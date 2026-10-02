@@ -1,10 +1,13 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
+import { IntroPage } from '@/components/intro/intro-page';
 import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
+import { createBackendSession } from '@/lib/backend-session';
 
 const RoomOrganizer = dynamic(
   () =>
@@ -45,5 +48,37 @@ const RoomOrganizer = dynamic(
 );
 
 export default function Page(): JSX.Element {
-  return <RoomOrganizer />;
+  const [controller] = useState(() => createBackendSession());
+  const [entered, setEntered] = useState(false);
+  const [editorStarted, setEditorStarted] = useState(false);
+
+  useEffect(() => controller.retain(), [controller]);
+  useEffect(() => {
+    // The landing page is ready before the optional editor chunk is requested.
+    // Clear the static-export watchdog so reading the introduction cannot reload it.
+    (window as unknown as { __pcReady?: boolean }).__pcReady = true;
+    clearChunkReloadGuard();
+  }, []);
+
+  useEffect(() => {
+    if (entered) window.dispatchEvent(new Event('resize'));
+  }, [entered]);
+
+  function enterEditor(): void {
+    setEditorStarted(true);
+    setEntered(true);
+  }
+
+  return (
+    <>
+      {!entered && <IntroPage controller={controller} onEnter={enterEditor} />}
+      {/* Keep in-progress briefs, image URLs, chat and proposals in memory when
+          returning to the introduction. The editor still mounts only on entry. */}
+      {editorStarted && (
+        <div hidden={!entered}>
+          <RoomOrganizer isActive={entered} controller={controller} onShowIntro={() => setEntered(false)} />
+        </div>
+      )}
+    </>
+  );
 }
