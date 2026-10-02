@@ -19,10 +19,7 @@ export interface ItemContextPopoverProps {
 const COLORS = ['#375B4B', '#78958B', '#B5C3B2', '#C9B89D', '#DDD9CA', '#EDEAE1', '#B98067', '#404748'];
 
 /**
- * Where a placed item came from, in the user's words. `public_library` is read first
- * because online models load straight from the CDN and carry no `assetId` — the schema
- * requires one to be a UUID — so pairing `glbUrl` with `assetId` alone would misfile
- * them as local samples.
+ * Keep the public-library origin for both older CDN drafts and registered assets.
  */
 export function catalogItemOrigin(item: Pick<FurnitureItem, 'source' | 'glbUrl' | 'assetId'>): string {
   if (item.source === 'public_library') return '云端模型资产';
@@ -37,7 +34,7 @@ export function catalogItemOrigin(item: Pick<FurnitureItem, 'source' | 'glbUrl' 
  */
 function SelectedPreview({ item }: { item: FurnitureItem }): JSX.Element {
   const [failed, setFailed] = useState(false);
-  const thumb = item.source === 'public_library' ? onlineModelThumb(item.glbUrl) : '';
+  const thumb = item.source === 'public_library' ? onlineModelThumb(item.glbUrl, item.assetId) : '';
   if (!thumb || failed) return <MaterialGlyph materialId={item.materialId} color={item.color}/>;
   // A catalogue thumbnail straight from the CDN; next/image cannot optimise a remote URL here.
   // eslint-disable-next-line @next/next/no-img-element

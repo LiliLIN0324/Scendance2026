@@ -68,6 +68,14 @@ beforeEach(() => {
 afterEach(() => { controller.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("AI proposal contract and paid request protection", () => {
+  it.each([[429, "DAILY_BUDGET_EXCEEDED"], [429, "BUDGET_EXCEEDED"], [503, "SERVICE_NOT_CONFIGURED"], [422, "AI_INVALID_PROPOSAL"]])("keeps editing available after AI-only %s %s", async (status, code) => {
+    await editing(); queue({ error: { code } }, status as number);
+    await expect(controller.requestProposal({ mode: "layout", prompt: "安排沙龙", scene })).rejects.toMatchObject({ code });
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, draft: scene, revision: 4 });
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 3, revision: 4, expiresAt: new Date(Date.now() + 120_000).toISOString() });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/lease/renew');
+  });
   it("sends the real proposal contract and leaves the draft unchanged for preview", async () => {
     await editing(); const before = controller.getSnapshot(); const result = await proposal(); queue(result);
     await expect(controller.requestProposal({ mode: "layout", prompt: "  Add one chair  ", scene, requestId })).resolves.toEqual(result);

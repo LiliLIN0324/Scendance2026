@@ -1,3 +1,4 @@
+import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import { isGlbUrl } from './glb-url';
 
 /**
@@ -6,7 +7,7 @@ import { isGlbUrl } from './glb-url';
  *
  * The index ships inside the repository instead of being fetched, because browsing
  * must not depend on a live endpoint. Only the thumbnails and GLB files come from the
- * CDN. The JSON is ~110 KB, so it is imported lazily — sessions that never open the
+ * CDN. The JSON is ~140 KB, so it is imported lazily — sessions that never open the
  * source switch never pay for it.
  */
 
@@ -16,6 +17,7 @@ const MAX_DIMENSION = 50;
 
 export interface OnlineModel {
   slug: string;
+  assetId?: string;
   name: string;
   /** Coarse family from the catalogue (`structure`, `seating`, …); drives the rail. */
   bucket: string;
@@ -124,6 +126,7 @@ export function normalizeOnlineModels(raw: unknown): OnlineModel[] {
     seen.add(slug);
     models.push({
       slug,
+      ...((libraryAssetIds as Record<string,string>)[glb] ? { assetId: (libraryAssetIds as Record<string,string>)[glb] } : {}),
       name,
       glb,
       bucket: toText(record.bucket),
@@ -190,7 +193,8 @@ export function formatModelBytes(bytes: number): string {
  * extra field the save schema would have to whitelist. Anything that is not a catalogue
  * `model.glb` returns an empty string, and the caller falls back to the vector glyph.
  */
-export function onlineModelThumb(glbUrl: string | undefined): string {
+export function onlineModelThumb(glbUrl: string | undefined, assetId?: string): string {
+  if (assetId) glbUrl = Object.entries(libraryAssetIds).find(([,id]) => id === assetId)?.[0] ?? glbUrl;
   if (!glbUrl || !/\/model\.glb$/.test(glbUrl)) return '';
   return glbUrl.replace(/\/model\.glb$/, '/thumb.webp');
 }
