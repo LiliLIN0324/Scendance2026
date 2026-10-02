@@ -6,10 +6,14 @@ export interface CreativeBrief {
   description: string;
   mustHave: string;
   allowIdeas: boolean;
+  venueConditions?: string;
+  style?: string;
+  palette?: string;
+  atmosphere?: string;
 }
 export const INITIAL_BRIEF: CreativeBrief = {
   event: '品牌快闪', guests: 24,
-  description: '', mustHave: '', allowIdeas: true,
+  description: '', mustHave: '', allowIdeas: true, venueConditions: '', style: '', palette: '', atmosphere: '',
 };
 export const IDEA_CARDS = [
   { title: '轻露营会客区', text: '用开放式帐篷、地毯与低座围合交流区，预留顺畅的主通道。', prompt: '设置一处帐篷会客区，适合小组交流，保留宽敞的主通道。' },
@@ -25,9 +29,13 @@ export function briefInstruction(brief: CreativeBrief, width: number, depth: num
     `请为客户设计一套完整的${brief.event}场景布置方案。场地${width}×${depth}米，预计${brief.guests}人。`,
     `客户需求：${brief.description.trim()}`,
     brief.mustHave.trim() ? `必须满足：${brief.mustHave.trim()}` : '',
+    brief.venueConditions?.trim() ? `用户确认的现场条件（文字输入，非图片识别）：${brief.venueConditions.trim()}。必须保留出入口与固定设施，不得覆盖。` : '',
+    brief.style?.trim() ? `风格要求：${brief.style.trim()}` : '',
+    brief.palette?.trim() ? `配色要求：${brief.palette.trim()}` : '',
+    brief.atmosphere?.trim() ? `氛围要求：${brief.atmosphere.trim()}；超出现有三种灯光预设的能力仅作为建议说明。` : '',
     brief.allowIdeas ? '在满足客户需求的基础上，提出适合主题的亮点、分区、装饰和氛围建议，但未经客户确认不得自动加入。把客户明确要求与额外创意分开说明；说明每个亮点的用途。' : '只围绕客户明确提出的要求规划，不自行扩展需求。',
     '保留锁定对象。先返回可预览提案，不要声称已经应用。使用当前接口支持的真实物料；帐篷、拱门等当前不支持的物件，请在说明中列为待补充资产，不得用桌椅冒充。',
-    '参考图片尚未提交给模型；不能声称已经识别、测量或参考了图片内容。',
+    '现场照片尚未提交给模型；不能声称已经识别、测量或参考了图片内容。',
   ].filter(Boolean).join('\n');
   if (result.length > 3000) throw new Error('需求内容过长，请精简后再生成。');
   return result;

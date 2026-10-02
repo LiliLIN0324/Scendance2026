@@ -39,6 +39,8 @@ describe('introduction and sign-in entry', () => {
     const onEnter = vi.fn();
     render(<IntroPage controller={session} onEnter={onEnter} />);
     expect((screen.getByRole('button', { name: '登录并进入工作台' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('邮箱') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('密码') as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByRole('status').textContent).toContain('云端登录与 AI 生成将在服务连接后开放');
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     expect(onEnter).toHaveBeenCalledOnce();
@@ -55,6 +57,11 @@ describe('introduction and sign-in entry', () => {
     submitCredentials();
     expect(onEnter).not.toHaveBeenCalled();
     expect((screen.getByRole('button', { name: '正在登录…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('form', { name: '工作室登录' }).getAttribute('aria-busy')).toBe('true');
+    expect((screen.getByLabelText('邮箱') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '先体验本地工作台' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
+    expect(mockFetch).toHaveBeenCalledOnce();
     expect(mockFetch.mock.calls[0]?.[0]).toBe('https://example.supabase.co/auth/v1/token?grant_type=password');
     expect(JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))).toEqual({ email: 'editor@example.com', password: 'test-password-only' });
     await act(async () => {
@@ -88,5 +95,47 @@ describe('introduction and sign-in entry', () => {
     expect(screen.getByText('editor@example.com')).toBeTruthy();
     expect(screen.queryByLabelText('密码')).toBeNull();
     expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('explains that venue photos are optional local previews without claiming automatic surveying', () => {
+    render(<IntroPage controller={controller(false)} onEnter={vi.fn()} />);
+    expect(screen.getByText(/现场照片可选，目前仅在本地预览，不会自动测绘或还原三维场地/)).toBeTruthy();
+    expect(screen.getByText(/现场照片刷新后需重新选择/)).toBeTruthy();
+    expect(screen.getByRole('img', { name: /活动空间概念插画/ })).toBeTruthy();
+    expect(screen.getByText('活动空间概念示意 · 实际方案由你来布置')).toBeTruthy();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('allows local entry after a network failure without manufacturing an authenticated session', async () => {
+    const session = controller();
+    const onEnter = vi.fn();
+    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    render(<IntroPage controller={session} onEnter={onEnter} />);
+    submitCredentials();
+    expect((await screen.findByRole('alert')).textContent).toContain('暂时无法连接登录服务');
+    expect(screen.getByRole('form', { name: '工作室登录' }).getAttribute('aria-busy')).toBe('false');
+    expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('editor@example.com');
+    expect(onEnter).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
+    expect(onEnter).toHaveBeenCalledOnce();
+    expect(session.getSnapshot().user).toBeNull();
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('recovers from a malformed login response and clears the error on a successful retry', async () => {
+    const session = controller();
+    const onEnter = vi.fn();
+    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    render(<IntroPage controller={session} onEnter={onEnter} />);
+    submitCredentials();
+    expect((await screen.findByRole('alert')).textContent).toBe('登录服务暂时无法完成验证，请稍后重试。');
+    expect(session.getSnapshot().user).toBeNull();
+    expect(onEnter).not.toHaveBeenCalled();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'editor-id', email: 'editor@example.com' } }), { status: 200 }));
+    fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await waitFor(() => expect(onEnter).toHaveBeenCalledOnce());
+    expect(session.getSnapshot().user?.email).toBe('editor@example.com');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });

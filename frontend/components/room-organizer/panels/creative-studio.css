@@ -84,3 +84,11 @@
 .cr-ideas article strong { font-size: 12px; color: #4a6251; }
 .cr-ideas article p { margin: 5px 0 0; font-size: 11px; line-height: 1.7; color: #78817b; }
 .sc-brand { text-decoration: none; }
+
+.cr-capability { padding:12px; margin:14px 0; border:1px solid #ddd7bc; border-radius:8px; background:#faf7ed; color:#635a45; }
+.cr-capability h3 { margin:0 0 8px; font-size:12px; }
+.cr-capability p,.cr-capability label { font-size:11px; line-height:1.7; }
+.cr-capability strong { font-size:11px; font-weight:550; }
+.cr-capability small { display:block; font-size:9px; color:#8a846e; line-height:1.7; }
+.cr-capability-finding { margin:10px 0; }
+.sc-preview-caption { position:absolute; top:66px; left:20px; right:20px; width:fit-content; padding:8px 12px; border:1px solid #8aaca0; border-radius:8px; background:#f8fff5eb; color:#386250; font-size:11px; pointer-events:none; z-index:15; }
