@@ -1,9 +1,9 @@
 'use client';
 
 import { ArrowRight, Box, ImagePlus, Layers3, LockKeyhole } from 'lucide-react';
-import { BrandMark } from '../brand-mark';
 import { useState, type FormEvent } from 'react';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
+import { BrandMark } from '../brand-mark';
 import './intro.css';
 
 interface IntroPageProps {

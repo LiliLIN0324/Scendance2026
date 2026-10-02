@@ -3,8 +3,8 @@
 import { Loader2, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { filterOnlineModels, formatModelBytes, loadOnlineModels } from '../lib/online-models';
-import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
+import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
 
 /**
@@ -115,6 +115,8 @@ export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibra
         onClick={() => void addOnline(model)} aria-label={`添加${onlineModelDisplayName(model)}`} title={model.name}>
         <span className="sc-material-preview">
           {model.thumb
+            // A catalogue thumbnail straight from the CDN; next/image cannot optimise a remote URL here.
+            // eslint-disable-next-line @next/next/no-img-element
             ? <img className="sc-material-thumb" src={model.thumb} alt="" loading="lazy" decoding="async"/>
             : <span className="sc-material-thumb-empty" aria-hidden="true">◇</span>}
           <span className="sc-material-add">{busy === model.slug ? <Loader2 className="cr-spin" size={12}/> : <Plus size={12}/>}</span>

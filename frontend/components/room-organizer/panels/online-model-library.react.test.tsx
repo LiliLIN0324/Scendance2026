@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
+import { ensureGlbAsset } from '../three/glb-assets';
+import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
+import type { OnlineModel } from '../lib/online-models';
 
 // Only the network boundary is stubbed: `createGlbCatalogItem` stays real so these
-// specs pin the actual catalogue item the library hands to the scene.
+// specs pin the actual catalogue item the library hands to the scene. Vitest hoists
+// `vi.mock` above the imports, so the factories still replace the real modules.
 vi.mock('../three/glb-assets', async importOriginal => ({
   ...(await importOriginal<typeof import('../three/glb-assets')>()),
   ensureGlbAsset: vi.fn(),
@@ -12,11 +17,6 @@ vi.mock('../lib/online-models', async importOriginal => ({
   ...(await importOriginal<typeof import('../lib/online-models')>()),
   loadOnlineModels: vi.fn(),
 }));
-
-import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
-import type { OnlineModel } from '../lib/online-models';
-import { ensureGlbAsset } from '../three/glb-assets';
-import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
 
 function model(slug: string, name: string, bucket: string): OnlineModel {
   return {
