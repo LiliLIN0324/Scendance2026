@@ -6,6 +6,7 @@ import { useRoomEditor, useSelection } from '../contexts';
 import { CATALOG_DRAG_MIME, catalogKey } from '../lib/catalog-drag';
 import { EVENT_CATALOG } from '../lib/constants';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
+import { OnlineModelLibrary } from './online-model-library';
 import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
 
 interface LibraryProps {
@@ -30,6 +31,8 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
   const [tab, setTab] = useState<'materials' | 'venue' | 'list'>('materials');
   const [sampleState, setSampleState] = useState<'idle' | 'loading' | 'error' | 'ready'>('idle');
   const [sampleError, setSampleError] = useState('');
+  /** 物料库 has two sources: the built-in event catalogue and the online model library. */
+  const [source, setSource] = useState<'builtin' | 'online'>('builtin');
   const items = EVENT_CATALOG.filter(item => item.name.includes(catalogQuery.trim()));
   const atLimit = activeFloor.items.length >= 50;
 
@@ -62,9 +65,14 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
         {creativePanel}
-        <div className="sc-section-heading"><div><h2>把想法放进场地</h2><p>点击添加，也可以拖入画布</p></div><span className="sc-count">8 类</span></div>
-        <label className="sc-search"><Search size={15}/><input aria-label="搜索活动物料" placeholder="搜索活动物料" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)}/></label>
+        <div className="sc-section-heading"><div><h2>把想法放进场地</h2><p>{source === 'online' ? '点击下载并放入场地' : '点击添加，也可以拖入画布'}</p></div>{source === 'builtin' && <span className="sc-count">8 类</span>}</div>
+        <div className="sc-source-switch" role="group" aria-label="物料来源">
+          <button type="button" aria-pressed={source === 'builtin'} className={source === 'builtin' ? 'is-active' : ''} onClick={() => setSource('builtin')}>内置物料</button>
+          <button type="button" aria-pressed={source === 'online'} className={source === 'online' ? 'is-active' : ''} onClick={() => setSource('online')}>线上模型</button>
+        </div>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
+        {source === 'online' ? <OnlineModelLibrary disabled={atLimit} onAdd={addMaterial}/> : <>
+        <label className="sc-search"><Search size={15}/><input aria-label="搜索活动物料" placeholder="搜索活动物料" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)}/></label>
         <div className="sc-material-grid">
           {items.map(item => <button type="button" key={item.materialId} className="sc-material-card" disabled={atLimit} draggable={!atLimit}
             onDragStart={event => { event.dataTransfer.setData(CATALOG_DRAG_MIME, catalogKey(item)); event.dataTransfer.effectAllowed = 'copy'; }}
@@ -80,6 +88,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
           {sampleState === 'ready' && <p role="status" className="sc-success">模型已加入，可选中调整尺寸。</p>}
           {sampleError && <p role="alert" className="sc-warning">{sampleError}</p>}
         </section>
+        </>}
       </>}
       {tab === 'venue' && <>
         <div className="sc-section-heading"><div><h2>场地设置</h2><p>单层矩形 · 统一使用米制</p></div><Grid size={19}/></div>
