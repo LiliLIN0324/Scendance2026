@@ -2,6 +2,7 @@
 
 import { Copy, Lock, RotateCcw, Trash2, Unlock, X } from 'lucide-react';
 import { useRoomEditor, useSelection } from '../contexts';
+import type { FurnitureItem } from '../lib/types';
 import { MaterialGlyph, NumberField } from './scendance-workspace';
 
 export interface ItemContextPopoverProps {
@@ -15,6 +16,18 @@ export interface ItemContextPopoverProps {
 
 const COLORS = ['#375B4B', '#78958B', '#B5C3B2', '#C9B89D', '#DDD9CA', '#EDEAE1', '#B98067', '#404748'];
 
+/**
+ * Where a placed item came from, in the user's words. `public_library` is read first
+ * because online models load straight from the CDN and carry no `assetId` — the schema
+ * requires one to be a UUID — so pairing `glbUrl` with `assetId` alone would misfile
+ * them as local samples.
+ */
+export function catalogItemOrigin(item: Pick<FurnitureItem, 'source' | 'glbUrl' | 'assetId'>): string {
+  if (item.source === 'public_library') return '云端模型资产';
+  if (item.glbUrl) return item.assetId ? '云端模型资产' : '本地 GLB 验证样例';
+  return '内置活动物料';
+}
+
 export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element {
   const { actions, pushColor, activeFloor } = useRoomEditor();
   const { selectedItem: item } = useSelection();
@@ -25,7 +38,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   return <aside className="sc-properties" aria-label={`${item.name}属性`}>
     <header><div><span className="sc-eyebrow">OBJECT PROPERTIES</span><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={17}/></button></header>
     <div className="sc-properties-content">
-      <div className="sc-selected-summary"><div><MaterialGlyph materialId={item.materialId} color={item.color}/></div><strong>{item.name}</strong><span>{item.glbUrl ? item.assetId ? '云端模型资产' : '本地 GLB 验证样例' : '内置活动物料'}</span></div>
+      <div className="sc-selected-summary"><div><MaterialGlyph materialId={item.materialId} color={item.color}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span></div>
       <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={15}/> : <Unlock size={15}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
       {props.hasCollision && <p className="sc-warning">物料可能重叠或超出场地，请检查位置。</p>}
       <section><h3>尺寸 <small>米</small></h3><div className="sc-dimension-grid">

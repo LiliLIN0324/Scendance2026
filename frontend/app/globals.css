@@ -520,21 +520,12 @@
 .sc-library-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 7px; min-height: 54px; border-bottom: 1px solid var(--sc-line); }
 .sc-library-tabs button { border: 1px solid transparent; border-radius: 8px; background: none; color: var(--sc-muted); font-size: 12px; }
 .sc-library-tabs button.is-active { color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #0e7c7833; font-weight: 600; }
-/* Second-level source switch inside the materials tab: still the light surface, because
-   the online library is a peer of the built-in catalogue and not a separate view. */
-.sc-source-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; margin-bottom: 16px; border: 1px solid var(--sc-line); border-radius: 10px; background: #f4f5eda6; }
-.sc-source-switch button { border: 1px solid transparent; border-radius: 8px; background: none; color: var(--sc-muted); font-size: 11px; padding: 6px 4px; }
-.sc-source-switch button.is-active { color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #0e7c7833; font-weight: 600; }
 .sc-library-content { padding: 22px 17px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #bac6ce transparent; }
 .sc-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
 .sc-section-heading h2 { margin: 0; font-size: 16px; font-weight: 500; letter-spacing: -.4px; }
 .sc-section-heading p { font-size: 11px; color: var(--sc-muted); margin: 6px 0 0; }
 .sc-count { font-size: 10px; background: #e8edf1; color: #53606a; padding: 3px 7px; border-radius: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sc-search { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--sc-line); border-radius: 8px; margin-bottom: 16px; color: var(--sc-muted); background: #f4f5eda6; }
-.sc-search:focus-within { border-color: var(--sc-accent-ink); outline: 2px solid var(--sc-accent-soft); }
-.sc-search input { width: 100%; min-width: 0; border: none; background: transparent; font-size: 12px; color: var(--sc-ink); }
-.sc-search input:focus-visible { outline: none; }
-.sc-search input::placeholder, .sc-notes::placeholder { color: var(--sc-muted); }
+.sc-notes::placeholder { color: var(--sc-muted); }
 .sc-material-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .sc-material-card { text-align: left; border: 1px solid #ffffff; background: #ffffff70; border-radius: 10px; padding: 7px 7px 10px; min-width: 0; transition: transform var(--sc-fast) var(--sc-ease), border-color var(--sc-fast) var(--sc-ease), background-color var(--sc-fast) var(--sc-ease) !important; }
 .sc-material-preview { position: relative; height: 72px; display: flex; align-items: center; justify-content: center; background: linear-gradient(145deg, #e5edf1, #f3f5f7); border-radius: 6px; }
@@ -544,11 +535,21 @@
 /* Online-library tiles reuse the material card, so only the preview and the filter rail differ. */
 .sc-material-thumb { width: 100%; height: 100%; object-fit: contain; border-radius: 5px; }
 .sc-material-thumb-empty { color: #a9b6bd; font-size: 20px; }
-.sc-bucket-rail { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
-.sc-bucket-rail button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--sc-line); border-radius: 999px; background: #ffffff8f; color: var(--sc-muted); font-size: 10px; padding: 4px 8px; }
+/* Families ride a single row that scrolls sideways rather than wrapping, which keeps the
+   search pinned to the corner and stops the grid from being pushed down the panel. */
+.sc-material-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.sc-bucket-rail { display: flex; flex-wrap: nowrap; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.sc-bucket-rail::-webkit-scrollbar { display: none; }
+.sc-bucket-rail button { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--sc-line); border-radius: 999px; background: #ffffff8f; color: var(--sc-muted); font-size: 10px; padding: 4px 8px; }
 .sc-bucket-rail button b { font-weight: 500; opacity: .6; font-variant-numeric: tabular-nums; }
 .sc-bucket-rail button.is-active { color: var(--sc-accent-ink); border-color: var(--sc-accent); background: var(--sc-accent-soft); }
 .sc-bucket-rail button.is-active b { opacity: .8; }
+/* Search sits collapsed to its glyph until the box is focused, so the row stays one line. */
+.sc-search-mini { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; border: 1px solid var(--sc-line); border-radius: 999px; background: #ffffff8f; color: var(--sc-muted); padding: 4px 8px; }
+.sc-search-mini:focus-within { border-color: var(--sc-accent-ink); outline: 2px solid var(--sc-accent-soft); }
+.sc-search-mini input { width: 0; min-width: 0; padding: 0; border: none; background: transparent; font-size: 12px; color: var(--sc-ink); opacity: 0; }
+.sc-search-mini:focus-within input { width: 96px; opacity: 1; }
+.sc-search-mini input:focus-visible { outline: none; }
 .sc-sample-section { padding: 16px 0 0; margin-top: 22px; border-top: 1px solid var(--sc-line); }
 .sc-sample-section > div:first-child { display: flex; align-items: center; gap: 7px; color: #4d5c65; }
 .sc-sample-section strong { font-size: 12px; font-weight: 500; }
@@ -625,7 +626,7 @@
   .sc-button:hover:not(:disabled), .sc-icon-button:hover, .sc-object-list button:hover { background: #e2edec; border-color: var(--sc-accent); color: var(--sc-accent-ink); }
   .sc-header .sc-button:hover:not(:disabled), .sc-header .sc-icon-button:hover { background: #ffffff26; color: #fff; border-color: #ffffff66; }
   .sc-material-card:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--sc-accent); background: #fff; }
-  .sc-library-tabs button:hover:not(.is-active), .sc-tool-group button:hover:not(:disabled), .sc-source-switch button:hover:not(.is-active), .sc-bucket-rail button:hover:not(.is-active) { background: #e2edec; color: var(--sc-accent-ink); }
+  .sc-library-tabs button:hover:not(.is-active), .sc-tool-group button:hover:not(:disabled), .sc-bucket-rail button:hover:not(.is-active) { background: #e2edec; color: var(--sc-accent-ink); }
   .sc-library-footer button:hover { color: var(--sc-accent-ink); }
   .sc-delete-button:hover:not(:disabled) { background: #f9e0da; border-color: #c49b91; }
 }
