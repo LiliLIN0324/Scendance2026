@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ONLINE_BUCKET_LABELS, buildOnlineModelIndex, clearOnlineModelCache, filterOnlineModels,
-  formatModelBytes, loadOnlineModels, normalizeOnlineModels, onlineBucketLabel } from './online-models';
+  formatModelBytes, loadOnlineModels, normalizeOnlineModels, onlineBucketLabel,
+  onlineModelThumb } from './online-models';
 
 /** A catalogue row shaped the way `assets/library/online.json` writes it. */
 function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -177,6 +178,20 @@ describe('formatModelBytes', () => {
     expect(formatModelBytes(900)).toBe('900 B');
     expect(formatModelBytes(71_752)).toBe('70 KB');
     expect(formatModelBytes(3 * 1024 * 1024)).toBe('3.0 MB');
+  });
+});
+
+describe('onlineModelThumb', () => {
+  it('points at the thumbnail served beside a catalogue GLB', () => {
+    expect(onlineModelThumb('https://cdn.3dassets.dev/assets/33803/v1/model.glb'))
+      .toBe('https://cdn.3dassets.dev/assets/33803/v1/thumb.webp');
+  });
+
+  it('returns nothing for anything that is not a catalogue GLB', () => {
+    expect(onlineModelThumb('/assets/models/table.glb')).toBe('');
+    expect(onlineModelThumb('https://cdn.example.com/a.glb')).toBe('');
+    expect(onlineModelThumb('https://cdn.3dassets.dev/assets/33803/v1/model.glb?v=2')).toBe('');
+    expect(onlineModelThumb(undefined)).toBe('');
   });
 });
 

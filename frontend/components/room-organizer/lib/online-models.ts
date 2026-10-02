@@ -184,6 +184,17 @@ export function formatModelBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * The catalogue serves a thumbnail beside every GLB (`…/v1/thumb.webp` next to
+ * `…/v1/model.glb`), so a placed item can show its real picture without carrying an
+ * extra field the save schema would have to whitelist. Anything that is not a catalogue
+ * `model.glb` returns an empty string, and the caller falls back to the vector glyph.
+ */
+export function onlineModelThumb(glbUrl: string | undefined): string {
+  if (!glbUrl || !/\/model\.glb$/.test(glbUrl)) return '';
+  return glbUrl.replace(/\/model\.glb$/, '/thumb.webp');
+}
+
 let pending: Promise<OnlineModelIndex> | null = null;
 
 /** Test seam: mirrors `clearGlbAssetCache` so a spec can exercise a fresh load. */
