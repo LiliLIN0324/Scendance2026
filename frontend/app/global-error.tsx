@@ -63,7 +63,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
           .sc-global-recovery-title{margin:0 0 12px;font-size:22px;font-weight:600;line-height:1.4;letter-spacing:-.045em}
           .sc-global-recovery-copy{margin:0 0 20px;color:#59636d;font-size:13px;line-height:1.8}
           .sc-global-recovery button{appearance:none;cursor:pointer;border:1px solid #2b2b2b;border-radius:8px;padding:10px 16px;background:#2b2b2b;color:#fff;font-family:inherit;font-size:12px;font-weight:500;transition:background 160ms cubic-bezier(.22,1,.36,1),transform 160ms cubic-bezier(.22,1,.36,1)}
-          .sc-global-recovery button:focus-visible{outline:2px solid #7435b8;outline-offset:3px}
+          .sc-global-recovery button:focus-visible{outline:2px solid #0a5f5c;outline-offset:3px}
           .sc-global-recovery button:active{transform:translateY(1px)}
           @media(hover:hover) and (pointer:fine){.sc-global-recovery button:hover{background:#414141}}
           @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.sc-global-recovery-card{background:#f8f9fb}}

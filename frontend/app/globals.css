@@ -439,9 +439,9 @@
   --sc-line: rgba(63, 77, 89, .14);
   --sc-paper: #f4f5ed;
   --sc-canvas: #eeeee4;
-  --sc-accent: #8aab70;
-  --sc-accent-ink: #4f6c3e;
-  --sc-accent-soft: #e8eedb;
+  --sc-accent: #0e7c78;
+  --sc-accent-ink: #0a5f5c;
+  --sc-accent-soft: #dcefee;
   --sc-surface: rgba(255, 255, 255, .76);
   --sc-glass-shadow: 0 12px 36px #24313e10, inset 0 1px 0 #fff;
   --sc-ease: cubic-bezier(.22, 1, .36, 1);

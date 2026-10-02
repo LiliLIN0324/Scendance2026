@@ -18,7 +18,7 @@
 .sc-cloud-form{display:grid;gap:15px}
 .sc-cloud-dialog label{display:grid;gap:6px;font-size:12px}
 .sc-cloud-dialog input,.sc-cloud-dialog select{font:inherit;background:#ffffffb8;border:1px solid var(--sc-line);border-radius:8px;padding:11px;color:var(--sc-ink);width:100%;transition:border-color var(--sc-fast) var(--sc-ease),background var(--sc-fast) var(--sc-ease)}
-.sc-cloud-message{padding:12px;background:var(--sc-accent-soft);color:var(--sc-accent-ink);border:1px solid #a459ff1a;border-radius:8px;overflow-wrap:anywhere}
+.sc-cloud-message{padding:12px;background:var(--sc-accent-soft);color:var(--sc-accent-ink);border:1px solid #0e7c781a;border-radius:8px;overflow-wrap:anywhere}
 .sc-cloud-footer{border-top:1px solid var(--sc-line);margin-top:24px;padding-top:16px;font-size:11px;color:var(--sc-muted);line-height:1.7}
 .sc-cloud-account{display:flex;gap:12px;justify-content:space-between;align-items:center;font-size:12px;overflow-wrap:anywhere}
 .sc-cloud-current{background:#f1f3f6a8;border:1px solid var(--sc-line);padding:16px;border-radius:12px;margin:18px 0}
@@ -47,7 +47,7 @@
 .sc-loading-line{display:block;margin:18px auto 0;width:32px;height:2px;border-radius:2px;background:var(--sc-accent);animation:sc-loading-breathe 1.8s ease-in-out infinite}
 
 @keyframes sc-loading-breathe{0%,100%{opacity:.35;transform:scaleX(.7)}50%{opacity:1;transform:scaleX(1)}}
-@media(hover:hover) and (pointer:fine){.sc-cloud-trigger:hover:not(:active){background:#fff;transform:translateY(-1px)}.sc-cloud-dialog button:not(:disabled):hover,.sc-recovery-button:hover{background:#fff;border-color:#a459ff66}.sc-cloud-dialog button.sc-cloud-primary:not(:disabled):hover,.sc-recovery-button--primary:hover{background:#414141;border-color:#414141}.sc-cloud-dialog button.sc-cloud-close:hover{background:#f1f3f6;color:var(--sc-ink)}}
+@media(hover:hover) and (pointer:fine){.sc-cloud-trigger:hover:not(:active){background:#fff;transform:translateY(-1px)}.sc-cloud-dialog button:not(:disabled):hover,.sc-recovery-button:hover{background:#fff;border-color:#0e7c7866}.sc-cloud-dialog button.sc-cloud-primary:not(:disabled):hover,.sc-recovery-button--primary:hover{background:#414141;border-color:#414141}.sc-cloud-dialog button.sc-cloud-close:hover{background:#f1f3f6;color:var(--sc-ink)}}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.sc-cloud-dialog{background:#f8f9fb}.sc-cloud-dialog::backdrop{background:#20252d80}}
 @media(prefers-reduced-motion:reduce){.sc-cloud-trigger,.sc-cloud-dialog button,.sc-cloud-dialog input,.sc-cloud-dialog select,.sc-recovery-button{transition:none}.sc-cloud-trigger:hover:not(:active),.sc-cloud-trigger:active,.sc-cloud-dialog button:not(:disabled):active,.sc-recovery-button:active{transform:none}.sc-cloud-dialog[open],.sc-loading-card,.sc-loading-line{animation:none}}
 @media(max-width:600px){.sc-cloud-dialog{padding:20px}.sc-cloud-heading h2{font-size:21px}.sc-recovery-card{padding:24px}}
