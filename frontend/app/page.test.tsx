@@ -9,7 +9,7 @@ import Page from './page';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
 import type { ComponentType } from 'react';
 
-type EditorProps = { controller: BackendSession; onShowIntro: () => void };
+type EditorProps = { controller: BackendSession };
 let activeController: BackendSession;
 let activeLayout: RoomLayout;
 const onApply = vi.fn();
@@ -35,9 +35,8 @@ vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
-    RoomOrganizer: ({ controller, onShowIntro }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+    RoomOrganizer: ({ controller }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
-        <button onClick={onShowIntro}>返回介绍页</button>
         <CreativeBriefPanel /><CreativeAssistant />
       </CreativeStudioProvider>
     </SelectionProvider>,
@@ -82,8 +81,8 @@ afterEach(() => {
   restore(HTMLElement.prototype, 'scrollTo', originalScroll);
 });
 
-describe('introduction round trips', () => {
-  it('defers the editor, then preserves the real brief, image, conversation and unsent message when returning', async () => {
+describe('introduction entry', () => {
+  it('defers the editor, then keeps the real brief, image, conversation and unsent message', async () => {
     const rendered = render(<AuthProvider><Page /></AuthProvider>);
     expect(screen.getByRole('heading', { name: '欢迎来到幕景' })).toBeTruthy();
     expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
@@ -98,14 +97,7 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '这条还没有发送。' } });
 
-    fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
-    expect(screen.getByRole('heading', { name: '欢迎来到幕景' })).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
-    expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
-    expect(revokeObjectURL).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
-
-    expect((await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
+    expect((screen.getByRole('textbox', { name: '客户需求' }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
     expect(screen.getByRole('img', { name: '现场照片：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
     expect(screen.getByText('为活动保留合影区。')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement).value).toBe('这条还没有发送。');

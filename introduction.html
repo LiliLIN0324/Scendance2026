@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#1b2429">
+<meta name="theme-color" content="#262c1f">
 <title>幕景 Scendance · 三维场景协作</title>
 <script>document.documentElement.className = 'js';</script>
 <!-- 复用仓库内本地 vendor/three，零外部请求；renderer-webgl.js 用 import.meta.url 定位素材。 -->
@@ -20,13 +20,13 @@
    1. 令牌 · 前 15 项原样沿用 style.css:2，其后为本轮计划新增
    ============================================================ */
 :root{
-  --sc-ink:#2b2b2b; --sc-muted:#59636d; --sc-line:rgba(63,77,89,.14);
-  --sc-paper:#f1f3f6; --sc-canvas:#e8eef1;
-  /* 产品色：深青（已定为全站主色），不使用紫色 */
-  --sc-accent:#0e7c78; --sc-accent-ink:#0a5f5c; --sc-accent-soft:#dcefee;
-  --sc-accent-glow:#0e7c7847; --sc-accent-mute:#8fb8b5;
+  --sc-ink:#26392f; --sc-muted:#6a7268; --sc-line:rgba(56,74,48,.16);
+  --sc-paper:#f7f5ed; --sc-canvas:#eef0e4;
+  /* 产品色：暖绿（全站主色；原来的深青已废弃） */
+  --sc-accent:#6f8f52; --sc-accent-ink:#465c33; --sc-accent-soft:#e7ecd7;
+  --sc-accent-glow:#6f8f5247; --sc-accent-mute:#a9bf8d;
   --sc-surface:rgba(255,255,255,.76);
-  --sc-glass-shadow:0 12px 36px #24313e10,inset 0 1px 0 #fff;
+  --sc-glass-shadow:0 12px 36px #2f3a2610,inset 0 1px 0 #fff;
   --sc-ease:cubic-bezier(.22,1,.36,1); --sc-fast:160ms; --sc-enter:280ms;
   --sc-font:'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;
 
@@ -75,37 +75,136 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .site-nav{
   position:absolute; z-index:6; left:0; right:0; top:0;
   max-width:1500px; margin:0 auto; padding:20px 4.5%;
-  display:flex; align-items:center; gap:16px;
+  /* space-between：品牌贴左、动作按钮贴右；中间胶囊用 absolute 单独居中，
+     这样它不会再参与左右分配（之前在流内，右侧按钮被推到中间而非贴边）。 */
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
 }
-.brand{display:flex;align-items:center;gap:11px;letter-spacing:.5px;font-weight:500;color:#fff;flex:none}
-.brand small{color:#9fa9b2;font-size:11px;letter-spacing:.14em}
-.brand-mark{display:flex;align-items:flex-end;gap:2px}
-.brand-mark i{display:block;width:4px;background:#ffffffa8;border-radius:1px}
-.brand-mark i:nth-child(1){height:11px}
-.brand-mark i:nth-child(2){height:17px}
-.brand-mark i:nth-child(3){height:23px;background:var(--sc-accent)}
+/* 品牌区：与入口页 .sc-intro-brand / 工作台 .sc-brand 同尺寸（43×43 底框，字 23px） */
+.brand{display:flex;align-items:center;gap:11px;font-size:23px;font-weight:600;letter-spacing:2px;color:#fff;flex:none}
+.brand small{color:inherit;font-size:12px;font-weight:600;letter-spacing:2.5px;margin-left:13px}
+.brand-mark{width:43px;height:43px;display:grid;place-items:center;flex:none;border-radius:13px;background:#2d3d32;border:1px solid #ffffff26}
+@media (max-width:760px){
+  .brand{gap:9px;font-size:20px;letter-spacing:1.6px}
+  .brand small{font-size:9px;letter-spacing:1.3px;margin-left:8px}
+  .brand-mark{width:37px;height:37px;border-radius:11px}
+}
 
-/* 居中胶囊：承载 Glass IN / Glass Move，与参考站顶部结构一致 */
+/* 居中编号胶囊：只负责“位置”和“排版”，不做花哨效果
+   —— 不用背景模糊、不用光斑、不用投影；深绿**实心**底，滑到浅色段落上也读得清。
+   absolute 居中是为了让左右两侧能真正贴边（见 .site-nav）。 */
 .nav-pill{
-  position:relative; margin:0 auto; overflow:hidden; flex:none;
-  display:flex; align-items:center; gap:24px; padding:12px 26px; border-radius:999px;
-  background:#ffffff14; border:1px solid #ffffff21;
-  backdrop-filter:blur(var(--sc-glass-blur)) saturate(150%);
-  -webkit-backdrop-filter:blur(var(--sc-glass-blur)) saturate(150%);
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:1;
+  margin:0; flex:none;
+  /* 间距按“5 项 + 品牌 + 两个按钮能在 1152px 下并存”反推；
+     6 项时实测胶囊会压到右侧按钮 41px、还压到品牌 4px。 */
+  display:flex; align-items:center; gap:clamp(12px,1.35vw,20px);
+  padding:11px clamp(16px,1.7vw,22px); border-radius:10px;
+  background:#2d3d32;
 }
-.nav-pill a{position:relative;z-index:2;color:#e4e9ee;font-size:13px;opacity:1;transition:opacity var(--sc-nav-hover) ease}
-@media (hover:hover) and (pointer:fine){ .nav-pill a:hover{opacity:.58} }
+.nav-pill a{position:relative;z-index:2;color:#e7ead9;font-size:13px;white-space:nowrap;opacity:.86;transition:opacity var(--sc-nav-hover) ease}
+@media (hover:hover) and (pointer:fine){ .nav-pill a:hover{opacity:1} }
+/* 编号索引：对齐参考站的 About01 / Programs02 / Approach03 / Technology04 */
+.nav-pill a i{font-style:normal;font-size:10px;letter-spacing:.04em;color:#ffffffa6;margin-right:7px}
+.nav-pill a[aria-current="true"]{opacity:1}
+.nav-pill a[aria-current="true"] i{color:var(--sc-accent-mute)}
 
-/* 独立光斑层：Glass IN / OUT 作用在这一层 */
-.nav-glow{
-  position:absolute; inset:-60% -8%; z-index:1; pointer-events:none;
-  background:radial-gradient(7em 7em at 50% 50%,#ffffff63,#fff0 70%);
-  filter:blur(30px);
-  opacity:0; transform:translate3d(calc(var(--gx) * var(--sc-glow-move) * 2 - var(--sc-glow-move)),0,0);
-  transition:opacity 800ms var(--sc-out-expo);
+/* ============================================================
+   段落导航：页面照常自由滚动（长页面），导航编号随视口所在段落高亮，
+   点击编号走原生锚点 + html{scroll-behavior:smooth} 平滑滚过去。
+   ============================================================ */
+/* 导航常驻：胶囊已是实心深绿底（见上方 .nav-pill 本体），这里不再叠模糊与投影 */
+.site-nav{position:fixed}
+/* 段落高度统一按「屏高」定，不再用 vw —— vw 会被窗口宽高比带偏
+   （96vw 在宽屏上 = 154% 屏高，所以同一数值在不同屏幕上完全不是一回事）。
+   短段给下限（--band-min），结构性长段给上限（--band-max / --offers-max）。 */
+:root{
+  --band-min:min(66svh,720px);      /* 普通段落：至少占 66% 屏高，但不超 720px */
+  --offers-min:min(92svh,980px);    /* 分类段：至少 92% 屏高 */
+  --offers-max:min(112svh,1200px);  /* 分类段：最多 1.12 屏 */
+  --foot-min:min(44svh,460px);
 }
-.nav-pill.is-glass-in .nav-glow{opacity:.26}
-.nav-pill.is-glass-out .nav-glow{opacity:0;transition:opacity 300ms ease}
+.band{scroll-margin-top:96px;min-height:var(--band-min)}   /* 固定导航不挡住段落开头 */
+
+/* 客户评价：照参考站的色块引语 */
+.quote-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:28px}
+.quote{margin:0;min-height:clamp(230px,24vw,400px);padding:clamp(22px,2.2vw,38px);border-radius:4px;background:var(--q);color:#fff;display:flex;flex-direction:column;justify-content:space-between;gap:28px}
+.quote blockquote{margin:0;font-size:clamp(18px,1.85vw,34px);line-height:1.42;letter-spacing:-.025em;font-weight:500}
+.quote figcaption b{display:block;font-size:clamp(13px,1vw,16px);font-weight:600}
+.quote figcaption span{font-size:clamp(11px,.85vw,14px);opacity:.82}
+
+/* 深色页脚：照参考站收尾那一段 */
+.site-foot{margin-inline:calc(50% - 50vw);width:100vw;margin-top:clamp(40px,7vh,90px);background:#1a1e15;color:#fff;padding:clamp(40px,7vh,80px) clamp(20px,4.5%,64px) 28px}
+.foot-inner{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(0,1fr));gap:clamp(24px,4vw,64px);align-items:start}
+.foot-brand{display:flex;align-items:center;gap:11px;font-size:23px;font-weight:600;letter-spacing:2px}
+.foot-brand small{font-size:12px;letter-spacing:2.5px;font-weight:600}
+.foot-col h3{margin:0 0 14px;font-size:11px;letter-spacing:.16em;font-weight:600;color:#ffffff8f;text-transform:uppercase}
+.foot-col a,.foot-col p{display:block;margin:0 0 10px;font-size:14px;color:#ffffffd9}
+.foot-col a:hover{color:#fff}
+.foot-note{margin:clamp(30px,5vh,56px) 0 0;padding-top:18px;border-top:1px solid #ffffff26;font-size:12px;color:#ffffff8f}
+
+/* 首屏底部不再做透明度渐变，硬切到下一页白 */
+.hero-veil{background:none}
+/* 每个分类的浅色类别底：段落色以 14% 叠上去（先铺在白底上更干净） */
+.offers{background:#fff}
+.offers::before{content:'';position:absolute;inset:0;z-index:0;background:var(--row);opacity:.14}
+
+/* 首屏之后的一页白：只留一句短句，作为正式内容前的呼吸 */
+/* 首屏之后的一页白：整屏满铺（左右出血 + 一屏高） */
+.band.blank{margin-inline:calc(50% - 50vw);width:100vw;min-height:min(100svh,900px);max-height:min(100svh,900px);display:grid;place-items:center;text-align:center;background:#fff;padding:0 6%}
+.band.blank p{margin:0;max-width:24em;font-size:clamp(19px,2.2vw,32px);line-height:1.5;letter-spacing:-.012em;color:var(--sc-ink)}
+.band.blank p b{display:block;margin-top:14px;font-size:.44em;font-weight:500;letter-spacing:.16em;color:var(--sc-muted);text-transform:uppercase}
+
+/* ---- 场景类别：照参考站 offerings 段 —— 浅色渐变底 + 建筑模型落左下角 + 左上大标题 + 右下 tab 白卡 ---- */
+.scenes-lede{margin:0;color:var(--sc-muted);font-size:14px}
+.offers-stack{margin-inline:calc(50% - 50vw);width:100vw}
+/* 不要渐变底色：每段就用页面自己的底，颜色只留在卡片与 tab 上 */
+.offers{position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:space-between;min-height:var(--offers-min);max-height:var(--offers-max);overflow:hidden;background:#fff}
+/* 不要渐变底色（原：linear-gradient(170deg,var(--row),#ffffff) opacity .34） */
+/* 落地影：给左下角的模型一个重心 */
+.offers::after{content:'';position:absolute;left:4%;bottom:0;z-index:1;width:46%;height:64px;background:radial-gradient(ellipse at 50% 100%,#2f3a2626,#0000 72%);pointer-events:none}
+/* 建筑模型：左下角，靠 multiply 把它自带的浅底融进渐变，不出现矩形边框 */
+/* 大图从「居中满铺」改为**左对齐**：左边缘与标题的左内边距对齐，
+   于是图片整体落在标题的下方、并向右侧展开（而不是压在正中间）。
+   height:128% + top:-14%：图片**故意比段落高**，上下各多出 14%，
+   视差位移才有空间——否则向下位移会被 .offers 的 overflow:hidden 直接裁掉，
+   看上去只是上边缘在动，感觉不到滞留（这也是参考站用 height:110% 的原因）。
+   注意不要用 translateX 居中，视差脚本会覆写 transform。 */
+.offers-art{position:absolute;left:clamp(20px,4.5%,64px);top:-14%;bottom:auto;z-index:2;width:min(76%,1160px);height:128%;object-fit:contain;object-position:left bottom;mix-blend-mode:multiply}
+.offers-head{position:relative;z-index:3;padding:clamp(24px,4.4vh,52px) clamp(20px,4.5%,64px) 0}
+.offers-title{margin:0;font-size:min(clamp(46px,14vw,240px),22svh);line-height:.86;letter-spacing:-.055em;font-weight:600;color:var(--row);mix-blend-mode:multiply}
+.offers-line{margin:14px 0 0;color:#3d4a3c;font-size:13px}
+.offers-line b{font-weight:400;color:#8a938a;margin:0 7px}
+.offers-body{position:relative;z-index:5;display:flex;justify-content:flex-end;align-items:flex-end;padding:0 clamp(20px,4.5%,64px) clamp(24px,4.4vh,52px)}
+.offers-panel{width:min(620px,100%)}
+.offers-tabs{display:flex}
+/* 卡片视觉：白面 + 顶部类别色规线 + 类别色徽标与字段标签；投影把它从浅底上抬起来 */
+.offers-panel{width:min(620px,100%);filter:drop-shadow(0 22px 48px #2f3a261c)}
+.offers-tabs{display:flex}
+.offers-tabs button{flex:1 1 0;min-width:0;border:0;border-top:2px solid transparent;background:rgba(0,0,0,.15);color:#fff;font:inherit;font-size:clamp(15px,2.05vw,30px);font-weight:600;line-height:1.25;letter-spacing:.02em;padding:clamp(14px,1.7vw,26px) clamp(10px,1vw,16px);text-align:left;cursor:pointer;transition:background var(--sc-fast) var(--sc-ease),color var(--sc-fast) var(--sc-ease)}
+.offers-tabs button:hover{background:#ffffffea;color:var(--sc-ink)}
+.offers-tabs button[aria-selected="true"]{background:#fff;border-top-color:var(--row);color:var(--row);font-weight:700}
+.offers-card{position:relative;background:#fff;padding:26px 28px 18px;overflow:hidden}
+.offers-card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:var(--row);z-index:2}
+/* 卡片里补回类别色：头部一层极淡的色洗 */
+.offers-card::after{content:'';position:absolute;inset:3px 0 auto 0;height:88px;background:var(--row);opacity:.07;pointer-events:none}
+.offers-card-head{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.offers-card-head h3{margin:0;font-size:clamp(21px,2vw,28px);line-height:1.04;font-weight:600;letter-spacing:-.025em;color:var(--sc-ink)}
+.offers-sub{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.offers-sub p{margin:0;font-size:12px;color:var(--sc-muted);line-height:1.5;text-align:right}
+.offers-no{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--row);color:#fff;font-size:11px;font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.offers-cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 30px;margin:20px 0 0;padding:0}
+.offers-cells>div{padding:13px 0 12px;border-top:1px solid #eceee6}
+.offers-cells dt{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--row);margin-bottom:6px}
+.offers-cells dd{margin:0;font-size:14px;color:var(--sc-ink);line-height:1.5}
+@keyframes offersSwap{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.offers-card.is-swap .offers-card-head,.offers-card.is-swap .offers-cells{animation:offersSwap 320ms var(--sc-out-expo) both}
+@media (prefers-reduced-motion:reduce){.offers-card.is-swap .offers-card-head,.offers-card.is-swap .offers-cells{animation:none}}
+@media (max-width:640px){.offers-cells{grid-template-columns:1fr;gap:0}.offers-card{padding:20px 18px 14px}.offers-tabs button{padding:11px 7px;font-size:11px}}
+/* 窄屏：模型让位给卡片，避免两者叠在一起 */
+@media (max-width:1080px){.offers-art{width:min(86%,620px)}.offers-panel{width:100%}}
+@media (max-width:700px){.offers-art{width:min(88%,380px)}}
+
+/* 独立光斑层已按「不要花哨」移除（元素也已从 HTML 删掉）。 */
 
 /* 右侧两枚胶囊按钮（参考站：深色 + 白色） */
 .nav-actions{display:flex;gap:10px;flex:none}
@@ -115,49 +214,55 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   font-size:var(--sc-btn-fs);font-weight:600;white-space:nowrap;
   transition:background var(--sc-fast) var(--sc-ease),transform var(--sc-fast) var(--sc-ease);
 }
-.pill-dark{background:#171d24;color:#fff;border:1px solid #ffffff26}
+.pill-dark{background:#242a1c;color:#fff;border:1px solid #ffffff26}
 .pill-light{background:#fff;color:var(--sc-ink)}
 
 /* ============================================================
    3. Hero · 视差 Y −8%→25% + 遮罩 .12→1，由滚动进度驱动
    ============================================================ */
 .hero{
-  position:relative; overflow:hidden; color:#fff; min-height:100svh;
+  position:relative; overflow:hidden; color:#fff; min-height:min(100svh,940px); max-height:min(104svh,1060px);
   display:flex; flex-direction:column;
-  /* 深色底 + 绿色弥散：光斑放在左栏文字区（右上会被 3D 视口遮住），避免纯黑发闷，也与深青产品色呼应 */
+  /* 首屏背景 = 场地渲染图。三层从下往上：
+     ① 深绿渐变：只做兜底底色（图还没放进来时不会变成白块）；
+     ② 场地图：铺满并裁切；
+     ③ 左侧压暗遮罩：文字压在图上要读得清，从左到右渐隐，右侧留给图。
+     换图只需替掉 assets/scenes/hero-court.png。 */
   background:
-    radial-gradient(82% 66% at 16% 2%, #2f7d6b5c 0%, #0000 68%),
-    radial-gradient(66% 56% at 34% 88%, #26695c45 0%, #0000 72%),
-    radial-gradient(120% 95% at 6% -10%, #33404d 0%, #0000 58%),
-    linear-gradient(160deg,#242d37 0%,#1b2429 58%,#131c1b 100%);
+    linear-gradient(100deg,#1a1e15eb 0%,#1a1e15bd 40%,#1a1e1538 70%,#1a1e1500 100%),
+    url(./assets/scenes/hero-court.png) center/cover no-repeat,
+    linear-gradient(160deg,#333b2a 0%,#262c1f 58%,#1a1e15 100%);
 }
 .hero-veil{
   position:absolute; inset:0; pointer-events:none; z-index:1;
-  /* 底部淡出到页面底色：**常驻满强度**。
-     不要套参考站那个「滚动驱动 0.12→1」的参数——那是在滚动时压暗图片，
-     用在这里会让页面顶部只剩 12% 不透明度，淡出等于看不见。 */
-  background:linear-gradient(180deg,#0000 84%,var(--sc-paper) 100%);
+  /* 底部淡出已按要求移除：这里是**唯一**定义 hero-veil 背景的地方，
+     之前在第 132 行加的那条会被本行覆盖，所以失效。 */
+  background:none;
   opacity:1;
 }
 .hero-body{
-  position:relative; z-index:2; flex:1; width:100%; max-width:1500px; margin:0 auto;
-  padding:126px 4.5% 13vh;   /* 底部多留出的这一段就是淡出区，不计入内容 */
-  display:grid; grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr); gap:52px; align-items:center;
+  position:relative; z-index:2; flex:1; width:100%; max-width:1600px; margin:0 auto;
+  padding:clamp(96px,13vh,150px) 4.5% 8vh;
+  /* 首屏只剩左栏文字（右栏留给后面那张绝对定位的浮动卡），
+     所以文字列单独限宽，别让它拉成一长条。 */
+  display:grid; grid-template-columns:minmax(0,min(52ch,780px)) minmax(0,1fr); gap:clamp(28px,3.4vw,56px); align-items:center;
 }
 .hero-copy .eyebrow{
   font-size:11px; letter-spacing:.34em; text-transform:uppercase;
   color:var(--sc-accent-mute); margin-bottom:26px;
 }
-/* 三行标题，中间一行压强调色块（对应参考站 OPENING / MORE(块) / DOORS） */
+/* 三行标题，中间一行压强调色块（对应参考站 OPENING / MORE(块) / DOORS）
+   尺度对齐参考站：display 量级在 12~14vw（之前 7.4vw + 124px 上限把自己卡死了） */
 .display{
-  font-size:clamp(30px,6.2vw,92px); line-height:.96; letter-spacing:-.04em;
-  font-weight:600; margin-bottom:24px;
+  /* 双重封顶：宽屏管宽度（vw），矮屏管高度（svh），避免在宽而矮的屏幕上撑破一屏 */
+  font-size:min(clamp(34px,5.4vw,104px),9svh); line-height:.98; letter-spacing:-.04em;
+  font-weight:600; margin-bottom:22px;
 }
 .display .block{
   display:inline-block; background:var(--sc-accent); color:#fff;
   padding:.02em .16em .1em; border-radius:.05em;
 }
-.hero .sub{max-width:30em; color:#c3ccd4; font-size:16px}
+.hero .sub{max-width:30em; color:#c6ccb8; font-size:16px}
 .hero-cta{margin-top:36px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .cta-btn{
   display:inline-flex;align-items:center;gap:10px;
@@ -166,24 +271,52 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   box-shadow:0 14px 34px var(--sc-accent-glow);
 }
 .hero-meta{
-  margin-top:46px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
-  font-size:12px; color:#9aa4ae;
+  grid-column:1 / -1; margin:clamp(24px,3.4vh,40px) 0 0; padding-top:16px;
+  border-top:1px solid #ffffff24;
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  font-size:12px; color:#c6ccb8;
 }
-.hero-meta i{width:4px;height:4px;border-radius:50%;background:#5d6873;display:block;flex:none}
-.hero-meta a{color:#c3ccd4;border-bottom:1px solid #ffffff3d;padding-bottom:2px}
+.hero-meta i{width:4px;height:4px;border-radius:50%;background:#66705c;display:block;flex:none}
+.hero-meta a{color:#c6ccb8;border-bottom:1px solid #ffffff3d;padding-bottom:2px}
 
 /* 右侧舞台：真实的 canvas#venue（主内容区，不删）+ 半透明数据卡 */
 .hero-stage{position:relative;min-width:0}
+.hero-stage{position:relative;min-width:0;margin-right:-4.5%}
+/* 画布自带浅底（renderer 里 scene.background = #e4e9e5），所以这里不加底、只加一道细边和投影，
+   把它当成一块“屏”而不是一块背景 */
 .stage-frame{
-  position:relative; border-radius:16px; overflow:hidden; height:min(64vh,600px);
-  border:1px solid #ffffff1f; background:#0f141a;
-  box-shadow:0 34px 80px #00000066, inset 0 1px 0 #ffffff14;
+  position:relative; border-radius:4px; overflow:hidden; height:min(58svh,600px);
+  border:1px solid #ffffff2b; box-shadow:0 30px 70px #0000004d, inset 0 1px 0 #ffffff1a;
 }
+/* 首屏浮动信息卡（照设计稿）：直接浮在背景渲染图上，不再装在一个画布窗口里。
+   尺度按“卡片占首屏大约五分之一宽”定，之前是挂在 469px 宽的小画布里、
+   卡片宽 292px 占掉 62%，显得又大又笨。 */
+.stage-card{
+  position:absolute; z-index:4;
+  right:clamp(16px,4.5%,72px); top:clamp(104px,17%,212px);
+  width:clamp(236px,19vw,300px);
+  padding:14px 16px 12px; border-radius:6px;
+  background:#1f2a20d9; border:1px solid #ffffff26; color:#fff;
+  box-shadow:0 18px 44px #10160e4d;
+  backdrop-filter:blur(12px) saturate(140%); -webkit-backdrop-filter:blur(12px) saturate(140%);
+}
+.stage-card .sc-head{display:flex; align-items:center; gap:8px; margin:0; color:#cfd8c4}
+.stage-card .sc-head i{width:6px; height:6px; border-radius:50%; background:var(--sc-accent-mute); display:block; flex:none}
+.stage-card .sc-title{margin:8px 0 0; font-weight:600; letter-spacing:-.02em; line-height:1.25}
+.stage-card .sc-rows{margin:14px 0 0; display:grid; gap:6px}
+.stage-card .sc-rows>div{display:flex; justify-content:space-between; gap:12px; align-items:baseline}
+.stage-card .sc-rows dt{color:#a9b49c; margin:0}
+.stage-card .sc-rows dd{margin:0; font-variant-numeric:tabular-nums}
+.stage-card .sc-foot{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding-top:12px; border-top:1px solid #ffffff1f}
+.stage-card .sc-thumb{display:block; width:58px; height:34px; border-radius:3px; border:1px solid #ffffff1f;
+  background:#2f3d2c url(./assets/scenes/house.png) center/cover}
+.stage-card .sc-badge{padding:3px 10px; border-radius:999px; background:#ffffff1a; border:1px solid #ffffff26; letter-spacing:.06em}
+@media (max-width:900px){.stage-card{display:none}}
 #venue{display:block;width:100%;height:100%}
 .loading{
   position:absolute; inset:0; z-index:3; display:grid; place-items:center; text-align:center;
-  padding:20px; color:#aab4bd; font-size:12px; letter-spacing:.06em;
-  background:#141a21e6; transition:opacity var(--sc-enter) var(--sc-ease);
+  padding:20px; color:var(--sc-muted); font-size:12px; letter-spacing:.06em;
+  background:#f7f5ede6; transition:opacity var(--sc-enter) var(--sc-ease);
 }
 .loading[hidden]{display:none}
 /* 三维视口内的浮动数据卡已按评审意见移除。 */
@@ -223,7 +356,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 section.band{padding:4vh 0}
 /* 功能页是产品内容，节奏比营销段更紧 */
 #scene,#phases{padding:3vh 0}
-.band-head{display:flex;align-items:baseline;gap:18px;margin-bottom:44px;flex-wrap:wrap}
+.band-head{display:flex;align-items:baseline;gap:18px;margin-bottom:clamp(18px,2.8svh,32px);flex-wrap:wrap}
 .tag{
   display:inline-block;font-size:11px;letter-spacing:.3em;text-transform:uppercase;
   color:var(--sc-accent-ink);
@@ -245,24 +378,27 @@ h2{font-size:clamp(24px,3.2vw,44px);line-height:1.22;letter-spacing:-.02em;font-
   background:linear-gradient(135deg,#ffffffb3,#ffffff00 60%),var(--sc-surface);
   border:1px solid #ffffffd9; box-shadow:var(--sc-glass-shadow);
   backdrop-filter:blur(var(--sc-glass-blur-panel)); -webkit-backdrop-filter:blur(var(--sc-glass-blur-panel));
-  border-radius:14px;
+  /* 参考站面板圆角是 0.2–0.3rem（≈4px），不是 14px */
+  border-radius:4px;
 }
 
 /* 数字计数段 */
-.counters{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
-.counter{padding:26px 24px}
-.counter b{display:block;font-size:clamp(34px,5vw,64px);line-height:1;letter-spacing:-.04em;font-weight:600}
-.counter b i{font-style:normal;color:var(--sc-accent);font-size:.45em;margin-left:2px}
-.counter span{display:block;margin-top:10px;font-size:12px;color:var(--sc-muted)}
+.counters{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:0}
+/* 卡片颜色补回来：每张卡左边一道类别色规线，数字用同一色 */
+.counter{position:relative;padding:22px 22px;background:#fff;border:1px solid var(--sc-line);border-radius:4px}
+.counter::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--row)}
+.counter b{display:block;font-size:clamp(30px,4vw,52px);line-height:1;letter-spacing:-.04em;font-weight:600;color:var(--row)}
+.counter b i{font-style:normal;color:var(--row);opacity:.78;font-size:.42em;margin-left:3px}
+.counter span{display:block;margin-top:9px;font-size:12px;color:var(--sc-muted)}
 
 /* 边界对比段 */
 /* 场地照片是 3:4 竖图，不约束比例会按原始比例把整行撑到 724px */
 .split{display:grid;grid-template-columns:1.15fr 1fr;gap:22px;align-items:start;margin-top:34px}
-.split figure{margin:0;position:relative;overflow:hidden;border-radius:14px;aspect-ratio:4/3}
+.split figure{margin:0;position:relative;overflow:hidden;border-radius:4px;aspect-ratio:4/3}
 .split img{width:100%;height:100%;object-fit:cover;display:block}
 .split .tagline{
   position:absolute;left:0;right:0;bottom:0;padding:16px 18px;color:#fff;
-  background:linear-gradient(180deg,#0000,#0d1114cc);font-size:12px;
+  background:linear-gradient(180deg,#0000,#1a1e15cc);font-size:12px;
 }
 /* 原「保留清单」样式随说明段落一并删除 */
 .diagram{
@@ -315,7 +451,7 @@ footer{padding:8vh 0 6vh;color:var(--sc-muted);font-size:12px}
   display:flex;align-items:center;gap:14px;flex-wrap:wrap;
   padding:12px 14px;border-bottom:1px solid var(--sc-line);background:#ffffffa6;
 }
-.view-tabs{display:flex;gap:4px;padding:4px;border-radius:999px;background:#eef1f4;border:1px solid var(--sc-line)}
+.view-tabs{display:flex;gap:4px;padding:4px;border-radius:999px;background:#f0efe6;border:1px solid var(--sc-line)}
 .view-tabs button{
   font-size:12px;padding:7px 14px;border-radius:999px;color:var(--sc-muted);
   transition:background var(--sc-fast) var(--sc-ease),color var(--sc-fast) var(--sc-ease);
@@ -331,7 +467,7 @@ footer{padding:8vh 0 6vh;color:var(--sc-muted);font-size:12px}
   .view-tabs button:hover{color:var(--sc-accent-ink)}
 }
 
-.canvas-wrap{position:relative;flex:1;min-height:430px;background:#0f141a}
+.canvas-wrap{position:relative;flex:1;min-height:min(33svh,300px);background:#0f141a}
 #venue-plan{display:block;width:100%;height:100%}
 .map-label{
   position:absolute;left:12px;top:12px;z-index:3;font-size:11px;color:var(--sc-muted);
@@ -379,9 +515,9 @@ footer{padding:8vh 0 6vh;color:var(--sc-muted);font-size:12px}
 .zone-heading{display:flex;align-items:center;gap:9px;margin-top:8px}
 .zone-heading h3{font-size:15px;font-weight:600}
 .zone-description{margin-top:9px;color:var(--sc-muted);font-size:12px}
-.zone-note{margin-top:11px;padding:9px 11px;border-radius:9px;background:var(--sc-accent-soft);color:var(--sc-accent-ink);font-size:11px}
+.zone-note{margin-top:11px;padding:9px 11px;border-radius:4px;background:var(--sc-accent-soft);color:var(--sc-accent-ink);font-size:11px}
 
-.timeline-panel{padding:22px;border-radius:14px}
+.timeline-panel{padding:22px;border-radius:4px}
 .timeline-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:20px}
 .timeline-heading h2{font-size:clamp(19px,2.3vw,28px)}
 .play-button{
@@ -415,11 +551,75 @@ footer{padding:8vh 0 6vh;color:var(--sc-muted);font-size:12px}
 .note-block{margin-top:14px}
 .note-block p{margin-top:7px;color:var(--sc-muted);font-size:12px;line-height:var(--sc-lh-body)}
 
-.site-footer{
-  display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap;
-  margin-top:30px;padding:18px 0 4vh;border-top:1px solid var(--sc-line);
-  font-size:11px;color:var(--sc-muted);
-}
+/* 首屏之后的介绍带：照参考站 hero 下面那几块（介绍语 / 大图 + 四格 / 数字带 / Our Offerings） */
+/* 介绍语：用一段 + <br> 控制断行。
+   注意**不要再加 max-width**：先前是 34ch，在 25.3px 下只有 ≈428px，
+   而最长一句要 ≈557px，于是每个 <p> 都已经断好的行又被容器二次折断，
+   硬换行叠软换行，变成很难看的碎行。--fs-lead 是 2.2vw，
+   一行约 22 字 ≈ 48.4vw，永远短于容器宽度，所以让它自然满宽就对了。 */
+.intro-lead{max-width:none;margin:0;font-size:var(--fs-lead);line-height:1.34;letter-spacing:-.03em;font-weight:600}
+.intro-lead p{margin:0}
+.intro-lead b{color:var(--sc-accent)}
+.intro-split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:clamp(26px,4vw,72px);align-items:start;margin-top:clamp(16px,2.4svh,34px)}
+.intro-split h2{margin:0 0 18px;font-size:clamp(26px,3.5vw,66px);line-height:1.08;letter-spacing:-.035em;font-weight:600}
+.intro-split .lede{margin:0;max-width:min(100%,30em);color:var(--sc-muted);font-size:clamp(13px,1.05vw,17px);line-height:1.7}
+/* 四格改成一排四个：原来是 2×2，占了两行高度 */
+.intro-cells{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 clamp(18px,2.4vw,40px)}
+.intro-cells>div{padding:18px 0;border-top:1px solid var(--sc-line)}
+.intro-cells span{display:block;font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--sc-accent);margin-bottom:8px}
+.intro-cells p{margin:0;font-size:clamp(14px,1.25vw,20px);font-weight:600;letter-spacing:-.015em}
+.intro-cta{display:inline-flex;align-items:center;gap:10px;margin-top:clamp(26px,4vw,56px);padding:16px 26px;border-radius:999px;background:var(--sc-accent);color:#fff;text-decoration:none;font-size:15px;font-weight:600}
+.intro-cta:hover{background:var(--sc-accent-ink)}
+.stat-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:clamp(22px,3.2svh,48px);border-top:1px solid var(--sc-line)}
+.stat-bar>div{padding:clamp(14px,2.2svh,30px) 0;border-bottom:1px solid var(--sc-line)}
+.stat-bar b{display:block;font-size:clamp(26px,3.4vw,60px);line-height:1.04;letter-spacing:-.04em;font-weight:600;font-variant-numeric:tabular-nums}
+.stat-bar span{display:block;margin-top:10px;font-size:12px;color:var(--sc-muted)}
+/* Our Offerings：照参考站两个大数字 + 说明 + CTA */
+.os-head{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;flex-wrap:wrap}
+.os-head h3{margin:0;font-size:clamp(26px,3.5vw,62px);line-height:1.04;letter-spacing:-.035em;font-weight:600}
+.os-head p{margin:0;max-width:min(100%,32em);color:var(--sc-muted);font-size:clamp(13px,1.05vw,17px);line-height:1.7}
+.os-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(20px,3vw,56px);margin-top:clamp(28px,4.4vw,70px)}
+.os-nums b{display:block;font-size:clamp(40px,6vw,120px);line-height:.95;letter-spacing:-.05em;font-weight:600;font-variant-numeric:tabular-nums;color:var(--sc-accent)}
+.os-nums b small{font-size:.5em;opacity:.6;margin:0 .06em}
+.os-nums span{display:block;margin-top:12px;padding-top:12px;border-top:1px solid var(--sc-line);font-size:13px;color:var(--sc-muted)}
+@media (max-width:900px){.intro-split{grid-template-columns:1fr}}
+@media (max-width:760px){.intro-cells{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* 页脚：照参考站收官段（白底 / 三栏 / 字级往上提）——旧的一行细页脚已废弃 */
+.site-foot{margin-inline:calc(50% - 50vw);width:100vw;margin-top:clamp(40px,7vw,110px);min-height:var(--foot-min);background:#fff;color:var(--sc-ink);border-top:1px solid var(--sc-line);padding:clamp(34px,5vh,80px) clamp(20px,4.5%,64px) clamp(20px,3vh,36px)}
+.foot-inner{max-width:1600px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(0,1fr));gap:clamp(24px,4vw,64px);align-items:start}
+.foot-brand{display:flex;align-items:center;gap:11px;font-size:23px;font-weight:600;letter-spacing:2px;color:var(--sc-ink);text-decoration:none}
+.foot-brand strong{display:inline-flex;align-items:baseline;gap:13px}
+.foot-brand small{font-size:12px;letter-spacing:2.5px;font-weight:600;color:var(--sc-muted)}
+.foot-lead{margin:clamp(20px,2.6vw,34px) 0 0;font-size:clamp(18px,2.1vw,36px);line-height:1.22;letter-spacing:-.028em;font-weight:600}
+.foot-cta{display:inline-flex;align-items:center;gap:10px;margin-top:clamp(18px,2.4vw,30px);padding:14px 22px;border-radius:999px;background:var(--sc-accent);color:#fff;text-decoration:none;font-size:14px;font-weight:600}
+.foot-cta:hover{background:var(--sc-accent-ink)}
+.foot-col h3{margin:0 0 14px;font-size:11px;letter-spacing:.16em;font-weight:700;color:var(--sc-muted);text-transform:uppercase}
+.foot-col a{display:block;margin:0 0 10px;font-size:14px;color:var(--sc-ink);text-decoration:none}
+.foot-col a:hover{color:var(--sc-accent)}
+.foot-note{max-width:1600px;margin:clamp(28px,4vw,56px) auto 0;padding-top:18px;border-top:1px solid var(--sc-line);font-size:12px;color:var(--sc-muted)}
+
+/* Process：照参考站那一段 21vw 巨型标题 + 4 步 + 整块可点 CTA 卡 */
+.huge{margin:0;font-size:min(clamp(58px,19vw,300px),25svh);line-height:.88;letter-spacing:-.055em;font-weight:600}
+.huge.sm{font-size:min(clamp(46px,13vw,210px),17svh)}
+.process-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:clamp(22px,3vw,48px);margin-top:clamp(20px,3svh,42px)}
+.step{display:flex;gap:13px;padding-top:16px;border-top:1px solid var(--sc-line)}
+.step>span{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--sc-accent);padding-top:5px}
+.step-t{margin:0 0 8px;font-size:clamp(17px,1.85vw,28px);line-height:1.16;font-weight:600;letter-spacing:-.02em;color:var(--sc-ink)}
+.step-d{margin:0;font-size:clamp(13px,1.05vw,16px);line-height:1.6;color:var(--sc-muted)}
+.process-cta{display:grid;gap:clamp(14px,2.2svh,30px);margin-top:clamp(22px,3.2svh,48px);padding:clamp(20px,3svh,44px) clamp(22px,3.2vw,48px);border-radius:4px;background:var(--sc-accent);color:#fff;text-decoration:none}
+.process-cta .pc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;font-size:13px;letter-spacing:.06em}
+.process-cta .pc-arw{justify-self:end;width:clamp(28px,3.4vw,54px);height:auto}
+.process-cta .pc-title{font-size:clamp(26px,4.2vw,84px);line-height:1.0;letter-spacing:-.04em;font-weight:600}
+.process-cta:hover{background:var(--sc-accent-ink)}
+
+/* Tech powered：照参考站 13vw 标题 + 一段说明 + 一个链接 */
+.tech-row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:clamp(24px,4vw,70px);align-items:end;margin-top:clamp(26px,4vw,58px)}
+.tech-lead{margin:0 0 14px;font-size:clamp(19px,2.1vw,34px);line-height:1.2;letter-spacing:-.025em;font-weight:600}
+.tech-copy{margin:0;font-size:clamp(13px,1.1vw,17px);line-height:1.65;color:var(--sc-muted);max-width:min(100%,34em)}
+.tech-link{justify-self:start;display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border:1px solid var(--sc-line);border-radius:999px;color:var(--sc-ink);text-decoration:none;font-size:14px;font-weight:600;background:#fff}
+.tech-link:hover{border-color:var(--sc-accent);color:var(--sc-accent)}
+@media (max-width:900px){.foot-inner{grid-template-columns:1fr}.tech-row{grid-template-columns:1fr}}
 
 dialog{
   border:1px solid #ffffffd9;border-radius:14px;box-shadow:0 24px 60px #24313e33;
@@ -493,6 +693,66 @@ h2, h3 { line-height: var(--sc-lh-tight); }
   .canvas-wrap{min-height:320px}
   .milestones button{flex:1 1 100%}
 }
+
+/* ============================================================
+   10. 字号层级统一：全城只保留 8 档（+ 品牌 1 档）
+   ------------------------------------------------------------
+   改前实测量出 **29 个不同字号**（10/11/11.2/12/12.5/13/14/14.4/15/16/19/19.4/
+   21.3/23/23.6/24.2/25.3/26/26.5/34.6/36.9/39.2/40.3/48.4/62.2/69.1/122.4/
+   158.4/180px），互相不成比例，改一处还得找一处。
+   这里作为字号**唯一来源**，放在最后靠同优先级下后者胜出来覆盖前面所有组件规则。
+   每一档都做「vw 管宽屏 + svh 管矮屏」双重封顶。
+   相对字号（em）故意不入本表：它们本来就该跟着父级走（如 .os-nums b small、
+   .counter b i、.band.blank p b）。
+   ============================================================ */
+:root{
+  --fs-hero:min(12vw,19svh);                          /* 1 主标题：分类大标题 */
+  --fs-mega:min(9vw,18svh);                           /* 2 巨型展示：Process / Tech powered */
+  --fs-display:min(clamp(34px,5.4vw,104px),9svh);     /* 3 首屏 h1 / 大数字 */
+  --fs-h2:min(3.5vw,6.2svh);                          /* 4 段落标题 */
+  --fs-lead:min(2.2vw,4svh);                          /* 5 引导语 */
+  --fs-sub:min(1.55vw,2.8svh);                        /* 6 卡标题 / tab / 引语 / 面板小标题 */
+  --fs-body:min(1.2vw,2.2svh);                        /* 7 正文 / 列表 / 按钮 / 链接 */
+  --fs-meta:min(1vw,1.8svh);                          /* 8 标签 / 序号 / 备注 */
+  --fs-brand:23px;                                    /* 品牌字（logo，不参与正文层级） */
+}
+/* 1 主标题（用 .offers .offers-title 两段式：单类会被 .band h2 靠优先级压掉） */
+.offers .offers-title{font-size:var(--fs-hero)!important}
+/* 2 巨型展示 */
+.huge,.huge.sm{font-size:var(--fs-mega)!important}
+/* 3 首屏 / 大数字 */
+.display,.os-nums b{font-size:var(--fs-display)!important}
+/* 4 段落标题（先给通用，再给更具体的覆盖） */
+.band h2,.timeline-heading h2,.os-head h3,.stat-bar b,.process-cta .pc-title,.counter b{font-size:var(--fs-h2)!important}
+.fn-aside h2,.zone-heading h3,.offers-card-head h3{font-size:var(--fs-sub)!important}
+/* 5 引导语 */
+.band.blank p,.intro-lead,.tech-lead,.foot-lead,.phase-time,.hero .sub,.stage-card .sc-title{font-size:var(--fs-lead)!important}
+/* 6 卡标题 / tab / 引语 / 面板小标题 / 数字单位 */
+.offers-tabs button,.quote blockquote,.step-t,.intro-cells p,.intro-cells span,
+.counter b i,.os-nums b small,.os-nums span{font-size:var(--fs-sub)!important}
+/* 7 正文 / 列表 / 按钮 / 链接
+   注意 .intro-split .lede、.nav-cta span、.os-nums span 这些原始规则是双类选择器，
+   单类覆盖不动它们，所以必须写全路径。 */
+body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-pill a,
+.nav-cta span,.foot-col a,.intro-cta,.cta-btn,.foot-cta,.tech-link,.tech-copy,.os-head p,
+.process-cta .pc-top,.phase-description,.zone-description,.zone-note,.note-block p,
+.offers-line,.hero-meta,.map-toolbar,.map-footer,.view-tabs button,.asset-strip,
+.phase-actions li,.milestones button,.map-label,.asset-indicator,
+.pill,.pill span,.play-button,.cta,.cta span,.step-d,.stage-card .sc-rows dd{font-size:var(--fs-body)!important}
+/* 8 标签 / 序号 / 备注 */
+.tag,.section-label,.eyebrow,.hero-copy .eyebrow,.offers-no,.offers-cells dt,.foot-col h3,
+.foot-note,.foot-brand small,.nav-pill a i,.step>span,.quote figcaption b,.quote figcaption span,
+.band.blank p b,.dialog-top,.zone-legend button,.time-ticks span,.loading,
+.phase-focus span,.timeline-panel .section-label,
+.stat-bar span,.milestones button span,.phase-focus strong,.brand small,.text-button,
+.stage-card .sc-head,.stage-card .sc-rows dt,.stage-card .sc-badge{font-size:var(--fs-meta)!important}
+/* 品牌字 */
+.brand,.foot-brand{font-size:var(--fs-brand)!important}
+
+/* 右侧信息栏：内容比一屏长，改成**栏内滚动**——
+   这样 #scene 的段落高度由画布区决定、锁在一屏内，而不是被这栏的文字长度拖着长。
+   内容一字未删，只是不再参与段落高度计算。 */
+.fn-aside{max-height:min(76svh,680px);overflow-y:auto;overscroll-behavior:contain}
 </style>
 </head>
 <body>
@@ -501,14 +761,15 @@ h2, h3 { line-height: var(--sc-lh-tight); }
   <!-- 顶部：左 logo / 居中玻璃胶囊 / 右侧双胶囊按钮（对齐参考站顶部结构） -->
   <div class="site-nav">
     <a class="brand" href="#hero">
-      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 -4.3 32 36" width="20.44" height="23" fill="none" focusable="false"><g transform="skewY(-15)"><rect x="2.5" y="7" width="7" height="22" rx="1" fill="#fdfcf8"/><rect x="12.5" y="1" width="7" height="34" rx="1" fill="#8da97c"/><rect x="22.5" y="4.5" width="7" height="27" rx="1" fill="#4e6244"/></g></svg></span>
       <span>幕景 <small>SCENDANCE</small></span>
     </a>
     <nav class="nav-pill" id="nav" aria-label="页面导航">
-      <a href="#boundary">场地边界</a>
-      <a href="#scene">三维场景</a>
-      <a href="#phases">48 小时</a>
-      <span class="nav-glow" aria-hidden="true"></span>
+      <a href="#scenes" data-view-link="scenes"><i>01</i>场景类别</a>
+      <a href="#boundary" data-view-link="boundary"><i>02</i>场地边界</a>
+      <a href="#scene" data-view-link="scene"><i>03</i>三维场景</a>
+      <a href="#phases" data-view-link="phases"><i>04</i>48 小时</a>
+      <a href="#deliver" data-view-link="deliver"><i>05</i>带走方案</a>
     </nav>
     <div class="nav-actions">
       <a class="pill pill-dark" href="#scene">
@@ -518,7 +779,7 @@ h2, h3 { line-height: var(--sc-lh-tight); }
           <span class="arw arw-2"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
         </span>
       </a>
-      <a class="pill pill-light" href="/auth?next=%2F">
+      <a class="pill pill-light" href="/">
         <span>进入场景</span>
         <span class="cta-arrows" aria-hidden="true">
           <span class="arw arw-1"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
@@ -533,10 +794,10 @@ h2, h3 { line-height: var(--sc-lh-tight); }
   <div class="hero-body">
     <div class="hero-copy">
       <p class="eyebrow rv">三维场景协作 Web 应用</p>
-      <h1 class="display rv">AI 快速成稿<br><span class="block">团队共同完善</span><br>客户自由查看</h1>
+      <h1 class="display rv">为相聚，<br>留一方空间。</h1>
       <p class="sub rv">
-        面向小型活动策划执行工作室：用 AI 和内置物料快速形成活动方案，
-        让团队共同完善布置，并向客户交付可自由查看的三维场景。
+        一场活动从想法到现场，都在同一个三维空间里成形 ——
+        AI 出草稿，团队调整，客户确认。
       </p>
       <div class="hero-cta rv">
         <a class="cta-btn" href="#scene">
@@ -547,7 +808,7 @@ h2, h3 { line-height: var(--sc-lh-tight); }
           </span>
         </a>
         <a class="pill pill-dark" href="#boundary">
-          <span>看示例场景</span>
+          <span>查看模型</span>
           <span class="cta-arrows" aria-hidden="true">
             <span class="arw arw-1"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
             <span class="arw arw-2"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
@@ -559,59 +820,104 @@ h2, h3 { line-height: var(--sc-lh-tight); }
       </div>
     </div>
 
-    <!-- 右侧：现有的 canvas#venue。这是主内容区，本轮只换外框，不删不改场景 -->
-    <div class="hero-stage rv">
-      <div class="stage-frame">
-        <canvas id="venue" tabindex="0" aria-label="黑客松三维场地，可拖动旋转、方向键调整、加减键缩放，点击区域查看说明"></canvas>
-        <div id="loading" class="loading" role="status">正在加载场地与三维素材…</div>
-      </div>
-    </div>
+  <!-- 首屏浮动信息卡：按设计稿，它直接浮在背景渲染图上。
+       这里原来还有一个 .stage-frame 装着 canvas#venue，但那个画布自带浅灰底
+       （renderer-webgl.js 里 scene.background = #e4e9e5），压在深色场地图上
+       会变成一块亮矩形，和卡片互相打架，所以整个窗口去掉了。
+       实时三维演示仍在下方 #scene 的 canvas#venue-plan 里。 -->
+  <div class="stage-card">
+    <p class="sc-head"><i aria-hidden="true"></i>活动场景 · 方案预览</p>
+    <p class="sc-title">高校迎新嘉年华</p>
+    <dl class="sc-rows">
+      <div><dt>容量</dt><dd>800 人</dd></div>
+      <div><dt>场地</dt><dd>58 × 34 m</dd></div>
+      <div><dt>方案版本</dt><dd>v2.1</dd></div>
+    </dl>
+    <div class="sc-foot"><span class="sc-thumb" aria-hidden="true"></span><span class="sc-badge">3D</span></div>
   </div>
 </header>
 
 <div class="wrap">
 
-  <section class="band" id="boundary">
+  <!-- 首屏之后：一页白 -->
+  <section class="band blank" id="blank">
+    <p class="rv">把现场放进屏幕里，<br>再决定它长什么样。<b>先想清楚，再做出来</b></p>
+  </section>
+
+  <!-- 首屏之后的介绍带：照参考站 hero 下面那几块（介绍语 / 大图 + 四格 / 数字带） -->
+  <section class="band" id="intro">
+    <span class="tag">Introduction</span>
+    <p class="intro-lead" data-speed="0.94" style="margin-top:14px">不管你是第一次办活动，还是已经做过几十场，<br><b>幕景</b>® 把场地照片变成能一起改的三维场景，<br>让「怎么摆」这件事，在动手之前就谈清楚。</p>
+    <div class="intro-split">
+      <div>
+        <h2>先把话说清楚，<br>再谈怎么摆。</h2>
+        <p class="lede">我们做的事很简单：把现场放进屏幕里，让场地方、搭建方、客户看同一份东西。不用靠嘴形容，也不用再手绘草图。</p>
+      </div>
+      <div class="intro-cells">
+        <div><span>01</span><p>不用装软件</p></div>
+        <div><span>02</span><p>照片即尺寸</p></div>
+        <div><span>03</span><p>方案可导出</p></div>
+        <div><span>04</span><p>模型可溯源</p></div>
+      </div>
+    </div>
+    <a class="intro-cta" href="#scene">进入三维场景 <span aria-hidden="true">↗</span></a>
+    <div class="stat-bar" data-speed="0.96">
+      <div><b>7</b><span>类场景做法</span></div>
+      <div><b>10</b><span>分钟出第一版</span></div>
+      <div><b>0</b><span>需要安装的软件</span></div>
+      <div><b>100%</b><span>计算在浏览器内完成</span></div>
+    </div>
+  </section>
+
+  <!-- Our Offerings：照参考站两个大数字 + 说明 + CTA -->
+  <section class="band" id="offerings">
+    <div class="os-head">
+      <h3>Our Offerings</h3>
+      <p>从 6 人的圆桌会议到 1200 人的开幕式，都能先在这里看清楚，再动手。</p>
+    </div>
+    <div class="os-nums" data-speed="0.9">
+      <div><b>6<small>–</small>1200</b><span>可承载人数范围</span></div>
+      <div><b>18<small>–</small>1500</b><span>可用场地面积 m²</span></div>
+    </div>
+    <a class="intro-cta" href="/">打开工作台 <span aria-hidden="true">↗</span></a>
+  </section>
+
+  <!-- 场景类别：6 段参考站 offerings 段（满铺图 + 左上大标题 + 右下 tab 白卡），
+       数据与渲染在文件末尾的 OFFERS 里；图像目前引参考站素材占位。 -->
+  <!-- 场景类别：给 data-view 才能被导航高亮跟踪（占 7 屏，是页面主体） -->
+  <section class="band" id="scenes" data-view="scenes">
+    <div class="offers-stack" id="offers-stack"></div>
+  </section>
+
+  <!-- 客户评价：色块引语（参考站 “Why They Chose Us”） -->
+  <section class="band" id="quotes">
+    <span class="tag">Why they chose us</span>
+    <h2 class="rv">他们为什么选幕景。</h2>
+    <div class="quote-grid">
+      <figure class="quote rv" style="--q:#6f8f52"><blockquote>把现场照片丢进去，十分钟就有一个能坐下来讨论的布置。</blockquote><figcaption><b>李经理</b><span>活动策划工作室</span></figcaption></figure>
+      <figure class="quote rv" style="--q:#b06a52"><blockquote>客户不用装软件，打开链接就能看清桌椅往哪摆。</blockquote><figcaption><b>陈总监</b><span>品牌市场部</span></figcaption></figure>
+      <figure class="quote rv" style="--q:#c08a3e"><blockquote>以前要画三版草图才能讲清楚，现在一份三维场景就对齐了。</blockquote><figcaption><b>周老师</b><span>高校活动中心</span></figcaption></figure>
+      <figure class="quote rv" style="--q:#4f7a72"><blockquote>场地方、搭建方各看一遍，争议全在图上说清楚。</blockquote><figcaption><b>吴工</b><span>场馆运营</span></figcaption></figure>
+    </div>
+  </section>
+
+  <!-- 场地边界：精简到只剩三个数字卡（颜色按卡片各自带） -->
+  <section class="band" id="boundary" data-view="boundary">
     <div class="band-head">
       <span class="tag">Reference / Boundary</span>
     </div>
-    <h2 class="rv">先看现场，<br>再谈方案。</h2>
-    <p class="lede rv">空间比例、出入口与容量都以现场复核为准。三维场景是沟通工具，不是施工图。</p>
-
-    <div class="split">
-      <figure class="rv">
-        <img src="./assets/venue.jpg" alt="参考场地照片：绿色球场、两侧看台、大跨度钢架屋顶与后侧窗户">
-        <div class="tagline">真实场馆照片 · 作为形态参考</div>
-      </figure>
-      <div class="diagram glass rv">
-        <span class="stamp">实施前必须确认</span>
-        <ol>
-          <li>可用尺寸与真实出入口</li>
-          <li>篮架能否移动、电力与网络条件</li>
-          <li>夜间开放与休息安排</li>
-          <li>导视、评委及工作人员动线</li>
-        </ol>
-        <p style="color:var(--sc-muted);font-size:12px;margin:0">
-          场馆采用示意比例，不代表实测尺寸、核定容量或人流仿真。
-        </p>
-      </div>
+    <div class="counters" style="margin-top:22px">
+      <div class="counter glass rv" style="--row:#6f8f52"><b><span data-count-to="100">0</span><i>人</i></b><span>计划参赛规模</span></div>
+      <div class="counter glass rv" style="--row:#c08a3e"><b><span data-count-to="25">0</span><i>队</i></b><span>每队 4 人</span></div>
+      <div class="counter glass rv" style="--row:#a34f5f"><b><span data-count-to="48">0</span><i>小时</i></b><span>活动时间</span></div>
     </div>
-
-    <div class="counters">
-      <div class="counter glass rv"><b><span data-count-to="100">0</span><i>人</i></b><span>计划参赛规模</span></div>
-      <div class="counter glass rv"><b><span data-count-to="25">0</span><i>队</i></b><span>每队 4 人</span></div>
-      <div class="counter glass rv"><b><span data-count-to="48">0</span><i>小时</i></b><span>活动时间</span></div>
-    </div>
-    <p style="margin-top:14px;font-size:12px;color:var(--sc-muted)" class="rv">
-      数字在滚动进入时计数到终值；还原动效偏好下直接显示终值。
-    </p>
   </section>
 
   <!-- ============================================================
        功能页：现有 index.html 的内容与 id 全部保留，只换外层设计语言
        canvas#venue 在首屏右侧运行；这里是第二个视口 canvas#venue-plan
        ============================================================ -->
-  <section class="band" id="scene">
+  <section class="band" id="scene" data-view="scene">
     <div class="band-head">
       <span class="tag">功能页 / 内容全部保留</span>
     </div>
@@ -665,18 +971,14 @@ h2, h3 { line-height: var(--sc-lh-tight); }
         <div id="zone-note" class="zone-note"></div>
         <hr>
         <div class="note-block">
-          <span class="section-label">布局原则</span>
-          <p>中央固定工位，两侧利用看台；咨询靠近团队，茶歇靠近入口；用连续通道连接各区。</p>
-        </div>
-        <div class="note-block">
-          <span class="section-label">实施前确认</span>
-          <p>可用尺寸、真实出入口、篮架能否移动、电力网络、夜间开放与休息安排。导师、评委及工作人员另计。</p>
+          <span class="section-label">布局原则 · 实施前确认</span>
+          <p>中央固定工位，两侧利用看台；咨询靠近团队，茶歇靠近入口；用连续通道连接各区。<br>实施前需确认：可用尺寸、真实出入口、篮架能否移动、电力网络、夜间开放与休息安排；导师、评委及工作人员另计。</p>
         </div>
       </aside>
     </div>
   </section>
 
-  <section class="band" id="phases">
+  <section class="band" id="phases" data-view="phases">
     <section class="timeline-panel" aria-label="48 小时活动时间轴">
       <div class="timeline-heading">
         <div><span class="section-label">TIME MAKES THE SPACE</span><h2>拖动时间，看空间如何被使用。</h2></div>
@@ -689,7 +991,7 @@ h2, h3 { line-height: var(--sc-lh-tight); }
     </section>
   </section>
 
-  <section class="band">
+  <section class="band" id="deliver" data-view="deliver">
     <h2 class="rv">把方案带走。</h2>
     <p class="lede rv">导出 Markdown 方案，或进入三维场景逐区确认。</p>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:30px" class="rv">
@@ -710,10 +1012,60 @@ h2, h3 { line-height: var(--sc-lh-tight); }
     </div>
   </section>
 
-  <footer class="site-footer">
-    <span>依据你的场地照片进行概念设计</span>
-    <span>模型采用示意比例；动线动画用于讲解活动组织。</span>
-    <span style="flex-basis:100%;color:#8d979f">幕景 Scendance · 面向小型活动策划执行工作室的三维场景协作</span>
+  <!-- Process：照参考站 21vw 巨型标题 + 4 步 + 整块可点 CTA 卡 -->
+  <section class="band" id="process">
+    <h2 class="huge" data-speed="0.93">Process</h2>
+    <div class="process-grid" data-speed="0.96">
+      <div class="step"><span>01</span><div><p class="step-t">先看现场，再谈方案</p><p class="step-d">把场地照片和可用尺寸发过来，我们先确认边界、出入口和供电，再决定能摆什么。</p></div></div>
+      <div class="step"><span>02</span><div><p class="step-t">十分钟出第一版</p><p class="step-d">按照片拉起三维空间，桌椅、舞台、动线一次摆好，直接能坐下来讨论。</p></div></div>
+      <div class="step"><span>03</span><div><p class="step-t">一起改，不是来回传</p><p class="step-d">场地方、搭建方、客户看同一份场景，改动落在图上，不落在聊天记录里。</p></div></div>
+      <div class="step"><span>04</span><div><p class="step-t">带走能落地的方案</p><p class="step-d">导出 Markdown 方案与布置说明，交给搭建方即可执行，附材料与来源清单。</p></div></div>
+    </div>
+    <a class="process-cta" href="#scene">
+      <span class="pc-top"><span>现在开始</span><span>幕景 ®</span></span>
+      <svg class="pc-arw" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg>
+      <span class="pc-title">为相聚，<br>留一方空间。</span>
+    </a>
+  </section>
+
+  <!-- Tech powered：照参考站 13vw 标题 + 一段说明 + 一个链接 -->
+  <section class="band" id="tech">
+    <h2 class="huge sm" data-speed="0.9">Tech powered</h2>
+    <div class="tech-row" data-speed="0.95">
+      <div>
+        <p class="tech-lead">照片进来，场景出去。</p>
+        <p class="tech-copy">照片只用来还原尺寸与采光；模型库里的桌型、桁架、灯具按真实规格摆放。所有计算在你的浏览器里完成，不上传原始照片，也不需要装软件。</p>
+      </div>
+      <a class="tech-link" href="#scene">看看三维场景 <span aria-hidden="true">↗</span></a>
+    </div>
+  </section>
+
+  <footer class="site-foot">
+    <div class="foot-inner">
+      <div>
+        <a class="foot-brand" href="/introduction" aria-label="幕景 Scendance 官网">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" width="23" height="23" fill="none"><rect x="10" y="6" width="4.6" height="28" rx="1.4" fill="#fdfcf8"/><rect x="17.7" y="6" width="4.6" height="28" rx="1.4" fill="#8da97c"/><rect x="25.4" y="6" width="4.6" height="28" rx="1.4" fill="#4e6244"/></svg></span>
+          <strong>幕景<small>SCENDANCE</small></strong>
+        </a>
+        <p class="foot-lead">把现场放进屏幕里，<br>再决定它长什么样。</p>
+        <a class="foot-cta" href="#scene">进入三维场景 <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="foot-col">
+        <h3>产品</h3>
+        <a href="#scenes">场景类别</a>
+        <a href="#scene">三维场景</a>
+        <a href="#phases">时间轴</a>
+        <a href="#deliver">导出方案</a>
+      </div>
+      <div class="foot-col">
+        <h3>进入</h3>
+        <a href="/">打开工作台</a>
+        <a href="#boundary">场地边界</a>
+        <a href="#quotes">客户评价</a>
+        <a href="#assets-open">模型与来源</a>
+      </div>
+    </div>
+    <p class="foot-note">幕景 Scendance · 面向小型活动策划执行工作室的三维场景协作　|　模型采用示意比例，动线动画用于讲解活动组织。　|　© 2026 幕景 Scendance</p>
   </footer>
 </div>
 
@@ -1054,6 +1406,9 @@ const renderers = [];
 
 async function mountView({ canvasId, loadingId, view }) {
   const canvas = document.getElementById(canvasId);
+  /* 首屏那个视口已按设计稿移除（只有背景图 + 浮动卡），
+     没有画布就跳过，不能让它把整个 scene() 拖抄。 */
+  if (!canvas) return null;
   const loading = document.getElementById(loadingId);
   const { VenueRenderer } = await import('./renderer-webgl.js');
 
@@ -1113,6 +1468,170 @@ reveal();
 /* 三维挂载完成后，把初始阶段与分区同步进去 */
 scene().then(() => { setTime(hours); selectZone(selectedZone); });
 addEventListener('load', () => { if (!reduced()) parallax(); });
+</script>
+<script>
+/* 段落导航：页面照常滚动，导航编号随视口所在段落高亮（滚动监听） */
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav-pill a[data-view-link]'));
+  var bands = Array.prototype.slice.call(document.querySelectorAll('.band[data-view]'));
+  function setActive(name) {
+    links.forEach(function (a) { a.setAttribute('aria-current', String(a.dataset.viewLink === name)); });
+  }
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) setActive(entry.target.dataset.view); });
+    }, { rootMargin: '-45% 0px -45% 0px' });
+    bands.forEach(function (band) { io.observe(band); });
+  }
+  /* 回到封面（首屏还没进入任何段落）时取消高亮 */
+  addEventListener('scroll', function () {
+    if (window.scrollY < window.innerHeight * 0.45) setActive('');
+  }, { passive: true });
+  addEventListener('hashchange', function () { setActive(location.hash.slice(1)); });
+  setActive(location.hash.slice(1));
+})();
+</script>
+<script>
+/* 场景类别：6 段参考站 offerings 段。每段 = 满铺图 + 左上大标题 + 右下 tab 白卡；
+   段内 4–5 个 tab 就是这个类别的「可能性」。数据格式：
+   [名称, 色, 斜杠说明行, 段图, 典型场地(共用), 交付物(共用), '子项|副标|场地规模|搭建周期', …] */
+(function () {
+  /* 占位素材：已落到本地 assets/scenes/（跨站外链会被浏览器 ORB 拦掉）。上线前换成自己的图。 */
+  var OFFERS = [
+    ['企业机构', '#6f8f52', '办公 / 会议 / 展会', '/showcase/assets/scenes/house.png', '办公室 · 会议厅 · 展会标准位', '三维链接 · 布置清单',
+      '年会|宴会厅 · 酒店|300 ~ 1200 m²|1 ~ 3 天',
+      '发布会|会议厅 · 中庭|150 ~ 600 m²|1 ~ 2 天',
+      '团建|园区 · 户外草坪|200 ~ 1500 m²|半天',
+      '展位|展馆标准位|18 ~ 72 m²|1 ~ 2 天'],
+    ['品牌商业', '#b06a52', '零售 / 快闪 / 门店', '/showcase/assets/scenes/house.png', '商场中庭 · 快闪店 · 门店橱窗', '三维链接 · 陈列清单',
+      '新品发布|商场中庭 · 品牌店|60 ~ 400 m²|1 ~ 3 天',
+      '快闪店|街区 · 商场中庭|80 ~ 300 m²|2 ~ 7 天',
+      '橱窗陈列|门店橱窗 · 沿街立面|20 ~ 80 m²|半天',
+      '门店体验区|品牌门店 · 旗舰店|100 ~ 500 m²|3 ~ 10 天'],
+    ['赛事体育', '#c08a3e', '马拉松 / 操场 / 球赛', '/showcase/assets/scenes/house.png', '体育馆 · 球场 · 赛道周边', '三维链接 · 分区图',
+      '马拉松|起点 · 补给站 · 终点|5 ~ 42 km 路线|1 ~ 2 天',
+      '操场|学校操场 · 田径场|400 m 标准跑道|半天',
+      '球赛看台|体育馆 · 球场边线|500 ~ 3000 m²|1 ~ 2 天',
+      '训练营|训练基地 · 户外草坪|300 ~ 2000 m²|3 ~ 30 天',
+      '开幕式|主体育场 · 中圈|1000 m² 以上|1 天'],
+    ['文化展览', '#8a6a4a', '展览 / 导览 / 公共艺术', '/showcase/assets/scenes/house.png', '美术馆 · 展厅 · 图书馆', '三维链接 · 展位图',
+      '艺术展|美术馆 · 画廊|200 ~ 1500 m²|3 ~ 10 天',
+      '非遗市集|文化街区 · 中庭|300 ~ 1200 m²|2 ~ 5 天',
+      '图书展|展馆 · 图书馆|150 ~ 800 m²|3 ~ 7 天',
+      '文博导览|博物馆 · 历史建筑|100 ~ 1000 m²|长期'],
+    ['演艺娱乐', '#a34f5f', '演出 / 音乐节 / 见面会', '/showcase/assets/scenes/house.png', '剧场 · Livehouse · 户外舞台', '三维链接 · 舞台平面',
+      '舞台演出|剧场 · 剧院|300 ~ 1200 m²|1 ~ 3 天',
+      '音乐节|户外草地 · 广场|2000 ~ 20000 m²|3 ~ 7 天',
+      '见面会|商场中庭 · 会场|200 ~ 600 m²|1 ~ 2 天',
+      '露天放映|广场 · 屋顶露台|150 ~ 800 m²|半天'],
+    ['城市公共', '#4f7a72', '市集 / 节庆 / 公共活动', '/showcase/assets/scenes/house.png', '广场 · 公园 · 步行街', '三维链接 · 占位示意',
+      '风物市集|广场 · 街区 · 公园|300 ~ 2000 m²|1 ~ 7 天',
+      '节庆巡游|主干道 · 步行街|500 m 以上路线|1 ~ 3 天',
+      '广场装置|城市广场 · 公园|100 ~ 600 m²|7 ~ 30 天',
+      '社区活动|小区中庭 · 社区广场|80 ~ 400 m²|半天 ~ 2 天'],
+    ['教育科研', '#47607f', '开学典礼 / 答辩 / 开放日', '/showcase/assets/scenes/house.png', '礼堂 · 实验室 · 校园中庭', '三维链接 · 布置说明',
+      '开学典礼|礼堂 · 操场|300 ~ 1500 m²|半天',
+      '毕业展|展厅 · 教学楼中庭|200 ~ 1000 m²|3 ~ 7 天',
+      '学术答辩|会议室 · 报告厅|60 ~ 300 m²|1 ~ 2 天',
+      '校园开放日|校园中庭 · 教学楼|500 ~ 3000 m²|1 ~ 3 天'],
+  ];
+  var LABELS = ['典型场地', '场地规模', '搭建周期', '交付物'];
+  var stack = document.getElementById('offers-stack');
+  if (!stack) return;
+  var no = 0;
+  OFFERS.forEach(function (offer) {
+    var name = offer[0]; var accent = offer[1]; var line = offer[2]; var image = offer[3];
+    var venue = offer[4]; var delivery = offer[5];
+    var items = offer.slice(6).map(function (raw) {
+      var f = raw.split('|');
+      return { name: f[0], sub: f[1], cells: [venue, f[2], f[3], delivery] };
+    });
+    no += 1;
+    var section = document.createElement('section');
+    section.className = 'offers rv';
+    section.style.setProperty('--row', accent);
+    section.innerHTML =
+      // 不要给这张图加 loading="lazy"：.offers-art 是 height:auto，图片未加载时
+      // 盒子高度为 0，而浏览器用盒子尺寸判断是否接近视口 —— 0 高度就永远不触发，
+      // 形成「不加载→0 高度→不加载」的死循环（实测 house.png 请求次数 0）。
+      '<img class="offers-art" data-speed="0.72" decoding="async" alt="" src="' + image + '">' +
+      '<div class="offers-head" data-speed="0.94"><h2 class="offers-title">' + name.slice(0, 2) + '<br>' + name.slice(2) + '</h2>' +
+      '<p class="offers-line">' + line.split(' / ').join('<b>/</b>') + '</p></div>' +
+      '<div class="offers-body"><div class="offers-panel" data-speed="1.08">' +
+      '<div class="offers-tabs" role="tablist" aria-label="' + name + ' 的常见布置"></div>' +
+      '<div class="offers-card"><div class="offers-card-head"><h3></h3>' +
+      '<div class="offers-sub"><p></p><span class="offers-no"></span></div></div>' +
+      '<dl class="offers-cells"></dl></div></div></div>';
+    var tabs = section.querySelector('.offers-tabs');
+    var title = section.querySelector('.offers-card-head h3');
+    var sub = section.querySelector('.offers-sub p');
+    var number = section.querySelector('.offers-no');
+    var cells = section.querySelector('.offers-cells');
+    var card = section.querySelector('.offers-card');
+    function show(index) {
+      var item = items[index];
+      title.innerHTML = item.name.slice(0, 2) + '<br>' + item.name.slice(2);
+      sub.textContent = item.sub;
+      number.textContent = ('0' + (index + 1)).slice(-2);
+      cells.innerHTML = item.cells.map(function (value, i) {
+        return '<div><dt>' + LABELS[i] + '</dt><dd>' + value + '</dd></div>';
+      }).join('');
+      Array.prototype.forEach.call(tabs.children, function (tab, i) {
+        tab.setAttribute('aria-selected', String(i === index));
+      });
+      /* 换 tab 时卡片内容轻微上浮淡入（重排一次让动画重播） */
+      card.classList.remove('is-swap');
+      void card.offsetWidth;
+      card.classList.add('is-swap');
+    }
+    items.forEach(function (item, index) {
+      var tab = document.createElement('button');
+      tab.type = 'button';
+      tab.setAttribute('role', 'tab');
+      tab.innerHTML = item.name.slice(0, 2) + '<br>' + item.name.slice(2);
+      tab.addEventListener('click', function () { show(index); });
+      tabs.appendChild(tab);
+    });
+    show(0);
+    stack.appendChild(section);
+  });
+})();
+</script>
+<script>
+/* 差异视差：每个 [data-speed] 图层按它**所在段落的过屏进度**位移。
+   进度 0 = 段落刚从下方进入视口；1 = 刚从上方离开；
+   位移 = (进度 − 0.5) × (1 − 速度) × 段高 × AMP
+   · 速度 < 1 → 位移与滚动反向，看起来“跟不上页面” → 滞留感（图片用 0.72）
+   · 速度 > 1 → 比页面走得更快（右下白卡用 1.08）
+   · 速度 = 1 → 完全跟随页面，不动
+   改前用的是「离视口中心的距离 × 0.22」，实际只有 ±40px，且图片是 max-height:84%
+   底部锚定，向下位移全被 overflow:hidden 裁掉，所以基本看不出来。
+   现在配套把图片改成 top:-14% / height:128%（比段落高），位移才有空间。 */
+(function () {
+  var els = Array.prototype.slice.call(document.querySelectorAll('[data-speed]'));
+  if (!els.length) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var AMP = 0.9;   /* 总位移 = 段高 × (1 − 速度) × AMP */
+  var raf = 0;
+  function apply() {
+    raf = 0;
+    var vh = window.innerHeight;
+    els.forEach(function (el) {
+      var speed = parseFloat(el.dataset.speed) || 1;
+      if (speed === 1) { el.style.transform = ''; return; }
+      var host = el.closest('.offers') || el.parentElement || el;
+      var rect = host.getBoundingClientRect();
+      var progress = (vh - rect.top) / (vh + rect.height);
+      if (progress < -0.25 || progress > 1.25) return;   /* 完全离屏不算，省开销 */
+      var y = (progress - 0.5) * (1 - speed) * rect.height * AMP;
+      el.style.transform = 'translate3d(0,' + y.toFixed(2) + 'px,0)';
+    });
+  }
+  function onScroll() { if (!raf) raf = requestAnimationFrame(apply); }
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', onScroll);
+  apply();
+})();
 </script>
 </body>
 </html>

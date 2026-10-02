@@ -70,11 +70,11 @@ export default function Page(): JSX.Element {
   return (
     <>
       {!entered && <IntroPage controller={controller} onEnter={enterEditor} />}
-      {/* Keep in-progress briefs, image URLs, chat and proposals in memory when
-          returning to the introduction. The editor still mounts only on entry. */}
+      {/* The editor mounts on first entry and stays mounted; reopening the landing
+          page needs a fresh load of / (the header logo opens the 官网 instead). */}
       {editorStarted && (
         <div hidden={!entered}>
-          <RoomOrganizer isActive={entered} controller={controller} onShowIntro={() => setEntered(false)} />
+          <RoomOrganizer isActive={entered} controller={controller} />
         </div>
       )}
     </>
