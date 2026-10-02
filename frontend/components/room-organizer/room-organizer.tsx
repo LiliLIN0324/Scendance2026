@@ -21,6 +21,7 @@ import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
 import { useNpcs } from './hooks/use-npcs';
 import { usePeopleModel } from './hooks/use-people-model';
+import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useThreeScene } from './hooks/use-three-scene';
@@ -96,6 +97,8 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
   const canvas2DRef = useRef<HTMLCanvasElement>(null);
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  const liveLayout = useRef(layout); liveLayout.current = layout;
+  const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
   const activeStoreyHeight = storeyHeight(activeFloor);
   const { recent: recentColors, pushColor } = useRecentColors();
@@ -1072,6 +1075,15 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
     initiallyFramed.current = false;
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
+  const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
+    setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
+    if (candidate) { setView(current => ({ ...current, view2D: false })); }
+  }, []);
+  const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
+  const previewCandidate = validAiPreview;
+  useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
+    candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
+
   useEventAtmosphere({ isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
     lighting: layout.backendLighting ?? 'warm', width: layout.width, depth: layout.height,
     ceilingHeight: activeStoreyHeight });
@@ -1079,10 +1091,10 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative}>
+    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <a className="sc-brand" href="#introduction" onClick={event => { event.preventDefault(); onShowIntro?.(); }} aria-label="Scendance 场域 · 返回介绍页"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>场域</span></strong><small>让每一场活动，有序成形 · v0.2.0</small></div></a>
+          <a className="sc-brand" href="#introduction" onClick={event => { event.preventDefault(); onShowIntro?.(); }} aria-label="Scendance 场域 · 返回介绍页"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>场域</span></strong><small>让每一场活动，有序成形 · v0.3.0</small></div></a>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
@@ -1093,7 +1105,7 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
           <button type="button" className="sc-mobile-menu sc-icon-button" aria-label={sidebarCollapsed ? '打开物料面板' : '收起物料面板'} onClick={() => setSidebarCollapsed(current => !current)}>{sidebarCollapsed ? <Menu size={20}/> : <PanelLeftClose size={20}/>}</button>
         </header>
         <main className="sc-workspace">
-          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
+          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`}>
       <Viewport
         isReady={isReady}
@@ -1151,7 +1163,8 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
         }}
       />
             <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.width} × {layout.height} m</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
-            {!selectedItem && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
+            {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            {!selectedItem && !previewCandidate && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <ScendanceViewTools onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
