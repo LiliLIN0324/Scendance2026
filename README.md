@@ -6,7 +6,9 @@
 
 ## 运行
 
-在本目录执行 `python3 -m http.server 8766 --bind 127.0.0.1`，打开 http://127.0.0.1:8766/ 。
+在本目录执行 `python serve.py`，打开 http://127.0.0.1:8766/ 。可选参数：`python serve.py 8080 --bind 0.0.0.0`。按 Ctrl+C 停止。
+
+也可以直接用 `python3 -m http.server 8766 --bind 127.0.0.1`（macOS、Linux）。Windows 上建议用 `serve.py`：系统注册表会让 Python 的 `mimetypes` 把 `.js` 推断为 `text/plain`，浏览器对 ES module 执行严格 MIME 校验，会拒绝加载并停在“正在加载场地与三维素材…”。`serve.py` 覆盖了 `.js`、`.glb`、`.wasm` 等类型的映射。
 
 使用本地保存的 Three.js 0.186.1、GLTFLoader 与 5 款 GLB 素材，不需要安装 npm 包、登录或配置 API Key，打开场景时不向素材供应商请求文件。浏览器需支持 WebGL 2 和 import maps。由于使用 ES Modules 和本地模型请求，必须通过 HTTP 服务打开，不支持双击 `index.html`。
 
