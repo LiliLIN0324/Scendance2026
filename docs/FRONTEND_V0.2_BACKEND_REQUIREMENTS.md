@@ -1,8 +1,10 @@
 # 前端 v0.3：现有协议与后端支持需求
 
-更新日期：2026-10-02。交接对象：后端负责人 B。文件名沿用 v0.2，以保留已有链接；内容已更新到 v0.3。
+更新日期：2026-10-02。交接对象：**成员 2（后端负责人 B）**。文件名沿用 v0.2，以保留已有链接；内容已更新到 v0.3。
 
-本轮只修改 `frontend/` 与文档，没有修改 `supabase/`、数据库、`client/scene-client.ts` 或根依赖。**“现有协议”可在代码中核对；“建议协议”尚未实现，不得向现有 API 直接发送新增字段。** B 先确认并更新共享 schema，A 再接线。
+本轮只修改 `frontend/` 与文档，没有修改 `supabase/`、数据库、`client/scene-client.ts` 或根依赖。**“现有协议”可在代码中核对；“建议协议”尚未实现，不得向现有 API 直接发送新增字段。** 涉及新增协议时，由 B 先确认并更新共享 schema，A 再接线；第六节模型替换维持现有协议。
+
+**当前执行优先级：只推进 [第六节 GPT 核心生成链路](#gpt-handoff)。** 其余新增协议是能力缺口备忘，不是本次新增实施授权。
 
 ## 一、v0.3 七项要求与当前边界
 
@@ -275,6 +277,141 @@ RequirementResult 建议区分 fulfilled/pending_asset/requires_confirmation/uns
 
 ## 五、交接顺序与实际验收范围
 
-B 先确认协议／共享类型及迁移，依次补项目需求存储、照片生命周期、能力声明，再接视觉理解、完整创意规划与会话服务，每步提供可复现请求及失败示例。A 负责字段接线、错误显示、临时三维预览、确认及保存状态，不通过前端关键词改名来伪装扩展资产。
+成员 2 当前按第六节完成 GPT 最小接入并保持既有协议。项目需求存储、照片生命周期、视觉理解及会话等建议，待核心链路通过且获得后续授权后再排期。A 负责字段接线、错误显示、临时三维预览、确认及保存状态，不通过前端关键词改名来伪装扩展资产。
 
 本文示例不是云端调用记录。前端测试、mock 契约及本地预览不能证明真实 Supabase、视觉模型或付费三维生成已验收；真实环境必须另记部署版本、账号角色与每项结果。
+
+<a id="gpt-handoff"></a>
+## 六、交给成员 2：GPT → 可编辑三维场景的最小接入
+
+核查基线：前端 `9943a687dc5a884e12cf8793bccd68d52b40cebe`，2026-10-02。本节是**成员 2 尚需实施的后端补丁方案**，不是已经接通 GPT 的声明。本次只更新交接文档，不改后端，不调用付费 API，不增加页面或按钮，不扩接混元。
+
+### 6.1 已确认兼容的前端链路
+
+`CreativeBriefPanel Generate → CreativeStudioProvider.generate → BackendSession.requestProposal → POST /projects/:id/proposals → SceneProposal.candidate → adapter/Three.js 临时预览 → 用户确认 → applySceneProposal → POST /proposals/apply → 返回实际已保存 Scene → 可编辑画布`。
+
+- `frontend/components/room-organizer/panels/creative-studio.tsx`：完整需求/现场文字/风格/配色/氛围/上下文组成 instruction；照片字节不随请求发送。空场景用 layout，已有物件用 modify，不自动清空旧方案。
+- `frontend/lib/backend-session.ts` 的 `requestProposal`、`applySceneProposal`：沿用 requestId、sessionId、generation、expectedRevision、localRevision、selectedIds、scene/currentScene。没有供应商专属字段。
+- 提案保留项目、租约、版本、base_hash、expires_at、锁定校验；请求中途的编辑/切项目/需求变化不能被旧结果覆盖。只有服务端返回并被本地接受的 Scene 才正式应用。
+- **后端保持现有 SceneProposal 和 apply 返回结构，前端就无需供应商专属修改。** 不把 OpenAI 的 Response 原样返回前端，不在浏览器调用 OpenAI，不增加 NEXT_PUBLIC_OPENAI_API_KEY。
+
+### 6.2 成员 2 的准确改动位置
+
+下列行号对应上述核查基线，提交前以函数名定位：
+
+| 后端位置 | 当前实现 | 最小补丁 |
+| --- | --- | --- |
+| `supabase/functions/_shared/providers.ts:27–50`，generateProposal | 固定 DeepSeek chat/completions、deepseek-flash、json_object；读取 choices[0]；最多一次修复 | 改为 OpenAI Responses 与受约束输出；读取真实 output 项，最后继续调用 buildProposal，返回原 `{scene,explanation,commands,warnings,usage}` |
+| `supabase/functions/_shared/api.ts:79–99` | lease.check 后独立检查 DEEPSEEK_API_KEY，再预留预算、生成、store、finish | 预留前改查 OPENAI_API_KEY、OPENAI_MODEL，并校验选定模式前提；不能只改 providers.ts 而保留旧 key 门槛。保留 requestId 指纹、租约检查、提案存储与费用状态 |
+| `supabase/functions/_shared/ai.ts:23–94` | layoutSchema / modificationSchema / buildProposal | 复用作为输出真源和程序校验，不扩大模板、人数、命令、物料、Scene 字段 |
+| `supabase/functions/_shared/http.ts`，fetchJson | 单次 25 秒超时、拒绝重定向、响应限长、上游 HTTP 错误清洗 | 保留。所选模型需验证能在该预算内完成；不要因为超时自动重发或放宽整站超时 |
+| 根 `.env.example`、`supabase/functions/.env.example`、`docs/DEPLOYMENT.md`、相关 provider/API 测试 | 仍说明 DeepSeek | 成员 2 随自己的后端 PR 更新配置与测试；这些文件本次未改 |
+
+`supabase/config.toml` 中 `[studio].openai_api_key` 是 Supabase Studio 的配置，不能据此认为 scene-api 已接入 GPT。生成链路需要 Edge Function 运行环境中的变量。
+
+| 服务端变量 | 用途 |
+| --- | --- |
+| `OPENAI_API_KEY`（拟新增业务配置） | 成员 2 在本地隐藏环境文件或 Supabase Edge secrets 中配置；不进入聊天、GitHub、日志或前端构建 |
+| `OPENAI_MODEL`（拟新增，必须明确填写） | 该账号实际可用、支持 Responses 和所用 strict schema 的 GPT 模型 ID；不设置猜测的默认型号，不推断账号额度 |
+| `AI_MAX_REQUEST_CENTS`（已有） | 根据选定模型实际价格/输入上界/输出上界/最多两次调用复核的正整数费用预留；不能照搬 DeepSeek 估值 |
+| `ALLOWED_ORIGINS`、Supabase 项目/Auth 配置（已有） | 允许实际前端 Origin，提供真实工作室成员、项目、租约；与模型 key 分开 |
+
+**补齐确定性前置校验：** 当前后端仅在付费后的 buildProposal 内拒绝非空 layout，并可能再花一次修复调用。成员2应在 api.ts 的 reserve 之前增加 `input.mode === 'layout' && input.scene.objects.length > 0` 检查，返回 `LAYOUT_REQUIRES_EMPTY_SCENE`，测试必须证明零次模型调用、零次预留。前端已有同类保护不能替代服务器检查。
+
+配置与计费校验失败必须在供应商请求之前返回。首个真实付费验收由成员 2 获得明确执行授权后运行，本次未执行。
+
+### 6.3 请求与 schema 的最小映射
+
+采用 `POST https://api.openai.com/v1/responses`，服务端 Bearer key。Responses 的结构化格式放在 `text.format`；不是原 Chat Completions 的 `response_format`，也不再发送 DeepSeek 的 thinking 字段。参见 [OpenAI 迁移文档](https://developers.openai.com/api/docs/guides/migrate-to-responses)。
+
+下面是嵌入现有 generateProposal 的请求形状示意；`input` 是已通过现有 proposalRequestSchema 的请求，`wireSchema` 来自下文受限转换，代码尚未部署：
+
+```ts
+const body = {
+  model: required(env, 'OPENAI_MODEL'),
+  instructions: SYSTEM_PROMPT,
+  input: [{ role: 'user', content: JSON.stringify({
+    mode: input.mode, instruction: input.instruction,
+    scene: input.scene, selectedIds: input.selectedIds, catalog,
+  }) }],
+  text: { format: {
+    type: 'json_schema', name: input.mode === 'layout' ? 'scene_layout_v1' : 'scene_modify_v1',
+    strict: true, schema: wireSchema,
+  } },
+  max_output_tokens: 4096, // 初始上限；需连同模型推理开销、25秒超时和费用预留一起验收
+  store: false,
+};
+```
+
+不请求模型直接创造任意 Scene、实例 UUID 或 assetId。模型先返回当前模板参数或命令，`buildProposal(input.scene,input.mode,parsed)` 产生并校验 candidate，然后 api.ts 按原协议存储提案。layout 仅 salon/networking、1–40人；modify 仅现有六类命令，总物件仍≤50。换 provider 不等于支持体育馆100人或任意场馆。现有模板也不会自动满足所有门窗/固定设施/动线文字条件，必须核对并如实说明未满足项。
+
+strict schema 的根为 object，各对象拒绝额外字段，属性均列入 required；命令分支可用嵌套 anyOf。拒绝与未完成输出需要单独处理，不能视为合法场景。参见 [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)。
+
+**本仓库已离线核查的 schema 陷阱：** 当前 Zod 的 colorSchema 有 transform；默认输出方向转换会失败。`z.toJSONSchema(schema,{io:'input'})` 可以导出输入约束，但 modify 的 discriminatedUnion 实际产生 `oneOf` 和 `const`，不能未经检查直接发送。成员 2 可仅对本项目这组 schema 作以下显式转换，并增加快照测试：
+
+```ts
+function proposalWireSchema(mode: 'layout' | 'modify') {
+  const raw = z.toJSONSchema(mode === 'layout' ? layoutSchema : modificationSchema, { io: 'input' });
+  function visit(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(visit);
+    if (value === null || typeof value !== 'object') return value;
+    const node = { ...(value as Record<string, unknown>) };
+    delete node.$schema;
+    if (node.format === 'uuid') delete node.format; // 保留 UUID pattern；程序端继续严格验证 UUID
+    if ('const' in node) { node.enum = [node.const]; delete node.const; }
+    // 仅适用于这里由不同 op 字面量区分、互斥的命令分支，不能泛化为任意 oneOf 转换。
+    if (Array.isArray(node.oneOf)) { node.anyOf = node.oneOf; delete node.oneOf; }
+    return Object.fromEntries(Object.entries(node).map(([key,item]) => [key,visit(item)]));
+  }
+  return visit(raw);
+}
+```
+
+该转换不替代 layoutSchema/modificationSchema/sceneSchema/buildProposal，不自动删除其他不支持的限制。若所选模型拒绝 schema，应修复适配并通过离线测试后再做真实验证，不降级成无约束 JSON、不悄悄更换模型。
+
+### 6.4 响应、修复与失败处理
+
+先校验供应商响应结构与状态。provider envelope 的 ZodError 必须在适配器包装成脱敏 ApiError（可沿用 AI_INVALID_PROPOSAL）；否则 api.ts 会把它误报为客户端 VALIDATION_ERROR/400。直接 fetch 返回的对象应遍历 `output`，只从 `type:"message"` 的 content 中收集 `type:"output_text"` 的 text；不能假设 output[0] 一定是文本，更不能继续读取 choices[0]。遇到 refusal、status 非 completed、缺失/空文本、无效 JSON 时不产生 candidate。完成解析后再运行现有业务校验。
+
+- 有完整 JSON 但违反业务约束时，最多执行现有的一次修复：携带上一段模型文本和程序校验错误，使用相同 schema；必须仍处于同一次业务 requestId 及费用预留内。
+- HTTP 401/403/429/5xx、断网/超时、拒绝或 incomplete 不盲目修复重发。拒绝/incomplete 可暂以现有 `AI_INVALID_PROPOSAL` 和脱敏 details.reason 返回；若新增顶层错误码，成员 2 应同步通知前端。
+- 保留每次已返回调用的 response id、实际 model、usage 与错误阶段以便对账，不记录 key。有未知费用的失败不自动释放预留，也不以新 requestId 自动再试。
+- candidate 中 locked 对象、边界、尺寸、ID、物件上限仍由程序校验。Structured Outputs 约束 JSON 结构，不保证实际布局合理或符合现场条件。
+
+模型成功输出示例（layout）——这不是发给浏览器的最终响应：
+
+```json
+{"explanation":"24人坐席交流会，米白与橄榄绿；请核对入口和通道。","template":"salon","attendees":24,"palette":["#f5f1e8","#65784c"]}
+```
+
+在空的12×10米、3米高矩形场景上，现有 buildProposal 离线验证生成26件物料（24椅子、1背景板、1签到台），warnings为空。UUID由程序生成；此结果仅证明程序夹具，不是 GPT 调用记录。对外成功响应仍为第二节的完整 SceneProposal（新提案 HTTP 201；幂等复用可为200），随后 apply 返回原 `{id,revision,scene,updatedAt,previousScene,undoGroup}`。
+
+失败形状保持不变，示例均不含秘密：
+
+```json
+{"error":{"code":"SERVICE_NOT_CONFIGURED","details":{"setting":"OPENAI_MODEL"}}}
+```
+
+```json
+{"error":{"code":"PROVIDER_HTTP_ERROR","details":{"status":429}}}
+```
+
+```json
+{"error":{"code":"AI_INVALID_PROPOSAL","details":{"reason":"incomplete"}}}
+```
+
+前两项沿用现有码（分别503、502）；最后一项是成员2适配时可采用的422映射示例，当前 DeepSeek 实现未使用该 reason。失败/拒绝不返回假 Scene，不改已有场景。
+
+### 6.5 首个真实案例的执行清单（成员 2 上线后）
+
+1. **离线先过**：provider fetch mock 覆盖有效 layout/modify、reasoning item在文本之前、拒绝、incomplete、空文本、上游错误、一次修复、锁定对象、越界、预算和重复 requestId。补 API 测试证明未配置 OpenAI 时尚未预留费用、配置后不再要求 DeepSeek key。
+2. **准备真实环境**：成员2在有授权的测试项目配置 Edge secrets、公开前端项目URL/key、CORS、真实工作室成员；记录后端commit、实际模型ID、预算和执行授权，不记录密钥。首例不需要混元、worker或三维资产生成服务。
+3. **空场景首例**：登录 → 云项目中创建/打开一个专门验收项目 → 获取编辑权。确保画布为空；默认样例不为空时由测试者明确移除其物件，不能由 Generate 自动清场。设置12×10米、高3米；24人；需求“24人坐席沙龙，前方背景板和入口签到台，米白与橄榄绿”。只点一次 Generate。
+4. **核实真实调用**：浏览器只访问自己的 scene-api，不直连 api.openai.com。成员2核对真实供应商 response id、model、usage 和业务 requestId；响应为现有提案格式。对这个明确要求 salon 的输入，预期26件、有效尺寸坐标；检查说明、warnings、现场条件与颜色，不能只看HTTP200。
+5. **预览不落库**：显示可编辑三维物件的候选预览，确认前正式场景/云revision不变。先放弃一次确认原稿不变；第二次生成会是另一笔付费请求，只有额外授权后执行，不能把两次生成混作一次调用。
+6. **确认与编辑**：可在首个提案直接选择确认（与上一步“放弃”二选一，优先走完整成功链）。确认后云revision前进、Three.js显示真实Scene；手动移动一把椅子→保存→刷新、重新登录并打开项目→核对位置与灯光。撤销作为本地编辑，须明确保存才同步云端。
+7. **后续修改及失败**：有额外调用授权后请求修改非锁定椅子并确认；锁定对象、过期、lease丢失、生成中改稿、旧项目迟到结果、供应商故障的破坏性/重复场景优先用受控测试验证，不无谓消耗额度。最终记录“已通过/未测/失败”及真实日志证据。
+
+当前阻塞由成员2处理：本次核查的代码基线没有 OpenAI 业务适配，实际部署状态、真实项目配置、账号、模型可用性与预算尚未核实，真实调用尚未授权执行。本次前端64项相关回归通过（5文件）；没有供应商专属前端代码改动，不重做UI，版本维持v0.3.0。
+
+图片仍为本地blob，不会被 GPT 看到。未来图片上传/授权/视觉输入的缺口见第三节，本次首例按文字与实测场地执行。原体育馆仅作为视觉参考，不把体育馆建模、100人布局或自动还原照片纳入本次完成声明。
