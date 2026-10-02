@@ -103,12 +103,12 @@ afterEach(() => {
 describe('creative brief and assistant interaction', () => {
   it('moves keyboard focus into the assistant and returns it on Escape', () => {
     render(ui());
-    const launch = screen.getByRole('button', { name: '打开场域助手' });
+    const launch = screen.getByRole('button', { name: '打开幕景助手' });
     fireEvent.click(launch);
     const input = screen.getByRole('textbox', { name: '告诉助手你的想法' });
     expect(document.activeElement).toBe(input);
     fireEvent.keyDown(input, { key: 'Escape' });
-    expect(screen.queryByRole('region', { name: '场域智能助手' })).toBeNull();
+    expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
     expect(document.activeElement).toBe(launch);
   });
 
@@ -117,7 +117,7 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByRole('button', { name: 'Generate 生成布置方案' }).hasAttribute('disabled')).toBe(true);
     enterBrief();
     fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
-    expect(await screen.findByRole('region', { name: '场域智能助手' })).toBeTruthy();
+    expect(await screen.findByRole('region', { name: '幕景智能助手' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('当前尚未连接 AI 服务');
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
     expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();

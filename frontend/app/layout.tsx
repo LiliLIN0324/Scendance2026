@@ -3,7 +3,7 @@ import './globals.css';
 import './cloud.css';
 
 export const metadata: Metadata = {
-  title: '场域 Scendance · 活动布置工作台',
+  title: '幕景 Scendance · 活动布置工作台',
   description: '用真实三维物料规划活动场地，与团队协作保存布置方案。',
 };
 

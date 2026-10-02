@@ -23,7 +23,7 @@ interface StudioValue {
 }
 const StudioContext = createContext<StudioValue | null>(null);
 function useStudio(): StudioValue { const value=useContext(StudioContext); if(!value) throw new Error('Creative studio unavailable'); return value; }
-const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'你好，我是场域助手。把客户的活动想法告诉我，我们一起梳理分区、体验亮点和氛围。当前可通过文字请求布置提案；通用问答与图片理解还在接入中。所有修改都先由你确认。' }];
+const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'你好，我是幕景助手。把客户的活动想法告诉我，我们一起梳理分区、体验亮点和氛围。当前可通过文字请求布置提案；通用问答与图片理解还在接入中。所有修改都先由你确认。' }];
 
 export function CreativeStudioProvider({ controller, layout, onApply, children }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
@@ -157,9 +157,9 @@ export function CreativeAssistant():JSX.Element {
   const submit=()=>{if(!draft.trim()||studio.busy)return;const text=draft;setDraft('');void studio.generate(text);};
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   return <div className={`cr-assistant ${studio.expanded?'is-open':''} ${selectedItem?'has-properties':''}`}>
-    {studio.expanded&&<section id="creative-assistant" className="cr-chat" aria-label="场域智能助手" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();studio.setExpanded(false);}}}>
-      <header><span className="cr-avatar"><Sparkles size={21}/></span><div><strong>场域小助手</strong><small><i/>{studio.connection}</small></div><button type="button" aria-label="收起助手" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></header>
-      <div className="cr-chat-feed" ref={feed} aria-live="polite">{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'场域':'你'}</span><p>{m.text}</p></div>)}
+    {studio.expanded&&<section id="creative-assistant" className="cr-chat" aria-label="幕景智能助手" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();studio.setExpanded(false);}}}>
+      <header><span className="cr-avatar"><Sparkles size={21}/></span><div><strong>幕景小助手</strong><small><i/>{studio.connection}</small></div><button type="button" aria-label="收起助手" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></header>
+      <div className="cr-chat-feed" ref={feed} aria-live="polite">{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'幕景':'你'}</span><p>{m.text}</p></div>)}
         {studio.busy&&<div className="cr-chat-working"><Loader2 className="cr-spin" size={15}/> 正在处理，请稍候…</div>}
         {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span><strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>{studio.preview.proposal.explanation}</p>{studio.preview.proposal.warnings.length>0&&<p role="status">提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示，请核对物件重叠和边界后应用。</p>}<ul>{studio.preview.layout.floors[0]?.items.slice(0,8).map(item=><li key={item.id}>{item.name} <small>{item.width} × {item.depth} m</small></li>)}</ul>{studio.stale?<p role="status">场景、需求或编辑权已变化，请重新生成。</p>:<div><button type="button" onClick={()=>void studio.applyPreview()} disabled={studio.busy}><Check size={14}/>确认应用</button><button type="button" onClick={studio.discardPreview} disabled={studio.busy}><Trash2 size={14}/>放弃</button></div>}</div>}
       </div>
@@ -167,6 +167,6 @@ export function CreativeAssistant():JSX.Element {
       <form onSubmit={e=>{e.preventDefault();submit();}}><label className="sr-only" htmlFor="creative-message">告诉助手你的想法</label><textarea ref={messageInput} id="creative-message" value={draft} maxLength={1800} onChange={e=>setDraft(e.target.value)} placeholder="告诉我想怎么调整……" rows={2} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit();}}}/><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy}><ArrowUp size={19}/></button></form>
       <footer><span>提案确认后才会修改场景 · 登录请使用顶部云项目</span></footer>
     </section>}
-    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>studio.setExpanded(!studio.expanded)} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭场域助手':'打开场域助手'}><span><MessageCircle size={21}/></span>{studio.expanded?'收起助手':'聊聊你的想法'}<i/></button>
+    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>studio.setExpanded(!studio.expanded)} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭幕景助手':'打开幕景助手'}><span><MessageCircle size={21}/></span>{studio.expanded?'收起助手':'聊聊你的想法'}<i/></button>
   </div>;
 }
