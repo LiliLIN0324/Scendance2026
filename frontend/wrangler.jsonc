@@ -1,11 +1,5 @@
 {
   "name": "scendance-scene-planner",
   "pages_build_output_dir": "out",
-  "compatibility_date": "2026-10-02",
-  // 构建期变量：Next 静态导出时会被内联进浏览器 JS，所以这里只放公开值，不放任何密钥。
-  // 注意：Pages 检测到本文件后，构建环境变量以这里为准；缺了它们，线上会显示「登录服务尚未配置」。
-  "vars": {
-    "NEXT_PUBLIC_SUPABASE_URL": "https://hrsrrduwbqxnqddkexoy.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_GGr6J3vWxxQIKzAhBCPO2w_kMbmiRQP"
-  }
+  "compatibility_date": "2026-10-02"
 }
