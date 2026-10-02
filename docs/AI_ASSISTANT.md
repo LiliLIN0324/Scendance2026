@@ -26,3 +26,9 @@
 获用户明确授权后，仅在该项目写入 `DEEPSEEK_API_KEY` 与既有 `AI_MAX_REQUEST_CENTS=40`，保留其他 secrets 及既有每日预算限制。再用专用验收项目完成真实生成、确认、保存重开，最后发布 `frontend/out` 至 Scendance 的独立 Pages 项目。前端仅使用公开 Supabase 配置。
 
 后端工作树单独记录配置，不从这个前端仓库部署较旧的后端副本。
+
+## 后续已授权执行
+
+用户已明确授权将 key 存入指定 Supabase 项目并部署上线。两项服务端 secrets 已成功写入 `hrsrrduwbqxnqddkexoy`。一次最小真实验收通过：账号登录、DeepSeek 提案生成、确认应用、重新读取场景；生成 6 件物料，保存为版本 1，并释放编辑权。验收项目 `92989c6c-2fa7-4683-8534-f1ae8848f679`，提案 `1f34b550-e462-407a-931d-9d96ad3a1bb4`。前述审批阻塞已解除。
+
+新版前端已直接发布到生产 Pages 项目，源提交 `8fe040c`，部署地址 https://7a6a6794.scendance-scene-planner.pages.dev ，正式域名 https://scendance.charlestech.org 。没有创建 PR，也没有合并 main/dev。
