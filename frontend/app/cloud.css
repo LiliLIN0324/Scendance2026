@@ -69,3 +69,5 @@
 .sc-ai-changes{font-size:11px;line-height:1.8;max-height:110px;overflow:auto;margin:8px 0 16px;padding-left:18px}
 .sc-ai-footnote{display:block;border-top:1px solid var(--sc-line);padding-top:14px;margin-top:18px}
 @media(max-width:600px){.sc-assistant{right:12px;top:76px;max-height:calc(100dvh - 88px);padding:18px}}
+
+@media(max-width:680px){.sc-cloud-trigger-label{display:none}.sc-header-actions>.sc-cloud-trigger{padding:9px;min-width:36px}}

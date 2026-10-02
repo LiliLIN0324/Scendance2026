@@ -80,6 +80,7 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景校验失败。'); }
   }
 
+  const cloudLabel = cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目';
   return <>
     <AssistantPanel controller={controller} layout={layout} selectedIds={selectedIds} bound={bound} busy={busy}
       onConnect={() => dialog.current?.showModal()} onSaved={scene => setSavedFingerprint(JSON.stringify(scene))} onApplied={next => {
@@ -87,8 +88,8 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
         setSavedFingerprint(saved); lastObserved.current = saved;
         (onApplyLayout ?? onLoadLayout)(next);
       }}/>
-    <button className="sc-cloud-trigger" type="button" onClick={() => dialog.current?.showModal()}>
-      <span aria-hidden="true">☁</span> {cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目'}
+    <button className="sc-cloud-trigger" type="button" aria-label={cloudLabel} title={cloudLabel} onClick={() => dialog.current?.showModal()}>
+      <span aria-hidden="true">☁</span> <span className="sc-cloud-trigger-label">{cloudLabel}</span>
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog" aria-labelledby="cloud-title">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">WORKSPACE / 项目协作</span><h2 id="cloud-title">让团队接着你的方案继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭云项目" onClick={() => dialog.current?.close()}>×</button></div>
