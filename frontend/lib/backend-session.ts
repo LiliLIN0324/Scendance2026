@@ -55,6 +55,7 @@ export interface BackendSnapshot {
   configured: boolean;
   sessionId: string;
   user: BackendUser | null;
+  recoveryReady: boolean;
   project: BackendProject | null;
   lease: Lease | null;
   revision: number | null;
@@ -112,6 +113,8 @@ export class BackendSession {
   private snapshot: BackendSnapshot;
   private readonly listeners = new Set<() => void>();
   private tokens: Tokens | null = null;
+  // Recovery authorizes only the password form; never persist it as editor login.
+  private recoveryTokens: Tokens | null = null;
   private refresh: Promise<string> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private operationPending = false;
@@ -127,7 +130,7 @@ export class BackendSession {
     // Never persist this in local/sessionStorage: duplicated tabs must not share a lease identity.
     const sessionId = crypto.randomUUID();
     this.snapshot = {
-      configured: config.configured, sessionId, user: null, project: null, lease: null, revision: null,
+      configured: config.configured, sessionId, user: null, recoveryReady: false, project: null, lease: null, revision: null,
       draft: null, localRevision: 0, dirty: false,
       status: config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null,
     };
@@ -182,6 +185,7 @@ export class BackendSession {
     return result;
   }
   private acceptAuth(result: AuthResponse) {
+    if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     this.tokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: result.expires_at ? result.expires_at * 1000 : Date.now() + result.expires_in * 1000 };
     this.persistTokens();
     this.update({ user: result.user });
@@ -228,8 +232,9 @@ export class BackendSession {
     if (!user.id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return user;
   }
-  async acceptCallback(hash: string): Promise<void> {
+  async acceptCallback(hash: string, expectedType?: "recovery"): Promise<void> {
     const values = new URLSearchParams(hash.replace(/^#/, ""));
+    if (expectedType && values.get("type") !== expectedType) throw new Error("请使用密码重置邮件中的验证码或链接。");
     if (values.has("error")) throw new Error("验证链接已失效，请返回登录页重新注册或登录。");
     const access = values.get("access_token"), refresh = values.get("refresh_token");
     const expires = Number(values.get("expires_in"));
@@ -237,33 +242,96 @@ export class BackendSession {
     const epoch = this.epoch;
     const user = await this.verifyUser(access);
     if (epoch !== this.epoch) return;
+    if (values.get("type") === "recovery") {
+      this.recoveryTokens = { access, refresh, expiresAt: Date.now() + expires * 1000 };
+      this.update({ recoveryReady: true });
+      return;
+    }
     this.acceptAuth({ access_token: access, refresh_token: refresh, expires_in: expires, user });
     this.update({ status: "ready", error: null });
   }
   async signUp(email: string, password: string, displayName: string, redirectTo: string): Promise<boolean> {
-    this.requireConfig();
-    const response = await fetch(`${this.config.url}/auth/v1/signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
-      method: "POST", headers: { apikey: this.config.anonKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } }), cache: "no-store",
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      const messages: Record<string, string> = {
-        user_already_exists: "该邮箱已注册，请切换到登录。",
-        weak_password: "请使用至少 12 位、更难猜测的密码。",
-        email_address_invalid: "请输入有效的邮箱地址。",
-        over_email_send_rate_limit: "发送邮件过于频繁，请稍后再试。",
-        email_address_not_authorized: "验证邮件服务尚未开放，请联系管理员。",
-        signup_disabled: "注册暂未开放，请稍后再试。",
-      };
-      throw new Error(messages[result.code ?? result.error_code] ?? "注册失败，请稍后重试。");
-    }
+    const epoch = this.epoch;
+    const result = await this.emailAuthRequest(`signup?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } });
+    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
     if (result.access_token && result.refresh_token && result.user?.id && Number.isFinite(result.expires_in)) {
       this.acceptAuth(result);
       this.update({ status: "ready", error: null });
       return true;
     }
     return false;
+  }
+  private async emailAuthRequest(path: string, body: unknown, access?: string): Promise<AuthResponse> {
+    this.requireConfig();
+    const response = await fetch(`${this.config.url}/auth/v1/${path}`, {
+      method: access ? "PUT" : "POST",
+      headers: { apikey: this.config.anonKey, "Content-Type": "application/json", ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+      body: JSON.stringify(body), cache: "no-store",
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const code = result.code ?? result.error_code;
+      if (path.startsWith("recover?") && code === "user_not_found") return result;
+      const messages: Record<string, string> = {
+        user_already_exists: "该邮箱已注册，请切换到登录。",
+        weak_password: "请使用至少 12 位、更难猜测的密码。",
+        same_password: "新密码不能与旧密码相同。",
+        email_address_invalid: "请输入有效的邮箱地址。",
+        over_email_send_rate_limit: "发送邮件过于频繁，请稍后再试。",
+        over_request_rate_limit: "操作过于频繁，请稍后再试。",
+        over_email_send_daily_limit: "今天的邮件发送额度已用完，请稍后再试。",
+        email_address_not_authorized: "验证邮件服务尚未开放，请联系管理员。",
+        signup_disabled: "注册暂未开放，请稍后再试。",
+        otp_expired: "验证码已失效或不正确，请重新获取验证码。",
+        email_not_confirmed: "请先使用邮件中的验证码确认邮箱。",
+        reauthentication_needed: "验证已失效，请重新获取验证码。",
+      };
+      throw new Error(messages[code] ?? (response.status === 429 ? "操作过于频繁，请稍后再试。" : "验证服务暂时不可用，请稍后重试。"));
+    }
+    return result;
+  }
+  async resendSignup(email: string, redirectTo: string): Promise<void> {
+    await this.emailAuthRequest(`resend?redirect_to=${encodeURIComponent(redirectTo)}`, { type: "signup", email: email.trim() });
+  }
+  async requestPasswordReset(email: string, redirectTo: string): Promise<void> {
+    await this.emailAuthRequest(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim() });
+  }
+  async verifyEmailCode(email: string, token: string, type: "signup" | "recovery"): Promise<void> {
+    if (!/^\d{6}$/.test(token)) throw new Error("请输入六位数字验证码。");
+    const epoch = this.epoch;
+    const result = await this.emailAuthRequest("verify", { email: email.trim(), token, type });
+    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    if (type === "recovery") {
+      this.recoveryTokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: Date.now() + result.expires_in * 1000 };
+      this.update({ recoveryReady: true, error: null });
+    } else {
+      this.acceptAuth(result);
+      this.update({ status: "ready", error: null });
+    }
+  }
+  async updatePassword(password: string): Promise<{ signedOutEverywhere: boolean }> {
+    const recovery = this.recoveryTokens;
+    if (!recovery || recovery.expiresAt <= Date.now()) throw new Error("验证已失效，请重新获取验证码。");
+    if (password.length < 12) throw new Error("请使用至少 12 位、更难猜测的密码。");
+    const epoch = this.epoch;
+    await this.emailAuthRequest("user", { password }, recovery.access);
+    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    ++this.epoch;
+    this.tokens = null;
+    this.recoveryTokens = null;
+    this.persistTokens();
+    this.stopRenewal();
+    this.update({ user: null, recoveryReady: false, project: null, lease: null, revision: null, status: "signed_out", writeBlocked: true, error: null });
+    try {
+      const response = await fetch(`${this.config.url}/auth/v1/logout?scope=global`, { method: "POST", headers: { apikey: this.config.anonKey, Authorization: `Bearer ${recovery.access}` } });
+      return { signedOutEverywhere: response.ok };
+    } catch { return { signedOutEverywhere: false }; }
+  }
+  clearPasswordRecovery(): void {
+    ++this.epoch;
+    this.recoveryTokens = null;
+    this.update({ recoveryReady: false });
   }
   private async accessToken(): Promise<string | null> {
     if (!this.tokens) return null;
@@ -306,7 +374,9 @@ export class BackendSession {
     this.stopRenewal();
     const epoch = ++this.epoch;
     this.tokens = null;
-    this.update({ user: null, lease: null, writeBlocked: true });
+    this.recoveryTokens = null;
+    this.persistTokens();
+    this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true });
     try {
       const result = await this.authRequest("password", { email: email.trim(), password });
       if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
@@ -324,9 +394,10 @@ export class BackendSession {
     const token = this.tokens?.access;
     ++this.epoch;
     this.tokens = null;
+    this.recoveryTokens = null;
     this.persistTokens();
     this.stopRenewal();
-    this.update({ user: null, lease: null, status: this.config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null });
+    this.update({ user: null, recoveryReady: false, lease: null, status: this.config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null });
     if (token) {
       try {
         await fetch(`${this.config.url}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: this.config.anonKey, Authorization: `Bearer ${token}` } });
@@ -527,7 +598,8 @@ export class BackendSession {
     ++this.lifecycle;
     this.stopRenewal();
     this.tokens = null;
-    this.update({ user: null, lease: null, writeBlocked: true, status: this.config.configured ? "signed_out" : "unconfigured" });
+    this.recoveryTokens = null;
+    this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true, status: this.config.configured ? "signed_out" : "unconfigured" });
     this.listeners.clear();
   }
 }

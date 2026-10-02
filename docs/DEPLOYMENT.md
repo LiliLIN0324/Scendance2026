@@ -30,7 +30,7 @@ npx supabase db advisors --local --type security --fail-on warn
 npx supabase db lint --local
 ```
 
-本仓库已生成 `config.toml`：关闭开放注册和匿名登录，PostgreSQL17，业务 schema 不暴露。不要用 `db reset` 清理已有本地数据。
+本仓库已生成 `config.toml`：开放邮箱注册并要求确认，匿名登录关闭，PostgreSQL17，业务 schema 不暴露。不要用 `db reset` 清理已有本地数据。
 
 现有 `.env.local` 和 `.env.edge.local` 保存本轮专用云配置，不要用本地模板覆盖它们。为本地开发另建 `.env.dev.local`，参考根目录 `.env.example`，填写 `supabase status` 提供的本地 URL/service role key/公钥，以及两个不同邮箱、至少 12 位独立密码和工作室 UUID。另建 `.env.edge.dev.local`，参考 `supabase/functions/.env.example`，配置本地 origin、单独的 worker secret 及需要启用的供应商。
 
@@ -77,7 +77,7 @@ npx supabase secrets set --project-ref hrsrrduwbqxnqddkexoy --env-file .env.edge
 | 数据库 | 四份迁移通过官方 HTTPS Management API 在一个事务中执行，原版本号及 SQL 已保存到迁移历史 |
 | 迁移版本 | `20261002060304`、`20261002060307`、`20261002060309`、`20261002061700` |
 | Edge | `scene-api`、`generation-worker` 均为 ACTIVE v1，`verify_jwt=false`，在服务内部验证 Auth JWT 或 worker secret |
-| Auth | 禁公开注册，邮箱密码登录开启，匿名登录关闭，最短密码 12 位 |
+| Auth | 邮箱注册与确认开启；独立 SMTP 由用户配置，真实收信按 [验证码验收](AUTH_EMAIL_OTP.md) 记录；匿名登录关闭，最短密码 12 位 |
 | 站点与允许来源 | 正式站点 `https://scendance.charlestech.org`；CORS/跳转白名单另允许 `http://localhost:3000`、`http://127.0.0.1:3000` |
 | 私有 Storage | `scene-assets`，最大文件 `10,485,760` 字节（10 MiB）；GLB/PNG/JPEG |
 | 演示账号 | 两成员已初始化，真实密码登录成功 |
@@ -92,7 +92,7 @@ npx supabase functions deploy scene-api generation-worker --project-ref hrsrrduw
 
 部署前通过相关测试与类型检查，部署后复查函数状态并运行云端冒烟。`verify_jwt=false` 支持匿名分享入口和 worker 独立凭据，业务接口继续在函数内认证。
 
-Auth 维护使用 [最小云端配置](../supabase/ops/cloud-config.toml)，在独立临时 Supabase 工作目录中应用并审阅差异，不直接向云端推送完整本地 `supabase/config.toml`。保留 `[auth].enable_signup=false` 与 `[auth.email].enable_signup=true`：顶级设置禁用公开注册，邮箱项保持登录提供方可用。本轮已发现并修复邮箱项设为 false 经 CLI 同步会关闭邮箱登录的问题，修复后真实登录通过。
+Auth 维护使用 [最小云端配置](../supabase/ops/cloud-config.toml)，在独立临时 Supabase 工作目录中应用并审阅差异，不直接向云端推送完整本地 `supabase/config.toml`。保持 `[auth].enable_signup=true`、`[auth.email].enable_signup=true` 和 `enable_confirmations=true`：允许注册，但确认邮箱后才能进入工作室。OTP 模板与云端限流见 [邮件注册与找回](AUTH_EMAIL_OTP.md)。本轮已发现并修复邮箱项设为 false 经 CLI 同步会关闭邮箱登录的问题，修复后真实登录通过。
 
 `.env.local` 保存新项目 key 与演示密码，`.env.edge.local` 保存 Edge 配置，`.env.provision.local` 保存数据库密码及建项信息；三份文件均为 `0600` 并由 Git 排除。平台会向 Edge 注入内建 `SUPABASE_*` 变量。浏览器只配置 Supabase URL 与 anon/public key，服务端凭据不进入前端。
 
