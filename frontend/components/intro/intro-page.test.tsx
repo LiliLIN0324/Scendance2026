@@ -34,14 +34,18 @@ afterEach(() => {
 });
 
 describe('introduction and sign-in entry', () => {
-  it('allows an honest local entry without creating a user or making network requests', () => {
+  it('keeps the fields usable but the submit inert when the backend is unconfigured', () => {
     const session = controller(false);
     const onEnter = vi.fn();
     render(<IntroPage controller={session} onEnter={onEnter} />);
+    // Only the submit is gated. Disabling the inputs as well made the form look broken:
+    // nothing was focusable, so there was no way to tell an unconfigured build from a dead one.
     expect((screen.getByRole('button', { name: '登录并进入工作台' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByLabelText('邮箱') as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText('密码') as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByRole('status').textContent).toContain('云端登录与 AI 生成将在服务连接后开放');
+    expect((screen.getByLabelText('邮箱') as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText('密码') as HTMLInputElement).disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'editor@example.com' } });
+    expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('editor@example.com');
+    expect(screen.getByRole('status').textContent).toContain('登录服务尚未配置');
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     expect(onEnter).toHaveBeenCalledOnce();
     expect(session.getSnapshot().user).toBeNull();
