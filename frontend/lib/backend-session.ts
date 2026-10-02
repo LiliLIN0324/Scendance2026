@@ -1,8 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { createSceneClient, SceneApiError } from "../../client/scene-client";
-import { sceneSchema, type Scene } from "../../supabase/functions/_shared/domain";
+import { assertFreshProposal, createSceneClient, SceneApiError, type Proposal, type EditorState } from "../../client/scene-client";
+import { proposalRequestSchema, sceneSchema, type Scene } from "../../supabase/functions/_shared/domain";
 
 export { SceneApiError };
 export type { Scene };
@@ -71,6 +71,8 @@ interface AuthResponse {
 }
 interface Tokens { access: string; refresh: string; expiresAt: number }
 export interface SaveResult { id: string; revision: number; scene: Scene; updatedAt: string; warnings: { code: string; ids: string[] }[] }
+export interface AssistantProposal extends Proposal { explanation: string; warnings: { code: string; ids: string[] }[] }
+export interface AppliedProposal { id: string; revision: number; scene: Scene; previousScene: Scene; undoGroup: string }
 export interface AuthorizedAssets { assetUrls: Record<string, string>; assetNames: Record<string, string> }
 type LeaseResponse = Omit<Lease, "projectId">;
 
@@ -90,6 +92,16 @@ function failure(error: unknown): BackendFailure {
     INVALID_RESPONSE: "云端返回的数据格式无效。",
     ASSET_AUTHORIZATION_INVALID: "云端模型的授权信息无效，未替换当前画布，草稿已保留。",
     SESSION_CHANGED: "会话已变化，请重新操作。",
+    STALE_PROPOSAL: "场景或编辑会话已变化，此提案不能应用，请重新生成。",
+    SERVICE_NOT_CONFIGURED: "AI 服务尚未配置，请联系工作室管理员。",
+    DAILY_BUDGET_EXCEEDED: "今天的 AI 额度已用完，请明天再试。",
+    BUDGET_EXCEEDED: "工作室 AI 总额度已用完，请联系管理员。",
+    AI_INVALID_PROPOSAL: "AI 未能生成可用方案，请调整要求后重试。",
+    AI_INPUT_TOO_LARGE: "场景内容过长，请缩短物件备注或需求后重试。",
+    BILLING_NOT_CONFIGURED: "AI 费用限制尚未配置，请联系工作室管理员。",
+    PROVIDER_HTTP_ERROR: "AI 服务暂时不可用，请稍后手动重试。",
+    PROVIDER_INVALID_JSON: "AI 服务返回异常，请稍后手动重试。",
+    PROVIDER_TIMEOUT: "AI 响应超时，请稍后手动重试。",
     PROJECT_SWITCH_REQUIRES_RELEASE: "请先交接当前项目的编辑权。",
   };
   return { code, status: error instanceof SceneApiError ? error.status : 0, message: messages[code] ?? (localCode && error instanceof Error ? error.message : `云端操作失败（${code}），草稿已保留。`) };
@@ -104,6 +116,7 @@ export class BackendSession {
   private timer: ReturnType<typeof setInterval> | null = null;
   private operationPending = false;
   private renewing = false;
+  private proposing = false;
   private epoch = 0;
   private owners = 0;
   private lifecycle = 0;
@@ -186,7 +199,7 @@ export class BackendSession {
     }
     return this.refresh;
   }
-  private async request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  private async request<T>(path: string, method = "GET", body?: unknown, blocksWrites = true): Promise<T> {
     const epoch = this.epoch;
     try {
       this.requireConfig();
@@ -200,7 +213,8 @@ export class BackendSession {
           this.update({ user: null });
         }
         // Any uncertain response stops cloud writes; never retry a save automatically.
-        this.block(error);
+        if (blocksWrites || error instanceof SceneApiError && [401, 409].includes(error.status)) this.block(error);
+        else this.update({ error: failure(error) });
       }
       throw error;
     }
@@ -381,6 +395,48 @@ export class BackendSession {
     } catch (error) {
       this.block(error);
       throw error;
+    } finally { this.operationPending = false; }
+  }
+  private editorState(): EditorState {
+    const lease = this.writableLease();
+    if (!this.snapshot.draft || this.snapshot.revision === null) throw new SceneApiError("CLOUD_WRITE_BLOCKED", 409, null);
+    return { projectId: lease.projectId, sessionId: lease.sessionId, generation: lease.generation,
+      expectedRevision: this.snapshot.revision, localRevision: this.snapshot.localRevision, scene: this.snapshot.draft };
+  }
+  async generateProposal(instruction: string, selectedIds: string[]): Promise<AssistantProposal> {
+    if (this.proposing || this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const state = this.editorState();
+    const input = proposalRequestSchema.parse({ ...state, requestId: crypto.randomUUID(), instruction,
+      mode: state.scene.objects.length ? "modify" : "layout", selectedIds });
+    this.proposing = true;
+    this.update({ error: null });
+    try {
+      const result = await this.request<AssistantProposal>(`/projects/${state.projectId}/proposals`, "POST", input, false);
+      sceneSchema.parse(result.candidate);
+      if (typeof result.explanation !== "string" || !Array.isArray(result.warnings) || !Number.isFinite(Date.parse(result.expires_at))) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+      await assertFreshProposal(result, this.editorState());
+      return result;
+    } finally { this.proposing = false; }
+  }
+  async applyProposal(proposal: AssistantProposal): Promise<AppliedProposal> {
+    if (this.operationPending || this.proposing) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const state = this.editorState();
+    this.operationPending = true;
+    try {
+      await assertFreshProposal(proposal, state);
+      const current = this.editorState();
+      if (current.localRevision !== state.localRevision || current.expectedRevision !== state.expectedRevision) throw new SceneApiError("STALE_PROPOSAL", 409, null);
+      const result = await this.request<AppliedProposal>(`/projects/${state.projectId}/proposals/apply`, "POST", {
+        proposalId: proposal.id, sessionId: state.sessionId, generation: state.generation,
+        expectedRevision: state.expectedRevision, localRevision: state.localRevision, currentScene: state.scene,
+      });
+      const saved = sceneSchema.parse(result.scene);
+      const unchanged = this.snapshot.localRevision === state.localRevision;
+      this.update({ revision: result.revision, lease: { ...this.snapshot.lease!, revision: result.revision },
+        project: { ...this.snapshot.project!, scene: saved, revision: result.revision },
+        ...(unchanged ? { draft: saved, dirty: false, localRevision: state.localRevision + 1 } : {}),
+        ...(!this.snapshot.writeBlocked ? { status: "editing", error: null } : {}) });
+      return { ...result, scene: saved };
     } finally { this.operationPending = false; }
   }
   /** Stop timers and invalidate in-flight responses; never discard the caller's editor draft. */

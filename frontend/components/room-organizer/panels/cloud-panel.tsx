@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { createBackendSession, useBackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
+import { AssistantPanel } from './assistant-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { layout: RoomLayout; onLoadLayout(layout: RoomLayout): void }
+interface Props { layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; selectedIds?: string[]; onApplyLayout?: (layout: RoomLayout) => void }
 
-export function CloudPanel({ layout, onLoadLayout }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayout }: Props): JSX.Element {
   const [controller] = useState(() => createBackendSession());
   const cloud = useBackendSession(controller);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -80,6 +81,12 @@ export function CloudPanel({ layout, onLoadLayout }: Props): JSX.Element {
   }
 
   return <>
+    <AssistantPanel controller={controller} layout={layout} selectedIds={selectedIds} bound={bound} busy={busy}
+      onConnect={() => dialog.current?.showModal()} onSaved={scene => setSavedFingerprint(JSON.stringify(scene))} onApplied={next => {
+        const saved = JSON.stringify(layoutToBackendScene(next));
+        setSavedFingerprint(saved); lastObserved.current = saved;
+        (onApplyLayout ?? onLoadLayout)(next);
+      }}/>
     <button className="sc-cloud-trigger" type="button" onClick={() => dialog.current?.showModal()}>
       <span aria-hidden="true">☁</span> {cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目'}
     </button>
