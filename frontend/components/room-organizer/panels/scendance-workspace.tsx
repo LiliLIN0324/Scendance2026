@@ -6,9 +6,10 @@ import { useRoomEditor, useSelection } from '../contexts';
 import { CATALOG_DRAG_MIME, catalogKey } from '../lib/catalog-drag';
 import { EVENT_CATALOG } from '../lib/constants';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
-import type { CameraPreset, CatalogItem } from '../lib/types';
+import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
 
 interface LibraryProps {
+  onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   creativePanel?: ReactNode;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
 }
@@ -23,7 +24,7 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, creativePanel }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }: LibraryProps): JSX.Element {
   const { layout, activeFloor, actions, catalogQuery, setCatalogQuery } = useRoomEditor();
   const { selectOnly } = useSelection();
   const [tab, setTab] = useState<'materials' | 'venue' | 'list'>('materials');
@@ -90,6 +91,8 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel }: LibraryPro
         </div>
         <div className="sc-area-card"><span>场地面积</span><strong>{(layout.width * layout.height).toFixed(1)} <small>m²</small></strong></div>
         <label className="sc-field sc-color-field">地面颜色<input type="color" aria-label="地面颜色" value={activeFloor.floorColor} onChange={event => actions.setFloorColor(event.target.value)}/></label>
+        <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
+        <p className="sc-note">实时作用于三维场景；随场景本地保存，连接云项目后使用现有 lighting 字段保存。</p>
         <p className="sc-note">当前版本提供矩形场地编辑。平面图标定与多边形编辑尚未接入。</p>
       </>}
       {tab === 'list' && <>
