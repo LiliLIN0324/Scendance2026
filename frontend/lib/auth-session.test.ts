@@ -56,6 +56,6 @@ it('refreshes an expired session and waits for confirmation after signup', async
 });
 
 it('rejects external and recursive return destinations', () => {
-  for (const value of ['//evil.example', '/\\evil.example', 'https://evil.example', '/auth/callback', null]) expect(safeReturnPath(value)).toBe('/');
+  for (const value of ['//evil.example', '/\\evil.example', 'https://evil.example', '/auth/callback', '/reset-password', null]) expect(safeReturnPath(value)).toBe('/');
   expect(safeReturnPath('/?scene=1#view')).toBe('/?scene=1#view');
 });

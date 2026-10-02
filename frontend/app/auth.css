@@ -22,6 +22,9 @@
 .sc-auth-notice{padding:12px;background:#f0f3e9;border-radius:8px;line-height:1.7;font-size:13px;margin:18px 0 0}
 .sc-auth-notice[role=alert]{background:#fff0e9;color:#923e24}
 .sc-auth-footnote{margin:28px 0 0;font-size:11px;color:#929787}
+.sc-auth-actions{display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:20px}
+.sc-auth-actions button,.sc-auth-actions a{border:0;padding:0;background:none;font:inherit;font-size:13px;color:#34482a;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.sc-auth-actions button:disabled{color:#929787;cursor:default;text-decoration:none}
 .sc-auth-callback{max-width:500px;margin:auto;text-align:center;line-height:1.8}
 .sc-auth-callback a{color:#34482a;text-decoration:underline}
 @media(max-width:700px){.sc-auth-page{padding:24px 20px}.sc-auth-card{grid-template-columns:1fr;max-width:440px;margin-top:76px}.sc-auth-intro{padding:28px}.sc-auth-intro h1{font-size:32px;margin:20px 0 14px}.sc-auth-intro h1 br{display:none}.sc-auth-intro p{font-size:13px;margin:0}.sc-auth-intro a{padding-top:20px}.sc-auth-form-wrap{padding:28px}.sc-auth-tabs{margin-bottom:24px}}

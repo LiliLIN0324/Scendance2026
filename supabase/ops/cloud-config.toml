@@ -16,3 +16,9 @@ minimum_password_length = 12
 # Email confirmation requires a dedicated SMTP service for public signups.
 enable_signup = true
 enable_confirmations = true
+max_frequency = "60s"
+otp_length = 6
+otp_expiry = 600
+
+[auth.rate_limit]
+email_sent = 30

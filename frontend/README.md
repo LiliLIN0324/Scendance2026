@@ -39,7 +39,7 @@ npx wrangler pages dev out --port 3018
 - AI 助理支持输入需求、提案俯视预览、确认保存和本地撤销；旧提案保护及联调状态见 [AI 助理接入](../docs/AI_ASSISTANT.md)。
 - 工作台入口要求登录；未配置后端时登录页会明确提示。不会显示伪造的登录或保存成功。
 
-后端已部署至独立 Supabase 项目。生产站点已验证登录、确认回调、刷新恢复、退出、私人工作室及项目权限；AI 助理已验证真实 DeepSeek 提案与确认应用。公开邮箱注册仍等待独立 SMTP，管理 API 生成确认链接的验证不代表邮件送达。详见 [登录配置](../docs/AUTH_SETUP.md) 与 [项目状态](../docs/PROJECT_STATUS.md)。
+后端已部署至独立 Supabase 项目。生产站点已验证登录、确认回调、刷新恢复、退出、私人工作室及项目权限；AI 助理已验证真实 DeepSeek 提案与确认应用。Resend 发信域已验证，用户已保存独立 SMTP；六位验证码注册与找回密码的配置、测试和上线状态见 [邮件认证记录](../docs/AUTH_EMAIL_OTP.md)。管理 API 生成确认链接的验证不代表邮件送达。详见 [登录配置](../docs/AUTH_SETUP.md) 与 [项目状态](../docs/PROJECT_STATUS.md)。
 
 本地 HTTP + PostgreSQL 联调使用显式测试 Auth/Storage，与上述生产验证分别记录，见 [联调报告](../docs/INTEGRATION.md)。
 
@@ -52,7 +52,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
 ```
 
-仅放公开 anon / publishable key；不要放 service-role、模型 API key、worker secret。公开配置在构建时写入前端，修改后要重启开发服务或重新构建。账号密码在登录框输入，Auth access/refresh token 只在内存，刷新后重新登录；本地草稿保留。
+仅放公开 anon / publishable key；不要放 service-role、模型 API key、worker secret。公开配置在构建时写入前端，修改后要重启开发服务或重新构建。账号密码在登录框输入，登录 access/refresh token 按标签页保存在 sessionStorage，刷新后向 Auth 验证；密码恢复令牌只在内存，刷新后需重新发码；本地草稿保留。
 
 B 按 [后端部署说明](../docs/DEPLOYMENT.md) 部署、迁移并准备工作室账号；将实际前端 Origin 加入后端 `ALLOWED_ORIGINS`。`http://localhost:3000` 与 `http://127.0.0.1:3018` 是不同 Origin，应按实际地址配置。
 
