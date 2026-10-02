@@ -41,7 +41,6 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
     </div>
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
-        <div className="sc-section-heading"><div><h2>线上模型库</h2><p>点击下载并放入场地</p></div></div>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
         <OnlineModelLibrary disabled={atLimit} onAdd={addMaterial}/>
       </>}
