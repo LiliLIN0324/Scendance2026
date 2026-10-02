@@ -167,7 +167,6 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
         </section>
 
         <section className="sc-intro-login" aria-labelledby="sc-intro-login-title">
-          <div className="sc-intro-login-mark" aria-hidden="true"><ArrowRight size={25} /></div>
           <p className="sc-intro-kicker">YOUR NEXT GATHERING STARTS HERE</p>
           <h2 id="sc-intro-login-title">欢迎来到幕景</h2>
           <p className="sc-intro-login-copy">一个空间，装下你的下一场相聚。</p>
@@ -186,17 +185,17 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
               <form className="sc-intro-form" aria-label={mode === 'signup' ? '工作室注册' : '工作室登录'} onSubmit={(event) => { void submit(event); }} aria-busy={busy}>
                 {mode === 'signup' && <>
                   <label htmlFor="sc-intro-name">称呼</label>
-                  <input id="sc-intro-name" name="name" autoComplete="nickname" maxLength={80} placeholder="怎么称呼你" value={name} onChange={(event) => setName(event.target.value)} disabled={!cloud.configured || busy} required />
+                  <input id="sc-intro-name" name="name" autoComplete="nickname" maxLength={80} placeholder="怎么称呼你" value={name} onChange={(event) => setName(event.target.value)} disabled={busy} required />
                 </>}
                 <label htmlFor="sc-intro-email">邮箱</label>
-                <input id="sc-intro-email" name="email" type="email" autoComplete="username" placeholder="你的工作室邮箱" value={email} onChange={(event) => setEmail(event.target.value)} disabled={!cloud.configured || busy} required />
+                <input id="sc-intro-email" name="email" type="email" autoComplete="username" placeholder="你的工作室邮箱" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required />
                 <label htmlFor="sc-intro-password">密码</label>
-                <input id="sc-intro-password" name="password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={mode === 'signup' ? 12 : undefined} placeholder={mode === 'signup' ? '至少 12 位' : '输入密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={!cloud.configured || busy} required />
+                <input id="sc-intro-password" name="password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={mode === 'signup' ? 12 : undefined} placeholder={mode === 'signup' ? '至少 12 位' : '输入密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required />
                 {error && <p className="sc-intro-error" role="alert">{error}</p>}
                 {notice && <p className="sc-intro-notice" role="status">{notice}</p>}
                 <button className="sc-intro-primary" type="submit" disabled={!cloud.configured || busy}>{busy ? (mode === 'signup' ? '正在创建…' : '正在登录…') : mode === 'signup' ? '创建账号' : '登录并进入工作台'}<ArrowRight size={18} aria-hidden="true" /></button>
               </form>
-              {!cloud.configured && <p className="sc-intro-offline" role="status">当前可先本地体验。云端登录与 AI 生成将在服务连接后开放。</p>}
+              {!cloud.configured && <p className="sc-intro-offline" role="status">登录服务尚未配置，暂时只能本地体验。本地开发需在 <code>frontend/.env.local</code> 填写 NEXT_PUBLIC_SUPABASE_URL 与 NEXT_PUBLIC_SUPABASE_ANON_KEY。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
               <button className="sc-intro-secondary" type="button" onClick={onEnter} disabled={busy}>先体验本地工作台<ArrowRight size={17} aria-hidden="true" /></button>
               <p className="sc-intro-local-note">无需账号即可布置空间。场景草稿保存在当前浏览器，现场照片刷新后需重新选择。</p>
