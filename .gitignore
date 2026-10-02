@@ -17,3 +17,5 @@ frontend/out/
 frontend/next-env.d.ts
 frontend/*.tsbuildinfo
 frontend/coverage/
+.playwright-cli/
+output/playwright/

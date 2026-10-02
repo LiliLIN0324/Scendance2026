@@ -38,6 +38,8 @@ python3 -m http.server 3018 --bind 127.0.0.1 --directory out
 
 后端尚未部署，因此本轮只证明本地编辑和接口契约通过测试，**没有证明真实云端、双账号交接、第三方生成或手机真机闭环**。
 
+后续合并联调已补充真实 HTTP + 后端处理器 + PostgreSQL 测试库验证，以及测试账号在浏览器中的保存、刷新重开与交接。Auth/Storage 在该环境使用显式测试实现，真实 Supabase 云端仍未验收。复现方法与结果见 [前后端联调报告](../docs/INTEGRATION.md)。
+
 ## 部署后配置
 
 复制 `frontend/.env.example` 为 `frontend/.env.local`，在本机填写：

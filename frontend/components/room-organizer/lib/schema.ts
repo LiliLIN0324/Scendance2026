@@ -1,6 +1,7 @@
 import { materialIds, uuid, venueSchema } from '../../../../supabase/functions/_shared/domain';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
+import { isGlbUrl } from './glb-url';
 import { NEIGHBOUR_FLAGS, isStreetSeed, isTerrainY } from './site';
 import { isStairsLeadIn, isStairsShape } from './stairs';
 import { isStoreyHeight } from './storeys';
@@ -152,7 +153,7 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   if (v.venueEntranceId !== undefined && !uuid.safeParse(v.venueEntranceId).success) return false;
   if (v.notes !== undefined && typeof v.notes !== 'string') return false;
   if (v.source !== undefined && !['builtin', 'public_library', 'generated', 'local_sample'].includes(v.source as string)) return false;
-  if (v.glbUrl !== undefined && (typeof v.glbUrl !== 'string' || v.glbUrl.length > 4096 || !/^(?:https:\/\/|\/(?!\/)|\.\/)[^\s]+$/.test(v.glbUrl))) return false;
+  if (v.glbUrl !== undefined && !isGlbUrl(v.glbUrl)) return false;
   if (v.price !== undefined && !isFiniteNumber(v.price)) return false;
   if (!isOptionalString(v.category)) return false;
   if (v.position !== undefined && !isVec2(v.position)) return false;

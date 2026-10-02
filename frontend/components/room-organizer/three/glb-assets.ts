@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { isGlbUrl } from '../lib/glb-url';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
 const MAX_GLB_BYTES = 10 * 1024 * 1024;
@@ -41,8 +42,7 @@ export function validateGlbBuffer(buffer: ArrayBuffer): void {
 }
 
 async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
-  // Local samples use /assets/; cloud loading URLs must use HTTPS.
-  if (!/^(?:https:\/\/|\/(?!\/)|\.\/)[^\s]+$/.test(url)) throw new Error('模型地址无效。');
+  if (!isGlbUrl(url)) throw new Error('模型地址无效。');
   const response = await fetch(url, { signal, credentials: 'omit' });
   if (!response.ok) throw new Error(`模型下载失败（HTTP ${response.status}）。`);
   if (Number(response.headers.get('content-length')) > MAX_GLB_BYTES) throw new Error('GLB 超过 10 MB，未载入。');

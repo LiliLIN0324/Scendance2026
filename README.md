@@ -9,6 +9,7 @@
 | A：前端工作台 | [启动与接口配置](frontend/README.md)、[前端修改边界](frontend/AGENTS.md) |
 | B：Supabase 后端 | [后端说明](BACKEND.md)、[部署说明](docs/DEPLOYMENT.md) |
 | A01：交接与验证 | [编辑器首版报告](docs/team/reports/A/A01.md) |
+| 前后端本地联调 | [运行步骤、修复及测试结果](docs/INTEGRATION.md) |
 | 原体育馆展示原型 | 根目录 `index.html`；运行方式与功能见下文 |
 
 使用 Node.js 24.15+，先在根目录执行 `npm ci`，再执行 `cd frontend && npm ci && npm run dev`，打开 `http://localhost:3000`。生产构建输出为 `frontend/out/`，与下面的静态体育馆原型是两个独立入口。
