@@ -34,6 +34,7 @@ export interface KeyboardShortcutHandlers {
 }
 
 export interface UseKeyboardShortcutsOptions {
+  enabled?: boolean;
   selectedItem: FurnitureItem | null;
   selectedWall: { id: string; kind: 'exterior' | 'interior' } | null;
   hasSignalItems: boolean;
@@ -79,6 +80,7 @@ function interruptsDrag(event: KeyboardEvent): boolean {
 }
 
 export function useKeyboardShortcuts({
+  enabled = true,
   selectedItem,
   selectedWall,
   hasSignalItems,
@@ -87,6 +89,7 @@ export function useKeyboardShortcuts({
   handlers,
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
+    if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
 
@@ -266,7 +269,7 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedItem, selectedWall, hasSignalItems, walkthroughActive, isDragActive, handlers]);
+  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, isDragActive, handlers]);
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

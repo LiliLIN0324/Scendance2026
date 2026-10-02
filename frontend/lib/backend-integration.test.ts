@@ -129,6 +129,40 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     expect((await fetch(url)).status).toBe(404);
   });
 
+  it('adds a registered library model from another studio and restores it after saving and logging in again', async () => {
+    const { json, resources } = tetrahedron(), bytes = packGltf(json, resources);
+    const modelId = 'integration-library-chair';
+    const record = await assetRecord(owner, bytes, { name: '公共模型联调', source: 'upload', sourceId: modelId,
+      sourceUrl: `https://3dassets.dev/assets/${modelId}`, license: { id: 'CC0-1.0' }, metadata: { catalog: 'scendance-v041' } });
+    await server.backend.upload(record.storagePath, bytes, 'model/gltf-binary');
+    await server.db.transaction(async tx => {
+      await tx.exec('set local role service_role');
+      await tx.query('select public.register_library_asset($1,$2,$3::jsonb)', [owner, modelId, JSON.stringify(record)]);
+    });
+    const otherStudio = crypto.randomUUID();
+    await server.db.query('insert into scene_private.studios(id,name) values($1,$2)', [otherStudio, 'Independent studio']);
+    await server.db.query("insert into scene_private.members values($1,$2,'owner','Other owner')", [otherStudio, editor]);
+    const a = await login(1);
+    const authorized = await a.authorizeAsset(record.id);
+    expect(new Uint8Array(await (await fetch(authorized.url)).arrayBuffer())).toEqual(bytes);
+    await ensureGlbAsset(record.id, authorized.url);
+    expect(getGlbAssetState(record.id).status).toBe('ready');
+    const project = await a.createProject(otherStudio, '公共模型保存', scene());
+    await a.acquireLease(project.id);
+    const draft = scene();
+    draft.objects.push({ ...chair('模型备注'), materialId: 'asset', assetId: record.id });
+    const layout = backendSceneToLayout(draft, { assetUrls: { [record.id]: authorized.url }, assetNames: { [record.id]: authorized.name } });
+    const saved = await a.saveScene(layoutToBackendScene(layout));
+    expect(saved.revision).toBe(1);
+    expect(JSON.stringify(saved.scene)).not.toContain('/test-storage/');
+    await a.releaseLease();
+    await a.signOut();
+    const b = await login(1), reopened = await b.getProject(project.id);
+    const assets = await b.authorizeAssets(reopened.scene);
+    expect(assets.assetUrls[record.id]).not.toBe(authorized.url);
+    expect(layoutToBackendScene(backendSceneToLayout(reopened.scene, assets))).toEqual(draft);
+  });
+
   it('publishes an immutable anonymous snapshot, strips private notes, and revokes it', async () => {
     const a = await login(), source = scene(); source.objects.push(chair('绝不能公开的内部备注'));
     const p = await a.createProject(studio, '分享联调', source), client = await rawClient();
@@ -186,16 +220,16 @@ describe('AI assistant → HTTP API → migrated PostgreSQL', () => {
       const empty = { ...scene(), objects: [] };
       const project = await a.createProject(studio, 'AI 确认闭环', empty);
       await a.acquireLease(project.id);
-      const proposal = await a.generateProposal('安排四人读书沙龙', []);
+      const proposal = await a.requestProposal({ mode: 'layout', prompt: '安排四人读书沙龙', scene: empty });
       expect(calls).toBe(1);
       expect(proposal.candidate.objects).toHaveLength(6);
       expect(a.getSnapshot().project?.scene.objects).toHaveLength(0);
       expect(a.getSnapshot().revision).toBe(0);
-      const applied = await a.applyProposal(proposal);
+      const applied = await a.applySceneProposal(proposal, a.getSnapshot().draft!);
       expect(applied.revision).toBe(1);
       expect(applied.previousScene.objects).toHaveLength(0);
       expect(a.getSnapshot().draft).toEqual(proposal.candidate);
-      await expect(a.applyProposal(proposal)).rejects.toMatchObject({ code: 'STALE_PROPOSAL' });
+      await expect(a.applySceneProposal(proposal, a.getSnapshot().draft!)).rejects.toMatchObject({ code: 'STALE_PROPOSAL' });
       await a.releaseLease();
       await b.signIn(testAccounts[1]!.email, testAccounts[1]!.password);
       const reopened = await b.getProject(project.id);

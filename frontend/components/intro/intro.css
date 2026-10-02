@@ -1,0 +1,111 @@
+.sc-intro {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #f7f5ed;
+  color: #26392f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding: 0 5.6%;
+  isolation: isolate;
+}
+.sc-intro *, .sc-intro *::before, .sc-intro *::after { box-sizing: border-box; }
+/* width:100% keeps the auto margins from turning the flex items shrink-to-fit. */
+.sc-intro-header, .sc-intro-content, .sc-intro-footer { width: 100%; max-width: 1280px; margin-inline: auto; }
+.sc-intro-header { display: flex; justify-content: space-between; align-items: center; min-height: clamp(70px, 9.2vh, 94px); gap: 24px; border-bottom: 1px solid #dedfd4; }
+.sc-intro-brand { display: flex; gap: 11px; align-items: center; font-size: 23px; font-weight: 650; letter-spacing: 2px; }
+.sc-intro-brand-icon { width: 43px; height: 43px; display: grid; place-items: center; background: #2d3d32; border-radius: 13px; }
+.sc-intro-wordmark { margin-left: 13px; font-size: 12px; letter-spacing: 2.5px; font-weight: 600; }
+.sc-intro-version { color: #727b6f; font-size: 12px; }
+.sc-intro-version span { margin-left: 14px; font-size: 11px; color: #899181; }
+.sc-intro-content { display: grid; grid-template-columns: minmax(0, 1fr) 374px; gap: clamp(35px, 6vw, 100px); align-items: center; flex: 1 1 auto; padding: clamp(24px, 4.4vh, 47px) 0 clamp(22px, 4vh, 42px); }
+.sc-intro-story { min-width: 0; }
+.sc-intro-eyebrow { margin: 0 0 clamp(12px, 1.8vh, 19px); font-size: 12px; font-weight: 500; color: #6a7861; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+.sc-intro-eyebrow > span, .sc-intro-visual-label > span { height: 6px; width: 6px; flex: 0 0 6px; border-radius: 50%; background: #7b9069; }
+.sc-intro h1 { margin: 0; font-size: clamp(28px, min(3.6vw, 4.6vh), 50px); font-weight: 650; line-height: 1.34; letter-spacing: -1.5px; }
+.sc-intro h1 span { color: #748465; }
+.sc-intro-description { margin: clamp(12px, 1.8vh, 19px) 0 0; font-size: 14px; color: #798071; line-height: 1.9; }
+.sc-intro-photo-note { max-width: 540px; margin: clamp(7px, 1vh, 9px) 0 0; color: #65735f; font-size: 11px; line-height: 1.7; }
+/* The illustration is the one element that can give up height without losing content, so it
+   absorbs the slack (34vh) and stays proportional: 680/450 is its viewBox ratio. */
+.sc-intro-visual { margin: clamp(14px, 2.4vh, 25px) auto 8px; position: relative; max-width: min(100%, calc(clamp(200px, 34vh, 398px) * 1.511)); border-radius: 24px; background: radial-gradient(ellipse at 50% 64%, #ebe7d8 0%, #f7f5ed00 67%); }
+.sc-intro-scene { display: block; width: 100%; height: auto; overflow: visible; }
+.sc-intro-visual-label { display: flex; gap: 8px; align-items: center; position: absolute; top: 18px; left: 17px; z-index: 1; padding: 8px 10px; border: 1px solid #e3e4d9; border-radius: 6px; background: #f9f8f2e6; font-size: 10px; color: #77846c; }
+.sc-intro-visual figcaption { position: relative; text-align: right; color: #7b8173; font-size: 10px; padding-right: 24px; margin-top: -6px; }
+.sc-intro-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: clamp(14px, 2vh, 20px) 0 0; margin: clamp(11px, 1.6vh, 17px) 0 0; gap: 16px; list-style: none; border-top: 1px solid #dedfd4; }
+.sc-intro-steps li { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.sc-intro-steps svg { margin-top: 2px; flex-shrink: 0; color: #748468; }
+.sc-intro-steps span { font-size: 12px; font-weight: 600; }
+.sc-intro-steps p { margin: 5px 0 0; color: #7a8274; font-size: 11px; line-height: 1.6; }
+.sc-intro-login { border: 1px solid #e0e4d8; background: #fdfcf8; border-radius: 20px; padding: clamp(18px, 2.7vh, 29px) 30px 0; box-shadow: 0 18px 65px #30472d08; overflow: hidden; }
+.sc-intro-kicker { font-size: 8px; letter-spacing: 1.45px; color: #8c9682; font-weight: 600; margin: 0 0 10px; }
+.sc-intro-login h2 { margin: 0; font-size: 26px; letter-spacing: -.7px; font-weight: 650; }
+.sc-intro-login-copy { margin: 10px 0 clamp(14px, 2.3vh, 24px); font-size: 12px; color: #87907e; line-height: 1.6; }
+.sc-intro-form { display: grid; }
+/* Sign in / sign up share one card: the toggle swaps the fields, never the page. */
+.sc-intro-auth-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 12px 0 18px; font-size: 12px; color: #52634d; }
+.sc-intro-auth-links a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sc-intro-form label { font-size: 12px; margin-bottom: 8px; color: #5a6b52; }
+.sc-intro-form input { width: 100%; min-width: 0; height: clamp(38px, 5.4vh, 44px); padding: 0 13px; border: 1px solid #dde2d4; border-radius: 7px; background: #fbfcf7; font-size: 13px; color: #2c442f; font-family: inherit; margin-bottom: clamp(11px, 1.7vh, 16px); }
+.sc-intro-form input::placeholder { color: #939a8b; }
+.sc-intro-form input:disabled { opacity: 1; background: #f2f3ed; color: #8e9784; }
+.sc-intro button { font-family: inherit; cursor: pointer; }
+.sc-intro button:disabled { cursor: not-allowed; }
+.sc-intro button:focus-visible, .sc-intro input:focus-visible { outline: 3px solid #8da97c; outline-offset: 3px; }
+.sc-intro-primary, .sc-intro-secondary { min-height: 44px; width: 100%; border-radius: 7px; display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 13px; font-weight: 550; transition: background .15s; }
+.sc-intro-primary { background: #36543c; border: 1px solid #36543c; color: #fafbf6; }
+.sc-intro-primary:hover:not(:disabled) { background: #253e2b; }
+.sc-intro-primary:disabled { background: #e4e8db; color: #8a967c; border-color: #e4e8db; }
+.sc-intro-secondary { background: #fdfcf8; color: #4e6244; border: 1px solid #d9dfce; }
+.sc-intro-secondary:hover:not(:disabled) { background: #f0f2e8; }
+.sc-intro-secondary:disabled { opacity: .55; }
+.sc-intro-offline { margin: clamp(7px, 1.2vh, 10px) 0 0; font-size: 11px; line-height: 1.7; color: #848c78; }
+.sc-intro-separator { display: flex; align-items: center; gap: 14px; color: #9da493; font-size: 10px; margin: clamp(10px, 1.6vh, 15px) 0; }
+.sc-intro-separator::before, .sc-intro-separator::after { content: ""; height: 1px; background: #e8eadd; flex: 1; }
+.sc-intro-local-note { color: #959c8b; font-size: 10px; line-height: 1.8; margin: 12px 0 clamp(12px, 2.2vh, 22px); }
+.sc-intro-error { color: #a94333; font-size: 12px; line-height: 1.6; margin: 0 0 14px; }
+.sc-intro-notice { color: #4d6a44; font-size: 12px; line-height: 1.6; margin: 0 0 14px; }
+.sc-intro-signed-in { margin: 32px 0; }
+.sc-intro-account-caption { color: #829273; font-size: 11px; margin: 0 0 6px; }
+.sc-intro-account { color: #47613c; font-size: 14px; margin: 0 0 25px; overflow-wrap: anywhere; }
+.sc-intro-login-footer { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 -30px; padding: clamp(11px, 1.7vh, 15px); color: #8e9a81; background: #f4f5ed; font-size: 10px; border-top: 1px solid #e9ecdf; }
+.sc-intro-footer { padding: clamp(12px, 1.9vh, 18px) 0 clamp(14px, 2.4vh, 23px); border-top: 1px solid #dedfd4; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; letter-spacing: .7px; color: #8c9381; }
+.sc-intro-description, .sc-intro-steps p, .sc-intro-login-copy,
+.sc-intro-offline, .sc-intro-local-note, .sc-intro-login-footer,
+.sc-intro-footer, .sc-intro-kicker, .sc-intro-account-caption,
+.sc-intro-visual-label, .sc-intro-visual figcaption, .sc-intro-version,
+.sc-intro-version span { color: #65735f; }
+@media (min-width: 1500px) { .sc-intro-content { padding-block: clamp(34px, 5vh, 60px); } }
+@media (max-width: 1050px) {
+  .sc-intro { padding-inline: 4%; }
+  .sc-intro-content { grid-template-columns: minmax(0, 1fr) 330px; gap: 32px; }
+  .sc-intro-login { padding-inline: 24px; }
+  .sc-intro-login-footer { margin-inline: -24px; }
+  .sc-intro-steps { gap: 12px; }
+  .sc-intro-steps li { flex-direction: column; gap: 6px; }
+  .sc-intro-visual-label { font-size: 9px; top: 1px; left: 6px; }
+}
+@media (max-width: 760px) {
+  .sc-intro { padding-inline: 22px; }
+  .sc-intro-header { min-height: 78px; }
+  .sc-intro-brand { font-size: 20px; gap: 9px; }
+  .sc-intro-brand-icon { width: 37px; height: 37px; border-radius: 11px; }
+  .sc-intro-wordmark { font-size: 9px; letter-spacing: 1.3px; margin-left: 8px; }
+  .sc-intro-version { font-size: 0; }
+  .sc-intro-version span { font-size: 10px; margin: 0; }
+  .sc-intro-content { display: flex; flex-direction: column; gap: 35px; padding-top: 33px; }
+  .sc-intro-story { width: 100%; }
+  .sc-intro h1 { font-size: clamp(30px, 7vw, 46px); line-height: 1.45; letter-spacing: -1px; }
+  .sc-intro-eyebrow { font-size: 10px; letter-spacing: .2px; margin-bottom: 15px; }
+  .sc-intro-description { font-size: 12px; margin-top: 13px; }
+  .sc-intro-visual { margin-top: 28px; margin-inline: -10px; max-width: none; }
+  .sc-intro-visual-label { left: 4px; font-size: 8px; padding: 6px 8px; }
+  .sc-intro-visual figcaption { font-size: 9px; padding-right: 7px; }
+  .sc-intro-steps { margin-top: 19px; padding-top: 17px; }
+  .sc-intro-steps p { font-size: 10px; }
+  .sc-intro-steps span { font-size: 11px; }
+  .sc-intro-login { width: 100%; max-width: 460px; padding-top: 26px; }
+  .sc-intro-form input { font-size: 16px; }
+  .sc-intro-footer { font-size: 9px; line-height: 1.7; }
+  .sc-intro-footer > span:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sc-intro-primary, .sc-intro-secondary { transition: none; } }

@@ -49,11 +49,10 @@ describe('CloudPanel delayed project replacement', () => {
   it.each(['open', 'acquire', 'create'] as const)('preserves edits made while the %s request is pending', async action => {
     const initialLayout = backendSceneToLayout(scene, { projectId, name: original.name });
     const onLoadLayout = vi.fn();
-    const rendered = render(<CloudPanel layout={initialLayout} onLoadLayout={onLoadLayout} />);
-    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger:not([aria-controls])')!);
     queue([other]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
-    fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
+    const rendered = render(<CloudPanel layout={initialLayout} onLoadLayout={onLoadLayout} />);
+    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
     await waitFor(() => expect(screen.getByRole('button', { name: '打开' }).hasAttribute('disabled')).toBe(false));
 
     let finish!: (response: Response) => void;
@@ -78,7 +77,7 @@ describe('CloudPanel delayed project replacement', () => {
     await waitFor(() => expect(screen.getByText(/加载期间画布有新改动/)).toBeTruthy());
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(controller.getSnapshot().writeBlocked).toBe(true);
-    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger:not([aria-controls])')!);
+    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
     expect(screen.getByRole('button', { name: '保存到云端' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByText(/已载入最新版本并获得编辑权|已打开云端方案|新项目已保存/)).toBeNull();
     if (action === 'acquire') {

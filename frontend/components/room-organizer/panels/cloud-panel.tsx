@@ -1,18 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/lib/auth-provider';
-import { createBackendSession, useBackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
+import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
-import { AssistantPanel } from './assistant-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; selectedIds?: string[]; onApplyLayout?: (layout: RoomLayout) => void }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void }
 
-export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayout }: Props): JSX.Element {
-  const auth = useAuth();
-  const [controller] = useState(() => auth?.controller ?? createBackendSession());
+export function CloudPanel({ layout, onLoadLayout, controller: providedController }: Props): JSX.Element {
+  const [fallbackController] = useState(() => providedController ?? createBackendSession());
+  const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
   const dialog = useRef<HTMLDialogElement>(null);
   const layoutRef = useRef(layout);
@@ -32,8 +30,8 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
   let conversionError = '';
   try { fingerprint = JSON.stringify(layoutToBackendScene(layout)); }
   catch (error) { conversionError = error instanceof Error ? error.message : '当前场景暂不能保存到云端。'; }
-  const dirty = fingerprint !== savedFingerprint;
   const bound = !!cloud.project && boundLayout === layout.id && boundLayout === cloud.project.id;
+  const dirty = bound ? cloud.dirty : fingerprint !== savedFingerprint;
 
   const userId = cloud.user?.id;
   useEffect(() => controller.retain(), [controller]);
@@ -49,7 +47,7 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
   useEffect(() => {
     if (fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
-      controller.setDraft(JSON.parse(fingerprint));
+      if (JSON.stringify(controller.getSnapshot().draft) !== fingerprint) controller.setDraft(JSON.parse(fingerprint));
     }
   }, [controller, fingerprint]);
 
@@ -80,7 +78,7 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
     onLoadLayout(next);
   }
   function confirmReplace(): boolean {
-    return !dirty || window.confirm('打开云端版本会替换当前画布。当前草稿将保留为本地恢复点；重要方案也可以先导出备份。继续吗？');
+    return !dirty || window.confirm('打开云端版本会替换当前画布。当前草稿将保留为本地恢复点。继续吗？');
   }
   function downloadContract(): void {
     try {
@@ -92,16 +90,9 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景校验失败。'); }
   }
 
-  const cloudLabel = cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目';
   return <>
-    <AssistantPanel controller={controller} layout={layout} selectedIds={selectedIds} bound={bound} busy={busy}
-      onConnect={() => dialog.current?.showModal()} onSaved={scene => setSavedFingerprint(JSON.stringify(scene))} onApplied={next => {
-        const saved = JSON.stringify(layoutToBackendScene(next));
-        setSavedFingerprint(saved); lastObserved.current = saved;
-        (onApplyLayout ?? onLoadLayout)(next);
-      }}/>
-    <button className="sc-cloud-trigger" type="button" aria-label={cloudLabel} title={cloudLabel} onClick={() => dialog.current?.showModal()}>
-      <span aria-hidden="true">☁</span> <span className="sc-cloud-trigger-label">{cloudLabel}</span>
+    <button className="sc-cloud-trigger" type="button" onClick={() => dialog.current?.showModal()}>
+      <span aria-hidden="true">☁</span> {cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目'}
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog" aria-labelledby="cloud-title">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">WORKSPACE / 项目协作</span><h2 id="cloud-title">让团队接着你的方案继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭云项目" onClick={() => dialog.current?.close()}>×</button></div>

@@ -155,7 +155,11 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
       }
       renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      // PCFSoftShadowMap was removed in r186: WebGLShadowMap warns and rewrites
+      // the type to PCFShadowMap on the first shadow pass. Setting it directly
+      // keeps the result identical while avoiding a stale program-cache key on
+      // the first frame.
+      renderer.shadowMap.type = THREE.PCFShadowMap;
       // The 2048² directional shadow is expensive; keep it static and only
       // recompute it when a caster or the sun actually moves (via
       // requestShadowUpdate). Frame 1 needs the initial pass, so start dirty.

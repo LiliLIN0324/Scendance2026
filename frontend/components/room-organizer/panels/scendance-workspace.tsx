@@ -1,17 +1,17 @@
 'use client';
 
-import { Box, Download, Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Search, Undo2, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
-import { CATALOG_DRAG_MIME, catalogKey } from '../lib/catalog-drag';
-import { EVENT_CATALOG } from '../lib/constants';
-import { downloadLayoutAsJson } from '../lib/file-io';
-import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
-import type { CameraPreset, CatalogItem } from '../lib/types';
+import { OnlineModelLibrary } from './online-model-library';
+import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
+import type { BackendSession } from '@/lib/backend-session';
 
 interface LibraryProps {
+  controller?: BackendSession;
+  onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
+  creativePanel?: ReactNode;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
-  onImport(file: File): Promise<boolean>;
 }
 
 export function MaterialGlyph({ materialId, color = 'currentColor' }: { materialId?: string | undefined; color?: string }): JSX.Element {
@@ -24,14 +24,10 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): JSX.Element {
-  const { layout, activeFloor, actions, catalogQuery, setCatalogQuery } = useRoomEditor();
+export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller }: LibraryProps): JSX.Element {
+  const { layout, activeFloor, actions } = useRoomEditor();
   const { selectOnly } = useSelection();
-  const [tab, setTab] = useState<'materials' | 'venue' | 'list'>('materials');
-  const [sampleState, setSampleState] = useState<'idle' | 'loading' | 'error' | 'ready'>('idle');
-  const [sampleError, setSampleError] = useState('');
-  const importRef = useRef<HTMLInputElement>(null);
-  const items = EVENT_CATALOG.filter(item => item.name.includes(catalogQuery.trim()));
+  const [tab, setTab] = useState<'materials' | 'brief' | 'venue'>('materials');
   const atLimit = activeFloor.items.length >= 50;
 
   const addMaterial = (item: CatalogItem) => {
@@ -40,47 +36,18 @@ export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): 
     if (id) selectOnly(id);
   };
 
-  const loadSample = async () => {
-    if (atLimit || sampleState === 'loading') return;
-    setSampleState('loading');
-    setSampleError('');
-    try {
-      const url = '/assets/models/table.glb';
-      await ensureGlbAsset(url, url);
-      addMaterial(createGlbCatalogItem({ name: 'GLB 桌子 · 本地样例', url, width: 1.2, depth: 0.6, height: 0.75 }));
-      setSampleState('ready');
-    } catch (error) {
-      setSampleState('error');
-      setSampleError(error instanceof Error ? error.message : '模型未能加载，请重试。');
-    }
-  };
-
   return <aside className="sc-library" aria-label="场地工具">
     <div className="sc-library-tabs" role="tablist" aria-label="工作台面板">
-      {([['materials', '物料库'], ['venue', '场地'], ['list', '清单']] as const).map(([key, label]) =>
+      {([['materials', '物料库'], ['brief', '需求'], ['venue', '场地']] as const).map(([key, label]) =>
         <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
-        <div className="sc-section-heading"><div><h2>把想法放进场地</h2><p>点击添加，也可以拖入画布</p></div><span className="sc-count">8 类</span></div>
-        <label className="sc-search"><Search size={15}/><input aria-label="搜索活动物料" placeholder="搜索活动物料" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)}/></label>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
-        <div className="sc-material-grid">
-          {items.map(item => <button type="button" key={item.materialId} className="sc-material-card" disabled={atLimit} draggable={!atLimit}
-            onDragStart={event => { event.dataTransfer.setData(CATALOG_DRAG_MIME, catalogKey(item)); event.dataTransfer.effectAllowed = 'copy'; }}
-            onClick={() => addMaterial(item)} aria-label={`添加${item.name}`}>
-            <span className="sc-material-preview"><MaterialGlyph materialId={item.materialId} color={item.color}/><span className="sc-material-add"><Plus size={12}/></span></span>
-            <span className="sc-material-name">{item.name}</span><span className="sc-material-size">{item.width} × {item.depth} × {item.height} m</span>
-          </button>)}
-        </div>
-        {items.length === 0 && <p className="sc-muted">未找到对应物料，试试“椅子”或“桌子”。</p>}
-        <section className="sc-sample-section"><div><Box size={17}/><strong>真实 GLB 加载验证</strong></div><p>使用仓库自带 CC0 桌子模型，验证导入、尺寸与保存重开。</p>
-          <button type="button" className="sc-button sc-full" onClick={() => void loadSample()} disabled={sampleState === 'loading' || atLimit}>{sampleState === 'loading' ? '正在加载模型…' : '加入本地 GLB 样例'}<Plus size={14}/></button>
-          <small>本地验证素材 · 不代表 AI 生成或云端资产</small>
-          {sampleState === 'ready' && <p role="status" className="sc-success">模型已加入，可选中调整尺寸。</p>}
-          {sampleError && <p role="alert" className="sc-warning">{sampleError}</p>}
-        </section>
+        <OnlineModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
       </>}
+      {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
+      {tab === 'brief' && <>{creativePanel}</>}
       {tab === 'venue' && <>
         <div className="sc-section-heading"><div><h2>场地设置</h2><p>单层矩形 · 统一使用米制</p></div><Grid size={19}/></div>
         <label className="sc-field">项目名称<input value={layout.name} maxLength={80} onChange={event => actions.setName(event.target.value)} aria-label="项目名称"/></label>
@@ -91,16 +58,10 @@ export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): 
         </div>
         <div className="sc-area-card"><span>场地面积</span><strong>{(layout.width * layout.height).toFixed(1)} <small>m²</small></strong></div>
         <label className="sc-field sc-color-field">地面颜色<input type="color" aria-label="地面颜色" value={activeFloor.floorColor} onChange={event => actions.setFloorColor(event.target.value)}/></label>
+        <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
+        <p className="sc-note">实时作用于三维场景；随场景本地保存，连接云项目后使用现有 lighting 字段保存。</p>
         <p className="sc-note">当前版本提供矩形场地编辑。平面图标定与多边形编辑尚未接入。</p>
       </>}
-      {tab === 'list' && <>
-        <div className="sc-section-heading"><div><h2>场景物料</h2><p>选中一项，继续调整位置和规格</p></div><span className="sc-count">{activeFloor.items.length} 件</span></div>
-        <div className="sc-object-list">{activeFloor.items.map(item => <button type="button" key={item.id} onClick={() => selectOnly(item.id)}><span className="sc-object-dot" style={{ background: item.color }}/><span><strong>{item.name}</strong><small>{item.width} × {item.depth} × {item.height} m</small></span><span>{item.locked ? '已锁定' : '可编辑'}</span></button>)}</div>
-        {activeFloor.items.length === 0 && <p className="sc-note">场地还是空的，从物料库添加第一件物料吧。</p>}
-      </>}
-    </div>
-    <div className="sc-library-footer"><span>本地文件</span><div><button type="button" onClick={() => importRef.current?.click()}><Upload size={14}/>导入 JSON</button><button type="button" onClick={() => downloadLayoutAsJson(layout)}><Download size={14}/>导出 JSON</button></div>
-      <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void onImport(file); event.target.value = ''; }}/>
     </div>
   </aside>;
 }

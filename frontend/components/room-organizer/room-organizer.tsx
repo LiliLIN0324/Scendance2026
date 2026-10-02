@@ -1,12 +1,16 @@
 'use client';
 
 import { ArrowUpRight, Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createBackendSession, type BackendSession } from '@/lib/backend-session';
+import { BrandMark } from '../brand-mark';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
+import { useEventAtmosphere } from './hooks/use-event-atmosphere';
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
 import { useHistory } from './hooks/use-history';
 import { useImportExport } from './hooks/use-import-export';
@@ -19,6 +23,7 @@ import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
 import { useNpcs } from './hooks/use-npcs';
 import { usePeopleModel } from './hooks/use-people-model';
+import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useThreeScene } from './hooks/use-three-scene';
@@ -39,6 +44,7 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { CloudPanel } from './panels/cloud-panel';
+import { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } from './panels/creative-studio';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { PlacementHint } from './panels/placement-hint';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -85,11 +91,16 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer(): JSX.Element {
+export function RoomOrganizer({ controller: providedController, onShowIntro, isActive = true }: { controller?: BackendSession; onShowIntro?: () => void; isActive?: boolean } = {}): JSX.Element {
+  const [fallbackController] = useState(() => providedController ?? createBackendSession());
+  const controller = providedController ?? fallbackController;
+  useEffect(() => controller.retain(), [controller]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvas2DRef = useRef<HTMLCanvasElement>(null);
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  const liveLayout = useRef(layout); liveLayout.current = layout;
+  const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
   const activeStoreyHeight = storeyHeight(activeFloor);
   const { recent: recentColors, pushColor } = useRecentColors();
@@ -98,7 +109,7 @@ export function RoomOrganizer(): JSX.Element {
   // First-person walkthrough only runs in the 3D view; the 2D top-down renderer
   // has no PointerLockControls. This single signal gates walkthrough-aware
   // behaviour: canvas select/drag/hover, single-key shortcuts and the hook.
-  const walkthroughActive = view.walkthroughMode && !view.view2D;
+  const walkthroughActive = isActive && view.walkthroughMode && !view.view2D;
 
   const playCue = useCallback(
     (cue: SoundCue) => {
@@ -800,7 +811,7 @@ export function RoomOrganizer(): JSX.Element {
     buildingHeight: buildingHeight(layout.floors),
   });
 
-  const { handleScreenshot, handleImport } = useImportExport({
+  const { handleScreenshot } = useImportExport({
     layout,
     actions,
     view2D: view.view2D,
@@ -985,6 +996,7 @@ export function RoomOrganizer(): JSX.Element {
   );
 
   useKeyboardShortcuts({
+    enabled: isActive,
     selectedItem,
     selectedWall,
     hasSignalItems,
@@ -1057,40 +1069,45 @@ export function RoomOrganizer(): JSX.Element {
     clearHistory(layoutStore.getState().layout);
   }, [actions, layout, clearTransientSelection, clearHistory]);
 
-  const onApplyAiLayout = useCallback((next: RoomLayout) => {
+  const onApplyCreative = useCallback((next: RoomLayout) => {
     commitHistoryNow();
+    snapshotBeforeReplace(layout);
     actions.applyLayout(next);
     clearTransientSelection();
-  }, [actions, commitHistoryNow, clearTransientSelection]);
+    initiallyFramed.current = false;
+  }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
-  // Keep the work surface quiet; no residential sky or outdoor scenery.
-  useEffect(() => {
-    const scene = sceneRef.current;
-    const THREE = threeModuleRef.current;
-    if (!isReady || !scene || !THREE) return;
-    const previous = scene.background;
-    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sc-canvas').trim() || '#e8eef1');
-    if (previous && 'dispose' in previous) previous.dispose();
-    invalidate();
-  }, [isReady, sceneRef, threeModuleRef, invalidate]);
+  const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
+    setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
+    if (candidate) { setView(current => ({ ...current, view2D: false })); }
+  }, []);
+  const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
+  const previewCandidate = validAiPreview;
+  useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
+    candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
+
+  useEventAtmosphere({ isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
+    lighting: layout.backendLighting ?? 'warm', width: layout.width, depth: layout.height,
+    ceilingHeight: activeStoreyHeight });
 
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
+    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <div className="sc-brand"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>场域</span></strong><small>让每一场活动，有序成形</small></div></div>
+          <Link className="sc-brand" href="/" onClick={event => { if (onShowIntro) { event.preventDefault(); onShowIntro(); } }} aria-label="Scendance 幕景 · 返回官网"><span className="sc-brand-mark"><BrandMark size={36} /></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.4.1</small></div></Link>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
             <span className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/>{saveError ? '本地保存失败' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本地验证'}</span>
             <button type="button" className="sc-button sc-screenshot-button" onClick={handleScreenshot} title="导出当前画面"><Camera size={15}/>导出画面</button>
-            <CloudPanel layout={layout} onLoadLayout={onLoadLayout} selectedIds={[...allSelectedIds]} onApplyLayout={onApplyAiLayout}/>
+            <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout}/>
           </div>
           <button type="button" className="sc-mobile-menu sc-icon-button" aria-label={sidebarCollapsed ? '打开物料面板' : '收起物料面板'} onClick={() => setSidebarCollapsed(current => !current)}>{sidebarCollapsed ? <Menu size={20}/> : <PanelLeftClose size={20}/>}</button>
         </header>
         <main className="sc-workspace">
-          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary placeCatalogItem={placeFromCatalog} onImport={handleImport}/></div>
+          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`}>
       <Viewport
         isReady={isReady}
@@ -1148,7 +1165,8 @@ export function RoomOrganizer(): JSX.Element {
         }}
       />
             <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.width} × {layout.height} m</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
-            {!selectedItem && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
+            {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            {!selectedItem && !previewCandidate && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <ScendanceViewTools onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
@@ -1170,7 +1188,9 @@ export function RoomOrganizer(): JSX.Element {
           />}
         </main>
         <footer className="sc-status-bar"><span><Check size={12}/>{activeFloor.items.length} 件物料 · {(layout.width * layout.height).toFixed(0)} m²</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <CreativeAssistant/>
       </div>
+    </CreativeStudioProvider>
     </SelectionProvider>
     </RoomEditorProvider>
   );

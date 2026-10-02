@@ -41,6 +41,8 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 
 `GET /projects` 和 `/assets` 当前固定返回最近 100 项，尚无分页 UI；演示账号范围下足够，扩大团队规模前增加游标分页。
 
+v0.4.1 公共模型目录随前端完整提供，不依赖 `/assets` 的本人最近 100 项列表。管理员用 `register_library_asset(p_owner,p_model_id,p_record)` RPC 批量登记后，工作室成员通过原 `/assets/:assetId/url` 和场景保存接口使用这些模型。RPC 仅 service_role 可调用；原 `/assets/import` 仍只导入 Poly Haven。登记、授权范围与上线顺序见 [v0.4.1 兼容记录](V041_COMPATIBILITY.md)。
+
 ## 场景契约
 
 ```json
