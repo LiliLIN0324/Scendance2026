@@ -140,7 +140,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
   const candidate = {
     schemaVersion: 1,
     venue: { width: layout.width, depth: layout.height, height: floor.height ?? 3, shape: 'rectangle', entrances },
-    objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
+    objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'warm',
   };
   const result = sceneSchema.safeParse(candidate);
   if (!result.success) {

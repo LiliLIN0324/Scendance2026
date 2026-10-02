@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createBackendSession, useBackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
+import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { layout: RoomLayout; onLoadLayout(layout: RoomLayout): void }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void }
 
-export function CloudPanel({ layout, onLoadLayout }: Props): JSX.Element {
-  const [controller] = useState(() => createBackendSession());
+export function CloudPanel({ layout, onLoadLayout, controller: providedController }: Props): JSX.Element {
+  const [fallbackController] = useState(() => providedController ?? createBackendSession());
+  const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
   const dialog = useRef<HTMLDialogElement>(null);
   const layoutRef = useRef(layout);
@@ -29,14 +30,14 @@ export function CloudPanel({ layout, onLoadLayout }: Props): JSX.Element {
   let conversionError = '';
   try { fingerprint = JSON.stringify(layoutToBackendScene(layout)); }
   catch (error) { conversionError = error instanceof Error ? error.message : '当前场景暂不能保存到云端。'; }
-  const dirty = fingerprint !== savedFingerprint;
   const bound = !!cloud.project && boundLayout === layout.id && boundLayout === cloud.project.id;
+  const dirty = bound ? cloud.dirty : fingerprint !== savedFingerprint;
 
   useEffect(() => controller.retain(), [controller]);
   useEffect(() => {
     if (fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
-      controller.setDraft(JSON.parse(fingerprint));
+      if (JSON.stringify(controller.getSnapshot().draft) !== fingerprint) controller.setDraft(JSON.parse(fingerprint));
     }
   }, [controller, fingerprint]);
 
@@ -67,7 +68,7 @@ export function CloudPanel({ layout, onLoadLayout }: Props): JSX.Element {
     onLoadLayout(next);
   }
   function confirmReplace(): boolean {
-    return !dirty || window.confirm('打开云端版本会替换当前画布。当前草稿将保留为本地恢复点；重要方案也可以先导出备份。继续吗？');
+    return !dirty || window.confirm('打开云端版本会替换当前画布。当前草稿将保留为本地恢复点。继续吗？');
   }
   function downloadContract(): void {
     try {
