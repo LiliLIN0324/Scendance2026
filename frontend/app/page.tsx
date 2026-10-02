@@ -32,32 +32,12 @@ const RoomOrganizer = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div
-        className="pc-world"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          display: 'grid',
-          placeItems: 'center',
-        }}
-      >
-        <div
-          className="pc-glass pc-glass--dark"
-          style={{ padding: '18px 28px', textAlign: 'center' }}
-        >
-          <p
-            style={{
-              margin: 0,
-              fontFamily: 'var(--pc-font-display)',
-              fontWeight: 700,
-              color: 'var(--pc-paper)',
-              letterSpacing: 'var(--pc-tr-caps)',
-              textTransform: 'uppercase',
-              fontSize: 14,
-            }}
-          >
+      <div className="pc-world sc-loading-screen">
+        <div className="pc-glass sc-loading-card" role="status">
+          <p>
             正在打开场域工作台…
           </p>
+          <span className="sc-loading-line" aria-hidden="true" />
         </div>
       </div>
     ),

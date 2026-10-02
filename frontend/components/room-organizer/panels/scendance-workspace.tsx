@@ -60,7 +60,7 @@ export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): 
       {([['materials', '物料库'], ['venue', '场地'], ['list', '清单']] as const).map(([key, label]) =>
         <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
     </div>
-    <div className="sc-library-content">
+    <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
         <div className="sc-section-heading"><div><h2>把想法放进场地</h2><p>点击添加，也可以拖入画布</p></div><span className="sc-count">8 类</span></div>
         <label className="sc-search"><Search size={15}/><input aria-label="搜索活动物料" placeholder="搜索活动物料" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)}/></label>

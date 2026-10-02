@@ -1063,7 +1063,7 @@ export function RoomOrganizer(): JSX.Element {
     const THREE = threeModuleRef.current;
     if (!isReady || !scene || !THREE) return;
     const previous = scene.background;
-    scene.background = new THREE.Color('#E8ECE5');
+    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sc-canvas').trim() || '#e8eef1');
     if (previous && 'dispose' in previous) previous.dispose();
     invalidate();
   }, [isReady, sceneRef, threeModuleRef, invalidate]);

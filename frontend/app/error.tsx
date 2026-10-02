@@ -22,36 +22,6 @@ import { snapshotBeforeReplace } from '../components/room-organizer/lib/restore-
 // reload is the saved house suspected, and even then "start fresh" moves it
 // aside to the recovery key, where the History list can restore it (#336).
 
-const buttonStyle: React.CSSProperties = {
-  appearance: 'none',
-  cursor: 'pointer',
-  border: '1px solid rgba(255, 255, 255, 0.18)',
-  borderRadius: 8,
-  padding: '10px 18px',
-  fontFamily: 'var(--pc-font-display)',
-  fontWeight: 700,
-  letterSpacing: 'var(--pc-tr-caps)',
-  textTransform: 'uppercase',
-  fontSize: 12,
-};
-const primaryButton: React.CSSProperties = {
-  ...buttonStyle,
-  background: 'var(--pc-cyan-glow, #22d3ee)',
-  color: '#0f172a',
-};
-const secondaryButton: React.CSSProperties = {
-  ...buttonStyle,
-  background: 'transparent',
-  color: 'var(--pc-paper, #f8fafc)',
-};
-const bodyStyle: React.CSSProperties = {
-  margin: '0 0 16px',
-  fontFamily: 'var(--pc-font-body)',
-  color: 'var(--pc-paper-soft)',
-  fontSize: 13,
-  lineHeight: 1.5,
-};
-
 export default function Error({ error }: { error: Error & { digest?: string }; reset: () => void }): JSX.Element {
   useEffect(() => {
     // Stale-chunk failures hard-reload ONCE via the shared pc-chunk-reload
@@ -118,41 +88,25 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
   }
 
   return (
-    <div
-      className="pc-world"
-      style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 24 }}
-    >
-      <div
-        className="pc-glass pc-glass--dark"
-        style={{ padding: '28px 32px', textAlign: 'center', maxWidth: 440 }}
-      >
-        <p
-          style={{
-            margin: '0 0 8px',
-            fontFamily: 'var(--pc-font-display)',
-            fontWeight: 700,
-            color: 'var(--pc-paper)',
-            letterSpacing: 'var(--pc-tr-caps)',
-            textTransform: 'uppercase',
-            fontSize: 16,
-          }}
-        >
+    <div className="pc-world sc-recovery">
+      <div className="pc-glass sc-recovery-card">
+        <p className="sc-recovery-title">
           {chunkFailure ? '页面加载失败' : '工作台暂时遇到问题'}
         </p>
-        <p style={bodyStyle}>{message}</p>
+        <p className="sc-recovery-copy">{message}</p>
         {resetFailure && (
-          <p role="alert" style={{ ...bodyStyle, color: 'var(--pc-danger, #f87171)' }}>
+          <p role="alert" className="sc-recovery-copy sc-recovery-alert">
             {resetFailure === 'refused'
               ? '浏览器无法保存备份，原草稿未删除。请先下载草稿。'
               : '浏览器存储失败，请在离开此页前下载当前草稿。'}
           </p>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-          <button type="button" onClick={chunkFailure ? retryChunkLoad : reload} style={primaryButton}>
+        <div className="sc-recovery-actions">
+          <button type="button" onClick={chunkFailure ? retryChunkLoad : reload} className="sc-recovery-button sc-recovery-button--primary">
             重新加载
           </button>
           {offerReset && !resetFailure && (
-            <button type="button" onClick={startFresh} style={secondaryButton}>
+            <button type="button" onClick={startFresh} className="sc-recovery-button">
               保留备份，开始新方案
             </button>
           )}
@@ -160,7 +114,7 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
             <button
               type="button"
               onClick={downloadHouse}
-              style={secondaryButton}
+              className="sc-recovery-button"
             >
               下载本地草稿
             </button>
