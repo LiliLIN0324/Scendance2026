@@ -1,8 +1,8 @@
 # Scendance · 场域
 
-当前版本：**0.1.0** · 分支：`version` · 标签：`v0.1.0`。版本内容见 [更新记录](CHANGELOG.md)。
+当前完整项目快照：**2026-10-02**，包含已部署的 AI 助理与独立登录接入。本次通过 PR 更新 `version`，未创建新版本标签。历史版本见 [更新记录](CHANGELOG.md)。
 
-活动场地布置工作台。当前可编辑前端位于 [`frontend/`](frontend/README.md)，支持八类活动物料、米制尺寸、三维编辑、本地保存和 GLB 样例。前端按 `codex/backend-implementation-20261002` 的实际 v1 契约接入项目、编辑租约及保存接口；已连接独立 Supabase 后端并发布至 https://scendance.charlestech.org/ 。首次上线范围与验收见 [上线记录](docs/FIRST_LAUNCH.md)。
+活动场地布置工作台。当前可编辑前端位于 [`frontend/`](frontend/README.md)，支持八类活动物料、米制尺寸、三维编辑、本地保存和 GLB 样例。前端按 `codex/backend-implementation-20261002` 的实际 v1 契约接入项目、编辑租约及保存接口；已连接独立 Supabase 后端并发布至 https://scendance.charlestech.org/ 。当前状态与文档索引见 [项目交接](docs/PROJECT_STATUS.md)，首次上线记录见 [上线记录](docs/FIRST_LAUNCH.md)。
 
 ## 开发入口
 
@@ -14,7 +14,7 @@
 | 前后端本地联调 | [运行步骤、修复及测试结果](docs/INTEGRATION.md) |
 | 原体育馆展示原型 | 根目录 `index.html`；运行方式与功能见下文 |
 
-使用 Node.js 24.15+，先在根目录执行 `npm ci`，再执行 `cd frontend && npm ci && npm run dev`，打开 `http://localhost:3000`。生产构建输出为 `frontend/out/`，与下面的静态体育馆原型是两个独立入口。
+使用 Node.js 24.15+，先在根目录执行 `npm ci`，再执行 `cd frontend && npm ci && npm run dev`，打开 `http://localhost:3000`。生产构建输出为 `frontend/out/`，构建脚本自动打包工作台、登录页、`/introduction` 介绍页与展示资源。
 
 ## 体育馆展示原型
 
@@ -61,4 +61,4 @@ Three.js 对真实三维网格进行渲染，道具使用 GLTFLoader 加载 GLB�
 
 ## 后端开发
 
-本仓库包含 Supabase 后端，详见 [后端开发入口](BACKEND.md)。支持权限、项目保存、编辑租约、AI 提案、三维生成任务、资产归档和客户分享。新前端已配置登录、项目、租约、场景保存及私有资产授权接口；AI、客户发布等前端界面仍待开发，首次发布已完成真实登录、项目读取与保存验收；AI 等未接入界面仍待开发。接口、部署步骤和验证边界见后端文档。
+本仓库包含 Supabase 后端，详见 [后端开发入口](BACKEND.md)。支持权限、项目保存、编辑租约、AI 提案、三维生成任务、资产归档和客户分享。新前端已接入登录/注册、项目、租约、场景保存、私有资产授权及 AI 提案预览与确认应用。登录回调、刷新恢复、工作室隔离与真实 DeepSeek 请求已有上线验证；公开注册邮件仍需独立 SMTP。三维生成与客户发布不能视为已完成前端端到端验收。接口、部署步骤和验证边界见后端文档。

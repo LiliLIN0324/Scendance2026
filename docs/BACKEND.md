@@ -2,7 +2,7 @@
 
 ## 范围与验收边界
 
-依据后端开发所采用的 PLAN.md v0.2，采用 v0.2 的活动工作室定位，覆盖其中服务端职责。前端三维编辑器、撤销 UI、移动端渲染和大陆网络实测属于后续联调。本次没有改动旧原型，也未将旧的私人聚会范围作为实现基线。
+依据 `/Users/lwc/Downloads/PLAN.md`，采用 v0.2 的活动工作室定位，覆盖其中服务端职责。前端三维编辑器、撤销 UI、移动端渲染和大陆网络实测属于后续联调。本次没有改动旧原型，也未将旧的私人聚会范围作为实现基线。
 
 成功标准：迁移可执行；非成员不能访问项目；浏览器不能绕过租约写库；保存具有版本冲突保护；AI 只能生成受控提案；生成任务可恢复且幂等；发布不泄漏草稿和内部备注；撤销阻止新的分享和资源授权。
 
@@ -101,4 +101,6 @@ queued → submitting → submitted → processing → archiving → ready → a
 - [腾讯查询结果字段](https://cloud.tencent.com/document/api/1804/123448)
 - [Poly Haven API](https://polyhaven.com/our-api)、[许可](https://polyhaven.com/license)
 
-腾讯适配器采用官方当前公开的 `api.ai3d.cloud.tencent.com`，不猜测 TokenHub 的未验证地址。新账号需要先在当前服务入口验证凭据兼容性；不能把该源码适配器当作真实账号接通证明。
+腾讯适配器默认使用 `HUNYUAN_API_MODE=tokenhub`，端点为 `https://tokenhub.tencentmaas.com/v1/api/3d`，通过 Bearer key 调用 `hy-3d-3.0 / LowPoly / triangle`。仅既有旧平台账号可显式选择 `legacy`，对应 `api.ai3d.cloud.tencent.com`；没有自动跨平台重试。当前实现已按官方请求格式测试，真实账号权限、任务结果与费用仍待凭据配置后验收。
+
+任务记录没有保存提供商模式。存在未完成或提交结果未知的任务时，不得切换 `HUNYUAN_API_MODE`；须先核对并处理既有任务，避免用另一平台查询旧任务或重复付费提交。配置步骤见 [供应商指南](PROVIDER_SETUP.md)。

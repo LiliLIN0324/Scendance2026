@@ -81,13 +81,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
           if(input.selectedIds.some(id=>!input.scene.objects.some(o=>o.id===id))) throw new ApiError('INVALID_SELECTION',422);
           await backend.scene(actor,'lease.check',input);
           required(env,'DEEPSEEK_API_KEY');
-          const reservation=await backend.jobs(actor,'reserve',{requestId:input.requestId,fingerprint:await sha256(canonical(input)),reserveCents:reserveCost(env,'AI_MAX_REQUEST_CENTS')});
+          const reserveCents=reserveCost(env,'AI_MAX_REQUEST_CENTS');
+          if(reserveCents<40) throw new ApiError('BILLING_NOT_CONFIGURED',503);
+          const reservation=await backend.jobs(actor,'reserve',{requestId:input.requestId,fingerprint:await sha256(canonical(input)),reserveCents});
           if(reservation.reused) {
             if(reservation.state==='complete') return respond(reservation.result);
             throw new ApiError(reservation.state==='reserved'?'AI_IN_PROGRESS':'AI_PREVIOUS_REQUEST_FAILED',409,{requestId:input.requestId});
           }
           try {
-            const proposal=await generateProposal(input,env,fetcher);
+            const proposal=await generateProposal(input,env,attempt=>backend.jobs(actor,'text.reserve_call',{id:reservation.id,attempt}),fetcher);
             const stored=await backend.scene(actor,'proposals.store',{
               ...input,id:reservation.id,baseHash:await sceneHash(input.scene),candidate:proposal.scene,explanation:proposal.explanation,warnings:proposal.warnings,
             });

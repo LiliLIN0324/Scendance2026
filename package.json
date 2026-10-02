@@ -12,7 +12,10 @@
     "check:edge": "deno check --config supabase/functions/deno.json supabase/functions/scene-api/index.ts supabase/functions/generation-worker/index.ts",
     "demo:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "smoke:edge": "deno run --config supabase/functions/deno.json scripts/smoke-edge.ts",
-    "check:public-model": "deno run --allow-net=api.polyhaven.com,dl.polyhaven.org --config supabase/functions/deno.json scripts/check-public-model.ts"
+    "check:public-model": "deno run --allow-net=api.polyhaven.com,dl.polyhaven.org --config supabase/functions/deno.json scripts/check-public-model.ts",
+    "check:config": "node scripts/check-config.mjs --mode core",
+    "check:config:full": "node scripts/check-config.mjs --mode full --demo",
+    "smoke:cloud": "node --env-file=.env.local scripts/smoke-cloud.mjs"
   },
   "dependencies": {
     "@gltf-transform/core": "4.5.1",

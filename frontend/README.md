@@ -1,6 +1,6 @@
 # 场域 · 活动场地工作台
 
-当前项目版本：**0.1.0**。上游项目的原始许可与来源继续保留。
+当前快照：**2026-10-02**，已接入 AI 助理与独立登录。上游项目的原始许可与来源继续保留。
 
 前端首版基于 PLAN 指定的 `threejs-sims-house-builder` 提交 `ab64647640a493657929246d62a2a37ebfc0ed42` 定向改造，使用 Next.js 静态导出、React、TypeScript、Three.js、Zustand。上游 MIT 许可见 [UPSTREAM-LICENSE](UPSTREAM-LICENSE)。原体育馆展示页仍在仓库根目录。
 
@@ -24,10 +24,10 @@ cd frontend
 npm run typecheck
 npm test
 npm run build
-python3 -m http.server 3018 --bind 127.0.0.1 --directory out
+npx wrangler pages dev out --port 3018
 ```
 
-最后打开 `http://127.0.0.1:3018`。部署目录为 `frontend/out/`，不是仓库根的旧 `index.html`。所有 UI 字体使用系统字体，不依赖 Google Fonts。
+最后打开 `http://127.0.0.1:3018`。使用支持无扩展名路由的静态服务器，以正确处理 `/auth` 与 `/auth/callback`。部署目录为 `frontend/out/`，不是仓库根的旧 `index.html`。所有 UI 字体使用系统字体，不依赖 Google Fonts。
 
 ## 当前可用
 
@@ -37,11 +37,11 @@ python3 -m http.server 3018 --bind 127.0.0.1 --directory out
 - 本地自动保存与 JSON 导入导出；真实 GLB 桌子样例可设定尺寸、复制、删除、刷新重开，保留原材质。
 - 云项目弹层、Auth 登录、工作室/项目列表、创建/打开项目、获取/续期/释放编辑权、版本校验保存与私有模型授权请求均已接线。
 - AI 助理支持输入需求、提案俯视预览、确认保存和本地撤销；旧提案保护及联调状态见 [AI 助理接入](../docs/AI_ASSISTANT.md)。
-- 未配置后端时只使用本地模式，云项目不会显示伪造的保存成功。
+- 工作台入口要求登录；未配置后端时登录页会明确提示。不会显示伪造的登录或保存成功。
 
-后端尚未部署，因此本轮只证明本地编辑和接口契约通过测试，**没有证明真实云端、双账号交接、第三方生成或手机真机闭环**。
+后端已部署至独立 Supabase 项目。生产站点已验证登录、确认回调、刷新恢复、退出、私人工作室及项目权限；AI 助理已验证真实 DeepSeek 提案与确认应用。公开邮箱注册仍等待独立 SMTP，管理 API 生成确认链接的验证不代表邮件送达。详见 [登录配置](../docs/AUTH_SETUP.md) 与 [项目状态](../docs/PROJECT_STATUS.md)。
 
-后续合并联调已补充真实 HTTP + 后端处理器 + PostgreSQL 测试库验证，以及测试账号在浏览器中的保存、刷新重开与交接。Auth/Storage 在该环境使用显式测试实现，真实 Supabase 云端仍未验收。复现方法与结果见 [前后端联调报告](../docs/INTEGRATION.md)。
+本地 HTTP + PostgreSQL 联调使用显式测试 Auth/Storage，与上述生产验证分别记录，见 [联调报告](../docs/INTEGRATION.md)。
 
 ## 部署后配置
 
