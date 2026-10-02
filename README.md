@@ -1,6 +1,6 @@
 # Scendance · 幕景
 
-当前版本：**0.1.0** · 分支：`version` · 标签：`v0.1.0`。版本内容见 [更新记录](CHANGELOG.md)。
+当前版本：**0.4.0** · 分支：`feat/homepage-scendance`（整合线，尚未打 tag）。版本内容见 [更新记录](CHANGELOG.md)。
 
 活动场地布置工作台。当前可编辑前端位于 [`frontend/`](frontend/README.md)，支持八类活动物料、米制尺寸、三维编辑、本地保存和 GLB 样例。前端按 `codex/backend-implementation-20261002` 的实际 v1 契约接入项目、编辑租约及保存接口；后端尚未部署，真实云端联调待完成。
 

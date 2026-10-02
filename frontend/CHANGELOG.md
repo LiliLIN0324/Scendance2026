@@ -1,15 +1,19 @@
 # 前端版本记录
 
-前端独立递增：修复使用 v0.3.1、v0.3.2，下一批功能使用 v0.4.0。后端版本不随前端升级。
+前端独立递增：修复使用 v0.4.1、v0.4.2，下一批功能使用 v0.5.0。后端版本不随前端升级。
 
-## v0.3.1 — 未发布
+## v0.4.0 — 2026-10-02
 
-修复版本，无新功能。上一版把版本线推到 v0.3.0，本版将 v0.3.0 之后的本地改动归到 v0.3.1。
+功能版本。在 v0.3.0 基础上合入模型物料库，并统一品牌、配色与导航。
 
-- 品牌统一：全仓「场域」改为「幕景」。`frontend/` 下的实现文案与测试断言同步修改，避免断言失配。
-- 前端阴影类型收口：`use-three-scene.ts` 的 `THREE.PCFSoftShadowMap` 改为 `THREE.PCFShadowMap`。r186 已移除前者，`WebGLShadowMap` 会在首次阴影渲染时告警并把它改写成后者，渲染结果不变（v0.3.0 未包含此修复）。
-- 仓库根目录侧改动，不在 `frontend/` 范围内，详见根 `CHANGELOG.md`：静态首页替换；`renderer-webgl.js` 与 `model-preview.js` 的阴影枚举同步；新增 Windows 开发服务器 `serve.py`。
-- 验证（Node 24.15.0，根与 `frontend/` 均已 `npm ci`）：`npm --prefix frontend test` 1291 通过；`npm test` 54 通过；`tsc --noEmit` 通过。
+- 合并 `feat/model-library`：新增 `scene/` 模型场景模板与模型库工具（独立静态页 + GLB 缩略图目录 + `tools/catalog` 生成脚本）。
+- 品牌统一：全仓「场域」改为「幕景」，含 `frontend/` 实现文案与测试断言同步，避免断言失配。
+- 主色统一为深青 `#0e7c78`（原站紫色仅作研究参考），工作台面层色与语义色保留。
+- 首页与工作台双向导航：首页「进入场景」跳工作台；工作台品牌 logo 跳回官网。
+- 前端阴影类型收口：`use-three-scene.ts` 的 `THREE.PCFSoftShadowMap` 改为 `THREE.PCFShadowMap`（r186 已移除前者，渲染结果不变）。
+- 合并队友 `c720dc7`：GPT 提案交接文档（纯文档，+142/−3）。
+- 仓库根目录侧改动详见根 `CHANGELOG.md`：静态首页替换、渲染器阴影枚举同步、Windows 开发服务器 `serve.py`。
+- 验证（Node 24.15.0）：`vitest run --maxWorkers=4` 1376/1376；`tsc --noEmit` 0 错误；后端 54/54。
 
 ## v0.3.0 — 2026-10-02
 
