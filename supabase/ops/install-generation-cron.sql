@@ -1,7 +1,7 @@
 -- Run after deployment. Store scene_project_url and scene_worker_secret in Vault first.
 -- This file intentionally contains no secret values and is not an automatic migration.
 create extension if not exists pg_cron;
-create extension if not exists pg_net;
+create extension if not exists pg_net with schema extensions;
 do $$ begin
   if (select count(*) from vault.decrypted_secrets where name in ('scene_project_url','scene_worker_secret')) <> 2 then
     raise exception 'Configure exactly one scene_project_url and scene_worker_secret in Vault first';

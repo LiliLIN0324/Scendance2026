@@ -7,10 +7,14 @@ import type { Backend } from './backend.ts';
 
 export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
   required(env,'HUNYUAN_API_KEY');
+  const provider=hunyuan(env,fetcher);
   const job=await backend.jobs(null,'jobs.claim');
   if(!job) return {processed:0};
   const update=(state:string,extra:Record<string,unknown>={})=>backend.jobs(null,'jobs.update',{id:job.id,workerToken:job.worker_token,state,...extra});
-  const provider=hunyuan(env,fetcher);
+  if(Date.now()-Date.parse(job.created_at)>23*60*60*1000) {
+    await update('failed',{errorCode:'PROVIDER_TASK_EXPIRED'});
+    return {processed:1};
+  }
   if(job.state==='submitting') {
     try {
       const submitted=await provider.submit(job.prompt);
@@ -19,10 +23,6 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
       // HTTP 5xx, invalid response, network timeout, or lost DB acknowledgement may all follow a charged submission.
       await update(error instanceof ApiError && error.code==='PROVIDER_REJECTED'?'failed':'submit_unknown',{errorCode:error instanceof ApiError?error.code:'SUBMIT_RESULT_UNKNOWN'});
     }
-    return {processed:1};
-  }
-  if(Date.now()-Date.parse(job.created_at)>23*60*60*1000) {
-    await update('failed',{errorCode:'PROVIDER_TASK_EXPIRED'});
     return {processed:1};
   }
   let archiving=job.state==='archiving';

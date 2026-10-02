@@ -144,3 +144,7 @@ const studios = await api.request('/studios');
 | 502/503 | PROVIDER_HTTP_ERROR / SERVICE_NOT_CONFIGURED / BILLING_NOT_CONFIGURED | 保留现有场景，报告服务不可用 |
 
 数据库业务冲突主要为409；AI 校验问题为422。提交付费任务必须在一次用户意图内复用同一个 requestId，网络重试不能生成新 UUID。
+
+## DeepSeek 每日预算
+
+AI 提案接口按北京时间执行全站共享的 10 元日预留上限；每次提供商调用（含修复）先预留 0.20 元。超额返回 `429 DAILY_BUDGET_EXCEEDED`，重复 attempt 拒绝再次发出模型请求；输入过大返回 `413 AI_INPUT_TOO_LARGE`。现有场景/提案 JSON 契约不变，客户端不能指定限额、费用或日期。详细语义见 [每日预算记录](DEEPSEEK_DAILY_LIMIT.md)。
