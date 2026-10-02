@@ -1,0 +1,162 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Only the network boundary is stubbed: `createGlbCatalogItem` stays real so these
+// specs pin the actual catalogue item the library hands to the scene.
+vi.mock('../three/glb-assets', async importOriginal => ({
+  ...(await importOriginal<typeof import('../three/glb-assets')>()),
+  ensureGlbAsset: vi.fn(),
+}));
+vi.mock('../lib/online-models', async importOriginal => ({
+  ...(await importOriginal<typeof import('../lib/online-models')>()),
+  loadOnlineModels: vi.fn(),
+}));
+
+import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
+import type { OnlineModel } from '../lib/online-models';
+import { ensureGlbAsset } from '../three/glb-assets';
+import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
+
+function model(slug: string, name: string, bucket: string): OnlineModel {
+  return {
+    slug,
+    name,
+    bucket,
+    subcategory: '测试',
+    width: 0.5,
+    depth: 0.6,
+    height: 0.9,
+    bytes: 2048,
+    triangles: 120,
+    downloads: 1,
+    thumb: `https://cdn.3dassets.dev/${slug}/thumb.webp`,
+    glb: `https://cdn.3dassets.dev/${slug}/model.glb`,
+    page: `https://3dassets.dev/${slug}`,
+  };
+}
+
+const CATALOGUE = [
+  model('seating-chaise', 'Lounge Chaise (Airport Lounge)', 'seating'),
+  model('stage-tower', 'Lighting Tower', 'stage'),
+  model('plants-hedge', 'Box Hedge', 'plants'),
+];
+const INDEX = buildOnlineModelIndex(CATALOGUE);
+
+function setup({ disabled = false } = {}) {
+  const onAdd = vi.fn();
+  render(<OnlineModelLibrary disabled={disabled} onAdd={onAdd} />);
+  return { onAdd };
+}
+
+const tiles = (): HTMLElement[] => screen.getAllByRole('button', { name: /^添加/ });
+
+beforeEach(() => {
+  vi.mocked(loadOnlineModels).mockResolvedValue(INDEX);
+  vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.mocked(loadOnlineModels).mockReset();
+  vi.mocked(ensureGlbAsset).mockReset();
+});
+
+describe('onlineModelDisplayName', () => {
+  it('shows the subject without the trailing collection, and never a blank label', () => {
+    expect(onlineModelDisplayName(model('a', 'Lounge Chaise (Airport Lounge)', 'seating'))).toBe('Lounge Chaise');
+    expect(onlineModelDisplayName(model('b', 'Lighting Tower', 'stage'))).toBe('Lighting Tower');
+    expect(onlineModelDisplayName(model('c', '(Only Parens)', 'decor'))).toBe('(Only Parens)');
+  });
+});
+
+describe('OnlineModelLibrary', () => {
+  it('reports the load, then lists the catalogue', async () => {
+    setup();
+    expect(screen.getByRole('status').textContent).toContain('正在载入');
+    expect(await screen.findByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
+    expect(tiles()).toHaveLength(3);
+  });
+
+  it('quotes each tile’s real footprint and file size, and keeps the full name on hover', async () => {
+    setup();
+    const tile = await screen.findByRole('button', { name: '添加Lounge Chaise' });
+    expect(tile.textContent).toContain('0.5 × 0.6 × 0.9 m');
+    expect(tile.textContent).toContain('2 KB');
+    expect(tile.getAttribute('title')).toBe('Lounge Chaise (Airport Lounge)');
+  });
+
+  it('downloads the GLB first, then places it as an online-library asset', async () => {
+    const { onAdd } = setup();
+    fireEvent.click(await screen.findByRole('button', { name: '添加Lounge Chaise' }));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(ensureGlbAsset).mock.calls[0]).toEqual([
+      'https://cdn.3dassets.dev/seating-chaise/model.glb',
+      'https://cdn.3dassets.dev/seating-chaise/model.glb',
+    ]);
+    expect(onAdd.mock.calls[0]![0]).toMatchObject({
+      type: 'glb-asset',
+      name: 'Lounge Chaise (Airport Lounge)',
+      glbUrl: 'https://cdn.3dassets.dev/seating-chaise/model.glb',
+      source: 'public_library',
+      width: 0.5,
+      depth: 0.6,
+      height: 0.9,
+      notes: '线上模型库 · seating-chaise',
+    });
+  });
+
+  it('says so when the download fails, and places nothing', async () => {
+    vi.mocked(ensureGlbAsset).mockRejectedValue(new Error('网络不可达'));
+    const { onAdd } = setup();
+    fireEvent.click(await screen.findByRole('button', { name: '添加Lounge Chaise' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('网络不可达');
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('offers a retry when the catalogue itself will not load', async () => {
+    vi.mocked(loadOnlineModels).mockRejectedValueOnce(new Error('索引损坏'));
+    setup();
+    expect((await screen.findByRole('alert')).textContent).toContain('索引损坏');
+    fireEvent.click(screen.getByRole('button', { name: '重新载入' }));
+    expect(await screen.findByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
+    expect(vi.mocked(loadOnlineModels)).toHaveBeenCalledTimes(2);
+  });
+
+  it('narrows the grid to the family whose chip was pressed', async () => {
+    setup();
+    await screen.findByRole('button', { name: '添加Lounge Chaise' });
+    fireEvent.click(screen.getByRole('button', { name: /^舞台/ }));
+    await waitFor(() => expect(tiles()).toHaveLength(1));
+    expect(tiles()[0]!.getAttribute('aria-label')).toBe('添加Lighting Tower');
+  });
+
+  it('searches the catalogue as you type, and says when nothing matches', async () => {
+    setup();
+    await screen.findByRole('button', { name: '添加Lounge Chaise' });
+    fireEvent.change(screen.getByLabelText('搜索线上模型'), { target: { value: 'hedge' } });
+    await waitFor(() => expect(tiles()).toHaveLength(1));
+    expect(tiles()[0]!.getAttribute('aria-label')).toBe('添加Box Hedge');
+    fireEvent.change(screen.getByLabelText('搜索线上模型'), { target: { value: 'zzz' } });
+    expect(await screen.findByText(/没有匹配的线上模型/)).toBeTruthy();
+  });
+
+  it('refuses to place anything while the active floor is full', async () => {
+    const { onAdd } = setup({ disabled: true });
+    const tile = await screen.findByRole('button', { name: '添加Lounge Chaise' });
+    expect((tile as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(tile);
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(vi.mocked(ensureGlbAsset)).not.toHaveBeenCalled();
+  });
+
+  it('reveals the catalogue in bounded steps instead of requesting every thumbnail at once', async () => {
+    const many = Array.from({ length: 30 }, (_, index) => model(`bulk-${index}`, `Model ${index}`, 'seating'));
+    vi.mocked(loadOnlineModels).mockResolvedValue(buildOnlineModelIndex(many));
+    setup();
+    await screen.findByRole('button', { name: '添加Model 0' });
+    expect(tiles()).toHaveLength(24);
+    fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
+    await waitFor(() => expect(tiles()).toHaveLength(30));
+  });
+});
