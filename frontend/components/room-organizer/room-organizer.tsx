@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BrandMark } from '../brand-mark';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
@@ -1094,7 +1095,7 @@ export function RoomOrganizer({ controller: providedController, onShowIntro: _on
     <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <a className="sc-brand" href="http://127.0.0.1:8766/" aria-label="Scendance 幕景 · 返回官网"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.4.1</small></div></a>
+          <a className="sc-brand" href="http://127.0.0.1:8766/" aria-label="Scendance 幕景 · 返回官网"><span className="sc-brand-mark"><BrandMark size={36} /></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.4.1</small></div></a>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
