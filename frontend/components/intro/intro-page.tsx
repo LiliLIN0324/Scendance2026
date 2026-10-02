@@ -114,7 +114,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
   return (
     <main className="sc-intro">
       <header className="sc-intro-header">
-        <div className="sc-intro-brand"><span className="sc-intro-brand-icon" aria-hidden="true"><Layers3 size={23} /></span><span>场域<span className="sc-intro-wordmark">SCENDANCE</span></span></div>
+        <div className="sc-intro-brand"><span className="sc-intro-brand-icon" aria-hidden="true"><Layers3 size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></div>
         <span className="sc-intro-version">活动空间工作台 <span>v0.2.0</span></span>
       </header>
 
@@ -128,7 +128,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
             <EventIllustration />
             <figcaption>活动空间概念示意 · 实际方案由你来布置</figcaption>
           </figure>
-          <ol className="sc-intro-steps" aria-label="场域使用流程">
+          <ol className="sc-intro-steps" aria-label="幕景使用流程">
             <li><ImagePlus size={18} aria-hidden="true" /><div><span>01 / 描述想法</span><p>带上参考图与活动需求</p></div></li>
             <li><Box size={18} aria-hidden="true" /><div><span>02 / 布置空间</span><p>在三维画布里调整物料</p></div></li>
             <li><Layers3 size={18} aria-hidden="true" /><div><span>03 / 保存方案</span><p>保存草稿，继续完善细节</p></div></li>
@@ -138,7 +138,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
         <section className="sc-intro-login" aria-labelledby="sc-intro-login-title">
           <div className="sc-intro-login-mark" aria-hidden="true"><ArrowRight size={25} /></div>
           <p className="sc-intro-kicker">YOUR NEXT GATHERING STARTS HERE</p>
-          <h2 id="sc-intro-login-title">欢迎来到场域</h2>
+          <h2 id="sc-intro-login-title">欢迎来到幕景</h2>
           <p className="sc-intro-login-copy">一个空间，装下你的下一场相聚。</p>
           {cloud.user ? (
             <div className="sc-intro-signed-in">

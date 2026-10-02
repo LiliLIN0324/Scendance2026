@@ -38,7 +38,7 @@ const RoomOrganizer = dynamic(
       <div className="pc-world sc-loading-screen">
         <div className="pc-glass sc-loading-card" role="status">
           <p>
-            正在打开场域工作台…
+            正在打开幕景工作台…
           </p>
           <span className="sc-loading-line" aria-hidden="true" />
         </div>

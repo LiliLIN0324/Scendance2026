@@ -84,21 +84,21 @@ afterEach(() => {
 describe('introduction round trips', () => {
   it('defers the editor, then preserves the real brief, image, conversation and unsent message when returning', async () => {
     const rendered = render(<Page />);
-    expect(screen.getByRole('heading', { name: '欢迎来到场域' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '欢迎来到幕景' })).toBeTruthy();
     expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '举办一场 24 人自然风聚会。' } });
     fireEvent.change(rendered.container.querySelector('input[type="file"]')!, { target: { files: [new File(['image'], 'venue.png', { type: 'image/png' })] } });
     await screen.findByRole('img', { name: '参考：venue.png' });
-    fireEvent.click(screen.getByRole('button', { name: '打开场域助手' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开幕景助手' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '为活动保留合影区。' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '这条还没有发送。' } });
 
     fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
-    expect(screen.getByRole('heading', { name: '欢迎来到场域' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '欢迎来到幕景' })).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
-    expect(screen.queryByRole('region', { name: '场域智能助手' })).toBeNull();
+    expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
     expect(revokeObjectURL).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
 
