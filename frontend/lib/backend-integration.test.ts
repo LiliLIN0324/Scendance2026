@@ -167,3 +167,40 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
     expect(denied.headers.get('access-control-allow-origin')).toBeNull();
   });
 });
+
+
+describe('AI assistant → HTTP API → migrated PostgreSQL', () => {
+  it('previews without saving, applies once, and restores the applied scene in a new session', async () => {
+    let calls = 0;
+    const aiFetcher: typeof fetch = async () => {
+      calls++;
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+        explanation: '四人读书沙龙，背景板与签到台。', template: 'salon', attendees: 4, palette: ['#c4a582'],
+      }) } }] });
+    };
+    const server = await startLocalServer(0, aiFetcher);
+    const a = new BackendSession(getBackendConfig({ url: server.url, anonKey: testPublicKey }));
+    const b = new BackendSession(getBackendConfig({ url: server.url, anonKey: testPublicKey }));
+    try {
+      await a.signIn(testAccounts[0]!.email, testAccounts[0]!.password);
+      const empty = { ...scene(), objects: [] };
+      const project = await a.createProject(studio, 'AI 确认闭环', empty);
+      await a.acquireLease(project.id);
+      const proposal = await a.generateProposal('安排四人读书沙龙', []);
+      expect(calls).toBe(1);
+      expect(proposal.candidate.objects).toHaveLength(6);
+      expect(a.getSnapshot().project?.scene.objects).toHaveLength(0);
+      expect(a.getSnapshot().revision).toBe(0);
+      const applied = await a.applyProposal(proposal);
+      expect(applied.revision).toBe(1);
+      expect(applied.previousScene.objects).toHaveLength(0);
+      expect(a.getSnapshot().draft).toEqual(proposal.candidate);
+      await expect(a.applyProposal(proposal)).rejects.toMatchObject({ code: 'STALE_PROPOSAL' });
+      await a.releaseLease();
+      await b.signIn(testAccounts[1]!.email, testAccounts[1]!.password);
+      const reopened = await b.getProject(project.id);
+      expect(reopened.scene).toEqual(proposal.candidate);
+      expect(reopened.revision).toBe(1);
+    } finally { a.dispose(); b.dispose(); await server.close(); }
+  }, 30_000);
+});

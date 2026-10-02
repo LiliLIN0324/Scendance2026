@@ -3,6 +3,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sceneHash } from "../../supabase/functions/_shared/domain";
 import { backendSceneToLayout } from "../components/room-organizer/lib/backend-adapter";
 import { BackendSession, getBackendConfig, useBackendSession, type Scene } from "./backend-session";
 
@@ -303,5 +304,76 @@ describe("backend session contract", () => {
     await expect(controller.authorizeAssets(twoAssets)).rejects.toMatchObject({ code: "ASSET_NOT_FOUND", status: 404 });
     expect(controller.getSnapshot()).toMatchObject({ draft: twoAssets, dirty: true, revision: 4, writeBlocked: true, error: { code: "ASSET_NOT_FOUND" } });
     expect(mockFetch).toHaveBeenCalledTimes(5);
+  });
+});
+
+async function proposalFor(controller: BackendSession) {
+  const state = controller.getSnapshot();
+  return { id: "90000000-0000-4000-8000-000000000001", project_id: projectId, session_id: state.sessionId,
+    generation: state.lease!.generation, base_revision: state.revision!, local_revision: state.localRevision,
+    base_hash: await sceneHash(state.draft!), candidate: { ...state.draft!, lighting: "warm" as const },
+    explanation: "暖色方案", warnings: [], applied_at: null, expires_at: new Date(Date.now() + 600_000).toISOString() };
+}
+
+describe("AI proposal lifecycle", () => {
+  it("sends the current scene and selection, then applies only on explicit confirmation", async () => {
+    const controller = await editing();
+    const proposal = await proposalFor(controller);
+    queue(proposal, 201);
+    expect(await controller.generateProposal("安排读书沙龙", [])).toEqual(proposal);
+    expect(request(3).body).toMatchObject({ scene, instruction: "安排读书沙龙", mode: "layout", selectedIds: [], localRevision: proposal.local_revision });
+    expect(controller.getSnapshot().revision).toBe(4);
+    queue({ id: projectId, revision: 5, scene: proposal.candidate, previousScene: scene, undoGroup: proposal.id });
+    await controller.applyProposal(proposal);
+    expect(request(4)).toMatchObject({ url: `${base}/functions/v1/scene-api/projects/${projectId}/proposals/apply`, body: { proposalId: proposal.id, currentScene: scene, expectedRevision: 4 } });
+    expect(controller.getSnapshot()).toMatchObject({ revision: 5, draft: proposal.candidate, dirty: false });
+    await expect(controller.applyProposal(proposal)).rejects.toMatchObject({ code: "STALE_PROPOSAL" });
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+  });
+
+  it("rejects old proposals after an edit and even after an edit is undone", async () => {
+    const controller = await editing();
+    const proposal = await proposalFor(controller);
+    controller.setDraft({ ...scene, lighting: "cool" });
+    controller.setDraft(scene);
+    await expect(controller.applyProposal(proposal)).rejects.toMatchObject({ code: "STALE_PROPOSAL" });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps renewing the lease during generation and prevents duplicate generation", async () => {
+    const controller = await editing();
+    const proposal = await proposalFor(controller);
+    let finish!: (value: Response) => void;
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = controller.generateProposal("安排沙龙", []);
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    await expect(controller.generateProposal("重复请求", [])).rejects.toMatchObject({ code: "CLOUD_OPERATION_BUSY" });
+    queue({ ...controller.getSnapshot().lease, expiresAt: new Date(Date.now() + 120_000).toISOString() });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(request(4).url).toContain("/lease/renew");
+    controller.setDraft({ ...scene, lighting: "cool" });
+    finish(response(proposal, 201));
+    await expect(pending).rejects.toMatchObject({ code: "STALE_PROPOSAL" });
+    expect(controller.getSnapshot().draft?.lighting).toBe("cool");
+  });
+
+  it.each([[429, "DAILY_BUDGET_EXCEEDED"], [503, "SERVICE_NOT_CONFIGURED"], [422, "AI_INVALID_PROPOSAL"]])("keeps editing available on AI-only %s %s", async (status, code) => {
+    const controller = await editing();
+    queue({ error: { code } }, status);
+    await expect(controller.generateProposal("安排沙龙", [])).rejects.toMatchObject({ code });
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, draft: scene, revision: 4, error: { code } });
+  });
+
+  it("preserves a newer local draft while a confirmed proposal is being saved", async () => {
+    const controller = await editing();
+    const proposal = await proposalFor(controller);
+    let finish!: (value: Response) => void;
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = controller.applyProposal(proposal);
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    controller.setDraft({ ...scene, camera: "top" });
+    finish(response({ id: projectId, revision: 5, scene: proposal.candidate, previousScene: scene, undoGroup: proposal.id }));
+    await pending;
+    expect(controller.getSnapshot()).toMatchObject({ revision: 5, draft: { ...scene, camera: "top" }, dirty: true, project: { scene: proposal.candidate } });
   });
 });
