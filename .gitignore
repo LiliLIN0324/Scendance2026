@@ -5,3 +5,8 @@
 __pycache__/
 node_modules/
 *.log
+
+# Backend local runtime and test output
+supabase/.temp/
+supabase/.branches/
+coverage/
