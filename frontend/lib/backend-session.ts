@@ -165,6 +165,10 @@ export class BackendSession {
   private readonly generationRequests = new Map<string, PaidRequest<GenerationJob>>();
   private proposalPending = false;
   private generationPending = false;
+  /** sessionStorage is per-tab by design: duplicated tabs must not silently share a sign-in. */
+  private readonly storage: Storage | null = (() => {
+    try { return typeof window === "undefined" ? null : window.sessionStorage; } catch { return null; }
+  })();
   private readonly client: ReturnType<typeof createSceneClient>;
 
   constructor(config: BackendConfig = getBackendConfig()) {
@@ -228,7 +232,19 @@ export class BackendSession {
   }
   private acceptAuth(result: AuthResponse) {
     this.tokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: result.expires_at ? result.expires_at * 1000 : Date.now() + result.expires_in * 1000 };
+    this.persistTokens();
     this.update({ user: result.user });
+  }
+  /**
+   * Session lives in sessionStorage so a refresh keeps the tab signed in (#auth). Access is
+   * wrapped because a blocked or partitioned store must not prevent the current sign-in.
+   */
+  private persistTokens() {
+    try {
+      const key = `scendance:auth:${this.config.url}`;
+      if (this.tokens) this.storage?.setItem(key, JSON.stringify(this.tokens));
+      else this.storage?.removeItem(key);
+    } catch { /* Storage restrictions should not prevent the current sign-in. */ }
   }
   private async accessToken(): Promise<string | null> {
     if (!this.tokens) return null;
@@ -280,6 +296,7 @@ export class BackendSession {
     this.stopRenewal();
     const epoch = ++this.epoch;
     this.tokens = null;
+    this.persistTokens();
     this.update({ user: null, lease: null, writeBlocked: true });
     try {
       const result = await this.authRequest("password", { email: email.trim(), password });
@@ -292,12 +309,89 @@ export class BackendSession {
       throw error;
     }
   }
+  /** `GET /auth/v1/user` — the only way to trust a token that arrived from storage or a link. */
+  private async verifyUser(access: string): Promise<BackendUser> {
+    const response = await fetch(`${this.config.url}/auth/v1/user`, {
+      headers: { apikey: this.config.anonKey, Authorization: `Bearer ${access}` }, cache: "no-store",
+    });
+    if (!response.ok) throw new SceneApiError(response.status === 401 || response.status === 403 ? "UNAUTHENTICATED" : "NETWORK_ERROR", response.status, null);
+    const user = await response.json() as BackendUser;
+    if (!user.id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return user;
+  }
+  /** Called once per page load; a stored session is renewed or verified before it is trusted. */
+  async restoreSession(): Promise<void> {
+    if (!this.config.configured || this.tokens) return;
+    let stored: Tokens | null = null;
+    try { stored = JSON.parse(this.storage?.getItem(`scendance:auth:${this.config.url}`) ?? "null") as Tokens | null; } catch { return; }
+    if (!stored?.access || !stored.refresh || !Number.isFinite(stored.expiresAt)) return;
+    const epoch = this.epoch;
+    try {
+      if (stored.expiresAt <= Date.now() + 30_000) {
+        const result = await this.authRequest("refresh_token", { refresh_token: stored.refresh });
+        if (epoch !== this.epoch) return;
+        this.acceptAuth(result);
+      } else {
+        const user = await this.verifyUser(stored.access);
+        if (epoch !== this.epoch) return;
+        this.tokens = stored;
+        this.update({ user });
+      }
+      this.update({ status: "ready", error: null });
+    } catch (error) {
+      if (epoch !== this.epoch) return;
+      this.tokens = null;
+      // Keep the saved session on a transient network failure so a reload can retry.
+      if (error instanceof SceneApiError && error.code === "UNAUTHENTICATED") this.persistTokens();
+      this.block(error);
+    }
+  }
+  /** The email-confirmation link lands on /auth/callback with the session in the URL hash. */
+  async acceptCallback(hash: string): Promise<void> {
+    const values = new URLSearchParams(hash.replace(/^#/, ""));
+    if (values.has("error")) throw new Error("验证链接已失效，请返回登录页重新注册或登录。");
+    const access = values.get("access_token"), refresh = values.get("refresh_token");
+    const expires = Number(values.get("expires_in"));
+    if (!access || !refresh || !Number.isFinite(expires) || expires <= 0) throw new Error("验证链接不完整，请重新打开邮件中的链接。");
+    const epoch = this.epoch;
+    const user = await this.verifyUser(access);
+    if (epoch !== this.epoch) return;
+    this.acceptAuth({ access_token: access, refresh_token: refresh, expires_in: expires, user });
+    this.update({ status: "ready", error: null });
+  }
+  /** Resolves true when Supabase returned a session directly, false when a confirmation email was sent. */
+  async signUp(email: string, password: string, displayName: string, redirectTo: string): Promise<boolean> {
+    this.requireConfig();
+    const response = await fetch(`${this.config.url}/auth/v1/signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
+      method: "POST", headers: { apikey: this.config.anonKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } }), cache: "no-store",
+    });
+    const result = await response.json() as { code?: string; error_code?: string } & Partial<AuthResponse>;
+    if (!response.ok) {
+      const messages: Record<string, string> = {
+        user_already_exists: "该邮箱已注册，请切换到登录。",
+        weak_password: "请使用至少 12 位、更难猜测的密码。",
+        email_address_invalid: "请输入有效的邮箱地址。",
+        over_email_send_rate_limit: "发送邮件过于频繁，请稍后再试。",
+        email_address_not_authorized: "验证邮件服务尚未开放，请联系管理员。",
+        signup_disabled: "注册暂未开放，请稍后再试。",
+      };
+      throw new Error(messages[result.code ?? result.error_code ?? ""] ?? "注册失败，请稍后重试。");
+    }
+    if (result.access_token && result.refresh_token && result.user?.id && Number.isFinite(result.expires_in)) {
+      this.acceptAuth(result as AuthResponse);
+      this.update({ status: "ready", error: null });
+      return true;
+    }
+    return false;
+  }
   async signOut(): Promise<void> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     try { if (this.snapshot.lease && !this.snapshot.writeBlocked) await this.releaseLease(); } catch { /* Lease expires within 90 seconds; draft remains. */ }
     const token = this.tokens?.access;
     ++this.epoch;
     this.tokens = null;
+    this.persistTokens();
     this.stopRenewal();
     this.update({ user: null, lease: null, status: this.config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null });
     if (token) {

@@ -1,0 +1,7 @@
+/* The confirmation link opens on its own route with no app shell, so it carries its own card. */
+.sc-auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 28px; background: #f7f6f0; color: #35403a; font: 13px/1.7 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif; -webkit-font-smoothing: antialiased; }
+.sc-auth-card { width: min(400px, 100%); padding: 34px 30px; border: 1px solid #e0e4d8; border-radius: 18px; background: #fdfcf8; box-shadow: 0 18px 65px #30472d08; text-align: center; }
+.sc-auth-mark { display: grid; place-items: center; width: 46px; height: 46px; margin: 0 auto 20px; border-radius: 13px; background: #2d3d32; }
+.sc-auth-card h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.4px; font-weight: 650; color: #35513a; }
+.sc-auth-status { margin: 0; font-size: 12px; color: #6f7a68; }
+.sc-auth-card a { display: inline-flex; margin-top: 20px; font-size: 12px; color: #4e6244; }
