@@ -209,7 +209,7 @@ export function CreativeBriefPanel():JSX.Element {
   const [ideaIndex,setIdeaIndex]=useState(0);
   const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
   return <div className="cr-brief">
-    <div className="cr-heading"><h2>先说说，你的想法。</h2></div>
+    <div className="sc-section-heading"><div><h2>先说说，你的想法。</h2></div></div>
     <label className="cr-label">活动类型<select value={studio.brief.event} onChange={e=>update({event:e.target.value})}>{['品牌快闪','露营派对','工作坊','小型黑客松','展览市集','婚礼聚会','其他活动'].map(label=><option key={label}>{label}</option>)}</select></label>
     <label className="cr-label">预计人数<input type="number" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/></label>
     <label className="cr-label">客户需求<textarea aria-label="客户需求" maxLength={1800} rows={5} placeholder="例如：为 24 位客人办一场自然风品牌聚会。希望有帐篷交流区、产品展示和一处让人想拍照的角落……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/></label>
