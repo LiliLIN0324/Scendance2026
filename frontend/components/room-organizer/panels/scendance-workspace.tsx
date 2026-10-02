@@ -1,17 +1,16 @@
 'use client';
 
-import { Box, Download, Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Search, Undo2, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Box, Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Search, Undo2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { CATALOG_DRAG_MIME, catalogKey } from '../lib/catalog-drag';
 import { EVENT_CATALOG } from '../lib/constants';
-import { downloadLayoutAsJson } from '../lib/file-io';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
 import type { CameraPreset, CatalogItem } from '../lib/types';
 
 interface LibraryProps {
+  creativePanel?: ReactNode;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
-  onImport(file: File): Promise<boolean>;
 }
 
 export function MaterialGlyph({ materialId, color = 'currentColor' }: { materialId?: string | undefined; color?: string }): JSX.Element {
@@ -24,13 +23,12 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, creativePanel }: LibraryProps): JSX.Element {
   const { layout, activeFloor, actions, catalogQuery, setCatalogQuery } = useRoomEditor();
   const { selectOnly } = useSelection();
   const [tab, setTab] = useState<'materials' | 'venue' | 'list'>('materials');
   const [sampleState, setSampleState] = useState<'idle' | 'loading' | 'error' | 'ready'>('idle');
   const [sampleError, setSampleError] = useState('');
-  const importRef = useRef<HTMLInputElement>(null);
   const items = EVENT_CATALOG.filter(item => item.name.includes(catalogQuery.trim()));
   const atLimit = activeFloor.items.length >= 50;
 
@@ -62,6 +60,7 @@ export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): 
     </div>
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
+        {creativePanel}
         <div className="sc-section-heading"><div><h2>把想法放进场地</h2><p>点击添加，也可以拖入画布</p></div><span className="sc-count">8 类</span></div>
         <label className="sc-search"><Search size={15}/><input aria-label="搜索活动物料" placeholder="搜索活动物料" value={catalogQuery} onChange={event => setCatalogQuery(event.target.value)}/></label>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
@@ -98,9 +97,6 @@ export function ScendanceLibrary({ placeCatalogItem, onImport }: LibraryProps): 
         <div className="sc-object-list">{activeFloor.items.map(item => <button type="button" key={item.id} onClick={() => selectOnly(item.id)}><span className="sc-object-dot" style={{ background: item.color }}/><span><strong>{item.name}</strong><small>{item.width} × {item.depth} × {item.height} m</small></span><span>{item.locked ? '已锁定' : '可编辑'}</span></button>)}</div>
         {activeFloor.items.length === 0 && <p className="sc-note">场地还是空的，从物料库添加第一件物料吧。</p>}
       </>}
-    </div>
-    <div className="sc-library-footer"><span>本地文件</span><div><button type="button" onClick={() => importRef.current?.click()}><Upload size={14}/>导入 JSON</button><button type="button" onClick={() => downloadLayoutAsJson(layout)}><Download size={14}/>导出 JSON</button></div>
-      <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void onImport(file); event.target.value = ''; }}/>
     </div>
   </aside>;
 }
