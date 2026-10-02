@@ -13,7 +13,7 @@ try{
   view.setPixelRatio(Math.min(devicePixelRatio,2));
   view.shadowMap.enabled=true;view.shadowMap.type=THREE.PCFSoftShadowMap;
   view.toneMapping=THREE.ACESFilmicToneMapping;view.toneMappingExposure=1.1;
-  scene=new THREE.Scene();scene.background=new THREE.Color('#eef0e9');
+  scene=new THREE.Scene();scene.background=new THREE.Color('#f1f3f6');
   camera=new THREE.PerspectiveCamera(38,1,.01,100);camera.position.set(3.5,2.7,4.2);
   controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.minDistance=.7;controls.maxDistance=10;controls.maxPolarAngle=Math.PI*.49;
   const room=new RoomEnvironment();const pmrem=new THREE.PMREMGenerator(view);const environment=pmrem.fromScene(room,.04);scene.environment=environment.texture;scene.environmentIntensity=.5;room.dispose();pmrem.dispose();

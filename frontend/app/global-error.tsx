@@ -56,32 +56,27 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
 
   return (
     <html lang="zh-CN">
-      <body
-        style={{
-          margin: 0,
-          minHeight: '100vh',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 24,
-          background: '#0f172a',
-          color: '#e2e8f0',
-          fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 420,
-            textAlign: 'center',
-            padding: '28px 32px',
-            borderRadius: 14,
-            border: '1px solid rgba(148, 163, 184, 0.24)',
-            background: 'rgba(30, 41, 59, 0.72)',
-          }}
-        >
-          <p style={{ margin: '0 0 8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 16 }}>
+      <head>
+        <style>{`
+          .sc-global-recovery{box-sizing:border-box;margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 24% 18%,#fff9,transparent 60%),#f1f3f6;color:#2b2b2b;font-family:'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif}
+          .sc-global-recovery-card{max-width:440px;box-sizing:border-box;padding:32px;border-radius:20px;border:1px solid #ffffffc4;background:linear-gradient(145deg,#ffffff70,transparent 45%),#ffffffc2;box-shadow:0 12px 36px #24313e10,inset 0 1px 0 #fff,inset 0 0 0 1px #ffffff52;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+          .sc-global-recovery-title{margin:0 0 12px;font-size:22px;font-weight:600;line-height:1.4;letter-spacing:-.045em}
+          .sc-global-recovery-copy{margin:0 0 20px;color:#59636d;font-size:13px;line-height:1.8}
+          .sc-global-recovery button{appearance:none;cursor:pointer;border:1px solid #2b2b2b;border-radius:8px;padding:10px 16px;background:#2b2b2b;color:#fff;font-family:inherit;font-size:12px;font-weight:500;transition:background 160ms cubic-bezier(.22,1,.36,1),transform 160ms cubic-bezier(.22,1,.36,1)}
+          .sc-global-recovery button:focus-visible{outline:2px solid #7435b8;outline-offset:3px}
+          .sc-global-recovery button:active{transform:translateY(1px)}
+          @media(hover:hover) and (pointer:fine){.sc-global-recovery button:hover{background:#414141}}
+          @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.sc-global-recovery-card{background:#f8f9fb}}
+          @media(prefers-reduced-motion:reduce){.sc-global-recovery button{transition:none}.sc-global-recovery button:active{transform:none}}
+          @media(max-width:600px){.sc-global-recovery-card{padding:24px}}
+        `}</style>
+      </head>
+      <body className="sc-global-recovery">
+        <div className="sc-global-recovery-card">
+          <p className="sc-global-recovery-title">
             {chunkFailure ? '页面加载失败' : '工作台暂时遇到问题'}
           </p>
-          <p style={{ margin: '0 0 20px', color: '#94a3b8', fontSize: 13, lineHeight: 1.5 }}>
+          <p className="sc-global-recovery-copy">
             {chunkFailure
               ? '部分页面文件未能加载，请重新加载。已保存的本地草稿不会被删除。'
               : resetProblem ??
@@ -93,19 +88,6 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
           <button
             type="button"
             onClick={chunkFailure ? retryChunkLoad : resetSavedLayout}
-            style={{
-              appearance: 'none',
-              cursor: 'pointer',
-              border: '1px solid rgba(255, 255, 255, 0.18)',
-              borderRadius: 8,
-              padding: '10px 18px',
-              background: '#22d3ee',
-              color: '#0f172a',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              fontSize: 12,
-            }}
           >
             {chunkFailure ? '重新加载' : '保留备份，开始新方案'}
           </button>
@@ -114,19 +96,6 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             <button
               type="button"
               onClick={() => downloadRawLayout(lostRaw, 'scendance-layout.json')}
-              style={{
-                appearance: 'none',
-                cursor: 'pointer',
-                display: 'block',
-                margin: '12px auto 0',
-                border: '1px solid rgba(255, 255, 255, 0.18)',
-                borderRadius: 8,
-                padding: '10px 18px',
-                background: 'transparent',
-                color: '#e2e8f0',
-                fontWeight: 700,
-                fontSize: 12,
-              }}
             >
               下载本地草稿
             </button>

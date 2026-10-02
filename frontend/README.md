@@ -1,5 +1,7 @@
 # 场域 · 活动场地工作台
 
+当前项目版本：**0.1.0**。上游项目的原始许可与来源继续保留。
+
 前端首版基于 PLAN 指定的 `threejs-sims-house-builder` 提交 `ab64647640a493657929246d62a2a37ebfc0ed42` 定向改造，使用 Next.js 静态导出、React、TypeScript、Three.js、Zustand。上游 MIT 许可见 [UPSTREAM-LICENSE](UPSTREAM-LICENSE)。原体育馆展示页仍在仓库根目录。
 
 ## 运行
