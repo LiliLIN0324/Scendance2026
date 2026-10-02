@@ -25,7 +25,7 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
 export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }: LibraryProps): JSX.Element {
   const { layout, activeFloor, actions } = useRoomEditor();
   const { selectOnly } = useSelection();
-  const [tab, setTab] = useState<'materials' | 'venue' | 'list'>('materials');
+  const [tab, setTab] = useState<'materials' | 'brief' | 'venue'>('materials');
   const atLimit = activeFloor.items.length >= 50;
 
   const addMaterial = (item: CatalogItem) => {
@@ -36,16 +36,17 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
 
   return <aside className="sc-library" aria-label="场地工具">
     <div className="sc-library-tabs" role="tablist" aria-label="工作台面板">
-      {([['materials', '物料库'], ['venue', '场地'], ['list', '清单']] as const).map(([key, label]) =>
+      {([['materials', '物料库'], ['brief', '需求'], ['venue', '场地']] as const).map(([key, label]) =>
         <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
-        {creativePanel}
-        <div className="sc-section-heading"><div><h2>把想法放进场地</h2><p>点击下载并放入场地</p></div></div>
+        <div className="sc-section-heading"><div><h2>线上模型库</h2><p>点击下载并放入场地</p></div></div>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
         <OnlineModelLibrary disabled={atLimit} onAdd={addMaterial}/>
       </>}
+      {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
+      {tab === 'brief' && <>{creativePanel}</>}
       {tab === 'venue' && <>
         <div className="sc-section-heading"><div><h2>场地设置</h2><p>单层矩形 · 统一使用米制</p></div><Grid size={19}/></div>
         <label className="sc-field">项目名称<input value={layout.name} maxLength={80} onChange={event => actions.setName(event.target.value)} aria-label="项目名称"/></label>
@@ -59,11 +60,6 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
         <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
         <p className="sc-note">实时作用于三维场景；随场景本地保存，连接云项目后使用现有 lighting 字段保存。</p>
         <p className="sc-note">当前版本提供矩形场地编辑。平面图标定与多边形编辑尚未接入。</p>
-      </>}
-      {tab === 'list' && <>
-        <div className="sc-section-heading"><div><h2>场景物料</h2><p>选中一项，继续调整位置和规格</p></div><span className="sc-count">{activeFloor.items.length} 件</span></div>
-        <div className="sc-object-list">{activeFloor.items.map(item => <button type="button" key={item.id} onClick={() => selectOnly(item.id)}><span className="sc-object-dot" style={{ background: item.color }}/><span><strong>{item.name}</strong><small>{item.width} × {item.depth} × {item.height} m</small></span><span>{item.locked ? '已锁定' : '可编辑'}</span></button>)}</div>
-        {activeFloor.items.length === 0 && <p className="sc-note">场地还是空的，从物料库添加第一件物料吧。</p>}
       </>}
     </div>
   </aside>;
