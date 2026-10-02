@@ -10,7 +10,7 @@
 .sc-intro-header, .sc-intro-content, .sc-intro-footer { max-width: 1280px; margin-inline: auto; }
 .sc-intro-header { display: flex; justify-content: space-between; align-items: center; min-height: 94px; gap: 24px; border-bottom: 1px solid #dedfd4; }
 .sc-intro-brand { display: flex; gap: 11px; align-items: center; font-size: 23px; font-weight: 650; letter-spacing: 2px; }
-.sc-intro-brand-icon { width: 43px; height: 43px; display: grid; place-items: center; background: #2c4a38; border-radius: 13px; color: #faf8ef; }
+.sc-intro-brand-icon { width: 43px; height: 43px; display: grid; place-items: center; background: #2d3d32; border-radius: 13px; }
 .sc-intro-wordmark { margin-left: 13px; font-size: 12px; letter-spacing: 2.5px; font-weight: 600; }
 .sc-intro-version { color: #727b6f; font-size: 12px; }
 .sc-intro-version span { margin-left: 14px; font-size: 11px; color: #899181; }
@@ -37,6 +37,11 @@
 .sc-intro-login h2 { margin: 0; font-size: 26px; letter-spacing: -.7px; font-weight: 650; }
 .sc-intro-login-copy { margin: 10px 0 27px; font-size: 12px; color: #87907e; line-height: 1.6; }
 .sc-intro-form { display: grid; }
+/* Sign in / sign up share one card: the toggle swaps the fields, never the page. */
+.sc-intro-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 3px; margin-bottom: 22px; border: 1px solid #e2e6d8; border-radius: 9px; background: #f6f7f0; }
+.sc-intro-mode button { border: 1px solid transparent; border-radius: 6px; background: none; color: #78846c; font-size: 12px; font-family: inherit; padding: 7px 4px; cursor: pointer; }
+.sc-intro-mode button.is-active { color: #35513a; background: #ffffff; border-color: #d7ddcb; font-weight: 600; }
+.sc-intro-mode button:disabled { opacity: .55; cursor: not-allowed; }
 .sc-intro-form label { font-size: 12px; margin-bottom: 8px; color: #5a6b52; }
 .sc-intro-form input { width: 100%; min-width: 0; height: 44px; padding: 0 13px; border: 1px solid #dde2d4; border-radius: 7px; background: #fbfcf7; font-size: 13px; color: #2c442f; font-family: inherit; margin-bottom: 18px; }
 .sc-intro-form input::placeholder { color: #939a8b; }
@@ -56,6 +61,7 @@
 .sc-intro-separator::before, .sc-intro-separator::after { content: ""; height: 1px; background: #e8eadd; flex: 1; }
 .sc-intro-local-note { color: #959c8b; font-size: 10px; line-height: 1.8; margin: 12px 0 25px; }
 .sc-intro-error { color: #a94333; font-size: 12px; line-height: 1.6; margin: 0 0 14px; }
+.sc-intro-notice { color: #4d6a44; font-size: 12px; line-height: 1.6; margin: 0 0 14px; }
 .sc-intro-signed-in { margin: 32px 0; }
 .sc-intro-account-caption { color: #829273; font-size: 11px; margin: 0 0 6px; }
 .sc-intro-account { color: #47613c; font-size: 14px; margin: 0 0 25px; overflow-wrap: anywhere; }

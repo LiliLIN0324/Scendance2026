@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowRight, Box, ImagePlus, Layers3, LockKeyhole } from 'lucide-react';
+import { BrandMark } from '../brand-mark';
 import { useState, type FormEvent } from 'react';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
 import './intro.css';
@@ -90,21 +91,43 @@ function EventIllustration(): JSX.Element {
 
 export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element {
   const cloud = useBackendSession(controller);
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  async function signIn(event: FormEvent<HTMLFormElement>): Promise<void> {
+  function switchMode(next: 'signin' | 'signup'): void {
+    setMode(next);
+    setError(null);
+    setNotice(null);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (busy || !cloud.configured) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
+      if (mode === 'signup') {
+        // Supabase mails a confirmation link back to /auth/callback unless confirmation is off.
+        const signedIn = await controller.signUp(email, password, name, `${window.location.origin}/auth/callback`);
+        setPassword('');
+        if (signedIn) { onEnter(); return; }
+        setNotice('请查收验证邮件，点击邮件中的链接完成注册。已经注册过就直接登录。');
+        return;
+      }
       await controller.signIn(email, password);
       setPassword('');
       onEnter();
-    } catch {
+    } catch (thrown) {
+      if (mode === 'signup') {
+        setError(thrown instanceof Error ? thrown.message : '注册失败，请稍后再试。');
+        return;
+      }
       const failure = controller.getSnapshot().error;
       setError(failure?.code === 'NETWORK_ERROR'
         ? '暂时无法连接登录服务，请稍后重试，也可以先体验本地工作台。'
@@ -121,7 +144,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
   return (
     <main className="sc-intro">
       <header className="sc-intro-header">
-        <div className="sc-intro-brand"><span className="sc-intro-brand-icon" aria-hidden="true"><Layers3 size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></div>
+        <div className="sc-intro-brand"><span className="sc-intro-brand-icon" aria-hidden="true"><BrandMark size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></div>
         <span className="sc-intro-version">活动空间工作台 <span>v0.4.1</span></span>
       </header>
 
@@ -156,13 +179,22 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
             </div>
           ) : (
             <>
-              <form className="sc-intro-form" aria-label="工作室登录" onSubmit={(event) => { void signIn(event); }} aria-busy={busy}>
+              <div className="sc-intro-mode" role="group" aria-label="登录或注册">
+                <button type="button" aria-pressed={mode === 'signin'} className={mode === 'signin' ? 'is-active' : ''} disabled={busy} onClick={() => switchMode('signin')}>登录</button>
+                <button type="button" aria-pressed={mode === 'signup'} className={mode === 'signup' ? 'is-active' : ''} disabled={busy} onClick={() => switchMode('signup')}>注册</button>
+              </div>
+              <form className="sc-intro-form" aria-label={mode === 'signup' ? '工作室注册' : '工作室登录'} onSubmit={(event) => { void submit(event); }} aria-busy={busy}>
+                {mode === 'signup' && <>
+                  <label htmlFor="sc-intro-name">称呼</label>
+                  <input id="sc-intro-name" name="name" autoComplete="nickname" maxLength={80} placeholder="怎么称呼你" value={name} onChange={(event) => setName(event.target.value)} disabled={!cloud.configured || busy} required />
+                </>}
                 <label htmlFor="sc-intro-email">邮箱</label>
                 <input id="sc-intro-email" name="email" type="email" autoComplete="username" placeholder="你的工作室邮箱" value={email} onChange={(event) => setEmail(event.target.value)} disabled={!cloud.configured || busy} required />
                 <label htmlFor="sc-intro-password">密码</label>
-                <input id="sc-intro-password" name="password" type="password" autoComplete="current-password" placeholder="输入密码" value={password} onChange={(event) => setPassword(event.target.value)} disabled={!cloud.configured || busy} required />
+                <input id="sc-intro-password" name="password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={mode === 'signup' ? 12 : undefined} placeholder={mode === 'signup' ? '至少 12 位' : '输入密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={!cloud.configured || busy} required />
                 {error && <p className="sc-intro-error" role="alert">{error}</p>}
-                <button className="sc-intro-primary" type="submit" disabled={!cloud.configured || busy}>{busy ? '正在登录…' : '登录并进入工作台'}<ArrowRight size={18} aria-hidden="true" /></button>
+                {notice && <p className="sc-intro-notice" role="status">{notice}</p>}
+                <button className="sc-intro-primary" type="submit" disabled={!cloud.configured || busy}>{busy ? (mode === 'signup' ? '正在创建…' : '正在登录…') : mode === 'signup' ? '创建账号' : '登录并进入工作台'}<ArrowRight size={18} aria-hidden="true" /></button>
               </form>
               {!cloud.configured && <p className="sc-intro-offline" role="status">当前可先本地体验。云端登录与 AI 生成将在服务连接后开放。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
