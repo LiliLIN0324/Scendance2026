@@ -90,7 +90,7 @@ export function AssistantPanel({ controller, layout, selectedIds, bound, busy, o
   const changes = proposal ? proposal.candidate.objects.filter(object => canonical(object) !== canonical(cloud.draft?.objects.find(old => old.id === object.id))) : [];
   const removed = proposal ? cloud.draft?.objects.filter(object => !proposal.candidate.objects.some(next => next.id === object.id)) ?? [] : [];
   return <>
-    <button ref={trigger} type="button" className="sc-cloud-trigger" aria-expanded={open} aria-controls="sc-assistant" onClick={() => setOpen(value => !value)}><Sparkles size={14}/>AI 助理</button>
+    <button ref={trigger} type="button" className="sc-cloud-trigger" aria-label="AI 助理" title="AI 助理" aria-expanded={open} aria-controls="sc-assistant" onClick={() => setOpen(value => !value)}><Sparkles size={14}/><span className="sc-cloud-trigger-label">AI 助理</span></button>
     {open && <aside ref={panel} id="sc-assistant" className="sc-assistant" tabIndex={-1} aria-label="AI 场景助理" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }}>
       <div className="sc-ai-heading"><div><span className="sc-cloud-eyebrow">DEEPSEEK / 场景提案</span><h2>把想法变成布置</h2></div><button type="button" aria-label="关闭 AI 助理" onClick={close}><X size={18}/></button></div>
       <p>描述活动、人数和风格，或告诉我如何调整当前物件。提案经你确认后才会应用。</p>
