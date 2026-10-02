@@ -1,7 +1,6 @@
 'use client';
 
 import { ArrowUpRight, Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { BrandMark } from '../brand-mark';
@@ -91,7 +90,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, onShowIntro, isActive = true }: { controller?: BackendSession; onShowIntro?: () => void; isActive?: boolean } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, isActive = true }: { controller?: BackendSession; isActive?: boolean } = {}): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   useEffect(() => controller.retain(), [controller]);
@@ -1096,7 +1095,7 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
     <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <Link className="sc-brand" href="/" onClick={event => { if (onShowIntro) { event.preventDefault(); onShowIntro(); } }} aria-label="Scendance 幕景 · 返回官网"><span className="sc-brand-mark"><BrandMark size={36} /></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.4.1</small></div></Link>
+          <a className="sc-brand" href="/introduction" aria-label="Scendance 幕景 · 打开官网"><span className="sc-brand-mark"><BrandMark size={23} /></span><div><strong>幕景<span>SCENDANCE</span></strong></div></a>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
