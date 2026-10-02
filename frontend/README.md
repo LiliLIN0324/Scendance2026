@@ -66,6 +66,8 @@ python3 -m http.server 3018 --bind 127.0.0.1 --directory out
 
 后续合并联调已补充真实 HTTP + 后端处理器 + PostgreSQL 测试库验证，以及测试账号在浏览器中的保存、刷新重开与交接。Auth/Storage 在该环境使用显式测试实现，真实 Supabase 云端仍未验收。复现方法与结果见 [前后端联调报告](../docs/INTEGRATION.md)。
 
+GPT 接入由成员 2 按 [GPT 核心链路交接](../docs/FRONTEND_V0.2_BACKEND_REQUIREMENTS.md#gpt-handoff) 实施；前端沿用 proposals 接口，无供应商专属改动。模型切换不会解除现有模板与 1–40 人限制。
+
 ## 部署后配置
 
 复制 `frontend/.env.example` 为 `frontend/.env.local`，在本机填写：
