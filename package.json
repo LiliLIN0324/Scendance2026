@@ -15,7 +15,8 @@
     "check:public-model": "deno run --allow-net=api.polyhaven.com,dl.polyhaven.org --config supabase/functions/deno.json scripts/check-public-model.ts",
     "check:config": "node scripts/check-config.mjs --mode core",
     "check:config:full": "node scripts/check-config.mjs --mode full --demo",
-    "smoke:cloud": "node --env-file=.env.local scripts/smoke-cloud.mjs"
+    "smoke:cloud": "node --env-file=.env.local scripts/smoke-cloud.mjs",
+    "library:check": "node --experimental-transform-types scripts/import-model-library.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "4.5.1",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
+    "@gltf-transform/extensions": "4.5.1",
     "@types/node": "24.10.1",
     "deno": "2.9.6",
     "supabase": "2.119.0",

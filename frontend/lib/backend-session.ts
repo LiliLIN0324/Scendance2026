@@ -1,8 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { assertFreshProposal, createSceneClient, SceneApiError, type Proposal, type EditorState } from "../../client/scene-client";
-import { proposalRequestSchema, sceneSchema, type Scene } from "../../supabase/functions/_shared/domain";
+import { z } from "zod";
+import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
+import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 
 export { SceneApiError };
 export type { Scene };
@@ -72,9 +73,54 @@ interface AuthResponse {
 }
 interface Tokens { access: string; refresh: string; expiresAt: number }
 export interface SaveResult { id: string; revision: number; scene: Scene; updatedAt: string; warnings: { code: string; ids: string[] }[] }
-export interface AssistantProposal extends Proposal { explanation: string; warnings: { code: string; ids: string[] }[] }
-export interface AppliedProposal { id: string; revision: number; scene: Scene; previousScene: Scene; undoGroup: string }
 export interface AuthorizedAssets { assetUrls: Record<string, string>; assetNames: Record<string, string> }
+/** Actual /proposals response from scene_private.proposals. */
+export interface SceneProposal extends Proposal {
+  user_id: string;
+  base_scene: Scene;
+  explanation: string;
+  warnings: { code: string; ids: string[] }[];
+}
+export interface SceneProposalInput {
+  mode: "layout" | "modify";
+  prompt: string;
+  scene: Scene;
+  selectedIds?: string[];
+  requestId?: string;
+}
+/** Applying a proposal saves it on the server; do not issue a second save. */
+export interface ApplySceneProposalResult {
+  id: string; revision: number; scene: Scene; updatedAt: string;
+  previousScene: Scene; undoGroup: string;
+  /** False when the user edited locally while the apply request was in flight. */
+  acceptedLocally: boolean;
+}
+const dateString = z.string().refine(value => Number.isFinite(Date.parse(value)));
+const proposalResponseSchema = z.object({
+  id: uuid, project_id: uuid, user_id: z.string().min(1), session_id: uuid,
+  generation: z.number().int().positive(), base_revision: z.number().int().nonnegative(),
+  local_revision: z.number().int().nonnegative(), base_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  base_scene: sceneSchema, candidate: sceneSchema, explanation: z.string(),
+  warnings: z.array(z.object({ code: z.string(), ids: z.array(uuid) })),
+  expires_at: dateString, applied_at: dateString.nullable(),
+});
+const applyProposalResponseSchema = z.object({
+  id: uuid, revision: z.number().int().nonnegative(), scene: sceneSchema,
+  updatedAt: dateString, previousScene: sceneSchema, undoGroup: uuid,
+});
+const generationJobSchema = z.object({
+  id: uuid, owner_id: z.string().min(1), prompt: z.string(),
+  state: z.enum(["queued", "submitting", "submitted", "processing", "archiving", "ready", "added", "failed", "rejected", "submit_unknown"]),
+  provider_job_id: z.string().nullable(), asset_id: uuid.nullable(),
+  next_poll_at: dateString, attempts: z.number().int().nonnegative(), error_code: z.string().nullable(),
+  provider_usage: z.unknown(), created_at: dateString, updated_at: dateString, reused: z.boolean().optional(),
+}).refine(job => !["ready", "added"].includes(job.state) || job.asset_id !== null);
+export type GenerationJob = z.infer<typeof generationJobSchema>;
+interface PaidRequest<T> { fingerprint: string; promise?: Promise<T>; result?: T }
+interface RequestScope {
+  projectId: string | null;
+  lease: Pick<Lease, "projectId" | "sessionId" | "generation"> | null;
+}
 type LeaseResponse = Omit<Lease, "projectId">;
 
 function failure(error: unknown): BackendFailure {
@@ -93,17 +139,21 @@ function failure(error: unknown): BackendFailure {
     INVALID_RESPONSE: "云端返回的数据格式无效。",
     ASSET_AUTHORIZATION_INVALID: "云端模型的授权信息无效，未替换当前画布，草稿已保留。",
     SESSION_CHANGED: "会话已变化，请重新操作。",
-    STALE_PROPOSAL: "场景或编辑会话已变化，此提案不能应用，请重新生成。",
-    SERVICE_NOT_CONFIGURED: "AI 服务尚未配置，请联系工作室管理员。",
     DAILY_BUDGET_EXCEEDED: "今天的 AI 额度已用完，请明天再试。",
     BUDGET_EXCEEDED: "工作室 AI 总额度已用完，请联系管理员。",
+    SERVICE_NOT_CONFIGURED: "AI 服务尚未配置，请联系工作室管理员。",
+    BILLING_NOT_CONFIGURED: "AI 费用限制尚未配置，请联系工作室管理员。",
     AI_INVALID_PROPOSAL: "AI 未能生成可用方案，请调整要求后重试。",
     AI_INPUT_TOO_LARGE: "场景内容过长，请缩短物件备注或需求后重试。",
-    BILLING_NOT_CONFIGURED: "AI 费用限制尚未配置，请联系工作室管理员。",
     PROVIDER_HTTP_ERROR: "AI 服务暂时不可用，请稍后手动重试。",
     PROVIDER_INVALID_JSON: "AI 服务返回异常，请稍后手动重试。",
     PROVIDER_TIMEOUT: "AI 响应超时，请稍后手动重试。",
     PROJECT_SWITCH_REQUIRES_RELEASE: "请先交接当前项目的编辑权。",
+    STALE_PROPOSAL: "方案生成期间场景或编辑权已变化，请根据当前场景重新生成。",
+    LAYOUT_REQUIRES_EMPTY_SCENE: "生成初稿需要空白场景；已有物料请使用修改方案。",
+    AI_BUSY: "已有方案正在生成，请等待本次请求完成。",
+    GENERATION_BUSY: "已有模型生成任务正在处理，请先查看任务状态。",
+    IDEMPOTENCY_CONFLICT: "同一请求编号不能用于不同需求，请创建新的请求。",
   };
   return { code, status: error instanceof SceneApiError ? error.status : 0, message: messages[code] ?? (localCode && error instanceof Error ? error.message : `云端操作失败（${code}），草稿已保留。`) };
 }
@@ -113,16 +163,19 @@ export class BackendSession {
   private snapshot: BackendSnapshot;
   private readonly listeners = new Set<() => void>();
   private tokens: Tokens | null = null;
-  // Recovery authorizes only the password form; never persist it as editor login.
   private recoveryTokens: Tokens | null = null;
   private refresh: Promise<string> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private operationPending = false;
   private renewing = false;
-  private proposing = false;
   private epoch = 0;
   private owners = 0;
   private lifecycle = 0;
+  private readonly proposalRequestIds = new Map<string, string>();
+  private readonly proposalRequests = new Map<string, PaidRequest<SceneProposal>>();
+  private readonly generationRequests = new Map<string, PaidRequest<GenerationJob>>();
+  private proposalPending = false;
+  private generationPending = false;
   private readonly client: ReturnType<typeof createSceneClient>;
 
   constructor(config: BackendConfig = getBackendConfig(), private readonly storage?: Storage) {
@@ -197,6 +250,81 @@ export class BackendSession {
       else this.storage?.removeItem(key);
     } catch { /* Storage restrictions should not prevent the current sign-in. */ }
   }
+  private async accessToken(): Promise<string | null> {
+    if (!this.tokens) return null;
+    if (this.tokens.expiresAt > Date.now() + 30_000) return this.tokens.access;
+    if (!this.refresh) {
+      const epoch = this.epoch;
+      const refreshToken = this.tokens.refresh;
+      this.refresh = this.authRequest("refresh_token", { refresh_token: refreshToken }).then(result => {
+        if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+        this.acceptAuth(result);
+        return result.access_token;
+      }).finally(() => { this.refresh = null; });
+    }
+    return this.refresh;
+  }
+  private captureRequestScope(projectId = this.snapshot.project?.id ?? null): RequestScope {
+    const lease = this.snapshot.lease;
+    return { projectId, lease: lease?.projectId === projectId
+      ? { projectId: lease.projectId, sessionId: lease.sessionId, generation: lease.generation } : null };
+  }
+  private isCurrentRequestScope(scope: RequestScope): boolean {
+    const current = this.captureRequestScope();
+    return current.projectId === scope.projectId && current.lease?.projectId === scope.lease?.projectId &&
+      current.lease?.sessionId === scope.lease?.sessionId && current.lease?.generation === scope.lease?.generation;
+  }
+  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites = true): Promise<T> {
+    const epoch = this.epoch;
+    try {
+      this.requireConfig();
+      const result = await this.client.request<T>(path, method, body);
+      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+      return result;
+    } catch (error) {
+      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
+        if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
+          this.tokens = null;
+          this.persistTokens();
+          this.update({ user: null });
+        }
+        // Uncertainty blocks only the project/lease that made this request. A
+        // late response from a handed-off editor must not stop the new lease.
+        if (blocksWrites || !(error instanceof SceneApiError) || [401, 409].includes(error.status)) this.block(error);
+        else this.update({ error: failure(error) });
+      }
+      throw error;
+    }
+  }
+
+  async signIn(email: string, password: string): Promise<BackendUser> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    this.stopRenewal();
+    const epoch = ++this.epoch;
+    this.tokens = null;
+    this.recoveryTokens = null;
+    this.persistTokens();
+    this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true });
+    try {
+      const result = await this.authRequest("password", { email: email.trim(), password });
+      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+      this.acceptAuth(result);
+      this.update({ status: "ready", error: null });
+      return result.user;
+    } catch (error) {
+      if (epoch === this.epoch) this.block(error);
+      throw error;
+    }
+  }
+  private async verifyUser(access: string): Promise<BackendUser> {
+    const response = await fetch(`${this.config.url}/auth/v1/user`, {
+      headers: { apikey: this.config.anonKey, Authorization: `Bearer ${access}` }, cache: "no-store",
+    });
+    if (!response.ok) throw new SceneApiError(response.status === 401 || response.status === 403 ? "UNAUTHENTICATED" : "NETWORK_ERROR", response.status, null);
+    const user = await response.json() as BackendUser;
+    if (!user.id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return user;
+  }
   async restoreSession(): Promise<void> {
     if (!this.config.configured || this.tokens) return;
     let stored: Tokens | null = null;
@@ -223,15 +351,6 @@ export class BackendSession {
       this.block(error);
     }
   }
-  private async verifyUser(access: string): Promise<BackendUser> {
-    const response = await fetch(`${this.config.url}/auth/v1/user`, {
-      headers: { apikey: this.config.anonKey, Authorization: `Bearer ${access}` }, cache: "no-store",
-    });
-    if (!response.ok) throw new SceneApiError(response.status === 401 || response.status === 403 ? "UNAUTHENTICATED" : "NETWORK_ERROR", response.status, null);
-    const user = await response.json() as BackendUser;
-    if (!user.id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
-    return user;
-  }
   async acceptCallback(hash: string, expectedType?: "recovery"): Promise<void> {
     const values = new URLSearchParams(hash.replace(/^#/, ""));
     if (expectedType && values.get("type") !== expectedType) throw new Error("请使用密码重置邮件中的验证码或链接。");
@@ -249,17 +368,6 @@ export class BackendSession {
     }
     this.acceptAuth({ access_token: access, refresh_token: refresh, expires_in: expires, user });
     this.update({ status: "ready", error: null });
-  }
-  async signUp(email: string, password: string, displayName: string, redirectTo: string): Promise<boolean> {
-    const epoch = this.epoch;
-    const result = await this.emailAuthRequest(`signup?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } });
-    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-    if (result.access_token && result.refresh_token && result.user?.id && Number.isFinite(result.expires_in)) {
-      this.acceptAuth(result);
-      this.update({ status: "ready", error: null });
-      return true;
-    }
-    return false;
   }
   private async emailAuthRequest(path: string, body: unknown, access?: string): Promise<AuthResponse> {
     this.requireConfig();
@@ -333,60 +441,16 @@ export class BackendSession {
     this.recoveryTokens = null;
     this.update({ recoveryReady: false });
   }
-  private async accessToken(): Promise<string | null> {
-    if (!this.tokens) return null;
-    if (this.tokens.expiresAt > Date.now() + 30_000) return this.tokens.access;
-    if (!this.refresh) {
-      const epoch = this.epoch;
-      const refreshToken = this.tokens.refresh;
-      this.refresh = this.authRequest("refresh_token", { refresh_token: refreshToken }).then(result => {
-        if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-        this.acceptAuth(result);
-        return result.access_token;
-      }).finally(() => { this.refresh = null; });
-    }
-    return this.refresh;
-  }
-  private async request<T>(path: string, method = "GET", body?: unknown, blocksWrites = true): Promise<T> {
+  async signUp(email: string, password: string, displayName: string, redirectTo: string): Promise<boolean> {
     const epoch = this.epoch;
-    try {
-      this.requireConfig();
-      const result = await this.client.request<T>(path, method, body);
-      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-      return result;
-    } catch (error) {
-      if (epoch === this.epoch) {
-        if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
-          this.tokens = null;
-          this.persistTokens();
-          this.update({ user: null });
-        }
-        // Any uncertain response stops cloud writes; never retry a save automatically.
-        if (blocksWrites || error instanceof SceneApiError && [401, 409].includes(error.status)) this.block(error);
-        else this.update({ error: failure(error) });
-      }
-      throw error;
-    }
-  }
-
-  async signIn(email: string, password: string): Promise<BackendUser> {
-    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
-    this.stopRenewal();
-    const epoch = ++this.epoch;
-    this.tokens = null;
-    this.recoveryTokens = null;
-    this.persistTokens();
-    this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true });
-    try {
-      const result = await this.authRequest("password", { email: email.trim(), password });
-      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    const result = await this.emailAuthRequest(`signup?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } });
+    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    if (result.access_token && result.refresh_token && result.user?.id && Number.isFinite(result.expires_in)) {
       this.acceptAuth(result);
       this.update({ status: "ready", error: null });
-      return result.user;
-    } catch (error) {
-      if (epoch === this.epoch) this.block(error);
-      throw error;
+      return true;
     }
+    return false;
   }
   async signOut(): Promise<void> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
@@ -406,28 +470,33 @@ export class BackendSession {
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
+  async authorizeAsset(assetId: string, scope = this.captureRequestScope()): Promise<{ id: string; url: string; name: string }> {
+    uuid.parse(assetId);
+    const result = await this.request<unknown>(`/assets/${encodeURIComponent(assetId)}/url`, "POST", undefined, scope);
+    if (!result || typeof result !== "object") throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
+    const asset = result as Record<string, unknown>;
+    if (asset.id !== assetId || asset.format !== "glb" || typeof asset.name !== "string" || !asset.name.trim() ||
+        typeof asset.url !== "string" || typeof asset.expiresIn !== "number" || !Number.isFinite(asset.expiresIn) || asset.expiresIn <= 0 || asset.expiresIn > 300) {
+      throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
+    }
+    let url: URL;
+    try { url = new URL(asset.url); }
+    catch { throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null); }
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if ((url.protocol !== "https:" && !(local && url.protocol === "http:")) || url.username || url.password || url.hash) {
+      throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
+    }
+    return { id: assetId, url: url.href, name: asset.name };
+  }
   /** Resolve only referenced GLB IDs; signed URLs remain transient renderer inputs. */
   async authorizeAssets(scene: Scene): Promise<AuthorizedAssets> {
     const epoch = this.epoch;
+    const scope = this.captureRequestScope();
     try {
       const parsed = sceneSchema.parse(scene);
       const ids = [...new Set(parsed.objects.flatMap(object => object.assetId ? [object.assetId] : []))];
       const assets = await Promise.all(ids.map(async assetId => {
-        const result = await this.request<unknown>(`/assets/${encodeURIComponent(assetId)}/url`, "POST");
-        if (!result || typeof result !== "object") throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
-        const asset = result as Record<string, unknown>;
-        if (asset.id !== assetId || asset.format !== "glb" || typeof asset.name !== "string" || !asset.name.trim() ||
-            typeof asset.url !== "string" || typeof asset.expiresIn !== "number" || !Number.isFinite(asset.expiresIn) || asset.expiresIn <= 0 || asset.expiresIn > 300) {
-          throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
-        }
-        let url: URL;
-        try { url = new URL(asset.url); }
-        catch { throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null); }
-        const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-        if ((url.protocol !== "https:" && !(local && url.protocol === "http:")) || url.username || url.password || url.hash) {
-          throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
-        }
-        return { id: assetId, url: url.href, name: asset.name };
+        return this.authorizeAsset(assetId, scope);
       }));
       if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
       return {
@@ -435,7 +504,7 @@ export class BackendSession {
         assetNames: Object.fromEntries(assets.map(asset => [asset.id, asset.name])),
       };
     } catch (error) {
-      if (epoch === this.epoch) this.block(error);
+      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) this.block(error);
       throw error;
     }
   }
@@ -531,6 +600,153 @@ export class BackendSession {
   setDraft(scene: Scene): void {
     this.update({ draft: sceneSchema.parse(scene), dirty: true, localRevision: this.snapshot.localRevision + 1 });
   }
+  private proposalState(scene: Scene): EditorState {
+    const parsed = sceneSchema.parse(scene);
+    const lease = this.writableLease();
+    if (this.snapshot.project?.id !== lease.projectId || this.snapshot.revision === null) throw new SceneApiError("CLOUD_WRITE_BLOCKED", 409, null);
+    // Synchronize an edit that has not yet reached the React draft effect. Equal
+    // snapshots must not invalidate a proposal merely because it was previewed.
+    if (canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed);
+    return { projectId: lease.projectId, sessionId: lease.sessionId, generation: lease.generation,
+      expectedRevision: this.snapshot.revision, localRevision: this.snapshot.localRevision, scene: parsed };
+  }
+  private assertProposalContext(state: EditorState): void {
+    if (!this.isCurrentRequestScope({ projectId: state.projectId, lease: state })) throw new SceneApiError("STALE_PROPOSAL", 409, null);
+    const lease = this.writableLease();
+    if (lease.projectId !== state.projectId || lease.sessionId !== state.sessionId || lease.generation !== state.generation ||
+        this.snapshot.project?.id !== state.projectId || this.snapshot.revision !== state.expectedRevision ||
+        this.snapshot.localRevision !== state.localRevision || canonical(this.snapshot.draft) !== canonical(state.scene)) {
+      throw new SceneApiError("STALE_PROPOSAL", 409, null);
+    }
+  }
+  /** Generate a preview only. Requests never change or save the scene. */
+  async requestProposal(input: SceneProposalInput): Promise<SceneProposal> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const parsed = sceneSchema.parse(input.scene);
+    if (input.mode === "layout" && parsed.objects.length > 0) throw new SceneApiError("LAYOUT_REQUIRES_EMPTY_SCENE", 422, null);
+    const state = this.proposalState(parsed);
+    const epoch = this.epoch;
+    const requestInput = { projectId: state.projectId, sessionId: state.sessionId, generation: state.generation,
+      expectedRevision: state.expectedRevision, localRevision: state.localRevision, scene: parsed,
+      instruction: input.prompt.trim(), mode: input.mode, selectedIds: [...new Set(input.selectedIds ?? [])].sort() };
+    const fingerprint = canonical(requestInput);
+    const contextKey = `${epoch}:${fingerprint}`;
+    let requestId = input.requestId ?? this.proposalRequestIds.get(contextKey) ?? crypto.randomUUID();
+    let key = `${epoch}:${requestId}`;
+    let existing = this.proposalRequests.get(key);
+    if (existing?.result && (existing.result.applied_at !== null || Date.parse(existing.result.expires_at) <= Date.now())) {
+      // A new user invocation may regenerate a definitively completed proposal
+      // that can no longer be applied. Uncertain failures have no result and
+      // retain their original idempotency key instead.
+      this.proposalRequests.delete(key);
+      for (const [context, id] of this.proposalRequestIds) if (id === requestId) this.proposalRequestIds.delete(context);
+      requestId = crypto.randomUUID();
+      key = `${epoch}:${requestId}`;
+      existing = undefined;
+    }
+    const body = proposalRequestSchema.parse({ ...requestInput, requestId });
+    if (body.selectedIds.some(id => !body.scene.objects.some(object => object.id === id))) throw new SceneApiError("OBJECT_NOT_FOUND", 422, null);
+    this.proposalRequestIds.set(contextKey, requestId);
+    if (existing && existing.fingerprint !== fingerprint) throw new SceneApiError("IDEMPOTENCY_CONFLICT", 409, null);
+    if (existing?.promise) {
+      const proposal = await existing.promise;
+      await assertFreshProposal(proposal, state);
+      this.assertProposalContext(state);
+      return proposal;
+    }
+    if (this.proposalPending) throw new SceneApiError("AI_BUSY", 409, null);
+    const record: PaidRequest<SceneProposal> = { fingerprint };
+    this.proposalRequests.set(key, record);
+    this.proposalPending = true;
+    record.promise = (async () => {
+      try {
+        // Keep renewal running during an AI call: generation may exceed 30 seconds.
+        const proposal = proposalResponseSchema.parse(await this.request<unknown>(`/projects/${state.projectId}/proposals`, "POST", body, { projectId: state.projectId, lease: state }, false));
+        if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+        await assertFreshProposal(proposal, state);
+        this.assertProposalContext(state);
+        if (canonical(proposal.base_scene) !== canonical(state.scene)) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+        record.result = proposal;
+        return proposal;
+      } catch (error) {
+        // Keep the idempotency key after failure. A user retry reuses it; no
+        // automatic retry may reserve a second paid request.
+        delete record.promise;
+        throw error;
+      } finally { this.proposalPending = false; }
+    })();
+    return record.promise;
+  }
+  async applySceneProposal(proposal: SceneProposal, scene: Scene): Promise<ApplySceneProposalResult> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const state = this.proposalState(scene);
+    const epoch = this.epoch;
+    const scope: RequestScope = { projectId: state.projectId, lease: state };
+    this.operationPending = true;
+    try {
+      const checked = proposalResponseSchema.parse(proposal);
+      await assertFreshProposal(checked, state);
+      this.assertProposalContext(state);
+      this.update({ status: "saving", error: null });
+      const result = applyProposalResponseSchema.parse(await this.request<unknown>(`/projects/${state.projectId}/proposals/apply`, "POST", {
+        proposalId: checked.id, sessionId: state.sessionId, generation: state.generation,
+        expectedRevision: state.expectedRevision, localRevision: state.localRevision, currentScene: state.scene,
+      }, scope));
+      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+      if (!this.isCurrentRequestScope(scope)) throw new SceneApiError("STALE_PROPOSAL", 409, null);
+      if (result.id !== state.projectId || result.undoGroup !== checked.id || result.revision !== state.expectedRevision + 1 ||
+          canonical(result.scene) !== canonical(checked.candidate) || canonical(result.previousScene) !== canonical(checked.base_scene)) {
+        throw new SceneApiError("INVALID_RESPONSE", 502, null);
+      }
+      for (const record of this.proposalRequests.values()) {
+        if (record.result?.id === checked.id) record.result = { ...record.result, applied_at: result.updatedAt };
+      }
+      const acceptedLocally = !this.snapshot.writeBlocked && this.snapshot.localRevision === state.localRevision &&
+        canonical(this.snapshot.draft) === canonical(state.scene) && this.snapshot.lease?.generation === state.generation;
+      this.update({ revision: result.revision, project: { ...this.snapshot.project!, revision: result.revision, scene: result.scene },
+        ...(this.snapshot.lease ? { lease: { ...this.snapshot.lease, revision: result.revision } } : {}),
+        ...(acceptedLocally ? { draft: result.scene, dirty: false, localRevision: this.snapshot.localRevision + 1 } : { dirty: true }),
+        ...(!this.snapshot.writeBlocked ? { status: "editing", error: null } : {}),
+      });
+      return { ...result, acceptedLocally };
+    } catch (error) {
+      // A stale preview is a local validation failure, not a loss of editing rights.
+      if (epoch === this.epoch && this.isCurrentRequestScope(scope) && !(error instanceof SceneApiError && error.code === "STALE_PROPOSAL")) this.block(error);
+      throw error;
+    } finally { this.operationPending = false; }
+  }
+  /** Only text-to-single-object generation is currently supported by /jobs. */
+  async createGenerationJob(prompt: string, requestId: string): Promise<GenerationJob> {
+    const body = z.object({ prompt: z.string().trim().min(1).max(1024), requestId: uuid }).parse({ prompt, requestId });
+    const key = `${this.epoch}:${body.requestId}`;
+    const existing = this.generationRequests.get(key);
+    if (existing && existing.fingerprint !== body.prompt) throw new SceneApiError("IDEMPOTENCY_CONFLICT", 409, null);
+    if (existing?.promise) return existing.promise;
+    if (this.generationPending) throw new SceneApiError("GENERATION_BUSY", 409, null);
+    const record: PaidRequest<GenerationJob> = { fingerprint: body.prompt };
+    this.generationRequests.set(key, record);
+    this.generationPending = true;
+    record.promise = (async () => {
+      try { return generationJobSchema.parse(await this.request<unknown>("/jobs", "POST", body)); }
+      catch (error) { delete record.promise; throw error; }
+      finally { this.generationPending = false; }
+    })();
+    return record.promise;
+  }
+  async getGenerationJob(id: string): Promise<GenerationJob> {
+    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}`));
+    if (job.id !== id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return job;
+  }
+  async listGenerationJobs(): Promise<GenerationJob[]> {
+    return z.array(generationJobSchema).parse(await this.request<unknown>("/jobs"));
+  }
+  /** Call after saving a scene containing asset_id; the server verifies that reference. */
+  async markGenerationAdded(id: string, projectId: string): Promise<GenerationJob> {
+    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}/added`, "POST", { projectId: uuid.parse(projectId) }, this.captureRequestScope(projectId)));
+    if (job.id !== id || job.state !== "added") throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return job;
+  }
   async saveScene(scene: Scene): Promise<SaveResult> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     this.setDraft(scene);
@@ -548,48 +764,6 @@ export class BackendSession {
     } catch (error) {
       this.block(error);
       throw error;
-    } finally { this.operationPending = false; }
-  }
-  private editorState(): EditorState {
-    const lease = this.writableLease();
-    if (!this.snapshot.draft || this.snapshot.revision === null) throw new SceneApiError("CLOUD_WRITE_BLOCKED", 409, null);
-    return { projectId: lease.projectId, sessionId: lease.sessionId, generation: lease.generation,
-      expectedRevision: this.snapshot.revision, localRevision: this.snapshot.localRevision, scene: this.snapshot.draft };
-  }
-  async generateProposal(instruction: string, selectedIds: string[]): Promise<AssistantProposal> {
-    if (this.proposing || this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
-    const state = this.editorState();
-    const input = proposalRequestSchema.parse({ ...state, requestId: crypto.randomUUID(), instruction,
-      mode: state.scene.objects.length ? "modify" : "layout", selectedIds });
-    this.proposing = true;
-    this.update({ error: null });
-    try {
-      const result = await this.request<AssistantProposal>(`/projects/${state.projectId}/proposals`, "POST", input, false);
-      sceneSchema.parse(result.candidate);
-      if (typeof result.explanation !== "string" || !Array.isArray(result.warnings) || !Number.isFinite(Date.parse(result.expires_at))) throw new SceneApiError("INVALID_RESPONSE", 502, null);
-      await assertFreshProposal(result, this.editorState());
-      return result;
-    } finally { this.proposing = false; }
-  }
-  async applyProposal(proposal: AssistantProposal): Promise<AppliedProposal> {
-    if (this.operationPending || this.proposing) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
-    const state = this.editorState();
-    this.operationPending = true;
-    try {
-      await assertFreshProposal(proposal, state);
-      const current = this.editorState();
-      if (current.localRevision !== state.localRevision || current.expectedRevision !== state.expectedRevision) throw new SceneApiError("STALE_PROPOSAL", 409, null);
-      const result = await this.request<AppliedProposal>(`/projects/${state.projectId}/proposals/apply`, "POST", {
-        proposalId: proposal.id, sessionId: state.sessionId, generation: state.generation,
-        expectedRevision: state.expectedRevision, localRevision: state.localRevision, currentScene: state.scene,
-      });
-      const saved = sceneSchema.parse(result.scene);
-      const unchanged = this.snapshot.localRevision === state.localRevision;
-      this.update({ revision: result.revision, lease: { ...this.snapshot.lease!, revision: result.revision },
-        project: { ...this.snapshot.project!, scene: saved, revision: result.revision },
-        ...(unchanged ? { draft: saved, dirty: false, localRevision: state.localRevision + 1 } : {}),
-        ...(!this.snapshot.writeBlocked ? { status: "editing", error: null } : {}) });
-      return { ...result, scene: saved };
     } finally { this.operationPending = false; }
   }
   /** Stop timers and invalidate in-flight responses; never discard the caller's editor draft. */
