@@ -1,6 +1,4 @@
 .cr-brief { color:#34483e; }
-.cr-heading { margin-bottom:22px; }
-.cr-heading h2 { margin:0; font-size:23px; font-weight:550; letter-spacing:-.04em; }
 .cr-label { display:block; margin:14px 0 7px; font-size:12px; font-weight:550; }
 .cr-label>span { margin-left:5px; color:#8a9083; font-size:10px; font-weight:400; }
 .cr-label input,.cr-label textarea,.cr-label select { display:block; width:100%; margin-top:7px; border:1px solid #dfe3d7; border-radius:8px; padding:10px 11px; background:#fcfcf8; color:#33453b; font:inherit; font-weight:400; line-height:1.65; outline:none; }
@@ -72,7 +70,6 @@
   .cr-chat { width:min(360px,calc(100vw - 24px)); height:min(530px,calc(100dvh - 136px)); }
   .cr-assistant.has-properties:not(.is-open) { bottom:calc(53dvh + 12px); }
   .cr-assistant-launcher { font-size:11px; min-height:41px; }
-  .cr-heading h2 { font-size:21px; }
 }
 @media (prefers-reduced-motion:reduce) { .cr-spin { animation:none; } }
 

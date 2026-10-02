@@ -522,7 +522,7 @@
 .sc-library-tabs button.is-active { color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #0e7c7833; font-weight: 600; }
 .sc-library-content { padding: 22px 17px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #bac6ce transparent; }
 .sc-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
-.sc-section-heading h2 { margin: 0; font-size: 16px; font-weight: 500; letter-spacing: -.4px; }
+.sc-section-heading h2 { margin: 0; color: var(--sc-ink); font-size: 16px; font-weight: 500; letter-spacing: -.4px; }
 .sc-section-heading p { font-size: 11px; color: var(--sc-muted); margin: 6px 0 0; }
 .sc-count { font-size: 10px; background: #e8edf1; color: #53606a; padding: 3px 7px; border-radius: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sc-notes::placeholder { color: var(--sc-muted); }
