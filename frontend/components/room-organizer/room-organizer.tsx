@@ -89,7 +89,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, onShowIntro, isActive = true }: { controller?: BackendSession; onShowIntro?: () => void; isActive?: boolean } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, onShowIntro: _onShowIntro, isActive = true }: { controller?: BackendSession; onShowIntro?: () => void; isActive?: boolean } = {}): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   useEffect(() => controller.retain(), [controller]);
@@ -1094,7 +1094,7 @@ export function RoomOrganizer({ controller: providedController, onShowIntro, isA
     <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <a className="sc-brand" href="#introduction" onClick={event => { event.preventDefault(); onShowIntro?.(); }} aria-label="Scendance 幕景 · 返回介绍页"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.3.0</small></div></a>
+          <a className="sc-brand" href="http://127.0.0.1:8766/" aria-label="Scendance 幕景 · 返回官网"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.3.0</small></div></a>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
