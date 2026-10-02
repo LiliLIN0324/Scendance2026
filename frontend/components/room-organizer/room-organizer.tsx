@@ -2,8 +2,8 @@
 
 import { ArrowUpRight, Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BrandMark } from '../brand-mark';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
+import { BrandMark } from '../brand-mark';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { useCameraPresets } from './hooks/use-camera-presets';

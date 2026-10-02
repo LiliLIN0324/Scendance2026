@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { BrandMark } from '@/components/brand-mark';
@@ -38,7 +39,7 @@ export default function AuthCallbackPage(): JSX.Element {
       <p className="sc-auth-status" role={error ? 'alert' : 'status'}>
         {error || (cloud.user ? '已验证，正在进入工作台…' : '正在确认邮箱，准备你的工作室…')}
       </p>
-      {error && <a href="/">返回介绍页</a>}
+      {error && <Link href="/">返回介绍页</Link>}
     </section>
   </main>;
 }

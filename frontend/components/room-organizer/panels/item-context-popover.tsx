@@ -4,8 +4,8 @@ import { Copy, Lock, RotateCcw, Trash2, Unlock, X } from 'lucide-react';
 import { useState } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { onlineModelThumb } from '../lib/online-models';
-import type { FurnitureItem } from '../lib/types';
 import { MaterialGlyph, NumberField } from './scendance-workspace';
+import type { FurnitureItem } from '../lib/types';
 
 export interface ItemContextPopoverProps {
   hasCollision: boolean;
@@ -39,6 +39,8 @@ function SelectedPreview({ item }: { item: FurnitureItem }): JSX.Element {
   const [failed, setFailed] = useState(false);
   const thumb = item.source === 'public_library' ? onlineModelThumb(item.glbUrl) : '';
   if (!thumb || failed) return <MaterialGlyph materialId={item.materialId} color={item.color}/>;
+  // A catalogue thumbnail straight from the CDN; next/image cannot optimise a remote URL here.
+  // eslint-disable-next-line @next/next/no-img-element
   return <img className="sc-selected-thumb" src={thumb} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)}/>;
 }
 
