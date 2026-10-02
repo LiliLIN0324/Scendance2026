@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/lib/auth-provider';
 import { createBackendSession, useBackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -10,7 +11,8 @@ import type { RoomLayout } from '../lib/types';
 interface Props { layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; selectedIds?: string[]; onApplyLayout?: (layout: RoomLayout) => void }
 
 export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayout }: Props): JSX.Element {
-  const [controller] = useState(() => createBackendSession());
+  const auth = useAuth();
+  const [controller] = useState(() => auth?.controller ?? createBackendSession());
   const cloud = useBackendSession(controller);
   const dialog = useRef<HTMLDialogElement>(null);
   const layoutRef = useRef(layout);
@@ -33,7 +35,17 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
   const dirty = fingerprint !== savedFingerprint;
   const bound = !!cloud.project && boundLayout === layout.id && boundLayout === cloud.project.id;
 
+  const userId = cloud.user?.id;
   useEffect(() => controller.retain(), [controller]);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    void Promise.all([controller.listProjects(), controller.listStudios()]).then(([nextProjects, nextStudios]) => {
+      if (cancelled) return;
+      setProjects(nextProjects); setStudios(nextStudios); setStudioId(nextStudios[0]?.id ?? '');
+    }).catch(() => { if (!cancelled) setNotice('工作室加载失败，请点击刷新重试。'); });
+    return () => { cancelled = true; };
+  }, [controller, userId]);
   useEffect(() => {
     if (fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
@@ -102,7 +114,7 @@ export function CloudPanel({ layout, onLoadLayout, selectedIds = [], onApplyLayo
       </div> : !cloud.user ? <form className="sc-cloud-form" onSubmit={event => {
         event.preventDefault(); void run(async () => { try { await controller.signIn(email, password); await refreshProjects(); } finally { setPassword(''); } });
       }}>
-        <p>使用工作室预置账号登录。当前草稿会保留。</p>
+        <p>登录你的工作室。当前草稿会保留。</p>
         <label>邮箱<input type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required /></label>
         <label>密码<input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></label>
         <button className="sc-cloud-primary" disabled={busy} type="submit">{busy ? '正在连接…' : '登录工作室'}</button>

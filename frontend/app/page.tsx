@@ -1,10 +1,14 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
+import { useAuth } from '@/lib/auth-provider';
+import { useBackendSession } from '@/lib/backend-session';
 
 const RoomOrganizer = dynamic(
   () =>
@@ -45,5 +49,12 @@ const RoomOrganizer = dynamic(
 );
 
 export default function Page(): JSX.Element {
+  const auth = useAuth()!;
+  const cloud = useBackendSession(auth.controller);
+  const router = useRouter();
+  useEffect(() => {
+    if (auth.ready && !cloud.user) router.replace('/auth?next=%2F');
+  }, [auth.ready, cloud.user, router]);
+  if (!auth.ready || !cloud.user) return <main className="sc-auth-page"><p role="status">正在打开你的工作室…</p></main>;
   return <RoomOrganizer />;
 }

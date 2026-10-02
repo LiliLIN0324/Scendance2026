@@ -42,7 +42,8 @@ export class VenueRenderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCFSoftShadowMap 自 r186 起弃用，且会被自动降级为 PCFShadowMap，这里直接使用后者。
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#e4e9e5');
