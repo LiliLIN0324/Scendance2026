@@ -100,13 +100,15 @@ export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibra
   }
 
   return <>
-    <label className="sc-search">
-      <Search size={15}/>
-      <input aria-label="搜索线上模型" placeholder={`搜索 ${index.models.length} 个线上模型`} value={query} onChange={event => setQuery(event.target.value)}/>
-    </label>
-    <div className="sc-bucket-rail" role="group" aria-label="线上模型分类">
-      <button type="button" aria-pressed={bucket === ''} className={bucket === '' ? 'is-active' : ''} onClick={() => setBucket('')}>全部 <b>{index.models.length}</b></button>
-      {index.buckets.map(entry => <button key={entry.key} type="button" aria-pressed={bucket === entry.key} className={bucket === entry.key ? 'is-active' : ''} onClick={() => setBucket(entry.key)}>{entry.label} <b>{entry.count}</b></button>)}
+    <div className="sc-material-toolbar">
+      <div className="sc-bucket-rail" role="group" aria-label="线上模型分类">
+        <button type="button" aria-pressed={bucket === ''} className={bucket === '' ? 'is-active' : ''} onClick={() => setBucket('')}>全部 <b>{index.models.length}</b></button>
+        {index.buckets.map(entry => <button key={entry.key} type="button" aria-pressed={bucket === entry.key} className={bucket === entry.key ? 'is-active' : ''} onClick={() => setBucket(entry.key)}>{entry.label} <b>{entry.count}</b></button>)}
+      </div>
+      <label className="sc-search-mini">
+        <Search size={15}/>
+        <input aria-label="搜索线上模型" placeholder="搜索" value={query} onChange={event => setQuery(event.target.value)}/>
+      </label>
     </div>
     {placeError && <p className="sc-warning" role="alert">{placeError}</p>}
     <div className="sc-material-grid">
