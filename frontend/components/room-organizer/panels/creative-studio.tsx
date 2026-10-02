@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUp, Check, Loader2, MessageCircle, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUp, Check, Loader2, MessageCircle, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildAssistantInstruction } from '@/lib/assistant-context';
 import { useBackendSession, type BackendSession, type SceneProposal } from '@/lib/backend-session';
@@ -205,8 +205,11 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
 export function CreativeBriefPanel():JSX.Element {
   const studio=useStudio();
   const update=(patch:Partial<CreativeBrief>)=>studio.setBrief(current=>({...current,...patch}));
+  // One idea at a time, swapped on demand: three stacked articles were mostly noise.
+  const [ideaIndex,setIdeaIndex]=useState(0);
+  const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
   return <div className="cr-brief">
-    <div className="cr-heading"><span className="cr-kicker">FROM BRIEF TO SPACE</span><h2>先说说，你的想法。</h2><p>一份需求，展开成一整个现场。</p></div>
+    <div className="cr-heading"><h2>先说说，你的想法。</h2></div>
     <label className="cr-label">活动类型<select value={studio.brief.event} onChange={e=>update({event:e.target.value})}>{['品牌快闪','露营派对','工作坊','小型黑客松','展览市集','婚礼聚会','其他活动'].map(label=><option key={label}>{label}</option>)}</select></label>
     <label className="cr-label">预计人数<input type="number" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/></label>
     <label className="cr-label">客户需求<textarea aria-label="客户需求" maxLength={1800} rows={5} placeholder="例如：为 24 位客人办一场自然风品牌聚会。希望有帐篷交流区、产品展示和一处让人想拍照的角落……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/></label>
@@ -222,7 +225,7 @@ export function CreativeBriefPanel():JSX.Element {
     <button className="cr-generate" type="button" disabled={studio.busy||!studio.brief.description.trim()} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':'Generate 生成布置方案'}</span></button>
     <p className="cr-hint">生成后先核对提案，再确认应用到 3D 场景。当前服务支持基础布置与修改；帐篷等更多物料和完整创意规划待接入。</p>
     {studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
-    <div className="cr-ideas"><div><h3>可以考虑的布置思路</h3><span>仅供参考</span></div>{IDEA_CARDS.map(idea=><article key={idea.title}><strong>{idea.title}</strong><p>{idea.text}</p></article>)}</div>
+    <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
   </div>;
 }
 
