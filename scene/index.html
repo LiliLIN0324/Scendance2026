@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eef2f6">
+<title>场域 · 模型场景模板</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+<script src="model-library.js" defer></script>
+<script src="main.js" type="module"></script>
+</head>
+<body>
+<div id="shell" class="shell">
+
+  <aside id="model-toolbar" class="model-toolbar" aria-label="模型工具栏">
+    <div class="toolbar-head">
+      <div class="toolbar-title"><strong>模型库</strong><span id="toolbar-count" class="toolbar-badge">—</span></div>
+      <button type="button" id="sidebar-collapse" class="toolbar-collapse" aria-expanded="true" aria-label="收起工具栏">‹</button>
+    </div>
+    <div id="toolbar-tabs" class="toolbar-tabs" role="tablist" aria-label="模型来源">
+      <button type="button" role="tab" data-tab="local" aria-selected="true" class="is-active">本地模型</button>
+      <button type="button" role="tab" data-tab="online" aria-selected="false">线上模型</button>
+    </div>
+    <label class="toolbar-search"><span aria-hidden="true">⌕</span><input id="toolbar-search" type="search" placeholder="搜索模型" aria-label="搜索模型"></label>
+    <div id="toolbar-rail" class="toolbar-rail" role="group" aria-label="模型类别"></div>
+    <div id="toolbar-grid" class="toolbar-grid"></div>
+    <p id="toolbar-status" class="toolbar-status" role="status" hidden></p>
+    <p class="toolbar-hint">拖模型到网格上放置 · 30 个本地模型随包离线可用，234 个线上模型需要联网</p>
+  </aside>
+
+  <main class="stage">
+    <canvas id="scene" tabindex="0" aria-label="三维网格场景：把左侧模型拖进来，点击模型可选中并拖动，拖动空白旋转视角"></canvas>
+
+    <p id="scene-status" class="scene-status" role="status" hidden></p>
+
+    <div class="stage-actions">
+      <button type="button" id="fit-view" title="适应场景">适应视图</button>
+      <button type="button" id="remove-last" title="移除选中的模型">移除选中</button>
+      <button type="button" id="clear-models" title="清空所有模型">清空</button>
+    </div>
+
+    <div id="selection-panel" class="selection-panel" hidden>
+      <div class="selection-info">
+        <span class="selection-eyebrow">已选中 <span id="selection-size">#1</span></span>
+        <strong id="selection-name">—</strong>
+      </div>
+      <p class="selection-tip">按住并拖动可移动 · Delete 删除</p>
+      <button type="button" id="deselect" class="selection-close" aria-label="取消选中">✕</button>
+    </div>
+
+    <p class="stage-help">拖动空白旋转视角 · 滚轮缩放 · 点击模型选中后拖动可移动</p>
+  </main>
+
+  <footer class="stage-footer">
+    <span>模型库 · 3DAssets.dev（CC0 1.0，免署名）</span>
+    <span>固定日光 · 半球补光 · 实时阴影</span>
+  </footer>
+</div>
+</body>
+</html>
