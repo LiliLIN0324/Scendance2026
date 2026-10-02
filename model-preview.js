@@ -11,7 +11,7 @@ const cache=new Map();
 try{
   view=new THREE.WebGLRenderer({canvas,antialias:true});
   view.setPixelRatio(Math.min(devicePixelRatio,2));
-  view.shadowMap.enabled=true;view.shadowMap.type=THREE.PCFSoftShadowMap;
+  view.shadowMap.enabled=true;view.shadowMap.type=THREE.PCFShadowMap;
   view.toneMapping=THREE.ACESFilmicToneMapping;view.toneMappingExposure=1.1;
   scene=new THREE.Scene();scene.background=new THREE.Color('#f1f3f6');
   camera=new THREE.PerspectiveCamera(38,1,.01,100);camera.position.set(3.5,2.7,4.2);
