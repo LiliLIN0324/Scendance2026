@@ -18,7 +18,8 @@ export async function database() {
     grant usage on schema auth,public to service_role; grant select on auth.users to service_role;
     grant usage on schema public to anon,authenticated;
     create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`);
-  for(const file of readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort()) await db.exec(readFileSync(`supabase/migrations/${file}`,'utf8'));
+  const migrations = new URL('../supabase/migrations/', import.meta.url);
+  for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')).sort()) await db.exec(readFileSync(new URL(file,migrations),'utf8'));
   await db.query('insert into auth.users values ($1),($2),($3)',[owner,editor,outsider]);
   await db.query('insert into scene_private.studios(id,name) values ($1,$2)',[studio,'Test studio']);
   await db.query("insert into scene_private.members values ($1,$2,'owner','Owner'),($1,$3,'editor','Editor')",[studio,owner,editor]);

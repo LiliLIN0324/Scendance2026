@@ -83,6 +83,18 @@ describe('owned GLB model instances', () => {
     expect(createCachedGlbModel({ ...createGlbCatalogItem({ name: '坏模型', url: '/assets/broken.glb', width: 1, depth: 1, height: 1 }), id: 'broken' })).toBeNull();
   });
 
+  it.each(['http://localhost:54321/model.glb', 'http://127.0.0.1:54321/model.glb', 'http://[::1]:54321/model.glb'])('loads a local Supabase model at %s', async url => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response());
+    await ensureGlbAsset('local-supabase', url);
+    expect(getGlbAssetState('local-supabase').status).toBe('ready');
+  });
+
+  it.each(['http://outside.example/model.glb', 'http://localhost.evil.test/model.glb', 'https://user:pass@example.test/model.glb', '//outside.example/model.glb', '/\\outside.example/model.glb', 'javascript:alert(1)', 'https://example.test/model.glb#secret'])('rejects an unsafe model URL before fetching: %s', async url => {
+    const fetcher = vi.spyOn(globalThis, 'fetch');
+    await expect(ensureGlbAsset('unsafe', url)).rejects.toThrow('模型地址无效');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('rejects oversized GLB and external file dependencies', () => {
     expect(() => validateGlbBuffer(new ArrayBuffer(10 * 1024 * 1024 + 1))).toThrow('10 MB');
     const json = new TextEncoder().encode(JSON.stringify({ asset: { version: '2.0' }, buffers: [{ uri: 'https://example.test/data.bin' }] }));
