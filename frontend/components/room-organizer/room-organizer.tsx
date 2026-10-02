@@ -2,11 +2,13 @@
 
 import { ArrowUpRight, Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
+import { useEventAtmosphere } from './hooks/use-event-atmosphere';
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
 import { useHistory } from './hooks/use-history';
 import { useImportExport } from './hooks/use-import-export';
@@ -39,6 +41,7 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { CloudPanel } from './panels/cloud-panel';
+import { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } from './panels/creative-studio';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { PlacementHint } from './panels/placement-hint';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -85,7 +88,10 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer(): JSX.Element {
+export function RoomOrganizer({ controller: providedController, onShowIntro, isActive = true }: { controller?: BackendSession; onShowIntro?: () => void; isActive?: boolean } = {}): JSX.Element {
+  const [fallbackController] = useState(() => providedController ?? createBackendSession());
+  const controller = providedController ?? fallbackController;
+  useEffect(() => controller.retain(), [controller]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvas2DRef = useRef<HTMLCanvasElement>(null);
 
@@ -98,7 +104,7 @@ export function RoomOrganizer(): JSX.Element {
   // First-person walkthrough only runs in the 3D view; the 2D top-down renderer
   // has no PointerLockControls. This single signal gates walkthrough-aware
   // behaviour: canvas select/drag/hover, single-key shortcuts and the hook.
-  const walkthroughActive = view.walkthroughMode && !view.view2D;
+  const walkthroughActive = isActive && view.walkthroughMode && !view.view2D;
 
   const playCue = useCallback(
     (cue: SoundCue) => {
@@ -800,7 +806,7 @@ export function RoomOrganizer(): JSX.Element {
     buildingHeight: buildingHeight(layout.floors),
   });
 
-  const { handleScreenshot, handleImport } = useImportExport({
+  const { handleScreenshot } = useImportExport({
     layout,
     actions,
     view2D: view.view2D,
@@ -985,6 +991,7 @@ export function RoomOrganizer(): JSX.Element {
   );
 
   useKeyboardShortcuts({
+    enabled: isActive,
     selectedItem,
     selectedWall,
     hasSignalItems,
@@ -1057,34 +1064,36 @@ export function RoomOrganizer(): JSX.Element {
     clearHistory(layoutStore.getState().layout);
   }, [actions, layout, clearTransientSelection, clearHistory]);
 
-  // Keep the work surface quiet; no residential sky or outdoor scenery.
-  useEffect(() => {
-    const scene = sceneRef.current;
-    const THREE = threeModuleRef.current;
-    if (!isReady || !scene || !THREE) return;
-    const previous = scene.background;
-    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sc-canvas').trim() || '#e8eef1');
-    if (previous && 'dispose' in previous) previous.dispose();
-    invalidate();
-  }, [isReady, sceneRef, threeModuleRef, invalidate]);
+  const onApplyCreative = useCallback((next: RoomLayout) => {
+    commitHistoryNow();
+    snapshotBeforeReplace(layout);
+    actions.applyLayout(next);
+    clearTransientSelection();
+    initiallyFramed.current = false;
+  }, [commitHistoryNow, layout, actions, clearTransientSelection]);
+
+  useEventAtmosphere({ isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
+    lighting: layout.backendLighting ?? 'warm', width: layout.width, depth: layout.height,
+    ceilingHeight: activeStoreyHeight });
 
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
+    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <div className="sc-brand"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>场域</span></strong><small>让每一场活动，有序成形</small></div></div>
+          <a className="sc-brand" href="#introduction" onClick={event => { event.preventDefault(); onShowIntro?.(); }} aria-label="Scendance 场域 · 返回介绍页"><span className="sc-brand-mark"><span/><span/><span/></span><div><strong>Scendance<span>场域</span></strong><small>让每一场活动，有序成形 · v0.2.0</small></div></a>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
             <span className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/>{saveError ? '本地保存失败' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本地验证'}</span>
             <button type="button" className="sc-button sc-screenshot-button" onClick={handleScreenshot} title="导出当前画面"><Camera size={15}/>导出画面</button>
-            <CloudPanel layout={layout} onLoadLayout={onLoadLayout}/>
+            <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout}/>
           </div>
           <button type="button" className="sc-mobile-menu sc-icon-button" aria-label={sidebarCollapsed ? '打开物料面板' : '收起物料面板'} onClick={() => setSidebarCollapsed(current => !current)}>{sidebarCollapsed ? <Menu size={20}/> : <PanelLeftClose size={20}/>}</button>
         </header>
         <main className="sc-workspace">
-          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary placeCatalogItem={placeFromCatalog} onImport={handleImport}/></div>
+          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`}>
       <Viewport
         isReady={isReady}
@@ -1164,7 +1173,9 @@ export function RoomOrganizer(): JSX.Element {
           />}
         </main>
         <footer className="sc-status-bar"><span><Check size={12}/>{activeFloor.items.length} 件物料 · {(layout.width * layout.height).toFixed(0)} m²</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <CreativeAssistant/>
       </div>
+    </CreativeStudioProvider>
     </SelectionProvider>
     </RoomEditorProvider>
   );

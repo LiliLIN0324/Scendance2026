@@ -200,3 +200,21 @@ describe('useKeyboardShortcuts — walkthrough gate (#339)', () => {
     expect(calls()).toEqual(['undo', 'redo']);
   });
 });
+
+
+describe('hidden editor keyboard isolation', () => {
+  afterEach(cleanup);
+  it('ignores delete and undo while hidden and resumes on re-entry', () => {
+    const handlers = makeHandlers();
+    const hook = renderHook(({ enabled }) => useKeyboardShortcuts({ enabled, handlers: handlers as unknown as KeyboardShortcutHandlers,
+      selectedItem: makeItem({ id: 'selected' }), selectedWall: null, hasSignalItems: false,
+    }), { initialProps: { enabled: false } });
+    expect(press('Delete').defaultPrevented).toBe(false);
+    expect(press('z', { metaKey: true }).defaultPrevented).toBe(false);
+    expect(handlers.removeItem).not.toHaveBeenCalled();
+    expect(handlers.undo).not.toHaveBeenCalled();
+    hook.rerender({ enabled: true });
+    press('Delete');
+    expect(handlers.removeItem).toHaveBeenCalledWith('selected');
+  });
+});
