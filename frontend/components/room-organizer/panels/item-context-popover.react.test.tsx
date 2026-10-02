@@ -71,3 +71,31 @@ describe('catalogItemOrigin', () => {
     expect(origin()).toBe('内置活动物料');
   });
 });
+
+describe('selected summary and colour', () => {
+  afterEach(cleanup);
+
+  it('shows an online model’s real thumbnail instead of the stand-in glyph', () => {
+    setup(placed({ source: 'public_library', glbUrl: 'https://cdn.3dassets.dev/assets/33803/v1/model.glb' }));
+    expect(document.querySelector('.sc-selected-thumb')?.getAttribute('src'))
+      .toBe('https://cdn.3dassets.dev/assets/33803/v1/thumb.webp');
+  });
+
+  it('keeps the glyph for a model with no catalogue thumbnail', () => {
+    setup(placed({ source: 'local_sample', glbUrl: '/assets/models/table.glb' }));
+    expect(document.querySelector('.sc-selected-thumb')).toBeNull();
+  });
+
+  it('replaces the unusable colour swatches with a note on a GLB model', () => {
+    setup(placed({ source: 'public_library', glbUrl: 'https://cdn.3dassets.dev/assets/33803/v1/model.glb' }));
+    // Every swatch was disabled for GLB items, so the section was dead UI.
+    expect(document.querySelector('.sc-color-swatches')).toBeNull();
+    expect(screen.getByText('该模型保留自身材质，暂不支持改色。')).toBeTruthy();
+  });
+
+  it('still offers colours for a built-in material', () => {
+    setup(placed({ source: 'builtin', type: 'chair' }));
+    expect(document.querySelector('.sc-color-swatches')).toBeTruthy();
+    expect(document.querySelectorAll('.sc-color-swatches button')).toHaveLength(8);
+  });
+});

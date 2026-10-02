@@ -102,7 +102,6 @@ describe('OnlineModelLibrary', () => {
       width: 0.5,
       depth: 0.6,
       height: 0.9,
-      notes: '线上模型库 · seating-chaise',
     });
   });
 

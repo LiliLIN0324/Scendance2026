@@ -79,7 +79,6 @@ export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibra
         depth: model.depth,
         height: model.height,
         source: 'public_library',
-        notes: `线上模型库 · ${model.slug}`,
       }));
     } catch (error) {
       setPlaceError(error instanceof Error ? error.message : '该模型未能下载，请重试或换一个。');
