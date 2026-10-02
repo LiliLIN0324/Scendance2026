@@ -1,6 +1,6 @@
 # 幕景 Scendance · 活动场地工作台
 
-当前前端版本：**v0.4.0**（上一版 v0.3.0）。前端按 v0.4.1、v0.4.2 / v0.5.0 继续递增，后端独立维护版本。上游项目的原始许可与来源继续保留。
+当前前端版本：**v0.4.1**（上一版 v0.4.0）。前端按 v0.4.2 / v0.5.0 继续递增，后端独立维护版本。上游项目的原始许可与来源继续保留。
 
 前端首版基于 PLAN 指定的 `threejs-sims-house-builder` 提交 `ab64647640a493657929246d62a2a37ebfc0ed42` 定向改造，使用 Next.js 静态导出、React、TypeScript、Three.js、Zustand。上游 MIT 许可见 [UPSTREAM-LICENSE](UPSTREAM-LICENSE)。原体育馆展示页仍在仓库根目录。
 

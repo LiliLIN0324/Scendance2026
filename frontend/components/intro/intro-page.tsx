@@ -122,7 +122,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
     <main className="sc-intro">
       <header className="sc-intro-header">
         <div className="sc-intro-brand"><span className="sc-intro-brand-icon" aria-hidden="true"><Layers3 size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></div>
-        <span className="sc-intro-version">活动空间工作台 <span>v0.3.0</span></span>
+        <span className="sc-intro-version">活动空间工作台 <span>v0.4.1</span></span>
       </header>
 
       <div className="sc-intro-content">
