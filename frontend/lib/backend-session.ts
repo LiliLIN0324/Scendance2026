@@ -15,7 +15,7 @@ export interface BackendConfig {
   error: string | null;
 }
 
-/** Only public configuration belongs in a browser bundle. Tokens stay in memory. */
+/** Only public configuration belongs in a browser bundle. Auth tokens are stored per tab; lease identities are never persisted. */
 export function getBackendConfig(input?: { url?: string; anonKey?: string }): BackendConfig {
   const url = (input?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
   const anonKey = (input?.anonKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
@@ -122,7 +122,7 @@ export class BackendSession {
   private lifecycle = 0;
   private readonly client: ReturnType<typeof createSceneClient>;
 
-  constructor(config: BackendConfig = getBackendConfig()) {
+  constructor(config: BackendConfig = getBackendConfig(), private readonly storage?: Storage) {
     this.config = config;
     // Never persist this in local/sessionStorage: duplicated tabs must not share a lease identity.
     const sessionId = crypto.randomUUID();
@@ -183,7 +183,87 @@ export class BackendSession {
   }
   private acceptAuth(result: AuthResponse) {
     this.tokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: result.expires_at ? result.expires_at * 1000 : Date.now() + result.expires_in * 1000 };
+    this.persistTokens();
     this.update({ user: result.user });
+  }
+  private persistTokens() {
+    try {
+      const key = `scendance:auth:${this.config.url}`;
+      if (this.tokens) this.storage?.setItem(key, JSON.stringify(this.tokens));
+      else this.storage?.removeItem(key);
+    } catch { /* Storage restrictions should not prevent the current sign-in. */ }
+  }
+  async restoreSession(): Promise<void> {
+    if (!this.config.configured || this.tokens) return;
+    let stored: Tokens | null = null;
+    try { stored = JSON.parse(this.storage?.getItem(`scendance:auth:${this.config.url}`) ?? "null"); } catch { return; }
+    if (!stored?.access || !stored.refresh || !Number.isFinite(stored.expiresAt)) return;
+    const epoch = this.epoch;
+    try {
+      if (stored.expiresAt <= Date.now() + 30_000) {
+        const result = await this.authRequest("refresh_token", { refresh_token: stored.refresh });
+        if (epoch !== this.epoch) return;
+        this.acceptAuth(result);
+      } else {
+        const user = await this.verifyUser(stored.access);
+        if (epoch !== this.epoch) return;
+        this.tokens = stored;
+        this.update({ user });
+      }
+      this.update({ status: "ready", error: null });
+    } catch (error) {
+      if (epoch !== this.epoch) return;
+      this.tokens = null;
+      // Keep the saved session on a transient network failure so a reload can retry.
+      if (error instanceof SceneApiError && error.code === "UNAUTHENTICATED") this.persistTokens();
+      this.block(error);
+    }
+  }
+  private async verifyUser(access: string): Promise<BackendUser> {
+    const response = await fetch(`${this.config.url}/auth/v1/user`, {
+      headers: { apikey: this.config.anonKey, Authorization: `Bearer ${access}` }, cache: "no-store",
+    });
+    if (!response.ok) throw new SceneApiError(response.status === 401 || response.status === 403 ? "UNAUTHENTICATED" : "NETWORK_ERROR", response.status, null);
+    const user = await response.json() as BackendUser;
+    if (!user.id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return user;
+  }
+  async acceptCallback(hash: string): Promise<void> {
+    const values = new URLSearchParams(hash.replace(/^#/, ""));
+    if (values.has("error")) throw new Error("验证链接已失效，请返回登录页重新注册或登录。");
+    const access = values.get("access_token"), refresh = values.get("refresh_token");
+    const expires = Number(values.get("expires_in"));
+    if (!access || !refresh || !Number.isFinite(expires) || expires <= 0) throw new Error("验证链接不完整，请重新打开邮件中的链接。");
+    const epoch = this.epoch;
+    const user = await this.verifyUser(access);
+    if (epoch !== this.epoch) return;
+    this.acceptAuth({ access_token: access, refresh_token: refresh, expires_in: expires, user });
+    this.update({ status: "ready", error: null });
+  }
+  async signUp(email: string, password: string, displayName: string, redirectTo: string): Promise<boolean> {
+    this.requireConfig();
+    const response = await fetch(`${this.config.url}/auth/v1/signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
+      method: "POST", headers: { apikey: this.config.anonKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } }), cache: "no-store",
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const messages: Record<string, string> = {
+        user_already_exists: "该邮箱已注册，请切换到登录。",
+        weak_password: "请使用至少 12 位、更难猜测的密码。",
+        email_address_invalid: "请输入有效的邮箱地址。",
+        over_email_send_rate_limit: "发送邮件过于频繁，请稍后再试。",
+        email_address_not_authorized: "验证邮件服务尚未开放，请联系管理员。",
+        signup_disabled: "注册暂未开放，请稍后再试。",
+      };
+      throw new Error(messages[result.code ?? result.error_code] ?? "注册失败，请稍后重试。");
+    }
+    if (result.access_token && result.refresh_token && result.user?.id && Number.isFinite(result.expires_in)) {
+      this.acceptAuth(result);
+      this.update({ status: "ready", error: null });
+      return true;
+    }
+    return false;
   }
   private async accessToken(): Promise<string | null> {
     if (!this.tokens) return null;
@@ -210,6 +290,7 @@ export class BackendSession {
       if (epoch === this.epoch) {
         if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
           this.tokens = null;
+          this.persistTokens();
           this.update({ user: null });
         }
         // Any uncertain response stops cloud writes; never retry a save automatically.
@@ -243,6 +324,7 @@ export class BackendSession {
     const token = this.tokens?.access;
     ++this.epoch;
     this.tokens = null;
+    this.persistTokens();
     this.stopRenewal();
     this.update({ user: null, lease: null, status: this.config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null });
     if (token) {
@@ -450,7 +532,11 @@ export class BackendSession {
   }
 }
 
-export function createBackendSession(config?: BackendConfig): BackendSession { return new BackendSession(config); }
+export function createBackendSession(config?: BackendConfig): BackendSession {
+  let storage: Storage | undefined;
+  try { if (typeof window !== "undefined") storage = window.sessionStorage; } catch { /* Memory-only fallback. */ }
+  return new BackendSession(config, storage);
+}
 export function useBackendSession(controller: BackendSession): BackendSnapshot {
   return useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
