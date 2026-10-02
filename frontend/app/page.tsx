@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IntroPage } from '@/components/intro/intro-page';
 import {
   clearChunkReloadGuard,
@@ -51,8 +51,15 @@ export default function Page(): JSX.Element {
   const [controller] = useState(() => createBackendSession());
   const [entered, setEntered] = useState(false);
   const [editorStarted, setEditorStarted] = useState(false);
+  const restored = useRef(false);
 
   useEffect(() => controller.retain(), [controller]);
+  useEffect(() => {
+    // A reload must not lose the tab's session, and StrictMode's double effect must not renew twice.
+    if (restored.current) return;
+    restored.current = true;
+    void controller.restoreSession();
+  }, [controller]);
   useEffect(() => {
     // The landing page is ready before the optional editor chunk is requested.
     // Clear the static-export watchdog so reading the introduction cannot reload it.
