@@ -9,11 +9,6 @@
 .cr-upload:hover { background:#edf2e2; border-color:#788f64; }
 .cr-upload strong { color:#5c6f50; font-size:12px; font-weight:500; }
 .cr-upload span { font-size:9px; letter-spacing:.06em; }
-.cr-references { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:10px; }
-.cr-references>div { position:relative; min-width:0; }
-.cr-references img { width:100%; height:64px; object-fit:cover; border-radius:6px; }
-.cr-references button { position:absolute; top:3px; right:3px; width:19px; height:19px; display:grid; place-items:center; color:white; background:#263c34b3; border-radius:50%; border:0; cursor:pointer; }
-.cr-references span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-top:3px; font-size:9px; color:#8c9284; }
 .cr-hint { margin:8px 0 13px; color:#899080; font-size:10px; line-height:1.65; }
 .cr-check { display:flex; align-items:flex-start; gap:9px; margin:18px 0; cursor:pointer; }
 .cr-check input { margin-top:3px; accent-color:#385944; }
