@@ -1,5 +1,6 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect } from 'vitest';
 import { database,owner,editor,outsider } from './fixtures.ts';
+import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 
 describe('generation queue, idempotency, fencing and budget',()=>{
   let f:Awaited<ReturnType<typeof database>>;
@@ -34,6 +35,16 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     expect(await f.jobs(null,'jobs.claim')).toBeNull();
     expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
     await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
+  });
+  it('expires an old queued task before making a paid submission',async()=>{
+    const j=await f.jobs(owner,'jobs.create',input());
+    await f.db.query("update scene_private.generation_jobs set created_at=now()-interval '24 hours' where id=$1",[j.id]);
+    let submissions=0;
+    const fetcher:typeof fetch=async()=>{submissions++;return new Response(JSON.stringify({JobId:'unexpected-paid-task'}));};
+    await processGeneration(f.backend,key=>key==='HUNYUAN_API_KEY'?'test-key':undefined,fetcher);
+    expect(submissions).toBe(0);
+    const expired=await f.jobs(owner,'jobs.get',{id:j.id});
+    expect(expired.state).toBe('failed');expect(expired.error_code).toBe('PROVIDER_TASK_EXPIRED');
   });
   it('requires the current worker token and valid transitions',async()=>{
     const j=await f.jobs(owner,'jobs.create',input()),c=await f.jobs(null,'jobs.claim');

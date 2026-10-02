@@ -12,7 +12,7 @@ export const testAccounts = [
 ];
 export const testPublicKey = 'sb_publishable_local_integration_only';
 
-export async function startLocalServer(port = 0) {
+export async function startLocalServer(port = 0, aiFetcher?: typeof fetch) {
   const fixture = await database();
   const sessions = new Map<string, { id: string; refresh: string }>();
   const files = new Map<string, { bytes: Uint8Array; mime: string }>();
@@ -35,7 +35,8 @@ export async function startLocalServer(port = 0) {
   };
   const api = createApi(backend, key => ({
     ALLOWED_ORIGINS: origins.join(','), PUBLIC_APP_URL: origins[0],
-  })[key]);
+    ...(aiFetcher ? { DEEPSEEK_API_KEY: 'test-provider-only', AI_MAX_REQUEST_CENTS: '40' } : {}),
+  })[key], aiFetcher);
   const server = createServer(async (req, res) => {
     try {
       const address = new URL(req.url ?? '/', url);

@@ -1,15 +1,16 @@
 'use client';
 
 import { Loader2, Plus, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterOnlineModels, formatModelBytes, loadOnlineModels } from '../lib/online-models';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
+import type { BackendSession } from '@/lib/backend-session';
 
 /**
  * The 线上模型 source inside the 物料库 panel: browse the shipped catalogue, then
- * place a piece by downloading its GLB straight from the CDN.
+ * place a piece from the registered cloud library (CDN for local previews).
  *
  * Tiles are click-to-place only. The drag payload identifies a catalogue entry by name
  * (`lib/catalog-drag`), which only resolves against the static in-app catalogues, so
@@ -26,12 +27,13 @@ export function onlineModelDisplayName(model: OnlineModel): string {
 }
 
 export interface OnlineModelLibraryProps {
+  controller?: BackendSession;
   /** True while the active floor is full, so tiles stop pretending to be clickable. */
   disabled?: boolean;
   onAdd(item: CatalogItem): void;
 }
 
-export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, onAdd, controller }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
@@ -41,6 +43,8 @@ export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibra
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   useEffect(() => {
     let alive = true;
@@ -68,22 +72,28 @@ export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibra
     if (disabled || busy) return;
     setBusy(model.slug);
     setPlaceError('');
+    const scope = controller?.getSnapshot();
     try {
-      // Fetch before placing: a CDN the browser cannot reach should say so instead of
+      // Fetch before placing: an unreachable asset should say so instead of
       // adding an invisible object to the scene.
-      await ensureGlbAsset(model.glb, model.glb);
+      const userId = controller?.getSnapshot().user?.id;
+      const url = userId && model.assetId && controller ? (await controller.authorizeAsset(model.assetId)).url : model.glb;
+      await ensureGlbAsset(model.assetId ?? model.glb, url);
+      if (!alive.current) return;
+      if (controller?.getSnapshot().user?.id !== userId || controller?.getSnapshot().project?.id !== scope?.project?.id) throw new Error('项目或登录状态已变化，请重新添加模型。');
       onAdd(createGlbCatalogItem({
         name: model.name,
-        url: model.glb,
+        url,
+        ...(model.assetId ? { assetId: model.assetId } : {}),
         width: model.width,
         depth: model.depth,
         height: model.height,
         source: 'public_library',
       }));
     } catch (error) {
-      setPlaceError(error instanceof Error ? error.message : '该模型未能下载，请重试或换一个。');
+      if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能下载，请重试或换一个。');
     } finally {
-      setBusy(null);
+      if (alive.current) setBusy(null);
     }
   };
 
@@ -130,6 +140,6 @@ export function OnlineModelLibrary({ disabled = false, onAdd }: OnlineModelLibra
     {filtered.length > shown.length && <button type="button" className="sc-button sc-full sc-more" onClick={() => setVisible(current => current + PAGE_SIZE)}>
       再显示 {Math.min(PAGE_SIZE, filtered.length - shown.length)} 个（共 {filtered.length}）
     </button>}
-    <p className="sc-note">缩略图与 glb 直连 CDN，需要可访问外网。点击后先下载再放入场地。</p>
+    <p className="sc-note">模型需要联网加载。点击后先下载再放入场地。</p>
   </>;
 }

@@ -90,7 +90,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, onShowIntro: _onShowIntro, isActive = true }: { controller?: BackendSession; onShowIntro?: () => void; isActive?: boolean } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, isActive = true }: { controller?: BackendSession; isActive?: boolean } = {}): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   useEffect(() => controller.retain(), [controller]);
@@ -1095,7 +1095,7 @@ export function RoomOrganizer({ controller: providedController, onShowIntro: _on
     <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
-          <a className="sc-brand" href="http://127.0.0.1:8766/" aria-label="Scendance 幕景 · 返回官网"><span className="sc-brand-mark"><BrandMark size={36} /></span><div><strong>Scendance<span>幕景</span></strong><small>让每一场活动，有序成形 · v0.4.1</small></div></a>
+          <a className="sc-brand" href="/introduction" aria-label="Scendance 幕景 · 打开官网"><span className="sc-brand-mark"><BrandMark size={23} /></span><div><strong>幕景<span>SCENDANCE</span></strong></div></a>
           <span className="sc-header-divider"/>
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
@@ -1106,7 +1106,7 @@ export function RoomOrganizer({ controller: providedController, onShowIntro: _on
           <button type="button" className="sc-mobile-menu sc-icon-button" aria-label={sidebarCollapsed ? '打开物料面板' : '收起物料面板'} onClick={() => setSidebarCollapsed(current => !current)}>{sidebarCollapsed ? <Menu size={20}/> : <PanelLeftClose size={20}/>}</button>
         </header>
         <main className="sc-workspace">
-          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
+          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`}>
       <Viewport
         isReady={isReady}

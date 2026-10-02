@@ -1,13 +1,13 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { IntroPage } from '@/components/intro/intro-page';
 import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
-import { createBackendSession } from '@/lib/backend-session';
+import { useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
   () =>
@@ -48,18 +48,9 @@ const RoomOrganizer = dynamic(
 );
 
 export default function Page(): JSX.Element {
-  const [controller] = useState(() => createBackendSession());
+  const { controller } = useAuth()!;
   const [entered, setEntered] = useState(false);
   const [editorStarted, setEditorStarted] = useState(false);
-  const restored = useRef(false);
-
-  useEffect(() => controller.retain(), [controller]);
-  useEffect(() => {
-    // A reload must not lose the tab's session, and StrictMode's double effect must not renew twice.
-    if (restored.current) return;
-    restored.current = true;
-    void controller.restoreSession();
-  }, [controller]);
   useEffect(() => {
     // The landing page is ready before the optional editor chunk is requested.
     // Clear the static-export watchdog so reading the introduction cannot reload it.
@@ -79,11 +70,11 @@ export default function Page(): JSX.Element {
   return (
     <>
       {!entered && <IntroPage controller={controller} onEnter={enterEditor} />}
-      {/* Keep in-progress briefs, image URLs, chat and proposals in memory when
-          returning to the introduction. The editor still mounts only on entry. */}
+      {/* The editor mounts on first entry and stays mounted; reopening the landing
+          page needs a fresh load of / (the header logo opens the 官网 instead). */}
       {editorStarted && (
         <div hidden={!entered}>
-          <RoomOrganizer isActive={entered} controller={controller} onShowIntro={() => setEntered(false)} />
+          <RoomOrganizer isActive={entered} controller={controller} />
         </div>
       )}
     </>

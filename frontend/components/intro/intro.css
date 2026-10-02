@@ -42,10 +42,8 @@
 .sc-intro-login-copy { margin: 10px 0 clamp(14px, 2.3vh, 24px); font-size: 12px; color: #87907e; line-height: 1.6; }
 .sc-intro-form { display: grid; }
 /* Sign in / sign up share one card: the toggle swaps the fields, never the page. */
-.sc-intro-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 3px; margin-bottom: clamp(13px, 2vh, 20px); border: 1px solid #e2e6d8; border-radius: 9px; background: #f6f7f0; }
-.sc-intro-mode button { border: 1px solid transparent; border-radius: 6px; background: none; color: #78846c; font-size: 12px; font-family: inherit; padding: 7px 4px; cursor: pointer; }
-.sc-intro-mode button.is-active { color: #35513a; background: #ffffff; border-color: #d7ddcb; font-weight: 600; }
-.sc-intro-mode button:disabled { opacity: .55; cursor: not-allowed; }
+.sc-intro-auth-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 12px 0 18px; font-size: 12px; color: #52634d; }
+.sc-intro-auth-links a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .sc-intro-form label { font-size: 12px; margin-bottom: 8px; color: #5a6b52; }
 .sc-intro-form input { width: 100%; min-width: 0; height: clamp(38px, 5.4vh, 44px); padding: 0 13px; border: 1px solid #dde2d4; border-radius: 7px; background: #fbfcf7; font-size: 13px; color: #2c442f; font-family: inherit; margin-bottom: clamp(11px, 1.7vh, 16px); }
 .sc-intro-form input::placeholder { color: #939a8b; }

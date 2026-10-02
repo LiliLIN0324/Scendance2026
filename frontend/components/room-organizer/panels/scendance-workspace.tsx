@@ -5,8 +5,10 @@ import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { OnlineModelLibrary } from './online-model-library';
 import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
+import type { BackendSession } from '@/lib/backend-session';
 
 interface LibraryProps {
+  controller?: BackendSession;
   onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   creativePanel?: ReactNode;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
@@ -22,7 +24,7 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller }: LibraryProps): JSX.Element {
   const { layout, activeFloor, actions } = useRoomEditor();
   const { selectOnly } = useSelection();
   const [tab, setTab] = useState<'materials' | 'brief' | 'venue'>('materials');
@@ -42,7 +44,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting }
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
-        <OnlineModelLibrary disabled={atLimit} onAdd={addMaterial}/>
+        <OnlineModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
       </>}
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
       {tab === 'brief' && <>{creativePanel}</>}

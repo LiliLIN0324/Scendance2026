@@ -1,8 +1,11 @@
+import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 /** The backend domain is the single wire-format authority. No parallel API schema. */
 import { catalog, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
 import { MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import type { FurnitureItem, RoomLayout } from './types';
+
+const publicLibraryIds = new Set(Object.values(libraryAssetIds));
 
 export class SceneAdapterError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -72,9 +75,10 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
     throw new SceneAdapterError('ENTRANCE_ID_COLLISION', '出入口与物件编号重复，无法无损打开。');
   }
   const items: FurnitureItem[] = scene.objects.map(o => {
+    const minFootprint = o.materialId === 'asset' ? 0.02 : 0.1;
     if (Math.max(o.size.width, o.size.depth, o.size.height) > MAX_ITEM_DIMENSION ||
-        o.size.width < 0.1 || o.size.depth < 0.1 || o.size.height < 0.01) {
-      throw new SceneAdapterError('OBJECT_SIZE_NOT_SUPPORTED', '物件尺寸超出此版编辑器范围（宽深至少 0.1 米、高至少 0.01 米），未打开项目，原尺寸未改动。');
+        o.size.width < minFootprint || o.size.depth < minFootprint || o.size.height < 0.01) {
+      throw new SceneAdapterError('OBJECT_SIZE_NOT_SUPPORTED', `物件尺寸超出此版编辑器范围（宽深至少 ${minFootprint} 米、高至少 0.01 米），未打开项目，原尺寸未改动。`);
     }
     const meta = catalog.find(entry => entry.id === o.materialId);
     return {
@@ -84,7 +88,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
       position: { x: o.position.x - scene.venue.width / 2, z: o.position.z - scene.venue.depth / 2 },
       rotation: backendDegreesToEditorRadians(o.rotation), color: o.color, icon: icons[o.materialId],
       locked: o.locked, notes: o.notes,
-      ...(o.assetId ? { assetId: o.assetId } : { source: 'builtin' as const }),
+      ...(o.assetId ? { assetId: o.assetId, ...(publicLibraryIds.has(o.assetId) ? { source: 'public_library' as const } : {}) } : { source: 'builtin' as const }),
       ...(o.assetId && options.assetUrls?.[o.assetId] ? { glbUrl: options.assetUrls[o.assetId] } : {}),
     };
   });
@@ -123,14 +127,15 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
   const objects = floor.items.filter(i => !i.venueEntranceId).map(item => {
     if (!item.position) throw new SceneAdapterError('POSITION_MISSING', `物件“${item.name}”缺少位置，无法保存。`);
     if (item.mirrored) throw new SceneAdapterError('MIRROR_NOT_SUPPORTED', '云端暂不支持镜像物件，不能丢失镜像状态。');
-    if ((item.type === 'glb-asset' || item.glbUrl) && !item.assetId) {
+    const assetId = item.assetId ?? (libraryAssetIds as Record<string,string>)[item.glbUrl ?? ''];
+    if ((item.type === 'glb-asset' || item.glbUrl) && !assetId) {
       throw new SceneAdapterError('LOCAL_ASSET_NOT_UPLOADED', '本地 GLB 样例尚未归档到云端，不能作为云资产保存。');
     }
     const inferred = Object.entries(rendererTypes).find(([, type]) => type === item.type)?.[0];
     const materialId = item.materialId ?? inferred;
     if (!materialId) throw new SceneAdapterError('MATERIAL_NOT_SUPPORTED', `物料“${item.name}”不在活动目录中，无法保存。`);
     return {
-      id: item.id, materialId, ...(item.assetId ? { assetId: item.assetId } : {}),
+      id: item.id, materialId, ...(assetId ? { assetId } : {}),
       position: { x: item.position.x + layout.width / 2, z: item.position.z + layout.height / 2 },
       rotation: editorRadiansToBackendDegrees(item.rotation ?? 0),
       size: { width: item.width, depth: item.depth, height: item.height }, color: item.color,

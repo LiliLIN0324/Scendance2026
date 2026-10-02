@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
@@ -71,6 +72,21 @@ describe('onlineModelDisplayName', () => {
 });
 
 describe('OnlineModelLibrary', () => {
+  it('authorizes a registered model for a signed-in user and passes its real ID into the scene', async () => {
+    const assetId = '10000000-0000-4000-8000-000000000001';
+    vi.mocked(loadOnlineModels).mockResolvedValue(buildOnlineModelIndex([{ ...CATALOGUE[0]!, assetId }]));
+    const controller = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
+    vi.spyOn(controller, 'getSnapshot').mockReturnValue({ ...controller.getSnapshot(), user: { id: 'member' } });
+    const authorize = vi.spyOn(controller, 'authorizeAsset').mockResolvedValue({ id: assetId, name: 'Chair', url: 'https://storage.example/chair.glb?token=short' });
+    const onAdd = vi.fn();
+    render(<OnlineModelLibrary controller={controller} onAdd={onAdd} />);
+    fireEvent.click(await screen.findByRole('button', { name: '添加Lounge Chaise' }));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
+    expect(authorize).toHaveBeenCalledWith(assetId);
+    expect(ensureGlbAsset).toHaveBeenCalledWith(assetId, 'https://storage.example/chair.glb?token=short');
+    expect(onAdd.mock.calls[0]![0]).toMatchObject({ assetId, materialId: 'asset', source: 'public_library' });
+    controller.dispose();
+  });
   it('reports the load, then lists the catalogue', async () => {
     setup();
     expect(screen.getByRole('status').textContent).toContain('正在载入');

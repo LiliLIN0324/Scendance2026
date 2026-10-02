@@ -49,11 +49,10 @@ describe('CloudPanel delayed project replacement', () => {
   it.each(['open', 'acquire', 'create'] as const)('preserves edits made while the %s request is pending', async action => {
     const initialLayout = backendSceneToLayout(scene, { projectId, name: original.name });
     const onLoadLayout = vi.fn();
-    const rendered = render(<CloudPanel layout={initialLayout} onLoadLayout={onLoadLayout} />);
-    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
     queue([other]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
-    fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
+    const rendered = render(<CloudPanel layout={initialLayout} onLoadLayout={onLoadLayout} />);
+    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
     await waitFor(() => expect(screen.getByRole('button', { name: '打开' }).hasAttribute('disabled')).toBe(false));
 
     let finish!: (response: Response) => void;

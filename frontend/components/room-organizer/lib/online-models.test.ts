@@ -16,8 +16,8 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     bytes: 71_752,
     triangles: 1_688,
     downloads: 9,
-    thumb: 'https://cdn.3dassets.dev/assets/33803/v1/thumb.webp',
-    glb: 'https://cdn.3dassets.dev/assets/33803/v1/model.glb',
+    thumb: 'https://cdn.3dassets.dev/assets/999999/v1/thumb.webp',
+    glb: 'https://cdn.3dassets.dev/assets/999999/v1/model.glb',
     page: 'https://3dassets.dev/assets/lounge-chaise',
     ...overrides,
   };
@@ -37,8 +37,8 @@ describe('normalizeOnlineModels', () => {
       bytes: 71_752,
       triangles: 1_688,
       downloads: 9,
-      thumb: 'https://cdn.3dassets.dev/assets/33803/v1/thumb.webp',
-      glb: 'https://cdn.3dassets.dev/assets/33803/v1/model.glb',
+      thumb: 'https://cdn.3dassets.dev/assets/999999/v1/thumb.webp',
+      glb: 'https://cdn.3dassets.dev/assets/999999/v1/model.glb',
       page: 'https://3dassets.dev/assets/lounge-chaise',
     });
   });
@@ -183,14 +183,14 @@ describe('formatModelBytes', () => {
 
 describe('onlineModelThumb', () => {
   it('points at the thumbnail served beside a catalogue GLB', () => {
-    expect(onlineModelThumb('https://cdn.3dassets.dev/assets/33803/v1/model.glb'))
-      .toBe('https://cdn.3dassets.dev/assets/33803/v1/thumb.webp');
+    expect(onlineModelThumb('https://cdn.3dassets.dev/assets/999999/v1/model.glb'))
+      .toBe('https://cdn.3dassets.dev/assets/999999/v1/thumb.webp');
   });
 
   it('returns nothing for anything that is not a catalogue GLB', () => {
     expect(onlineModelThumb('/assets/models/table.glb')).toBe('');
     expect(onlineModelThumb('https://cdn.example.com/a.glb')).toBe('');
-    expect(onlineModelThumb('https://cdn.3dassets.dev/assets/33803/v1/model.glb?v=2')).toBe('');
+    expect(onlineModelThumb('https://cdn.3dassets.dev/assets/999999/v1/model.glb?v=2')).toBe('');
     expect(onlineModelThumb(undefined)).toBe('');
   });
 });
