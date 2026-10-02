@@ -16,9 +16,14 @@ describe('creative brief boundaries', () => {
   it('does not imply image understanding or silently adopt optional ideas', () => {
     const instruction = briefInstruction({ ...INITIAL_BRIEF, description: '要帐篷和签到区' }, 12, 10);
     expect(instruction).toContain('未经客户确认不得自动加入');
-    expect(instruction).toContain('参考图片尚未提交给模型');
+    expect(instruction).toContain('现场照片尚未提交给模型');
     expect(instruction).toContain('不得用桌椅冒充');
     expect(briefInstruction({ ...INITIAL_BRIEF, description: '交流会', allowIdeas: false }, 12, 10)).toContain('不自行扩展');
+  });
+
+  it('carries confirmed venue conditions, style, palette and atmosphere without pretending to read images', () => {
+    const instruction=briefInstruction({...INITIAL_BRIEF,description:'品牌活动',venueConditions:'北侧入口不得遮挡',style:'自然露营',palette:'米白橄榄绿',atmosphere:'温暖夜场'},12,10);
+    for(const text of ['北侧入口不得遮挡','自然露营','米白橄榄绿','温暖夜场','文字输入，非图片识别']) expect(instruction).toContain(text);
   });
 
   it('persists the default warm atmosphere of a local draft', () => {

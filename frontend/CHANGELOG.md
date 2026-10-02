@@ -1,21 +1,28 @@
 # 前端版本记录
 
-前端独立递增：修复使用 v0.2.1、v0.2.2，下一批功能使用 v0.3.0。后端版本不随前端升级。
+前端独立递增：修复使用 v0.3.1、v0.3.2，下一批功能使用 v0.4.0。后端版本不随前端升级。
 
-## 未发布
+## v0.3.1 — 未发布
+
+修复版本，无新功能。上一版把版本线推到 v0.3.0，本版将 v0.3.0 之后的本地改动归到 v0.3.1。
 
 - 品牌统一：全仓「场域」改为「幕景」。`frontend/` 下的实现文案与测试断言同步修改，避免断言失配。
-- 纯重命名，不含新功能，`frontend/` 行为与 v0.2.1 一致；记为 v0.2.2 还是并入 v0.3.0 待定。
-- 仓库根目录静态首页的替换不在 `frontend/` 范围内，见根 `README.md` / `CHANGELOG.md`。
+- 前端阴影类型收口：`use-three-scene.ts` 的 `THREE.PCFSoftShadowMap` 改为 `THREE.PCFShadowMap`。r186 已移除前者，`WebGLShadowMap` 会在首次阴影渲染时告警并把它改写成后者，渲染结果不变（v0.3.0 未包含此修复）。
+- 仓库根目录侧改动，不在 `frontend/` 范围内，详见根 `CHANGELOG.md`：静态首页替换；`renderer-webgl.js` 与 `model-preview.js` 的阴影枚举同步；新增 Windows 开发服务器 `serve.py`。
+- 验证（Node 24.15.0，根与 `frontend/` 均已 `npm ci`）：`npm --prefix frontend test` 1291 通过；`npm test` 54 通过；`tsc --noEmit` 通过。
 
-## v0.2.1 — 2026-10-02
+## v0.3.0 — 2026-10-02
 
-修复版本，无新功能，前端行为与 v0.2.0 一致。
+- 统一页面配色，保留三维优先；增加现有三种灯光预设的实时切换与场景保存。
+- 现场照片可放大、删除、连续选图，校验与跨项目隔离；介绍页往返保留，刷新需重选。
+- 新增可编辑现场条件、风格、配色与氛围；助手使用完整需求、确认决定与近期对话，不截断必需条件。
+- 补齐登录加载/错误/重试验证，以及 v0.3 最新后端交接 MD。
 
-- 前端阴影类型收口：`use-three-scene.ts` 的 `THREE.PCFSoftShadowMap` 改为 `THREE.PCFShadowMap`。r186 已移除前者，`WebGLShadowMap` 会在首次阴影渲染时告警并把它改写成后者，渲染结果不变。
-- 根目录渲染器同步：`renderer-webgl.js` 与 `model-preview.js` 的 `PCFSoftShadowMap` 改为 `PCFShadowMap`（合并 `main`）。
-- 新增 Windows 本地开发服务器 `serve.py`（合并 `main`），覆盖 `.js`、`.mjs`、`.cjs`、`.glb`、`.wasm` 的 MIME 映射。Windows 上 `python -m http.server` 会让 `mimetypes` 把 `.js` 推为 `text/plain`，浏览器对 ES module 的严格 MIME 校验会拒绝加载，页面会停在“正在加载”。
-- 根 `README.md` 运行说明补上 Windows 的 MIME 注意事项。
+- 图片入口明确为“现场照片（选填）”，用于真实场地资料；当前不识别照片、不自动还原场地。
+
+- AI 提案在三维画布呈现临时差异；放弃、过期或草稿改变后清理，预览不保存、不进入撤销历史。
+- 对可靠识别的缺少物料、规格差异作保守提示；未经确认不替换物料。
+- 保留 v0.2.0 的介绍页、图文需求入口、助手、氛围，以及移除 JSON 按钮的产品界面。
 
 ## v0.2.0 — 2026-10-02
 

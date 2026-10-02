@@ -89,7 +89,7 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '举办一场 24 人自然风聚会。' } });
     fireEvent.change(rendered.container.querySelector('input[type="file"]')!, { target: { files: [new File(['image'], 'venue.png', { type: 'image/png' })] } });
-    await screen.findByRole('img', { name: '参考：venue.png' });
+    await screen.findByRole('img', { name: '现场照片：venue.png' });
     fireEvent.click(screen.getByRole('button', { name: '打开幕景助手' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '为活动保留合影区。' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
@@ -103,7 +103,7 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
 
     expect((await screen.findByRole('textbox', { name: '客户需求' }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
-    expect(screen.getByRole('img', { name: '参考：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
+    expect(screen.getByRole('img', { name: '现场照片：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
     expect(screen.getByText('为活动保留合影区。')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement).value).toBe('这条还没有发送。');
     expect(createObjectURL).toHaveBeenCalledOnce();

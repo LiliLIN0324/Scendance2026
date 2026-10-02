@@ -105,7 +105,14 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
       setPassword('');
       onEnter();
     } catch {
-      setError(controller.getSnapshot().error?.message ?? '暂时无法登录，请稍后再试。');
+      const failure = controller.getSnapshot().error;
+      setError(failure?.code === 'NETWORK_ERROR'
+        ? '暂时无法连接登录服务，请稍后重试，也可以先体验本地工作台。'
+        : failure?.code === 'INVALID_RESPONSE'
+          ? '登录服务暂时无法完成验证，请稍后重试。'
+          : failure?.code === 'UNAUTHENTICATED'
+            ? '当前无法登录，请检查账号状态或稍后再试。'
+            : failure?.message ?? '暂时无法登录，请稍后再试。');
     } finally {
       setBusy(false);
     }
@@ -115,21 +122,22 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
     <main className="sc-intro">
       <header className="sc-intro-header">
         <div className="sc-intro-brand"><span className="sc-intro-brand-icon" aria-hidden="true"><Layers3 size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></div>
-        <span className="sc-intro-version">活动空间工作台 <span>v0.2.0</span></span>
+        <span className="sc-intro-version">活动空间工作台 <span>v0.3.0</span></span>
       </header>
 
       <div className="sc-intro-content">
         <section className="sc-intro-story" aria-labelledby="sc-intro-title">
           <p className="sc-intro-eyebrow"><span aria-hidden="true" />让每一个活动想法，都有落脚的地方</p>
           <h1 id="sc-intro-title">先想象一场活动，<br />再让它<span>成为现场。</span></h1>
-          <p className="sc-intro-description">把参考图片、活动需求与空间布置放在一起，<br className="sc-intro-desktop-break" />在三维场景里推敲桌椅、动线和现场氛围。</p>
+          <p className="sc-intro-description">把现场照片、活动需求与空间布置放在一起，<br className="sc-intro-desktop-break" />在三维场景里推敲桌椅、动线和现场氛围。</p>
+          <p className="sc-intro-photo-note">现场照片可选，目前仅在本地预览，不会自动测绘或还原三维场地；场地尺寸请按实测填写。</p>
           <figure className="sc-intro-visual">
             <div className="sc-intro-visual-label"><span aria-hidden="true" />从一个想法，到一个空间</div>
             <EventIllustration />
             <figcaption>活动空间概念示意 · 实际方案由你来布置</figcaption>
           </figure>
           <ol className="sc-intro-steps" aria-label="幕景使用流程">
-            <li><ImagePlus size={18} aria-hidden="true" /><div><span>01 / 描述想法</span><p>带上参考图与活动需求</p></div></li>
+            <li><ImagePlus size={18} aria-hidden="true" /><div><span>01 / 描述想法</span><p>描述需求，可选上传现场照片</p></div></li>
             <li><Box size={18} aria-hidden="true" /><div><span>02 / 布置空间</span><p>在三维画布里调整物料</p></div></li>
             <li><Layers3 size={18} aria-hidden="true" /><div><span>03 / 保存方案</span><p>保存草稿，继续完善细节</p></div></li>
           </ol>
@@ -148,7 +156,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
             </div>
           ) : (
             <>
-              <form className="sc-intro-form" onSubmit={(event) => { void signIn(event); }} aria-busy={busy}>
+              <form className="sc-intro-form" aria-label="工作室登录" onSubmit={(event) => { void signIn(event); }} aria-busy={busy}>
                 <label htmlFor="sc-intro-email">邮箱</label>
                 <input id="sc-intro-email" name="email" type="email" autoComplete="username" placeholder="你的工作室邮箱" value={email} onChange={(event) => setEmail(event.target.value)} disabled={!cloud.configured || busy} required />
                 <label htmlFor="sc-intro-password">密码</label>
@@ -159,7 +167,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
               {!cloud.configured && <p className="sc-intro-offline" role="status">当前可先本地体验。云端登录与 AI 生成将在服务连接后开放。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
               <button className="sc-intro-secondary" type="button" onClick={onEnter} disabled={busy}>先体验本地工作台<ArrowRight size={17} aria-hidden="true" /></button>
-              <p className="sc-intro-local-note">无需账号即可布置空间。本地草稿保存在当前浏览器，可随时继续布置。</p>
+              <p className="sc-intro-local-note">无需账号即可布置空间。场景草稿保存在当前浏览器，现场照片刷新后需重新选择。</p>
             </>
           )}
           <div className="sc-intro-login-footer"><LockKeyhole size={14} aria-hidden="true" /><span>云项目使用工作室账号登录</span></div>

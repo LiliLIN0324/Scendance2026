@@ -28,6 +28,7 @@ let controller: BackendSession;
 let snapshot: BackendSnapshot;
 let layout: RoomLayout;
 const onApply = vi.fn<(next: RoomLayout) => void>();
+const onPreview = vi.fn<(next: RoomLayout | null) => void>();
 const createBitmap = vi.fn();
 const createObjectURL = vi.fn();
 const revokeObjectURL = vi.fn();
@@ -42,7 +43,7 @@ function restoreProperty(object: object, key: string, descriptor: PropertyDescri
 }
 
 function ui(current = layout) {
-  return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply}>
+  return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onPreview={onPreview}>
     <CreativeBriefPanel/><CreativeAssistant/>
   </CreativeStudioProvider>;
 }
@@ -71,6 +72,7 @@ function upload(container: HTMLElement, files: File[]): void {
 
 beforeEach(() => {
   onApply.mockReset();
+  onPreview.mockReset();
   forbiddenFetch.mockClear();
   vi.stubGlobal('fetch', forbiddenFetch);
   createBitmap.mockReset().mockImplementation(async () => ({ width: 1024, height: 768, close: vi.fn() }));
@@ -92,6 +94,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   controller.dispose();
+  vi.useRealTimers();
   expect(forbiddenFetch).not.toHaveBeenCalled();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -101,6 +104,30 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
+  it('requires an explicit decision before generating with a missing round table', async () => {
+    connected();
+    render(ui());
+    fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '需要圆桌和椅子，安排24人交流会' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
+    expect(controller.requestProposal).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole('combobox', { name: '圆桌的处理方式' }), { target: { value: 'table' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /已核对以上选择/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
+    await screen.findByText('方案提案 · 尚未应用');
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('用户明确同意将「圆桌」改用「桌子」') }));
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('does not send missing-asset chat requests as if they were supported', () => {
+    connected();
+    render(ui());
+    fireEvent.click(screen.getByRole('button', { name: '打开幕景助手' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '加入帐篷' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    expect(controller.requestProposal).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/这条消息包含当前物料目录缺项/).length).toBeGreaterThan(0);
+  });
+
   it('moves keyboard focus into the assistant and returns it on Escape', () => {
     render(ui());
     const launch = screen.getByRole('button', { name: '打开幕景助手' });
@@ -129,15 +156,15 @@ describe('creative brief and assistant interaction', () => {
     const rendered = render(ui());
     const file = new File(['image fixture'], 'venue.png', { type: 'image/png' });
     upload(rendered.container, [file]);
-    const image = await screen.findByRole('img', { name: '参考：venue.png' });
+    const image = await screen.findByRole('img', { name: '现场照片：venue.png' });
     expect(image.getAttribute('src')).toBe('blob:local-reference');
-    expect(screen.getByText(/图片当前仅供本机参考；本次生成仅发送文字/)).toBeTruthy();
+    expect(screen.getByText(/目前仅本机预览，尚不识别场地/)).toBeTruthy();
     expect(controller.requestProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
     expect(screen.queryByRole('img')).toBeNull();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-reference');
     upload(rendered.container, [file]);
-    await screen.findByRole('img', { name: '参考：venue.png' });
+    await screen.findByRole('img', { name: '现场照片：venue.png' });
     rendered.unmount();
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
@@ -168,6 +195,7 @@ describe('creative brief and assistant interaction', () => {
     connected();
     render(ui());
     await generatePreview();
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
     expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ mode: 'layout', scene: layoutToBackendScene(layout), prompt: expect.stringContaining('给 24 位来宾') }));
     expect(onApply).not.toHaveBeenCalled();
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
@@ -190,6 +218,7 @@ describe('creative brief and assistant interaction', () => {
     }
     expect(await screen.findByText('场景、需求或编辑权已变化，请重新生成。')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(onPreview).toHaveBeenLastCalledWith(null);
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
   });
@@ -217,6 +246,89 @@ describe('creative brief and assistant interaction', () => {
     await act(async () => { finish(proposal); });
     expect(screen.getByRole('status').textContent).toContain('生成期间方案或需求已变化');
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('automatically clears the canvas preview at expiration without waiting for a confirm click', async () => {
+    connected();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-02T10:00:00Z'));
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({ ...proposal, expires_at: '2026-10-02T10:00:02Z' });
+    render(ui());
+    enterBrief();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' })); });
+    expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy();
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.getByText('提案已过期，请重新生成。')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(onPreview).toHaveBeenLastCalledWith(null);
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('clears the render-only preview when discarded or when its provider unmounts', async () => {
+    connected();
+    const rendered = render(ui());
+    await generatePreview();
+    expect(onPreview.mock.calls.at(-1)?.[0]).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '放弃' }));
+    expect(onPreview).toHaveBeenLastCalledWith(null);
+    expect(onApply).not.toHaveBeenCalled();
+    await generatePreview();
+    expect(onPreview.mock.calls.at(-1)?.[0]).not.toBeNull();
+    rendered.unmount();
+    expect(onPreview).toHaveBeenLastCalledWith(null);
+  });
+
+  it('lists individual overlap and boundary warnings against named objects', async () => {
+    connected();
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({ ...proposal, warnings: [
+      { code: 'OVERLAP', ids: [candidate.objects[0].id] },
+      { code: 'OUT_OF_BOUNDS', ids: [candidate.objects[0].id] },
+    ] });
+    render(ui());
+    await generatePreview();
+    expect(screen.getByText('物件重叠：椅子')).toBeTruthy();
+    expect(screen.getByText('超出场地边界：椅子')).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('context continuity and project isolation', () => {
+  it('carries confirmed venue and design requirements into successive assistant requests', async () => {
+    connected(); render(ui()); enterBrief();
+    fireEvent.change(screen.getByRole('textbox',{name:'已确认的现场条件'}),{target:{value:'北侧入口不得遮挡'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'风格要求'}),{target:{value:'简约现代'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'配色要求'}),{target:{value:'米白橄榄绿'}});
+    fireEvent.change(screen.getByRole('textbox',{name:'氛围要求'}),{target:{value:'温暖聚会'}});
+    fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
+    const send=async(text:string)=>{
+      fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:text}});
+      fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+      await waitFor(()=>expect(screen.getByRole('button',{name:'确认应用'})).toBeTruthy());
+    };
+    await send('把交流区靠近入口');
+    fireEvent.click(screen.getByRole('button',{name:'放弃'}));
+    await send('再留宽一点');
+    const prompt=vi.mocked(controller.requestProposal).mock.calls[1]![0].prompt;
+    for(const text of ['北侧入口不得遮挡','简约现代','米白橄榄绿','温暖聚会','把交流区靠近入口','再留宽一点',proposal.explanation]) expect(prompt).toContain(text);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('clears old brief and conversation on project switch and ignores an old in-flight response', async () => {
+    connected(); const rendered=render(ui()); enterBrief();
+    let finish!:(value:SceneProposal)=>void;
+    vi.mocked(controller.requestProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    fireEvent.click(screen.getByRole('button',{name:'Generate 生成布置方案'}));
+    await waitFor(()=>expect(controller.requestProposal).toHaveBeenCalledOnce());
+    const changed={...layout,id:'10000000-0000-4000-8000-000000000002'};
+    rendered.rerender(ui(changed));
+    expect((screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement).value).toBe('');
+    await act(async()=>{finish(proposal);});
+    expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
+    expect(screen.queryByText(proposal.explanation)).toBeNull();
     expect(onApply).not.toHaveBeenCalled();
   });
 });
