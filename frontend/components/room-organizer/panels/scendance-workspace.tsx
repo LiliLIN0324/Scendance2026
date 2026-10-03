@@ -1,11 +1,10 @@
 'use client';
 
 import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
-import { GeneratedModelLibrary } from './generated-model-library';
 import { OnlineModelLibrary } from './online-model-library';
 import { SceneLayersPanel } from './scene-layers-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -16,7 +15,6 @@ import type { BackendSession } from '@/lib/backend-session';
 interface LibraryProps {
   controller?: BackendSession;
   onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
-  creativePanel?: ReactNode;
   onPreviewMovement?(layout: RoomLayout | null): void;
   onLoadPreset(layout: RoomLayout): void;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
@@ -32,10 +30,10 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller, onLoadPreset, onPreviewMovement }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, onLighting, controller, onLoadPreset, onPreviewMovement }: LibraryProps): JSX.Element {
   const { layout, activeFloor } = useRoomEditor();
   const { selectOnly } = useSelection();
-  const [tab, setTab] = useState<'materials' | 'brief' | 'presets' | 'layers'>('brief');
+  const [tab, setTab] = useState<'materials' | 'presets' | 'layers'>('materials');
   const atLimit = materialCount(activeFloor.items) >= editorItemLimit(layout);
 
   const addMaterial = (item: CatalogItem) => {
@@ -46,17 +44,14 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
 
   return <aside className="sc-library" aria-label="场地工具">
     <div className="sc-library-tabs" role="tablist" aria-label="工作台面板">
-      {([['brief', '需求'], ['presets', '场景预设'], ['materials', '物料库'], ['layers', '图层']] as const).map(([key, label]) =>
+      {([['materials', '物料库'], ['presets', '场景预设'], ['layers', '图层']] as const).map(([key, label]) =>
         <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
         {atLimit && <p className="sc-warning">已达到 {editorItemLimit(layout)} 件物料上限，请先删除部分物料。</p>}
-        <GeneratedModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
         <OnlineModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
       </>}
-      {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
-      {tab === 'brief' && <>{creativePanel}</>}
       {tab === 'layers' && <SceneLayersPanel {...(controller ? { controller } : {})} {...(onPreviewMovement ? { onPreview: onPreviewMovement } : {})}/>}
       {tab === 'presets' && <>
         <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>
