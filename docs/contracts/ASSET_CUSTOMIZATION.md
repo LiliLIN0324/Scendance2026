@@ -16,4 +16,4 @@
 
 确认后仍调用既有 `/projects/:id/proposals/apply`，使用当前 lease / cloud revision / localRevision / scene hash 校验。应用前后正常执行资产权限与结构检查；预览过期、租约或场景变化不会覆盖新编辑。撤销也可沿用既有场景历史。
 
-迁移 `20261003160000_material_variants.sql` 只增加服务端幂等登记表，包裹并委托此前的 scene_rpc，保留已有删除/授权等分支。浏览器角色不获得表/RPC访问权；不新增模型计费条目。部署顺序为先迁移，再 scene-api，最后前端。
+迁移 `20261003160000_material_variants.sql` 只增加服务端幂等登记表，包裹并委托此前的 scene_rpc，保留已有删除/授权等分支。浏览器角色不获得表/RPC访问权；不新增模型计费条目。本轮与生成输入迁移 `20261003161000_generation_inputs.sql` 一起发布：两条迁移按序同事务执行，再依次发布 generation-worker、scene-api、前端，避免旧 worker 处理新图片任务。

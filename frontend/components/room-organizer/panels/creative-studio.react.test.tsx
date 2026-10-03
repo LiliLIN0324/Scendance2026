@@ -8,11 +8,13 @@ import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } 
 import { ensureGlbAsset } from '../three/glb-assets';
 import { CreativeAssistant, CreativeStudioProvider } from './creative-studio';
 import { GeneratedModelLibrary } from './generated-model-library';
+import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
-vi.mock('./material-customization', () => ({ MaterialCustomization: ({ seed }: { seed?: unknown }) => <output data-testid="material-seed">{JSON.stringify(seed ?? null)}</output> }));
+let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
+vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
 const scene: Scene = {
@@ -188,6 +190,22 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button',{name:'场景交付'}));
     expect(screen.getByRole('button',{name:'导出场景 GLB'})).toBeTruthy();
+  });
+  it('tracks the newly applied version so the same instances can restore their parent', async () => {
+    connected();
+    const sourceAssetId='50000000-0000-4000-8000-000000000001',variantAssetId='50000000-0000-4000-8000-000000000002';
+    const base:Scene={...candidate,objects:[{...candidate.objects[0]!,materialId:'asset',assetId:sourceAssetId}]};
+    const current=backendSceneToLayout(base,{projectId,name:'材质测试'});
+    const suggestion={objectIds:[base.objects[0]!.id],sourceAssetId,name:'蓝色椅子',reason:'仅选中实例',scope:'all_materials' as const,changes:{baseColor:'#285fad'}};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,base_scene:base,candidate:base,materialSuggestions:[suggestion]});
+    function Harness(){const [value,setValue]=useState(current);return <CreativeStudioProvider controller={controller} layout={value} onApply={setValue}><CreativeAssistant/></CreativeStudioProvider>;}
+    renderUI(<Harness/>);fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'给椅子换色'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    fireEvent.click(await screen.findByRole('button',{name:'预览材质调整'}));
+    act(()=>materialProps.onApply({...current,floors:current.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,assetId:variantAssetId}))}))}));
+    expect(materialProps.seed).toMatchObject({sourceAssetId:variantAssetId,objectIds:suggestion.objectIds});
+    expect(materialProps.seed!.changes).toBeUndefined();
+    fireEvent.click(screen.getByRole('button',{name:'使用当前选中物件'}));expect(materialProps.seed).toBeUndefined();
   });
 
   it('ignores a late suggestion after the signed-in account changes', async () => {

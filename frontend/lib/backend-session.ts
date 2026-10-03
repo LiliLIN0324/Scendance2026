@@ -3,11 +3,11 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
-import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
-import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
+import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
+import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 export { SceneApiError };
 export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
 export type ReconstructionJob = Pick<z.infer<typeof reconstructionJobSchema>, 'id' | 'state' | 'candidate' | 'issues' | 'error_code'> & { proposal?: SceneProposal | null | undefined };
@@ -841,11 +841,22 @@ export class BackendSession {
     this.requireConfig();
     const scope = this.captureRequestScope(), epoch = this.epoch, token = await this.accessToken();
     if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
-    const response = await fetch(`${this.config.apiUrl}/assets/floorplan`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
-    const result = await response.json();
-    if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
-    if (!response.ok) throw new SceneApiError(result.error?.code ?? 'SOURCE_UPLOAD_FAILED', response.status, result.error?.details);
-    return z.object({ id: uuid }).parse(result);
+    try {
+      const response = await fetch(`${this.config.apiUrl}/assets/floorplan`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
+      if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
+      if (response.status === 401) throw new SceneApiError('UNAUTHENTICATED', 401, null);
+      const result = await response.json();
+      if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
+      if (!response.ok) throw new SceneApiError(result.error?.code ?? 'SOURCE_UPLOAD_FAILED', response.status, result.error?.details);
+      return z.object({ id: uuid }).parse(result);
+    } catch (error) {
+      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
+        if (error instanceof SceneApiError && error.status === 401) {
+          this.tokens = null; this.persistTokens(); this.update({ user: null }); this.block(error);
+        } else this.update({ error: failure(error) });
+      }
+      throw error;
+    }
   }
   async createGenerationJob(prompt: string, requestId: string, options?: Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId'>): Promise<GenerationJob> {
     const parsed = generationRequestSchema.parse({ prompt: prompt.trim(), requestId, ...options });

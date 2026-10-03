@@ -12,12 +12,12 @@ import { briefInstruction, IDEA_CARDS, INITIAL_BRIEF, mergeProposalPresentation,
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
+import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ReconstructionPanel } from './reconstruction-panel';
+import { SceneDeliveryPanel } from './scene-delivery-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import { VenueShapePresets } from './venue-shape-presets';
 import type { ModelGenerationSeed } from './generated-model-library';
-import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
-import { SceneDeliveryPanel } from './scene-delivery-panel';
 import type { RoomLayout } from '../lib/types';
 import './creative-studio.css';
 
@@ -327,6 +327,12 @@ export function CreativeAssistant({ generationPanel }: { generationPanel?: React
     setModelTool('customize');setModelOpened(true);setTab('model');
   }
   const generationContext:GenerationContext={...(sourceAssetId?{sourceAssetId}:{}),sourceObjectIds:sourceAssetId?selectedItems.map(item=>item.id):[],onVariantReady:variant=>previewMaterial({...variant,objectIds:variant.objectIds??[],name:'纹理新版本',reason:'核对纹理与原模型后，仅替换指定物件。',materialScope:'all_materials'})};
+  function applyMaterial(next:RoomLayout):void {
+    const changed=next.floors.flatMap(floor=>floor.items).filter(item=>item.assetId&&sceneItems.some(previous=>previous.id===item.id&&previous.assetId!==item.assetId));
+    studio.onApply(next);
+    if(changed.length&&changed.every(item=>item.assetId===changed[0]!.assetId))previewMaterial({sourceAssetId:changed[0]!.assetId!,objectIds:changed.map(item=>item.id),name:'已更新的物料',reason:'可继续调整或预览恢复父版本。',materialScope:'all_materials'});
+    else setMaterialSeed(undefined);
+  }
   const submit=()=>{if(!draft.trim()||studio.busy)return;const text=draft;setDraft('');void studio.generate(text);};
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
@@ -353,7 +359,7 @@ export function CreativeAssistant({ generationPanel }: { generationPanel?: React
       <div className="cr-model-panel" role="tabpanel" id="agent-panel-model" aria-labelledby="agent-tab-model" hidden={tab!=='model'}>
         <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','新模型'],['customize','材质调整'],['delivery','场景交付']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
         <div hidden={modelTool!=='generate'}>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationSeed?.scope===studio.scope?generationSeed:undefined,generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后，可生成单件 3D 物料。</p>)}</div>
-        {modelOpened&&<div hidden={modelTool!=='customize'}><MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={studio.onApply} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={studio.expanded&&tab==='model'&&modelTool==='customize'}/></div>}
+        {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={studio.expanded&&tab==='model'&&modelTool==='customize'}/></div>}
         {modelTool==='delivery'&&<SceneDeliveryPanel layout={studio.layout} controller={studio.controller}/>}
       </div>
     </section>}

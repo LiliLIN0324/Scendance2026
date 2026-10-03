@@ -209,7 +209,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, seed, sourceAssetId,
   }
 
   function previewVariant(job:GenerationJob){
-    if(!job.asset_id||!job.source_asset_id||!onVariantReady||disabled||cloud.writeBlocked)return;
+    if(!job.asset_id||!job.source_asset_id||!onVariantReady||cloud.writeBlocked)return;
     onVariantReady({sourceAssetId:job.source_asset_id,variantAssetId:job.asset_id,...(sourceAssetId===job.source_asset_id&&sourceObjectIds?{objectIds:[...sourceObjectIds]}:{})});
   }
 
@@ -256,7 +256,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, seed, sourceAssetId,
         <p className="sc-note">尺寸为你设定的场地摆放尺寸，请按实际物料核对。加入后使用云端保存。</p>
         <ul className="sc-generated-tasks">{jobs.map(job => <li key={job.id}>
           <strong>{job.prompt}</strong><span role="status">{labels[job.state]}</span>
-          {['ready','added'].includes(job.state)&&job.kind==='texture'&&<button type="button" className="sc-button" disabled={!projectId||cloud.writeBlocked||disabled||!onVariantReady} onClick={()=>previewVariant(job)}>预览纹理版本</button>}
+          {['ready','added'].includes(job.state)&&job.kind==='texture'&&<button type="button" className="sc-button" disabled={!projectId||cloud.writeBlocked||!onVariantReady} onClick={()=>previewVariant(job)}>预览纹理版本</button>}
           {['ready', 'added'].includes(job.state) && job.kind!=='texture' && <button type="button" className="sc-button" disabled={!projectId || cloud.writeBlocked || disabled || busy || adding !== null || !validSize}
             onClick={() => void add(job)}>{adding === job.id ? '正在加载…' : '加入场地预览'}</button>}
         </li>)}</ul>

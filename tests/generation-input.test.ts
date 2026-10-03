@@ -50,6 +50,13 @@ describe('generation inputs and provider isolation',()=>{
     const network=vi.fn(async(_url,init)=>{expect(JSON.parse(init.body)).toEqual({model:'hy-3d-3.1',prompt:'vase',generate_type:'Normal',face_count:20000,enable_pbr:true});return response({id:'3.1'});});
     await hunyuan(env(),network,{providerMode:'tokenhub',providerModel:'hy-3d-3.1'}).submit('vase');expect(network).toHaveBeenCalledTimes(1);
   });
+  it('processes a pinned job even when the current default mode becomes invalid',async()=>{
+    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},env());
+    await f.jobs(owner,'jobs.create',{...prepared,reserveCents:100});
+    const network=vi.fn(async(url,init)=>{expect(String(url)).toContain('tokenhub.tencentmaas.com');expect(JSON.parse(init!.body as string).model).toBe('hy-3d-3.0');return response({id:'pinned-job'});});
+    await expect(processGeneration(f.backend,env({HUNYUAN_API_MODE:'unconfigured'}),network)).resolves.toEqual({processed:1});
+    expect(network).toHaveBeenCalledOnce();
+  });
   it('rejects required source extensions before UV inspection and before reserving a paid request',async()=>{
     const fixture=tetrahedron();fixture.json.extensionsRequired=['KHR_mesh_quantization'];
     const a=await source(packGltf(fixture.json,fixture.resources)),ref=await image();

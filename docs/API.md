@@ -36,10 +36,14 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 | POST `/share/read` | `{token}`，匿名 | 发布名称、时间、场景、去除内部备注的物料表和带短期 URL 的资产 |
 | GET `/assets` | 无 | 最近 100 个本人资产；不返回存储路径 |
 | POST `/assets/:assetId/url` | 无 | 已授权资产信息 + `url/expiresIn:300` |
+| GET `/assets/:assetId/materials` | 无 | 已授权 GLB 的真实材质槽、SHA、UV 摘要与可选父版本 |
+| POST `/assets/:assetId/customize` | `{requestId,sourceSha256,materialIndices,baseColor?,metallic?,roughness?,removeBaseColorTexture?:true}` | 201，新独立材质版本；幂等重放200，原资产不变 |
+| POST `/projects/:id/material-variants` | `{requestId,sessionId,generation,expectedRevision,localRevision,scene,objectIds,sourceAssetId,variantAssetId}` | 201，选定实例的版本替换提案；确认仍走原 proposals/apply |
 | POST `/assets/floorplan` | PNG/JPEG 二进制，Content-Type 对应图片 | 201，私有图片资产；<=5MB、4096像素 |
 | POST `/catalog/recommendations` | `{theme,scene}` | 最多 8 条真实公共素材（名称、缩略图、来源、许可、导入体积预检） |
 | POST `/assets/import` | `{modelId}` | 201，打包并归档后的 Poly Haven GLB 资产 |
-| POST `/jobs` | `{requestId,prompt}` | 202，持久化生成任务；幂等重放为200 |
+| GET `/generation/capabilities` | 无 | 配置允许的文字／图片／纹理能力与模型标识；不代表账号实际供应商验收 |
+| POST `/jobs` | `{requestId,prompt,kind?:"text"\|"image"\|"texture",referenceImageAssetId?,sourceAssetId?}` | 202，持久化生成任务；幂等重放为200，原文字请求兼容 |
 | GET `/jobs` | 无 | 最近 100 个本人任务 |
 | GET `/jobs/:jobId` | 无 | 任务真实状态、provider_job_id、asset_id、错误与 usage；不暴露 worker token |
 | POST `/jobs/:jobId/added` | `{projectId}` | 确认资产已存在于保存的项目后标记 added |

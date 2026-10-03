@@ -8,7 +8,6 @@ import type { Backend } from './backend.ts';
 
 export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
   required(env,'HUNYUAN_API_KEY');
-  hunyuan(env,fetcher);
   const job=await backend.jobs(null,'jobs.claim');
   if(!job) return {processed:0};
   const provider=hunyuan(env,fetcher,{providerMode:job.provider_mode,providerModel:job.provider_model});
