@@ -52,8 +52,10 @@ const CHUNK_RECOVERY_SCRIPT = `(function(){
 })();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Extensions such as Trancy inject root attributes before hydration.
+  // Limit the escape hatch to html; descendants still validate normally.
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
