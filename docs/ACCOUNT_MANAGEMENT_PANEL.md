@@ -24,3 +24,12 @@
 - 仓库已有 `scene-preview.tsx` import/order 警告，以及静态导出 rewrites 提示；本次修改没有新增 lint 警告。
 
 以上是首次本地验收结果。随后已基于当前生产修复重新验证并部署，真实账号和正式域名验收见 [账户面板生产发布记录](ACCOUNT_PANEL_PRODUCTION_RELEASE.md)。
+
+## 滚动区域圆角修复（2026-10-03）
+
+- 修复右侧原生滚动条底板覆盖弹窗圆角的问题。外层 dialog 裁切四角，独立内层负责滚动；滚动轨道与滑块均使用圆角，轨道两端留出 14px。
+- 应用提交 `0eea1be0be87a9af45eac888fdd15ebf70761861`，分支 `codex/account-panel-rounded-scroll`。仅修改账户面板 JSX 与 CSS，保留实际生产基线 `99ca1e8` 的 Binggo 入口和既有功能。
+- 面板专项 16 项测试、类型检查、生产构建和差异检查通过。修复前浏览器断言复现外层仍为 `overflow:auto`；修复后验证外层不滚动、内层可滚到底、四角一致、无横向溢出、Escape 关闭与焦点恢复。
+- 本地及正式域名检查覆盖 1440×780、1100×520、390×844；截图与结果存于忽略目录 `output/playwright/account-radius-*`。线上检查使用本地体验，没有写入云项目或发起付费生成。
+- 生产部署 `f0c5505c-ca7d-4e24-a4b4-d4f2012ce6d8`；公开构建配置与生产一致。通过 Pages 项目的 `canonical_deployment` 核对实际生效版本，避免将部署列表中已被回退的 `5b92fcd` 误当作生产基线。
+- 保留回滚版本 `99b80ba8-5a19-40c1-bcd9-a5f4cdc8e326`。没有合并 Git main/dev；Pages 的 `--branch main` 只选择生产环境。
