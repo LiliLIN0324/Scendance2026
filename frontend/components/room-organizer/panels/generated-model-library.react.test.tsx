@@ -73,6 +73,18 @@ describe('single object generation UI', () => {
     expect(screen.queryByRole('button',{name:'修改未通过检查的输入'})).toBeNull();
     expect(JSON.parse(localStorage.getItem(localKey())!)).toEqual(legacyIntent);
   });
+  it('revokes permission to discard a previously rejected input after an uncertain retry',async()=>{
+    create.mockRejectedValueOnce(Object.assign(new Error('INVALID_REFERENCE_IMAGE'),{code:'INVALID_REFERENCE_IMAGE'})).mockRejectedValueOnce(new TypeError('connection reset'));
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'vase'}});
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button',{name:'生成 3D 模型'}));
+    await screen.findByRole('button',{name:'修改未通过检查的输入'});
+    fireEvent.click(screen.getByRole('button',{name:'核对并继续同一请求'}));
+    await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain('connection reset'));
+    expect(screen.queryByRole('button',{name:'修改未通过检查的输入'})).toBeNull();
+    expect(localStorage.getItem(localKey())).not.toBeNull();
+  });
   it('blocks conflicting saved image sources sharing a request id',()=>{
     localStorage.setItem(localKey(),JSON.stringify({...legacyIntent,kind:'image',referenceImageAssetId:assetId}));
     sessionStorage.setItem(sessionKey,JSON.stringify({...legacyIntent,kind:'image',referenceImageAssetId:id}));

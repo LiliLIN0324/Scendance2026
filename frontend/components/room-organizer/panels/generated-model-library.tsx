@@ -158,7 +158,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, seed, sourceAssetId,
 
   async function generate() {
     if (!userId || uploading || (!intent&&!ready) || lock.current || storageError || (!intent && !prompt.trim())) return;
-    lock.current = true; setBusy(true); setError('');
+    lock.current = true; setBusy(true); setError(''); setRejectedInput(undefined);
     const next: Intent = intent ?? { requestId: crypto.randomUUID(), prompt: prompt.trim(), ...(kind==='text'?{}:{kind,referenceImageAssetId:reference!.id,...(kind==='texture'?{sourceAssetId}:{})}), storage: 'local' };
     try {
       // Persist before dispatch; after an uncertain response, explicit retry keeps the same ID.
