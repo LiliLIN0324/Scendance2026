@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { assetError } from '@/lib/assets-api';
-import { useBackendSession, type AuthorizedAssets, type BackendSession, type SceneProposal } from '@/lib/backend-session';
+import { useBackendSession, type AuthorizedAssets, type BackendSession, type Scene, type SceneProposal } from '@/lib/backend-session';
 import { materialChangeSchema, materialInspectionSchema, materialVariantAssetSchema, type MaterialChange, type MaterialInspection } from '../../../../supabase/functions/_shared/asset-customization-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { ScenePreview } from '../../business/scene-preview';
@@ -51,6 +51,18 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
   const [notice,setNotice]=useState('');
   const [preview,setPreview]=useState<Preview|null>(null);
   const [showOriginal,setShowOriginal]=useState(false);
+  const firstTargetId=target.ids[0];
+  const focusedPreview=useMemo(()=>{
+    if(!preview)return null;
+    const before=preview.proposal.base_scene.objects.find(object=>object.id===firstTargetId);
+    const after=preview.proposal.candidate.objects.find(object=>object.id===firstTargetId);
+    if(!before||!after)return null;
+    const angle=before.rotation*Math.PI/180,cos=Math.abs(Math.cos(angle)),sin=Math.abs(Math.sin(angle));
+    const {width,depth,height}=before.size,padding=Math.max(width,depth,height)*.25;
+    const venue={width:width*cos+depth*sin+padding*2,depth:width*sin+depth*cos+padding*2,height,shape:'rectangle' as const,entrances:[]};
+    const frame=(object:Scene['objects'][number]):Scene=>({schemaVersion:1,venue,camera:'overview',lighting:preview.proposal.base_scene.lighting,objects:[{...object,position:{x:venue.width/2,z:venue.depth/2},elevation:0}]});
+    return {before:frame(before),after:frame(after)};
+  },[preview,firstTargetId]);
   const [expired,setExpired]=useState(false);
   const [reload,setReload]=useState(0);
   const latest=useRef({scope,targetKey,layout});latest.current={scope,targetKey,layout};
@@ -166,7 +178,8 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
     </>}
     {!inspection&&!loading&&target.sourceAssetId&&<button type="button" className="sc-button" onClick={()=>setReload(value=>value+1)}>重新读取材质槽</button>}
     {preview&&<div className="mc-preview"><div className="mc-comparison" role="group" aria-label="版本对比"><button type="button" aria-pressed={showOriginal} onClick={()=>setShowOriginal(true)}>原版本</button><button type="button" aria-pressed={!showOriginal} onClick={()=>setShowOriginal(false)}>候选版本</button></div>
-      {active&&!stale&&<ScenePreview scene={showOriginal?preview.proposal.base_scene:preview.proposal.candidate} assetUrls={showOriginal?preview.before.assetUrls:preview.after.assetUrls} assetNames={showOriginal?preview.before.assetNames:preview.after.assetNames}/>}
+      <p className="sc-note">预览首个目标；将应用到 {target.ids.length} 件。保留实际尺寸、旋转与实例颜色。</p>
+      {active&&!stale&&focusedPreview&&<ScenePreview scene={showOriginal?focusedPreview.before:focusedPreview.after} assetUrls={showOriginal?preview.before.assetUrls:preview.after.assetUrls} assetNames={showOriginal?preview.before.assetNames:preview.after.assetNames}/>}
       {stale?<p className="sc-note" role="status">场景、材质选择或编辑权已变化，或候选已过期；请重新预览。</p>:<p className="sc-note">{preview.proposal.explanation}</p>}
       <button type="button" className="sc-button sc-full" disabled={busy||stale||!canEdit} onClick={()=>void apply()}>确认应用到选定物件</button>
       <button type="button" className="sc-button sc-full" disabled={busy} onClick={()=>setPreview(null)}>放弃候选</button>

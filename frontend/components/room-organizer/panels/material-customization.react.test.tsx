@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
+import { ScenePreview } from '../../business/scene-preview';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
@@ -10,7 +11,7 @@ import type { RoomLayout } from '../lib/types';
 let selection=new Set<string>();
 vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:selection})}));
 vi.mock('../three/glb-assets',()=>({ensureGlbAsset:vi.fn().mockResolvedValue(undefined)}));
-vi.mock('../../business/scene-preview',()=>({ScenePreview:({scene}:{scene:Scene})=><div data-testid="scene-preview">{scene.objects.map(object=>`${object.id}:${object.assetId}:${object.color}`).join('|')}</div>}));
+vi.mock('../../business/scene-preview',()=>({ScenePreview:vi.fn(({scene}:{scene:Scene})=><div data-testid="scene-preview">{scene.objects.map(object=>`${object.id}:${object.assetId}:${object.color}`).join('|')}</div>)}));
 const source='10000000-0000-4000-8000-000000000001',variant='10000000-0000-4000-8000-000000000002';
 const project='20000000-0000-4000-8000-000000000001',user='30000000-0000-4000-8000-000000000001',sessionId='40000000-0000-4000-8000-000000000001';
 const first='50000000-0000-4000-8000-000000000001',second='50000000-0000-4000-8000-000000000002';
@@ -25,7 +26,7 @@ function proposal(scene:Scene,ids=[first],to=variant):SceneProposal{return {id:'
 function ui(extra:{seed?:MaterialCustomizationSeed;active?:boolean}={}){return <MaterialCustomization controller={controller} layout={current} onApply={onApply} {...extra}/>;}
 async function preview(){fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));await screen.findByRole('button',{name:'确认应用到选定物件'});}
 beforeEach(()=>{
-  selection=new Set([first]);onApply.mockReset();vi.mocked(ensureGlbAsset).mockClear();
+  selection=new Set([first]);onApply.mockReset();vi.mocked(ScenePreview).mockClear();vi.mocked(ensureGlbAsset).mockClear();
   controller=new BackendSession(getBackendConfig({url:'https://example.supabase.co',anonKey:'sb_publishable_test'}));
   current=backendSceneToLayout(base,{projectId:project,name:'客户场景',assetNames:{[source]:'木椅'}});
   snapshot={...controller.getSnapshot(),configured:true,user:{id:user},project:{id:project,name:'客户场景',studio_id:user,revision:1,scene:base},revision:1,localRevision:0,sessionId,writeBlocked:false,status:'editing',lease:{projectId:project,sessionId,generation:1,revision:1,expiresAt:new Date(Date.now()+90_000).toISOString()}};
@@ -148,6 +149,24 @@ describe('selected material version workflow',()=>{
     expect((screen.getByRole('checkbox',{name:/座面/}) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole('checkbox',{name:/椅腿1 个/}) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByTestId('scene-preview')).toBeTruthy();expect(vi.mocked(controller.businessRequest).mock.calls.filter(([path])=>path.endsWith('/materials'))).toHaveLength(1);
+  });
+
+  it('renders only the first target at real size and tint in a compact independent preview',async()=>{
+    const sourceScene={...base,objects:base.objects.map((object,index)=>index?object:{...object,rotation:45,elevation:1})};
+    current=backendSceneToLayout(sourceScene,{projectId:project,name:'大场景'});
+    render(ui({seed:seed({objectIds:[first,second]})}));await preview();
+    expect(screen.getByText(/预览首个目标；将应用到 2 件/)).toBeTruthy();
+    const rendered=()=>vi.mocked(ScenePreview).mock.calls.at(-1)![0].scene;
+    const candidate=rendered();expect(candidate.objects).toHaveLength(1);
+    expect(candidate.objects[0]).toMatchObject({id:first,assetId:variant,size:sourceScene.objects[0].size,color:'#eeddcc',rotation:45,elevation:0});
+    expect(candidate.objects[0].position).toEqual({x:candidate.venue.width/2,z:candidate.venue.depth/2});
+    expect(candidate.venue.width).toBeLessThan(sourceScene.venue.width);expect(candidate.venue.depth).toBeLessThan(sourceScene.venue.depth);
+    fireEvent.click(screen.getByRole('button',{name:'原版本'}));const original=rendered();
+    expect(original.objects[0]).toEqual({...candidate.objects[0],assetId:source});expect(original.venue).toEqual(candidate.venue);
+    fireEvent.click(screen.getByRole('button',{name:'候选版本'}));expect(rendered()).toBe(candidate);
+    fireEvent.click(screen.getByRole('button',{name:'确认应用到选定物件'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    const applied=vi.mocked(controller.applySceneProposal).mock.calls[0][0].candidate;
+    expect(applied.objects).toHaveLength(2);expect(applied.objects[0].position).toEqual(sourceScene.objects[0].position);expect(applied.objects[0].elevation).toBe(1);expect(applied.venue).toEqual(sourceScene.venue);
   });
 
 });
