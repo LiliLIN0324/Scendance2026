@@ -23,4 +23,4 @@
 - 截图保存在本工作树的 `output/playwright/account-{projects,team,permissions}-{desktop,mobile}.png`（不提交）。项目截图使用明确的浏览器测试夹具；团队/权限截图来自未配置云服务的本地构建。
 - 仓库已有 `scene-preview.tsx` import/order 警告，以及静态导出 rewrites 提示；本次修改没有新增 lint 警告。
 
-以上证明本地交互和回归检查，未连接真实云端账户做浏览器验收，未合并或部署。
+以上是首次本地验收结果。随后已基于当前生产修复重新验证并部署，真实账号和正式域名验收见 [账户面板生产发布记录](ACCOUNT_PANEL_PRODUCTION_RELEASE.md)。
