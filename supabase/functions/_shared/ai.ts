@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canApplyStructuralChange, structuralWarnings } from './structural-geometry.ts';
 import { ApiError, catalog, colorSchema, materialIds, objectSchema, pointSchema, sceneSchema, sceneWarnings, uuid, type Scene, type SceneObject } from './domain.ts';
 
 // The complete prompt is intentionally kept here as a reviewable source of truth.
@@ -81,7 +82,8 @@ export function buildProposal(scene: Scene, mode: 'layout' | 'modify', output: u
     }
   }
   const candidate = sceneSchema.parse(next);
-  const warnings = sceneWarnings(candidate);
+  if(!canApplyStructuralChange(scene,candidate))throw new ApiError('STRUCTURAL_COLLISION',422,structuralWarnings(candidate));
+  const warnings = [...new Map([...sceneWarnings(candidate), ...structuralWarnings(candidate)].map(w => [`${w.code}:${[...w.ids].sort().join(',')}`, w])).values()];
   const originalOutside = new Set(sceneWarnings(scene).filter(w => w.code === 'OUT_OF_BOUNDS').flatMap(w => w.ids));
   const touched = new Set(commands.flatMap(c => 'id' in c ? [c.id] : []));
   const invalid = warnings.filter(w => w.code === 'OUT_OF_BOUNDS' && w.ids.some(id => !originalOutside.has(id) || touched.has(id)));
