@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
-      <body><AuthProvider><Suspense fallback={<p role="status">正在加载…</p>}><WorkspaceShell>{children}</WorkspaceShell></Suspense></AuthProvider></body>
+      <body><Suspense fallback={<p role="status">正在加载…</p>}><AuthProvider><WorkspaceShell>{children}</WorkspaceShell></AuthProvider></Suspense></body>
     </html>
   );
 }
