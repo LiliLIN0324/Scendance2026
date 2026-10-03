@@ -9,6 +9,10 @@ export function layoutFromPreset(key: ScenePresetKey, source: THREE.Object3D): R
   source.updateMatrixWorld(true);
   const fixtures = source.getObjectByName('Preset_Objects');
   if (!fixtures?.children.length || !source.getObjectByName('Preset_Structure')) throw new Error('预设缺少场馆或可编辑物件。');
+  // Item dimensions are the fixture's measured bounds: `normalizeGlbInstance`
+  // scales each instance to them, so rounding or clamping here would shift and
+  // resize real geometry. The build keeps any fixture the renderer cannot
+  // instance (a zero-thickness decal) out of `Preset_Objects` instead.
   const items: FurnitureItem[] = fixtures.children.map(node => {
     const bounds = new THREE.Box3().setFromObject(node);
     const size = bounds.getSize(new THREE.Vector3());

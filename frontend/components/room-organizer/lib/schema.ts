@@ -2,6 +2,7 @@ import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabas
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
+import { SCENE_PRESET_KEYS } from './scene-presets';
 import { NEIGHBOUR_FLAGS, isStreetSeed, isTerrainY } from './site';
 import { isStairsLeadIn, isStairsShape } from './stairs';
 import { isStoreyHeight } from './storeys';
@@ -21,6 +22,7 @@ import type {
   RoofStyle,
   RoomLayout,
   RoomZone,
+  ScenePresetKey,
   SofaShape,
   TerrainSpec,
   WallId,
@@ -263,7 +265,9 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
 
   if (typeof v.name !== 'string') return false;
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
-  if (v.scenePreset !== undefined && !['gym', 'popup'].includes(v.scenePreset as string)) return false;
+  // The packaged preset list is the single source of truth: a preset the build
+  // never generated must not survive as `scenePreset` on a stored layout.
+  if (v.scenePreset !== undefined && !SCENE_PRESET_KEYS.includes(v.scenePreset as ScenePresetKey)) return false;
   if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
   if (v.backendCamera !== undefined && !['overview', 'top', 'customer'].includes(v.backendCamera as string)) return false;
   if (v.backendLighting !== undefined && !['neutral', 'warm', 'cool'].includes(v.backendLighting as string)) return false;

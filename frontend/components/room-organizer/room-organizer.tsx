@@ -39,7 +39,7 @@ import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomSuffix } from './lib/ids';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
-import { editorItemLimit } from './lib/scene-presets';
+import { editorItemLimit, SCENE_PRESETS } from './lib/scene-presets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
@@ -1195,7 +1195,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           selectOnly(newId);
         }}
       />
-            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset === 'gym' ? '体育馆概念场景 · 原模型比例' : `${layout.width} × ${layout.height} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
+            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset ? `${SCENE_PRESETS[layout.scenePreset].name} · 概念场景` : `${layout.width} × ${layout.height} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
             {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {!selectedItem && !previewCandidate && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
@@ -1219,7 +1219,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             onClose={() => selectOnly(null)}
           />}
         </main>
-        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset === 'gym' ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
         <CreativeAssistant/>
       </div>
     </CreativeStudioProvider>

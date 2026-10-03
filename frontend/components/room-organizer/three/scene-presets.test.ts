@@ -25,7 +25,13 @@ function geometryBuffer(buffer: Buffer): ArrayBuffer {
 }
 
 describe('editable scene archives', () => {
-  it.each([['gym', 307], ['popup', 42]] as const)('opens every %s fixture at its archived position and persists edits', async (key, count) => {
+  // gym and popup are hand-grouped archives; the other eight are driven by the
+  // layer plan in scripts/package-scene-presets.mjs. The counts are asserted
+  // here so a plan change that silently drops fixtures fails loudly.
+  it.each([
+    ['gym', 307], ['popup', 42], ['bar', 38], ['cafe', 46], ['conference', 212],
+    ['lawn', 135], ['market', 57], ['museum', 23], ['office', 76], ['studio', 24],
+  ] as const)('opens every %s fixture at its archived position and persists edits', async (key, count) => {
     const original = readFileSync(new URL(`../../../../scene/templates/${key}/${key}.glb`, import.meta.url));
     const converted = convertPreset(original, key);
     const document = JSON.parse(converted.subarray(20, 20 + converted.readUInt32LE(12)).toString()) as { nodes: { children?: number[] }[] };
@@ -63,7 +69,12 @@ describe('editable scene archives', () => {
     expect(structure).not.toBeNull(); disposeOwnedModel(structure);
     const actions = layoutStore.getState().actions;
     actions.applyLayout(layout);
-    const item = layout.floors[0].items[0];
+    // Edit the smallest fixture rather than the first one: a preset's first item
+    // can be a wall-length fixture (bar opens with a 7 m back-bar), and once it
+    // sits at (1, 2) a 90° rotation leaves the 12 × 9 m venue — which the
+    // reducer refuses, correctly. The assertion is about persistence, so any
+    // real fixture proves it.
+    const item = [...layout.floors[0].items].sort((a, b) => a.width * a.depth - b.width * b.depth)[0]!;
     actions.moveItem(item.id, 1, 2);
     actions.setRotation(item.id, Math.PI / 2);
     actions.resizeItem(item.id, 'height', item.height * 1.2);
