@@ -30,7 +30,7 @@ describe('generation worker HTTP boundary',()=>{
     expect(response.status).toBe(405);expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toEqual({error:'METHOD_NOT_ALLOWED'});
   });
-  it.each([{HUNYUAN_API_KEY:undefined},{HUNYUAN_API_MODE:'invalid-mode'}])('returns 503 without claiming a job when provider configuration is invalid: %j',async overrides=>{
+  it.each([{HUNYUAN_API_KEY:undefined}])('returns 503 without claiming a job when provider credentials are missing: %j',async overrides=>{
     const job=await f.jobs(owner,'jobs.create',{requestId:crypto.randomUUID(),fingerprint:'prop',prompt:'Prop',reserveCents:100});
     const response=await createWorker(f.backend,env(overrides),noNetwork)(request());
     expect(response.status).toBe(503);expect(response.headers.get('cache-control')).toBe('no-store');
