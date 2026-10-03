@@ -274,7 +274,7 @@ export class BackendSession {
     return current.projectId === scope.projectId && current.lease?.projectId === scope.lease?.projectId &&
       current.lease?.sessionId === scope.lease?.sessionId && current.lease?.generation === scope.lease?.generation;
   }
-  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites = true): Promise<T> {
+  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true): Promise<T> {
     const epoch = this.epoch;
     try {
       this.requireConfig();
@@ -290,7 +290,9 @@ export class BackendSession {
         }
         // Uncertainty blocks only the project/lease that made this request. A
         // late response from a handed-off editor must not stop the new lease.
-        if (blocksWrites || !(error instanceof SceneApiError) || [401, 409].includes(error.status)) this.block(error);
+        const permissionLost = error instanceof SceneApiError && (error.status === 401 || ["LEASE_LOST", "REVISION_CONFLICT"].includes(error.code));
+        const serviceFailure = error instanceof SceneApiError && ["SERVICE_NOT_CONFIGURED", "BILLING_NOT_CONFIGURED", "BUDGET_EXCEEDED", "DAILY_BUDGET_EXCEEDED", "AI_BUSY", "AI_IN_PROGRESS", "AI_PREVIOUS_REQUEST_FAILED", "AI_INVALID_PROPOSAL", "AI_INPUT_TOO_LARGE", "PROVIDER_HTTP_ERROR", "PROVIDER_INVALID_JSON", "PROVIDER_TIMEOUT", "GENERATION_BUSY"].includes(error.code);
+        if (permissionLost || blocksWrites === true || (blocksWrites === false && !serviceFailure)) this.block(error);
         else this.update({ error: failure(error) });
       }
       throw error;
@@ -470,9 +472,26 @@ export class BackendSession {
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
+  /** Asset, sharing and membership operations reuse the authenticated session. */
+  businessRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+    return this.request<T>(path, method, body, this.captureRequestScope(), "business");
+  }
+  async renameProject(name: string): Promise<BackendProject> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const lease = this.writableLease();
+    this.operationPending = true;
+    try {
+      const project = await this.request<BackendProject>(`/projects/${lease.projectId}`, "PATCH", {
+        name, sessionId: lease.sessionId, generation: lease.generation, expectedRevision: this.snapshot.revision,
+      });
+      this.update({ project: { ...this.snapshot.project!, ...project }, revision: project.revision,
+        lease: { ...(this.snapshot.lease ?? lease), revision: project.revision } });
+      return project;
+    } finally { this.operationPending = false; }
+  }
   async authorizeAsset(assetId: string, scope = this.captureRequestScope()): Promise<{ id: string; url: string; name: string }> {
     uuid.parse(assetId);
-    const result = await this.request<unknown>(`/assets/${encodeURIComponent(assetId)}/url`, "POST", undefined, scope);
+    const result = await this.request<unknown>(`/assets/${encodeURIComponent(assetId)}/url`, "POST", undefined, scope, "business");
     if (!result || typeof result !== "object") throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
     const asset = result as Record<string, unknown>;
     if (asset.id !== assetId || asset.format !== "glb" || typeof asset.name !== "string" || !asset.name.trim() ||
@@ -727,23 +746,23 @@ export class BackendSession {
     this.generationRequests.set(key, record);
     this.generationPending = true;
     record.promise = (async () => {
-      try { return generationJobSchema.parse(await this.request<unknown>("/jobs", "POST", body)); }
+      try { return generationJobSchema.parse(await this.businessRequest<unknown>("/jobs", "POST", body)); }
       catch (error) { delete record.promise; throw error; }
       finally { this.generationPending = false; }
     })();
     return record.promise;
   }
   async getGenerationJob(id: string): Promise<GenerationJob> {
-    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}`));
+    const job = generationJobSchema.parse(await this.businessRequest<unknown>(`/jobs/${uuid.parse(id)}`));
     if (job.id !== id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return job;
   }
   async listGenerationJobs(): Promise<GenerationJob[]> {
-    return z.array(generationJobSchema).parse(await this.request<unknown>("/jobs"));
+    return z.array(generationJobSchema).parse(await this.businessRequest<unknown>("/jobs"));
   }
   /** Call after saving a scene containing asset_id; the server verifies that reference. */
   async markGenerationAdded(id: string, projectId: string): Promise<GenerationJob> {
-    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}/added`, "POST", { projectId: uuid.parse(projectId) }, this.captureRequestScope(projectId)));
+    const job = generationJobSchema.parse(await this.request<unknown>(`/jobs/${uuid.parse(id)}/added`, "POST", { projectId: uuid.parse(projectId) }, this.captureRequestScope(projectId), "business"));
     if (job.id !== id || job.state !== "added") throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return job;
   }

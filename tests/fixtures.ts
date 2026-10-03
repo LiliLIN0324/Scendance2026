@@ -36,7 +36,8 @@ export async function database() {
       throw error;
     }
   };
-  const sceneRpc=call('scene_rpc'), jobs=call('job_rpc');
+  const core=call('scene_rpc'),studios=call('studio_rpc'),jobs=call('job_rpc');
+  const sceneRpc:Rpc=(actor,action,data)=>(action.startsWith('studios.')?studios:core)(actor,action,data);
   const backend:Backend={scene:sceneRpc,jobs,user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},upload:async()=>{},sign:async path=>`https://storage.example/signed/${path}`};
   return {db,rpc:sceneRpc,jobs,backend};
 }

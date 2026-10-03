@@ -55,17 +55,21 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   const pathname = usePathname();
   const [editorStarted, setEditorStarted] = useState(false);
   const [localEntry, setLocalEntry] = useState(false);
-  const entered = pathname === '/' && ready && (!!cloud.user || localEntry);
+  const workspacePath = pathname === '/' || pathname.replace(/\/$/, '') === '/editor';
+  const entered = workspacePath && ready && (!!cloud.user || localEntry);
 
   useEffect(() => {
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
-    if (pathname !== '/' || !ready) return;
+    if (!workspacePath || !ready) return;
     if (cloud.user || new URLSearchParams(window.location.search).get('local') === '1') {
       setLocalEntry(true);
       setEditorStarted(true);
-    } else router.replace('/auth');
-  }, [pathname, ready, cloud.user, router]);
+    } else {
+      const next = window.location.pathname + window.location.search;
+      router.replace(next === '/' ? '/auth' : `/auth?next=${encodeURIComponent(next)}`);
+    }
+  }, [pathname, workspacePath, ready, cloud.user, router]);
 
   useEffect(() => {
     if (entered) window.dispatchEvent(new Event('resize'));
