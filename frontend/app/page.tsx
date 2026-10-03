@@ -1,13 +1,14 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { IntroPage } from '@/components/intro/intro-page';
 import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
-import { useAuth } from '@/lib/auth-provider';
+import { safeReturnPath, useAuth } from '@/lib/auth-provider';
 
 const RoomOrganizer = dynamic(
   () =>
@@ -48,7 +49,8 @@ const RoomOrganizer = dynamic(
 );
 
 export default function Page(): JSX.Element {
-  const { controller } = useAuth()!;
+  const { controller, ready, error } = useAuth()!;
+  const router = useRouter();
   const [entered, setEntered] = useState(false);
   const [editorStarted, setEditorStarted] = useState(false);
   useEffect(() => {
@@ -67,14 +69,20 @@ export default function Page(): JSX.Element {
     setEntered(true);
   }
 
+  function enterAuthenticated(): void {
+    const next = safeReturnPath(new URLSearchParams(window.location.search).get('next'));
+    if (next === '/') enterEditor();
+    else router.replace(next);
+  }
+
   return (
     <>
-      {!entered && <IntroPage controller={controller} onEnter={enterEditor} />}
-      {/* The editor mounts on first entry and stays mounted; reopening the landing
-          page needs a fresh load of / (the header logo opens the 官网 instead). */}
+      {!entered && <IntroPage controller={controller} ready={ready} authError={error} onEnter={enterEditor} onAuthenticated={enterAuthenticated} />}
+      {/* Keep in-progress briefs, image URLs, chat and proposals in memory when
+          returning to the introduction. The editor still mounts only on entry. */}
       {editorStarted && (
         <div hidden={!entered}>
-          <RoomOrganizer isActive={entered} controller={controller} />
+          <RoomOrganizer isActive={entered} controller={controller} onShowIntro={() => setEntered(false)} />
         </div>
       )}
     </>

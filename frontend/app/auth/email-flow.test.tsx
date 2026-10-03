@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { IntroPage } from '@/components/intro/intro-page';
 import { AuthProvider } from '@/lib/auth-provider';
 import { BackendSession, createBackendSession, getBackendConfig } from '@/lib/backend-session';
 import ResetPasswordPage from '../reset-password/page';
@@ -24,7 +25,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it('registers, clears the password, handles an invalid OTP, then enters the workspace', async () => {
-  render(<AuthProvider><AuthPage /></AuthProvider>);
+  render(<AuthProvider><IntroPage controller={controller} onEnter={() => navigation.replace('/')} /></AuthProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Sign up · 注册' }));
   fireEvent.change(screen.getByLabelText('如何称呼你'), { target: { value: '测试创作者' } });
   fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'new@example.com' } });
@@ -92,4 +93,17 @@ it('strips recovery credentials from the URL before routing the old callback to 
   expect(window.location.hash).toBe('');
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/reset-password'));
   expect(controller.getSnapshot().user).toBeNull();
+});
+
+
+it.each([
+  ['/auth?next=%2F', '/#sign-in'],
+  ['/auth?next=%2Fprojects%3Fview%3Drecent%23saved', '/?next=%2Fprojects%3Fview%3Drecent%23saved#sign-in'],
+  ['/auth?next=https%3A%2F%2Fevil.example', '/#sign-in'],
+  ['/auth?next=%2Fauth', '/#sign-in'],
+])('redirects the legacy login entry %s to the landing card', async (path, target) => {
+  window.history.replaceState(null, '', path);
+  render(<AuthPage />);
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(target));
+  expect(screen.queryByLabelText('密码')).toBeNull();
 });

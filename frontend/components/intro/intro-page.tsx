@@ -1,8 +1,8 @@
 'use client';
 
 import { ArrowRight, Box, ImagePlus, Layers3, LockKeyhole } from 'lucide-react';
-import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
+import { useEmailCooldown } from '@/lib/auth-provider';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
 import { BrandMark } from '../brand-mark';
 import './intro.css';
@@ -10,6 +10,9 @@ import './intro.css';
 interface IntroPageProps {
   controller: BackendSession;
   onEnter: () => void;
+  onAuthenticated?: () => void;
+  ready?: boolean;
+  authError?: string;
 }
 
 function EventIllustration(): JSX.Element {
@@ -90,8 +93,14 @@ function EventIllustration(): JSX.Element {
   );
 }
 
-export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element {
+export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, ready = true, authError = '' }: IntroPageProps): JSX.Element {
   const cloud = useBackendSession(controller);
+  const [signUp, setSignUp] = useState(false);
+  const [name, setName] = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [notice, setNotice] = useState('');
+  const cooldown = useEmailCooldown();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -99,16 +108,26 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (busy || !cloud.configured) return;
+    if (busy || !ready || !cloud.configured) return;
     setBusy(true);
     setError(null);
+    setNotice('');
     try {
-      await controller.signIn(email, password);
-      setPassword('');
-      onEnter();
+      if (verificationEmail) {
+        await controller.verifyEmailCode(verificationEmail, code, 'signup');
+      } else if (signUp) {
+        const signedIn = await controller.signUp(email, password, name, `${window.location.origin}/auth/callback`);
+        if (!signedIn) {
+          setVerificationEmail(email.trim());
+          cooldown.start();
+          setNotice('请检查收件箱和垃圾邮件。如果已经确认过邮箱，请直接登录。');
+          return;
+        }
+      } else await controller.signIn(email, password);
+      onAuthenticated();
     } catch (thrown) {
       const failure = controller.getSnapshot().error;
-      setError(failure?.code === 'NETWORK_ERROR'
+      setError(signUp ? (thrown instanceof Error ? thrown.message : '注册失败，请重试。') : failure?.code === 'NETWORK_ERROR'
         ? '暂时无法连接登录服务，请稍后重试，也可以先体验本地工作台。'
         : failure?.code === 'INVALID_RESPONSE'
           ? '登录服务暂时无法完成验证，请稍后重试。'
@@ -116,8 +135,13 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
             ? '当前无法登录，请检查账号状态或稍后再试。'
             : failure?.message ?? '暂时无法登录，请稍后再试。');
     } finally {
+      setPassword('');
       setBusy(false);
     }
+  }
+
+  function changeMode(value: boolean): void {
+    setSignUp(value); setVerificationEmail(''); setCode(''); setPassword(''); setNotice(''); setError(null);
   }
 
   return (
@@ -145,26 +169,50 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
           </ol>
         </section>
 
-        <section className="sc-intro-login" aria-labelledby="sc-intro-login-title">
-          <p className="sc-intro-kicker">YOUR NEXT GATHERING STARTS HERE</p>
-          <p className="sc-intro-login-copy">一个空间，装下你的下一场相聚。</p>
+        <section id="sign-in" className="sc-intro-login" aria-labelledby="sc-intro-login-title">
+          {!cloud.user && <div className="sc-intro-auth-tabs" role="group" aria-label="登录或注册">
+            <button type="button" aria-pressed={!signUp} disabled={busy} onClick={() => changeMode(false)}>Sign in · 登录</button>
+            <button type="button" aria-pressed={signUp} disabled={busy} onClick={() => changeMode(true)}>Sign up · 注册</button>
+          </div>}
+          <h2 id="sc-intro-login-title">{cloud.user ? '欢迎来到幕景' : verificationEmail ? '确认你的邮箱' : signUp ? '创建你的工作室' : '欢迎回来'}</h2>
+          <p className="sc-intro-login-copy">{cloud.user ? '一个空间，装下你的下一场相聚。' : verificationEmail ? `请输入发送至 ${verificationEmail} 的六位验证码。` : signUp ? '确认邮箱后，即可拥有独立的场景工作室。' : '登录后，继续你的场景。'}</p>
           {cloud.user ? (
             <div className="sc-intro-signed-in">
               <p className="sc-intro-account-caption">当前已登录</p>
               <p className="sc-intro-account">{cloud.user.email ?? '工作室账号'}</p>
-              <button className="sc-intro-primary" type="button" onClick={onEnter}>进入工作台<ArrowRight size={18} aria-hidden="true" /></button>
+              <button className="sc-intro-primary" type="button" onClick={onAuthenticated}>进入工作台<ArrowRight size={18} aria-hidden="true" /></button>
             </div>
           ) : (
             <>
-              <form className="sc-intro-form" aria-label="工作室登录" onSubmit={(event) => { void submit(event); }} aria-busy={busy}>
-                <label htmlFor="sc-intro-email">邮箱</label>
-                <input id="sc-intro-email" name="email" type="email" autoComplete="username" placeholder="你的工作室邮箱" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required />
-                <label htmlFor="sc-intro-password">密码</label>
-                <input id="sc-intro-password" name="password" type="password" autoComplete="current-password" placeholder="输入密码" value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required />
-                {error && <p className="sc-intro-error" role="alert">{error}</p>}
-                <button className="sc-intro-primary" type="submit" disabled={!cloud.configured || busy}>{busy ? '正在登录…' : '登录并进入工作台'}<ArrowRight size={18} aria-hidden="true" /></button>
+              <form className="sc-intro-form" aria-label={verificationEmail ? '邮箱验证' : signUp ? '工作室注册' : '工作室登录'} onSubmit={(event) => { void submit(event); }} aria-busy={busy}>
+                {verificationEmail ? <>
+                  <label htmlFor="sc-intro-code">六位验证码</label>
+                  <input id="sc-intro-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={busy} required />
+                </> : <>
+                  {signUp && <>
+                    <label htmlFor="sc-intro-name">如何称呼你</label>
+                    <input id="sc-intro-name" autoComplete="nickname" maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="你的名字" disabled={busy} required />
+                  </>}
+                  <label htmlFor="sc-intro-email">邮箱</label>
+                  <input id="sc-intro-email" name="email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} required />
+                  <label htmlFor="sc-intro-password">密码</label>
+                  <input id="sc-intro-password" name="password" type="password" autoComplete={signUp ? 'new-password' : 'current-password'} minLength={signUp ? 12 : undefined} placeholder={signUp ? '至少 12 位' : '输入你的密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required />
+                </>}
+                {(error || authError) && <p className="sc-intro-error" role="alert">{error || authError}</p>}
+                <button className="sc-intro-primary" type="submit" disabled={!ready || !cloud.configured || busy}>{busy ? (signUp ? '正在处理…' : '正在登录…') : !ready ? '正在恢复会话…' : verificationEmail ? '验证并进入工作室' : signUp ? '创建账号' : '登录并进入工作台'}<ArrowRight size={18} aria-hidden="true" /></button>
               </form>
-              <div className="sc-intro-auth-links"><Link href="/auth?next=%2F">注册账号 / 邮箱验证</Link><Link href="/reset-password">忘记密码</Link></div>
+              <div className="sc-intro-auth-links">
+                {verificationEmail ? <>
+                  <button type="button" disabled={busy || cooldown.remaining > 0} onClick={async () => {
+                    setBusy(true); setError(null); setNotice(''); cooldown.start();
+                    try { await controller.resendSignup(verificationEmail, `${window.location.origin}/auth/callback`); setNotice('若邮箱仍待确认，新的验证码将发送到邮箱。请使用最新邮件中的验证码。'); }
+                    catch (err) { setError(err instanceof Error ? err.message : '发送失败，请稍后重试。'); }
+                    finally { setBusy(false); }
+                  }}>{cooldown.remaining > 0 ? `${cooldown.remaining} 秒后可重新发送` : '重新发送验证码'}</button>
+                  <button type="button" disabled={busy} onClick={() => { setVerificationEmail(''); setCode(''); setNotice(''); setError(null); }}>修改邮箱</button>
+                </> : signUp ? <button type="button" disabled={busy || !email.trim()} onClick={() => { setVerificationEmail(email.trim()); setError(null); setNotice('请输入收到的注册验证码，或重新发送。'); }}>输入已有验证码</button> : <a href="/reset-password">忘记密码？</a>}
+              </div>
+              {notice && <p className="sc-intro-notice" role="status">{notice}</p>}
               {!cloud.configured && <p className="sc-intro-offline" role="status">登录服务尚未配置，暂时只能本地体验。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
               <button className="sc-intro-secondary" type="button" onClick={onEnter} disabled={busy}>先体验本地工作台<ArrowRight size={17} aria-hidden="true" /></button>
