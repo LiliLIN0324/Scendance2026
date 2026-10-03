@@ -16,7 +16,7 @@ export const assetCustomizationRequestSchema=z.strictObject({
   requestId:uuid,sourceSha256:hash,materialIndices,...changeFields,
 }).refine(hasChange,'至少选择一项材质修改');
 export const materialInspectionSchema=z.object({
-  id:uuid,name:z.string(),sha256:hash,
+  id:uuid,name:z.string(),sha256:hash,parentAssetId:uuid.optional(),
   slots:z.array(z.object({
     index:z.number().int().nonnegative(),name:z.string(),baseColor:colorSchema,
     baseColorFactor:z.tuple([z.number(),z.number(),z.number(),z.number()]),
@@ -34,6 +34,14 @@ export const materialVariantMetadataSchema=z.object({
     procurementStatus:z.literal('needs_confirmation'),
   }),
 }).passthrough();
+export const textureVariantMetadataSchema=z.object({
+  parentAssetId:uuid,sourceSha256:hash,changeMode:z.literal('texture'),
+  textureVariant:z.object({
+    validation:z.object({geometryPreserved:z.literal(true),uvPreserved:z.literal(true),tolerance:z.literal(1e-5),comparison:z.literal('ordered-accessors-and-nodes')}),
+    procurementStatus:z.literal('needs_confirmation'),
+  }),
+}).passthrough();
+export const derivedVariantMetadataSchema=z.union([materialVariantMetadataSchema,textureVariantMetadataSchema]);
 export const materialVariantAssetSchema=z.object({
   id:uuid,name:z.string(),source:z.string(),format:z.literal('glb'),sha256:hash,
   byte_size:z.number().int().positive(),metadata:materialVariantMetadataSchema,
