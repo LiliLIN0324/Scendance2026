@@ -1,6 +1,7 @@
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
+import { buildWallMaterial } from './wall-patterns';
 import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
@@ -37,9 +38,12 @@ export function buildStructureShell(THREE: typeof import('three'), scene: ThreeN
       ? buildExtrudedWallGeometry(THREE, length, wall.height, wall.thickness, openings)
       : new THREE.BoxGeometry(length, wall.height, wall.thickness).translate(0, wall.height / 2, 0);
     const source = floor.interiorWalls?.find(w => w.id === wall.id);
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-      color: source?.color ?? (wall.status === 'inferred' ? '#d9b97f' : '#e8e1d4'), roughness: 0.86,
-    }));
+    // Keep the existing editor's exterior/interior finishes. Recognition status
+    // belongs in the review UI, not in the physical wall's material color.
+    const material = wall.kind === 'exterior'
+      ? buildWallMaterial(THREE, { pattern: 'solid', color: source?.color ?? '#e8dcc4', width: length, height: wall.height })
+      : new THREE.MeshStandardMaterial({ color: source?.color ?? '#e0e0e0', roughness: 0.85 });
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set((wall.start.x + wall.end.x) / 2 - layout.width / 2, 0,
       (wall.start.z + wall.end.z) / 2 - layout.height / 2);
     mesh.rotation.y = -Math.atan2(dz, dx);

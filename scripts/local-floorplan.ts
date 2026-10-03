@@ -35,7 +35,7 @@ if (!(await server.db.query('select id from scene_private.projects limit 1')).ro
       {id:crypto.randomUUID(),materialId:'table',position:{x:3,z:5},rotation:30,size:{width:1.8,depth:0.8,height:0.75},color:'#b59f7a',locked:false,notes:'拖动至中间墙可验证回弹'},
       {id:crypto.randomUUID(),materialId:'reception',position:{x:9,z:3},rotation:0,size:{width:1.8,depth:0.6,height:1},color:'#58776a',locked:false,notes:'人工示例签到台'}],
     sources:[],dimensions:[['width',12],['depth',10],['height',4.2]].map(([kind,valueMeters])=>({id:crypto.randomUUID(),kind,valueMeters,status:'confirmed',label:'人工验收尺寸'})),
-    finishes:{floorColor:'#e8deca',floorPattern:'wood',wallColors:Object.fromEntries(wallIds.map(id=>[id,'#eee5d9']))},
+    finishes:{floorColor:'#e9e5db',floorPattern:'solid'},
   });
   await server.rpc(owner, 'projects.create', { studioId: studio, name: '人工实测场地 · 本地验收', scene: demo });
 }
