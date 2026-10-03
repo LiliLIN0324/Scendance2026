@@ -1,5 +1,6 @@
 import { cp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { packageScenePresets } from './package-scene-presets.mjs';
 
 // The standalone 幕景 官网 lives at the repository root, not inside the Next app.
 // Mirror it into frontend/public/ so one output serves both modes:
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 //   next build (export) → public/ is copied into frontend/out/
 // Run from the frontend npm scripts (`predev` / `prebuild`), never by hand.
 const root = new URL('../', import.meta.url);
+await packageScenePresets(root);
 const publicDir = new URL('frontend/public/', root);
 const showcase = new URL('showcase/', publicDir);
 // cp 是递归覆盖、不会删除源目录里已不存在的文件。不先清空的话，

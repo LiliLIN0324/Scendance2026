@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from '../contexts/selection-context';
+import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { ItemContextPopover } from './item-context-popover';
 import type { FurnitureItem } from '../lib/types';
 
@@ -22,6 +23,7 @@ function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
 
 function setup(selected: FurnitureItem): void {
   const editor = {
+    layout: INITIAL_LAYOUT,
     actions: { setLocked: vi.fn(), resizeItem: vi.fn(), moveItem: vi.fn(), setRotation: vi.fn(), setColor: vi.fn(), updateItem: vi.fn() },
     pushColor: vi.fn(),
     activeFloor: { items: [] },

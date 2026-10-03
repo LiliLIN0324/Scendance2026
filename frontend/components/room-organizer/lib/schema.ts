@@ -154,6 +154,8 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   if (v.notes !== undefined && typeof v.notes !== 'string') return false;
   if (v.source !== undefined && !['builtin', 'public_library', 'generated', 'local_sample'].includes(v.source as string)) return false;
   if (v.glbUrl !== undefined && !isGlbUrl(v.glbUrl)) return false;
+  if (v.glbNode !== undefined && (typeof v.glbNode !== 'string' || !/^Preset_Object_\d{1,4}$/.test(v.glbNode))) return false;
+  if (v.elevation !== undefined && (!isFiniteNumber(v.elevation) || Math.abs(v.elevation) > MAX_ROOM_DIMENSION)) return false;
   if (v.price !== undefined && !isFiniteNumber(v.price)) return false;
   if (!isOptionalString(v.category)) return false;
   if (v.position !== undefined && !isVec2(v.position)) return false;
@@ -257,6 +259,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   const v = value;
 
   if (typeof v.name !== 'string') return false;
+  if (v.scenePreset !== undefined && !['gym', 'popup'].includes(v.scenePreset as string)) return false;
   if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
   if (v.backendCamera !== undefined && !['overview', 'top', 'customer'].includes(v.backendCamera as string)) return false;
   if (v.backendLighting !== undefined && !['neutral', 'warm', 'cool'].includes(v.backendLighting as string)) return false;
@@ -358,6 +361,7 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  scenePreset: true,
   backendVenue: true,
   backendCamera: true,
   backendLighting: true,
@@ -394,6 +398,8 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   notes: true,
   source: true,
   glbUrl: true,
+  glbNode: true,
+  elevation: true,
   venueEntranceId: true,
   id: true,
   type: true,

@@ -35,8 +35,9 @@ const CURTAIN_PANEL_FRACTION = 0.95;
  * Where an item's mesh sits vertically: wall-hung decor at its hanging
  * height, a window from its sill, anything else from the floor up.
  */
-export function mountBand(item: Pick<FurnitureItem, 'type' | 'height' | 'sillHeight'>): MountBand {
+export function mountBand(item: Pick<FurnitureItem, 'type' | 'height' | 'sillHeight' | 'elevation'>): MountBand {
   const { height } = item;
+  if (item.elevation !== undefined) return { bottom: item.elevation, top: item.elevation + height };
   switch (item.type) {
     case 'painting':
       return { bottom: PAINTING_MOUNT_Y, top: PAINTING_MOUNT_Y + height };
