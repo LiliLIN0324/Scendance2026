@@ -5,6 +5,9 @@
 | 请求 | 输入 | 输出及权限 |
 |---|---|---|
 | POST `/studios` | `{requestId,name,displayName}` | 当前用户成为新工作室 owner；同一请求 UUID 和内容幂等重放 |
+| GET `/studios/:id/projects` | 无 | 当前工作室成员可读当前工作室全部项目，按更新时间排列，不受全局最近 100 个项目限制 |
+| PATCH `/studios/:id` | `{name}` | 仅 owner 重命名，返回工作室；ID、项目归属和成员不变 |
+| DELETE `/studios/:id` | 无 | 仅 owner 删除空工作室及成员关系，返回 `{removed:true}`；非空返回 `STUDIO_NOT_EMPTY` |
 | GET `/studios/:id/members` | 无 | 当前工作室成员可读 `{userId,role,displayName}[]` |
 | PUT `/studios/:id/members/:userId` | `{displayName}` | owner 添加已有账号为 editor 或更新显示名；不可改 owner |
 | DELETE `/studios/:id/members/:userId` | 无 | owner 移除 editor 并同步废止其全部工作室租约 |
@@ -17,3 +20,7 @@
 前端共享 `BackendSession.businessRequest<T>` 取得现有会话 token。它不自动重试写请求，普通素材/成员请求错误不抢占编辑流程，401/租约丢失/版本冲突继续触发写保护。`renameProject` 必须携带有效租约和 expectedRevision，并使用后端返回版本。
 
 跨工作室操作期间固定选择器；异步响应不能渲染到另一工作室。项目 URL 必须与成功打开的项目一致。同项目恢复存在未保存画布时保留本地改动，不用保存快照静默替换。
+
+工作室是项目归属和成员权限的唯一边界，项目内的参与人员继承该工作室全部成员，不新增项目级角色。工作室删除在数据库中锁定工作室行并检查项目，项目外键阻止并发创建时误删；删除不删除账号，也不自动迁移或级联删除项目。浏览器须先完成内容加载才允许删除，并输入工作室名称确认；后端仍独立检查 owner 与非空状态。
+
+首次确认邮箱时仍自动创建个人工作室。用户主动删除最后一个工作室后，后续账号更新不再自动重建；可通过创建工作室入口重新开始。

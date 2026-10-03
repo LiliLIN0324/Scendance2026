@@ -135,6 +135,11 @@ function failure(error: unknown): BackendFailure {
   const code = error instanceof SceneApiError ? error.code : localCode ?? (error instanceof Error && error.name === "ZodError" ? "INVALID_RESPONSE" : "NETWORK_ERROR");
   const messages: Record<string, string> = {
     UNAUTHENTICATED: "登录已失效，草稿已保留，请重新登录并获取编辑权。",
+    STUDIO_NOT_EMPTY: "工作室中仍有项目，请先处理其中的项目后再删除。",
+    STUDIO_NOT_FOUND: "工作室已不存在，或你已没有访问权限，请刷新列表。",
+    FORBIDDEN: "你没有执行此操作的权限，请联系工作室负责人。",
+    OWNER_PROTECTED: "不能移除工作室负责人。",
+    USER_NOT_FOUND: "未找到该账号，请核对成员提供的账号 ID。",
     INVALID_CREDENTIALS: "邮箱或密码不正确。",
     REVISION_CONFLICT: "云端版本已变化，草稿已保留；请核对后重新获取编辑权。",
     LEASE_LOST: "编辑权已到期或交接，草稿已保留。",
