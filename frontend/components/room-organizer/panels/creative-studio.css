@@ -123,7 +123,7 @@
 
 
 .cr-chat[hidden], .cr-plan-panel[hidden], .cr-model-panel[hidden] { display:none; }
-.cr-agent-tabs { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:10px 12px; border-bottom:1px solid #e5e9de; }
+.cr-agent-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; padding:10px 12px; border-bottom:1px solid #e5e9de; }
 .cr-agent-tabs button { display:flex; gap:9px; align-items:center; padding:10px; border:1px solid transparent; border-radius:9px; background:transparent; color:#74806b; cursor:pointer; text-align:left; font:inherit; font-size:12px; }
 .cr-agent-tabs button[aria-selected="true"] { background:#eaf0df; border-color:#d2ddc5; color:#354f38; }
 .cr-agent-tabs small { display:block; margin-top:3px; font-size:10px; color:#78866e; }

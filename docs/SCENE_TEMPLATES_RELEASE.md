@@ -29,4 +29,17 @@ Target: https://scendance.charlestech.org (Cloudflare Pages `scendance-scene-pla
 
 Pre-release deployment: `360e5c49-fcab-47ae-8aa4-0284626737ff`, https://360e5c49.scendance-scene-planner.pages.dev . This is the rollback target. Production was rechecked immediately before release preparation and still pointed to this baseline.
 
-Deployment evidence will be recorded after publication. No Supabase release is required.
+Published on 2026-10-03:
+
+- Deployed source commit: `4236ea65a39dc215664282b4dfb74267487282fa` (initial template-only release).
+- Preview: https://9a59ca61.scendance-scene-planner.pages.dev . All 38 checked assets and all 3 checked routes matched the build byte-for-byte. The 212-object conference template rendered in a real browser.
+- Production: `405e3fc2-91fb-4400-9c01-91c91ea1ab89`, https://405e3fc2.scendance-scene-planner.pages.dev . Wrangler reported deployment complete, and the production deployment list points to source `4236ea6`.
+- Formal domain: https://scendance.charlestech.org . Real browser shows all 10 complete-scene template cards, existing account and Binggo entries.
+- No Supabase release was performed. Git `main` was not merged or modified; the Pages `main` branch option selects the production deployment environment only.
+
+## Binggo template entry (selected option A)
+
+- Adds a separate `场景模板` tab inside the existing Binggo panel. Reuses `ScenePresetsPanel` and the existing apply/restore-point/undo path; no AI or paid generation call is made by opening or loading a template.
+- Retains the existing planning and 3D-generation tabs, including material customization and delivery. Tab switches preserve unsent planning text.
+- Full regression after integration: 1,717 tests passed; the sole failing assertion expected the previous two tabs. That assertion was updated to the requested three tabs, and the complete 32-test assistant suite passes on rerun. Typecheck, lint (same pre-existing warning), and production build pass.
+- Real browser: all 10 cards appear inside Binggo; loading office creates 76 editable items; Undo restores the original five-item workshop.

@@ -1,6 +1,6 @@
 # 可编辑场景预设
 
-入口：工作台左侧「场景预设」→「载入工作台」。共 **10 套**完整场景，卡片顺序与 `lib/scene-presets.ts` 的 `SCENE_PRESETS` 一致，封面取 `/scene-presets/<key>/preview.jpg`。
+入口：工作台左侧「场景预设」，或右下角「Binggo · Agent」→「场景模板」→「载入工作台」。两个入口复用同一加载、确认和恢复点流程，不调用 AI 生成。共 **10 套**完整场景，卡片顺序与 `lib/scene-presets.ts` 的 `SCENE_PRESETS` 一致，封面取 `/scene-presets/<key>/preview.jpg`。
 
 ## 已接入的 10 套
 

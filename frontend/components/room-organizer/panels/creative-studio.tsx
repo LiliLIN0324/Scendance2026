@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUp, Box, Check, Loader2, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUp, Box, Check, LayoutTemplate, Loader2, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { buildAssistantInstruction } from '@/lib/assistant-context';
 import { useBackendSession, type BackendSession, type SceneProposal } from '@/lib/backend-session';
@@ -15,6 +15,7 @@ import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ReconstructionPanel } from './reconstruction-panel';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
+import { ScenePresetsPanel } from './scene-presets-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import { VenueShapePresets } from './venue-shape-presets';
 import type { ModelGenerationSeed } from './generated-model-library';
@@ -294,7 +295,7 @@ export type GenerationContext = { sourceAssetId?: string; sourceObjectIds: strin
 export function CreativeAssistant({ generationPanel }: { generationPanel?: ReactNode | ((seed: ModelGenerationSeed | undefined, context: GenerationContext) => ReactNode) }):JSX.Element {
   const studio=useStudio(); const {selectedItem,allSelectedIds}=useSelection();
   const [draft,setDraft]=useState(''); const feed=useRef<HTMLDivElement>(null);
-  const [tab,setTab]=useState<'plan'|'model'>('plan');
+  const [tab,setTab]=useState<'plan'|'model'|'templates'>('plan');
   const [opened,setOpened]=useState(false);
   const [modelOpened,setModelOpened]=useState(false);
   const [generationSeed,setGenerationSeed]=useState<ModelGenerationSeed>();
@@ -340,7 +341,7 @@ export function CreativeAssistant({ generationPanel }: { generationPanel?: React
     {(opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className="cr-chat" aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();studio.setExpanded(false);}}}>
       <header><span className="cr-avatar"><AssistantMascot busy={studio.busy}/></span><div><strong>Binggo · Agent</strong><small><i/>{studio.connection}</small></div><button type="button" aria-label="收起 Agent" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></header>
       <div className="cr-agent-tabs" role="tablist" aria-label="Agent 能力">
-        {([['plan','场景策划','DeepSeek'],['model','3D 生成','腾讯 HY-3D']] as const).map(([key,label,provider])=><button type="button" role="tab" id={`agent-tab-${key}`} aria-controls={`agent-panel-${key}`} aria-selected={tab===key} key={key} onClick={()=>{setTab(key);if(key==='model')setModelOpened(true);}}>{key==='plan'?<Sparkles size={17}/>:<Box size={17}/>}<span>{label}<small>{provider}</small></span></button>)}
+        {([['plan','场景策划','DeepSeek'],['model','3D 生成','腾讯 HY-3D'],['templates','场景模板','完整场景']] as const).map(([key,label,provider])=><button type="button" role="tab" id={`agent-tab-${key}`} aria-controls={`agent-panel-${key}`} aria-selected={tab===key} key={key} onClick={()=>{setTab(key);if(key==='model')setModelOpened(true);}}>{key==='plan'?<Sparkles size={17}/>:key==='model'?<Box size={17}/>:<LayoutTemplate size={17}/>}<span>{label}<small>{provider}</small></span></button>)}
       </div>
       <div className="cr-plan-panel" role="tabpanel" id="agent-panel-plan" aria-labelledby="agent-tab-plan" hidden={tab!=='plan'}>
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.directApply} disabled={studio.busy} onChange={event=>studio.setDirectApply(event.target.checked)}/>发送后直接应用</label><span>{studio.directApply?'可用画布撤销恢复':'先预览，再确认应用'}</span></div>
@@ -361,6 +362,9 @@ export function CreativeAssistant({ generationPanel }: { generationPanel?: React
         <div hidden={modelTool!=='generate'}>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationSeed?.scope===studio.scope?generationSeed:undefined,generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后，可生成单件 3D 物料。</p>)}</div>
         {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={studio.expanded&&tab==='model'&&modelTool==='customize'}/></div>}
         {modelTool==='delivery'&&<SceneDeliveryPanel layout={studio.layout} controller={studio.controller}/>}
+      </div>
+      <div className="cr-model-panel" role="tabpanel" id="agent-panel-templates" aria-labelledby="agent-tab-templates" hidden={tab!=='templates'}>
+        {tab==='templates'&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}
       </div>
     </section>}
     <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>studio.setExpanded(!studio.expanded)} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭 Binggo Agent':'打开 Binggo Agent'}><span><AssistantMascot busy={studio.busy}/></span>{studio.expanded?'收起 Binggo':'Binggo · Agent'}<i/></button>
