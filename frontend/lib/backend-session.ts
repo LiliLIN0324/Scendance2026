@@ -4,8 +4,15 @@ import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
 import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
-
+import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 export { SceneApiError };
+export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
+export type ReconstructionJob = Pick<z.infer<typeof reconstructionJobSchema>, 'id' | 'state' | 'candidate' | 'issues' | 'error_code'> & { proposal?: SceneProposal | null | undefined };
+export type ReconstructionInput = Pick<ReconstructionRequest, 'scene' | 'sources' | 'dimensions' | 'mode' | 'instruction' | 'selectedIds' | 'reviewedScene' | 'reviewedJobId'> & { requestId: string };
+function parseReconstructionJob(input: unknown): ReconstructionJob {
+  const parsed = reconstructionJobSchema.parse(input);
+  return {...parsed, proposal: parsed.proposal ? proposalResponseSchema.parse(parsed.proposal) : parsed.proposal};
+}
 export type { Scene };
 
 export interface BackendConfig {
@@ -172,6 +179,7 @@ export class BackendSession {
   private owners = 0;
   private lifecycle = 0;
   private readonly proposalRequestIds = new Map<string, string>();
+  private lastAppliedReconstruction: { proposal: SceneProposal; epoch: number } | null = null;
   private readonly proposalRequests = new Map<string, PaidRequest<SceneProposal>>();
   private readonly generationRequests = new Map<string, PaidRequest<GenerationJob>>();
   private proposalPending = false;
@@ -708,12 +716,59 @@ export class BackendSession {
         ...(acceptedLocally ? { draft: result.scene, dirty: false, localRevision: this.snapshot.localRevision + 1 } : { dirty: true }),
         ...(!this.snapshot.writeBlocked ? { status: "editing", error: null } : {}),
       });
+      if(checked.base_scene.schemaVersion===1&&checked.candidate.schemaVersion===2)this.lastAppliedReconstruction={proposal:checked,epoch:this.epoch};
       return { ...result, acceptedLocally };
     } catch (error) {
       // A stale preview is a local validation failure, not a loss of editing rights.
       if (epoch === this.epoch && this.isCurrentRequestScope(scope) && !(error instanceof SceneApiError && error.code === "STALE_PROPOSAL")) this.block(error);
       throw error;
     } finally { this.operationPending = false; }
+  }
+  /** Source bytes remain private; no base64 payload or credentials are persisted with a scene. */
+  async uploadSource(file: Blob, name: string, kind: SourceImage['kind']): Promise<SourceImage> {
+    this.requireConfig();
+    const lease = this.writableLease();
+    const scope = this.captureRequestScope();
+    const epoch = this.epoch;
+    const token = await this.accessToken();
+    if (!token) throw new SceneApiError("UNAUTHENTICATED", 401, null);
+    const form = new FormData(); form.append("file", file, name); form.append("projectId", lease.projectId); form.append("kind", kind);
+    const response = await fetch(`${this.config.apiUrl}/assets/sources`, { method: "POST", headers: {Authorization: `Bearer ${token}`}, body: form, cache: "no-store" });
+    const result = await response.json();
+    if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    if (!response.ok) throw new SceneApiError(result.error?.code ?? "SOURCE_UPLOAD_FAILED", response.status, result.error?.details);
+    return sourceImageSchema.parse(result);
+  }
+  async listSources(): Promise<SourceImage[]> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError("PROJECT_REQUIRED", 409, null);
+    return z.array(sourceImageSchema).parse(await this.request(`/projects/${projectId}/sources`, 'GET', undefined, this.captureRequestScope(), false));
+  }
+  async removeSource(assetId: string): Promise<void> {
+    const lease=this.writableLease();
+    const result=await this.request<{removed:boolean}>(`/projects/${lease.projectId}/sources/${uuid.parse(assetId)}`, 'DELETE', undefined, this.captureRequestScope(), false);
+    if(result.removed!==true)throw new SceneApiError('INVALID_RESPONSE',502,null);
+  }
+  async sourceImageUrl(assetId: string): Promise<string> {
+    const result = await this.request<{id: string; url: string}>(`/assets/${uuid.parse(assetId)}/url`, "POST", undefined, this.captureRequestScope(), false);
+    if (result.id !== assetId || typeof result.url !== 'string') throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    const url = new URL(result.url);
+    if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)))) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return url.href;
+  }
+  async createReconstruction(input: ReconstructionInput): Promise<ReconstructionJob> {
+    const state = this.proposalState(input.scene);
+    const request = reconstructionRequestSchema.parse({ ...input, sessionId: state.sessionId, generation: state.generation, expectedRevision: state.expectedRevision, localRevision: state.localRevision });
+    const job = parseReconstructionJob(await this.request(`/projects/${state.projectId}/reconstructions`, 'POST', request, {projectId:state.projectId,lease:state}, false));
+    this.assertProposalContext(state);
+    return job;
+  }
+  async getReconstruction(jobId: string): Promise<ReconstructionJob> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError("PROJECT_REQUIRED", 409, null);
+    const job = parseReconstructionJob(await this.request(`/projects/${projectId}/reconstructions/${uuid.parse(jobId)}`, 'GET', undefined, this.captureRequestScope(), false));
+    if (job.id !== jobId) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return job;
   }
   /** Only text-to-single-object generation is currently supported by /jobs. */
   async createGenerationJob(prompt: string, requestId: string): Promise<GenerationJob> {
@@ -747,8 +802,30 @@ export class BackendSession {
     if (job.id !== id || job.state !== "added") throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return job;
   }
+  /** A v2 -> v1 local undo can restore only an authoritative, known pre-apply snapshot. */
+  private async saveReconstructionUndo(scene: Scene, proposal: SceneProposal): Promise<SaveResult> {
+    this.setDraft(scene);
+    const lease=this.writableLease(),epoch=this.epoch,scope=this.captureRequestScope();
+    const revision=this.snapshot.revision!,localRevision=this.snapshot.localRevision;
+    this.operationPending=true;this.update({status:'saving',error:null});
+    try {
+      const raw=await this.request<unknown>(`/projects/${lease.projectId}/history/restore`,'POST',{
+        sessionId:lease.sessionId,generation:lease.generation,expectedRevision:revision,proposalId:proposal.id,currentScene:proposal.candidate,
+      },scope);
+      const result=applyProposalResponseSchema.extend({warnings:z.array(z.object({code:z.string(),ids:z.array(uuid)}))}).parse(raw);
+      if(epoch!==this.epoch||!this.isCurrentRequestScope(scope))throw new SceneApiError('SESSION_CHANGED',409,null);
+      if(result.id!==lease.projectId||result.revision!==revision+1||result.undoGroup!==proposal.id||canonical(result.scene)!==canonical(proposal.base_scene)||canonical(result.previousScene)!==canonical(proposal.candidate))throw new SceneApiError('INVALID_RESPONSE',502,null);
+      const unchanged=this.snapshot.localRevision===localRevision&&canonical(this.snapshot.draft)===canonical(scene);
+      this.lastAppliedReconstruction=null;
+      this.update({revision:result.revision,project:{...this.snapshot.project!,revision:result.revision,scene:result.scene},lease:{...lease,revision:result.revision},...(unchanged?{draft:result.scene,dirty:false}:{dirty:true}),status:'editing',error:null});
+      return result;
+    }catch(error){if(epoch===this.epoch&&this.isCurrentRequestScope(scope))this.block(error);throw error;}
+    finally{this.operationPending=false;}
+  }
   async saveScene(scene: Scene): Promise<SaveResult> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const restore=this.lastAppliedReconstruction;
+    if(scene.schemaVersion===1&&this.snapshot.project?.scene.schemaVersion===2&&restore?.epoch===this.epoch&&restore.proposal.project_id===this.snapshot.project.id&&canonical(scene)===canonical(restore.proposal.base_scene)&&canonical(this.snapshot.project.scene)===canonical(restore.proposal.candidate))return this.saveReconstructionUndo(scene,restore.proposal);
     this.setDraft(scene);
     const lease = this.writableLease();
     const draft = this.snapshot.draft!;

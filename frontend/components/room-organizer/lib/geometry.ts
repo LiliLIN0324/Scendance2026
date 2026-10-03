@@ -161,7 +161,7 @@ function isIntendedStack(a: FurnitureItem, b: FurnitureItem): boolean {
 function bandsOverlap(a: FurnitureItem, b: FurnitureItem): boolean {
   const bandA = mountBand(a);
   const bandB = mountBand(b);
-  return bandA.bottom < bandB.top && bandB.bottom < bandA.top;
+  return bandA.bottom + (a.elevation ?? 0) < bandB.top + (b.elevation ?? 0) && bandB.bottom + (b.elevation ?? 0) < bandA.top + (a.elevation ?? 0);
 }
 
 /**
@@ -184,7 +184,7 @@ function pairCollides(a: FurnitureItem, b: FurnitureItem): boolean {
   }
   if (isLowProfile(a) || isLowProfile(b)) return false;
   if (isIntendedStack(a, b)) return false;
-  if ((isWallHung(a.type) || isWallHung(b.type)) && !bandsOverlap(a, b)) return false;
+  if ((isWallHung(a.type) || isWallHung(b.type) || a.elevation !== undefined || b.elevation !== undefined) && !bandsOverlap(a, b)) return false;
   return itemsOverlap(a, b);
 }
 
@@ -272,6 +272,8 @@ function straddlesInteriorWall(
 
 /** What else on the storey an item may not overlap, besides other items. */
 export interface CollisionContext {
+  /** Measured geometry already owns polygon bounds and mounted-wall exceptions. */
+  structureValidated?: boolean;
   /** Porch and stairwell rects (`floorKeepOut`). */
   keepOut?: readonly KeepOutRect[] | undefined;
   /** The storey's partitions. */
@@ -303,7 +305,7 @@ export function hasCollisions(
     if (!onPorch && !itemFullyOutside(item, roomWidth, roomDepth)) return true;
     return overlapsAnother();
   }
-  if (!itemInBounds(item, roomWidth, roomDepth)) return true;
+  if (!context.structureValidated && !itemInBounds(item, roomWidth, roomDepth)) return true;
   // The porch is outside too, just inside the footprint (#285); a stairwell
   // is a hole in the floor (#372).
   if (keepOut.some((rect) => keepsOut(item, rect))) return true;

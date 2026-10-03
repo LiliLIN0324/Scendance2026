@@ -69,6 +69,7 @@ export default function Page(): JSX.Element {
 
   return (
     <>
+      {process.env.NEXT_PUBLIC_LOCAL_FIXTURE === '1' && <aside role="status" style={{position:'fixed',bottom:4,left:'50%',transform:'translateX(-50%)',zIndex:10000,padding:'4px 10px',borderRadius:6,background:'#283f36',color:'#fff',fontSize:11,pointerEvents:'none'}}>独立本地预览 · 测试账号与本地数据库</aside>}
       {!entered && <IntroPage controller={controller} onEnter={enterEditor} />}
       {/* The editor mounts on first entry and stays mounted; reopening the landing
           page needs a fresh load of / (the header logo opens the 官网 instead). */}

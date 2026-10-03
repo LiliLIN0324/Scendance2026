@@ -84,7 +84,7 @@ afterEach(() => {
 describe('introduction entry', () => {
   it('defers the editor, then keeps the real brief, image, conversation and unsent message', async () => {
     const rendered = render(<AuthProvider><Page /></AuthProvider>);
-    expect(screen.getByRole('heading', { name: '欢迎来到幕景' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /为相聚，.*留一方空间。/ })).toBeTruthy();
     expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     // The editor chunk is loaded lazily through next/dynamic; the default 1s findBy budget
@@ -117,10 +117,7 @@ describe('introduction entry', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
     await screen.findByText('方案提案 · 尚未应用');
-    fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
-    expect(screen.getByText('editor@example.com')).toBeTruthy();
-    expect(apply).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
+    expect(apply).not.toHaveBeenCalled(); // Candidate stays pending until explicit confirmation.
     fireEvent.click(await screen.findByRole('button', { name: '确认应用' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     expect(generate).toHaveBeenCalledOnce();

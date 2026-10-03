@@ -124,22 +124,21 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
     <main className="sc-intro">
       <header className="sc-intro-header">
         <a className="sc-intro-brand" href="/introduction" aria-label="打开幕景官网"><span className="sc-intro-brand-icon" aria-hidden="true"><BrandMark size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></a>
-        <span className="sc-intro-version">活动空间工作台 <span>v0.4.1</span></span>
+        <span className="sc-intro-version">活动空间工作台 <span>v0.5.0 · 图纸重建预览</span></span>
       </header>
 
       <div className="sc-intro-content">
         <section className="sc-intro-story" aria-labelledby="sc-intro-title">
           <p className="sc-intro-eyebrow"><span aria-hidden="true" />让每一个活动想法，都有落脚的地方</p>
           <h1 id="sc-intro-title">为相聚，<br />留<span>一方空间。</span></h1>
-          <p className="sc-intro-description">把现场照片、活动需求与空间布置放在一起，<br className="sc-intro-desktop-break" />在三维场景里推敲桌椅、动线和现场氛围。</p>
-          {/* <p className="sc-intro-photo-note">现场照片可选，目前仅在本地预览，不会自动测绘或还原三维场地；场地尺寸请按实测填写。</p> */}
+          <p className="sc-intro-description">上传图纸或现场照片，补充实测尺寸和活动需求，<br className="sc-intro-desktop-break" />核对空间结构，再在三维场景里完善你的方案。</p>
           <figure className="sc-intro-visual">
             <div className="sc-intro-visual-label"><span aria-hidden="true" />从一个想法，到一个空间</div>
             <EventIllustration />
             <figcaption>活动空间概念示意 · 实际方案由你来布置</figcaption>
           </figure>
           <ol className="sc-intro-steps" aria-label="幕景使用流程">
-            <li><ImagePlus size={18} aria-hidden="true" /><div><span>01 / 描述想法</span><p>描述需求，可选上传现场照片</p></div></li>
+            <li><ImagePlus size={18} aria-hidden="true" /><div><span>01 / 提供资料</span><p>上传图纸或照片，填写尺寸与需求</p></div></li>
             <li><Box size={18} aria-hidden="true" /><div><span>02 / 布置空间</span><p>在三维画布里调整物料</p></div></li>
             <li><Layers3 size={18} aria-hidden="true" /><div><span>03 / 保存方案</span><p>保存草稿，继续完善细节</p></div></li>
           </ol>
@@ -168,7 +167,7 @@ export function IntroPage({ controller, onEnter }: IntroPageProps): JSX.Element 
               {!cloud.configured && <p className="sc-intro-offline" role="status">登录服务尚未配置，暂时只能本地体验。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
               <button className="sc-intro-secondary" type="button" onClick={onEnter} disabled={busy}>先体验本地工作台<ArrowRight size={17} aria-hidden="true" /></button>
-              <p className="sc-intro-local-note"></p>
+              <p className="sc-intro-local-note" />
             </>
           )}
           <div className="sc-intro-login-footer"><LockKeyhole size={14} aria-hidden="true" /><span>云项目使用工作室账号登录</span></div>

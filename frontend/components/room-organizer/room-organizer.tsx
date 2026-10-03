@@ -6,6 +6,7 @@ import { createBackendSession, type BackendSession } from '@/lib/backend-session
 import { BrandMark } from '../brand-mark';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
+import { layoutReducer } from './hooks/layout-reducer';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
@@ -41,6 +42,7 @@ import { snapshotBeforeReplace } from './lib/restore-point';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
+import { canApplyLayoutGeometry, structuralItemCollides, venueArea, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { CloudPanel } from './panels/cloud-panel';
 import { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } from './panels/creative-studio';
@@ -122,6 +124,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [pendingCatalog, setPendingCatalog] = useState<CatalogItem | null>(null);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
   const [measurementPoints, setMeasurementPoints] = useState<ReadonlyArray<{ x: number; z: number }>>([]);
@@ -155,12 +158,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const collidingIds = useMemo(() => {
     const matches = new Set<string>();
     for (const item of activeFloor.items) {
-      if (hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, interiorWalls: activeFloor.interiorWalls })) {
+      if (structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })) {
         matches.add(item.id);
       }
     }
     return matches;
-  }, [activeFloor.items, activeFloor.interiorWalls, layout.width, layout.height, keepOut]);
+  }, [activeFloor.items, activeFloor.interiorWalls, layout, activeFloorIndex, keepOut]);
 
   const handleEmptyClick = useCallback(
     (x: number, z: number) => {
@@ -435,6 +438,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     handleDragCancel,
     isDragActive,
   } = useItemDrag({
+    layout,
     activeFloor,
     activeFloorIndex,
     roomWidth: layout.width,
@@ -573,25 +577,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // copy mixed in with the stale originals' ids.
   const duplicateSelected = useCallback(
     (primaryId: string) => {
-      const count = allSelectedIds.has(primaryId) ? allSelectedIds.size : 1;
-      if (activeFloor.items.length + count > 50) { notify('当前演示最多支持 50 件物料。', 'info'); return; }
-      commitHistoryNow();
-      if (allSelectedIds.size > 1 && allSelectedIds.has(primaryId)) {
-        // Duplicate the primary first so it becomes the new primary, then the
-        // remaining selected items in a stable order.
-        const others = Array.from(allSelectedIds).filter((id) => id !== primaryId);
-        const newPrimary = actions.duplicateItem(primaryId);
-        const newExtras = others.map((id) => actions.duplicateItem(id));
-        setSelectedItemId(newPrimary);
-        setExtraSelectedIds(new Set(newExtras));
-        return;
+      const originals = allSelectedIds.has(primaryId) ? [primaryId, ...Array.from(allSelectedIds).filter(id => id !== primaryId)] : [primaryId];
+      const ids = originals.map(() => crypto.randomUUID());
+      const extra = activeFloor.items.filter(item => originals.includes(item.id));
+      if (materialCount(activeFloor.items) + materialCount(extra) > 50) { notify('当前演示最多支持 50 件物料。', 'info'); return; }
+      let candidate = { layout, activeFloorIndex };
+      for (let index = 0; index < originals.length; index++) {
+        const next = layoutReducer(candidate, {type:'duplicateItem',sourceId:originals[index]!,newId:ids[index]!});
+        if (next === candidate) { notify('复制位置与结构冲突，整组未复制。', 'info'); return; }
+        candidate = next;
       }
-      const newId = actions.duplicateItem(primaryId);
-      setSelectedItemId(newId);
-      // Clear stale extras so the selection is only the fresh copy.
-      setExtraSelectedIds(new Set());
+      commitHistoryNow();
+      actions.replaceItems(candidate.layout.floors[activeFloorIndex]!.items);
+      setSelectedItemId(ids[0]!);
+      setExtraSelectedIds(new Set(ids.slice(1)));
     },
-    [actions, activeFloor.items.length, commitHistoryNow, allSelectedIds]
+    [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds]
   );
 
   const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout } = useLayoutPersistence({
@@ -635,6 +636,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   );
 
   const { snapPosition, getDragPlaneY, placeCatalogItem } = useItemPlacement({
+    layout,
     activeFloor,
     activeFloorY,
     roomWidth: layout.width,
@@ -650,11 +652,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const placeDiscrete = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }): string => {
-      if (activeFloor.items.length >= 50) { notify('当前演示最多支持 50 件物料。', 'info'); return ''; }
+      if (activeFloor.items.filter(i=>!i.structuralOpeningId && !i.structuralColumnId && !i.venueEntranceId).length >= 50) { notify('当前演示最多支持 50 件物料。', 'info'); return ''; }
       commitHistoryNow();
-      return placeCatalogItem(catalogItem, position);
+      const id = placeCatalogItem(catalogItem, position);
+      if (!id) { setPendingCatalog(catalogItem); notify('此处与结构相交，请点击场地中的其他位置放置。', 'info'); }
+      else setPendingCatalog(null);
+      return id;
     },
-    [commitHistoryNow, placeCatalogItem, activeFloor.items.length]
+    [commitHistoryNow, placeCatalogItem, activeFloor.items]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -719,6 +724,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       snapPosition,
       getDragPlaneY,
     });
+
+  useEffect(() => {
+    const focusObject = (event: Event) => {
+      const detail = (event as CustomEvent<{projectId?: string; objectId: string; position: {x: number; z: number}}>).detail;
+      if (!detail || detail.projectId !== layout.id || !Number.isFinite(detail.position?.x) || !Number.isFinite(detail.position?.z)) return;
+      const camera = cameraRef.current, controls = controlsRef.current;
+      if (!camera || !controls) return;
+      const dx = detail.position.x - controls.target.x, dz = detail.position.z - controls.target.z;
+      camera.position.x += dx; camera.position.z += dz;
+      controls.target.x = detail.position.x; controls.target.z = detail.position.z;
+      controls.update(); setView(current => ({...current, view2D:false})); invalidate();
+    };
+    window.addEventListener('scendance:focus-object', focusObject);
+    return () => window.removeEventListener('scendance:focus-object', focusObject);
+  }, [layout.id, cameraRef, controlsRef, invalidate]);
 
   sceneBoxRef.current = sceneRef;
   invalidateBoxRef.current = invalidate;
@@ -857,9 +877,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       floorIndex: activeFloorIndex,
     });
     if (built.length === 0) return false;
-    if (activeFloor.items.length + built.length > 50) { notify('当前演示最多支持 50 件物料。', 'info'); return false; }
+    if (materialCount(activeFloor.items) + materialCount(built) > 50) { notify('当前演示最多支持 50 件物料。', 'info'); return false; }
+    const pasted = built.map(item => { const id = crypto.randomUUID(); return { ...item, id, ...(item.structuralOpeningId ? {structuralOpeningId:id} : {}), ...(item.structuralColumnId ? {structuralColumnId:id} : {}) }; });
+    const next = {...layout, floors:layout.floors.map((floor,index)=>index===activeFloorIndex ? {...floor,items:[...floor.items,...pasted]} : floor)};
+    if (!canApplyLayoutGeometry(layout,next)) { notify('粘贴位置与结构冲突，整组未放置。', 'info'); return false; }
     commitHistoryNow();
-    const pasted = built.map(item => ({ ...item, id: crypto.randomUUID() }));
     actions.addItems(pasted);
     selectOnly(pasted[0]!.id);
     if (built.length > 1) {
@@ -867,7 +889,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     }
     playCue('place');
     return true;
-  }, [layout.width, layout.height, activeFloor.interiorWalls, activeFloor.items.length, activeFloorIndex, actions, commitHistoryNow, selectOnly, playCue]);
+  }, [layout, activeFloor.interiorWalls, activeFloor.items, activeFloorIndex, actions, commitHistoryNow, selectOnly, playCue]);
 
   const shortcutHandlers = useMemo(
     () => ({
@@ -1069,6 +1091,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [actions, layout, clearTransientSelection, clearHistory]);
 
   const onApplyCreative = useCallback((next: RoomLayout) => {
+    if (!canApplyLayoutGeometry(layoutStore.getState().layout, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
     commitHistoryNow();
     snapshotBeforeReplace(layout);
     actions.applyLayout(next);
@@ -1086,8 +1109,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
   useEventAtmosphere({ isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
-    lighting: layout.backendLighting ?? 'warm', width: layout.width, depth: layout.height,
-    ceilingHeight: activeStoreyHeight });
+    lighting: previewCandidate?.backendLighting ?? layout.backendLighting ?? 'warm', width: previewCandidate?.width ?? layout.width, depth: previewCandidate?.height ?? layout.height,
+    ceilingHeight: previewCandidate?.floors[0]?.height ?? activeStoreyHeight });
 
   return (
     <RoomEditorProvider value={roomEditorValue}>
@@ -1107,7 +1130,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         </header>
         <main className="sc-workspace">
           <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
-          <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`}>
+          <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`} onPointerDownCapture={event => {
+            if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
+            event.preventDefault(); event.stopPropagation();
+            const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
+            if (!point) return;
+            const id = placeDiscrete(pendingCatalog,point);
+            if (id) selectOnly(id);
+          }}>
       <Viewport
         isReady={isReady}
         error={error}
@@ -1166,6 +1196,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.width} × {layout.height} m</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
             {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {!selectedItem && !previewCandidate && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
+            {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <ScendanceViewTools onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
@@ -1178,7 +1209,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
           {selectedItem && <ItemContextPopover
-            hasCollision={hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, interiorWalls: activeFloor.interiorWalls })}
+            hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
             onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }}
             onToggleCameraBracket={toggleCameraBracket}
             onDuplicate={duplicateSelected}
@@ -1186,7 +1217,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             onClose={() => selectOnly(null)}
           />}
         </main>
-        <footer className="sc-status-bar"><span><Check size={12}/>{activeFloor.items.length} 件物料 · {(layout.width * layout.height).toFixed(0)} m²</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
         <CreativeAssistant/>
       </div>
     </CreativeStudioProvider>

@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
+import { registerSourceFlush } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
 import { CloudPanel } from './cloud-panel';
 
@@ -46,6 +47,24 @@ afterEach(() => {
 });
 
 describe('CloudPanel delayed project replacement', () => {
+  it('waits for live source inputs before sending the new project request', async () => {
+    let finishFlush!:()=>void;
+    const unregister=registerSourceFlush(projectId,()=>new Promise<void>(resolve=>{finishFlush=resolve;}));
+    const create=vi.spyOn(controller,'createProject').mockRejectedValue(new Error('测试停止于创建请求'));
+    queue([]);
+    queue([{id:studioId,name:'工作室',role:'owner',displayName:'A'}]);
+    const rendered=render(<CloudPanel layout={backendSceneToLayout(scene,{projectId})} onLoadLayout={vi.fn()}/>);
+    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
+    await waitFor(()=>expect(screen.getByRole('button',{name:'把当前画布创建为新项目'}).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button',{name:'把当前画布创建为新项目'}));
+    await waitFor(()=>expect(finishFlush).toBeTypeOf('function'));
+    expect(create).not.toHaveBeenCalled();
+    await act(async()=>{finishFlush();});
+    expect(create).toHaveBeenCalledOnce();
+    expect(await screen.findByText('测试停止于创建请求')).toBeTruthy();
+    unregister();
+  });
+
   it.each(['open', 'acquire', 'create'] as const)('preserves edits made while the %s request is pending', async action => {
     const initialLayout = backendSceneToLayout(scene, { projectId, name: original.name });
     const onLoadLayout = vi.fn();

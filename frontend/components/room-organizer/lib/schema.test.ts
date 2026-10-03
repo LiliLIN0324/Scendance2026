@@ -598,7 +598,7 @@ describe('persisted-field whitelist and bounds (#350)', () => {
     expect(floor).not.toHaveProperty('note');
     expect(floor.items[0]).not.toHaveProperty('extra');
     expect(floor.items[0]!.position).toEqual({ x: 1, z: 2 });
-    expect(floor.interiorWalls![0]).not.toHaveProperty('thickness');
+    expect(floor.interiorWalls![0]).not.toHaveProperty('unknownThickness');
     expect(floor.zones![0]).not.toHaveProperty('area');
     expect(parsed!.roof).not.toHaveProperty('pitch');
     expect(parsed!.roof!.dormers![0]).not.toHaveProperty('tint');
@@ -654,6 +654,7 @@ describe('persisted-field whitelist and bounds (#350)', () => {
 
   it('keeps every field a fully-populated item can carry', () => {
     const item: Required<FurnitureItem> = {
+      structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall', elevation: 0,
       materialId: 'asset',
       assetId: '00000000-0000-4000-8000-000000000002',
       notes: '保存来源与备注',

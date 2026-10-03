@@ -101,10 +101,10 @@ describe('introduction and sign-in entry', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
   });
 
-  it('explains that venue photos are optional local previews without claiming automatic surveying', () => {
+  it('explains measured inputs and structure review without running recognition on entry', () => {
     render(<IntroPage controller={controller(false)} onEnter={vi.fn()} />);
-    expect(screen.getByText(/现场照片可选，目前仅在本地预览，不会自动测绘或还原三维场地/)).toBeTruthy();
-    expect(screen.getByText(/现场照片刷新后需重新选择/)).toBeTruthy();
+    expect(screen.getByText(/上传图纸或现场照片，补充实测尺寸和活动需求/)).toBeTruthy();
+    expect(screen.getByText(/核对空间结构，再在三维场景里完善你的方案/)).toBeTruthy();
     expect(screen.getByRole('img', { name: /活动空间概念插画/ })).toBeTruthy();
     expect(screen.getByText('活动空间概念示意 · 实际方案由你来布置')).toBeTruthy();
     expect(mockFetch).not.toHaveBeenCalled();

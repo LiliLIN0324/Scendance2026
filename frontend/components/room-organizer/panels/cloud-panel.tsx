@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
+import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
@@ -84,9 +85,9 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     try {
       const scene = layoutToBackendScene(layoutRef.current);
       const url = URL.createObjectURL(new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }));
-      const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'scendance-scene-v1.json';
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = `scendance-scene-v${scene.schemaVersion}.json`;
       anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setNotice('已导出通过后端 v1 校验的场景文件。');
+      setNotice(`已导出通过后端 v${scene.schemaVersion} 校验的场景文件。`);
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景校验失败。'); }
   }
 
@@ -157,9 +158,14 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           <label>保存到工作室<select value={studioId} onChange={event => setStudioId(event.target.value)}>{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></label>
           <button type="button" disabled={busy || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
             const current = layoutRef.current;
+            await flushSourceScope(current.id ?? 'local');
+            if(layoutRef.current!==current)throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新创建。');
             setBoundLayout(undefined);
             const created = await controller.createProject(studioId, current.name, layoutToBackendScene(current));
-            await acceptScene(created.scene, created.id, created.name, current); await refreshProjects(); setNotice('新项目已保存，获取编辑权后可继续云端编辑。');
+            let sourceNotice = '';
+            try { await copySourceScope(current.id ?? 'local', created.id); }
+            catch { sourceNotice = ' 本机资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
+            await acceptScene(created.scene, created.id, created.name, current); await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
           })}>把当前画布创建为新项目</button>
         </div>
       </div>}

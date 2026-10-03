@@ -133,10 +133,10 @@ describe('layoutReducer — item CRUD', () => {
     const state = layoutReducer(stateWith([makeItem({ id: 'a' })]), {
       type: 'moveItem',
       id: 'a',
-      x: 5,
+      x: 3,
       z: -3,
     });
-    expect(activeItems(state)[0]!.position).toEqual({ x: 5, z: -3 });
+    expect(activeItems(state)[0]!.position).toEqual({ x: 3, z: -3 });
   });
 
   it('resizeItem clamps to a 0.1 minimum', () => {
@@ -230,23 +230,23 @@ describe('layoutReducer — bulk item operations', () => {
       {
         type: 'bulkSetPositions',
         positions: new Map([
-          ['a', { x: 5, z: 5 }],
-          ['b', { x: 5, z: 5 }],
+          ['a', { x: 3, z: 3 }],
+          ['b', { x: 3, z: 3 }],
         ]),
       }
     );
     const items = activeItems(state);
-    expect(items.find((i) => i.id === 'a')!.position).toEqual({ x: 5, z: 5 });
+    expect(items.find((i) => i.id === 'a')!.position).toEqual({ x: 3, z: 3 });
     expect(items.find((i) => i.id === 'b')!.position).toEqual({ x: 1, z: 1 });
   });
 
   it('bulkSetPositions moves only listed items and leaves others untouched', () => {
     const state = layoutReducer(
       stateWith([makeItem({ id: 'a', position: { x: 0, z: 0 } }), makeItem({ id: 'b', position: { x: 1, z: 1 } })]),
-      { type: 'bulkSetPositions', positions: new Map([['a', { x: 9, z: 9 }]]) }
+      { type: 'bulkSetPositions', positions: new Map([['a', { x: 2, z: 2 }]]) }
     );
     const items = activeItems(state);
-    expect(items.find((i) => i.id === 'a')!.position).toEqual({ x: 9, z: 9 });
+    expect(items.find((i) => i.id === 'a')!.position).toEqual({ x: 2, z: 2 });
     expect(items.find((i) => i.id === 'b')!.position).toEqual({ x: 1, z: 1 });
   });
 });
@@ -326,7 +326,7 @@ describe('layoutReducer — rotateSelection (rigid rotation about centroid)', ()
   });
 
   it('leaves unselected items untouched and is a no-op with no positioned selection', () => {
-    const before = stateWith([makeItem({ id: 'a', position: { x: 5, z: 5 } })]);
+    const before = stateWith([makeItem({ id: 'a', position: { x: 3, z: 3 } })]);
     const after = layoutReducer(before, {
       type: 'rotateSelection',
       ids: new Set(['zzz']),

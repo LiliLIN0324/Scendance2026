@@ -3,7 +3,9 @@
 import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
+import { materialCount, venueArea } from '../lib/structural-layout';
 import { OnlineModelLibrary } from './online-model-library';
+import { StructuralPropertiesPanel } from './structural-properties-panel';
 import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -28,7 +30,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
   const { layout, activeFloor, actions } = useRoomEditor();
   const { selectOnly } = useSelection();
   const [tab, setTab] = useState<'materials' | 'brief' | 'venue'>('materials');
-  const atLimit = activeFloor.items.length >= 50;
+  const atLimit = materialCount(activeFloor.items) >= 50;
 
   const addMaterial = (item: CatalogItem) => {
     if (atLimit) return;
@@ -49,18 +51,19 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
       {tab === 'brief' && <>{creativePanel}</>}
       {tab === 'venue' && <>
-        <div className="sc-section-heading"><div><h2>场地设置</h2><p>单层矩形 · 统一使用米制</p></div><Grid size={19}/></div>
+        <div className="sc-section-heading"><div><h2>场地设置</h2><p>{layout.backendSceneV2 ? '已建立空间结构' : '单层场地'} · 统一使用米制</p></div><Grid size={19}/></div>
         <label className="sc-field">项目名称<input value={layout.name} maxLength={80} onChange={event => actions.setName(event.target.value)} aria-label="项目名称"/></label>
         <div className="sc-dimension-grid">
-          <NumberField label="宽度 / m" value={layout.width} min={2} max={100} onChange={actions.setWidth}/>
-          <NumberField label="进深 / m" value={layout.height} min={2} max={100} onChange={actions.setHeight}/>
-          <NumberField label="净高 / m" value={activeFloor.height ?? 3} min={2} max={10} onChange={actions.setStoreyHeight}/>
+          <NumberField label="宽度 / m" value={layout.width} min={2} max={100} disabled={!!layout.backendSceneV2} onChange={actions.setWidth}/>
+          <NumberField label="进深 / m" value={layout.height} min={2} max={100} disabled={!!layout.backendSceneV2} onChange={actions.setHeight}/>
+          <NumberField label="净高 / m" value={activeFloor.height ?? 3} min={2} max={10} disabled={!!layout.backendSceneV2} onChange={actions.setStoreyHeight}/>
         </div>
-        <div className="sc-area-card"><span>场地面积</span><strong>{(layout.width * layout.height).toFixed(1)} <small>m²</small></strong></div>
+        <div className="sc-area-card"><span>场地面积</span><strong>{venueArea(layout).toFixed(1)} <small>m²</small></strong></div>
         <label className="sc-field sc-color-field">地面颜色<input type="color" aria-label="地面颜色" value={activeFloor.floorColor} onChange={event => actions.setFloorColor(event.target.value)}/></label>
         <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
         <p className="sc-note">实时作用于三维场景；随场景本地保存，连接云项目后使用现有 lighting 字段保存。</p>
-        <p className="sc-note">当前版本提供矩形场地编辑。平面图标定与多边形编辑尚未接入。</p>
+        <p className="sc-note">在“需求”中上传平面图或现场照片，填写真实尺寸并生成空间。已有结构的整体尺寸请通过尺寸核对修改。</p>
+        <StructuralPropertiesPanel/>
       </>}
     </div>
   </aside>;
