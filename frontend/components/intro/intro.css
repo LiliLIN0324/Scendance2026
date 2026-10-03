@@ -39,9 +39,16 @@
 .sc-intro-login { border: 1px solid #e0e4d8; background: #fdfcf8; border-radius: 20px; padding: clamp(18px, 2.7vh, 29px) 30px 0; box-shadow: 0 18px 65px #30472d08; overflow: hidden; }
 .sc-intro-kicker { font-size: 8px; letter-spacing: 1.45px; color: #8c9682; font-weight: 600; margin: 0 0 10px; }
 .sc-intro-login h2 { margin: 0; font-size: 26px; letter-spacing: -.7px; font-weight: 650; }
-.sc-intro-login-copy { margin: 10px 0 clamp(14px, 2.3vh, 24px); font-size: 12px; color: #87907e; line-height: 1.6; }
+.sc-intro-login-copy { overflow-wrap: anywhere; margin: 10px 0 clamp(14px, 2.3vh, 24px); font-size: 12px; color: #87907e; line-height: 1.6; }
 .sc-intro-form { display: grid; }
 /* Sign in / sign up share one card: the toggle swaps the fields, never the page. */
+.sc-intro-auth-tabs { display: flex; gap: 24px; border-bottom: 1px solid #dde2d4; margin-bottom: 26px; }
+.sc-intro-auth-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 0 0 14px; background: none; color: #798071; font-size: 14px; }
+.sc-intro-auth-tabs button[aria-pressed=true] { color: #26392f; border-bottom-color: #526b3d; }
+.sc-intro-auth-tabs button:disabled { opacity: .55; }
+.sc-intro-auth-links button { border: 0; background: none; color: inherit; font-size: inherit; padding: 0; }
+.sc-intro-auth-links button:disabled { opacity: .55; }
+.sc-intro-auth-links button:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
 .sc-intro-auth-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 12px 0 18px; font-size: 12px; color: #52634d; }
 .sc-intro-auth-links a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .sc-intro-form label { font-size: 12px; margin-bottom: 8px; color: #5a6b52; }
@@ -50,7 +57,7 @@
 .sc-intro-form input:disabled { opacity: 1; background: #f2f3ed; color: #8e9784; }
 .sc-intro button { font-family: inherit; cursor: pointer; }
 .sc-intro button:disabled { cursor: not-allowed; }
-.sc-intro button:focus-visible, .sc-intro input:focus-visible { outline: 3px solid #8da97c; outline-offset: 3px; }
+.sc-intro button:focus-visible, .sc-intro input:focus-visible, .sc-intro a:focus-visible { outline: 3px solid #8da97c; outline-offset: 3px; }
 .sc-intro-primary, .sc-intro-secondary { min-height: 44px; width: 100%; border-radius: 7px; display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 13px; font-weight: 550; transition: background .15s; }
 .sc-intro-primary { background: #36543c; border: 1px solid #36543c; color: #fafbf6; }
 .sc-intro-primary:hover:not(:disabled) { background: #253e2b; }

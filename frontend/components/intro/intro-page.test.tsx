@@ -136,10 +136,62 @@ describe('introduction and sign-in entry', () => {
     expect(session.getSnapshot().user).toBeNull();
     expect(onEnter).not.toHaveBeenCalled();
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'editor-id', email: 'editor@example.com' } }), { status: 200 }));
-    fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+    submitCredentials();
     expect(screen.queryByRole('alert')).toBeNull();
     await waitFor(() => expect(onEnter).toHaveBeenCalledOnce());
     expect(session.getSnapshot().user?.email).toBe('editor@example.com');
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+});
+
+
+it('registers and verifies an email inside the landing card before entering', async () => {
+  const session = controller();
+  const onEnter = vi.fn();
+  render(<IntroPage controller={session} onEnter={onEnter} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Sign up · 注册' }));
+  fireEvent.change(screen.getByLabelText('如何称呼你'), { target: { value: '测试创作者' } });
+  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'new@example.com' } });
+  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-long-password' } });
+  mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ id: 'new-user' })));
+  fireEvent.click(screen.getByRole('button', { name: '创建账号' }));
+  await screen.findByLabelText('六位验证码');
+  expect(onEnter).not.toHaveBeenCalled();
+  expect(screen.queryByLabelText('密码')).toBeNull();
+  expect(screen.getByRole('button', { name: /秒后可重新发送/ }).hasAttribute('disabled')).toBe(true);
+  mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'otp_expired' }), { status: 403 }));
+  fireEvent.change(screen.getByLabelText('六位验证码'), { target: { value: '012345' } });
+  fireEvent.click(screen.getByRole('button', { name: '验证并进入工作室' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('验证码已失效');
+  expect(onEnter).not.toHaveBeenCalled();
+  mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'new-user' } })));
+  fireEvent.click(screen.getByRole('button', { name: '验证并进入工作室' }));
+  await waitFor(() => expect(onEnter).toHaveBeenCalledOnce());
+});
+
+
+it('switches modes in place, preserves email and clears passwords and errors', async () => {
+  render(<IntroPage controller={controller()} onEnter={vi.fn()} />);
+  mockFetch.mockResolvedValueOnce(new Response('{}', { status: 400 }));
+  submitCredentials();
+  await screen.findByRole('alert');
+  fireEvent.click(screen.getByRole('button', { name: 'Sign up · 注册' }));
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('editor@example.com');
+  expect((screen.getByLabelText('密码') as HTMLInputElement).value).toBe('');
+  expect(screen.getByLabelText('密码').getAttribute('minlength')).toBe('12');
+  fireEvent.click(screen.getByRole('button', { name: '输入已有验证码' }));
+  expect(screen.getByLabelText('六位验证码')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '修改邮箱' }));
+  expect(screen.getByLabelText('邮箱')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in · 登录' }));
+  expect(screen.queryByLabelText('如何称呼你')).toBeNull();
+  expect(screen.getByRole('link', { name: '忘记密码？' }).getAttribute('href')).toBe('/reset-password');
+});
+
+it('waits for session restoration before allowing credentials to be submitted', () => {
+  render(<IntroPage controller={controller()} ready={false} onEnter={vi.fn()} />);
+  expect(screen.getByRole('button', { name: '正在恢复会话…' }).hasAttribute('disabled')).toBe(true);
+  fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
+  expect(mockFetch).not.toHaveBeenCalled();
 });

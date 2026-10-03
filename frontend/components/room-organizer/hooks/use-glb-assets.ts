@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { presetModelUrl } from '../lib/scene-presets';
 import { ensureGlbAsset, getGlbAssetRevision, getGlbAssetState, glbAssetKey, subscribeGlbAssets } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
 
@@ -7,12 +8,16 @@ const serverRevision = () => 0;
 export function useGlbAssets(layout: RoomLayout): number {
   const revision = useSyncExternalStore(subscribeGlbAssets, getGlbAssetRevision, serverRevision);
   useEffect(() => {
+    if (layout.scenePreset) {
+      const url = presetModelUrl(layout.scenePreset);
+      if (getGlbAssetState(url).status === 'idle') void ensureGlbAsset(url, url).catch(() => {});
+    }
     for (const floor of layout.floors) for (const item of floor.items) {
       const key = glbAssetKey(item);
       if (key && item.glbUrl && getGlbAssetState(key).status === 'idle') {
         void ensureGlbAsset(key, item.glbUrl).catch(() => { /* Error remains in the queryable cache state. */ });
       }
     }
-  }, [layout.floors, revision]);
+  }, [layout.floors, layout.scenePreset, revision]);
   return revision;
 }
