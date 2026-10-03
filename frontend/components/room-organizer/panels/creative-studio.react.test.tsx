@@ -6,12 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
+import { loadScenePreset } from '../three/scene-presets';
 import { CreativeAssistant, CreativeStudioProvider } from './creative-studio';
 import { GeneratedModelLibrary } from './generated-model-library';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
 let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
 vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
@@ -121,6 +123,28 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
+  it('opens complete templates separately without losing the planning draft or invoking generation', async () => {
+    connected();
+    const preset:RoomLayout={...layout,name:'办公室 · 留白',scenePreset:'office'};
+    vi.mocked(loadScenePreset).mockResolvedValueOnce(preset);
+    vi.spyOn(window,'confirm').mockReturnValue(true);
+    const create=vi.spyOn(controller,'createGenerationJob');
+    renderUI(ui());
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'保留这条未发送的需求'}});
+    fireEvent.click(screen.getByRole('tab',{name:/场景模板/}));
+    expect(screen.getAllByRole('button',{name:/载入工作台/})).toHaveLength(10);
+    fireEvent.click(screen.getByRole('tab',{name:/场景策划/}));
+    expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('保留这条未发送的需求');
+    fireEvent.click(screen.getByRole('tab',{name:/场景模板/}));
+    fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledWith(preset));
+    expect(loadScenePreset).toHaveBeenCalledWith('office');
+    expect(controller.requestProposal).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab',{name:/3D 生成/})).toBeTruthy();
+  });
+
   it('keeps text planning available alongside reconstruction for an existing v2 scene',async()=>{
     render(ui(createMeasuredRoomLayout(layout,{width:12,depth:10,height:3})));
     await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
@@ -431,10 +455,10 @@ describe('context continuity and project isolation', () => {
 
 
 describe('unified Agent', () => {
-  it('offers exactly two Agent sections and keeps the unsent planning message when switching', () => {
+  it('offers three Agent sections and keeps the unsent planning message when switching', () => {
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
-    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加两把椅子' } });
     fireEvent.click(screen.getByRole('tab', { name: /3D 生成/ }));
     expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
