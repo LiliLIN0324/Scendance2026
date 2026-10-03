@@ -41,7 +41,7 @@ import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
-import { editorItemLimit } from './lib/scene-presets';
+import { editorItemLimit, SCENE_PRESETS } from './lib/scene-presets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
@@ -1216,7 +1216,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           } catch (error) { notify(error instanceof Error ? error.message : '模型加载失败，请重试。', 'error'); }
         }}
       />
-            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset === 'gym' ? '体育馆概念场景 · 原模型比例' : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
+            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset ? `${SCENE_PRESETS[layout.scenePreset].name} · 概念场景` : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
             {previewCandidate && <div className="sc-preview-caption" role="status">{validMovementPreview ? '批量移动预览 · 尚未应用' : 'AI 修改预览 · 尚未加入场景'}{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
@@ -1239,7 +1239,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             onClose={() => selectOnly(null)}
           />}
         </main>
-        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset === 'gym' ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
         <CreativeAssistant generationPanel={(seed,context)=><GeneratedModelLibrary {...context} seed={seed} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
       </div>
     </CreativeStudioProvider>

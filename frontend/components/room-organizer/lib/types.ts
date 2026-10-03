@@ -327,6 +327,8 @@ export interface NeighbourSpec {
   seed?: number;
 }
 
+export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | 'lawn' | 'market' | 'museum' | 'office' | 'studio';
+
 /**
  * A multi-floor building. `floors[0]` is the ground floor; subsequent
  * entries stack upward. Footprint and floor-plan upload live on the
@@ -339,7 +341,7 @@ export interface RoomLayout {
   /** Authoritative v2 provenance and design, retained through local save and undo. */
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
   /** Local complete-scene preset; its architecture is separate from editable items. */
-  scenePreset?: 'gym' | 'popup';
+  scenePreset?: ScenePresetKey;
   /** Preserves backend fields until explicitly edited through supported controls. */
   backendVenue?: Scene['venue'];
   backendCamera?: Scene['camera'];
