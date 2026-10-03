@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { IntroPage } from '@/components/intro/intro-page';
 import { AuthProvider } from '@/lib/auth-provider';
 import { BackendSession, createBackendSession, getBackendConfig } from '@/lib/backend-session';
 import ResetPasswordPage from '../reset-password/page';
 import CallbackPage from './callback/page';
 import AuthPage from './page';
 
-const navigation = vi.hoisted(() => ({ replace: vi.fn() }));
+const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => navigation }));
 vi.mock('@/lib/backend-session', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/backend-session')>(), createBackendSession: vi.fn() }));
 const fetchMock = vi.fn<typeof fetch>();
@@ -17,7 +16,7 @@ const response = (value: unknown, status = 200) => new Response(JSON.stringify(v
 let controller: BackendSession;
 beforeEach(() => {
   window.history.replaceState(null, '', '/auth');
-  sessionStorage.clear(); fetchMock.mockReset(); navigation.replace.mockReset();
+  sessionStorage.clear(); fetchMock.mockReset(); navigation.replace.mockReset(); navigation.push.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   controller = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'public-test' }), sessionStorage);
   vi.mocked(createBackendSession).mockReturnValue(controller);
@@ -25,7 +24,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it('registers, clears the password, handles an invalid OTP, then enters the workspace', async () => {
-  render(<AuthProvider><IntroPage controller={controller} onEnter={() => navigation.replace('/')} /></AuthProvider>);
+  render(<AuthProvider><AuthPage /></AuthProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Sign up · 注册' }));
   fireEvent.change(screen.getByLabelText('如何称呼你'), { target: { value: '测试创作者' } });
   fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'new@example.com' } });
@@ -97,13 +96,28 @@ it('strips recovery credentials from the URL before routing the old callback to 
 
 
 it.each([
-  ['/auth?next=%2F', '/#sign-in'],
-  ['/auth?next=%2Fprojects%3Fview%3Drecent%23saved', '/?next=%2Fprojects%3Fview%3Drecent%23saved#sign-in'],
-  ['/auth?next=https%3A%2F%2Fevil.example', '/#sign-in'],
-  ['/auth?next=%2Fauth', '/#sign-in'],
-])('redirects the legacy login entry %s to the landing card', async (path, target) => {
+  ['/auth', '/'],
+  ['/auth?next=%2F', '/'],
+  ['/auth?next=%2Fprojects%3Fview%3Drecent%23saved', '/projects?view=recent#saved'],
+  ['/auth?next=https%3A%2F%2Fevil.example', '/'],
+  ['/auth?next=%2Fauth', '/'],
+])('keeps %s as the login page and only follows its safe destination after login', async (path, target) => {
   window.history.replaceState(null, '', path);
-  render(<AuthPage />);
+  render(<AuthProvider><AuthPage /></AuthProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name: '登录并进入工作台' }).hasAttribute('disabled')).toBe(false));
+  expect(navigation.replace).not.toHaveBeenCalled();
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'test@example.com' } });
+  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-long-password' } });
+  fetchMock.mockResolvedValueOnce(response(auth));
+  fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(target));
-  expect(screen.queryByLabelText('密码')).toBeNull();
+});
+
+
+it('enters the local workspace without signing in', async () => {
+  render(<AuthProvider><AuthPage /></AuthProvider>);
+  fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
+  expect(navigation.push).toHaveBeenCalledWith('/?local=1');
+  expect(fetchMock).not.toHaveBeenCalled();
 });

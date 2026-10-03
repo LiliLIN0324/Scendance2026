@@ -17,8 +17,7 @@ for (const path of ['assets', 'vendor', 'renderer-webgl.js']) {
   await cp(new URL(path, root), new URL(path, showcase), { recursive: true });
 }
 const introduction = (await readFile(new URL('introduction.html', root), 'utf8'))
-  // v0.4.1's 官网 shipped the workbench entry as http://localhost:3000/ (the app root).
-  .replaceAll('http://localhost:3000/', '/')
+  .replaceAll('http://localhost:3000/', '/auth')
   .replaceAll('./assets/', '/showcase/assets/')
   .replaceAll('./vendor/', '/showcase/vendor/')
   .replaceAll('./renderer-webgl.js', '/showcase/renderer-webgl.js')

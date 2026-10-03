@@ -86,3 +86,15 @@ describe('CloudPanel delayed project replacement', () => {
     }
   });
 });
+
+
+it('uses the canonical auth page instead of a second cloud login form', () => {
+  const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+  const rendered = render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
+  expect(screen.queryByLabelText('密码')).toBeNull();
+  expect(screen.getByRole('link', { name: '前往登录' }).getAttribute('href')).toBe('/auth');
+  fireEvent.click(screen.getByRole('link', { name: '前往登录' }));
+  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+  anonymous.dispose();
+});

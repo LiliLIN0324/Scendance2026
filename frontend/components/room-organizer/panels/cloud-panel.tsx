@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
@@ -18,8 +19,6 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [studios, setStudios] = useState<Studio[]>([]);
   const [studioId, setStudioId] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [boundLayout, setBoundLayout] = useState<string | undefined>();
@@ -102,14 +101,10 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         <p>你可以继续布置场地，草稿自动保存在此浏览器。团队登录与云端交接将在后端部署后开放。</p>
         <p className="sc-cloud-muted">当前画布支持导出符合后端格式的场景文件，便于交接和检查。</p>
         <button type="button" onClick={downloadContract} disabled={!!conversionError}>导出场景数据</button>
-      </div> : !cloud.user ? <form className="sc-cloud-form" onSubmit={event => {
-        event.preventDefault(); void run(async () => { try { await controller.signIn(email, password); await refreshProjects(); } finally { setPassword(''); } });
-      }}>
-        <p>登录你的工作室。当前草稿会保留。</p>
-        <label>邮箱<input type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required /></label>
-        <label>密码<input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></label>
-        <button className="sc-cloud-primary" disabled={busy} type="submit">{busy ? '正在连接…' : '登录工作室'}</button>
-      </form> : <div className="sc-cloud-content">
+      </div> : !cloud.user ? <div className="sc-cloud-form">
+        <p>登录你的工作室，继续连接云项目。</p>
+        <Link className="sc-cloud-primary" href="/auth" onClick={() => dialog.current?.close()}>前往登录</Link>
+      </div> : <div className="sc-cloud-content">
         <div className="sc-cloud-account"><span>{cloud.user.email ?? '已登录工作室'}</span><button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button></div>
         {cloud.project && <section className="sc-cloud-current">
           <span className="sc-cloud-eyebrow">当前云项目</span><h3>{cloud.project.name}</h3>
