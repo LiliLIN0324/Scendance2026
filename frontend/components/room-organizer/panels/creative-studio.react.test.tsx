@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
-import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider } from './creative-studio';
 import type { RoomLayout } from '../lib/types';
 
@@ -104,6 +104,13 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
+  it('renders only the reconstruction Generate action for an existing v2 scene',async()=>{
+    render(ui(createMeasuredRoomLayout(layout,{width:12,depth:10,height:3})));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
+    expect(screen.queryByRole('button',{name:'Generate 生成布置方案'})).toBeNull();
+    expect(screen.queryByText('Generate 生成布置方案')).toBeNull();
+  });
+
   it('requires an explicit decision before generating with a missing round table', async () => {
     connected();
     render(ui());
@@ -157,8 +164,10 @@ describe('creative brief and assistant interaction', () => {
     const file = new File(['image fixture'], 'venue.png', { type: 'image/png' });
     upload(rendered.container, [file]);
     const image = await screen.findByRole('img', { name: '现场照片：venue.png' });
+    expect(screen.queryByRole('button',{name:'Generate 生成布置方案'})).toBeNull();
+    expect(screen.queryByText('Generate 生成布置方案')).toBeNull();
     expect(image.getAttribute('src')).toBe('blob:local-reference');
-    expect(screen.getByText(/目前仅本机预览，尚不识别场地/)).toBeTruthy();
+    expect(screen.getByText(/图片保存在本机；连接项目并生成时会上传至私有存储/)).toBeTruthy();
     expect(controller.requestProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
     expect(screen.queryByRole('img')).toBeNull();

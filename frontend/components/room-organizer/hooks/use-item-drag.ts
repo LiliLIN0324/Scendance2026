@@ -1,12 +1,14 @@
 import { useCallback, useRef, type MutableRefObject } from 'react';
 import { hasCollisions, type KeepOutRect } from '../lib/geometry';
 import { settleWallMountedItem, type WallGap } from '../lib/opening-snap';
+import { canApplyLayoutGeometry, structuralItemCollides } from '../lib/structural-layout';
 import type { LayoutActions } from './use-layout-state';
-import type { FloorLayout } from '../lib/types';
+import type { FloorLayout, RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
 export interface UseItemDragParams {
   activeFloor: FloorLayout;
+  layout?: RoomLayout;
   activeFloorIndex: number;
   roomWidth: number;
   roomDepth: number;
@@ -74,6 +76,7 @@ function sessionMoved(
 
 export function useItemDrag({
   activeFloor,
+  layout,
   activeFloorIndex,
   roomWidth,
   roomDepth,
@@ -89,6 +92,7 @@ export function useItemDrag({
     primaryId: string;
     origins: Map<string, { x: number; z: number }>;
     latest: Map<string, { x: number; z: number }>;
+    valid: Map<string, { x: number; z: number }>;
   } | null>(null);
 
   const findFurnitureGroup = useCallback(
@@ -138,7 +142,7 @@ export function useItemDrag({
         if (item.locked && id !== primaryId) continue;
         origins.set(id, { x: item.position.x, z: item.position.z });
       }
-      dragSessionRef.current = { primaryId, origins, latest: new Map(origins) };
+      dragSessionRef.current = { primaryId, origins, latest: new Map(origins), valid: new Map(origins) };
     },
     [allSelectedIds, activeFloor.items]
   );
@@ -175,20 +179,31 @@ export function useItemDrag({
         const moved = session.latest.get(item.id);
         return moved ? { ...item, position: moved } : item;
       });
+      const base = layout ?? { name: '拖动', width: roomWidth, height: roomDepth, floors: [activeFloor] };
+      const candidate = { ...base, floors: base.floors.map(f => f.id === activeFloor.id ? { ...f, items: candidateItems } : f) };
+      if (canApplyLayoutGeometry(base, candidate)) session.valid = new Map(session.latest);
       const dragged = candidateItems.find((item) => item.id === id);
       const primaryGroup = findFurnitureGroup(id);
       if (dragged && primaryGroup) {
-        setDragCollisionTint(primaryGroup, hasCollisions(dragged, candidateItems, roomWidth, roomDepth, { keepOut, interiorWalls: activeFloor.interiorWalls }));
+        setDragCollisionTint(primaryGroup, structuralItemCollides(dragged, candidate, activeFloorIndex) || hasCollisions(dragged, candidateItems, roomWidth, roomDepth, { keepOut, structureValidated: !!layout?.backendSceneV2, interiorWalls: layout?.backendSceneV2 ? [] : activeFloor.interiorWalls }));
       }
       invalidateBoxRef.current();
     },
-    [actions, activeFloor.items, activeFloor.interiorWalls, roomWidth, roomDepth, keepOut, findFurnitureGroup, setDragCollisionTint]
+    [actions, activeFloor, activeFloorIndex, layout, roomWidth, roomDepth, keepOut, findFurnitureGroup, setDragCollisionTint]
   );
 
   const handleDragEnd = useCallback(
     (id: string) => {
       const session = dragSessionRef.current;
       dragSessionRef.current = null;
+      if (session) {
+        session.latest = session.valid;
+        for (const [memberId, position] of session.latest) {
+          const group = findFurnitureGroup(memberId);
+          if (group) { group.position.x = position.x; group.position.z = position.z; setDragCollisionTint(group, false); }
+        }
+        invalidateBoxRef.current();
+      }
       const finalPos = session?.latest.get(id);
       // A gesture that never actually moved anything (a stray zero-distance
       // drag) must not write state or add an undo entry, and must not re-lock

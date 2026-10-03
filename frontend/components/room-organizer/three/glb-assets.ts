@@ -23,6 +23,8 @@ export function subscribeGlbAssets(listener: () => void): () => void {
 }
 export function getGlbAssetRevision(): number { return revision; }
 export function getGlbAssetState(key: string): GlbAssetState { return cache.get(key)?.state ?? IDLE; }
+/** Read-only source owned by the cache; callers must clone before mutation. */
+export function getGlbAssetSource(key: string): THREE.Object3D | undefined { return cache.get(key)?.source; }
 export function glbAssetKey(item: Pick<FurnitureItem, 'assetId' | 'glbUrl'>): string | undefined { return item.assetId ?? item.glbUrl; }
 
 /** Reject external URI dependencies: an archived standalone GLB must reopen by itself. */
@@ -162,9 +164,20 @@ export function normalizeGlbInstance(source: THREE.Object3D, dimensions: { width
 
 export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
   const key = glbAssetKey(item);
-  const source = key ? cache.get(key)?.source : undefined;
+  const asset = key ? cache.get(key)?.source : undefined;
+  const source = item.glbNode ? asset?.getObjectByName(item.glbNode) : asset;
   if (!source) return null;
   const group = normalizeGlbInstance(source, item);
+  if (item.elevation) {
+    // Keep the outer group on the floor for the existing drag handlers.
+    // This wrapper's world offset must not scale when the fixture is resized.
+    const content = new THREE.Group();
+    content.add(...group.children);
+    content.scale.copy(group.scale);
+    content.position.y = item.elevation;
+    group.scale.set(1, 1, 1);
+    group.add(content);
+  }
   // The default white multiplier preserves every original material/texture.
   // An explicit user colour tints independent instance materials only.
   if (item.color.toLowerCase() !== '#ffffff') {

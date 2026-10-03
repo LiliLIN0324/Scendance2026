@@ -2,6 +2,7 @@ import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '.
 import { rotatedHalfExtents } from '../lib/geometry';
 import { planDrawOrder } from '../lib/plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../lib/street';
+import { layoutGeometryScene } from '../lib/structural-layout';
 import { zoneArea, type ZoneRect } from '../lib/zones';
 import { drawStairsSymbol, drawStairwellHoles } from './stairs-symbol';
 import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, WallId } from '../lib/types';
@@ -122,15 +123,25 @@ export function render2DTopDown(options: Render2DOptions): void {
 
   const { scale, offsetX, offsetY } = get2DViewTransform(viewWidth, viewHeight, layout, options.padding ?? PADDING);
 
+  ctx.save();
+  if (layout.backendVenue?.polygon) {
+    ctx.beginPath();
+    layout.backendVenue.polygon.forEach((p, i) => { if (i) ctx.lineTo(offsetX + p.x * scale, offsetY + p.z * scale); else ctx.moveTo(offsetX + p.x * scale, offsetY + p.z * scale); });
+    ctx.closePath(); ctx.clip();
+  }
   drawFloor(ctx, layout, floor, offsetX, offsetY, scale);
   drawGrid(ctx, layout, offsetX, offsetY, scale);
+  ctx.restore();
   // The stairwell the floor below cuts through this slab (#290), under everything placed over it.
   drawStairwellHoles(ctx, layout, planFloorIndex(layout.floors, floor), { scale, offsetX, offsetY });
   // Zone tints sit on the floor under the walls; their labels go over the
   // walls but under the furniture, like a plan's room names (#155).
   drawZoneFills(ctx, layout, floor, offsetX, offsetY, scale);
-  drawRoomOutline(ctx, layout, floor, offsetX, offsetY, scale);
-  drawInteriorWalls(ctx, layout, floor, offsetX, offsetY, scale);
+  if (layout.backendSceneV2) drawMeasuredStructure(ctx, layout, offsetX, offsetY, scale);
+  else {
+    drawRoomOutline(ctx, layout, floor, offsetX, offsetY, scale);
+    drawInteriorWalls(ctx, layout, floor, offsetX, offsetY, scale);
+  }
   drawZoneLabels(ctx, layout, floor, offsetX, offsetY, scale, options.showMeasurements);
 
   if (options.showHeatmap) {
@@ -883,4 +894,23 @@ export function ensureFloorPlanImageDecoded(url: string): Promise<void> {
     image.addEventListener('load', done, { once: true });
     image.addEventListener('error', done, { once: true });
   });
+}
+
+function drawMeasuredStructure(ctx: CanvasRenderingContext2D, layout: RoomLayout, ox: number, oy: number, scale: number): void {
+  const { structure } = layoutGeometryScene(layout);
+  for (const wall of structure.walls) {
+    const dx = wall.end.x - wall.start.x, dz = wall.end.z - wall.start.z, length = Math.hypot(dx, dz);
+    const holes = structure.openings.filter(o => o.wallId === wall.id).sort((a,b) => a.offset - b.offset);
+    ctx.strokeStyle = wall.status === 'inferred' ? '#bb8b3c' : '#5b665f';
+    ctx.lineWidth = Math.max(2, wall.thickness * scale);
+    ctx.lineCap = 'butt';
+    let from = 0;
+    for (const hole of [...holes, { offset: length, width: 0 }]) {
+      if (hole.offset > from) { ctx.beginPath();
+        ctx.moveTo(ox + (wall.start.x + dx * from / length) * scale, oy + (wall.start.z + dz * from / length) * scale);
+        ctx.lineTo(ox + (wall.start.x + dx * hole.offset / length) * scale, oy + (wall.start.z + dz * hole.offset / length) * scale); ctx.stroke();
+      }
+      from = Math.max(from, hole.offset + hole.width);
+    }
+  }
 }

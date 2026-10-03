@@ -6,11 +6,13 @@ import {
   snapToWall as snapPositionToWall,
 } from '../lib/geometry';
 import { isOpening, snapOpeningToWall, snapWallMountedItem, type WallGap } from '../lib/opening-snap';
+import { canApplyLayoutGeometry, snapMeasuredOpening } from '../lib/structural-layout';
 import type { LayoutActions } from './use-layout-state';
-import type { CatalogItem, FloorLayout, ViewSettings } from '../lib/types';
+import type { CatalogItem, FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
 
 export interface UseItemPlacementParams {
   activeFloor: FloorLayout;
+  layout?: RoomLayout;
   /** World-space Y of the active floor — the drag plane. */
   activeFloorY: number;
   roomWidth: number;
@@ -42,6 +44,7 @@ export interface UseItemPlacementResult {
 
 export function useItemPlacement({
   activeFloor,
+  layout,
   activeFloorY,
   roomWidth,
   roomDepth,
@@ -67,6 +70,7 @@ export function useItemPlacement({
       // Doors and windows have to live on a wall — there's no such thing as
       // a "free-floating" opening. Force-snap them regardless of the toggle.
       if (item && isOpening(item.type)) {
+        if (layout?.backendSceneV2) return snapMeasuredOpening(layout,item,result)?.position ?? item.position ?? result;
         const snapped = snapOpeningToWall({
           position: result,
           itemWidth: item.width,
@@ -121,6 +125,7 @@ export function useItemPlacement({
       view.snapToWall,
       view.snapToItems,
       activeFloor.items,
+      layout,
       activeFloor.interiorWalls,
       allSelectedIds,
       gap,
@@ -140,6 +145,14 @@ export function useItemPlacement({
   const placeCatalogItem = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }) => {
       if (isOpening(catalogItem.type)) {
+        if (layout?.backendSceneV2) {
+          const item = {...catalogItem,id:crypto.randomUUID()};
+          const seated = snapMeasuredOpening(layout,item,position??{x:0,z:0});
+          if (!seated) return '';
+          const candidate = {...layout,floors:layout.floors.map(f=>f.id===activeFloor.id?{...f,items:[...f.items,{...item,...seated}]}:f)};
+          if (!canApplyLayoutGeometry(layout,candidate)) return '';
+          return actions.addCatalogItem(catalogItem,seated.position);
+        }
         const snapped = snapOpeningToWall({
           position: position ?? { x: 0, z: 0 },
           itemWidth: catalogItem.width,
@@ -184,11 +197,15 @@ export function useItemPlacement({
         const outsidePos = { x: 0, z: roomDepth / 2 + catalogItem.depth / 2 + 0.5 };
         return actions.addCatalogItem(catalogItem, outsidePos);
       }
+      const base = layout ?? { name: '放置', width: roomWidth, height: roomDepth, floors: [activeFloor] };
+      const candidateItem = { ...catalogItem, id: '__placement_preview__', position: position ?? { x: 0, z: 0 }, rotation: 0 };
+      const candidate = { ...base, floors: base.floors.map(f => f.id === activeFloor.id ? { ...f, items: [...f.items, candidateItem] } : f) };
+      if (!canApplyLayoutGeometry(base, candidate)) return '';
       const id = actions.addCatalogItem(catalogItem, position);
       actions.setLocked(id, false);
       return id;
     },
-    [actions, activeFloor.interiorWalls, activeFloorY, roomWidth, roomDepth, gap]
+    [actions, activeFloor, layout, activeFloorY, roomWidth, roomDepth, gap]
   );
 
   return { snapPosition, getDragPlaneY, placeCatalogItem };

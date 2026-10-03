@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { canApplyStructuralChange, structuralViolations, dimensionConflicts } from './structural-geometry.ts';
+import { reconstructionRequestSchema } from './reconstruction-contract.ts';
 import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, recommendations } from './assets.ts';
@@ -7,6 +9,7 @@ import { readBounded, required, reserveCost, type Env, type Fetcher } from './ht
 import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
+const displayName=z.string().trim().min(1).max(80);
 const idempotency=z.strictObject({requestId:uuid,prompt:z.string().trim().min(1).max(1024)});
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
@@ -32,7 +35,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         try {return JSON.parse(new TextDecoder().decode(await readBounded(request,256_000))) as unknown;}
         catch(e) {if(e instanceof ApiError) throw e; throw new ApiError('INVALID_JSON');}
       };
-      if(path==='/health' && method==='GET') return respond({ok:true,schemaVersion:1});
+      if(path==='/health' && method==='GET') return respond({ok:true,schemaVersion:1,supportedSchemaVersions:[1,2]});
       if(path==='/share/read' && method==='POST') {
         const input=z.strictObject({token:z.string().regex(/^[a-f0-9]{64}$/)}).parse(await json());
         const tokenHash=await sha256(input.token);
@@ -47,12 +50,31 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
       const token=request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1];
       if(!token) throw new ApiError('UNAUTHENTICATED',401);
       const actor=await backend.user(token);
-      if(['/assets/import','/assets/floorplan','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
+      if(['/assets/import','/assets/floorplan','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
+      if(path==='/studios' && method==='POST') {
+        const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
+        return respond(await backend.scene(actor,'studios.create',input),201);
+      }
+      const members=path.match(/^\/studios\/([^/]+)\/members(?:\/([^/]+))?$/);
+      if(members) {
+        const studioId=uuid.parse(members[1]);
+        if(!members[2] && method==='GET') return respond(await backend.scene(actor,'studios.members.list',{studioId}));
+        if(members[2]) {
+          const userId=uuid.parse(members[2]);
+          if(method==='PUT') {
+            const input=z.strictObject({displayName}).parse(await json());
+            return respond(await backend.scene(actor,'studios.members.put',{...input,studioId,userId}));
+          }
+          if(method==='DELETE') return respond(await backend.scene(actor,'studios.members.remove',{studioId,userId}));
+        }
+      }
       if(path==='/catalog' && method==='GET') return respond(catalog);
       if(path==='/projects' && method==='GET') return respond(await backend.scene(actor,'projects.list'));
       if(path==='/projects' && method==='POST') {
         const input=z.strictObject({studioId:uuid,name,scene:sceneSchema}).parse(await json());
+        if(dimensionConflicts(input.scene).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(input.scene));
+        if(input.scene.schemaVersion===2&&structuralViolations(input.scene).length)throw new ApiError('STRUCTURAL_COLLISION',422,structuralViolations(input.scene));
         return respond(await backend.scene(actor,'projects.create',input),201);
       }
       const project=path.match(/^\/projects\/([^/]+)(.*)$/);
@@ -63,6 +85,23 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
           const input=z.strictObject({...leaseSchema.shape,name}).parse(await json());
           return respond(await backend.scene(actor,'projects.rename',{...input,projectId}));
         }
+        const source=tail.match(/^\/sources\/([^/]+)$/);
+        if(source&&method==='DELETE')return respond(await backend.scene(actor,'sources.unlink',{projectId,assetId:uuid.parse(source[1])}));
+        if(tail==='/sources'&&method==='GET')return respond(await backend.scene(actor,'sources.list',{projectId}));
+        if(tail==='/reconstructions'&&method==='POST'){
+          const input=reconstructionRequestSchema.parse(await json());
+          if(input.sources.some((s,i)=>input.sources.findIndex(x=>x.assetId===s.assetId)!==i))throw new ApiError('DUPLICATE_SOURCE',422);
+          if(input.selectedIds.some(id=>!input.scene.objects.some(o=>o.id===id)))throw new ApiError('INVALID_SELECTION',422);
+          required(env,'DEEPSEEK_API_KEY');
+          const reserveCents=reserveCost(env,'RECONSTRUCTION_MAX_REQUEST_CENTS');
+          if(reserveCents<200)throw new ApiError('BILLING_NOT_CONFIGURED',503,{setting:'RECONSTRUCTION_MAX_REQUEST_CENTS',minimum:200});
+          await backend.scene(actor,'lease.check',{...input,projectId});
+          if(input.reviewedJobId)await backend.reconstruction(actor,'review.check',{input:{...input,projectId},baseHash:await sceneHash(input.scene)});
+          const stored=await backend.reconstruction(actor,'create',{input:{...input,projectId},fingerprint:await sha256(canonical({...input,projectId})),baseHash:await sceneHash(input.scene),reserveCents});
+          return respond(stored,stored.reused?200:202);
+        }
+        const reconstruction=tail.match(/^\/reconstructions\/([^/]+)$/);
+        if(reconstruction&&method==='GET')return respond(await backend.reconstruction(actor,'get',{projectId,id:uuid.parse(reconstruction[1])}));
         if(tail==='/materials' && method==='GET') return respond((await backend.scene(actor,'projects.get',{projectId})).materials);
         if(tail==='/lease/acquire' && method==='POST') {
           const input=z.strictObject({sessionId:uuid}).parse(await json());
@@ -74,6 +113,9 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         }
         if(tail==='/scene' && method==='PUT') {
           const input=savedScene.parse(await json());
+          if(dimensionConflicts(input.scene).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(input.scene));
+          const previous=await backend.scene(actor,'lease.check',{...input,projectId});
+          if(!canApplyStructuralChange(sceneSchema.parse(previous.scene),input.scene))throw new ApiError('STRUCTURAL_COLLISION',422,structuralViolations(input.scene));
           return respond({...await backend.scene(actor,'scene.save',{...input,projectId}),warnings:sceneWarnings(input.scene)});
         }
         if(tail==='/proposals' && method==='POST') {
@@ -102,7 +144,17 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         }
         if(tail==='/proposals/apply' && method==='POST') {
           const input=z.strictObject({...leaseSchema.shape,proposalId:uuid,localRevision:z.number().int().nonnegative(),currentScene:sceneSchema}).parse(await json());
+          const proposal=await backend.scene(actor,'proposals.get',{projectId,proposalId:input.proposalId});
+          if(dimensionConflicts(proposal.candidate).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(proposal.candidate));
+          if(!canApplyStructuralChange(input.currentScene,sceneSchema.parse(proposal.candidate)))throw new ApiError('STRUCTURAL_COLLISION',422,structuralViolations(proposal.candidate));
           return respond(await backend.scene(actor,'proposals.apply',{...input,projectId,baseHash:await sceneHash(input.currentScene)}));
+        }
+        if(tail==='/history/restore'&&method==='POST'){
+          const input=z.strictObject({...leaseSchema.shape,proposalId:uuid,currentScene:sceneSchema}).parse(await json());
+          const previous=await backend.scene(actor,'proposals.get',{projectId,proposalId:input.proposalId});
+          if(await sceneHash(input.currentScene)!==await sceneHash(previous.candidate))throw new ApiError('STALE_HISTORY_RESTORE',409);
+          const restored=await backend.scene(actor,'history.restore',{...input,projectId});
+          return respond({...restored,warnings:sceneWarnings(sceneSchema.parse(restored.scene))});
         }
         if(tail==='/publish' && method==='POST') {
           const input=z.strictObject({expectedRevision:z.number().int().nonnegative()}).parse(await json());
@@ -132,6 +184,24 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         const record=await assetRecord(actor,bytes,properties);
         await backend.upload(record.storagePath,bytes,'model/gltf-binary');
         return respond(await backend.scene(actor,'assets.register',record),201);
+      }
+      if(path==='/assets/sources'&&method==='POST'){
+        if(!request.headers.get('content-type')?.startsWith('multipart/form-data'))throw new ApiError('MULTIPART_REQUIRED',415);
+        const bytes=await readBounded(request,5*1024*1024+65536);
+        const form=await new Request(request.url,{method:'POST',headers:{'content-type':request.headers.get('content-type')!},body:new Uint8Array(bytes)}).formData();
+        const projectId=uuid.parse(form.get('projectId')),kind=z.enum(['floorplan','photo']).parse(form.get('kind')),file=form.get('file');
+        const existing=await backend.scene(actor,'sources.list',{projectId});
+        if(!(file instanceof File)||!['image/png','image/jpeg','image/webp'].includes(file.type))throw new ApiError('UNSUPPORTED_IMAGE',415);
+        if(file.size>5*1024*1024)throw new ApiError('FILE_TOO_LARGE',413);
+        const image=new Uint8Array(await file.arrayBuffer());let size:ReturnType<typeof ImageUtils.getSize>;
+        try{if(ImageUtils.getMimeType(image)!==file.type)throw new ApiError('INVALID_IMAGE',422);size=ImageUtils.getSize(image,file.type);}catch{throw new ApiError('INVALID_IMAGE',422);}
+        if(!size||size.some(n=>n<=0||n>4096))throw new ApiError('INVALID_IMAGE',422);
+        const record=await assetRecord(actor,image,{name:file.name.slice(0,120)||'来源图片',source:'upload',format:file.type.slice(6),metadata:{width:size[0],height:size[1],kind},license:{type:'user-upload'}});
+        const duplicate=await backend.scene(actor,'sources.find',{projectId,kind,sha256:record.sha256});
+        if(duplicate)return respond(duplicate);
+        if(existing.length>=12)throw new ApiError('SOURCE_LIMIT_EXCEEDED',422);
+        await backend.upload(record.storagePath,image,file.type);
+        return respond(await backend.scene(actor,'sources.register',{projectId,kind,asset:record}),201);
       }
       if(path==='/assets/floorplan' && method==='POST') {
         const mime=request.headers.get('content-type');

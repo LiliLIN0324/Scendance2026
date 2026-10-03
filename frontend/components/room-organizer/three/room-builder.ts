@@ -106,6 +106,8 @@ export function applyWallDisplay(
       let nz = 0;
       let cx = 0;
       let cz = 0;
+      const normal = obj.userData.normal as { x: number; z: number } | undefined;
+      if (normal) { nx = normal.x; nz = normal.z; cx = obj.position.x; cz = obj.position.z; }
       switch (wallId) {
         case 'north': nz = -1; cz = -halfD; break;
         case 'south': nz =  1; cz =  halfD; break;
@@ -113,7 +115,7 @@ export function applyWallDisplay(
         case 'west':  nx = -1; cx = -halfW; break;
       }
       const dot = (cameraX - cx) * nx + (cameraZ - cz) * nz;
-      visible = dot < 0;
+      visible = obj.userData.structureKind === 'interior' || dot < 0;
     }
     setVisible(obj, visible);
     wallVisibility.set(`${ROOM_OBJECT_TAGS.Wall}:${wallId}`, visible);

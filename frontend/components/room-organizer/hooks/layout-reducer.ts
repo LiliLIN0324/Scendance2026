@@ -3,7 +3,7 @@ import { MAX_DORMERS, clampDormer, type DormerInput, type DormerPatch } from '..
 import { rotatedHalfExtents } from '../lib/geometry';
 import { remapGroupIds } from '../lib/groups';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../lib/initial-layout';
-import { isWallMounted, settleWallMountedItem, snapOpeningToWall, type WallGap } from '../lib/opening-snap';
+import { isOpening, isWallMounted, settleWallMountedItem, snapOpeningToWall, type WallGap } from '../lib/opening-snap';
 import {
   MAX_INTERIOR_WALLS_PER_FLOOR,
   MAX_ITEMS_PER_FLOOR,
@@ -28,6 +28,7 @@ import {
   sameEntrance,
   streetLevel,
 } from '../lib/street';
+import { canApplyLayoutGeometry, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, sameZone } from '../lib/zones';
 import type {
   CatalogItem,
@@ -160,8 +161,26 @@ const ENTRANCE_RESYNC_ACTIONS: ReadonlySet<LayoutAction['type']> = new Set([
  */
 const DOOR_REMOVAL_ACTIONS: ReadonlySet<LayoutAction['type']> = new Set(['removeItem', 'replaceItems', 'clearItems']);
 
+const STRUCTURAL_ACTIONS = new Set<LayoutAction['type']>([
+  'addCatalogItem', 'updateItem', 'duplicateItem', 'rotateItem', 'moveItem', 'resizeItem',
+  'setRotation', 'replaceItems', 'addItems', 'bulkSetPositions', 'rotateSelection',
+  'setWidth', 'setHeight', 'setStoreyHeight', 'addInteriorWall', 'addInteriorWalls',
+  'removeItem', 'removeInteriorWall', 'clearInteriorWalls', 'setSillHeight', 'clearItems',
+]);
 export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
-  const next = reduceLayout(state, action);
+  // A measured outline cannot be resized by the legacy rectangle sliders.
+  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'addFloor', 'duplicateFloor'].includes(action.type)) return state;
+  let next = reduceLayout(state, action);
+  if (next !== state && state.layout.backendSceneV2 && STRUCTURAL_ACTIONS.has(action.type)) {
+    // Keep marker meshes on their owned wall and aligned after any edit path.
+    const floors = next.layout.floors.map((floor,index)=>({...floor,items:floor.items.map(item=> {
+      if (!isOpening(item.type) || !item.position || state.layout.floors[index]?.items.find(old=>old.id===item.id)===item) return item;
+      const seated = snapMeasuredOpening(next.layout,item,item.position,index);
+      return seated ? {...item,...seated} : item;
+    })}));
+    next = {...next,layout:{...next.layout,floors}};
+  }
+  if (next !== state && STRUCTURAL_ACTIONS.has(action.type) && !canApplyLayoutGeometry(state.layout, next.layout)) return state;
   const entrance = next.layout.entrance;
   if (next === state || !entrance) return next;
   if (DOOR_REMOVAL_ACTIONS.has(action.type) && entrance.door === undefined) {
@@ -374,8 +393,13 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         rotation: 0,
         ...(action.catalogItem.type === 'sofa' ? { sofaShape: 'standard' as const } : {}),
       };
+      if (state.layout.backendSceneV2 && isOpening(newItem.type)) {
+        const seated = snapMeasuredOpening(state.layout,newItem,newItem.position!,state.activeFloorIndex);
+        if (!seated) return state;
+        Object.assign(newItem,seated);
+      }
       return withActiveFloor(state, (floor) =>
-        hasRoomFor(floor.items, 1, MAX_ITEMS_PER_FLOOR, ENTRANCE_DOOR_ID)
+        hasRoomFor(floor.items, newItem.structuralOpeningId ? 0 : 1, MAX_ITEMS_PER_FLOOR, ENTRANCE_DOOR_ID)
           ? { ...floor, items: [...floor.items, newItem] }
           : floor
       );
@@ -424,6 +448,8 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         // A duplicate is a loose copy: it must not join the source's group
         // (#154). Paste remaps groups instead — see lib/clipboard.ts. It is
         // about to be moved, so it starts unlocked, as a pasted copy does (#353).
+        if (copy.structuralOpeningId) copy.structuralOpeningId = copy.id;
+        if (copy.structuralColumnId) copy.structuralColumnId = copy.id;
         delete copy.groupId;
         delete copy.locked;
         return { ...floor, items: [...floor.items, copy] };
@@ -506,7 +532,7 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         if (item.locked || item.type !== 'window') return null;
         if (action.sillHeight === null) return item.sillHeight === undefined ? null : { sillHeight: undefined };
         if (!Number.isFinite(action.sillHeight)) return null;
-        return { sillHeight: Math.min(MAX_SILL_HEIGHT, Math.max(MIN_SILL_HEIGHT, action.sillHeight)) };
+        return { sillHeight: Math.min(item.structuralOpeningId ? 30 : MAX_SILL_HEIGHT, Math.max(item.structuralOpeningId ? 0 : MIN_SILL_HEIGHT, action.sillHeight)) };
       });
 
     // Stair shape changes the flight and the hole above it — geometry, so
@@ -552,7 +578,7 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
 
     case 'addItems':
       return withActiveFloor(state, (floor) =>
-        hasRoomFor(floor.items, action.items.length, MAX_ITEMS_PER_FLOOR, ENTRANCE_DOOR_ID)
+        hasRoomFor(floor.items, materialCount(action.items), MAX_ITEMS_PER_FLOOR, ENTRANCE_DOOR_ID)
           ? { ...floor, items: [...floor.items, ...action.items.map(boundItem)] }
           : floor
       );
@@ -1060,8 +1086,8 @@ function boundItem(item: FurnitureItem): FurnitureItem {
  * under the cap stays free for the porch's door or back wall (`porchId`),
  * which the entrance re-fit adds on its own.
  */
-function hasRoomFor(list: readonly { id: string }[] | undefined, count: number, max: number, porchId: string): boolean {
-  const own = (list ?? []).filter((entry) => entry.id !== porchId).length;
+function hasRoomFor(list: readonly { id: string; structuralOpeningId?: string; structuralColumnId?: string; venueEntranceId?:string }[] | undefined, count: number, max: number, porchId: string): boolean {
+  const own = (list ?? []).filter((entry) => entry.id !== porchId && !entry.structuralOpeningId && !entry.structuralColumnId && !entry.venueEntranceId).length;
   return own + count <= max - 1;
 }
 
@@ -1201,7 +1227,7 @@ function normaliseLayout(layout: RoomLayout): RoomLayout {
       : layout.floors.slice(0, MAX_FLOORS).map((floor) => ({
           ...floor,
           floorColor: floor.floorColor || '#c9a57d',
-          ...(floor.height !== undefined ? { height: clampStoreyHeight(floor.height) } : {}),
+          ...(floor.height !== undefined ? { height: layout.backendSceneV2 ? floor.height : clampStoreyHeight(floor.height) } : {}),
         }));
   return {
     ...layout,
