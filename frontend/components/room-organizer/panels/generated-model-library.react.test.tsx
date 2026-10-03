@@ -31,6 +31,35 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(ensureGlbAsset).mockReset(); });
 
 describe('single object generation UI', () => {
+  it('refuses a new chat submission if the earlier request record is unreadable', async () => {
+    sessionStorage.setItem('scendance:3d-intent:member','{broken');
+    const result=vi.fn();
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()} presentation="assistant" onAssistantResult={result}
+      assistantRequest={{requestId:id,prompt:'藤编椅',userId:'member',projectId:'project'}}/>);
+    await waitFor(()=>expect(result).toHaveBeenCalled());expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('无法读取上一次模型请求');
+  });
+
+  it('keeps the earlier uncertain request when a new chat request arrives', async () => {
+    const prior={requestId:id,prompt:'原来的椅子'};
+    sessionStorage.setItem('scendance:3d-intent:member',JSON.stringify(prior));
+    const result=vi.fn();
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()} presentation="assistant" onAssistantResult={result}
+      assistantRequest={{requestId:assetId,prompt:'新的灯具',userId:'member',projectId:'project'}}/>);
+    await waitFor(()=>expect(result).toHaveBeenCalled());
+    expect(create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'核对并继续同一请求'}));
+    await waitFor(()=>expect(create).toHaveBeenCalledWith('原来的椅子',id));
+  });
+
+  it('does not submit a chat request created under another account', async () => {
+    const result=vi.fn();
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()} presentation="assistant" onAssistantResult={result}
+      assistantRequest={{requestId:id,prompt:'藤编椅',userId:'another-user',projectId:'project'}}/>);
+    await waitFor(()=>expect(result).toHaveBeenCalled());
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('only creates a paid job after an explicit click', async () => {
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
