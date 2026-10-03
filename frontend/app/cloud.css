@@ -8,9 +8,9 @@
 .sc-cloud-dialog button.sc-cloud-close{border-color:transparent;font-size:25px;align-self:flex-start;line-height:1;background:transparent;padding:4px;color:var(--sc-muted);box-shadow:none}
 .sc-cloud-dialog p{font-size:13px;line-height:1.8;margin:10px 0}
 .sc-cloud-dialog h3{font-size:16px;font-weight:600;letter-spacing:-.025em;margin:8px 0}
-.sc-cloud-dialog button{font-family:inherit;color:var(--sc-ink);border:1px solid var(--sc-line);background:#ffffffb8;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:500;cursor:pointer;box-shadow:inset 0 1px 0 #ffffffa6;transition:background var(--sc-fast) var(--sc-ease),border-color var(--sc-fast) var(--sc-ease),transform var(--sc-fast) var(--sc-ease)}
+.sc-cloud-dialog button,.sc-cloud-dialog a.sc-cloud-primary{font-family:inherit;color:var(--sc-ink);border:1px solid var(--sc-line);background:#ffffffb8;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:500;cursor:pointer;box-shadow:inset 0 1px 0 #ffffffa6;transition:background var(--sc-fast) var(--sc-ease),border-color var(--sc-fast) var(--sc-ease),transform var(--sc-fast) var(--sc-ease)}
 .sc-cloud-dialog button:disabled{opacity:.45;cursor:not-allowed}
-.sc-cloud-dialog button.sc-cloud-primary{color:white;background:var(--sc-ink);border-color:var(--sc-ink);box-shadow:inset 0 1px 0 #ffffff1f}
+.sc-cloud-dialog .sc-cloud-primary{color:white;background:var(--sc-ink);border-color:var(--sc-ink);box-shadow:inset 0 1px 0 #ffffff1f}
 .sc-cloud-muted{color:var(--sc-muted)}
 .sc-cloud-badge{display:inline-block;font-size:11px;color:var(--sc-accent-ink);background:var(--sc-accent-soft);border-radius:6px;padding:4px 8px}
 .sc-cloud-offline{padding:20px;background:#f4f3e9a8;border:1px solid var(--sc-line);border-radius:12px}
@@ -51,3 +51,5 @@
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.sc-cloud-dialog{background:#f8f9fb}.sc-cloud-dialog::backdrop{background:#20252d80}}
 @media(prefers-reduced-motion:reduce){.sc-cloud-trigger,.sc-cloud-dialog button,.sc-cloud-dialog input,.sc-cloud-dialog select,.sc-recovery-button{transition:none}.sc-cloud-trigger:hover:not(:active),.sc-cloud-trigger:active,.sc-cloud-dialog button:not(:disabled):active,.sc-recovery-button:active{transform:none}.sc-cloud-dialog[open],.sc-loading-card,.sc-loading-line{animation:none}}
 @media(max-width:600px){.sc-cloud-dialog{padding:20px}.sc-cloud-heading h2{font-size:21px}.sc-recovery-card{padding:24px}}
+
+.sc-cloud-dialog a.sc-cloud-primary{text-align:center;text-decoration:none}

@@ -8,6 +8,15 @@ afterEach(cleanup);
 const photo = { id: 'photo-one', name: '场地.jpg', url: 'blob:local-venue' };
 
 describe('venue photo viewer', () => {
+  it('identifies a floorplan correctly in both its thumbnail and enlarged preview',()=>{
+    render(<VenuePhotosPanel images={[{...photo,kind:'floorplan'}]} addImages={vi.fn()} removeImage={vi.fn()}/>);
+    expect(screen.getByRole('img',{name:'平面图：场地.jpg'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'放大 场地.jpg'}));
+    expect(screen.getByRole('dialog',{name:'平面图预览：场地.jpg'})).toBeTruthy();
+    expect(screen.getByRole('img',{name:'放大平面图：场地.jpg'})).toBeTruthy();
+    expect(screen.queryByRole('img',{name:/现场照片/})).toBeNull();
+  });
+
   it('opens directly from the thumbnail, traps focus, and restores focus on Escape', async () => {
     render(<VenuePhotosPanel images={[photo]} addImages={vi.fn()} removeImage={vi.fn()}/>);
     const thumbnail = screen.getByRole('button', { name: '放大 场地.jpg' });
@@ -41,7 +50,7 @@ describe('venue photo viewer', () => {
     rendered.rerender(view(false));
     expect(screen.getByRole('img', { name: '现场照片：场地.jpg' }).getAttribute('src')).toBe(photo.url);
     fireEvent.click(screen.getByRole('button', { name: '放大 场地.jpg' }));
-    expect(screen.getByText('仅在本机查看 · 图片尚未提交给模型')).toBeTruthy();
+    expect(screen.getByText('本机资料 · 生成时提交模型')).toBeTruthy();
     expect(removeImage).not.toHaveBeenCalled();
   });
 

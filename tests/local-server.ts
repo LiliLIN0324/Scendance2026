@@ -1,6 +1,9 @@
 /** Explicit loopback-only test fixture, never a production authentication fallback. */
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { database, owner, editor, outsider } from './fixtures.ts';
 import { createApi } from '../supabase/functions/_shared/api.ts';
 import { ApiError } from '../supabase/functions/_shared/domain.ts';
@@ -12,12 +15,33 @@ export const testAccounts = [
 ];
 export const testPublicKey = 'sb_publishable_local_integration_only';
 
-export async function startLocalServer(port = 0, aiFetcher?: typeof fetch) {
-  const fixture = await database();
+export interface LocalServerOptions {
+  /** Explicitly passed by the isolated development runner; never reads production credentials. */
+  env?: (key: string) => string | undefined;
+  origins?: string[];
+  /** Dedicated local test data, never an existing Supabase database. */
+  dataDirectory?: string;
+}
+
+export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, options: LocalServerOptions = {}) {
+  if (options.dataDirectory) await mkdir(options.dataDirectory, { recursive: true });
+  const fixture = await database(options.dataDirectory ? join(options.dataDirectory, 'postgres') : undefined);
   const sessions = new Map<string, { id: string; refresh: string }>();
   const files = new Map<string, { bytes: Uint8Array; mime: string }>();
   const links = new Map<string, { path: string; until: number }>();
-  const origins = ['http://127.0.0.1:3018', 'http://localhost:3018', 'http://localhost:3000'];
+  const storageDirectory = options.dataDirectory ? join(options.dataDirectory, 'private-storage') : undefined;
+  if (storageDirectory) await mkdir(storageDirectory, { recursive: true });
+  const storageKey = (path: string) => createHash('sha256').update(path).digest('hex');
+  async function readStored(path: string) {
+    const cached = files.get(path);
+    if (cached || !storageDirectory) return cached;
+    try {
+      const key = storageKey(path);
+      const [bytes, mime] = await Promise.all([readFile(join(storageDirectory, key)), readFile(join(storageDirectory, `${key}.mime`), 'utf8')]);
+      return { bytes: new Uint8Array(bytes), mime };
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
+  }
+  const origins = options.origins ?? ['http://127.0.0.1:3018', 'http://localhost:3018', 'http://localhost:3000'];
   let url = '';
   const backend = {
     ...fixture.backend,
@@ -26,17 +50,29 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch) {
       if (!user) throw new ApiError('UNAUTHENTICATED', 401);
       return user.id;
     },
-    async upload(path: string, bytes: Uint8Array, mime: string) { files.set(path, { bytes, mime }); },
+    async upload(path: string, bytes: Uint8Array, mime: string) {
+      if (storageDirectory) {
+        const key = storageKey(path);
+        await writeFile(join(storageDirectory, key), bytes);
+        await writeFile(join(storageDirectory, `${key}.mime`), mime);
+      } else files.set(path, { bytes, mime });
+    },
+    async readSourceBytes(path: string) {
+      const file = await readStored(path);
+      if (!file) throw new ApiError('ASSET_NOT_FOUND', 404);
+      return file.bytes;
+    },
     async sign(path: string) {
       const token = crypto.randomUUID();
       links.set(token, { path, until: Date.now() + 300_000 });
       return `${url}/test-storage/${token}`;
     },
   };
-  const api = createApi(backend, key => ({
+  const env = (key: string) => ({
     ALLOWED_ORIGINS: origins.join(','), PUBLIC_APP_URL: origins[0],
     ...(aiFetcher ? { DEEPSEEK_API_KEY: 'test-provider-only', AI_MAX_REQUEST_CENTS: '40' } : {}),
-  })[key], aiFetcher);
+  })[key] ?? options.env?.(key);
+  const api = createApi(backend, env, aiFetcher);
   const server = createServer(async (req, res) => {
     try {
       const address = new URL(req.url ?? '/', url);
@@ -44,7 +80,8 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch) {
       let length = 0;
       for await (const chunk of req) {
         length += chunk.length;
-        if (length > 256_000) { res.writeHead(413).end(); return; }
+        const limit = address.pathname.includes('/assets/sources') || address.pathname.endsWith('/assets/floorplan') ? 5 * 1024 * 1024 + 65536 : 256_000;
+        if (length > limit) { res.writeHead(413).end(); return; }
         chunks.push(chunk);
       }
       const body = Buffer.concat(chunks);
@@ -84,7 +121,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch) {
           response = new Response(null, { status: 204, headers });
         } else if (address.pathname.startsWith('/test-storage/') && req.method === 'GET') {
           const link = links.get(address.pathname.split('/').at(-1)!);
-          const file = link && link.until > Date.now() ? files.get(link.path) : undefined;
+          const file = link && link.until > Date.now() ? await readStored(link.path) : undefined;
           if (!file) response = json({ error: 'test_signed_url_expired' }, 404);
           else { headers.set('Content-Type', file.mime); response = new Response(new Uint8Array(file.bytes), { headers }); }
         } else response = json({ error: 'test_route_not_found' }, 404);
@@ -104,7 +141,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch) {
   if (!address || typeof address === 'string') throw new Error('Missing loopback address');
   url = `http://127.0.0.1:${address.port}`;
   return {
-    ...fixture, backend, url, links,
+    ...fixture, backend, url, links, env,
     async close() {
       await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); });
       await fixture.db.close();

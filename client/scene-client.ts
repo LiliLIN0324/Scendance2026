@@ -1,4 +1,5 @@
-import { sceneHash, type Scene } from '../supabase/functions/_shared/domain.ts';
+import { reconstructionJobSchema, type ReconstructionRequest } from '../supabase/functions/_shared/reconstruction-contract.ts';
+import { sceneHash, type SourceImage, type Scene } from '../supabase/functions/_shared/domain.ts';
 
 export class SceneApiError extends Error {
   constructor(public code:string,public status:number,public details:unknown) {super(code);}
@@ -17,14 +18,20 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
   async function request<T>(path:string,method='GET',body?:unknown,isPublic=false):Promise<T> {
     const headers:Record<string,string>={};
     if(!isPublic) {const token=await getAccessToken();if(!token)throw new SceneApiError('UNAUTHENTICATED',401,null);headers.Authorization=`Bearer ${token}`;}
-    if(body!==undefined) headers['Content-Type']='application/json';
-    const response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store'});
+    const multipart=body instanceof FormData;
+    if(body!==undefined&&!multipart) headers['Content-Type']='application/json';
+    const response=await fetch(`${baseUrl.replace(/\/$/,'')}${path}`,{method,headers,...(body===undefined?{}:{body:multipart?body as FormData:JSON.stringify(body)}),cache:'no-store'});
     const data=await response.json();
     if(!response.ok) throw new SceneApiError(data.error?.code??'HTTP_ERROR',response.status,data.error?.details);
     return data as T;
   }
   return {
     request,
+    listSources(projectId:string){return request<SourceImage[]>(`/projects/${projectId}/sources`);},
+    uploadSource(projectId:string,file:File,kind:SourceImage['kind']){const body=new FormData();body.set('projectId',projectId);body.set('file',file);body.set('kind',kind);return request<SourceImage>('/assets/sources','POST',body);},
+    removeSource(projectId:string,assetId:string){return request<{removed:true}>(`/projects/${projectId}/sources/${assetId}`,'DELETE');},
+    async createReconstruction(projectId:string,input:ReconstructionRequest){return reconstructionJobSchema.parse(await request(`/projects/${projectId}/reconstructions`,'POST',input));},
+    async getReconstruction(projectId:string,id:string){return reconstructionJobSchema.parse(await request(`/projects/${projectId}/reconstructions/${id}`));},
     async applyProposal(proposal:Proposal,current:EditorState) {
       await assertFreshProposal(proposal,current);
       return request<{id:string;revision:number;scene:Scene;previousScene:Scene;undoGroup:string}>(`/projects/${current.projectId}/proposals/apply`,'POST',{
@@ -32,6 +39,7 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
         localRevision:current.localRevision,currentScene:current.scene,
       });
     },
+    restoreProposal(proposal:Proposal,current:EditorState){return request<{id:string;revision:number;scene:Scene;previousScene:Scene;undoGroup:string}>(`/projects/${current.projectId}/history/restore`,'POST',{sessionId:current.sessionId,generation:current.generation,expectedRevision:current.expectedRevision,proposalId:proposal.id,currentScene:current.scene});},
     readShare(token:string) {return request('/share/read','POST',{token},true);},
   };
 }

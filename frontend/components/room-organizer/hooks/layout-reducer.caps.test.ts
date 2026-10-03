@@ -108,12 +108,12 @@ describe('reducer output always reloads unchanged (#332, #350)', () => {
     }
   }, 30_000);
 
-  it('clamps a drag far past the lot instead of writing an unreadable position', () => {
+  it('refuses a drag far past the lot instead of writing an invalid placement', () => {
     let state: LayoutState = { layout: makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'a' })] })] }), activeFloorIndex: 0 };
     state = layoutReducer(state, { type: 'moveItem', id: 'a', x: 1e9, z: -250 });
-    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: MAX_COORDINATE, z: -250 });
+    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: 0, z: 0 });
     state = layoutReducer(state, { type: 'bulkSetPositions', positions: new Map([['a', { x: -1e9, z: 1e9 }]]) });
-    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: -MAX_COORDINATE, z: MAX_COORDINATE });
+    expect(state.layout.floors[0]!.items[0]!.position).toEqual({ x: 0, z: 0 });
     expectReloadsUnchanged(state);
   });
 
@@ -147,8 +147,12 @@ describe('reducer output always reloads unchanged (#332, #350)', () => {
     // Every item that was let in survives the reload.
     expect(reload(state.layout)!.floors[0]!.items).toHaveLength(MAX_ITEMS_PER_FLOOR - 1);
 
+    // Test the wall limit independently: adding walls through all capped items
+    // correctly fails structural validation before reaching the wall-cap guard.
+    state = start();
     const walls = Array.from({ length: MAX_INTERIOR_WALLS_PER_FLOOR - 1 }, (_, i) => ({ id: `w${i}`, x1: 0, z1: i / 100, x2: 1, z2: i / 100 }));
     state = layoutReducer(state, { type: 'addInteriorWalls', walls });
+    expect(state.layout.floors[0]!.interiorWalls).toHaveLength(MAX_INTERIOR_WALLS_PER_FLOOR - 1);
     expect(layoutReducer(state, { type: 'addInteriorWall', wall: { id: 'extra', x1: 0, z1: 0, x2: 2, z2: 2 } })).toBe(state);
     expectReloadsUnchanged(state);
   });

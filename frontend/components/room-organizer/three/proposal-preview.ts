@@ -2,6 +2,7 @@ import { mountBand } from '../lib/mount-band';
 import { floorElevation, itemForStorey } from '../lib/storeys';
 import { disposeObject } from './builder-utils';
 import { createFurnitureModel } from './furniture-builders';
+import { buildStructureShell } from './structure-builder';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
@@ -15,7 +16,7 @@ function itemsById(layout: RoomLayout): Map<string, LocatedItem> {
 
 function visibleSignature({ item, floorIndex }: LocatedItem): string {
   return JSON.stringify([floorIndex, item.type, item.assetId, item.assetId ? null : item.glbUrl, item.materialId, item.width, item.depth, item.height,
-    item.position?.x, item.position?.z, item.rotation ?? 0, item.mirrored ?? false, item.color, item.locked, item.notes]);
+    item.position?.x, item.position?.z, item.elevation ?? 0, item.sillHeight, item.rotation ?? 0, item.mirrored ?? false, item.color, item.locked, item.notes]);
 }
 
 export function proposalDifferences(before: RoomLayout, after: RoomLayout): ProposalDifference[] {
@@ -52,9 +53,10 @@ export function createProposalPreview(
   const hidden = new Map<ThreeNS.Object3D, boolean>();
   const affected = new Set(differences.filter(change => change.before).map(change => change.id));
   let disposed = false;
+  const structureChanged = !!candidate.backendSceneV2 && JSON.stringify([before.backendVenue, before.floors.map(f=>[f.interiorWalls,f.floorColor,f.floorPattern,f.items.filter(i=>i.structuralOpeningId)])]) !== JSON.stringify([candidate.backendVenue, candidate.floors.map(f=>[f.interiorWalls,f.floorColor,f.floorPattern,f.items.filter(i=>i.structuralOpeningId)])]);
 
   function position(group: ThreeNS.Object3D, located: LocatedItem, layout: RoomLayout): void {
-    group.position.set(located.item.position?.x ?? 0, floorElevation(layout.floors, located.floorIndex), located.item.position?.z ?? 0);
+    group.position.set(located.item.position?.x ?? 0, floorElevation(layout.floors, located.floorIndex) + (located.item.elevation ?? 0), located.item.position?.z ?? 0);
     group.rotation.y = located.item.rotation ?? 0;
     if (located.item.mirrored) group.scale.x = -1;
     group.userData.proposalItemId = located.item.id;
@@ -62,7 +64,7 @@ export function createProposalPreview(
 
   function outline(located: LocatedItem, layout: RoomLayout, color: number, role: string): void {
     const floor = layout.floors[located.floorIndex];
-    const band = mountBand(itemForStorey(located.item, floor));
+    const band = mountBand(located.item.structuralOpeningId || located.item.structuralColumnId ? located.item : itemForStorey(located.item, floor));
     const box = new THREE.BoxGeometry(located.item.width + 0.02, band.top - band.bottom + 0.02, located.item.depth + 0.02);
     const edges = new THREE.EdgesGeometry(box);
     box.dispose();
@@ -80,11 +82,23 @@ export function createProposalPreview(
   }
 
   try {
+    if (structureChanged) {
+      const shell = new THREE.Scene();
+      buildStructureShell(THREE, shell, candidate);
+      for (const child of [...shell.children]) {
+        child.userData.previewRole = 'candidate-structure';
+        if (child.userData.type === 'wall') {
+          const material = (child as ThreeNS.Mesh).material as ThreeNS.MeshStandardMaterial;
+          material.transparent = true; material.opacity = 0.5;
+        }
+        root.add(child);
+      }
+    }
     for (const difference of differences) {
       const old = difference.before, next = difference.after;
       if (old?.floorIndex === visibleFloorIndex) outline(old, before, difference.kind === 'removed' ? 0xea6868 : 0xe6ac50, difference.kind === 'removed' ? 'removed' : 'original-position');
       if (next?.floorIndex === visibleFloorIndex && next.item.position) {
-        const model = createFurnitureModel(THREE, itemForStorey(next.item, candidate.floors[next.floorIndex]), false);
+        const model = createFurnitureModel(THREE, next.item.structuralOpeningId || next.item.structuralColumnId ? next.item : itemForStorey(next.item, candidate.floors[next.floorIndex]), false);
         model.userData.previewRole = 'candidate';
         position(model, next, candidate);
         model.traverse(node => {
@@ -127,7 +141,8 @@ export function createProposalPreview(
     if (disposed) return false;
     let changed = false;
     for (const object of scene.children) {
-      if (object.userData.type !== 'furniture' || !affected.has(object.userData.id as string)) continue;
+      const originalShell = structureChanged && ['floor','wall','interior-wall'].includes(object.userData.type as string);
+      if (!originalShell && (object.userData.type !== 'furniture' || !affected.has(object.userData.id as string))) continue;
       object.traverse(node => {
         // Keep LineSegments selection outlines visible; only the original
         // render meshes hide while their translucent candidate is shown.
