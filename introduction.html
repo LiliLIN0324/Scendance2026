@@ -61,7 +61,11 @@ html{scroll-behavior:smooth}
 body{
   margin:0; background:var(--sc-paper); color:var(--sc-ink);
   font-family:var(--sc-font); font-size:15px; font-weight:400; line-height:var(--sc-lh-body);
-  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  /* 横向溢出用 clip 而不是 hidden：hidden 会让 body 变成滚动容器，
+     首屏的 position:sticky 钉住会失效。
+     不支持 clip 的老浏览器退回 hidden —— 只是不做钉住，布局照旧。 */
+  overflow-x:hidden; overflow-x:clip;
 }
 a{color:inherit;text-decoration:none}
 h1,h2,h3,p{margin:0}
@@ -128,11 +132,37 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .band{scroll-margin-top:96px;min-height:var(--band-min)}   /* 固定导航不挡住段落开头 */
 
 /* 客户评价：照参考站的色块引语 */
-.quote-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:28px}
-.quote{margin:0;min-height:clamp(230px,24vw,400px);padding:clamp(22px,2.2vw,38px);border-radius:4px;background:var(--q);color:#fff;display:flex;flex-direction:column;justify-content:space-between;gap:28px}
-.quote blockquote{margin:0;font-size:clamp(18px,1.85vw,34px);line-height:1.42;letter-spacing:-.025em;font-weight:500}
-.quote figcaption b{display:block;font-size:clamp(13px,1vw,16px);font-weight:600}
-.quote figcaption span{font-size:clamp(11px,.85vw,14px);opacity:.82}
+/* 客户评价：效果图上的白卡片（场景图 + 引语 + 人物 + 两个标签）。
+   左上是小标签 + 标题（「幕景」下面手绘下划线），右侧一段说明 + 三条斜杠。 */
+.quote-head{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:clamp(18px,3.5vw,60px);align-items:end}
+.quote-head h2{margin-top:12px}
+/* 「幕景」下面那笔手绘线：SVG 拉满整段宽度，靠 preserveAspectRatio=none 跟着字宽伸缩 */
+.q-u{position:relative;display:inline-block}
+.q-u svg{position:absolute;left:-3%;bottom:-.16em;width:106%;height:.3em;color:var(--sc-accent)}
+.quote-lede p{margin:0;line-height:1.75;color:var(--sc-muted)}
+.q-slashes{display:flex;gap:5px;margin-top:14px}
+.q-slashes i{width:4px;height:15px;background:var(--sc-accent);transform:skewX(-20deg)}
+.quote-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(12px,1.5vw,20px);margin-top:clamp(24px,4svh,46px)}
+.quote{margin:0;display:flex;flex-direction:column;padding:16px 16px 18px;border-radius:14px;background:#fff;box-shadow:0 16px 40px #2f3a261f}
+/* height:auto 不能省：img 的 width/height 属性会变成最低优先级的 CSS 高度，
+   不写 height 的话属性里的 559px 会盖掉 aspect-ratio 算出来的高度，卡片被拉长 */
+.q-art{width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:8px;margin:0 0 14px;background:var(--sc-canvas)}
+.quote blockquote{margin:0;line-height:1.5;letter-spacing:-.01em}
+.quote blockquote::before{content:'\201C'}
+.quote blockquote::after{content:'\201D'}
+.quote blockquote::before,.quote blockquote::after{color:var(--sc-accent);opacity:.6}
+.quote figcaption{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:20px}
+.q-ava{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--sc-accent-soft);color:var(--sc-accent-ink);font-weight:600}
+.q-who b{display:block;font-weight:600}
+.q-who em{display:block;font-style:normal;color:var(--sc-muted)}
+.q-tags{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0;padding:0}
+.q-tags li{padding:4px 10px;border-radius:999px;background:var(--sc-canvas);color:var(--sc-accent-ink)}
+/* 四张卡并排要各留 ~260px 才不像竖条，窄了就退成两列 */
+@media (max-width:1080px){
+  .quote-head{grid-template-columns:1fr}
+  .quote-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:520px){ .quote-grid{grid-template-columns:1fr} }
 
 /* 关于我们：团队与联系方式 */
 .team{list-style:none; margin:clamp(24px,4vh,44px) 0 0; padding:0; display:grid;
@@ -160,9 +190,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .offers{background:#fff}
 .offers::before{content:'';position:absolute;inset:0;z-index:0;background:var(--row);opacity:.14}
 
-/* 首屏之后的一页白：只留一句短句，作为正式内容前的呼吸 */
-/* 首屏之后的一页白：整屏满铺（左右出血 + 一屏高） */
-.band.blank{margin-inline:calc(50% - 50vw);width:100vw;min-height:min(100svh,900px);max-height:min(100svh,900px);display:grid;place-items:center;text-align:center;background:#fff;padding:0 6%}
+/* 首屏之后的一页白：整屏满铺（左右出血 + 一屏高），只留一句短句做正式内容前的呼吸。
+   它同时是盖住钉住的首屏的那块「板」：不透明 + z-index 高一层，从下往上推过去。 */
+.band.blank{margin-inline:calc(50% - 50vw);width:100vw;min-height:min(100svh,900px);max-height:min(100svh,900px);display:grid;place-items:center;text-align:center;background:#fff;padding:0 6%;position:relative;z-index:1}
 .band.blank p{margin:0;max-width:24em;font-size:clamp(19px,2.2vw,32px);line-height:1.5;letter-spacing:-.012em;color:var(--sc-ink)}
 .band.blank p b{display:block;margin-top:14px;font-size:.44em;font-weight:500;letter-spacing:.16em;color:var(--sc-muted);text-transform:uppercase}
 
@@ -231,8 +261,15 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 /* ============================================================
    3. Hero · 视差 Y −8%→25% + 遮罩 .12→1，由滚动进度驱动
    ============================================================ */
+/* 首屏钉住：.hero 是 sticky，钉住的行程由它的父级 .hero-stack 决定 ——
+   父级里只放「首屏 + 下面那页白」，所以首屏正好钉住一屏，白页滚完就跟着放开。
+   （若把首屏直接挂在 body 上，它会钉到页尾：后面几段是透明的、宽度又只有 1500px，
+   首屏会从左右留白处透出来。）
+   这里故意不给 z-index：一旦有 z-index 就会生成层叠上下文，
+   首屏顶部那条 fixed 的顶栏会被关进这一层里，之后 .wrap 里任何定位元素都能盖住它。 */
+.hero-stack{position:relative}
 .hero{
-  position:relative; overflow:hidden; color:#fff; min-height:min(100svh,940px); max-height:min(104svh,1060px);
+  position:sticky; top:0; overflow:hidden; color:#fff; min-height:min(100svh,940px); max-height:min(104svh,1060px);
   display:flex; flex-direction:column;
   /* 首屏底色只留深绿兜底渐变；场景图与左侧压暗遮罩各自独立成层
      （.hero-bg / .hero-mask），这样才能做背景图轮播。 */
@@ -509,6 +546,26 @@ footer{padding:8vh 0 6vh;color:var(--sc-muted);font-size:12px}
 /* Process：照参考站那一段 21vw 巨型标题 + 4 步 + 整块可点 CTA 卡 */
 .huge{margin:0;font-size:min(clamp(58px,19vw,300px),25svh);line-height:.88;letter-spacing:-.055em;font-weight:600}
 .huge.sm{font-size:min(clamp(46px,13vw,210px),17svh)}
+/* 大标题钉住：标题自己 sticky 在视口上方，下面那块 .pin-cover 从下往上推过来盖掉它，
+   盖完跟着段落一起放开。
+   两个量要配对，否则会「盖到一半就放开」：
+   · 盖完需要的行程 = margin-bottom + 标题高（封面顶边从标题下沿爬到标题上沿）
+   · 钉住的总行程   = .pin-cover 的高度（= 段落高 − 标题高 − margin-bottom）
+   所以 .pin-cover 给 min-height 兜底，保证「盖得完」，同时让钉住行程稳定在 ~0.7 屏，
+   不随段落内容多少变化。
+   .pin-cover 还要拿页面底色当背景，否则巨型字会从卡片缝隙里透出来。 */
+.pin-title{position:sticky;top:clamp(14px,5svh,64px);z-index:0;margin-bottom:clamp(60px,14svh,140px)}
+.pin-cover{position:relative;z-index:1;background:var(--sc-paper);min-height:min(72svh,640px)}
+.pin-cover .process-grid,.pin-cover .tech-row{margin-top:0}
+.pin-cover .process-grid{padding-top:clamp(20px,3svh,42px)}
+.pin-cover .tech-row{padding-top:clamp(26px,4vw,58px)}
+.is-reduced .pin-title{position:static;margin-bottom:0}
+.is-reduced .pin-cover{min-height:0}
+/* 钉住本身就是「不动的元素 + 滚过去的内容」，对减少动态效果的用户同样关掉，
+   退回原来的正常滚动（.hero 原本就是 position:relative）。 */
+.is-reduced .hero{position:relative}
+.is-reduced .pin-cover .process-grid{padding-top:0}
+.is-reduced .pin-cover .tech-row{padding-top:0}
 .process-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:clamp(22px,3vw,48px);margin-top:clamp(20px,3svh,42px)}
 .step{display:flex;gap:13px;padding-top:16px;border-top:1px solid var(--sc-line)}
 .step>span{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--sc-accent);padding-top:5px}
@@ -625,13 +682,16 @@ h2, h3 { line-height: var(--sc-lh-tight); }
 .huge,.huge.sm{font-size:var(--fs-mega)!important}
 /* 3 首屏 / 大数字 */
 .display,.os-nums b{font-size:var(--fs-display)!important}
-/* 4 段落标题（先给通用，再给更具体的覆盖） */
-.band h2,.timeline-heading h2,.os-head h3,.stat-bar b,.process-cta .pc-title,.counter b{font-size:var(--fs-h2)!important}
+/* 4 段落标题（先给通用，再给更具体的覆盖）
+   :not(.huge) 不能省：单写 .band h2 时它的优先级（0,1,1）高过上面的 .huge（0,1,0），
+   两条又都是 !important，结果由优先级决定 —— 巨型标题会被压成段落标题的字号
+   （实测 902px 宽下只有 21.28px）。加 :not() 后这条不再命中 .huge。 */
+.band h2:not(.huge),.timeline-heading h2,.os-head h3,.stat-bar b,.process-cta .pc-title,.counter b{font-size:var(--fs-h2)!important}
 .fn-aside h2,.zone-heading h3,.offers-card-head h3{font-size:var(--fs-sub)!important}
 /* 5 引导语 */
 .band.blank p,.intro-lead,.tech-lead,.foot-lead,.phase-time,.hero .sub,.stage-card .sc-title{font-size:var(--fs-lead)!important}
 /* 6 卡标题 / tab / 引语 / 面板小标题 / 数字单位 */
-.offers-tabs button,.quote blockquote,.step-t,.intro-cells p,.intro-cells span,
+.offers-tabs button,.quote blockquote,.q-who b,.step-t,.intro-cells p,.intro-cells span,
 .counter b i,.os-nums b small,.os-nums span{font-size:var(--fs-sub)!important}
 /* 7 正文 / 列表 / 按钮 / 链接
    注意 .intro-split .lede、.nav-cta span、.os-nums span 这些原始规则是双类选择器，
@@ -641,10 +701,10 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 .process-cta .pc-top,.phase-description,.zone-description,.zone-note,.note-block p,
 .offers-line,.hero-meta,.map-toolbar,.map-footer,.view-tabs button,.asset-strip,
 .phase-actions li,.milestones button,.map-label,.asset-indicator,
-.pill,.pill span,.play-button,.cta,.cta span,.step-d{font-size:var(--fs-body)!important}
+.pill,.pill span,.play-button,.cta,.cta span,.step-d,.quote-lede p{font-size:var(--fs-body)!important}
 /* 8 标签 / 序号 / 备注 */
 .tag,.section-label,.eyebrow,.hero-copy .eyebrow,.offers-no,.offers-cells dt,.foot-col h3,
-.foot-note,.foot-brand small,.step>span,.quote figcaption b,.quote figcaption span,
+.foot-note,.foot-brand small,.step>span,.q-ava,.q-who em,.q-tags li,
 .band.blank p b,.dialog-top,.zone-legend button,.time-ticks span,.loading,
 .phase-focus span,.timeline-panel .section-label,
 .stat-bar span,.milestones button span,.phase-focus strong,.brand small,.text-button,
@@ -788,6 +848,12 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 </head>
 <body>
 
+<!-- 首屏钉住的作用域：.hero 是 sticky，钉住行程由这个父级决定 ——
+     里面只放「首屏 + 下面那页白」，所以首屏正好钉住一屏，白页滚完就一起放开。
+     （若把首屏直接挂在 body 上，它会钉到页尾，后面几段是透明的、宽度又只有 1500px，
+     首屏会从左右留白处透出来。） -->
+<div class="hero-stack">
+
 <header class="hero" id="hero">
   <!-- 首屏背景轮播：每张场景图一层，交叉淡入淡出（层与名称表都在轮播脚本里）。
        这里只留第 0 层，保证无 JS 时也有图、首屏也能立刻出图；其余层等脚本按需补。
@@ -863,12 +929,14 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
   </div>
 </header>
 
-<div class="wrap">
-
-  <!-- 首屏之后：一页白 -->
+  <!-- 首屏之后：一页白。它同时是盖住钉住的首屏的那块板（不透明 + 高一层，从下往上推过去） -->
   <section class="band blank" id="blank">
     <p class="rv">一个空间，不止一种可能。<b>先看见，再决定。</b></p>
   </section>
+
+</div>
+
+<div class="wrap">
 
   <!-- 介绍段：按需求隐藏（内容保留，去掉 hidden 即可恢复） -->
   <section class="band" id="intro" hidden>
@@ -906,43 +974,88 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
   </section>
 
 
-  <!-- 客户评价：色块引语（参考站 “Why They Chose Us”） -->
+  <!-- 客户评价：白卡片（序号 + 场景图 + 引语 + 人物 + 标签），图用的是十场景渲染的压缩版 -->
   <section class="band" id="quotes">
-    <span class="tag">Why they chose us</span>
-    <h2 class="rv">他们为什么选幕景。</h2>
-    <div class="quote-grid">
-      <figure class="quote rv" style="--q:#6f8f52"><blockquote>把现场照片丢进去，十分钟就有一个能坐下来讨论的布置。</blockquote><figcaption><b>李经理</b><span>活动策划工作室</span></figcaption></figure>
-      <figure class="quote rv" style="--q:#b06a52"><blockquote>客户不用装软件，打开链接就能看清桌椅往哪摆。</blockquote><figcaption><b>陈总监</b><span>品牌市场部</span></figcaption></figure>
-      <figure class="quote rv" style="--q:#c08a3e"><blockquote>以前要画三版草图才能讲清楚，现在一份三维场景就对齐了。</blockquote><figcaption><b>周老师</b><span>高校活动中心</span></figcaption></figure>
-      <figure class="quote rv" style="--q:#4f7a72"><blockquote>场地方、搭建方各看一遍，争议全在图上说清楚。</blockquote><figcaption><b>吴工</b><span>场馆运营</span></figcaption></figure>
-    </div>
-  </section>
-
-  <!-- Process：照参考站 21vw 巨型标题 + 4 步 + 整块可点 CTA 卡 -->
-  <section class="band" id="process" data-view="process">
-    <h2 class="huge" data-speed="0.93">Process</h2>
-    <div class="process-grid" data-speed="0.96">
-      <div class="step"><span>01</span><div><p class="step-t">先看现场，再谈方案</p><p class="step-d">把场地照片和可用尺寸发过来，我们先确认边界、出入口和供电，再决定能摆什么。</p></div></div>
-      <div class="step"><span>02</span><div><p class="step-t">核对结构，再生成方案</p><p class="step-d">结合图纸、照片和实测尺寸生成空间候选，补充未知区域，再完善活动布置。</p></div></div>
-      <div class="step"><span>03</span><div><p class="step-t">一起改，不是来回传</p><p class="step-d">场地方、搭建方、客户看同一份场景，改动落在图上，不落在聊天记录里。</p></div></div>
-      <div class="step"><span>04</span><div><p class="step-t">带走能落地的方案</p><p class="step-d">导出 Markdown 方案与布置说明，交给搭建方即可执行，附材料与来源清单。</p></div></div>
-    </div>
-    <a class="process-cta" href="#library">
-      <span class="pc-top"><span>现在开始</span><span>幕景 ®</span></span>
-      <svg class="pc-arw" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg>
-      <span class="pc-title">为相聚，<br>留一方空间。</span>
-    </a>
-  </section>
-
-  <!-- Tech powered：照参考站 13vw 标题 + 一段说明 + 一个链接 -->
-  <section class="band" id="tech">
-    <h2 class="huge sm" data-speed="0.9">Tech powered</h2>
-    <div class="tech-row" data-speed="0.95">
+    <div class="quote-head">
       <div>
-        <p class="tech-lead">照片进来，场景出去。</p>
-        <p class="tech-copy">图纸和照片结合用户提供的实测尺寸建立空间候选。生成时资料保存在项目私有来源中，并提交给识别服务；公开方案不包含原始照片。不可见结构和推断尺寸需要用户核对，浏览器中可继续编辑三维方案。</p>
+        <span class="tag">Why Scendance</span>
+        <h2 class="rv">他们，为什么选择<span class="q-u">幕景<svg viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true"><path d="M2 7c20-5 44-6 62-3 17 2 34 1 52-3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></span>。</h2>
       </div>
-      <a class="tech-link" href="#library">看看场景库 <span aria-hidden="true">↗</span></a>
+      <div class="quote-lede">
+        <p class="rv">从校园活动、品牌快闪到展览空间，不同的团队用它更快地实现想法。</p>
+        <span class="q-slashes" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+    </div>
+    <div class="quote-grid">
+      <figure class="quote rv">
+        <img class="q-art" src="./assets/quotes/market.jpg" alt="市集活动的三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <blockquote>把现场照片丢进去，十分钟就有一个能坐下来讨论的布置。</blockquote>
+        <figcaption>
+          <span class="q-ava" aria-hidden="true">李</span>
+          <span class="q-who"><b>李经理</b><em>活动策划工作室</em></span>
+        </figcaption>
+        <ul class="q-tags"><li>市集活动</li><li>场地布置</li></ul>
+      </figure>
+      <figure class="quote rv">
+        <img class="q-art" src="./assets/quotes/popup.jpg" alt="品牌快闪三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <blockquote>客户不用装软件，打开链接就能看清桌椅往哪摆。</blockquote>
+        <figcaption>
+          <span class="q-ava" aria-hidden="true">陈</span>
+          <span class="q-who"><b>陈总监</b><em>品牌市场部</em></span>
+        </figcaption>
+        <ul class="q-tags"><li>品牌快闪</li><li>客户沟通</li></ul>
+      </figure>
+      <figure class="quote rv">
+        <img class="q-art" src="./assets/quotes/campus.jpg" alt="校园学术交流活动的三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <blockquote>以前要画三版草图才能讲清楚，现在一份三维场景就对了。</blockquote>
+        <figcaption>
+          <span class="q-ava" aria-hidden="true">周</span>
+          <span class="q-who"><b>周老师</b><em>高校活动中心</em></span>
+        </figcaption>
+        <ul class="q-tags"><li>校园活动</li><li>方案汇报</li></ul>
+      </figure>
+      <figure class="quote rv">
+        <img class="q-art" src="./assets/quotes/cafe.jpg" alt="室内空间的三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <blockquote>场地方、搭建方各看一遍，争议全在图上说清楚。</blockquote>
+        <figcaption>
+          <span class="q-ava" aria-hidden="true">吴</span>
+          <span class="q-who"><b>吴工</b><em>场馆运营</em></span>
+        </figcaption>
+        <ul class="q-tags"><li>室内空间</li><li>施工对接</li></ul>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Process：照参考站 21vw 巨型标题 + 4 步 + 整块可点 CTA 卡
+       标题钉住（.pin-title），.grid + CTA 包在 .pin-cover 里从下往上盖掉它 -->
+  <section class="band" id="process" data-view="process">
+    <h2 class="huge pin-title">Process</h2>
+    <div class="pin-cover">
+      <div class="process-grid" data-speed="0.96">
+        <div class="step"><span>01</span><div><p class="step-t">先看现场，再谈方案</p><p class="step-d">把场地照片和可用尺寸发过来，我们先确认边界、出入口和供电，再决定能摆什么。</p></div></div>
+        <div class="step"><span>02</span><div><p class="step-t">核对结构，再生成方案</p><p class="step-d">结合图纸、照片和实测尺寸生成空间候选，补充未知区域，再完善活动布置。</p></div></div>
+        <div class="step"><span>03</span><div><p class="step-t">一起改，不是来回传</p><p class="step-d">场地方、搭建方、客户看同一份场景，改动落在图上，不落在聊天记录里。</p></div></div>
+        <div class="step"><span>04</span><div><p class="step-t">带走能落地的方案</p><p class="step-d">导出 Markdown 方案与布置说明，交给搭建方即可执行，附材料与来源清单。</p></div></div>
+      </div>
+      <a class="process-cta" href="#library">
+        <span class="pc-top"><span>现在开始</span><span>幕景 ®</span></span>
+        <svg class="pc-arw" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg>
+        <span class="pc-title">为相聚，<br>留一方空间。</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Tech powered：照参考站 13vw 标题 + 一段说明 + 一个链接，同样是标题钉住 + 内容盖上来 -->
+  <section class="band" id="tech">
+    <h2 class="huge sm pin-title">Tech powered</h2>
+    <div class="pin-cover">
+      <div class="tech-row" data-speed="0.95">
+        <div>
+          <p class="tech-lead">照片进来，场景出去。</p>
+          <p class="tech-copy">图纸和照片结合用户提供的实测尺寸建立空间候选。生成时资料保存在项目私有来源中，并提交给识别服务；公开方案不包含原始照片。不可见结构和推断尺寸需要用户核对，浏览器中可继续编辑三维方案。</p>
+        </div>
+        <a class="tech-link" href="#library">看看场景库 <span aria-hidden="true">↗</span></a>
+      </div>
     </div>
   </section>
 
@@ -1100,12 +1213,14 @@ function glassIn() {
    顶栏是 fixed + 透明底，趴在白色内容上既挡正文又看不清 logo，所以只留在首屏。 */
 function navAutoHide() {
   const bar = document.querySelector('.site-nav');
-  const hero = document.getElementById('hero');
-  if (!bar || !hero) return;
+  /* 首屏是 sticky 钉住的：滚动时它的 rect / offsetTop 都停在原位，不再是「滚到哪」的信号。
+     用不属于 sticky 的那页白（它正是盖住首屏的那块板）当标尺：
+     白色内容推到顶栏位置，就说明盖到顶栏了，收起。 */
+  const cover = document.getElementById('blank');
+  if (!bar || !cover) return;
   let hidden = false;
   const apply = () => {
-    /* 首屏底部还在顶栏之下就算「还在首屏」，此时显示；否则收起 */
-    const shouldHide = hero.getBoundingClientRect().bottom <= bar.offsetHeight;
+    const shouldHide = cover.getBoundingClientRect().top <= bar.offsetHeight;
     if (shouldHide === hidden) return;
     hidden = shouldHide;
     bar.classList.toggle('is-hidden', hidden);
@@ -2459,7 +2574,7 @@ syncAutoplay();
    每张图等到快轮到它时才设 background-image，避免首屏一次拉十张大图。
    和场景库的自动切换同一套口径：首屏还在视口里才走，开了「减少动态效果」不走。 */
 const HERO_BASE = './assets/scenes/';
-const HERO_HOLD = 6000;      /* 每张停留时长 */
+const HERO_HOLD = 3000;      /* 每张停留时长 */
 const HERO_FADE = 1300;      /* 略大于 CSS 的 1.2s 淡入，等淡完再撤掉下面那层 */
 
 const heroShots = SCENES.filter((scene) => scene.image);
