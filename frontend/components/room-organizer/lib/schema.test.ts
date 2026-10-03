@@ -809,3 +809,12 @@ describe('round trips', () => {
     expect(parseStoredLayout(once)).toBe(once);
   });
 });
+
+it('retains local layers and design history when reopening an expanded scene preset', () => {
+  const layout = makeLayout({
+    scenePreset: 'bar',
+    itemLayers: [{ id: 'custom-layer', name: '舞台区', itemIds: [] }],
+    designBook: { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: makeLayout() }] },
+  });
+  expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
+});
