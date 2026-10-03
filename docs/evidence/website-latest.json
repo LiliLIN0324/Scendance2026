@@ -1,0 +1,619 @@
+{
+  "verifiedAt": "2026-10-03T12:03:18.915537+00:00",
+  "frontend": {
+    "sourceCommit": "b554910af8a818c08fd440c7787f8eadebc315e8",
+    "deployment": {
+      "Id": "8153b386-93b5-45b8-9904-b6caf94472df",
+      "Environment": "Production",
+      "Branch": "main",
+      "Source": "b554910",
+      "Deployment": "https://8153b386.scendance-scene-planner.pages.dev",
+      "Status": "15 minutes ago",
+      "Build": "https://dash.cloudflare.com/fd8c05b7baa3126651103f11bb24fe32/pages/view/scendance-scene-planner/8153b386-93b5-45b8-9904-b6caf94472df"
+    },
+    "httpVerification": {
+      "base": "https://scendance.charlestech.org",
+      "checkedFiles": 38,
+      "files": [
+        {
+          "path": "scene-presets/studio/preview.jpg",
+          "bytes": 111540,
+          "sha256": "d94ffcbc20dabb708bc88c6ef5fc8eea5dcc314ba20142c8c145a9633203b3ca",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/studio/studio.glb",
+          "bytes": 1839632,
+          "sha256": "df000c70ecb4f8008a6aa45d8dc2effadc39a9ebf1de15690e9e97662f907bab",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/popup/popup.glb",
+          "bytes": 6525548,
+          "sha256": "f9f4f49db82ed86955772f05cfddb4ea238c8ef2db204ea94a6b1d07b997456a",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/popup/preview.jpg",
+          "bytes": 83420,
+          "sha256": "ec6d71f38e329e402fd28ab2cb3f82f9dca1aafbc35dfebd8efda3908ee188f5",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/conference/preview.jpg",
+          "bytes": 76248,
+          "sha256": "130f066c90d88b72eadf3487786289c98aaafe506f65dac60450353f8f280c7e",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/conference/conference.glb",
+          "bytes": 3779272,
+          "sha256": "26be801164ce8379f57fd90b6dc023abe4e4b76f11c5c382c4d302eb6fc02fa5",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/office/office.glb",
+          "bytes": 3521196,
+          "sha256": "9fb98cb5e00bd6e171a92fef2fbe36040a623ecf4f5628db7dd2e46457d45e12",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/office/preview.jpg",
+          "bytes": 54746,
+          "sha256": "53c53d1e15cb9ba8627db650805f0c8ca1faa7c1d64e9579a1ca8f7e0f5683a8",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/lawn/preview.jpg",
+          "bytes": 88440,
+          "sha256": "9110f41b050e50e54176b0886e14d9815dea6cf46d95f11baca45dc44928bdbc",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/lawn/lawn.glb",
+          "bytes": 2886084,
+          "sha256": "452337db91ec5c0257b64b9fffd32ed369afa205367a45d7d06a7e17e971093d",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/cafe/preview.jpg",
+          "bytes": 62171,
+          "sha256": "39580878ea2cc52590a51837d4c2262b42a73f55c75524c8404ff8b84e2dc2fc",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/cafe/cafe.glb",
+          "bytes": 3802532,
+          "sha256": "e8656c2ee0d764063c4d393b04866951979eb84fe58b39bb8c4174889f9e77b0",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/museum/preview.jpg",
+          "bytes": 68319,
+          "sha256": "bd247d751227e46d684e816c8d4921abee6fa3f1ec44799ad0a1d1a428fb98bf",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/museum/museum.glb",
+          "bytes": 2432936,
+          "sha256": "969e2c700e05cdfbab0ae99185f782a0dbb6706a7e3b68aabd931860a614297f",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/gym/preview.jpg",
+          "bytes": 71165,
+          "sha256": "2605105d25cd0722ec1777d11c66817b1f68154229f656ecdafbb417e9ee9a3c",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/gym/gym.glb",
+          "bytes": 3915920,
+          "sha256": "1b6ef8ef09a2ac0d2051da616f7d2c4cbeab8a8a32fec861c734b73362c06a08",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/market/preview.jpg",
+          "bytes": 65254,
+          "sha256": "949a34bb4f4fd99c0be4ce8fb78c61398e904181d78e403b374be8f0c15f726b",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/market/market.glb",
+          "bytes": 6655040,
+          "sha256": "6af0b2370366a8eb8490fbb6a4939b76449713e04a06e962b2d1029baef1c012",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/bar/preview.jpg",
+          "bytes": 64960,
+          "sha256": "12ef692c35a67220374daa8946d2093370e886378ad9db88184379c115f1e583",
+          "matchesBuild": true
+        },
+        {
+          "path": "scene-presets/bar/bar.glb",
+          "bytes": 4137180,
+          "sha256": "03c6b51b79135466cf9dbbf27cec754d8ffe7880c991ac54a16220b8b8fb2c22",
+          "matchesBuild": true
+        },
+        {
+          "path": "showcase/assets/library/merged.json",
+          "bytes": 546295,
+          "sha256": "e87d3266a5abc3546b77ab19177b114450981ec75762a7997d64d1bd9a4a2a3b",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/161-90bb8351488a3849.js",
+          "bytes": 85865,
+          "sha256": "055ff6eca5ebdbd0dd0b48d05ded14cadb431b7134a772480df7c624f05daab4",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/255-9c0c72a5d4870e58.js",
+          "bytes": 173917,
+          "sha256": "729a91fa70c541f4df7226846d975f04006216180a1ca2a30a65f3261f3568ac",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/410-9ada2437be592cf3.js",
+          "bytes": 32135,
+          "sha256": "3541f6657f4ba867e9f5426aa0a6a138640c6e368bf99d172a0fc6b3949a7c88",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/4bd1b696-c023c6e3521b1417.js",
+          "bytes": 173019,
+          "sha256": "2c752a401191671d5bbbe7514f5828bbb0a7cc50bfbe77ddaf1b1ccba4412ed2",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/871-31660ec522f0dc3e.js",
+          "bytes": 34840,
+          "sha256": "7baf7b49fc377f6e9908c33578186acfb5bd603b5623214d665ed78041eef342",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/922-3fe3248b2f29125e.js",
+          "bytes": 51061,
+          "sha256": "7e92ef39be56264f6b66b1209f22fb4faa5e7575d0c2c044586418a6e4b1dab8",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/93-342201aa0d3794e9.js",
+          "bytes": 93740,
+          "sha256": "af56277e394142055d3f000cffa89a542d92b02e262082e07df286f5e0305419",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/app/error-e5a67035f18f4528.js",
+          "bytes": 10699,
+          "sha256": "f6b22573c767d5e7bdba4cdf1909a7c308bc473543d49bad742e0f0bfc049179",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/app/global-error-dc4cf2522aba861d.js",
+          "bytes": 12128,
+          "sha256": "8560649555ed38b29119bdb84f4c71527db306d6c296d68efb1ac17a8679e988",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/app/layout-70ff5240462067cd.js",
+          "bytes": 7718,
+          "sha256": "f2078942ae18d585f2db82e31c9c2fb697edf60f114a699262819b4a9d1eb0b4",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/main-app-4a39e21554b8dea8.js",
+          "bytes": 513,
+          "sha256": "c4e601079195d577116b003d91a88849e3580c1d55097e33c6ca7b9aa9287b40",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/polyfills-42372ed130431b0a.js",
+          "bytes": 112594,
+          "sha256": "0973c1d64c88adc8e3c950410cb58b288f72118d5965b78049438deb8f2f9683",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/chunks/webpack-6decfef576bcf317.js",
+          "bytes": 5459,
+          "sha256": "0c1f1c16dec5f58aaa2a7b1d2d26d742cbc90097fccc9c38b28f6c81245884b5",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/css/15f13a0704ae4736.css",
+          "bytes": 4872,
+          "sha256": "d2492b4fa5f6ea37b76ef42ca5caf2ff00f862fd89861dc4af58b60417514cb0",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/css/34a19a7241b9f229.css",
+          "bytes": 3086,
+          "sha256": "848fa5bd56f08773958731bc94d9740cb6f3ab5ace8342d00a40999f7170e5b8",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/css/4a5630d97c231bbf.css",
+          "bytes": 8768,
+          "sha256": "ed19c328d340529478bb889ddc42e1296542d51fdb50104ab1a3642c010b370e",
+          "matchesBuild": true
+        },
+        {
+          "path": "_next/static/css/6190fd3002013551.css",
+          "bytes": 73892,
+          "sha256": "89e3fb205073ad7b650b6cdceb512aafc8d989a88377b5df7fef3c97a5334fdd",
+          "matchesBuild": true
+        }
+      ],
+      "routes": [
+        {
+          "route": "/",
+          "status": 200,
+          "bytes": 10289,
+          "matchesBuild": false,
+          "matchesAfterRemovingCloudflareChallengeScript": true
+        },
+        {
+          "route": "/introduction",
+          "status": 200,
+          "bytes": 100481,
+          "matchesBuild": false,
+          "matchesAfterRemovingCloudflareChallengeScript": true
+        },
+        {
+          "route": "/reset-password",
+          "status": 200,
+          "bytes": 12169,
+          "matchesBuild": false,
+          "matchesAfterRemovingCloudflareChallengeScript": true
+        }
+      ]
+    }
+  },
+  "backend": {
+    "projectRef": "hrsrrduwbqxnqddkexoy",
+    "functions": [
+      {
+        "slug": "scene-api",
+        "version": 15,
+        "status": "ACTIVE",
+        "updated_at": 1791025064340,
+        "ezbr_sha256": "30e56c4c57d8f53f7bb205ad6176d503363fe5ff5981be8cbca44b9fd1d43c9c"
+      },
+      {
+        "slug": "generation-worker",
+        "version": 6,
+        "status": "ACTIVE",
+        "updated_at": 1791023349859,
+        "ezbr_sha256": "9a67ad36e46fa7b0501c21c1f78f3c161381689f4aa72dbe319940148c43068e"
+      },
+      {
+        "slug": "reconstruction-worker",
+        "version": 2,
+        "status": "ACTIVE",
+        "updated_at": 1790994856632,
+        "ezbr_sha256": "f18f40698f58817c45c9d203c595e1d4937acac6911b7c7e139b1c82e0c55d1e"
+      }
+    ],
+    "functionSourceChecks": [
+      {
+        "slug": "scene-api",
+        "files": [
+          {
+            "path": "supabase/functions/_shared/agent-material-contract.ts",
+            "matches": true,
+            "liveSha256": "c4c76a2fb1358f630cab72bea321598247f3dac42c6b9cef834df4de67fa0911"
+          },
+          {
+            "path": "supabase/functions/_shared/ai.ts",
+            "matches": true,
+            "liveSha256": "b7001152e94a9301e73ac2bfaf3b5854ee75d83f224cc7ce511047fc0aa7071e"
+          },
+          {
+            "path": "supabase/functions/_shared/api.ts",
+            "matches": true,
+            "liveSha256": "679c9a5793b92fbbb21b27e39932bf98abc0994edaa904e3f4c540baf95cc610"
+          },
+          {
+            "path": "supabase/functions/_shared/asset-customization-contract.ts",
+            "matches": true,
+            "liveSha256": "5949aca578ecba07cedd07e79bf7b44db98c942b5525844eee3932558e2648b0"
+          },
+          {
+            "path": "supabase/functions/_shared/assets.ts",
+            "matches": true,
+            "liveSha256": "94c9c725c2845783a1893256abd16fb3cb1dd428d37de334f9862bbc25bcb768"
+          },
+          {
+            "path": "supabase/functions/_shared/backend.ts",
+            "matches": true,
+            "liveSha256": "4926feb8c10b7e324980aa0a11990b7f152a7e3fff4299b65c5922b6a580cbd0"
+          },
+          {
+            "path": "supabase/functions/_shared/domain.ts",
+            "matches": true,
+            "liveSha256": "3694acda9e73fdb9ab9225ed536d37465e3c69b12137ee17abcc8f06483e260e"
+          },
+          {
+            "path": "supabase/functions/_shared/http.ts",
+            "matches": true,
+            "liveSha256": "b1fad49820521216cd37fb1182407b4598bb4027c81827130948d417d056768a"
+          },
+          {
+            "path": "supabase/functions/_shared/models.ts",
+            "matches": true,
+            "liveSha256": "6590534e8b8d12df8136e28cdb18a06037100c4dd47cbf3426b5c224deb2ff8f"
+          },
+          {
+            "path": "supabase/functions/_shared/providers.ts",
+            "matches": true,
+            "liveSha256": "a51697d919adce6c70a182d1e0455b64a28494c7c2c60d690e21801efe181366"
+          },
+          {
+            "path": "supabase/functions/_shared/reconstruction-contract.ts",
+            "matches": true,
+            "liveSha256": "f0ef8c64ee9b0a361b69576ca7204d8f41cfe51ff024784e73387479936508dd"
+          },
+          {
+            "path": "supabase/functions/_shared/scene-resources.ts",
+            "matches": true,
+            "liveSha256": "7418e8b148324dfc583e20e924c6fb8772d3e24ee746c2d5f87cc7cd664810d4"
+          },
+          {
+            "path": "supabase/functions/_shared/structural-geometry.ts",
+            "matches": true,
+            "liveSha256": "1ab3f57eb16ee50ab5aba295061d7b73175971d34121a3639c613faf1c96cbbf"
+          },
+          {
+            "path": "supabase/functions/scene-api/index.ts",
+            "matches": true,
+            "liveSha256": "9110a05a49d9bb9444b687f85b32cf3ac586ee688b8f55c83a49f8cf3a1a6a23"
+          }
+        ]
+      },
+      {
+        "slug": "generation-worker",
+        "files": [
+          {
+            "path": "supabase/functions/_shared/agent-material-contract.ts",
+            "matches": true,
+            "liveSha256": "c4c76a2fb1358f630cab72bea321598247f3dac42c6b9cef834df4de67fa0911"
+          },
+          {
+            "path": "supabase/functions/_shared/ai.ts",
+            "matches": false,
+            "liveSha256": "ab8afe34ea279ccc86f21a9a63b1bc43299613069cd39bd5e0d6875c1b7948cc"
+          },
+          {
+            "path": "supabase/functions/_shared/asset-customization-contract.ts",
+            "matches": true,
+            "liveSha256": "5949aca578ecba07cedd07e79bf7b44db98c942b5525844eee3932558e2648b0"
+          },
+          {
+            "path": "supabase/functions/_shared/assets.ts",
+            "matches": true,
+            "liveSha256": "94c9c725c2845783a1893256abd16fb3cb1dd428d37de334f9862bbc25bcb768"
+          },
+          {
+            "path": "supabase/functions/_shared/backend.ts",
+            "matches": true,
+            "liveSha256": "4926feb8c10b7e324980aa0a11990b7f152a7e3fff4299b65c5922b6a580cbd0"
+          },
+          {
+            "path": "supabase/functions/_shared/domain.ts",
+            "matches": true,
+            "liveSha256": "3694acda9e73fdb9ab9225ed536d37465e3c69b12137ee17abcc8f06483e260e"
+          },
+          {
+            "path": "supabase/functions/_shared/generation-quality.ts",
+            "matches": true,
+            "liveSha256": "283ac531ceafb817a2497a2e5ff5a0bee2dffda05a87daa2ae571dea915843dd"
+          },
+          {
+            "path": "supabase/functions/_shared/http.ts",
+            "matches": true,
+            "liveSha256": "b1fad49820521216cd37fb1182407b4598bb4027c81827130948d417d056768a"
+          },
+          {
+            "path": "supabase/functions/_shared/models.ts",
+            "matches": true,
+            "liveSha256": "6590534e8b8d12df8136e28cdb18a06037100c4dd47cbf3426b5c224deb2ff8f"
+          },
+          {
+            "path": "supabase/functions/_shared/providers.ts",
+            "matches": true,
+            "liveSha256": "a51697d919adce6c70a182d1e0455b64a28494c7c2c60d690e21801efe181366"
+          },
+          {
+            "path": "supabase/functions/_shared/scene-resources.ts",
+            "matches": false,
+            "liveSha256": "78c7b76108c711e27ce857508e2371a55cd2653e72b254d251ebdc416c3ca3e3"
+          },
+          {
+            "path": "supabase/functions/_shared/structural-geometry.ts",
+            "matches": true,
+            "liveSha256": "1ab3f57eb16ee50ab5aba295061d7b73175971d34121a3639c613faf1c96cbbf"
+          },
+          {
+            "path": "supabase/functions/_shared/worker-handler.ts",
+            "matches": true,
+            "liveSha256": "0f71895108f95d0d29538fdf80a01d091b103bea9e4836798b12178f8d9abb62"
+          },
+          {
+            "path": "supabase/functions/_shared/worker.ts",
+            "matches": true,
+            "liveSha256": "45dc4ca6d641ff15d0d1d207516c426d121aa7d8d3eb7e9678d38d651b35fa63"
+          },
+          {
+            "path": "supabase/functions/generation-worker/index.ts",
+            "matches": true,
+            "liveSha256": "4c0494b2e50e5091112122bbe2a97385a4750f9eb58121105a87653918b278bd"
+          }
+        ]
+      },
+      {
+        "slug": "reconstruction-worker",
+        "files": [
+          {
+            "path": "supabase/functions/_shared/backend.ts",
+            "matches": true,
+            "liveSha256": "4926feb8c10b7e324980aa0a11990b7f152a7e3fff4299b65c5922b6a580cbd0"
+          },
+          {
+            "path": "supabase/functions/_shared/domain.ts",
+            "matches": true,
+            "liveSha256": "3694acda9e73fdb9ab9225ed536d37465e3c69b12137ee17abcc8f06483e260e"
+          },
+          {
+            "path": "supabase/functions/_shared/http.ts",
+            "matches": true,
+            "liveSha256": "b1fad49820521216cd37fb1182407b4598bb4027c81827130948d417d056768a"
+          },
+          {
+            "path": "supabase/functions/_shared/reconstruction-contract.ts",
+            "matches": true,
+            "liveSha256": "f0ef8c64ee9b0a361b69576ca7204d8f41cfe51ff024784e73387479936508dd"
+          },
+          {
+            "path": "supabase/functions/_shared/reconstruction-handler.ts",
+            "matches": true,
+            "liveSha256": "fe3c8486971394c494480631ad479879378a1313f163490d144478134f2c1b15"
+          },
+          {
+            "path": "supabase/functions/_shared/reconstruction.ts",
+            "matches": true,
+            "liveSha256": "26d911e53c6fd478f9b87e7ca8df2186606eedbb57366f3e5ac485348e5b0606"
+          },
+          {
+            "path": "supabase/functions/_shared/structural-geometry.ts",
+            "matches": true,
+            "liveSha256": "1ab3f57eb16ee50ab5aba295061d7b73175971d34121a3639c613faf1c96cbbf"
+          },
+          {
+            "path": "supabase/functions/deno.json",
+            "matches": true,
+            "liveSha256": "3938f40c812044e54791e1e28bbae418243d00229b442c20ab54b53f7c747512"
+          },
+          {
+            "path": "supabase/functions/reconstruction-worker/index.ts",
+            "matches": true,
+            "liveSha256": "b326a2abcbf2a9cfa06dadf64008bbd58f231dfa7a6bf6eeee93819980d4963f"
+          }
+        ]
+      }
+    ],
+    "migrations": [
+      {
+        "version": "20261002060304",
+        "name": "scene_core",
+        "sourceSha256": "2ce3f6e753978d651973a5afbfd7468e05cde7586fe85ad7e3706210996f649f",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002060307",
+        "name": "scene_jobs",
+        "sourceSha256": "cd47892c4db301219eafebf72bb8cfce53a3bb9a46e8ea4070f7323b1b121719",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002060309",
+        "name": "scene_storage",
+        "sourceSha256": "6faab5633d47babc750c82017e6fc58c888413b6c00ee7ec129fba0bea6c07d1",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002061700",
+        "name": "scene_demo_admin",
+        "sourceSha256": "7826289a6565bb5db55c5e32d72cb76113ab380ecf74596b5b5ea67086be1a2a",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002110000",
+        "name": "deepseek_daily_budget",
+        "sourceSha256": "0956b987386b3f145850d902cf2f8bc285bd05a2c64e6f22dea38bc5fecb4008",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002140000",
+        "name": "personal_studio",
+        "sourceSha256": "5a44a2a8e6f956015ef5f99c75aa144677f412828c0332f2d24b896991b37199",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002150000",
+        "name": "scene_studios",
+        "sourceSha256": "e7a8f4be37e1cfc450be452b8e3e7e4d25774b9250acd668efcace36c5a578e3",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261002180000",
+        "name": "shared_model_library",
+        "sourceSha256": "85a913073ad4931869644892b28c9d7434c858690b0c0ea1dc4a44958cb11221",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003090000",
+        "name": "scene_v2_reconstruction",
+        "sourceSha256": "01df98188313a56895729d937a2afb4b56a270de54fcd24b94cf7e656d985ce8",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003094500",
+        "name": "studio_management",
+        "sourceSha256": "40bf17c8f6b10bca903ea557ba4ba9b2c65eb03cd409503c899b859f447fe1db",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003120000",
+        "name": "project_deletion",
+        "sourceSha256": "637619797a13f30b0c3a8469211f1d9391cbb657e140051b8bc33ab2fd0311fa",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003133000",
+        "name": "studio_project_visibility",
+        "sourceSha256": "996866f8ef2d55963057094c5415895abf76bff6414238db22ccead0e73fa139",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003140000",
+        "name": "empty_studio_deletion",
+        "sourceSha256": "02ed0d64c3c94c54d2be20dbabcb8e54d524d39447b8a79b8bca1dd69e920e68",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003160000",
+        "name": "material_variants",
+        "sourceSha256": "c992ad30d1359f8340f9aea3f832aa804890f512287f076a85449c84ad4fe3ed",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003161000",
+        "name": "generation_inputs",
+        "sourceSha256": "bc230b2b9c3811432e95403b871407eee7d0200da99d630bfbb0c700de4c5503",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      },
+      {
+        "version": "20261003180000",
+        "name": "unlimited_ai_usage",
+        "sourceSha256": "7c5eaeb0dcc6a796db67194787c5bbc66cf5e911cb86092226a459d3ce4f9166",
+        "matchesRemoteStatementsIgnoringOuterWhitespace": true
+      }
+    ],
+    "sourceArchiveLimitations": "CLI refused catalogue JSON paths outside supabase/functions; raw body export timed out. Only successfully downloaded source files are archived. Platform ezbr hashes are deployment identifiers, not a claim that local archives match original upload bytes."
+  },
+  "validation": {
+    "backendTypecheck": "passed",
+    "backendTests": {
+      "passed": 212,
+      "note": "210 passed in initial sandbox run; 2 socket tests passed on rerun with loopback permission"
+    },
+    "frontendBuild": "passed",
+    "frontendTypecheck": "passed as part of build",
+    "frontendLint": "one existing import-order warning",
+    "newCloudDeployments": false,
+    "frontendTargetedTests": {
+      "files": 2,
+      "passed": 15
+    }
+  }
+}
