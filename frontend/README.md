@@ -6,6 +6,12 @@ v0.6.0 的运行、接口与验证边界见 [图纸／照片重建说明](../doc
 
 前端首版基于 PLAN 指定的 `threejs-sims-house-builder` 提交 `ab64647640a493657929246d62a2a37ebfc0ed42` 定向改造，使用 Next.js 静态导出、React、TypeScript、Three.js、Zustand。上游 MIT 许可见 [UPSTREAM-LICENSE](UPSTREAM-LICENSE)。原体育馆展示页仍在仓库根目录。
 
+## 统一 Agent 入口
+
+工作台 AI 功能集中在右下角 **Agent**，分为「场景策划 · DeepSeek」和「3D 生成 · 腾讯 HY-3D-3.0」。活动需求、图纸与照片资料、尺寸核对位于策划页的折叠区；左侧保留物料库、场景预设和场地，云项目保留个人云素材管理。
+
+文字指令默认在后端校验后直接应用，可用画布撤销；取消「发送后直接应用」可先预览。已有图片或 v2 空间结构不再阻止文字物料修改。详细范围与验证见 [Agent 入口改造记录](docs/AGENT-ENTRY.md)。
+
 ## 运行
 
 使用 Node.js 24.15+（建议 Node 24 LTS），在仓库根目录执行：

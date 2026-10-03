@@ -55,12 +55,12 @@ vi.mock('@/lib/backend-session', async (importOriginal) => {
 });
 vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
-  const { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
+  const { CreativeStudioProvider, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
     RoomOrganizer: ({ controller }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
         <button onClick={() => navigation.push('/auth')}>返回登录页</button>
-        <CreativeBriefPanel /><CreativeAssistant />
+        <CreativeAssistant />
       </CreativeStudioProvider>
     </SelectionProvider>,
   };
@@ -111,6 +111,11 @@ afterEach(() => {
   restore(HTMLElement.prototype, 'scrollTo', originalScroll);
 });
 
+async function openAgent(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name:'打开 Binggo Agent' }, { timeout:5000 }));
+  fireEvent.click(screen.getByText('活动需求与场地资料'));
+}
+
 describe('introduction round trips', () => {
   it('defers the editor, then preserves the real brief, image, conversation and unsent message when returning', async () => {
     const rendered = render(<App />);
@@ -119,10 +124,10 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     // The editor chunk is loaded lazily through next/dynamic; the default 1s findBy budget
     // is not enough once the mock's own factory has a cold module graph to resolve.
+    await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }), { target: { value: '举办一场 24 人自然风聚会。' } });
     fireEvent.change(rendered.container.querySelector('input[type="file"]')!, { target: { files: [new File(['image'], 'venue.png', { type: 'image/png' })] } });
     await screen.findByRole('img', { name: '现场照片：venue.png' });
-    fireEvent.click(screen.getByRole('button', { name: '打开幕景助手' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '为活动保留合影区。' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '这条还没有发送。' } });
@@ -130,7 +135,7 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
     expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
-    expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Agent' })).toBeNull();
     expect(revokeObjectURL).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
 
@@ -151,8 +156,10 @@ describe('introduction round trips', () => {
     const apply = vi.spyOn(activeController, 'applySceneProposal').mockResolvedValue({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: true });
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
+    await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
+    fireEvent.click(screen.getByRole('checkbox', { name:'发送后直接应用' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
     await screen.findByText('方案提案 · 尚未应用');
     fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
     expect(screen.getByText('editor@example.com')).toBeTruthy();
@@ -189,7 +196,7 @@ it('opens the workspace directly after session restoration without another login
   const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
   vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
   render(<App />);
-  await screen.findByRole('textbox', { name: '客户需求' });
+  await screen.findByRole('button', { name: '打开 Binggo Agent' });
   expect(screen.queryByLabelText('密码')).toBeNull();
   expect(navigation.replace).not.toHaveBeenCalled();
 });
@@ -206,6 +213,6 @@ it('opens the current workspace at the editor alias after session restoration', 
   const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
   vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
   render(<App />);
-  await screen.findByRole('textbox', { name: '客户需求' });
+  await screen.findByRole('button', { name: '打开 Binggo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
 });
