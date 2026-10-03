@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
+import { GeneratedModelLibrary } from './generated-model-library';
 import { OnlineModelLibrary } from './online-model-library';
 import { SceneLayersPanel } from './scene-layers-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -51,6 +52,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
         {atLimit && <p className="sc-warning">已达到 {editorItemLimit(layout)} 件物料上限，请先删除部分物料。</p>}
+        <GeneratedModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
         <OnlineModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
       </>}
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
