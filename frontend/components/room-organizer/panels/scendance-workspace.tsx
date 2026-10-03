@@ -16,6 +16,7 @@ interface LibraryProps {
   controller?: BackendSession;
   onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   creativePanel?: ReactNode;
+  onPreviewMovement?(layout: RoomLayout | null): void;
   onLoadPreset(layout: RoomLayout): void;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
 }
@@ -30,7 +31,7 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller, onLoadPreset }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller, onLoadPreset, onPreviewMovement }: LibraryProps): JSX.Element {
   const { layout, activeFloor } = useRoomEditor();
   const { selectOnly } = useSelection();
   const [tab, setTab] = useState<'materials' | 'brief' | 'presets' | 'layers'>('brief');
@@ -54,7 +55,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
       </>}
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
       {tab === 'brief' && <>{creativePanel}</>}
-      {tab === 'layers' && <SceneLayersPanel {...(controller ? { controller } : {})}/>}
+      {tab === 'layers' && <SceneLayersPanel {...(controller ? { controller } : {})} {...(onPreviewMovement ? { onPreview: onPreviewMovement } : {})}/>}
       {tab === 'presets' && <>
         <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>
         <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>

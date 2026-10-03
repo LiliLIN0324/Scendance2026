@@ -78,12 +78,16 @@ describe('catalogItemOrigin', () => {
 describe('selected summary and colour', () => {
   afterEach(cleanup);
 
-  it('edits Y elevation and keeps the rotate shortcut with position, without size controls', () => {
-    const editor = setup(placed({ elevation: 0.75 }));
-    const input = screen.getByRole('spinbutton', { name: 'Y / m' });
+  it('edits Z elevation and Y ground position without changing the stored coordinate convention', () => {
+    const editor = setup(placed({ position: { x: 2, z: 3 }, elevation: 0.75 }));
+    const input = screen.getByRole('spinbutton', { name: 'Z / m' });
     expect((input as HTMLInputElement).value).toBe('0.75');
     fireEvent.change(input, { target: { value: '1.25' } });
     expect(editor.actions.updateItem).toHaveBeenCalledWith('placed-1', { elevation: 1.25 });
+    const ground = screen.getByRole('spinbutton', { name: 'Y / m' });
+    expect((ground as HTMLInputElement).value).toBe('3');
+    fireEvent.change(ground, { target: { value: '3.2' } });
+    expect(editor.actions.moveItem).toHaveBeenCalledWith('placed-1', 2, 3.2);
     expect(screen.queryByRole('spinbutton', { name: '宽' })).toBeNull();
     expect(screen.getByRole('button', { name: '旋转 90°' }).closest('section')?.textContent).toContain('位置与角度');
   });

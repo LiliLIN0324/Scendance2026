@@ -23,14 +23,15 @@ describe('scene layers', () => {
     expect(materialLayers(items).find(l => l.name === '全部椅子')?.itemIds).toHaveLength(2);
     const locked = { ...items[0]!, locked: true };
     const model = { ...items[1]!, glbUrl: '/assets/example.glb' };
-    const result = batchLayerEdit([locked, model, items[2]!], new Set(items.map(i => i.id)), { x: 0.2, y: 0.5, z: 0, color: '#123456' });
+    const result = batchLayerEdit([locked, model, items[2]!], new Set(items.map(i => i.id)), { x: 0.2, y: -0.3, z: 0.5, color: '#123456' });
     expect(result[0]).toBe(locked);
     expect(result[1]!.color).toBe(model.color);
     expect(result[1]!.position!.x).toBeCloseTo(model.position!.x + 0.2);
+    expect(result[1]!.position!.z).toBeCloseTo(model.position!.z - 0.3);
     expect(result[2]).toMatchObject({ elevation: 0.5, color: '#123456' });
     const painted = batchLayerEdit([items[2]!], new Set([items[2]!.id]), { x: 0, y: 0, z: 0, color: '#654321' });
     expect(painted[0]!.elevation).toBeUndefined();
-    expect(() => batchLayerEdit(items, new Set(items.map(i => i.id)), { x: 0, y: -1, z: 0 })).toThrow('整组保持原位');
+    expect(() => batchLayerEdit(items, new Set(items.map(i => i.id)), { x: 0, y: 0, z: -1 })).toThrow('整组保持原位');
   });
 
   it('preserves custom layers and rejects nested snapshots or invalid member IDs', () => {
