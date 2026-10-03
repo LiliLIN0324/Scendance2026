@@ -7,7 +7,7 @@ import type { Env } from '../supabase/functions/_shared/http.ts';
 import type { Scene } from '../supabase/functions/_shared/domain.ts';
 
 const env:Env=key=>({DEEPSEEK_API_KEY:'fixture-key',AI_MAX_REQUEST_CENTS:'40'}[key]);
-const resource=libraryResources.find(item=>item.name==='Folding Beach Chair')!;
+const resource=libraryResources.find(item=>item.name==='抱臂站立人物')!;
 const suggestion={name:'定制花朵装置',reason:'现有资源中没有客户所需造型',prompt:'单件白色花朵装置，独立底座，不含场景'};
 const completion=(value:unknown)=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{total_tokens:100}}));
 
@@ -22,7 +22,7 @@ describe('scene Agent -> real authorization -> proposal -> database application'
   async function project(actor=editor,base:Scene=scene()) {
     const p=await f.rpc(actor,'projects.create',{studioId:studio,name:'Agent fixture',scene:base});
     const lease=await f.rpc(actor,'lease.acquire',{projectId:p.id,sessionId:session});
-    return {projectId:p.id,requestId:crypto.randomUUID(),sessionId:session,generation:lease.generation,expectedRevision:0,localRevision:0,scene:base,instruction:'从资源库加入沙滩椅，缺少定制花朵时提示 HY3。',mode:'modify' as const,selectedIds:[]};
+    return {projectId:p.id,requestId:crypto.randomUUID(),sessionId:session,generation:lease.generation,expectedRevision:0,localRevision:0,scene:base,instruction:'从资源库加入抱臂站立人物，缺少定制花朵时提示 HY3。',mode:'modify' as const,selectedIds:[]};
   }
   function request(api:ReturnType<typeof createApi>,input:Awaited<ReturnType<typeof project>>,actor=editor) {
     const {projectId,...body}=input;
@@ -33,13 +33,13 @@ describe('scene Agent -> real authorization -> proposal -> database application'
     const input=await project(editor,{...scene(),objects:[existing]});let context:Record<string,any>={};
     const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{
       context=JSON.parse(JSON.parse(init!.body as string).messages[1].content);
-      return completion({explanation:'已规划沙滩椅；花朵需另行生成。',commands:[{op:'move',id:existing.id,position:{x:3,z:3}},{op:'add_resource',resourceId:resource.resourceId,position:{x:6,z:5},rotation:0}],modelSuggestions:[suggestion]});
+      return completion({explanation:'已规划人物；花朵需另行生成。',commands:[{op:'move',id:existing.id,position:{x:3,z:3}},{op:'add_resource',resourceId:resource.resourceId,position:{x:6,z:5},rotation:0}],modelSuggestions:[suggestion]});
     });
     const api=createApi(f.backend,env,fetcher);
     const response=await request(api,input);expect(response.status).toBe(201);const result=await response.json();
     expect(context.scene).toEqual(input.scene);expect(context.selectedIds).toEqual([]);
     expect(context.sceneResourceRefs).toEqual({[existing.id]:resource.resourceId});
-    expect(context.resources.items).toHaveLength(234);
+    expect(context.resources.items).toHaveLength(528);
     expect(context.resources.items).toContainEqual([resource.resourceId,resource.name,resource.category,[resource.size!.width,resource.size!.depth,resource.size!.height]]);
     expect(JSON.stringify(context)).not.toContain('storage_path');expect(JSON.stringify(context)).not.toContain('https://');
     expect(result.modelSuggestions).toEqual([suggestion]);
@@ -66,7 +66,7 @@ describe('scene Agent -> real authorization -> proposal -> database application'
     expect((await f.rpc(editor,'projects.get',{projectId:input.projectId})).scene.objects).toEqual([]);
   });
   it('keeps the full public index compact through the bounded repair call',async()=>{
-    expect(new TextEncoder().encode(JSON.stringify(resourceIndex(libraryResources))).length).toBeLessThan(18000);
+    expect(new TextEncoder().encode(JSON.stringify(resourceIndex(libraryResources))).length).toBeLessThan(40000);
     const input=await project();let attempts=0;
     const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{
       expect(new TextEncoder().encode(init!.body as string).length).toBeLessThan(65536);

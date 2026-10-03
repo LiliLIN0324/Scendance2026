@@ -1,0 +1,263 @@
+{
+  "sourceCounts": {
+    "websiteOnline": 234,
+    "websiteLocal": 30,
+    "websiteLegacy": 5,
+    "model200": 279
+  },
+  "count": 529,
+  "placeableCount": 528,
+  "registeredCount": 528,
+  "replacements": [
+    {
+      "slug": "dog-agility-and-training-field-pa-speaker-post-8d62a208",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-microphone-on-boom-b553a46d",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "nightclub-and-dj-booth-hanging-speaker-c73e7811",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "village-hall-and-community-events-pa-speaker-on-stand-7ffa787e",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-stage-deck-module-b23478f5",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-stage-roof-canopy--f849524b",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-lighting-bar-with--9d1b9fb6",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-truss-straight-bay-3e0706d1",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "nightclub-and-dj-booth-lighting-truss-straight-8d2acafa",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "harbor-and-tackle-fish-market-stall-d82006ea",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "indoor-market-hall-and-traders-stall-stool-3c24a76c",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "medieval-mmo-starter-realm-market-stall-blue-f5cbc408",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "medieval-mmo-starter-realm-market-stall-e0677cc9",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "clinic-and-veterinary-practice-examination-couch-adjus-ac07fdf2",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-drum-kit-shell-set-a2d5fafe",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-line-array-speaker-7500d812",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "community-sports-hall-and-changing-rooms-reception-des-ee569bd0",
+      "identicalAfterRepair": true
+    },
+    {
+      "slug": "hot-air-balloon-festival-traffic-cone-799bc862",
+      "identicalAfterRepair": true
+    }
+  ],
+  "duplicates": [],
+  "repairs": [
+    {
+      "slug": "live-music-venue-and-festival-stage-guitar-stand-with--12a05ac1",
+      "originalBytes": 116284,
+      "originalSha256": "df0456f09aaaf28a0ed61f80df063d9355514683e1402457aef3a112b62ed3a8",
+      "restoredBytes": 117696,
+      "restoredSha256": "f9e4ab3cd40dbbadc3b6a96a8158caae5ac46508c7dc4fa0f8ba5a0f90397037"
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-guitar-stand-with--e8d04dcb",
+      "originalBytes": 47915,
+      "originalSha256": "e4ebd873941b7aa87f55a8c79cb876d6f7609960739427ccf4b60db5a06b48ee",
+      "restoredBytes": 117636,
+      "restoredSha256": "46b6ba6a23bb40acc153373c45394b4711bec9fb16094aca4bc57b501611bd1d"
+    },
+    {
+      "slug": "nightclub-and-dj-booth-hanging-speaker-c73e7811",
+      "originalBytes": 21904,
+      "originalSha256": "d1b998494d59fe16a092e4f8b95eb4b4aa8792fea7baa40fa2e48b0da5c75081",
+      "restoredBytes": 38764,
+      "restoredSha256": "3d57fc9145fcaaf2ba5a257014c8c550784ce2c064da40d8ce6bde954d984ba5"
+    },
+    {
+      "slug": "chocolate-making-and-confectionery-choco-0bed56f3-starter-scene",
+      "originalBytes": 222248,
+      "originalSha256": "de1f2b8745c7d3ddaff7a5135c2d9bfebd28badac52f28f8f7b7a8356e3f6a10",
+      "restoredBytes": 3419852,
+      "restoredSha256": "7975882f474f443970952abfb87f465a9fba82d909fe4a88dd2658ba731c414f"
+    },
+    {
+      "slug": "nightclub-and-dj-booth-cocktail-station-d186e438",
+      "originalBytes": 50631,
+      "originalSha256": "88915ee33933d45bb8e5c19d42f6e545bc4e88f0a40e1c3ee7eb68ab5ac480ce",
+      "restoredBytes": 58460,
+      "restoredSha256": "ebf35c051579ab720ce7cdbc609a909a151fa365140eb1ca1583fa363df7b97a"
+    },
+    {
+      "slug": "theatre-stage-and-backstage-costume-rail-with-covers-8ed59fc5",
+      "originalBytes": 53325,
+      "originalSha256": "72c313e9f6632a14ce4eada64eb862ee9bab6b666b9c0affd034b4c9b39ff2fd",
+      "restoredBytes": 95504,
+      "restoredSha256": "dbb0c1737d1ef81b1bf79bc9873b94dcc4632bb153f1b5fb1c696d1021689c3f"
+    },
+    {
+      "slug": "theatre-stage-and-backstage-proscenium-arch-frame-f9dcb7bb",
+      "originalBytes": 20535,
+      "originalSha256": "119e8abf3c3bb583e93c0f6740338ea97ba5d6dae2a78963f7782fdf599245b4",
+      "restoredBytes": 30776,
+      "restoredSha256": "c33dba4775c7190345b02991c8e57045f805f46db59c5914860b05325791d691"
+    },
+    {
+      "slug": "theatre-stage-and-backstage-stage-trap-section-c946022f",
+      "originalBytes": 45133,
+      "originalSha256": "bc8e2fd4b9873bae5dd600d6501096a33751dc439ec863eaaf0127ba79970690",
+      "restoredBytes": 60936,
+      "restoredSha256": "cde9ad60644a5fbdec4ddc0d2d68d7de5b20c0ee2d1bab90084d815a6a6c9a05"
+    },
+    {
+      "slug": "christmas-storybook-christmas-bakery-market-a78eca89",
+      "originalBytes": 221982,
+      "originalSha256": "9075c1039721aeee910b64e90b71e177b7ece054f98a78ab8e40872839209563",
+      "restoredBytes": 844480,
+      "restoredSha256": "0644546825ca87536bb2f94fa87dd16501486476a2e49466b7a4fe4f61d3cf87"
+    },
+    {
+      "slug": "hero-shooter-harbour-payload-market-stall-awning-358921d2",
+      "originalBytes": 67425,
+      "originalSha256": "d9a0c0d5e35a14c4907458dd73c80b053587957a0b139f5d5b58c1f738908e29",
+      "restoredBytes": 79616,
+      "restoredSha256": "d2526f91c486072ed80c780faf7fc4ceae4cbb63082653cdf7ddeeef277f823b"
+    },
+    {
+      "slug": "indian-bazaar-street-and-temple-tea-stall-865b528a",
+      "originalBytes": 53391,
+      "originalSha256": "6377d12088b8353136fd16017253183c84b98f616f944d588f46734a582de5bd",
+      "restoredBytes": 75568,
+      "restoredSha256": "dead0b93f31e74c040d895c5d7949e689f7ad82639661209be9b2e425574aa68"
+    },
+    {
+      "slug": "indoor-market-hall-and-traders-lock-up-stall-unit-3085836b",
+      "originalBytes": 105486,
+      "originalSha256": "6c354d2cac8393bdb5116fa76146d9135a184aedb51e98085ed951d5e580a2c4",
+      "restoredBytes": 244376,
+      "restoredSha256": "df97fddcf54dcfb5c39b4a0b4410257afb2a7ab0330ce98b4edd2e6076dde535"
+    },
+    {
+      "slug": "indoor-market-hall-and-traders-open-stall-unit-blue-7bc77762",
+      "originalBytes": 74260,
+      "originalSha256": "649f985a83c7f53feb0f1c21f637a74d826e5ca88fe2af9dfcc7b3f3976802a5",
+      "restoredBytes": 109744,
+      "restoredSha256": "ebfac9b198ba713dccab9715b51d48b1850251d59c6d57169d641b46dc55fb70"
+    },
+    {
+      "slug": "meadow-courier-parcel-market-awning",
+      "originalBytes": 12840,
+      "originalSha256": "1b628d0315967318179ce9daf604dbd8e21c8f8ac77dc7e57690104b731fd473",
+      "restoredBytes": 20788,
+      "restoredSha256": "e319f0b80c28d3bb8e0a8c520e280b2b7a99675e69377d11e77c8e935a7cae96"
+    },
+    {
+      "slug": "medieval-mmo-starter-realm-market-stall-blue-f5cbc408",
+      "originalBytes": 6005,
+      "originalSha256": "80f115994b57e4e868e1cf3e6ac1bc783b4b3c6488b9076298193764daadd566",
+      "restoredBytes": 68056,
+      "restoredSha256": "dab1741f0d0a12b58ff622ff1b5eab2183c9682d335b93f0a0fb6c9468abd2f4"
+    },
+    {
+      "slug": "medieval-tournament-and-jousting-ground-merchant-stall-9a839369",
+      "originalBytes": 34747,
+      "originalSha256": "8ddc823c20f9a641c32d941d97a4d59dd8b8ca86c25ff8fc2c924dee104fd7e6",
+      "restoredBytes": 39796,
+      "restoredSha256": "fadf139ef3182f0698c515f27541982ec6a73d111d02550e005362a9f3effee8"
+    },
+    {
+      "slug": "roman-bathhouse-and-palaestra-vendor-stall-42493924",
+      "originalBytes": 51956,
+      "originalSha256": "9601d759006648b8e85c824492795fd42cc26bcc62b6313cb1a30307a4fe0b1d",
+      "restoredBytes": 70908,
+      "restoredSha256": "7e58f46b434295d4a3605f787b2be6a2b3aa97f01a01ec6f9674066198bb3720"
+    },
+    {
+      "slug": "community-sports-hall-and-changing-rooms-gym-mat-stack-d3bfc381",
+      "originalBytes": 37484,
+      "originalSha256": "795113459a79bce7534e74c9ab4905004199ea3f226a0e0abe5312427bbda4a0",
+      "restoredBytes": 37868,
+      "restoredSha256": "4dc2ac9e5c18cd112570a3875b490386d76bc88f1add0bcc449ddaa28093c26e"
+    },
+    {
+      "slug": "live-music-venue-and-festival-stage-litter-bin-d65ec1dd",
+      "originalBytes": 11518,
+      "originalSha256": "040f26d7b4e64e316263f1733b2665a61c2583aad79343886e1e5065710cd7cb",
+      "restoredBytes": 17588,
+      "restoredSha256": "b1d010941a088db239cea6b344f061ddcb9b3176363b37c0c66c6a057554beeb"
+    },
+    {
+      "slug": "petrol-station-and-forecourt-shop-screen-wash-pallet-e983d54e",
+      "originalBytes": 294912,
+      "originalSha256": "e0bc229f52611e92e26843d1a8aa45ac6309b63a389ebbcd651d1d2b658b0ab8",
+      "restoredBytes": 307984,
+      "restoredSha256": "85c7813a58e79b804a796710b9df706b1833647454b8df4c6e208cc29527fbe6"
+    },
+    {
+      "slug": "retail-store-fixtures-and-mall-ceiling-track-lighting--9cadd166",
+      "originalBytes": 30052,
+      "originalSha256": "34c6b412a88947106ed38074791299090fcd0647d559be0cf03d3defca1a40ac",
+      "restoredBytes": 78496,
+      "restoredSha256": "a314799655f89f1cfc55e3fe28d4c3a18e55b3b3a0868b1ab2323941df6756b1"
+    },
+    {
+      "slug": "theatre-stage-and-backstage-house-tabs-on-track-open-00c29a91",
+      "originalBytes": 67381,
+      "originalSha256": "d4abd6921dbea0b25899df3fae0c7dcf80a43c691e41b183821ccf650569d9e4",
+      "restoredBytes": 102824,
+      "restoredSha256": "66a8fe1f2e6103ef82fc7b2d852c26565f3054617bf5ac09e5549515e8fb2841"
+    },
+    {
+      "slug": "theatre-stage-and-backstage-prop-shelf-unit-791c9034",
+      "originalBytes": 46480,
+      "originalSha256": "a00189bbc8e90ec3dfc00b601e518f93bb1ec61c686e33e41b58413589830fa4",
+      "restoredBytes": 55556,
+      "restoredSha256": "d0d7c4e413f75e3d62251693c72d9dc4f1077e50187941be4ea98e54c8fad37b"
+    },
+    {
+      "slug": "recycling-centre-and-material-sorting-sample-sorting-t-453f97fd",
+      "originalBytes": 24620,
+      "originalSha256": "58c9e7f22a17db9b4d1d9eefb7a62e1739906d3604bff9bec1fb0413facd167f",
+      "restoredBytes": 65224,
+      "restoredSha256": "a777edd555288300c5e4e4029ce5b9b2aab74f6dd77daec6a084fe623d9778f2"
+    }
+  ],
+  "blocked": [
+    {
+      "slug": "chocolate-making-and-confectionery-choco-0bed56f3-starter-scene",
+      "name": "巧克力工坊生产线场景",
+      "reason": "完整工坊场景超出单件模型的复杂度限制，请下载后作为场景模板处理。"
+    }
+  ]
+}

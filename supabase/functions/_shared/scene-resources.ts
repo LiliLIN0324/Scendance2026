@@ -1,4 +1,4 @@
-import library from '../../../assets/library/online.json' with { type: 'json' };
+import library from '../../../assets/library/merged.json' with { type: 'json' };
 import { sizeSchema, uuid, type Scene } from './domain.ts';
 import type { Backend } from './backend.ts';
 
@@ -12,7 +12,7 @@ export interface SceneResource {
 
 // Use the same reviewed placement dimensions as the visible model library.
 // Raw GLB bounds are not a statement of real-world dimensions.
-export const libraryResources: readonly SceneResource[] = library.models.map((model,index) => ({
+export const libraryResources: readonly SceneResource[] = library.models.filter(model => model.assetId && !('blockedReason' in model)).map((model,index) => ({
   resourceId: `library:${index}`, assetId: uuid.parse(model.assetId),
   name: model.name.replace(/\s*\([^()]*\)\s*$/, '').trim(), category: model.subcategory,
   size: sizeSchema.parse(Object.fromEntries(['width','depth','height'].map(key =>
@@ -39,7 +39,7 @@ export async function readSceneResources(backend: Backend, actor: string, scene:
   return [...resources.values()];
 }
 
-/** The complete 234-item public index is about 16 KB, leaving room for the scene and repair. */
+/** Compact rows keep the full public index bounded for the scene and repair call. */
 export function resourceIndex(resources: readonly SceneResource[]) {
   return { columns:['resourceId','name','category','sizeMeters'],items:resources.map(resource =>
     [resource.resourceId,resource.name,resource.category,resource.size ? [resource.size.width,resource.size.depth,resource.size.height] : null]) };
