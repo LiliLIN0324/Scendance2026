@@ -13,6 +13,10 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 |---|---|---|
 | GET `/health` | 无 | `{ok:true,schemaVersion:1}` |
 | GET `/studios` | 无 | 当前成员的工作室、角色、展示名 |
+| POST `/studios` | `{requestId,name,displayName}` | 201，新增工作室 `{id,name,role:"owner",displayName}`；相同请求可重放 |
+| GET `/studios/:studioId/members` | 无 | 当前工作室成员 `[{userId,role,displayName}]` |
+| PUT `/studios/:studioId/members/:userId` | `{displayName}` | 负责人添加/更新已存在账号的编辑成员，返回 `{userId,role:"editor",displayName}` |
+| DELETE `/studios/:studioId/members/:userId` | 无 | 负责人移除编辑成员，返回 `{removed:true}`；重复删除幂等 |
 | GET `/catalog` | 无 | 8 种内置物料的 id/name/size |
 | GET `/projects` | 无 | 最近 100 个可访问项目；id/name/studio_id/revision/updated_at/current_editor/lease_expires |
 | POST `/projects` | `{studioId,name,scene}` | 201，项目（revision=0） |
@@ -96,6 +100,14 @@ const api = createSceneClient(
 // getSession 仅用于取本地 token；服务端会独立调用 getUser 验证。
 const studios = await api.request('/studios');
 ```
+
+### 工作室与成员
+
+个人工作室由账号确认流程自动创建；`POST /studios` 用于用户明确新增工作室，不能在每次页面加载时调用。创建前生成一次 `requestId=crypto.randomUUID()`，网络失败重试时复用同一个 ID 和正文；改名或修改展示名后重用该 ID 会返回 `409 IDEMPOTENCY_CONFLICT`。工作室名称最多 120 字，成员展示名最多 80 字，均会去除前后空白。
+
+任一成员可查看本工作室的成员列表；只有负责人可按对方已有账号的 UUID 添加或移除编辑成员。账号 ID 可由前端当前 Auth session 展示给本人复制；这里不搜索邮箱、不创建 Auth 账号、不发送邀请邮件。不能通过此接口提升角色、变更或移除负责人；返回 `OWNER_PROTECTED`。不存在的账号返回 `404 USER_NOT_FOUND`；非成员读取/管理工作室返回 `404 STUDIO_NOT_FOUND`。
+
+移除成员会立即作废该成员在工作室项目中的编辑租约；保存的项目、发布分享及已授予项目的资产引用保留。成员本人资产仍归本人，负责人若需停止客户访问应另行撤销相应分享。重新添加成员不会恢复旧租约代次，需要重新获取编辑权。
 
 进入一次编辑会话生成 `crypto.randomUUID()`。不要用账号 UUID 代替 sessionId，也不要把同一个编辑会话 ID 复制到多个标签页。获取租约后使用返回场景/云端 revision，清空旧历史；每30秒续期。保存成功只更新返回的新 revision，不凭前端加一推测。失去租约/断网时保留当前草稿和未保存提示。
 

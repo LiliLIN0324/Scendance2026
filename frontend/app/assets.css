@@ -1,0 +1,33 @@
+.sc-assets{border-top:1px solid var(--sc-line);padding-top:14px;margin-top:12px;text-align:left}
+.sc-assets .sc-assets-toggle{display:flex;justify-content:space-between;width:100%;border:0;border-radius:0;background:transparent;padding:6px 0;font-size:14px;font-weight:600}
+.sc-assets p{font-size:12px;line-height:1.75;margin:10px 0;overflow-wrap:anywhere}
+.sc-assets .sc-assets-intro{color:var(--sc-muted);margin-bottom:16px}
+.sc-assets .sc-assets-tabs{display:flex;gap:5px;border-bottom:1px solid var(--sc-line);padding-bottom:8px;margin-bottom:14px}
+.sc-assets .sc-assets-tabs button{flex:1;padding:9px 6px;border:0;background:transparent}
+.sc-assets .sc-assets-tabs button[aria-selected=true]{background:var(--sc-ink);color:#fff}
+.sc-assets form{display:grid;gap:10px;margin:14px 0 18px}
+.sc-assets label{display:grid;gap:6px;font-size:12px;font-weight:500}
+.sc-assets input,.sc-assets textarea{width:100%;min-width:0;padding:10px 12px;font:13px/1.6 var(--sc-font);color:var(--sc-ink);border:1px solid var(--sc-line);border-radius:8px;background:#fff}
+.sc-assets textarea{resize:vertical;min-height:90px}
+.sc-assets small{display:block;color:var(--sc-muted);font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.sc-assets ul{list-style:none;padding:0;margin:0}
+.sc-assets strong{font-size:13px;font-weight:600}
+.sc-assets h4{font-size:13px;font-weight:600;margin:0}
+.sc-assets .sc-assets-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}
+.sc-assets .sc-assets-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--sc-line)}
+.sc-assets .sc-assets-list li>div{min-width:0;overflow-wrap:anywhere}
+.sc-assets .sc-assets-list button{flex-shrink:0;max-width:46%;overflow-wrap:anywhere}
+.sc-assets a{color:var(--sc-ink);font-size:11px;text-decoration:underline;text-underline-offset:3px}
+.sc-assets .sc-assets-jobs li{border-bottom:1px solid var(--sc-line);padding:12px 0}
+.sc-assets .sc-assets-jobs li p{white-space:pre-wrap}
+.sc-assets .sc-assets-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.sc-assets .sc-assets-message{background:#f0ede7;border-left:2px solid #8b7861;padding:12px;color:#514636}
+.sc-assets .sc-assets-preview{margin-top:20px;padding:16px;background:#f3f2ee;border-radius:12px}
+.sc-assets .sc-assets-dimensions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.sc-assets .sc-assets-dimensions input{font-variant-numeric:tabular-nums;padding:9px}
+.sc-assets button.sc-assets-primary{background:var(--sc-ink);color:#fff;border-color:var(--sc-ink)}
+.sc-assets :focus-visible{outline:2px solid var(--sc-accent-ink);outline-offset:3px}
+.sc-assets button{transition:background .15s,transform .15s}
+.sc-assets button:not(:disabled):active{transform:translateY(1px)}
+@media(prefers-reduced-motion:reduce){.sc-assets button{transition:none}.sc-assets button:not(:disabled):active{transform:none}}
+@media(max-width:480px){.sc-assets .sc-assets-preview{padding:12px}.sc-assets .sc-assets-list li{align-items:flex-start}.sc-assets .sc-assets-section-heading{flex-wrap:wrap}}

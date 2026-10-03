@@ -9,6 +9,7 @@ import { readBounded, required, reserveCost, type Env, type Fetcher } from './ht
 import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
+const displayName=z.string().trim().min(1).max(80);
 const idempotency=z.strictObject({requestId:uuid,prompt:z.string().trim().min(1).max(1024)});
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
@@ -51,6 +52,23 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
       const actor=await backend.user(token);
       if(['/assets/import','/assets/floorplan','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
+      if(path==='/studios' && method==='POST') {
+        const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
+        return respond(await backend.scene(actor,'studios.create',input),201);
+      }
+      const members=path.match(/^\/studios\/([^/]+)\/members(?:\/([^/]+))?$/);
+      if(members) {
+        const studioId=uuid.parse(members[1]);
+        if(!members[2] && method==='GET') return respond(await backend.scene(actor,'studios.members.list',{studioId}));
+        if(members[2]) {
+          const userId=uuid.parse(members[2]);
+          if(method==='PUT') {
+            const input=z.strictObject({displayName}).parse(await json());
+            return respond(await backend.scene(actor,'studios.members.put',{...input,studioId,userId}));
+          }
+          if(method==='DELETE') return respond(await backend.scene(actor,'studios.members.remove',{studioId,userId}));
+        }
+      }
       if(path==='/catalog' && method==='GET') return respond(catalog);
       if(path==='/projects' && method==='GET') return respond(await backend.scene(actor,'projects.list'));
       if(path==='/projects' && method==='POST') {

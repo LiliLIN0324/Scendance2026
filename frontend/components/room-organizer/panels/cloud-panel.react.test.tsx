@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
 import { registerSourceFlush } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import { ensureGlbAsset } from '../three/glb-assets';
 import { CloudPanel } from './cloud-panel';
 
 vi.mock('@/lib/backend-session', async importOriginal => {
@@ -12,6 +13,9 @@ vi.mock('@/lib/backend-session', async importOriginal => {
   return { ...actual, createBackendSession: vi.fn() };
 });
 vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn() }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
+vi.mock('@/components/business/publication-panel', () => ({ PublicationPanel: () => null }));
+vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: () => null }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
 const otherId = '10000000-0000-4000-8000-000000000002';
@@ -26,6 +30,7 @@ function json(body: unknown) { return new Response(JSON.stringify(body), { statu
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
 
 beforeEach(async () => {
+  window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
   vi.stubGlobal('fetch', mockFetch);
   vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -64,6 +69,65 @@ describe('CloudPanel delayed project replacement', () => {
     expect(await screen.findByText('测试停止于创建请求')).toBeTruthy();
     unregister();
   });
+
+  it('opens the requested project after the current editing lease is released', async () => {
+    const sessionId = controller.getSnapshot().sessionId;
+    queue({ sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    await controller.acquireLease(projectId);
+    window.history.replaceState(null, '', `/editor/?project=${otherId}`);
+    queue([original, other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const onLoadLayout = vi.fn();
+    render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
+    await screen.findByText('请先释放当前项目的编辑权，再打开链接中的项目。');
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
+    expect(onLoadLayout).not.toHaveBeenCalled();
+    queue({ sessionId, generation: 4, revision: 2, expiresAt: new Date().toISOString() }); queue(other);
+    fireEvent.click(screen.getByRole('button', { name: '释放编辑权' }));
+    await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
+    expect(controller.getSnapshot().project?.id).toBe(otherId);
+  });
+  it('keeps the matching unsaved canvas when returning through an editor project link', async () => {
+    const sessionId = controller.getSnapshot().sessionId;
+    queue({ sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    await controller.acquireLease(projectId);
+    const draft = { ...scene, lighting: 'warm' as const };
+    controller.setDraft(draft);
+    window.history.replaceState(null, '', `/editor/?project=${projectId}`);
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const onLoadLayout = vi.fn();
+    render(<CloudPanel layout={backendSceneToLayout(draft, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
+    await waitFor(() => expect(screen.getByText(/已保留这个项目的本地未保存改动/)).toBeTruthy());
+    expect(onLoadLayout).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).toMatchObject({ draft, dirty: true, writeBlocked: false });
+  });
+
+  it('reauthorizes restored private models without replacing unsaved placements', async () => {
+    const assetId = '30000000-0000-4000-8000-000000000001';
+    const draft: Scene = { ...scene, lighting: 'warm', objects: [{ id: '40000000-0000-4000-8000-000000000001', materialId: 'asset', assetId, position: { x: 2, z: 3 }, size: { width: 1, depth: 1, height: 1 }, rotation: 0, color: '#ffffff', locked: false, notes: '本地备注' }] };
+    window.history.replaceState(null, '', `/editor/?project=${projectId}`);
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    queue(original); queue({ id: assetId, format: 'glb', name: '道具', url: 'https://storage.example/fresh.glb', expiresIn: 300 });
+    const onLoadLayout = vi.fn();
+    render(<CloudPanel layout={backendSceneToLayout(draft, { projectId, name: original.name, assetUrls: { [assetId]: 'https://storage.example/expired.glb' } })} onLoadLayout={onLoadLayout} />);
+    await screen.findByText(/已保留这个项目的本地未保存改动/);
+    expect(ensureGlbAsset).toHaveBeenCalledWith(assetId, 'https://storage.example/fresh.glb');
+    expect(onLoadLayout).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().draft).toEqual(draft);
+    expect(controller.getSnapshot().dirty).toBe(true);
+  });
+
+  it('updates the editor URL after opening another project', async () => {
+    queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const onLoadLayout = vi.fn();
+    const rendered = render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
+    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger:not([aria-controls])')!);
+    await waitFor(() => expect(screen.getByRole('button', { name: '打开' })).toBeTruthy());
+    queue(other);
+    fireEvent.click(screen.getByRole('button', { name: '打开' }));
+    await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
+    expect(new URLSearchParams(window.location.search).get('project')).toBe(otherId);
+  });
+
 
   it('never labels a local scene preset as saved to the cloud', async () => {
     queue([other]);
