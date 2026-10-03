@@ -115,9 +115,9 @@ describe('buildOnlineModelIndex', () => {
 
   it('labels and counts every family, busiest first', () => {
     expect(index.buckets).toEqual([
-      { key: 'stage', label: '舞台', count: 3 },
-      { key: 'seating', label: '座椅', count: 2 },
-      { key: 'plants', label: '绿植', count: 1 },
+      { key: 'stage', label: '舞台设施', count: 3 },
+      { key: 'seating', label: '座椅沙发', count: 2 },
+      { key: 'plants', label: '绿植景观', count: 1 },
     ]);
   });
 
@@ -134,10 +134,10 @@ describe('buildOnlineModelIndex', () => {
 
 describe('onlineBucketLabel', () => {
   it('translates a known family and falls back to the raw key otherwise', () => {
-    expect(onlineBucketLabel('seating')).toBe('座椅');
+    expect(onlineBucketLabel('seating')).toBe('座椅沙发');
     expect(onlineBucketLabel('unmapped-family')).toBe('unmapped-family');
     expect(onlineBucketLabel('')).toBe('其他');
-    expect(ONLINE_BUCKET_LABELS.stage).toBe('舞台');
+    expect(ONLINE_BUCKET_LABELS.stage).toBe('舞台设施');
   });
 });
 
@@ -207,7 +207,8 @@ describe('loadOnlineModels', () => {
     expect(index.models.length).toBeGreaterThan(100);
     expect(index.buckets.length).toBeGreaterThan(1);
     for (const model of index.models) {
-      expect(model.glb.startsWith('https://')).toBe(true);
+      expect(model.glb.startsWith('/showcase/assets/library/model/')).toBe(true);
+      expect(model.name).toMatch(/[\u4e00-\u9fff]/u);
       expect(model.name.length).toBeGreaterThan(0);
       expect(model.width).toBeGreaterThan(0);
       expect(model.depth).toBeGreaterThan(0);
@@ -228,5 +229,21 @@ describe('loadOnlineModels', () => {
     const first = await loadOnlineModels();
     const second = await loadOnlineModels();
     expect(second).toBe(first);
+  });
+});
+
+// Real merged data, including user-supplied files, must be available in the editor.
+describe('merged Chinese library', () => {
+  it('merges all sources once and keeps Chinese and English searches usable', async () => {
+    clearOnlineModelCache();
+    const index = await loadOnlineModels();
+    expect(index.models).toHaveLength(528);
+    expect(new Set(index.models.map(model => model.slug)).size).toBe(528);
+    expect(index.models.filter(model => model.assetId)).toHaveLength(528);
+    expect(index.buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(528);
+    expect(filterOnlineModels(index.models, '抱臂', 'people')[0]?.name).toBe('抱臂站立人物');
+    expect(filterOnlineModels(index.models, 'arms crossed', 'people')[0]?.name).toBe('抱臂站立人物');
+    expect(filterOnlineModels(index.models, '音箱', 'audio').length).toBeGreaterThan(5);
+    expect(filterOnlineModels(index.models, '音箱', 'storage')).toHaveLength(0);
   });
 });

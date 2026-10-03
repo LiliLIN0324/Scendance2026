@@ -28,3 +28,6 @@ output/playwright/
 
 # Local Pages runtime
 frontend/.wrangler/
+
+# Generated Chinese model library download
+output/model-library/
