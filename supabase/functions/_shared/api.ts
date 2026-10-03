@@ -6,12 +6,13 @@ import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, rando
 import { assetRecord, importPublicModel, recommendations } from './assets.ts';
 import { generateProposal } from './providers.ts';
 import { readSceneResources } from './scene-resources.ts';
+import { prepareGenerationRequest } from './generation-input.ts';
+import { generationCapabilities } from './generation-contract.ts';
 import { readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
 import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
 const displayName=z.string().trim().min(1).max(80);
-const idempotency=z.strictObject({requestId:uuid,prompt:z.string().trim().min(1).max(1024)});
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
@@ -230,10 +231,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         await backend.upload(record.storagePath,bytes,mime);
         return respond(await backend.scene(actor,'assets.register',record),201);
       }
+      if(path==='/generation/capabilities' && method==='GET') return respond(generationCapabilities(env));
       if(path==='/jobs' && method==='POST') {
-        const input=idempotency.parse(await json());
-        required(env,'HUNYUAN_API_KEY'); required(env,'HUNYUAN_TERMS_REVIEWED_AT'); required(env,'HUNYUAN_TERMS_URL');
-        const result=await backend.jobs(actor,'jobs.create',{...input,fingerprint:await sha256(input.prompt),reserveCents:reserveCost(env,'GENERATION_MAX_TASK_CENTS')});
+        const input=await prepareGenerationRequest(backend,actor,await json(),env);
+        const result=await backend.jobs(actor,'jobs.create',{...input,reserveCents:reserveCost(env,'GENERATION_MAX_TASK_CENTS')});
         const {worker_token,worker_until,...safe}=result;
         return respond(safe,result.reused?200:202);
       }
