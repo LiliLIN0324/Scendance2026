@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
@@ -72,6 +72,49 @@ describe('onlineModelDisplayName', () => {
 });
 
 describe('OnlineModelLibrary', () => {
+  it('scrolls categories horizontally with a mouse wheel without changing the filter', async () => {
+    await act(async () => { setup(); });
+    const rail = screen.getByRole('group', { name: '线上模型分类' });
+    Object.defineProperties(rail, { scrollWidth: { value: 900 }, clientWidth: { value: 240 } });
+    expect(fireEvent.wheel(rail, { deltaY: 100 })).toBe(false);
+    expect(rail.scrollLeft).toBe(100);
+    expect(fireEvent.wheel(rail, { deltaY: -40 })).toBe(false);
+    expect(rail.scrollLeft).toBe(60);
+    expect(screen.getByRole('button', { name: /^全部/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(tiles()).toHaveLength(3);
+  });
+
+  it('leaves horizontal trackpad scrolling and browser zoom to the browser', async () => {
+    await act(async () => { setup(); });
+    const rail = screen.getByRole('group', { name: '线上模型分类' });
+    Object.defineProperties(rail, { scrollWidth: { value: 900 }, clientWidth: { value: 240 } });
+    expect(fireEvent.wheel(rail, { deltaX: 80, deltaY: 10 })).toBe(true);
+    expect(fireEvent.wheel(rail, { deltaY: 100, ctrlKey: true })).toBe(true);
+    expect(rail.scrollLeft).toBe(0);
+  });
+
+  it('normalizes line and page wheels and releases scrolling at either end', async () => {
+    await act(async () => { setup(); });
+    const rail = screen.getByRole('group', { name: '线上模型分类' });
+    Object.defineProperties(rail, { scrollWidth: { value: 900 }, clientWidth: { value: 240 } });
+    expect(fireEvent.wheel(rail, { deltaY: -100 })).toBe(true);
+    fireEvent.wheel(rail, { deltaY: 3, deltaMode: 1 });
+    expect(rail.scrollLeft).toBe(48);
+    fireEvent.wheel(rail, { deltaY: 1, deltaMode: 2 });
+    expect(rail.scrollLeft).toBe(288);
+    fireEvent.wheel(rail, { deltaY: 1000 });
+    expect(rail.scrollLeft).toBe(660);
+    expect(fireEvent.wheel(rail, { deltaY: 100 })).toBe(true);
+  });
+
+  it('does not intercept the wheel when all categories fit', async () => {
+    await act(async () => { setup(); });
+    const rail = screen.getByRole('group', { name: '线上模型分类' });
+    Object.defineProperties(rail, { scrollWidth: { value: 240 }, clientWidth: { value: 240 } });
+    expect(fireEvent.wheel(rail, { deltaY: 100 })).toBe(true);
+    expect(rail.scrollLeft).toBe(0);
+  });
+
   it('authorizes a registered model for a signed-in user and passes its real ID into the scene', async () => {
     const assetId = '10000000-0000-4000-8000-000000000001';
     vi.mocked(loadOnlineModels).mockResolvedValue(buildOnlineModelIndex([{ ...CATALOGUE[0]!, assetId }]));
