@@ -13,9 +13,9 @@ describe('creative brief boundaries', () => {
     expect(briefInstruction({ ...brief, guests: 40 }, 12, 10)).toContain('40人');
   });
 
-  it('does not imply image understanding or silently adopt optional ideas', () => {
+  it('does not imply image understanding and creates a complete preview for confirmation', () => {
     const instruction = briefInstruction({ ...INITIAL_BRIEF, description: '要帐篷和签到区' }, 12, 10);
-    expect(instruction).toContain('未经客户确认不得自动加入');
+    expect(instruction).toContain('完整候选后由客户整体确认');
     expect(instruction).toContain('现场照片尚未提交给模型');
     expect(instruction).toContain('不得用桌椅冒充');
     expect(briefInstruction({ ...INITIAL_BRIEF, description: '交流会', allowIdeas: false }, 12, 10)).toContain('不自行扩展');

@@ -107,6 +107,10 @@ export interface CategoryMeta {
 }
 
 export interface FurnitureItem {
+  structuralOpeningId?: string;
+  structuralColumnId?: string;
+  wallId?: string;
+  elevation?: number;
   /** Backend identifiers survive the upstream save/load whitelist. */
   materialId?: SceneObject['materialId'];
   assetId?: string;
@@ -114,6 +118,8 @@ export interface FurnitureItem {
   source?: 'builtin' | 'public_library' | 'generated' | 'local_sample';
   /** A frontend loading reference; the backend scene stores assetId only. */
   glbUrl?: string;
+  /** Named editable fixture within an archived scene model. */
+  glbNode?: string;
   /** Rendered structural marker; never exported as a material object. */
   venueEntranceId?: string;
   id: string;
@@ -225,6 +231,10 @@ export interface RoofSpec {
  * but has its own items, finishes, and wall colors.
  */
 export interface InteriorWall {
+  thickness?: number;
+  height?: number;
+  kind?: 'exterior' | 'interior';
+  status?: 'detected' | 'inferred' | 'confirmed';
   id: string;
   x1: number;
   z1: number;
@@ -323,6 +333,10 @@ export interface NeighbourSpec {
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /** Authoritative v2 provenance and design, retained through local save and undo. */
+  backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
+  /** Local complete-scene preset; its architecture is separate from editable items. */
+  scenePreset?: 'gym' | 'popup';
   /** Preserves backend fields until explicitly edited through supported controls. */
   backendVenue?: Scene['venue'];
   backendCamera?: Scene['camera'];

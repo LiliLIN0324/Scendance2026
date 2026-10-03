@@ -45,6 +45,8 @@ export function buildDoor({ THREE, item, hasCollision, baseColor, opacity }: Bui
   handle.position.set(item.width * 0.35, item.height * 0.5, item.depth * 0.28);
   group.add(handle);
 
+  // Raised thresholds are measured opening geometry, shared with the wall cut.
+  for (const child of group.children) child.position.y += item.sillHeight ?? 0;
   return group;
 }
 

@@ -7,7 +7,7 @@ import ResetPasswordPage from '../reset-password/page';
 import CallbackPage from './callback/page';
 import AuthPage from './page';
 
-const navigation = vi.hoisted(() => ({ replace: vi.fn() }));
+const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => navigation }));
 vi.mock('@/lib/backend-session', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/backend-session')>(), createBackendSession: vi.fn() }));
 const fetchMock = vi.fn<typeof fetch>();
@@ -16,7 +16,7 @@ const response = (value: unknown, status = 200) => new Response(JSON.stringify(v
 let controller: BackendSession;
 beforeEach(() => {
   window.history.replaceState(null, '', '/auth');
-  sessionStorage.clear(); fetchMock.mockReset(); navigation.replace.mockReset();
+  sessionStorage.clear(); fetchMock.mockReset(); navigation.replace.mockReset(); navigation.push.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   controller = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'public-test' }), sessionStorage);
   vi.mocked(createBackendSession).mockReturnValue(controller);
@@ -92,4 +92,32 @@ it('strips recovery credentials from the URL before routing the old callback to 
   expect(window.location.hash).toBe('');
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/reset-password'));
   expect(controller.getSnapshot().user).toBeNull();
+});
+
+
+it.each([
+  ['/auth', '/'],
+  ['/auth?next=%2F', '/'],
+  ['/auth?next=%2Fprojects%3Fview%3Drecent%23saved', '/projects?view=recent#saved'],
+  ['/auth?next=https%3A%2F%2Fevil.example', '/'],
+  ['/auth?next=%2Fauth', '/'],
+])('keeps %s as the login page and only follows its safe destination after login', async (path, target) => {
+  window.history.replaceState(null, '', path);
+  render(<AuthProvider><AuthPage /></AuthProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name: '登录并进入工作台' }).hasAttribute('disabled')).toBe(false));
+  expect(navigation.replace).not.toHaveBeenCalled();
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'test@example.com' } });
+  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-long-password' } });
+  fetchMock.mockResolvedValueOnce(response(auth));
+  fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(target));
+});
+
+
+it('enters the local workspace without signing in', async () => {
+  render(<AuthProvider><AuthPage /></AuthProvider>);
+  fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
+  expect(navigation.push).toHaveBeenCalledWith('/?local=1');
+  expect(fetchMock).not.toHaveBeenCalled();
 });

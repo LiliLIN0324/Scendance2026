@@ -136,7 +136,7 @@ export function renderInteriorWalls(
   }
 }
 
-function buildExtrudedWallGeometry(
+export function buildExtrudedWallGeometry(
   THREE: ThreeModule,
   length: number,
   height: number,

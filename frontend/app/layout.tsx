@@ -1,8 +1,13 @@
+import { Suspense } from 'react';
+import { WorkspaceShell } from '@/components/workspace-shell';
 import { AuthProvider } from '@/lib/auth-provider';
 import type { Metadata } from 'next';
 import './globals.css';
 import './cloud.css';
 import './auth.css';
+import './workspace.css';
+import './assets.css';
+import './share.css';
 
 export const metadata: Metadata = {
   title: '幕景 Scendance · 活动布置工作台',
@@ -52,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
-      <body><AuthProvider>{children}</AuthProvider></body>
+      <body><Suspense fallback={<p role="status">正在加载…</p>}><AuthProvider><WorkspaceShell>{children}</WorkspaceShell></AuthProvider></Suspense></body>
     </html>
   );
 }

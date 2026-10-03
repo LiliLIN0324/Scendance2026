@@ -1,15 +1,16 @@
 {
   "name": "scene-planner-backend",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "dev:floorplan": "node --env-file-if-exists=.env.local --experimental-transform-types scripts/local-floorplan.ts",
     "dev:integration": "node --experimental-transform-types scripts/local-integration.ts",
     "test:integration": "npm --prefix frontend exec -- vitest run lib/backend-integration.test.ts --root frontend",
     "test": "vitest run tests/",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test",
-    "check:edge": "deno check --config supabase/functions/deno.json supabase/functions/scene-api/index.ts supabase/functions/generation-worker/index.ts",
+    "check:edge": "deno check --config supabase/functions/deno.json supabase/functions/scene-api/index.ts supabase/functions/generation-worker/index.ts supabase/functions/reconstruction-worker/index.ts",
     "demo:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "smoke:edge": "deno run --config supabase/functions/deno.json scripts/smoke-edge.ts",
     "check:public-model": "deno run --allow-net=api.polyhaven.com,dl.polyhaven.org --config supabase/functions/deno.json scripts/check-public-model.ts",

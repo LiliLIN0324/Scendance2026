@@ -5,12 +5,14 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { buildAssistantInstruction } from '@/lib/assistant-context';
 import { useBackendSession, type BackendSession, type SceneProposal } from '@/lib/backend-session';
 import { inspectMaterialRequirements, type MaterialCapabilityInspection } from '@/lib/material-capabilities';
+import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, registerSourceFlush } from '@/lib/source-storage';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { briefInstruction, IDEA_CARDS, INITIAL_BRIEF, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCapabilityNote } from './material-capability-note';
+import { ReconstructionPanel } from './reconstruction-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import type { RoomLayout } from '../lib/types';
 import './creative-studio.css';
@@ -18,9 +20,9 @@ import './creative-studio.css';
 type ReferenceImage = VenuePhoto;
 type Message = { id: string; role: 'user' | 'assistant'; text: string };
 type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string };
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onPreview?(layout: RoomLayout | null): void; children: ReactNode }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 interface StudioValue {
-  scope: string;
+  scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
   capabilities: MaterialCapabilityInspection; choices: Record<string,string>; capabilityAccepted: boolean; chooseMaterial(key:string,value:string):void; acceptCapabilities(value:boolean):void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   images: ReferenceImage[]; addImages(files: FileList | null): Promise<void>; removeImage(id: string): void;
@@ -32,12 +34,15 @@ const StudioContext = createContext<StudioValue | null>(null);
 function useStudio(): StudioValue { const value=useContext(StudioContext); if(!value) throw new Error('Creative studio unavailable'); return value; }
 /** Library consumers can render independently of the creative workspace. */
 export function useCreativeBrief(): CreativeBrief | null { return useContext(StudioContext)?.brief ?? null; }
-const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'你好，我是幕景助手。把客户的活动想法告诉我，我们一起梳理分区、体验亮点和氛围。当前可通过文字请求布置提案；通用问答与图片理解还在接入中。所有修改都先由你确认。' }];
+const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'你好，我是幕景助手。把客户的活动想法告诉我，我们一起梳理分区、体验亮点和氛围。可以通过文字请求布置提案；图纸与照片请在资料面板提供尺寸并发起重建。所有修改都先由你确认。' }];
 
 export function CreativeStudioProvider({ controller, layout, onApply, onPreview, children }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
   const { allSelectedIds }=useSelection();
   const [brief,setBrief]=useState<CreativeBrief>(INITIAL_BRIEF);
+  const [briefReady,setBriefReady]=useState(false);
+  const briefValueRef=useRef(brief);briefValueRef.current=brief;
+  const briefHydration=useRef<Promise<void>>(Promise.resolve());
   const [choices,setChoices]=useState<Record<string,string>>({});
   const [acceptedCapabilities,setAcceptedCapabilities]=useState<string|null>(null);
   const capabilities=useMemo(()=>inspectMaterialRequirements([brief.description,brief.mustHave].join('；')),[brief.description,brief.mustHave]);
@@ -51,6 +56,8 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
   const scope=layout.id??'local';
   const scopeRef=useRef(scope); scopeRef.current=scope;
   useEffect(()=>{setBrief(INITIAL_BRIEF);setChoices({});setAcceptedCapabilities(null);setMessages(initialMessages);setLastExplanation('');setPreview(null);setNotice('');},[scope]);
+  useEffect(()=>{let cancelled=false;setBriefReady(false);briefHydration.current=readSourceForm<CreativeBrief>(`${scope}:brief`).then(saved=>{if(!cancelled&&saved){briefValueRef.current={...INITIAL_BRIEF,...saved};setBrief(briefValueRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setBriefReady(true);});return()=>{cancelled=true;};},[scope]);
+  useEffect(()=>{if(!briefReady)return;const timer=setTimeout(()=>{void storeSourceForm(`${scope}:brief`,brief).catch(()=>{});},250);return()=>clearTimeout(timer);},[brief,briefReady,scope]);
   const [expanded,setExpanded]=useState(false);
   const [preview,setPreview]=useState<Preview|null>(null);
   const [expired,setExpired]=useState(false);
@@ -61,13 +68,38 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
   const uploadQueue=useRef<Promise<void>>(Promise.resolve());
   const imageEpoch=useRef(0);
   useEffect(()=>{
-    imageEpoch.current++;
-    uploadQueue.current=Promise.resolve();
+    const epoch=++imageEpoch.current;
+    uploadQueue.current=listStoredSources(scope).then(stored=>{
+      if(!alive.current || epoch!==imageEpoch.current)return;
+      const restored=stored.filter(source=>source.blob).map(source=>({...source,url:URL.createObjectURL(source.blob!)}));
+      imageRef.current=restored;setImages(restored);
+    }).catch(()=>{ /* Saving reports unavailable IndexedDB when files are selected. */ });
     for(const image of imageRef.current) URL.revokeObjectURL(image.url);
     imageRef.current=[];
     setImages([]);
   },[scope]);
-  const briefKey=JSON.stringify({brief,choices,acceptedCapabilities,images:images.map(i=>i.id)});
+  useEffect(()=>{
+    if(!cloud.user||cloud.project?.id!==scope)return;
+    let cancelled=false;
+    void uploadQueue.current.then(async()=>{
+      const sources=await controller.listSources();
+      const saved=await listStoredSources(scope).catch(()=>[]);
+      const missing=sources.filter(source=>!imageRef.current.some(image=>image.assetId===source.assetId));
+      const restored=await Promise.all(missing.map(async source=>({...source,kind:saved.find(image=>image.assetId===source.assetId)?.kind??source.kind,id:saved.find(image=>image.assetId===source.assetId)?.id??source.assetId,url:await controller.sourceImageUrl(source.assetId),uploadedKind:source.kind})));
+      if(cancelled||scopeRef.current!==scope)return;
+      imageRef.current=[...imageRef.current,...restored.filter(source=>!imageRef.current.some(image=>image.assetId===source.assetId))].slice(0,12);setImages(imageRef.current);
+    }).catch(error=>{if(!cancelled)setNotice(error instanceof Error?error.message:'云端资料暂时无法恢复，本机资料已保留。');});
+    return()=>{cancelled=true;};
+  },[controller,cloud.user,cloud.project?.id,scope]);
+  useEffect(()=>registerSourceFlush(scope,async()=>{
+    await Promise.all([uploadQueue.current,briefHydration.current]);
+    if(!alive.current||scopeRef.current!==scope)throw new Error('场地资料正在切换，请稍后重试创建项目。');
+    await Promise.all([
+      storeSourceForm(`${scope}:brief`,briefValueRef.current),
+      ...imageRef.current.map(({url,...image})=>storeSource({...image,scope,kind:image.kind??'photo',width:image.width!,height:image.height!})),
+    ]);
+  }),[scope]);
+  const briefKey=JSON.stringify({brief,choices,acceptedCapabilities,images:images.map(i=>({id:i.id,kind:i.kind}))});
   const briefRef=useRef(briefKey); briefRef.current=briefKey;
   const connection=!cloud.configured?'离线引导':!cloud.user?'等待登录':cloud.writeBlocked?'等待项目编辑权':'项目已连接';
   const stale=!!preview && (expired || Date.parse(preview.proposal.expires_at)<=Date.now() || preview.base!==layout || preview.briefKey!==briefKey || cloud.writeBlocked || preview.proposal.project_id!==cloud.project?.id || preview.proposal.base_revision!==cloud.revision);
@@ -102,38 +134,48 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
       setNotice('');
       const added:ReferenceImage[]=[];
       try {
-        if(batch.length+imageRef.current.length>3) throw new Error('最多添加 3 张现场照片。');
+        if(batch.length+imageRef.current.length>12) throw new Error('最多添加 12 张图纸或现场照片。');
         for(const file of batch) {
           if(!['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('请选择 PNG、JPEG 或 WebP 图片。');
           if(file.size>5*1024*1024) throw new Error('每张图片不能超过 5 MB。');
           const bitmap=await createImageBitmap(file);
           const valid=bitmap.width>0&&bitmap.height>0&&bitmap.width<=4096&&bitmap.height<=4096;
+          const width=bitmap.width,height=bitmap.height;
+          let pixels:Uint8ClampedArray|undefined;
+          try { const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64; const context=canvas.getContext('2d');if(context){context.drawImage(bitmap,0,0,64,64);pixels=context.getImageData(0,0,64,64).data;} } catch { /* Filename suggestion still available. */ }
+          const kind=suggestSourceKind(file.name,pixels);
           bitmap.close();
           if(!valid) throw new Error('图片长宽请控制在 4096 像素以内。');
           if(!active()) break;
-          added.push({id:crypto.randomUUID(),name:file.name,url:URL.createObjectURL(file)});
+          added.push({id:crypto.randomUUID(),name:file.name,url:URL.createObjectURL(file),width,height,kind,blob:file});
         }
         if(!active()) { for(const img of added) URL.revokeObjectURL(img.url); return; }
         // Update the ref immediately: the following queued batch can start
         // before React commits this state, and must still see the new count.
         imageRef.current=[...imageRef.current,...added];
         setImages(imageRef.current);
+        try { await Promise.all(added.map(({url,...image})=>storeSource({...image,scope:imageScope,kind:image.kind??'photo',width:image.width!,height:image.height!}))); } catch(error) { if(active()) setNotice(error instanceof Error?error.message:'本机保存失败，图片仍在本次会话中。'); }
       } catch(error) { for(const img of added) URL.revokeObjectURL(img.url); if(active()) setNotice(error instanceof Error?error.message:'图片无法读取，请更换文件。'); }
     });
     uploadQueue.current=task;
     return task;
   }
   function removeImage(id:string):void {
-    const image=imageRef.current.find(value=>value.id===id);
-    if(!image) return;
-    URL.revokeObjectURL(image.url);
-    imageRef.current=imageRef.current.filter(value=>value.id!==id);
-    setImages(imageRef.current);
+    const image=imageRef.current.find(value=>value.id===id);if(!image)return;
+    const requestedScope=scopeRef.current;
+    const remove=()=>{if(scopeRef.current!==requestedScope)return;URL.revokeObjectURL(image.url);imageRef.current=imageRef.current.filter(value=>value.id!==id);setImages(imageRef.current);void deleteSource(id).catch(error=>setNotice(error instanceof Error?error.message:'删除本机记录失败。'));};
+    if(image.assetId){void controller.removeSource(image.assetId).then(remove).catch(error=>setNotice(error instanceof Error?error.message:'项目资料移除失败，请重试。'));}else remove();
+  }
+  function updateImage(id:string,patch:Partial<VenuePhoto>):void {
+    imageRef.current=imageRef.current.map(image=>image.id===id?{...image,...patch}:image);setImages(imageRef.current);
+    const updated=imageRef.current.find(image=>image.id===id);
+    if(updated){const {url,...stored}=updated;void storeSource({...stored,scope,kind:stored.kind??'photo',width:stored.width!,height:stored.height!}).catch(error=>setNotice(error instanceof Error?error.message:'资料保存失败。'));}
   }
   async function generate(message?:string):Promise<void> {
     if(requestPending.current) return;
     setExpanded(true); setNotice('');
     if(message?.trim()) setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'user',text:message.trim()}]);
+    if(images.length||layout.backendSceneV2){const text='请在「图纸与照片重建」中生成完整方案。已有结构可直接规划；图片需先核对尺寸和模式。局部修改要求也可填写到重建面板。';setNotice(text);say(text);return;}
     if(!cloud.configured || !cloud.user || cloud.writeBlocked || cloud.project?.id!==layout.id) {
       const text=!cloud.configured ? '需求入口已经准备好。当前尚未连接 AI 服务，暂时不能生成真实方案。你可以完善需求、添加现场照片，并使用物料库手动布置。'
         : !cloud.user ? '请先登录工作室，再为当前方案创建云项目并获取编辑权。'
@@ -198,7 +240,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
     } catch(error) { if(alive.current && scopeRef.current===(selected.base.id??'local'))setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
     finally { requestPending.current=false;if(alive.current)setBusy(false); }
   }
-  const value:StudioValue={scope,capabilities,choices,capabilityAccepted,chooseMaterial:(key,value)=>setChoices(current=>({...current,[key]:value})),acceptCapabilities:value=>setAcceptedCapabilities(value?capabilityKey:null),brief,setBrief,images,addImages,removeImage,busy,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,applyPreview,discardPreview:()=>setPreview(null)};
+  const value:StudioValue={scope,controller,layout,onApply,onPreview,updateImage,capabilities,choices,capabilityAccepted,chooseMaterial:(key,value)=>setChoices(current=>({...current,[key]:value})),acceptCapabilities:value=>setAcceptedCapabilities(value?capabilityKey:null),brief,setBrief,images,addImages,removeImage,busy,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,applyPreview,discardPreview:()=>setPreview(null)};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -217,13 +259,13 @@ export function CreativeBriefPanel():JSX.Element {
     <label className="cr-label">风格要求 <span>选填</span><input aria-label="风格要求" maxLength={120} placeholder="自然露营、简约现代、复古市集……" value={studio.brief.style??''} onChange={e=>update({style:e.target.value})}/></label>
     <label className="cr-label">配色要求 <span>选填</span><input aria-label="配色要求" maxLength={120} placeholder="米白与橄榄绿，少量暖橙点缀" value={studio.brief.palette??''} onChange={e=>update({palette:e.target.value})}/></label>
     <label className="cr-label">氛围要求 <span>选填</span><input aria-label="氛围要求" maxLength={120} placeholder="温暖的夜场、明亮交流、安静观展……" value={studio.brief.atmosphere??''} onChange={e=>update({atmosphere:e.target.value})}/></label>
-    <p className="cr-hint">以上要求会随文字提案提交。现场照片不会自动转成约束；尚未连接生成服务时，可用“场地”中的灯光氛围直接预览。</p>
+    <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
     <label className="cr-label">一定要有 <span>选填</span><input maxLength={350} placeholder="帐篷、签到区、无障碍通道……" value={studio.brief.mustHave} onChange={e=>update({mustHave:e.target.value})}/></label>
-    <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage}/>
+    <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage} onKindChange={(id,kind)=>studio.updateImage(id,{kind})}/><ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief}/>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     <MaterialCapabilityNote report={studio.capabilities} choices={studio.choices} onChoice={studio.chooseMaterial} accepted={studio.capabilityAccepted} onAccept={studio.acceptCapabilities}/>
-    <button className="cr-generate" type="button" disabled={studio.busy||!studio.brief.description.trim()} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':'Generate 生成布置方案'}</span></button>
-    <p className="cr-hint">生成后先核对提案，再确认应用到 3D 场景。当前服务支持基础布置与修改；帐篷等更多物料和完整创意规划待接入。</p>
+    {studio.images.length===0&&!studio.layout.backendSceneV2&&<button className="cr-generate" type="button" disabled={studio.busy||!studio.brief.description.trim()} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':'Generate 生成布置方案'}</span></button>}
+    <p className="cr-hint">生成后先核对提案，再确认应用到 3D 场景。特殊造型需要生成资产并校验，缺少物料会在提案中说明。</p>
     {studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
   </div>;

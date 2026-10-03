@@ -184,6 +184,7 @@ describe('layoutReducer — values the schema rejects never reach the save (#418
 
   it('clamps sizes, the field of view and the plan opacity into range, and the result reloads', () => {
     let state = sensor();
+    state = { ...state, layout: { ...state.layout, width: 100, height: 100 } }; // large enough for the capped footprint
     state = reduce(
       state,
       { type: 'updateItem', id: 'ap', patch: { width: 0, depth: MAX_ITEM_DIMENSION * 10 } },

@@ -53,11 +53,11 @@ describe('use-layout-store — React hook layer', () => {
     expect(renders).toBe(rendersAfterMount + 1);
 
     act(() => {
-      layoutStore.getState().actions.moveItem(itemId, 3, 4);
+      layoutStore.getState().actions.moveItem(itemId, 2, 2);
     });
     // The move really happened…
     const moved = layoutStore.getState().layout.floors[0]!.items.find((i) => i.id === itemId);
-    expect(moved?.position).toEqual({ x: 3, z: 4 });
+    expect(moved?.position).toEqual({ x: 2, z: 2 });
     // …but the name subscriber did not re-render for it.
     expect(renders).toBe(rendersAfterMount + 1);
   });
