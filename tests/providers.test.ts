@@ -75,14 +75,14 @@ describe('worker recovery against PostgreSQL queue',()=>{
   let f:Awaited<ReturnType<typeof database>>;
   beforeAll(async()=>{f=await database();},30000);afterAll(async()=>{await f?.db.close();});
   beforeEach(async()=>{await f.db.exec('delete from scene_private.generation_jobs;delete from scene_private.requests;update scene_private.budgets set committed_cents=0;');});
-  async function create(){return f.jobs(owner,'jobs.create',{requestId:crypto.randomUUID(),fingerprint:'prop',prompt:'Prop',reserveCents:100});}
+  async function create(providerMode='legacy'){return f.jobs(owner,'jobs.create',{providerMode,requestId:crypto.randomUUID(),fingerprint:'prop',prompt:'Prop',reserveCents:100});}
   it('submission timeout becomes unknown and never causes an automatic second submit',async()=>{
     const j=await create(),network=vi.fn(async()=>{throw new Error('timeout');});
     await processGeneration(f.backend,env,network);expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
     await processGeneration(f.backend,env,network);expect(network).toHaveBeenCalledTimes(1);
   });
   it.each(['legacy','tokenhub'])('archives an actual valid %s GLB and only then marks ready',async mode=>{
-    const j=await create(),fixture=tetrahedron(),bytes=packGltf(fixture.json,fixture.resources);
+    const j=await create(mode),fixture=tetrahedron(),bytes=packGltf(fixture.json,fixture.resources);
     const network=vi.fn(async(url:unknown)=>{
       if(String(url).endsWith('/submit')) return response(mode==='legacy'?{JobId:'generated-1'}:{id:'generated-1'});
       if(String(url).endsWith('/query')) return response(mode==='legacy'?{Status:'DONE',ResultFile3Ds:[{Type:'GLB',Url:'https://assets.myqcloud.com/prop.glb'}],ResultCreditConsumed:20}:{status:'completed',data:[{type:'glb',url:'https://assets.myqcloud.com/prop.glb'}]});

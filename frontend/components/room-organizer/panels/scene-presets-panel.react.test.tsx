@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
+import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { loadScenePreset } from '../three/scene-presets';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import type { RoomLayout } from '../lib/types';
@@ -11,6 +12,17 @@ const next: RoomLayout = { ...INITIAL_LAYOUT, scenePreset: 'popup', name: '青�
 beforeEach(() => { vi.mocked(loadScenePreset).mockReset(); vi.spyOn(window, 'confirm').mockReturnValue(true); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const load = () => fireEvent.click(screen.getByRole('button', { name: /青序 · 香氛快闪/ }));
+
+it('offers a preview card for every packaged preset', () => {
+  render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={vi.fn()}/>);
+  const keys = Object.keys(SCENE_PRESETS) as ScenePresetKey[];
+  expect(keys).toHaveLength(10);
+  for (const key of keys) {
+    const card = screen.getByRole('button', { name: new RegExp(SCENE_PRESETS[key].name) });
+    expect(card.querySelector('img')?.getAttribute('src')).toBe(`/scene-presets/${key}/preview.jpg`);
+    expect(card.textContent).toContain(SCENE_PRESETS[key].description);
+  }
+});
 
 it('opens the selected preset once and permits loading it again', async () => {
   vi.mocked(loadScenePreset).mockResolvedValue(next);

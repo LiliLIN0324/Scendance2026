@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { SYSTEM_PROMPT, buildProposal } from './ai.ts';
 import { ApiError, catalog, type ProposalRequest } from './domain.ts';
 import { fetchJson, required, type Env, type Fetcher } from './http.ts';
+import type { GenerationProvider } from './generation-contract.ts';
+import { resourceIndex, sceneResourceRefs, type SceneResource } from './scene-resources.ts';
 
 const submitSchema = z.object({ JobId: z.string().min(1), RequestId: z.string().optional() });
 export const querySchema = z.object({
@@ -20,22 +22,28 @@ function unwrap(value: unknown) {
   if (body && typeof body === 'object' && 'Error' in body) throw new ApiError('PROVIDER_REJECTED', 502);
   return body;
 }
-export function hunyuan(env: Env, fetcher: Fetcher = fetch) {
-  const mode=env('HUNYUAN_API_MODE')??'tokenhub';
+export function hunyuan(env: Env, fetcher: Fetcher = fetch, pinned?:GenerationProvider) {
+  const mode=pinned?.providerMode??env('HUNYUAN_API_MODE')??'tokenhub';
+  const model=pinned?.providerModel??'hy-3d-3.0';
   if(mode!=='tokenhub' && mode!=='legacy') throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:'HUNYUAN_API_MODE'});
+  if(!['hy-3d-3.0','hy-3d-3.1','hy-3d-texture'].includes(model)||(mode==='legacy'&&model!=='hy-3d-3.0'))throw new ApiError('SERVICE_NOT_CONFIGURED',503);
   const base=mode==='tokenhub'?'https://tokenhub.tencentmaas.com/v1/api/3d':'https://api.ai3d.cloud.tencent.com/v1/ai3d';
   const call = (path: string, body: unknown) => fetchJson(`${base}/${path}`, {
     method: 'POST', headers: { Authorization: `${mode==='tokenhub'?'Bearer ':''}${required(env, 'HUNYUAN_API_KEY')}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }, fetcher).then(unwrap);
   return {
-    async submit(prompt: string) {
+    async submit(prompt: string, assets?:{imageUrl?:string;sourceUrl?:string}) {
       if(mode==='legacy') return submitSchema.parse(await call('submit', { Prompt: prompt, Model: '3.0', GenerateType: 'LowPoly', PolygonType: 'triangle' }));
-      const result=tokenhubSubmitSchema.parse(await call('submit',{model:'hy-3d-3.0',prompt,generate_type:'LowPoly',polygon_type:'triangle'}));
+      if(model==='hy-3d-texture'&&(!assets?.imageUrl||!assets.sourceUrl))throw new ApiError('INVALID_GENERATION_INPUT',422);
+      const body=model==='hy-3d-texture'
+        ?{model,file_3d:{url:assets!.sourceUrl},image:{url:assets!.imageUrl},enable_pbr:true,enable_keep_uv:true,texture_size:1024}
+        :{model,...(assets?.imageUrl?{image_url:assets.imageUrl}:{prompt}),...(model==='hy-3d-3.1'?{generate_type:'Normal',face_count:20000,enable_pbr:true}:{generate_type:'LowPoly',polygon_type:'triangle'})};
+      const result=tokenhubSubmitSchema.parse(await call('submit',body));
       return {JobId:result.id,RequestId:result.request_id};
     },
     async query(id: string):Promise<z.infer<typeof querySchema>> {
       if(mode==='legacy') return querySchema.parse(await call('query', { JobId: id }));
-      const result=tokenhubQuerySchema.parse(await call('query',{model:'hy-3d-3.0',id}));
+      const result=tokenhubQuerySchema.parse(await call('query',{model,id}));
       return {
         Status:({queued:'WAIT',in_progress:'RUN',failed:'FAIL',completed:'DONE'} as const)[result.status],RequestId:result.request_id,
         ResultFile3Ds:result.data?.map(file=>({Type:file.type,Url:file.url,PreviewImageUrl:file.preview_image_url})),
@@ -43,10 +51,10 @@ export function hunyuan(env: Env, fetcher: Fetcher = fetch) {
     },
   };
 }
-export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch) {
+export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch, resources: readonly SceneResource[] = []) {
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: JSON.stringify({ mode: input.mode, instruction: input.instruction, scene: input.scene, selectedIds: input.selectedIds, catalog }) },
+    { role: 'user', content: JSON.stringify({ mode: input.mode, instruction: input.instruction, scene: input.scene, selectedIds: input.selectedIds, catalog, resources:resourceIndex(resources), sceneResourceRefs:sceneResourceRefs(input.scene,resources) }) },
   ];
   const usage: unknown[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -63,7 +71,7 @@ export async function generateProposal(input: ProposalRequest, env: Env, reserve
     const content = response.choices[0].message.content;
     try {
       if (response.choices[0].finish_reason !== 'stop') throw new ApiError('AI_INCOMPLETE_OUTPUT', 422);
-      return { ...buildProposal(input.scene, input.mode, JSON.parse(content)), usage };
+      return { ...buildProposal(input.scene, input.mode, JSON.parse(content),resources,input.selectedIds), usage };
     } catch (error) {
       const details = error instanceof z.ZodError ? error.issues : error instanceof ApiError ? { code: error.code, details: error.details } : { code: 'INVALID_JSON' };
       if (attempt === 1) throw new ApiError('AI_INVALID_PROPOSAL', 422, { validation: details, usage });

@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
@@ -72,6 +73,15 @@ describe('onlineModelDisplayName', () => {
 });
 
 describe('OnlineModelLibrary', () => {
+  it('starts a catalogue drag using a known model identity without placing it', async () => {
+    const { onAdd } = setup();
+    const tile = await screen.findByRole('button', { name: '添加Lounge Chaise' });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '' };
+    expect(tile.draggable).toBe(true);
+    fireEvent.dragStart(tile, { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith(CATALOG_DRAG_MIME, 'online:seating-chaise');
+    expect(onAdd).not.toHaveBeenCalled();
+  });
   it('scrolls categories horizontally with a mouse wheel without changing the filter', async () => {
     await act(async () => { setup(); });
     const rail = screen.getByRole('group', { name: '线上模型分类' });

@@ -1,3 +1,4 @@
+import { mountBand } from '../lib/mount-band';
 import { type BuilderContext, type FurnitureBuilder, type ThreeModule, buildFallback } from './builder-utils';
 import { buildToilet, buildBathtub, buildShower } from './builders/builders-bathroom';
 import { buildBed, buildNightstand, buildDresser } from './builders/builders-bedroom';
@@ -109,7 +110,7 @@ export function createFurnitureModel(
       baseColor: state.status === 'error' ? '#b94c4c' : '#b5a87b', opacity: 0.45 });
     placeholder.userData.glbStatus = state.status;
     placeholder.name = state.status === 'error' ? '模型加载失败（占位）' : '模型待加载（占位）';
-    return placeholder;
+    return withElevation(item, placeholder);
   }
   const ctx: BuilderContext = {
     THREE,
@@ -119,5 +120,15 @@ export function createFurnitureModel(
     opacity: hasCollision ? 0.7 : 1.0,
   };
   const builder = BUILDERS[item.type] ?? buildFallback;
-  return builder(ctx);
+  return withElevation(item, builder(ctx));
+}
+
+/** Match GLB instances: meshes carry their elevation, the outer group stays on the floor. */
+function withElevation(item: FurnitureItem, model: ReturnType<FurnitureBuilder>): ReturnType<FurnitureBuilder> {
+  if (item.elevation !== undefined) {
+    const { elevation, ...grounded } = item;
+    const offset = elevation - mountBand(grounded).bottom;
+    for (const child of model.children) child.position.y += offset;
+  }
+  return model;
 }

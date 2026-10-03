@@ -23,3 +23,12 @@ it('provisions one private studio at confirmation and preserves existing members
   expect(await f.rpc(id, 'studios')).toEqual(studios);
   expect(await f.rpc(owner, 'studios')).toHaveLength(1);
 });
+
+it('does not recreate a deliberately deleted last studio on later account updates', async () => {
+  const id = crypto.randomUUID();
+  await f.db.query('insert into auth.users(id,email_confirmed_at) values($1,now())', [id]);
+  const [personal] = await f.rpc(id, 'studios');
+  await f.rpc(id, 'studios.delete', { studioId: personal.id });
+  await f.db.query("update auth.users set raw_user_meta_data='{}'::jsonb where id=$1", [id]);
+  expect(await f.rpc(id, 'studios')).toEqual([]);
+});

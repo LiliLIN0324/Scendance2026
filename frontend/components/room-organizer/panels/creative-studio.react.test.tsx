@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
+import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
-import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider } from './creative-studio';
+import { CreativeAssistant, CreativeStudioProvider } from './creative-studio';
+import { GeneratedModelLibrary } from './generated-model-library';
+import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
 
+vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
+let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
+vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
 const scene: Scene = {
@@ -46,8 +53,17 @@ function restoreProperty(object: object, key: string, descriptor: PropertyDescri
 
 function ui(current = layout) {
   return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onPreview={onPreview}>
-    <CreativeBriefPanel/><CreativeAssistant/>
+    <CreativeAssistant/>
   </CreativeStudioProvider>;
+}
+
+function render(element: React.ReactElement) {
+  const view=renderUI(element);
+  fireEvent.click(screen.getByRole('button', {name:'打开 Binggo Agent'}));
+  fireEvent.click(screen.getByText('活动需求与场地资料'));
+  fireEvent.click(screen.getByText('风格、配色与氛围（可选）'));
+  fireEvent.click(screen.getByRole('checkbox', {name:'发送后直接应用'}));
+  return view;
 }
 
 function connected(): void {
@@ -63,7 +79,7 @@ function enterBrief(): void {
 
 async function generatePreview(): Promise<void> {
   enterBrief();
-  fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
+  fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
   await screen.findByText('方案提案 · 尚未应用');
 }
 
@@ -74,8 +90,6 @@ function upload(container: HTMLElement, files: File[]): void {
 
 beforeEach(() => {
   onApply.mockReset();
-  sessionStorage.clear();
-  vi.mocked(loadScenePreset).mockReset();
   onPreview.mockReset();
   forbiddenFetch.mockClear();
   vi.stubGlobal('fetch', forbiddenFetch);
@@ -89,11 +103,8 @@ beforeEach(() => {
   controller = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   snapshot = { ...controller.getSnapshot() };
   vi.spyOn(controller, 'getSnapshot').mockImplementation(() => snapshot);
-  vi.spyOn(controller, 'requestProposal').mockResolvedValue(proposal);
-  vi.spyOn(controller, 'listGenerationJobs').mockResolvedValue([]);
   vi.spyOn(controller, 'listSources').mockResolvedValue([]);
-  vi.spyOn(controller, 'createGenerationJob').mockResolvedValue({ id: '50000000-0000-4000-8000-000000000001', owner_id: 'test-user', prompt: '绿色藤编椅', state: 'queued', asset_id: null, provider_job_id: null, next_poll_at: '2026-10-03T08:00:00Z', attempts: 0, error_code: null, provider_usage: null, created_at: '2026-10-03T08:00:00Z', updated_at: '2026-10-03T08:00:00Z' });
-  vi.spyOn(controller, 'releaseLease').mockResolvedValue(undefined);
+  vi.spyOn(controller, 'requestProposal').mockResolvedValue(proposal);
   vi.spyOn(controller, 'authorizeAssets').mockResolvedValue({ assetUrls: {}, assetNames: {} });
   vi.spyOn(controller, 'applySceneProposal').mockResolvedValue({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: true });
   layout = backendSceneToLayout(scene, { projectId, name: '客户方案' });
@@ -112,113 +123,145 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
-
-  it('sends a model request through chat exactly once without calling scene planning', async () => {
-    connected();render(ui());
-    fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
-    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'帮我生成一把绿色藤编椅'}});
-    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    await waitFor(()=>expect(controller.createGenerationJob).toHaveBeenCalledOnce());
-    expect(controller.createGenerationJob).toHaveBeenCalledWith('帮我生成一把绿色藤编椅',expect.stringMatching(/^[0-9a-f-]{36}$/));
+  it('opens complete templates separately without losing the planning draft or invoking generation', async () => {
+    connected();
+    const preset:RoomLayout={...layout,name:'办公室 · 留白',scenePreset:'office'};
+    vi.mocked(loadScenePreset).mockResolvedValueOnce(preset);
+    vi.spyOn(window,'confirm').mockReturnValue(true);
+    const create=vi.spyOn(controller,'createGenerationJob');
+    renderUI(ui());
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'保留这条未发送的需求'}});
+    fireEvent.click(screen.getByRole('tab',{name:/场景模板/}));
+    expect(screen.getAllByRole('button',{name:/载入工作台/})).toHaveLength(10);
+    fireEvent.click(screen.getByRole('tab',{name:/场景策划/}));
+    expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('保留这条未发送的需求');
+    fireEvent.click(screen.getByRole('tab',{name:/场景模板/}));
+    fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledWith(preset));
+    expect(loadScenePreset).toHaveBeenCalledWith('office');
     expect(controller.requestProposal).not.toHaveBeenCalled();
-    await screen.findByText(/混元模型任务已提交/);
-    expect(onApply).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab',{name:/3D 生成/})).toBeTruthy();
   });
 
-  it('does not charge for a model question or a greeting', async () => {
-    connected();render(ui());fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
-    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'怎么生成模型？'}});
-    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    await screen.findByText(/我可以用 DeepSeek/);
-    expect(controller.requestProposal).not.toHaveBeenCalled();expect(controller.createGenerationJob).not.toHaveBeenCalled();
-  });
-
-  it('plans a confirmed v2 scene from chat without replacing the user count with brief defaults', async () => {
-    connected();const measured=createMeasuredRoomLayout(layout,{width:12,depth:10,height:3});
-    const measuredScene=layoutToBackendScene(measured);
-    vi.mocked(controller.requestProposal).mockResolvedValue({...proposal,base_scene:measuredScene,candidate:measuredScene});
-    render(ui(measured));fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
-    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'生成 12 人沙龙场景，保留通道'}});
-    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    await screen.findByText('方案提案 · 尚未应用');
-    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({scene:measuredScene,prompt:expect.stringContaining('12 人沙龙')}));
-    expect(vi.mocked(controller.requestProposal).mock.calls[0]![0].prompt).not.toContain('预计24人');
-    expect(onApply).not.toHaveBeenCalled();
-  });
-
-  it('loads a named preset only after confirmation and keeps AI services unused', async () => {
-    connected();const next={...layout,scenePreset:'gym' as const};vi.mocked(loadScenePreset).mockResolvedValue(next);
-    render(ui());fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
-    fireEvent.click(screen.getByRole('button',{name:'体育馆 · 黑客松 ↗'}));
-    expect(screen.getByText('场景预设 · 尚未载入')).toBeTruthy();
-    expect(loadScenePreset).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'确认载入预设'}));
-    await waitFor(()=>expect(onApply).toHaveBeenCalledWith(next));
-    expect(controller.releaseLease).toHaveBeenCalledOnce();
-    expect(controller.requestProposal).not.toHaveBeenCalled();expect(controller.createGenerationJob).not.toHaveBeenCalled();
-  });
-
-  it('rejects a preset that finishes loading after the draft changed', async () => {
-    connected();let finish!:(next:RoomLayout)=>void;
-    vi.mocked(loadScenePreset).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
-    const view=render(ui());fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
-    fireEvent.click(screen.getByRole('button',{name:'香氛快闪 ↗'}));
-    fireEvent.click(screen.getByRole('button',{name:'确认载入预设'}));
-    view.rerender(ui({...layout,name:'更新后的草稿'}));
-    await act(async()=>finish({...layout,scenePreset:'popup'}));
-    expect(onApply).not.toHaveBeenCalled();expect(controller.releaseLease).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/当前草稿已保留/).length).toBeGreaterThan(0);
-  });
-
-  it('renders only the reconstruction Generate action for an existing v2 scene',async()=>{
+  it('keeps text planning available alongside reconstruction for an existing v2 scene',async()=>{
     render(ui(createMeasuredRoomLayout(layout,{width:12,depth:10,height:3})));
     await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
-    expect(screen.queryByRole('button',{name:'Generate 生成布置方案'})).toBeNull();
-    expect(screen.queryByText('Generate 生成布置方案')).toBeNull();
+    expect(screen.getByRole('button',{name:'生成布置预览'})).toBeTruthy();
+    expect(screen.getByText('生成布置预览')).toBeTruthy();
   });
 
-  it('requires an explicit decision before generating with a missing round table', async () => {
-    connected();
-    render(ui());
-    fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '需要圆桌和椅子，安排24人交流会' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
-    expect(controller.requestProposal).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByRole('combobox', { name: '圆桌的处理方式' }), { target: { value: 'table' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: /已核对以上选择/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
+  it('sends full resource requirements to the Agent without a built-in catalogue rejection', async () => {
+    connected();render(ui());
+    fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '需要圆桌和帐篷，安排24人交流会' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
     await screen.findByText('方案提案 · 尚未应用');
-    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('用户明确同意将「圆桌」改用「桌子」') }));
-    expect(onApply).not.toHaveBeenCalled();
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ mode: 'modify', prompt: expect.stringContaining('需要圆桌和帐篷') }));
+    expect(vi.mocked(controller.requestProposal).mock.calls[0]![0].prompt).toContain('不得用其他物件冒充');
+    expect(screen.queryByText('圆桌的处理方式')).toBeNull();
   });
 
-  it('does not send missing-asset chat requests as if they were supported', () => {
+  it('lets the Agent select a library tent and loads the authorized GLB before applying', async () => {
     connected();
-    render(ui());
-    fireEvent.click(screen.getByRole('button', { name: '打开幕景助手' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '加入帐篷' } });
-    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
-    expect(controller.requestProposal).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/这条消息包含当前物料目录缺项/).length).toBeGreaterThan(0);
+    const assetId='50000000-0000-4000-8000-000000000001';
+    const assetCandidate:Scene={...candidate,objects:[{...candidate.objects[0],materialId:'asset',assetId}]};
+    const assetProposal={...proposal,candidate:assetCandidate};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce(assetProposal);
+    vi.mocked(controller.authorizeAssets).mockResolvedValueOnce({assetUrls:{[assetId]:'https://storage.example/tent.glb'},assetNames:{[assetId]:'资源库帐篷'}});
+    vi.mocked(controller.applySceneProposal).mockResolvedValueOnce({id:projectId,revision:2,scene:assetCandidate,previousScene:scene,updatedAt:'2026-10-03T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});
+    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'从资源库加入一顶帐篷'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({mode:'modify',prompt:expect.stringContaining('从资源库加入一顶帐篷')}));
+    expect(ensureGlbAsset).toHaveBeenCalledWith(assetId,'https://storage.example/tent.glb');
+    expect(controller.applySceneProposal).toHaveBeenCalledWith(assetProposal,layoutToBackendScene(layout));
+    expect(onApply.mock.calls[0]![0].floors[0].items[0]).toMatchObject({assetId,name:'资源库帐篷'});
+  });
+
+  it('shows a no-change answer and HY3 handoff without applying or charging for generation', async () => {
+    connected();
+    const suggestion={name:'花形拱门',reason:'可用资源库中没有花形拱门',prompt:'单件米白色花形拱门，无背景'};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,candidate:scene,explanation:'已读取场景，资源库缺少花形拱门。',modelSuggestions:[suggestion]});
+    vi.spyOn(controller,'listGenerationJobs').mockResolvedValue([]);
+    const create=vi.spyOn(controller,'createGenerationJob');
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant generationPanel={seed=><GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>}/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'添加花形拱门'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    fireEvent.click(await screen.findByRole('button',{name:'前往 HY3 生成'}));
+    expect(screen.getByRole('tab',{name:/3D 生成/}).getAttribute('aria-selected')).toBe('true');
+    await waitFor(()=>expect((screen.getByRole('textbox',{name:'物料描述'}) as HTMLTextAreaElement).value).toBe(suggestion.prompt));
+    expect(controller.authorizeAssets).not.toHaveBeenCalled();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('img',{name:'Binggo 小狗'}).every(img=>img.getAttribute('src')==='/assets/assistant/puppy.png')).toBe(true);
+  });
+
+  it('hands exact material targets to a preview without applying the scene or calling HY3', async () => {
+    connected();
+    const suggestion={name:'椅面换色',reason:'保留原模型，调整选中椅子的基础色',objectIds:['20000000-0000-4000-8000-000000000001'],sourceAssetId:'50000000-0000-4000-8000-000000000001',scope:'choose_materials' as const,changes:{baseColor:'#aabbcc'}};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,candidate:scene,materialSuggestions:[suggestion]});
+    const create=vi.spyOn(controller,'createGenerationJob');
+    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'把选中椅子的椅面改为灰蓝色'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    fireEvent.click(await screen.findByRole('button',{name:'预览材质调整'}));
+    expect(JSON.parse(screen.getByTestId('material-seed').textContent!)).toMatchObject({sourceAssetId:suggestion.sourceAssetId,objectIds:suggestion.objectIds,changes:suggestion.changes,materialScope:'choose_materials',projectId,userId:'test-user'});
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button',{name:'场景交付'}));
+    expect(screen.getByRole('button',{name:'导出场景 GLB'})).toBeTruthy();
+  });
+  it('tracks the newly applied version so the same instances can restore their parent', async () => {
+    connected();
+    const sourceAssetId='50000000-0000-4000-8000-000000000001',variantAssetId='50000000-0000-4000-8000-000000000002';
+    const base:Scene={...candidate,objects:[{...candidate.objects[0]!,materialId:'asset',assetId:sourceAssetId}]};
+    const current=backendSceneToLayout(base,{projectId,name:'材质测试'});
+    const suggestion={objectIds:[base.objects[0]!.id],sourceAssetId,name:'蓝色椅子',reason:'仅选中实例',scope:'all_materials' as const,changes:{baseColor:'#285fad'}};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,base_scene:base,candidate:base,materialSuggestions:[suggestion]});
+    function Harness(){const [value,setValue]=useState(current);return <CreativeStudioProvider controller={controller} layout={value} onApply={setValue}><CreativeAssistant/></CreativeStudioProvider>;}
+    renderUI(<Harness/>);fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'给椅子换色'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    fireEvent.click(await screen.findByRole('button',{name:'预览材质调整'}));
+    act(()=>materialProps.onApply({...current,floors:current.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,assetId:variantAssetId}))}))}));
+    expect(materialProps.seed).toMatchObject({sourceAssetId:variantAssetId,objectIds:suggestion.objectIds});
+    expect(materialProps.seed!.changes).toBeUndefined();
+    fireEvent.click(screen.getByRole('button',{name:'使用当前选中物件'}));expect(materialProps.seed).toBeUndefined();
+  });
+
+  it('ignores a late suggestion after the signed-in account changes', async () => {
+    connected();let finish!:(value:SceneProposal)=>void;
+    vi.mocked(controller.requestProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const view=renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'添加花形拱门'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    snapshot={...snapshot,user:{id:'another-user'}};view.rerender(ui());
+    await act(async()=>{finish({...proposal,candidate:scene,modelSuggestions:[{name:'花形拱门',reason:'缺少该资源',prompt:'单件花形拱门'}]});});
+    expect(screen.queryByRole('button',{name:'前往 HY3 生成'})).toBeNull();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
 
   it('moves keyboard focus into the assistant and returns it on Escape', () => {
-    render(ui());
-    const launch = screen.getByRole('button', { name: '打开幕景助手' });
+    renderUI(ui());
+    const launch = screen.getByRole('button', { name: '打开 Binggo Agent' });
+    expect(screen.getByRole('img',{name:'Binggo 小狗'}).getAttribute('src')).toBe('/assets/assistant/puppy.png');
     fireEvent.click(launch);
     const input = screen.getByRole('textbox', { name: '告诉助手你的想法' });
     expect(document.activeElement).toBe(input);
     fireEvent.keyDown(input, { key: 'Escape' });
-    expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Agent' })).toBeNull();
     expect(document.activeElement).toBe(launch);
   });
 
   it('explains the missing AI connection offline without fabricating a proposal or changing the scene', async () => {
     render(ui());
-    expect(screen.getByRole('button', { name: 'Generate 生成布置方案' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: '生成布置预览' }).hasAttribute('disabled')).toBe(true);
     enterBrief();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
-    expect(await screen.findByRole('region', { name: '幕景智能助手' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
+    expect(await screen.findByRole('region', { name: 'Agent' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('当前尚未连接 AI 服务');
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
     expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
@@ -231,13 +274,13 @@ describe('creative brief and assistant interaction', () => {
     const file = new File(['image fixture'], 'venue.png', { type: 'image/png' });
     upload(rendered.container, [file]);
     const image = await screen.findByRole('img', { name: '现场照片：venue.png' });
-    expect(screen.queryByRole('button',{name:'Generate 生成布置方案'})).toBeNull();
-    expect(screen.queryByText('Generate 生成布置方案')).toBeNull();
+    expect(screen.getByRole('button',{name:'生成布置预览'})).toBeTruthy();
+    expect(screen.getByText('生成布置预览')).toBeTruthy();
     expect(image.getAttribute('src')).toBe('blob:local-reference');
     expect(screen.getByText(/图片保存在本机；连接项目并生成时会上传至私有存储/)).toBeTruthy();
     expect(controller.requestProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-reference');
     upload(rendered.container, [file]);
     await screen.findByRole('img', { name: '现场照片：venue.png' });
@@ -252,7 +295,7 @@ describe('creative brief and assistant interaction', () => {
     const rendered = render(ui());
     upload(rendered.container, [file()]);
     expect(await screen.findByText(message)).toBeTruthy();
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull();
     expect(createBitmap).not.toHaveBeenCalled();
     expect(createObjectURL).not.toHaveBeenCalled();
   });
@@ -272,13 +315,15 @@ describe('creative brief and assistant interaction', () => {
     render(ui());
     await generatePreview();
     expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
-    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ mode: 'layout', scene: layoutToBackendScene(layout), prompt: expect.stringContaining('给 24 位来宾') }));
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ mode: 'modify', scene: layoutToBackendScene(layout), prompt: expect.stringContaining('给 24 位来宾') }));
     expect(onApply).not.toHaveBeenCalled();
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '确认应用' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    expect(onApply.mock.calls[0]![0].designBook?.variants.map(v => v.name)).toEqual(['原始方案', 'AI 方案 A']);
     expect(controller.applySceneProposal).toHaveBeenCalledWith(proposal, layoutToBackendScene(layout));
     expect(layoutToBackendScene(onApply.mock.calls[0][0])).toEqual(candidate);
+    expect(onApply.mock.calls[0][0].designBook?.variants.map(variant=>variant.name)).toEqual(['原始方案','AI 方案 A']);
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
   });
 
@@ -316,7 +361,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(controller.requestProposal).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const rendered = render(ui());
     enterBrief();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
     await waitFor(() => expect(finish).toBeTypeOf('function'));
     rendered.rerender(ui({ ...layout, width: 13 }));
     await act(async () => { finish(proposal); });
@@ -332,7 +377,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(controller.requestProposal).mockResolvedValueOnce({ ...proposal, expires_at: '2026-10-02T10:00:02Z' });
     render(ui());
     enterBrief();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '生成布置预览' })); });
     expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy();
     expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
@@ -379,7 +424,6 @@ describe('context continuity and project isolation', () => {
     fireEvent.change(screen.getByRole('textbox',{name:'风格要求'}),{target:{value:'简约现代'}});
     fireEvent.change(screen.getByRole('textbox',{name:'配色要求'}),{target:{value:'米白橄榄绿'}});
     fireEvent.change(screen.getByRole('textbox',{name:'氛围要求'}),{target:{value:'温暖聚会'}});
-    fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
     const send=async(text:string)=>{
       fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:text}});
       fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
@@ -397,7 +441,7 @@ describe('context continuity and project isolation', () => {
     connected(); const rendered=render(ui()); enterBrief();
     let finish!:(value:SceneProposal)=>void;
     vi.mocked(controller.requestProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    fireEvent.click(screen.getByRole('button',{name:'Generate 生成布置方案'}));
+    fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
     await waitFor(()=>expect(controller.requestProposal).toHaveBeenCalledOnce());
     const changed={...layout,id:'10000000-0000-4000-8000-000000000002'};
     rendered.rerender(ui(changed));
@@ -406,5 +450,110 @@ describe('context continuity and project isolation', () => {
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
     expect(screen.queryByText(proposal.explanation)).toBeNull();
     expect(onApply).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('unified Agent', () => {
+  it('offers three Agent sections and keeps the unsent planning message when switching', () => {
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加两把椅子' } });
+    fireEvent.click(screen.getByRole('tab', { name: /3D 生成/ }));
+    expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: /场景策划/ }));
+    expect((screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement).value).toBe('增加两把椅子');
+    expect(controller.requestProposal).not.toHaveBeenCalled();
+  });
+
+  it('applies a validated text request directly through the cloud apply endpoint', async () => {
+    connected();
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一把椅子' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({mode:'modify'}));
+    expect(vi.mocked(controller.requestProposal).mock.calls[0]![0].prompt).not.toContain('预计24人');
+    expect(controller.applySceneProposal).toHaveBeenCalledWith(proposal, layoutToBackendScene(layout));
+    expect(layoutToBackendScene(onApply.mock.calls[0][0])).toEqual(candidate);
+    expect(onApply.mock.calls[0][0].designBook?.variants.map(variant=>variant.name)).toEqual(['原始方案','AI 方案 A']);
+  });
+
+  it('sends structured scenes to DeepSeek as material modifications without dropping structure', async () => {
+    connected();
+    const structured = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
+    const baseScene=layoutToBackendScene(structured);
+    const structuredCandidate={...baseScene,objects:candidate.objects};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,base_scene:baseScene,candidate:structuredCandidate});
+    vi.mocked(controller.applySceneProposal).mockResolvedValueOnce({id:projectId,revision:2,scene:structuredCandidate,previousScene:baseScene,updatedAt:'2026-10-03T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});
+    renderUI(<CreativeStudioProvider controller={controller} layout={structured} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一把椅子' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(controller.requestProposal).toHaveBeenCalledOnce());
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({ mode: 'modify', scene: baseScene }));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    expect(layoutToBackendScene(onApply.mock.calls[0][0])).toEqual(structuredCandidate);
+  });
+
+
+  it('keeps generation content mounted across tab switches and closing the Agent', () => {
+    const mounted=vi.fn(), submitted=vi.fn();
+    function Generator() {
+      const [text,setText]=useState('');
+      useEffect(()=>{mounted();},[]);
+      return <><input aria-label="测试物料描述" value={text} onChange={event=>setText(event.target.value)}/><button onClick={submitted}>测试提交</button></>;
+    }
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant generationPanel={<Generator/>}/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.click(screen.getByRole('tab',{name:/3D 生成/}));
+    fireEvent.change(screen.getByRole('textbox',{name:'测试物料描述'}),{target:{value:'绿色休闲椅'}});
+    fireEvent.click(screen.getByRole('tab',{name:/场景策划/}));
+    fireEvent.click(screen.getByRole('button',{name:'关闭 Binggo Agent'}));
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.click(screen.getByRole('tab',{name:/3D 生成/}));
+    expect((screen.getByRole('textbox',{name:'测试物料描述'}) as HTMLInputElement).value).toBe('绿色休闲椅');
+    expect(mounted).toHaveBeenCalledOnce();
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it('keeps the existing design limit before directly applying a proposal', async () => {
+    connected();
+    const full={...layout,designBook:{activeId:'design-0',variants:Array.from({length:20},(_,index)=>({id:`design-${index}`,name:`方案 ${index}`,layout}))}};
+    renderUI(<CreativeStudioProvider controller={controller} layout={full} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('请先在图层面板移除'));
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('shows layout warnings after a direct application', async () => {
+    connected();
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,warnings:[{code:'OVERLAP',ids:[candidate.objects[0].id]}]});
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    expect(screen.getByRole('status').textContent).toContain('物件重叠：椅子');
+  });
+
+  it('does not apply a direct response after a scene edit while generation is pending', async () => {
+    connected();
+    let finish!:(value:SceneProposal)=>void;
+    vi.mocked(controller.requestProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const view=renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    view.rerender(<CreativeStudioProvider controller={controller} layout={{...layout,width:13}} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    await act(async()=>{finish(proposal);});
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(screen.getByRole('status').textContent).toContain('生成期间方案或需求已变化');
   });
 });

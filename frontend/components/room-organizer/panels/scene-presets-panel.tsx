@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isUntouched } from '../lib/restore-point';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { loadScenePreset } from '../three/scene-presets';
+import { VenueShapePresets } from './venue-shape-presets';
 import type { RoomLayout } from '../lib/types';
 
 interface Props {
@@ -36,6 +37,7 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
   }
   return <section aria-label="场景预设">
     <div className="sc-section-heading"><div><h2>场景预设</h2><p>从完整方案开始，继续布置</p></div></div>
+    <VenueShapePresets layout={layout} onApply={onApply}/>
     <div className="sc-preset-list">
       {(Object.keys(SCENE_PRESETS) as ScenePresetKey[]).map(key => <button className="sc-preset-card" key={key} type="button" disabled={busy !== null} onClick={() => { void load(key); }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}

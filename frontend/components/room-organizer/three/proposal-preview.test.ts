@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import { createFurnitureModel } from './furniture-builders';
+import { clearGlbAssetCache, disposeOwnedModel, ensureGlbAsset } from './glb-assets';
 import { createProposalPreview, proposalDifferences, PROPOSAL_PREVIEW_TAG } from './proposal-preview';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 
@@ -12,6 +15,26 @@ function layout(items: FurnitureItem[]): RoomLayout {
 }
 
 describe('proposal render overlay', () => {
+  afterEach(() => { clearGlbAssetCache(); vi.restoreAllMocks(); });
+
+  it.each(['chair', 'glb-asset'])('renders %s and its preview at the requested elevation exactly once', async type => {
+    if (type === 'glb-asset') {
+      const buffer = new Uint8Array(readFileSync(new URL('../../../../assets/models/table.glb', import.meta.url))).buffer;
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(buffer));
+      await ensureGlbAsset('preview-height', '/assets/models/table.glb');
+    }
+    const placed = { ...item, type, elevation: 0.5, ...(type === 'glb-asset' ? { assetId: 'preview-height', glbUrl: '/assets/models/table.glb' } : {}) };
+    const model = createFurnitureModel(THREE, placed, false);
+    expect(new THREE.Box3().setFromObject(model).min.y).toBeCloseTo(0.5);
+    const scene = new THREE.Scene();
+    const preview = createProposalPreview(THREE, scene, layout([placed]), layout([{ ...placed, elevation: 1 }]));
+    const root = scene.getObjectByName(PROPOSAL_PREVIEW_TAG)!;
+    const candidate = root.children.find(o => o.userData.previewRole === 'candidate')!;
+    const outline = root.children.find(o => o.userData.previewRole === 'new-position')!;
+    expect(new THREE.Box3().setFromObject(candidate).min.y).toBeCloseTo(1);
+    expect(new THREE.Box3().setFromObject(outline).min.y).toBeCloseTo(1);
+    preview.dispose(); disposeOwnedModel(model);
+  });
   it.each([
     { position: { x: 2, z: 2 } }, { rotation: Math.PI / 6 }, { width: 1 }, { depth: 1 }, { height: 1.5 }, { color: '#ffffff' },
   ])('recognizes the material edit %j without mutating either document', change => {
