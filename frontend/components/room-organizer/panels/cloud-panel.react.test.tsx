@@ -46,6 +46,16 @@ afterEach(() => {
 });
 
 describe('CloudPanel delayed project replacement', () => {
+  it('never labels a local scene preset as saved to the cloud', async () => {
+    queue([other]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
+    render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /预设 · 本地保存/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /云端已保存/ })).toBeNull();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    expect(controller.getSnapshot().draft).not.toEqual(layout);
+  });
   it.each(['open', 'acquire', 'create'] as const)('preserves edits made while the %s request is pending', async action => {
     const initialLayout = backendSceneToLayout(scene, { projectId, name: original.name });
     const onLoadLayout = vi.fn();

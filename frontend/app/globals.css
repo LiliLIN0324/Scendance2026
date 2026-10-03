@@ -514,7 +514,15 @@
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); overflow: hidden;
 }
 .sc-library { display: flex; flex-direction: column; height: 100%; }
-.sc-library-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 7px; min-height: 54px; border-bottom: 1px solid var(--sc-line); }
+.sc-library-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 7px; min-height: 54px; border-bottom: 1px solid var(--sc-line); }
+.sc-preset-list { display: grid; gap: 14px; margin-bottom: 18px; }
+.sc-preset-card { overflow: hidden; text-align: left; border: 1px solid var(--sc-line); border-radius: 12px; background: var(--sc-surface); color: var(--sc-ink); }
+.sc-preset-card:disabled { opacity: .6; cursor: wait; }
+.sc-preset-card img { width: 100%; aspect-ratio: 1.7; object-fit: cover; }
+.sc-preset-card > span { display: grid; gap: 7px; padding: 13px; }
+.sc-preset-card strong { font-size: 14px; }
+.sc-preset-card small { color: var(--sc-muted); }
+.sc-preset-card b { font-size: 12px; color: var(--sc-accent-ink); }
 .sc-library-tabs button { border: 1px solid transparent; border-radius: 8px; background: none; color: var(--sc-muted); font-size: 12px; }
 .sc-library-tabs button.is-active { color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #6f8f5233; font-weight: 600; }
 .sc-library-content { padding: 22px 17px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #bac6ce transparent; }

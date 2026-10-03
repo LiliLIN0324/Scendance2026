@@ -3,7 +3,9 @@
 import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
+import { editorItemLimit } from '../lib/scene-presets';
 import { OnlineModelLibrary } from './online-model-library';
+import { ScenePresetsPanel } from './scene-presets-panel';
 import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -11,6 +13,7 @@ interface LibraryProps {
   controller?: BackendSession;
   onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   creativePanel?: ReactNode;
+  onLoadPreset(layout: RoomLayout): void;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
 }
 
@@ -24,11 +27,11 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
   </svg>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller, onLoadPreset }: LibraryProps): JSX.Element {
   const { layout, activeFloor, actions } = useRoomEditor();
   const { selectOnly } = useSelection();
-  const [tab, setTab] = useState<'materials' | 'brief' | 'venue'>('materials');
-  const atLimit = activeFloor.items.length >= 50;
+  const [tab, setTab] = useState<'materials' | 'brief' | 'venue' | 'presets'>('materials');
+  const atLimit = activeFloor.items.length >= editorItemLimit(layout);
 
   const addMaterial = (item: CatalogItem) => {
     if (atLimit) return;
@@ -38,26 +41,28 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
 
   return <aside className="sc-library" aria-label="场地工具">
     <div className="sc-library-tabs" role="tablist" aria-label="工作台面板">
-      {([['materials', '物料库'], ['brief', '需求'], ['venue', '场地']] as const).map(([key, label]) =>
+      {([['materials', '物料库'], ['presets', '场景预设'], ['brief', '需求'], ['venue', '场地']] as const).map(([key, label]) =>
         <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
-        {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
+        {atLimit && <p className="sc-warning">已达到 {editorItemLimit(layout)} 件物料上限，请先删除部分物料。</p>}
         <OnlineModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
       </>}
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
       {tab === 'brief' && <>{creativePanel}</>}
+      {tab === 'presets' && <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>}
       {tab === 'venue' && <>
         <div className="sc-section-heading"><div><h2>场地设置</h2><p>单层矩形 · 统一使用米制</p></div><Grid size={19}/></div>
         <label className="sc-field">项目名称<input value={layout.name} maxLength={80} onChange={event => actions.setName(event.target.value)} aria-label="项目名称"/></label>
-        <div className="sc-dimension-grid">
+        {layout.scenePreset ? <p className="sc-note">场馆按原模型比例显示，结构与地面固定；可在画布选择物件调整位置和尺寸。</p> : <><div className="sc-dimension-grid">
           <NumberField label="宽度 / m" value={layout.width} min={2} max={100} onChange={actions.setWidth}/>
           <NumberField label="进深 / m" value={layout.height} min={2} max={100} onChange={actions.setHeight}/>
           <NumberField label="净高 / m" value={activeFloor.height ?? 3} min={2} max={10} onChange={actions.setStoreyHeight}/>
         </div>
         <div className="sc-area-card"><span>场地面积</span><strong>{(layout.width * layout.height).toFixed(1)} <small>m²</small></strong></div>
         <label className="sc-field sc-color-field">地面颜色<input type="color" aria-label="地面颜色" value={activeFloor.floorColor} onChange={event => actions.setFloorColor(event.target.value)}/></label>
+        </>}
         <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
         <p className="sc-note">实时作用于三维场景；随场景本地保存，连接云项目后使用现有 lighting 字段保存。</p>
         <p className="sc-note">当前版本提供矩形场地编辑。平面图标定与多边形编辑尚未接入。</p>

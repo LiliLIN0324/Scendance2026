@@ -91,7 +91,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
 
   return <>
     <button className="sc-cloud-trigger" type="button" onClick={() => dialog.current?.showModal()}>
-      <span aria-hidden="true">☁</span> {cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目'}
+      <span aria-hidden="true">☁</span> {layout.scenePreset ? '预设 · 本地保存' : cloud.user ? (cloud.writeBlocked ? '云项目' : dirty ? '有改动待保存' : '云端已保存') : '连接云项目'}
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog" aria-labelledby="cloud-title">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">WORKSPACE / 项目协作</span><h2 id="cloud-title">让团队接着你的方案继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭云项目" onClick={() => dialog.current?.close()}>×</button></div>
