@@ -193,3 +193,19 @@ it('opens the workspace directly after session restoration without another login
   expect(screen.queryByLabelText('密码')).toBeNull();
   expect(navigation.replace).not.toHaveBeenCalled();
 });
+
+
+it('keeps the project destination when entering the editor alias without a session', async () => {
+  window.history.replaceState(null, '', `/editor/?project=${projectId}`);
+  render(<App />);
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(`/auth?next=${encodeURIComponent(`/editor/?project=${projectId}`)}`));
+});
+
+it('opens the current workspace at the editor alias after session restoration', async () => {
+  window.history.replaceState(null, '', `/editor/?project=${projectId}`);
+  const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
+  vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
+  render(<App />);
+  await screen.findByRole('textbox', { name: '客户需求' });
+  expect(navigation.replace).not.toHaveBeenCalled();
+});

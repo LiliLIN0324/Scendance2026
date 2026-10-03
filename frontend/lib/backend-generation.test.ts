@@ -68,7 +68,7 @@ beforeEach(() => {
 afterEach(() => { controller.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("AI proposal contract and paid request protection", () => {
-  it.each([[429, "DAILY_BUDGET_EXCEEDED"], [429, "BUDGET_EXCEEDED"], [503, "SERVICE_NOT_CONFIGURED"], [422, "AI_INVALID_PROPOSAL"]])("keeps editing available after AI-only %s %s", async (status, code) => {
+  it.each([[429, "DAILY_BUDGET_EXCEEDED"], [429, "BUDGET_EXCEEDED"], [503, "SERVICE_NOT_CONFIGURED"], [422, "AI_INVALID_PROPOSAL"], [409, "AI_IN_PROGRESS"], [409, "AI_PREVIOUS_REQUEST_FAILED"]])("keeps editing available after AI-only %s %s", async (status, code) => {
     await editing(); queue({ error: { code } }, status as number);
     await expect(controller.requestProposal({ mode: "layout", prompt: "安排沙龙", scene })).rejects.toMatchObject({ code });
     expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, draft: scene, revision: 4 });
@@ -214,6 +214,18 @@ describe("AI proposal contract and paid request protection", () => {
 });
 
 describe("single object generation jobs", () => {
+  it("keeps the draft and lease while a background job-list refresh is unavailable", async () => {
+    await editing();
+    const draft = { ...scene, lighting: "warm" as const };
+    controller.setDraft(draft);
+    fetchMock.mockRejectedValueOnce(new TypeError("connection reset"));
+    await expect(controller.listGenerationJobs()).rejects.toThrow("connection reset");
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, dirty: true, draft, revision: 4 });
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 3, revision: 4, expiresAt: new Date(Date.now() + 120_000).toISOString() });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/lease/renew');
+  });
+
   it.each(["create", "get", "list", "added"] as const)("isolates a late job %s failure from a new project lease", async operation => {
     await editing(); const call = pending();
     const jobRequest = operation === "create" ? controller.createGenerationJob("A tent", requestId)
