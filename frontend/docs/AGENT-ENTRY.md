@@ -1,5 +1,7 @@
 # 统一 Agent 入口
 
+后续的真实资源读取、操作与 HY3 转接已上线，见 [Binggo 场景资源 Agent](../../docs/BINGGO_SCENE_AGENT.md)。以下保留入口改造时的发布记录。
+
 日期：2026-10-03。生产基线：`7c9125c`。发布分支：`codex/binggo-agent-release`。已部署代码：`99ca1e8`。
 
 ## 行为
