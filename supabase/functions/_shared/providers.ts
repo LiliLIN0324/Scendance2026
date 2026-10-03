@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { SYSTEM_PROMPT, buildProposal } from './ai.ts';
 import { ApiError, catalog, type ProposalRequest } from './domain.ts';
 import { fetchJson, required, type Env, type Fetcher } from './http.ts';
+import { resourceIndex, sceneResourceRefs, type SceneResource } from './scene-resources.ts';
 
 const submitSchema = z.object({ JobId: z.string().min(1), RequestId: z.string().optional() });
 export const querySchema = z.object({
@@ -43,10 +44,10 @@ export function hunyuan(env: Env, fetcher: Fetcher = fetch) {
     },
   };
 }
-export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch) {
+export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch, resources: readonly SceneResource[] = []) {
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: JSON.stringify({ mode: input.mode, instruction: input.instruction, scene: input.scene, selectedIds: input.selectedIds, catalog }) },
+    { role: 'user', content: JSON.stringify({ mode: input.mode, instruction: input.instruction, scene: input.scene, selectedIds: input.selectedIds, catalog, resources:resourceIndex(resources), sceneResourceRefs:sceneResourceRefs(input.scene,resources) }) },
   ];
   const usage: unknown[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -63,7 +64,7 @@ export async function generateProposal(input: ProposalRequest, env: Env, reserve
     const content = response.choices[0].message.content;
     try {
       if (response.choices[0].finish_reason !== 'stop') throw new ApiError('AI_INCOMPLETE_OUTPUT', 422);
-      return { ...buildProposal(input.scene, input.mode, JSON.parse(content)), usage };
+      return { ...buildProposal(input.scene, input.mode, JSON.parse(content),resources), usage };
     } catch (error) {
       const details = error instanceof z.ZodError ? error.issues : error instanceof ApiError ? { code: error.code, details: error.details } : { code: 'INVALID_JSON' };
       if (attempt === 1) throw new ApiError('AI_INVALID_PROPOSAL', 422, { validation: details, usage });

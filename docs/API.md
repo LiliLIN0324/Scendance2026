@@ -132,9 +132,19 @@ const studios = await api.request('/studios');
 }
 ```
 
-此处 `scene` 必须替换为上述完整场景，不是空对象。`mode` 为 layout 或 modify。每次本地操作（包括撤销/重做、颜色、锁定、场地调整）递增 localRevision。等待 AI 时可编辑；发生变化则旧提案不能应用。仅用户确认后调用 `api.applyProposal(proposal,currentState)`。
+此处 `scene` 必须替换为上述完整场景，不是空对象。`mode` 为 layout 或 modify。每次本地操作（包括撤销/重做、颜色、锁定、场地调整）递增 localRevision。等待 AI 时可编辑；发生变化则旧提案不能应用。用户选择直接应用或确认提案后调用 `api.applyProposal(proposal,currentState)`。文字策划统一使用 `modify`，以当前场景为起点；`layout` 保留给兼容客户端。
 
 应用发起后短暂冻结编辑，直到返回结果；将 `previousScene → scene` 作为一个历史条目。撤销时恢复 previousScene，再正常保存（会产生新的云端 revision，不回退计数器）。前端不能把提案解释文本当作已完成保存。
+
+### Binggo 资源 Agent
+
+服务器读取当前场景、选中实例、公共资源库以及当前用户有权访问的个人/场景素材，发送紧凑的资源索引和 `sceneResourceRefs`（实例 ID → 本轮资源引用）。提供商不接收下载地址、存储路径或密钥。公共资源使用与前端资源库相同的目标尺寸；私人素材没有可靠尺寸时，必须补充尺寸。
+
+DeepSeek 通过 `add_resource` / `replace_resource` 命令引用索引中的 `resourceId`。Agent 将其解析为已知资产，检查尺寸、边界、结构及锁定状态；提案存储、模型预加载和应用分别重查权限。宽深支持 0.02–50 m，高支持 0.01–30 m；不支持直接改 GLB 内材质。未通过检查的结果最多修复一次，不扩大既有预算。
+
+提案响应增加可选 `modelSuggestions: [{name,reason,prompt}]`（最多 3 项），同 requestId 重放保留建议。没有适合资源时，返回缺项及单件模型描述，前端“前往 HY3 生成”切换现有生成页签；不会自动提交收费生成，也不覆盖已有未确认请求或草稿。生成完成后沿用授权预览、确认尺寸和加入场地流程，后续策划可读取该素材。
+
+如果提案场景与当前场景相同，前端只展示回答/模型建议，不保存或新增撤销记录。建议并非已生成资产；解释文本并非执行成功的依据。
 
 ### 模型预览/加入
 
