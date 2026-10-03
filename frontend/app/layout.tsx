@@ -1,3 +1,4 @@
+import { WorkspaceShell } from '@/components/workspace-shell';
 import { AuthProvider } from '@/lib/auth-provider';
 import type { Metadata } from 'next';
 import './globals.css';
@@ -52,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
-      <body><AuthProvider>{children}</AuthProvider></body>
+      <body><AuthProvider><WorkspaceShell>{children}</WorkspaceShell></AuthProvider></body>
     </html>
   );
 }

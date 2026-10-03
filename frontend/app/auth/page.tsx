@@ -1,15 +1,16 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { safeReturnPath } from '@/lib/auth-provider';
+import { IntroPage } from '@/components/intro/intro-page';
+import { safeReturnPath, useAuth } from '@/lib/auth-provider';
 
 export default function AuthPage(): JSX.Element {
+  const { controller, ready, error } = useAuth()!;
   const router = useRouter();
-  useEffect(() => {
-    const next = safeReturnPath(new URLSearchParams(window.location.search).get('next'));
-    router.replace(`${next === '/' ? '/' : `/?next=${encodeURIComponent(next)}`}#sign-in`);
-  }, [router]);
-  return <main className="sc-auth-page"><p role="status">正在打开登录入口…</p><Link href="/#sign-in">前往登录</Link></main>;
+
+  function enterWorkspace(): void {
+    router.replace(safeReturnPath(new URLSearchParams(window.location.search).get('next')));
+  }
+
+  return <IntroPage controller={controller} ready={ready} authError={error} onEnter={() => router.push('/?local=1')} onAuthenticated={enterWorkspace} />;
 }

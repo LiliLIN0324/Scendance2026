@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { usePathname } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout } from '@/components/room-organizer/lib/backend-adapter';
+import { WorkspaceShell } from '@/components/workspace-shell';
 import { AuthProvider } from '@/lib/auth-provider';
 import { BackendSession, getBackendConfig, type Scene, type SceneProposal } from '@/lib/backend-session';
+import AuthPage from './auth/page';
 import Page from './page';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
 import type { ComponentType } from 'react';
@@ -13,8 +16,25 @@ type EditorProps = { controller: BackendSession; onShowIntro: () => void };
 let activeController: BackendSession;
 let activeLayout: RoomLayout;
 const onApply = vi.fn();
-const navigation = vi.hoisted(() => ({ replace: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => navigation }));
+const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useRouter: () => navigation,
+    usePathname: () => useSyncExternalStore(callback => {
+      window.addEventListener('popstate', callback);
+      return () => window.removeEventListener('popstate', callback);
+    }, () => window.location.pathname),
+  };
+});
+
+function Routes(): JSX.Element | null {
+  return usePathname() === '/auth' ? <AuthPage /> : <Page />;
+}
+
+function App(): JSX.Element {
+  return <AuthProvider><WorkspaceShell><Routes /></WorkspaceShell></AuthProvider>;
+}
 
 // Keep the async editor boundary. Only the WebGL shell is replaced; the actual
 // brief, reference-image lifecycle, conversation and proposal components run.
@@ -62,8 +82,13 @@ function restore(object: object, key: string, descriptor: PropertyDescriptor | u
 }
 
 beforeEach(() => {
-  window.history.replaceState(null, '', '/');
-  navigation.replace.mockReset();
+  window.history.replaceState(null, '', '/auth');
+  const navigate = (url: string) => {
+    window.history.replaceState(null, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  navigation.replace.mockReset().mockImplementation(navigate);
+  navigation.push.mockReset().mockImplementation(navigate);
   activeController = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   activeLayout = backendSceneToLayout(scene, { projectId, name: '客户方案' });
   onApply.mockReset();
@@ -88,7 +113,7 @@ afterEach(() => {
 
 describe('introduction round trips', () => {
   it('defers the editor, then preserves the real brief, image, conversation and unsent message when returning', async () => {
-    const rendered = render(<AuthProvider><Page /></AuthProvider>);
+    const rendered = render(<App />);
     expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
     expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
@@ -124,7 +149,7 @@ describe('introduction round trips', () => {
     const generate = vi.spyOn(activeController, 'requestProposal').mockResolvedValue(proposal);
     vi.spyOn(activeController, 'authorizeAssets').mockResolvedValue({ assetUrls: {}, assetNames: {} });
     const apply = vi.spyOn(activeController, 'applySceneProposal').mockResolvedValue({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: true });
-    render(<AuthProvider><Page /></AuthProvider>);
+    render(<App />);
     fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
@@ -142,10 +167,29 @@ describe('introduction round trips', () => {
 
 
 it('preserves a safe return destination for authenticated entry', () => {
-  window.history.replaceState(null, '', '/?next=%2Fprojects%3Fview%3Drecent%23saved');
+  window.history.replaceState(null, '', '/auth?next=%2Fprojects%3Fview%3Drecent%23saved');
   const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
   vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
-  render(<AuthProvider><Page /></AuthProvider>);
+  render(<App />);
   fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
   expect(navigation.replace).toHaveBeenCalledWith('/projects?view=recent#saved');
+});
+
+
+it('redirects an anonymous workspace visit to the only login page', async () => {
+  window.history.replaceState(null, '', '/');
+  render(<App />);
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/auth'));
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+  expect(screen.getAllByLabelText('密码')).toHaveLength(1);
+});
+
+it('opens the workspace directly after session restoration without another login form', async () => {
+  window.history.replaceState(null, '', '/');
+  const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
+  vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
+  render(<App />);
+  await screen.findByRole('textbox', { name: '客户需求' });
+  expect(screen.queryByLabelText('密码')).toBeNull();
+  expect(navigation.replace).not.toHaveBeenCalled();
 });
