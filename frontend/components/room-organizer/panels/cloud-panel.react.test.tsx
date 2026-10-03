@@ -31,6 +31,7 @@ function json(body: unknown) { return new Response(JSON.stringify(body), { statu
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
 
 beforeEach(async () => {
+  localStorage.clear();
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
   vi.stubGlobal('fetch', mockFetch);
@@ -63,6 +64,18 @@ describe('CloudPanel delayed project replacement', () => {
     await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
     expect(onLoadLayout.mock.calls[0]![0].designBook).toEqual(layout.designBook);
     expect(onLoadLayout.mock.calls[0]![0].itemLayers).toEqual(layout.itemLayers);
+  });
+  it('shows only projects in the selected studio and labels the save destination', async () => {
+    queue([other, { ...other, id: 'foreign-project', studio_id: 'studio-b', name: '其他工作室的项目' }]);
+    queue([{ id: studioId, name: '当前工作室', role: 'owner', displayName: 'A' }, { id: 'studio-b', name: '另一工作室', role: 'owner', displayName: 'A' }]);
+    const rendered = render(<CloudPanel layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+    fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
+    await screen.findByText('另一个云项目');
+    expect(screen.queryByText('其他工作室的项目')).toBeNull();
+    fireEvent.change(screen.getByLabelText('当前工作室'), { target: { value: 'studio-b' } });
+    expect(screen.queryByText('另一个云项目')).toBeNull();
+    expect(screen.getByText('其他工作室的项目')).toBeTruthy();
+    expect(screen.getByText('新项目将归属「另一工作室」')).toBeTruthy();
   });
   it('waits for live source inputs before sending the new project request', async () => {
     let finishFlush!:()=>void;

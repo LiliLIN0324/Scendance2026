@@ -56,6 +56,16 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
         return respond(await backend.scene(actor,'studios.create',input),201);
       }
+      const studio=path.match(/^\/studios\/([^/]+)(\/projects)?$/);
+      if(studio) {
+        const studioId=uuid.parse(studio[1]);
+        if(studio[2] && method==='GET') return respond(await backend.scene(actor,'studios.projects.list',{studioId}));
+        if(!studio[2] && method==='PATCH') {
+          const input=z.strictObject({name}).parse(await json());
+          return respond(await backend.scene(actor,'studios.rename',{...input,studioId}));
+        }
+        if(!studio[2] && method==='DELETE') return respond(await backend.scene(actor,'studios.delete',{studioId}));
+      }
       const members=path.match(/^\/studios\/([^/]+)\/members(?:\/([^/]+))?$/);
       if(members) {
         const studioId=uuid.parse(members[1]);
