@@ -3,6 +3,7 @@
 import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
+import { GeneratedModelLibrary } from './generated-model-library';
 import { OnlineModelLibrary } from './online-model-library';
 import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
@@ -44,6 +45,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
     <div key={tab} className="sc-library-content">
       {tab === 'materials' && <>
         {atLimit && <p className="sc-warning">已达到 50 件演示物料上限，请先删除部分物料。</p>}
+        <GeneratedModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
         <OnlineModelLibrary {...(controller ? { controller } : {})} disabled={atLimit} onAdd={addMaterial}/>
       </>}
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}

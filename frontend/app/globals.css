@@ -523,6 +523,12 @@
 .sc-section-heading p { font-size: 11px; color: var(--sc-muted); margin: 6px 0 0; }
 .sc-notes::placeholder { color: var(--sc-muted); }
 .sc-material-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sc-generated-models { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #d9dfd4; }
+.sc-generated-models textarea { width: 100%; resize: vertical; padding: 9px; border: 1px solid #d9dfd4; border-radius: 6px; background: #fff; color: inherit; font: inherit; }
+.sc-generated-models > button { margin: 5px 0; }
+.sc-generated-tasks { padding: 0; margin: 12px 0; list-style: none; }
+.sc-generated-tasks li { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid #d9dfd4; border-radius: 8px; font-size: 12px; }
+.sc-generated-tasks strong { overflow-wrap: anywhere; }
 .sc-material-card { text-align: left; border: 1px solid #ffffff; background: #ffffff70; border-radius: 10px; padding: 7px 7px 10px; min-width: 0; transition: transform var(--sc-fast) var(--sc-ease), border-color var(--sc-fast) var(--sc-ease), background-color var(--sc-fast) var(--sc-ease) !important; }
 .sc-material-preview { position: relative; height: 72px; display: flex; align-items: center; justify-content: center; background: linear-gradient(145deg, #e5edf1, #f3f5f7); border-radius: 6px; }
 .sc-material-add { position: absolute; right: 5px; bottom: 5px; height: 20px; width: 20px; display: grid; place-items: center; background: #ffffffb8; border: 1px solid #fff; color: var(--sc-accent-ink); border-radius: 50%; }
