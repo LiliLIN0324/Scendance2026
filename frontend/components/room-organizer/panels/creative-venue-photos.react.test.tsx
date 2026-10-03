@@ -3,9 +3,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { flushSourceScope } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
 import { CreativeBriefPanel, CreativeStudioProvider } from './creative-studio';
 
+const persisted = vi.hoisted(() => ({ sources: [] as Record<string, unknown>[], forms: new Map<string, unknown>() }));
+vi.mock('@/lib/source-storage', async importOriginal => ({...await importOriginal<object>(),listStoredSources:async()=>[],storeSource:async(value:Record<string,unknown>)=>{persisted.sources.push(value);},deleteSource:async()=>{},readSourceForm:async()=>undefined,storeSourceForm:async(scope:string,value:unknown)=>{persisted.forms.set(scope,value);}}));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
 
 const layout = backendSceneToLayout({ schemaVersion: 1, venue: { width: 12, depth: 10, height: 3, shape: 'rectangle', entrances: [] }, objects: [], camera: 'overview', lighting: 'warm' }, { projectId: '10000000-0000-4000-8000-000000000001' });
@@ -26,6 +29,8 @@ function upload(container: HTMLElement, files: File[]): void {
 }
 
 beforeEach(() => {
+  persisted.sources.length=0;persisted.forms.clear();
+  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);
   decode.mockReset().mockImplementation(async () => bitmap());
   createObjectURL.mockClear();
   revokeObjectURL.mockClear();
@@ -44,6 +49,29 @@ afterEach(() => {
 });
 
 describe('venue photo input lifecycle', () => {
+  it('flushes dimensions, brief and a just-selected image before creating the project', async () => {
+    let finish!: (value: ReturnType<typeof bitmap>) => void;
+    decode.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const rendered = render(ui());
+    await act(async()=>{await Promise.resolve();});
+    fireEvent.change(screen.getByLabelText('总宽（米）'),{target:{value:'18.25'}});
+    fireEvent.change(screen.getByLabelText('客户需求'),{target:{value:'保留入口，安排签到区'}});
+    const selected = file('just-selected.png');
+    upload(rendered.container,[selected]);
+    await waitFor(()=>expect(decode).toHaveBeenCalledOnce());
+
+    // This is the creation gate. No debounce timer or image decode has finished.
+    const createProject=vi.fn();
+    const creation=flushSourceScope(layout.id!).then(createProject);
+    await act(async()=>{await Promise.resolve();});
+    expect(createProject).not.toHaveBeenCalled();
+    await act(async()=>{finish(bitmap());await creation;});
+    expect(createProject).toHaveBeenCalledOnce();
+    expect(persisted.forms.get(layout.id!)).toMatchObject({width:'18.25'});
+    expect(persisted.forms.get(`${layout.id}:brief`)).toMatchObject({description:'保留入口，安排签到区'});
+    expect(persisted.sources.at(-1)).toMatchObject({scope:layout.id,name:'just-selected.png',blob:selected});
+  });
+
   it('preserves consecutive selections in order while the first decode is pending', async () => {
     let finish!: (value: ReturnType<typeof bitmap>) => void;
     decode.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
@@ -73,16 +101,16 @@ describe('venue photo input lifecycle', () => {
     expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:old.png');
   });
 
-  it('enforces the three-photo limit across queued selections without dropping earlier accepted photos', async () => {
+  it('enforces the twelve-source limit across queued selections without dropping earlier accepted photos', async () => {
     const rendered = render(ui());
-    upload(rendered.container, [file('one.png'), file('two.png')]);
+    upload(rendered.container, Array.from({length:11},(_,index)=>file(`photo-${index}.png`)));
     upload(rendered.container, [file('three.png'), file('four.png')]);
-    expect(await screen.findByText('最多添加 3 张现场照片。')).toBeTruthy();
-    expect(screen.getAllByRole('img')).toHaveLength(2);
-    expect(decode).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('最多添加 12 张图纸或现场照片。')).toBeTruthy();
+    expect(screen.getAllByRole('img')).toHaveLength(11);
+    expect(decode).toHaveBeenCalledTimes(11);
     upload(rendered.container, [file('three.png')]);
     await screen.findByRole('img', { name: '现场照片：three.png' });
-    expect(screen.getByRole('button', { name: /已添加 3 张现场照片/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: /已添加 12 张资料/ }).hasAttribute('disabled')).toBe(true);
   });
 
   it('rolls back a partially decoded invalid batch and accepts the next queued valid selection', async () => {

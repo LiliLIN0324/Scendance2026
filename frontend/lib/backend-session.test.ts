@@ -305,3 +305,64 @@ describe("backend session contract", () => {
     expect(mockFetch).toHaveBeenCalledTimes(5);
   });
 });
+
+describe('private reconstruction transport',()=>{
+  const source={assetId,kind:'floorplan' as const,name:'图纸.png',width:1024,height:768};
+  const jobId='70000000-0000-4000-8000-000000000001';
+  it('uploads binary multipart source bytes with project-scoped authentication',async()=>{
+    const controller=await editing();queue(source);
+    const result=await controller.uploadSource(new Blob(['image'],{type:'image/png'}),'图纸.png','floorplan');
+    const [url,options]=mockFetch.mock.calls[3]!;
+    expect(String(url)).toBe(`${base}/functions/v1/scene-api/assets/sources`);
+    expect(options?.headers).toEqual({Authorization:'Bearer access-test-only'});
+    const form=options?.body as FormData;expect(form).toBeInstanceOf(FormData);expect(form.get('projectId')).toBe(projectId);expect(form.get('kind')).toBe('floorplan');expect(form.get('file')).toBeInstanceOf(Blob);expect(result).toEqual(source);
+  });
+  it('submits measured sources with stable lease/version context and preserves state on status reads',async()=>{
+    const controller=await editing();queue({id:jobId,state:'queued',issues:[]});
+    const input={scene,sources:[source],dimensions:[{id:crypto.randomUUID(),kind:'width' as const,label:'总宽',valueMeters:12,status:'confirmed' as const}],instruction:'还原场地',mode:'restore' as const,selectedIds:[],requestId:crypto.randomUUID()};
+    expect((await controller.createReconstruction(input)).state).toBe('queued');
+    const submitted=request(3);expect(submitted.body).toMatchObject({...input,expectedRevision:4,generation:3,sessionId:controller.getSnapshot().sessionId});
+    const previous=controller.getSnapshot().draft;queue({id:jobId,state:'needs_review',issues:[{code:'UNSEEN',message:'确认不可见墙'}]});
+    await controller.getReconstruction(jobId);expect(controller.getSnapshot().draft).toBe(previous);expect(request(4).options.method).toBe('GET');
+  });
+  it('rejects a late reconstruction response after the user edits the draft',async()=>{
+    const controller=await editing();let finish!:(response:Response)=>void;mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const pending=controller.createReconstruction({scene,sources:[source],dimensions:[],instruction:'还原场地',mode:'restore',selectedIds:[],requestId:crypto.randomUUID()});
+    await Promise.resolve();await Promise.resolve();controller.setDraft({...scene,lighting:'warm'});finish(response({id:jobId,state:'queued',issues:[]}));
+    await expect(pending).rejects.toMatchObject({code:'STALE_PROPOSAL'});expect(controller.getSnapshot().draft?.lighting).toBe('warm');
+  });
+  it('unlinks a source without deleting scene snapshots',async()=>{
+    const controller=await editing();queue({removed:true});await controller.removeSource(assetId);expect(request(3)).toMatchObject({url:`${base}/functions/v1/scene-api/projects/${projectId}/sources/${assetId}`,options:{method:'DELETE'}});expect(controller.getSnapshot().draft).toEqual(scene);
+  });
+});
+
+describe("workspace business requests", () => {
+  it("keeps the editing lease on a generation idempotency conflict", async () => {
+    const controller = await editing();
+    const lease = controller.getSnapshot().lease;
+    queue({ error: { code: "IDEMPOTENCY_CONFLICT" } }, 409);
+    await expect(controller.businessRequest('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: '灯' })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, lease, revision: 4 });
+    queue({ ...lease, expiresAt: new Date(Date.now() + 120_000).toISOString() });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(request(4).url).toContain('/lease/renew');
+  });
+
+  it("renames with the current lease and revision while preserving unsaved draft", async () => {
+    const controller = await editing();
+    const draft = { ...scene, lighting: 'warm' as const };
+    controller.setDraft(draft);
+    queue({ ...project, name: '新名称', revision: 5 });
+    await controller.renameProject('新名称');
+    expect(request(3)).toMatchObject({ options: { method: 'PATCH' }, body: { name: '新名称', expectedRevision: 4, generation: 3, sessionId: controller.getSnapshot().sessionId } });
+    expect(controller.getSnapshot()).toMatchObject({ draft, dirty: true, revision: 5, project: { name: '新名称' } });
+  });
+
+  it("still blocks cloud writes when a business request discovers expired authentication", async () => {
+    const controller = await editing();
+    controller.setDraft({ ...scene, lighting: 'warm' });
+    queue({ error: { code: 'UNAUTHENTICATED' } }, 401);
+    await expect(controller.businessRequest('/assets')).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(controller.getSnapshot()).toMatchObject({ user: null, writeBlocked: true, dirty: true, draft: { lighting: 'warm' } });
+  });
+});

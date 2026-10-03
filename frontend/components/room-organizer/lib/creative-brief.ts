@@ -33,7 +33,7 @@ export function briefInstruction(brief: CreativeBrief, width: number, depth: num
     brief.style?.trim() ? `风格要求：${brief.style.trim()}` : '',
     brief.palette?.trim() ? `配色要求：${brief.palette.trim()}` : '',
     brief.atmosphere?.trim() ? `氛围要求：${brief.atmosphere.trim()}；超出现有三种灯光预设的能力仅作为建议说明。` : '',
-    brief.allowIdeas ? '在满足客户需求的基础上，提出适合主题的亮点、分区、装饰和氛围建议，但未经客户确认不得自动加入。把客户明确要求与额外创意分开说明；说明每个亮点的用途。' : '只围绕客户明确提出的要求规划，不自行扩展需求。',
+    brief.allowIdeas ? '在满足客户需求的基础上，主动布置适合主题的亮点、分区、装饰和氛围，形成完整候选后由客户整体确认。明确说明每个亮点的用途与对应物件。' : '只围绕客户明确提出的要求规划，不自行扩展需求。',
     '保留锁定对象。先返回可预览提案，不要声称已经应用。使用当前接口支持的真实物料；帐篷、拱门等当前不支持的物件，请在说明中列为待补充资产，不得用桌椅冒充。',
     '现场照片尚未提交给模型；不能声称已经识别、测量或参考了图片内容。',
   ].filter(Boolean).join('\n');
@@ -54,7 +54,7 @@ export function mergeProposalPresentation(base: RoomLayout, candidate: RoomLayou
   if (!previous || !next) return candidate;
   const existing = new Map(previous.items.map(item => [item.id, item]));
   return { ...base, ...candidate, floors: [{ ...previous, ...next, id: previous.id,
-    name: previous.name, floorColor: previous.floorColor,
+    name: previous.name, floorColor: candidate.backendSceneV2 ? next.floorColor : previous.floorColor,
     items: next.items.map(item => {
       const old = existing.get(item.id);
       return old && old.type === item.type && old.assetId === item.assetId
