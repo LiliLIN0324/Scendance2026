@@ -87,6 +87,7 @@ export interface SceneProposal extends Proposal {
   base_scene: Scene;
   explanation: string;
   warnings: { code: string; ids: string[] }[];
+  modelSuggestions?: { name: string; reason: string; prompt: string }[] | undefined;
 }
 export interface SceneProposalInput {
   mode: "layout" | "modify";
@@ -109,6 +110,7 @@ const proposalResponseSchema = z.object({
   local_revision: z.number().int().nonnegative(), base_hash: z.string().regex(/^[a-f0-9]{64}$/),
   base_scene: sceneSchema, candidate: sceneSchema, explanation: z.string(),
   warnings: z.array(z.object({ code: z.string(), ids: z.array(uuid) })),
+  modelSuggestions: z.array(z.object({ name: z.string().min(1).max(120), reason: z.string().min(1).max(500), prompt: z.string().min(1).max(1024) })).max(3).optional(),
   expires_at: dateString, applied_at: dateString.nullable(),
 });
 const applyProposalResponseSchema = z.object({
