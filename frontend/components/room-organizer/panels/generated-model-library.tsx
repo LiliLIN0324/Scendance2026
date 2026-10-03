@@ -12,14 +12,24 @@ const labels: Record<GenerationJob['state'], string> = {
 };
 const activeStates = new Set<GenerationJob['state']>(['queued', 'submitting', 'submitted', 'processing', 'archiving']);
 type Intent = { requestId: string; prompt: string };
+export type AssistantModelRequest = Intent & { userId: string; projectId: string | undefined };
+type GenerationProps = {
+  controller?: BackendSession; disabled?: boolean; onAdd(item: CatalogItem): void;
+  assistantRequest?: AssistantModelRequest | null;
+  onAssistantResult?(requestId: string, message: string): void;
+  presentation?: 'library' | 'assistant';
+};
 const storageKey = (user: string) => `scendance:3d-intent:${user}`;
 function loadIntent(user: string): Intent | null {
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem(storageKey(user)) ?? 'null');
+    const raw = sessionStorage.getItem(storageKey(user));
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
     if (value && typeof value === 'object' && 'requestId' in value && 'prompt' in value &&
-      typeof value.requestId === 'string' && /^[0-9a-f-]{36}$/i.test(value.requestId) && typeof value.prompt === 'string') return value as Intent;
-  } catch { /* A corrupt intent never triggers a request. */ }
-  return null;
+      typeof value.requestId === 'string' && /^[0-9a-f-]{36}$/i.test(value.requestId) &&
+      typeof value.prompt === 'string' && value.prompt.trim() && value.prompt.length <= 1024) return value as Intent;
+  } catch { /* Fail closed when an earlier submission cannot be recovered. */ }
+  throw new Error('无法读取上一次模型请求，请先核对云任务记录并恢复本地存储，再提交新生成。');
 }
 function message(error: unknown): string {
   const code = error instanceof Error && 'code' in error ? error.code : '';
@@ -28,16 +38,14 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : '操作失败，请手动刷新状态。';
 }
 
-export function GeneratedModelLibrary({ controller, disabled = false, onAdd }: {
-  controller?: BackendSession; disabled?: boolean; onAdd(item: CatalogItem): void;
-}): JSX.Element {
-  return controller ? <ConnectedGeneration controller={controller} disabled={disabled} onAdd={onAdd}/>
+export function GeneratedModelLibrary({ controller, disabled = false, onAdd, assistantRequest, onAssistantResult, presentation = 'library' }: GenerationProps): JSX.Element {
+  return controller ? <ConnectedGeneration controller={controller} disabled={disabled} onAdd={onAdd}
+    {...(assistantRequest ? { assistantRequest } : {})} {...(onAssistantResult ? { onAssistantResult } : {})} presentation={presentation}/>
     : <p className="sc-note">连接云项目后可生成单件 3D 模型。</p>;
 }
 
-function ConnectedGeneration({ controller, disabled, onAdd }: {
-  controller: BackendSession; disabled: boolean; onAdd(item: CatalogItem): void;
-}): JSX.Element {
+function ConnectedGeneration({ controller, disabled = false, onAdd, assistantRequest, onAssistantResult, presentation = 'library' }:
+  GenerationProps & { controller: BackendSession }): JSX.Element {
   const cloud = useBackendSession(controller);
   const userId = cloud.user?.id;
   const projectId = cloud.project?.id;
@@ -54,13 +62,16 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
   latest.current = { userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd };
   const mounted = useRef(true);
   const marked = useRef(new Set<string>());
+  const handledRequests = useRef(new Set<string>());
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
     setJobs([]); setError('');
     marked.current.clear();
-    const saved = userId ? loadIntent(userId) : null;
-    setIntent(saved); setPrompt(saved?.prompt ?? '');
+    try {
+      const saved = userId ? loadIntent(userId) : null;
+      setIntent(saved); setPrompt(saved?.prompt ?? '');
+    } catch (failure) { setIntent(null); setPrompt(''); setError(message(failure)); }
   }, [userId]);
 
   useEffect(() => {
@@ -95,11 +106,19 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
     }
   }, [controller, userId, projectId, cloud.dirty, cloud.project, jobs]);
 
-  async function generate() {
-    if (!userId || lock.current || (!intent && !prompt.trim())) return;
+  async function generate(request?: AssistantModelRequest) {
+    if (!userId || lock.current || (!request && !intent && !prompt.trim())) return;
     lock.current = true; setBusy(true); setError('');
-    const next = intent ?? { requestId: crypto.randomUUID(), prompt: prompt.trim() };
+    let resultMessage = '';
     try {
+      const saved = loadIntent(userId);
+      const next = request ?? saved ?? intent ?? { requestId: crypto.randomUUID(), prompt: prompt.trim() };
+      if (request && (request.userId !== userId || request.projectId !== projectId)) throw new Error('账号或项目已变化，请重新发送模型要求。');
+      if (request && saved && saved.requestId !== request.requestId) {
+        setIntent(saved);
+        throw new Error('上一次模型提交结果尚未确认，请先继续核对原请求。');
+      }
+      if (!next.prompt.trim() || next.prompt.length > 1024) throw new Error('单件模型描述须为 1–1024 个字符，请精简后发送。');
       // Persist before dispatch; after an uncertain response, explicit retry keeps the same ID.
       sessionStorage.setItem(storageKey(userId), JSON.stringify(next));
       setIntent(next);
@@ -108,10 +127,25 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
       if (!mounted.current || latest.current.userId !== userId) return;
       setIntent(null); setPrompt(''); setJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
       setRefresh(value => value + 1);
+      resultMessage = '混元模型任务已提交，进度会在这里更新。完成后设定尺寸，再加入场地。';
     } catch (failure) {
-      if (mounted.current && latest.current.userId === userId) setError(`${message(failure)} 如需重试，将继续核对同一项请求。`);
-    } finally { lock.current = false; if (mounted.current) setBusy(false); }
+      resultMessage = `${message(failure)} 如需重试，将继续核对同一项请求。`;
+      if (mounted.current && latest.current.userId === userId) setError(resultMessage);
+    } finally {
+      lock.current = false;
+      if (mounted.current) setBusy(false);
+      if (request) onAssistantResult?.(request.requestId, resultMessage);
+    }
   }
+
+  useEffect(() => {
+    if (!assistantRequest || !userId || handledRequests.current.has(assistantRequest.requestId) || lock.current) return;
+    handledRequests.current.add(assistantRequest.requestId);
+    void generate(assistantRequest);
+    // Only a request explicitly created by sending a chat message can submit here.
+    // Status refreshes and component rerenders never create new request IDs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assistantRequest?.requestId, userId, busy, adding]);
 
   async function add(job: GenerationJob) {
     if (!userId || !projectId || disabled || cloud.writeBlocked || !job.asset_id || lock.current) return;
@@ -129,13 +163,13 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
 
   const validSize = Object.values(dimensions).every(value => Number.isFinite(value) && value >= 0.1 && value <= 50);
   return <section className="sc-generated-models" aria-label="生成 3D 模型">
-    <div className="sc-section-heading"><div><h2>生成单件 3D 模型</h2><p>描述一件物料，生成后加入场地预览。</p></div></div>
+    <div className="sc-section-heading"><div><h2>{presentation === 'assistant' ? '混元模型任务' : '生成单件 3D 模型'}</h2>{presentation === 'library' && <p>描述一件物料，生成后加入场地预览。</p>}</div></div>
     {!userId ? <p className="sc-note">请先登录云项目。</p> : <>
-      <label className="sc-field">物料描述<textarea aria-label="物料描述" maxLength={1024} rows={3} value={intent?.prompt ?? prompt}
-        disabled={busy || intent !== null} onChange={event => setPrompt(event.target.value)} placeholder="例如：一把绿色藤编休闲椅，独立物件，无背景"/></label>
+      {presentation === 'library' && <label className="sc-field">物料描述<textarea aria-label="物料描述" maxLength={1024} rows={3} value={intent?.prompt ?? prompt}
+        disabled={busy || intent !== null} onChange={event => setPrompt(event.target.value)} placeholder="例如：一把绿色藤编休闲椅，独立物件，无背景"/></label>}
       <p className="sc-note">每次生成会使用账号额度。失败或结果待核对时，额度可能仍被消耗。</p>
-      <button type="button" className="sc-button sc-full" disabled={busy || adding !== null || (!intent && !prompt.trim())}
-        onClick={() => void generate()}>{busy ? '正在提交…' : intent ? '核对并继续同一请求' : '生成 3D 模型'}</button>
+      {(presentation === 'library' || intent) && <button type="button" className="sc-button sc-full" disabled={busy || adding !== null || (!intent && !prompt.trim())}
+        onClick={() => void generate()}>{busy ? '正在提交…' : intent ? '核对并继续同一请求' : '生成 3D 模型'}</button>}
       <button type="button" className="sc-button sc-full" onClick={() => { setError(''); setRefresh(value => value + 1); }}>刷新任务状态</button>
       {error && <p className="sc-warning" role="alert">{error}</p>}
       {jobs.length > 0 && <>
