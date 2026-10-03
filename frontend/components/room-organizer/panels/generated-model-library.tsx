@@ -12,6 +12,7 @@ const labels: Record<GenerationJob['state'], string> = {
   rejected: '模型未通过检查', submit_unknown: '提交结果待核对，请联系管理员',
 };
 const activeStates = new Set<GenerationJob['state']>(['queued', 'submitting', 'submitted', 'processing', 'archiving']);
+export interface ModelGenerationSeed { id: string; scope: string; userId: string; projectId: string; apiUrl: string; name: string; prompt: string }
 type Intent = GenerationIntent & { storage: 'local' | 'session' };
 const storageKey = (user: string) => `scendance:3d-intent:${user}`;
 function message(error: unknown): string {
@@ -21,22 +22,28 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : '操作失败，请手动刷新状态。';
 }
 
-export function GeneratedModelLibrary({ controller, disabled = false, onAdd }: {
-  controller?: BackendSession; disabled?: boolean; onAdd(item: CatalogItem): void;
+export function GeneratedModelLibrary({ controller, disabled = false, onAdd, seed }: {
+  controller?: BackendSession; disabled?: boolean; onAdd(item: CatalogItem): void; seed?: ModelGenerationSeed | undefined;
 }): JSX.Element {
-  return controller ? <ConnectedGeneration controller={controller} disabled={disabled} onAdd={onAdd}/>
+  return controller ? <ScopedGeneration controller={controller} disabled={disabled} onAdd={onAdd} seed={seed}/>
     : <p className="sc-note">连接云项目后可生成单件 3D 模型。</p>;
 }
 
-function ConnectedGeneration({ controller, disabled, onAdd }: {
-  controller: BackendSession; disabled: boolean; onAdd(item: CatalogItem): void;
-}): JSX.Element {
+interface ConnectedProps { controller: BackendSession; disabled: boolean; onAdd(item: CatalogItem): void; seed?: ModelGenerationSeed | undefined }
+function ScopedGeneration(props: ConnectedProps): JSX.Element {
+  const cloud=useBackendSession(props.controller);
+  return <ConnectedGeneration key={`${props.controller.config.apiUrl}:${cloud.user?.id}:${cloud.project?.id}`} {...props}/>;
+}
+function ConnectedGeneration({ controller, disabled, onAdd, seed }: ConnectedProps): JSX.Element {
   const cloud = useBackendSession(controller);
   const userId = cloud.user?.id;
   const projectId = cloud.project?.id;
   const apiUrl = controller.config.apiUrl;
   const key = userId ? intentStorageKey(apiUrl, userId) : '';
   const [prompt, setPrompt] = useState('');
+  const [storageReady, setStorageReady] = useState(false);
+  const [pendingSeed, setPendingSeed] = useState<ModelGenerationSeed>();
+  const handledSeed = useRef<string>();
   const [intents, setIntents] = useState<Intent[]>([]);
   const intent = intents[0] ?? null;
   const [storageError, setStorageError] = useState('');
@@ -60,7 +67,7 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
   }, [userId, apiUrl]);
 
   useEffect(() => {
-    setIntents([]); setPrompt(''); setStorageError('');
+    setIntents([]); setPrompt(''); setStorageError(''); setStorageReady(false);
     if (!userId) return;
     try {
       const local = readGenerationIntent(localStorage, key);
@@ -76,7 +83,15 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
       }
       setIntents(saved.filter(value => !acknowledged.has(value.requestId)));
     } catch (failure) { setStorageError(message(failure)); }
+    finally { setStorageReady(true); }
   }, [userId, key, recovery]);
+
+  useEffect(() => {
+    if (!seed || !storageReady || handledSeed.current === seed.id || seed.userId !== userId || seed.projectId !== projectId || seed.apiUrl !== apiUrl) return;
+    handledSeed.current = seed.id;
+    if (!prompt.trim() && !intent && !storageError && !busy) setPrompt(seed.prompt);
+    else setPendingSeed(seed);
+  }, [seed, storageReady, userId, projectId, apiUrl, prompt, intent, storageError, busy]);
 
   useEffect(() => {
     if (!userId) return;
@@ -158,6 +173,7 @@ function ConnectedGeneration({ controller, disabled, onAdd }: {
   return <section className="sc-generated-models" aria-label="生成 3D 模型">
     <div className="sc-section-heading"><div><h2>生成单件 3D 模型</h2><p>由腾讯 HY-3D-3.0 生成单件物料，完成后可加入场地预览。</p></div></div>
     {!userId ? <p className="sc-note">请先登录云项目。</p> : <>
+      {pendingSeed && <aside className="cr-model-suggestion" aria-label="Binggo 生成建议"><strong>{pendingSeed.name}</strong><p>{pendingSeed.prompt}</p><p>{intent ? '请先核对已有请求；建议不会替换待确认的生成任务。' : '当前生成草稿已保留，请确认是否改用这条建议。'}</p><button type="button" className="sc-button" disabled={busy || !!intent || !!storageError} onClick={() => { setPrompt(pendingSeed.prompt); setPendingSeed(undefined); }}>{prompt.trim() ? '用此建议替换草稿' : '使用此生成描述'}</button><button type="button" className="sc-button" onClick={() => setPendingSeed(undefined)}>保留原草稿</button></aside>}
       <label className="sc-field">物料描述<textarea aria-label="物料描述" maxLength={1024} rows={3} value={intent?.prompt ?? prompt}
         disabled={busy || intent !== null || !!storageError} onChange={event => setPrompt(event.target.value)} placeholder="例如：一把绿色藤编休闲椅，独立物件，无背景"/></label>
       <p className="sc-note">每次生成会使用账号额度。失败或结果待核对时，额度可能仍被消耗。</p>

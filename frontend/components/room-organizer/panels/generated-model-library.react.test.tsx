@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { intentStorageKey } from '@/lib/assets-api';
 import { BackendSession, getBackendConfig, type GenerationJob } from '@/lib/backend-session';
 import { ensureGlbAsset } from '../three/glb-assets';
-import { GeneratedModelLibrary } from './generated-model-library';
+import { GeneratedModelLibrary, type ModelGenerationSeed } from './generated-model-library';
 
 vi.mock('../three/glb-assets', async original => ({
   ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn(),
@@ -45,6 +45,52 @@ describe('single object generation UI', () => {
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
     expect(create.mock.calls[0]![0]).toBe('绿色藤编椅');
     expect(create.mock.calls[0]![1]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('prefills a scoped Agent suggestion without submitting a paid request', async () => {
+    const seed:ModelGenerationSeed={id:'suggestion',scope:'scope',apiUrl:controller.config.apiUrl,userId:'member',projectId:'project',name:'花形拱门',prompt:'单件米白色花形拱门，无背景'};
+    render(<GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>);
+    await waitFor(()=>expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe(seed.prompt));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('preserves a nonempty generation draft until the user explicitly accepts the suggestion', async () => {
+    const seed:ModelGenerationSeed={id:'suggestion',scope:'scope',apiUrl:controller.config.apiUrl,userId:'member',projectId:'project',name:'花形拱门',prompt:'单件米白色花形拱门，无背景'};
+    const view=render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'我的绿色椅子'}});
+    view.rerender(<GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>);
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe('我的绿色椅子');
+    fireEvent.click(screen.getByRole('button',{name:'用此建议替换草稿'}));
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe(seed.prompt);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('never replaces an unresolved paid request with an Agent suggestion', async () => {
+    localStorage.setItem(localKey(),JSON.stringify(legacyIntent));
+    const seed:ModelGenerationSeed={id:'suggestion',scope:'scope',apiUrl:controller.config.apiUrl,userId:'member',projectId:'project',name:'花形拱门',prompt:'单件米白色花形拱门，无背景'};
+    render(<GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>);
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe(legacyIntent.prompt);
+    expect((screen.getByRole('button',{name:'使用此生成描述'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(JSON.parse(localStorage.getItem(localKey())!)).toEqual(legacyIntent);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([{userId:'another-user'}, {projectId:'another-project'}, {apiUrl:'https://another.example'}])('ignores a suggestion from another scope %j', async mismatch => {
+    const seed:ModelGenerationSeed={id:'suggestion',scope:'scope',apiUrl:controller.config.apiUrl,userId:'member',projectId:'project',name:'拱门',prompt:'单件花形拱门',...mismatch};
+    render(<GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>);
+    await waitFor(()=>expect(list).toHaveBeenCalledOnce());
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.queryByLabelText('Binggo 生成建议')).toBeNull();
+  });
+
+  it('clears an unsubmitted prompt when the project changes and does not replay an old suggestion', async () => {
+    const seed:ModelGenerationSeed={id:'suggestion',scope:'scope',apiUrl:controller.config.apiUrl,userId:'member',projectId:'project',name:'拱门',prompt:'单件花形拱门'};
+    const view=render(<GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>);
+    await waitFor(()=>expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe(seed.prompt));
+    vi.mocked(controller.getSnapshot).mockReturnValue({...controller.getSnapshot(),project:{...controller.getSnapshot().project!,id:'other-project'}});
+    view.rerender(<GeneratedModelLibrary controller={controller} seed={seed} onAdd={vi.fn()}/>);
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).value).toBe('');
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('recovers an uncertain creation after remount and explicitly retries the identical intent', async () => {
@@ -229,7 +275,7 @@ describe('single object generation UI', () => {
     vi.mocked(controller.getSnapshot).mockReturnValue({ ...controller.getSnapshot(), project: { ...controller.getSnapshot().project!, id: 'other' } });
     view.rerender(<GeneratedModelLibrary controller={controller} onAdd={onAdd}/>);
     await act(async () => { finish(); });
-    expect(onAdd).not.toHaveBeenCalled(); expect(screen.getByRole('alert').textContent).toContain('已变化');
+    expect(onAdd).not.toHaveBeenCalled(); expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('keeps ready models unavailable while the floor is full or editing is blocked', async () => {

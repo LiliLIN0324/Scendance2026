@@ -1,31 +1,30 @@
 'use client';
 
 import { ArrowUp, Box, Check, Loader2, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { buildAssistantInstruction } from '@/lib/assistant-context';
 import { useBackendSession, type BackendSession, type SceneProposal } from '@/lib/backend-session';
-import { inspectMaterialRequirements, type MaterialCapabilityInspection } from '@/lib/material-capabilities';
 import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, registerSourceFlush } from '@/lib/source-storage';
+import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { briefInstruction, IDEA_CARDS, INITIAL_BRIEF, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
-import { MaterialCapabilityNote } from './material-capability-note';
 import { ReconstructionPanel } from './reconstruction-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import { VenueShapePresets } from './venue-shape-presets';
+import type { ModelGenerationSeed } from './generated-model-library';
 import type { RoomLayout } from '../lib/types';
 import './creative-studio.css';
 
 type ReferenceImage = VenuePhoto;
-type Message = { id: string; role: 'user' | 'assistant'; text: string };
-type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string };
+type Message = { id: string; role: 'user' | 'assistant'; text: string; modelSuggestions?: SceneProposal['modelSuggestions'] };
+type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string };
 interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 interface StudioValue {
   scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
-  capabilities: MaterialCapabilityInspection; choices: Record<string,string>; capabilityAccepted: boolean; chooseMaterial(key:string,value:string):void; acceptCapabilities(value:boolean):void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   images: ReferenceImage[]; addImages(files: FileList | null): Promise<void>; removeImage(id: string): void;
   busy: boolean; notice: string; connection: string; generate(message?: string): Promise<void>;
@@ -45,11 +44,6 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
   const [briefReady,setBriefReady]=useState(false);
   const briefValueRef=useRef(brief);briefValueRef.current=brief;
   const briefHydration=useRef<Promise<void>>(Promise.resolve());
-  const [choices,setChoices]=useState<Record<string,string>>({});
-  const [acceptedCapabilities,setAcceptedCapabilities]=useState<string|null>(null);
-  const capabilities=useMemo(()=>inspectMaterialRequirements([brief.description,brief.mustHave].join('；')),[brief.description,brief.mustHave]);
-  const capabilityKey=JSON.stringify({description:brief.description,mustHave:brief.mustHave,choices});
-  const capabilityAccepted=acceptedCapabilities===capabilityKey;
   const [images,setImages]=useState<ReferenceImage[]>([]);
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState('');
@@ -57,7 +51,10 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
   const [lastExplanation,setLastExplanation]=useState('');
   const scope=layout.id??'local';
   const scopeRef=useRef(scope); scopeRef.current=scope;
-  useEffect(()=>{setBrief(INITIAL_BRIEF);setChoices({});setAcceptedCapabilities(null);setMessages(initialMessages);setLastExplanation('');setPreview(null);setNotice('');},[scope]);
+  const agentScope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${scope}`;
+  const agentScopeRef=useRef(agentScope);agentScopeRef.current=agentScope;
+  useEffect(()=>{setBrief(INITIAL_BRIEF);},[scope]);
+  useEffect(()=>{setMessages(initialMessages);setLastExplanation('');setPreview(null);setNotice('');},[agentScope]);
   useEffect(()=>{let cancelled=false;setBriefReady(false);briefHydration.current=readSourceForm<CreativeBrief>(`${scope}:brief`).then(saved=>{if(!cancelled&&saved){briefValueRef.current={...INITIAL_BRIEF,...saved};setBrief(briefValueRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setBriefReady(true);});return()=>{cancelled=true;};},[scope]);
   useEffect(()=>{if(!briefReady)return;const timer=setTimeout(()=>{void storeSourceForm(`${scope}:brief`,brief).catch(()=>{});},250);return()=>clearTimeout(timer);},[brief,briefReady,scope]);
   const [expanded,setExpanded]=useState(false);
@@ -102,10 +99,10 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
       ...imageRef.current.map(({url,...image})=>storeSource({...image,scope,kind:image.kind??'photo',width:image.width!,height:image.height!})),
     ]);
   }),[scope]);
-  const briefKey=JSON.stringify({brief,choices,acceptedCapabilities,images:images.map(i=>({id:i.id,kind:i.kind}))});
+  const briefKey=JSON.stringify({brief,images:images.map(i=>({id:i.id,kind:i.kind}))});
   const briefRef=useRef(briefKey); briefRef.current=briefKey;
   const connection=!cloud.configured?'离线引导':!cloud.user?'等待登录':cloud.writeBlocked?'等待项目编辑权':'项目已连接';
-  const stale=!!preview && (expired || Date.parse(preview.proposal.expires_at)<=Date.now() || preview.base!==layout || preview.briefKey!==briefKey || cloud.writeBlocked || preview.proposal.project_id!==cloud.project?.id || preview.proposal.base_revision!==cloud.revision);
+  const stale=!!preview && (expired || Date.parse(preview.proposal.expires_at)<=Date.now() || preview.scope!==agentScope || preview.base!==layout || preview.briefKey!==briefKey || cloud.writeBlocked || preview.proposal.project_id!==cloud.project?.id || preview.proposal.base_revision!==cloud.revision);
   useEffect(()=>{ alive.current=true; const lifecycleEpoch=imageEpoch; return ()=>{ alive.current=false; lifecycleEpoch.current++; for(const img of imageRef.current) URL.revokeObjectURL(img.url); }; },[]);
   useEffect(()=>{
     setExpired(false);
@@ -123,7 +120,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
   },[preview]);
   useEffect(()=>{ onPreview?.(preview&&!stale?preview.layout:null); },[onPreview,preview,stale]);
   useEffect(()=>()=>onPreview?.(null),[onPreview]);
-  function say(text:string):void { setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'assistant',text}]); }
+  function say(text:string,modelSuggestions?:SceneProposal['modelSuggestions']):void { setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'assistant',text,modelSuggestions}]); }
 
   async function addImages(files: FileList|null):Promise<void> {
     if(!files?.length) return;
@@ -184,27 +181,11 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
         : '请在“账户与项目”中打开或创建当前方案，并获取编辑权；你的本地草稿会保留。';
       setNotice(text); say(text); return;
     }
-    const messageCapabilities=message?inspectMaterialRequirements(message):null;
-    if (messageCapabilities && ([...messageCapabilities.missing,...messageCapabilities.needsConfirmation].some(finding=>!capabilityAccepted || ![...capabilities.missing,...capabilities.needsConfirmation].some(known=>known.key===finding.key)))) {
-      const text='这条消息包含当前物料目录缺项或待核对规格。请在 Agent 的「活动需求与场地资料」中填写要求，核对并选择保留缺项或替代；新造型可在「3D 生成」中制作。';
-      setNotice(text);say(text);return;
-    }
-    if ((capabilities.missing.length>0 || capabilities.needsConfirmation.length>0) && !capabilityAccepted) {
-      const text='请先核对物料能力提示。缺少的物料不会被自动替换。';
-      setNotice(text);say(text);return;
-    }
-    const base=layoutRef.current, submittedBrief=briefRef.current, submittedScope=scopeRef.current, applyDirectly=directApply;
+    const base=layoutRef.current, submittedBrief=briefRef.current, submittedScope=agentScopeRef.current, applyDirectly=directApply;
     try {
       const scene=layoutToBackendScene(base);
-      const decisions=(capabilities.missing.length>0 || capabilities.needsConfirmation.length>0)&&capabilityAccepted
-        ? [...capabilities.missing,...capabilities.needsConfirmation].map(finding=>{
-          const suggestion=finding.suggestions.find(item=>item.materialId===choices[finding.key]);
-          return suggestion ? `用户明确同意将「${finding.label}」改用「${suggestion.name}」现有规格，此选择覆盖原要求；请在说明中写出差异。`
-            : `「${finding.label}」仍待核对或补资产：用户同意先生成其余可支持部分，不用其他物料冒充。`;
-        }).join('\n') : '';
       const context=buildAssistantInstruction({
         briefInstruction:message&&!brief.description.trim()?'':briefInstruction(brief,base.width,base.height),
-        confirmedMaterialDecisions:decisions?[decisions]:[],
         message:message?.trim() || '请按上述需求生成布置方案。',
         recentMessages:message?messages.filter(item=>item.id!=='welcome'):[],
         lastProposalExplanation:message?lastExplanation:'',
@@ -213,28 +194,36 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
       if(context.omittedHistory) say(`为遵守接口长度限制，已省略 ${context.omittedHistory} 条较早对话；当前需求和确认条件完整保留。`);
       if(!message) setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'user',text:`生成${brief.event}方案：${brief.description.trim()}`}]);
       requestPending.current=true;setBusy(true);setPreview(null);
-      const proposal=await controller.requestProposal({mode:message||scene.schemaVersion===2||scene.objects.length?'modify':'layout',prompt:instruction,scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id))});
-      const assets=await controller.authorizeAssets(proposal.candidate);
-      await Promise.all(Object.entries(assets.assetUrls).map(([id,url])=>ensureGlbAsset(id,url)));
-      if(!alive.current || scopeRef.current!==submittedScope) return;
+      const proposal=await controller.requestProposal({mode:'modify',prompt:instruction,scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id))});
+      if(!alive.current || agentScopeRef.current!==submittedScope) return;
       if(layoutRef.current!==base || briefRef.current!==submittedBrief) throw new Error('生成期间方案或需求已变化，旧提案未应用。请根据最新内容重新生成。');
       if(!Number.isFinite(Date.parse(proposal.expires_at)) || Date.parse(proposal.expires_at)<=Date.now()) throw new Error('提案已过期，请重新生成。');
-      const next=mergeProposalPresentation(base,backendSceneToLayout(proposal.candidate,{projectId:base.id!,name:base.name,...assets}));
-      const result={proposal,assets,layout:next,base,briefKey:submittedBrief};
       setLastExplanation(proposal.explanation);
+      if(canonical(proposal.candidate)===canonical(scene)) {
+        say(proposal.explanation || '已读取当前场景，本次没有修改物件。',proposal.modelSuggestions);
+        return;
+      }
+      const assets=await controller.authorizeAssets(proposal.candidate);
+      await Promise.all(Object.entries(assets.assetUrls).map(([id,url])=>ensureGlbAsset(id,url)));
+      if(!alive.current || agentScopeRef.current!==submittedScope) return;
+      if(layoutRef.current!==base || briefRef.current!==submittedBrief) throw new Error('生成期间方案或需求已变化，旧提案未应用。请根据最新内容重新生成。');
+      if(Date.parse(proposal.expires_at)<=Date.now()) throw new Error('提案已过期，请重新生成。');
+      const next=mergeProposalPresentation(base,backendSceneToLayout(proposal.candidate,{projectId:base.id!,name:base.name,...assets}));
+      const result={proposal,assets,layout:next,base,briefKey:submittedBrief,scope:submittedScope};
       if(applyDirectly) {
         await applyCandidate(result);
       } else {
         setPreview(result);
-        say(proposal.explanation || '方案提案已返回，请核对修改范围后确认应用。');
+        say(proposal.explanation || '方案提案已返回，请核对修改范围后确认应用。',proposal.modelSuggestions);
       }
-    } catch(error) { if(alive.current && scopeRef.current===submittedScope){ const text=controller.getSnapshot().error?.message ?? (error instanceof Error?error.message:'生成失败，原方案已保留。');setNotice(text);say(text);} }
+    } catch(error) { if(alive.current && agentScopeRef.current===submittedScope){ const text=controller.getSnapshot().error?.message ?? (error instanceof Error?error.message:'生成失败，原方案已保留。');setNotice(text);say(text);} }
     finally { requestPending.current=false;if(alive.current)setBusy(false); }
   }
   async function applyCandidate(selected:Preview):Promise<void> {
+    if(agentScopeRef.current!==selected.scope)return;
     if ((selected.base.designBook?.variants.length ?? 0) >= MAX_DESIGNS) throw new Error('请先在图层面板移除不再需要的方案，再确认提案。');
     const result=await controller.applySceneProposal(selected.proposal,layoutToBackendScene(layoutRef.current));
-    if(!alive.current || scopeRef.current!==(selected.base.id??'local'))return;
+    if(!alive.current || agentScopeRef.current!==selected.scope)return;
     if(!result.acceptedLocally || layoutRef.current!==selected.base) throw new Error('应用期间本地有新修改，已保留本地草稿。云端已有新版本，请核对后重新打开。');
     const next=mergeProposalPresentation(selected.base,backendSceneToLayout(result.scene,{projectId:selected.base.id!,name:selected.base.name,...selected.assets}));
     onApply(addDesign(selected.base,next));setPreview(null);
@@ -242,7 +231,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
       const names=warning.ids.map(id=>next.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件');
       return `${warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项'}：${names.join('、')}`;
     }).join('；'));
-    say(`${selected.proposal.explanation}\n提案已应用。你可以继续调整，或用撤销返回应用前的本地方案。`);
+    say(`${selected.proposal.explanation}\n提案已应用。你可以继续调整，或用撤销返回应用前的本地方案。`,selected.proposal.modelSuggestions);
   }
   async function applyPreview():Promise<void> {
     if(!preview || requestPending.current || busy || stale) return;
@@ -250,10 +239,10 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
     const selected=preview;
     requestPending.current=true;setBusy(true);setNotice('');
     try { await applyCandidate(selected); }
-    catch(error) { if(alive.current && scopeRef.current===(selected.base.id??'local'))setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
+    catch(error) { if(alive.current && agentScopeRef.current===selected.scope)setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
     finally { requestPending.current=false;if(alive.current)setBusy(false); }
   }
-  const value:StudioValue={scope,controller,layout,onApply,onPreview,updateImage,capabilities,choices,capabilityAccepted,chooseMaterial:(key,value)=>setChoices(current=>({...current,[key]:value})),acceptCapabilities:value=>setAcceptedCapabilities(value?capabilityKey:null),brief,setBrief,images,addImages,removeImage,busy,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,applyPreview,discardPreview:()=>setPreview(null)};
+  const value:StudioValue={scope:agentScope,controller,layout,onApply,onPreview,updateImage,brief,setBrief,images,addImages,removeImage,busy,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,applyPreview,discardPreview:()=>setPreview(null)};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -284,9 +273,8 @@ export function CreativeBriefPanel({ showNotice=true }: { showNotice?: boolean }
     <label className="cr-label">一定要有 <span>选填</span><input maxLength={350} placeholder="帐篷、签到区、无障碍通道……" value={studio.brief.mustHave} onChange={e=>update({mustHave:e.target.value})}/></label>
     <ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief}/>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
-    <MaterialCapabilityNote report={studio.capabilities} choices={studio.choices} onChoice={studio.chooseMaterial} accepted={studio.capabilityAccepted} onAccept={studio.acceptCapabilities}/>
     <button className="cr-generate" type="button" disabled={studio.busy||!studio.brief.description.trim()} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.directApply?'生成并应用布置':'生成布置预览'}</span></button>
-    <p className="cr-hint">DeepSeek 使用文字需求与当前场景布置物料，不读取照片。新造型请切换「3D 生成」；图纸与照片仍须先核对尺寸。</p>
+    <p className="cr-hint">DeepSeek 读取当前场景与可用资源库来布置物料，不读取照片。资源库缺少所需造型时，会提供前往 HY3 的生成建议。</p>
 
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
@@ -299,23 +287,31 @@ function AssistantMascot({ busy }: { busy: boolean }): JSX.Element {
   return <img className={`cr-mascot ${busy ? 'is-thinking' : ''}`} src="/assets/assistant/puppy.png" alt="Binggo 小狗" draggable={false} width={60} height={60}/>;
 }
 
-export function CreativeAssistant({ generationPanel }: { generationPanel?: ReactNode }):JSX.Element {
-  const studio=useStudio(); const {selectedItem}=useSelection();
+export function CreativeAssistant({ generationPanel }: { generationPanel?: ReactNode | ((seed: ModelGenerationSeed | undefined) => ReactNode) }):JSX.Element {
+  const studio=useStudio(); const {selectedItem,allSelectedIds}=useSelection();
   const [draft,setDraft]=useState(''); const feed=useRef<HTMLDivElement>(null);
   const [tab,setTab]=useState<'plan'|'model'>('plan');
   const [opened,setOpened]=useState(false);
   const [modelOpened,setModelOpened]=useState(false);
+  const [generationSeed,setGenerationSeed]=useState<ModelGenerationSeed>();
   useEffect(()=>{if(studio.expanded)setOpened(true);},[studio.expanded]);
   const messageInput=useRef<HTMLTextAreaElement>(null);
   const launcher=useRef<HTMLButtonElement>(null);
   const wasExpanded=useRef(false);
-  useEffect(()=>setDraft(''),[studio.scope]);
+  useEffect(()=>{setDraft('');setGenerationSeed(undefined);setTab('plan');},[studio.scope]);
   useEffect(()=>{
     if(studio.expanded && tab==='plan') messageInput.current?.focus();
     else if(!studio.expanded&&wasExpanded.current) launcher.current?.focus();
     wasExpanded.current=studio.expanded;
   },[studio.expanded,tab]);
   useEffect(()=>{feed.current?.scrollTo({top:feed.current.scrollHeight,behavior:'smooth'});},[studio.messages,studio.busy,studio.expanded]);
+  function suggestModel(suggestion: NonNullable<SceneProposal['modelSuggestions']>[number]):void {
+    const cloud=studio.controller.getSnapshot();
+    if(!cloud.user || !cloud.project || cloud.project.id!==studio.layout.id)return;
+    setGenerationSeed({id:crypto.randomUUID(),scope:studio.scope,userId:cloud.user.id,projectId:cloud.project.id,apiUrl:studio.controller.config.apiUrl,...suggestion});setModelOpened(true);setTab('model');
+  }
+  const sceneItems=studio.layout.floors.flatMap(floor=>floor.items);
+  const selectedCount=sceneItems.filter(item=>allSelectedIds.has(item.id)).length;
   const submit=()=>{if(!draft.trim()||studio.busy)return;const text=draft;setDraft('');void studio.generate(text);};
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
@@ -329,8 +325,8 @@ export function CreativeAssistant({ generationPanel }: { generationPanel?: React
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.directApply} disabled={studio.busy} onChange={event=>studio.setDirectApply(event.target.checked)}/>发送后直接应用</label><span>{studio.directApply?'可用画布撤销恢复':'先预览，再确认应用'}</span></div>
       <div className="cr-chat-feed" ref={feed}>
         <details className="cr-agent-brief"><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false}/></details>
-        {selectedItem&&<p className="cr-selection-context">当前选中：{selectedItem.name}</p>}
-        <div aria-live="polite">{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'Binggo':'你'}</span><p>{m.text}</p></div>)}
+        <p className="cr-selection-context">当前场景：{sceneItems.length} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
+        <div aria-live="polite">{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'Binggo':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><button type="button" onClick={()=>suggestModel(suggestion)}>前往 HY3 生成</button><small>先填写生成描述，由你确认后提交。</small></article>)}</div>)}
         {studio.busy&&<div className="cr-chat-working"><Loader2 className="cr-spin" size={15}/> 正在处理，请稍候…</div>}
         {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span><strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>{studio.preview.proposal.explanation}</p>{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=>{const names=warning.ids.map(id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件');return <li key={`${warning.code}-${index}`}>{warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项'}：{names.join('、')}</li>;})}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul><p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:<div><button type="button" onClick={()=>void studio.applyPreview()} disabled={studio.busy}><Check size={14}/>确认应用</button><button type="button" onClick={studio.discardPreview} disabled={studio.busy}><Trash2 size={14}/>放弃</button></div>}</div>}
         </div>
@@ -339,7 +335,7 @@ export function CreativeAssistant({ generationPanel }: { generationPanel?: React
       <form className="cr-chat-composer" onSubmit={e=>{e.preventDefault();submit();}}><label className="sr-only" htmlFor="creative-message">告诉助手你的想法</label><textarea ref={messageInput} id="creative-message" value={draft} maxLength={1800} onChange={e=>setDraft(e.target.value)} placeholder="告诉我想怎么调整……" rows={2} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit();}}}/><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy}><ArrowUp size={19}/></button></form>
       <footer><span>{studio.directApply?'通过校验后应用到当前场景，可撤销':'确认提案后修改当前场景'} · 登录请使用顶部账户与项目</span></footer>
       </div>
-      <div className="cr-model-panel" role="tabpanel" id="agent-panel-model" aria-labelledby="agent-tab-model" hidden={tab!=='model'}>{modelOpened&&(generationPanel??<p className="sc-note">登录并打开云项目后，可生成单件 3D 物料。</p>)}</div>
+      <div className="cr-model-panel" role="tabpanel" id="agent-panel-model" aria-labelledby="agent-tab-model" hidden={tab!=='model'}>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationSeed?.scope===studio.scope?generationSeed:undefined):generationPanel)??<p className="sc-note">登录并打开云项目后，可生成单件 3D 物料。</p>)}</div>
     </section>}
     <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>studio.setExpanded(!studio.expanded)} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭 Binggo Agent':'打开 Binggo Agent'}><span><AssistantMascot busy={studio.busy}/></span>{studio.expanded?'收起 Binggo':'Binggo · Agent'}<i/></button>
   </div>;

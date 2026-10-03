@@ -83,6 +83,18 @@ describe("AI proposal contract and paid request protection", () => {
       localRevision: before.localRevision, scene, instruction: "Add one chair", mode: "layout", selectedIds: [], requestId });
     expect(controller.getSnapshot()).toBe(before);
   });
+  it('retains structured HY3 suggestions alongside an unchanged scene', async () => {
+    await editing();
+    const result=await proposal({candidate:scene,modelSuggestions:[{name:'花形拱门',reason:'资源库缺少该造型',prompt:'单件花形拱门，无背景'}]});
+    queue(result);
+    await expect(controller.requestProposal({mode:'modify',prompt:'加入花形拱门',scene})).resolves.toEqual(result);
+    expect(controller.getSnapshot().revision).toBe(4);
+  });
+  it('rejects malformed suggestions instead of passing them to a paid generation form', async () => {
+    await editing();
+    queue({...await proposal(),modelSuggestions:[{name:'拱门',reason:'缺少',prompt:'x'.repeat(1025)}]});
+    await expect(controller.requestProposal({mode:'modify',prompt:'加入拱门',scene})).rejects.toThrow('modelSuggestions');
+  });
   it("rejects nonempty initial layouts before spending a request", async () => {
     await editing();
     await expect(controller.requestProposal({ mode: "layout", prompt: "Plan", scene: candidate })).rejects.toMatchObject({ code: "LAYOUT_REQUIRES_EMPTY_SCENE" });
