@@ -12,7 +12,7 @@ import Page from './page';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
 import type { ComponentType } from 'react';
 
-type EditorProps = { controller: BackendSession; onShowIntro: () => void };
+type EditorProps = { controller: BackendSession };
 let activeController: BackendSession;
 let activeLayout: RoomLayout;
 const onApply = vi.fn();
@@ -57,9 +57,9 @@ vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
-    RoomOrganizer: ({ controller, onShowIntro }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+    RoomOrganizer: ({ controller }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
-        <button onClick={onShowIntro}>返回介绍页</button>
+        <button onClick={() => navigation.push('/auth')}>返回登录页</button>
         <CreativeBriefPanel /><CreativeAssistant />
       </CreativeStudioProvider>
     </SelectionProvider>,
@@ -127,7 +127,7 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '这条还没有发送。' } });
 
-    fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
+    fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
     expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
     expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
@@ -154,7 +154,7 @@ describe('introduction round trips', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate 生成布置方案' }));
     await screen.findByText('方案提案 · 尚未应用');
-    fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
+    fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
     expect(screen.getByText('editor@example.com')).toBeTruthy();
     expect(apply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
