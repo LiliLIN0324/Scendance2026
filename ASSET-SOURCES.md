@@ -41,3 +41,11 @@ Total download size: **262,516 bytes** (256.4 KiB); **5,638 triangles** across t
   - SHA-256: `a4ecf82c56717032ca0cb588d1664c3de7867971f2dce6a364a794a341b6df9a`
 - **speaker**: [official metadata](https://3dassets.dev/api/v1/assets/village-hall-and-community-events-pa-speaker-on-stand-7ffa787e) · [original GLB](https://cdn.3dassets.dev/assets/35204/v1/model.glb) · [license](https://creativecommons.org/publicdomain/zero/1.0/)
   - SHA-256: `46083c231cbd4d24dd60ef7306f35577aea7c8b8f6b3f74b8fc4ea160b28106a`
+
+## 2026-10-03 统一中文模型库
+
+本次将原网站线上 234 项、精选本地 30 项、旧版样例 5 项及用户提供的 `model200` 279 项合并为 **529 个唯一模型**。同名项优先采用本次提供的文件；24 个截断文件从对应原站补齐，恢复后的开头与原文件逐字节一致。18 项新旧重叠模型恢复后哈希相同；旧线上库与旧版样例另有 1 项相同模型。
+
+新模型逐项核对 `https://3dassets.dev/api/v1/assets/<slug>` 返回的 CC0 1.0 许可，记录于 [model200.json](assets/library/model200.json)。原始英文标题、原站链接、尺寸和 SHA-256 保留于 [merged.json](assets/library/merged.json)；中文名称和分类见 [labels.zh.json](assets/library/labels.zh.json)。完整对账与修复记录见 [merge-report.json](assets/library/merge-report.json)。
+
+GLB 合计 48,104,156 字节。压缩包使用中文分类目录和文件名，附预览图、来源清单。复杂的巧克力工坊整场景保留文件，作为下载资源使用。新增模型未冒用既有云身份；网站发布及新增云端归档未在此次执行。

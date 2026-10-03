@@ -1,0 +1,2118 @@
+{
+  "beach-surf-and-paddle-kit-folding-beach-chair-68794f97": {
+    "name": "沙滩折叠椅",
+    "bucket": "seating"
+  },
+  "bedroom-and-living-room-furniture-desk-task-chair-e1320da0": {
+    "name": "办公任务椅",
+    "bucket": "seating"
+  },
+  "casino-floor-and-back-rooms-dealer-chair-f39054bd": {
+    "name": "荷官椅",
+    "bucket": "seating"
+  },
+  "bedroom-and-living-room-furniture-dining-chair-upholst-7ec33345": {
+    "name": "软包餐椅",
+    "bucket": "seating"
+  },
+  "voxel-city-districts-bar-stool-15ad652a": {
+    "name": "像素风吧凳",
+    "bucket": "seating"
+  },
+  "indoor-market-hall-and-traders-stall-stool-3c24a76c": {
+    "name": "摊位圆凳",
+    "bucket": "seating"
+  },
+  "music-recording-studio-and-instruments-studio-stool-a2c0747a": {
+    "name": "录音室圆凳",
+    "bucket": "seating"
+  },
+  "tattoo-and-piercing-studio-artists-stool-4b12a1fb": {
+    "name": "纹身师工作凳",
+    "bucket": "seating"
+  },
+  "bedroom-and-living-room-furniture-sofa-three-seat-6be9b44b": {
+    "name": "三人沙发",
+    "bucket": "seating"
+  },
+  "hotel-and-resort-operations-lobby-sofa-79174bf1": {
+    "name": "酒店大堂沙发",
+    "bucket": "seating"
+  },
+  "bedroom-and-living-room-furniture-sofa-two-seat-904fa140": {
+    "name": "双人沙发",
+    "bucket": "seating"
+  },
+  "clinic-and-veterinary-practice-examination-couch-adjus-ac07fdf2": {
+    "name": "升降检查床",
+    "bucket": "seating"
+  },
+  "hospital-wards-and-clinic-operations-waiting-bench-row-4a483ebb": {
+    "name": "候诊连排长椅",
+    "bucket": "seating"
+  },
+  "steampunk-airship-dock-and-workshop-workbench-ed991aad": {
+    "name": "带台钳抽屉工作台",
+    "bucket": "tools"
+  },
+  "distillery-and-bonded-warehouse-racking-bench-5530b468": {
+    "name": "桶架工作台",
+    "bucket": "tools"
+  },
+  "distillery-and-bonded-warehouse-stencil-bench-92b00a0a": {
+    "name": "模板工作台",
+    "bucket": "tools"
+  },
+  "marina-and-yacht-club-marina-and-yacht-club-terrace-ta-e463ef37": {
+    "name": "游艇会露台桌椅套装",
+    "bucket": "tables"
+  },
+  "andean-terraces-and-stone-village-terrace-wall-high-54f771ed": {
+    "name": "安第斯梯田高墙",
+    "bucket": "structure"
+  },
+  "football-soccer-club-grounds-terrace-tier-d060e188": {
+    "name": "三层站席看台",
+    "bucket": "seating"
+  },
+  "baseball-park-and-batting-cages-bleacher-stand-2ab80b42": {
+    "name": "棒球场观众看台",
+    "bucket": "seating"
+  },
+  "zombie-quarantine-streets-food-distribution-table-b72c37f7": {
+    "name": "食物分发桌",
+    "bucket": "tables"
+  },
+  "human-anatomy-and-education-kit-bench-table-775888b5": {
+    "name": "教学实验长桌",
+    "bucket": "tables"
+  },
+  "steampunk-airship-dock-and-workshop-chart-table-6d4aed38": {
+    "name": "带抽屉图表桌",
+    "bucket": "tables"
+  },
+  "casino-floor-and-back-rooms-cocktail-table-329ca6f8": {
+    "name": "鸡尾酒高脚桌",
+    "bucket": "tables"
+  },
+  "downtown-office-interiors-desk-executive-6ef42aca": {
+    "name": "带挡板主管办公桌",
+    "bucket": "tables"
+  },
+  "tv-studio-and-broadcast-gallery-gallery-desk-run-a72b3947": {
+    "name": "多屏监看工作台",
+    "bucket": "digital"
+  },
+  "downtown-office-interiors-desk-1600-panel-end-9c79542d": {
+    "name": "一米六办公桌",
+    "bucket": "tables"
+  },
+  "computers-and-desk-gadgets-desk-1400-c38edf1c": {
+    "name": "一米四办公桌",
+    "bucket": "tables"
+  },
+  "distillery-and-bonded-warehouse-tasting-counter-5c8e94aa": {
+    "name": "品酒接待吧台",
+    "bucket": "tables"
+  },
+  "fast-food-and-drive-thru-holding-cabinet-door-open-1b2f4d59": {
+    "name": "保温柜（开门）",
+    "bucket": "food"
+  },
+  "cinema-multiplex-and-foyer-nacho-and-hot-dog-counter-686a7c9e": {
+    "name": "热狗玉米片售卖台",
+    "bucket": "food"
+  },
+  "hearing-aid-and-audiology-clinic-appointment-reception-95ca2b14": {
+    "name": "预约接待柜台",
+    "bucket": "tables"
+  },
+  "city-courthouse-and-records-office-city-courthouse-and-6bcfd40f": {
+    "name": "法院讲台",
+    "bucket": "tables"
+  },
+  "griffin-airmail-roost-and-posthouse-route-map-lectern-8634b74f": {
+    "name": "路线图讲解台",
+    "bucket": "signage"
+  },
+  "abandoned-cinema-and-projection-booth-abandoned-cinema-dbdc40c1": {
+    "name": "影院验票台",
+    "bucket": "tables"
+  },
+  "wedding-and-chapel-kit-chapel-lectern-df983527": {
+    "name": "礼拜堂讲台",
+    "bucket": "tables"
+  },
+  "travelling-circus-and-big-top-circus-ticket-booth-428cc272": {
+    "name": "马戏团售票亭",
+    "bucket": "exhibition"
+  },
+  "restaurant-kitchen-and-dining-booth-2-cover-accent-5fa7aeaf": {
+    "name": "彩色软包卡座",
+    "bucket": "seating"
+  },
+  "nightclub-and-dj-booth-lighting-truss-straight-8d2acafa": {
+    "name": "直线灯光桁架",
+    "bucket": "stage"
+  },
+  "restaurant-kitchen-and-dining-booth-4-cover-31918298": {
+    "name": "四人餐厅卡座",
+    "bucket": "seating"
+  },
+  "harbor-and-tackle-fish-market-stall-d82006ea": {
+    "name": "鱼市摊位",
+    "bucket": "exhibition"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-55e52c8d": {
+    "name": "气球射击摊位",
+    "bucket": "exhibition"
+  },
+  "medieval-mmo-starter-realm-market-stall-e0677cc9": {
+    "name": "中世纪市集摊位",
+    "bucket": "exhibition"
+  },
+  "canal-town-and-windmill-market-stall-with-awning-a330661e": {
+    "name": "运河市集遮棚摊位",
+    "bucket": "exhibition"
+  },
+  "music-recording-studio-and-instruments-electric-guitar-7ef7ab5a": {
+    "name": "电吉他与支架",
+    "bucket": "audio"
+  },
+  "velodrome-and-track-cycling-bell-on-stand-31ceff7b": {
+    "name": "自行车赛场立钟",
+    "bucket": "sports"
+  },
+  "steampunk-airship-dock-and-workshop-flight-gear-stand-b2d883bc": {
+    "name": "飞行装备展示架",
+    "bucket": "exhibition"
+  },
+  "music-recording-studio-and-instruments-bass-guitar-on--c2780ecc": {
+    "name": "贝斯与支架",
+    "bucket": "audio"
+  },
+  "fresh-produce-and-groceries-greengrocer--86f48b0c-starter-scene": {
+    "name": "水果陈列架",
+    "bucket": "exhibition"
+  },
+  "modern-rail-and-metro-network-information-display-1f74d599": {
+    "name": "站台信息显示屏",
+    "bucket": "signage"
+  },
+  "steampunk-airship-dock-and-workshop-gear-stand-1f118594": {
+    "name": "齿轮齿条展示架",
+    "bucket": "exhibition"
+  },
+  "garden-centre-and-florist-fence-panel-display-rack-3d4aa56d": {
+    "name": "围栏样品展示架",
+    "bucket": "exhibition"
+  },
+  "hotel-and-resort-operations-spa-reception-desk-8e1bcf19": {
+    "name": "水疗接待台",
+    "bucket": "tables"
+  },
+  "office-lobby-and-facilities-reception-desk-module-910ee715": {
+    "name": "一米二模块接待台",
+    "bucket": "tables"
+  },
+  "community-sports-hall-and-changing-rooms-reception-des-ee569bd0": {
+    "name": "体育中心接待台",
+    "bucket": "tables"
+  },
+  "factory-conveyor-network-factory-conveyor-network-pipe-cdcbbb64": {
+    "name": "管道止回阀",
+    "bucket": "tools"
+  },
+  "live-music-venue-and-festival-stage-lighting-bar-with--9d1b9fb6": {
+    "name": "帕灯灯杆组合",
+    "bucket": "lighting"
+  },
+  "orchestra-and-band-instruments-concert-s-8aaba2c3-starter-scene": {
+    "name": "音乐会舞台与排练区",
+    "bucket": "scenes"
+  },
+  "live-music-venue-and-festival-stage-drum-kit-shell-set-a2d5fafe": {
+    "name": "架子鼓组",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-stage-deck-module-b23478f5": {
+    "name": "模块舞台地台",
+    "bucket": "stage"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-8d85e1d0": {
+    "name": "六米厂房屋架",
+    "bucket": "structure"
+  },
+  "steampunk-airship-dock-and-workshop-shed-roof-truss-cdf34936": {
+    "name": "八米棚顶桁架",
+    "bucket": "structure"
+  },
+  "wedding-and-chapel-kit-chapel-roof-bay-6c89de0c": {
+    "name": "礼拜堂屋顶桁架",
+    "bucket": "structure"
+  },
+  "velodrome-and-track-cycling-flood-light-truss-e50be79a": {
+    "name": "赛场泛光灯桁架",
+    "bucket": "lighting"
+  },
+  "hearing-aid-and-audiology-clinic-free-field-test-speak-86e5beac": {
+    "name": "声场测试音箱",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-line-array-speaker-7500d812": {
+    "name": "线阵列音箱",
+    "bucket": "audio"
+  },
+  "dog-agility-and-training-field-pa-speaker-post-8d62a208": {
+    "name": "户外广播立柱音箱",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-hanging-speaker-c73e7811": {
+    "name": "吊挂音箱",
+    "bucket": "audio"
+  },
+  "music-recording-studio-and-instruments-vocal-mic-with--b6c69c11": {
+    "name": "人声麦克风与防喷罩",
+    "bucket": "audio"
+  },
+  "city-courthouse-and-records-office-city-courthouse-and-53b03ef5": {
+    "name": "桌面麦克风",
+    "bucket": "audio"
+  },
+  "hearing-aid-and-audiology-clinic-probe-microphone-head-5d89b7c9": {
+    "name": "探头式麦克风耳机",
+    "bucket": "audio"
+  },
+  "computers-and-desk-gadgets-microphone-condenser-762c7fa7": {
+    "name": "电容麦克风",
+    "bucket": "audio"
+  },
+  "steampunk-airship-dock-and-workshop-signal-lamp-1a96f759": {
+    "name": "三脚架黄铜信号灯",
+    "bucket": "lighting"
+  },
+  "care-home-and-day-room-floor-lamp-d9eec340": {
+    "name": "活动室落地灯",
+    "bucket": "lighting"
+  },
+  "fps-survival-forest-outpost-floodlight-mast-98fcda0b": {
+    "name": "四头泛光照明灯杆",
+    "bucket": "lighting"
+  },
+  "police-station-and-detective-office-swing-arm-lamp-c61b6b30": {
+    "name": "摆臂工作灯",
+    "bucket": "lighting"
+  },
+  "cinema-multiplex-and-foyer-cinema-screen-and-masking-92b7d56f": {
+    "name": "影院银幕与遮幅框",
+    "bucket": "digital"
+  },
+  "hospital-wards-and-clinic-operations-privacy-screen-6adde32a": {
+    "name": "医院隐私屏风",
+    "bucket": "structure"
+  },
+  "museum-conservation-and-art-restoration-museum-conserv-9b435540": {
+    "name": "藏品挂屏滑轨",
+    "bucket": "storage"
+  },
+  "escape-room-and-puzzle-venue-briefing-screen-on-stand-9d2b7005": {
+    "name": "移动简报显示屏",
+    "bucket": "digital"
+  },
+  "cruise-ship-deck-and-lounge-cruise-ship-deck-and-loung-73390ffd": {
+    "name": "甲板舞台与背景板",
+    "bucket": "stage"
+  },
+  "nightclub-and-dj-booth-backdrop-led-panel-module-831305f2": {
+    "name": "背景发光屏模块",
+    "bucket": "digital"
+  },
+  "nightclub-and-dj-booth-backdrop-led-panel-module-cyan-4133ef86": {
+    "name": "青色背景发光屏模块",
+    "bucket": "digital"
+  },
+  "escape-room-and-puzzle-venue-photo-backdrop-with-frame-0f587850": {
+    "name": "摄影背景与道具框",
+    "bucket": "decor"
+  },
+  "distillery-and-bonded-warehouse-hoop-stack-f2d9b2de": {
+    "name": "桶箍堆",
+    "bucket": "tools"
+  },
+  "basketball-club-and-street-courts-anchored-hoop-380419f7": {
+    "name": "固定式带网篮球架",
+    "bucket": "sports"
+  },
+  "basketball-club-and-street-courts-portable-hoop-df2b2c77": {
+    "name": "便携训练篮球架",
+    "bucket": "sports"
+  },
+  "wilderness-survival-camp-bivouac-hoop-shelter-1d5a0203": {
+    "name": "拱形露营庇护棚",
+    "bucket": "structure"
+  },
+  "football-soccer-club-grounds-mini-goal-b4e93f9b": {
+    "name": "便携迷你球门",
+    "bucket": "sports"
+  },
+  "community-sports-hall-and-changing-rooms-five-a-side-g-32bd7f98": {
+    "name": "五人制足球门",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-scoreboard-e12a4ed5": {
+    "name": "高架足球记分牌",
+    "bucket": "sports"
+  },
+  "ice-hockey-arena-and-locker-room-arena-scoreboard-655d2b37": {
+    "name": "支架式冰球记分牌",
+    "bucket": "sports"
+  },
+  "dog-agility-and-training-field-scoreboard-post-23b98089": {
+    "name": "犬类训练场记分牌",
+    "bucket": "sports"
+  },
+  "laser-tag-arena-and-activity-centre-scoreboard-wall-fr-b2654443": {
+    "name": "壁框式赛场记分牌",
+    "bucket": "sports"
+  },
+  "vfx-mesh-library-thruster-cone-a2af2dfc": {
+    "name": "推进器喷口",
+    "bucket": "tools"
+  },
+  "steampunk-airship-dock-and-workshop-mooring-bollard-0886a456": {
+    "name": "铸造系缆桩",
+    "bucket": "logistics"
+  },
+  "vfx-mesh-library-hover-jet-cone-0eb53517": {
+    "name": "悬浮喷口",
+    "bucket": "tools"
+  },
+  "harbor-and-tackle-harbor-bollard-36ce647e": {
+    "name": "双角系缆桩",
+    "bucket": "logistics"
+  },
+  "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-94a6ecfd": {
+    "name": "一百一十伏电缆卷盘",
+    "bucket": "tools"
+  },
+  "alien-biosphere-brush-head-fb434803": {
+    "name": "刷头形外星植物",
+    "bucket": "plants"
+  },
+  "care-home-and-day-room-potted-plant-tall-e50d9742": {
+    "name": "高大盆栽",
+    "bucket": "plants"
+  },
+  "tool-hire-depot-and-plant-yard-tool-hire-depot-and-pla-f27b6012": {
+    "name": "庭院垃圾箱",
+    "bucket": "logistics"
+  },
+  "botanical-glasshouse-and-palm-house-botanical-glasshou-3f717859": {
+    "name": "陶花盆堆",
+    "bucket": "storage"
+  },
+  "jelly-friends-playroom-potted-fern-46bf82a5": {
+    "name": "陶盆蕨类植物",
+    "bucket": "plants"
+  },
+  "voxel-city-districts-raised-planter-5ebe7904": {
+    "name": "高架种植箱",
+    "bucket": "plants"
+  },
+  "winter-hearth-village-winter-berry-planter-22af2844": {
+    "name": "冬季浆果花箱",
+    "bucket": "plants"
+  },
+  "fantasy-mmo-city-and-townsfolk-city-broadleaf-tree-0328372c": {
+    "name": "城市阔叶树",
+    "bucket": "plants"
+  },
+  "wipe-day-survival-island-pine-tree-dfc88d2b": {
+    "name": "松树",
+    "bucket": "plants"
+  },
+  "racecourse-and-parade-ring-paddock-tree-91f358c4": {
+    "name": "牧场乔木",
+    "bucket": "plants"
+  },
+  "turning-seasons-spring-orchard-tree-4f507ab0": {
+    "name": "春季果树",
+    "bucket": "plants"
+  },
+  "wipe-day-survival-island-berry-bush-0694adfc": {
+    "name": "浆果灌木",
+    "bucket": "plants"
+  },
+  "safari-camp-and-bush-lodge-folding-camp-chair-20878b9f": {
+    "name": "营地折叠椅",
+    "bucket": "seating"
+  },
+  "safari-camp-and-bush-lodge-pole-and-wire-fence-section-5cd9cd73": {
+    "name": "立柱铁丝围栏",
+    "bucket": "structure"
+  },
+  "safari-camp-and-bush-lodge-grass-tuft-cluster-8eaa2b17": {
+    "name": "高草丛",
+    "bucket": "plants"
+  },
+  "fantasy-mmo-city-and-townsfolk-clipped-hedge-block-ea0b52b0": {
+    "name": "方块修剪绿篱",
+    "bucket": "plants"
+  },
+  "city-park-and-playground-hedge-section-c1ff730d": {
+    "name": "公园绿篱段",
+    "bucket": "plants"
+  },
+  "pixel-modern-farm-hedge-run-0ee547bc": {
+    "name": "四米绿篱",
+    "bucket": "plants"
+  },
+  "lawn-mowing-simulator-kit-hedge-block-2m-ec0f9b45": {
+    "name": "两米绿篱块",
+    "bucket": "plants"
+  },
+  "steampunk-airship-dock-and-workshop-gas-lantern-afc5ebc9": {
+    "name": "支架煤气灯",
+    "bucket": "lighting"
+  },
+  "turning-seasons-winter-lantern-dc1a8170": {
+    "name": "冬季提灯",
+    "bucket": "lighting"
+  },
+  "harbor-and-tackle-camp-lantern-81612db6": {
+    "name": "港口防风灯",
+    "bucket": "lighting"
+  },
+  "lantern-watch-courtyard-flame-brazier": {
+    "name": "庭院火盆",
+    "bucket": "lighting"
+  },
+  "airport-terminal-and-ground-operations-information-tot-d38d78b4": {
+    "name": "信息导视柱",
+    "bucket": "signage"
+  },
+  "battle-royale-town-and-airfield-road-sign-post-c45b9b7c": {
+    "name": "道路标志杆",
+    "bucket": "signage"
+  },
+  "ski-resort-and-snow-park-trail-sign-post-0fbf6fda": {
+    "name": "步道指示杆",
+    "bucket": "signage"
+  },
+  "theatre-stage-and-backstage-exit-sign-and-door-module-f64fc225": {
+    "name": "安全出口标志门",
+    "bucket": "structure"
+  },
+  "live-music-venue-and-festival-stage-festival-flag-pole-6d4f8842": {
+    "name": "节庆旗杆",
+    "bucket": "signage"
+  },
+  "bus-station-and-city-transit-bus-stop-pole-with-flag-3071e762": {
+    "name": "公交站旗式站牌",
+    "bucket": "signage"
+  },
+  "hot-air-balloon-festival-event-flag-pole-f98bce99": {
+    "name": "活动旗杆",
+    "bucket": "signage"
+  },
+  "live-music-venue-and-festival-stage-festival-flag-pole-a34eab89": {
+    "name": "绿色节庆旗杆",
+    "bucket": "signage"
+  },
+  "arena-shooter-map-kit-banner-31542f76": {
+    "name": "竞技场横幅",
+    "bucket": "signage"
+  },
+  "velodrome-and-track-cycling-banner-rail-run-4a15542b": {
+    "name": "赛道横幅栏杆",
+    "bucket": "signage"
+  },
+  "halloween-slasher-street-halloween-pennant-banner-e9003fa9": {
+    "name": "万圣节三角旗串",
+    "bucket": "decor"
+  },
+  "fantasy-mmo-city-and-townsfolk-hanging-guild-banner-67cde01e": {
+    "name": "悬挂公会旗帜",
+    "bucket": "decor"
+  },
+  "neon-dispatch-parcel-yard-barrier": {
+    "name": "货运场隔离栏",
+    "bucket": "logistics"
+  },
+  "hardware-store-and-diy-warehouse-aisle-safety-barrier-0423d23e": {
+    "name": "通道安全护栏",
+    "bucket": "logistics"
+  },
+  "laundrette-and-cleaning-caution-barrier-post-75cbf09d": {
+    "name": "伸缩带隔离柱",
+    "bucket": "logistics"
+  },
+  "nightclub-and-dj-booth-rope-barrier-post-with-rope-327c14d3": {
+    "name": "带绳礼宾隔离柱",
+    "bucket": "logistics"
+  },
+  "car-park-and-road-vehicle-fleet-bollard-e7119d33": {
+    "name": "钢制防撞柱",
+    "bucket": "logistics"
+  },
+  "bus-station-and-city-transit-street-bollard-7db606aa": {
+    "name": "街道隔离桩",
+    "bucket": "logistics"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-eb9d099e": {
+    "name": "黄色安全隔离柱",
+    "bucket": "logistics"
+  },
+  "voxel-city-districts-bollard-4e19587e": {
+    "name": "像素风隔离桩",
+    "bucket": "logistics"
+  },
+  "car-park-and-road-vehicle-fleet-double-cab-pickup-cano-aa92dedb": {
+    "name": "带货斗罩双排皮卡",
+    "bucket": "vehicles"
+  },
+  "live-music-venue-and-festival-stage-stage-roof-canopy--f849524b": {
+    "name": "短跨舞台顶棚",
+    "bucket": "stage"
+  },
+  "powerboat-racing-and-launch-ramp-cabin-cruiser-canopy-11c4fda1": {
+    "name": "带座舱顶棚游艇",
+    "bucket": "vehicles"
+  },
+  "roadside-survival-stops-pump-canopy-corner-4c17359e": {
+    "name": "加油站雨棚转角",
+    "bucket": "structure"
+  },
+  "beach-surf-and-paddle-kit-beach-umbrella-fb839e7d": {
+    "name": "沙滩遮阳伞",
+    "bucket": "structure"
+  },
+  "harbor-and-tackle-fishing-umbrella-53ccf80c": {
+    "name": "钓鱼遮阳伞",
+    "bucket": "structure"
+  },
+  "motorcycle-racing-and-street-bikes-umbrella-ef9fbcd7": {
+    "name": "配重底座遮阳伞",
+    "bucket": "structure"
+  },
+  "greek-island-village-and-harbour-cafe-parasol-a99c4044": {
+    "name": "希腊咖啡座遮阳伞",
+    "bucket": "structure"
+  },
+  "almanac-gardens-garden-pergola-36e88395": {
+    "name": "乡村花园凉架",
+    "bucket": "structure"
+  },
+  "city-park-and-playground-pergola-f44394ba": {
+    "name": "木制凉架",
+    "bucket": "structure"
+  },
+  "greek-island-village-and-harbour-grape-pergola-with-vi-5a3fe0db": {
+    "name": "葡萄藤凉架",
+    "bucket": "structure"
+  },
+  "greek-island-village-and-harbour-roof-terrace-with-per-a9847509": {
+    "name": "带凉架屋顶露台",
+    "bucket": "structure"
+  },
+  "harbor-and-tackle-pier-railing-79e66c86": {
+    "name": "木柱绳索码头栏杆",
+    "bucket": "structure"
+  },
+  "steampunk-airship-dock-and-workshop-dock-railing-panel-e62f5297": {
+    "name": "四米码头边缘栏杆",
+    "bucket": "structure"
+  },
+  "farm-and-working-animals-hd-fence-straight-abfd7b2a": {
+    "name": "牧场柱栏围栏",
+    "bucket": "structure"
+  },
+  "harvest-hearth-split-rail-fence": {
+    "name": "乡村劈木围栏",
+    "bucket": "structure"
+  },
+  "tv-studio-and-broadcast-gallery-glass-partition-door-m-bd121cea": {
+    "name": "演播室玻璃隔断门",
+    "bucket": "structure"
+  },
+  "tv-studio-and-broadcast-gallery-glass-partition-module-bf80147b": {
+    "name": "演播室玻璃隔断",
+    "bucket": "structure"
+  },
+  "police-station-and-detective-office-partition-wall-pla-eac2cc8e": {
+    "name": "警局实心隔断墙",
+    "bucket": "structure"
+  },
+  "downtown-office-interiors-glazed-partition-door-module-180c4720": {
+    "name": "办公室玻璃隔断门",
+    "bucket": "structure"
+  },
+  "paranormal-investigation-house-interior-door-3d3cfbcc": {
+    "name": "镶板室内门",
+    "bucket": "structure"
+  },
+  "medieval-monastery-and-scriptorium-monastery-door-bay-a5edad0f": {
+    "name": "修道院门廊模块",
+    "bucket": "structure"
+  },
+  "restaurant-kitchen-and-dining-upright-fridge-double-06328b60": {
+    "name": "双门立式冰箱",
+    "bucket": "food"
+  },
+  "botanical-glasshouse-and-palm-house-botanical-glasshou-3dc62c89": {
+    "name": "三米锅炉房门模块",
+    "bucket": "structure"
+  },
+  "japanese-school-and-city-street-classroom-wall-window-7c9dbfa2": {
+    "name": "教室窗墙模块",
+    "bucket": "structure"
+  },
+  "desert-mosque-and-madrasa-courtyard-iron-window-grille-17aa98e2": {
+    "name": "铁艺窗栅",
+    "bucket": "structure"
+  },
+  "medieval-monastery-and-scriptorium-monastery-lancet-wi-c0c13950": {
+    "name": "修道院尖拱窗模块",
+    "bucket": "structure"
+  },
+  "community-sports-hall-and-changing-rooms-hall-wall-mod-275ea046": {
+    "name": "体育馆条窗墙模块",
+    "bucket": "structure"
+  },
+  "dog-agility-and-training-field-field-litter-bin-eeefea95": {
+    "name": "户外垃圾桶",
+    "bucket": "logistics"
+  },
+  "steampunk-airship-dock-and-workshop-parts-bin-rack-0547387b": {
+    "name": "零件盒货架",
+    "bucket": "storage"
+  },
+  "modern-rail-and-metro-network-waste-bin-57f44ea1": {
+    "name": "站台垃圾桶",
+    "bucket": "logistics"
+  },
+  "public-swimming-baths-and-poolside-foyer-bin-7c56238f": {
+    "name": "泳池大厅垃圾桶",
+    "bucket": "logistics"
+  },
+  "steampunk-airship-dock-and-workshop-gas-pump-trolley-c02ef62c": {
+    "name": "充气泵手推车",
+    "bucket": "tools"
+  },
+  "airport-terminal-and-ground-operations-tray-return-tro-6d84dbed": {
+    "name": "餐盘回收车",
+    "bucket": "logistics"
+  },
+  "aircraft-fleet-and-airfield-ground-power-cart-69186e50": {
+    "name": "地面电源车",
+    "bucket": "tools"
+  },
+  "supermarket-operations-shopping-trolley-9248600c": {
+    "name": "购物推车",
+    "bucket": "logistics"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-154266a1": {
+    "name": "框架式液压压力机",
+    "bucket": "tools"
+  },
+  "home-appliances-and-utility-washing-machine-front-load-8cf238bc": {
+    "name": "六百毫米滚筒洗衣机",
+    "bucket": "logistics"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-416adcb7": {
+    "name": "手动托盘搬运车",
+    "bucket": "logistics"
+  },
+  "modern-rail-and-metro-network-ticket-machine-dc3e6a42": {
+    "name": "自助售票机",
+    "bucket": "logistics"
+  },
+  "robots-and-drones-kit-battery-swap-cabinet-e152705f": {
+    "name": "电池换电柜",
+    "bucket": "logistics"
+  },
+  "robots-and-drones-kit-storage-locker-tall-84257c98": {
+    "name": "高型储物柜",
+    "bucket": "storage"
+  },
+  "casino-floor-and-back-rooms-slot-upright-0689c21c": {
+    "name": "立式老虎机",
+    "bucket": "digital"
+  },
+  "modern-rail-and-metro-network-relay-cabinet-85dc805a": {
+    "name": "铁路继电器柜",
+    "bucket": "tools"
+  },
+  "fire-and-emergency-services-fire-hydrant-09cb0c64": {
+    "name": "消防栓",
+    "bucket": "logistics"
+  },
+  "voxel-city-districts-fire-hydrant-04ac7d3a": {
+    "name": "像素风消防栓",
+    "bucket": "logistics"
+  },
+  "machine-shop-and-factory-hall-machine-shop-and-factory-d83014ca": {
+    "name": "支架灭火器",
+    "bucket": "logistics"
+  },
+  "street-food-market-and-food-trucks-fire-extinguisher-p-1bc646d7": {
+    "name": "灭火器站点",
+    "bucket": "logistics"
+  },
+  "computers-and-desk-gadgets-laptop-convertible-flip-068fe56f": {
+    "name": "翻转式银色笔记本电脑",
+    "bucket": "digital"
+  },
+  "computers-and-desk-gadgets-laptop-closed-13-ea6b62e9": {
+    "name": "闭合十三英寸笔记本电脑",
+    "bucket": "digital"
+  },
+  "computers-and-desk-gadgets-laptop-gaming-17-976ef973": {
+    "name": "十七英寸游戏笔记本电脑",
+    "bucket": "digital"
+  },
+  "downtown-office-interiors-laptop-riser-2ae46c86": {
+    "name": "笔记本电脑增高架",
+    "bucket": "digital"
+  },
+  "downtown-office-interiors-monitor-24-inch-cd110e8d": {
+    "name": "二十四英寸办公显示器",
+    "bucket": "digital"
+  },
+  "computers-and-desk-gadgets-monitor-24-flat-7108a75c": {
+    "name": "二十四英寸平面显示器",
+    "bucket": "digital"
+  },
+  "hospital-wards-and-clinic-operations-patient-monitor-af189b00": {
+    "name": "病人监护仪",
+    "bucket": "digital"
+  },
+  "university-lecture-hall-and-campus-ceiling-projector-m-3875de72": {
+    "name": "讲堂吊装投影仪",
+    "bucket": "digital"
+  },
+  "police-station-and-detective-office-camera-on-tripod-60d9e444": {
+    "name": "三脚架现场摄像机",
+    "bucket": "digital"
+  },
+  "self-storage-facility-and-loading-bay-self-storage-fac-fedf9f45": {
+    "name": "壁挂监控摄像头",
+    "bucket": "digital"
+  },
+  "animated-mechanisms-kit-security-camera-yoke-12d335bf": {
+    "name": "杆装云台监控摄像头",
+    "bucket": "digital"
+  },
+  "robots-and-drones-kit-quadcopter-camera-16e693ab": {
+    "name": "四旋翼航拍无人机",
+    "bucket": "digital"
+  },
+  "cozy-home-interiors-bath-mat-a5af83c6": {
+    "name": "浴室地垫",
+    "bucket": "decor"
+  },
+  "companion-animals-and-pet-home-rug-3aff2413": {
+    "name": "宠物家居客厅地毯",
+    "bucket": "decor"
+  },
+  "pets-and-companions-hd-rug-b811e9ad": {
+    "name": "宠物主题客厅地毯",
+    "bucket": "decor"
+  },
+  "velodrome-and-track-cycling-mat-stack-7fcbe043": {
+    "name": "运动垫堆",
+    "bucket": "sports"
+  },
+  "museum-conservation-and-art-restoration-museum-conserv-9172cc18": {
+    "name": "破损陶器展品",
+    "bucket": "decor"
+  },
+  "art-gallery-and-exhibition-rooms-cafe-table-and-chairs-a767551a": {
+    "name": "绿色咖啡桌椅套装",
+    "bucket": "tables"
+  },
+  "museum-conservation-and-art-restoration-museum-conserv-94b0c868": {
+    "name": "画布支撑条收纳架",
+    "bucket": "storage"
+  },
+  "museum-conservation-and-art-restoration-museum-conserv-a682cd52": {
+    "name": "泡沫护角支撑套件",
+    "bucket": "storage"
+  },
+  "fantasy-mmo-city-and-townsfolk-curtain-wall-bay-2d830417": {
+    "name": "城市幕墙模块",
+    "bucket": "structure"
+  },
+  "medieval-castle-construction-curtain-corner-abc40abb": {
+    "name": "城堡墙体转角",
+    "bucket": "structure"
+  },
+  "hospital-wards-and-clinic-operations-curtain-rail-with-219d2fc4": {
+    "name": "医院轨道隔帘",
+    "bucket": "structure"
+  },
+  "animated-mechanisms-kit-bead-curtain-20e9dbe5": {
+    "name": "门框珠帘",
+    "bucket": "decor"
+  },
+  "voxel-city-districts-abstract-sculpture-eae2dbd2": {
+    "name": "抽象雕塑",
+    "bucket": "decor"
+  },
+  "sunken-city-and-underwater-ruins-statue-base-8c3948c9": {
+    "name": "雕像底座",
+    "bucket": "decor"
+  },
+  "vampire-crypt-and-gothic-cathedral-angel-statue-ea3e1925": {
+    "name": "天使雕像",
+    "bucket": "decor"
+  },
+  "alpine-snow-village-ice-fox-sculpture-7cef66b3": {
+    "name": "冰狐雕塑",
+    "bucket": "decor"
+  },
+  "lantern-watch-hanging-wall-lantern": {
+    "name": "壁挂提灯",
+    "bucket": "lighting"
+  },
+  "hot-air-balloon-festival-balloon-basket-with-burner-fr-4d6ec787": {
+    "name": "热气球吊篮与燃烧器",
+    "bucket": "vehicles"
+  },
+  "hot-air-balloon-festival-traffic-cone-799bc862": {
+    "name": "活动交通锥",
+    "bucket": "logistics"
+  },
+  "hero-shooter-harbour-payload-lighthouse-lantern-stage-fea64c17": {
+    "name": "灯塔灯室平台",
+    "bucket": "structure"
+  },
+  "indoor-market-hall-and-traders-bakery-tray-set-13f8fc39": {
+    "name": "烘焙托盘套装",
+    "bucket": "food"
+  },
+  "car-repair-garage-and-mot-workshop-car-repair-garage-a-7ee8b3f2": {
+    "name": "全自动咖啡机",
+    "bucket": "food"
+  },
+  "izakaya-alley-and-ramen-shop-bowl-of-ramen-48b66069": {
+    "name": "日式拉面碗",
+    "bucket": "food"
+  },
+  "cheesemaking-and-dairy-cellar-culture-measuring-tray-a1fce8d4": {
+    "name": "奶酪发酵计量托盘",
+    "bucket": "food"
+  },
+  "long-haul-trucking-and-truck-stop-long-nose-sleeper-949ae647": {
+    "name": "长头卧铺卡车",
+    "bucket": "vehicles"
+  },
+  "car-park-and-road-vehicle-fleet-box-truck-4574c765": {
+    "name": "卷帘门厢式货车",
+    "bucket": "vehicles"
+  },
+  "long-haul-trucking-and-truck-stop-cabover-day-cab-2da6af6b": {
+    "name": "平头日间驾驶室牵引车",
+    "bucket": "vehicles"
+  },
+  "long-haul-trucking-and-truck-stop-cabover-sleeper-b86f0719": {
+    "name": "平头卧铺牵引车",
+    "bucket": "vehicles"
+  },
+  "car-park-and-road-vehicle-fleet-sports-car-900de487": {
+    "name": "中置引擎跑车",
+    "bucket": "vehicles"
+  },
+  "car-park-and-road-vehicle-fleet-city-car-033e3215": {
+    "name": "城市小汽车",
+    "bucket": "vehicles"
+  },
+  "motorcycle-racing-and-street-bikes-road-sportbike-e1418015": {
+    "name": "公路运动摩托车",
+    "bucket": "vehicles"
+  },
+  "car-park-and-road-vehicle-fleet-saloon-ad831b1f": {
+    "name": "四门轿车",
+    "bucket": "vehicles"
+  },
+  "live-music-venue-and-festival-stage-backdrop-banner-fr-7ebd4df6": {
+    "name": "舞台背景横幅框架",
+    "bucket": "stage"
+  },
+  "airport-terminal-and-ground-operations-check-in-desk-ba7d92dc": {
+    "name": "机场签到台",
+    "bucket": "tables"
+  },
+  "bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7": {
+    "name": "木质餐椅",
+    "bucket": "seating"
+  },
+  "solar-system-and-astronauts-brochure-stand-167bd36f": {
+    "name": "宣传册展架",
+    "bucket": "exhibition"
+  },
+  "medieval-mmo-starter-realm-market-stall-blue-f5cbc408": {
+    "name": "蓝色市集摊位",
+    "bucket": "exhibition"
+  },
+  "indian-bazaar-street-and-temple-speaker-horn-on-pole-4788391b": {
+    "name": "立杆号角音箱",
+    "bucket": "audio"
+  },
+  "japanese-school-and-city-street-lectern-f8b909de": {
+    "name": "学校讲台",
+    "bucket": "tables"
+  },
+  "medieval-monastery-and-scriptorium-trestle-table-2a0801e0": {
+    "name": "木制支架长桌",
+    "bucket": "tables"
+  },
+  "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc": {
+    "name": "一米二模块吧台",
+    "bucket": "tables"
+  },
+  "live-music-venue-and-festival-stage-microphone-on-boom-b553a46d": {
+    "name": "悬臂麦克风与支架",
+    "bucket": "audio"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-spotlight-yoke-335ca905": {
+    "name": "支架式舞台射灯",
+    "bucket": "lighting"
+  },
+  "abandoned-cinema-and-projection-booth-abandoned-cinema-765a1a5b": {
+    "name": "投影幕布",
+    "bucket": "digital"
+  },
+  "live-music-venue-and-festival-stage-truss-straight-bay-3e0706d1": {
+    "name": "直线舞台桁架",
+    "bucket": "stage"
+  },
+  "trampoline-park-and-soft-play-basketball-dunk-hoop-58e31467": {
+    "name": "弹跳灌篮架",
+    "bucket": "sports"
+  },
+  "community-sports-hall-and-changing-rooms-hall-scoreboa-1aac26ec": {
+    "name": "体育馆壁挂记分牌",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-full-size-goal-08c07f03": {
+    "name": "标准足球门",
+    "bucket": "sports"
+  },
+  "beach-surf-and-paddle-kit-warning-flag-pole-04ad1969": {
+    "name": "警示旗杆",
+    "bucket": "signage"
+  },
+  "street-food-market-and-food-trucks-planter-with-shrub-0eedba0e": {
+    "name": "灌木种植箱",
+    "bucket": "plants"
+  },
+  "trading-post-and-barter-market-canopy-market-booth-46c6c10f": {
+    "name": "遮棚展位",
+    "bucket": "exhibition"
+  },
+  "almanac-gardens-terracotta-planter-1472f447": {
+    "name": "卷边陶土花盆",
+    "bucket": "plants"
+  },
+  "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a": {
+    "name": "排队隔离栏",
+    "bucket": "logistics"
+  },
+  "ferry-terminal-and-harbour-crossing-ferry-terminal-and-4f8d77f5": {
+    "name": "路向导视柱",
+    "bucket": "signage"
+  },
+  "bunker-shelter-construction-waste-bin-foot-pedal-f50124e7": {
+    "name": "脚踏垃圾桶",
+    "bucket": "logistics"
+  },
+  "zombie-quarantine-streets-chain-fence-bay-014919d4": {
+    "name": "铁丝网围栏",
+    "bucket": "structure"
+  },
+  "mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea": {
+    "name": "大本营圆顶帐篷",
+    "bucket": "structure"
+  },
+  "robots-and-drones-kit-battery-trolley-c1d0113b": {
+    "name": "电池运输推车",
+    "bucket": "logistics"
+  },
+  "hero-shooter-harbour-payload-cafe-parasol-3af84c9f": {
+    "name": "咖啡座遮阳伞",
+    "bucket": "structure"
+  },
+  "medieval-mmo-starter-realm-rug-5064c4c7": {
+    "name": "中世纪地毯",
+    "bucket": "decor"
+  },
+  "pixel-modern-apartments-wall-art-6f3f2e8b": {
+    "name": "像素风墙面装饰画",
+    "bucket": "decor"
+  },
+  "computers-and-desk-gadgets-laptop-open-14-ad4c2b1d": {
+    "name": "打开的十四英寸笔记本电脑",
+    "bucket": "digital"
+  },
+  "american-football-stadium-kit-field-microphone-1129c7a5": {
+    "name": "抛物面场地麦克风",
+    "bucket": "audio"
+  },
+  "hot-air-balloon-festival-pa-speaker-on-stand-43f5125f": {
+    "name": "活动三脚架音箱",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-di-box-63bef201": {
+    "name": "音频直通盒",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-guitar-amp-stack-9d8c42bd": {
+    "name": "吉他音箱堆叠组",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-guitar-stand-with--12a05ac1": {
+    "name": "蓝色吉他与支架",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-guitar-stand-with--e8d04dcb": {
+    "name": "吉他与支架",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-keyboard-rig-c2846152": {
+    "name": "电子键盘演奏台",
+    "bucket": "audio"
+  },
+  "music-recording-studio-and-instruments-mic-stand-empty-3a0d7a1c": {
+    "name": "空置悬臂麦克风架",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-dj-headphones-68ba5562": {
+    "name": "打碟耳机",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-dj-monitor-wedge-78f6b1b0": {
+    "name": "返听音箱",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-optics-rail-a5550ac4": {
+    "name": "定量酒嘴轨架",
+    "bucket": "food"
+  },
+  "orchestra-and-band-instruments-flute-8c1f6878": {
+    "name": "音乐会长笛",
+    "bucket": "audio"
+  },
+  "racecourse-and-parade-ring-big-screen-frame-9bea9827": {
+    "name": "大型屏幕框架",
+    "bucket": "digital"
+  },
+  "theatre-stage-and-backstage-tannoy-speaker-efacfc9d": {
+    "name": "剧院广播音箱",
+    "bucket": "audio"
+  },
+  "tv-studio-and-broadcast-gallery-boom-microphone-on-pol-952f926e": {
+    "name": "长杆吊麦",
+    "bucket": "audio"
+  },
+  "university-lecture-hall-and-campus-projection-screen-f41396d5": {
+    "name": "讲堂投影幕布",
+    "bucket": "digital"
+  },
+  "village-hall-and-community-events-pa-speaker-on-stand-7ffa787e": {
+    "name": "三脚架舞台音箱",
+    "bucket": "audio"
+  },
+  "low-poly-character-figures-builder-standing-41a26918": {
+    "name": "安全帽建筑工人",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-chef-standing-107eec87": {
+    "name": "白衣厨师",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-arms-crossed-d539191f": {
+    "name": "抱臂站立人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-coat-standing-d311fc0b": {
+    "name": "穿外套站立人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-coat-walking-52e652ed": {
+    "name": "穿外套提包行走人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-hands-in-pockets-65efe4c2": {
+    "name": "双手插袋人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-leaning-7dd8a161": {
+    "name": "倚墙人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-on-phone-57698df1": {
+    "name": "打电话人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-pushing-trolley-02fba33e": {
+    "name": "推购物车人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-running-de3617e6": {
+    "name": "奔跑人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-sitting-f51129df": {
+    "name": "坐姿人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-standing-idle-514e9033": {
+    "name": "自然站立人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-walking-06de0354": {
+    "name": "行走人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-civilian-waving-a7248cbd": {
+    "name": "挥手人物",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-cleaner-with-mop-579c8a9e": {
+    "name": "持拖把保洁员",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-courier-with-parcel-9ba10dd9": {
+    "name": "抱包裹快递员",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-firefighter-standing-8ded7b6f": {
+    "name": "站立消防员",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-medic-standing-c9e96efa": {
+    "name": "站立医护人员",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-shop-worker-standing-44c74d70": {
+    "name": "围裙店员",
+    "bucket": "people"
+  },
+  "low-poly-character-figures-waiter-with-tray-59369bb3": {
+    "name": "托盘服务员",
+    "bucket": "people"
+  },
+  "american-football-stadium-kit-championship-trophy-6989e4ff": {
+    "name": "橄榄球冠军奖杯",
+    "bucket": "decor"
+  },
+  "art-gallery-and-exhibition-rooms-wall-text-panel-c987f386": {
+    "name": "展馆墙面说明牌",
+    "bucket": "signage"
+  },
+  "football-soccer-club-grounds-substitution-board-05e2171f": {
+    "name": "手持换人牌",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-tactics-wall-board-15e2a3e2": {
+    "name": "壁挂战术板",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-trophy-plinth-99e2c1de": {
+    "name": "俱乐部奖杯展台",
+    "bucket": "exhibition"
+  },
+  "football-soccer-club-grounds-wall-hook-rail-618b9d6b": {
+    "name": "六钩更衣挂架",
+    "bucket": "storage"
+  },
+  "go-kart-track-and-pit-lane-trophy-set-7acab0eb": {
+    "name": "奖杯套装",
+    "bucket": "decor"
+  },
+  "hot-air-balloon-festival-briefing-board-81a73204": {
+    "name": "飞行员简报板",
+    "bucket": "signage"
+  },
+  "indoor-market-hall-and-traders-hanging-trader-sign-b77a654b": {
+    "name": "悬挂商铺招牌",
+    "bucket": "signage"
+  },
+  "indoor-market-hall-and-traders-hanging-trader-sign-blu-1948335a": {
+    "name": "蓝底商铺招牌",
+    "bucket": "signage"
+  },
+  "indoor-market-hall-and-traders-information-board-04c099de": {
+    "name": "市场信息公告板",
+    "bucket": "signage"
+  },
+  "nightclub-and-dj-booth-fire-exit-sign-b7435ec3": {
+    "name": "消防出口指示牌",
+    "bucket": "signage"
+  },
+  "public-aquarium-and-marine-centre-tank-interpretive-si-a078150f": {
+    "name": "青绿色水族说明牌",
+    "bucket": "signage"
+  },
+  "public-aquarium-and-marine-centre-wall-graphic-panel-a5dfb6e6": {
+    "name": "水族馆墙面图示板",
+    "bucket": "signage"
+  },
+  "theatre-stage-and-backstage-wig-block-stand-347eee98": {
+    "name": "假发头模支架",
+    "bucket": "decor"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-gathered-stage-cebd22a1": {
+    "name": "收拢舞台幕帘",
+    "bucket": "stage"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-raised-puppet--3ae52a70": {
+    "name": "抬高木偶舞台",
+    "bucket": "stage"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-stage-wing-pan-fad76803": {
+    "name": "舞台侧翼挡板",
+    "bucket": "stage"
+  },
+  "art-gallery-and-exhibition-rooms-gallery-floor-tile-8d6d082b": {
+    "name": "美术馆地砖模块",
+    "bucket": "structure"
+  },
+  "art-gallery-and-exhibition-rooms-single-room-hang-a32f2fd9": {
+    "name": "单间展厅布展场景",
+    "bucket": "scenes"
+  },
+  "chocolate-making-and-confectionery-choco-0bed56f3-starter-scene": {
+    "name": "巧克力工坊生产线场景",
+    "bucket": "scenes"
+  },
+  "chocolate-making-and-confectionery-roofed-chocolate-wo-7d76ee5b": {
+    "name": "带屋顶巧克力工坊",
+    "bucket": "scenes"
+  },
+  "community-sports-hall-and-changing-rooms-changing-room-b2debb51": {
+    "name": "更衣室镜面板",
+    "bucket": "decor"
+  },
+  "community-sports-hall-and-changing-rooms-cleaning-trol-ae0faab6": {
+    "name": "体育馆清洁推车",
+    "bucket": "logistics"
+  },
+  "football-soccer-club-grounds-drink-cooler-e552e4f8": {
+    "name": "场边保温饮料箱",
+    "bucket": "food"
+  },
+  "football-soccer-club-grounds-laundry-trolley-8899c51b": {
+    "name": "敞口衣物运输车",
+    "bucket": "logistics"
+  },
+  "football-soccer-club-grounds-shower-column-2aeb12a4": {
+    "name": "独立淋浴柱",
+    "bucket": "logistics"
+  },
+  "football-soccer-club-grounds-wash-basin-3be77db0": {
+    "name": "立柱洗手盆",
+    "bucket": "logistics"
+  },
+  "hot-air-balloon-festival-blank-finger-post-5c68f83a": {
+    "name": "空白多向指示杆",
+    "bucket": "signage"
+  },
+  "indoor-market-hall-and-traders-hanging-stock-rail-d052326c": {
+    "name": "悬挂式商品挂杆",
+    "bucket": "storage"
+  },
+  "live-music-venue-and-festival-stage-ground-support-bas-c4711f51": {
+    "name": "桁架落地支撑底板",
+    "bucket": "stage"
+  },
+  "live-music-venue-and-festival-stage-pa-stack-frame-189c8a7c": {
+    "name": "扩声音箱支架",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-stage-riser-block-0d3aaf5f": {
+    "name": "舞台增高台块",
+    "bucket": "stage"
+  },
+  "live-music-venue-and-festival-stage-stage-roof-canopy--543b5fb3": {
+    "name": "舞台顶棚模块",
+    "bucket": "stage"
+  },
+  "live-music-venue-and-festival-stage-stage-step-unit-f141dc1c": {
+    "name": "舞台台阶",
+    "bucket": "stage"
+  },
+  "nightclub-and-dj-booth-cleaning-trolley-58c22c92": {
+    "name": "夜场清洁推车",
+    "bucket": "logistics"
+  },
+  "nightclub-and-dj-booth-cocktail-station-d186e438": {
+    "name": "鸡尾酒操作台",
+    "bucket": "food"
+  },
+  "nightclub-and-dj-booth-glass-washer-d7ae8ae5": {
+    "name": "吧台下洗杯机",
+    "bucket": "food"
+  },
+  "nightclub-and-dj-booth-laptop-on-stand-6c305e35": {
+    "name": "支架上的打碟笔记本电脑",
+    "bucket": "digital"
+  },
+  "nightclub-and-dj-booth-riser-platform-module-1e135c35": {
+    "name": "模块升高平台",
+    "bucket": "stage"
+  },
+  "orchestra-and-band-instruments-folding-music-stand-20723b66": {
+    "name": "折叠乐谱架",
+    "bucket": "audio"
+  },
+  "orchestra-and-band-instruments-stage-platform-module-6be1e985": {
+    "name": "音乐会舞台平台",
+    "bucket": "stage"
+  },
+  "retro-diner-and-roadside-motel-napkin-dispenser-2df9b069": {
+    "name": "餐巾纸分配盒",
+    "bucket": "food"
+  },
+  "rocket-launch-pad-and-gantry-stage-transport-cradle-7c9f60ce": {
+    "name": "火箭级运输托架",
+    "bucket": "tools"
+  },
+  "storybook-christmas-market-santa-toy-workshop-01bea88e": {
+    "name": "圣诞老人玩具工坊",
+    "bucket": "scenes"
+  },
+  "theatre-stage-and-backstage-costume-rail-with-covers-8ed59fc5": {
+    "name": "带防尘罩服装挂架",
+    "bucket": "storage"
+  },
+  "theatre-stage-and-backstage-dressing-room-mirror-stati-97cf3af1": {
+    "name": "化妆间镜台",
+    "bucket": "tables"
+  },
+  "theatre-stage-and-backstage-orchestra-pit-rail-45132244": {
+    "name": "乐池护栏",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-orchestra-pit-rostrum-8834f48d": {
+    "name": "乐池演奏台",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-proscenium-arch-frame-f9dcb7bb": {
+    "name": "剧院台口框架",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-row-letter-plate-160b8d03": {
+    "name": "座位排号牌",
+    "bucket": "signage"
+  },
+  "theatre-stage-and-backstage-scenery-flat-eef5eda8": {
+    "name": "舞台布景平板",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-stage-brace-and-weight-c75020db": {
+    "name": "舞台斜撑与配重",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-stage-trap-section-c946022f": {
+    "name": "舞台活门模块",
+    "bucket": "stage"
+  },
+  "tv-studio-and-broadcast-gallery-scenery-brace-and-weig-9e0bb91c": {
+    "name": "演播室布景斜撑与配重",
+    "bucket": "stage"
+  },
+  "village-hall-and-community-events-parquet-floor-tile-b-965c446f": {
+    "name": "带边框拼花地板模块",
+    "bucket": "structure"
+  },
+  "village-hall-and-community-events-stage-curtain-rail-20c284fc": {
+    "name": "舞台轨道与幕帘",
+    "bucket": "stage"
+  },
+  "village-hall-and-community-events-stage-platform-modul-208d60a2": {
+    "name": "社区会堂舞台模块",
+    "bucket": "stage"
+  },
+  "american-football-stadium-kit-agility-chute-fecff344": {
+    "name": "低位敏捷训练架",
+    "bucket": "sports"
+  },
+  "american-football-stadium-kit-resistance-parachute-309496f5": {
+    "name": "展开的阻力训练伞",
+    "bucket": "sports"
+  },
+  "american-football-stadium-kit-snap-trainer-36159cec": {
+    "name": "橄榄球开球目标训练器",
+    "bucket": "sports"
+  },
+  "american-football-stadium-kit-tackle-wheel-ae0b39f3": {
+    "name": "直立擒抱训练轮",
+    "bucket": "sports"
+  },
+  "basketball-club-and-street-courts-sports-duffel-5c80a427": {
+    "name": "篮球运动包",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-agility-ladder-75e84ad2": {
+    "name": "六格敏捷训练梯",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-equipment-carry-bag-787b6642": {
+    "name": "训练器材携行包",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-soccer-ball-118e3a67": {
+    "name": "拼片足球",
+    "bucket": "sports"
+  },
+  "nursery-and-primary-classroom-fire-exit-door-module-1f2b7548": {
+    "name": "消防出口门模块",
+    "bucket": "structure"
+  },
+  "squash-club-and-racket-workshop-equipment-bag-487e54a5": {
+    "name": "壁球器材包",
+    "bucket": "sports"
+  },
+  "squash-club-and-racket-workshop-resistance-band-statio-854fd051": {
+    "name": "弹力带训练站",
+    "bucket": "sports"
+  },
+  "tennis-club-and-courts-sports-bag-73697f1c": {
+    "name": "网球运动包",
+    "bucket": "sports"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-stage-spotligh-998dc62f": {
+    "name": "舞台聚光灯",
+    "bucket": "lighting"
+  },
+  "live-music-venue-and-festival-stage-moving-head-light-0781fce0": {
+    "name": "摇头灯",
+    "bucket": "lighting"
+  },
+  "live-music-venue-and-festival-stage-truss-corner-block-be643b18": {
+    "name": "桁架转角块",
+    "bucket": "stage"
+  },
+  "live-music-venue-and-festival-stage-truss-vertical-tow-8ea841b9": {
+    "name": "竖直桁架塔",
+    "bucket": "stage"
+  },
+  "nightclub-and-dj-booth-ceiling-truss-grid-module-49574ae0": {
+    "name": "顶棚桁架网格",
+    "bucket": "stage"
+  },
+  "nightclub-and-dj-booth-disco-ball-on-motor-055bf9ff": {
+    "name": "电动迪斯科镜面球",
+    "bucket": "lighting"
+  },
+  "storybook-christmas-market-festoon-bulb-string-9422da4e": {
+    "name": "节庆灯泡串",
+    "bucket": "lighting"
+  },
+  "village-hall-and-community-events-ceiling-pendant-ligh-7acec826": {
+    "name": "会堂吊灯",
+    "bucket": "lighting"
+  },
+  "car-park-and-road-vehicle-fleet-payment-kiosk-c5c914df": {
+    "name": "停车场缴费亭",
+    "bucket": "logistics"
+  },
+  "christmas-storybook-christmas-bakery-market-a78eca89": {
+    "name": "圣诞烘焙市集小屋",
+    "bucket": "exhibition"
+  },
+  "christmas-storybook-market-chalet-f8bf72ba": {
+    "name": "节庆市集木屋",
+    "bucket": "exhibition"
+  },
+  "christmas-village-christmas-market-stall-4fcc8838": {
+    "name": "圣诞市集摊位",
+    "bucket": "exhibition"
+  },
+  "fantasy-mmo-city-and-townsfolk-market-stall-5d9f093b": {
+    "name": "带顶市集摊位",
+    "bucket": "exhibition"
+  },
+  "football-soccer-club-grounds-concession-kiosk-fc162fe3": {
+    "name": "敞窗小卖亭",
+    "bucket": "exhibition"
+  },
+  "football-soccer-club-grounds-ticket-booth-e23acd9f": {
+    "name": "球场入口售票亭",
+    "bucket": "exhibition"
+  },
+  "hero-shooter-harbour-payload-market-stall-awning-358921d2": {
+    "name": "条纹遮棚市集摊位",
+    "bucket": "exhibition"
+  },
+  "hot-air-balloon-festival-trestle-table-5be944ba": {
+    "name": "折叠支架长桌",
+    "bucket": "tables"
+  },
+  "indian-bazaar-street-and-temple-cloth-stall-with-bolt--a2faee3a": {
+    "name": "布卷展示架布料摊位",
+    "bucket": "exhibition"
+  },
+  "indian-bazaar-street-and-temple-flower-garland-stall-1de92b5c": {
+    "name": "花环摊位",
+    "bucket": "exhibition"
+  },
+  "indian-bazaar-street-and-temple-fruit-and-vegetable-st-280ccd20": {
+    "name": "果蔬摊位",
+    "bucket": "exhibition"
+  },
+  "indian-bazaar-street-and-temple-spice-stall-1b95bd16": {
+    "name": "敞口麻袋香料摊位",
+    "bucket": "exhibition"
+  },
+  "indian-bazaar-street-and-temple-tea-stall-865b528a": {
+    "name": "带茶壶杯架的茶摊",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-corner-stall-unit-62d7d118": {
+    "name": "转角摊位单元",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-lock-up-stall-unit-3085836b": {
+    "name": "卷帘门封闭摊位",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-lock-up-stall-unit-open-83b67308": {
+    "name": "卷帘门开启摊位",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-lock-up-stall-unit-red-3f955420": {
+    "name": "红色卷帘门摊位",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-market-hall-floor-bay-d36d1956": {
+    "name": "市场大厅地板模块",
+    "bucket": "structure"
+  },
+  "indoor-market-hall-and-traders-open-stall-unit-5124bc70": {
+    "name": "带柜台顶棚开放摊位",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-open-stall-unit-blue-7bc77762": {
+    "name": "蓝色开放摊位",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-stall-back-shelving-3462e261": {
+    "name": "摊位后置货架",
+    "bucket": "storage"
+  },
+  "indoor-market-hall-and-traders-stall-counter-module-0979a957": {
+    "name": "摊位柜台模块",
+    "bucket": "tables"
+  },
+  "indoor-market-hall-and-traders-stall-price-board-85782807": {
+    "name": "画架式价目牌",
+    "bucket": "signage"
+  },
+  "korean-hanok-village-and-street-market-stall-with-awni-064ed223": {
+    "name": "韩式遮棚市集摊位",
+    "bucket": "exhibition"
+  },
+  "live-music-venue-and-festival-stage-food-stall-unit-da74e65f": {
+    "name": "音乐节餐饮摊位",
+    "bucket": "exhibition"
+  },
+  "live-music-venue-and-festival-stage-merch-stall-3fd15894": {
+    "name": "音乐节周边摊位",
+    "bucket": "exhibition"
+  },
+  "meadow-courier-parcel-market-awning": {
+    "name": "田园包裹市集遮棚",
+    "bucket": "exhibition"
+  },
+  "medieval-mmo-starter-realm-market-stall-cream-e095e409": {
+    "name": "奶油色市集摊位",
+    "bucket": "exhibition"
+  },
+  "medieval-tournament-and-jousting-ground-merchant-stall-9a839369": {
+    "name": "比武场商贩摊位",
+    "bucket": "exhibition"
+  },
+  "nightclub-and-dj-booth-dj-booth-desk-b052b722": {
+    "name": "打碟工作台",
+    "bucket": "audio"
+  },
+  "pixel-modern-farm-market-stall-acecc44a": {
+    "name": "像素风农场摊位",
+    "bucket": "exhibition"
+  },
+  "racecourse-and-parade-ring-bar-and-food-kiosk-7eefd7a3": {
+    "name": "饮品餐食售卖亭",
+    "bucket": "exhibition"
+  },
+  "roman-bathhouse-and-palaestra-vendor-stall-42493924": {
+    "name": "罗马浴场售货摊",
+    "bucket": "exhibition"
+  },
+  "storybook-christmas-market-cocoa-market-stall-76043373": {
+    "name": "热可可市集摊位",
+    "bucket": "exhibition"
+  },
+  "street-food-market-and-food-trucks-gazebo-stall-with-c-e8a7b705": {
+    "name": "凉亭式遮棚摊位",
+    "bucket": "exhibition"
+  },
+  "street-food-market-and-food-trucks-market-stall-frame--b7c13845": {
+    "name": "空置摊位框架",
+    "bucket": "exhibition"
+  },
+  "street-food-market-and-food-trucks-stall-number-sign-99e7d623": {
+    "name": "摊位编号牌",
+    "bucket": "signage"
+  },
+  "street-food-market-and-food-trucks-trestle-stall-red-a-b0ea3177": {
+    "name": "红色遮棚支架摊位",
+    "bucket": "exhibition"
+  },
+  "street-food-market-and-food-trucks-trestle-stall-with--2858ba1d": {
+    "name": "遮棚支架摊位",
+    "bucket": "exhibition"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-df93cdea": {
+    "name": "游乐场射击摊位",
+    "bucket": "exhibition"
+  },
+  "village-hall-and-community-events-book-stall-table-11610050": {
+    "name": "书籍售卖桌",
+    "bucket": "tables"
+  },
+  "community-sports-hall-and-changing-rooms-gym-bench-76cb03bd": {
+    "name": "体育馆长凳",
+    "bucket": "seating"
+  },
+  "community-sports-hall-and-changing-rooms-gym-mat-singl-70cf5ea8": {
+    "name": "单张体操垫",
+    "bucket": "sports"
+  },
+  "community-sports-hall-and-changing-rooms-gym-mat-stack-d3bfc381": {
+    "name": "体操垫堆",
+    "bucket": "sports"
+  },
+  "football-soccer-club-grounds-bucket-seat-1a72cd60": {
+    "name": "独立观众桶形座椅",
+    "bucket": "seating"
+  },
+  "football-soccer-club-grounds-changing-bench-912e20bc": {
+    "name": "无靠背更衣长凳",
+    "bucket": "seating"
+  },
+  "football-soccer-club-grounds-folding-coach-chair-3a02f4ca": {
+    "name": "折叠教练椅",
+    "bucket": "seating"
+  },
+  "gym-and-fitness-studio-adjustable-bench-4624177a": {
+    "name": "可调训练卧推凳",
+    "bucket": "sports"
+  },
+  "hot-air-balloon-festival-folding-camp-chair-ba5bb3d0": {
+    "name": "热气球营地折叠椅",
+    "bucket": "seating"
+  },
+  "public-aquarium-and-marine-centre-visitor-bench-teal-d3402427": {
+    "name": "青绿色游客长椅",
+    "bucket": "seating"
+  },
+  "street-food-market-and-food-trucks-bar-stool-aed9cea8": {
+    "name": "街头餐饮吧凳",
+    "bucket": "seating"
+  },
+  "tennis-club-and-courts-terrace-chair-db8478f6": {
+    "name": "网球场露台椅",
+    "bucket": "seating"
+  },
+  "village-hall-and-community-events-stacking-chair-row-fcb22800": {
+    "name": "六座连排椅",
+    "bucket": "seating"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33": {
+    "name": "道具储物箱",
+    "bucket": "storage"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-scenery-track--493f526d": {
+    "name": "布景轨道端头",
+    "bucket": "stage"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-scenery-track--6838572e": {
+    "name": "直线布景轨道",
+    "bucket": "stage"
+  },
+  "abandoned-tidal-model-testing-hall-optical-tracking-ca-5a93f82e": {
+    "name": "光学追踪摄像机",
+    "bucket": "digital"
+  },
+  "aircraft-fleet-and-airfield-fuel-drum-pallet-8abe06a7": {
+    "name": "托盘燃料桶组",
+    "bucket": "storage"
+  },
+  "arable-fields-and-farm-machinery-tracked-tractor-f59c2454": {
+    "name": "双履带拖拉机",
+    "bucket": "vehicles"
+  },
+  "art-gallery-and-exhibition-rooms-lighting-track-sectio-c570a9a8": {
+    "name": "美术馆照明轨道",
+    "bucket": "lighting"
+  },
+  "art-gallery-and-exhibition-rooms-track-spot-head-44353656": {
+    "name": "轨道射灯灯头",
+    "bucket": "lighting"
+  },
+  "art-gallery-and-exhibition-rooms-vitrine-case-ca6b50af": {
+    "name": "玻璃展示柜",
+    "bucket": "exhibition"
+  },
+  "basketball-club-and-street-courts-spectator-bin-94bb1439": {
+    "name": "观众区垃圾桶",
+    "bucket": "logistics"
+  },
+  "cinema-multiplex-and-foyer-spare-lamp-case-9f73b1ff": {
+    "name": "备用灯具航空箱",
+    "bucket": "storage"
+  },
+  "community-sports-hall-and-changing-rooms-foyer-bin-b2789118": {
+    "name": "会堂大厅垃圾桶",
+    "bucket": "logistics"
+  },
+  "community-sports-hall-and-changing-rooms-trophy-cabine-51c36706": {
+    "name": "俱乐部奖杯展示柜",
+    "bucket": "exhibition"
+  },
+  "dog-agility-and-training-field-equipment-store-rack-6c5ec6c3": {
+    "name": "训练器材收纳架",
+    "bucket": "storage"
+  },
+  "football-soccer-club-grounds-boot-rack-1112eb8f": {
+    "name": "三层球鞋架",
+    "bucket": "storage"
+  },
+  "football-soccer-club-grounds-first-aid-cabinet-feff73ae": {
+    "name": "急救用品柜",
+    "bucket": "logistics"
+  },
+  "football-soccer-club-grounds-open-kit-locker-d10c9b5a": {
+    "name": "开放式通风装备柜",
+    "bucket": "storage"
+  },
+  "football-soccer-club-grounds-towel-shelf-8d7f3ef9": {
+    "name": "毛巾收纳架",
+    "bucket": "storage"
+  },
+  "football-soccer-club-grounds-waste-bin-15a6b427": {
+    "name": "场馆敞口垃圾桶",
+    "bucket": "logistics"
+  },
+  "football-soccer-club-grounds-water-bottle-carrier-3c5028a4": {
+    "name": "六瓶场边饮水提架",
+    "bucket": "sports"
+  },
+  "gym-and-fitness-studio-water-bottle-97b8b284": {
+    "name": "健身运动水壶",
+    "bucket": "sports"
+  },
+  "hot-air-balloon-festival-propane-cylinder-rack-b1de839d": {
+    "name": "丙烷气瓶运输架",
+    "bucket": "storage"
+  },
+  "indian-bazaar-street-and-temple-produce-crate-stack-a539d636": {
+    "name": "果蔬周转箱堆",
+    "bucket": "storage"
+  },
+  "indian-bazaar-street-and-temple-street-bin-3aeaa2eb": {
+    "name": "市集街道垃圾桶",
+    "bucket": "logistics"
+  },
+  "indoor-market-hall-and-traders-ceramic-and-homeware-sh-fcd061ca": {
+    "name": "陶器家居货架",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-fruit-and-veg-crate-set-222d673b": {
+    "name": "果蔬筐套装",
+    "bucket": "storage"
+  },
+  "indoor-market-hall-and-traders-glass-display-case-8f12ea4d": {
+    "name": "移门玻璃展示柜",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-litter-bin-06bd3ac5": {
+    "name": "带翻盖垃圾桶",
+    "bucket": "logistics"
+  },
+  "indoor-market-hall-and-traders-preserve-and-cheese-she-99589905": {
+    "name": "果酱奶酪陈列架",
+    "bucket": "exhibition"
+  },
+  "indoor-market-hall-and-traders-vinyl-record-crate-set-672bf283": {
+    "name": "黑胶唱片收纳箱组",
+    "bucket": "storage"
+  },
+  "korean-hanok-village-and-street-produce-basket-set-0d57d77d": {
+    "name": "韩式果蔬篮套装",
+    "bucket": "storage"
+  },
+  "live-music-venue-and-festival-stage-drum-riser-fb450f31": {
+    "name": "鼓手增高台",
+    "bucket": "stage"
+  },
+  "live-music-venue-and-festival-stage-litter-bin-d65ec1dd": {
+    "name": "音乐节垃圾桶",
+    "bucket": "logistics"
+  },
+  "live-music-venue-and-festival-stage-multicore-cable-dr-67864f73": {
+    "name": "多芯音频电缆卷盘",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-road-case-large-483e15ad": {
+    "name": "大型演出航空箱",
+    "bucket": "storage"
+  },
+  "live-music-venue-and-festival-stage-road-case-small-ea804af6": {
+    "name": "小型演出航空箱",
+    "bucket": "storage"
+  },
+  "live-music-venue-and-festival-stage-subwoofer-cabinet-76be2833": {
+    "name": "低音炮音箱",
+    "bucket": "audio"
+  },
+  "live-music-venue-and-festival-stage-water-bottle-crate-0c59da5b": {
+    "name": "瓶装水周转箱",
+    "bucket": "storage"
+  },
+  "music-recording-studio-and-instruments-drum-snare-on-s-d42c8c13": {
+    "name": "军鼓与支架",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-speaker-mid-cabinet-2e417753": {
+    "name": "中频音箱箱体",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-speaker-stack-sub-cabinet-77151eb8": {
+    "name": "堆叠式低音音箱",
+    "bucket": "audio"
+  },
+  "petrol-station-and-forecourt-shop-screen-wash-pallet-e983d54e": {
+    "name": "汽车玻璃水托盘",
+    "bucket": "storage"
+  },
+  "pixel-modern-farm-produce-crates-c20feab2": {
+    "name": "农场果蔬周转箱",
+    "bucket": "storage"
+  },
+  "racecourse-and-parade-ring-divot-fork-rack-c3450a2d": {
+    "name": "草皮修补叉收纳架",
+    "bucket": "tools"
+  },
+  "radio-telescope-array-and-field-station-supply-crate-s-6a5d3508": {
+    "name": "物资补给箱堆",
+    "bucket": "storage"
+  },
+  "retail-store-fixtures-and-mall-ceiling-track-lighting--9cadd166": {
+    "name": "商场顶装轨道灯杆",
+    "bucket": "lighting"
+  },
+  "tennis-club-and-courts-water-bottle-abd2477f": {
+    "name": "网球运动水壶",
+    "bucket": "sports"
+  },
+  "theatre-stage-and-backstage-house-lighting-bracket-381e7e7d": {
+    "name": "剧院观众席灯光支架",
+    "bucket": "lighting"
+  },
+  "theatre-stage-and-backstage-house-tabs-on-track-2201a546": {
+    "name": "闭合轨道大幕",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-house-tabs-on-track-open-00c29a91": {
+    "name": "打开的轨道大幕",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-prop-shelf-unit-791c9034": {
+    "name": "舞台道具货架",
+    "bucket": "storage"
+  },
+  "village-hall-and-community-events-crockery-crate-ed80f580": {
+    "name": "餐具周转箱",
+    "bucket": "storage"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-lighting-contr-fa7fd39b": {
+    "name": "灯光控制台",
+    "bucket": "lighting"
+  },
+  "american-football-stadium-kit-tablet-station-ec47a183": {
+    "name": "赛事回放平板充电站",
+    "bucket": "digital"
+  },
+  "art-gallery-and-exhibition-rooms-reception-desk-0494fe21": {
+    "name": "美术馆接待台",
+    "bucket": "tables"
+  },
+  "art-gallery-and-exhibition-rooms-shop-counter-d42a2ff0": {
+    "name": "美术馆商店柜台",
+    "bucket": "tables"
+  },
+  "butchers-shop-and-deli-counter-stainless-prep-table-7c8a3bb8": {
+    "name": "不锈钢备餐台",
+    "bucket": "food"
+  },
+  "dog-agility-and-training-field-rosette-and-trophy-tabl-e70911a3": {
+    "name": "奖章奖杯陈列桌",
+    "bucket": "exhibition"
+  },
+  "downtown-office-interiors-desk-sit-stand-raised-19facdb2": {
+    "name": "升起的坐站两用办公桌",
+    "bucket": "tables"
+  },
+  "downtown-office-interiors-sit-stand-desk-frame-39615259": {
+    "name": "升降办公桌框架",
+    "bucket": "tables"
+  },
+  "football-soccer-club-grounds-treatment-table-2eeb6a53": {
+    "name": "场边治疗床",
+    "bucket": "seating"
+  },
+  "indian-bazaar-street-and-temple-sweet-counter-3a98de40": {
+    "name": "带托盘甜品柜台",
+    "bucket": "food"
+  },
+  "indoor-market-hall-and-traders-folding-trader-table-c8986b1d": {
+    "name": "折叠商贩桌",
+    "bucket": "tables"
+  },
+  "indoor-market-hall-and-traders-till-and-card-reader-facdd132": {
+    "name": "收银机与刷卡器",
+    "bucket": "digital"
+  },
+  "live-music-venue-and-festival-stage-front-of-house-mix-ab9b61a6": {
+    "name": "观众区调音台",
+    "bucket": "audio"
+  },
+  "nightclub-and-dj-booth-cloakroom-counter-with-rails-c6d08198": {
+    "name": "带挂杆衣帽间柜台",
+    "bucket": "tables"
+  },
+  "nightclub-and-dj-booth-turntable-deck-aa917183": {
+    "name": "黑胶打碟唱盘",
+    "bucket": "audio"
+  },
+  "parcel-depot-and-sorting-hall-parcel-depot-and-sorting-83979c04": {
+    "name": "货运司机登记台",
+    "bucket": "tables"
+  },
+  "recycling-centre-and-material-sorting-sample-sorting-t-453f97fd": {
+    "name": "样品分拣工作台",
+    "bucket": "tools"
+  },
+  "theatre-stage-and-backstage-counterweight-frame-with-w-65d65714": {
+    "name": "舞台配重框架",
+    "bucket": "stage"
+  },
+  "theatre-stage-and-backstage-set-dressing-table-5d0f7164": {
+    "name": "布景道具桌",
+    "bucket": "tables"
+  },
+  "theatre-stage-and-backstage-stage-manager-desk-with-pa-e34d027a": {
+    "name": "带呼叫面板舞台监督台",
+    "bucket": "stage"
+  },
+  "village-hall-and-community-events-raffle-table-af0f6485": {
+    "name": "抽奖奖品桌",
+    "bucket": "tables"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--09eae188": {
+    "name": "一米八装配工作台",
+    "bucket": "tools"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-string-spool-s-43bbc017": {
+    "name": "线轴支架",
+    "bucket": "tools"
+  },
+  "bakery-and-cafe-grinder-retail-bulk-3668d9ae": {
+    "name": "商用大容量咖啡磨豆机",
+    "bucket": "food"
+  },
+  "community-sports-hall-and-changing-rooms-pump-and-whis-2e97e815": {
+    "name": "打气筒与口哨托盘",
+    "bucket": "sports"
+  },
+  "community-sports-hall-and-changing-rooms-vending-machi-3def4990": {
+    "name": "体育馆自动售货机",
+    "bucket": "food"
+  },
+  "escape-room-and-puzzle-venue-drinks-vending-machine-d751cf4a": {
+    "name": "饮料自动售货机",
+    "bucket": "food"
+  },
+  "football-soccer-club-grounds-ball-pump-46d4eaeb": {
+    "name": "脚踏球类打气筒",
+    "bucket": "sports"
+  },
+  "laser-tag-arena-and-activity-centre-vending-machine-73e45792": {
+    "name": "游乐场自动售货机",
+    "bucket": "food"
+  },
+  "live-music-venue-and-festival-stage-cable-ramp-6576a82f": {
+    "name": "电缆过线板",
+    "bucket": "tools"
+  },
+  "live-music-venue-and-festival-stage-generator-trailer-354a33e9": {
+    "name": "发电机拖车",
+    "bucket": "tools"
+  },
+  "live-music-venue-and-festival-stage-haze-machine-f83afacc": {
+    "name": "舞台薄雾机",
+    "bucket": "stage"
+  },
+  "live-music-venue-and-festival-stage-power-distro-box-28b03233": {
+    "name": "电源配电箱",
+    "bucket": "tools"
+  },
+  "music-recording-studio-and-instruments-tape-machine-680673b8": {
+    "name": "两英寸磁带录音机",
+    "bucket": "audio"
+  },
+  "racecourse-and-parade-ring-tractor-harrow-99591e72": {
+    "name": "拖拉机耙具",
+    "bucket": "tools"
+  },
+  "skate-park-and-street-sports-grind-box-25236bc8": {
+    "name": "钢边滑板练习箱",
+    "bucket": "sports"
+  },
+  "textile-weaving-and-dye-workshop-warp-beam-stand-515559b5": {
+    "name": "经轴支架",
+    "bucket": "tools"
+  },
+  "trampoline-park-and-soft-play-vending-machine-0b02ec87": {
+    "name": "蹦床馆自动售货机",
+    "bucket": "food"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--64e716a2": {
+    "name": "立式台钻",
+    "bucket": "tools"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--87d87bf5": {
+    "name": "开放框架带锯",
+    "bucket": "tools"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--af108527": {
+    "name": "移动机械底座",
+    "bucket": "tools"
+  },
+  "hotel-and-resort-operations-conference-table-module-a6abb373": {
+    "name": "模块会议桌",
+    "bucket": "tables"
+  },
+  "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8": {
+    "name": "可叠放座椅",
+    "bucket": "seating"
+  },
+  "tattoo-and-piercing-studio-studio-plant-pot-7ee5b536": {
+    "name": "宽叶盆栽",
+    "bucket": "plants"
+  }
+}

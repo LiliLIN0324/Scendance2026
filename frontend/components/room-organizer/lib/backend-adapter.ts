@@ -1,4 +1,5 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
+import libraryAssetLabels from '../../../../assets/library/asset-labels.zh.json';
 /** The backend domain is the single wire-format authority. No parallel API schema. */
 import { catalog, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
 import { dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
@@ -85,7 +86,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
     const meta = catalog.find(entry => entry.id === o.materialId);
     return {
       id: o.id, type: rendererTypes[o.materialId], materialId: o.materialId,
-      name: o.assetId ? options.assetNames?.[o.assetId] ?? '三维资产' : meta?.name ?? o.materialId,
+      name: o.assetId ? (libraryAssetLabels as Record<string, string>)[o.assetId] ?? options.assetNames?.[o.assetId] ?? '三维资产' : meta?.name ?? o.materialId,
       width: o.size.width, depth: o.size.depth, height: o.size.height,
       position: { x: o.position.x - scene.venue.width / 2, z: o.position.z - scene.venue.depth / 2 },
       rotation: backendDegreesToEditorRadians(o.rotation), color: o.color, icon: icons[o.materialId],
