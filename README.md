@@ -76,45 +76,29 @@
 | B：Supabase 后端 | [后端说明](BACKEND.md)、[部署说明](docs/DEPLOYMENT.md) |
 | A01：交接与验证 | [编辑器首版报告](docs/team/reports/A/A01.md) |
 | 前后端本地联调 | [运行步骤、修复及测试结果](docs/INTEGRATION.md) |
-| 原体育馆展示原型 | 根目录 `index.html`；运行方式与功能见下文 |
+| 官网静态首页 | 根目录 `introduction.html`；运行与打包见下文 |
 
-## 体育馆展示原型（根目录 HTML）
+## 官网静态首页（根目录 introduction.html）
 
-100 人、48 小时黑客松空间方案
-
-基于用户提供的体育馆参考照片制作的空间与时间交互原型。计划参赛规模为 100 人，25 支四人团队；导师、工作人员和评委另计。
-
-这一块是**独立于工作台的展示原型**，用来把「场地→布置→时间」讲清楚，与 `frontend/` 里的产品不是同一套代码。
+`introduction.html` 是官网本体：单文件、样式与动效内联，页面里内嵌了十场景三维库。打包后由 `/introduction` 提供。原先的体育馆展示原型 `index.html` 已删除，旧版留档见 `docs/mockups/legacy-venue-index.html`。
 
 ### 运行
 
-在本目录执行 `python3 -m http.server 8766 --bind 127.0.0.1`，打开 http://127.0.0.1:8766/ 。
+在本目录执行 `python3 -m http.server 8766 --bind 127.0.0.1`，打开 http://127.0.0.1:8766/introduction.html 。
 
-使用本地保存的 Three.js 0.186.1、GLTFLoader 与 5 款 GLB 素材，不需要安装 npm 包、登录或配置 API Key，打开场景时不向素材供应商请求文件。浏览器需支持 WebGL 2 和 import maps。由于使用 ES Modules 和本地模型请求，必须通过 HTTP 服务打开，不支持双击 `index.html`。
+页面用 import map 解析裸模块名 `three`，并按相对路径请求 `vendor/three` 与 `scene/templates/*.glb`；必须通过 HTTP 服务打开，不支持双击 `introduction.html`。浏览器需支持 WebGL 2 与 import maps。
 
-### 交互
+### 打包
 
-- 在场内视角、三维全景、俯视布局之间切换。拖动环视，滚轮或双指缩放。
-- 点击区域或图例查看用途与现场确认事项。
-- 拖动 48 小时时间轴，查看签到开场、开发、轮休、导师反馈、迭代、路演和收尾。
-- 播放/暂停活动流程，切换动线及钢架屋顶。
-- 查看原照片、下载完整 Markdown 方案。
-- 查看 3DAssets 模型加载状态；打开“查看模型与来源”可跳转原始资产页面或下载对应的真实 GLB 文件。
-- 点击“旋转查看模型”或打开 `models.html`，逐个放大查看真实素材；模型预览支持拖动旋转与滚轮缩放。
+在本目录执行 `node scripts/package-pages.mjs`，把 `introduction.html`、`showcase/`（`assets`、`vendor`、`renderer-webgl.js`）以及场景库页面与十套 GLB 镜像到 `frontend/public/`，随 `frontend/` 的 Next 构建一起发布。
 
-### 已接入的素材
+### 素材
 
-会议桌、活动座椅、笔记本电脑、宽叶盆栽和舞台音箱。五款源模型共 262,516 字节，来自 3DAssets.dev 官方 API，按用途缓存到 `assets/models/`。素材清单在 `assets/catalogue.json`，完整来源、授权、文件哈希与检查记录在 `ASSET-SOURCES.md`。重复工位复用模型几何。
-
-Three.js 官方 npm 包的 SHA-512 完整性已验证，版本固定为 0.186.1，仅保存运行需要的文件到 `vendor/three/`，MIT 授权随文件保留。`renderer-webgl.js` 是当前渲染器。
+会议桌、活动座椅、笔记本电脑、宽叶盆栽和舞台音箱五款源模型来自 3DAssets.dev 官方 API，按用途缓存到 `assets/models/`；素材清单在 `assets/catalogue.json`，来源、授权与文件哈希记录在 `ASSET-SOURCES.md`。Three.js 官方 npm 包版本固定为 0.186.1，仅保存运行需要的文件到 `vendor/three/`，MIT 授权随文件保留，`renderer-webgl.js` 是页面里的三维渲染器。十场景库的模型来源与授权见各模板目录下的 `ASSET-SOURCES.md`。`models.html` 提供五款模型的独立旋转预览与下载。
 
 ### 模型边界
 
-Three.js 对真实三维网格进行渲染，道具使用 GLTFLoader 加载 GLB；体育馆、看台、舞台、人物和动线由程序搭建。照片仅作为形态参考，未进行测绘或自动三维重建。场馆采用示意比例，不代表实测尺寸、核定容量或人流仿真。入口、舞台、篮架处理、电力、网络、夜间开放、休息安排均需要现场确认。时间轴上的阶段变化和人物动线用于讲解活动流程，日夜变化以假定上午 9 时开场展示。
-
-### 场景预览
-
-![场内视角与活动时间轴](preview-webgl-desktop.jpg)
+Three.js 对真实三维网格进行渲染，道具使用 GLTFLoader 加载 GLB；场馆、看台、展墙、人物与动线由程序搭建。照片仅作为形态参考，未进行测绘或自动三维重建。场馆采用示意比例，不代表实测尺寸、核定容量或人流仿真；入口、电力、网络、夜间开放与休息安排均需现场确认。
 
 ## 目录入口
 
@@ -127,7 +111,7 @@ Three.js 对真实三维网格进行渲染，道具使用 GLTFLoader 加载 GLB�
 
 ### 展示原型
 
-- `index.html`：体育馆三维场景与时间轴
+- `introduction.html`：官网静态首页（内嵌十场景三维库）
 - `models.html`：五款模型的独立旋转预览与下载
 - `assets/`：模型、缩略图与素材清单
 

@@ -18,11 +18,21 @@ await mkdir(showcase, { recursive: true });
 for (const path of ['assets', 'vendor', 'renderer-webgl.js']) {
   await cp(new URL(path, root), new URL(path, showcase), { recursive: true });
 }
+// 场景库页面与它要加载的十套模型、以及它 import 的 vendored three。
+// 各模板目录里的预览图、ZIP、验证脚本不随站点发布，只带运行时需要的那几个文件。
+const libraryOut = new URL('scene/templates/', showcase);
+await cp(new URL('scene/templates/index.html', root), new URL('index.html', libraryOut));
+await cp(new URL('scene/templates/gym/vendor/', root), new URL('gym/vendor/', libraryOut), { recursive: true });
+for (const id of ['gym', 'popup', 'studio', 'bar', 'cafe', 'conference', 'lawn', 'market', 'museum', 'office']) {
+  await mkdir(new URL(`${id}/`, libraryOut), { recursive: true });
+  await cp(new URL(`scene/templates/${id}/${id}.glb`, root), new URL(`${id}/${id}.glb`, libraryOut));
+}
 const introduction = (await readFile(new URL('introduction.html', root), 'utf8'))
   .replaceAll('http://localhost:3000/', '/auth')
   .replaceAll('./assets/', '/showcase/assets/')
   .replaceAll('./vendor/', '/showcase/vendor/')
   .replaceAll('./renderer-webgl.js', '/showcase/renderer-webgl.js')
+  .replaceAll('./scene/templates/', '/showcase/scene/templates/')
   .replaceAll('./${a.localPath}', '/showcase/${a.localPath}');
 await writeFile(new URL('introduction.html', publicDir), introduction);
 console.log(`Packaged /introduction and /showcase in ${fileURLToPath(publicDir)}`);
