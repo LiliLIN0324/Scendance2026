@@ -75,7 +75,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
     {editorStarted && <div hidden={!entered}>
-      <RoomOrganizer isActive={entered} controller={controller} onShowIntro={() => router.push('/auth')} />
+      <RoomOrganizer isActive={entered} controller={controller} />
     </div>}
   </>;
 }

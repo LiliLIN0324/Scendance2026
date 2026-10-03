@@ -103,8 +103,8 @@ describe('introduction and sign-in entry', () => {
 
   it('explains that venue photos are optional local previews without claiming automatic surveying', () => {
     render(<IntroPage controller={controller(false)} onEnter={vi.fn()} />);
-    expect(screen.getByText(/现场照片可选，目前仅在本地预览，不会自动测绘或还原三维场地/)).toBeTruthy();
-    expect(screen.getByText(/现场照片刷新后需重新选择/)).toBeTruthy();
+    expect(screen.getByText('描述需求，可选上传现场照片')).toBeTruthy();
+    expect(screen.queryByText(/自动测绘场地/)).toBeNull();
     expect(screen.getByRole('img', { name: /活动空间概念插画/ })).toBeTruthy();
     expect(screen.getByText('活动空间概念示意 · 实际方案由你来布置')).toBeTruthy();
     expect(mockFetch).not.toHaveBeenCalled();
