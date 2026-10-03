@@ -41,10 +41,10 @@ describe('use-layout-store — wiring', () => {
     // Catalog items are born locked (#11) and the reducer now refuses to
     // move locked items (#209) — unlock first, like the UI does.
     setLocked(id, false);
-    moveItem(id, 5, 7);
+    moveItem(id, 2, 2);
 
     const moved = layoutStore.getState().layout.floors[0]!.items.find((i) => i.id === id);
-    expect(moved?.position).toEqual({ x: 5, z: 7 });
+    expect(moved?.position).toEqual({ x: 2, z: 2 });
   });
 
   it('addFloor + setActiveFloorIndex append a floor and switch to it', () => {

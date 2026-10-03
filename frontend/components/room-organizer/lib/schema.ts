@@ -1,4 +1,4 @@
-import { materialIds, uuid, venueSchema } from '../../../../supabase/functions/_shared/domain';
+import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
@@ -148,6 +148,8 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   ) {
     return false;
   }
+  for (const key of ['structuralOpeningId', 'structuralColumnId', 'wallId']) if (!isOptionalString(v[key])) return false;
+  if (v.elevation !== undefined && (!isFiniteNumber(v.elevation) || v.elevation < 0 || v.elevation > 30)) return false;
   if (v.materialId !== undefined && ![...materialIds, 'asset'].some(id => id === v.materialId)) return false;
   if (v.assetId !== undefined && !uuid.safeParse(v.assetId).success) return false;
   if (v.venueEntranceId !== undefined && !uuid.safeParse(v.venueEntranceId).success) return false;
@@ -165,7 +167,7 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   if (v.visionFov !== undefined && (!isPositiveNumber(v.visionFov) || v.visionFov > 360)) return false;
   if (v.wallRotation !== undefined && !isFiniteNumber(v.wallRotation)) return false;
   // Sill height places the window hole in the wall (#204).
-  if (v.sillHeight !== undefined && !isSillHeight(v.sillHeight)) return false;
+  if (v.sillHeight !== undefined && !(v.structuralOpeningId ? isFiniteNumber(v.sillHeight) && v.sillHeight >= 0 && v.sillHeight <= 30 : isSillHeight(v.sillHeight))) return false;
   // Enum-ish fields ingested from external data must match their unions —
   // an unknown sofaShape reaches builder switch statements unchecked (#121).
   // cctvModelId only needs to be a string: unknown ids fall back to the
@@ -189,7 +191,7 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   return true;
 }
 
-export function isFloorLayout(value: unknown): value is FloorLayout {
+export function isFloorLayout(value: unknown, measured = false): value is FloorLayout {
   if (!isPlainObject(value)) return false;
   const v = value;
   if (typeof v.id !== 'string') return false;
@@ -228,11 +230,13 @@ export function isFloorLayout(value: unknown): value is FloorLayout {
         return false;
       }
       if (!isOptionalString(wall.color)) return false;
+      if (wall.height !== undefined && (!isPositiveNumber(wall.height) || wall.height > 30)) return false;
+      if (wall.thickness !== undefined && (!isPositiveNumber(wall.thickness) || wall.thickness > 5)) return false;
     }
   }
   // Storey height feeds every floor's elevation and the roof base: a zero,
   // negative or absurd value collapses or launches the whole stack (#202).
-  if (v.height !== undefined && !isStoreyHeight(v.height)) return false;
+  if (v.height !== undefined && !(measured ? isPositiveNumber(v.height) && v.height <= 30 : isStoreyHeight(v.height))) return false;
   // Zone rectangles are painted and measured as-is: a NaN corner or a
   // negative size must not reach the renderer or the stats (#155).
   if (v.zones !== undefined) {
@@ -257,6 +261,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   const v = value;
 
   if (typeof v.name !== 'string') return false;
+  if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
   if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
   if (v.backendCamera !== undefined && !['overview', 'top', 'customer'].includes(v.backendCamera as string)) return false;
   if (v.backendLighting !== undefined && !['neutral', 'warm', 'cool'].includes(v.backendLighting as string)) return false;
@@ -267,7 +272,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
     !Array.isArray(v.floors) ||
     v.floors.length === 0 ||
     v.floors.length > MAX_FLOORS ||
-    !v.floors.every(isFloorLayout)
+    !v.floors.every(floor => isFloorLayout(floor, v.backendSceneV2 !== undefined))
   ) {
     return false;
   }
@@ -359,6 +364,7 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
   backendVenue: true,
+  backendSceneV2: true,
   backendCamera: true,
   backendLighting: true,
   id: true,
@@ -389,6 +395,10 @@ const FLOOR_KEYS = keysOf<FloorLayout>({
   height: true,
 });
 const ITEM_KEYS = keysOf<FurnitureItem>({
+  structuralOpeningId: true,
+  structuralColumnId: true,
+  wallId: true,
+  elevation: true,
   materialId: true,
   assetId: true,
   notes: true,
@@ -425,7 +435,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   groupId: true,
 });
 const VEC2_KEYS = ['x', 'z'] as const;
-const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true });
+const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true, thickness: true, height: true, kind: true, status: true });
 const ZONE_KEYS = keysOf<RoomZone>({ id: true, name: true, color: true, x: true, z: true, w: true, d: true });
 const ROOF_KEYS = keysOf<RoofSpec>({ style: true, color: true, dormers: true });
 const DORMER_KEYS = keysOf<DormerSpec>({

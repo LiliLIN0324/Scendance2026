@@ -1,0 +1,8 @@
+.sc-structure-editor { border-top: 1px solid var(--sc-line, #dcded6); margin-top: 22px; padding-top: 18px; }
+.sc-structure-editor .sc-section-heading h3 { font-size: 15px; margin: 0; }
+.sc-structure-editor .sc-section-heading span { color: #567362; font-size: 11px; }
+.sc-structure-editor select { width: 100%; min-width: 0; }
+.sc-structure-editor output { padding: 9px 0; font-variant-numeric: tabular-nums; }
+.sc-structure-save { width: 100%; margin-top: 12px; padding: 10px 12px; border: 1px solid #34604c; border-radius: 9px; background: #34604c; color: white; font: inherit; cursor: pointer; }
+.sc-structure-save:hover { background: #294f3e; }
+.sc-structure-save:focus-visible { outline: 3px solid #d4a654; outline-offset: 2px; }

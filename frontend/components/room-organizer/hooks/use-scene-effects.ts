@@ -8,6 +8,7 @@ import { hasNeighbours, lowestGround } from '../lib/site';
 import { buildingHeight, floorElevation, interiorWallHeight, itemForStorey, storeyHeight } from '../lib/storeys';
 import { ENTRANCE_WALL_ID, entranceGeometry, entranceWallCut } from '../lib/street';
 import { generateStreet } from '../lib/street-row';
+import { structuralItemCollides } from '../lib/structural-layout';
 import { disposeObject, removeAndDispose } from '../three/builder-utils';
 import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
@@ -27,6 +28,7 @@ import { setOutdoorVisible } from '../three/outdoor';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
 import { addSignalOverlays } from '../three/signal-overlay';
+import { buildStructureShell } from '../three/structure-builder';
 import { computeFloorOpenings, computeWallOpenings } from '../three/wall-openings';
 import { useGlbAssets } from './use-glb-assets';
 import type { FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
@@ -225,6 +227,13 @@ export function useSceneEffects({
     if (!THREE || !scene) return;
 
     removeTagged(scene, ROOM_OBJECT_TAGS.Floor, ROOM_OBJECT_TAGS.Wall);
+    if (layout.backendSceneV2) {
+      buildStructureShell(THREE, scene, layout);
+      const camera = cameraRef.current;
+      if (camera) applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
+      requestShadowUpdate();
+      return;
+    }
 
     // The building no longer has a floor plan: release the decoded multi-MB
     // image. (Only here — see clearFloorPlanImageCache for why buildRoom must
@@ -321,7 +330,7 @@ export function useSceneEffects({
     // interior walls (nearest wall wins), so the exterior hole set changes
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
-    layout.width, layout.height, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
+    layout.backendSceneV2, layout.width, layout.height, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
     activeFloorIndex,
@@ -373,11 +382,11 @@ export function useSceneEffects({
       for (const item of floor.items) {
         if (!item.position) continue;
 
-        const collision = hasCollisions(item, floor.items, layout.width, layout.height, { keepOut: floorKeepOut(entranceBuilding, index), interiorWalls: floor.interiorWalls });
+        const collision = structuralItemCollides(item, layout, index) || hasCollisions(item, floor.items, layout.width, layout.height, { keepOut: floorKeepOut(entranceBuilding, index), structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : floor.interiorWalls });
         // Stairs climb to the floor above and openings are fitted into the
         // storey, so the mesh matches the hole cut for it (#202, #277).
-        const group = createFurnitureModel(THREE, itemForStorey(item, floor), collision);
-        group.position.set(item.position.x, floorY, item.position.z);
+        const group = createFurnitureModel(THREE, item.structuralOpeningId ? item : itemForStorey(item, floor), collision);
+        group.position.set(item.position.x, floorY + (item.elevation ?? 0), item.position.z);
         group.rotation.y = item.rotation ?? 0;
         if (item.mirrored) group.scale.x *= -1;
         group.userData.type = ROOM_OBJECT_TAGS.Furniture;
@@ -404,7 +413,7 @@ export function useSceneEffects({
     requestShadowUpdate();
   }, [
     isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef,
-    layout.floors, layout.width, layout.height, entranceBuilding,
+    layout, layout.floors, layout.width, layout.height, entranceBuilding,
     activeFloor, activeFloorIndex, view.showAllFloors, view.wallDisplay,
     // Not read in the body: createFurnitureModel picks the rigged person up
     // from the model cache, and this re-runs the build once it's filled.
@@ -446,7 +455,7 @@ export function useSceneEffects({
       if (!item) continue;
 
       const isSelected = selectedItemId === id || extraSelectedIds.has(id);
-      const collision = hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, interiorWalls: activeFloor.interiorWalls });
+      const collision = structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls });
       const accent = isSelected
         ? selectedItemId === id
           ? collision
@@ -456,7 +465,7 @@ export function useSceneEffects({
         : 0xfacc15;
       // Around the built mesh, not floor-to-height: a painting hangs at 0.8 m
       // and a window starts at its sill (#376).
-      const band = mountBand(itemForStorey(item, activeFloor));
+      const band = mountBand(item.structuralOpeningId ? item : itemForStorey(item, activeFloor));
       const geometry = new THREE.BoxGeometry(item.width, band.top - band.bottom, item.depth);
       const edges = new THREE.EdgesGeometry(geometry);
       geometry.dispose();
@@ -478,7 +487,7 @@ export function useSceneEffects({
     // rigged person model loads (#335).
   }, [
     isReady, invalidate, threeModuleRef, sceneRef,
-    activeFloor, activeFloorIndex, layout.width, layout.height, entranceBuilding,
+    activeFloor, activeFloorIndex, layout, layout.width, layout.height, entranceBuilding,
     selectedItemId, extraSelectedIds, highlightedIds,
     layout.floors, view.showAllFloors, view.wallDisplay, peopleModelReady,
   ]);
@@ -612,6 +621,7 @@ export function useSceneEffects({
     if (!THREE || !scene) return;
 
     clearInteriorWalls(scene);
+    if (layout.backendSceneV2) return;
     const floorsToRender = view.showAllFloors
       ? layout.floors.map((floor, index) => ({ floor, index }))
       : [{ floor: activeFloor, index: activeFloorIndex }];
@@ -664,7 +674,7 @@ export function useSceneEffects({
     // door/window opening candidates only; the two keys cover exactly that,
     // so a furniture edit doesn't re-extrude every interior wall.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, interiorWallsKey, wallOpeningsKey, storeyHeightsKey, activeFloorIndex, view.showAllFloors, view.wallDisplay, layout.width, layout.height, layout.entrance, layout.terrain]);
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, layout.backendSceneV2, interiorWallsKey, wallOpeningsKey, storeyHeightsKey, activeFloorIndex, view.showAllFloors, view.wallDisplay, layout.width, layout.height, layout.entrance, layout.terrain]);
 
   // Cyan outline on selected wall. Declared AFTER the shell + interior-wall
   // rebuild effects and keyed on the same rebuild keys, so it always snapshots
@@ -830,7 +840,7 @@ export function useSceneEffects({
         showMeasurements: view.showMeasurements,
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
-        hasCollision: (item) => hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, interiorWalls: activeFloor.interiorWalls }),
+        hasCollision: (item) => structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls }),
       });
     };
 

@@ -157,3 +157,32 @@ describe('useItemDrag — locks remain a user decision', () => {
     expect(state.layout.floors[0].items[1]).toMatchObject({ locked: true, position: { x: -3, z: -3 } });
   });
 });
+
+describe('useItemDrag — structural collision rollback', () => {
+  afterEach(cleanup);
+  it('commits the latest valid group position after the pointer finishes inside a wall', () => {
+    const actions = { moveItem: vi.fn(), bulkSetPositions: vi.fn(), updateItem: vi.fn() } as unknown as LayoutActions;
+    const floor = makeFloor({ items: [makeItem({ id:'a', width:1, depth:1, position:{x:-2,z:0}, locked:false }),
+      makeItem({ id:'b',width:1,depth:1,position:{x:-2,z:2},locked:false })],
+      interiorWalls:[{id:'wall',x1:0,z1:-4,x2:0,z2:4}] });
+    const {result}=renderHook(()=>useItemDrag({ activeFloor:floor,activeFloorIndex:0,roomWidth:10,roomDepth:8,
+      keepOut:[],frontGap:null,actions,allSelectedIds:new Set(['a','b']) }));
+    const scene=new THREE.Scene();
+    for (const item of floor.items) { const group=new THREE.Group();group.userData={type:'furniture',id:item.id,floorIndex:0}; scene.add(group); }
+    result.current.sceneBoxRef.current={current:scene};
+    result.current.handleDragStart('a');
+    result.current.handleDrag('a',-1,0);
+    result.current.handleDrag('a',0,0);
+    result.current.handleDragEnd('a');
+    expect(actions.bulkSetPositions).toHaveBeenCalledWith(new Map([['a',{x:-1,z:0}],['b',{x:-1,z:2}]]));
+    expect(scene.children.map(g=>g.position.x)).toEqual([-1,-1]);
+  });
+  it('adds no history mutation when every attempted drop is invalid', () => {
+    const actions={moveItem:vi.fn(),bulkSetPositions:vi.fn(),updateItem:vi.fn()} as unknown as LayoutActions;
+    const floor=makeFloor({items:[makeItem({id:'a',position:{x:0,z:0},locked:false})]});
+    const {result}=renderHook(()=>useItemDrag({activeFloor:floor,activeFloorIndex:0,roomWidth:10,roomDepth:8,
+      keepOut:[],frontGap:null,actions,allSelectedIds:new Set(['a'])}));
+    result.current.handleDragStart('a');result.current.handleDrag('a',100,100);result.current.handleDragEnd('a');
+    expect(actions.bulkSetPositions).not.toHaveBeenCalled();
+  });
+});

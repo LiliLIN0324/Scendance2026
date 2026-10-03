@@ -54,6 +54,10 @@ export function mountBand(item: Pick<FurnitureItem, 'type' | 'height' | 'sillHei
         bottom: Math.max(0, height * (1 - CURTAIN_PANEL_FRACTION) - CURTAIN_PANEL_TOP_OFFSET),
         top: height,
       };
+    case 'door': {
+      const sill = item.sillHeight ?? 0;
+      return { bottom: sill, top: sill + height };
+    }
     case 'window': {
       const sill = windowSillHeight(item);
       return { bottom: sill, top: sill + height };
