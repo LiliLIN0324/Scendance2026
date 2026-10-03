@@ -56,7 +56,7 @@ export function createProposalPreview(
   const structureChanged = !!candidate.backendSceneV2 && JSON.stringify([before.backendVenue, before.floors.map(f=>[f.interiorWalls,f.floorColor,f.floorPattern,f.items.filter(i=>i.structuralOpeningId)])]) !== JSON.stringify([candidate.backendVenue, candidate.floors.map(f=>[f.interiorWalls,f.floorColor,f.floorPattern,f.items.filter(i=>i.structuralOpeningId)])]);
 
   function position(group: ThreeNS.Object3D, located: LocatedItem, layout: RoomLayout): void {
-    group.position.set(located.item.position?.x ?? 0, floorElevation(layout.floors, located.floorIndex) + (located.item.elevation ?? 0), located.item.position?.z ?? 0);
+    group.position.set(located.item.position?.x ?? 0, floorElevation(layout.floors, located.floorIndex), located.item.position?.z ?? 0);
     group.rotation.y = located.item.rotation ?? 0;
     if (located.item.mirrored) group.scale.x = -1;
     group.userData.proposalItemId = located.item.id;

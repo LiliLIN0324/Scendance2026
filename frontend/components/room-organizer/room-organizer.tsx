@@ -107,6 +107,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
+  const [movementPreview, setMovementPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
   const activeStoreyHeight = storeyHeight(activeFloor);
   const { recent: recentColors, pushColor } = useRecentColors();
@@ -1110,7 +1111,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (candidate) { setView(current => ({ ...current, view2D: false })); }
   }, []);
   const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
-  const previewCandidate = validAiPreview;
+  const onPreviewMovement = useCallback((candidate: RoomLayout | null) => {
+    setMovementPreview(candidate ? { base: liveLayout.current, candidate } : null);
+    if (candidate) setView(current => ({ ...current, view2D: false }));
+  }, []);
+  const validMovementPreview = movementPreview?.base === layout ? movementPreview.candidate : null;
+  const previewCandidate = validMovementPreview ?? validAiPreview;
   useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
     candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
@@ -1135,7 +1141,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button type="button" className="sc-mobile-menu sc-icon-button" aria-label={sidebarCollapsed ? '打开物料面板' : '收起物料面板'} onClick={() => setSidebarCollapsed(current => !current)}>{sidebarCollapsed ? <Menu size={20}/> : <PanelLeftClose size={20}/>}</button>
         </header>
         <main className="sc-workspace">
-          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary onLoadPreset={onApplyCreative} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
+          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary onLoadPreset={onApplyCreative} onPreviewMovement={onPreviewMovement} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`} onPointerDownCapture={event => {
             if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
@@ -1210,7 +1216,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         }}
       />
             <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset === 'gym' ? '体育馆概念场景 · 原模型比例' : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
-            {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            {previewCandidate && <div className="sc-preview-caption" role="status">{validMovementPreview ? '批量移动预览 · 尚未应用' : 'AI 修改预览 · 尚未加入场景'}{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <ScendanceViewTools onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {

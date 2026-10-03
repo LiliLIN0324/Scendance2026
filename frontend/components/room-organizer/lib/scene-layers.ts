@@ -36,12 +36,13 @@ export function materialLayers(items: readonly FurnitureItem[]): { id: string; n
 }
 
 export function batchLayerEdit(items: readonly FurnitureItem[], ids: ReadonlySet<string>, delta: { x: number; y: number; z: number; color?: string }): FurnitureItem[] {
+  // User-facing X/Y are horizontal; the renderer stores that plane as x/z.
   return items.map(item => {
     if (!ids.has(item.id) || item.locked || item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId) return item;
-    const elevation = (item.elevation ?? 0) + delta.y;
-    if (delta.y && (elevation < (item.glbNode ? -100 : 0) || elevation > (item.glbNode ? 100 : 30))) throw new Error('部分物料的高度超出允许范围，整组保持原位。');
-    return { ...item, ...(item.position && (delta.x || delta.z) ? { position: { x: item.position.x + delta.x, z: item.position.z + delta.z } } : {}),
-      ...(delta.y ? { elevation } : {}),
+    const elevation = (item.elevation ?? 0) + delta.z;
+    if (delta.z && (elevation < (item.glbNode ? -100 : 0) || elevation > (item.glbNode ? 100 : 30))) throw new Error('部分物料的高度超出允许范围，整组保持原位。');
+    return { ...item, ...(item.position && (delta.x || delta.y) ? { position: { x: item.position.x + delta.x, z: item.position.z + delta.y } } : {}),
+      ...(delta.z ? { elevation } : {}),
       ...(delta.color && !item.glbUrl ? { color: delta.color } : {}) };
   });
 }
