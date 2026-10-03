@@ -27,6 +27,7 @@ import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
+import { createPresetStructure } from '../three/scene-presets';
 import { addSignalOverlays } from '../three/signal-overlay';
 import { buildStructureShell } from '../three/structure-builder';
 import { computeFloorOpenings, computeWallOpenings } from '../three/wall-openings';
@@ -234,6 +235,15 @@ export function useSceneEffects({
       requestShadowUpdate();
       return;
     }
+    if (layout.scenePreset) {
+      const structure = createPresetStructure(layout.scenePreset);
+      if (structure) {
+        structure.userData.type = ROOM_OBJECT_TAGS.Floor;
+        scene.add(structure);
+      }
+      requestShadowUpdate();
+      return;
+    }
 
     // The building no longer has a floor plan: release the decoded multi-MB
     // image. (Only here — see clearFloorPlanImageCache for why buildRoom must
@@ -330,7 +340,7 @@ export function useSceneEffects({
     // interior walls (nearest wall wins), so the exterior hole set changes
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
-    layout.backendSceneV2, layout.width, layout.height, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
+    layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
     activeFloorIndex,

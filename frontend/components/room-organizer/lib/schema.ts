@@ -149,13 +149,14 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
     return false;
   }
   for (const key of ['structuralOpeningId', 'structuralColumnId', 'wallId']) if (!isOptionalString(v[key])) return false;
-  if (v.elevation !== undefined && (!isFiniteNumber(v.elevation) || v.elevation < 0 || v.elevation > 30)) return false;
   if (v.materialId !== undefined && ![...materialIds, 'asset'].some(id => id === v.materialId)) return false;
   if (v.assetId !== undefined && !uuid.safeParse(v.assetId).success) return false;
   if (v.venueEntranceId !== undefined && !uuid.safeParse(v.venueEntranceId).success) return false;
   if (v.notes !== undefined && typeof v.notes !== 'string') return false;
   if (v.source !== undefined && !['builtin', 'public_library', 'generated', 'local_sample'].includes(v.source as string)) return false;
   if (v.glbUrl !== undefined && !isGlbUrl(v.glbUrl)) return false;
+  if (v.glbNode !== undefined && (typeof v.glbNode !== 'string' || !/^Preset_Object_\d{1,4}$/.test(v.glbNode))) return false;
+  if (v.elevation !== undefined && (!isFiniteNumber(v.elevation) || (v.glbNode ? Math.abs(v.elevation) > MAX_ROOM_DIMENSION : v.elevation < 0 || v.elevation > 30))) return false;
   if (v.price !== undefined && !isFiniteNumber(v.price)) return false;
   if (!isOptionalString(v.category)) return false;
   if (v.position !== undefined && !isVec2(v.position)) return false;
@@ -262,6 +263,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
 
   if (typeof v.name !== 'string') return false;
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
+  if (v.scenePreset !== undefined && !['gym', 'popup'].includes(v.scenePreset as string)) return false;
   if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
   if (v.backendCamera !== undefined && !['overview', 'top', 'customer'].includes(v.backendCamera as string)) return false;
   if (v.backendLighting !== undefined && !['neutral', 'warm', 'cool'].includes(v.backendLighting as string)) return false;
@@ -363,6 +365,7 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  scenePreset: true,
   backendVenue: true,
   backendSceneV2: true,
   backendCamera: true,
@@ -404,6 +407,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   notes: true,
   source: true,
   glbUrl: true,
+  glbNode: true,
   venueEntranceId: true,
   id: true,
   type: true,

@@ -39,6 +39,7 @@ import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomSuffix } from './lib/ids';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
+import { editorItemLimit } from './lib/scene-presets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
@@ -580,7 +581,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       const originals = allSelectedIds.has(primaryId) ? [primaryId, ...Array.from(allSelectedIds).filter(id => id !== primaryId)] : [primaryId];
       const ids = originals.map(() => crypto.randomUUID());
       const extra = activeFloor.items.filter(item => originals.includes(item.id));
-      if (materialCount(activeFloor.items) + materialCount(extra) > 50) { notify('当前演示最多支持 50 件物料。', 'info'); return; }
+      if (materialCount(activeFloor.items) + materialCount(extra) > editorItemLimit(layout)) { notify(`当前场景最多支持 ${editorItemLimit(layout)} 件物料。`, 'info'); return; }
       let candidate = { layout, activeFloorIndex };
       for (let index = 0; index < originals.length; index++) {
         const next = layoutReducer(candidate, {type:'duplicateItem',sourceId:originals[index]!,newId:ids[index]!});
@@ -652,14 +653,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const placeDiscrete = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }): string => {
-      if (activeFloor.items.filter(i=>!i.structuralOpeningId && !i.structuralColumnId && !i.venueEntranceId).length >= 50) { notify('当前演示最多支持 50 件物料。', 'info'); return ''; }
+      if (materialCount(activeFloor.items) >= editorItemLimit(layout)) { notify(`当前场景最多支持 ${editorItemLimit(layout)} 件物料。`, 'info'); return ''; }
       commitHistoryNow();
       const id = placeCatalogItem(catalogItem, position);
       if (!id) { setPendingCatalog(catalogItem); notify('此处与结构相交，请点击场地中的其他位置放置。', 'info'); }
       else setPendingCatalog(null);
       return id;
     },
-    [commitHistoryNow, placeCatalogItem, activeFloor.items]
+    [commitHistoryNow, placeCatalogItem, activeFloor.items, layout]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -877,7 +878,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       floorIndex: activeFloorIndex,
     });
     if (built.length === 0) return false;
-    if (materialCount(activeFloor.items) + materialCount(built) > 50) { notify('当前演示最多支持 50 件物料。', 'info'); return false; }
+    if (materialCount(activeFloor.items) + materialCount(built) > editorItemLimit(layout)) { notify(`当前场景最多支持 ${editorItemLimit(layout)} 件物料。`, 'info'); return false; }
     const pasted = built.map(item => { const id = crypto.randomUUID(); return { ...item, id, ...(item.structuralOpeningId ? {structuralOpeningId:id} : {}), ...(item.structuralColumnId ? {structuralColumnId:id} : {}) }; });
     const next = {...layout, floors:layout.floors.map((floor,index)=>index===activeFloorIndex ? {...floor,items:[...floor.items,...pasted]} : floor)};
     if (!canApplyLayoutGeometry(layout,next)) { notify('粘贴位置与结构冲突，整组未放置。', 'info'); return false; }
@@ -1097,6 +1098,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     actions.applyLayout(next);
     clearTransientSelection();
     initiallyFramed.current = false;
+    setView(current => ({ ...current, view2D: false }));
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
@@ -1129,7 +1131,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button type="button" className="sc-mobile-menu sc-icon-button" aria-label={sidebarCollapsed ? '打开物料面板' : '收起物料面板'} onClick={() => setSidebarCollapsed(current => !current)}>{sidebarCollapsed ? <Menu size={20}/> : <PanelLeftClose size={20}/>}</button>
         </header>
         <main className="sc-workspace">
-          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
+          <div className={`sc-left-drawer ${sidebarCollapsed ? 'is-collapsed' : ''}`}><ScendanceLibrary onLoadPreset={onApplyCreative} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog} creativePanel={<CreativeBriefPanel/>}/></div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`} onPointerDownCapture={event => {
             if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
@@ -1193,7 +1195,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           selectOnly(newId);
         }}
       />
-            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.width} × {layout.height} m</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
+            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset === 'gym' ? '体育馆概念场景 · 原模型比例' : `${layout.width} × ${layout.height} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
             {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {!selectedItem && !previewCandidate && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
@@ -1217,7 +1219,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             onClose={() => selectOnly(null)}
           />}
         </main>
-        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset === 'gym' ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
         <CreativeAssistant/>
       </div>
     </CreativeStudioProvider>

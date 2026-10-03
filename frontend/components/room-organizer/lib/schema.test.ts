@@ -654,12 +654,14 @@ describe('persisted-field whitelist and bounds (#350)', () => {
 
   it('keeps every field a fully-populated item can carry', () => {
     const item: Required<FurnitureItem> = {
-      structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall', elevation: 0,
+      structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall',
       materialId: 'asset',
       assetId: '00000000-0000-4000-8000-000000000002',
       notes: '保存来源与备注',
       source: 'generated',
       glbUrl: '/assets/models/table.glb',
+      glbNode: 'Preset_Object_0',
+      elevation: 0.75,
       venueEntranceId: '00000000-0000-4000-8000-000000000003',
       id: 'cam',
       type: 'security-camera',

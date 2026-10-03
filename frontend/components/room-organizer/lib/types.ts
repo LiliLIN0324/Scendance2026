@@ -118,6 +118,8 @@ export interface FurnitureItem {
   source?: 'builtin' | 'public_library' | 'generated' | 'local_sample';
   /** A frontend loading reference; the backend scene stores assetId only. */
   glbUrl?: string;
+  /** Named editable fixture within an archived scene model. */
+  glbNode?: string;
   /** Rendered structural marker; never exported as a material object. */
   venueEntranceId?: string;
   id: string;
@@ -333,6 +335,8 @@ export interface NeighbourSpec {
 export interface RoomLayout {
   /** Authoritative v2 provenance and design, retained through local save and undo. */
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
+  /** Local complete-scene preset; its architecture is separate from editable items. */
+  scenePreset?: 'gym' | 'popup';
   /** Preserves backend fields until explicitly edited through supported controls. */
   backendVenue?: Scene['venue'];
   backendCamera?: Scene['camera'];

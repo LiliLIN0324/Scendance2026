@@ -65,6 +65,16 @@ describe('CloudPanel delayed project replacement', () => {
     unregister();
   });
 
+  it('never labels a local scene preset as saved to the cloud', async () => {
+    queue([other]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
+    render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /预设 · 本地保存/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /云端已保存/ })).toBeNull();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    expect(controller.getSnapshot().draft).not.toEqual(layout);
+  });
   it.each(['open', 'acquire', 'create'] as const)('preserves edits made while the %s request is pending', async action => {
     const initialLayout = backendSceneToLayout(scene, { projectId, name: original.name });
     const onLoadLayout = vi.fn();
@@ -104,4 +114,29 @@ describe('CloudPanel delayed project replacement', () => {
       expect(String(lastRequest[0])).toContain(`/projects/${projectId}/lease/release`);
     }
   });
+});
+
+
+it('uses the canonical auth page instead of a second cloud login form', () => {
+  const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+  const rendered = render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
+  expect(screen.queryByLabelText('密码')).toBeNull();
+  expect(screen.getByRole('link', { name: '前往登录' }).getAttribute('href')).toBe('/auth');
+  fireEvent.click(screen.getByRole('link', { name: '前往登录' }));
+  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+  anonymous.dispose();
+});
+
+it('closes the cloud dialog when signing out redirects to auth', async () => {
+  queue([]);
+  queue([]);
+  const rendered = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
+  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+  queue({});
+  fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+  await waitFor(() => expect(controller.getSnapshot().user).toBeNull());
+  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
 });
