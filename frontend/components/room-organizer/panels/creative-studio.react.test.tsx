@@ -12,6 +12,7 @@ import type { RoomLayout } from '../lib/types';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
+vi.mock('./material-customization', () => ({ MaterialCustomization: ({ seed }: { seed?: unknown }) => <output data-testid="material-seed">{JSON.stringify(seed ?? null)}</output> }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
 const scene: Scene = {
@@ -171,6 +172,22 @@ describe('creative brief and assistant interaction', () => {
     expect(onApply).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
     expect(screen.getAllByRole('img',{name:'Binggo 小狗'}).every(img=>img.getAttribute('src')==='/assets/assistant/puppy.png')).toBe(true);
+  });
+
+  it('hands exact material targets to a preview without applying the scene or calling HY3', async () => {
+    connected();
+    const suggestion={name:'椅面换色',reason:'保留原模型，调整选中椅子的基础色',objectIds:['20000000-0000-4000-8000-000000000001'],sourceAssetId:'50000000-0000-4000-8000-000000000001',scope:'choose_materials' as const,changes:{baseColor:'#aabbcc'}};
+    vi.mocked(controller.requestProposal).mockResolvedValueOnce({...proposal,candidate:scene,materialSuggestions:[suggestion]});
+    const create=vi.spyOn(controller,'createGenerationJob');
+    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'把选中椅子的椅面改为灰蓝色'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    fireEvent.click(await screen.findByRole('button',{name:'预览材质调整'}));
+    expect(JSON.parse(screen.getByTestId('material-seed').textContent!)).toMatchObject({sourceAssetId:suggestion.sourceAssetId,objectIds:suggestion.objectIds,changes:suggestion.changes,materialScope:'choose_materials',projectId,userId:'test-user'});
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button',{name:'场景交付'}));
+    expect(screen.getByRole('button',{name:'导出场景 GLB'})).toBeTruthy();
   });
 
   it('ignores a late suggestion after the signed-in account changes', async () => {

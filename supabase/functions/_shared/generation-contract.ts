@@ -3,7 +3,7 @@ import { uuid } from './domain.ts';
 import type { Env } from './http.ts';
 
 export const generationRequestSchema=z.strictObject({
-  requestId:uuid,prompt:z.string().min(1).max(1024),kind:z.enum(['text','image','texture']).default('text'),
+  requestId:uuid,prompt:z.string().trim().min(1).max(1024),kind:z.enum(['text','image','texture']).default('text'),
   referenceImageAssetId:uuid.optional(),sourceAssetId:uuid.optional(),
 }).superRefine((input,ctx)=>{
   if(input.kind==='text'&&(input.referenceImageAssetId||input.sourceAssetId))ctx.addIssue({code:'custom',message:'文字生成不能附带图片或源模型'});

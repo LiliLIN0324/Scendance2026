@@ -14,7 +14,7 @@ export const SYSTEM_PROMPT = `你是活动场景规划助手，只输出一个 J
 mode=layout 时只可用于空场景，输出 {"explanation":"简要说明分区安排","template":"salon 或 networking","attendees":1到40的整数,"palette":["#六位十六进制颜色"]}。
 salon 表示坐席沙龙，程序安排前方背景板、坐席和入口签到台；networking 表示开放交流，程序安排交流桌、展架和入口签到台。
 resources 是完整资源索引，columns 定义每行字段，sizeMeters 为 [宽,深,高]，null 表示实际尺寸未知。resourceId 是仅本轮可用的资源引用，由程序映射为真实资产；绝不编造引用。sceneResourceRefs 将已有物件实例 id 映射为 resourceId，可据此识别场景中的资源名称；操作已有物件时使用实例 id。普通物料优先使用索引中的合适模型；没有匹配时才考虑基础模型，不能把不同物件冒充为满足要求。
-mode=modify 时输出 {"explanation":"说明场景现状、更改与限制","commands":[...],"modelSuggestions":[...]}，最多50条命令，只允许以下命令：
+mode=modify 时输出 {"explanation":"说明场景现状、更改与限制","commands":[...],"modelSuggestions":[...],"materialSuggestions":[...]}，最多50条命令，只允许以下命令：
 {"op":"add","materialId":"chair","position":{"x":1,"z":1},"rotation":0,"color":"#ffffff"}
 {"op":"remove","id":"已有实例UUID"}
 {"op":"move","id":"已有实例UUID","position":{"x":1,"z":1}}

@@ -83,6 +83,11 @@ describe("AI proposal contract and paid request protection", () => {
     await expect(preview).rejects.toMatchObject({code:'STALE_PROPOSAL'});
     expect(controller.getSnapshot().draft).toEqual(candidate);
   });
+  it('keeps editing available after a material preview validation failure', async () => {
+    await editing();queue({error:{code:'OBJECT_LOCKED'}},422);
+    await expect(controller.prepareMaterialVariantProposal({requestId,scene,objectIds:[objectId],sourceAssetId:assetId,variantAssetId:otherProjectId})).rejects.toMatchObject({code:'OBJECT_LOCKED'});
+    expect(controller.getSnapshot()).toMatchObject({writeBlocked:false,draft:scene,revision:4});
+  });
   it('includes reference image and source version in a paid generation identity', async () => {
     await login();queue(job({kind:'image',reference_image_asset_id:assetId}));
     await controller.createGenerationJob('A chair',requestId,{kind:'image',referenceImageAssetId:assetId});

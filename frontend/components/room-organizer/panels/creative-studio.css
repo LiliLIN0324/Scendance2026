@@ -150,3 +150,7 @@
 .cr-model-suggestion button { padding:8px 10px; border:1px solid #bccdad; border-radius:6px; background:#edf3e5; color:#36532f; cursor:pointer; }
 .cr-model-suggestion button:disabled { opacity:.5; cursor:not-allowed; }
 .cr-model-suggestion small { display:block; margin-top:7px; font-size:10px; color:#768368; }
+
+.cr-model-tools { display:flex; gap:6px; margin-bottom:16px; }
+.cr-model-tools button { flex:1; padding:9px 4px; border:1px solid #dce2d2; border-radius:7px; background:#f8faf3; color:#68785d; cursor:pointer; font:inherit; font-size:11px; }
+.cr-model-tools button[aria-pressed="true"] { background:#eaf0df; border-color:#b8c9a8; color:#354f38; }
