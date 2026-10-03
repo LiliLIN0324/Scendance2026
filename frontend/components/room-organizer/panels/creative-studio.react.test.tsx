@@ -4,9 +4,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { loadScenePreset } from '../three/scene-presets';
 import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider } from './creative-studio';
 import type { RoomLayout } from '../lib/types';
 
+vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
@@ -72,6 +74,8 @@ function upload(container: HTMLElement, files: File[]): void {
 
 beforeEach(() => {
   onApply.mockReset();
+  sessionStorage.clear();
+  vi.mocked(loadScenePreset).mockReset();
   onPreview.mockReset();
   forbiddenFetch.mockClear();
   vi.stubGlobal('fetch', forbiddenFetch);
@@ -86,6 +90,10 @@ beforeEach(() => {
   snapshot = { ...controller.getSnapshot() };
   vi.spyOn(controller, 'getSnapshot').mockImplementation(() => snapshot);
   vi.spyOn(controller, 'requestProposal').mockResolvedValue(proposal);
+  vi.spyOn(controller, 'listGenerationJobs').mockResolvedValue([]);
+  vi.spyOn(controller, 'listSources').mockResolvedValue([]);
+  vi.spyOn(controller, 'createGenerationJob').mockResolvedValue({ id: '50000000-0000-4000-8000-000000000001', owner_id: 'test-user', prompt: '绿色藤编椅', state: 'queued', asset_id: null, provider_job_id: null, next_poll_at: '2026-10-03T08:00:00Z', attempts: 0, error_code: null, provider_usage: null, created_at: '2026-10-03T08:00:00Z', updated_at: '2026-10-03T08:00:00Z' });
+  vi.spyOn(controller, 'releaseLease').mockResolvedValue(undefined);
   vi.spyOn(controller, 'authorizeAssets').mockResolvedValue({ assetUrls: {}, assetNames: {} });
   vi.spyOn(controller, 'applySceneProposal').mockResolvedValue({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: true });
   layout = backendSceneToLayout(scene, { projectId, name: '客户方案' });
@@ -104,6 +112,65 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
+
+  it('sends a model request through chat exactly once without calling scene planning', async () => {
+    connected();render(ui());
+    fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'帮我生成一把绿色藤编椅'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(controller.createGenerationJob).toHaveBeenCalledOnce());
+    expect(controller.createGenerationJob).toHaveBeenCalledWith('帮我生成一把绿色藤编椅',expect.stringMatching(/^[0-9a-f-]{36}$/));
+    expect(controller.requestProposal).not.toHaveBeenCalled();
+    await screen.findByText(/混元模型任务已提交/);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('does not charge for a model question or a greeting', async () => {
+    connected();render(ui());fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'怎么生成模型？'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await screen.findByText(/我可以用 DeepSeek/);
+    expect(controller.requestProposal).not.toHaveBeenCalled();expect(controller.createGenerationJob).not.toHaveBeenCalled();
+  });
+
+  it('plans a confirmed v2 scene from chat without replacing the user count with brief defaults', async () => {
+    connected();const measured=createMeasuredRoomLayout(layout,{width:12,depth:10,height:3});
+    const measuredScene=layoutToBackendScene(measured);
+    vi.mocked(controller.requestProposal).mockResolvedValue({...proposal,base_scene:measuredScene,candidate:measuredScene});
+    render(ui(measured));fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'生成 12 人沙龙场景，保留通道'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await screen.findByText('方案提案 · 尚未应用');
+    expect(controller.requestProposal).toHaveBeenCalledWith(expect.objectContaining({scene:measuredScene,prompt:expect.stringContaining('12 人沙龙')}));
+    expect(vi.mocked(controller.requestProposal).mock.calls[0]![0].prompt).not.toContain('预计24人');
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('loads a named preset only after confirmation and keeps AI services unused', async () => {
+    connected();const next={...layout,scenePreset:'gym' as const};vi.mocked(loadScenePreset).mockResolvedValue(next);
+    render(ui());fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
+    fireEvent.click(screen.getByRole('button',{name:'体育馆 · 黑客松 ↗'}));
+    expect(screen.getByText('场景预设 · 尚未载入')).toBeTruthy();
+    expect(loadScenePreset).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'确认载入预设'}));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledWith(next));
+    expect(controller.releaseLease).toHaveBeenCalledOnce();
+    expect(controller.requestProposal).not.toHaveBeenCalled();expect(controller.createGenerationJob).not.toHaveBeenCalled();
+  });
+
+  it('rejects a preset that finishes loading after the draft changed', async () => {
+    connected();let finish!:(next:RoomLayout)=>void;
+    vi.mocked(loadScenePreset).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    const view=render(ui());fireEvent.click(screen.getByRole('button',{name:'打开幕景助手'}));
+    fireEvent.click(screen.getByRole('button',{name:'香氛快闪 ↗'}));
+    fireEvent.click(screen.getByRole('button',{name:'确认载入预设'}));
+    view.rerender(ui({...layout,name:'更新后的草稿'}));
+    await act(async()=>finish({...layout,scenePreset:'popup'}));
+    expect(onApply).not.toHaveBeenCalled();expect(controller.releaseLease).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/当前草稿已保留/).length).toBeGreaterThan(0);
+  });
+
   it('renders only the reconstruction Generate action for an existing v2 scene',async()=>{
     render(ui(createMeasuredRoomLayout(layout,{width:12,depth:10,height:3})));
     await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
