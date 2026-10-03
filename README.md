@@ -1,142 +1,141 @@
 # Scendance · 幕景
 
-当前开发分支版本：**0.6.0 · 图纸／照片重建预览**。本分支未合并部署；[运行说明](docs/floorplan-v2.md) 与 [已验证范围](docs/floorplan-verification.md) 单独记录，真实识别及云环境仍待验收。
+面向活动策划团队的三维场景布置与协作网站。主工作台采用 Next.js 静态导出和 Three.js，账号、项目、模型资产与 AI 接口由 Supabase 提供。
 
-**面向小型活动策划执行工作室的三维场景协作 Web 应用。**
-用 AI 和内置物料快速形成活动方案，让团队共同完善布置，并向客户交付可自由查看的三维场景。
+- 在线工作台：<https://scendance.charlestech.org/>
+- 本地体验入口：<https://scendance.charlestech.org/?local=1>
+- 产品介绍：<https://scendance.charlestech.org/introduction>
+- 源码仓库：<https://github.com/LiliLIN0324/scendance>
 
-在线体验 <https://scendance.charlestech.org/> · 产品官网 <https://scendance.charlestech.org/introduction> · 产品规划见 [PLAN.md](PLAN.md)
+## 本份代码对应什么版本
 
-## 我们想解决的问题
+这是 **2026-10-03 核验的线上版本快照**，专用分支为 `codex/website-latest`，本地交付目录为 `WEBSITE-LATEST/`。根目录即仓库根目录，不需要再进入一层 `scendance/`。
 
-一场活动从「客户脑中的效果」到「执行人员理解的布置」，中间隔着一层信息差：客户说不清、设计师画不准、执行方理解不一样。
+线上前端与后端独立发布，因此不存在一个同时代表全部线上服务的原始提交。本分支以实际前端部署提交为基线，补入已经上线的后端变更与原始迁移，并完善交接说明；不是将仓库默认分支直接视为线上版本。
 
-幕景把这三方的共同语言换成同一份**三维场景**：
-
-- 策划方在电脑浏览器里搭场景，改的是同一份数据，不来回传文件；
-- 客户用手机打开只读链接，就能旋转、缩放、切换预设视角；
-- 物料表跟着场景自动汇总，不需要有人再数一遍。
-
-核心价值假设是**减少信息差**。成本与成交率是否真的改善，要通过真实工作室的任务去验证，这里不预先宣称。
-
-## 核心流程
-
-创建项目与场地 → 描述活动需求 → AI 生成可编辑初稿 → 人工调整 → 补充生成物件 → 团队交接编辑 → 核对物料表 → 发布客户只读版本
-
-## 主要能力
-
-| 能力 | 说明 |
+| 发布面 | 核验基线 |
 |---|---|
-| 场地设置 | 输入平面图与长、宽、高，设置主要出入口，米制统一 |
-| AI 初稿 | 理解主题、人数、场地分区与色系，组合内置物料；生成结果均可继续编辑 |
-| AI 修改 | 增删、移动、旋转、换色、替换物件；先出提案，人工确认后应用 |
-| 三维编辑 | 添加、选择、拖动、旋转、改尺寸、换色、复制、删除、锁定、撤销/重做 |
-| 内置物料 | 椅子、桌子、签到台、背景板、展架、隔断、地毯、装饰道具 |
-| 三维物件生成 | 提交描述 → 异步任务 → 预览结果 → 设定整体尺寸 → 加入场景 |
-| 轮流编辑 | 同一项目同一时刻一人持有编辑权，默认租约 90 秒、每 30 秒续期 |
-| 自动物料表 | 按物料与规格汇总数量、尺寸和备注，与当前场景快照一致 |
-| 客户查看 | 无需登录的只读链接，手机可旋转缩放；项目负责人可撤销 |
+| Cloudflare Pages 项目 | `scendance-scene-planner` |
+| 前端源提交 | `b554910af8a818c08fd440c7787f8eadebc315e8` |
+| Pages 生产部署 | `8153b386-93b5-45b8-9904-b6caf94472df` |
+| Supabase 项目 | `hrsrrduwbqxnqddkexoy` |
+| `scene-api` | ACTIVE v15 |
+| `generation-worker` | ACTIVE v6 |
+| `reconstruction-worker` | ACTIVE v2 |
+| 数据库迁移 | 16 份，最新为 `20261003180000_unlimited_ai_usage` |
 
-## 首版边界（不夸大）
+前端源文件、模型与模板保持上述生产提交内容。后端同步已上线的 `f77aa2a`（取消应用每日及累计 AI 额度）和 `548c48d`（Agent 行动优先）。另从线上迁移历史恢复 `20261003133000` 与 `20261003140000` 两份 SQL，避免新环境漏掉工作室项目可见性与删除逻辑。
 
-产品边界写在 [PLAN.md](PLAN.md)，这里只列容易被误解的几条：
+详细版本、哈希和本次检查见 [线上快照记录](docs/WEBSITE_LATEST.md) 与 [机器可读清单](docs/evidence/website-latest.json)。本次整理不重新部署网站、不修改云数据库，也不合并到 `main`。
 
-- 首批客户是**小型活动策划执行工作室**，主要案例是小型黑客松 / 工作坊 / 竞赛。
-- 场地和物料**基本尺寸准确**，首版只支持矩形单层场地；吊挂、复杂叠放、多层场地不在演示范围。
-- 场地边界和重叠提示**不是**消防、承重或完整施工校验。
-- 生成物件在物料表中标记「概念道具，实物待确认」，不编造供应商、库存或价格。
-- 体育馆原型采用**示意比例**，照片仅作形态参考，未做测绘或自动三维重建；时间轴与动线用于讲解流程，不是人流仿真。
+## 当前功能与边界
 
-## 技术栈
+- **三维编辑**：添加、选择、移动、旋转、调整尺寸、复制、删除、锁定、撤销与重做；场地与布局保存在本地草稿或云项目中。
+- **模型资源库**：当前发布记录为 529 项归档资源、528 项可摆放资源；保留中文名称、尺寸和来源信息。
+- **Binggo**：右下角小狗 Agent，包含场景策划、3D 生成和场景模板入口。策划调用 DeepSeek；三维生成调用腾讯 HY-3D。生成任务的真实结果仍需在任务状态与资产归档中确认。
+- **场景策划**：读取场景与资源索引，生成添加、替换、移动等候选操作；经过后端校验后按界面选项直接应用或预览。用户要求直接布置时优先使用可用资源并说明默认假设。缺少新造型时可转到 HY3 填写生成描述。
+- **Agent 边界**：当前仍为一次 JSON 生成加最多一次修复，并未接入 DeepSeek Harness。对话内容受现有上下文长度限制，不代表无限或跨项目长期记忆。
+- **场景模板**：酒吧、咖啡馆、会议、草坪、集市、博物馆、办公室、工作室、体育馆、快闪，共 10 套。模板沿用本地保存与编辑能力；现有模板场景不支持云保存或 AI 编辑，不要将模板加载成功等同于这些能力已打通。
+- **账号与协作**：邮箱登录、注册及验证码、密码找回、工作室与项目管理、编辑权租约、版本校验、私有资产授权与客户只读分享接口。
+- **AI 使用额度**：应用内每日与累计额度限制已取消。供应商计费、请求状态、并发保护和运行时限制仍存在；“不限额度”不表示供应商免费。
+- **图纸与照片**：仓库包含重建预览及相关接口；具体支持和验证范围见 [图纸说明](docs/floorplan-v2.md)。本次快照未重新执行付费识别或生成验收。
 
-| 层 | 选择 |
-|---|---|
-| 前端 | Next.js 静态导出 + React + TypeScript |
-| 三维 | 原生 Three.js + GLTFLoader |
-| 状态与校验 | Zustand + Zod |
-| 账号与数据库 | Supabase Auth + Postgres |
-| 文件存储 | Supabase 私有 Storage |
-| 后端 | Supabase Edge Functions |
-| 文本 AI | DeepSeek `deepseek-flash` |
-| 三维生成 | 腾讯混元 HY-3D-3.0（优先 LowPoly） |
-| 静态托管 | Cloudflare Pages |
+## 目录
+
+```text
+frontend/              Next.js 工作台、Binggo、账号与业务界面
+client/                场景 API 客户端与共享契约
+supabase/functions/    Edge Functions 与校验、供应商适配逻辑
+supabase/migrations/   16 份数据库迁移
+supabase/ops/          运维配置与脚本
+assets/                模型、缩略图、资源清单
+scene/templates/       完整场景模板及其资源
+scripts/               打包、本地联调与检查脚本
+tests/                 后端及数据库测试
+vendor/                展示页依赖与许可
+docs/                  接口、历史发布记录和本次快照证据
+frontend/out/          静态构建产物，Git 忽略
+production-snapshot/   本地保存的已下载的线上函数源码及版本记录，Git 忽略
+```
+
+根目录的 `index.html` 是早期独立展示原型。生产工作台来自 `frontend/`；不能只发布根目录 HTML 来替代在线网站。
 
 ## 本地开发
 
-使用 Node.js 24.15+，先在根目录执行 `npm ci`，再执行 `cd frontend && npm ci && npm run dev`，打开 `http://localhost:3000`。生产构建输出为 `frontend/out/`，构建脚本自动打包工作台、登录页、`/introduction` 介绍页与展示资源。
+需要 Node.js 24.15+（Node 24 系列）或符合 `frontend/package.json` 的更新版本，以及 npm。根目录与前端各有独立锁文件，两处都需要安装。
 
-当前状态与文档索引见 [项目交接](docs/PROJECT_STATUS.md)，首次上线记录见 [上线记录](docs/FIRST_LAUNCH.md)，历史版本见 [更新记录](CHANGELOG.md)。
+```sh
+npm ci
+npm --prefix frontend ci
+npm --prefix frontend run dev -- --hostname 127.0.0.1 --port 3157
+```
 
-## 开发入口
+打开 <http://127.0.0.1:3157/?local=1> 使用本地体验。端口 3157 仅为隔离开发示例；如已占用，换用其他空闲端口。首次安装依赖需要网络。
 
-| 负责方向 | 入口 |
-|---|---|
-| 产品规划与 PRD | [PLAN.md](PLAN.md) |
-| A：前端工作台 | [启动与接口配置](frontend/README.md)、[前端修改边界](frontend/AGENTS.md) |
-| B：Supabase 后端 | [后端说明](BACKEND.md)、[部署说明](docs/DEPLOYMENT.md) |
-| A01：交接与验证 | [编辑器首版报告](docs/team/reports/A/A01.md) |
-| 前后端本地联调 | [运行步骤、修复及测试结果](docs/INTEGRATION.md) |
-| 原体育馆展示原型 | 根目录 `index.html`；运行方式与功能见下文 |
+### 连接云端功能
 
-## 体育馆展示原型（根目录 HTML）
+```sh
+cp frontend/.env.example frontend/.env.local
+```
 
-100 人、48 小时黑客松空间方案
+在本机填写公开客户端配置：
 
-基于用户提供的体育馆参考照片制作的空间与时间交互原型。计划参赛规模为 100 人，25 支四人团队；导师、工作人员和评委另计。
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://hrsrrduwbqxnqddkexoy.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<该项目的公开 anon 或 publishable key>
+NEXT_PUBLIC_GENERATION_ENABLED=false
+```
 
-这一块是**独立于工作台的展示原型**，用来把「场地→布置→时间」讲清楚，与 `frontend/` 里的产品不是同一套代码。
+公开配置在构建时写入前端，修改后需要重启开发服务或重新构建。生成开关按要连接的环境配置；示例保持关闭，不会自行提交生成任务。自定义本地端口只有被目标后端 CORS 和 Auth 跳转设置允许后，才能使用对应云端流程。
 
-### 运行
+服务端配置模板为 [.env.example](.env.example) 与 [Edge 环境模板](supabase/functions/.env.example)。DeepSeek、HY3、service-role 和 worker secret 只能留在服务端。源码克隆不包含这些密钥、登录会话、云数据库业务数据或用户上传的私有模型；这些仍保留在各自云服务中。
 
-在本目录执行 `python3 -m http.server 8766 --bind 127.0.0.1`，打开 http://127.0.0.1:8766/ 。
+完整本地 API/数据库联调见 [INTEGRATION.md](docs/INTEGRATION.md)。为各工作树使用独立端口和数据目录，避免连接到其他任务的测试环境。
 
-使用本地保存的 Three.js 0.186.1、GLTFLoader 与 5 款 GLB 素材，不需要安装 npm 包、登录或配置 API Key，打开场景时不向素材供应商请求文件。浏览器需支持 WebGL 2 和 import maps。由于使用 ES Modules 和本地模型请求，必须通过 HTTP 服务打开，不支持双击 `index.html`。
+## 构建与静态预览
 
-### 交互
+```sh
+npm --prefix frontend run build
+npx wrangler pages dev frontend/out --ip 127.0.0.1 --port 3158
+```
 
-- 在场内视角、三维全景、俯视布局之间切换。拖动环视，滚轮或双指缩放。
-- 点击区域或图例查看用途与现场确认事项。
-- 拖动 48 小时时间轴，查看签到开场、开发、轮休、导师反馈、迭代、路演和收尾。
-- 播放/暂停活动流程，切换动线及钢架屋顶。
-- 查看原照片、下载完整 Markdown 方案。
-- 查看 3DAssets 模型加载状态；打开“查看模型与来源”可跳转原始资产页面或下载对应的真实 GLB 文件。
-- 点击“旋转查看模型”或打开 `models.html`，逐个放大查看真实素材；模型预览支持拖动旋转与滚轮缩放。
+打开 <http://127.0.0.1:3158/?local=1>。`pages dev` 只做本地预览，不发布。`build` 自动将介绍页、资源库和场景模板打包到 `frontend/public/`，最终输出 `frontend/out/`。
 
-### 已接入的素材
+本次本地交付额外保留经过线上抽查核验的原发布构建到 `frontend/out/`，以及已下载的函数源码与版本记录到 `production-snapshot/edge/`。它们不提交到 Git；以后重新 `git clone` 时需要重新构建。运行 `build` 会替换本地 `out/`，需要保留原发布产物时先另行备份。
 
-会议桌、活动座椅、笔记本电脑、宽叶盆栽和舞台音箱。五款源模型共 262,516 字节，来自 3DAssets.dev 官方 API，按用途缓存到 `assets/models/`。素材清单在 `assets/catalogue.json`，完整来源、授权、文件哈希与检查记录在 `ASSET-SOURCES.md`。重复工位复用模型几何。
+## 检查
 
-Three.js 官方 npm 包的 SHA-512 完整性已验证，版本固定为 0.186.1，仅保存运行需要的文件到 `vendor/three/`，MIT 授权随文件保留。`renderer-webgl.js` 是当前渲染器。
+```sh
+# 后端类型与数据库/接口测试；测试使用隔离的 PGlite
+npm run check
 
-### 模型边界
+# 前端类型、交互测试与生产构建
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 
-Three.js 对真实三维网格进行渲染，道具使用 GLTFLoader 加载 GLB；体育馆、看台、舞台、人物和动线由程序搭建。照片仅作为形态参考，未进行测绘或自动三维重建。场馆采用示意比例，不代表实测尺寸、核定容量或人流仿真。入口、舞台、篮架处理、电力、网络、夜间开放、休息安排均需要现场确认。时间轴上的阶段变化和人物动线用于讲解活动流程，日夜变化以假定上午 9 时开场展示。
+# Edge 类型检查（需要 Deno）
+npm run check:edge
+```
 
-### 场景预览
+部分本地集成测试会监听随机回环端口，需要运行环境允许。测试通过不等于完成真实供应商或生产数据验收；本次执行范围见 [快照检查记录](docs/WEBSITE_LATEST.md)。
 
-![场内视角与活动时间轴](preview-webgl-desktop.jpg)
+## 发布与维护
 
-## 目录入口
+前端、Edge Functions、数据库迁移是三个独立发布面。修改前先查询实际生产版本，再决定发布哪些部分。`package.json` 中仍保留 `0.6.0`，不能据此判断目前部署内容。
 
-### 产品
+- 前端部署目录固定为 `frontend/out/`，项目为 `scendance-scene-planner`。
+- Edge Functions 使用项目 `hrsrrduwbqxnqddkexoy`；仅发布本次确实变更且通过检查的函数。
+- 此快照中的 16 份迁移已经在线上存在，不要作为新迁移再次执行；新环境按版本顺序初始化。
+- 三个函数发布时点不同，其部署包包含的共享依赖版本可能不同；本次交付保留各函数已下载的源码与平台部署标识，不能把整个当前共享源码重新发布视为无变化备份。
+- 历史文档中的旧版本、额度、未部署声明以各自记录日期为准；本次快照基线以本 README 及对应证据文件为准。
 
-- [`frontend/`](frontend/README.md)：工作台与官网（Next.js），生产构建输出 `frontend/out/`
-- [`PLAN.md`](PLAN.md)：产品规划与 PRD
-- [`docs/`](docs/PROJECT_STATUS.md)：状态、部署、接口与验证文档
-- `supabase/`：数据库迁移、Edge Functions 与运维脚本
+## 进一步阅读与许可
 
-### 展示原型
+- [API 契约](docs/API.md)、[业务契约](docs/contracts/SUPABASE_BUSINESS.md)
+- [Binggo 场景资源 Agent](docs/BINGGO_SCENE_AGENT.md)、[材质和模型升级](docs/BINGGO_ASSET_UPGRADE.md)
+- [场景模板发布记录](docs/SCENE_TEMPLATES_RELEASE.md)、[当前 AI 额度说明](docs/AI_USAGE_LIMITS.md)
+- [部署与恢复](docs/DEPLOYMENT.md)、[账号邮件验证](docs/AUTH_EMAIL_OTP.md)
+- [素材来源](ASSET-SOURCES.md)、[前端上游许可](frontend/UPSTREAM-LICENSE)、[产品规划](PLAN.md)
 
-- `index.html`：体育馆三维场景与时间轴
-- `models.html`：五款模型的独立旋转预览与下载
-- `assets/`：模型、缩略图与素材清单
-
-### 记录
-
-- `ASSET-SOURCES.md`：素材来源及授权记录
-- `VALIDATION.md`：已完成的检查
-- `CHANGELOG.md`：更新记录
-
-## 后端开发
-
-本仓库包含 Supabase 后端，详见 [后端开发入口](BACKEND.md)。支持权限、项目保存、编辑租约、AI 提案、三维生成任务、资产归档和客户分享。新前端已接入登录/注册、项目、租约、场景保存、私有资产授权及 AI 提案预览与确认应用。登录回调、刷新恢复、工作室隔离与真实 DeepSeek 请求已有上线验证；公开注册邮件仍需独立 SMTP。三维生成与客户发布不能视为已完成前端端到端验收。接口、部署步骤和验证边界见后端文档。
+保留原有上游许可、模型来源和署名。各素材授权以其来源记录为准。
