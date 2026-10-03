@@ -18,6 +18,8 @@ describe('creative brief boundaries', () => {
     expect(instruction).toContain('完整候选后由客户整体确认');
     expect(instruction).toContain('现场照片尚未提交给模型');
     expect(instruction).toContain('不得用桌椅冒充');
+    expect(instruction).toContain('依据当前资源库');
+    expect(instruction).not.toContain('帐篷、拱门等当前不支持');
     expect(briefInstruction({ ...INITIAL_BRIEF, description: '交流会', allowIdeas: false }, 12, 10)).toContain('不自行扩展');
   });
 

@@ -1,0 +1,645 @@
+[
+  {
+    "name": "模块会议桌",
+    "path": "assets/models/table.glb",
+    "source": "https://3dassets.dev/assets/hotel-and-resort-operations-conference-table-module-a6abb373",
+    "license": "cc0-1.0",
+    "bytes": 75548,
+    "sha256": "85a08d3f62713c7c78df5a6974b2025b240fae163b795dd61ff1b7011c23f854",
+    "recordedHashMatches": true,
+    "bounds": {
+      "min": [
+        -0.800000011920929,
+        -0.000019743059480936687,
+        -0.4499649104191022
+      ],
+      "max": [
+        0.800000011920929,
+        0.7420005503675007,
+        0.4499649104191022
+      ]
+    },
+    "sizeXYZ": [
+      1.600000023841858,
+      0.7420202934269816,
+      0.8999298208382044
+    ],
+    "nodes": [
+      {
+        "name": "conference-table-module",
+        "children": 5
+      },
+      {
+        "name": "conference-table-module_0",
+        "mesh": "conference-table-module_0",
+        "children": 0
+      },
+      {
+        "name": "conference-table-module_1",
+        "mesh": "conference-table-module_1",
+        "children": 0
+      },
+      {
+        "name": "conference-table-module_2",
+        "mesh": "conference-table-module_2",
+        "children": 0
+      },
+      {
+        "name": "conference-table-module_3",
+        "mesh": "conference-table-module_3",
+        "children": 0
+      },
+      {
+        "name": "lid-cable-box",
+        "children": 1
+      },
+      {
+        "name": "",
+        "mesh": "lid-cable-box",
+        "children": 0
+      }
+    ],
+    "meshes": 5,
+    "primitives": 5,
+    "triangles": 1476,
+    "primitiveUV": [
+      {
+        "vertices": 2832,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "metal"
+      },
+      {
+        "vertices": 576,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "carcass"
+      },
+      {
+        "vertices": 384,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "surface"
+      },
+      {
+        "vertices": 252,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "dark"
+      },
+      {
+        "vertices": 384,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "metal"
+      }
+    ],
+    "materials": [
+      {
+        "name": "metal",
+        "color": [
+          0.72,
+          0.73,
+          0.76,
+          1
+        ],
+        "metalness": 1,
+        "roughness": 0.35
+      },
+      {
+        "name": "carcass",
+        "color": [
+          0.88,
+          0.86,
+          0.82,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.55
+      },
+      {
+        "name": "surface",
+        "color": [
+          0.44,
+          0.31,
+          0.21,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.5
+      },
+      {
+        "name": "dark",
+        "color": [
+          0.14,
+          0.15,
+          0.16,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.55
+      }
+    ],
+    "textures": [],
+    "extensionsUsed": [
+      "KHR_mesh_quantization"
+    ],
+    "extensionsRequired": [
+      "KHR_mesh_quantization"
+    ],
+    "animations": [
+      "open",
+      "close"
+    ],
+    "skins": 0,
+    "validation": {
+      "errors": 0,
+      "warnings": 0,
+      "infos": 0,
+      "messages": []
+    }
+  },
+  {
+    "name": "可叠放座椅",
+    "path": "assets/models/chair.glb",
+    "source": "https://3dassets.dev/assets/office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+    "license": "cc0-1.0",
+    "bytes": 51616,
+    "sha256": "0ef21a9011a00e92766aa88fb434927ccbf85b47d4746c6e39228ca27e2f9813",
+    "recordedHashMatches": true,
+    "bounds": {
+      "min": [
+        -0.23000884509488254,
+        0,
+        -0.2936966121196747
+      ],
+      "max": [
+        0.23000884509488254,
+        0.886755433655616,
+        0.2199999988079071
+      ]
+    },
+    "sizeXYZ": [
+      0.46001769018976507,
+      0.886755433655616,
+      0.5136966109275818
+    ],
+    "nodes": [
+      {
+        "name": "canteen-stacking-chair",
+        "children": 3
+      },
+      {
+        "name": "canteen-stacking-chair_0",
+        "mesh": "canteen-stacking-chair_0",
+        "children": 0
+      },
+      {
+        "name": "canteen-stacking-chair_1",
+        "mesh": "canteen-stacking-chair_1",
+        "children": 0
+      },
+      {
+        "name": "canteen-stacking-chair_2",
+        "mesh": "canteen-stacking-chair_2",
+        "children": 0
+      }
+    ],
+    "meshes": 3,
+    "primitives": 3,
+    "triangles": 1022,
+    "primitiveUV": [
+      {
+        "vertices": 1536,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "metal"
+      },
+      {
+        "vertices": 720,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "dark"
+      },
+      {
+        "vertices": 810,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "carcass"
+      }
+    ],
+    "materials": [
+      {
+        "name": "metal",
+        "color": [
+          0.72,
+          0.73,
+          0.76,
+          1
+        ],
+        "metalness": 1,
+        "roughness": 0.36
+      },
+      {
+        "name": "dark",
+        "color": [
+          0.13,
+          0.14,
+          0.16,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.55
+      },
+      {
+        "name": "carcass",
+        "color": [
+          0.88,
+          0.88,
+          0.86,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.58
+      }
+    ],
+    "textures": [],
+    "extensionsUsed": [
+      "KHR_mesh_quantization"
+    ],
+    "extensionsRequired": [
+      "KHR_mesh_quantization"
+    ],
+    "animations": [],
+    "skins": 0,
+    "validation": {
+      "errors": 0,
+      "warnings": 0,
+      "infos": 0,
+      "messages": []
+    }
+  },
+  {
+    "name": "椅子",
+    "path": "assets/library/model/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7.glb",
+    "source": "https://3dassets.dev/assets/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7",
+    "license": "CC0 1.0 Universal",
+    "bytes": 29684,
+    "sha256": "41ceb2de779a5f237bc4b77101199362e36a9526b3d8a64003d4404746cb7380",
+    "recordedHashMatches": true,
+    "bounds": {
+      "min": [
+        -0.24484195398935835,
+        0,
+        -0.2356609545272238
+      ],
+      "max": [
+        0.24484195398935835,
+        1.0027793645858765,
+        0.2356609545272238
+      ]
+    },
+    "sizeXYZ": [
+      0.4896839079787167,
+      1.0027793645858765,
+      0.4713219090544476
+    ],
+    "nodes": [
+      {
+        "name": "dining-chair-timber",
+        "children": 2
+      },
+      {
+        "name": "dining-chair-timber_0",
+        "mesh": "dining-chair-timber_0",
+        "children": 0
+      },
+      {
+        "name": "dining-chair-timber_1",
+        "mesh": "dining-chair-timber_1",
+        "children": 0
+      }
+    ],
+    "meshes": 2,
+    "primitives": 2,
+    "triangles": 672,
+    "primitiveUV": [
+      {
+        "vertices": 1190,
+        "indices": 1632,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "oak"
+      },
+      {
+        "vertices": 284,
+        "indices": 384,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "walnut"
+      }
+    ],
+    "materials": [
+      {
+        "name": "oak",
+        "color": [
+          0.64,
+          0.47,
+          0.3,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.5
+      },
+      {
+        "name": "walnut",
+        "color": [
+          0.33,
+          0.23,
+          0.15,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.5
+      }
+    ],
+    "textures": [],
+    "extensionsUsed": [
+      "KHR_mesh_quantization"
+    ],
+    "extensionsRequired": [
+      "KHR_mesh_quantization"
+    ],
+    "animations": [],
+    "skins": 0,
+    "validation": {
+      "errors": 0,
+      "warnings": 0,
+      "infos": 0,
+      "messages": []
+    }
+  },
+  {
+    "name": "讲台",
+    "path": "assets/library/model/japanese-school-and-city-street-lectern-f8b909de.glb",
+    "source": "https://3dassets.dev/assets/japanese-school-and-city-street-lectern-f8b909de",
+    "license": "CC0 1.0 Universal",
+    "bytes": 82252,
+    "sha256": "fdbd9f2e1e8ae96e30c98d758dee82301eb32b5811e925d96854e56d685d65ea",
+    "recordedHashMatches": true,
+    "bounds": {
+      "min": [
+        -0.309994879538959,
+        0,
+        -0.19003455309961248
+      ],
+      "max": [
+        0.309994879538959,
+        1.5449999570846558,
+        0.2300345596561234
+      ]
+    },
+    "sizeXYZ": [
+      0.619989759077918,
+      1.5449999570846558,
+      0.4200691127557359
+    ],
+    "nodes": [
+      {
+        "name": "lectern",
+        "children": 2
+      },
+      {
+        "name": "lectern_0",
+        "mesh": "lectern_0",
+        "children": 0
+      },
+      {
+        "name": "lectern_1",
+        "mesh": "lectern_1",
+        "children": 0
+      }
+    ],
+    "meshes": 2,
+    "primitives": 2,
+    "triangles": 416,
+    "primitiveUV": [
+      {
+        "vertices": 767,
+        "indices": 1056,
+        "uv0": 767,
+        "uv1": 0,
+        "material": "timber"
+      },
+      {
+        "vertices": 147,
+        "indices": 192,
+        "uv0": 147,
+        "uv1": 0,
+        "material": "render"
+      }
+    ],
+    "materials": [
+      {
+        "name": "timber",
+        "color": [
+          0.64,
+          0.47,
+          0.29,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.85,
+        "baseColorTexture": "wood"
+      },
+      {
+        "name": "render",
+        "color": [
+          0.9,
+          0.88,
+          0.82,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.9,
+        "baseColorTexture": "panel"
+      }
+    ],
+    "textures": [
+      {
+        "name": "wood",
+        "mime": "image/webp",
+        "size": [
+          512,
+          512
+        ]
+      },
+      {
+        "name": "panel",
+        "mime": "image/webp",
+        "size": [
+          512,
+          512
+        ]
+      }
+    ],
+    "extensionsUsed": [
+      "EXT_texture_webp",
+      "KHR_mesh_quantization"
+    ],
+    "extensionsRequired": [
+      "EXT_texture_webp",
+      "KHR_mesh_quantization"
+    ],
+    "animations": [],
+    "skins": 0,
+    "validation": {
+      "errors": 0,
+      "warnings": 0,
+      "infos": 0,
+      "messages": []
+    }
+  },
+  {
+    "name": "帐篷",
+    "path": "assets/library/model/mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea.glb",
+    "source": "https://3dassets.dev/assets/mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea",
+    "license": "CC0 1.0 Universal",
+    "bytes": 91616,
+    "sha256": "37024b4ef118e177f5b07677a2ec268f3a5093f8e1d320c2c7173de83fa0ad27",
+    "recordedHashMatches": true,
+    "bounds": {
+      "min": [
+        -1.8600596043738833,
+        -0.00007955300985129643,
+        -1.7082206010818481
+      ],
+      "max": [
+        1.8600596043738833,
+        1.5788549588936402,
+        2.1069071292877197
+      ]
+    },
+    "sizeXYZ": [
+      3.7201192087477666,
+      1.5789345119034914,
+      3.815127730369568
+    ],
+    "nodes": [
+      {
+        "name": "base-camp-dome-tent",
+        "children": 4
+      },
+      {
+        "name": "base-camp-dome-tent_0",
+        "mesh": "base-camp-dome-tent_0",
+        "children": 0
+      },
+      {
+        "name": "base-camp-dome-tent_1",
+        "mesh": "base-camp-dome-tent_1",
+        "children": 0
+      },
+      {
+        "name": "base-camp-dome-tent_2",
+        "mesh": "base-camp-dome-tent_2",
+        "children": 0
+      },
+      {
+        "name": "base-camp-dome-tent_3",
+        "mesh": "base-camp-dome-tent_3",
+        "children": 0
+      }
+    ],
+    "meshes": 4,
+    "primitives": 4,
+    "triangles": 1840,
+    "primitiveUV": [
+      {
+        "vertices": 1296,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "shell"
+      },
+      {
+        "vertices": 1344,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "charcoal"
+      },
+      {
+        "vertices": 2448,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "alloy"
+      },
+      {
+        "vertices": 432,
+        "uv0": 0,
+        "uv1": 0,
+        "material": "crimson"
+      }
+    ],
+    "materials": [
+      {
+        "name": "shell",
+        "color": [
+          0.88,
+          0.4,
+          0.09,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.62
+      },
+      {
+        "name": "charcoal",
+        "color": [
+          0.13,
+          0.14,
+          0.16,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.72
+      },
+      {
+        "name": "alloy",
+        "color": [
+          0.79,
+          0.81,
+          0.84,
+          1
+        ],
+        "metalness": 0.35,
+        "roughness": 0.38
+      },
+      {
+        "name": "crimson",
+        "color": [
+          0.76,
+          0.13,
+          0.13,
+          1
+        ],
+        "metalness": 0,
+        "roughness": 0.68
+      }
+    ],
+    "textures": [],
+    "extensionsUsed": [
+      "KHR_mesh_quantization"
+    ],
+    "extensionsRequired": [
+      "KHR_mesh_quantization"
+    ],
+    "animations": [],
+    "skins": 0,
+    "validation": {
+      "errors": 0,
+      "warnings": 0,
+      "infos": 0,
+      "messages": []
+    }
+  }
+]

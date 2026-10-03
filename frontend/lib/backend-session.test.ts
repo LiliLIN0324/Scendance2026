@@ -54,6 +54,25 @@ afterEach(() => {
 });
 
 describe("backend session contract", () => {
+  it("deletes the idle bound project while preserving its local draft", async () => {
+    const controller = session(); queue(auth); await controller.signIn('test@example.com', 'test');
+    queue(project); await controller.getProject(projectId);
+    controller.setDraft(assetScene);
+    const draft = controller.getSnapshot().draft;
+    queue({ deleted: true }); await controller.deleteProject(projectId, 4);
+    expect(request(2)).toMatchObject({ options: { method: 'DELETE' }, body: { expectedRevision: 4 } });
+    expect(controller.getSnapshot()).toMatchObject({ project: null, revision: null, draft, writeBlocked: true, dirty: true });
+  });
+
+  it("does not remove the bound project on a failed deletion or bypass a held lease", async () => {
+    const controller = await editing();
+    await expect(controller.deleteProject(projectId, 4)).rejects.toMatchObject({ code: 'PROJECT_SWITCH_REQUIRES_RELEASE' });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    queue({ released: true }); await controller.releaseLease();
+    queue({ error: { code: 'PROJECT_BUSY' } }, 429);
+    await expect(controller.deleteProject(projectId, 4)).rejects.toMatchObject({ code: 'PROJECT_BUSY' });
+    expect(controller.getSnapshot().project?.id).toBe(projectId);
+  });
   it("requires public configuration and rejects secrets before any request", async () => {
     expect(getBackendConfig({ url: "", anonKey: "" }).configured).toBe(false);
     expect(getBackendConfig({ url: base, anonKey: "sb_secret_do-not-use" }).configured).toBe(false);

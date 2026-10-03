@@ -28,3 +28,9 @@ output/playwright/
 
 # Local Pages runtime
 frontend/.wrangler/
+
+# Generated Chinese model library download
+output/model-library/
+
+# Local production artifact backup delivered with WEBSITE-LATEST
+/production-snapshot/

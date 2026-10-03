@@ -396,7 +396,7 @@ export function useSceneEffects({
         // Stairs climb to the floor above and openings are fitted into the
         // storey, so the mesh matches the hole cut for it (#202, #277).
         const group = createFurnitureModel(THREE, item.structuralOpeningId ? item : itemForStorey(item, floor), collision);
-        group.position.set(item.position.x, floorY + (item.elevation ?? 0), item.position.z);
+        group.position.set(item.position.x, floorY, item.position.z);
         group.rotation.y = item.rotation ?? 0;
         if (item.mirrored) group.scale.x *= -1;
         group.userData.type = ROOM_OBJECT_TAGS.Furniture;

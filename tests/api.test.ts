@@ -44,6 +44,11 @@ describe('HTTP request -> validation -> PostgreSQL -> response',()=>{
     expect((await req('/jobs','POST',{requestId:crypto.randomUUID(),prompt:'A lamp'})).status).toBe(503);
     expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(0);
   });
+  it('advertises only configured generation capabilities without reserving a request',async()=>{
+    expect(await (await req('/generation/capabilities')).json()).toEqual({model:'hy-3d-3.0',textToModel:false,imageToModel:false,texture:false,textureRequiresImage:true});
+    expect((await req('/generation/capabilities','GET',undefined,null)).status).toBe(401);
+    expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(0);
+  });
   it('does not treat share tokens as authentication',async()=>{
     expect((await req('/projects','GET',undefined,'a'.repeat(64))).status).toBe(401);
   });

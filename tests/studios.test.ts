@@ -29,6 +29,49 @@ describe('studio membership business API',()=>{
     await f.db.query('insert into scene_private.studios(id,name) values($1,$2)',[requestId,'Existing']);
     await expect(f.rpc(owner,'studios.create',{requestId,name:'Existing',displayName:'Owner'})).rejects.toThrow('IDEMPOTENCY_CONFLICT');
   });
+  it('renames a studio for its owner and preserves project and member identities',async()=>{
+    const input={requestId:crypto.randomUUID(),name:'旧名称',displayName:'负责人'};
+    await req('/studios','POST',input);
+    await req(`/studios/${input.requestId}/members/${editor}`,'PUT',{displayName:'成员'});
+    const project=await f.rpc(owner,'projects.create',{studioId:input.requestId,name:'归属项目',scene:scene()});
+    const path=`/studios/${input.requestId}`;
+    expect((await req(path,'PATCH',{name:'越权'},editor)).status).toBe(403);
+    expect((await req(path,'PATCH',{name:'越权'},outsider)).status).toBe(404);
+    expect((await req(path,'PATCH',{name:' '})).status).toBe(400);
+    expect((await req(path,'PATCH',{name:'新名称',role:'owner'})).status).toBe(400);
+    expect(await (await req(path,'PATCH',{name:' 新名称 '})).json()).toMatchObject({id:input.requestId,name:'新名称'});
+    expect((await f.rpc(editor,'projects.get',{projectId:project.id})).studio_id).toBe(input.requestId);
+    expect(await (await req(`${path}/members`)).json()).toHaveLength(2);
+    expect(await (await req(`${path}/projects`)).json()).toEqual([expect.objectContaining({id:project.id,studio_id:input.requestId})]);
+    expect((await req(`${path}/projects`,'GET',undefined,outsider)).status).toBe(404);
+  });
+  it('lists all projects within a studio even beyond the global recent-project limit',async()=>{
+    const id=crypto.randomUUID();
+    await req('/studios','POST',{requestId:id,name:'完整项目清单',displayName:'负责人'});
+    await f.db.query(`insert into scene_private.projects(studio_id,created_by,name,scene)
+      select $1,$2,'项目 '||n,$3::jsonb from generate_series(1,101) n`,[id,owner,JSON.stringify(scene())]);
+    const response=await req(`/studios/${id}/projects`);
+    expect(response.status).toBe(200);
+    const projects=await response.json();
+    expect(projects).toHaveLength(101);
+    expect(projects.every((project:{studio_id:string})=>project.studio_id===id)).toBe(true);
+  });
+  it('deletes only empty studios for their owner, including remaining memberships',async()=>{
+    const input={requestId:crypto.randomUUID(),name:'待删除工作室',displayName:'负责人'};
+    await req('/studios','POST',input);
+    const path=`/studios/${input.requestId}`;
+    await req(`${path}/members/${editor}`,'PUT',{displayName:'成员'});
+    expect((await req(path,'DELETE',undefined,editor)).status).toBe(403);
+    expect((await req(path,'DELETE',undefined,outsider)).status).toBe(404);
+    expect(await (await req(path,'DELETE')).json()).toEqual({removed:true});
+    expect(await (await req('/studios','GET',undefined,editor)).json()).not.toContainEqual(expect.objectContaining({id:input.requestId}));
+    expect((await req(path,'DELETE')).status).toBe(404);
+    const occupied={...input,requestId:crypto.randomUUID()};
+    await req('/studios','POST',occupied);
+    const project=await f.rpc(owner,'projects.create',{studioId:occupied.requestId,name:'不可删除',scene:scene()});
+    expect((await (await req(`/studios/${occupied.requestId}`,'DELETE')).json()).error.code).toBe('STUDIO_NOT_EMPTY');
+    expect((await f.rpc(owner,'projects.get',{projectId:project.id})).name).toBe('不可删除');
+  });
   it('only lets the owner add existing accounts and protects the owner membership',async()=>{
     await f.db.exec('revoke select on auth.users from service_role');
     const path=`/studios/${studio}/members`;

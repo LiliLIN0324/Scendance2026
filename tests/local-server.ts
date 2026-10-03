@@ -116,6 +116,11 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
             sessions.set(access, { id: account.id, refresh });
             response = json({ access_token: access, refresh_token: refresh, expires_in: 3600, user: { id: account.id, email: account.email } });
           }
+        } else if (address.pathname === '/auth/v1/user' && req.method === 'GET') {
+          const session = sessions.get((req.headers.authorization ?? '').replace(/^Bearer /, ''));
+          const account = session && testAccounts.find(a => a.id === session.id);
+          response = account && req.headers.apikey === testPublicKey
+            ? json({ id: account.id, email: account.email }) : json({ error: 'invalid_token' }, 401);
         } else if (address.pathname === '/auth/v1/logout' && req.method === 'POST') {
           sessions.delete((req.headers.authorization ?? '').replace(/^Bearer /, ''));
           response = new Response(null, { status: 204, headers });

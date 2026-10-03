@@ -22,6 +22,7 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 | POST `/projects` | `{studioId,name,scene}` | 201，项目（revision=0） |
 | GET `/projects/:id` | 无 | 项目完整当前场景、物料表、编辑者 |
 | PATCH `/projects/:id` | `{sessionId,generation,expectedRevision,name}` | 名称与 revision 更新后的项目 |
+| DELETE `/projects/:id` | `{expectedRevision}` | 工作室 owner 删除空闲项目，返回 `{deleted:true}`；同时撤销客户分享 |
 | POST `/projects/:id/lease/acquire` | `{sessionId}` | `{sessionId,generation,expiresAt,revision,scene}` |
 | POST `/projects/:id/lease/renew` | `{sessionId,generation}` | 当前租约、revision |
 | POST `/projects/:id/lease/release` | `{sessionId,generation}` | 已到期租约；不会自动保存 |
@@ -35,15 +36,23 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 | POST `/share/read` | `{token}`，匿名 | 发布名称、时间、场景、去除内部备注的物料表和带短期 URL 的资产 |
 | GET `/assets` | 无 | 最近 100 个本人资产；不返回存储路径 |
 | POST `/assets/:assetId/url` | 无 | 已授权资产信息 + `url/expiresIn:300` |
+| GET `/assets/:assetId/materials` | 无 | 已授权 GLB 的真实材质槽、SHA、UV 摘要与可选父版本 |
+| POST `/assets/:assetId/customize` | `{requestId,sourceSha256,materialIndices,baseColor?,metallic?,roughness?,removeBaseColorTexture?:true}` | 201，新独立材质版本；幂等重放200，原资产不变 |
+| POST `/projects/:id/material-variants` | `{requestId,sessionId,generation,expectedRevision,localRevision,scene,objectIds,sourceAssetId,variantAssetId}` | 201，选定实例的版本替换提案；确认仍走原 proposals/apply |
 | POST `/assets/floorplan` | PNG/JPEG 二进制，Content-Type 对应图片 | 201，私有图片资产；<=5MB、4096像素 |
 | POST `/catalog/recommendations` | `{theme,scene}` | 最多 8 条真实公共素材（名称、缩略图、来源、许可、导入体积预检） |
 | POST `/assets/import` | `{modelId}` | 201，打包并归档后的 Poly Haven GLB 资产 |
-| POST `/jobs` | `{requestId,prompt}` | 202，持久化生成任务；幂等重放为200 |
+| GET `/generation/capabilities` | 无 | 配置允许的文字／图片／纹理能力与模型标识；不代表账号实际供应商验收 |
+| POST `/jobs` | `{requestId,prompt,kind?:"text"\|"image"\|"texture",referenceImageAssetId?,sourceAssetId?}` | 202，持久化生成任务；幂等重放为200，原文字请求兼容 |
 | GET `/jobs` | 无 | 最近 100 个本人任务 |
 | GET `/jobs/:jobId` | 无 | 任务真实状态、provider_job_id、asset_id、错误与 usage；不暴露 worker token |
 | POST `/jobs/:jobId/added` | `{projectId}` | 确认资产已存在于保存的项目后标记 added |
 
 `GET /projects` 和 `/assets` 当前固定返回最近 100 项，尚无分页 UI；演示账号范围下足够，扩大团队规模前增加游标分页。
+
+删除项目要求版本一致且没有有效编辑租约或正在执行的图纸重建任务，分别返回 `REVISION_CONFLICT`、`PROJECT_BUSY`、`RECONSTRUCTION_BUSY`。无成员权限返回 `PROJECT_NOT_FOUND`，编辑成员返回 `FORBIDDEN`。同一 owner 重复删除幂等；删除后的项目、租约、图纸任务读取和旧分享均不可再使用。数据库用 `deleted_at` 保留发布、账单和服务调用证据，个人素材不随项目删除。上线需先应用 `20261003120000_project_deletion.sql`，再发布 API 与前端。
+
+编辑器 `RoomLayout.itemLayers/designBook` 是本机编组与方案历史，不属于 v1/v2 场景协议。云端保存/发布当前选中的场景；本机方案切换保留每个方案最新编辑状态，最多 20 个方案，可移除非当前方案并撤销恢复。
 
 v0.4.1 公共模型目录随前端完整提供，不依赖 `/assets` 的本人最近 100 项列表。管理员用 `register_library_asset(p_owner,p_model_id,p_record)` RPC 批量登记后，工作室成员通过原 `/assets/:assetId/url` 和场景保存接口使用这些模型。RPC 仅 service_role 可调用；原 `/assets/import` 仍只导入 Poly Haven。登记、授权范围与上线顺序见 [v0.4.1 兼容记录](V041_COMPATIBILITY.md)。
 
@@ -127,9 +136,19 @@ const studios = await api.request('/studios');
 }
 ```
 
-此处 `scene` 必须替换为上述完整场景，不是空对象。`mode` 为 layout 或 modify。每次本地操作（包括撤销/重做、颜色、锁定、场地调整）递增 localRevision。等待 AI 时可编辑；发生变化则旧提案不能应用。仅用户确认后调用 `api.applyProposal(proposal,currentState)`。
+此处 `scene` 必须替换为上述完整场景，不是空对象。`mode` 为 layout 或 modify。每次本地操作（包括撤销/重做、颜色、锁定、场地调整）递增 localRevision。等待 AI 时可编辑；发生变化则旧提案不能应用。用户选择直接应用或确认提案后调用 `api.applyProposal(proposal,currentState)`。文字策划统一使用 `modify`，以当前场景为起点；`layout` 保留给兼容客户端。
 
 应用发起后短暂冻结编辑，直到返回结果；将 `previousScene → scene` 作为一个历史条目。撤销时恢复 previousScene，再正常保存（会产生新的云端 revision，不回退计数器）。前端不能把提案解释文本当作已完成保存。
+
+### Binggo 资源 Agent
+
+服务器读取当前场景、选中实例、公共资源库以及当前用户有权访问的个人/场景素材，发送紧凑的资源索引和 `sceneResourceRefs`（实例 ID → 本轮资源引用）。提供商不接收下载地址、存储路径或密钥。公共资源使用与前端资源库相同的目标尺寸；私人素材没有可靠尺寸时，必须补充尺寸。
+
+DeepSeek 通过 `add_resource` / `replace_resource` 命令引用索引中的 `resourceId`。Agent 将其解析为已知资产，检查尺寸、边界、结构及锁定状态；提案存储、模型预加载和应用分别重查权限。宽深支持 0.02–50 m，高支持 0.01–30 m；不支持直接改 GLB 内材质。未通过检查的结果最多修复一次，不扩大既有预算。
+
+提案响应增加可选 `modelSuggestions: [{name,reason,prompt}]`（最多 3 项），同 requestId 重放保留建议。没有适合资源时，返回缺项及单件模型描述，前端“前往 HY3 生成”切换现有生成页签；不会自动提交收费生成，也不覆盖已有未确认请求或草稿。生成完成后沿用授权预览、确认尺寸和加入场地流程，后续策划可读取该素材。
+
+如果提案场景与当前场景相同，前端只展示回答/模型建议，不保存或新增撤销记录。建议并非已生成资产；解释文本并非执行成功的依据。
 
 ### 模型预览/加入
 
@@ -162,3 +181,11 @@ const studios = await api.request('/studios');
 ## DeepSeek 每日预算
 
 AI 提案接口按北京时间执行全站共享的 10 元日预留上限；每次提供商调用（含修复）先预留 0.20 元。超额返回 `429 DAILY_BUDGET_EXCEEDED`，重复 attempt 拒绝再次发出模型请求；输入过大返回 `413 AI_INPUT_TOO_LARGE`。现有场景/提案 JSON 契约不变，客户端不能指定限额、费用或日期。详细语义见 [每日预算记录](DEEPSEEK_DAILY_LIMIT.md)。
+
+### 工作室管理
+
+- `GET /studios/:id/projects`：返回当前工作室的完整项目列表（含当前编辑人），工作室成员可读。
+- `PATCH /studios/:id`：输入 `{name}`，仅负责人可重命名；返回 `{id,name,role,displayName}`。
+- `DELETE /studios/:id`：仅负责人可删除没有任何项目的工作室；成功返回 `{removed:true}`，保留成员账号。非空返回 `STUDIO_NOT_EMPTY`，无权限或不存在返回 `STUDIO_NOT_FOUND`，非负责人返回 `FORBIDDEN`。
+
+以上接口通过 `studio_rpc` 执行，浏览器不能直接调用 RPC。部署需要先应用 `20261003094500_studio_management.sql`，再更新 Edge Function。已有全局 `/projects` 协议保持兼容。

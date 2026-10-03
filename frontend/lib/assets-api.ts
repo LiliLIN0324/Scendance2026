@@ -1,5 +1,6 @@
 import { layoutToBackendScene } from '@/components/room-organizer/lib/backend-adapter';
 import { type Scene, sceneSchema } from '../../supabase/functions/_shared/domain';
+import { generationRequestSchema, type GenerationRequest } from '../../supabase/functions/_shared/generation-contract';
 import type { GenerationJob } from './backend-session';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
 
@@ -10,7 +11,11 @@ export interface CloudAsset {
 }
 export interface AuthorizedAsset { id: string; name: string; source: string; url: string }
 export interface AssetSize { width: number; depth: number; height: number }
-export interface GenerationIntent { requestId: string; prompt: string; jobId?: string }
+export type GenerationIntent = Omit<GenerationRequest,'kind'> & {kind?:GenerationRequest['kind'];jobId?:string};
+export function generationIntentFingerprint(intent:GenerationIntent):string {
+  const input={...intent};delete input.jobId;
+  return JSON.stringify(generationRequestSchema.parse(input));
+}
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const jobLabels: Record<GenerationJob['state'], string> = {
@@ -38,6 +43,8 @@ export function readGenerationIntent(storage: Pick<Storage, 'getItem'>, key: str
     if (!raw) return null;
     const value = JSON.parse(raw) as GenerationIntent;
     if (!uuid.test(value.requestId) || typeof value.prompt !== 'string' || !value.prompt.trim() || value.prompt.length > 1024 || value.jobId && !uuid.test(value.jobId)) throw new Error('Invalid intent');
+    const request={...value};delete request.jobId;
+    generationRequestSchema.parse(request);
     return value;
   } catch { throw new Error('无法读取上一次生成请求。请先核对云任务记录；恢复本地存储前不能新建付费任务。'); }
 }
@@ -54,6 +61,10 @@ export function assetError(error: unknown): string {
     FORBIDDEN: '当前账号没有工作室权限，请联系管理员。',
     NO_COMPATIBLE_MODEL: '该模型暂不符合导入要求，请选择其他模型。',
     ASSET_NOT_FOUND: '没有访问此素材的权限，或素材已不存在。',
+    SOURCE_UV_REQUIRED: '此模型没有可用 UV，暂不能进行纹理生成，可先使用材质参数修改。',
+    TEXTURE_GEOMETRY_CHANGED: '生成结果改变了几何或 UV，已拒绝应用，原模型保持不变。',
+    REFERENCE_IMAGE_FORBIDDEN: '请选择当前账号上传的 PNG 或 JPEG 参考图。',
+    INVALID_REFERENCE_IMAGE: '参考图尺寸不符合要求，请使用 129–4095 像素的 PNG 或 JPEG。',
     ASSET_NOT_IN_SAVED_SCENE: '云端项目尚未保存该资产，请先保存当前画布。',
   };
   return messages[code] ?? (error instanceof Error ? error.message : '请求失败，请稍后重试。');

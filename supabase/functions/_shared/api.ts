@@ -5,12 +5,15 @@ import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, recommendations } from './assets.ts';
 import { generateProposal } from './providers.ts';
+import { readSceneResources } from './scene-resources.ts';
+import { prepareGenerationRequest } from './generation-input.ts';
+import { generationCapabilities } from './generation-contract.ts';
+import { createMaterialVariant, prepareMaterialVariant, readAssetMaterials } from './material-variants.ts';
 import { readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
 import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
 const displayName=z.string().trim().min(1).max(80);
-const idempotency=z.strictObject({requestId:uuid,prompt:z.string().trim().min(1).max(1024)});
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
@@ -56,6 +59,16 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
         return respond(await backend.scene(actor,'studios.create',input),201);
       }
+      const studio=path.match(/^\/studios\/([^/]+)(\/projects)?$/);
+      if(studio) {
+        const studioId=uuid.parse(studio[1]);
+        if(studio[2] && method==='GET') return respond(await backend.scene(actor,'studios.projects.list',{studioId}));
+        if(!studio[2] && method==='PATCH') {
+          const input=z.strictObject({name}).parse(await json());
+          return respond(await backend.scene(actor,'studios.rename',{...input,studioId}));
+        }
+        if(!studio[2] && method==='DELETE') return respond(await backend.scene(actor,'studios.delete',{studioId}));
+      }
       const members=path.match(/^\/studios\/([^/]+)\/members(?:\/([^/]+))?$/);
       if(members) {
         const studioId=uuid.parse(members[1]);
@@ -80,7 +93,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
       const project=path.match(/^\/projects\/([^/]+)(.*)$/);
       if(project) {
         const projectId=uuid.parse(project[1]), tail=project[2];
+        if(tail==='/material-variants' && method==='POST') {
+          const {reused,...proposal}=await prepareMaterialVariant(backend,actor,projectId,await json());
+          return respond(proposal,reused?200:201);
+        }
         if(!tail && method==='GET') return respond(await backend.scene(actor,'projects.get',{projectId}));
+        if(!tail && method==='DELETE') {
+          const input=z.strictObject({expectedRevision:z.number().int().nonnegative()}).parse(await json());
+          return respond(await backend.scene(actor,'projects.delete',{...input,projectId}));
+        }
         if(!tail && method==='PATCH') {
           const input=z.strictObject({...leaseSchema.shape,name}).parse(await json());
           return respond(await backend.scene(actor,'projects.rename',{...input,projectId}));
@@ -131,12 +152,14 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
             throw new ApiError(reservation.state==='reserved'?'AI_IN_PROGRESS':'AI_PREVIOUS_REQUEST_FAILED',409,{requestId:input.requestId});
           }
           try {
-            const proposal=await generateProposal(input,env,attempt=>backend.jobs(actor,'text.reserve_call',{id:reservation.id,attempt}),fetcher);
+            const resources=await readSceneResources(backend,actor,input.scene);
+            const proposal=await generateProposal(input,env,attempt=>backend.jobs(actor,'text.reserve_call',{id:reservation.id,attempt}),fetcher,resources);
             const stored=await backend.scene(actor,'proposals.store',{
               ...input,id:reservation.id,baseHash:await sceneHash(input.scene),candidate:proposal.scene,explanation:proposal.explanation,warnings:proposal.warnings,
             });
-            await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'complete',result:stored,usage:proposal.usage});
-            return respond(stored,201);
+            const result={...stored,modelSuggestions:proposal.modelSuggestions,materialSuggestions:proposal.materialSuggestions};
+            await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'complete',result,usage:proposal.usage});
+            return respond(result,201);
           } catch(error) {
             await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'failed',result:null,usage:error instanceof ApiError?error.details??{}:{}}).catch(()=>{});
             throw error;
@@ -168,6 +191,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         if(share && method==='DELETE') return respond(await backend.scene(actor,'shares.revoke',{projectId,shareId:uuid.parse(share[1])}));
       }
       if(path==='/assets' && method==='GET') return respond(await backend.scene(actor,'assets.list'));
+      const materialAsset=path.match(/^\/assets\/([^/]+)\/(materials|customize)$/);
+      if(materialAsset) {
+        const assetId=uuid.parse(materialAsset[1]);
+        if(materialAsset[2]==='materials' && method==='GET')return respond(await readAssetMaterials(backend,actor,assetId));
+        if(materialAsset[2]==='customize' && method==='POST') {
+          const result=await createMaterialVariant(backend,actor,assetId,await json());
+          return respond(result.asset,result.reused?200:201);
+        }
+      }
       const asset=path.match(/^\/assets\/([^/]+)\/url$/);
       if(asset && method==='POST') {
         const a=await backend.scene(actor,'assets.get',{assetId:uuid.parse(asset[1])});
@@ -213,10 +245,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         await backend.upload(record.storagePath,bytes,mime);
         return respond(await backend.scene(actor,'assets.register',record),201);
       }
+      if(path==='/generation/capabilities' && method==='GET') return respond(generationCapabilities(env));
       if(path==='/jobs' && method==='POST') {
-        const input=idempotency.parse(await json());
-        required(env,'HUNYUAN_API_KEY'); required(env,'HUNYUAN_TERMS_REVIEWED_AT'); required(env,'HUNYUAN_TERMS_URL');
-        const result=await backend.jobs(actor,'jobs.create',{...input,fingerprint:await sha256(input.prompt),reserveCents:reserveCost(env,'GENERATION_MAX_TASK_CENTS')});
+        const input=await prepareGenerationRequest(backend,actor,await json(),env);
+        const result=await backend.jobs(actor,'jobs.create',{...input,reserveCents:reserveCost(env,'GENERATION_MAX_TASK_CENTS')});
         const {worker_token,worker_until,...safe}=result;
         return respond(safe,result.reused?200:202);
       }

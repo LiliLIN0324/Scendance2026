@@ -1,15 +1,7 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import { isGlbUrl } from './glb-url';
 
-/**
- * The online model library (#online-models): the curated catalogue that also backs
- * `assets/library/online.json`, browsable from the workspace's 物料库 panel.
- *
- * The index ships inside the repository instead of being fetched, because browsing
- * must not depend on a live endpoint. Only the thumbnails and GLB files come from the
- * CDN. The JSON is ~140 KB, so it is imported lazily — sessions that never open the
- * source switch never pay for it.
- */
+/** Unified, lazily loaded catalogue: Chinese labels with original names for search. */
 
 /** Item dimensions are clamped to the envelope the workspace's own numeric inputs accept. */
 const MIN_DIMENSION = 0.02;
@@ -19,6 +11,7 @@ export interface OnlineModel {
   slug: string;
   assetId?: string;
   name: string;
+  originalName?: string;
   /** Coarse family from the catalogue (`structure`, `seating`, …); drives the rail. */
   bucket: string;
   subcategory: string;
@@ -39,19 +32,11 @@ export interface OnlineModel {
  * should appear in the rail on its own, falling back to its raw key.
  */
 export const ONLINE_BUCKET_LABELS: Readonly<Record<string, string>> = {
-  structure: '结构',
-  stage: '舞台',
-  lighting: '灯光',
-  seating: '座椅',
-  tables: '桌台',
-  decor: '装饰',
-  plants: '绿植',
-  exhibition: '展陈',
-  logistics: '后勤',
-  digital: '数码',
-  food: '餐饮',
-  sports: '运动',
-  vehicles: '车辆',
+  seating: '座椅沙发', tables: '桌台柜台', exhibition: '摊位展陈', stage: '舞台设施',
+  audio: '音响乐器', lighting: '灯光照明', signage: '标识导视', people: '人物角色',
+  storage: '收纳容器', logistics: '后勤设施', tools: '工具设备', sports: '运动器材',
+  plants: '绿植景观', structure: '建筑结构', digital: '数码设备', decor: '装饰陈设',
+  food: '餐饮用品', vehicles: '交通载具', scenes: '完整场景',
 };
 
 export function onlineBucketLabel(bucket: string): string {
@@ -118,7 +103,7 @@ export function normalizeOnlineModels(raw: unknown): OnlineModel[] {
     const slug = toText(record.slug);
     const name = toText(record.name);
     const glb = toText(record.glb);
-    if (!slug || !name || seen.has(slug) || !isGlbUrl(glb)) continue;
+    if (!slug || !name || seen.has(slug) || !isGlbUrl(glb) || toText(record.blockedReason)) continue;
     const width = toDimension(record.width);
     const depth = toDimension(record.depth);
     const height = toDimension(record.height);
@@ -128,6 +113,7 @@ export function normalizeOnlineModels(raw: unknown): OnlineModel[] {
       slug,
       ...((libraryAssetIds as Record<string,string>)[glb] ? { assetId: (libraryAssetIds as Record<string,string>)[glb] } : {}),
       name,
+      ...(toText(record.originalName) ? { originalName: toText(record.originalName) } : {}),
       glb,
       bucket: toText(record.bucket),
       subcategory: toText(record.subcategory),
@@ -173,9 +159,8 @@ export function filterOnlineModels(
   return models.filter(model => {
     if (bucket && model.bucket !== bucket) return false;
     if (!needle) return true;
-    return model.name.toLowerCase().includes(needle)
-      || model.subcategory.toLowerCase().includes(needle)
-      || model.slug.includes(needle);
+    const text = [model.name, model.originalName, model.subcategory, onlineBucketLabel(model.bucket), model.slug].join(' ').toLowerCase();
+    return needle.split(/\s+/).every(word => text.includes(word));
   });
 }
 
@@ -194,7 +179,13 @@ export function formatModelBytes(bytes: number): string {
  * `model.glb` returns an empty string, and the caller falls back to the vector glyph.
  */
 export function onlineModelThumb(glbUrl: string | undefined, assetId?: string): string {
-  if (assetId) glbUrl = Object.entries(libraryAssetIds).find(([,id]) => id === assetId)?.[0] ?? glbUrl;
+  if (assetId) {
+    const entries = Object.entries(libraryAssetIds).filter(([,id]) => id === assetId);
+    glbUrl = entries.find(([url]) => url.startsWith('/showcase/'))?.[0] ?? entries[0]?.[0] ?? glbUrl;
+  }
+  if (glbUrl?.startsWith('/showcase/assets/library/model/') && glbUrl.endsWith('.glb')) {
+    return glbUrl.replace('/model/', '/thumb/').replace(/\.glb$/, '.webp');
+  }
   if (!glbUrl || !/\/model\.glb$/.test(glbUrl)) return '';
   return glbUrl.replace(/\/model\.glb$/, '/thumb.webp');
 }
@@ -212,7 +203,7 @@ export function clearOnlineModelCache(): void {
  * same rejection.
  */
 export function loadOnlineModels(): Promise<OnlineModelIndex> {
-  pending ??= import('../../../../assets/library/online.json')
+  pending ??= import('../../../../assets/library/merged.json')
     .then(module => {
       const namespace = module as { default?: unknown };
       return buildOnlineModelIndex(normalizeOnlineModels(namespace.default ?? namespace));

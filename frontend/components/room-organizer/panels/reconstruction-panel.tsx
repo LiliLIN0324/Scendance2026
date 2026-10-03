@@ -12,6 +12,7 @@ import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { mergeProposalPresentation, type CreativeBrief } from '../lib/creative-brief';
+import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { VenuePhoto } from './venue-photos-panel';
 import type { RoomLayout } from '../lib/types';
@@ -149,7 +150,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     }catch(error){if(alive.current&&scopeRef.current===submittedScope)setNotice(errorText(error));}
     finally{pending.current=false;if(alive.current)setBusy(false);}
   }
-  async function apply():Promise<void>{if(!preview||pending.current||stale)return;pending.current=true;setBusy(true);const selected=preview,base=layoutRef.current,submittedScope=scopeRef.current;try{const result=await controller.applySceneProposal(selected.proposal,layoutToBackendScene(base));if(!alive.current||scopeRef.current!==submittedScope)return;if(!result.acceptedLocally||layoutRef.current!==base)throw new Error('应用期间本地有新修改，已保留草稿；请核对云端新版本。');onApply(mergeProposalPresentation(base,backendSceneToLayout(result.scene,{projectId:base.id!,name:base.name,...selected.assets})));setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');}catch(error){setNotice(errorText(error));}finally{pending.current=false;setBusy(false);}}
+  async function apply():Promise<void>{if(!preview||pending.current||stale)return;pending.current=true;setBusy(true);const selected=preview,base=layoutRef.current,submittedScope=scopeRef.current;try{if((base.designBook?.variants.length??0)>=MAX_DESIGNS)throw new Error('请先在图层面板移除不再需要的方案，再确认提案。');const result=await controller.applySceneProposal(selected.proposal,layoutToBackendScene(base));if(!alive.current||scopeRef.current!==submittedScope)return;if(!result.acceptedLocally||layoutRef.current!==base)throw new Error('应用期间本地有新修改，已保留草稿；请核对云端新版本。');onApply(addDesign(base,mergeProposalPresentation(base,backendSceneToLayout(result.scene,{projectId:base.id!,name:base.name,...selected.assets}))));setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');}catch(error){setNotice(errorText(error));}finally{pending.current=false;setBusy(false);}}
   const floorplan=useMemo(()=>source&&source.width&&source.height?source:null,[source]);
   const reviewedWall=review?.structure.walls.find(w=>w.id===selectedWall);
   function updateWall(patch:Partial<SceneV2['structure']['walls'][number]>){if(!reviewedWall||!review)return;setReview(updateReviewedWall(review,reviewedWall.id,patch));}
