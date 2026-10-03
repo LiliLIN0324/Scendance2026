@@ -151,7 +151,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
             const stored=await backend.scene(actor,'proposals.store',{
               ...input,id:reservation.id,baseHash:await sceneHash(input.scene),candidate:proposal.scene,explanation:proposal.explanation,warnings:proposal.warnings,
             });
-            const result={...stored,modelSuggestions:proposal.modelSuggestions};
+            const result={...stored,modelSuggestions:proposal.modelSuggestions,materialSuggestions:proposal.materialSuggestions};
             await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'complete',result,usage:proposal.usage});
             return respond(result,201);
           } catch(error) {

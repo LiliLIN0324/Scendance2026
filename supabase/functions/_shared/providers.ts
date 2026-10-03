@@ -64,7 +64,7 @@ export async function generateProposal(input: ProposalRequest, env: Env, reserve
     const content = response.choices[0].message.content;
     try {
       if (response.choices[0].finish_reason !== 'stop') throw new ApiError('AI_INCOMPLETE_OUTPUT', 422);
-      return { ...buildProposal(input.scene, input.mode, JSON.parse(content),resources), usage };
+      return { ...buildProposal(input.scene, input.mode, JSON.parse(content),resources,input.selectedIds), usage };
     } catch (error) {
       const details = error instanceof z.ZodError ? error.issues : error instanceof ApiError ? { code: error.code, details: error.details } : { code: 'INVALID_JSON' };
       if (attempt === 1) throw new ApiError('AI_INVALID_PROPOSAL', 422, { validation: details, usage });

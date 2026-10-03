@@ -68,6 +68,28 @@ beforeEach(() => {
 afterEach(() => { controller.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("AI proposal contract and paid request protection", () => {
+  it('prepares an immutable material replacement without saving or charging an AI request', async () => {
+    await editing(); const before=controller.getSnapshot(), result=await proposal(); queue(result);
+    const input={requestId,scene,objectIds:[objectId],sourceAssetId:assetId,variantAssetId:otherProjectId};
+    await expect(controller.prepareMaterialVariantProposal(input)).resolves.toEqual(result);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain(`/projects/${projectId}/material-variants`);
+    expect(body()).toEqual({...input,sessionId:before.sessionId,generation:3,expectedRevision:4,localRevision:before.localRevision});
+    expect(controller.getSnapshot()).toBe(before);
+  });
+  it('rejects a material preview returned after another local edit', async () => {
+    await editing(); const result=await proposal(),call=pending();
+    const preview=controller.prepareMaterialVariantProposal({requestId,scene,objectIds:[objectId],sourceAssetId:assetId,variantAssetId:otherProjectId});
+    await call.ready();controller.setDraft(candidate);call.finish(result);
+    await expect(preview).rejects.toMatchObject({code:'STALE_PROPOSAL'});
+    expect(controller.getSnapshot().draft).toEqual(candidate);
+  });
+  it('includes reference image and source version in a paid generation identity', async () => {
+    await login();queue(job({kind:'image',reference_image_asset_id:assetId}));
+    await controller.createGenerationJob('A chair',requestId,{kind:'image',referenceImageAssetId:assetId});
+    expect(body()).toEqual({prompt:'A chair',requestId,kind:'image',referenceImageAssetId:assetId});
+    await expect(controller.createGenerationJob('A chair',requestId,{kind:'image',referenceImageAssetId:otherProjectId})).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT'});
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
   it.each([[429, "DAILY_BUDGET_EXCEEDED"], [429, "BUDGET_EXCEEDED"], [503, "SERVICE_NOT_CONFIGURED"], [422, "AI_INVALID_PROPOSAL"], [409, "AI_IN_PROGRESS"], [409, "AI_PREVIOUS_REQUEST_FAILED"]])("keeps editing available after AI-only %s %s", async (status, code) => {
     await editing(); queue({ error: { code } }, status as number);
     await expect(controller.requestProposal({ mode: "layout", prompt: "安排沙龙", scene })).rejects.toMatchObject({ code });
