@@ -8,6 +8,7 @@ import { generateProposal } from './providers.ts';
 import { readSceneResources } from './scene-resources.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
 import { generationCapabilities } from './generation-contract.ts';
+import { createMaterialVariant, prepareMaterialVariant, readAssetMaterials } from './material-variants.ts';
 import { readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
 import type { Backend } from './backend.ts';
 
@@ -92,6 +93,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
       const project=path.match(/^\/projects\/([^/]+)(.*)$/);
       if(project) {
         const projectId=uuid.parse(project[1]), tail=project[2];
+        if(tail==='/material-variants' && method==='POST') {
+          const {reused,...proposal}=await prepareMaterialVariant(backend,actor,projectId,await json());
+          return respond(proposal,reused?200:201);
+        }
         if(!tail && method==='GET') return respond(await backend.scene(actor,'projects.get',{projectId}));
         if(!tail && method==='DELETE') {
           const input=z.strictObject({expectedRevision:z.number().int().nonnegative()}).parse(await json());
@@ -186,6 +191,15 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
         if(share && method==='DELETE') return respond(await backend.scene(actor,'shares.revoke',{projectId,shareId:uuid.parse(share[1])}));
       }
       if(path==='/assets' && method==='GET') return respond(await backend.scene(actor,'assets.list'));
+      const materialAsset=path.match(/^\/assets\/([^/]+)\/(materials|customize)$/);
+      if(materialAsset) {
+        const assetId=uuid.parse(materialAsset[1]);
+        if(materialAsset[2]==='materials' && method==='GET')return respond(await readAssetMaterials(backend,actor,assetId));
+        if(materialAsset[2]==='customize' && method==='POST') {
+          const result=await createMaterialVariant(backend,actor,assetId,await json());
+          return respond(result.asset,result.reused?200:201);
+        }
+      }
       const asset=path.match(/^\/assets\/([^/]+)\/url$/);
       if(asset && method==='POST') {
         const a=await backend.scene(actor,'assets.get',{assetId:uuid.parse(asset[1])});
