@@ -146,8 +146,9 @@ describe('CloudPanel delayed project replacement', () => {
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
     render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /预设 · 本地保存/ })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /云端已保存/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+    expect(screen.getByText('预设 · 本地保存')).toBeTruthy();
+    expect(screen.queryByText('云端已保存')).toBeNull();
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
     expect(controller.getSnapshot().draft).not.toEqual(layout);
   });
@@ -167,7 +168,7 @@ describe('CloudPanel delayed project replacement', () => {
     await waitFor(() => expect(finish).toBeTypeOf('function'));
 
     // The dialog can be closed while busy, so edits on the canvas must remain safe.
-    fireEvent.click(screen.getByRole('button', { name: '关闭云项目' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭账户面板' }));
     const changedLayout = { ...initialLayout, width: 13 };
     rendered.rerender(<CloudPanel layout={changedLayout} onLoadLayout={onLoadLayout} />);
     const sessionId = controller.getSnapshot().sessionId;
@@ -215,4 +216,80 @@ it('closes the cloud dialog when signing out redirects to auth', async () => {
   fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
   await waitFor(() => expect(controller.getSnapshot().user).toBeNull());
   expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+});
+
+it('filters projects by name and studio and clears an empty search', async () => {
+  const secondStudio = '20000000-0000-4000-8000-000000000002';
+  queue([original, { ...other, studio_id: secondStudio }]);
+  queue([{ id: studioId, name: '一号工作室', role: 'owner', displayName: 'A' }, { id: secondStudio, name: '二号工作室', role: 'editor', displayName: 'A' }]);
+  render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+  await waitFor(() => expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(2));
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选工作室' }), { target: { value: secondStudio } });
+  expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
+  expect(screen.getByText('另一个云项目')).toBeTruthy();
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '不存在' } });
+  expect(screen.queryByRole('button', { name: '打开' })).toBeNull();
+  expect(screen.getByText('没有匹配的项目')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '清除筛选' }));
+  expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(2);
+});
+
+it('offers team and permission demos offline without requests or canvas replacement', () => {
+  const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
+  const load = vi.fn();
+  render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={load} />);
+  fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+  const requestCount = mockFetch.mock.calls.length;
+  fireEvent.click(screen.getByRole('button', { name: '团队演示' }));
+  fireEvent.change(screen.getByLabelText('演示成员姓名'), { target: { value: '陈知远' } });
+  fireEvent.click(screen.getByRole('button', { name: '添加演示成员' }));
+  expect(screen.getByText('4 位演示成员')).toBeTruthy();
+  fireEvent.change(screen.getByRole('combobox', { name: '陈知远的演示角色' }), { target: { value: 'viewer' } });
+  fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: '查看成员：导出方案' }));
+  fireEvent.change(screen.getByRole('combobox', { name: '预览角色' }), { target: { value: 'viewer' } });
+  expect(screen.getByText('适用于 2 位演示成员')).toBeTruthy();
+  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '团队演示' }));
+  expect((screen.getByRole('combobox', { name: '陈知远的演示角色' }) as HTMLSelectElement).value).toBe('viewer');
+  fireEvent.click(screen.getByRole('button', { name: '移除演示成员陈知远' }));
+  expect(screen.getByText('3 位演示成员')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
+  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByRole('checkbox', { name: '负责人：编辑场景' }).hasAttribute('disabled')).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: '重置演示' }));
+  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(false);
+  expect(mockFetch).toHaveBeenCalledTimes(requestCount);
+  expect(load).not.toHaveBeenCalled();
+  expect(offline.getSnapshot().user).toBeNull();
+  expect(offline.getSnapshot().writeBlocked).toBe(true);
+  offline.dispose();
+});
+
+it('reports a failed project list without claiming the account is empty and allows retry', async () => {
+  const list = vi.spyOn(controller, 'listProjects').mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([other]);
+  vi.spyOn(controller, 'listStudios').mockResolvedValue([]);
+  render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+  expect(await screen.findByText('项目加载失败，请点击刷新列表重试。')).toBeTruthy();
+  expect(screen.queryByText('第一份方案，从这里开始')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
+  expect(await screen.findByText('另一个云项目')).toBeTruthy();
+  expect(list).toHaveBeenCalledTimes(2);
+});
+
+it('keeps account-panel keys away from canvas shortcuts while preserving native dialog defaults', () => {
+  const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
+  render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+  const canvasShortcut = vi.fn();
+  window.addEventListener('keydown', canvasShortcut);
+  const close = screen.getByRole('button', { name: '关闭账户面板' });
+  expect(fireEvent.keyDown(close, { key: 'Escape' })).toBe(true);
+  fireEvent.keyDown(close, { key: 'Delete' });
+  fireEvent.keyDown(close, { key: 'z', ctrlKey: true });
+  window.removeEventListener('keydown', canvasShortcut);
+  expect(canvasShortcut).not.toHaveBeenCalled();
+  offline.dispose();
 });
