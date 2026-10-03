@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import assetIds from '../../../../assets/library/asset-ids.json';
-import catalogue from '../../../../assets/library/online.json';
+import assetLabels from '../../../../assets/library/asset-labels.zh.json';
+import catalogue from '../../../../assets/library/merged.json';
 import { sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { backendSceneToLayout, layoutToBackendScene } from './backend-adapter';
 import { buildOnlineModelIndex, normalizeOnlineModels, onlineModelThumb } from './online-models';
 import { parseStoredLayout } from './schema';
 
-describe('full v0.4.1 catalogue cloud compatibility',()=>{
+describe('merged catalogue cloud compatibility',()=>{
   it('keeps every model and its identity through save, reload and local serialization, including thin models',()=>{
     const models=normalizeOnlineModels(catalogue);
-    expect(models).toHaveLength(234);
-    expect(buildOnlineModelIndex(models).buckets).toHaveLength(13);
-    expect(new Set(models.map(m=>m.assetId)).size).toBe(234);
+    expect(models).toHaveLength(528);
+    expect(buildOnlineModelIndex(models).buckets).toHaveLength(19);
+    expect(new Set(models.map(m=>m.assetId)).size).toBe(528);
     for(const model of models){
       expect(model.assetId).toBe((assetIds as Record<string,string>)[model.glb]);
       const doc=sceneSchema.parse({schemaVersion:1,venue:{shape:'rectangle',width:100,depth:100,height:6,entrances:[]},camera:'overview',lighting:'warm',
@@ -21,11 +22,12 @@ describe('full v0.4.1 catalogue cloud compatibility',()=>{
       const reopened=parseStoredLayout(JSON.parse(JSON.stringify(layout)));
       expect(reopened).not.toBeNull();
       expect(reopened!.floors[0].items[0].source).toBe('public_library');
+      expect(reopened!.floors[0].items[0].name).toBe((assetLabels as Record<string,string>)[model.assetId!]);
       const saved=layoutToBackendScene(reopened!);
       expect(saved.objects[0].rotation).toBeCloseTo(doc.objects[0].rotation, 10);
       expect(saved).toEqual({ ...doc, objects: [{ ...doc.objects[0], rotation: saved.objects[0].rotation }] });
       expect(JSON.stringify(saved)).not.toContain('token=');
-      expect(onlineModelThumb('https://storage.example/model.glb?token=short',model.assetId)).toBe(model.thumb);
+      expect(onlineModelThumb('https://storage.example/model.glb?token=short',model.assetId)).toBe(`/showcase/assets/library/thumb/${model.slug}.webp`);
     }
   });
   it('upgrades an old local catalogue instance by its exact pinned URL without accepting arbitrary GLBs',()=>{
