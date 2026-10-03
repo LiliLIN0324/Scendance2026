@@ -43,6 +43,7 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const bucketRail = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -61,6 +62,24 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
 
   // A new filter restarts the reveal window, so results never open mid-list.
   useEffect(() => { setVisible(PAGE_SIZE); }, [query, bucket]);
+
+  useEffect(() => {
+    const rail = bucketRail.current;
+    if (!rail) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      const max = rail.scrollWidth - rail.clientWidth;
+      if (max <= 0) return;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rail.clientWidth : 1;
+      const next = Math.max(0, Math.min(max, rail.scrollLeft + event.deltaY * unit));
+      if (next === rail.scrollLeft) return;
+      // A non-passive listener prevents the surrounding list from scrolling too.
+      event.preventDefault();
+      rail.scrollLeft = next;
+    };
+    rail.addEventListener('wheel', onWheel, { passive: false });
+    return () => rail.removeEventListener('wheel', onWheel);
+  }, [loadState]);
 
   const filtered = useMemo(
     () => (index ? filterOnlineModels(index.models, query, bucket) : []),
@@ -110,7 +129,7 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
 
   return <>
     <div className="sc-material-toolbar">
-      <div className="sc-bucket-rail" role="group" aria-label="线上模型分类">
+      <div ref={bucketRail} className="sc-bucket-rail" role="group" aria-label="线上模型分类">
         <button type="button" aria-pressed={bucket === ''} className={bucket === '' ? 'is-active' : ''} onClick={() => setBucket('')}>全部 <b>{index.models.length}</b></button>
         {index.buckets.map(entry => <button key={entry.key} type="button" aria-pressed={bucket === entry.key} className={bucket === entry.key ? 'is-active' : ''} onClick={() => setBucket(entry.key)}>{entry.label} <b>{entry.count}</b></button>)}
       </div>
