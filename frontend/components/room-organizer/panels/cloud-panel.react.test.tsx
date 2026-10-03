@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
 import { registerSourceFlush } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import { addDesign } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { CloudPanel } from './cloud-panel';
 
@@ -52,6 +53,17 @@ afterEach(() => {
 });
 
 describe('CloudPanel delayed project replacement', () => {
+  it('keeps local design history and layer names when reopening the same saved cloud scene', async () => {
+    window.history.replaceState(null, '', `/editor/?project=${projectId}`);
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]); queue(original);
+    const base = backendSceneToLayout(scene, { projectId, name: original.name });
+    const layout = { ...addDesign(base, base), itemLayers: [{ id: 'custom', name: '交流区', itemIds: [] }] };
+    const onLoadLayout = vi.fn();
+    render(<CloudPanel layout={layout} onLoadLayout={onLoadLayout}/>);
+    await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
+    expect(onLoadLayout.mock.calls[0]![0].designBook).toEqual(layout.designBook);
+    expect(onLoadLayout.mock.calls[0]![0].itemLayers).toEqual(layout.itemLayers);
+  });
   it('waits for live source inputs before sending the new project request', async () => {
     let finishFlush!:()=>void;
     const unregister=registerSourceFlush(projectId,()=>new Promise<void>(resolve=>{finishFlush=resolve;}));

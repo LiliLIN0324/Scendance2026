@@ -2,6 +2,7 @@ import type { RoomLayout } from './types';
 
 export interface CreativeBrief {
   event: string;
+  hasFloorplan?: boolean;
   guests: number;
   description: string;
   mustHave: string;

@@ -4,9 +4,10 @@ import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } fro
 import { useState, type ReactNode } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
-import { ScenePresetsPanel } from './scene-presets-panel';
-import { materialCount, venueArea } from '../lib/structural-layout';
+import { materialCount } from '../lib/structural-layout';
 import { OnlineModelLibrary } from './online-model-library';
+import { SceneLayersPanel } from './scene-layers-panel';
+import { ScenePresetsPanel } from './scene-presets-panel';
 import { StructuralPropertiesPanel } from './structural-properties-panel';
 import type { CameraPreset, CatalogItem, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
@@ -30,9 +31,9 @@ export function MaterialGlyph({ materialId, color = 'currentColor' }: { material
 }
 
 export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, controller, onLoadPreset }: LibraryProps): JSX.Element {
-  const { layout, activeFloor, actions } = useRoomEditor();
+  const { layout, activeFloor } = useRoomEditor();
   const { selectOnly } = useSelection();
-  const [tab, setTab] = useState<'materials' | 'brief' | 'venue' | 'presets'>('materials');
+  const [tab, setTab] = useState<'materials' | 'brief' | 'presets' | 'layers'>('brief');
   const atLimit = materialCount(activeFloor.items) >= editorItemLimit(layout);
 
   const addMaterial = (item: CatalogItem) => {
@@ -43,7 +44,7 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
 
   return <aside className="sc-library" aria-label="场地工具">
     <div className="sc-library-tabs" role="tablist" aria-label="工作台面板">
-      {([['materials', '物料库'], ['presets', '场景预设'], ['brief', '需求'], ['venue', '场地']] as const).map(([key, label]) =>
+      {([['brief', '需求'], ['presets', '场景预设'], ['materials', '物料库'], ['layers', '图层']] as const).map(([key, label]) =>
         <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     <div key={tab} className="sc-library-content">
@@ -53,22 +54,11 @@ export function ScendanceLibrary({ placeCatalogItem, creativePanel, onLighting, 
       </>}
       {/* 需求 and the material library are separate jobs: the brief is a form, the library is a shelf. */}
       {tab === 'brief' && <>{creativePanel}</>}
-      {tab === 'presets' && <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>}
-      {tab === 'venue' && <>
-        <div className="sc-section-heading"><div><h2>场地设置</h2><p>{layout.backendSceneV2 ? '已建立空间结构' : '单层场地'} · 统一使用米制</p></div><Grid size={19}/></div>
-        <label className="sc-field">项目名称<input value={layout.name} maxLength={80} onChange={event => actions.setName(event.target.value)} aria-label="项目名称"/></label>
-        {layout.scenePreset ? <p className="sc-note">场馆按原模型比例显示，结构与地面固定；可在画布选择物件调整位置和尺寸。</p> : <><div className="sc-dimension-grid">
-          <NumberField label="宽度 / m" value={layout.width} min={2} max={100} disabled={!!layout.backendSceneV2} onChange={actions.setWidth}/>
-          <NumberField label="进深 / m" value={layout.height} min={2} max={100} disabled={!!layout.backendSceneV2} onChange={actions.setHeight}/>
-          <NumberField label="净高 / m" value={activeFloor.height ?? 3} min={2} max={10} disabled={!!layout.backendSceneV2} onChange={actions.setStoreyHeight}/>
-        </div>
-        <div className="sc-area-card"><span>场地面积</span><strong>{venueArea(layout).toFixed(1)} <small>m²</small></strong></div>
-        <label className="sc-field sc-color-field">地面颜色<input type="color" aria-label="地面颜色" value={activeFloor.floorColor} onChange={event => actions.setFloorColor(event.target.value)}/></label>
-        </>}
+      {tab === 'layers' && <SceneLayersPanel {...(controller ? { controller } : {})}/>}
+      {tab === 'presets' && <>
+        <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>
         <label className="sc-field">灯光氛围<select aria-label="灯光氛围" value={layout.backendLighting??'warm'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
-        <p className="sc-note">实时作用于三维场景；随场景本地保存，连接云项目后使用现有 lighting 字段保存。</p>
-        <p className="sc-note">在“需求”中上传平面图或现场照片，填写真实尺寸并生成空间。已有结构的整体尺寸请通过尺寸核对修改。</p>
-        <StructuralPropertiesPanel/>
+        {layout.backendSceneV2 && <details><summary>已建空间的结构微调</summary><StructuralPropertiesPanel/></details>}
       </>}
     </div>
   </aside>;

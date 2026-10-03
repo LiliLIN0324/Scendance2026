@@ -81,6 +81,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
       if(project) {
         const projectId=uuid.parse(project[1]), tail=project[2];
         if(!tail && method==='GET') return respond(await backend.scene(actor,'projects.get',{projectId}));
+        if(!tail && method==='DELETE') {
+          const input=z.strictObject({expectedRevision:z.number().int().nonnegative()}).parse(await json());
+          return respond(await backend.scene(actor,'projects.delete',{...input,projectId}));
+        }
         if(!tail && method==='PATCH') {
           const input=z.strictObject({...leaseSchema.shape,name}).parse(await json());
           return respond(await backend.scene(actor,'projects.rename',{...input,projectId}));

@@ -75,6 +75,14 @@ export default function ProjectsPage(): JSX.Element {
       <div className="sc-project-grid">{projects.filter(project => project.studio_id === studioId).map(project => <article className="sc-project-card" key={project.id}>
         <span>SCENE / V{project.revision}</span><h2>{project.name}</h2><p>{project.lease_expires && Date.parse(project.lease_expires) > Date.now() ? '有成员正在编辑' : '可接手编辑'}</p>
         {!cloud.writeBlocked && cloud.project?.id !== project.id ? <p>请先释放当前项目的编辑权</p> : <Link href={`/editor/?project=${encodeURIComponent(project.id)}`}>打开方案 ↗</Link>}
+        {selected?.role === 'owner' && <button className="sc-project-delete" disabled={busy || !cloud.writeBlocked} onClick={() => {
+          if (!window.confirm(`删除「${project.name}」？项目将从工作室移除，客户分享链接立即失效。本机草稿和个人素材仍保留。`)) return;
+          void run(async () => {
+            await controller.deleteProject(project.id, project.revision);
+            setProjects(current => current.filter(entry => entry.id !== project.id));
+            setNotice(`已删除「${project.name}」，客户分享已撤销。`);
+          });
+        }}>删除方案</button>}
       </article>)}</div>
       {!projects.some(project => project.studio_id === studioId) && <p className="sc-projects-empty">这里还没有方案。创建一个场地，从空白开始。</p>}
       <form className="sc-projects-card" onSubmit={event => { event.preventDefault(); void run(async () => {

@@ -139,6 +139,8 @@ function failure(error: unknown): BackendFailure {
     REVISION_CONFLICT: "云端版本已变化，草稿已保留；请核对后重新获取编辑权。",
     LEASE_LOST: "编辑权已到期或交接，草稿已保留。",
     LEASE_BUSY: "另一编辑会话正在使用此项目。",
+    PROJECT_BUSY: "项目仍有人持有编辑权，请先释放或等待到期后再删除。",
+    RECONSTRUCTION_BUSY: "项目正在生成方案，请等待任务完成后再删除。",
     NETWORK_ERROR: "连接失败，草稿已保留，云端写入已暂停。",
     CLOUD_WRITE_BLOCKED: "请先获取有效编辑权再保存。",
     CLOUD_OPERATION_BUSY: "上一个保存或交接仍在进行。",
@@ -483,6 +485,18 @@ export class BackendSession {
   /** Asset, sharing and membership operations reuse the authenticated session. */
   businessRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     return this.request<T>(path, method, body, this.captureRequestScope(), "business");
+  }
+  async deleteProject(projectId: string, expectedRevision: number): Promise<void> {
+    this.ensureCanSwitch();
+    this.operationPending = true;
+    try {
+      const result = await this.businessRequest<{ deleted: boolean }>(`/projects/${uuid.parse(projectId)}`, "DELETE", { expectedRevision });
+      if (result.deleted !== true) throw new Error('项目删除结果无效，请刷新列表核对。');
+      if (this.snapshot.project?.id === projectId) {
+        this.stopRenewal();
+        this.update({ project: null, lease: null, revision: null, writeBlocked: true, status: "ready", error: null });
+      }
+    } finally { this.operationPending = false; }
   }
   async renameProject(name: string): Promise<BackendProject> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);

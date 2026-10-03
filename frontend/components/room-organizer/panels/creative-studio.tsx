@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUp, Check, Loader2, MessageCircle, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUp, Check, Loader2, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildAssistantInstruction } from '@/lib/assistant-context';
 import { useBackendSession, type BackendSession, type SceneProposal } from '@/lib/backend-session';
@@ -9,11 +9,13 @@ import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSo
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { briefInstruction, IDEA_CARDS, INITIAL_BRIEF, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
+import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCapabilityNote } from './material-capability-note';
 import { ReconstructionPanel } from './reconstruction-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
+import { VenueShapePresets } from './venue-shape-presets';
 import type { RoomLayout } from '../lib/types';
 import './creative-studio.css';
 
@@ -231,12 +233,13 @@ export function CreativeStudioProvider({ controller, layout, onApply, onPreview,
     const selected=preview;
     requestPending.current=true;setBusy(true);setNotice('');
     try {
+      if ((selected.base.designBook?.variants.length ?? 0) >= MAX_DESIGNS) throw new Error('请先在图层面板移除不再需要的方案，再确认提案。');
       const result=await controller.applySceneProposal(selected.proposal,layoutToBackendScene(layoutRef.current));
       if(!alive.current || scopeRef.current!==(selected.base.id??'local'))return;
       if(!result.acceptedLocally || layoutRef.current!==selected.base) throw new Error('应用期间本地有新修改，已保留本地草稿。云端已有新版本，请核对后重新打开。');
       // Candidate assets were authorized and loaded before presenting this confirmation.
       const next=mergeProposalPresentation(selected.base,backendSceneToLayout(result.scene,{projectId:selected.base.id!,name:selected.base.name,...selected.assets}));
-      onApply(next);setPreview(null);say('提案已应用。你可以继续调整，或用撤销返回应用前的本地方案。');
+      onApply(addDesign(selected.base,next));setPreview(null);say('提案已应用。你可以继续调整，或用撤销返回应用前的本地方案。');
     } catch(error) { if(alive.current && scopeRef.current===(selected.base.id??'local'))setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
     finally { requestPending.current=false;if(alive.current)setBusy(false); }
   }
@@ -253,15 +256,23 @@ export function CreativeBriefPanel():JSX.Element {
   return <div className="cr-brief">
     <div className="sc-section-heading"><div><h2>先说说，你的想法。</h2></div></div>
     <label className="cr-label">活动类型<select value={studio.brief.event} onChange={e=>update({event:e.target.value})}>{['品牌快闪','露营派对','工作坊','小型黑客松','展览市集','婚礼聚会','其他活动'].map(label=><option key={label}>{label}</option>)}</select></label>
-    <label className="cr-label">预计人数<input type="number" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/></label>
-    <label className="cr-label">客户需求<textarea aria-label="客户需求" maxLength={1800} rows={5} placeholder="例如：为 24 位客人办一场自然风品牌聚会。希望有帐篷交流区、产品展示和一处让人想拍照的角落……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/></label>
-    <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
+    <fieldset className="cr-floorplan-choice"><legend>平面图</legend><div role="radiogroup" aria-label="是否有平面图">
+      <label><input type="radio" name="floorplan-choice" checked={studio.brief.hasFloorplan!==false} onChange={()=>update({hasFloorplan:true})}/>有平面图，上传资料</label>
+      <label><input type="radio" name="floorplan-choice" checked={studio.brief.hasFloorplan===false} onChange={()=>update({hasFloorplan:false})}/>没有平面图，选择场地形状</label>
+    </div></fieldset>
+    {studio.brief.hasFloorplan===false ? <VenueShapePresets layout={studio.layout} onApply={studio.onApply}/> : <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage} onKindChange={(id,kind)=>studio.updateImage(id,{kind})}/>}
+    {studio.brief.hasFloorplan===false && studio.images.length>0 && <p className="cr-hint">已上传的资料仍保留；生成时会使用这些资料。切回“有平面图”可查看或删除。</p>}
+    <label className="cr-label">客户需求<textarea aria-label="客户需求" maxLength={1800} rows={5} placeholder="描述活动目标、分区与来宾体验……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/></label>
+    <details className="cr-optional"><summary>风格、配色与氛围（可选）</summary>
     <label className="cr-label">风格要求 <span>选填</span><input aria-label="风格要求" maxLength={120} placeholder="自然露营、简约现代、复古市集……" value={studio.brief.style??''} onChange={e=>update({style:e.target.value})}/></label>
     <label className="cr-label">配色要求 <span>选填</span><input aria-label="配色要求" maxLength={120} placeholder="米白与橄榄绿，少量暖橙点缀" value={studio.brief.palette??''} onChange={e=>update({palette:e.target.value})}/></label>
     <label className="cr-label">氛围要求 <span>选填</span><input aria-label="氛围要求" maxLength={120} placeholder="温暖的夜场、明亮交流、安静观展……" value={studio.brief.atmosphere??''} onChange={e=>update({atmosphere:e.target.value})}/></label>
+    </details>
+    <label className="cr-label">预计人数<input type="number" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/></label>
+    <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
     <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
     <label className="cr-label">一定要有 <span>选填</span><input maxLength={350} placeholder="帐篷、签到区、无障碍通道……" value={studio.brief.mustHave} onChange={e=>update({mustHave:e.target.value})}/></label>
-    <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage} onKindChange={(id,kind)=>studio.updateImage(id,{kind})}/><ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief}/>
+    <ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief}/>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     <MaterialCapabilityNote report={studio.capabilities} choices={studio.choices} onChoice={studio.chooseMaterial} accepted={studio.capabilityAccepted} onAccept={studio.acceptCapabilities}/>
     {studio.images.length===0&&!studio.layout.backendSceneV2&&<button className="cr-generate" type="button" disabled={studio.busy||!studio.brief.description.trim()} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':'Generate 生成布置方案'}</span></button>}
@@ -269,6 +280,12 @@ export function CreativeBriefPanel():JSX.Element {
     {studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
   </div>;
+}
+
+function AssistantMascot({ busy }: { busy: boolean }): JSX.Element {
+  // A transparent user-provided character; only the element moves, never the launcher.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className={`cr-mascot ${busy ? 'is-thinking' : ''}`} src="/assets/assistant/puppy.png" alt="" draggable={false} width={60} height={60}/>;
 }
 
 export function CreativeAssistant():JSX.Element {
@@ -289,7 +306,7 @@ export function CreativeAssistant():JSX.Element {
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
   return <div className={`cr-assistant ${studio.expanded?'is-open':''} ${selectedItem?'has-properties':''}`}>
     {studio.expanded&&<section id="creative-assistant" className="cr-chat" aria-label="幕景智能助手" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();studio.setExpanded(false);}}}>
-      <header><span className="cr-avatar"><Sparkles size={21}/></span><div><strong>幕景小助手</strong><small><i/>{studio.connection}</small></div><button type="button" aria-label="收起助手" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></header>
+      <header><span className="cr-avatar"><AssistantMascot busy={studio.busy}/></span><div><strong>幕景小助手</strong><small><i/>{studio.connection}</small></div><button type="button" aria-label="收起助手" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></header>
       <div className="cr-chat-feed" ref={feed} aria-live="polite">{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'幕景':'你'}</span><p>{m.text}</p></div>)}
         {studio.busy&&<div className="cr-chat-working"><Loader2 className="cr-spin" size={15}/> 正在处理，请稍候…</div>}
         {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span><strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>{studio.preview.proposal.explanation}</p>{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=>{const names=warning.ids.map(id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件');return <li key={`${warning.code}-${index}`}>{warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项'}：{names.join('、')}</li>;})}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul><p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:<div><button type="button" onClick={()=>void studio.applyPreview()} disabled={studio.busy}><Check size={14}/>确认应用</button><button type="button" onClick={studio.discardPreview} disabled={studio.busy}><Trash2 size={14}/>放弃</button></div>}</div>}
@@ -298,6 +315,6 @@ export function CreativeAssistant():JSX.Element {
       <form onSubmit={e=>{e.preventDefault();submit();}}><label className="sr-only" htmlFor="creative-message">告诉助手你的想法</label><textarea ref={messageInput} id="creative-message" value={draft} maxLength={1800} onChange={e=>setDraft(e.target.value)} placeholder="告诉我想怎么调整……" rows={2} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit();}}}/><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy}><ArrowUp size={19}/></button></form>
       <footer><span>提案确认后才会修改场景 · 登录请使用顶部云项目</span></footer>
     </section>}
-    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>studio.setExpanded(!studio.expanded)} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭幕景助手':'打开幕景助手'}><span><MessageCircle size={21}/></span>{studio.expanded?'收起助手':'聊聊你的想法'}<i/></button>
+    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>studio.setExpanded(!studio.expanded)} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭幕景助手':'打开幕景助手'}><span><AssistantMascot busy={studio.busy}/></span>{studio.expanded?'收起助手':'聊聊你的想法'}<i/></button>
   </div>;
 }
