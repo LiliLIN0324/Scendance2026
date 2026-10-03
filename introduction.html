@@ -114,8 +114,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
    ============================================================ */
 /* 导航常驻：胶囊已是实心深绿底（见上方 .nav-pill 本体），这里不再叠模糊与投影 */
 .site-nav{position:fixed;transition:transform .32s var(--sc-ease)}
-/* 向下滚动时整条顶栏收起，向上滚动或回到顶部时落下：
-   顶栏是 fixed 且透明底，压在白色内容上会挡住正文。 */
+/* 导航只跟首屏走：首屏滚出去就整条收起，回到首屏再落下。
+   顶栏是 fixed 且透明底，压在白色内容上既挡正文又看不清 logo。 */
 .site-nav.is-hidden{transform:translateY(-115%);pointer-events:none}
 .is-reduced .site-nav{transition:none}
 /* 段落高度统一按「屏高」定，不再用 vw —— vw 会被窗口宽高比带偏
@@ -1064,24 +1064,23 @@ function glassIn() {
   }, { passive: true });
 }
 
-/* ---- 4b. 顶栏自动收起：向下滚动藏起来，向上滚动或回到顶部再落下 ----
-   顶栏是 fixed + 透明底，压在白色内容上会挡住正文，所以只在需要时出现。 */
+/* ---- 4b. 顶栏只跟随首屏：滚出首屏就收起，回到首屏再落下 ----
+   顶栏是 fixed + 透明底，趴在白色内容上既挡正文又看不清 logo，所以只留在首屏。 */
 function navAutoHide() {
   const bar = document.querySelector('.site-nav');
-  if (!bar) return;
-  const TOP_ZONE = 80;   /* 回到这一带就算在顶部，恒定显示 */
-  const DELTA = 6;       /* 过滤触控板的小抖动，避免临界值反复切换 */
-  let last = scrollY;
+  const hero = document.getElementById('hero');
+  if (!bar || !hero) return;
   let hidden = false;
-  addEventListener('scroll', () => {
-    const y = scrollY;
-    if (Math.abs(y - last) < DELTA) return;
-    const shouldHide = y > TOP_ZONE && y > last;
-    last = y;
+  const apply = () => {
+    /* 首屏底部还在顶栏之下就算「还在首屏」，此时显示；否则收起 */
+    const shouldHide = hero.getBoundingClientRect().bottom <= bar.offsetHeight;
     if (shouldHide === hidden) return;
     hidden = shouldHide;
     bar.classList.toggle('is-hidden', hidden);
-  }, { passive: true });
+  };
+  addEventListener('scroll', apply, { passive: true });
+  addEventListener('resize', apply);
+  apply();
 }
 
 /* ---- 5. Glass Move：指针跟随，lerp smoothing 88 ----
