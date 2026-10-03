@@ -174,6 +174,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={15}/></span><span>账户与项目</span><ChevronDown size={13} aria-hidden="true"/>
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onKeyDown={event => event.stopPropagation()}>
+      <div className="sc-account-scroll">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={21}/></button></div>
       <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" onClick={() => dialog.current?.close()}>前往登录</Link>}</div>
       <nav className="sc-account-nav" aria-label="账户导航">{[
@@ -268,6 +269,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       {(notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
       </div>
       <div className="sc-cloud-footer">本地草稿与云端版本分别保存。云端写入失败时，当前画布仍然保留。</div>
+      </div>
     </dialog>
   </>;
 }
