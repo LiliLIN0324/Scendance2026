@@ -35,7 +35,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const userId = cloud.user?.id;
   useEffect(() => controller.retain(), [controller]);
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) { dialog.current?.close(); return; }
     let cancelled = false;
     void Promise.all([controller.listProjects(), controller.listStudios()]).then(([nextProjects, nextStudios]) => {
       if (cancelled) return;

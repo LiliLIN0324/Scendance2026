@@ -98,3 +98,16 @@ it('uses the canonical auth page instead of a second cloud login form', () => {
   expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
   anonymous.dispose();
 });
+
+it('closes the cloud dialog when signing out redirects to auth', async () => {
+  queue([]);
+  queue([]);
+  const rendered = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
+  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+  queue({});
+  fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+  await waitFor(() => expect(controller.getSnapshot().user).toBeNull());
+  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+});
