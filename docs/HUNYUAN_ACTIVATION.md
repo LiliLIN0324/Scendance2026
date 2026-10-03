@@ -14,10 +14,10 @@
 
 - TokenHub HY-3D-3.0 默认接入点为 ACTIVE。
 - 已领取免费体验额度 100 积分，查询时已用 0，后付费关闭。
-- `model_create` Key 存在且启用，但当前授权范围为 all。项目应使用专用且仅授权 `hy-3d-3.0` 的普通 TokenHub Key；不复用 CLI 的通用对话 Key。
+- 已创建 `scendance-3d` 专用普通 TokenHub Key，只授权 `hy-3d-3.0` 默认接入点；服务端使用该 Key。
 - Supabase 生成队列为空，三维累计预留为 0 / 15000 分。
-- `scene-generation-poll` 每分钟运行一次，查询时 `active=false`。
-- 云端 HUNYUAN_API_MODE 为 tokenhub；Key、单次费用与条款字段仍为空。配置完成前保持轮询关闭。
+- `scene-generation-poll` 每分钟运行一次；配置与空队列核对后已启用。
+- 云端五项混元配置已上传，逐项摘要与本机配置一致。API mode 为 tokenhub，单次保守预留为 720 分；条款采用腾讯大模型服务条款，复核记录为用户本次确认日 2026-10-03。
 
 上述是查询时的快照，启用前必须重新读取。免费额度是积分，不是生成次数；Key tokens 限额不能作为 3D 积分或人民币账单硬上限。
 
@@ -37,7 +37,7 @@ HUNYUAN_TERMS_REVIEWED_AT=
 
 Key 仅在本机填写，禁止发到聊天、截图、前端环境变量或 Git。普通 TokenHub Key 不需要 SecretId/SecretKey。费用是用户账号核对后的保守单次上界，单位为人民币分；条款日期是真实阅读日期。
 
-公开价格为 15–60 积分/次、0.12 元/积分（1.8–7.2 元/次）。只有用户确认其账号及所用参数不超过 7.20 元，才能填写 720 分；当前没有替用户预填费用或条款记录。[官方价格](https://cloud.tencent.com/document/product/1823/130055)
+公开价格为 15–60 积分/次、0.12 元/积分（1.8–7.2 元/次）。本次用户已确认完成价格与条款核对，并授权助手自行配置；采用 720 分保守预留。[官方价格](https://cloud.tencent.com/document/product/1823/130055)
 
 ```sh
 npm run check:config:hunyuan -- .env.hunyuan.local
