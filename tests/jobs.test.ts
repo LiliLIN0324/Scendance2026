@@ -10,7 +10,7 @@ describe('generation queue, idempotency, fencing and budget',()=>{
   const input=()=>({requestId:crypto.randomUUID(),fingerprint:'same-prompt',prompt:'Low-poly prop',reserveCents:100});
   it('returns same internal task and reserves only once',async()=>{
     const i=input(),a=await f.jobs(owner,'jobs.create',i),b=await f.jobs(owner,'jobs.create',i);expect(b.id).toBe(a.id);expect(b.reused).toBe(true);
-    expect((await f.db.query<{committed_cents:number}>("select committed_cents from scene_private.budgets where kind='generation'")).rows[0].committed_cents).toBe(100);
+    expect((await f.db.query<{committed_cents:number}>("select committed_cents from scene_private.budgets where kind='generation'")).rows[0].committed_cents).toBe('100');
     await expect(f.jobs(owner,'jobs.create',{...i,fingerprint:'changed'})).rejects.toThrow('IDEMPOTENCY_CONFLICT');
   });
   it('scopes task reads to owner and denies outsiders',async()=>{
@@ -23,9 +23,10 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
     expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(1);
   });
-  it('enforces hard category ceilings before dispatch',async()=>{
-    await expect(f.jobs(owner,'jobs.create',{...input(),reserveCents:15001})).rejects.toThrow('BUDGET_EXCEEDED');
-    await expect(f.jobs(owner,'reserve',{...input(),reserveCents:3001})).rejects.toThrow('BUDGET_EXCEEDED');
+  it('allows spending beyond former category ceilings while requiring accounting',async()=>{
+    await f.db.exec("update scene_private.budgets set committed_cents=2147483647");
+    await expect(f.jobs(owner,'jobs.create',{...input(),reserveCents:15001})).resolves.toMatchObject({state:'queued'});
+    await expect(f.jobs(owner,'reserve',{...input(),reserveCents:3001})).resolves.toMatchObject({state:'reserved'});
     await expect(f.jobs(owner,'jobs.create',{...input(),reserveCents:0})).rejects.toThrow('BILLING_NOT_CONFIGURED');
   });
   it('never requeues an ambiguous submission after crash',async()=>{
