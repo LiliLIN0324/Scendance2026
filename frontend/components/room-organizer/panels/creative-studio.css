@@ -69,7 +69,7 @@
 @keyframes cr-spin { to { transform:rotate(360deg); } }
 @media (max-width:680px) {
   .cr-assistant { right:12px; bottom:44px; }
-  .cr-chat { width:calc(100vw - 24px); height:calc(100dvh - 190px); }
+  .cr-chat { width:calc(100vw - 24px); height:calc(100dvh - 220px); }
   .cr-assistant-launcher { font-size:11px; min-height:41px; }
 }
 @media (prefers-reduced-motion:reduce) { .cr-spin { animation:none; } }
