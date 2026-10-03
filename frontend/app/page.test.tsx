@@ -9,10 +9,12 @@ import Page from './page';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
 import type { ComponentType } from 'react';
 
-type EditorProps = { controller: BackendSession };
+type EditorProps = { controller: BackendSession; onShowIntro: () => void };
 let activeController: BackendSession;
 let activeLayout: RoomLayout;
 const onApply = vi.fn();
+const navigation = vi.hoisted(() => ({ replace: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => navigation }));
 
 // Keep the async editor boundary. Only the WebGL shell is replaced; the actual
 // brief, reference-image lifecycle, conversation and proposal components run.
@@ -35,8 +37,9 @@ vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeBriefPanel, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
-    RoomOrganizer: ({ controller }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+    RoomOrganizer: ({ controller, onShowIntro }: EditorProps) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
+        <button onClick={onShowIntro}>返回介绍页</button>
         <CreativeBriefPanel /><CreativeAssistant />
       </CreativeStudioProvider>
     </SelectionProvider>,
@@ -59,6 +62,8 @@ function restore(object: object, key: string, descriptor: PropertyDescriptor | u
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/');
+  navigation.replace.mockReset();
   activeController = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   activeLayout = backendSceneToLayout(scene, { projectId, name: '客户方案' });
   onApply.mockReset();
@@ -81,10 +86,10 @@ afterEach(() => {
   restore(HTMLElement.prototype, 'scrollTo', originalScroll);
 });
 
-describe('introduction entry', () => {
-  it('defers the editor, then keeps the real brief, image, conversation and unsent message', async () => {
+describe('introduction round trips', () => {
+  it('defers the editor, then preserves the real brief, image, conversation and unsent message when returning', async () => {
     const rendered = render(<AuthProvider><Page /></AuthProvider>);
-    expect(screen.getByRole('heading', { name: '欢迎来到幕景' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
     expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     // The editor chunk is loaded lazily through next/dynamic; the default 1s findBy budget
@@ -97,7 +102,14 @@ describe('introduction entry', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '这条还没有发送。' } });
 
-    expect((screen.getByRole('textbox', { name: '客户需求' }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
+    fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
+    expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
+    expect(screen.queryByRole('region', { name: '幕景智能助手' })).toBeNull();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
+
+    expect((await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
     expect(screen.getByRole('img', { name: '现场照片：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
     expect(screen.getByText('为活动保留合影区。')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement).value).toBe('这条还没有发送。');
@@ -126,4 +138,14 @@ describe('introduction entry', () => {
     expect(generate).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledWith(proposal, scene);
   });
+});
+
+
+it('preserves a safe return destination for authenticated entry', () => {
+  window.history.replaceState(null, '', '/?next=%2Fprojects%3Fview%3Drecent%23saved');
+  const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
+  vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
+  render(<AuthProvider><Page /></AuthProvider>);
+  fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
+  expect(navigation.replace).toHaveBeenCalledWith('/projects?view=recent#saved');
 });
