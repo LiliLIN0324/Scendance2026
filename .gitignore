@@ -25,3 +25,6 @@ frontend/public/scene-presets/
 .playwright-cli/
 output/playwright/
 .local-dev/
+
+# Local Pages runtime
+frontend/.wrangler/

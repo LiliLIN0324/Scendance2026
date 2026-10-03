@@ -335,3 +335,34 @@ describe('private reconstruction transport',()=>{
     const controller=await editing();queue({removed:true});await controller.removeSource(assetId);expect(request(3)).toMatchObject({url:`${base}/functions/v1/scene-api/projects/${projectId}/sources/${assetId}`,options:{method:'DELETE'}});expect(controller.getSnapshot().draft).toEqual(scene);
   });
 });
+
+describe("workspace business requests", () => {
+  it("keeps the editing lease on a generation idempotency conflict", async () => {
+    const controller = await editing();
+    const lease = controller.getSnapshot().lease;
+    queue({ error: { code: "IDEMPOTENCY_CONFLICT" } }, 409);
+    await expect(controller.businessRequest('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: '灯' })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, lease, revision: 4 });
+    queue({ ...lease, expiresAt: new Date(Date.now() + 120_000).toISOString() });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(request(4).url).toContain('/lease/renew');
+  });
+
+  it("renames with the current lease and revision while preserving unsaved draft", async () => {
+    const controller = await editing();
+    const draft = { ...scene, lighting: 'warm' as const };
+    controller.setDraft(draft);
+    queue({ ...project, name: '新名称', revision: 5 });
+    await controller.renameProject('新名称');
+    expect(request(3)).toMatchObject({ options: { method: 'PATCH' }, body: { name: '新名称', expectedRevision: 4, generation: 3, sessionId: controller.getSnapshot().sessionId } });
+    expect(controller.getSnapshot()).toMatchObject({ draft, dirty: true, revision: 5, project: { name: '新名称' } });
+  });
+
+  it("still blocks cloud writes when a business request discovers expired authentication", async () => {
+    const controller = await editing();
+    controller.setDraft({ ...scene, lighting: 'warm' });
+    queue({ error: { code: 'UNAUTHENTICATED' } }, 401);
+    await expect(controller.businessRequest('/assets')).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(controller.getSnapshot()).toMatchObject({ user: null, writeBlocked: true, dirty: true, draft: { lighting: 'warm' } });
+  });
+});

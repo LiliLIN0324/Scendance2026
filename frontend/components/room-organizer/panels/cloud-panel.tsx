@@ -1,19 +1,23 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { AssetsPanel } from '@/components/business/assets-panel';
+import { PublicationPanel } from '@/components/business/publication-panel';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
+  const requestedProjectId = useSearchParams()?.get('project');
   const dialog = useRef<HTMLDialogElement>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -25,6 +29,10 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const [boundLayout, setBoundLayout] = useState<string | undefined>();
   const [savedFingerprint, setSavedFingerprint] = useState<string | null>(null);
   const lastObserved = useRef('');
+  const openRequested = useRef<(id: string) => Promise<void>>(async () => {});
+  const openedRequest = useRef('');
+  const actionPending = useRef(false);
+  const [projectName, setProjectName] = useState('');
 
   let fingerprint: string | null = null;
   let conversionError = '';
@@ -36,7 +44,23 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const userId = cloud.user?.id;
   useEffect(() => controller.retain(), [controller]);
   useEffect(() => {
-    if (!userId) { dialog.current?.close(); return; }
+    if (!userId || busy) return;
+    const id = requestedProjectId;
+    if (!id || openedRequest.current === `${userId}:${id}`) return;
+    if (!cloud.writeBlocked && cloud.project?.id !== id) {
+      setNotice('请先释放当前项目的编辑权，再打开链接中的项目。');
+      dialog.current?.showModal(); return;
+    }
+    const timer = window.setTimeout(() => {
+      openedRequest.current = `${userId}:${id}`;
+      void openRequested.current(id);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [userId, requestedProjectId, busy, cloud.writeBlocked, cloud.project?.id]);
+  useEffect(() => { setProjectName(cloud.project?.name ?? ''); }, [cloud.project?.name]);
+
+  useEffect(() => {
+    if (!userId) { openedRequest.current = ''; dialog.current?.close(); return; }
     let cancelled = false;
     void Promise.all([controller.listProjects(), controller.listStudios()]).then(([nextProjects, nextStudios]) => {
       if (cancelled) return;
@@ -52,12 +76,12 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   }, [controller, fingerprint]);
 
   async function run(action: () => Promise<void>): Promise<void> {
-    if (busy) return;
-    setBusy(true); setNotice('');
+    if (actionPending.current) return;
+    actionPending.current = true; setBusy(true); setNotice('');
     try { await action(); }
     catch (error) {
       setNotice(controller.getSnapshot().error?.message ?? (error instanceof Error ? error.message : '操作失败，请重试。'));
-    } finally { setBusy(false); }
+    } finally { actionPending.current = false; setBusy(false); }
   }
   async function refreshProjects(): Promise<void> {
     const [nextProjects, nextStudios] = await Promise.all([controller.listProjects(), controller.listStudios()]);
@@ -76,7 +100,42 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     setSavedFingerprint(JSON.stringify(layoutToBackendScene(next)));
     lastObserved.current = JSON.stringify(layoutToBackendScene(next));
     onLoadLayout(next);
+    syncProjectUrl(projectId);
   }
+  function syncProjectUrl(projectId: string): void {
+    openedRequest.current = `${userId}:${projectId}`;
+    const url = new URL(window.location.href);
+    url.searchParams.set('project', projectId);
+    window.history.replaceState(null, '', url.pathname + url.search);
+  }
+  openRequested.current = id => run(async () => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      dialog.current?.showModal(); throw new Error('项目链接无效。');
+    }
+    const openingFrom = layoutRef.current;
+    try {
+      const current = controller.getSnapshot();
+      if (openingFrom.id && openingFrom.id !== id && current.dirty && !confirmReplace()) return;
+      const project = current.project?.id === id && !current.writeBlocked ? current.project :
+        await controller.getProject(id, incoming => { backendSceneToLayout(incoming.scene, { projectId: incoming.id, name: incoming.name }); });
+      if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
+      const localScene = openingFrom.id === id ? layoutToBackendScene(openingFrom) : null;
+      if (localScene && JSON.stringify(localScene) !== JSON.stringify(project.scene)) {
+        controller.setDraft(localScene);
+        // Restored private GLB URLs may have expired while the tab was closed.
+        // Refresh the UUID-keyed cache without replacing the draft or its history.
+        const assets = await controller.authorizeAssets(localScene);
+        await Promise.all(Object.entries(assets.assetUrls).map(([assetId, url]) => ensureGlbAsset(assetId, url)));
+        if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
+        setBoundLayout(id); setSavedFingerprint(JSON.stringify(project.scene));
+        syncProjectUrl(id);
+        setNotice('已保留这个项目的本地未保存改动。请核对云端版本后继续保存或获取编辑权。');
+        dialog.current?.showModal(); return;
+      }
+      await acceptScene(project.scene, project.id, project.name, openingFrom);
+      setNotice('已打开项目。获取编辑权后可以保存修改。');
+    } catch (error) { dialog.current?.showModal(); throw error; }
+  });
   function confirmReplace(): boolean {
     return !dirty || window.confirm('打开云端版本会替换当前画布。当前草稿将保留为本地恢复点。继续吗？');
   }
@@ -110,6 +169,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         {cloud.project && <section className="sc-cloud-current">
           <span className="sc-cloud-eyebrow">当前云项目</span><h3>{cloud.project.name}</h3>
           <p>版本 {cloud.revision} · {cloud.writeBlocked ? '尚未持有有效编辑权，改动只保留在本地' : '你正在编辑，每 30 秒续期'}{dirty ? ' · 画布有未保存改动' : ''}</p>
+          <label>项目名称<input maxLength={120} value={projectName} onChange={event => setProjectName(event.target.value)} /></label>
+          <button type="button" disabled={busy || cloud.writeBlocked || !projectName.trim() || projectName.trim() === cloud.project.name} onClick={() => void run(async () => { await controller.renameProject(projectName.trim()); await refreshProjects(); setNotice('项目名称已更新，画布草稿仍保留。'); })}>保存名称</button>
           <div className="sc-cloud-actions">
             <button type="button" disabled={busy || !cloud.writeBlocked} onClick={() => {
               if (!confirmReplace()) return;
@@ -137,7 +198,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           </div>
           {!bound && <p className="sc-cloud-muted">画布已切换到另一份本地草稿。请重新获取编辑权，或将当前草稿创建为新项目。</p>}
         </section>}
-        <div className="sc-cloud-project-heading"><h3>工作室项目</h3><button type="button" disabled={busy} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
+        <div className="sc-cloud-project-heading"><h3>工作室项目</h3><Link href="/projects/" onClick={() => dialog.current?.close()}>项目与团队 ↗</Link><button type="button" disabled={busy} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
         <ul className="sc-cloud-projects">{projects.map(project => <li key={project.id}><div><strong>{project.name}</strong><small>版本 {project.revision}{project.current_editor ? ' · 有成员持有编辑权' : ''}</small></div><button type="button" disabled={busy || !cloud.writeBlocked} onClick={() => {
           if (!confirmReplace()) return;
           void run(async () => {
@@ -150,7 +211,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         }}>打开</button></li>)}</ul>
         {!projects.length && <p className="sc-cloud-muted">还没有可访问的项目，可以把当前画布存为新项目。</p>}
         <div className="sc-cloud-new">
-          <label>保存到工作室<select value={studioId} onChange={event => setStudioId(event.target.value)}>{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></label>
+          <label>保存到工作室<select disabled={busy} value={studioId} onChange={event => setStudioId(event.target.value)}>{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></label>
           <button type="button" disabled={busy || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
             const current = layoutRef.current;
             await flushSourceScope(current.id ?? 'local');
@@ -163,6 +224,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
             await acceptScene(created.scene, created.id, created.name, current); await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
           })}>把当前画布创建为新项目</button>
         </div>
+        {cloud.project && cloud.revision !== null && <PublicationPanel controller={controller} projectId={cloud.project.id} revision={cloud.revision} dirty={dirty || !bound || busy || !!conversionError} />}
+        <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} />
       </div>}
       {conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
       {(notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
