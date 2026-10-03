@@ -18,6 +18,11 @@ describe('generation intent recovery', () => {
     expect(readGenerationIntent(storage, intentStorageKey('api-2', 'user-1'))).toBeNull();
     expect(readGenerationIntent(storage, intentStorageKey('api-1', 'user-2'))).toBeNull();
   });
+  it('restores complete image and texture intents and rejects partial references',()=>{
+    const intent={requestId:crypto.randomUUID(),prompt:'Oak chair',kind:'texture' as const,referenceImageAssetId:crypto.randomUUID(),sourceAssetId:crypto.randomUUID()};
+    expect(readGenerationIntent({getItem:()=>JSON.stringify(intent)},'key')).toEqual(intent);
+    expect(()=>readGenerationIntent({getItem:()=>JSON.stringify({...intent,referenceImageAssetId:undefined})},'key')).toThrow('无法读取');
+  });
   it('refuses to forget an unreadable or unstorable intent', () => {
     expect(() => readGenerationIntent({ getItem: () => '{invalid' }, 'key')).toThrow('无法读取上一次');
     expect(() => saveGenerationIntent({ getItem: () => null, setItem: () => {} }, 'key', { requestId: crypto.randomUUID(), prompt: 'chair' })).toThrow('无法保存生成请求编号');

@@ -29,6 +29,7 @@ beforeEach(() => {
   const snapshot = { ...controller.getSnapshot(), user: { id: 'member' },
     project: { id: 'project' } as NonNullable<ReturnType<BackendSession['getSnapshot']>['project']>, writeBlocked: false };
   vi.spyOn(controller, 'getSnapshot').mockReturnValue(snapshot);
+  Object.assign(controller,{getGenerationCapabilities:vi.fn().mockResolvedValue({model:'hy-3d-3.0',textToModel:true,imageToModel:true,texture:false,textureRequiresImage:true}),uploadGenerationReference:vi.fn().mockResolvedValue({id:assetId})});
   list = vi.spyOn(controller, 'listGenerationJobs').mockResolvedValue([]);
   create = vi.spyOn(controller, 'createGenerationJob').mockResolvedValue(job());
   vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
@@ -36,11 +37,64 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(ensureGlbAsset).mockReset(); });
 
 describe('single object generation UI', () => {
+  it('uploads an image explicitly, persists the full intent and recovers it without a new paid identity',async()=>{
+    create.mockRejectedValueOnce(new Error('network unknown'));
+    const view=render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    await waitFor(()=>expect((screen.getByRole('option',{name:'参考图生成'}) as HTMLOptionElement).disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText('生成方式'),{target:{value:'image'}});
+    fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'参考图中的花瓶'}});
+    fireEvent.change(screen.getByLabelText('模型参考图'),{target:{files:[new File(['image'],'vase.png',{type:'image/png'})]}});
+    await screen.findByText('vase.png');
+    fireEvent.click(screen.getByRole('button',{name:'生成 3D 模型'}));
+    await screen.findByRole('alert');
+    expect(create.mock.calls[0]![2]).toEqual({kind:'image',referenceImageAssetId:assetId,sourceAssetId:undefined});
+    const saved=JSON.parse(localStorage.getItem(localKey())!);
+    expect(saved).toMatchObject({kind:'image',referenceImageAssetId:assetId,prompt:'参考图中的花瓶'});
+    expect((screen.getByLabelText('生成方式') as HTMLSelectElement).disabled).toBe(true);
+    view.unmount();render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('button',{name:'核对并继续同一请求'}));
+    await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
+  });
+  it('lets a first request rejected before creation be corrected, but never discards an uncertain restored request',async()=>{
+    const invalid=Object.assign(new Error('INVALID_REFERENCE_IMAGE'),{code:'INVALID_REFERENCE_IMAGE'});
+    create.mockRejectedValue(invalid);
+    const view=render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'vase'}});
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button',{name:'生成 3D 模型'}));
+    fireEvent.click(await screen.findByRole('button',{name:'修改未通过检查的输入'}));
+    expect(localStorage.getItem(localKey())).toBeNull();
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).disabled).toBe(false);
+    view.unmount();localStorage.setItem(localKey(),JSON.stringify(legacyIntent));
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('button',{name:'核对并继续同一请求'}));
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('button',{name:'修改未通过检查的输入'})).toBeNull();
+    expect(JSON.parse(localStorage.getItem(localKey())!)).toEqual(legacyIntent);
+  });
+  it('blocks conflicting saved image sources sharing a request id',()=>{
+    localStorage.setItem(localKey(),JSON.stringify({...legacyIntent,kind:'image',referenceImageAssetId:assetId}));
+    sessionStorage.setItem(sessionKey,JSON.stringify({...legacyIntent,kind:'image',referenceImageAssetId:id}));
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    expect(screen.getByRole('alert').textContent).toContain('编号相同但内容不一致');
+    expect(create).not.toHaveBeenCalled();
+  });
+  it('offers a checked texture result for explicit variant preview instead of adding another object',async()=>{
+    const ready={...job('ready'),kind:'texture' as const,source_asset_id:id};
+    list.mockResolvedValue([ready]);const onAdd=vi.fn(),onVariantReady=vi.fn();
+    render(<GeneratedModelLibrary controller={controller} onAdd={onAdd} sourceAssetId={id} sourceObjectIds={['selected-instance']} onVariantReady={onVariantReady}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'预览纹理版本'}));
+    expect(onAdd).not.toHaveBeenCalled();expect(onVariantReady).toHaveBeenCalledWith({sourceAssetId:id,variantAssetId:assetId,objectIds:['selected-instance']});
+    expect(screen.queryByRole('button',{name:'加入场地预览'})).toBeNull();
+  });
+
   it('only creates a paid job after an explicit click', async () => {
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     await waitFor(() => expect(list).toHaveBeenCalledOnce());
     expect(create).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('物料描述'), { target: { value: '  绿色藤编椅  ' } });
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: '生成 3D 模型' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
     expect(create.mock.calls[0]![0]).toBe('绿色藤编椅');
@@ -97,6 +151,7 @@ describe('single object generation UI', () => {
     create.mockRejectedValueOnce(new TypeError('connection reset'));
     const first = render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(screen.getByLabelText('物料描述'), { target: { value: '绿色藤编椅' } });
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: '生成 3D 模型' }));
     await screen.findByRole('alert');
     const original = create.mock.calls[0]; first.unmount();
@@ -194,6 +249,7 @@ describe('single object generation UI', () => {
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage denied'); });
     fireEvent.change(screen.getByLabelText('物料描述'), { target: { value: '绿色藤编椅' } });
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: '生成 3D 模型' }));
     expect((await screen.findByRole('alert')).textContent).toContain('无法保存生成请求编号');
     expect(create).not.toHaveBeenCalled();
