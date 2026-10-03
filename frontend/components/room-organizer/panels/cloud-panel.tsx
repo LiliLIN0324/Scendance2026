@@ -96,6 +96,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     await Promise.all(Object.entries(assets.assetUrls).map(([assetId, url]) => ensureGlbAsset(assetId, url)));
     if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     const next = backendSceneToLayout(scene, { projectId, name, ...assets });
+    if (openingFrom.id === projectId) {
+      if (openingFrom.designBook) next.designBook = openingFrom.designBook;
+      if (openingFrom.itemLayers) {
+        const ids = new Set(next.floors.flatMap(floor => floor.items.map(item => item.id)));
+        next.itemLayers = openingFrom.itemLayers.map(layer => ({ ...layer, itemIds: layer.itemIds.filter(id => ids.has(id)) }));
+      }
+    }
     setBoundLayout(next.id);
     setSavedFingerprint(JSON.stringify(layoutToBackendScene(next)));
     lastObserved.current = JSON.stringify(layoutToBackendScene(next));

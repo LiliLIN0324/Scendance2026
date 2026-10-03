@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpRight, Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
+import { Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { BrandMark } from '../brand-mark';
@@ -37,6 +37,8 @@ import { notify } from './lib/editor-notices';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomSuffix } from './lib/ids';
+import { loadOnlineCatalogItem } from './lib/online-model-placement';
+import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { editorItemLimit } from './lib/scene-presets';
@@ -94,6 +96,8 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
 };
 
 export function RoomOrganizer({ controller: providedController, isActive = true }: { controller?: BackendSession; isActive?: boolean } = {}): JSX.Element {
+  const dropActive = useRef(isActive);
+  useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   useEffect(() => controller.retain(), [controller]);
@@ -1095,7 +1099,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (!canApplyLayoutGeometry(layoutStore.getState().layout, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
     commitHistoryNow();
     snapshotBeforeReplace(layout);
-    actions.applyLayout(next);
+    actions.applyLayout({ ...next, ...(layout.designBook && !next.designBook ? { designBook: layout.designBook } : {}) });
     clearTransientSelection();
     initiallyFramed.current = false;
     setView(current => ({ ...current, view2D: false }));
@@ -1183,21 +1187,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             return item ? { item, clientX: hover.clientX, clientY: hover.clientY } : null;
           })()
         }
-        onCatalogDrop={(clientX, clientY, key) => {
-          const item = findCatalogEntry(EVENT_CATALOG, key);
-          if (!item) return;
-          // The 2D plan inverts the renderer's view transform; 3D raycasts (#166).
+        onCatalogDrop={async (clientX, clientY, key) => {
+          if (!dropActive.current) return;
+          const base = layoutStore.getState();
           const world = view.view2D
             ? clientToWorld2D(clientX, clientY)
             : worldPositionFromClient(clientX, clientY);
-          const newId = placeDiscrete(item, world ?? undefined);
-          if (!newId) return;
-          selectOnly(newId);
+          if (!world) return;
+          try {
+            let item = findCatalogEntry(EVENT_CATALOG, key);
+            if (key.startsWith('online:')) {
+              const model = (await loadOnlineModels()).models.find(entry => entry.slug === key.slice(7));
+              if (!model) return;
+              item = await loadOnlineCatalogItem(model, controller);
+            }
+            if (!item) return;
+            if (!dropActive.current) return;
+            if (layoutStore.getState() !== base) throw new Error('下载期间画布已有变化，请重新拖入物料。');
+            const newId = placeDiscrete(item, world);
+            if (newId) selectOnly(newId);
+          } catch (error) { notify(error instanceof Error ? error.message : '模型加载失败，请重试。', 'error'); }
         }}
       />
-            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset === 'gym' ? '体育馆概念场景 · 原模型比例' : `${layout.width} × ${layout.height} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
+            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset === 'gym' ? '体育馆概念场景 · 原模型比例' : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-dot">·</span><span>单层活动场地</span></div>
             {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
-            {!selectedItem && !previewCandidate && <div className="sc-canvas-tip"><span>从想法，到现场</span><p>点击物料继续布置，选中后微调细节。</p><ArrowUpRight size={18}/></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <ScendanceViewTools onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
@@ -1219,7 +1232,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             onClose={() => selectOnly(null)}
           />}
         </main>
-        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset === 'gym' ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span className="sc-shortcut-hint">拖动物料调整位置 · 拖动空白旋转视角 · 滚轮缩放 · R 旋转 · Delete 删除</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
+        <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset === 'gym' ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
         <CreativeAssistant/>
       </div>
     </CreativeStudioProvider>

@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { makeItem, makeUnplacedItem } from '../lib/__testfixtures__/fixtures';
-import { computeFloorPlanPlacement, computeHeatmapCells, HEATMAP_COLS, HEATMAP_ROWS } from './render';
+import { computeFloorPlanPlacement, computeHeatmapCells, HEATMAP_COLS, HEATMAP_ROWS, render2DTopDown } from './render';
+
+it('rounds item and room dimension labels to at most two decimal places without rounding scene data', () => {
+  const texts: string[] = [];
+  const ctx = new Proxy({}, { get: (_target, key) => key === 'fillText' ? (text: string) => texts.push(text) : key === 'measureText' ? () => ({ width: 12 }) : () => {} });
+  const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+  const item = makeItem({ width: 1.2367, depth: 0.88888 });
+  const floor = { id: 'floor', name: 'test floor', floorColor: '#ffffff', floorPattern: 'solid' as const, items: [item] };
+  const layout = { name: 'measured', width: 10.12345, height: 8.77777, floors: [floor] };
+  render2DTopDown({ canvas, layout, floor, selectedItemId: item.id, showMeasurements: true, showWiFiSignals: false, hasCollision: () => false });
+  expect(texts).toContain('1.24m × 0.89m');
+  expect(texts).toContain('10.12m');
+  expect(texts).toContain('8.78m');
+  expect(item.width).toBe(1.2367);
+});
 
 // A 10×10 m room with the default 20×20 grid gives 0.5 m cells, so grid
 // coordinates are easy to reason about: cell (col, row) spans

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from '../contexts/selection-context';
@@ -21,7 +21,7 @@ function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
   };
 }
 
-function setup(selected: FurnitureItem): void {
+function setup(selected: FurnitureItem) {
   const editor = {
     layout: INITIAL_LAYOUT,
     actions: { setLocked: vi.fn(), resizeItem: vi.fn(), moveItem: vi.fn(), setRotation: vi.fn(), setColor: vi.fn(), updateItem: vi.fn() },
@@ -45,6 +45,7 @@ function setup(selected: FurnitureItem): void {
       </SelectionProvider>
     </RoomEditorProvider>
   );
+  return editor;
 }
 
 const origin = (): string | null =>
@@ -76,6 +77,16 @@ describe('catalogItemOrigin', () => {
 
 describe('selected summary and colour', () => {
   afterEach(cleanup);
+
+  it('edits Y elevation and keeps the rotate shortcut with position, without size controls', () => {
+    const editor = setup(placed({ elevation: 0.75 }));
+    const input = screen.getByRole('spinbutton', { name: 'Y / m' });
+    expect((input as HTMLInputElement).value).toBe('0.75');
+    fireEvent.change(input, { target: { value: '1.25' } });
+    expect(editor.actions.updateItem).toHaveBeenCalledWith('placed-1', { elevation: 1.25 });
+    expect(screen.queryByRole('spinbutton', { name: '宽' })).toBeNull();
+    expect(screen.getByRole('button', { name: '旋转 90°' }).closest('section')?.textContent).toContain('位置与角度');
+  });
 
   it('shows an online model’s real thumbnail instead of the stand-in glyph', () => {
     setup(placed({ source: 'public_library', glbUrl: 'https://cdn.3dassets.dev/assets/33803/v1/model.glb' }));

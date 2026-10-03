@@ -22,6 +22,7 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 | POST `/projects` | `{studioId,name,scene}` | 201，项目（revision=0） |
 | GET `/projects/:id` | 无 | 项目完整当前场景、物料表、编辑者 |
 | PATCH `/projects/:id` | `{sessionId,generation,expectedRevision,name}` | 名称与 revision 更新后的项目 |
+| DELETE `/projects/:id` | `{expectedRevision}` | 工作室 owner 删除空闲项目，返回 `{deleted:true}`；同时撤销客户分享 |
 | POST `/projects/:id/lease/acquire` | `{sessionId}` | `{sessionId,generation,expiresAt,revision,scene}` |
 | POST `/projects/:id/lease/renew` | `{sessionId,generation}` | 当前租约、revision |
 | POST `/projects/:id/lease/release` | `{sessionId,generation}` | 已到期租约；不会自动保存 |
@@ -44,6 +45,10 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 | POST `/jobs/:jobId/added` | `{projectId}` | 确认资产已存在于保存的项目后标记 added |
 
 `GET /projects` 和 `/assets` 当前固定返回最近 100 项，尚无分页 UI；演示账号范围下足够，扩大团队规模前增加游标分页。
+
+删除项目要求版本一致且没有有效编辑租约或正在执行的图纸重建任务，分别返回 `REVISION_CONFLICT`、`PROJECT_BUSY`、`RECONSTRUCTION_BUSY`。无成员权限返回 `PROJECT_NOT_FOUND`，编辑成员返回 `FORBIDDEN`。同一 owner 重复删除幂等；删除后的项目、租约、图纸任务读取和旧分享均不可再使用。数据库用 `deleted_at` 保留发布、账单和服务调用证据，个人素材不随项目删除。上线需先应用 `20261003120000_project_deletion.sql`，再发布 API 与前端。
+
+编辑器 `RoomLayout.itemLayers/designBook` 是本机编组与方案历史，不属于 v1/v2 场景协议。云端保存/发布当前选中的场景；本机方案切换保留每个方案最新编辑状态，最多 20 个方案，可移除非当前方案并撤销恢复。
 
 v0.4.1 公共模型目录随前端完整提供，不依赖 `/assets` 的本人最近 100 项列表。管理员用 `register_library_asset(p_owner,p_model_id,p_record)` RPC 批量登记后，工作室成员通过原 `/assets/:assetId/url` 和场景保存接口使用这些模型。RPC 仅 service_role 可调用；原 `/assets/import` 仍只导入 Poly Haven。登记、授权范围与上线顺序见 [v0.4.1 兼容记录](V041_COMPATIBILITY.md)。
 

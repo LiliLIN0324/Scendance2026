@@ -635,7 +635,7 @@ function drawFurniture(
       ctx.fillStyle = '#333';
       ctx.font = '10px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(`${item.width}m × ${item.depth}m`, cx, cy + halfD * scale + 15);
+      ctx.fillText(`${Number(item.width.toFixed(2))}m × ${Number(item.depth.toFixed(2))}m`, cx, cy + halfD * scale + 15);
       ctx.restore();
     }
   }
@@ -685,11 +685,11 @@ function drawRoomDimensions(
   ctx.fillStyle = '#333';
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`${layout.width}m`, offsetX + (layout.width * scale) / 2, offsetY - 10);
+  ctx.fillText(`${Number(layout.width.toFixed(2))}m`, offsetX + (layout.width * scale) / 2, offsetY - 10);
   ctx.save();
   ctx.translate(offsetX - 10, offsetY + (layout.height * scale) / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText(`${layout.height}m`, 0, 0);
+  ctx.fillText(`${Number(layout.height.toFixed(2))}m`, 0, 0);
   ctx.restore();
 }
 

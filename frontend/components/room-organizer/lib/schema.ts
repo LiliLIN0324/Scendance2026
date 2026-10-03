@@ -262,6 +262,18 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   const v = value;
 
   if (typeof v.name !== 'string') return false;
+  if (v.itemLayers !== undefined && (!Array.isArray(v.itemLayers) || v.itemLayers.length > 100 || !v.itemLayers.every(layer =>
+    isPlainObject(layer) && typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= MAX_ID_LENGTH &&
+    typeof layer.name === 'string' && layer.name.length <= MAX_NAME_LENGTH && Array.isArray(layer.itemIds) && layer.itemIds.length <= MAX_ITEMS_PER_FLOOR &&
+    layer.itemIds.every(id => typeof id === 'string' && id.length <= MAX_ID_LENGTH)))) return false;
+  if (v.designBook !== undefined) {
+    const book = v.designBook;
+    if (!isPlainObject(book) || typeof book.activeId !== 'string' || !Array.isArray(book.variants) || book.variants.length > 20 ||
+      !book.variants.every(variant => isPlainObject(variant) && typeof variant.id === 'string' && variant.id.length <= MAX_ID_LENGTH &&
+        typeof variant.name === 'string' && variant.name.length <= MAX_NAME_LENGTH && isPlainObject(variant.layout) &&
+        variant.layout.designBook === undefined && isRoomLayout(variant.layout)) ||
+      !book.variants.some(variant => variant.id === book.activeId) || new Set(book.variants.map(variant => variant.id)).size !== book.variants.length) return false;
+  }
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
   if (v.scenePreset !== undefined && !['gym', 'popup'].includes(v.scenePreset as string)) return false;
   if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
@@ -365,6 +377,8 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  itemLayers: true,
+  designBook: true,
   scenePreset: true,
   backendVenue: true,
   backendSceneV2: true,
@@ -630,6 +644,8 @@ function repairLayout(layout: RoomLayout): RoomLayout {
     floors: mapSame(layout.floors, repairFloor),
   };
   if (layout.id !== undefined) patch.id = capText(layout.id, MAX_ID_LENGTH);
+  if (layout.itemLayers) patch.itemLayers = layout.itemLayers.map(({ id, name, itemIds }) => ({ id, name, itemIds: [...new Set(itemIds)] }));
+  if (layout.designBook) patch.designBook = { activeId: layout.designBook.activeId, variants: layout.designBook.variants.map(({ id, name, layout: snapshot }) => ({ id, name, layout: withUniqueIds(repairLayout(snapshot)) })) };
   if (layout.roof) patch.roof = repairRoof(layout.roof);
   if (layout.terrain) patch.terrain = pick(layout.terrain, TERRAIN_KEYS);
   if (layout.entrance) patch.entrance = pick(layout.entrance, ENTRANCE_KEYS);

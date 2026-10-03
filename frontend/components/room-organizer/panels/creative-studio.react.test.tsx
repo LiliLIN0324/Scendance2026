@@ -210,6 +210,7 @@ describe('creative brief and assistant interaction', () => {
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '确认应用' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    expect(onApply.mock.calls[0]![0].designBook?.variants.map(v => v.name)).toEqual(['原始方案', 'AI 方案 A']);
     expect(controller.applySceneProposal).toHaveBeenCalledWith(proposal, layoutToBackendScene(layout));
     expect(layoutToBackendScene(onApply.mock.calls[0][0])).toEqual(candidate);
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();

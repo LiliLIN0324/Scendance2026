@@ -333,6 +333,9 @@ export interface NeighbourSpec {
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /** Local editor metadata; cloud scenes contain only the active design. */
+  itemLayers?: { id: string; name: string; itemIds: string[] }[];
+  designBook?: { activeId: string; variants: { id: string; name: string; layout: Omit<RoomLayout, 'designBook'> }[] };
   /** Authoritative v2 provenance and design, retained through local save and undo. */
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
   /** Local complete-scene preset; its architecture is separate from editable items. */
