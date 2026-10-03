@@ -50,6 +50,12 @@ describe('generation inputs and provider isolation',()=>{
     const network=vi.fn(async(_url,init)=>{expect(JSON.parse(init.body)).toEqual({model:'hy-3d-3.1',prompt:'vase',generate_type:'Normal',face_count:20000,enable_pbr:true});return response({id:'3.1'});});
     await hunyuan(env(),network,{providerMode:'tokenhub',providerModel:'hy-3d-3.1'}).submit('vase');expect(network).toHaveBeenCalledTimes(1);
   });
+  it('rejects required source extensions before UV inspection and before reserving a paid request',async()=>{
+    const fixture=tetrahedron();fixture.json.extensionsRequired=['KHR_mesh_quantization'];
+    const a=await source(packGltf(fixture.json,fixture.resources)),ref=await image();
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'浅橡木',kind:'texture',sourceAssetId:a.id,referenceImageAssetId:ref.id},env({HUNYUAN_TEXTURE_ENABLED:'true'}))).rejects.toMatchObject({code:'UNSUPPORTED_MODEL_FEATURE',status:422});
+    expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(0);
+  });
   it('requires source UV before a texture task can be reserved',async()=>{
     const fixture=tetrahedron(),a=await source(packGltf(fixture.json,fixture.resources)),ref=await image();
     await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'浅橡木',kind:'texture',sourceAssetId:a.id,referenceImageAssetId:ref.id},env({HUNYUAN_TEXTURE_ENABLED:'true'}))).rejects.toThrow('SOURCE_UV_REQUIRED');

@@ -57,7 +57,7 @@ describe('single object generation UI', () => {
     expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
   });
   it('lets a first request rejected before creation be corrected, but never discards an uncertain restored request',async()=>{
-    const invalid=Object.assign(new Error('INVALID_REFERENCE_IMAGE'),{code:'INVALID_REFERENCE_IMAGE'});
+    const invalid=Object.assign(new Error('INVALID_REFERENCE_IMAGE'),{code:'INVALID_REFERENCE_IMAGE',status:422});
     create.mockRejectedValue(invalid);
     const view=render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'vase'}});
@@ -73,8 +73,28 @@ describe('single object generation UI', () => {
     expect(screen.queryByRole('button',{name:'修改未通过检查的输入'})).toBeNull();
     expect(JSON.parse(localStorage.getItem(localKey())!)).toEqual(legacyIntent);
   });
+  it.each(['UNSUPPORTED_MODEL_FEATURE','INVALID_GLB_SIZE','INVALID_GLB','GLTF_VALIDATION_FAILED','EXTERNAL_MODEL_RESOURCES','MODEL_TOO_COMPLEX','MODEL_REQUIRES_ONE_SCENE','MODEL_REQUIRES_TRIANGLES','MODEL_MISSING_POSITIONS','UNSUPPORTED_TEXTURE','INVALID_MODEL_BOUNDS','UNSUPPORTED_TEXTURE_SOURCE','SOURCE_UV_REQUIRED'])('allows correcting the first uncharged source-model rejection: %s',async code=>{
+    create.mockRejectedValueOnce(Object.assign(new Error(code),{code,status:422}));
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'chair'}});
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button',{name:'生成 3D 模型'}));
+    fireEvent.click(await screen.findByRole('button',{name:'修改未通过检查的输入'}));
+    expect(localStorage.getItem(localKey())).toBeNull();
+    expect((screen.getByLabelText('物料描述') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+  it.each([{code:'UNSUPPORTED_MODEL_FEATURE',status:502},{code:'STORAGE_DOWNLOAD_FAILED',status:502},{code:'PROVIDER_HTTP_ERROR',status:502},{code:'UNKNOWN_RESPONSE',status:422}])('does not clear ambiguous server failure %j',async failure=>{
+    create.mockRejectedValueOnce(Object.assign(new Error(failure.code),failure));
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'chair'}});
+    await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button',{name:'生成 3D 模型'}));
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('button',{name:'修改未通过检查的输入'})).toBeNull();
+    expect(localStorage.getItem(localKey())).not.toBeNull();
+  });
   it('revokes permission to discard a previously rejected input after an uncertain retry',async()=>{
-    create.mockRejectedValueOnce(Object.assign(new Error('INVALID_REFERENCE_IMAGE'),{code:'INVALID_REFERENCE_IMAGE'})).mockRejectedValueOnce(new TypeError('connection reset'));
+    create.mockRejectedValueOnce(Object.assign(new Error('INVALID_REFERENCE_IMAGE'),{code:'INVALID_REFERENCE_IMAGE',status:422})).mockRejectedValueOnce(new TypeError('connection reset'));
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(screen.getByLabelText('物料描述'),{target:{value:'vase'}});
     await waitFor(()=>expect((screen.getByRole('button',{name:'生成 3D 模型'}) as HTMLButtonElement).disabled).toBe(false));

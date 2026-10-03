@@ -13,6 +13,13 @@ const labels: Record<GenerationJob['state'], string> = {
   rejected: '模型未通过检查', submit_unknown: '提交结果待核对，请联系管理员',
 };
 const activeStates = new Set<GenerationJob['state']>(['queued', 'submitting', 'submitted', 'processing', 'archiving']);
+// These are returned by /jobs input validation before reservation or provider dispatch.
+const preflightRejections=new Set([
+  'INVALID_REFERENCE_IMAGE','REFERENCE_IMAGE_FORBIDDEN','INVALID_SOURCE_MODEL','VALIDATION_ERROR',
+  'SOURCE_UV_REQUIRED','UNSUPPORTED_TEXTURE_SOURCE','INVALID_GLB_SIZE','INVALID_GLB',
+  'EXTERNAL_MODEL_RESOURCES','UNSUPPORTED_MODEL_FEATURE','MODEL_TOO_COMPLEX','GLTF_VALIDATION_FAILED',
+  'MODEL_REQUIRES_ONE_SCENE','MODEL_REQUIRES_TRIANGLES','MODEL_MISSING_POSITIONS','UNSUPPORTED_TEXTURE','INVALID_MODEL_BOUNDS',
+]);
 export interface ModelGenerationSeed { id: string; scope: string; userId: string; projectId: string; apiUrl: string; name: string; prompt: string }
 type Intent = GenerationIntent & { storage: 'local' | 'session' };
 function persistedIntent(value:Intent):GenerationIntent {
@@ -184,7 +191,8 @@ function ConnectedGeneration({ controller, disabled, onAdd, seed, sourceAssetId,
     } catch (failure) {
       if (mounted.current && latest.current.userId === userId && latest.current.apiUrl === apiUrl) {
         const code=failure&&typeof failure==='object'&&'code' in failure?String(failure.code):'';
-        const rejected=!intent&&['INVALID_REFERENCE_IMAGE','SOURCE_UV_REQUIRED','INVALID_SOURCE_MODEL','REFERENCE_IMAGE_FORBIDDEN','VALIDATION_ERROR'].includes(code);
+        const status=failure&&typeof failure==='object'&&'status' in failure?Number(failure.status):0;
+        const rejected=!intent&&[400,403,422].includes(status)&&preflightRejections.has(code);
         if(rejected)setRejectedInput(next.requestId);
         setError(`${message(failure)} ${rejected?'输入未通过检查，尚未创建生成任务。':'如需重试，将继续核对同一项请求。'}`);
       }
