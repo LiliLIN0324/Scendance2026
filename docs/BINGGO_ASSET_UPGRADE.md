@@ -20,11 +20,13 @@
 
 [供应商配置与接口核查](HY3_PROVIDER_AUDIT.md) 和 [不可变版本契约](contracts/ASSET_CUSTOMIZATION.md) 记录这些边界。视觉材质与尺寸仍需实际采购确认。
 
-自动回归：前端 132 个文件、1,706 项测试通过；后端 23 个文件、208 项测试通过。前端类型检查、Deno 三个函数检查与生产构建均通过。静态生产包在隔离 API 下实际下载 GLB、JSON、CSV，GLB 包含 3 个物件并完成复检。小狗图片 SHA256 仍为 `bc146412343ffe23a475ab63d0929e55139376b2962e613accc60a26a35664d2`。
+自动回归：前端 132 个文件、1,707 项测试通过；后端 24 个文件、212 项测试通过。前端类型检查、Deno 三个函数检查与生产构建均通过。静态生产包在隔离 API 下实际下载 GLB、JSON、CSV，GLB 包含 3 个物件并完成复检。小狗图片 SHA256 仍为 `bc146412343ffe23a475ab63d0929e55139376b2962e613accc60a26a35664d2`。
+
+真实云端验证：已认证能力接口显示 3.0 文字/图片入口可用、纹理关闭；未认证返回 401。实际库椅子的 5 个材质槽读取、创建不可变版本、同请求幂等复用、几何/UV 签名保持、仅一实例确认应用、保存重开、父版本恢复均通过。临时项目已删除；QA 账号保留一个独立验证材质资产，未覆盖源模型，付费调用为 0。
 
 ## 发布及回退
 
-发布前基线：Pages `28d0c30c-52e8-47a3-9bce-20b186a2fd59`（源 `9972522`），scene-api v11，generation-worker v5，reconstruction-worker v2。
+初始核查基线为 Pages `28d0c30c`（`9972522`）与 scene-api v11。发布期间发现并行任务已更新生产为 Pages `93a24b92-f1fd-4887-a2f1-0f870ff8b2c1`（`329b0d7`）与 scene-api v12；最终发布以此为基线，将该中文目录提交及发布记录 `96b099a` 合入本次专用分支。全部 529 项静态文件、528 项可用资源、中文映射及既有索引与生产提交逐字节一致。generation-worker 原为 v5，reconstruction-worker v2。
 
 新增迁移仅 `20261003160000_material_variants` 与 `20261003161000_generation_inputs`。它们包裹当前 RPC 并委托旧路由，保留线上独有的 `20261003133000_studio_project_visibility` 与 `20261003140000_empty_studio_deletion`。不通过整库 push 覆盖迁移历史。两条迁移在同一事务执行，然后先发布 generation-worker，再发布 scene-api，最后发布 Pages；reconstruction-worker 不发布。先升级 worker，避免旧 worker 将新 API 的图片任务误作为文字任务提交。
 
