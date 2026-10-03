@@ -19,6 +19,9 @@ describe('assistant capability routing', () => {
     expect(assistantAction('绿色藤编椅', 'model')).toEqual({ kind: 'model', prompt: '绿色藤编椅' });
     expect(assistantAction('载入体育馆黑客松预设', 'auto')).toEqual({ kind: 'preset', key: 'gym' });
     expect(assistantAction('使用香氛快闪模板', 'auto')).toEqual({ kind: 'preset', key: 'popup' });
+    expect(assistantAction('载入酒吧预设', 'auto')).toEqual({ kind: 'preset', key: 'bar' });
+    expect(assistantAction('换成美术馆展区的模板', 'auto')).toEqual({ kind: 'preset', key: 'museum' });
+    expect(assistantAction('载入摄影工作室预设', 'auto')).toEqual({ kind: 'preset', key: 'studio' });
     expect(assistantAction('生成场景并生成一件模型', 'scene')).toEqual({ kind: 'scene' });
   });
 });

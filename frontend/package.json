@@ -1,6 +1,6 @@
 {
   "name": "scendance-frontend",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Scendance event layout editor; adapted from threejs-sims-house-builder",
   "author": "Bassem Chagra",
   "license": "MIT",

@@ -1,5 +1,18 @@
 # 更新记录
 
+## 0.6.1 — 2026-10-03
+
+工作台场景预设从 2 套扩到 **10 套**：把 `codex/gym-scene-template` 归档里除 gym、popup 之外的 8 套完整场景（bar、cafe、conference、lawn、market、museum、office、studio）接入左侧「场景预设」面板，卡片、封面与载入方式沿用原有样式。
+
+- 资源：8 套 `<key>.glb`、`template.json`、`ASSET-SOURCES.md` 与统一命名的总览图入库到 `scene/templates/<key>/`（market 另带 `LICENSE.md`）。
+- 构建：`scripts/package-scene-presets.mjs` 增加数据驱动的重挂转换器（`PRESET_SOURCES` 图层计划：`flag`／`grouped`／`names` 三种取件方式，`groups` 把多个零件合成一件）。只重写 GLB 的 JSON 块，二进制几何与贴图逐字节保留；图层未归类、分组缺失、图层带变换都会让构建抛错，不静默丢资源。零厚度构件不能作为可编辑物件（渲染器拒绝零厚度包围盒），留在固定结构并由构建日志报告。
+- 天花板／屋面板与吊装灯具不进入编辑视图，且只剔这些：cafe 的店面玻璃门窗、conference 的右墙与入口、吸音鳍都保留。
+- 前端：`SCENE_PRESETS` 增至 10 套；`ScenePresetKey` 联合类型移入 `lib/types.ts` 并与 `SCENE_PRESETS` 表互相约束；`schema.ts` 的预设白名单改为引用同一张表；工作台页头与状态栏去掉 `gym` 特判；AI 助手关键词路由扩展到 10 套。
+- 可编辑物件新增 611 件，10 套合计 960 件；预设模式上限仍为 500 件／场景（最多的体育馆 307 件）。
+- 文档：[场景预设](frontend/docs/SCENE-PRESETS.md)、[模板来源](scene/templates/README.md) 已更新。
+- **验证**：`vitest run` 全量 124 文件 / 1603 用例通过；`tsc --noEmit` 与 `next build` 通过；10 套预设逐件包围盒位置比对、保存恢复往返、云保存拒绝均通过；独立复算 960 件包围盒无违规。
+- **边界**：预设仍不支持云保存与 AI 修改（适配器 `PRESET_LOCAL_ONLY`）；本次未做真实浏览器逐套渲染验收。
+
 ## 0.6.0 — 2026-10-03
 
 图纸与照片重建的独立预览版本，开发分支为 `codex/floorplan-to-3d`，尚未合并至 main 或部署到原站。

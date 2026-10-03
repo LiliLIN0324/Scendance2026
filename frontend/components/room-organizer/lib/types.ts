@@ -332,11 +332,19 @@ export interface NeighbourSpec {
  * entries stack upward. Footprint and floor-plan upload live on the
  * building because they're shared across levels.
  */
+/**
+ * A complete-scene archive the workbench can open as a starting point. The
+ * keys are mirrored by `lib/scene-presets.ts`, which owns each preset's name,
+ * size and packaged GLB; validation accepts exactly this union, so adding a
+ * preset means extending both — never only the panel.
+ */
+export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | 'lawn' | 'market' | 'museum' | 'office' | 'studio';
+
 export interface RoomLayout {
   /** Authoritative v2 provenance and design, retained through local save and undo. */
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
   /** Local complete-scene preset; its architecture is separate from editable items. */
-  scenePreset?: 'gym' | 'popup';
+  scenePreset?: ScenePresetKey;
   /** Preserves backend fields until explicitly edited through supported controls. */
   backendVenue?: Scene['venue'];
   backendCamera?: Scene['camera'];

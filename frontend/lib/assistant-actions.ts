@@ -9,6 +9,23 @@ export type AssistantAction =
   | { kind: 'help' }
   | { kind: 'choose-action' };
 
+/**
+ * Keyword routing per archived preset. First match wins, so venue names stay
+ * above generic words, and every key here must exist in `SCENE_PRESETS`.
+ */
+const PRESET_HINTS: ReadonlyArray<readonly [ScenePresetKey, RegExp]> = [
+  ['gym', /体育馆|黑客松|hackathon|gym/i],
+  ['popup', /香氛|快闪|青序|popup/i],
+  ['bar', /酒吧|琥珀间|吧台|bar/i],
+  ['cafe', /咖啡|慢调|cafe/i],
+  ['conference', /学术|会议|论坛|conference/i],
+  ['lawn', /草坪|旷野|室外|lawn/i],
+  ['market', /市集|集市|风物|market/i],
+  ['museum', /美术馆|博物馆|展区|museum/i],
+  ['office', /办公室|工位|office/i],
+  ['studio', /摄影|影棚|studio/i],
+];
+
 /** Routing only selects an existing capability; message text never becomes executable code. */
 export function assistantAction(message: string, mode: AssistantMode): AssistantAction {
   const text = message.trim();
@@ -16,8 +33,8 @@ export function assistantAction(message: string, mode: AssistantMode): Assistant
     /(?:不要|别|不需要|暂不|不想).*(?:生成|制作|载入)|(?:如何|怎么|多少钱|费用|价格).*(?:模型|生成)|(?:模型|生成).*(?:多少钱|费用|价格)|(?:能否|可以).*(?:生成).*[吗么？?]/.test(text)) return { kind: 'help' };
   if (mode === 'model') return { kind: 'model', prompt: text };
   if (/预设|模板|载入|加载/.test(text)) {
-    if (/体育馆|黑客松|hackathon|gym/i.test(text)) return { kind: 'preset', key: 'gym' };
-    if (/香氛|快闪|青序|popup/i.test(text)) return { kind: 'preset', key: 'popup' };
+    const hinted = PRESET_HINTS.find(([, pattern]) => pattern.test(text));
+    if (hinted) return { kind: 'preset', key: hinted[0] };
     if (/预设|模板/.test(text)) return { kind: 'choose-preset' };
   }
   if (mode === 'scene') return { kind: 'scene' };
