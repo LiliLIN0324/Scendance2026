@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProjectsPage from './page';
 
-const mocks = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), listStudios: vi.fn(), businessRequest: vi.fn(), createProject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), listStudios: vi.fn(), businessRequest: vi.fn(), createProject: vi.fn(), deleteProject: vi.fn() }));
 const snapshot: { user: { id: string }; writeBlocked: boolean; project: { id: string; name: string } | null; error: null } = { user: { id: 'my-account' }, writeBlocked: true, project: null, error: null };
 const controller = { ...mocks, subscribe: () => () => {}, getSnapshot: () => snapshot };
 vi.mock('@/lib/auth-provider', () => ({ useAuth: () => ({ ready: true, controller }) }));
@@ -89,6 +89,20 @@ describe('workspace management', () => {
     await screen.findByRole('option', { name: '拾光工作室' });
     expect(mocks.businessRequest).toHaveBeenCalledWith('/studios/studio-a', 'PATCH', { name: '拾光工作室' });
     expect((screen.getByLabelText('工作室') as HTMLSelectElement).value).toBe('studio-a');
+  });
+  it('preserves confirmed project deletion before allowing removal of an empty studio', async () => {
+    projects = [{ id: 'project-a', studio_id: 'studio-a', name: '旧方案', revision: 3 }];
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mocks.deleteProject.mockResolvedValue({ removed: true });
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByText('旧方案'));
+    fireEvent.click(screen.getByRole('button', { name: '删除方案' }));
+    await ready();
+    expect(mocks.deleteProject).toHaveBeenCalledWith('project-a', 3);
+    expect(confirm).toHaveBeenCalledOnce();
+    openPanel('设置');
+    expect((screen.getByRole('button', { name: '删除工作室' }) as HTMLButtonElement).disabled).toBe(false);
+    confirm.mockRestore();
   });
   it('disables deleting a nonempty workspace', async () => {
     projects = [{ id: 'project-a', studio_id: 'studio-a', name: '有内容的项目', revision: 0 }];

@@ -237,15 +237,15 @@ it('filters projects by name and studio and clears an empty search', async () =>
   queue([{ id: studioId, name: '一号工作室', role: 'owner', displayName: 'A' }, { id: secondStudio, name: '二号工作室', role: 'editor', displayName: 'A' }]);
   render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
-  await waitFor(() => expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(2));
-  fireEvent.change(screen.getByRole('combobox', { name: '筛选工作室' }), { target: { value: secondStudio } });
+  await waitFor(() => expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1));
+  fireEvent.change(screen.getByRole('combobox', { name: '当前工作室' }), { target: { value: secondStudio } });
   expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
   expect(screen.getByText('另一个云项目')).toBeTruthy();
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '不存在' } });
   expect(screen.queryByRole('button', { name: '打开' })).toBeNull();
   expect(screen.getByText('没有匹配的项目')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '清除筛选' }));
-  expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(2);
+  expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
 });
 
 it('offers team and permission demos offline without requests or canvas replacement', () => {
@@ -282,11 +282,11 @@ it('offers team and permission demos offline without requests or canvas replacem
 
 it('reports a failed project list without claiming the account is empty and allows retry', async () => {
   const list = vi.spyOn(controller, 'listProjects').mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([other]);
-  vi.spyOn(controller, 'listStudios').mockResolvedValue([]);
+  vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
   render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
   expect(await screen.findByText('项目加载失败，请点击刷新列表重试。')).toBeTruthy();
-  expect(screen.queryByText('第一份方案，从这里开始')).toBeNull();
+  expect(screen.queryByText('这个工作室还没有项目')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
   expect(await screen.findByText('另一个云项目')).toBeTruthy();
   expect(list).toHaveBeenCalledTimes(2);
