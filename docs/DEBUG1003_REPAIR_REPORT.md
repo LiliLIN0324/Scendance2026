@@ -59,6 +59,12 @@
 
 截图：[批量移动预览](evidence/debug1003/batch-movement-preview.png)、[应用后的三维位置](evidence/debug1003/batch-movement-applied.png)。
 
+### 追加修复：Safari 扩展引起的 hydration 警告
+
+Safari 的 Trancy 扩展兼容修复：截图显示扩展在 `<html>` 注入 `trancy-version="7.9.1"`，造成 hydration 属性警告。用真实根布局渲染服务端 HTML，再注入同一属性进行 hydration，修改前稳定出现相同警告，无注入对照通过。现在仅在 `<html>` 使用 React 的单层 `suppressHydrationWarning`，页面后代继续检查一致性；不修改扩展设置或过滤全局控制台。[React 官方说明](https://react.dev/reference/react-dom/client/hydrateRoot#suppressing-unavoidable-hydration-mismatch-errors)
+
+新增 3 项测试通过：无扩展正常加载、注入扩展属性后正常加载且按钮可用、页面内部真实文本差异仍产生 hydration 错误。类型检查、ESLint 与生产静态构建通过（仍有前述既有警告）。已在用户 Safari 新标签打开本地页面，确认报错遮罩消失、3D 场景显示、图层标签可点击。
+
 ### 启动与账号
 
 预览：<http://127.0.0.1:3037/?local=1>。隔离 API：`127.0.0.1:54347`；数据库：`.local-dev/debug1003/postgres`。
