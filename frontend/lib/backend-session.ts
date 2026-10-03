@@ -5,6 +5,9 @@ import { z } from "zod";
 import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
 import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
+import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
+import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
+import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 export { SceneApiError };
 export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
 export type ReconstructionJob = Pick<z.infer<typeof reconstructionJobSchema>, 'id' | 'state' | 'candidate' | 'issues' | 'error_code'> & { proposal?: SceneProposal | null | undefined };
@@ -88,6 +91,7 @@ export interface SceneProposal extends Proposal {
   explanation: string;
   warnings: { code: string; ids: string[] }[];
   modelSuggestions?: { name: string; reason: string; prompt: string }[] | undefined;
+  materialSuggestions?: MaterialSuggestion[] | undefined;
 }
 export interface SceneProposalInput {
   mode: "layout" | "modify";
@@ -111,6 +115,7 @@ const proposalResponseSchema = z.object({
   base_scene: sceneSchema, candidate: sceneSchema, explanation: z.string(),
   warnings: z.array(z.object({ code: z.string(), ids: z.array(uuid) })),
   modelSuggestions: z.array(z.object({ name: z.string().min(1).max(120), reason: z.string().min(1).max(500), prompt: z.string().min(1).max(1024) })).max(3).optional(),
+  materialSuggestions: z.array(resolvedMaterialSuggestionSchema).max(3).optional(),
   expires_at: dateString, applied_at: dateString.nullable(),
 });
 const applyProposalResponseSchema = z.object({
@@ -119,12 +124,17 @@ const applyProposalResponseSchema = z.object({
 });
 const generationJobSchema = z.object({
   id: uuid, owner_id: z.string().min(1), prompt: z.string(),
+  kind: z.enum(['text','image','texture']).optional(), source_asset_id: uuid.nullable().optional(),
+  reference_image_asset_id: uuid.nullable().optional(), provider_model: z.string().nullable().optional(),
+  provider_mode: z.enum(['tokenhub','legacy']).nullable().optional(),
   state: z.enum(["queued", "submitting", "submitted", "processing", "archiving", "ready", "added", "failed", "rejected", "submit_unknown"]),
   provider_job_id: z.string().nullable(), asset_id: uuid.nullable(),
   next_poll_at: dateString, attempts: z.number().int().nonnegative(), error_code: z.string().nullable(),
   provider_usage: z.unknown(), created_at: dateString, updated_at: dateString, reused: z.boolean().optional(),
 }).refine(job => !["ready", "added"].includes(job.state) || job.asset_id !== null);
 export type GenerationJob = z.infer<typeof generationJobSchema>;
+const generationCapabilitiesSchema = z.object({ model: z.string(), textToModel: z.boolean(), imageToModel: z.boolean(), texture: z.boolean(), textureRequiresImage: z.literal(true) });
+export type GenerationCapabilities = z.infer<typeof generationCapabilitiesSchema>;
 interface PaidRequest<T> { fingerprint: string; promise?: Promise<T>; result?: T }
 interface RequestScope {
   projectId: string | null;
@@ -725,6 +735,18 @@ export class BackendSession {
     })();
     return record.promise;
   }
+  /** Deterministic asset replacement prepares a preview; only applySceneProposal saves it. */
+  async prepareMaterialVariantProposal(input: { requestId: string; scene: Scene; objectIds: string[]; sourceAssetId: string; variantAssetId: string }): Promise<SceneProposal> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const state = this.proposalState(input.scene), epoch = this.epoch;
+    const body = materialVariantProposalRequestSchema.parse({ sessionId: state.sessionId, generation: state.generation, expectedRevision: state.expectedRevision, localRevision: state.localRevision, ...input });
+    const proposal = proposalResponseSchema.parse(await this.request(`/projects/${state.projectId}/material-variants`, "POST", body, { projectId: state.projectId, lease: state }, false));
+    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    await assertFreshProposal(proposal, state);
+    this.assertProposalContext(state);
+    if (canonical(proposal.base_scene) !== canonical(state.scene)) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return proposal;
+  }
   async applySceneProposal(proposal: SceneProposal, scene: Scene): Promise<ApplySceneProposalResult> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     const state = this.proposalState(scene);
@@ -810,15 +832,31 @@ export class BackendSession {
     if (job.id !== jobId) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     return job;
   }
-  /** Only text-to-single-object generation is currently supported by /jobs. */
-  async createGenerationJob(prompt: string, requestId: string): Promise<GenerationJob> {
-    const body = z.object({ prompt: z.string().trim().min(1).max(1024), requestId: uuid }).parse({ prompt, requestId });
+  async getGenerationCapabilities(): Promise<GenerationCapabilities> {
+    return generationCapabilitiesSchema.parse(await this.businessRequest('/generation/capabilities'));
+  }
+  async uploadGenerationReference(file: File): Promise<{ id: string }> {
+    if (!['image/png','image/jpeg'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) throw new Error('请选择 5 MB 以内的 PNG 或 JPEG 参考图。');
+    this.requireConfig();
+    const scope = this.captureRequestScope(), epoch = this.epoch, token = await this.accessToken();
+    if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
+    const response = await fetch(`${this.config.apiUrl}/assets/floorplan`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
+    const result = await response.json();
+    if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
+    if (!response.ok) throw new SceneApiError(result.error?.code ?? 'SOURCE_UPLOAD_FAILED', response.status, result.error?.details);
+    return z.object({ id: uuid }).parse(result);
+  }
+  async createGenerationJob(prompt: string, requestId: string, options?: Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId'>): Promise<GenerationJob> {
+    const parsed = generationRequestSchema.parse({ prompt: prompt.trim(), requestId, ...options });
+    // Preserve the existing text request body and identity across reloads and upgrades.
+    const body = parsed.kind === 'text' ? { prompt: parsed.prompt, requestId: parsed.requestId } : parsed;
+    const fingerprint = canonical(body);
     const key = `${this.epoch}:${body.requestId}`;
     const existing = this.generationRequests.get(key);
-    if (existing && existing.fingerprint !== body.prompt) throw new SceneApiError("IDEMPOTENCY_CONFLICT", 409, null);
+    if (existing && existing.fingerprint !== fingerprint) throw new SceneApiError("IDEMPOTENCY_CONFLICT", 409, null);
     if (existing?.promise) return existing.promise;
     if (this.generationPending) throw new SceneApiError("GENERATION_BUSY", 409, null);
-    const record: PaidRequest<GenerationJob> = { fingerprint: body.prompt };
+    const record: PaidRequest<GenerationJob> = { fingerprint };
     this.generationRequests.set(key, record);
     this.generationPending = true;
     record.promise = (async () => {
