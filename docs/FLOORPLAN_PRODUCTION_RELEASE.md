@@ -1,8 +1,8 @@
 # 图纸重建与云工作台统一发布记录
 
-发布时间：2026-10-03 02:38 UTC（美国中部时间 10 月 2 日）。
+发布时间：2026-10-03 02:46 UTC（美国中部时间 10 月 2 日）。
 正式站：https://scendance.charlestech.org
-发布代码：`a4a3109`，专用分支 `codex/floorplan-safe-release`。未合并或重写 `main` / `dev`。
+发布代码：`0644c75`，专用分支 `codex/floorplan-safe-release`。未合并或重写 `main` / `dev`。
 
 ## 与发布前网站的比较
 
@@ -22,6 +22,8 @@
 ## 验证结果与边界
 
 - 后端：14 文件、147 项通过；前端：122 文件、1,568 项通过。
+- 末轮真实浏览器发现并复现登录页 hydration 文案不一致：会话恢复先于页面初始化。将 AuthProvider 放入同一 Suspense 边界后，开发构建、生产构建、Cloudflare 预览和正式站同一复现全部无错误；另补跑 30 项登录/会话回归全部通过。
+- 正式域名八路由均 HTTP 200，引用资源与最终构建匹配；最终登录页到本地编辑器入口检查页面异常、失败资源均为 0。
 - 后端/前端 TypeScript、三个 Edge 入口 Deno 检查、ESLint、生产构建、`git diff --check` 通过。
 - 新增公共预览回归检查门窗射线穿透、墙体厚度和高度、旋转柱子、离地物件；先复现高度丢失再修复。
 - 生产构建共 156 个文件，扫描 74 个文本资源，未发现已知私密配置或本地测试 API 地址。
@@ -44,8 +46,8 @@
 
 ## 部署与回滚
 
-- 当前生产 Pages：`fa5d18d8-01aa-4471-86d1-427b72f41556`。
-- 相同构建预览：`71a76980.scendance-scene-planner.pages.dev`。
+- 当前生产 Pages：`bbf0a890-c6fb-4822-8b62-e8db7f68c96a`。
+- 相同构建预览：`bdc1a48a.scendance-scene-planner.pages.dev`。
 - 上一生产 Pages：`9ffc3780-58f2-4621-b38a-400511ca71c9`，源代码 `a08f12f`，仍保留。
 - 发布使用 Pages 的生产通道 `--branch main`，这是部署环境标签，不是 Git 合并。
 
@@ -60,5 +62,7 @@ select cron.alter_job(job_id := (select jobid from cron.job where jobname='scene
 网页回退：Cloudflare → Workers & Pages → `scendance-scene-planner` → Deployments → 选择上述旧生产编号 → Rollback to this deployment。操作依据 [Cloudflare Pages 回滚文档](https://developers.cloudflare.com/pages/configuration/rollbacks/)。
 
 **回退网页不回退数据库。** 应继续保留兼容 v2 的 API、新增表和防降级保护；旧网页可能无法打开新 v2 项目，这种情况下保持数据、修复前端，不能强制转成 v1。上线后已有新任务或 v2 写入时，不要直接恢复旧 API 或执行破坏性逆迁移。旧 API 源码和迁移前函数定义仅作为事故分析依据；完整后端回退必须先评估新增数据并准备可兼容的前向修复。
+
+草稿 PR：https://github.com/LiliLIN0324/scendance/pull/10 。发布后的补充文档提交不影响构建。
 
 本地证据位于忽略的 `output/playwright/release/`：测试/构建日志、构建摘要、迁移前后聚合数据、原 Edge 源码、Pages 部署元数据和实际浏览器截图。包含私密管理备份的文件不进 Git。未实际切换回旧生产验证回滚，以免中断服务。
