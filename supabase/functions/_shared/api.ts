@@ -5,6 +5,7 @@ import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, recommendations } from './assets.ts';
 import { generateProposal } from './providers.ts';
+import { readSceneResources } from './scene-resources.ts';
 import { readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
 import type { Backend } from './backend.ts';
 
@@ -145,12 +146,14 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
             throw new ApiError(reservation.state==='reserved'?'AI_IN_PROGRESS':'AI_PREVIOUS_REQUEST_FAILED',409,{requestId:input.requestId});
           }
           try {
-            const proposal=await generateProposal(input,env,attempt=>backend.jobs(actor,'text.reserve_call',{id:reservation.id,attempt}),fetcher);
+            const resources=await readSceneResources(backend,actor,input.scene);
+            const proposal=await generateProposal(input,env,attempt=>backend.jobs(actor,'text.reserve_call',{id:reservation.id,attempt}),fetcher,resources);
             const stored=await backend.scene(actor,'proposals.store',{
               ...input,id:reservation.id,baseHash:await sceneHash(input.scene),candidate:proposal.scene,explanation:proposal.explanation,warnings:proposal.warnings,
             });
-            await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'complete',result:stored,usage:proposal.usage});
-            return respond(stored,201);
+            const result={...stored,modelSuggestions:proposal.modelSuggestions};
+            await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'complete',result,usage:proposal.usage});
+            return respond(result,201);
           } catch(error) {
             await backend.jobs(actor,'requests.finish',{id:reservation.id,state:'failed',result:null,usage:error instanceof ApiError?error.details??{}:{}}).catch(()=>{});
             throw error;
