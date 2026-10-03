@@ -30,8 +30,8 @@ export async function readBounded(response: Response | Request, max: number): Pr
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   return bytes;
 }
-export async function fetchJson(url: string, init: RequestInit, fetcher: Fetcher = fetch, max = 2_000_000): Promise<unknown> {
-  const response = await fetcher(url, { ...init, signal: AbortSignal.timeout(25_000), redirect: 'error' });
+export async function fetchJson(url: string, init: RequestInit, fetcher: Fetcher = fetch, max = 2_000_000, timeoutMs=25_000): Promise<unknown> {
+  const response = await fetcher(url, { ...init, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
   if (!response.ok) { await response.body?.cancel(); throw new ApiError('PROVIDER_HTTP_ERROR', 502, { status: response.status }); }
   try { return JSON.parse(new TextDecoder().decode(await readBounded(response, max))); }
   catch (e) { if (e instanceof ApiError) throw e; throw new ApiError('PROVIDER_INVALID_JSON', 502); }

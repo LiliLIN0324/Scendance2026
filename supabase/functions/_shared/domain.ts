@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { structuralViolations } from './structural-geometry.ts';
 
 export class ApiError extends Error {
   constructor(public code: string, public status = 400, public details?: unknown) {
@@ -35,6 +36,8 @@ export const objectSchema = z.strictObject({
   color: colorSchema,
   locked: z.boolean(),
   notes: z.string().max(500).default(''),
+  elevation: z.number().min(0).max(30).optional(),
+  wallId: uuid.optional(),
 }).superRefine((o, ctx) => {
   if ((o.materialId === 'asset') !== !!o.assetId) ctx.addIssue({ code: 'custom', message: '资产物料必须且只能携带 assetId' });
 });
@@ -63,16 +66,58 @@ export const venueSchema = z.strictObject({
     if (!poly.some((a, i) => onSegment(entrance.position, a, poly[(i + 1) % poly.length]))) ctx.addIssue({ code: 'custom', message: '出入口必须位于场地边界' });
   }
 });
-export const sceneSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  venue: venueSchema,
-  objects: z.array(objectSchema).max(50),
-  camera: z.enum(['overview', 'top', 'customer']),
-  lighting: z.enum(['neutral', 'warm', 'cool']),
-}).superRefine((s, ctx) => {
-  if (new Set(s.objects.map(o => o.id)).size !== s.objects.length) ctx.addIssue({ code: 'custom', message: '实例 ID 不能重复' });
+export const evidenceStatusSchema = z.enum(['detected', 'inferred', 'confirmed']);
+export const sourceSchema = z.strictObject({
+  assetId: uuid, kind: z.enum(['floorplan', 'photo']), name: z.string().min(1).max(120),
+  width: z.number().int().positive().max(4096), height: z.number().int().positive().max(4096),
+});
+export const dimensionSchema = z.strictObject({
+  id: uuid, kind: z.enum(['width', 'depth', 'height', 'wall', 'distance']),
+  valueMeters: z.number().positive().max(400), status: evidenceStatusSchema,
+  targetId: uuid.optional(), targetEndId:uuid.optional(), measure:z.enum(['width','depth','height','length']).optional(), sourceAssetId: uuid.optional(),
+  start: pointSchema.optional(), end: pointSchema.optional(), label: z.string().max(200),
+});
+export const structureSchema = z.strictObject({
+  walls: z.array(z.strictObject({id:uuid,start:pointSchema,end:pointSchema,thickness:z.number().min(0.02).max(2),height:z.number().positive().max(30),kind:z.enum(['exterior','interior']),status:evidenceStatusSchema,evidence:z.array(z.strictObject({sourceAssetId:uuid,start:z.strictObject({x:z.number().min(0).max(1),z:z.number().min(0).max(1)}),end:z.strictObject({x:z.number().min(0).max(1),z:z.number().min(0).max(1)})})).max(12).optional()})).max(128),
+  openings: z.array(z.strictObject({id:uuid,wallId:uuid,kind:z.enum(['door','window']),offset:z.number().min(0).max(400),width:z.number().positive().max(20),height:z.number().positive().max(30),sillHeight:z.number().min(0).max(30),status:evidenceStatusSchema})).max(128),
+  columns: z.array(z.strictObject({id:uuid,position:pointSchema,size:sizeSchema,rotation:z.number().min(-360).max(360),status:evidenceStatusSchema})).max(64),
+}).superRefine((s,ctx)=>{
+  const ids=[...s.walls,...s.openings,...s.columns].map(x=>x.id);
+  if(new Set(ids).size!==ids.length) ctx.addIssue({code:'custom',message:'结构 ID 不能重复'});
+  for(const wall of s.walls) if(Math.hypot(wall.end.x-wall.start.x,wall.end.z-wall.start.z)<0.02) ctx.addIssue({code:'custom',message:'墙段长度必须大于两厘米'});
+  for(const opening of s.openings) {
+    const wall=s.walls.find(w=>w.id===opening.wallId);
+    if(!wall || opening.offset+opening.width>Math.hypot(wall.end.x-wall.start.x,wall.end.z-wall.start.z)+0.001 || opening.sillHeight+opening.height>wall.height+0.001) ctx.addIssue({code:'custom',message:'门窗必须完全位于所属墙内'});
+  }
+});
+export const designSchema=z.strictObject({
+  concept:z.string().max(2000),palette:z.array(colorSchema).max(8),
+  highlights:z.array(z.strictObject({title:z.string().max(120),description:z.string().max(1000),objectIds:z.array(uuid).max(50)})).max(20),
+  requirements:z.array(z.strictObject({text:z.string().max(500),status:z.enum(['satisfied','partial','unmet']),reason:z.string().max(1000),objectIds:z.array(uuid).max(50)})).max(40),
+});
+const sceneCommon={venue:venueSchema,objects:z.array(objectSchema).max(50),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
+export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon});
+export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCommon,structure:structureSchema,sources:z.array(sourceSchema).max(12).default([]),dimensions:z.array(dimensionSchema).max(128).default([]),design:designSchema.optional(),finishes:z.strictObject({floorColor:colorSchema.optional(),floorPattern:z.enum(['solid','wood','tile','carpet','concrete']).optional(),wallColors:z.record(uuid,colorSchema).optional()}).optional()});
+export const sceneSchema=z.discriminatedUnion('schemaVersion',[sceneV1Schema,sceneV2Schema]).superRefine((s,ctx)=>{
+  if(new Set(s.objects.map(o=>o.id)).size!==s.objects.length) ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
+  if(s.schemaVersion===2) {
+    const entityIds=[...s.objects,...s.structure.walls,...s.structure.openings,...s.structure.columns].map(x=>x.id);
+    if(new Set(entityIds).size!==entityIds.length)ctx.addIssue({code:'custom',message:'物件、墙体、门窗和柱子的 ID 不能互相重复'});
+    if(new Set(s.sources.map(x=>x.assetId)).size!==s.sources.length) ctx.addIssue({code:'custom',message:'来源图片不能重复'});
+    if(new Set(s.dimensions.map(x=>x.id)).size!==s.dimensions.length) ctx.addIssue({code:'custom',message:'尺寸 ID 不能重复'});
+    for(const d of s.dimensions){
+      if(d.sourceAssetId&&!s.sources.some(x=>x.assetId===d.sourceAssetId))ctx.addIssue({code:'custom',message:'尺寸来源图片不存在'});
+      if(d.sourceAssetId&&[d.start,d.end].some(p=>p&&(p.x<0||p.x>1||p.z<0||p.z>1)))ctx.addIssue({code:'custom',message:'图片标定点须为0到1的归一化坐标'});
+    }
+    for(const w of s.structure.walls)for(const e of w.evidence??[])if(!s.sources.some(x=>x.assetId===e.sourceAssetId&&x.kind==='floorplan'))ctx.addIssue({code:'custom',message:'墙线证据必须关联平面图来源'});
+    for(const o of s.objects) if(o.wallId && !s.structure.walls.some(w=>w.id===o.wallId)) ctx.addIssue({code:'custom',message:'挂墙物件所属墙不存在'});
+    for(const h of [...(s.design?.highlights??[]),...(s.design?.requirements??[])]) if(h.objectIds.some(id=>!s.objects.some(o=>o.id===id)))ctx.addIssue({code:'custom',message:'设计引用了不存在的物件'});
+  }
 });
 export type Scene = z.infer<typeof sceneSchema>;
+export type SceneV2 = z.infer<typeof sceneV2Schema>;
+export type SourceImage = z.infer<typeof sourceSchema>;
+export type DimensionConstraint = z.infer<typeof dimensionSchema>;
 export type SceneObject = z.infer<typeof objectSchema>;
 export type Point = z.infer<typeof pointSchema>;
 
@@ -101,17 +146,28 @@ export function corners(o: SceneObject): Point[] {
 }
 export function sceneWarnings(scene: Scene) {
   const warnings: { code: string; ids: string[] }[] = [];
+  if (scene.schemaVersion === 2) {
+    // Use the same boundary and wall-mount rules as placement and server saves.
+    for (const id of new Set(structuralViolations(scene).filter(v => v.code === 'OUT_OF_BOUNDS').map(v => v.objectId))) {
+      warnings.push({ code: 'OUT_OF_BOUNDS', ids: [id] });
+    }
+  }
   const v = scene.venue;
   const poly = v.polygon ?? [{ x: 0, z: 0 }, { x: v.width, z: 0 }, { x: v.width, z: v.depth }, { x: 0, z: v.depth }];
   const footprints = scene.objects.map(corners);
   for (const [i, o] of scene.objects.entries()) {
     const p = footprints[i];
-    const samples = p.flatMap((a, j) => { const b = p[(j + 1) % 4]; return [a, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }]; });
-    // Proper intersections also catch narrow concave notches between sampled points.
-    const crossesBoundary = p.some((a, j) => poly.some((b, k) => cross(a, p[(j + 1) % 4], b) * cross(a, p[(j + 1) % 4], poly[(k + 1) % poly.length]) < -1e-8 && cross(b, poly[(k + 1) % poly.length], a) * cross(b, poly[(k + 1) % poly.length], p[(j + 1) % 4]) < -1e-8));
-    if (o.size.height > v.height || samples.some(p => !inside(p, poly)) || crossesBoundary) warnings.push({ code: 'OUT_OF_BOUNDS', ids: [o.id] });
+    if (scene.schemaVersion === 1) {
+      const samples = p.flatMap((a, j) => { const b = p[(j + 1) % 4]; return [a, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }]; });
+      // Proper intersections also catch narrow concave notches between sampled points.
+      const crossesBoundary = p.some((a, j) => poly.some((b, k) => cross(a, p[(j + 1) % 4], b) * cross(a, p[(j + 1) % 4], poly[(k + 1) % poly.length]) < -1e-8 && cross(b, poly[(k + 1) % poly.length], a) * cross(b, poly[(k + 1) % poly.length], p[(j + 1) % 4]) < -1e-8));
+      if ((o.elevation ?? 0) + o.size.height > v.height || samples.some(p => !inside(p, poly)) || crossesBoundary) warnings.push({ code: 'OUT_OF_BOUNDS', ids: [o.id] });
+    }
     for (let j = 0; j < i; j++) {
-      if (o.materialId === 'carpet' || scene.objects[j].materialId === 'carpet') continue;
+      const other = scene.objects[j];
+      if (o.materialId === 'carpet' || other.materialId === 'carpet') continue;
+      const bottom = o.elevation ?? 0, otherBottom = other.elevation ?? 0;
+      if (bottom + o.size.height <= otherBottom + 1e-8 || otherBottom + other.size.height <= bottom + 1e-8) continue;
       const q = footprints[j];
       const axes = [...p, ...q].map((a, k, all) => { const b = all[k < 4 ? (k + 1) % 4 : 4 + (k + 1) % 4]; return { x: -(b.z - a.z), z: b.x - a.x }; });
       const separated = axes.some(axis => {
