@@ -104,9 +104,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .nav-pill a{position:relative;z-index:2;color:#e7ead9;font-size:13px;white-space:nowrap;opacity:.86;transition:opacity var(--sc-nav-hover) ease}
 @media (hover:hover) and (pointer:fine){ .nav-pill a:hover{opacity:1} }
 /* 编号索引：对齐参考站的 About01 / Programs02 / Approach03 / Technology04 */
-.nav-pill a i{font-style:normal;font-size:10px;letter-spacing:.04em;color:#ffffffa6;margin-right:7px}
 .nav-pill a[aria-current="true"]{opacity:1}
-.nav-pill a[aria-current="true"] i{color:var(--sc-accent-mute)}
 
 /* ============================================================
    段落导航：页面照常自由滚动（长页面），导航编号随视口所在段落高亮，
@@ -135,6 +133,16 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .quote blockquote{margin:0;font-size:clamp(18px,1.85vw,34px);line-height:1.42;letter-spacing:-.025em;font-weight:500}
 .quote figcaption b{display:block;font-size:clamp(13px,1vw,16px);font-weight:600}
 .quote figcaption span{font-size:clamp(11px,.85vw,14px);opacity:.82}
+
+/* 关于我们：团队与联系方式 */
+.team{list-style:none; margin:clamp(24px,4vh,44px) 0 0; padding:0; display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); gap:14px}
+.team li{display:flex; flex-direction:column; gap:7px; padding:16px 18px;
+  border:1px solid var(--sc-line); border-radius:10px; background:#ffffffbd}
+.team b{font-size:15px; font-weight:600; letter-spacing:.02em}
+.team a{color:var(--sc-accent-ink); text-decoration:none; align-self:flex-start;
+  border-bottom:1px solid #0000001f; padding-bottom:1px; word-break:break-all}
+.team a:hover{color:var(--sc-accent); border-bottom-color:currentColor}
 
 /* 深色页脚：照参考站收尾那一段 */
 .site-foot{margin-inline:calc(50% - 50vw);width:100vw;margin-top:clamp(40px,7vh,90px);background:#1a1e15;color:#fff;padding:clamp(40px,7vh,80px) clamp(20px,4.5%,64px) 28px}
@@ -226,16 +234,24 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .hero{
   position:relative; overflow:hidden; color:#fff; min-height:min(100svh,940px); max-height:min(104svh,1060px);
   display:flex; flex-direction:column;
-  /* 首屏背景 = 场地渲染图。三层从下往上：
-     ① 深绿渐变：只做兜底底色（图还没放进来时不会变成白块）；
-     ② 场地图：铺满并裁切；
-     ③ 左侧压暗遮罩：文字压在图上要读得清，从左到右渐隐，右侧留给图。
-     换图只需替掉 assets/scenes/hero-court.png。 */
-  background:
-    linear-gradient(100deg,#1a1e15eb 0%,#1a1e15bd 40%,#1a1e1538 70%,#1a1e1500 100%),
-    url(./assets/scenes/hero-court.png) center/cover no-repeat,
-    linear-gradient(160deg,#333b2a 0%,#262c1f 58%,#1a1e15 100%);
+  /* 首屏底色只留深绿兜底渐变；场景图与左侧压暗遮罩各自独立成层
+     （.hero-bg / .hero-mask），这样才能做背景图轮播。 */
+  background:linear-gradient(160deg,#333b2a 0%,#262c1f 58%,#1a1e15 100%);
 }
+/* 首屏背景轮播：每张场景图一层，靠 opacity 交叉淡入淡出。
+   层与数据都由页面末尾的 module 按 SCENES[].image 生成（见「首屏：背景轮播 + 浮动方案卡」）。 */
+.hero-bg{position:absolute;inset:0;z-index:0}
+.hero-shot{position:absolute;inset:0;background-position:center;background-size:cover;background-repeat:no-repeat;opacity:0;transition:opacity 1.2s var(--sc-ease)}
+.hero-shot.is-on{opacity:1}
+/* 左侧压暗遮罩：文字压在图上要读得清，从左到右渐隐，右侧留给图 */
+.hero-mask{position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(100deg,#1a1e15eb 0%,#1a1e15bd 40%,#1a1e1538 70%,#1a1e1500 100%)}
+.hero-shot-name{position:absolute;z-index:3;right:clamp(16px,4.5%,72px);bottom:clamp(18px,4vh,42px);margin:0;
+  display:flex;align-items:center;gap:9px;padding:7px 15px;border-radius:999px;font-size:12px;
+  background:#10160ead;border:1px solid #ffffff26;color:#e7ead9;letter-spacing:.06em;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.hero-shot-name::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--sc-accent-mute);flex:none}
+.is-reduced .hero-shot{transition:none}
 .hero-veil{
   position:absolute; inset:0; pointer-events:none; z-index:1;
   /* 底部淡出已按要求移除：这里是**唯一**定义 hero-veil 背景的地方，
@@ -276,9 +292,10 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .hero-meta{
   grid-column:1 / -1; margin:clamp(24px,3.4vh,40px) 0 0; padding-top:16px;
   border-top:1px solid #ffffff24;
-  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  display:flex; align-items:center; gap:clamp(9px,1.1vw,16px); flex-wrap:wrap;
   font-size:12px; color:#c6ccb8;
 }
+.hero-meta span{white-space:nowrap}   /* 一条标签不要被拆到两行 */
 .hero-meta i{width:4px;height:4px;border-radius:50%;background:#66705c;display:block;flex:none}
 .hero-meta a{color:#c6ccb8;border-bottom:1px solid #ffffff3d;padding-bottom:2px}
 
@@ -299,21 +316,25 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   right:clamp(16px,4.5%,72px); top:clamp(104px,17%,212px);
   width:clamp(236px,19vw,300px);
   padding:14px 16px 12px; border-radius:6px;
-  background:#1f2a20d9; border:1px solid #ffffff26; color:#fff;
-  box-shadow:0 18px 44px #10160e4d;
-  backdrop-filter:blur(12px) saturate(140%); -webkit-backdrop-filter:blur(12px) saturate(140%);
+  /* 玻璃感：底色压得很淡，靠 backdrop blur + 顶部高光撑出「一块玻璃」的层次；
+     文字保持不透明，不然会糊在背景图上读不出来 */
+  background:#1f2a2061; border:1px solid #ffffff2e; color:#fff;
+  box-shadow:0 18px 44px #10160e33, inset 0 1px 0 #ffffff24;
+  backdrop-filter:blur(20px) saturate(150%); -webkit-backdrop-filter:blur(20px) saturate(150%);
 }
 .stage-card .sc-head{display:flex; align-items:center; gap:8px; margin:0; color:#cfd8c4}
+.stage-card .sc-close{margin-left:auto; flex:none; width:20px; height:20px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:13px; line-height:1; cursor:pointer;
+  color:#cfd8c4; background:#ffffff14; border:1px solid #ffffff1f}
+.stage-card .sc-close:hover{color:#fff; background:#ffffff2b}
 .stage-card .sc-head i{width:6px; height:6px; border-radius:50%; background:var(--sc-accent-mute); display:block; flex:none}
 .stage-card .sc-title{margin:8px 0 0; font-weight:600; letter-spacing:-.02em; line-height:1.25}
-.stage-card .sc-rows{margin:14px 0 0; display:grid; gap:6px}
-.stage-card .sc-rows>div{display:flex; justify-content:space-between; gap:12px; align-items:baseline}
-.stage-card .sc-rows dt{color:#a9b49c; margin:0}
-.stage-card .sc-rows dd{margin:0; font-variant-numeric:tabular-nums}
-.stage-card .sc-foot{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding-top:12px; border-top:1px solid #ffffff1f}
-.stage-card .sc-thumb{display:block; width:58px; height:34px; border-radius:3px; border:1px solid #ffffff1f;
-  background:#2f3d2c url(./assets/scenes/house.png) center/cover}
-.stage-card .sc-badge{padding:3px 10px; border-radius:999px; background:#ffffff1a; border:1px solid #ffffff26; letter-spacing:.06em}
+/* 数据与场景库面板里的 .nv-stats 同源同排版：粗体数值 + 小单位，下面一行浅色说明 */
+.stage-card .sc-stats{display:flex; gap:22px; margin:14px 0 0; padding-top:12px; border-top:1px solid #ffffff1f}
+.stage-card .sc-stats>div{display:flex; flex-direction:column; gap:3px; min-width:0}
+.stage-card .sc-stats strong{font-size:17px; font-weight:600; line-height:1.1; letter-spacing:-.02em}
+.stage-card .sc-stats strong small{font-size:10px; font-weight:400; color:#cfd8c4}
+.stage-card .sc-stats span{font-size:10px; letter-spacing:.02em; color:#a9b49c}
 @media (max-width:900px){.stage-card{display:none}}
 #venue{display:block;width:100%;height:100%}
 .loading{
@@ -620,14 +641,14 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 .process-cta .pc-top,.phase-description,.zone-description,.zone-note,.note-block p,
 .offers-line,.hero-meta,.map-toolbar,.map-footer,.view-tabs button,.asset-strip,
 .phase-actions li,.milestones button,.map-label,.asset-indicator,
-.pill,.pill span,.play-button,.cta,.cta span,.step-d,.stage-card .sc-rows dd{font-size:var(--fs-body)!important}
+.pill,.pill span,.play-button,.cta,.cta span,.step-d{font-size:var(--fs-body)!important}
 /* 8 标签 / 序号 / 备注 */
 .tag,.section-label,.eyebrow,.hero-copy .eyebrow,.offers-no,.offers-cells dt,.foot-col h3,
-.foot-note,.foot-brand small,.nav-pill a i,.step>span,.quote figcaption b,.quote figcaption span,
+.foot-note,.foot-brand small,.step>span,.quote figcaption b,.quote figcaption span,
 .band.blank p b,.dialog-top,.zone-legend button,.time-ticks span,.loading,
 .phase-focus span,.timeline-panel .section-label,
 .stat-bar span,.milestones button span,.phase-focus strong,.brand small,.text-button,
-.stage-card .sc-head,.stage-card .sc-rows dt,.stage-card .sc-badge{font-size:var(--fs-meta)!important}
+.stage-card .sc-head{font-size:var(--fs-meta)!important}
 /* 品牌字 */
 .brand,.foot-brand{font-size:var(--fs-brand)!important}
 
@@ -768,6 +789,15 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 <body>
 
 <header class="hero" id="hero">
+  <!-- 首屏背景轮播：每张场景图一层，交叉淡入淡出（层与名称表都在轮播脚本里）。
+       这里只留第 0 层，保证无 JS 时也有图、首屏也能立刻出图；其余层等脚本按需补。
+       文案区在左、浮动卡在右上，所以场景名放右下角。 -->
+  <div class="hero-bg" aria-hidden="true">
+    <div class="hero-shot is-on" style="background-image:url('./assets/scenes/01体育馆.png')"></div>
+  </div>
+  <div class="hero-mask" aria-hidden="true"></div>
+  <p class="hero-shot-name" id="hero-shot-name">体育馆</p>
+
   <!-- 顶部：左 logo / 居中玻璃胶囊 / 右侧双胶囊按钮（对齐参考站顶部结构） -->
   <div class="site-nav">
     <a class="brand" href="#hero">
@@ -775,8 +805,9 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
       <span>幕景 <small>SCENDANCE</small></span>
     </a>
     <nav class="nav-pill" id="nav" aria-label="页面导航">
-      <a href="#library" data-view-link="library"><i>01</i>三维场景</a>
-      <a href="#process" data-view-link="process"><i>02</i>流程</a>
+      <a href="#library" data-view-link="library">三维场景</a>
+      <a href="#process" data-view-link="process">流程</a>
+      <a href="#about" data-view-link="about">关于我们</a>
     </nav>
     <div class="nav-actions">
       <a class="pill pill-dark" href="#library">
@@ -800,12 +831,9 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 
   <div class="hero-body">
     <div class="hero-copy">
-      <p class="eyebrow rv">三维场景协作 Web 应用</p>
+      <p class="eyebrow rv">三维场景协作 · AI 驱动的活动空间设计</p>
       <h1 class="display rv">为相聚，<br>留一方空间。</h1>
-      <p class="sub rv">
-        一场活动从想法到现场，都在同一个三维空间里成形 ——
-        AI 出草稿，团队调整，客户确认。
-      </p>
+      <p class="sub rv">从一个想法，到一场真实活动。</p>
       <div class="hero-cta rv">
         <a class="cta-btn" href="#library">
           <span>开始体验</span>
@@ -814,16 +842,9 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
             <span class="arw arw-2"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5"/></svg></span>
           </span>
         </a>
-        <a class="pill pill-dark" href="#library">
-          <span>查看模型</span>
-          <span class="cta-arrows" aria-hidden="true">
-            <span class="arw arw-1"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
-            <span class="arw arw-2"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
-          </span>
-        </a>
       </div>
       <div class="hero-meta rv">
-        <span>AI 初稿</span><i></i><span>多人轮流编辑</span><i></i><span>客户只读链接</span><i></i><span>单物件三维生成</span>
+        <span>AI 3D生成</span><i></i><span>多人协作</span><i></i><span>在线确认</span><i></i><span>实时呈现</span>
       </div>
     </div>
 
@@ -833,14 +854,12 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
        会变成一块亮矩形，和卡片互相打架，所以整个窗口去掉了。
        实时三维演示请见下方「场景库」段落。 -->
   <div class="stage-card">
-    <p class="sc-head"><i aria-hidden="true"></i>活动场景 · 方案预览</p>
-    <p class="sc-title">高校迎新嘉年华</p>
-    <dl class="sc-rows">
-      <div><dt>容量</dt><dd>800 人</dd></div>
-      <div><dt>场地</dt><dd>58 × 34 m</dd></div>
-      <div><dt>方案版本</dt><dd>v2.1</dd></div>
-    </dl>
-    <div class="sc-foot"><span class="sc-thumb" aria-hidden="true"></span><span class="sc-badge">3D</span></div>
+    <p class="sc-head"><i aria-hidden="true"></i>活动场景 · 方案预览<button class="sc-close" type="button" aria-label="关闭方案预览">×</button></p>
+    <p class="sc-title">48 小时，<br>一座体育馆。</p>
+    <div class="sc-stats">
+      <div><strong>25<small> 团队</small></strong><span>共 100 位参与者</span></div>
+      <div><strong>概念</strong><span>照片建模 · 非实测</span></div>
+    </div>
   </div>
 </header>
 
@@ -848,7 +867,7 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 
   <!-- 首屏之后：一页白 -->
   <section class="band blank" id="blank">
-    <p class="rv">把现场放进屏幕里，<br>再决定它长什么样。<b>先想清楚，再做出来</b></p>
+    <p class="rv">一个空间，不止一种可能。<b>先看见，再决定。</b></p>
   </section>
 
   <!-- 介绍段：按需求隐藏（内容保留，去掉 hidden 即可恢复） -->
@@ -927,6 +946,19 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
     </div>
   </section>
 
+  <!-- 关于我们：团队与联系方式（放在页面前最后一段，就是「最下面」） -->
+  <section class="band" id="about" data-view="about">
+    <span class="tag">About us</span>
+    <h2 class="rv">四个人，把活动现场搬进屏幕。</h2>
+    <p class="lede rv">从场地照片到能继续编辑的三维方案，产品、前后端与三维渲染都在同一个仓库里迭代。想法、需求或你手上的真实场地，欢迎直接写信给我们。</p>
+    <ul class="team rv">
+      <li><b>林丽丽</b><a href="mailto:lily1326685527@gmail.com">lily1326685527@gmail.com</a></li>
+      <li><b>叶雯雯</b><a href="mailto:yebetterlaw@163.com">yebetterlaw@163.com</a></li>
+      <li><b>蔡泽焱</b><a href="mailto:hermit2022@163.com">hermit2022@163.com</a></li>
+      <li><b>雷硕</b><a href="mailto:2157939146@qq.com">2157939146@qq.com</a></li>
+    </ul>
+  </section>
+
   <footer class="site-foot">
     <div class="foot-inner">
       <div class="foot-col">
@@ -940,18 +972,18 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
         <a href="#quotes">客户评价</a>
         <a href="#assets-open">模型与来源</a>
       </div>
+      <div class="foot-col">
+        <h3>关于</h3>
+        <a href="#about">关于我们</a>
+        <a href="mailto:lily1326685527@gmail.com">联系我们</a>
+      </div>
     </div>
     <p class="foot-note">幕景 Scendance · 面向小型活动策划执行工作室的三维场景协作　|　模型采用示意比例，动线动画用于讲解活动组织。　|　© 2026 幕景 Scendance</p>
   </footer>
 </div>
 
-<!-- 两个弹窗与 toast：现有 index.html 的 #photo-dialog / #assets-dialog / #toast 一并保留 -->
-<dialog id="photo-dialog">
-  <div class="dialog-top"><strong>场地原照</strong><button id="close-photo" class="text-button">关闭 ×</button></div>
-  <img src="./assets/venue.jpg" alt="参考场地照片：绿色球场、两侧看台、大跨度钢架屋顶与后侧窗户">
-  <p>照片用于判断空间形态，不能据此确定实际面积、设施容量或全部出入口。</p>
-</dialog>
-
+<!-- 弹窗与 toast：现有 index.html 的 #assets-dialog / #toast 一并保留。
+     原来的 #photo-dialog（场地原照）已经没有入口，图片素材也撤离了，所以整个删掉。 -->
 <dialog id="assets-dialog">
   <div class="dialog-top"><strong>模型与来源</strong><button id="close-assets" class="text-button">关闭 ×</button></div>
   <p class="lede" style="margin:0 0 14px">五款源模型共 262,516 字节，来自 3DAssets.dev，按用途缓存到 <code>assets/models/</code>。</p>
@@ -1083,6 +1115,9 @@ function navAutoHide() {
   apply();
 }
 
+/* ---- 4c. 首屏背景轮播 + 浮动方案卡 ----
+   两者都要跟下面的场景库共用 SCENES 数据，所以实现放在页面末尾的 module 里。 */
+
 /* ---- 5. Glass Move：指针跟随，lerp smoothing 88 ----
    状态放在函数外，避免中途重入时把插值进度归零；监听只注册一次。 ---- */
 const glassState = { tx: .5, ty: .5, cx: .5, cy: .5, running: false };
@@ -1164,7 +1199,6 @@ function exportPlan() {
 
 function dialogs() {
   const open = (id) => $id(id).showModal();
-  $id('close-photo').addEventListener('click', () => $id('photo-dialog').close());
   $id('close-assets').addEventListener('click', () => $id('assets-dialog').close());
   document.querySelectorAll('a[href="#assets-open"]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); open('assets-dialog'); }));
   document.querySelectorAll('a[href="#export-plan"]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); exportPlan(); }));
@@ -1475,6 +1509,7 @@ const SCENES = [
     intro: '场馆壳体、看台与舞台的概念快照，配 25 组团队桌与参与者示意。',
     stats: [['25', ' 团队', '共 100 位参与者'], ['概念', '', '照片建模 · 非实测']],
     glb: './gym/gym.glb',
+    image: '01体育馆.png',
     mood: 'light',
     enclosure: 'Gym_Roof',
     guests: { group: 'Gym_People', min: 0, max: 100, value: 100, note: '参与者示意' },
@@ -1503,6 +1538,7 @@ const SCENES = [
     intro: '从被看见，到愿意停留。围绕一座香氛岛，让展示、体验与交流自然发生。',
     stats: [['96', ' m²', '12 × 8 米'], ['24', ' 人', '来访者 · 另有 2 位店员']],
     glb: './popup/popup.glb',
+    image: '02青序.png',
     mood: 'popup',
     defaultPhase: 1,
     lights: 'Popup_LightingRig',
@@ -1530,6 +1566,7 @@ const SCENES = [
     intro: '弧形无影墙留出干净画面，灯具围绕拍摄区展开。化妆、修图与器材各有位置。',
     stats: [['120', ' m²', '12 × 10 米'], ['4.3', ' m', '概念层高']],
     glb: './studio/studio.glb',
+    image: '03拍摄.png',
     mood: 'studio',
     enclosure: 'Studio_Roof',
     people: { min: 0, max: 6, value: 6, note: '共用访客角色', spots: [
@@ -1558,6 +1595,7 @@ const SCENES = [
     intro: '胡桃木的深色，黄铜的微光。在吧台与卡座之间，留一段适合慢慢坐下的距离。',
     stats: [['108', ' m²', '12 × 9 米'], ['3.4', ' m', '概念层高']],
     glb: './bar/bar.glb',
+    image: '04L型吧台.png',
     // 酒吧的夜间琥珀是它自己的样子，保留下来，只在打烊时压暗。
     mood: 'amber',
     defaultPhase: 1,
@@ -1585,6 +1623,7 @@ const SCENES = [
     intro: '浅木、暖白和窗边绿意。咖啡操作、等候取餐与坐下来喝一杯，都各有位置。',
     stats: [['108', ' m²', '12 × 9 米'], ['3.25', ' m', '概念层高']],
     glb: './cafe/cafe.glb',
+    image: '05慢调咖啡.png',
     mood: 'cafe',
     enclosure: 'Cafe_Roof',
     people: { min: 0, max: 8, value: 8, note: '共用访客角色', spots: [
@@ -1610,6 +1649,7 @@ const SCENES = [
     intro: '一场报告，一次提问，一段茶歇间的对话。以清晰的动线，为学术交流留出空间。',
     stats: [['432', ' m²', '24 × 18 米'], ['100', ' 人', '含 4 位嘉宾 · 另 4 位工作人员']],
     glb: './conference/conference.glb',
+    image: '06共知.png',
     mood: 'conference',
     defaultPhase: 2,
     enclosure: 'Conference_Roof',
@@ -1638,6 +1678,7 @@ const SCENES = [
     intro: '树荫下的交流，草坪上的分享。一条木步道连接舞台、作品和人与人之间的相遇。',
     stats: [['560', ' m²', '28 × 20 米'], ['60', ' 人', '来访者 · 另有 4 位工作人员']],
     glb: './lawn/lawn.glb',
+    image: '07旷野有约.png',
     mood: 'lawn',
     defaultPhase: 2,
     enclosure: 'Lawn_Canopies',
@@ -1667,6 +1708,7 @@ const SCENES = [
     intro: '沿着小摊慢慢走，在树下坐一会儿。把一个寻常周末，过成邻里相遇的节日。',
     stats: [['660', ' m²', '30 × 22 米概念场地'], ['12', ' 摊', '手作、花植与轻食']],
     glb: './market/market.glb',
+    image: '08好物.png',
     mood: 'marketOpen',
     defaultPhase: 1,
     enclosure: 'Market_Canopies',
@@ -1702,6 +1744,7 @@ const SCENES = [
     intro: '在色彩、体量与光之间，给观看留出一点时间。让想象，自由停留。',
     stats: [['280', ' m²', '20 × 14 米 · 概念展区'], ['3', ' 人', '参观者 · 另有 1 位工作人员']],
     glb: './museum/museum.glb',
+    image: '09一座当代艺术展厅.png',
     mood: 'museum',
     defaultPhase: 1,
     enclosure: 'Museum_Architecture',
@@ -1733,6 +1776,7 @@ const SCENES = [
     intro: '把专注与讨论放在合适的位置。以浅木、织物和自然光，连接日常工作里的不同节奏。',
     stats: [['140', ' m²', '14 × 10 米 · 概念场地'], ['4', ' 区', '工位 · 会议 · 交流 · 收纳']],
     glb: './office/office.glb',
+    image: '10办公室.png',
     mood: 'office',
     enclosure: 'Office_Roof',
     enclosureLabel: '顶部结构',
@@ -2407,6 +2451,110 @@ const syncAutoplay = () => {
 addEventListener('scroll', syncAutoplay, { passive: true });
 addEventListener('resize', syncAutoplay);
 syncAutoplay();
+
+/* ---- 首屏：背景轮播 + 浮动方案卡 ----
+   和上面的轨道、下面的场景库共用 SCENES 一份数据，所以卡片标题与两条数据与场景库逐字一致
+   （数据在 <script> 顶部的「SCENES[].image / title / stats」里）。
+   第 0 层写在 HTML 的 style 里（无 JS 也能看到、首屏立刻出图），其余层这里补；
+   每张图等到快轮到它时才设 background-image，避免首屏一次拉十张大图。
+   和场景库的自动切换同一套口径：首屏还在视口里才走，开了「减少动态效果」不走。 */
+const HERO_BASE = './assets/scenes/';
+const HERO_HOLD = 6000;      /* 每张停留时长 */
+const HERO_FADE = 1300;      /* 略大于 CSS 的 1.2s 淡入，等淡完再撤掉下面那层 */
+
+const heroShots = SCENES.filter((scene) => scene.image);
+const heroBg = document.querySelector('.hero-bg');
+const heroLabel = document.getElementById('hero-shot-name');
+const heroCard = document.querySelector('.stage-card');
+
+if (heroBg && heroLabel && heroShots.length > 1) {
+  /* 右下角的名字取文件名去掉序号的部分，跟 assets/scenes/ 的命名一致 */
+  const shotName = (scene) => scene.image.replace(/^\d+/, '').replace(/\.[^.]+$/, '');
+  const layers = heroShots.map((scene, i) => {
+    let node = heroBg.children[i];
+    if (!node) {
+      node = element('div', 'hero-shot');
+      heroBg.appendChild(node);
+    }
+    return node;
+  });
+  const cardTitle = heroCard && heroCard.querySelector('.sc-title');
+  const cardStats = heroCard && heroCard.querySelector('.sc-stats');
+
+  const paintCard = (scene) => {
+    if (!cardTitle || !cardStats) return;
+    cardTitle.textContent = '';
+    scene.title.split('\n').forEach((line, i) => {
+      if (i) cardTitle.append(element('br'));
+      cardTitle.append(line);
+    });
+    cardStats.textContent = '';
+    for (const [value, unit, note] of scene.stats) {
+      const row = element('div');
+      const strong = element('strong', null, value);
+      if (unit) strong.append(element('small', null, unit));
+      row.append(strong, element('span', null, note));
+      cardStats.append(row);
+    }
+  };
+
+  let heroAt = 0;
+  let heroTimer = null;
+  let heroInView = true;
+
+  /* 设上 background-image 就会开始下载；默认留到快轮到时再设 */
+  const loadShot = (i) => {
+    if (!layers[i].style.backgroundImage) layers[i].style.backgroundImage = `url("${HERO_BASE}${heroShots[i].image}")`;
+  };
+
+  const showShot = (i) => {
+    const next = layers[i];
+    const prev = layers[heroAt];
+    heroAt = i;
+    heroLabel.textContent = shotName(heroShots[i]);
+    paintCard(heroShots[i]);
+    loadShot(i);                       /* 兜底：万一还没设上，至少现在开始下 */
+    if (next === prev) return;
+    /* 新的压在上面、旧的按在下面：两层 z-index 明确分开，否则轮回到第 0 张时
+       DOM 靠后的旧层会盖住正在淡入的新层 */
+    next.style.zIndex = '2';
+    prev.style.zIndex = '1';
+    next.classList.add('is-on');
+    /* 旧的先留在下面不透明，等淡入完再撤，否则淡入过程中会透出底色；
+       只有它已经不是当前那张时才撤（防止转一圈又轮到它的时候被撤掉） */
+    setTimeout(() => {
+      if (prev !== layers[heroAt]) { prev.classList.remove('is-on'); prev.style.zIndex = ''; }
+    }, HERO_FADE);
+  };
+
+  const armShots = () => {
+    clearTimeout(heroTimer);
+    heroTimer = null;
+    if (!heroInView) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    loadShot((heroAt + 1) % heroShots.length);   /* 停留的这几秒里先把下一张拉进来 */
+    heroTimer = setTimeout(() => {
+      showShot((heroAt + 1) % heroShots.length);
+      armShots();
+    }, HERO_HOLD);
+  };
+
+  const heroSection = document.getElementById('hero');
+  addEventListener('scroll', () => {
+    /* 首屏滚出去了就停，别在看不见的地方翻图 */
+    heroInView = heroSection.getBoundingClientRect().bottom > 0;
+    armShots();
+  }, { passive: true });
+  addEventListener('resize', armShots);
+  paintCard(heroShots[0]);
+  armShots();
+}
+
+/* 浮动方案卡可以关掉：它是占位内容，不该一直挡住背景渲染图 */
+if (heroCard) {
+  const heroClose = heroCard.querySelector('.sc-close');
+  if (heroClose) heroClose.addEventListener('click', () => { heroCard.hidden = true; });
+}
 </script>
 </body>
 </html>
