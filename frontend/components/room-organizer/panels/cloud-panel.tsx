@@ -45,7 +45,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   let conversionError = '';
   try { fingerprint = JSON.stringify(layoutToBackendScene(layout)); }
   catch (error) { conversionError = error instanceof Error ? error.message : '当前场景暂不能保存到云端。'; }
-  const bound = !!cloud.project && boundLayout === layout.id && boundLayout === cloud.project.id;
+  const bound = !!cloud.project && layout.id === cloud.project.id && (boundLayout === layout.id ||
+    (!cloud.writeBlocked && cloud.lease?.projectId === layout.id && cloud.lease.sessionId === cloud.sessionId && Date.parse(cloud.lease.expiresAt) > Date.now()));
   const dirty = bound ? cloud.dirty : fingerprint !== savedFingerprint;
 
   const userId = cloud.user?.id;
@@ -168,8 +169,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   }
 
   const filteredProjects = studioProjects.filter(project => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const saveStatus = layout.scenePreset ? '预设 · 本地保存' : !cloud.user || !bound ? '本地草稿' : cloud.writeBlocked ? '云项目 · 只读' : dirty ? '有改动待保存' : '云端已保存';
-  const accountName = cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : '本地体验');
+  const saveStatus = !cloud.user || !bound ? '本地草稿' : cloud.writeBlocked ? '云项目 · 只读' : dirty ? '有改动待保存' : '云端已保存';
+  const accountName = cloud.user?.is_anonymous ? '访客' : cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : '本地体验');
 
   return <>
     <button className="sc-cloud-trigger" type="button" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
@@ -178,7 +179,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={21}/></button></div>
-      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" onClick={() => dialog.current?.close()}>前往登录</Link>}</div>
+      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" onClick={() => dialog.current?.close()}>前往登录</Link>}</div>
       <nav className="sc-account-nav" aria-label="账户导航">{[
         ['projects', '我的项目'], ['team', '团队演示'], ['permissions', '权限演示'], ['assets', '素材库'], ['publication', '发布管理'],
       ].map(([id, label]) => <button type="button" key={id} aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}</nav>

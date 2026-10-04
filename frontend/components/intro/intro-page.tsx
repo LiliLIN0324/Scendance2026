@@ -104,6 +104,7 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [guestBusy, setGuestBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -137,6 +138,19 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
     } finally {
       setPassword('');
       setBusy(false);
+    }
+  }
+
+  async function enterAsGuest(): Promise<void> {
+    if (busy || !ready || !cloud.configured) return;
+    setBusy(true); setGuestBusy(true); setError(null); setNotice('');
+    try {
+      await controller.signInAsGuest();
+      onAuthenticated();
+    } catch {
+      setError('暂时无法创建访客会话，请稍后重试。');
+    } finally {
+      setBusy(false); setGuestBusy(false);
     }
   }
 
@@ -178,7 +192,7 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
           {cloud.user ? (
             <div className="sc-intro-signed-in">
               <p className="sc-intro-account-caption">当前已登录</p>
-              <p className="sc-intro-account">{cloud.user.email ?? '工作室账号'}</p>
+              <p className="sc-intro-account">{cloud.user.is_anonymous ? '访客' : cloud.user.email ?? '工作室账号'}</p>
               <button className="sc-intro-primary" type="button" onClick={onAuthenticated}>进入工作台<ArrowRight size={18} aria-hidden="true" /></button>
             </div>
           ) : (
@@ -214,11 +228,12 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
               {notice && <p className="sc-intro-notice" role="status">{notice}</p>}
               {!cloud.configured && <p className="sc-intro-offline" role="status">登录服务尚未配置，暂时只能本地体验。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
-              <button className="sc-intro-secondary" type="button" onClick={onEnter} disabled={busy}>先体验本地工作台<ArrowRight size={17} aria-hidden="true" /></button>
-              <p className="sc-intro-local-note" />
+              <button className="sc-intro-secondary" type="button" onClick={() => { void enterAsGuest(); }} disabled={busy || !ready || !cloud.configured}>{guestBusy ? '正在进入…' : '访客进入'}<ArrowRight size={17} aria-hidden="true" /></button>
+              <p className="sc-intro-local-note">无需注册，享有普通用户功能。访客身份保留在此浏览器，退出或清除浏览器数据后失效。</p>
+              <div className="sc-intro-auth-links"><button type="button" onClick={onEnter} disabled={busy}>先体验本地工作台</button></div>
             </>
           )}
-          <div className="sc-intro-login-footer"><LockKeyhole size={14} aria-hidden="true" /><span>云项目使用工作室账号登录</span></div>
+          <div className="sc-intro-login-footer"><LockKeyhole size={14} aria-hidden="true" /><span>每位用户拥有独立身份与私有项目</span></div>
         </section>
       </div>
 

@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { structuralViolations } from './structural-geometry.ts';
+import presetManifest from './preset-manifest.json' with { type: 'json' };
+
+export const presetKeys = ['gym', 'popup', 'bar', 'cafe', 'conference', 'lawn', 'market', 'museum', 'office', 'studio'] as const;
+export { presetManifest };
 
 export class ApiError extends Error {
   constructor(public code: string, public status = 400, public details?: unknown) {
@@ -30,16 +34,19 @@ export const objectSchema = z.strictObject({
   id: uuid,
   materialId: z.enum([...materialIds, 'asset']),
   assetId: uuid.optional(),
+  presetNode: z.number().int().nonnegative().max(499).optional(),
   position: pointSchema,
   rotation: z.number().min(-360).max(360),
   size: sizeSchema,
   color: colorSchema,
   locked: z.boolean(),
   notes: z.string().max(500).default(''),
-  elevation: z.number().min(0).max(30).optional(),
+  elevation: z.number().min(-100).max(30).optional(),
   wallId: uuid.optional(),
 }).superRefine((o, ctx) => {
-  if ((o.materialId === 'asset') !== !!o.assetId) ctx.addIssue({ code: 'custom', message: '资产物料必须且只能携带 assetId' });
+  const references = Number(!!o.assetId) + Number(o.presetNode !== undefined);
+  if (references !== (o.materialId === 'asset' ? 1 : 0)) ctx.addIssue({ code: 'custom', message: '资产物料必须且只能携带一个 assetId 或已知预设节点' });
+  if ((o.elevation ?? 0) < 0 && o.presetNode === undefined) ctx.addIssue({ code: 'custom', message: '普通物件高度不能低于地面' });
 });
 export const venueSchema = z.strictObject({
   ...sizeSchema.shape,
@@ -95,10 +102,12 @@ export const designSchema=z.strictObject({
   highlights:z.array(z.strictObject({title:z.string().max(120),description:z.string().max(1000),objectIds:z.array(uuid).max(50)})).max(20),
   requirements:z.array(z.strictObject({text:z.string().max(500),status:z.enum(['satisfied','partial','unmet']),reason:z.string().max(1000),objectIds:z.array(uuid).max(50)})).max(40),
 });
-const sceneCommon={venue:venueSchema,objects:z.array(objectSchema).max(50),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
+const sceneCommon={venue:venueSchema,objects:z.array(objectSchema).max(500),scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
 export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon});
 export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCommon,structure:structureSchema,sources:z.array(sourceSchema).max(12).default([]),dimensions:z.array(dimensionSchema).max(128).default([]),design:designSchema.optional(),finishes:z.strictObject({floorColor:colorSchema.optional(),floorPattern:z.enum(['solid','wood','tile','carpet','concrete']).optional(),wallColors:z.record(uuid,colorSchema).optional()}).optional()});
 export const sceneSchema=z.discriminatedUnion('schemaVersion',[sceneV1Schema,sceneV2Schema]).superRefine((s,ctx)=>{
+  if (!s.scenePreset && s.objects.length > 50) ctx.addIssue({code:'custom',message:'普通场景最多50件物件'});
+  for (const o of s.objects) if (o.presetNode !== undefined && (!s.scenePreset || !presetManifest[s.scenePreset][o.presetNode])) ctx.addIssue({code:'custom',message:'预设节点不存在'});
   if(new Set(s.objects.map(o=>o.id)).size!==s.objects.length) ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
   if(s.schemaVersion===2) {
     const entityIds=[...s.objects,...s.structure.walls,...s.structure.openings,...s.structure.columns].map(x=>x.id);

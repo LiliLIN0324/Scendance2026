@@ -13,6 +13,9 @@ import type { RoomLayout } from './types';
 import type { BackendSession } from '@/lib/backend-session';
 
 function deliveryScene(layout: RoomLayout) {
+  if (layout.scenePreset || layout.floors.some(floor => floor.items.some(item => item.glbNode))) {
+    throw new Error('完整场景预设暂不支持交付导出，固定场馆结构和物件会保留在云方案中。');
+  }
   if(layout.entrance)throw new Error('当前交付不支持本地建筑入口扩展，请保留原始方案。');
   return layoutToBackendScene(layout);
 }

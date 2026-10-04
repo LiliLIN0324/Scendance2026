@@ -1,0 +1,17 @@
+{
+  "anonymous_session": true,
+  "private_studio": true,
+  "project_id": "1b2ed7af-0590-4622-8976-ffac749814db",
+  "run_id": "854ae4de-f227-4774-954c-5cae3c1dcb7c",
+  "state": "complete",
+  "calls": 4,
+  "original_objects_unchanged": 307,
+  "preview_objects": 308,
+  "added_size": {
+    "depth": 0.8,
+    "width": 1.6,
+    "height": 0.75
+  },
+  "saved_objects_before_apply": 307,
+  "lease_released": true
+}

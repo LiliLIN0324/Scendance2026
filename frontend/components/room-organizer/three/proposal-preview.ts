@@ -14,9 +14,18 @@ function itemsById(layout: RoomLayout): Map<string, LocatedItem> {
   return new Map(layout.floors.flatMap((floor, floorIndex) => floor.items.map(item => [item.id, { item, floorIndex }] as const)));
 }
 
-function visibleSignature({ item, floorIndex }: LocatedItem): string {
-  return JSON.stringify([floorIndex, item.type, item.assetId, item.assetId ? null : item.glbUrl, item.materialId, item.width, item.depth, item.height,
-    item.position?.x, item.position?.z, item.elevation ?? 0, item.sillHeight, item.rotation ?? 0, item.mirrored ?? false, item.color, item.locked, item.notes]);
+function visibleValues({ item, floorIndex }: LocatedItem) {
+  return [floorIndex, item.type, item.assetId, item.assetId ? null : item.glbUrl, item.glbNode, item.materialId, item.width, item.depth, item.height,
+    item.position?.x, item.position?.z, item.elevation ?? 0, item.sillHeight, item.rotation ?? 0, item.mirrored ?? false, item.color, item.locked ?? false, item.notes ?? ''];
+}
+
+function sameVisibleValues(before: LocatedItem, after: LocatedItem): boolean {
+  const next = visibleValues(after);
+  // Origin/angle conversion can add machine noise without changing visible geometry.
+  return visibleValues(before).every((value, index) => {
+    const other = next[index];
+    return typeof value === 'number' && typeof other === 'number' ? Math.abs(value - other) <= 1e-12 : value === other;
+  });
 }
 
 export function proposalDifferences(before: RoomLayout, after: RoomLayout): ProposalDifference[] {
@@ -25,7 +34,7 @@ export function proposalDifferences(before: RoomLayout, after: RoomLayout): Prop
   for (const [id, item] of old) {
     const replacement = next.get(id);
     if (!replacement) differences.push({ id, kind: 'removed', before: item });
-    else if (visibleSignature(item) !== visibleSignature(replacement)) differences.push({ id, kind: 'changed', before: item, after: replacement });
+    else if (!sameVisibleValues(item, replacement)) differences.push({ id, kind: 'changed', before: item, after: replacement });
   }
   for (const [id, item] of next) if (!old.has(id)) differences.push({ id, kind: 'added', after: item });
   return differences;

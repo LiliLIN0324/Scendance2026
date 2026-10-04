@@ -7,6 +7,10 @@
 - 产品介绍：<https://scendance.charlestech.org/introduction>
 - 源码仓库：<https://github.com/LiliLIN0324/scendance>
 
+官网整页预览（`preview.jpg`）：
+
+![幕景官网整页预览](preview.jpg)
+
 ## 本份代码对应什么版本
 
 这是 **2026-10-03 核验的线上版本快照**，专用分支为 `codex/website-latest`，本地交付目录为 `WEBSITE-LATEST/`。根目录即仓库根目录，不需要再进入一层 `scendance/`。

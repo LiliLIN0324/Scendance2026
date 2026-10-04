@@ -59,3 +59,30 @@ it('rejects external and recursive return destinations', () => {
   for (const value of ['//evil.example', '/\\evil.example', 'https://evil.example', '/auth/callback', '/reset-password', null]) expect(safeReturnPath(value)).toBe('/');
   expect(safeReturnPath('/?scene=1#view')).toBe('/?scene=1#view');
 });
+
+it('restores the same guest identity after reload and reuses it without another signup', async () => {
+  const guest = { ...auth, user: { id: 'guest-test', is_anonymous: true } };
+  const first = new BackendSession(config, sessionStorage);
+  fetchMock.mockResolvedValueOnce(response(guest));
+  await first.signInAsGuest();
+  first.dispose();
+  const second = new BackendSession(config, sessionStorage);
+  fetchMock.mockResolvedValueOnce(response(guest.user));
+  await second.restoreSession();
+  expect(await second.signInAsGuest()).toEqual(guest.user);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  second.dispose();
+});
+
+it('does not let a late guest response restore a signed-out identity', async () => {
+  const session = new BackendSession(config, sessionStorage);
+  let complete!: (value: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const pending = session.signInAsGuest();
+  await session.signOut();
+  complete(response({ ...auth, user: { id: 'guest-test', is_anonymous: true } }));
+  await expect(pending).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+  expect(session.getSnapshot().user).toBeNull();
+  expect(sessionStorage.length).toBe(0);
+  session.dispose();
+});

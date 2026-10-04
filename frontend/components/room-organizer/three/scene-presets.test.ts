@@ -2,12 +2,16 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { convertPreset } from '../../../../scripts/package-scene-presets.mjs';
+import { buildProposal } from '../../../../supabase/functions/_shared/ai';
+import { evaluateCandidates } from '../../../../supabase/functions/_shared/jev';
 import { layoutStore } from '../hooks/use-layout-store';
-import { layoutToBackendScene } from '../lib/backend-adapter';
+import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { mergeProposalPresentation } from '../lib/creative-brief';
 import { batchLayerEdit, materialLayers } from '../lib/scene-layers';
 import { editorItemLimit, presetModelUrl } from '../lib/scene-presets';
 import { parseStoredLayout } from '../lib/schema';
 import { clearGlbAssetCache, createCachedGlbModel, disposeOwnedModel, getGlbAssetSource } from './glb-assets';
+import { createProposalPreview, proposalDifferences, PROPOSAL_PREVIEW_TAG } from './proposal-preview';
 import { createPresetStructure, loadScenePreset } from './scene-presets';
 
 afterEach(() => { clearGlbAssetCache(); vi.restoreAllMocks(); });
@@ -53,7 +57,58 @@ describe('editable scene archives', () => {
     expect(editorItemLimit(layout)).toBeGreaterThan(count);
     expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
     expect(parseStoredLayout({ ...layout, scenePreset: 'unknown' })).toBeNull();
-    expect(() => layoutToBackendScene(layout)).toThrow('暂不支持云保存');
+    const scene = layoutToBackendScene(layout);
+    const reopened = backendSceneToLayout(scene);
+    expect(reopened.scenePreset).toBe(key);
+    reopened.floors[0].items.forEach((item, index) => {
+      const originalItem = layout.floors[0].items[index];
+      expect({ ...item, position: originalItem.position }).toEqual({ ...originalItem, locked: false, notes: '' });
+      expect(item.position!.x).toBeCloseTo(originalItem.position!.x, 12);
+      expect(item.position!.z).toBeCloseTo(originalItem.position!.z, 12);
+    });
+    if (key === 'gym') {
+      const proposal = buildProposal(scene, 'modify', { explanation: '添加桌子', commands: [{ op: 'add', materialId: 'table', position: { x: 3, z: 3 }, rotation: 0, color: '#cbb68e' }] });
+      expect(proposal.scene.objects).toHaveLength(308);
+      expect(proposal.scene.objects.slice(0, 307)).toEqual(scene.objects);
+      expect(backendSceneToLayout(proposal.scene).scenePreset).toBe('gym');
+      const previewLayout = mergeProposalPresentation(layout, backendSceneToLayout(proposal.scene));
+      expect(proposalDifferences(layout, previewLayout).map(({ id, kind }) => ({ id, kind })))
+        .toEqual([{ id: proposal.scene.objects[307].id, kind: 'added' }]);
+      const previewScene = new THREE.Scene();
+      const preview = createProposalPreview(THREE, previewScene, layout, previewLayout);
+      const previewRoot = previewScene.getObjectByName(PROPOSAL_PREVIEW_TAG)!;
+      expect(previewRoot.children.map(child => child.userData.previewRole)).toEqual(['candidate', 'added']);
+      preview.dispose();
+      const candidates = [3, 5, 7].map((x, index) => ({ label: ['A', 'B', 'C'][index], title: `桌子方案 ${index + 1}`,
+        ...buildProposal(scene, 'modify', { explanation: `桌子放在 x=${x} 米`, commands: [{ op: 'add', materialId: 'table', position: { x, z: 3 }, rotation: 0, color: '#cbb68e' }] }) }));
+      const originalCandidates = structuredClone(candidates);
+      let encoded = '';
+      const evaluation = await evaluateCandidates(candidates, '比较三个新增桌子的位置，保留原体育馆布置', () => 'fixture', 5000, async (_url, init) => {
+        encoded = String(init?.body);
+        return new Response(JSON.stringify({ answers: { recommended_plan: { type: 'choice', choice: 'B', probabilities: { A: 0.2, B: 0.5, C: 0.2, NONE: 0.1 }, confidence: 0.5 } } }));
+      });
+      expect(encoded).not.toBe('');
+      const { state } = JSON.parse(encoded);
+      expect(new TextEncoder().encode(encoded).length).toBeLessThan(100000);
+      expect(state.objectRows).toHaveLength(310); // 307 shared fixtures plus three distinct tables.
+      const restored = state.candidates.map(({ warningRefs, scene: compactScene, ...candidate }: {
+        warningRefs: number[]; scene: { objects: number[] }; [key: string]: unknown;
+      }) => ({ ...candidate, scene: { ...compactScene, objects: compactScene.objects.map(index => {
+        const object: Record<string, unknown> = {};
+        state.objectColumns.forEach((column: string, field: number) => {
+          const value = state.objectRows[index][field];
+          if (value === null) return;
+          const [key, child] = column.split('.');
+          if (child) object[key] ??= {};
+          if (child) (object[key] as Record<string, unknown>)[child] = value;
+          else object[key] = value;
+        });
+        return object;
+      }) }, warnings: warningRefs.map(index => state.warningRows[index]) }));
+      expect(restored).toEqual(JSON.parse(JSON.stringify(candidates)));
+      expect(evaluation).toMatchObject({ status: 'complete', choice: 'B', confidence: 0.5, probabilities: { A: 0.2, B: 0.5, C: 0.2, NONE: 0.1 } });
+      expect(candidates).toEqual(originalCandidates);
+    }
     const source = getGlbAssetSource(presetModelUrl(key))!;
     for (const item of layout.floors[0].items) {
       const originalBounds = new THREE.Box3().setFromObject(source.getObjectByName(item.glbNode!)!);

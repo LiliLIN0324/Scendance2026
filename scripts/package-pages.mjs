@@ -15,13 +15,14 @@ const showcase = new URL('showcase/', publicDir);
 // 之前迭代留下的图片（例如改名前的 show.png / house.jpg）会一直被打进产物。
 await rm(showcase, { recursive: true, force: true });
 await mkdir(showcase, { recursive: true });
-for (const path of ['assets', 'vendor', 'renderer-webgl.js']) {
+for (const path of ['assets', 'vendor', 'renderer-webgl.js', 'scene/templates']) {
   await cp(new URL(path, root), new URL(path, showcase), { recursive: true });
 }
 const introduction = (await readFile(new URL('introduction.html', root), 'utf8'))
   .replaceAll('http://localhost:3000/', '/auth')
   .replaceAll('./assets/', '/showcase/assets/')
   .replaceAll('./vendor/', '/showcase/vendor/')
+  .replaceAll('./scene/templates/', '/showcase/scene/templates/')
   .replaceAll('./renderer-webgl.js', '/showcase/renderer-webgl.js')
   .replaceAll('./${a.localPath}', '/showcase/${a.localPath}');
 await writeFile(new URL('introduction.html', publicDir), introduction);
