@@ -46,7 +46,7 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
       </button>)}
     </div>
     <p className="sc-note">桌椅、展台和人物可移动、旋转、缩放、复制、删除。场馆结构固定，屋顶隐藏以便编辑。</p>
-    <p className="sc-note">预设改动自动保存在此浏览器，暂不支持云保存或 AI 修改。场地尺寸与人数为概念方案。</p>
+    <p className="sc-note">预设改动自动保存在此浏览器；使用 Binggo 时会自动连接云项目，可继续 AI 修改和云保存。场地尺寸与人数为概念方案。</p>
     {notice && <p className="sc-note" role="status">{notice}</p>}
   </section>;
 }

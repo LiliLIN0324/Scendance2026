@@ -3,12 +3,15 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
+import { agentRunRequestSchema, agentRunSchema, type AgentRun, type AgentRunRequest } from "../../supabase/functions/_shared/agent-contract";
 import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
 import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 export { SceneApiError };
+export type { AgentRun };
+export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
 export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
 export type ReconstructionJob = Pick<z.infer<typeof reconstructionJobSchema>, 'id' | 'state' | 'candidate' | 'issues' | 'error_code'> & { proposal?: SceneProposal | null | undefined };
 export type ReconstructionInput = Pick<ReconstructionRequest, 'scene' | 'sources' | 'dimensions' | 'mode' | 'instruction' | 'selectedIds' | 'reviewedScene' | 'reviewedJobId'> & { requestId: string };
@@ -26,7 +29,7 @@ export interface BackendConfig {
   error: string | null;
 }
 
-/** Only public configuration belongs in a browser bundle. Auth tokens are stored per tab; lease identities are never persisted. */
+/** Only public configuration belongs in a browser bundle. Verified guests can persist in this browser; lease identities never do. */
 export function getBackendConfig(input?: { url?: string; anonKey?: string }): BackendConfig {
   const url = (input?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
   const anonKey = (input?.anonKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
@@ -51,7 +54,7 @@ export function getBackendConfig(input?: { url?: string; anonKey?: string }): Ba
   return { configured: error === null, url, anonKey, apiUrl: `${url}/functions/v1/scene-api`, error };
 }
 
-export interface BackendUser { id: string; email?: string }
+export interface BackendUser { id: string; email?: string; is_anonymous?: boolean }
 export interface Studio { id: string; name: string; role: "owner" | "editor"; displayName: string }
 export interface ProjectSummary {
   id: string; name: string; studio_id: string; revision: number;
@@ -203,9 +206,12 @@ export class BackendSession {
   private readonly generationRequests = new Map<string, PaidRequest<GenerationJob>>();
   private proposalPending = false;
   private generationPending = false;
+  private workbenchPending: { key: string; promise: Promise<BackendProject> } | null = null;
+  private workbenchBinding: { localId: string | undefined; projectId: string; userId: string } | null = null;
+  private guestUserId: string | null = null;
   private readonly client: ReturnType<typeof createSceneClient>;
 
-  constructor(config: BackendConfig = getBackendConfig(), private readonly storage?: Storage) {
+  constructor(config: BackendConfig = getBackendConfig(), private readonly storage?: Storage, private readonly guestStorage?: Storage) {
     this.config = config;
     // Never persist this in local/sessionStorage: duplicated tabs must not share a lease identity.
     const sessionId = crypto.randomUUID();
@@ -267,15 +273,28 @@ export class BackendSession {
   private acceptAuth(result: AuthResponse) {
     if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     this.tokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: result.expires_at ? result.expires_at * 1000 : Date.now() + result.expires_in * 1000 };
-    this.persistTokens();
     this.update({ user: result.user });
+    this.persistTokens();
   }
-  private persistTokens() {
+  private persistTokens(rejected?: Tokens | null) {
     try {
       const key = `scendance:auth:${this.config.url}`;
-      if (this.tokens) this.storage?.setItem(key, JSON.stringify(this.tokens));
+      if (this.tokens) this.storage?.setItem(key, JSON.stringify({ ...this.tokens, ...(this.snapshot.user?.is_anonymous === true ? { userId: this.snapshot.user.id } : {}) }));
       else this.storage?.removeItem(key);
     } catch { /* Storage restrictions should not prevent the current sign-in. */ }
+    try {
+      const key = `scendance:guest-auth:${this.config.url}`;
+      if (this.tokens && this.snapshot.user?.is_anonymous === true) {
+        const stored = JSON.parse(this.guestStorage?.getItem(key) ?? "null");
+        const continuing = this.guestUserId === this.snapshot.user.id;
+        this.guestUserId = this.snapshot.user.id;
+        if (!continuing || !stored?.userId || stored.userId === this.guestUserId) this.guestStorage?.setItem(key, JSON.stringify({ ...this.tokens, userId: this.guestUserId }));
+      } else if (!this.tokens && this.guestUserId) {
+        const stored = JSON.parse(this.guestStorage?.getItem(key) ?? "null");
+        if (stored?.userId === this.guestUserId && (rejected === undefined || rejected && stored.access === rejected.access && stored.refresh === rejected.refresh)) this.guestStorage?.removeItem(key);
+        this.guestUserId = null;
+      }
+    } catch { /* A guest can still work when browser persistence is unavailable. */ }
   }
   private async accessToken(): Promise<string | null> {
     if (!this.tokens) return null;
@@ -283,13 +302,45 @@ export class BackendSession {
     if (!this.refresh) {
       const epoch = this.epoch;
       const refreshToken = this.tokens.refresh;
-      this.refresh = this.authRequest("refresh_token", { refresh_token: refreshToken }).then(result => {
+      this.refresh = (this.snapshot.user?.is_anonymous === true ? this.refreshGuestTokens(this.snapshot.user.id, this.tokens) : this.authRequest("refresh_token", { refresh_token: refreshToken }).then(result => {
         if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
         this.acceptAuth(result);
         return result.access_token;
-      }).finally(() => { this.refresh = null; });
+      })).finally(() => { this.refresh = null; });
     }
     return this.refresh;
+  }
+  private readGuestTokens(userId: string): Tokens | null {
+    try {
+      const stored = JSON.parse(this.guestStorage?.getItem(`scendance:guest-auth:${this.config.url}`) ?? "null");
+      return stored?.userId === userId && typeof stored.access === "string" && stored.access && typeof stored.refresh === "string" && stored.refresh && Number.isFinite(stored.expiresAt)
+        ? { access: stored.access, refresh: stored.refresh, expiresAt: stored.expiresAt } : null;
+    } catch { return null; }
+  }
+  private async refreshGuestTokens(userId: string, previous: Tokens, verified?: BackendUser): Promise<string> {
+    const epoch = this.epoch;
+    const run = async () => {
+      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+      const shared = this.readGuestTokens(userId);
+      const current = shared && shared.expiresAt >= previous.expiresAt ? shared : previous;
+      try {
+        const result = current.expiresAt <= Date.now() + 30_000
+          ? await this.authRequest("refresh_token", { refresh_token: current.refresh }) : null;
+        const user = result?.user ?? (verified && current.access === previous.access ? verified : await this.verifyUser(current.access));
+        if (epoch !== this.epoch || shared && !this.readGuestTokens(userId)) throw new SceneApiError("SESSION_CHANGED", 409, null);
+        if (user.id !== userId || user.is_anonymous !== true) throw new SceneApiError("UNAUTHENTICATED", 401, null);
+        if (result) this.acceptAuth(result);
+        else { this.tokens = current; this.update({ user }); this.persistTokens(); }
+        return this.tokens!.access;
+      } catch (error) {
+        if (epoch === this.epoch && error instanceof SceneApiError && error.code === "UNAUTHENTICATED") {
+          this.tokens = null; this.persistTokens(current); this.update({ user: null });
+        }
+        throw error;
+      }
+    };
+    return await (typeof navigator !== "undefined" && navigator.locks
+      ? navigator.locks.request(`scendance:guest-refresh:${this.config.url}:${userId}`, run) : run());
   }
   private captureRequestScope(projectId = this.snapshot.project?.id ?? null): RequestScope {
     const lease = this.snapshot.lease;
@@ -303,6 +354,7 @@ export class BackendSession {
   }
   private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true): Promise<T> {
     const epoch = this.epoch;
+    const credentials = this.tokens;
     try {
       this.requireConfig();
       const result = await this.client.request<T>(path, method, body);
@@ -311,9 +363,11 @@ export class BackendSession {
     } catch (error) {
       if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
         if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
-          this.tokens = null;
-          this.persistTokens();
-          this.update({ user: null });
+          if (!this.tokens || this.tokens === credentials) {
+            this.tokens = null;
+            this.persistTokens(credentials);
+            this.update({ user: null });
+          }
         }
         // Uncertainty blocks only the project/lease that made this request. A
         // late response from a handed-off editor must not stop the new lease.
@@ -346,6 +400,16 @@ export class BackendSession {
       throw error;
     }
   }
+  async signInAsGuest(): Promise<BackendUser> {
+    if (this.operationPending || this.snapshot.recoveryReady) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    if (this.snapshot.user) return this.snapshot.user;
+    const epoch = this.epoch;
+    const result = await this.emailAuthRequest("signup", { data: { display_name: "访客" } });
+    if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+    this.acceptAuth(result);
+    this.update({ status: "ready", error: null, project: null, lease: null, revision: null });
+    return result.user;
+  }
   private async verifyUser(access: string): Promise<BackendUser> {
     const response = await fetch(`${this.config.url}/auth/v1/user`, {
       headers: { apikey: this.config.anonKey, Authorization: `Bearer ${access}` }, cache: "no-store",
@@ -357,27 +421,45 @@ export class BackendSession {
   }
   async restoreSession(): Promise<void> {
     if (!this.config.configured || this.tokens) return;
-    let stored: Tokens | null = null;
-    try { stored = JSON.parse(this.storage?.getItem(`scendance:auth:${this.config.url}`) ?? "null"); } catch { return; }
-    if (!stored?.access || !stored.refresh || !Number.isFinite(stored.expiresAt)) return;
+    let stored: (Tokens & { userId?: string }) | null = null;
+    let guestBackup = false;
+    try { stored = JSON.parse(this.storage?.getItem(`scendance:auth:${this.config.url}`) ?? "null"); } catch { /* Try the guest backup. */ }
+    if (!stored?.access || !stored.refresh || !Number.isFinite(stored.expiresAt)) {
+      try { stored = JSON.parse(this.guestStorage?.getItem(`scendance:guest-auth:${this.config.url}`) ?? "null"); } catch { return; }
+      guestBackup = true;
+    }
+    if (typeof stored?.access !== "string" || !stored.access || typeof stored.refresh !== "string" || !stored.refresh || !Number.isFinite(stored.expiresAt)) return;
+    guestBackup ||= typeof stored.userId === "string";
+    if (guestBackup) {
+      if (typeof stored.userId !== "string" || !stored.userId) return;
+      this.guestUserId = stored.userId;
+    }
     const epoch = this.epoch;
     try {
       if (stored.expiresAt <= Date.now() + 30_000) {
-        const result = await this.authRequest("refresh_token", { refresh_token: stored.refresh });
-        if (epoch !== this.epoch) return;
-        this.acceptAuth(result);
+        if (guestBackup) await this.refreshGuestTokens(stored.userId!, stored);
+        else {
+          const result = await this.authRequest("refresh_token", { refresh_token: stored.refresh });
+          if (epoch !== this.epoch) return;
+          this.acceptAuth(result);
+        }
       } else {
         const user = await this.verifyUser(stored.access);
         if (epoch !== this.epoch) return;
-        this.tokens = stored;
-        this.update({ user });
+        if (guestBackup && (user.is_anonymous !== true || user.id !== stored.userId)) throw new SceneApiError("UNAUTHENTICATED", 401, null);
+        if (user.is_anonymous === true) await this.refreshGuestTokens(user.id, stored, user);
+        else {
+          this.tokens = { access: stored.access, refresh: stored.refresh, expiresAt: stored.expiresAt };
+          this.update({ user });
+          this.persistTokens();
+        }
       }
       this.update({ status: "ready", error: null });
     } catch (error) {
       if (epoch !== this.epoch) return;
       this.tokens = null;
       // Keep the saved session on a transient network failure so a reload can retry.
-      if (error instanceof SceneApiError && error.code === "UNAUTHENTICATED") this.persistTokens();
+      if (error instanceof SceneApiError && error.code === "UNAUTHENTICATED") this.persistTokens(stored);
       this.block(error);
     }
   }
@@ -500,6 +582,58 @@ export class BackendSession {
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
+  /** First use creates a real private guest workspace; the local scene remains authoritative. */
+  ensureWorkbenchReady(scene: Scene, name: string, localId?: string): Promise<BackendProject> {
+    const parsed = sceneSchema.parse(scene);
+    const key = canonical({ scene: parsed, name, localId: localId ?? null });
+    if (this.workbenchPending) {
+      return this.workbenchPending.key === key ? this.workbenchPending.promise : Promise.reject(new SceneApiError("CLOUD_OPERATION_BUSY", 409, null));
+    }
+    const epoch = this.epoch;
+    const current = () => { if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null); };
+    const promise = (async () => {
+      this.requireConfig();
+      if (this.operationPending || this.snapshot.recoveryReady) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+      if (!this.snapshot.user) {
+        await this.signInAsGuest();
+      }
+      current();
+      let project = this.snapshot.project;
+      if (!project && localId && uuid.safeParse(localId).success) {
+        const projects = await this.listProjects();
+        current();
+        if (projects.some(item => item.id === localId)) {
+          try { project = await this.getProject(localId); }
+          finally { if (epoch === this.epoch && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed); }
+          current();
+        }
+      }
+      const binding = this.workbenchBinding;
+      const bound = project && (project.id === localId || binding && binding.localId === localId && binding.projectId === project.id && binding.userId === this.snapshot.user!.id);
+      if (!bound) {
+        if (this.snapshot.lease && !this.snapshot.writeBlocked) await this.releaseLease();
+        current();
+        const studios = await this.listStudios();
+        current();
+        const studio = studios.find(item => item.role === "owner") ?? studios[0] ?? await this.businessRequest<Studio>("/studios", "POST", {
+          requestId: crypto.randomUUID(), name: "我的工作室", displayName: "访客",
+        });
+        current();
+        project = await this.createProject(studio.id, name.trim() || "未命名方案", parsed);
+        current();
+        this.workbenchBinding = { localId, projectId: project.id, userId: this.snapshot.user!.id };
+      }
+      if (!this.snapshot.lease || this.snapshot.writeBlocked || Date.parse(this.snapshot.lease.expiresAt) <= Date.now()) {
+        try { await this.acquireLease(project!.id); }
+        finally { if (epoch === this.epoch && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed); }
+        current();
+      }
+      if (canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed);
+      return this.snapshot.project!;
+    })().finally(() => { if (this.workbenchPending?.promise === promise) this.workbenchPending = null; });
+    this.workbenchPending = { key, promise };
+    return promise;
+  }
   /** Asset, sharing and membership operations reuse the authenticated session. */
   businessRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     return this.request<T>(path, method, body, this.captureRequestScope(), "business");
@@ -736,6 +870,36 @@ export class BackendSession {
     })();
     return record.promise;
   }
+  /** Start once; uncertain dispatches are recovered by request ID through GET. */
+  async startAgentRun(input: AgentRunInput): Promise<AgentRun> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const state = this.proposalState(input.scene);
+    const body = agentRunRequestSchema.parse({ ...input, sessionId: state.sessionId, generation: state.generation, expectedRevision: state.expectedRevision, localRevision: state.localRevision });
+    const run = agentRunSchema.parse(await this.request(`/projects/${state.projectId}/agent-runs`, 'POST', body, { projectId: state.projectId, lease: state }, false));
+    if (run.projectId !== state.projectId || run.requestId !== input.requestId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
+    return run;
+  }
+  async getAgentRun(runId: string): Promise<AgentRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}`));
+    if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
+    return run;
+  }
+  async getAgentRunByRequest(requestId: string): Promise<AgentRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/by-request/${uuid.parse(requestId)}`));
+    if (run.projectId !== projectId || run.requestId !== requestId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
+    return run;
+  }
+  async cancelAgentRun(runId: string): Promise<AgentRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}/cancel`, 'POST'));
+    if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
+    return run;
+  }
   /** Deterministic asset replacement prepares a preview; only applySceneProposal saves it. */
   async prepareMaterialVariantProposal(input: { requestId: string; scene: Scene; objectIds: string[]; sourceAssetId: string; variantAssetId: string }): Promise<SceneProposal> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
@@ -840,6 +1004,7 @@ export class BackendSession {
     if (!['image/png','image/jpeg'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) throw new Error('请选择 5 MB 以内的 PNG 或 JPEG 参考图。');
     this.requireConfig();
     const scope = this.captureRequestScope(), epoch = this.epoch, token = await this.accessToken();
+    const credentials = this.tokens;
     if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
     try {
       const response = await fetch(`${this.config.apiUrl}/assets/floorplan`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
@@ -852,7 +1017,8 @@ export class BackendSession {
     } catch (error) {
       if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
         if (error instanceof SceneApiError && error.status === 401) {
-          this.tokens = null; this.persistTokens(); this.update({ user: null }); this.block(error);
+          if (!this.tokens || this.tokens === credentials) { this.tokens = null; this.persistTokens(credentials); this.update({ user: null }); }
+          this.block(error);
         } else this.update({ error: failure(error) });
       }
       throw error;
@@ -947,8 +1113,10 @@ export class BackendSession {
 
 export function createBackendSession(config?: BackendConfig): BackendSession {
   let storage: Storage | undefined;
+  let guestStorage: Storage | undefined;
   try { if (typeof window !== "undefined") storage = window.sessionStorage; } catch { /* Memory-only fallback. */ }
-  return new BackendSession(config, storage);
+  try { if (typeof window !== "undefined") guestStorage = window.localStorage; } catch { /* Per-tab fallback. */ }
+  return new BackendSession(config, storage, guestStorage);
 }
 export function useBackendSession(controller: BackendSession): BackendSnapshot {
   return useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);

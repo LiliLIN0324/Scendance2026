@@ -20,6 +20,19 @@ function scene(): Scene {
 }
 
 describe('the shared backend scene adapter', () => {
+  it('accepts only known preset nodes and still rejects arbitrary local GLBs', () => {
+    const layout = backendSceneToLayout(scene());
+    layout.scenePreset = 'gym';
+    const item = layout.floors[0].items[0];
+    Object.assign(item, { type: 'glb-asset', materialId: 'asset', glbUrl: '/scene-presets/gym/gym.glb', glbNode: 'Preset_Object_0' });
+    expect(layoutToBackendScene(layout).objects[0].presetNode).toBe(0);
+    item.glbNode = 'Preset_Object_307';
+    expect(() => layoutToBackendScene(layout)).toThrow('不在已归档的模型中');
+    item.glbNode = 'Preset_Object_0'; item.glbUrl = 'https://example.test/custom.glb';
+    expect(() => layoutToBackendScene(layout)).toThrow('不在已归档的模型中');
+    delete item.glbNode;
+    expect(() => layoutToBackendScene(layout)).toThrow('本地 GLB 样例尚未归档');
+  });
   it('maps a non-square 30 degree object to identical physical corners in Three.js', () => {
     const input = scene();
     const layout = backendSceneToLayout(input);

@@ -194,4 +194,38 @@ it('waits for session restoration before allowing credentials to be submitted', 
   expect(screen.getByRole('button', { name: '正在恢复会话…' }).hasAttribute('disabled')).toBe(true);
   fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
   expect(mockFetch).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '访客进入' }).hasAttribute('disabled')).toBe(true);
+});
+
+it('creates a real guest session before entering through the authenticated return path', async () => {
+  const session = controller();
+  const onEnter = vi.fn();
+  const onAuthenticated = vi.fn();
+  let complete!: (response: Response) => void;
+  mockFetch.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  render(<IntroPage controller={session} onEnter={onEnter} onAuthenticated={onAuthenticated} />);
+  fireEvent.click(screen.getByRole('button', { name: '访客进入' }));
+  expect(screen.getByRole('button', { name: '正在进入…' }).hasAttribute('disabled')).toBe(true);
+  expect(onAuthenticated).not.toHaveBeenCalled();
+  expect(mockFetch).toHaveBeenCalledOnce();
+  expect(mockFetch.mock.calls[0][0]).toBe('https://example.supabase.co/auth/v1/signup');
+  expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({ data: { display_name: '访客' } });
+  await act(async () => complete(new Response(JSON.stringify({ access_token: 'guest-access', refresh_token: 'guest-refresh', expires_in: 3600, user: { id: 'guest-id', is_anonymous: true } }))));
+  await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
+  expect(onEnter).not.toHaveBeenCalled();
+  expect(session.getSnapshot().user).toMatchObject({ id: 'guest-id', is_anonymous: true });
+  expect(screen.getByText('访客')).toBeTruthy();
+});
+
+it.each(['network', 'malformed'])('keeps guest entry retryable after a %s failure without a fake login', async failure => {
+  const session = controller();
+  const onAuthenticated = vi.fn();
+  if (failure === 'network') mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  else mockFetch.mockResolvedValueOnce(new Response('{}'));
+  render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={onAuthenticated} />);
+  fireEvent.click(screen.getByRole('button', { name: '访客进入' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('暂时无法创建访客会话');
+  expect(session.getSnapshot().user).toBeNull();
+  expect(onAuthenticated).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '访客进入' }).hasAttribute('disabled')).toBe(false);
 });

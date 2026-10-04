@@ -1,0 +1,20 @@
+{
+  "browser_project": {
+    "id": "225f6395-fce0-433d-9d1e-d68b5948f6e6",
+    "revision": 1,
+    "object_count": 308
+  },
+  "cron": [
+    {
+      "active": false,
+      "jobname": "scene-generation-poll",
+      "schedule": "* * * * *"
+    },
+    {
+      "active": true,
+      "jobname": "scene-reconstruction-poll",
+      "schedule": "* * * * *"
+    }
+  ],
+  "legacy_pending_jobs": 0
+}

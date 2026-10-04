@@ -1107,6 +1107,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setView(current => ({ ...current, view2D: false }));
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
+  const onBindProject = useCallback((projectId: string) => {
+    actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
+  }, [actions]);
+
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
     setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
     if (candidate) { setView(current => ({ ...current, view2D: false })); }
@@ -1128,7 +1132,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onPreview={onPreviewAi}>
+    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onBindProject={onBindProject} onPreview={onPreviewAi}>
       <div className="sc-workbench">
         <header className="sc-header">
           <a className="sc-brand" href="/introduction" aria-label="Scendance 幕景 · 打开官网"><span className="sc-brand-mark"><BrandMark size={23} /></span><div><strong>幕景<span>SCENDANCE</span></strong></div></a>
@@ -1240,7 +1244,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           />}
         </main>
         <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
-        <CreativeAssistant generationPanel={(seed,context)=><GeneratedModelLibrary {...context} seed={seed} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+        <CreativeAssistant generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
       </div>
     </CreativeStudioProvider>
     </SelectionProvider>

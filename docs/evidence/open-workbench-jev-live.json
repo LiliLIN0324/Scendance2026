@@ -1,0 +1,30 @@
+{
+  "anonymous_session": true,
+  "private_studio": true,
+  "project_id": "534eb54d-74e7-49aa-8d71-cfd25d20e8a3",
+  "run_id": "974a62e4-11cd-4b3c-bc3c-99f602bf6d75",
+  "state": "complete",
+  "calls": 6,
+  "original_objects_unchanged": 307,
+  "preview_objects": 308,
+  "added_size": {
+    "depth": 0.8,
+    "width": 1.6,
+    "height": 0.75
+  },
+  "saved_objects_before_apply": 307,
+  "lease_released": true,
+  "evaluation": {
+    "choice": "B",
+    "status": "complete",
+    "message": "百分比为模型推荐概率，用于方案间比较，不代表真实成功率；最终由你选择。",
+    "confidence": 0.8913553953170776,
+    "probabilities": {
+      "A": 0.021611519157886505,
+      "B": 0.8913553953170776,
+      "C": 0.07935035973787308,
+      "NONE": 0.007682688534259796
+    }
+  },
+  "candidate_count": 3
+}

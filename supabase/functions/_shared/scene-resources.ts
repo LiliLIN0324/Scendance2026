@@ -1,5 +1,5 @@
 import library from '../../../assets/library/merged.json' with { type: 'json' };
-import { sizeSchema, uuid, type Scene } from './domain.ts';
+import { presetManifest, sizeSchema, uuid, type Scene } from './domain.ts';
 import type { Backend } from './backend.ts';
 
 export interface SceneResource {
@@ -50,4 +50,10 @@ export function sceneResourceRefs(scene: Scene, resources: readonly SceneResourc
   const refs=new Map(resources.map(resource=>[resource.assetId,resource.resourceId]));
   return Object.fromEntries(scene.objects.filter(object=>object.assetId && refs.has(object.assetId))
     .map(object=>[object.id,refs.get(object.assetId!)]));
+}
+
+/** Names come from the packaged archives, never from user-supplied asset URLs. */
+export function presetObjectLabels(scene: Scene): Record<string, string> {
+  return Object.fromEntries(scene.objects.filter(object => object.presetNode !== undefined)
+    .map(object => [object.id, presetManifest[scene.scenePreset!][object.presetNode!]]));
 }

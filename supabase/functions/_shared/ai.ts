@@ -110,9 +110,9 @@ export function buildProposal(scene: Scene, mode: 'layout' | 'modify', output: u
       if (c.op === 'remove') next.objects = next.objects.filter(o => o.id !== c.id);
       if (c.op === 'move') o.position = c.position;
       if (c.op === 'rotate') o.rotation = c.rotation;
-      if (c.op === 'recolor') { if(o.assetId)throw new ApiError('ASSET_MATERIAL_UNSUPPORTED',422,{id:o.id}); o.color = c.color; }
-      if (c.op === 'replace') { o.materialId = c.materialId; o.size = { ...catalog.find(m => m.id === c.materialId)!.size }; delete o.assetId; }
-      if(c.op==='replace_resource') Object.assign(o,resourceObject(c.resourceId,c.size),{color:'#ffffff'});
+      if (c.op === 'recolor') { if(o.assetId || o.presetNode !== undefined)throw new ApiError('ASSET_MATERIAL_UNSUPPORTED',422,{id:o.id}); o.color = c.color; }
+      if (c.op === 'replace') { o.materialId = c.materialId; o.size = { ...catalog.find(m => m.id === c.materialId)!.size }; delete o.assetId; delete o.presetNode; }
+      if(c.op==='replace_resource') { Object.assign(o,resourceObject(c.resourceId,c.size),{color:'#ffffff'}); delete o.presetNode; }
     }
     materialSuggestions=parsed.materialSuggestions.map(suggestion=>{
       const targets=suggestion.objectIds.map(id=>scene.objects.find(object=>object.id===id));

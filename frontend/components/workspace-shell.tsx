@@ -1,14 +1,13 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   clearChunkReloadGuard,
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
 import { useAuth } from '@/lib/auth-provider';
-import { useBackendSession } from '@/lib/backend-session';
 
 const RoomOrganizer = dynamic(
   () =>
@@ -50,26 +49,17 @@ const RoomOrganizer = dynamic(
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX.Element {
   const { controller, ready } = useAuth()!;
-  const cloud = useBackendSession(controller);
-  const router = useRouter();
   const pathname = usePathname();
   const [editorStarted, setEditorStarted] = useState(false);
-  const [localEntry, setLocalEntry] = useState(false);
   const workspacePath = pathname === '/' || pathname.replace(/\/$/, '') === '/editor';
-  const entered = workspacePath && ready && (!!cloud.user || localEntry);
+  const entered = workspacePath && ready;
 
   useEffect(() => {
     (window as unknown as { __pcReady?: boolean }).__pcReady = true;
     clearChunkReloadGuard();
     if (!workspacePath || !ready) return;
-    if (cloud.user || new URLSearchParams(window.location.search).get('local') === '1') {
-      setLocalEntry(true);
-      setEditorStarted(true);
-    } else {
-      const next = window.location.pathname + window.location.search;
-      router.replace(next === '/' ? '/auth' : `/auth?next=${encodeURIComponent(next)}`);
-    }
-  }, [pathname, workspacePath, ready, cloud.user, router]);
+    setEditorStarted(true);
+  }, [workspacePath, ready]);
 
   useEffect(() => {
     if (entered) window.dispatchEvent(new Event('resize'));

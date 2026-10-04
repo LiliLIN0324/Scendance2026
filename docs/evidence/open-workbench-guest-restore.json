@@ -1,0 +1,18 @@
+{
+  "frontendSource": "727588b538ce747521f899dfbba081ea152d9078",
+  "productionDeployment": "1fc2b231-b6ff-4b57-9ca7-457e8b4077f2",
+  "guestEntrySucceeded": true,
+  "manualProjectOrLeaseRequired": false,
+  "parametricPreviewSucceeded": true,
+  "userConfirmedApply": true,
+  "testProjectId": "d92b1dfb-d619-4604-92e2-81612ad5a6c9",
+  "savedRevision": 1,
+  "objectCount": 5,
+  "privateAssetCount": 1,
+  "originalTabClosed": true,
+  "sameGuestRestored": true,
+  "sameProjectRestored": true,
+  "projectReadStatus": 200,
+  "privateModelRenderedAfterRestore": true,
+  "transientBrowserIssue": "First guest signup request encountered ERR_NETWORK_CHANGED; one manual retry succeeded."
+}

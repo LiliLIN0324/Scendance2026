@@ -2,6 +2,8 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssetsPanel } from '@/components/business/assets-panel';
+import { PublicationPanel } from '@/components/business/publication-panel';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
 import { registerSourceFlush } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
@@ -15,8 +17,8 @@ vi.mock('@/lib/backend-session', async importOriginal => {
 });
 vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
-vi.mock('@/components/business/publication-panel', () => ({ PublicationPanel: () => null }));
-vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: () => null }));
+vi.mock('@/components/business/publication-panel', () => ({ PublicationPanel: vi.fn(() => null) }));
+vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: vi.fn(() => null) }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
 const otherId = '10000000-0000-4000-8000-000000000002';
@@ -34,6 +36,8 @@ beforeEach(async () => {
   localStorage.clear();
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
+  vi.mocked(AssetsPanel).mockClear();
+  vi.mocked(PublicationPanel).mockClear();
   vi.stubGlobal('fetch', mockFetch);
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); } });
@@ -54,6 +58,41 @@ afterEach(() => {
 });
 
 describe('CloudPanel delayed project replacement', () => {
+  it('saves an externally bound Agent project without replacing its draft or creating another project', async () => {
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const onLoadLayout = vi.fn();
+    const rendered = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={onLoadLayout} />);
+    fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    const draft = { ...scene, lighting: 'warm' as const };
+    await act(async () => { await controller.acquireLease(projectId); controller.setDraft(draft); });
+    rendered.rerender(<CloudPanel controller={controller} layout={backendSceneToLayout(draft, { projectId })} onLoadLayout={onLoadLayout} />);
+    expect(screen.getByRole('button', { name: '保存到云端' }).hasAttribute('disabled')).toBe(false);
+    expect(vi.mocked(AssetsPanel).mock.calls.at(-1)?.[0].bound).toBe(true);
+    expect(vi.mocked(PublicationPanel).mock.calls.at(-1)?.[0].dirty).toBe(true);
+    expect(controller.getSnapshot().draft).toEqual(draft);
+    queue({ id: projectId, revision: 3, scene: draft, updatedAt: new Date().toISOString(), warnings: [] });
+    fireEvent.click(screen.getByRole('button', { name: '保存到云端' }));
+    await screen.findByText('已保存云端版本 3。');
+    expect(vi.mocked(PublicationPanel).mock.calls.at(-1)?.[0].dirty).toBe(false);
+    expect(controller.getSnapshot().draft).toEqual(draft);
+    expect(onLoadLayout).not.toHaveBeenCalled();
+    expect(mockFetch.mock.calls.filter(([url, init]) => String(url).endsWith('/projects') && init?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('does not bind a different local canvas to an existing Agent lease', async () => {
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    await controller.acquireLease(projectId);
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId: otherId })} onLoadLayout={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
+    expect(screen.getByRole('button', { name: '保存到云端' }).hasAttribute('disabled')).toBe(true);
+    expect(vi.mocked(AssetsPanel).mock.calls.at(-1)?.[0].bound).toBe(false);
+    expect(vi.mocked(PublicationPanel).mock.calls.at(-1)?.[0].dirty).toBe(true);
+  });
+
   it('keeps local design history and layer names when reopening the same saved cloud scene', async () => {
     window.history.replaceState(null, '', `/editor/?project=${projectId}`);
     queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]); queue(original);
@@ -160,7 +199,7 @@ describe('CloudPanel delayed project replacement', () => {
     const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
     render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
-    expect(screen.getByText('预设 · 本地保存')).toBeTruthy();
+    expect(screen.getByText('本地草稿')).toBeTruthy();
     expect(screen.queryByText('云端已保存')).toBeNull();
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
     expect(controller.getSnapshot().draft).not.toEqual(layout);
@@ -248,7 +287,7 @@ it('filters projects by name and studio and clears an empty search', async () =>
   expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
 });
 
-it('offers team and permission demos offline without requests or canvas replacement', () => {
+it('defaults demo permissions to all enabled and keeps changes separate from real access and canvas', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   const load = vi.fn();
   render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={load} />);
@@ -260,19 +299,21 @@ it('offers team and permission demos offline without requests or canvas replacem
   expect(screen.getByText('4 位演示成员')).toBeTruthy();
   fireEvent.change(screen.getByRole('combobox', { name: '陈知远的演示角色' }), { target: { value: 'viewer' } });
   fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
+  expect(screen.getByText('功能默认开放 · 权限仅作演示')).toBeTruthy();
+  expect(screen.getAllByRole('checkbox').every(checkbox => (checkbox as HTMLInputElement).checked)).toBe(true);
   fireEvent.click(screen.getByRole('checkbox', { name: '查看成员：导出方案' }));
   fireEvent.change(screen.getByRole('combobox', { name: '预览角色' }), { target: { value: 'viewer' } });
   expect(screen.getByText('适用于 2 位演示成员')).toBeTruthy();
-  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: '团队演示' }));
   expect((screen.getByRole('combobox', { name: '陈知远的演示角色' }) as HTMLSelectElement).value).toBe('viewer');
   fireEvent.click(screen.getByRole('button', { name: '移除演示成员陈知远' }));
   expect(screen.getByText('3 位演示成员')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
-  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(false);
   expect(screen.getByRole('checkbox', { name: '负责人：编辑场景' }).hasAttribute('disabled')).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: '重置演示' }));
-  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(false);
+  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(true);
   expect(mockFetch).toHaveBeenCalledTimes(requestCount);
   expect(load).not.toHaveBeenCalled();
   expect(offline.getSnapshot().user).toBeNull();

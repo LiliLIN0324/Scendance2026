@@ -53,6 +53,15 @@ describe('proposal render overlay', () => {
       .toEqual([[item.id, 'removed'], ['new-item', 'added']]);
   });
 
+  it('ignores serialization defaults and coordinate noise but retains actual small edits and preset-node replacements', () => {
+    const before = layout([item]);
+    const roundtrip = { ...item, position: { x: item.position!.x + 1e-15, z: item.position!.z - 1e-15 }, locked: false, notes: '' };
+    expect(proposalDifferences(before, layout([roundtrip]))).toEqual([]);
+    for (const change of [{ position: { x: item.position!.x + 1e-6, z: item.position!.z } }, { locked: true }, { notes: '保留此处' }, { glbNode: 'Preset_Object_1' }]) {
+      expect(proposalDifferences(before, layout([{ ...roundtrip, ...change }]))).toMatchObject([{ id: item.id, kind: 'changed' }]);
+    }
+  });
+
   it('renders a real translucent candidate, old position, and movement line while leaving selection and document untouched', () => {
     const scene = new THREE.Scene();
     const original = new THREE.Group();

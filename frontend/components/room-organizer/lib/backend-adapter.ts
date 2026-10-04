@@ -1,9 +1,10 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import libraryAssetLabels from '../../../../assets/library/asset-labels.zh.json';
 /** The backend domain is the single wire-format authority. No parallel API schema. */
-import { catalog, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
+import { catalog, presetManifest, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
 import { dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
 import { MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
+import { presetModelUrl } from './scene-presets';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import { layoutGeometryScene, canApplyLayoutGeometry, stableMeasurement } from './structural-layout';
 import type { FurnitureItem, RoomLayout } from './types';
@@ -78,15 +79,15 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
     throw new SceneAdapterError('ENTRANCE_ID_COLLISION', '出入口与物件编号重复，无法无损打开。');
   }
   const items: FurnitureItem[] = scene.objects.map(o => {
-    const minFootprint = o.materialId === 'asset' ? 0.02 : 0.1;
+    const minFootprint = o.presetNode !== undefined ? 0 : o.materialId === 'asset' ? 0.02 : 0.1;
     if (Math.max(o.size.width, o.size.depth, o.size.height) > MAX_ITEM_DIMENSION ||
-        o.size.width < minFootprint || o.size.depth < minFootprint || o.size.height < 0.01) {
+        o.size.width < minFootprint || o.size.depth < minFootprint || o.size.height < (o.presetNode !== undefined ? 0 : 0.01)) {
       throw new SceneAdapterError('OBJECT_SIZE_NOT_SUPPORTED', `物件尺寸超出此版编辑器范围（宽深至少 ${minFootprint} 米、高至少 0.01 米），未打开项目，原尺寸未改动。`);
     }
     const meta = catalog.find(entry => entry.id === o.materialId);
     return {
       id: o.id, type: rendererTypes[o.materialId], materialId: o.materialId,
-      name: o.assetId ? (libraryAssetLabels as Record<string, string>)[o.assetId] ?? options.assetNames?.[o.assetId] ?? '三维资产' : meta?.name ?? o.materialId,
+      name: o.presetNode !== undefined ? presetManifest[scene.scenePreset!][o.presetNode] : o.assetId ? (libraryAssetLabels as Record<string, string>)[o.assetId] ?? options.assetNames?.[o.assetId] ?? '三维资产' : meta?.name ?? o.materialId,
       width: o.size.width, depth: o.size.depth, height: o.size.height,
       position: { x: o.position.x - scene.venue.width / 2, z: o.position.z - scene.venue.depth / 2 },
       rotation: backendDegreesToEditorRadians(o.rotation), color: o.color, icon: icons[o.materialId],
@@ -95,6 +96,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
       ...(o.wallId ? { wallId: o.wallId } : {}),
       ...(o.assetId ? { assetId: o.assetId, ...(publicLibraryIds.has(o.assetId) ? { source: 'public_library' as const } : {}) } : { source: 'builtin' as const }),
       ...(o.assetId && options.assetUrls?.[o.assetId] ? { glbUrl: options.assetUrls[o.assetId] } : {}),
+      ...(o.presetNode !== undefined ? { source: 'local_sample' as const, glbUrl: presetModelUrl(scene.scenePreset!), glbNode: `Preset_Object_${o.presetNode}` } : {}),
     };
   });
   if (scene.schemaVersion === 2) {
@@ -117,6 +119,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
   } else items.push(...scene.venue.entrances.map(e => entranceItem(e, scene.venue)));
   return {
     ...(options.projectId ? { id: options.projectId } : {}),
+    ...(scene.scenePreset ? { scenePreset: scene.scenePreset } : {}),
     name: options.name ?? '活动场景', width: scene.venue.width, height: scene.venue.depth,
     floors: [{ id: 'event-floor', name: '活动场地', height: scene.venue.height,
       floorColor: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? scene.design?.palette[0] ?? '#e9e5db' : '#e9e5db',
@@ -133,9 +136,6 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
 }
 
 export function layoutToBackendScene(layout: RoomLayout): Scene {
-  if (layout.scenePreset || layout.floors.some(floor => floor.items.some(item => item.glbNode))) {
-    throw new SceneAdapterError('PRESET_LOCAL_ONLY', '完整场景预设保存在此浏览器，暂不支持云保存或 AI 修改；原场馆结构和物件改动会保留。');
-  }
   if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '云端首版只支持单层场地，请保留本地方案。');
   if (!layout.backendSceneV2 && (layout.floorPlanImage || layout.backendVenue?.floorplanAssetId)) {
     throw new SceneAdapterError('FLOORPLAN_NOT_SUPPORTED', '平面图尚未接入云保存，不能忽略底图后保存。');
@@ -161,7 +161,11 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
     if (!item.position) throw new SceneAdapterError('POSITION_MISSING', `物件“${item.name}”缺少位置，无法保存。`);
     if (item.mirrored) throw new SceneAdapterError('MIRROR_NOT_SUPPORTED', '云端暂不支持镜像物件，不能丢失镜像状态。');
     const assetId = item.assetId ?? (libraryAssetIds as Record<string,string>)[item.glbUrl ?? ''];
-    if ((item.type === 'glb-asset' || item.glbUrl) && !assetId) {
+    const presetNode = item.glbNode?.match(/^Preset_Object_(\d+)$/)?.[1];
+    if (item.glbNode && (!layout.scenePreset || item.glbUrl !== presetModelUrl(layout.scenePreset) || presetNode === undefined || !presetManifest[layout.scenePreset][Number(presetNode)])) {
+      throw new SceneAdapterError('UNKNOWN_PRESET_NODE', '场景预设节点不在已归档的模型中，未保存。');
+    }
+    if ((item.type === 'glb-asset' || item.glbUrl) && !assetId && presetNode === undefined) {
       throw new SceneAdapterError('LOCAL_ASSET_NOT_UPLOADED', '本地 GLB 样例尚未归档到云端，不能作为云资产保存。');
     }
     const inferred = Object.entries(rendererTypes).find(([, type]) => type === item.type)?.[0];
@@ -170,6 +174,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
     const original = layout.backendSceneV2?.objects.find(o=>o.id===item.id);
     return {
       id: item.id, materialId, ...(assetId ? { assetId } : {}),
+      ...(presetNode !== undefined ? { presetNode: Number(presetNode) } : {}),
       position: { x: stableMeasurement(item.position.x + layout.width / 2, original?.position.x), z: stableMeasurement(item.position.z + layout.height / 2, original?.position.z) },
       rotation: stableMeasurement(editorRadiansToBackendDegrees(item.rotation ?? 0), original?.rotation),
       size: { width: item.width, depth: item.depth, height: item.height }, color: item.color,
@@ -190,6 +195,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
   const candidate = {
     ...(layout.backendSceneV2 ?? {}),
     schemaVersion: layout.backendSceneV2 ? 2 : 1,
+    ...(layout.scenePreset ? { scenePreset: layout.scenePreset } : {}),
     venue: { ...(layout.backendVenue ?? {}), width: layout.width, depth: layout.height, height: floor.height ?? 3, shape: layout.backendVenue?.shape ?? 'rectangle', entrances },
     ...(geometric ? { structure: geometric.structure,
       ...(originalFinishes || Object.keys(finishes).length ? { finishes } : {}),
