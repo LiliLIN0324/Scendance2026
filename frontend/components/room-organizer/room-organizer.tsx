@@ -3,6 +3,7 @@
 import { Camera, Check, ClipboardList, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
+import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
 import { BrandMark } from '../brand-mark';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
@@ -132,8 +133,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
-  const deliveryEntryRef = useRef<HTMLButtonElement>(null);
+  const [workspaceOpenRequest, setWorkspaceOpenRequest] = useState(0);
+  const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   const [pendingCatalog, setPendingCatalog] = useState<CatalogItem | null>(null);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
@@ -605,7 +606,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds]
   );
 
-  const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout } = useLayoutPersistence({
+  const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout, acknowledgeRestoredLayout } = useLayoutPersistence({
     layout,
     onHydrate: useCallback(
       (saved: RoomLayout) => {
@@ -1100,6 +1101,26 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     clearHistory(layoutStore.getState().layout);
   }, [actions, layout, clearTransientSelection, clearHistory]);
 
+  const prepareRestoreLayout = useCallback((next: RoomLayout): RoomLayout => {
+    if (controller.getSnapshot().project || new URL(window.location.href).searchParams.has('project')) {
+      throw new Error('当前页面已连接或正在打开云项目，请在本地工作台恢复备份。');
+    }
+    return prepareLocalRestoreLayout(next);
+  }, [controller]);
+  const commitRestoredLayout = useCallback((candidate: RoomLayout): void => {
+    const next = prepareRestoreLayout(candidate);
+    const before = layoutStore.getState().layout;
+    const json = commitLocalRestoreLayout(next, {
+      current: () => layoutStore.getState().layout,
+      apply: value => actions.applyLayout(value),
+      beforeReplace: () => { commitHistoryNow(); snapshotBeforeReplace(before); },
+    });
+    const restored = layoutStore.getState().layout;
+    acknowledgeRestoredLayout(restored, json);
+    clearTransientSelection(); clearHistory(restored);
+    initiallyFramed.current = false;
+  }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory]);
+
   const onApplyCreative = useCallback((next: RoomLayout) => {
     if (!canApplyLayoutGeometry(layoutStore.getState().layout, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
     commitHistoryNow();
@@ -1135,7 +1156,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
@@ -1146,7 +1167,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
             <span className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/>{saveError ? '本地保存失败' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本地验证'}</span>
-            <button ref={deliveryEntryRef} type="button" className="sc-button" aria-label="打开执行工作单" aria-controls="creative-assistant" onClick={() => setDeliveryOpenRequest(value => value + 1)}><ClipboardList size={15}/>执行工作单</button>
+            <button ref={workspaceEntryRef} type="button" className="sc-button" aria-label="打开活动工作区" aria-controls="creative-assistant" onClick={() => setWorkspaceOpenRequest(value => value + 1)}><ClipboardList size={15}/>活动工作区</button>
             <button type="button" className="sc-button sc-screenshot-button" onClick={handleScreenshot} title="导出当前画面"><Camera size={15}/>导出画面</button>
             <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative}/>
           </div>
@@ -1251,7 +1272,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           />}
         </main>
         <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
-        <CreativeAssistant deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+        <CreativeAssistant workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
       </div>
     </CreativeStudioProvider>
     </SelectionProvider>
