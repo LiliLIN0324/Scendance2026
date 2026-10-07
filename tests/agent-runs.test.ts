@@ -24,6 +24,30 @@ describe('durable bounded DeepSeek Agent',()=>{
   const p=run.candidates[0].proposal;expect(p.base_scene).toEqual(i.scene);
   const applied=await f.rpc(owner,'proposals.apply',{...i,proposalId:p.id,baseHash:await sceneHash(i.scene)});expect(applied.scene.objects).toHaveLength(1);expect(applied.previousScene).toEqual(i.scene);expect(applied.undoGroup).toBe(p.id);
  });
+ it.each([
+  {colors:['#ff0000','#0000ff'],groups:2},
+  {colors:['#ff0000','#ff0000'],groups:1},
+ ])('reports draft BOM colors without merging different specifications: $colors',async({colors,groups})=>{
+  const draft={...scene(),objects:colors.map((color,index)=>({...chair(),color,position:{x:2+index*3,z:2}}))};
+  const i=await input({scene:draft,instruction:'仅统计当前草稿物料，不修改场景',executionMode:'preview'});
+  const cloudBefore=(await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene;
+  let bom:{items:{color:string;quantity:number;size:unknown}[];pricing:string}={items:[],pricing:''};
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_bom',{})]);
+   const receipt=JSON.parse(String(init?.body)).messages.find((message:{role:string})=>message.role==='tool');
+   bom=JSON.parse(receipt.content);
+   return completion([tool('submit_candidates',{candidates:[{title:'物料统计',explanation:'按草稿统计，价格和库存待核实。',commands:[]}]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'preview'});
+  expect(bom.items).toHaveLength(groups);
+  expect(bom.items.map(({color,quantity})=>({color,quantity}))).toEqual(groups===1
+   ?[{color:colors[0],quantity:2}]:colors.map(color=>({color,quantity:1})));
+  expect(bom.items.every(item=>canonical(item.size)===canonical(draft.objects[0].size))).toBe(true);
+  expect(bom.pricing).toMatch(/未提供.*价格.*库存/);
+  expect(run.candidates[0].proposal.base_scene).toEqual(draft);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(cloudBefore);
+ });
  it('holds 3 independent candidates for JEV and never direct-applies them',async()=>{
   const i=await input({jevEnabled:true}),fetcher=vi.fn(async(url)=>String(url).includes('systemone')?new Response(JSON.stringify({answers:{recommended_plan:{type:'choice',choice:'B',probabilities:{A:0.2,B:0.6,C:0.1,NONE:0.1},confidence:0.7}}})):completion([tool('submit_candidates',{candidates:[plan(2),plan(5),plan(8)]})]));
   const res=await send(createApi(f.backend,env,fetcher),i),run=agentRunSchema.parse(await res.json());expect(run.executionMode).toBe('preview');expect(run.candidates).toHaveLength(3);expect(run.evaluation?.choice).toBe('B');expect(run.candidates.every(c=>c.proposal.base_hash===run.candidates[0].proposal.base_hash)).toBe(true);expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene.objects).toHaveLength(0);

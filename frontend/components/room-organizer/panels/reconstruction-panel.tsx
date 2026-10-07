@@ -164,7 +164,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   }
   const currentDesign=layout.backendSceneV2?.design;
   return <section className="rc-panel" aria-label="图纸与照片重建">
-    <header><Ruler size={16}/><h3>图纸与照片重建</h3><span>米制 · 可核对</span></header>
+    <details className="rc-inputs"><summary><Ruler size={16}/><span>图纸与照片重建</span><small>米制 · 可核对</small></summary>
     <p className="cr-hint">输入实测尺寸，图纸和照片共同补充空间信息。照片遮挡处与手绘不确定部分需要核对。</p>
     <div className="rc-measures">{([['width','总宽'],['depth','总深'],['height','层高']] as const).map(([key,label])=><label key={key}>{label}（米）<input aria-label={`${label}（米）`} type="number" step="0.001" min="0.001" max={key==='height'?30:200} value={form[key]} onChange={e=>patch({[key]:e.target.value})} placeholder="实测值"/></label>)}</div>
     <label className="cr-label">补充尺寸<textarea aria-label="补充尺寸" rows={2} value={form.text} onChange={e=>patch({text:e.target.value})} placeholder="北墙 8 米，入口宽 1.2 米，柱间距 450 厘米"/></label>
@@ -184,6 +184,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       <label className="cr-label">局部修改或保留要求<textarea aria-label="局部修改或保留要求" value={form.adjustment} maxLength={1000} rows={2} onChange={e=>patch({adjustment:e.target.value})} placeholder="保留座位和结构，只调整展示区。可在场景中锁定要保留的物件。"/></label>
       <button type="button" className="cr-generate" disabled={requestRunning||!loaded} onClick={()=>void generate()}>{requestRunning?<Loader2 size={16} className="cr-spin"/>:<Sparkles size={16}/>} {requestRunning?'重建任务进行中…':'Generate 重建并设计方案'}</button>
     </>}
+    </details>
     {form.jobId&&!job&&<div className="rc-job" role="status"><strong>正在恢复原重建任务</strong><small>任务 {form.jobId.slice(0,8)}</small>{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>setPollingPaused(false)}>继续查询原任务</button>}</div>}
     {job&&<div className="rc-job" role="status"><strong>{LABELS[job.state]}</strong><small>任务 {job.id.slice(0,8)}</small>{stale&&<p>场景、资料、要求或编辑会话已变化，旧结果仅供核对。请重新生成后应用。</p>}{job.issues.map((issue,index)=><p key={`${issue.code}-${index}`}>{issue.message}</p>)}{job.error_code&&<p>{errorCodeText(job.error_code)}</p>}{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>{setPollingPaused(false);setNotice('');}}>继续查询原任务</button>}</div>}
     {review&&job?.state==='needs_review'&&<div className="rc-review"><h4>核对识别结构</h4><p className="cr-hint">结构示意使用米制坐标。点击墙线编辑，核对门窗、柱子与看不到的区域；确认意味着你已根据现场或图纸核实。</p>

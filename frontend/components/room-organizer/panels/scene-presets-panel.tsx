@@ -23,14 +23,18 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
   async function load(key: ScenePresetKey): Promise<void> {
     if (loading.current) return;
     const before = current.current;
-    if (!isUntouched(before) && !window.confirm('载入预设将替换当前画布。原草稿会保留恢复点，也可以撤销返回。继续吗？')) return;
+    const hasExecution = before.eventOperations !== undefined || before.floors.some(floor => floor.items.some(item => item.handoff));
+    if (!isUntouched(before) && !window.confirm(hasExecution
+      ? '载入模板将替换当前布置。活动需求和任务会保留，关联物料需重新核对；原布置与物料工作单可用撤销恢复。继续吗？'
+      : '载入模板将替换当前布置，可用撤销恢复。继续吗？')) return;
     loading.current = true;
     setBusy(key); setNotice('');
     try {
       const next = await loadScenePreset(key);
       if (!mounted.current) return;
       if (current.current !== before) throw new Error('载入期间画布已有改动，已保留当前草稿。请重新载入预设。');
-      onApply(next);
+      onApply({ ...next, ...(before.id ? { id: before.id, name: before.name } : {}),
+        ...(before.eventOperations !== undefined ? { eventOperations: before.eventOperations } : {}) });
       setNotice(`已载入${SCENE_PRESETS[key].name}，可选择物件继续编辑。`);
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景载入失败，请重试。'); }
     finally { loading.current = false; setBusy(null); }

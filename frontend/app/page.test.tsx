@@ -17,6 +17,15 @@ let activeController: BackendSession;
 let activeLayout: RoomLayout;
 const onApply = vi.fn();
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
+const localInputs = vi.hoisted(() => ({ forms: new Map<string, unknown>(), sources: [] as Record<string, unknown>[] }));
+vi.mock('@/lib/source-storage', async importOriginal => ({
+  ...await importOriginal<object>(),
+  readSourceForm: async (key: string) => localInputs.forms.get(key),
+  storeSourceForm: async (key: string, value: unknown) => { localInputs.forms.set(key, value); },
+  listStoredSources: async (scope: string) => localInputs.sources.filter(source => source.scope === scope),
+  storeSource: async (source: Record<string, unknown>) => { localInputs.sources.push(source); },
+  deleteSource: async (id: string) => { localInputs.sources = localInputs.sources.filter(source => source.id !== id); },
+}));
 vi.mock('next/navigation', async () => {
   const { useSyncExternalStore } = await import('react');
   return {
@@ -83,6 +92,7 @@ function restore(object: object, key: string, descriptor: PropertyDescriptor | u
 
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear();
+  localInputs.forms.clear(); localInputs.sources.length = 0;
   window.history.replaceState(null, '', '/auth');
   const navigate = (url: string) => {
     window.history.replaceState(null, '', url);
@@ -114,7 +124,10 @@ afterEach(() => {
 
 async function openAgent(): Promise<void> {
   fireEvent.click(await screen.findByRole('button', { name:'打开 Binggo Agent' }, { timeout:5000 }));
-  fireEvent.click(screen.getByText('活动需求与场地资料'));
+  for (const label of ['活动需求与场地资料', '图纸、照片与现场条件（可选）', '助手设置']) {
+    const summary = screen.getByText(label);
+    if (!summary.closest('details')?.open) fireEvent.click(summary);
+  }
 }
 
 describe('introduction round trips', () => {
