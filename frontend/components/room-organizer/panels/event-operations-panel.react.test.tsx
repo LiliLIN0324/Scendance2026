@@ -17,7 +17,7 @@ const itemId = '30000000-0000-4000-8000-000000000001';
 function taskLayout(task: EventOperationTask, withItem = false): RoomLayout {
   return makeLayout({ floors: [makeFloor({ items: withItem ? [makeItem({ id: itemId, name: '签到椅' })] : [] })], eventOperations: eventOperationsSchema.parse({ tasks: [task] }) });
 }
-function livePanel(initial: RoomLayout) {
+function livePanel(initial: RoomLayout, briefState?: Parameters<typeof EventOperationsPanel>[0]['briefState']) {
   let current = initial;
   const updates = vi.fn<(value: EventOperations | undefined) => void>();
   const locate = vi.fn();
@@ -28,7 +28,7 @@ function livePanel(initial: RoomLayout) {
     else { const { eventOperations: _removed, ...rest } = current; current = rest; }
     view.rerender(element());
   }
-  const element = () => <EventOperationsPanel layout={current} disabled={false} onUpdate={update} onLocate={locate}/>;
+  const element = () => <EventOperationsPanel layout={current} disabled={false} onUpdate={update} onLocate={locate} briefState={briefState}/>;
   view = render(element());
   return { updates, locate, get layout() { return current; }, replace(next: RoomLayout) { current = next; view.rerender(element()); } };
 }
@@ -131,6 +131,9 @@ describe('activity operations in the delivery panel', () => {
     const ui = livePanel(makeLayout());
     expect(screen.getByText('活动需求尚未填写或未保存。')).toBeDefined();
     expect(screen.getByText('新增任务').closest('details')!.open).toBe(true);
+    expect(screen.getByText('先写一项任务，再补负责人、计划时间和完成条件。可以不关联物料。')).toBeDefined();
+    expect(screen.queryByRole('group', { name: '任务待补与复核' })).toBeNull();
+    expect(screen.getByRole('button', { name: '添加任务' }).compareDocumentPosition(screen.getByRole('button', { name: '载入演练任务示例' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(ui.updates).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '添加任务' }));
     expect(screen.getByRole('alert').textContent).toContain('请填写任务标题');
@@ -157,6 +160,43 @@ describe('activity operations in the delivery panel', () => {
     view.rerender(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()} onOpenBrief={open} briefState={{ brief: INITIAL_BRIEF, ready: true, error: 'internal storage failure', hasSavedBrief: true }}/>);
     expect(screen.getByText('活动需求无法读取或尚未保存，请打开原表单核对。')).toBeDefined();
     expect(screen.queryByText(/internal storage failure/)).toBeNull();
+  });
+
+  it('loads six labelled example tasks while retaining the current project, scene and saved 24-person requirement', async () => {
+    const initial = makeLayout({ name: '周末品牌活动' });
+    const brief = { ...INITIAL_BRIEF, description: '24人客户交流活动', mustHave: '签到与合影' };
+    const originalBrief = { ...brief };
+    const ui = livePanel(initial, { brief, ready: true, error: null, hasSavedBrief: true });
+    expect(screen.getByRole('heading', { name: '周末品牌活动' })).toBeDefined();
+    expect(screen.getByText('30人共创示例，共6项任务；载入后请按当前活动调整。需求和场景保持原样。')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '载入演练任务示例' }));
+    expect(ui.layout.eventOperations!.tasks).toHaveLength(6);
+    expect(ui.layout.eventOperations!.dataKind).toBe('rehearsal');
+    expect(ui.layout.name).toBe(initial.name);
+    expect(ui.layout.floors).toBe(initial.floors);
+    expect(brief).toEqual(originalBrief);
+    expect(screen.getByText('已保存需求草稿 · 品牌快闪 · 预计 24 人')).toBeDefined();
+    expect(screen.getByRole('status').textContent).toBe('已载入6项30人共创示例任务，需求和场景保持原样。请按当前活动调整。');
+    expect(screen.getByText('需求详情').closest('details')!.open).toBe(false);
+    await settled();
+  });
+
+  it('counts missing task fields and exposes review failures outside folded tasks without double-counting', async () => {
+    const incomplete = { ...createOperation('签到安排', 'event'), plannedStartAt: '2026-10-08T01:00:00Z' };
+    const reviewed = { ...createOperation('布场核对', 'setup'), ownerName: '现场组', plannedStartAt: '2026-10-08T00:00:00Z', plannedEndAt: '2026-10-08T00:30:00Z', acceptance: '确认布置与通道', status: 'accepted' as const, evidenceNote: '现场已检查', reviewedBasis: `sha256:${'0'.repeat(64)}` };
+    const ui = livePanel(makeLayout({ eventOperations: eventOperationsSchema.parse({ tasks: [incomplete, reviewed] }) }));
+    const overview = screen.getByRole('group', { name: '任务待补与复核' });
+    expect(overview.textContent).toContain('待补 · 负责人 1 项 · 计划时间 1 项 · 完成条件 1 项');
+    expect(within(overview).queryByText(/需复核/)).toBeNull();
+    await settled();
+    expect(overview.textContent).toContain('需复核 1 项，请展开任务重新核对。');
+    vi.stubGlobal('crypto', { randomUUID: webcrypto.randomUUID.bind(webcrypto) });
+    ui.replace({ ...ui.layout });
+    await waitFor(() => expect(screen.getByText('有 1 项任务核对失败，请展开任务检查后重试。')).toBeDefined());
+    expect(screen.getByText('有 1 项任务核对失败，请展开任务检查后重试。').closest('details')).toBeNull();
+    expect(within(overview).queryByText(/需复核/)).toBeNull();
+    expect(screen.getByText('布场核对').closest('details')!.open).toBe(false);
+    expect(ui.updates).not.toHaveBeenCalled();
   });
 
   it('records a plan in Beijing time without changing the independent actual times', async () => {
@@ -256,13 +296,13 @@ describe('activity operations in the delivery panel', () => {
   it('undoes a task deletion and loads the labelled rehearsal only on explicit request', async () => {
     const task = createOperation('准备资料', 'preparation');
     const ui = livePanel(taskLayout(task)); openTask('准备资料'); await settled();
-    expect(screen.queryByRole('button', { name: '载入30人演练安排' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '载入演练任务示例' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '删除任务' }));
     expect(ui.layout.eventOperations!.tasks).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: '撤销删除任务' }));
     expect(ui.layout.eventOperations!.tasks[0].id).toBe(task.id);
     openTask('准备资料'); fireEvent.click(screen.getByRole('button', { name: '删除任务' }));
-    fireEvent.click(screen.getByRole('button', { name: '载入30人演练安排' }));
+    fireEvent.click(screen.getByRole('button', { name: '载入演练任务示例' }));
     expect(ui.layout.eventOperations!.dataKind).toBe('rehearsal');
     expect(ui.layout.eventOperations!.tasks).toHaveLength(6);
     expect(new Set(ui.layout.eventOperations!.tasks.map(value => value.phase)).size).toBe(4);

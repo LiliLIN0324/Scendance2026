@@ -196,16 +196,28 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
     if (disabled || operations.tasks.length) return;
     const example = eventOperationsSchema.safeParse(rehearsalExample);
     if (!example.success) { setError('演练安排暂不能读取，请稍后重试。'); return; }
-    if (update(copyRehearsalOperations(example.data))) { setNotice('已载入30人演练安排，请按当前场景补充人员、时间与关联物料。'); setDeleted(null); }
+    if (update(copyRehearsalOperations(example.data))) { setNotice('已载入6项30人共创示例任务，需求和场景保持原样。请按当前活动调整。'); setDeleted(null); }
   }
   const brief = briefState?.ready && !briefState.error && briefState.hasSavedBrief ? briefState.brief : null;
+  const missingOwners = operations.tasks.filter(task => !task.ownerName.trim()).length;
+  const missingPlans = operations.tasks.filter(task => !task.plannedStartAt || !task.plannedEndAt).length;
+  const missingConditions = operations.tasks.filter(task => !task.acceptance.trim()).length;
+  const missingSummary = [missingOwners && `负责人 ${missingOwners} 项`, missingPlans && `计划时间 ${missingPlans} 项`, missingConditions && `完成条件 ${missingConditions} 项`].filter(Boolean).join(' · ');
+  const currentReviews = reviews?.layout === layout ? operations.tasks.map(task => reviews.statuses[task.id]) : [];
+  const needsReview = currentReviews.filter(review => review?.status === 'needs_review' && !review.failed).length;
+  const failedReviews = currentReviews.filter(review => review?.failed).length;
   return <section className="sc-event-operations" aria-label="活动安排">
     <div className="sc-operation-brief">
-      <div className="sc-operation-brief-heading"><h3>活动需求</h3><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
+      <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.event} · 预计 {brief.guests} 人</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
     </div>
+    <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
     <div className="sc-operation-toolbar"><strong className="sc-operation-kind-label">{operations.dataKind === 'rehearsal' ? '演练安排' : operations.dataKind === 'real' ? '真实活动安排' : '活动任务'} · {operations.tasks.length} 项</strong><label className="sc-field sc-operation-kind">资料类型<select disabled={disabled} value={operations.dataKind} onChange={event => { if (update({ ...operations, dataKind: event.target.value as EventOperations['dataKind'] })) setNotice('资料类型已更新，请留意本机保存状态。'); }}><option value="unspecified">未标注</option><option value="rehearsal">演练</option><option value="real">真实</option></select></label></div>
-    {!operations.tasks.length && <><p className="sc-note">先添加一项活动任务，可以不关联物料。</p><button type="button" className="sc-button" disabled={disabled} onClick={loadRehearsal}>载入30人演练安排</button></>}
+    {(missingSummary || needsReview > 0 || failedReviews > 0) && <div className="sc-operation-overview" role="group" aria-label="任务待补与复核">
+      {missingSummary && <p className="sc-note">待补 · {missingSummary}</p>}
+      {needsReview > 0 && <p className="sc-handoff-review">需复核 {needsReview} 项，请展开任务重新核对。</p>}
+      {failedReviews > 0 && <p className="sc-handoff-error" role="alert">有 {failedReviews} 项任务核对失败，请展开任务检查后重试。</p>}
+    </div>}
     {!!operations.tasks.length && eventOperationPhases.map(value => {
       const tasks = operations.tasks.filter(task => task.phase === value);
       return <div key={value} className="sc-operation-phase"><h3>{OPERATION_PHASE_LABELS[value]} <small>{tasks.length} 项</small></h3>
@@ -229,12 +241,13 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       const element = event.currentTarget;
       setAddOpen(element.open);
       if (!element.open && element.contains(document.activeElement)) element.querySelector('summary')?.focus();
-    }}><summary>新增任务</summary><form className="sc-operation-add" onSubmit={add}>
+    }}><summary>新增任务</summary>{!operations.tasks.length && <p className="sc-note">先写一项任务，再补负责人、计划时间和完成条件。可以不关联物料。</p>}<form className="sc-operation-add" onSubmit={add}>
       <fieldset disabled={disabled || operations.tasks.length >= eventOperationsLimits.tasks}>
         <label className="sc-field">新任务标题<input value={title} maxLength={eventOperationsLimits.title} placeholder="如签到、主持或撤场交接" onChange={event => setTitle(event.target.value)}/></label>
         <div className="sc-operation-add-actions"><label className="sc-field">新任务阶段<select value={phase} onChange={event => setPhase(event.target.value as EventOperationTask['phase'])}>{eventOperationPhases.map(value => <option key={value} value={value}>{OPERATION_PHASE_LABELS[value]}</option>)}</select></label><button className="sc-button" type="submit">添加任务</button></div>
       </fieldset>
     </form></details>
+    {!operations.tasks.length && <div className="sc-operation-example"><p className="sc-note">30人共创示例，共6项任务；载入后请按当前活动调整。需求和场景保持原样。</p><button type="button" className="sc-button" disabled={disabled} onClick={loadRehearsal}>载入演练任务示例</button></div>}
     {operations.tasks.length >= eventOperationsLimits.tasks && <p className="sc-note">已达到 {eventOperationsLimits.tasks} 项任务，请整理已有安排。</p>}
     {deleted && <button type="button" className="sc-button" disabled={disabled || operations.tasks.some(task => task.id === deleted.task.id)} onClick={() => {
       const tasks = [...operations.tasks]; tasks.splice(Math.min(deleted.index, tasks.length), 0, deleted.task);

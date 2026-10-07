@@ -24,6 +24,13 @@ const bitmap = () => ({ width: 1024, height: 768, close: vi.fn() });
 function ui(id = layout.id!, hidden = false) {
   return <div hidden={hidden}><CreativeStudioProvider controller={controller} layout={{ ...layout, id }} onApply={vi.fn()}><CreativeBriefPanel/></CreativeStudioProvider></div>;
 }
+function renderUi() {
+  const rendered = render(ui());
+  fireEvent.click(screen.getByText('图纸、照片与现场条件（可选）'));
+  const reconstruction = rendered.container.querySelector<HTMLDetailsElement>('.rc-inputs');
+  if (reconstruction && !reconstruction.open) fireEvent.click(reconstruction.querySelector('summary')!);
+  return rendered;
+}
 function upload(container: HTMLElement, files: File[]): void {
   fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files } });
 }
@@ -52,7 +59,7 @@ describe('venue photo input lifecycle', () => {
   it('flushes dimensions, brief and a just-selected image before creating the project', async () => {
     let finish!: (value: ReturnType<typeof bitmap>) => void;
     decode.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const rendered = render(ui());
+    const rendered = renderUi();
     await act(async()=>{await Promise.resolve();});
     fireEvent.change(screen.getByLabelText('总宽（米）'),{target:{value:'18.25'}});
     fireEvent.change(screen.getByLabelText('客户需求'),{target:{value:'保留入口，安排签到区'}});
@@ -75,7 +82,7 @@ describe('venue photo input lifecycle', () => {
   it('preserves consecutive selections in order while the first decode is pending', async () => {
     let finish!: (value: ReturnType<typeof bitmap>) => void;
     decode.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const rendered = render(ui());
+    const rendered = renderUi();
     upload(rendered.container, [file('first.png')]);
     await waitFor(() => expect(decode).toHaveBeenCalledOnce());
     upload(rendered.container, [file('second.png')]);
@@ -87,7 +94,7 @@ describe('venue photo input lifecycle', () => {
   });
 
   it('allows deleting an old photo while another selection is decoding', async () => {
-    const rendered = render(ui());
+    const rendered = renderUi();
     upload(rendered.container, [file('old.png')]);
     await screen.findByRole('img', { name: '现场照片：old.png' });
     let finish!: (value: ReturnType<typeof bitmap>) => void;
@@ -102,7 +109,7 @@ describe('venue photo input lifecycle', () => {
   });
 
   it('enforces the twelve-source limit across queued selections without dropping earlier accepted photos', async () => {
-    const rendered = render(ui());
+    const rendered = renderUi();
     upload(rendered.container, Array.from({length:11},(_,index)=>file(`photo-${index}.png`)));
     upload(rendered.container, [file('three.png'), file('four.png')]);
     expect(await screen.findByText('最多添加 12 张图纸或现场照片。')).toBeTruthy();
@@ -114,7 +121,7 @@ describe('venue photo input lifecycle', () => {
   });
 
   it('rolls back a partially decoded invalid batch and accepts the next queued valid selection', async () => {
-    const rendered = render(ui());
+    const rendered = renderUi();
     upload(rendered.container, [file('temporary.png'), new File(['svg'], 'invalid.svg', { type: 'image/svg+xml' })]);
     await screen.findByText('请选择 PNG、JPEG 或 WebP 图片。');
     expect(screen.queryByRole('img')).toBeNull();
@@ -124,7 +131,7 @@ describe('venue photo input lifecycle', () => {
   });
 
   it('clears photos and ignores pending decodes from a previous project, while allowing new project uploads', async () => {
-    const rendered = render(ui());
+    const rendered = renderUi();
     upload(rendered.container, [file('saved.png')]);
     await screen.findByRole('img', { name: '现场照片：saved.png' });
     let finish!: (value: ReturnType<typeof bitmap>) => void;
@@ -144,7 +151,7 @@ describe('venue photo input lifecycle', () => {
   });
 
   it('preserves provider photos when returning from the introduction without changing project', async () => {
-    const rendered = render(ui());
+    const rendered = renderUi();
     upload(rendered.container, [file('venue.png')]);
     await screen.findByRole('img', { name: '现场照片：venue.png' });
     rendered.rerender(ui(layout.id, true));
