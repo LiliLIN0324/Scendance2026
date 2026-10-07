@@ -29,6 +29,30 @@ describe('useLayoutPersistence — activity metadata', () => {
   beforeEach(() => { window.localStorage.clear(); window.history.replaceState(null, '', '/'); vi.useFakeTimers(); });
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
+  it('does not let an older layout debounce overwrite a verified file restore or pagehide', () => {
+    const initial = makeLayout({ id: 'activity-a' });
+    const restored = makeLayout({ id: 'activity-b', eventOperations: operations });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    layoutStore.setState({ layout: initial, activeFloorIndex: 0 });
+    const editor = renderHook(() => {
+      const state = useLayoutState();
+      const persistence = useLayoutPersistence({ layout: state.layout, onHydrate: state.actions.applyLayout, debounceMs: 250 });
+      return { ...state, persistence };
+    });
+    act(() => { editor.result.current.actions.setName('尚在旧保存窗口中的演练输入'); });
+    act(() => { vi.advanceTimersByTime(100); });
+    act(() => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+      editor.result.current.actions.applyLayout(restored);
+      editor.result.current.persistence.acknowledgeRestoredLayout(layoutStore.getState().layout, JSON.stringify(restored));
+    });
+    act(() => { vi.advanceTimersByTime(1000); window.dispatchEvent(new Event('pagehide')); });
+    expect(loadLayout()).toEqual(restored);
+    expect(editor.result.current.persistence.saving).toBe(false);
+    expect(editor.result.current.persistence.saveError).toBeNull();
+    editor.unmount(); expect(loadLayout()).toEqual(restored);
+  });
+
   it('flushes pending activity edits on close and hydrates the same geometry and metadata on reopen', () => {
     layoutStore.setState({ layout: makeLayout({ id: 'rehearsal-30' }), activeFloorIndex: 0 });
     const mount = () => renderHook(() => {

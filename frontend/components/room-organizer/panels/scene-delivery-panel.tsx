@@ -6,7 +6,8 @@ import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase
 import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABELS } from '../lib/scene-handoff';
 import { EventOperationsPanel } from './event-operations-panel';
-import type { CreativeBriefState } from './creative-studio';
+import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
+import { LocalProjectBackupPanel } from './local-project-backup-panel';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import './scene-delivery-panel.css';
@@ -18,6 +19,8 @@ interface Props {
   onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined;
   briefState?: CreativeBriefState | null | undefined;
   onOpenBrief?: (() => void) | undefined;
+  backupActions?: LocalProjectBackupActions | null | undefined;
+  onBackupRestored?: (() => void) | undefined;
 }
 
 function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
@@ -90,7 +93,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing Binggo entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, briefState, onOpenBrief }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, briefState, onOpenBrief, backupActions, onBackupRestored }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
@@ -182,5 +185,6 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     <p className="sc-note">交付当前单层项目。完整场馆预设需保留原文件；环境光与后处理不会随 GLB 交付。采购规格需另行确认。</p>
     {preview.error && view === 'operations' && <p className="sc-note">当前场馆模型暂不能完整交付，文字活动安排仍可单独导出。</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
+    {backupActions && <LocalProjectBackupPanel layout={layout} actions={backupActions} briefState={briefState} onComplete={onBackupRestored}/>}
   </section>;
 }

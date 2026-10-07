@@ -76,10 +76,11 @@ export function measurement(scene:SceneV2,d:DimensionConstraint):number|undefine
   if(evidenceLength<2||distance(start,a,b)>tolerance||distance(end,a,b)>tolerance)return undefined;
   return Math.hypot(wall.end.x-wall.start.x,wall.end.z-wall.start.z)*segmentLength/evidenceLength;
  }
+ const column=scene.structure.columns.find(c=>c.id===d.targetId),other=scene.structure.columns.find(c=>c.id===d.targetEndId);
+ // An explicit pair must resolve both columns; another measurement cannot stand in for a missing endpoint.
+ if(d.targetEndId)return column&&other?Math.hypot(column.position.x-other.position.x,column.position.z-other.position.z):undefined;
  if(wall)return d.measure==='height'?wall.height:Math.hypot(wall.end.x-wall.start.x,wall.end.z-wall.start.z);
  const opening=scene.structure.openings.find(o=>o.id===d.targetId);if(opening)return d.measure==='height'?opening.height:opening.width;
- const column=scene.structure.columns.find(c=>c.id===d.targetId),other=scene.structure.columns.find(c=>c.id===d.targetEndId);
- if(column&&other)return Math.hypot(column.position.x-other.position.x,column.position.z-other.position.z);
  if(column&&d.measure&&d.measure!=='length')return column.size[d.measure];
  if(d.kind==='distance'&&!d.sourceAssetId&&d.start&&d.end)return Math.hypot(d.end.x-d.start.x,d.end.z-d.start.z);
  return undefined;

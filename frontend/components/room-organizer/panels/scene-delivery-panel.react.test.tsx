@@ -18,6 +18,23 @@ function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('Binggo scene delivery panel',()=>{
+  it('keeps backup in the existing delivery area and permits a full template backup without the model export gate', async () => {
+    const prepareBackup=vi.fn().mockResolvedValue('{"format":"scendance-local-project-backup"}');
+    const backupActions={prepareBackup,restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
+    const view=render(<SceneDeliveryPanel layout={{...layout,scenePreset:'gym'}} controller={controller} backupActions={backupActions}/>);
+    const summary=screen.getByText('场景与活动备份');
+    expect(summary.closest('details')!.open).toBe(false);
+    fireEvent.click(summary);
+    expect((screen.getByRole('button',{name:'导出场景 GLB'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button',{name:'下载场景与活动备份'}) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'下载场景与活动备份'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    expect(prepareBackup).toHaveBeenCalledOnce();
+    expect(exportDeliveryGlb).not.toHaveBeenCalled();
+    view.rerender(<SceneDeliveryPanel layout={layout} controller={controller}/>);
+    expect(screen.queryByText('场景与活动备份')).toBeNull();
+    expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(false);
+  });
   it('only prepares and downloads after an explicit click',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     expect(exportDeliveryGlb).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();

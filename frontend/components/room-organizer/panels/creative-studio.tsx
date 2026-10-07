@@ -5,16 +5,18 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun } from '@/lib/backend-session';
-import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, registerSourceFlush, flushSourceScope, copySourceScope } from '@/lib/source-storage';
+import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease } from '@/lib/source-storage';
+import { parseLocalProjectBackupJson, serializeLocalProjectBackup, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
-import { briefInstruction, IDEA_CARDS, INITIAL_BRIEF, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
+import { appendCreativeBriefTemplate, briefInstruction, IDEA_CARDS, INITIAL_BRIEF, MANUAL_BRIEF_TEMPLATE, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { assertNoLocalHandoffCloudTransition } from '../lib/handoff-cloud-guard';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
+import { ActivityWorkflowGuide } from './activity-workflow-guide';
 import { ReconstructionPanel } from './reconstruction-panel';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -30,9 +32,13 @@ type RunMarker = { requestId: string; runId?: string; baseKey: string; briefKey:
 const runStorageKey = (scope: string) => `scendance:agent-run:${scope}`;
 type CandidatePreview = { label: 'A' | 'B' | 'C'; title: string; preview: Preview };
 type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string };
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
-interface StudioValue {
+export interface LocalProjectBackupActions {
+  prepareBackup(): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
+  backupPending: boolean; canUndoRestore: boolean;
+}
+interface StudioValue extends LocalProjectBackupActions {
   scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   briefReady: boolean; briefError: string | null; hasSavedBrief: boolean; retryBrief(): void;
@@ -50,9 +56,10 @@ export function useCreativeBriefState(): CreativeBriefState | null {
   const studio=useContext(StudioContext);
   return studio?{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}:null;
 }
+export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'我是 Binggo，当前项目的助手。选择场景策划来完善活动需求、调整布置，选择物料建模来创建或修改物件，或打开执行交付核对活动安排与物料工作单。选中物件后可针对它们调整；新物料候选由你确认后应用。' }];
 
-export function CreativeStudioProvider({ controller, layout, onApply, onUpdateItem, onUpdateEventOperations, onBindProject, onPreview, children }: Props): JSX.Element {
+export function CreativeStudioProvider({ controller, layout, onApply, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onBindProject, onPreview, children }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
   const { allSelectedIds }=useSelection();
   const [brief,setBriefValue]=useState<CreativeBrief>(INITIAL_BRIEF);
@@ -65,12 +72,25 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
   const briefStorage=useRef({scope:layout.id??'local',ready:false,dirty:false,revision:0,error:null as string|null,edits:{} as Partial<CreativeBrief>});
   const briefDrafts=useRef(new Map<string,{brief:CreativeBrief;storage:typeof briefStorage.current}>());
   const briefSaveQueue=useRef<Promise<void>>(Promise.resolve());
+  const briefTimer=useRef<ReturnType<typeof setTimeout>>();
+  const briefEditEpoch=useRef(0);
+  const [backupPending,setBackupPending]=useState(false);
+  const backupBusy=useRef(false), restoreWriting=useRef(false);
+  const operationEpoch=useRef(0);
+  const editorLease=useRef<{scope:string;lease:SourceEditorLease}>();
+  const editorLeases=useRef(new Map<string,SourceEditorLease>());
+  const adoptedScope=useRef<string>();
+  const [undoPoint,setUndoPoint]=useState<{beforeLayout:RoomLayout;beforeBrief:CreativeBrief|undefined;targetScope:string;targetBrief:CreativeBrief|undefined;targetDraft:ReturnType<typeof briefDrafts.current.get>;afterLayout:RoomLayout;afterEdits:number;afterBrief:CreativeBrief|undefined}|null>(null);
+  const undoPointRef=useRef<typeof undoPoint>(null);
+  const failedRollback=useRef<{scope:string;original:CreativeBrief|undefined;attempted:CreativeBrief|undefined}|null>(null);
+  const undoRecovery=useRef<{scope:string;before:CreativeBrief|undefined;attempted:CreativeBrief|undefined}[]|null>(null);
+  const preparedRestoreIds=useRef(new WeakMap<LocalProjectRestoreCandidate,string>());
   const setBrief=useCallback<React.Dispatch<React.SetStateAction<CreativeBrief>>>(update=>{
     const next=typeof update==='function'?update(briefValueRef.current):update;
     if(!briefStorage.current.ready)for(const key of Object.keys(next) as (keyof CreativeBrief)[]){
       if(!Object.is(next[key],briefValueRef.current[key]))briefStorage.current.edits={...briefStorage.current.edits,[key]:next[key]};
     }
-    briefStorage.current.dirty=true;briefStorage.current.revision++;
+    briefStorage.current.dirty=true;briefStorage.current.revision++;briefEditEpoch.current++;
     briefValueRef.current=next;setBriefValue(next);setHasSavedBrief(false);
   },[]);
   const [images,setImages]=useState<ReferenceImage[]>([]);
@@ -85,12 +105,27 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
   const scopeRef=useRef(scope); scopeRef.current=scope;
   const agentScope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${scope}`;
   const agentScopeRef=useRef(agentScope);agentScopeRef.current=agentScope;
+  useLayoutEffect(()=>{
+    const lease=registerSourceEditor(scope);editorLease.current={scope,lease};editorLeases.current.set(scope,lease);
+    return()=>{
+      const replacement=editorLease.current?.scope===scope?editorLease.current.lease:undefined;
+      if(replacement)editorLease.current=undefined;
+      if(!lease.acquired)void lease.release();
+      if(replacement&&!replacement.acquired)void replacement.release();
+      queueMicrotask(()=>{void briefSaveQueue.current.catch(()=>{}).then(async()=>{
+        await Promise.all([lease.release(),replacement?.release()]);
+        const held=editorLeases.current.get(scope);if(held===lease||held===replacement)editorLeases.current.delete(scope);
+      });});
+    };
+  },[scope]);
   useEffect(()=>{if(preservingPreparation.current)return;runEpoch.current++;markerRef.current=null;requestPending.current=false;setBusy(false);setMessages(initialMessages);setAcceptedDecisions([]);setLastExplanation('');setPreview(null);setCandidates([]);setRun(null);setRecoverable(false);setNotice('');},[agentScope]);
   const saveBrief=useCallback(async(saveScope:string,storage=briefStorage.current,value=briefValueRef.current):Promise<void>=>{
+    if(restoreWriting.current)throw new Error('正在恢复本地资料，请稍后再保存。');
     if(storage.scope!==saveScope||!storage.ready)throw new Error(storage.error??'活动需求尚未读取完成，请稍后重试。');
     if(!storage.dirty)return;
     const revision=storage.revision;
-    const write=briefSaveQueue.current.catch(()=>{}).then(()=>storeSourceForm(`${saveScope}:brief`,value));
+    const lease=editorLeases.current.get(saveScope);
+    const write=briefSaveQueue.current.catch(()=>{}).then(async()=>{await lease?.ready;await storeSourceForm(`${saveScope}:brief`,value);});
     briefSaveQueue.current=write;
     try{
       await write;
@@ -108,6 +143,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
   },[]);
   useEffect(()=>{
     if(preservingPreparation.current){briefStorage.current.scope=scope;return;}
+    if(adoptedScope.current===scope){adoptedScope.current=undefined;briefHydration.current=Promise.resolve();return;}
     if(briefStorage.current.scope!==scope){
       const previous=briefStorage.current;
       if(previous.dirty){
@@ -126,7 +162,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
     const storage=briefStorage.current;
     let cancelled=false;
     storage.ready=false;storage.error=null;setBriefReady(false);setBriefError(null);
-    briefHydration.current=readSourceForm<CreativeBrief>(`${scope}:brief`).then(saved=>{
+    briefHydration.current=(editorLease.current?.lease.ready??Promise.resolve()).then(()=>readSourceForm<CreativeBrief>(`${scope}:brief`)).then(saved=>{
       if(cancelled)return;
       storage.ready=true;
       const restored=saved?{...INITIAL_BRIEF,...saved}:INITIAL_BRIEF;
@@ -141,10 +177,10 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
     return()=>{cancelled=true;};
   },[scope,briefLoadAttempt,saveBrief]);
   useEffect(()=>{
-    if(!briefReady||!briefStorage.current.dirty)return;
-    const timer=setTimeout(()=>{void saveBrief(scope).catch(()=>{});},250);
-    return()=>clearTimeout(timer);
-  },[brief,briefReady,scope,saveBrief]);
+    if(!briefReady||!briefStorage.current.dirty||backupPending)return;
+    const timer=setTimeout(()=>{briefTimer.current=undefined;void saveBrief(scope).catch(()=>{});},250);briefTimer.current=timer;
+    return()=>{clearTimeout(timer);if(briefTimer.current===timer)briefTimer.current=undefined;};
+  },[brief,briefReady,scope,saveBrief,backupPending]);
   function retryBrief():void { if(briefStorage.current.ready)void saveBrief(scope).catch(()=>{});else setBriefLoadAttempt(value=>value+1); }
   const [expanded,setExpanded]=useState(false);
   const [directApply,setDirectApply]=useState(true);
@@ -164,6 +200,179 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
   const requestPending=useRef(false);
   const uploadQueue=useRef<Promise<void>>(Promise.resolve());
   const imageEpoch=useRef(0);
+  useLayoutEffect(()=>{operationEpoch.current++;},[layout,controller,cloud.user?.id,cloud.project?.id]);
+  const controllerRef=useRef(controller);controllerRef.current=controller;
+  function beginBackupOperation() {
+    if(backupBusy.current)throw new Error('正在处理备份，请等待当前操作完成。');
+    backupBusy.current=true;setBackupPending(true);
+    if(briefTimer.current!==undefined){clearTimeout(briefTimer.current);briefTimer.current=undefined;}
+    const base={layout:layoutRef.current,scope:scopeRef.current,epoch:operationEpoch.current,edits:briefEditEpoch.current,user:controller.getSnapshot().user?.id,project:controller.getSnapshot().project?.id};
+    return {base,check(){
+      const current=controller.getSnapshot();
+      if(!alive.current||controllerRef.current!==controller||operationEpoch.current!==base.epoch||layoutRef.current!==base.layout||scopeRef.current!==base.scope||briefEditEpoch.current!==base.edits||current.user?.id!==base.user||current.project?.id!==base.project)throw new Error('操作期间项目或需求已变化，已停止处理并保留当前输入，请重新选择备份。');
+    }};
+  }
+  function endBackupOperation():void {
+    restoreWriting.current=false;backupBusy.current=false;
+    if(alive.current){
+      if(!editorLease.current||editorLease.current.scope!==scopeRef.current){
+        const nextScope=scopeRef.current,lease=registerSourceEditor(nextScope);editorLease.current={scope:nextScope,lease};editorLeases.current.set(nextScope,lease);
+      }
+      setBackupPending(false);
+    }
+  }
+  async function flushBackupBase(operation:ReturnType<typeof beginBackupOperation>):Promise<CreativeBrief|undefined> {
+    await flushSourceScope(operation.base.scope);operation.check();
+    // The current flusher reports its own write error; an older scope's failed
+    // draft stays in its cache and must not masquerade as this scope's failure.
+    await briefSaveQueue.current.catch(()=>{});operation.check();
+    const saved=await readSourceForm<CreativeBrief>(`${operation.base.scope}:brief`);operation.check();
+    return saved;
+  }
+  async function prepareBackup():Promise<string> {
+    const activeScope=scopeRef.current;
+    if(failedRollback.current?.scope===activeScope||undoRecovery.current?.some(entry=>entry.scope===activeScope))throw new Error('当前项目的资料回退尚未完成，请先重试恢复或撤销恢复，再下载场景与活动备份。');
+    const operation=beginBackupOperation();
+    try {
+      const saved=await flushBackupBase(operation);
+      const text=serializeLocalProjectBackup(operation.base.layout,{state:'ready',scope:operation.base.scope,brief:saved===undefined?{status:'absent'}:{status:'present',value:saved}});
+      operation.check();return text;
+    } finally {endBackupOperation();}
+  }
+  function assertLocalRestore():void {
+    if(controller.getSnapshot().project)throw new Error('当前工作台连接了云项目，请先切换到本地项目再恢复备份。');
+    if(!prepareRestoreLayout||!commitRestoredLayout)throw new Error('此工作台尚未开放完整备份恢复。');
+  }
+  async function writeBackupBrief(targetScope:string,value:CreativeBrief|undefined):Promise<void> {
+    if(value===undefined)await deleteSourceForm(`${targetScope}:brief`);
+    else await storeSourceForm(`${targetScope}:brief`,value);
+  }
+  const sameBrief=(a:CreativeBrief|undefined,b:CreativeBrief|undefined)=>a===undefined||b===undefined?a===b:canonical(a)===canonical(b);
+  async function writeAndReadBrief(targetScope:string,value:CreativeBrief|undefined,check:()=>void):Promise<CreativeBrief|undefined> {
+    check();
+    await writeBackupBrief(targetScope,value);check();
+    const saved=await readSourceForm<CreativeBrief>(`${targetScope}:brief`);check();
+    if(!sameBrief(saved,value))throw new Error('活动需求保存后的核对失败，原项目已保留。');
+    return saved;
+  }
+  function adoptRestoredBrief(targetScope:string,saved:CreativeBrief|undefined):void {
+    briefDrafts.current.delete(targetScope);
+    briefStorage.current={scope:targetScope,ready:true,dirty:false,revision:0,error:null,edits:{}};
+    briefValueRef.current=saved===undefined?INITIAL_BRIEF:{...INITIAL_BRIEF,...saved};
+    adoptedScope.current=targetScope;briefHydration.current=Promise.resolve();
+    setBriefValue(briefValueRef.current);setBriefReady(true);setBriefError(null);setHasSavedBrief(saved!==undefined);setBriefLoadAttempt(value=>value+1);
+  }
+  async function releaseEditorForRestore():Promise<void> {
+    restoreWriting.current=true;
+    const held=editorLease.current;editorLease.current=undefined;
+    await held?.lease.release();
+    if(held&&editorLeases.current.get(held.scope)===held.lease)editorLeases.current.delete(held.scope);
+  }
+  async function restoreBackup(candidate:LocalProjectRestoreCandidate):Promise<void> {
+    assertLocalRestore();
+    if(undoRecovery.current)throw new Error('上次撤销恢复的资料回退尚未完成，请先重试撤销；当前所选文件仍保留。');
+    // Revalidate even callers that did not use the file picker. Serialization checks
+    // the original values before JSON can omit or coerce an invalid field.
+    if(!candidate||typeof candidate.layoutWasRepaired!=='boolean'||(candidate.source!=='backup'&&candidate.source!=='legacy-layout')||candidate.source==='legacy-layout'&&(candidate.createdAt!==null||candidate.brief.status!=='not-in-file')||candidate.source==='backup'&&(candidate.createdAt===null||!['present','absent'].includes(candidate.brief.status)))throw new Error('备份候选格式无效，请重新选择文件。');
+    const checked=parseLocalProjectBackupJson(serializeLocalProjectBackup(candidate.layout,{state:'ready',scope:candidate.layout.id??'local',brief:candidate.brief.status==='present'?candidate.brief:{status:'absent'}},candidate.createdAt??undefined));
+    const priorId=preparedRestoreIds.current.get(candidate);
+    const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=next.id??'local';
+    if(!candidate.layout.id&&next.id)preparedRestoreIds.current.set(candidate,next.id);
+    const desired=candidate.brief.status==='present'?checked.brief.status==='present'?checked.brief.value:undefined:undefined;
+    const targetDraft=briefDrafts.current.get(targetScope);
+    const operation=beginBackupOperation();
+    try {
+      let beforeBrief=await flushBackupBase(operation);assertLocalRestore();
+      await releaseEditorForRestore();operation.check();
+      await withSourceRestoreLock([operation.base.scope,targetScope,...(failedRollback.current?[failedRollback.current.scope]:[])],async()=>{
+        operation.check();assertLocalRestore();
+        const recovery=failedRollback.current;
+        if(recovery){
+          const current=await readSourceForm<CreativeBrief>(`${recovery.scope}:brief`);operation.check();
+          if(!sameBrief(current,recovery.original)&&!sameBrief(current,recovery.attempted))throw new Error('上次回退未完成的目标资料已有新变化，原恢复值仍保留在此页面，请保留当前页面和原备份，核对后再处理。');
+          await writeAndReadBrief(recovery.scope,recovery.original,operation.check);failedRollback.current=null;
+          if(recovery.scope===operation.base.scope)beforeBrief=recovery.original;
+        }
+        const targetBrief=await readSourceForm<CreativeBrief>(`${targetScope}:brief`);operation.check();
+        let touched=false;
+        try {
+          touched=true;
+          const saved=await writeAndReadBrief(targetScope,desired,operation.check);assertLocalRestore();
+          flushSync(()=>{commitRestoredLayout!(next);adoptRestoredBrief(targetScope,saved);});
+          const afterLayout=layoutRef.current;
+          const point={beforeLayout:operation.base.layout,beforeBrief,targetScope,targetBrief,targetDraft,afterLayout,afterEdits:briefEditEpoch.current,afterBrief:saved};
+          undoPointRef.current=point;setUndoPoint(point);
+        } catch(error) {
+          if(touched)try {await writeAndReadBrief(targetScope,targetBrief,()=>{});}catch(rollbackError){
+            failedRollback.current={scope:targetScope,original:targetBrief,attempted:desired};
+            if(scopeRef.current===targetScope){
+              briefStorage.current.error='上次恢复的活动需求回退未完成，当前输入仍在此页面，请重试保存或恢复。';
+              setBriefError(briefStorage.current.error);setHasSavedBrief(false);
+            }
+            throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 原活动需求回退也失败，当前草稿与所选文件仍保留，请保留此页面并重试。${rollbackError instanceof Error?` ${rollbackError.message}`:''}`);
+          }
+          throw error;
+        }
+      });
+    } finally {endBackupOperation();}
+  }
+  const canUndoRestore=!!undoPoint&&!backupPending&&undoPoint.afterLayout===layout&&undoPoint.afterEdits===briefEditEpoch.current&&!cloud.project;
+  async function undoRestore():Promise<void> {
+    assertLocalRestore();
+    const point=undoPointRef.current;
+    if(!point||point.afterLayout!==layoutRef.current||point.afterEdits!==briefEditEpoch.current)throw new Error('恢复后项目或需求已有新编辑，不能覆盖这些编辑；请保留当前页面和原备份，核对后再处理。');
+    const next=prepareRestoreLayout!(point.beforeLayout),nextScope=next.id??'local';
+    const operation=beginBackupOperation();
+    try {
+      await flushBackupBase(operation);
+      await releaseEditorForRestore();operation.check();
+      await withSourceRestoreLock([point.targetScope,nextScope],async()=>{
+        operation.check();assertLocalRestore();
+        const recovery=undoRecovery.current;
+        if(recovery){
+          // Read every key before repairing any: a new edit must never be guessed
+          // to be one of this transaction's partial writes.
+          for(const entry of recovery){
+            const saved=await readSourceForm<CreativeBrief>(`${entry.scope}:brief`);operation.check();
+            if(!sameBrief(saved,entry.before)&&!sameBrief(saved,entry.attempted))throw new Error('上次撤销回退涉及的资料已有新修改，原恢复点仍保留，不能覆盖新资料。');
+          }
+          const errors:unknown[]=[];
+          for(const entry of recovery)try{await writeAndReadBrief(entry.scope,entry.before,operation.check);}catch(error){errors.push(error);}
+          if(errors.length)throw new Error('上次撤销的资料回退仍未完成，原恢复点已保留，请在本地存储恢复后重试撤销。');
+          undoRecovery.current=null;
+        }
+        const currentBrief=await readSourceForm<CreativeBrief>(`${point.targetScope}:brief`);operation.check();
+        if(!sameBrief(currentBrief,point.afterBrief))throw new Error('恢复后的活动需求已变化，不能覆盖新资料。');
+        const originalBrief=await readSourceForm<CreativeBrief>(`${nextScope}:brief`);operation.check();
+        if(nextScope!==point.targetScope&&!sameBrief(originalBrief,point.beforeBrief))throw new Error('原项目的活动需求在恢复后已有新修改，原恢复点仍保留，不能覆盖这些新资料。');
+        const compensations=[{scope:nextScope,before:originalBrief,attempted:point.beforeBrief},...(point.targetScope===nextScope?[]:[{scope:point.targetScope,before:currentBrief,attempted:point.targetBrief}])];
+        let touched=false;
+        try {
+          touched=true;
+          const saved=await writeAndReadBrief(nextScope,point.beforeBrief,operation.check);
+          if(point.targetScope!==nextScope)await writeAndReadBrief(point.targetScope,point.targetBrief,operation.check);
+          assertLocalRestore();
+          flushSync(()=>{
+            commitRestoredLayout!(next);adoptRestoredBrief(nextScope,saved);
+            if(point.targetDraft&&point.targetScope!==nextScope)briefDrafts.current.set(point.targetScope,point.targetDraft);
+            undoPointRef.current=null;setUndoPoint(null);
+          });
+        } catch(error) {
+          if(touched){
+            const failures:unknown[]=[];
+            for(const entry of compensations)try{await writeAndReadBrief(entry.scope,entry.before,()=>{});}catch(rollbackError){failures.push(rollbackError);}
+            if(failures.length){
+              undoRecovery.current=compensations;
+              briefStorage.current.error='上次撤销恢复的活动需求回退未完成，当前输入仍保留，请重试撤销恢复。';
+              setBriefError(briefStorage.current.error);setHasSavedBrief(false);
+              throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 活动需求回退也失败，原恢复点仍保留，请在本地存储恢复后重试撤销。${failures[0] instanceof Error?` ${failures[0].message}`:''}`);
+            }
+          }
+          throw error;
+        }
+      });
+    } finally {endBackupOperation();}
+  }
   useEffect(()=>{
     if(preservingPreparation.current)return;
     const epoch=++imageEpoch.current;
@@ -480,13 +689,24 @@ export function CreativeStudioProvider({ controller, layout, onApply, onUpdateIt
     catch(error) { if(alive.current && agentScopeRef.current===selected.scope)setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
     finally { if(epoch===runEpoch.current){requestPending.current=false;if(alive.current)setBusy(false);} }
   }
-  const value:StudioValue={scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
 export function CreativeBriefPanel({ showNotice=true, descriptionRef }: { showNotice?: boolean; descriptionRef?: RefObject<HTMLTextAreaElement> }):JSX.Element {
   const studio=useStudio();
   const update=(patch:Partial<CreativeBrief>)=>studio.setBrief(current=>({...current,...patch}));
+  const templateOnly=studio.brief.description.trim()===MANUAL_BRIEF_TEMPLATE.trim();
+  const [templateNotice,setTemplateNotice]=useState<{text:string;error:boolean}|null>(null);
+  useEffect(()=>setTemplateNotice(null),[studio.scope]);
+  function addBriefTemplate():void {
+    if(!studio.briefReady||studio.briefError||studio.backupPending)return;
+    try{
+      const next=appendCreativeBriefTemplate(studio.brief.description);
+      if(next===studio.brief.description){setTemplateNotice({text:'当前文字已含提纲，未重复添加。',error:false});return;}
+      update({description:next});setTemplateNotice({text:'提纲已加入当前输入，请逐项填写并核对。',error:false});
+    }catch(error){setTemplateNotice({text:error instanceof Error?error.message:'提纲未能添加，原文字保持不变。',error:true});}
+  }
   // One idea at a time, swapped on demand: three stacked articles were mostly noise.
   const [ideaIndex,setIdeaIndex]=useState(0);
   const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
@@ -496,6 +716,9 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef }: { showNo
     {studio.briefReady&&!studio.hasSavedBrief&&!studio.briefError&&<p className="cr-hint">当前需求尚未保存；默认活动类型和人数仅供参考，请按实际情况填写。</p>}
     {showNotice&&studio.briefError&&<p className="cr-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
     <label className="cr-label">客户需求<textarea ref={descriptionRef} aria-label="客户需求" maxLength={1800} rows={5} placeholder="描述活动目标、分区与来宾体验……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/></label>
+    <button className="awg-template-button" type="button" disabled={!studio.briefReady||!!studio.briefError||studio.backupPending} onClick={addBriefTemplate}>添加活动简报提纲</button>
+    {templateNotice&&<p className={templateNotice.error?'cr-notice':'cr-hint'} role={templateNotice.error?'alert':'status'}>{templateNotice.text}</p>}
+    {templateOnly&&<p className="cr-hint">先补充活动目标和参与观众，再生成整场布置方案。</p>}
     <div className="cr-brief-basics">
       <label className="cr-label">活动类型<select value={studio.brief.event} onChange={e=>update({event:e.target.value})}>{['品牌快闪','露营派对','工作坊','小型黑客松','展览市集','婚礼聚会','其他活动'].map(label=><option key={label}>{label}</option>)}</select></label>
       <label className="cr-label">预计人数<input type="number" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/></label>
@@ -518,7 +741,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef }: { showNo
     </details>
     <ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief}/>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
-    <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
+    <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||templateOnly||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <p className="cr-hint">根据当前场景与资源库生成布置方案。本轮策划不读取照片；图纸与照片重建需单独确认。</p>
 
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
@@ -536,18 +759,29 @@ export type GeneratedVariant = { sourceAssetId: string; variantAssetId: string; 
 export type GenerationContext = { sourceAssetId?: string; sourceObjectIds: string[]; onVariantReady(variant: GeneratedVariant): void };
 type WorkMode = 'plan'|'model'|'delivery';
 const WORK_MODES = {plan:'场景策划',model:'物料建模',delivery:'执行交付'} as const;
-export function CreativeAssistant({ generationPanel, deliveryOpenRequest = 0, deliveryEntryRef }: {
+export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, workspaceEntryRef, deliveryOpenRequest = 0, deliveryEntryRef }: {
   generationPanel?: ReactNode | ((context: GenerationContext) => ReactNode);
+  workspaceOpenRequest?: number;
+  workspaceEntryRef?: RefObject<HTMLButtonElement>;
   deliveryOpenRequest?: number;
   deliveryEntryRef?: RefObject<HTMLButtonElement>;
 }):JSX.Element {
   const studio=useStudio(); const {setExpanded}=studio; const {selectedItem,allSelectedIds,selectOnly}=useSelection();
   const [drafts,setDrafts]=useState({plan:'',model:''}); const feed=useRef<HTMLDivElement>(null);
+  const content=useRef<HTMLDivElement>(null);
+  const conversation=useRef<HTMLElement>(null);
+  const chatToggle=useRef<HTMLButtonElement>(null);
+  const focusChat=useRef(false);
   const [mode,setMode]=useState<WorkMode>('plan');
+  const latestScopeRef=useRef(studio.scope);latestScopeRef.current=studio.scope;
+  const lastResetScopeRef=useRef<string|null>(null);
+  const afterRestoreScopeRef=useRef<string|null>(null);
   const [templatesOpen,setTemplatesOpen]=useState(false);
   const [workspaceExpanded,setWorkspaceExpanded]=useState(false);
-  const workspaceScroll=useRef<{floating?:number;expanded?:number}>({});
-  const pendingWorkspaceScroll=useRef<number>();
+  const [chatCollapsed,setChatCollapsed]=useState(false);
+  const chatHidden=workspaceExpanded&&chatCollapsed;
+  const workspaceScroll=useRef<Partial<Record<'floating'|'expanded',{content:number;conversation:number}>>>({});
+  const pendingWorkspaceScroll=useRef<{content:number;conversation:number}>();
   const [opened,setOpened]=useState(false);
   const [modelOpened,setModelOpened]=useState(false);
   const [deliveryOpened,setDeliveryOpened]=useState(false);
@@ -555,9 +789,18 @@ export function CreativeAssistant({ generationPanel, deliveryOpenRequest = 0, de
   const [materialSeed,setMaterialSeed]=useState<MaterialCustomizationSeed>();
   useEffect(()=>{if(studio.expanded)setOpened(true);},[studio.expanded]);
   useLayoutEffect(()=>{
-    if(pendingWorkspaceScroll.current!==undefined&&feed.current)feed.current.scrollTop=pendingWorkspaceScroll.current;
+    if(pendingWorkspaceScroll.current){
+      if(content.current)content.current.scrollTop=pendingWorkspaceScroll.current.content;
+      if(feed.current)feed.current.scrollTop=pendingWorkspaceScroll.current.conversation;
+    }
     pendingWorkspaceScroll.current=undefined;
   },[workspaceExpanded]);
+  useLayoutEffect(()=>{
+    if(!focusChat.current||chatHidden)return;
+    focusChat.current=false;
+    if(!templatesOpen&&(mode==='plan'||mode==='model'))messageInput.current?.focus();
+    else conversation.current?.focus();
+  },[chatHidden,mode,templatesOpen]);
   const messageInput=useRef<HTMLTextAreaElement>(null);
   const launcher=useRef<HTMLButtonElement>(null);
   const deliveryFocusTarget=useRef<HTMLDivElement>(null);
@@ -566,14 +809,29 @@ export function CreativeAssistant({ generationPanel, deliveryOpenRequest = 0, de
   const focusBrief=useRef(false);
   const focusDelivery=useRef(false);
   const returnToDeliveryEntry=useRef(false);
+  const returnToWorkspaceEntry=useRef(false);
+  const handledWorkspaceRequest=useRef(0);
   const handledDeliveryRequest=useRef(0);
   const wasExpanded=useRef(false);
   const preparingScope=useRef(studio.preparing);preparingScope.current=studio.preparing;
-  useEffect(()=>{if(preparingScope.current)return;setDrafts({plan:'',model:''});setMaterialSeed(undefined);setModelTool('generate');setMode('plan');setTemplatesOpen(false);},[studio.scope]);
+  useEffect(()=>{
+    if(preparingScope.current)return;
+    const restored=afterRestoreScopeRef.current===studio.scope;
+    afterRestoreScopeRef.current=null;lastResetScopeRef.current=studio.scope;
+    setDrafts({plan:'',model:''});setMaterialSeed(undefined);setModelTool('generate');
+    setMode(restored?'delivery':'plan');if(restored)setDeliveryOpened(true);setTemplatesOpen(false);
+  },[studio.scope]);
+  useEffect(()=>{
+    if(workspaceOpenRequest===handledWorkspaceRequest.current)return;
+    handledWorkspaceRequest.current=workspaceOpenRequest;
+    returnToWorkspaceEntry.current=true;returnToDeliveryEntry.current=false;
+    if(mode==='plan'&&studio.briefReady&&!studio.brief.description.trim())focusBrief.current=true;
+    resizeWorkspace(true);setTemplatesOpen(false);setExpanded(true);
+  },[workspaceOpenRequest,setExpanded]);
   useEffect(()=>{
     if(deliveryOpenRequest===handledDeliveryRequest.current)return;
     handledDeliveryRequest.current=deliveryOpenRequest;
-    returnToDeliveryEntry.current=true;
+    returnToDeliveryEntry.current=true;returnToWorkspaceEntry.current=false;
     focusDelivery.current=true;
     setDeliveryOpened(true);setMode('delivery');setTemplatesOpen(false);setExpanded(true);
   },[deliveryOpenRequest,setExpanded]);
@@ -584,10 +842,11 @@ export function CreativeAssistant({ generationPanel, deliveryOpenRequest = 0, de
       briefDescription.current?.focus();
     }else if(studio.expanded && !templatesOpen && mode==='delivery' && (focusDelivery.current||!wasExpanded.current)){
       focusDelivery.current=false;deliveryFocusTarget.current?.focus();
-    }else if(studio.expanded && !wasExpanded.current && !templatesOpen && (mode==='plan'||mode==='model'&&modelTool==='generate')) messageInput.current?.focus();
-    else if(!studio.expanded&&wasExpanded.current) (returnToDeliveryEntry.current ? deliveryEntryRef?.current ?? launcher.current : launcher.current)?.focus();
+    }else if(studio.expanded && !wasExpanded.current && chatHidden) chatToggle.current?.focus();
+    else if(studio.expanded && !wasExpanded.current && !templatesOpen && (mode==='plan'||mode==='model'&&modelTool==='generate')) (chatHidden?chatToggle.current:messageInput.current)?.focus();
+    else if(!studio.expanded&&wasExpanded.current) (returnToWorkspaceEntry.current ? workspaceEntryRef?.current ?? launcher.current : returnToDeliveryEntry.current ? deliveryEntryRef?.current ?? launcher.current : launcher.current)?.focus();
     wasExpanded.current=studio.expanded;
-  },[studio.expanded,mode,modelTool,templatesOpen,deliveryOpenRequest,deliveryEntryRef]);
+  },[studio.expanded,mode,modelTool,templatesOpen,chatHidden,workspaceOpenRequest,workspaceEntryRef,deliveryOpenRequest,deliveryEntryRef]);
   useEffect(()=>{feed.current?.scrollTo({top:feed.current.scrollHeight,behavior:'smooth'});},[studio.messages,studio.busy]);
   const sceneItems=studio.layout.floors.flatMap(floor=>floor.items);
   const selectedItems=sceneItems.filter(item=>allSelectedIds.has(item.id));
@@ -613,32 +872,68 @@ export function CreativeAssistant({ generationPanel, deliveryOpenRequest = 0, de
   const modeSummary=studio.jevEnabled?'三个方案，确认后应用':mode==='model'?'物料候选确认后应用':studio.directApply?'明确调整直接应用':'预览后确认应用';
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
+  const chatPending=studio.busy?studio.run?.progress||'正在提交任务…':studio.recoverable?'原任务结果待核对':studio.preview||studio.candidates.length>0?studio.stale?'候选需重新生成':'有方案待确认':studio.notice?'有助手提示待查看':'';
   function resizeWorkspace(next:boolean):void {
-    const current=feed.current?.scrollTop??0;
+    const current={content:content.current?.scrollTop??0,conversation:feed.current?.scrollTop??0};
     workspaceScroll.current[workspaceExpanded?'expanded':'floating']=current;
     pendingWorkspaceScroll.current=workspaceScroll.current[next?'expanded':'floating']??current;
+    if(next&&chatCollapsed&&conversation.current?.contains(document.activeElement))setChatCollapsed(false);
     setWorkspaceExpanded(next);
+  }
+  function openChat():void {
+    if(chatHidden){focusChat.current=true;setChatCollapsed(false);}
+    else if(!templatesOpen&&(mode==='plan'||mode==='model'))messageInput.current?.focus();
+    else conversation.current?.focus();
+  }
+  function toggleChat():void {
+    if(!workspaceExpanded)return;
+    if(chatHidden)openChat();
+    else{
+      if(conversation.current?.contains(document.activeElement))chatToggle.current?.focus();
+      setChatCollapsed(true);
+    }
+  }
+  function finishBackupNavigation():void {
+    const scope=latestScopeRef.current;
+    afterRestoreScopeRef.current=lastResetScopeRef.current===scope?null:scope;
+    focusDelivery.current=false;focusBrief.current=false;
+    setDeliveryOpened(true);setMode('delivery');setTemplatesOpen(false);
+  }
+  function openBrief():void {
+    if(studio.expanded&&mode==='plan'&&!templatesOpen){
+      if(briefDetails.current)briefDetails.current.open=true;
+      briefDescription.current?.focus();
+    }else{
+      focusBrief.current=true;setMode('plan');setTemplatesOpen(false);setExpanded(true);
+    }
   }
   return <div className={`cr-assistant ${studio.expanded?'is-open':''} ${studio.expanded&&workspaceExpanded?'is-workspace-expanded':''} ${selectedItem?'has-properties':''}`}>
     {(opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className={`cr-chat ${workspaceExpanded?'is-expanded':''}`} aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();studio.setExpanded(false);}}}>
-      <header><div className="cr-header-brand"><span className="cr-avatar"><AssistantMascot busy={studio.busy}/></span><div><strong>Binggo · {templatesOpen?'场景模板':WORK_MODES[mode]}</strong><small title={studio.layout.name}>{studio.layout.name}</small></div></div><div className="cr-chat-header-actions"><label className="sr-only" htmlFor="creative-work-mode">工作模式</label><select id="creative-work-mode" value={mode} onChange={event=>{const next=event.target.value as WorkMode;setMode(next);setTemplatesOpen(false);if(next==='model')setModelOpened(true);if(next==='delivery')setDeliveryOpened(true);}}>{(Object.keys(WORK_MODES) as WorkMode[]).map(key=><option value={key} key={key}>{WORK_MODES[key]}</option>)}</select><button className="cr-workspace-toggle" type="button" aria-pressed={workspaceExpanded} onMouseDown={event=>{if(event.button===0)event.preventDefault();}} onClick={()=>resizeWorkspace(!workspaceExpanded)}>{workspaceExpanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}<span>{workspaceExpanded?'恢复浮窗':'展开工作区'}</span></button><button type="button" aria-label="收起 Agent" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></div></header>
-      <div className="cr-workspace-tools">{templatesOpen?<button type="button" onClick={()=>setTemplatesOpen(false)}><ArrowLeft size={14}/>返回当前工作区</button>:<button type="button" onClick={()=>setTemplatesOpen(true)}><LayoutTemplate size={14}/>场景模板</button>}<span>{studio.connection}</span></div>
+      <header><div className="cr-header-brand"><span className="cr-avatar"><AssistantMascot busy={studio.busy}/></span><div><strong>{workspaceExpanded?'活动工作区':`Binggo · ${templatesOpen?'场景模板':WORK_MODES[mode]}`}</strong><small title={studio.layout.name}>{studio.layout.name}</small></div></div><div className="cr-chat-header-actions"><label className="sr-only" htmlFor="creative-work-mode">工作模式</label><select id="creative-work-mode" value={mode} onChange={event=>{const next=event.target.value as WorkMode;setMode(next);setTemplatesOpen(false);if(next==='model')setModelOpened(true);if(next==='delivery')setDeliveryOpened(true);}}>{(Object.keys(WORK_MODES) as WorkMode[]).map(key=><option value={key} key={key}>{WORK_MODES[key]}</option>)}</select><button className="cr-workspace-toggle" type="button" aria-pressed={workspaceExpanded} onMouseDown={event=>{if(event.button===0)event.preventDefault();}} onClick={()=>resizeWorkspace(!workspaceExpanded)}>{workspaceExpanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}<span>{workspaceExpanded?'恢复浮窗':'展开工作区'}</span></button><button type="button" aria-label="收起 Agent" onClick={()=>studio.setExpanded(false)}><X size={18}/></button></div></header>
+      <div className="cr-workspace-tools">{templatesOpen?<button type="button" onClick={()=>setTemplatesOpen(false)}><ArrowLeft size={14}/>返回当前工作区</button>:<button type="button" onClick={()=>setTemplatesOpen(true)}><LayoutTemplate size={14}/>场景模板</button>}<span>{studio.connection}</span><div className="cr-chat-toggle-wrap" hidden={!workspaceExpanded}><button ref={chatToggle} className="cr-chat-toggle" type="button" aria-label={chatHidden?'展开聊天':'收起聊天'} aria-controls="creative-conversation" aria-expanded={!chatHidden} aria-describedby={chatHidden&&chatPending?'creative-conversation-status':undefined} onClick={toggleChat}>{chatHidden?'展开聊天':'收起聊天'}</button>{chatHidden&&chatPending&&<span id="creative-conversation-status" className="cr-chat-pending" role="status" aria-live="polite">{chatPending} · 展开聊天查看</span>}</div></div>
+      <div className={`cr-plan-panel cr-workspace-body ${chatHidden?'is-chat-collapsed':''}`}>
+      <div className="cr-workspace-content" ref={content}>
+        {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
+        <div hidden={templatesOpen||mode==='model'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief}/></div>
+        <section id="agent-panel-plan" aria-label="场景策划" hidden={mode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false} descriptionRef={briefDescription}/></details></section>
+        <section id="agent-panel-model" aria-label="物料建模" hidden={mode!=='model'||templatesOpen}>
+          <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
+          <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>{setDrafts(current=>({...current,model:prompt!}));openChat();}}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
+          {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={studio.expanded&&!templatesOpen&&mode==='model'&&modelTool==='customize'}/></div>}
+        </section>
+        <section id="agent-panel-delivery" aria-label="执行交付" hidden={mode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel layout={studio.layout} controller={studio.controller} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
+        <section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>
+        <p className="cr-selection-context">当前场景：{sceneItems.length} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
+      </div>
+      <section id="creative-conversation" className="cr-conversation" aria-label="Binggo 聊天" hidden={chatHidden} ref={conversation} tabIndex={-1}>
+      <header className="cr-conversation-heading"><strong>Binggo · 聊天</strong><small>{mode==='delivery'||templatesOpen?'任务与候选记录':modeSummary}</small></header>
       <details className="cr-agent-settings" hidden={mode==='delivery'||templatesOpen}><summary>助手设置 <small>{modeSummary}</small></summary>
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.directApply} disabled={studio.busy||studio.jevEnabled||mode==='model'} onChange={event=>studio.setDirectApply(event.target.checked)}/>明确指令直接应用</label><span>{mode==='model'?'仅用于场景策划；物料建模始终先预览':studio.directApply?'明确调整通过校验后应用，可撤销':'先预览，再确认应用'}</span></div>
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.jevEnabled} disabled={studio.busy} onChange={event=>studio.setJevEnabled(event.target.checked)}/>JEV 决策模式</label><span>生成 3 个方案，由你最终选择</span></div>
       <p className="cr-hint">场景策划与物料建模使用 DeepSeek。{studio.jevEnabled?'比较方案后由你确认应用。':'模糊需求先预览；已应用的调整可撤销。'}</p>
       </details>
-      <div className="cr-plan-panel">
       <div className="cr-chat-feed" ref={feed}>
-        <section id="agent-panel-plan" aria-label="场景策划" hidden={mode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false} descriptionRef={briefDescription}/></details></section>
-        <section id="agent-panel-model" aria-label="物料建模" hidden={mode!=='model'||templatesOpen}>
-          <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
-          <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在下方填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>{setDrafts(current=>({...current,model:prompt!}));messageInput.current?.focus();}}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
-          {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={studio.expanded&&!templatesOpen&&mode==='model'&&modelTool==='customize'}/></div>}
-        </section>
-        <section id="agent-panel-delivery" aria-label="执行交付" hidden={mode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel layout={studio.layout} controller={studio.controller} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={()=>{focusBrief.current=true;setMode('plan');setTemplatesOpen(false);setExpanded(true);}}/></div>}</section>
-        <section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>
-        <p className="cr-selection-context">当前场景：{sceneItems.length} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
+        {(mode==='delivery'||templatesOpen)&&<p className="cr-hint">切换到场景策划或物料建模可继续对话。</p>}
         <div aria-live="polite"><div hidden={mode==='delivery'||templatesOpen}>{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'Binggo':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸，让 DeepSeek 查找资源或使用参数化建模；不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div>)}</div>
         {studio.busy&&<div className="cr-chat-working"><Loader2 className="cr-spin" size={15}/><span>{studio.run?.progress||'正在提交任务…'}</span>{(!studio.run||['queued','running'].includes(studio.run.state))&&<button type="button" onClick={()=>void studio.cancelRun()}>取消任务</button>}</div>}
         {studio.recoverable&&<div className="cr-proposal"><p>原任务结果待核对。查询会继续读取原任务，不会再次提交生成。</p><button type="button" disabled={studio.busy} onClick={()=>void studio.recoverRun()}>查询原任务</button><button type="button" disabled={studio.busy} onClick={()=>void studio.cancelRun()}>取消原任务</button></div>}
@@ -651,13 +946,13 @@ export function CreativeAssistant({ generationPanel, deliveryOpenRequest = 0, de
         {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span><strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>{studio.preview.proposal.explanation}</p>{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=>{const names=warning.ids.map(id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件');return <li key={`${warning.code}-${index}`}>{warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项'}：{names.join('、')}</li>;})}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul><p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:<div><button type="button" onClick={()=>void studio.applyPreview()} disabled={studio.busy}><Check size={14}/>确认应用</button><button type="button" onClick={studio.discardPreview} disabled={studio.busy}><Trash2 size={14}/>放弃</button></div>}</div>}
         {studio.preview&&workspaceExpanded&&!studio.stale&&<button className="cr-return-canvas" type="button" onClick={()=>resizeWorkspace(false)}><Minimize2 size={14}/>回到画布预览</button>}
         </div>
-      </div>
-      {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
       {studio.notice&&<p className="cr-agent-notice" role="status">{studio.notice}</p>}
+      </div>
       <form className="cr-chat-composer" hidden={mode==='delivery'||templatesOpen} onSubmit={e=>{e.preventDefault();submit();}}><label className="sr-only" htmlFor="creative-message">告诉助手你的想法</label><textarea ref={messageInput} id="creative-message" value={draft} maxLength={1800} onChange={e=>setDraft(e.target.value)} placeholder={mode==='model'?'填写物料尺寸、样式和摆放要求……':'告诉我想怎么调整……'} rows={2} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit();}}}/><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy||studio.recoverable}><ArrowUp size={19}/></button></form>
       <footer hidden={mode==='delivery'||templatesOpen}><span>{studio.jevEnabled?'比较方案后由你确认应用':mode==='model'?'核对物料候选后确认应用':studio.directApply?'明确调整通过校验后应用，模糊需求先预览':'确认提案后修改当前场景'}</span></footer>
+      </section>
       </div>
     </section>}
-    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>{if(!studio.expanded)returnToDeliveryEntry.current=false;studio.setExpanded(!studio.expanded);}} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭 Binggo Agent':'打开 Binggo Agent'}><span><AssistantMascot busy={studio.busy}/></span>{studio.expanded?'收起 Binggo':'Binggo · Agent'}<i/></button>
+    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>{if(!studio.expanded){returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;}studio.setExpanded(!studio.expanded);}} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭 Binggo Agent':'打开 Binggo Agent'}><span><AssistantMascot busy={studio.busy}/></span>{studio.expanded?'收起 Binggo':'Binggo · Agent'}<i/></button>
   </div>;
 }

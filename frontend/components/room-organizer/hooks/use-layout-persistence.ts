@@ -23,6 +23,8 @@ export interface UseLayoutPersistenceOptions {
 }
 
 export interface UseLayoutPersistenceResult {
+  /** Cancel older autosaves and acknowledge the fully verified file restore. */
+  acknowledgeRestoredLayout(layout: RoomLayout, json: string): void;
   /** Milliseconds-since-epoch of the last successful save, or null. */
   lastSavedAt: number | null;
   /** True while the debounce window is pending — the next save is on the way. */
@@ -66,6 +68,8 @@ export function useLayoutPersistence({
   // The exact JSON this tab last wrote: its own echo must not count as
   // another tab's change (#334).
   const lastSavedJsonRef = useRef<string | null>(null);
+  const saveEpochRef = useRef(0);
+  const restoredLayoutRef = useRef<RoomLayout | null>(null);
   // The main save holds a house that couldn't be opened and couldn't be
   // copied aside (storage full): it's the only copy, so nothing may be
   // written over it until a copy succeeds.
@@ -223,6 +227,7 @@ export function useLayoutPersistence({
   }, [onHydrate]);
 
   useEffect(() => {
+    if (restoredLayoutRef.current === layout) { restoredLayoutRef.current = null; return; }
     if (hydrationBaseRef.current) {
       if (Object.is(layout, hydrationBaseRef.current)) return;
       // First layout change after hydration is the hydration dispatch itself,
@@ -230,9 +235,11 @@ export function useLayoutPersistence({
       hydrationBaseRef.current = null;
       return;
     }
+    const saveEpoch = saveEpochRef.current;
     setSaving(true);
     pendingRef.current = true;
     const handle = window.setTimeout(() => {
+      if (saveEpoch !== saveEpochRef.current) return;
       // Retried on every edit, so freeing space lets saving resume.
       if (mainSaveHeldRef.current) {
         const outcome = keepStoredLayout();
@@ -287,5 +294,11 @@ export function useLayoutPersistence({
     };
   }, []);
 
-  return { lastSavedAt, saving, saveError, remoteLayout, clearRemoteLayout };
+  const acknowledgeRestoredLayout = useCallback((restored: RoomLayout, json: string): void => {
+    saveEpochRef.current++; restoredLayoutRef.current = restored;
+    layoutRef.current = restored; lastSavedJsonRef.current = json;
+    pendingRef.current = false; mainSaveHeldRef.current = false; hydrationBaseRef.current = null;
+    setSaving(false); setSaveError(null); setLastSavedAt(Date.now()); setRemoteLayout(null);
+  }, []);
+  return { lastSavedAt, saving, saveError, remoteLayout, clearRemoteLayout, acknowledgeRestoredLayout };
 }
