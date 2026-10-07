@@ -16,6 +16,32 @@ export const INITIAL_BRIEF: CreativeBrief = {
   event: '品牌快闪', guests: 24,
   description: '', mustHave: '', allowIdeas: true, venueConditions: '', style: '', palette: '', atmosphere: '',
 };
+export const CREATIVE_BRIEF_DESCRIPTION_LIMIT = 1800;
+const MANUAL_BRIEF_HEADING = '【创意简报与观众体验】';
+export const MANUAL_BRIEF_TEMPLATE = [
+  MANUAL_BRIEF_HEADING,
+  '请按实际情况填写；未知写“待确认”，演练设定写明“假设”。',
+  '活动目标：待填写希望表达什么、解决什么问题。',
+  '参与观众：待填写谁会来，希望他们理解或做什么。',
+  '交付范围：待填写我们承担什么、交付到什么状态。',
+  '已知约束：待填写已确认的场地、时间、预算与必须保留的条件。',
+  '待确认项：待填写需要向客户、场地方或协作方核实的事项。',
+  '到达：待填写如何找到入口、提前需要知道什么。',
+  '进入：待填写第一眼看见什么、如何开始参与。',
+  '观看：待填写内容、顺序、关键视角及对应物件。',
+  '交流：待填写停留位置、互动方式和负责引导的人。',
+  '离开：待填写带走什么、如何反馈或继续参与。',
+].join('\n');
+
+/** A manual scaffold in the existing description; never overwrite or truncate user text. */
+export function appendCreativeBriefTemplate(description: string): string {
+  if (description.includes(MANUAL_BRIEF_HEADING)) return description;
+  const next = description + (description ? '\n\n' : '') + MANUAL_BRIEF_TEMPLATE;
+  if (next.length > CREATIVE_BRIEF_DESCRIPTION_LIMIT) {
+    throw new Error('描述空间不足，请先精简或手动补充简报；原文字保持不变。');
+  }
+  return next;
+}
 export const IDEA_CARDS = [
   { title: '轻露营会客区', text: '用开放式帐篷、地毯与低座围合交流区，预留顺畅的主通道。', prompt: '设置一处帐篷会客区，适合小组交流，保留宽敞的主通道。' },
   { title: '会发光的夜场', text: '用暖色串灯连接签到、互动与休息区，形成连贯的夜间氛围。', prompt: '用暖色串灯串联签到区和休息区，并加入有层次的夜间照明。' },
