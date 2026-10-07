@@ -1,8 +1,9 @@
+import { layoutForExport } from '../../../lib/layout-export';
 import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
 export function downloadLayoutAsJson(layout: RoomLayout): void {
-  const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(layoutForExport(layout), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   try {
     const link = document.createElement('a');

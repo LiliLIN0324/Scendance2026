@@ -9,10 +9,14 @@ import { buildRoom } from '../three/room-builder';
 import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
+import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
+import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
+import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
 import type { RoomLayout } from './types';
 import type { BackendSession } from '@/lib/backend-session';
 
-function deliveryScene(layout: RoomLayout) {
+export function deliveryScene(layout: RoomLayout) {
   if (layout.scenePreset || layout.floors.some(floor => floor.items.some(item => item.glbNode))) {
     throw new Error('完整场景预设暂不支持交付导出，固定场馆结构和物件会保留在云方案中。');
   }
@@ -48,21 +52,82 @@ export function deliveryMaterials(layout: RoomLayout): DeliveryMaterial[] {
   return [...groups.values()];
 }
 
-export function sceneDeliveryJson(layout: RoomLayout): string {
+export interface DeliverySnapshot { id: string; generatedAt: string }
+export interface DeliveryExecution extends Omit<Handoff, 'reviewedBasis'> {
+  objectId: string; name: string; materialId: string; assetVersionId: string | null;
+  floorId: string; floorName: string; size: { width: number; depth: number; height: number };
+  position: { x: number; z: number }; rotation: number; elevation: number;
+  hasHandoff: boolean; effectiveStatus: Handoff['status'] | 'needs_review';
+}
+
+export async function deliveryExecution(layout: RoomLayout): Promise<DeliveryExecution[]> {
   const scene = deliveryScene(layout);
-  return JSON.stringify({ format: 'scendance-scene-delivery', version: 1, units: 'm', upAxis: 'Y',
-    coordinateOrigin: 'venue-north-west', name: layout.name, scene, materials: deliveryMaterials(layout),
+  return Promise.all(scene.objects.map(async object => {
+    const floor = layout.floors.find(entry => entry.items.some(item => item.id === object.id))!;
+    const item = floor.items.find(entry => entry.id === object.id)!;
+    const { reviewedBasis: _localBasis, ...handoff } = handoffSchema.parse(item.handoff ?? blankHandoff());
+    return { ...handoff, objectId: object.id, name: item.name, materialId: object.materialId,
+      assetVersionId: object.assetId ?? null, floorId: floor.id, floorName: floor.name,
+      size: object.size, position: object.position, rotation: object.rotation, elevation: object.elevation ?? 0,
+      hasHandoff: !!item.handoff, effectiveStatus: await effectiveHandoffStatus(layout, item.id) };
+  }));
+}
+
+export interface DeliveryOperation extends Omit<EventOperationTask, 'reviewedBasis'> {
+  effectiveStatus: EventOperationTask['status'] | 'needs_review'; missingObjectIds: string[];
+}
+export async function deliveryOperations(layout: RoomLayout): Promise<{
+  schemaVersion: 1; dataKind: 'unspecified' | 'rehearsal' | 'real'; tasks: DeliveryOperation[];
+} | null> {
+  if (!layout.eventOperations) return null;
+  const operations = eventOperationsSchema.parse(layout.eventOperations);
+  return { schemaVersion: 1, dataKind: operations.dataKind, tasks: await Promise.all(operations.tasks.map(async task => {
+    const { reviewedBasis: _localBasis, ...fields } = task;
+    const review = await operationReview(layout, task);
+    return { ...fields, effectiveStatus: review.status, missingObjectIds: review.missingObjectIds };
+  })) };
+}
+
+export async function sceneDeliveryJson(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
+  const scene = deliveryScene(layout);
+  return JSON.stringify({ format: 'scendance-scene-delivery', version: 2, units: 'm', upAxis: 'Y',
+    coordinateOrigin: 'venue-north-west', name: layout.name, ...(snapshot ? { snapshot } : {}), scene,
+    execution: await deliveryExecution(layout), materials: deliveryMaterials(layout),
+    operations: await deliveryOperations(layout), operationsTimeZone: 'Asia/Shanghai',
+    source: { kind: 'editor-snapshot', layoutId: layout.id ?? null },
     note: 'assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。' }, null, 2);
 }
 
 function csvField(value: unknown): string {
   const text = String(value ?? '');
-  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  const safe = typeof value === 'string' && /^\s*[=+\-@]|^[\t\r\n]/.test(text) ? `'${text}` : text;
   return `"${safe.replace(/"/g, '""')}"`;
 }
-export function sceneDeliveryCsv(layout: RoomLayout): string {
-  const rows: unknown[][] = [['名称','物料类型','资产版本ID','来源','宽/m','深/m','高/m','颜色','数量','物件ID','采购状态','来源页面','许可','SHA256']];
-  for (const item of deliveryMaterials(layout)) rows.push([item.name,item.materialId,item.assetVersionId,item.source,item.width,item.depth,item.height,item.color,item.quantity,item.objectIds.join(';'),item.procurement,item.sourceUrl,item.license,item.sha256]);
+export function sceneDeliveryCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): string {
+  const rows: unknown[][] = [['名称','物料类型','资产版本ID','来源','宽/m','深/m','高/m','颜色','数量','物件ID','采购状态','来源页面','许可','SHA256','交付编号','生成时间']];
+  for (const item of deliveryMaterials(layout)) rows.push([item.name,item.materialId,item.assetVersionId,item.source,item.width,item.depth,item.height,item.color,item.quantity,item.objectIds.join(';'),item.procurement,item.sourceUrl,item.license,item.sha256,snapshot?.id,snapshot?.generatedAt]);
+  return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
+}
+
+export async function sceneExecutionCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
+  const rows: unknown[][] = [['物件ID','名称','物料类型','资产版本ID','楼层','宽/m','深/m','高/m','X/m','Z/m','旋转/度','离地/m','数量','负责人','期限','验收条件','记录状态','有效状态','证据链接','验收说明','交付编号','生成时间']];
+  for (const item of await deliveryExecution(layout)) rows.push([item.objectId,item.name,item.materialId,item.assetVersionId,
+    item.floorName,item.size.width,item.size.depth,item.size.height,item.position.x,item.position.z,item.rotation,item.elevation,
+    1,item.ownerName,item.dueDate,item.acceptance,HANDOFF_STATUS_LABELS[item.status],
+    item.hasHandoff ? HANDOFF_STATUS_LABELS[item.effectiveStatus] : '未分配',item.evidenceUrls.join('\n'),item.evidenceNote,
+    snapshot?.id,snapshot?.generatedAt]);
+  return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
+}
+
+/** Text schedules remain deliverable even when venue/model exports are unsupported. */
+export async function eventOperationsCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
+  const kinds = { unspecified: '未标注', rehearsal: '演练', real: '真实' };
+  const operations = await deliveryOperations(layout);
+  const rows: unknown[][] = [['任务编号','任务标题','阶段','负责人','承接团队','计划开始','计划结束','实际开始','实际结束','完成条件','记录状态','有效状态','关联物件编号','缺失物件编号','现场核对说明','证据链接','资料类型','界面输入时区','交付编号','生成时间','场景名称','本地项目编号']];
+  for (const task of operations?.tasks ?? []) rows.push([task.id,task.title,OPERATION_PHASE_LABELS[task.phase],task.ownerName,
+    task.contractorName,task.plannedStartAt,task.plannedEndAt,task.actualStartedAt,task.actualFinishedAt,task.acceptance,
+    OPERATION_STATUS_LABELS[task.status],OPERATION_STATUS_LABELS[task.effectiveStatus],task.objectIds.join(';'),task.missingObjectIds.join(';'),
+    task.evidenceNote,task.evidenceUrls.join('\n'),kinds[operations!.dataKind],'Asia/Shanghai',snapshot?.id,snapshot?.generatedAt,layout.name,layout.id]);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 

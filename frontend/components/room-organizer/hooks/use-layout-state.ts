@@ -1,5 +1,6 @@
 'use client';
 
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import {
   INITIAL_GROUND_FLOOR,
   INITIAL_LAYOUT,
@@ -40,6 +41,7 @@ export { INITIAL_LAYOUT };
 // ---------------------------------------------------------------------------
 
 export interface LayoutActions {
+  setEventOperations(value: EventOperations | undefined): void;
   setName(name: string): void;
   setWidth(width: number): void;
   setHeight(height: number): void;

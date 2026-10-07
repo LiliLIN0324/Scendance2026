@@ -2,10 +2,12 @@
 
 面向活动策划团队的三维场景布置与协作网站。主工作台采用 Next.js 静态导出和 Three.js，账号、项目、模型资产与 AI 接口由 Supabase 提供。
 
+**当前开发分支：`codex/delivery-research-20261007`。** 已增加本地活动安排、逐件物料工作单、变更复核与交接导出，并增强Agent执行可靠性。[查看本版进度、验证和演练步骤](docs/DELIVERY-PROGRESS-2026-10-07.md)。备份文件模块已完成，界面接入与真实云协作仍待推进。
+
 - 在线工作台：<https://scendance.charlestech.org/>
 - 本地体验入口：<https://scendance.charlestech.org/?local=1>
 - 产品介绍：<https://scendance.charlestech.org/introduction>
-- 源码仓库：<https://github.com/LiliLIN0324/scendance>
+- 源码仓库：<https://github.com/LiliLIN0324/Scendance2026>
 
 官网整页预览（`preview.jpg`）：
 
@@ -13,7 +15,7 @@
 
 ## 本份代码对应什么版本
 
-这是 **2026-10-03 核验的线上版本快照**，专用分支为 `codex/website-latest`，本地交付目录为 `WEBSITE-LATEST/`。根目录即仓库根目录，不需要再进入一层 `scendance/`。
+本开发分支基于 `d139da72694cca53809eba444ee1c5b909cdb627` 增量实现。当前新增功能以分支代码和本机演练为准，线上服务独立部署。下面保留原 **2026-10-03 线上版本快照** 的历史说明，旧快照分支为 `codex/website-latest`；根目录即仓库根目录。
 
 线上前端与后端独立发布，因此不存在一个同时代表全部线上服务的原始提交。本分支以实际前端部署提交为基线，补入已经上线的后端变更与原始迁移，并完善交接说明；不是将仓库默认分支直接视为线上版本。
 

@@ -1,4 +1,6 @@
 import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
+import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 
 export type Vec2 = Readonly<{ x: number; z: number }>;
 
@@ -107,6 +109,8 @@ export interface CategoryMeta {
 }
 
 export interface FurnitureItem {
+  /** Local execution record for this instance; not part of the cloud Scene. */
+  handoff?: Handoff | undefined;
   structuralOpeningId?: string;
   structuralColumnId?: string;
   wallId?: string;
@@ -176,7 +180,7 @@ export interface FurnitureItem {
 
 export type CameraPreset = 'iso' | 'top' | 'front' | 'corner';
 
-export type CatalogItem = Omit<FurnitureItem, 'id' | 'position' | 'rotation' | 'price' | 'category'> & {
+export type CatalogItem = Omit<FurnitureItem, 'id' | 'position' | 'rotation' | 'price' | 'category' | 'handoff'> & {
   price: number;
   category: FurnitureCategory;
 };
@@ -335,6 +339,8 @@ export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | '
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /** Local activity execution metadata, saved and restored with the layout. */
+  eventOperations?: EventOperations | undefined;
   /** Local editor metadata; cloud scenes contain only the active design. */
   itemLayers?: { id: string; name: string; itemIds: string[] }[];
   designBook?: { activeId: string; variants: { id: string; name: string; layout: Omit<RoomLayout, 'designBook'> }[] };

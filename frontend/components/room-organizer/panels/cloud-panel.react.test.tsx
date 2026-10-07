@@ -7,9 +7,11 @@ import { PublicationPanel } from '@/components/business/publication-panel';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
 import { registerSourceFlush } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import { LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { addDesign } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { CloudPanel } from './cloud-panel';
+import type { RoomLayout } from '../lib/types';
 
 vi.mock('@/lib/backend-session', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/backend-session')>();
@@ -58,6 +60,55 @@ afterEach(() => {
 });
 
 describe('CloudPanel delayed project replacement', () => {
+  it.each(['url','button','acquire'] as const)('stops $0 before a replacement request when the original brief cannot flush', async entry => {
+    const initial=backendSceneToLayout(scene,{projectId});
+    const unregister=registerSourceFlush(projectId,async()=>{throw new Error('活动需求保存失败，原输入已保留。');});
+    const getProject=vi.spyOn(controller,'getProject');
+    const acquireLease=vi.spyOn(controller,'acquireLease');
+    const onLoadLayout=vi.fn();
+    queue([other]); queue([{id:studioId,name:'工作室',role:'owner',displayName:'A'}]);
+    if(entry==='url')window.history.replaceState(null,'',`/editor/?project=${otherId}`);
+    try{
+      render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+      await waitFor(()=>expect(mockFetch).toHaveBeenCalledTimes(4));
+      if(entry!=='url'){
+        fireEvent.click(screen.getByRole('button',{name:'账户与项目'}));
+        fireEvent.click(screen.getByRole('button',{name:entry==='button'?'打开':'获取编辑权'}));
+      }
+      expect(await screen.findByText('活动需求保存失败，原输入已保留。')).toBeTruthy();
+      expect(getProject).not.toHaveBeenCalled(); expect(acquireLease).not.toHaveBeenCalled(); expect(onLoadLayout).not.toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    }finally{unregister();}
+  });
+
+  it.each((['url', 'button'] as const).flatMap(entry => (['worksheet', 'activity', 'nested activity'] as const).map(kind => ({entry,kind}))))('does not read or replace a local $kind through a $entry', async ({entry,kind}) => {
+    const local = backendSceneToLayout({ ...scene, objects: [{ id: '40000000-0000-4000-8000-000000000001', materialId: 'chair', position: { x: 2, z: 3 }, size: { width: 0.5, depth: 0.5, height: 0.9 }, rotation: 0, color: '#ffffff', locked: false, notes: '' }] });
+    if(kind==='worksheet')local.floors[0]!.items[0]!.handoff = { ownerName: '布展负责人', dueDate: '2026-10-08', acceptance: '摆放完成并核对通道', status: 'todo', evidenceUrls: [], evidenceNote: '' };
+    else if(kind==='activity')local.eventOperations={schemaVersion:1,dataKind:'unspecified',tasks:[]};
+    // Test-only malformed nesting checks the cloud guard without widening the editor's design snapshot type.
+    else local.designBook={activeId:'parent',variants:[{id:'parent',name:'方案',layout:{...backendSceneToLayout(scene),designBook:{activeId:'leaf',variants:[{id:'leaf',name:'活动',layout:{...backendSceneToLayout(scene),eventOperations:{schemaVersion:1,dataKind:'unspecified',tasks:[]}}}]}}}]} as unknown as NonNullable<RoomLayout['designBook']>;
+    const getProject = vi.spyOn(controller, 'getProject');
+    const onLoadLayout = vi.fn();
+    queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    if (entry === 'url') window.history.replaceState(null, '', `/editor/?project=${otherId}`);
+    const rendered = render(<CloudPanel controller={controller} layout={local} onLoadLayout={onLoadLayout}/>);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    if (entry === 'button') {
+      fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: '打开' })); });
+    } else {
+      await waitFor(() => expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(true));
+    }
+    expect(screen.getByText(LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy();
+    expect(getProject).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(onLoadLayout).not.toHaveBeenCalled();
+    if(kind==='worksheet')expect(local.floors[0]!.items[0]!.handoff?.ownerName).toBe('布展负责人');
+    else if(kind==='activity')expect(local.eventOperations?.tasks).toEqual([]);
+    else expect((local.designBook?.variants[0]!.layout as RoomLayout | undefined)?.designBook?.variants[0]!.layout.eventOperations?.tasks).toEqual([]);
+    expect(controller.getSnapshot().project?.id).toBe(projectId);
+  });
+
   it('saves an externally bound Agent project without replacing its draft or creating another project', async () => {
     queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const onLoadLayout = vi.fn();
@@ -79,6 +130,29 @@ describe('CloudPanel delayed project replacement', () => {
     expect(controller.getSnapshot().draft).toEqual(draft);
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(mockFetch.mock.calls.filter(([url, init]) => String(url).endsWith('/projects') && init?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('keeps activity information added while a cloud save is pending without reporting it saved', async () => {
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    await controller.acquireLease(projectId);
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const initial=backendSceneToLayout(scene,{projectId});
+    const onLoadLayout=vi.fn();
+    const view=render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+    fireEvent.click(screen.getByRole('button',{name:'账户与项目'}));
+    await waitFor(()=>expect(mockFetch).toHaveBeenCalledTimes(5));
+    let finish!:(response:Response)=>void;
+    mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    fireEvent.click(screen.getByRole('button',{name:'保存到云端'}));
+    await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    const changed={...initial,eventOperations:{schemaVersion:1 as const,dataKind:'rehearsal' as const,tasks:[]}};
+    view.rerender(<CloudPanel controller={controller} layout={changed} onLoadLayout={onLoadLayout}/>);
+    await act(async()=>{finish(json({id:projectId,revision:3,scene,updatedAt:new Date().toISOString(),warnings:[]}));});
+    expect(screen.getByText(LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy();
+    expect(screen.queryByText('已保存云端版本 3。')).toBeNull();
+    expect(vi.mocked(PublicationPanel).mock.calls.at(-1)?.[0].dirty).toBe(true);
+    expect(changed.eventOperations).toEqual({schemaVersion:1,dataKind:'rehearsal',tasks:[]});
+    expect(onLoadLayout).not.toHaveBeenCalled();
   });
 
   it('does not bind a different local canvas to an existing Agent lease', async () => {
@@ -204,7 +278,7 @@ describe('CloudPanel delayed project replacement', () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
     expect(controller.getSnapshot().draft).not.toEqual(layout);
   });
-  it.each(['open', 'acquire', 'create'] as const)('preserves edits made while the %s request is pending', async action => {
+  it.each((['open', 'acquire', 'create'] as const).flatMap(action => (['geometry', 'activity', 'nested activity'] as const).map(change => ({action,change}))))('preserves $change edits made while the $action request is pending', async ({action,change}) => {
     const initialLayout = backendSceneToLayout(scene, { projectId, name: original.name });
     const onLoadLayout = vi.fn();
     queue([other]);
@@ -221,7 +295,7 @@ describe('CloudPanel delayed project replacement', () => {
 
     // The dialog can be closed while busy, so edits on the canvas must remain safe.
     fireEvent.click(screen.getByRole('button', { name: '关闭账户面板' }));
-    const changedLayout = { ...initialLayout, width: 13 };
+    const changedLayout = change==='geometry' ? { ...initialLayout, width: 13 } : change==='activity' ? { ...initialLayout, eventOperations:{schemaVersion:1 as const,dataKind:'unspecified' as const,tasks:[]} } : {...initialLayout,designBook:{activeId:'parent',variants:[{id:'parent',name:'方案',layout:{...initialLayout,designBook:{activeId:'leaf',variants:[{id:'leaf',name:'活动',layout:{...initialLayout,eventOperations:{schemaVersion:1 as const,dataKind:'unspecified' as const,tasks:[]}}}]}}}]}};
     rendered.rerender(<CloudPanel layout={changedLayout} onLoadLayout={onLoadLayout} />);
     const sessionId = controller.getSnapshot().sessionId;
     if (action === 'acquire') {
@@ -232,7 +306,7 @@ describe('CloudPanel delayed project replacement', () => {
         ? { sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() }
         : other));
     });
-    await waitFor(() => expect(screen.getByText(/加载期间画布有新改动/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(change==='geometry' ? /加载期间画布有新改动/ : LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy());
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(controller.getSnapshot().writeBlocked).toBe(true);
     fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);

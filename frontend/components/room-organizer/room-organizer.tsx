@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, Check, Menu, PanelLeftClose } from 'lucide-react';
+import { Camera, Check, ClipboardList, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { BrandMark } from '../brand-mark';
@@ -42,6 +42,7 @@ import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { editorItemLimit, SCENE_PRESETS } from './lib/scene-presets';
+import { parseLayoutEventOperations } from './lib/schema';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
@@ -131,6 +132,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
+  const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const [pendingCatalog, setPendingCatalog] = useState<CatalogItem | null>(null);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
@@ -1132,7 +1135,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onBindProject={onBindProject} onPreview={onPreviewAi}>
+    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+      if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
+      commitHistoryNow(); actions.setEventOperations(value);
+    }}>
       <div className="sc-workbench">
         <header className="sc-header">
           <a className="sc-brand" href="/introduction" aria-label="Scendance 幕景 · 打开官网"><span className="sc-brand-mark"><BrandMark size={23} /></span><div><strong>幕景<span>SCENDANCE</span></strong></div></a>
@@ -1140,6 +1146,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-project-heading"><span className="sc-eyebrow">活动场地工作台</span><strong>{layout.name || '未命名活动'}</strong></div>
           <div className="sc-header-actions">
             <span className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/>{saveError ? '本地保存失败' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本地验证'}</span>
+            <button ref={deliveryEntryRef} type="button" className="sc-button" aria-label="打开执行工作单" aria-controls="creative-assistant" onClick={() => setDeliveryOpenRequest(value => value + 1)}><ClipboardList size={15}/>执行工作单</button>
             <button type="button" className="sc-button sc-screenshot-button" onClick={handleScreenshot} title="导出当前画面"><Camera size={15}/>导出画面</button>
             <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative}/>
           </div>
@@ -1244,7 +1251,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           />}
         </main>
         <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
-        <CreativeAssistant generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+        <CreativeAssistant deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
       </div>
     </CreativeStudioProvider>
     </SelectionProvider>
