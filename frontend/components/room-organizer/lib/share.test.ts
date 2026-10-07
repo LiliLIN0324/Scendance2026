@@ -1,4 +1,6 @@
-import { deflateRawSync } from 'node:zlib';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import libraryAssetIds from '../../../../assets/library/asset-ids.json';
+import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { MAX_LAYOUT_JSON_BYTES, MAX_NAME_LENGTH } from './schema';
@@ -18,6 +20,42 @@ import type { RoomLayout } from './types';
 
 const ORIGIN = 'https://example.com/app';
 const PREFIX = '#layout=';
+
+describe('public share asset URLs', () => {
+  it('removes fake loading credentials from the encoded payload and nested snapshots', async () => {
+    const assetId = '70000000-0000-4000-8000-000000000001';
+    const item = makeItem({ type: 'glb-asset', assetId,
+      glbUrl: 'https://storage.example.test/private/model.glb?token=FAKE_SHARE_TOKEN',
+      handoff: handoffSchema.parse({ ownerName: '本地负责人', evidenceNote: '本地执行证据' }) });
+    const variant = makeLayout({ floors: [makeFloor({ items: [item] })] });
+    const layout = makeLayout({ floors: variant.floors,
+      designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '方案', layout: variant }] } });
+    const original = JSON.stringify(layout);
+    const { url } = await encodeShareUrl(layout, ORIGIN);
+    // Inspect the generated payload itself; decoder filtering alone cannot prevent leakage.
+    const encoded = hashOf(url).slice(`${PREFIX}2.`.length);
+    const json = inflateRawSync(Buffer.from(encoded, 'base64url')).toString('utf8');
+    expect(json).not.toContain('FAKE_SHARE_TOKEN');
+    expect(json).not.toContain('storage.example.test');
+    expect(json).not.toContain('handoff');
+    const reopened = await decodeShareUrl(hashOf(url));
+    const { glbUrl: _loadingUrl, handoff: _handoff, ...geometry } = item;
+    expect(reopened!.floors[0].items[0]).toEqual(geometry);
+    expect(reopened!.designBook!.variants[0].layout.floors[0].items[0]).toEqual(geometry);
+    expect(JSON.stringify(layout)).toBe(original);
+  });
+
+  it('keeps known public assets renderable through trusted catalogue URLs and leaves local samples intact', async () => {
+    const publicUrl = 'https://cdn.3dassets.dev/assets/39459/v1/model.glb';
+    const publicItem = makeItem({ id: 'public', type: 'glb-asset', assetId: libraryAssetIds[publicUrl],
+      glbUrl: 'https://storage.example.test/public/model.glb?token=FAKE_PUBLIC_TOKEN' });
+    const local = makeItem({ id: 'local', type: 'glb-asset', glbUrl: '/assets/models/table.glb' });
+    const layout = makeLayout({ floors: [makeFloor({ items: [publicItem, local] })] });
+    const reopened = await decodeShareUrl(hashOf((await encodeShareUrl(layout, ORIGIN)).url));
+    expect(reopened!.floors[0].items).toEqual([{ ...publicItem, glbUrl: publicUrl }, local]);
+    expect(publicItem.glbUrl).toContain('FAKE_PUBLIC_TOKEN');
+  });
+});
 
 function hashOf(url: string): string {
   return url.slice(url.indexOf(PREFIX));

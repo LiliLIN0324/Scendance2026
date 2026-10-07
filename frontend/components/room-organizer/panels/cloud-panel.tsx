@@ -10,6 +10,7 @@ import { createBackendSession, useBackendSession, type BackendSession, type Proj
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { assertNoLocalHandoffCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { AccountTeamDemo } from './account-team-demo';
 import type { RoomLayout } from '../lib/types';
@@ -45,9 +46,10 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   let conversionError = '';
   try { fingerprint = JSON.stringify(layoutToBackendScene(layout)); }
   catch (error) { conversionError = error instanceof Error ? error.message : '当前场景暂不能保存到云端。'; }
+  const localHandoff = hasLocalHandoff(layout);
   const bound = !!cloud.project && layout.id === cloud.project.id && (boundLayout === layout.id ||
     (!cloud.writeBlocked && cloud.lease?.projectId === layout.id && cloud.lease.sessionId === cloud.sessionId && Date.parse(cloud.lease.expiresAt) > Date.now()));
-  const dirty = bound ? cloud.dirty : fingerprint !== savedFingerprint;
+  const dirty = localHandoff || (bound ? cloud.dirty : fingerprint !== savedFingerprint);
 
   const userId = cloud.user?.id;
   const studioProjects = projects.filter(project => project.studio_id === studioId);
@@ -81,11 +83,11 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     return () => { cancelled = true; };
   }, [controller, userId]);
   useEffect(() => {
-    if (fingerprint && fingerprint !== lastObserved.current) {
+    if (!localHandoff && fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
       if (JSON.stringify(controller.getSnapshot().draft) !== fingerprint) controller.setDraft(JSON.parse(fingerprint));
     }
-  }, [controller, fingerprint]);
+  }, [controller, fingerprint, localHandoff]);
 
   async function run(action: () => Promise<void>): Promise<void> {
     if (actionPending.current) return;
@@ -100,12 +102,20 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     setProjects(nextProjects); setStudios(nextStudios); setProjectsLoaded(true);
     setStudioId(current => nextStudios.some(studio => studio.id === current) ? current : nextStudios[0]?.id ?? '');
   }
+  async function flushBeforeReplacement(openingFrom: RoomLayout): Promise<void> {
+    assertNoLocalHandoffCloudTransition(openingFrom);
+    await flushSourceScope(openingFrom.id ?? 'local');
+    assertNoLocalHandoffCloudTransition(layoutRef.current);
+    if(layoutRef.current!==openingFrom)throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新打开。');
+  }
   async function acceptScene(scene: unknown, projectId: string, name: string, openingFrom: RoomLayout): Promise<void> {
+    assertNoLocalHandoffCloudTransition(layoutRef.current);
     // Include the initial project/lease request in the guard, not only GLB loading.
     if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     const candidate = backendSceneToLayout(scene, { projectId, name });
     const assets = await controller.authorizeAssets(layoutToBackendScene(candidate));
     await Promise.all(Object.entries(assets.assetUrls).map(([assetId, url]) => ensureGlbAsset(assetId, url)));
+    assertNoLocalHandoffCloudTransition(layoutRef.current);
     if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     const next = backendSceneToLayout(scene, { projectId, name, ...assets });
     if (openingFrom.id === projectId) {
@@ -133,10 +143,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     }
     const openingFrom = layoutRef.current;
     try {
+      assertNoLocalHandoffCloudTransition(openingFrom);
       const current = controller.getSnapshot();
       if (openingFrom.id && openingFrom.id !== id && current.dirty && !confirmReplace()) return;
+      await flushBeforeReplacement(openingFrom);
       const project = current.project?.id === id && !current.writeBlocked ? current.project :
-        await controller.getProject(id, incoming => { backendSceneToLayout(incoming.scene, { projectId: incoming.id, name: incoming.name }); });
+        await controller.getProject(id, incoming => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(incoming.scene, { projectId: incoming.id, name: incoming.name }); });
+      assertNoLocalHandoffCloudTransition(layoutRef.current);
       if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
       const localScene = openingFrom.id === id ? layoutToBackendScene(openingFrom) : null;
       if (localScene && JSON.stringify(localScene) !== JSON.stringify(project.scene)) {
@@ -145,6 +158,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         // Refresh the UUID-keyed cache without replacing the draft or its history.
         const assets = await controller.authorizeAssets(localScene);
         await Promise.all(Object.entries(assets.assetUrls).map(([assetId, url]) => ensureGlbAsset(assetId, url)));
+        assertNoLocalHandoffCloudTransition(layoutRef.current);
         if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
         setBoundLayout(id); setSavedFingerprint(JSON.stringify(project.scene));
         syncProjectUrl(id);
@@ -164,7 +178,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       const url = URL.createObjectURL(new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }));
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = `scendance-scene-v${scene.schemaVersion}.json`;
       anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setNotice(`已导出通过后端 v${scene.schemaVersion} 校验的场景文件。`);
+      setNotice(`已导出通过后端 v${scene.schemaVersion} 校验的场景文件。${hasLocalHandoff(layoutRef.current) ? ' 本地执行信息请在“场景交付”导出交付包。' : ''}`);
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景校验失败。'); }
   }
 
@@ -206,8 +220,10 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           if (!confirmReplace()) return;
           void run(async () => {
             const openingFrom = layoutRef.current;
+            assertNoLocalHandoffCloudTransition(openingFrom);
+            await flushBeforeReplacement(openingFrom);
             setBoundLayout(undefined);
-            const opened = await controller.getProject(project.id, candidate => { backendSceneToLayout(candidate.scene, { projectId: candidate.id, name: candidate.name }); });
+            const opened = await controller.getProject(project.id, candidate => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(candidate.scene, { projectId: candidate.id, name: candidate.name }); });
             await acceptScene(opened.scene, opened.id, opened.name, openingFrom);
             setNotice('已打开云端方案；获取编辑权后可以保存修改。');
           });
@@ -218,7 +234,9 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           <p className="sc-cloud-muted">{selectedStudio ? `新项目将归属「${selectedStudio.name}」` : '请先创建或加入工作室。'}</p>
           <button type="button" disabled={busy || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
             const current = layoutRef.current;
+            assertNoLocalHandoffCloudTransition(current);
             await flushSourceScope(current.id ?? 'local');
+            assertNoLocalHandoffCloudTransition(layoutRef.current);
             if(layoutRef.current!==current)throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新创建。');
             setBoundLayout(undefined);
             const created = await controller.createProject(studioId, current.name, layoutToBackendScene(current));
@@ -239,18 +257,22 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
               if (!confirmReplace()) return;
               void run(async () => {
                 const openingFrom = layoutRef.current;
+                assertNoLocalHandoffCloudTransition(openingFrom);
+                await flushBeforeReplacement(openingFrom);
                 setBoundLayout(undefined);
                 const project = controller.getSnapshot().project!;
-                const lease = await controller.acquireLease(project.id, scene => { backendSceneToLayout(scene, { projectId: project.id, name: project.name }); });
+                const lease = await controller.acquireLease(project.id, scene => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(scene, { projectId: project.id, name: project.name }); });
                 try { await acceptScene(lease.scene, project.id, project.name, openingFrom); }
                 catch (error) { await controller.releaseLease(); throw error; }
                 setNotice('已载入最新版本并获得编辑权。');
               });
             }}>获取编辑权</button>
             <button className="sc-cloud-primary" type="button" disabled={busy || cloud.writeBlocked || !bound || !!conversionError} onClick={() => void run(async () => {
+              assertNoLocalHandoffCloudTransition(layoutRef.current);
               const scene = layoutToBackendScene(layoutRef.current);
               const submitted = JSON.stringify(scene);
               const saved = await controller.saveScene(scene);
+              assertNoLocalHandoffCloudTransition(layoutRef.current);
               setSavedFingerprint(submitted);
               setNotice(`已保存云端版本 ${saved.revision}${saved.warnings.length ? '，请留意场地重叠提示' : ''}。`);
             })}>保存到云端</button>
@@ -269,6 +291,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       <section hidden={section !== 'assets'} aria-label="账户素材库"><div className="sc-account-section-heading"><div><h3>素材库</h3><p className="sc-cloud-muted">管理可复用的场景物料。</p></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录账户后查看云端素材。</p>}</section>
       <section hidden={section !== 'publication'} aria-label="发布管理"><div className="sc-account-section-heading"><div><h3>发布管理</h3><p className="sc-cloud-muted">为当前项目管理客户查看链接。</p></div></div>{cloud.user && cloud.project && cloud.revision !== null ? <PublicationPanel controller={controller} projectId={cloud.project.id} revision={cloud.revision} dirty={dirty || !bound || busy || !!conversionError} /> : <p className="sc-account-empty">在「我的项目」中打开一个云项目后，即可管理发布。</p>}</section>
       {conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
+      {localHandoff && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
       {(notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
       </div>
       <div className="sc-cloud-footer">本地草稿与云端版本分别保存。云端写入失败时，当前画布仍然保留。</div>

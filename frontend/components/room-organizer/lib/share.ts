@@ -1,3 +1,4 @@
+import { layoutForExport } from '../../../lib/layout-export';
 import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
@@ -36,7 +37,7 @@ export async function encodeShareUrl(
   origin: string
 ): Promise<EncodeShareUrlResult> {
   const stripped = layout.floorPlanImage !== undefined;
-  const shareable: RoomLayout = { ...layout };
+  const shareable = layoutForExport(layout, true);
   delete shareable.floorPlanImage;
 
   const json = JSON.stringify(shareable);
@@ -85,7 +86,7 @@ export async function readShareHash(hash: string): Promise<ShareDecodeResult> {
     const json = new TextDecoder('utf-8', { fatal: true }).decode(jsonBytes);
     const parsed: unknown = JSON.parse(json);
     const layout = parseStoredLayout(parsed);
-    return layout ? { ok: true, layout } : { ok: false, reason: 'unreadable' };
+    return layout ? { ok: true, layout: layoutForExport(layout, true) } : { ok: false, reason: 'unreadable' };
   } catch {
     return { ok: false, reason: 'unreadable' };
   }

@@ -12,7 +12,8 @@ export interface Proposal {
   base_hash:string;candidate:Scene;expires_at:string;applied_at:string|null;
 }
 export async function assertFreshProposal(proposal:Proposal,current:EditorState) {
-  if(proposal.project_id!==current.projectId || proposal.session_id!==current.sessionId || proposal.generation!==current.generation || proposal.base_revision!==current.expectedRevision || proposal.local_revision!==current.localRevision || proposal.applied_at || Date.parse(proposal.expires_at)<=Date.now() || proposal.base_hash!==await sceneHash(current.scene)) throw new SceneApiError('STALE_PROPOSAL',409,null);
+  const expiresAt=Date.parse(proposal.expires_at);
+  if(proposal.project_id!==current.projectId || proposal.session_id!==current.sessionId || proposal.generation!==current.generation || proposal.base_revision!==current.expectedRevision || proposal.local_revision!==current.localRevision || proposal.applied_at || !Number.isFinite(expiresAt) || expiresAt<=Date.now() || proposal.base_hash!==await sceneHash(current.scene)) throw new SceneApiError('STALE_PROPOSAL',409,null);
 }
 export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<string|null>) {
   async function request<T>(path:string,method='GET',body?:unknown,isPublic=false):Promise<T> {

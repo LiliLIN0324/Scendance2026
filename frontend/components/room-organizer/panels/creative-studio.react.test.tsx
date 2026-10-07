@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
+import { copySourceScope, flushSourceScope, listStoredSources, readSourceForm, storeSourceForm } from '@/lib/source-storage';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
-import { CreativeAssistant, CreativeStudioProvider } from './creative-studio';
+import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider, useCreativeBrief, useCreativeBriefState } from './creative-studio';
 import { GeneratedModelLibrary } from './generated-model-library';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
@@ -15,6 +17,7 @@ import type { RoomLayout } from '../lib/types';
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
+vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), storeSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn() }));
 let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
 vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
@@ -59,6 +62,65 @@ function ui(current = layout) {
   </CreativeStudioProvider>;
 }
 
+function DeliveryShortcutTrial({ current = layout, operations = false }: { current?: RoomLayout; operations?: boolean }) {
+  const [request, setRequest] = useState(0);
+  const entry = useRef<HTMLButtonElement>(null);
+  return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onUpdateEventOperations={operations?()=>{}:undefined}>
+    <button ref={entry} type="button" onClick={() => setRequest(value => value + 1)}>打开执行工作单</button>
+    <CreativeAssistant deliveryOpenRequest={request} deliveryEntryRef={entry}/>
+  </CreativeStudioProvider>;
+}
+
+describe('direct local delivery shortcut', () => {
+  it('opens the existing execution list in one click without preparing cloud or Agent work', async () => {
+    const current = backendSceneToLayout(candidate, { name: '演练 · 执行入口' });
+    const prepare = vi.spyOn(controller, 'ensureWorkbenchReady');
+    renderUI(<DeliveryShortcutTrial current={current}/>);
+    expect(screen.queryByRole('region', { name: '场景交付' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '打开执行工作单' }));
+    const work = await screen.findByRole('group', { name: '执行工作单' });
+    expect(document.activeElement).toBe(work);
+    expect(screen.getByText('采购汇总 · 1 类')).toBeDefined();
+    expect(screen.getByRole('button', { name: '导出执行清单 CSV' })).toBeDefined();
+    expect(prepare).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('returns keyboard focus to the shortcut after Escape and opens the same list again', async () => {
+    renderUI(<DeliveryShortcutTrial/>);
+    const entry = screen.getByRole('button', { name: '打开执行工作单' });
+    fireEvent.click(entry);
+    fireEvent.keyDown(await screen.findByRole('group', { name: '执行工作单' }), { key: 'Escape' });
+    await waitFor(() => expect(document.activeElement).toBe(entry));
+    fireEvent.click(entry);
+    expect(await screen.findByRole('group', { name: '执行工作单' })).toBe(document.activeElement);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each([false,true])('opens and focuses the original demand form from activity operations (saved=%s)', async saved => {
+    if(saved)vi.mocked(readSourceForm).mockImplementation(async key => key.endsWith(':brief') ? {event:'工作坊',guests:30,description:'已保存的活动需求',mustHave:'',allowIdeas:false} : undefined);
+    const prepare=vi.spyOn(controller,'ensureWorkbenchReady');
+    const view=renderUI(<DeliveryShortcutTrial operations/>);
+    const entry=screen.getByRole('button',{name:'打开执行工作单'});
+    fireEvent.click(entry);
+    await screen.findByRole('group',{name:'执行工作单'});
+    const details=view.container.querySelector<HTMLDetailsElement>('.cr-agent-brief')!;
+    expect(details.open).toBe(false);
+    fireEvent.click(await screen.findByRole('button',{name:saved?'查看活动需求':'打开活动需求表单'}));
+    const input=screen.getByRole('textbox',{name:'客户需求'});
+    await waitFor(()=>expect(document.activeElement).toBe(input));
+    expect(details.open).toBe(true);
+    expect(screen.getByRole('tab',{name:/场景策划/}).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getAllByRole('textbox',{name:'客户需求'})).toHaveLength(1);
+    expect((input as HTMLTextAreaElement).value).toBe(saved?'已保存的活动需求':'');
+    expect(prepare).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    fireEvent.keyDown(input,{key:'Escape'});
+    await waitFor(()=>expect(document.activeElement).toBe(entry));
+    fireEvent.click(entry);
+    expect(await screen.findByRole('group',{name:'执行工作单'})).toBe(document.activeElement);
+  });
+});
+
 function render(element: React.ReactElement) {
   const view=renderUI(element);
   fireEvent.click(screen.getByRole('button', {name:'打开 Binggo Agent'}));
@@ -95,6 +157,10 @@ beforeEach(() => {
   onApply.mockReset();
   onPreview.mockReset();
   forbiddenFetch.mockClear();
+  vi.mocked(readSourceForm).mockReset().mockResolvedValue(undefined);
+  vi.mocked(storeSourceForm).mockReset().mockResolvedValue(undefined);
+  vi.mocked(copySourceScope).mockReset().mockResolvedValue(undefined);
+  vi.mocked(listStoredSources).mockReset().mockResolvedValue([]);
   vi.stubGlobal('fetch', forbiddenFetch);
   createBitmap.mockReset().mockImplementation(async () => ({ width: 1024, height: 768, close: vi.fn() }));
   createObjectURL.mockReset().mockReturnValue('blob:local-reference');
@@ -130,6 +196,37 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
+  it.each(['activity', 'nested activity'] as const)('preserves a local %s without preparing cloud or starting Agent work', async kind => {
+    snapshot = { ...snapshot, configured: true };
+    const operations = { schemaVersion: 1 as const, dataKind: 'unspecified' as const, tasks: [] };
+    const local = { ...layout, eventOperations: operations };
+    const current = kind === 'activity' ? local : { ...layout, designBook: { activeId: 'parent', variants: [{ id: 'parent', name: '方案', layout: { ...layout, designBook: { activeId: 'leaf', variants: [{ id: 'leaf', name: '活动方案', layout: local }] } } }] } };
+    const ready = vi.spyOn(controller, 'ensureWorkbenchReady');
+    render(ui(current));
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一张桌子' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(screen.getAllByText(LOCAL_HANDOFF_CLOUD_MESSAGE).length).toBeGreaterThan(0));
+    expect(ready).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    expect(local.eventOperations).toBe(operations);
+  });
+
+  it('preserves a local execution worksheet without preparing a cloud workbench or starting an Agent run', async () => {
+    snapshot = { ...snapshot, configured: true };
+    const local = backendSceneToLayout(candidate, { name: '本地执行场景' });
+    local.floors[0]!.items[0]!.handoff = { ownerName: '布展负责人', dueDate: '2026-10-08', acceptance: '摆放完成并核对通道', status: 'todo', evidenceUrls: [], evidenceNote: '' };
+    const ready = vi.spyOn(controller, 'ensureWorkbenchReady');
+    const bind = vi.fn();
+    render(<CreativeStudioProvider controller={controller} layout={local} onApply={onApply} onBindProject={bind}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一张桌子' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(screen.getAllByText(LOCAL_HANDOFF_CLOUD_MESSAGE).length).toBeGreaterThan(0));
+    expect(ready).not.toHaveBeenCalled();
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(local.floors[0]!.items[0]!.handoff?.ownerName).toBe('布展负责人');
+  });
+
   it('prepares an isolated workbench automatically for the first local Agent request and preserves its scene and prompt', async () => {
     snapshot={...snapshot,configured:true};
     const local={...backendSceneToLayout(candidate,{name:'本地活动场地'})};
@@ -290,6 +387,7 @@ describe('creative brief and assistant interaction', () => {
     const view=renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'添加花形拱门'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(finish).toBeTypeOf('function'));
     snapshot={...snapshot,user:{id:'another-user'}};view.rerender(ui());
     await act(async()=>{finish({...proposal,candidate:scene,modelSuggestions:[{name:'花形拱门',reason:'缺少该资源',prompt:'单件花形拱门'}]});});
     expect(screen.queryByRole('button',{name:'前往 HY3 生成'})).toBeNull();
@@ -468,6 +566,211 @@ describe('creative brief and assistant interaction', () => {
   });
 });
 
+function BriefStateProbe() {
+  return <output data-testid="brief-state">{JSON.stringify({state:useCreativeBriefState(),legacy:useCreativeBrief()})}</output>;
+}
+function briefForm(current = layout) {
+  return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply}><CreativeBriefPanel/><BriefStateProbe/></CreativeStudioProvider>;
+}
+function briefState() { return JSON.parse(screen.getByTestId('brief-state').textContent!).state; }
+
+describe('original CreativeBrief storage state', () => {
+  it('keeps both optional hooks null outside the provider', () => {
+    renderUI(<BriefStateProbe/>);
+    expect(JSON.parse(screen.getByTestId('brief-state').textContent!)).toEqual({state:null,legacy:null});
+  });
+
+  it('does not persist unedited default suggestions', async () => {
+    vi.useFakeTimers(); renderUI(briefForm());
+    await act(async () => { await Promise.resolve(); await vi.advanceTimersByTimeAsync(300); });
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:false});
+    expect(screen.getByText('当前需求尚未保存；默认活动类型和人数仅供参考，请按实际情况填写。')).toBeTruthy();
+    await act(async () => { await flushSourceScope(projectId); });
+    expect(vi.mocked(storeSourceForm).mock.calls.filter(([key]) => key.endsWith(':brief'))).toHaveLength(0);
+  });
+
+  it('keeps a draft through a read failure, blocks flushing, and recovers by retrying the original key', async () => {
+    vi.useFakeTimers();
+    vi.mocked(readSourceForm).mockImplementation(async key => {
+      if (key.endsWith(':brief')) throw new Error('存储暂时不可用');
+      return undefined;
+    });
+    renderUI(briefForm());
+    await act(async () => { await Promise.resolve(); });
+    expect(briefState()).toMatchObject({ready:false,hasSavedBrief:false});
+    expect(screen.getByRole('alert').textContent).toContain('活动需求读取失败');
+    enterBrief();
+    fireEvent.change(screen.getByRole('spinbutton', {name:'预计人数'}), {target:{value:'30'}});
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    await expect(flushSourceScope(projectId)).rejects.toThrow('活动需求读取失败');
+    expect(vi.mocked(storeSourceForm).mock.calls.filter(([key]) => key.endsWith(':brief'))).toHaveLength(0);
+    vi.mocked(readSourceForm).mockImplementation(async key => key.endsWith(':brief') ? {event:'工作坊',guests:12,description:'原需求',mustHave:'',allowIdeas:false} : undefined);
+    fireEvent.click(screen.getByRole('button', {name:'重试读取需求'}));
+    await act(async () => { await Promise.resolve(); });
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:false,brief:{guests:30,description:'给 24 位来宾布置一个交流会，保留中心通道。'}});
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(storeSourceForm).toHaveBeenCalledWith(`${projectId}:brief`, expect.objectContaining({guests:30,description:'给 24 位来宾布置一个交流会，保留中心通道。'}));
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true});
+  });
+
+  it('preserves input entered while the original brief is still loading', async () => {
+    vi.useFakeTimers();
+    let finish!:(saved:unknown)=>void;
+    vi.mocked(readSourceForm).mockImplementation(key => key.endsWith(':brief') ? new Promise(resolve=>{finish=resolve;}) : Promise.resolve(undefined));
+    renderUI(briefForm()); enterBrief();
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(vi.mocked(storeSourceForm).mock.calls.filter(([key]) => key.endsWith(':brief'))).toHaveLength(0);
+    await act(async () => { finish({event:'工作坊',guests:30,description:'存储中的旧需求',mustHave:'',allowIdeas:false}); });
+    expect(briefState().brief.description).toBe('给 24 位来宾布置一个交流会，保留中心通道。');
+    expect(briefState().brief.guests).toBe(30);
+    await act(async () => { await flushSourceScope(projectId); });
+    expect(storeSourceForm).toHaveBeenCalledWith(`${projectId}:brief`, expect.objectContaining({guests:30,description:'给 24 位来宾布置一个交流会，保留中心通道。'}));
+  });
+
+  it('shows write failure, retains the draft, and reopens a successfully retried brief from its scope', async () => {
+    vi.useFakeTimers();
+    const forms = new Map<string, unknown>();
+    vi.mocked(readSourceForm).mockImplementation(async key => forms.get(key));
+    vi.mocked(storeSourceForm).mockImplementation(async (key,value) => {
+      if(key.endsWith(':brief')) throw new Error('本机空间不足');
+      forms.set(key,value);
+    });
+    const view=renderUI(briefForm());
+    await act(async () => { await Promise.resolve(); });
+    enterBrief();
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(screen.getByRole('alert').textContent).toContain('活动需求保存失败');
+    expect(briefState()).toMatchObject({ready:true,hasSavedBrief:false,brief:{description:'给 24 位来宾布置一个交流会，保留中心通道。'}});
+    await expect(flushSourceScope(projectId)).rejects.toThrow('活动需求保存失败');
+    vi.mocked(storeSourceForm).mockImplementation(async (key,value) => { forms.set(key,value); });
+    fireEvent.click(screen.getByRole('button', {name:'重试保存需求'}));
+    await act(async () => { await Promise.resolve(); });
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true});
+    view.unmount(); renderUI(briefForm());
+    await act(async () => { await Promise.resolve(); });
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{description:'给 24 位来宾布置一个交流会，保留中心通道。'}});
+  });
+
+  it('isolates scope changes and ignores a delayed brief from the prior scope', async () => {
+    vi.useFakeTimers();
+    let finish!:(saved:unknown)=>void;
+    const nextId='10000000-0000-4000-8000-000000000002';
+    vi.mocked(readSourceForm).mockImplementation(key => key===`${projectId}:brief` ? new Promise(resolve=>{finish=resolve;}) : Promise.resolve(key===`${nextId}:brief` ? {event:'工作坊',guests:30,description:'另一个活动',mustHave:'',allowIdeas:false} : undefined));
+    const view=renderUI(briefForm()); enterBrief();
+    view.rerender(briefForm({...layout,id:nextId}));
+    await act(async () => { await Promise.resolve(); });
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{guests:30,description:'另一个活动'}});
+    await act(async () => { finish({event:'品牌快闪',guests:24,description:'迟到的旧活动',mustHave:'',allowIdeas:true}); await vi.advanceTimersByTimeAsync(300); });
+    expect(briefState().brief.description).toBe('另一个活动');
+    expect(vi.mocked(storeSourceForm).mock.calls.filter(([key]) => key.endsWith(':brief'))).toHaveLength(0);
+    enterBrief(); await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(storeSourceForm).toHaveBeenCalledWith(`${nextId}:brief`,expect.objectContaining({description:'给 24 位来宾布置一个交流会，保留中心通道。'}));
+    expect(vi.mocked(storeSourceForm).mock.calls.some(([key]) => key===`${projectId}:brief`)).toBe(false);
+  });
+
+  it('saves the original brief key when switching before the debounce and restores it on immediate return', async () => {
+    vi.useFakeTimers();
+    const nextId='10000000-0000-4000-8000-000000000002';
+    const forms=new Map<string,unknown>([[`${projectId}:brief`,{event:'工作坊',guests:30,description:'A旧需求',mustHave:'',allowIdeas:false}]]);
+    vi.mocked(readSourceForm).mockImplementation(async key=>forms.get(key));
+    vi.mocked(storeSourceForm).mockImplementation(async(key,value)=>{forms.set(key,value);});
+    const view=renderUI(briefForm());
+    await act(async()=>{await Promise.resolve();});
+    fireEvent.change(screen.getByRole('textbox',{name:'客户需求'}),{target:{value:'A最新需求'}});
+    view.rerender(briefForm({...layout,id:nextId}));
+    view.rerender(briefForm());
+    await act(async()=>{await Promise.resolve();await vi.advanceTimersByTimeAsync(320);});
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{guests:30,description:'A最新需求'}});
+    expect(forms.get(`${projectId}:brief`)).toMatchObject({description:'A最新需求',guests:30});
+    expect(storeSourceForm).toHaveBeenCalledWith(`${projectId}:brief`,expect.objectContaining({description:'A最新需求'}));
+    expect(vi.mocked(storeSourceForm).mock.calls.some(([key])=>key===`${nextId}:brief`)).toBe(false);
+  });
+
+  it('retains an old-scope save failure in its draft cache without changing the new scope state', async () => {
+    vi.useFakeTimers();
+    const nextId='10000000-0000-4000-8000-000000000002';
+    const forms=new Map<string,unknown>([
+      [`${projectId}:brief`,{event:'工作坊',guests:30,description:'A旧需求',mustHave:'',allowIdeas:false}],
+      [`${nextId}:brief`,{event:'展览市集',guests:12,description:'B已保存需求',mustHave:'',allowIdeas:false}],
+    ]);
+    vi.mocked(readSourceForm).mockImplementation(async key=>forms.get(key));
+    let fail!:(reason:Error)=>void;
+    vi.mocked(storeSourceForm).mockImplementation((key)=>key===`${projectId}:brief`?new Promise((_resolve,reject)=>{fail=reject;}):Promise.resolve());
+    const view=renderUI(briefForm());
+    await act(async()=>{await Promise.resolve();});
+    fireEvent.change(screen.getByRole('textbox',{name:'客户需求'}),{target:{value:'A未保存新需求'}});
+    view.rerender(briefForm({...layout,id:nextId}));
+    await act(async()=>{await Promise.resolve();});
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{description:'B已保存需求'}});
+    await act(async()=>{fail(new Error('A保存失败'));});
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{description:'B已保存需求'}});
+    expect(screen.queryByRole('alert')).toBeNull();
+    view.rerender(briefForm());
+    expect(briefState()).toMatchObject({ready:true,hasSavedBrief:false,brief:{guests:30,description:'A未保存新需求'}});
+    expect(screen.getByRole('alert').textContent).toContain('A保存失败');
+    expect(forms.get(`${projectId}:brief`)).toMatchObject({description:'A旧需求'});
+    expect(vi.mocked(readSourceForm).mock.calls.filter(([key])=>key===`${projectId}:brief`)).toHaveLength(1);
+    vi.mocked(storeSourceForm).mockImplementation(async(key,value)=>{forms.set(key,value);});
+    fireEvent.click(screen.getByRole('button',{name:'重试保存需求'}));
+    await act(async()=>{await Promise.resolve();});
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{description:'A未保存新需求'}});
+    expect(forms.get(`${projectId}:brief`)).toMatchObject({description:'A未保存新需求'});
+  });
+
+  it('restores a draft on A to B to A while the original-key save is still pending', async () => {
+    vi.useFakeTimers();
+    const nextId='10000000-0000-4000-8000-000000000002';
+    vi.mocked(readSourceForm).mockImplementation(async key=>key===`${projectId}:brief`?{event:'工作坊',guests:30,description:'A旧需求',mustHave:'',allowIdeas:false}:undefined);
+    let finish!:()=>void;
+    vi.mocked(storeSourceForm).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    const view=renderUI(briefForm());
+    await act(async()=>{await Promise.resolve();});
+    fireEvent.change(screen.getByRole('textbox',{name:'客户需求'}),{target:{value:'A等待保存的新需求'}});
+    view.rerender(briefForm({...layout,id:nextId}));
+    await act(async()=>{await Promise.resolve();});
+    view.rerender(briefForm());
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:false,brief:{guests:30,description:'A等待保存的新需求'}});
+    await act(async()=>{finish();});
+    expect(briefState()).toMatchObject({ready:true,error:null,hasSavedBrief:true,brief:{description:'A等待保存的新需求'}});
+    expect(storeSourceForm).toHaveBeenCalledWith(`${projectId}:brief`,expect.objectContaining({description:'A等待保存的新需求'}));
+  });
+
+  it('blocks automatic cloud preparation after a brief read failure', async () => {
+    snapshot={...snapshot,configured:true};
+    vi.mocked(readSourceForm).mockImplementation(async key => { if(key.endsWith(':brief'))throw new Error('读取失败');return undefined; });
+    const ready=vi.spyOn(controller,'ensureWorkbenchReady');
+    const local={...layout}; delete local.id;
+    render(ui(local));
+    await screen.findByRole('button',{name:'重试读取需求'});
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一张桌子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(screen.getAllByText(/活动需求读取失败/).length).toBeGreaterThan(0));
+    expect(ready).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
+    expect(vi.mocked(storeSourceForm).mock.calls.filter(([key])=>key.endsWith(':brief'))).toHaveLength(0);
+  });
+
+  it('keeps the original local scope and input when migration to a prepared cloud project fails', async () => {
+    snapshot={...snapshot,configured:true};
+    const local={...layout,id:'10000000-0000-4000-8000-000000000009'};
+    const bind=vi.fn();
+    const ready=vi.spyOn(controller,'ensureWorkbenchReady').mockImplementation(async()=>{connected();return snapshot.project!;});
+    const release=vi.spyOn(controller,'releaseLease').mockResolvedValue(undefined);
+    vi.mocked(copySourceScope).mockRejectedValueOnce(new Error('本机资料复制失败'));
+    render(<CreativeStudioProvider controller={controller} layout={local} onApply={onApply} onBindProject={bind}><CreativeAssistant/><BriefStateProbe/></CreativeStudioProvider>);
+    enterBrief();
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一张桌子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await screen.findByText('云项目已准备好，但活动需求和场地资料未能迁移。原本地草稿与当前输入已保留，请重试后再发送。',{selector:'.cr-agent-notice'});
+    expect(ready).toHaveBeenCalledOnce(); expect(copySourceScope).toHaveBeenCalledWith(local.id,projectId);
+    expect(release).toHaveBeenCalledOnce(); expect(bind).not.toHaveBeenCalled();
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    expect(briefState().brief.description).toBe('给 24 位来宾布置一个交流会，保留中心通道。');
+    expect(storeSourceForm).toHaveBeenCalledWith(`${local.id}:brief`,expect.objectContaining({description:'给 24 位来宾布置一个交流会，保留中心通道。'}));
+    expect(local.id).toBe('10000000-0000-4000-8000-000000000009');
+    expect(controller.getSnapshot().project?.id).toBe(projectId);
+  });
+});
+
 
 describe('context continuity and project isolation', () => {
   it('carries confirmed venue and design requirements into successive assistant requests', async () => {
@@ -602,6 +905,7 @@ describe('unified Agent', () => {
     fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(finish).toBeTypeOf('function'));
     view.rerender(<CreativeStudioProvider controller={controller} layout={{...layout,width:13}} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     await act(async()=>{finish(proposal);});
     expect(controller.applySceneProposal).not.toHaveBeenCalled();

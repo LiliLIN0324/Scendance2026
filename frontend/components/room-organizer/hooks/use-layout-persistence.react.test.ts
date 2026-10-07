@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../lib/constants';
 import {
@@ -12,7 +13,61 @@ import {
   readRecoveryCopies,
 } from '../lib/persistence';
 import { useLayoutPersistence } from './use-layout-persistence';
+import { layoutStore } from './use-layout-store';
+import { useLayoutState } from './use-layout-state';
 import type { RoomLayout } from '../lib/types';
+
+describe('useLayoutPersistence — activity metadata', () => {
+  const operations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{
+    id: 'a1000000-0000-4000-8000-000000000001', title: '签到', phase: 'event', objectIds: [],
+    plannedStartAt: '2026-10-09T09:00:00+08:00', plannedEndAt: '2026-10-09T09:30:00+08:00',
+    actualStartedAt: '2026-10-09T09:05:00+08:00', actualFinishedAt: '2026-10-09T09:35:00+08:00',
+    ownerName: '签到团队', contractorName: '执行团队', acceptance: '登记记录核对', status: 'accepted',
+    evidenceNote: '已人工核对签到记录', evidenceUrls: ['https://example.com/signin'],
+    reviewedBasis: `sha256:${'a'.repeat(64)}`,
+  }] });
+  beforeEach(() => { window.localStorage.clear(); window.history.replaceState(null, '', '/'); vi.useFakeTimers(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('flushes pending activity edits on close and hydrates the same geometry and metadata on reopen', () => {
+    layoutStore.setState({ layout: makeLayout({ id: 'rehearsal-30' }), activeFloorIndex: 0 });
+    const mount = () => renderHook(() => {
+      const state = useLayoutState();
+      const persistence = useLayoutPersistence({ layout: state.layout, onHydrate: state.actions.applyLayout, debounceMs: 10 });
+      return { ...state, persistence };
+    });
+    const first = mount();
+    act(() => { first.result.current.actions.setEventOperations(operations); first.result.current.actions.setWidth(9); });
+    const edited = layoutStore.getState().layout;
+    first.unmount();
+    expect(loadLayout()).toEqual(edited);
+    layoutStore.setState({ layout: makeLayout({ id: 'fallback' }), activeFloorIndex: 0 });
+    const second = mount();
+    expect(second.result.current.layout).toEqual(edited);
+    expect(second.result.current.layout.eventOperations).toEqual(operations);
+    second.unmount();
+  });
+
+  it('shows failed saving and leaves the previously saved record and current activity draft intact', () => {
+    const saved = makeLayout({ id: 'rehearsal-30', eventOperations: operations });
+    const tab = renderHook(({ layout }) => useLayoutPersistence({ layout, onHydrate: () => {}, debounceMs: 10 }), {
+      initialProps: { layout: saved },
+    });
+    act(() => { vi.advanceTimersByTime(10); });
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const savedAt = tab.result.current.lastSavedAt;
+    const draft = { ...saved, eventOperations: { ...operations, dataKind: 'real' as const } };
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    tab.rerender({ layout: draft });
+    act(() => { vi.advanceTimersByTime(10); });
+    expect(tab.result.current.saveError).toBe('blocked');
+    expect(tab.result.current.saving).toBe(true);
+    expect(tab.result.current.lastSavedAt).toBe(savedAt);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);
+    expect(draft.eventOperations.dataKind).toBe('real');
+  });
+});
 
 function fireStorage(key: string, newValue: string | null): void {
   window.dispatchEvent(new StorageEvent('storage', { key, newValue }));

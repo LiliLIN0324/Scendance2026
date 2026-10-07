@@ -688,7 +688,7 @@
   .sc-view-tools { bottom: 16px; }
   .sc-canvas-stage.has-selection .sc-view-tools, .sc-canvas-stage.has-selection .sc-canvas-heading { display: none; }
 }
-@media (max-width: 380px) {
+@media (max-width: 480px) {
   .sc-brand strong > span, .sc-brand-mark { display: none; }
   .sc-header { gap: 6px; }
 }

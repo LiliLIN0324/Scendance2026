@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { makeCatalogItem } from '../lib/__testfixtures__/fixtures';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { makeCatalogItem, makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { INITIAL_LAYOUT } from './layout-reducer';
-import { layoutStore } from './use-layout-store';
+import { createLayoutStore, layoutStore } from './use-layout-store';
 
 // Smoke test for the Zustand store WIRING only. The actual state transitions are
 // delegated to `layoutReducer`, which is already exhaustively covered by
@@ -78,5 +79,47 @@ describe('use-layout-store — house identity (#342)', () => {
     const first = layoutStore.getState().layout.id;
     layoutStore.getState().actions.applyLayout({ ...INITIAL_LAYOUT });
     expect(layoutStore.getState().layout.id).not.toBe(first);
+  });
+});
+
+describe('use-layout-store — development hot replacement state', () => {
+  it('recreates actions while retaining activity identity, all six tasks, active floor and unsaved edits', () => {
+    const operations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: Array.from({ length: 6 }, (_, index) => ({
+      id: `a1000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      title: `演练任务${index + 1}`, phase: ['preparation', 'setup', 'event', 'teardown'][index % 4],
+    })) });
+    const initial = makeLayout({ id: 'rehearsal-30', eventOperations: operations, floors: [makeFloor(),
+      makeFloor({ id: 'upper', items: [makeItem({ id: 'table-1' })] }),
+    ] });
+    const previous = createLayoutStore({ layout: initial, activeFloorIndex: 1 });
+    previous.getState().actions.moveItem('table-1', 2, 1);
+    previous.getState().actions.setName('尚未保存的演练修改');
+    const current = previous.getState();
+    // Webpack's dispose passes only these fields through hot.data; the new module creates actions.
+    const hotData = { layoutState: { layout: current.layout, activeFloorIndex: current.activeFloorIndex } };
+    const replacement = createLayoutStore(hotData.layoutState);
+    expect(replacement.getState().layout).toBe(current.layout);
+    expect(replacement.getState().layout.id).toBe('rehearsal-30');
+    expect(replacement.getState().layout.eventOperations!.tasks).toHaveLength(6);
+    expect(replacement.getState().activeFloorIndex).toBe(1);
+    expect(replacement.getState().layout.name).toBe('尚未保存的演练修改');
+    expect(replacement.getState().layout.floors[1]!.items[0]!.position).toEqual({ x: 2, z: 1 });
+    expect(replacement.getState().actions).not.toBe(current.actions);
+    const updated = { ...operations, dataKind: 'real' as const };
+    replacement.getState().actions.setEventOperations(updated);
+    expect(replacement.getState().layout.eventOperations).toEqual(updated);
+    expect(replacement.getState().layout.id).toBe('rehearsal-30');
+    expect(previous.getState().layout.eventOperations).toEqual(operations);
+  });
+
+  it('starts normally without a hot payload, minting its own layout id and fresh actions', () => {
+    const first = createLayoutStore();
+    const second = createLayoutStore();
+    expect(first.getState().layout).toMatchObject(INITIAL_LAYOUT);
+    expect(first.getState().layout.id).toMatch(/^house-/);
+    expect(second.getState().layout.id).not.toBe(first.getState().layout.id);
+    expect(second.getState().activeFloorIndex).toBe(0);
+    expect(second.getState().layout).not.toHaveProperty('eventOperations');
+    expect(second.getState().actions).not.toBe(first.getState().actions);
   });
 });

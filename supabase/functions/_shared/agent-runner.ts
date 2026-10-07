@@ -11,6 +11,7 @@ import { createMaterialVariant, readAssetMaterials } from './material-variants.t
 import { materialChangeSchema } from './asset-customization-contract.ts';
 import { evaluateCandidates } from './jev.ts';
 import { fetchJson, required, type Env, type Fetcher } from './http.ts';
+import { parseAgentModelReply } from './agent-model-reply.ts';
 import type { Backend } from './backend.ts';
 
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
@@ -90,72 +91,84 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       return {...proposal,title:parsed.title};
     };
     const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId===r.assetId))),jevEnabled:input.jevEnabled,catalog})}];
+    // ponytail: run-local receipts; terminal run fencing still prevents worker restarts.
+    const receipts=new Map<string,{fingerprint:string;content:string}>();
     for(let turn=1;turn<=6&&!finished;turn++) {
       await check();await call('step',{progress:`DeepSeek 正在处理（${turn}/6）`});
       if(turn===6)messages.push({role:'user',content:`这是最后一次模型调用。请现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个完整候选（title、explanation、commands），不要继续读取或校验。此前 validate_candidate 的结果未提交；提交仍需通过程序校验，JEV 方案由用户最终选择。`});
       const body={model:'deepseek-flash',messages,tools,tool_choice:turn===6?{type:'function',function:{name:'submit_candidates'}}:'auto',max_tokens:7000,thinking:{type:'disabled'}};
       if(new TextEncoder().encode(JSON.stringify(body)).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
       const raw=await fetchJson('https://api.deepseek.com/chat/completions',{method:'POST',headers:{authorization:`Bearer ${required(env,'DEEPSEEK_API_KEY')}`,'content-type':'application/json'},body:JSON.stringify(body)},fetcher,150000,Math.min(35000,Math.max(1,deadline-Date.now())));
-      const response=z.object({choices:z.array(z.object({finish_reason:z.string().nullable(),message:z.object({content:z.string().nullable().optional(),tool_calls:z.array(z.object({id:z.string(),type:z.literal('function'),function:z.object({name:z.string(),arguments:z.string()})})).max(12).optional()})})).min(1),usage:z.unknown().optional()}).parse(raw);
-      await call('usage',{usage:{provider:'deepseek',turn,usage:response.usage??{}}});await check();
-      const choice=response.choices[0],message=choice.message;
-      if(choice.finish_reason==='length')throw new ApiError('AGENT_OUTPUT_TRUNCATED',502);
-      if(!message.tool_calls?.length){messages.push({role:'assistant',content:message.content??''},{role:'user',content:'请调用 submit_candidates 完成本次结果；说明性回答也使用一个空 commands 候选。'});continue;}
-      messages.push({role:'assistant',content:message.content??null,tool_calls:message.tool_calls});
-      for(const tool of message.tool_calls) {
-        await check();let result:unknown;
+      const reply=parseAgentModelReply(raw);
+      await call('usage',{usage:{provider:'deepseek',turn,usage:reply.usage}});await check();
+      if(reply.finishReason==='length')throw new ApiError('AGENT_OUTPUT_TRUNCATED',502);
+      if(!reply.toolCalls.length){messages.push({role:'assistant',content:reply.content??''},{role:'user',content:'请调用 submit_candidates 完成本次结果；说明性回答也使用一个空 commands 候选。'});continue;}
+      messages.push({role:'assistant',content:reply.content,tool_calls:reply.toolCalls});
+      for(const tool of reply.toolCalls) {
+        await check();let result:unknown,fingerprint:string|undefined,replayed=false;
         try {
           const name=tool.function.name as keyof typeof schemas;
           if(!(name in schemas))throw new ApiError('UNKNOWN_TOOL',422);
           const args=schemas[name].parse(JSON.parse(tool.function.arguments));
-          await call('progress',{progress:progressLabels[name]});
-          if(name==='get_scene')result=input.scene.objects.length>50
-            ?{sameAsInitialScene:true,objectCount:input.scene.objects.length,selectedIds:input.selectedIds,message:'当前草稿未变化。完整scene、presetObjectLabels与资源引用已在首条用户消息中，请使用该数据；重复省略以保留工具调用空间。'}
-            :{scene:input.scene,presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId===r.assetId)))};
-          else if(name==='search_resources') {
-            const query=(args as z.infer<typeof schemas.search_resources>).query.toLowerCase();
-            const matches=query?resources.filter(r=>`${r.name} ${r.category} ${r.resourceId} ${r.assetId}`.toLowerCase().includes(query)):resources;
-            result=resourceIndex(matches.slice(0,100));
-          } else if(name==='create_parametric_model') {
-            const parameters=(args as z.infer<typeof schemas.create_parametric_model>).parameters;
-            const created=await createParametricAsset(backend,actor,start.studioId,crypto.randomUUID(),parameters);
-            const {color,...shape}=parameters;void color;identities.set(created.resource.assetId,canonical(shape));
-            resources.push(created.resource);result=resourceIndex([created.resource]);
-          } else if(name==='inspect_materials') {
-            const resource=currentResource((args as z.infer<typeof schemas.inspect_materials>).resourceId);
-            const asset=await backend.scene(actor,'assets.get',{assetId:resource.assetId});
-            result={...await readAssetMaterials(backend,actor,resource.assetId),parametric:asset.metadata?.parametric??null};
-          } else if(name==='customize_material') {
-            const a=args as z.infer<typeof schemas.customize_material>,resource=currentResource(a.resourceId);
-            if(a.objectIds.some(id=>!input.scene.objects.some(o=>o.id===id&&o.assetId===resource.assetId&&!o.locked)||(input.selectedIds.length>0&&!input.selectedIds.includes(id))))throw new ApiError('INVALID_MATERIAL_TARGET',422);
-            const inspected=await readAssetMaterials(backend,actor,resource.assetId);
-            const created=await createMaterialVariant(backend,actor,resource.assetId,{requestId:crypto.randomUUID(),sourceSha256:inspected.sha256,materialIndices:a.materialIndices,...a.changes});
-            const next:SceneResource={...resource,resourceId:`asset:${created.asset.id}`,assetId:created.asset.id,name:created.asset.name};resources.push(next);materialVariants.set(next.resourceId,{sourceAssetId:resource.assetId,objectIds:a.objectIds});
-            const {baseColor,...nonColor}=a.changes;void baseColor;identities.set(next.assetId,canonical({source:identities.get(resource.assetId)??resource.assetId,changes:nonColor}));result=resourceIndex([next]);
-          } else if(name==='get_bom') {
-            const items=new Map<string,{name:string;quantity:number;size:unknown}>(),labels=presetObjectLabels(input.scene);
-            for(const object of input.scene.objects){const key=canonical({material:object.assetId??labels[object.id]??object.materialId,size:object.size});const old=items.get(key);if(old)old.quantity++;else items.set(key,{name:labels[object.id]??resources.find(r=>r.assetId===object.assetId)?.name??catalog.find(m=>m.id===object.materialId)?.name??object.materialId,quantity:1,size:object.size});}
-            result={items:[...items.values()],pricing:'未提供供应商价格与库存，需另行核实'};
-          } else if(name==='validate_candidate') {const candidate=build(args);result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length};}
-          else if(name==='submit_candidates') {
-            const rawCandidates=(args as z.infer<typeof schemas.submit_candidates>).candidates,valid:Candidate[]=[],errors:unknown[]=[];
-            for(const rawCandidate of rawCandidates)try{
-              const candidate=build(rawCandidate);
-              if(valid.some(v=>diversityKey(v.scene,identities)===diversityKey(candidate.scene,identities)))throw new ApiError('CANDIDATES_NOT_DISTINCT',422);
-              valid.push({...candidate,label:(['A','B','C'] as const)[valid.length]});
-            }catch(error){errors.push(safeError(error));}
-            const expected=input.jevEnabled?3:1;
-            if(valid.length>=candidates.length)candidates=valid.slice(0,expected);
-            if(candidates.length)await call('checkpoint',{candidates});
-            if(valid.length===expected){finished=true;result={accepted:valid.length};}
-            else if(++repair>1){finished=true;result={accepted:valid.length,partial:true};}
-            else {result={accepted:valid.length,expected,errors,message:'只修复这些问题后完整重交，最多再修复一次。'};}
+          fingerprint=canonical({name,args});
+          const receipt=receipts.get(tool.id);
+          if(receipt) {
+            if(receipt.fingerprint!==fingerprint)throw new ApiError('AGENT_TOOL_CALL_CONFLICT',422);
+            result=JSON.parse(receipt.content);replayed=true;
+          } else {
+            await call('progress',{progress:progressLabels[name]});
+            if(name==='get_scene')result=input.scene.objects.length>50
+              ?{sameAsInitialScene:true,objectCount:input.scene.objects.length,selectedIds:input.selectedIds,message:'当前草稿未变化。完整scene、presetObjectLabels与资源引用已在首条用户消息中，请使用该数据；重复省略以保留工具调用空间。'}
+              :{scene:input.scene,presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId===r.assetId)))};
+            else if(name==='search_resources') {
+              const query=(args as z.infer<typeof schemas.search_resources>).query.toLowerCase();
+              const matches=query?resources.filter(r=>`${r.name} ${r.category} ${r.resourceId} ${r.assetId}`.toLowerCase().includes(query)):resources;
+              result=resourceIndex(matches.slice(0,100));
+            } else if(name==='create_parametric_model') {
+              const parameters=(args as z.infer<typeof schemas.create_parametric_model>).parameters;
+              const created=await createParametricAsset(backend,actor,start.studioId,crypto.randomUUID(),parameters);
+              const {color,...shape}=parameters;void color;identities.set(created.resource.assetId,canonical(shape));
+              resources.push(created.resource);result=resourceIndex([created.resource]);
+            } else if(name==='inspect_materials') {
+              const resource=currentResource((args as z.infer<typeof schemas.inspect_materials>).resourceId);
+              const asset=await backend.scene(actor,'assets.get',{assetId:resource.assetId});
+              result={...await readAssetMaterials(backend,actor,resource.assetId),parametric:asset.metadata?.parametric??null};
+            } else if(name==='customize_material') {
+              const a=args as z.infer<typeof schemas.customize_material>,resource=currentResource(a.resourceId);
+              if(a.objectIds.some(id=>!input.scene.objects.some(o=>o.id===id&&o.assetId===resource.assetId&&!o.locked)||(input.selectedIds.length>0&&!input.selectedIds.includes(id))))throw new ApiError('INVALID_MATERIAL_TARGET',422);
+              const inspected=await readAssetMaterials(backend,actor,resource.assetId);
+              const created=await createMaterialVariant(backend,actor,resource.assetId,{requestId:crypto.randomUUID(),sourceSha256:inspected.sha256,materialIndices:a.materialIndices,...a.changes});
+              const next:SceneResource={...resource,resourceId:`asset:${created.asset.id}`,assetId:created.asset.id,name:created.asset.name};resources.push(next);materialVariants.set(next.resourceId,{sourceAssetId:resource.assetId,objectIds:a.objectIds});
+              const {baseColor,...nonColor}=a.changes;void baseColor;identities.set(next.assetId,canonical({source:identities.get(resource.assetId)??resource.assetId,changes:nonColor}));result=resourceIndex([next]);
+            } else if(name==='get_bom') {
+              const items=new Map<string,{name:string;quantity:number;size:unknown}>(),labels=presetObjectLabels(input.scene);
+              for(const object of input.scene.objects){const key=canonical({material:object.assetId??labels[object.id]??object.materialId,size:object.size});const old=items.get(key);if(old)old.quantity++;else items.set(key,{name:labels[object.id]??resources.find(r=>r.assetId===object.assetId)?.name??catalog.find(m=>m.id===object.materialId)?.name??object.materialId,quantity:1,size:object.size});}
+              result={items:[...items.values()],pricing:'未提供供应商价格与库存，需另行核实'};
+            } else if(name==='validate_candidate') {const candidate=build(args);result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length};}
+            else if(name==='submit_candidates') {
+              const rawCandidates=(args as z.infer<typeof schemas.submit_candidates>).candidates,valid:Candidate[]=[],errors:unknown[]=[];
+              for(const rawCandidate of rawCandidates)try{
+                const candidate=build(rawCandidate);
+                if(valid.some(v=>diversityKey(v.scene,identities)===diversityKey(candidate.scene,identities)))throw new ApiError('CANDIDATES_NOT_DISTINCT',422);
+                valid.push({...candidate,label:(['A','B','C'] as const)[valid.length]});
+              }catch(error){errors.push(safeError(error));}
+              const expected=input.jevEnabled?3:1;
+              const nextCandidates=valid.length>=candidates.length?valid.slice(0,expected):candidates;
+              if(nextCandidates.length)await call('checkpoint',{candidates:nextCandidates});
+              candidates=nextCandidates;
+              if(valid.length===expected){finished=true;result={accepted:valid.length};}
+              else if(++repair>1){finished=true;result={accepted:valid.length,partial:true};}
+              else {result={accepted:valid.length,expected,errors,message:'只修复这些问题后完整重交，最多再修复一次。'};}
+            }
           }
         } catch(error) {lastError=error;result=safeError(error);}
-        await call('usage',{usage:{tool:tool.function.name,...(result&&typeof result==='object'&&'code' in result?{errorCode:result.code}:{ok:true})}});
-        messages.push({role:'tool',tool_call_id:tool.id,content:JSON.stringify(result)});
+        const content=JSON.stringify(result);
+        // Keep execution failures too: a lost response may follow a committed effect.
+        if(fingerprint!==undefined&&!receipts.has(tool.id))receipts.set(tool.id,{fingerprint,content});
+        await call('usage',{usage:{tool:tool.function.name,...(replayed?{replayed:true}:{}),...(result&&typeof result==='object'&&'code' in result?{errorCode:result.code}:{ok:true})}});
+        messages.push({role:'tool',tool_call_id:tool.id,content});
         // Any further tools in this message are acknowledged without side effects.
-        if(finished){for(const pending of message.tool_calls.slice(message.tool_calls.indexOf(tool)+1))messages.push({role:'tool',tool_call_id:pending.id,content:'{"stopped":true}'});break;}
+        if(finished){for(const pending of reply.toolCalls.slice(reply.toolCalls.indexOf(tool)+1))messages.push({role:'tool',tool_call_id:pending.id,content:'{"stopped":true}'});break;}
       }
     }
     if(!candidates.length)throw lastError??new ApiError('AGENT_NO_VALID_CANDIDATE',422);

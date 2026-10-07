@@ -34,9 +34,9 @@ describe('scene delivery',()=>{
     const changed={...current,floors:[{...current.floors[0],items:current.floors[0].items.map((item,index)=>index===0?{...item,color:'#ffeedd'}:item)}]};
     expect(deliveryMaterials(changed).map(row=>row.quantity)).toEqual([1,9,2]);
   });
-  it('exports a canonical scene with references but never embeds signed URLs or private layout history',()=>{
+  it('exports a canonical scene with references but never embeds signed URLs or private layout history',async()=>{
     const current=layout([object(1)]);
-    const json=sceneDeliveryJson(current);
+    const json=await sceneDeliveryJson(current);
     expect(json).not.toContain('token=');expect(json).not.toContain('storage.example');expect(json).not.toContain('glbUrl');
     expect(JSON.parse(json).scene.objects[0]).toMatchObject({assetId:chairId,position:{x:2,z:1}});
     expect(JSON.parse(json).materials[0].assetVersionId).toBe(chairId);
@@ -49,10 +49,10 @@ describe('scene delivery',()=>{
   it('fails closed on missing GLB models instead of exporting renderer placeholders',()=>{
     expect(()=>assembleDeliveryScene(layout([object(1)]))).toThrow('尚未就绪');
   });
-  it('rejects glbNode presets and multiple floors rather than exporting a partial scene',()=>{
+  it('rejects glbNode presets and multiple floors rather than exporting a partial scene',async()=>{
     const current=layout([object(1)]);current.floors[0].items[0].glbNode='chair';
     expect(()=>assembleDeliveryScene(current)).toThrow('完整场景预设');
-    expect(()=>sceneDeliveryJson({...layout(),floors:[...layout().floors,...layout().floors]})).toThrow('单层');
+    await expect(sceneDeliveryJson({...layout(),floors:[...layout().floors,...layout().floors]})).rejects.toThrow('单层');
   });
   it('exports and actually reloads a 12-chair scene with stable IDs, materials, rotations and height',async()=>{
     await load();await load(variantId);

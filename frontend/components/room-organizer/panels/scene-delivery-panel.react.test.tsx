@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
+import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
-import { makeLayout } from '../lib/__testfixtures__/fixtures';
-import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson } from '../lib/scene-delivery';
+import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
+import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } from '../lib/scene-delivery';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { createOperation } from '../lib/event-operations';
+import { blankHandoff, effectiveHandoffStatus, handoffBasis } from '../lib/scene-handoff';
+import type { FurnitureItem } from '../lib/types';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
-vi.mock('../lib/scene-delivery',()=>({downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn()}));
+vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
 let controller:BackendSession;
-const layout=makeLayout();
-beforeEach(()=>{controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneDeliveryJson).mockReturnValue('{}');});
-afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();});
+const layout=makeLayout({roof:{style:'none'}});
+const itemId='30000000-0000-4000-8000-000000000001';
+function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor({items:[makeItem({id:itemId,name:'签到椅',materialId:'chair'})]})]}); }
+beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
+afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('Binggo scene delivery panel',()=>{
   it('only prepares and downloads after an explicit click',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
@@ -22,9 +29,9 @@ describe('Binggo scene delivery panel',()=>{
   it('keeps JSON and CSV as separate explicit downloads',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
-    await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledWith(layout));
+    await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledWith(layout,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)})));
     fireEvent.click(screen.getByRole('button',{name:'导出物料清单 CSV'}));
-    await waitFor(()=>expect(sceneDeliveryCsv).toHaveBeenCalledWith(layout));
+    await waitFor(()=>expect(sceneDeliveryCsv).toHaveBeenCalledWith(layout,vi.mocked(sceneDeliveryJson).mock.calls[0][1]));
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
   it('does not download a stale snapshot after scene editing during verification',async()=>{
@@ -44,5 +51,95 @@ describe('Binggo scene delivery panel',()=>{
     fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('复检失败'));
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
+  it('validates, saves and locates an execution record with explicit acceptance evidence',async()=>{
+    const current=workLayout(), update=vi.fn(), locate=vi.fn();
+    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update} onLocate={locate}/>);
+    fireEvent.click(screen.getByText('签到椅 · 1'));
+    fireEvent.click(screen.getByRole('button',{name:'定位物件'})); expect(locate).toHaveBeenCalledWith(itemId);
+    fireEvent.change(screen.getByLabelText('状态'),{target:{value:'accepted'}});
+    fireEvent.click(screen.getByRole('button',{name:'确认验收'}));
+    await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain('负责人')); expect(update).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('负责人'),{target:{value:'执行甲'}});
+    fireEvent.change(screen.getByLabelText('期限'),{target:{value:'2026-10-09'}});
+    fireEvent.change(screen.getByLabelText('验收条件'),{target:{value:'按图摆放并检查尺寸'}});
+    fireEvent.change(screen.getByLabelText('验收说明'),{target:{value:'已实测并现场核对'}});
+    fireEvent.click(screen.getByRole('button',{name:'确认验收'}));
+    await waitFor(()=>expect(update).toHaveBeenCalledWith(itemId,{handoff:expect.objectContaining({ownerName:'执行甲',status:'accepted',evidenceNote:'已实测并现场核对',reviewedBasis:expect.any(String)})}));
+  });
+  it('keeps the previous basis when saving changed criteria until an explicit reconfirmation',async()=>{
+    const current=workLayout(), update=vi.fn(); const acceptance='按原图摆放';
+    current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,acceptance)};
+    const previousBasis=current.floors[0].items[0].handoff!.reviewedBasis;
+    const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
+    fireEvent.click(screen.getByText('签到椅 · 1'));
+    await waitFor(()=>expect(screen.queryByText('正在核对…')).toBeNull());
+    fireEvent.change(screen.getByLabelText('验收条件'),{target:{value:'还需安装固定件'}});
+    fireEvent.click(screen.getByRole('button',{name:'保存工作单'}));
+    const patch=update.mock.calls[0][1] as Partial<FurnitureItem>;
+    expect(patch.handoff!.reviewedBasis).toBe(previousBasis);
+    const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],...patch}]}]};
+    expect(await effectiveHandoffStatus(changed,itemId)).toBe('needs_review');
+    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller} onUpdateItem={update}/>);
+    await waitFor(()=>expect(screen.getByText('需复核')).toBeDefined());
+    fireEvent.click(screen.getByRole('button',{name:'重新确认验收'}));
+    const nextBasis=await handoffBasis(changed,itemId,'还需安装固定件'); await waitFor(()=>expect(update.mock.calls[1][1].handoff.reviewedBasis).toBe(nextBasis));
+    const confirmed={...changed,floors:[{...changed.floors[0],items:[{...changed.floors[0].items[0],...update.mock.calls[1][1]}]}]};
+    view.rerender(<SceneDeliveryPanel layout={confirmed} controller={controller} onUpdateItem={update}/>);
+    await waitFor(()=>expect(screen.getByText('已验收')).toBeDefined());
+    expect(screen.queryByRole('button',{name:'重新确认验收'})).toBeNull();
+  });
+  it('rejects clearing the last evidence from an accepted record',async()=>{
+    const current=workLayout(), update=vi.fn(); const acceptance='核对尺寸';
+    current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,acceptance)};
+    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
+    fireEvent.click(screen.getByText('签到椅 · 1')); await waitFor(()=>expect(screen.queryByText('正在核对…')).toBeNull()); fireEvent.change(screen.getByLabelText('验收说明'),{target:{value:''}});
+    fireEvent.click(screen.getByRole('button',{name:'保存工作单'}));
+    expect(update).not.toHaveBeenCalled(); expect(screen.getByRole('alert').textContent).toContain('证据');
+  });
+  it('uses the same snapshot across export files and replaces it after editing execution fields',async()=>{
+    const current=workLayout(); const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
+    const snapshot=vi.mocked(sceneDeliveryJson).mock.calls[0][1];
+    fireEvent.click(screen.getByRole('button',{name:'导出执行清单 CSV'})); await waitFor(()=>expect(sceneExecutionCsv).toHaveBeenCalledWith(current,snapshot));
+    const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],handoff:{...blankHandoff(),ownerName:'执行乙'}}]}]};
+    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller}/>);
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(sceneDeliveryJson).mock.calls[1][1]!.id).not.toBe(snapshot!.id);
+  });
+  it('disables execution editing for cloud projects and all exports for complete templates',()=>{
+    const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001'};
+    window.history.replaceState({},'',`/?project=${current.id}`);
+    const update=vi.fn();const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
+    fireEvent.click(screen.getByText('签到椅 · 1'));
+    expect((screen.getByLabelText('负责人') as HTMLInputElement).closest('fieldset')!.disabled).toBe(true);
+    fireEvent.submit(screen.getByLabelText('负责人').closest('form')!); expect(update).not.toHaveBeenCalled();
+    view.rerender(<SceneDeliveryPanel layout={{...current,scenePreset:'gym'}} controller={controller} onUpdateItem={update}/>);
+    expect(screen.getByRole('alert').textContent).toContain('完整场景预设');
+    for(const name of ['导出场景 JSON','导出执行清单 CSV','导出物料清单 CSV','导出场景 GLB']) expect((screen.getByRole('button',{name}) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('reuses the same direct panel for activity tasks without requiring material and preserves the model export gate', async () => {
+    const current={...layout,scenePreset:'gym' as const,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[createOperation('演练主持','event')]})};
+    const update=vi.fn(), openBrief=vi.fn();
+    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={update} onOpenBrief={openBrief}/>);
+    expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('region',{name:'活动安排'})).toBeDefined();
+    expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'打开活动需求表单'}));expect(openBrief).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));
+    await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,expect.objectContaining({id:expect.any(String)})));
+    expect(downloadSceneDelivery).toHaveBeenCalledOnce(); expect(exportDeliveryGlb).not.toHaveBeenCalled();
+  });
+  it('uses the same snapshot for activity and scene downloads, and discards in-flight activity output after editing', async () => {
+    const current={...layout,eventOperations:eventOperationsSchema.parse({tasks:[createOperation('演练任务','preparation')]})};
+    const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
+    const snapshot=vi.mocked(sceneDeliveryJson).mock.calls[0][1];
+    fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,snapshot));
+    let done!:(value:string)=>void;vi.mocked(eventOperationsCsv).mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));
+    const before=vi.mocked(downloadSceneDelivery).mock.calls.length;
+    fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledTimes(2));
+    view.rerender(<SceneDeliveryPanel layout={{...current,eventOperations:{...current.eventOperations,tasks:[{...current.eventOperations.tasks[0],title:'新演练任务'}]}}} controller={controller}/>);
+    await act(async()=>{done('old operations');});expect(downloadSceneDelivery).toHaveBeenCalledTimes(before);
   });
 });
