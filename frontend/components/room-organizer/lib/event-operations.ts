@@ -11,8 +11,11 @@ export const OPERATION_STATUS_LABELS: Record<EventOperationTask['status'] | 'nee
 };
 
 function itemBasis(item: FurnitureItem) {
+  const assetId = item.assetId ?? (libraryAssetIds as Record<string, string>)[item.glbUrl ?? ''] ?? null;
   return { id: item.id, type: item.type, materialId: item.materialId ?? null,
-    assetId: item.assetId ?? (libraryAssetIds as Record<string, string>)[item.glbUrl ?? ''] ?? null,
+    assetId,
+    // Without a stable asset identity, even a query change can select a different model.
+    ...(!assetId && item.glbUrl ? { unarchivedModelUrl: item.glbUrl } : {}),
     glbNode: item.glbNode ?? null, size: [item.width, item.depth, item.height], color: item.color,
     position: item.position ?? null, rotation: item.rotation ?? 0, elevation: item.elevation ?? 0,
     wallId: item.wallId ?? null, sillHeight: item.sillHeight ?? null, mirrored: item.mirrored ?? false,

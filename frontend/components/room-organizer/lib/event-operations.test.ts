@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { eventOperationsSchema, eventOperationTaskSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { sceneSchema } from '../../../../supabase/functions/_shared/domain';
+import { eventOperationsSchema, eventOperationTaskSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { createMeasuredRoomLayout } from './backend-adapter';
 import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationReview, toShanghaiDateTimeInput } from './event-operations';
@@ -59,6 +59,23 @@ describe('activity operations references and review', () => {
     const renewed = { ...asset, floors: [{ ...asset.floors[0], items: [{ ...asset.floors[0].items[0], glbUrl: 'https://example.test/model?token=new' }] }] };
     expect((await operationReview(renewed, assetTask)).status).toBe('accepted');
   });
+  it.each(['https://example.test/replacement.glb', 'https://example.test/chair.glb?version=2'])(
+    'requires review when an unarchived model reference changes to %s without losing prior evidence', async glbUrl => {
+      const layout = venue();
+      const item = layout.floors[0].items[0];
+      Object.assign(item, { type: 'glb-asset', materialId: 'asset', glbUrl: 'https://example.test/chair.glb?version=1' });
+      const task = await accepted(layout, [objectId]);
+      layout.eventOperations = eventOperationsSchema.parse({ tasks: [task] });
+      const changed = { ...layout, floors: [{ ...layout.floors[0], items: [{ ...item, glbUrl }] }] };
+      expect((await operationReview(changed, task)).status).toBe('needs_review');
+      expect((await deliveryOperations(changed))!.tasks[0]).toMatchObject({
+        effectiveStatus: 'needs_review', actualStartedAt: task.actualStartedAt, evidenceNote: task.evidenceNote,
+      });
+      expect(await eventOperationsCsv(changed)).toContain('需复核');
+      expect((await operationReview(layout, task)).status).toBe('accepted');
+      expect(task.reviewedBasis).toMatch(/^sha256:[0-9a-f]{64}$/);
+    },
+  );
   it('copies a selected rehearsal template as new drafts and discards old assignments and results', async () => {
     const layout = venue(), task = await accepted(layout, [objectId]);
     const source = eventOperationsSchema.parse({ dataKind: 'real', tasks: [task] });
