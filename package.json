@@ -18,7 +18,8 @@
     "check:config:full": "node scripts/check-config.mjs --mode full --demo",
     "check:config:hunyuan": "node scripts/check-hunyuan-config.mjs",
     "smoke:cloud": "node --env-file=.env.local scripts/smoke-cloud.mjs",
-    "library:check": "node --experimental-transform-types scripts/import-model-library.ts"
+    "library:check": "node --experimental-transform-types scripts/import-model-library.ts",
+    "blender:verify": "node --experimental-transform-types tools/blender/verify-parametric.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "4.5.1",
