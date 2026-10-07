@@ -12,6 +12,11 @@ export class ApiError extends Error {
 }
 
 export const uuid = z.uuid();
+const duplicateUuidIds=(ids:readonly string[])=>new Set(ids.map(id=>id.toLowerCase())).size!==ids.length;
+const overlappingUuidIds=(left:readonly string[],right:readonly string[])=>{
+  const ids=new Set(left.map(id=>id.toLowerCase()));
+  return right.some(id=>ids.has(id.toLowerCase()));
+};
 export const sizeSchema = z.strictObject({
   width: z.number().positive().max(200),
   depth: z.number().positive().max(200),
@@ -55,6 +60,7 @@ export const venueSchema = z.strictObject({
   entrances: z.array(z.strictObject({ id: uuid, position: pointSchema, width: z.number().positive().max(10) })).max(12),
   floorplanAssetId: uuid.optional(),
 }).superRefine((v, ctx) => {
+  if(duplicateUuidIds(v.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'出入口 ID 不能重复'});
   if (v.shape === 'polygon' && !v.polygon) ctx.addIssue({ code: 'custom', message: '多边形场地缺少顶点' });
   if (v.shape === 'rectangle' && v.polygon) ctx.addIssue({ code: 'custom', message: '矩形场地不能携带多边形' });
   if (v.polygon) {
@@ -90,7 +96,7 @@ export const structureSchema = z.strictObject({
   columns: z.array(z.strictObject({id:uuid,position:pointSchema,size:sizeSchema,rotation:z.number().min(-360).max(360),status:evidenceStatusSchema})).max(64),
 }).superRefine((s,ctx)=>{
   const ids=[...s.walls,...s.openings,...s.columns].map(x=>x.id);
-  if(new Set(ids).size!==ids.length) ctx.addIssue({code:'custom',message:'结构 ID 不能重复'});
+  if(duplicateUuidIds(ids)) ctx.addIssue({code:'custom',message:'结构 ID 不能重复'});
   for(const wall of s.walls) if(Math.hypot(wall.end.x-wall.start.x,wall.end.z-wall.start.z)<0.02) ctx.addIssue({code:'custom',message:'墙段长度必须大于两厘米'});
   for(const opening of s.openings) {
     const wall=s.walls.find(w=>w.id===opening.wallId);
@@ -102,18 +108,25 @@ export const designSchema=z.strictObject({
   highlights:z.array(z.strictObject({title:z.string().max(120),description:z.string().max(1000),objectIds:z.array(uuid).max(50)})).max(20),
   requirements:z.array(z.strictObject({text:z.string().max(500),status:z.enum(['satisfied','partial','unmet']),reason:z.string().max(1000),objectIds:z.array(uuid).max(50)})).max(40),
 });
-const sceneCommon={venue:venueSchema,objects:z.array(objectSchema).max(500),scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
-export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon});
-export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCommon,structure:structureSchema,sources:z.array(sourceSchema).max(12).default([]),dimensions:z.array(dimensionSchema).max(128).default([]),design:designSchema.optional(),finishes:z.strictObject({floorColor:colorSchema.optional(),floorPattern:z.enum(['solid','wood','tile','carpet','concrete']).optional(),wallColors:z.record(uuid,colorSchema).optional()}).optional()});
+const sceneObjectsSchema=z.array(objectSchema).max(500).superRefine((objects,ctx)=>{
+  if(duplicateUuidIds(objects.map(object=>object.id)))ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
+});
+const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
+export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon}).superRefine((s,ctx)=>{
+  if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
+});
+export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCommon,structure:structureSchema,sources:z.array(sourceSchema).max(12).default([]),dimensions:z.array(dimensionSchema).max(128).default([]),design:designSchema.optional(),finishes:z.strictObject({floorColor:colorSchema.optional(),floorPattern:z.enum(['solid','wood','tile','carpet','concrete']).optional(),wallColors:z.record(uuid,colorSchema).optional()}).optional()}).superRefine((s,ctx)=>{
+  // Cached V2 entrances may reference openings; only ordinary objects collide.
+  if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
+  const entityIds=[...s.objects,...s.structure.walls,...s.structure.openings,...s.structure.columns].map(x=>x.id);
+  if(duplicateUuidIds(entityIds))ctx.addIssue({code:'custom',message:'物件、墙体、门窗和柱子的 ID 不能互相重复'});
+  if(duplicateUuidIds(s.sources.map(x=>x.assetId)))ctx.addIssue({code:'custom',message:'来源图片不能重复'});
+  if(duplicateUuidIds(s.dimensions.map(x=>x.id)))ctx.addIssue({code:'custom',message:'尺寸 ID 不能重复'});
+});
 export const sceneSchema=z.discriminatedUnion('schemaVersion',[sceneV1Schema,sceneV2Schema]).superRefine((s,ctx)=>{
   if (!s.scenePreset && s.objects.length > 50) ctx.addIssue({code:'custom',message:'普通场景最多50件物件'});
   for (const o of s.objects) if (o.presetNode !== undefined && (!s.scenePreset || !presetManifest[s.scenePreset][o.presetNode])) ctx.addIssue({code:'custom',message:'预设节点不存在'});
-  if(new Set(s.objects.map(o=>o.id)).size!==s.objects.length) ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
   if(s.schemaVersion===2) {
-    const entityIds=[...s.objects,...s.structure.walls,...s.structure.openings,...s.structure.columns].map(x=>x.id);
-    if(new Set(entityIds).size!==entityIds.length)ctx.addIssue({code:'custom',message:'物件、墙体、门窗和柱子的 ID 不能互相重复'});
-    if(new Set(s.sources.map(x=>x.assetId)).size!==s.sources.length) ctx.addIssue({code:'custom',message:'来源图片不能重复'});
-    if(new Set(s.dimensions.map(x=>x.id)).size!==s.dimensions.length) ctx.addIssue({code:'custom',message:'尺寸 ID 不能重复'});
     for(const d of s.dimensions){
       if(d.sourceAssetId&&!s.sources.some(x=>x.assetId===d.sourceAssetId))ctx.addIssue({code:'custom',message:'尺寸来源图片不存在'});
       if(d.sourceAssetId&&[d.start,d.end].some(p=>p&&(p.x<0||p.x>1||p.z<0||p.z>1)))ctx.addIssue({code:'custom',message:'图片标定点须为0到1的归一化坐标'});
