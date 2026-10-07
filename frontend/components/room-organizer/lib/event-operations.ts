@@ -36,6 +36,7 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
       backendVenue: layout.backendVenue ?? null, storedStructure: layout.backendSceneV2?.structure ?? null,
       entrance: layout.entrance ?? null, terrain: layout.terrain ?? null, roof: layout.roof ?? null,
       floors: layout.floors.map(floor => ({ id: floor.id, height: floor.height ?? 3,
+        floorColor: floor.floorColor, floorPattern: floor.floorPattern ?? 'solid',
         walls: floor.interiorWalls ?? [],
         fixtures: floor.items.filter(item => item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId).map(itemBasis) })) },
     objects: [...task.objectIds].sort().map(id => {

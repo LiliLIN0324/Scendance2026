@@ -4,6 +4,7 @@ import { eventOperationsSchema, eventOperationTaskSchema, type EventOperationTas
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { createMeasuredRoomLayout } from './backend-adapter';
 import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationReview, toShanghaiDateTimeInput } from './event-operations';
+import { parseLayoutJson } from './persistence';
 import { deliveryOperations, eventOperationsCsv, sceneDeliveryJson } from './scene-delivery';
 import type { RoomLayout } from './types';
 
@@ -90,6 +91,28 @@ describe('activity operations references and review', () => {
     const task = await accepted(layout);
     const changed = { ...layout, eventOperations: { ...layout.eventOperations, dataKind: 'real' as const } };
     expect((await operationReview(changed, task)).status).toBe('needs_review');
+  });
+  it.each([
+    ['legacy', 'floorPattern'], ['legacy', 'floorColor'], ['measured', 'floorPattern'], ['measured', 'floorColor'],
+  ] as const)('rechecks %s floor %s changes carried by a restored project', async (kind, field) => {
+    const layout = kind === 'measured' ? createMeasuredRoomLayout(venue(), { width: 8, depth: 8, height: 3 }) : venue();
+    layout.floors[0].floorPattern = 'wood';
+    const task = await accepted(layout);
+    layout.eventOperations = eventOperationsSchema.parse({ tasks: [task] });
+    const changed = { ...layout, floors: [{ ...layout.floors[0], [field]: field === 'floorPattern' ? 'carpet' : '#102030' }] } as RoomLayout;
+    expect((await operationReview(changed, task)).status).toBe('needs_review');
+    const reopened = parseLayoutJson(JSON.stringify(changed));
+    expect(reopened).not.toBeNull();
+    expect((await deliveryOperations(reopened!))!.tasks[0]).toMatchObject({
+      effectiveStatus: 'needs_review', evidenceNote: task.evidenceNote, actualStartedAt: task.actualStartedAt,
+    });
+    expect(await eventOperationsCsv(reopened!)).toContain('需复核');
+    expect((await operationReview(layout, task)).status).toBe('accepted');
+  });
+  it('treats omitted and explicit solid floor patterns as the same physical finish', async () => {
+    const layout = venue(), task = await accepted(layout);
+    const explicit = { ...layout, floors: [{ ...layout.floors[0], floorPattern: 'solid' as const }] };
+    expect((await operationReview(explicit, task)).status).toBe('accepted');
   });
 });
 
