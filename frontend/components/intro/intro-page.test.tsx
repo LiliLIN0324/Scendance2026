@@ -67,7 +67,7 @@ describe('introduction and sign-in entry', () => {
     fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
     expect(mockFetch).toHaveBeenCalledOnce();
     expect(mockFetch.mock.calls[0]?.[0]).toBe('https://example.supabase.co/auth/v1/token?grant_type=password');
-    expect(JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))).toEqual({ email: 'editor@example.com', password: 'test-password-only' });
+    expect(JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))).toMatchObject({ email: 'editor@example.com', password: 'test-password-only' });
     await act(async () => {
       complete(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'editor-id', email: 'editor@example.com' } }), { status: 200 }));
     });
@@ -209,7 +209,7 @@ it('creates a real guest session before entering through the authenticated retur
   expect(onAuthenticated).not.toHaveBeenCalled();
   expect(mockFetch).toHaveBeenCalledOnce();
   expect(mockFetch.mock.calls[0][0]).toBe('https://example.supabase.co/auth/v1/signup');
-  expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({ data: { display_name: '访客' } });
+  expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({ data: { display_name: '访客' } });
   await act(async () => complete(new Response(JSON.stringify({ access_token: 'guest-access', refresh_token: 'guest-refresh', expires_in: 3600, user: { id: 'guest-id', is_anonymous: true } }))));
   await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
   expect(onEnter).not.toHaveBeenCalled();

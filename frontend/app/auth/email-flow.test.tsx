@@ -78,10 +78,12 @@ it('supports an existing code after reload and blocks immediate repeat sends', a
   fireEvent.change(screen.getByLabelText('注册邮箱'), { target: { value: 'test@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: '输入已有验证码' }));
   await screen.findByLabelText('六位验证码');
+  const resend = screen.getByRole('button', { name: /重新发送验证码|秒后可重新发送/ });
+  await waitFor(() => expect((resend as HTMLButtonElement).disabled).toBe(false));
   fetchMock.mockResolvedValueOnce(response({}));
-  fireEvent.click(screen.getByRole('button', { name: '重新发送验证码' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: /秒后可重新发送/ }).hasAttribute('disabled')).toBe(true));
-  fireEvent.click(screen.getByRole('button', { name: /秒后可重新发送/ }));
+  fireEvent.click(resend);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  fireEvent.click(resend);
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -89,7 +91,7 @@ it('strips recovery credentials from the URL before routing the old callback to 
   window.history.replaceState(null, '', '/auth/callback#access_token=access-test&refresh_token=refresh-test&expires_in=3600&type=recovery');
   fetchMock.mockResolvedValueOnce(response(auth.user));
   render(<AuthProvider><CallbackPage /></AuthProvider>);
-  expect(window.location.hash).toBe('');
+  await waitFor(() => expect(window.location.hash).toBe(''));
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/reset-password'));
   expect(controller.getSnapshot().user).toBeNull();
 });

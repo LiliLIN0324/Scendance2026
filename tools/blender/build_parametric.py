@@ -27,7 +27,7 @@ import sys
 import traceback
 
 import bpy
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 RESULT_MARKER = "SCENDANCE_PARAMETRIC_RESULT"
 
@@ -76,7 +76,14 @@ def make_surface_material(color: str):
 
 def add_box(name: str, width: float, depth: float, height: float,
             cx: float = 0.0, cy: float = 0.0, cz: float | None = None):
-    """Axis-aligned box centred on (cx, cy), base at cz, or centred vertically when cz is omitted."""
+    """Axis-aligned box in glTF coordinates.
+
+    `cx`, `cy` and `cz` are read exactly as `parametric.ts` passes them to its
+    `box()`: glTF X (width) centre, glTF Z (depth) centre and glTF Y (height)
+    centre — the base sits at `cz = height / 2` when `cz` is omitted. The mesh is
+    scaled on its local axes, which the exporter already maps to glTF extents
+    (width, height, depth), so only the node offset needs the axis swap below.
+    """
     if cz is None:
         cz = height / 2.0
     bpy.ops.mesh.primitive_cube_add(size=1)
@@ -84,7 +91,10 @@ def add_box(name: str, width: float, depth: float, height: float,
     obj.name = name
     # The unit cube spans ±0.5, so scaling the mesh data gives exactly width/depth/height.
     obj.data.transform(Matrix.Diagonal((width, depth, height, 1.0)))
-    obj.location = (cx, cy, cz)
+    # Blender is Z-up: (blender X, Y, Z) = (glTF X, -glTF Z, glTF Y). Without the
+    # negation of `cy` every depth-asymmetric part (chair back, counter front,
+    # cabinet back/door) would come out mirrored, which a bounds check cannot see.
+    obj.location = (cx, -cy, cz)
     OBJECTS.append(obj)
     return obj
 
@@ -196,11 +206,15 @@ BUILDERS = {
 
 def measure_bounds() -> dict:
     """World-space bounds expressed in glTF axes (X width, Y height, Z depth)."""
+    # `obj.data.transform` and `obj.location` only reach `bound_box`/`matrix_world`
+    # after a dependency-graph update; without this the measurement silently
+    # returns the untransformed unit cube.
+    bpy.context.view_layer.update()
     lo = [math.inf] * 3
     hi = [-math.inf] * 3
     for obj in OBJECTS:
         for corner in obj.bound_box:
-            world = (obj.matrix_world @ Matrix.Translation(corner)).translation
+            world = obj.matrix_world @ Vector(corner)
             # Blender X -> glTF X, Blender Y -> glTF -Z, Blender Z -> glTF Y
             gltf = (world.x, world.z, -world.y)
             for axis in range(3):

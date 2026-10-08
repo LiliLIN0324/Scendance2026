@@ -9,6 +9,8 @@ import { materialVariantProposalRequestSchema } from "../../supabase/functions/_
 import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
+import { createSupabaseBrowserClient } from "./supabase/client";
+import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 export { SceneApiError };
 export type { AgentRun };
 export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
@@ -32,9 +34,10 @@ export interface BackendConfig {
 /** Only public configuration belongs in a browser bundle. Verified guests can persist in this browser; lease identities never do. */
 export function getBackendConfig(input?: { url?: string; anonKey?: string }): BackendConfig {
   const url = (input?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
-  const anonKey = (input?.anonKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
+  // Supabase 新版控制台叫 publishable key，旧版叫 anon key；publishable 优先，旧名继续兼容。
+  const anonKey = (input?.anonKey ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
   let error: string | null = null;
-  if (!url || !anonKey) error = "请配置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_ANON_KEY。";
+  if (!url || !anonKey) error = "请配置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY（旧名 NEXT_PUBLIC_SUPABASE_ANON_KEY）。";
   else {
     try {
       const parsed = new URL(url);
@@ -85,6 +88,28 @@ interface AuthResponse {
   access_token: string; refresh_token: string; expires_in: number; expires_at?: number; user: BackendUser;
 }
 interface Tokens { access: string; refresh: string; expiresAt: number }
+type AuthResult = Partial<AuthResponse>;
+function clearSupabaseCookies(): void {
+  if (typeof document === "undefined") return;
+  for (const cookie of document.cookie.split(";")) {
+    const name = cookie.split("=")[0]?.trim();
+    if (name?.startsWith("sb-")) document.cookie = `${name}=; Max-Age=0; path=/`;
+  }
+}
+function toBackendUser(user: User): BackendUser {
+  const anonymous = (user as User & { is_anonymous?: boolean }).is_anonymous === true;
+  return { id: user.id, ...(user.email ? { email: user.email } : {}), ...(anonymous ? { is_anonymous: true } : {}) };
+}
+function toAuthResult(session: Session | null, user: User | null): AuthResult | null {
+  if (!session?.access_token || !session.refresh_token || !user?.id) return null;
+  return {
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_in: session.expires_in ?? Math.max(1, (session.expires_at ?? Math.floor(Date.now() / 1000) + 3600) - Math.floor(Date.now() / 1000)),
+    ...(session.expires_at === undefined ? {} : { expires_at: session.expires_at }),
+    user: toBackendUser(user),
+  };
+}
 export interface SaveResult { id: string; revision: number; scene: Scene; updatedAt: string; warnings: { code: string; ids: string[] }[] }
 export interface AuthorizedAssets { assetUrls: Record<string, string>; assetNames: Record<string, string> }
 /** Actual /proposals response from scene_private.proposals. */
@@ -193,7 +218,7 @@ export class BackendSession {
   private readonly listeners = new Set<() => void>();
   private tokens: Tokens | null = null;
   private recoveryTokens: Tokens | null = null;
-  private refresh: Promise<string> | null = null;
+  private readonly supabase: SupabaseClient | null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private operationPending = false;
   private renewing = false;
@@ -208,11 +233,11 @@ export class BackendSession {
   private generationPending = false;
   private workbenchPending: { key: string; promise: Promise<BackendProject> } | null = null;
   private workbenchBinding: { localId: string | undefined; projectId: string; userId: string } | null = null;
-  private guestUserId: string | null = null;
   private readonly client: ReturnType<typeof createSceneClient>;
 
-  constructor(config: BackendConfig = getBackendConfig(), private readonly storage?: Storage, private readonly guestStorage?: Storage) {
+  constructor(config: BackendConfig = getBackendConfig(), _storage?: Storage, _guestStorage?: Storage) {
     this.config = config;
+    this.supabase = config.configured ? createSupabaseBrowserClient(config.url, config.anonKey) : null;
     // Never persist this in local/sessionStorage: duplicated tabs must not share a lease identity.
     const sessionId = crypto.randomUUID();
     this.snapshot = {
@@ -259,88 +284,97 @@ export class BackendSession {
     if (!this.config.configured) throw new SceneApiError("CONFIGURATION_MISSING", 0, null);
   }
   private async authRequest(grant: "password" | "refresh_token", body: unknown): Promise<AuthResponse> {
-    this.requireConfig();
-    // Supabase Auth REST: https://github.com/supabase/auth/blob/master/openapi.yaml
-    const response = await fetch(`${this.config.url}/auth/v1/token?grant_type=${grant}`, {
-      method: "POST", headers: { apikey: this.config.anonKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body), cache: "no-store",
-    });
-    if (!response.ok) throw new SceneApiError(grant === "password" && response.status === 400 ? "INVALID_CREDENTIALS" : "UNAUTHENTICATED", response.status, null);
-    const result = await response.json() as AuthResponse;
-    if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in)) throw new SceneApiError("INVALID_RESPONSE", 502, null);
-    return result;
+    if (!this.supabase) throw new SceneApiError("CONFIGURATION_MISSING", 0, null);
+    const input = body as { email?: string; password?: string; refresh_token?: string };
+    const response = grant === "password"
+      ? await this.supabase.auth.signInWithPassword({ email: input.email ?? "", password: input.password ?? "" })
+      : await this.supabase.auth.refreshSession({ refresh_token: input.refresh_token ?? "" });
+    if (response.error || !response.data.session || !response.data.user) {
+      const status = response.error?.status ?? 0;
+      if (grant === "password" && status === 400) throw new SceneApiError("INVALID_CREDENTIALS", status, null);
+      if (response.error && status === 0) throw new SceneApiError("NETWORK_ERROR", 0, null);
+      if (!response.error || status >= 500) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+      throw new SceneApiError("UNAUTHENTICATED", status, null);
+    }
+    const result = toAuthResult(response.data.session, response.data.user);
+    if (!result) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return result as AuthResponse;
+  }
+  private async emailAuthRequest(path: string, body: unknown): Promise<AuthResult> {
+    if (!this.supabase) throw new SceneApiError("CONFIGURATION_MISSING", 0, null);
+    const input = body as { email?: string; password?: string; token?: string; type?: "signup" | "recovery"; data?: Record<string, unknown> };
+    const requestUrl = new URL(path, "https://auth.local");
+    const requestPath = requestUrl.pathname.replace(/^\//, "");
+    const redirectTo = requestUrl.searchParams.get("redirect_to") ?? undefined;
+    let response: { data: { user?: User | null; session?: Session | null } | null; error: { code?: string; status?: number; message?: string } | null };
+    if (requestPath === "signup") {
+      response = input.email && input.password
+        ? await this.supabase.auth.signUp({ email: input.email.trim(), password: input.password, options: { ...(input.data ? { data: input.data } : {}), ...(redirectTo ? { emailRedirectTo: redirectTo } : {}) } }) as typeof response
+        : await this.supabase.auth.signInAnonymously({ options: { ...(input.data ? { data: input.data } : {}) } }) as typeof response;
+    } else if (requestPath === "resend") {
+      response = await this.supabase.auth.resend({ type: "signup", email: input.email?.trim() ?? "", ...(redirectTo ? { options: { emailRedirectTo: redirectTo } } : {}) }) as typeof response;
+    } else if (requestPath === "recover") {
+      response = await this.supabase.auth.resetPasswordForEmail(input.email?.trim() ?? "", redirectTo ? { redirectTo } : undefined) as typeof response;
+    } else if (requestPath === "verify") {
+      response = await this.supabase.auth.verifyOtp({ email: input.email?.trim() ?? "", token: input.token ?? "", type: input.type ?? "signup" }) as typeof response;
+    } else {
+      throw new SceneApiError("INVALID_RESPONSE", 500, null);
+    }
+    if (response.error) {
+      const code = response.error.code ?? "";
+      const message = response.error.message?.toLowerCase() ?? "";
+      const errorKey = code || (
+        message.includes("already registered") || message.includes("already exists") ? "user_already_exists"
+        : response.error.status === 403 ? "otp_expired"
+        : message.includes("expired") ? "otp_expired"
+        : message.includes("rate") ? "over_email_send_rate_limit"
+        : message.includes("not authorized") ? "email_address_not_authorized"
+        : message.includes("signup") && message.includes("disabled") ? "signup_disabled"
+        : message.includes("not found") ? "user_not_found"
+        : ""
+      );
+      if (requestPath === "recover" && (errorKey === "user_not_found" || response.error.status === 404)) return {};
+      const messages: Record<string, string> = {
+        user_already_exists: "该邮箱已注册，请切换到登录。",
+        weak_password: "请使用至少 12 位、更难猜测的密码。",
+        same_password: "新密码不能与旧密码相同。",
+        email_address_invalid: "请输入有效的邮箱地址。",
+        over_email_send_rate_limit: "发送邮件过于频繁，请稍后再试。",
+        over_request_rate_limit: "操作过于频繁，请稍后再试。",
+        over_email_send_daily_limit: "今天的邮件发送额度已用完，请稍后再试。",
+        email_address_not_authorized: "验证邮件服务尚未开放，请联系管理员。",
+        signup_disabled: "注册暂未开放，请稍后再试。",
+        otp_expired: "验证码已失效或不正确，请重新获取验证码。",
+        email_not_confirmed: "请先使用邮件中的验证码确认邮箱。",
+        reauthentication_needed: "验证已失效，请重新获取验证码。",
+      };
+      throw new Error(messages[errorKey] ?? (response.error.status === 429 ? "操作过于频繁，请稍后再试。" : "验证服务暂时不可用，请稍后重试。"));
+    }
+    if (!response.data) return {};
+    return toAuthResult(response.data.session ?? null, response.data.user ?? response.data.session?.user ?? null) ?? (response.data.user ? { user: toBackendUser(response.data.user) } : {});
   }
   private acceptAuth(result: AuthResponse) {
-    if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    if (!result.access_token || !result.refresh_token || !result.user?.id || typeof result.expires_in !== "number" || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
     this.tokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: result.expires_at ? result.expires_at * 1000 : Date.now() + result.expires_in * 1000 };
     this.update({ user: result.user });
-    this.persistTokens();
   }
-  private persistTokens(rejected?: Tokens | null) {
-    try {
-      const key = `scendance:auth:${this.config.url}`;
-      if (this.tokens) this.storage?.setItem(key, JSON.stringify({ ...this.tokens, ...(this.snapshot.user?.is_anonymous === true ? { userId: this.snapshot.user.id } : {}) }));
-      else this.storage?.removeItem(key);
-    } catch { /* Storage restrictions should not prevent the current sign-in. */ }
-    try {
-      const key = `scendance:guest-auth:${this.config.url}`;
-      if (this.tokens && this.snapshot.user?.is_anonymous === true) {
-        const stored = JSON.parse(this.guestStorage?.getItem(key) ?? "null");
-        const continuing = this.guestUserId === this.snapshot.user.id;
-        this.guestUserId = this.snapshot.user.id;
-        if (!continuing || !stored?.userId || stored.userId === this.guestUserId) this.guestStorage?.setItem(key, JSON.stringify({ ...this.tokens, userId: this.guestUserId }));
-      } else if (!this.tokens && this.guestUserId) {
-        const stored = JSON.parse(this.guestStorage?.getItem(key) ?? "null");
-        if (stored?.userId === this.guestUserId && (rejected === undefined || rejected && stored.access === rejected.access && stored.refresh === rejected.refresh)) this.guestStorage?.removeItem(key);
-        this.guestUserId = null;
-      }
-    } catch { /* A guest can still work when browser persistence is unavailable. */ }
-  }
+  private persistTokens(_rejected?: Tokens | null): void {}
   private async accessToken(): Promise<string | null> {
-    if (!this.tokens) return null;
-    if (this.tokens.expiresAt > Date.now() + 30_000) return this.tokens.access;
-    if (!this.refresh) {
-      const epoch = this.epoch;
-      const refreshToken = this.tokens.refresh;
-      this.refresh = (this.snapshot.user?.is_anonymous === true ? this.refreshGuestTokens(this.snapshot.user.id, this.tokens) : this.authRequest("refresh_token", { refresh_token: refreshToken }).then(result => {
-        if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-        this.acceptAuth(result);
-        return result.access_token;
-      })).finally(() => { this.refresh = null; });
-    }
-    return this.refresh;
-  }
-  private readGuestTokens(userId: string): Tokens | null {
-    try {
-      const stored = JSON.parse(this.guestStorage?.getItem(`scendance:guest-auth:${this.config.url}`) ?? "null");
-      return stored?.userId === userId && typeof stored.access === "string" && stored.access && typeof stored.refresh === "string" && stored.refresh && Number.isFinite(stored.expiresAt)
-        ? { access: stored.access, refresh: stored.refresh, expiresAt: stored.expiresAt } : null;
-    } catch { return null; }
-  }
-  private async refreshGuestTokens(userId: string, previous: Tokens, verified?: BackendUser): Promise<string> {
-    const epoch = this.epoch;
-    const run = async () => {
-      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-      const shared = this.readGuestTokens(userId);
-      const current = shared && shared.expiresAt >= previous.expiresAt ? shared : previous;
-      try {
-        const result = current.expiresAt <= Date.now() + 30_000
-          ? await this.authRequest("refresh_token", { refresh_token: current.refresh }) : null;
-        const user = result?.user ?? (verified && current.access === previous.access ? verified : await this.verifyUser(current.access));
-        if (epoch !== this.epoch || shared && !this.readGuestTokens(userId)) throw new SceneApiError("SESSION_CHANGED", 409, null);
-        if (user.id !== userId || user.is_anonymous !== true) throw new SceneApiError("UNAUTHENTICATED", 401, null);
-        if (result) this.acceptAuth(result);
-        else { this.tokens = current; this.update({ user }); this.persistTokens(); }
-        return this.tokens!.access;
-      } catch (error) {
-        if (epoch === this.epoch && error instanceof SceneApiError && error.code === "UNAUTHENTICATED") {
-          this.tokens = null; this.persistTokens(current); this.update({ user: null });
-        }
-        throw error;
+    if (!this.supabase || this.snapshot.recoveryReady) return null;
+    let { data, error } = await this.supabase.auth.getSession();
+    if (error) throw new SceneApiError("UNAUTHENTICATED", error.status ?? 401, null);
+    let session = data.session;
+    if (!session) { this.tokens = null; return null; }
+    if (session.expires_at && session.expires_at * 1000 <= Date.now() + 30_000) {
+      const refreshed = await this.supabase.auth.refreshSession();
+      if (refreshed.error || !refreshed.data.session) {
+        this.tokens = null;
+        throw new SceneApiError("UNAUTHENTICATED", refreshed.error?.status ?? 401, null);
       }
-    };
-    return await (typeof navigator !== "undefined" && navigator.locks
-      ? navigator.locks.request(`scendance:guest-refresh:${this.config.url}:${userId}`, run) : run());
+      session = refreshed.data.session;
+    }
+    this.tokens = { access: session.access_token, refresh: session.refresh_token, expiresAt: (session.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000 };
+    return session.access_token;
   }
   private captureRequestScope(projectId = this.snapshot.project?.id ?? null): RequestScope {
     const lease = this.snapshot.lease;
@@ -361,14 +395,14 @@ export class BackendSession {
       if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
       return result;
     } catch (error) {
-      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
-        if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
-          if (!this.tokens || this.tokens === credentials) {
-            this.tokens = null;
-            this.persistTokens(credentials);
-            this.update({ user: null });
-          }
+      if (epoch === this.epoch && error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
+        if (!this.tokens || this.tokens === credentials) {
+          this.tokens = null;
+          this.persistTokens(credentials);
+          this.update({ user: null, writeBlocked: true, status: "blocked" });
         }
+      }
+      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
         // Uncertainty blocks only the project/lease that made this request. A
         // late response from a handed-off editor must not stop the new lease.
         const permissionLost = error instanceof SceneApiError && (error.status === 401 || ["LEASE_LOST", "REVISION_CONFLICT"].includes(error.code));
@@ -387,7 +421,6 @@ export class BackendSession {
     const epoch = ++this.epoch;
     this.tokens = null;
     this.recoveryTokens = null;
-    this.persistTokens();
     this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true });
     try {
       const result = await this.authRequest("password", { email: email.trim(), password });
@@ -406,109 +439,70 @@ export class BackendSession {
     const epoch = this.epoch;
     const result = await this.emailAuthRequest("signup", { data: { display_name: "访客" } });
     if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-    this.acceptAuth(result);
+    if (!result.access_token || !result.refresh_token || !result.user?.id || typeof result.expires_in !== "number" || !Number.isFinite(result.expires_in)) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    this.acceptAuth(result as AuthResponse);
     this.update({ status: "ready", error: null, project: null, lease: null, revision: null });
     return result.user;
   }
   private async verifyUser(access: string): Promise<BackendUser> {
-    const response = await fetch(`${this.config.url}/auth/v1/user`, {
-      headers: { apikey: this.config.anonKey, Authorization: `Bearer ${access}` }, cache: "no-store",
-    });
-    if (!response.ok) throw new SceneApiError(response.status === 401 || response.status === 403 ? "UNAUTHENTICATED" : "NETWORK_ERROR", response.status, null);
-    const user = await response.json() as BackendUser;
-    if (!user.id) throw new SceneApiError("INVALID_RESPONSE", 502, null);
-    return user;
+    if (!this.supabase) throw new SceneApiError("CONFIGURATION_MISSING", 0, null);
+    const { data, error } = await this.supabase.auth.getUser(access);
+    if (error || !data.user) throw new SceneApiError(error?.status && error.status !== 0 ? "UNAUTHENTICATED" : "NETWORK_ERROR", error?.status ?? 0, null);
+    return toBackendUser(data.user);
   }
-  async restoreSession(): Promise<void> {
-    if (!this.config.configured || this.tokens) return;
-    let stored: (Tokens & { userId?: string }) | null = null;
-    let guestBackup = false;
-    try { stored = JSON.parse(this.storage?.getItem(`scendance:auth:${this.config.url}`) ?? "null"); } catch { /* Try the guest backup. */ }
-    if (!stored?.access || !stored.refresh || !Number.isFinite(stored.expiresAt)) {
-      try { stored = JSON.parse(this.guestStorage?.getItem(`scendance:guest-auth:${this.config.url}`) ?? "null"); } catch { return; }
-      guestBackup = true;
-    }
-    if (typeof stored?.access !== "string" || !stored.access || typeof stored.refresh !== "string" || !stored.refresh || !Number.isFinite(stored.expiresAt)) return;
-    guestBackup ||= typeof stored.userId === "string";
-    if (guestBackup) {
-      if (typeof stored.userId !== "string" || !stored.userId) return;
-      this.guestUserId = stored.userId;
-    }
+  private captureRecovery(session: { access_token: string; refresh_token: string; expires_at?: number | null; expires_in?: number }): void {
+    if (!session.access_token || !session.refresh_token) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    this.tokens = null;
+    this.recoveryTokens = {
+      access: session.access_token,
+      refresh: session.refresh_token,
+      expiresAt: session.expires_at ? session.expires_at * 1000 : Date.now() + (session.expires_in ?? 3600) * 1000,
+    };
+    clearSupabaseCookies();
+    this.update({ user: null, recoveryReady: true, writeBlocked: true, status: "blocked", error: null });
+  }
+  async restoreSession(recovery = false): Promise<void> {
+    if (!this.config.configured || !this.supabase || (!recovery && this.snapshot.user)) return;
     const epoch = this.epoch;
     try {
-      if (stored.expiresAt <= Date.now() + 30_000) {
-        if (guestBackup) await this.refreshGuestTokens(stored.userId!, stored);
-        else {
-          const result = await this.authRequest("refresh_token", { refresh_token: stored.refresh });
-          if (epoch !== this.epoch) return;
-          this.acceptAuth(result);
-        }
-      } else {
-        const user = await this.verifyUser(stored.access);
-        if (epoch !== this.epoch) return;
-        if (guestBackup && (user.is_anonymous !== true || user.id !== stored.userId)) throw new SceneApiError("UNAUTHENTICATED", 401, null);
-        if (user.is_anonymous === true) await this.refreshGuestTokens(user.id, stored, user);
-        else {
-          this.tokens = { access: stored.access, refresh: stored.refresh, expiresAt: stored.expiresAt };
-          this.update({ user });
-          this.persistTokens();
-        }
+      const { data, error } = await this.supabase.auth.getSession();
+      if (error) throw error;
+      if (!data.session) {
+        this.tokens = null;
+        this.update({ user: null, recoveryReady: false, status: "signed_out", writeBlocked: true, error: null });
+        return;
       }
-      this.update({ status: "ready", error: null });
+      if (recovery) {
+        this.captureRecovery(data.session);
+          return;
+      }
+      const user = await this.verifyUser(data.session.access_token);
+      if (epoch !== this.epoch) return;
+      this.tokens = { access: data.session.access_token, refresh: data.session.refresh_token, expiresAt: (data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000 };
+      this.update({ user, status: "ready", error: null });
     } catch (error) {
       if (epoch !== this.epoch) return;
-      this.tokens = null;
-      // Keep the saved session on a transient network failure so a reload can retry.
-      if (error instanceof SceneApiError && error.code === "UNAUTHENTICATED") this.persistTokens(stored);
       this.block(error);
     }
   }
-  async acceptCallback(hash: string, expectedType?: "recovery"): Promise<void> {
-    const values = new URLSearchParams(hash.replace(/^#/, ""));
+  async acceptCallback(callback: string, expectedType?: "recovery"): Promise<void> {
+    if (!this.supabase) throw new SceneApiError("CONFIGURATION_MISSING", 0, null);
+    const values = new URLSearchParams(callback.replace(/^#/, ""));
     if (expectedType && values.get("type") !== expectedType) throw new Error("请使用密码重置邮件中的验证码或链接。");
     if (values.has("error")) throw new Error("验证链接已失效，请返回登录页重新注册或登录。");
     const access = values.get("access_token"), refresh = values.get("refresh_token");
-    const expires = Number(values.get("expires_in"));
-    if (!access || !refresh || !Number.isFinite(expires) || expires <= 0) throw new Error("验证链接不完整，请重新打开邮件中的链接。");
-    const epoch = this.epoch;
-    const user = await this.verifyUser(access);
-    if (epoch !== this.epoch) return;
-    if (values.get("type") === "recovery") {
-      this.recoveryTokens = { access, refresh, expiresAt: Date.now() + expires * 1000 };
-      this.update({ recoveryReady: true });
+    if (!access || !refresh) throw new Error("验证链接不完整，请重新打开邮件中的链接。");
+    if (values.get("type") === "recovery" || expectedType === "recovery") {
+      this.captureRecovery({ access_token: access, refresh_token: refresh });
       return;
     }
-    this.acceptAuth({ access_token: access, refresh_token: refresh, expires_in: expires, user });
+    const { data, error } = await this.supabase.auth.setSession({ access_token: access, refresh_token: refresh });
+    if (error || !data.session) throw new SceneApiError("UNAUTHENTICATED", error?.status ?? 401, null);
+    const user = data.user ?? data.session.user;
+    const result = toAuthResult(data.session, user);
+    if (!result) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    this.acceptAuth(result as AuthResponse);
     this.update({ status: "ready", error: null });
-  }
-  private async emailAuthRequest(path: string, body: unknown, access?: string): Promise<AuthResponse> {
-    this.requireConfig();
-    const response = await fetch(`${this.config.url}/auth/v1/${path}`, {
-      method: access ? "PUT" : "POST",
-      headers: { apikey: this.config.anonKey, "Content-Type": "application/json", ...(access ? { Authorization: `Bearer ${access}` } : {}) },
-      body: JSON.stringify(body), cache: "no-store",
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      const code = result.code ?? result.error_code;
-      if (path.startsWith("recover?") && code === "user_not_found") return result;
-      const messages: Record<string, string> = {
-        user_already_exists: "该邮箱已注册，请切换到登录。",
-        weak_password: "请使用至少 12 位、更难猜测的密码。",
-        same_password: "新密码不能与旧密码相同。",
-        email_address_invalid: "请输入有效的邮箱地址。",
-        over_email_send_rate_limit: "发送邮件过于频繁，请稍后再试。",
-        over_request_rate_limit: "操作过于频繁，请稍后再试。",
-        over_email_send_daily_limit: "今天的邮件发送额度已用完，请稍后再试。",
-        email_address_not_authorized: "验证邮件服务尚未开放，请联系管理员。",
-        signup_disabled: "注册暂未开放，请稍后再试。",
-        otp_expired: "验证码已失效或不正确，请重新获取验证码。",
-        email_not_confirmed: "请先使用邮件中的验证码确认邮箱。",
-        reauthentication_needed: "验证已失效，请重新获取验证码。",
-      };
-      throw new Error(messages[code] ?? (response.status === 429 ? "操作过于频繁，请稍后再试。" : "验证服务暂时不可用，请稍后重试。"));
-    }
-    return result;
   }
   async resendSignup(email: string, redirectTo: string): Promise<void> {
     await this.emailAuthRequest(`resend?redirect_to=${encodeURIComponent(redirectTo)}`, { type: "signup", email: email.trim() });
@@ -519,38 +513,62 @@ export class BackendSession {
   async verifyEmailCode(email: string, token: string, type: "signup" | "recovery"): Promise<void> {
     if (!/^\d{6}$/.test(token)) throw new Error("请输入六位数字验证码。");
     const epoch = this.epoch;
+    if (type === "recovery") {
+      const response = await fetch(`${this.config.url}/auth/v1/verify`, {
+        method: "POST",
+        headers: { apikey: this.config.anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), token, type }),
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const key = result.code ?? result.error_code ?? (response.status === 403 ? "otp_expired" : "");
+        const messages: Record<string, string> = { otp_expired: "验证码已失效或不正确，请重新获取验证码。", over_request_rate_limit: "操作过于频繁，请稍后再试。" };
+        throw new Error(messages[key] ?? "验证服务暂时不可用，请稍后重试。");
+      }
+      if (!result.access_token || !result.refresh_token || !result.user?.id || typeof result.expires_in !== "number" || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+      this.captureRecovery(result as AuthResponse);
+      return;
+    }
     const result = await this.emailAuthRequest("verify", { email: email.trim(), token, type });
     if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
-    if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
-    if (type === "recovery") {
-      this.recoveryTokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: Date.now() + result.expires_in * 1000 };
-      this.update({ recoveryReady: true, error: null });
-    } else {
-      this.acceptAuth(result);
-      this.update({ status: "ready", error: null });
-    }
+    if (!result.access_token || !result.refresh_token || !result.user?.id || typeof result.expires_in !== "number" || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    this.acceptAuth(result as AuthResponse);
+    this.update({ status: "ready", error: null });
   }
   async updatePassword(password: string): Promise<{ signedOutEverywhere: boolean }> {
     const recovery = this.recoveryTokens;
     if (!recovery || recovery.expiresAt <= Date.now()) throw new Error("验证已失效，请重新获取验证码。");
     if (password.length < 12) throw new Error("请使用至少 12 位、更难猜测的密码。");
     const epoch = this.epoch;
-    await this.emailAuthRequest("user", { password }, recovery.access);
+    const response = await fetch(`${this.config.url}/auth/v1/user`, {
+      method: "PUT",
+      headers: { apikey: this.config.anonKey, "Content-Type": "application/json", Authorization: `Bearer ${recovery.access}` },
+      body: JSON.stringify({ password }),
+      cache: "no-store",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const messages: Record<string, string> = { same_password: "新密码不能与旧密码相同。", weak_password: "请使用至少 12 位、更难猜测的密码。", reauthentication_needed: "验证已失效，请重新获取验证码。" };
+      throw new Error(messages[result.code ?? result.error_code ?? ""] ?? "验证服务暂时不可用，请稍后重试。");
+    }
     if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
     ++this.epoch;
     this.tokens = null;
     this.recoveryTokens = null;
-    this.persistTokens();
+    clearSupabaseCookies();
     this.stopRenewal();
     this.update({ user: null, recoveryReady: false, project: null, lease: null, revision: null, status: "signed_out", writeBlocked: true, error: null });
     try {
-      const response = await fetch(`${this.config.url}/auth/v1/logout?scope=global`, { method: "POST", headers: { apikey: this.config.anonKey, Authorization: `Bearer ${recovery.access}` } });
-      return { signedOutEverywhere: response.ok };
+      const signOut = await fetch(`${this.config.url}/auth/v1/logout?scope=global`, { method: "POST", headers: { apikey: this.config.anonKey, Authorization: `Bearer ${recovery.access}` } });
+      return { signedOutEverywhere: signOut.ok };
     } catch { return { signedOutEverywhere: false }; }
   }
   clearPasswordRecovery(): void {
     ++this.epoch;
     this.recoveryTokens = null;
+    clearSupabaseCookies();
     this.update({ recoveryReady: false });
   }
   async signUp(email: string, password: string, displayName: string, redirectTo: string): Promise<boolean> {
@@ -558,7 +576,7 @@ export class BackendSession {
     const result = await this.emailAuthRequest(`signup?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim(), password, data: { display_name: displayName.trim().slice(0, 80) } });
     if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
     if (result.access_token && result.refresh_token && result.user?.id && Number.isFinite(result.expires_in)) {
-      this.acceptAuth(result);
+      this.acceptAuth(result as AuthResponse);
       this.update({ status: "ready", error: null });
       return true;
     }
@@ -567,18 +585,12 @@ export class BackendSession {
   async signOut(): Promise<void> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     try { if (this.snapshot.lease && !this.snapshot.writeBlocked) await this.releaseLease(); } catch { /* Lease expires within 90 seconds; draft remains. */ }
-    const token = this.tokens?.access;
     ++this.epoch;
     this.tokens = null;
     this.recoveryTokens = null;
-    this.persistTokens();
     this.stopRenewal();
     this.update({ user: null, recoveryReady: false, lease: null, status: this.config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null });
-    if (token) {
-      try {
-        await fetch(`${this.config.url}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: this.config.anonKey, Authorization: `Bearer ${token}` } });
-      } catch { /* Local credentials have already been discarded. */ }
-    }
+    try { await this.supabase?.auth.signOut({ scope: "local" }); } catch { /* Local credentials have already been discarded. */ }
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
@@ -1104,6 +1116,7 @@ export class BackendSession {
     ++this.epoch;
     ++this.lifecycle;
     this.stopRenewal();
+    void this.supabase?.auth.stopAutoRefresh();
     this.tokens = null;
     this.recoveryTokens = null;
     this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true, status: this.config.configured ? "signed_out" : "unconfigured" });
@@ -1112,11 +1125,7 @@ export class BackendSession {
 }
 
 export function createBackendSession(config?: BackendConfig): BackendSession {
-  let storage: Storage | undefined;
-  let guestStorage: Storage | undefined;
-  try { if (typeof window !== "undefined") storage = window.sessionStorage; } catch { /* Memory-only fallback. */ }
-  try { if (typeof window !== "undefined") guestStorage = window.localStorage; } catch { /* Per-tab fallback. */ }
-  return new BackendSession(config, storage, guestStorage);
+  return new BackendSession(config);
 }
 export function useBackendSession(controller: BackendSession): BackendSnapshot {
   return useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);

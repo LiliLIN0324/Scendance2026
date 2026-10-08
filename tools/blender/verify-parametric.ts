@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { validateModel } from '../../supabase/functions/_shared/models.ts';
 import { parametricParametersSchema } from '../../supabase/functions/_shared/parametric-contract.ts';
+import { buildParametricGlb } from '../../supabase/functions/_shared/parametric.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repoRoot = resolve(here, '../..');
@@ -71,6 +72,80 @@ function findBlender(): string {
     }
   }
   return '';
+}
+
+/** The subset of glTF JSON this harness reads. */
+interface GltfJson {
+  nodes?: { mesh?: number; translation?: number[] }[];
+  meshes?: { primitives?: { attributes: Record<string, number> }[] }[];
+  accessors?: { min?: number[]; max?: number[] }[];
+}
+
+/** One solid as stored in the GLB: its node offset plus its mesh-local bounds. */
+interface Solid {
+  translation: number[];
+  min: number[];
+  max: number[];
+}
+
+/** Read every node-backed solid out of a GLB without decoding the binary buffer. */
+function readSolids(glb: Uint8Array): Solid[] {
+  const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
+  let offset = 12;
+  let gltf: GltfJson | null = null;
+  while (offset < glb.byteLength) {
+    const length = view.getUint32(offset, true);
+    const type = view.getUint32(offset + 4, true);
+    if (type === 0x4e4f534a) {
+      gltf = JSON.parse(new TextDecoder().decode(glb.subarray(offset + 8, offset + 8 + length))) as GltfJson;
+    }
+    offset += 8 + length;
+  }
+  if (!gltf) throw new Error('GLB has no JSON chunk');
+  const solids: Solid[] = [];
+  for (const node of gltf.nodes ?? []) {
+    if (node.mesh === undefined) continue;
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (const primitive of gltf.meshes?.[node.mesh]?.primitives ?? []) {
+      const accessor = gltf.accessors?.[primitive.attributes.POSITION];
+      if (!accessor?.min || !accessor?.max) throw new Error('POSITION accessor without min/max');
+      for (let axis = 0; axis < 3; axis += 1) {
+        min[axis] = Math.min(min[axis], accessor.min[axis]);
+        max[axis] = Math.max(max[axis], accessor.max[axis]);
+      }
+    }
+    solids.push({ translation: node.translation ?? [0, 0, 0], min, max });
+  }
+  return solids;
+}
+
+function sameSolid(a: Solid, b: Solid): boolean {
+  const near = (left: number, right: number) => Math.abs(left - right) <= BOUNDS_TOLERANCE;
+  return a.translation.every((value, axis) => near(value, b.translation[axis]))
+    && a.min.every((value, axis) => near(value, b.min[axis]))
+    && a.max.every((value, axis) => near(value, b.max[axis]));
+}
+
+/**
+ * Diff the solids Blender emitted against the TypeScript generator's, matched by
+ * geometry rather than by name. Each solid's node offset and mesh-local bounds must
+ * agree, which pins its position on all three axes. The outer-box check alone could
+ * not catch a mirrored solid (e.g. a chair back on the wrong side), because a mirror
+ * across a symmetric shape leaves the bounding box unchanged.
+ */
+function describeDifference(reference: Solid[], actual: Solid[]): string | null {
+  if (reference.length !== actual.length) return `${actual.length} solids where the generator has ${reference.length}`;
+  const remaining = [...reference];
+  for (const solid of actual) {
+    const index = remaining.findIndex((candidate) => sameSolid(candidate, solid));
+    if (index < 0) {
+      const at = solid.translation.map((value) => value.toFixed(3)).join(', ');
+      return `solid at [${at}] does not exist in the generator output`;
+    }
+    remaining.splice(index, 1);
+  }
+  return null;
 }
 
 interface RunResult {
@@ -152,6 +227,11 @@ async function main(): Promise<number> {
           problems.push(`${worst.axis} off by ${worst.delta.toExponential(2)} m (tolerance ${BOUNDS_TOLERANCE})`);
         }
         if (Math.abs(offCentre) > 1e-4) problems.push(`not centred on X/Z with base at Y=0 (offset ${offCentre.toExponential(2)} m)`);
+        // The bounds checks above are blind to a mirrored solid, so diff the actual
+        // placement against the generator that the contract is written for.
+        const reference = await buildParametricGlb(parameters);
+        const difference = describeDifference(readSolids(reference.bytes), readSolids(result.glb));
+        if (difference) problems.push(`orientation/placement differs from the TS generator: ${difference}`);
 
         outcomes.push({
           name: sample.name,

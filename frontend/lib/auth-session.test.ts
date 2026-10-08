@@ -27,32 +27,34 @@ it('restores a verified session after reload without reusing the editor lease id
   expect(sessionStorage.length).toBe(0);
 });
 
-it('rejects revoked sessions and validates callback tokens with Auth before accepting them', async () => {
-  const session = new BackendSession(config, sessionStorage);
+it('rejects revoked cookie sessions after Auth verification', async () => {
+  const first = new BackendSession(config);
+  fetchMock.mockResolvedValueOnce(response(auth));
+  await first.signIn('test@example.com', 'test-password');
   fetchMock.mockResolvedValueOnce(response({}, 401));
-  await expect(session.acceptCallback('#access_token=revoked&refresh_token=test&expires_in=3600')).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
-  expect(session.getSnapshot().user).toBeNull();
-  expect(sessionStorage.length).toBe(0);
-  fetchMock.mockResolvedValueOnce(response(auth.user));
-  await session.acceptCallback('#access_token=valid&refresh_token=test&expires_in=3600');
-  expect(session.getSnapshot().user).toEqual(auth.user);
-  session.dispose();
-  fetchMock.mockResolvedValueOnce(response({}, 401));
-  await new BackendSession(config, sessionStorage).restoreSession();
-  expect(sessionStorage.length).toBe(0);
+  const reopened = new BackendSession(config);
+  await reopened.restoreSession();
+  expect(reopened.getSnapshot().user).toBeNull();
+  expect(reopened.getSnapshot().writeBlocked).toBe(true);
+  first.dispose();
+  reopened.dispose();
 });
 
-it('refreshes an expired session and waits for confirmation after signup', async () => {
-  sessionStorage.setItem(`scendance:auth:${config.url}`, JSON.stringify({ access: 'old', refresh: 'old-refresh', expiresAt: 1 }));
-  const session = new BackendSession(config, sessionStorage);
+it('refreshes an expired cookie session and waits for confirmation after signup', async () => {
+  const session = new BackendSession(config);
+  fetchMock.mockResolvedValueOnce(response({ ...auth, expires_in: 1 }));
+  await session.signIn('test@example.com', 'test-password');
   fetchMock.mockResolvedValueOnce(response(auth));
-  await session.restoreSession();
-  expect(String(fetchMock.mock.calls[0][0])).toContain('grant_type=refresh_token');
+  fetchMock.mockResolvedValueOnce(response([]));
+  await session.listProjects();
+  expect(String(fetchMock.mock.calls[1][0])).toContain('grant_type=refresh_token');
   expect(session.getSnapshot().user).toEqual(auth.user);
   const signup = new BackendSession(config);
   fetchMock.mockResolvedValueOnce(response({ id: 'new-user' }));
   expect(await signup.signUp('new@example.com', 'long-test-password', '新人', 'https://app.example/auth/callback')).toBe(false);
   expect(signup.getSnapshot().user).toBeNull();
+  session.dispose();
+  signup.dispose();
 });
 
 it('rejects external and recursive return destinations', () => {
