@@ -1,8 +1,8 @@
 # 幕景 Scendance · 活动场地工作台
 
-当前前端版本：**v0.6.0 · 图纸重建预览**。上游项目的原始许可与来源继续保留。
+当前前端版本：**v1.0.0 · 图纸重建预览**。上游项目的原始许可与来源继续保留。
 
-v0.6.0 的运行、接口与验证边界见 [图纸／照片重建说明](../docs/floorplan-v2.md) 和 [验收记录](../docs/floorplan-verification.md)。下方 v0.3/v0.4 说明保留为历史背景，旧版功能限制以本次说明为准。真实模型与独立云环境尚未完成验收。
+v0.6.0 的运行、接口与验证边界见 [图纸／照片重建说明](../docs/floorplan-v2.md) 和 [验收记录](../docs/archive/floorplan-verification.md)。下方 v0.3/v0.4 说明保留为历史背景，旧版功能限制以本次说明为准。真实模型与独立云环境尚未完成验收。
 
 前端首版基于 PLAN 指定的 `threejs-sims-house-builder` 提交 `ab64647640a493657929246d62a2a37ebfc0ed42` 定向改造，使用 Next.js 静态导出、React、TypeScript、Three.js、Zustand。上游 MIT 许可见 [UPSTREAM-LICENSE](UPSTREAM-LICENSE)。原体育馆展示页仍在仓库根目录。
 
@@ -83,7 +83,8 @@ GPT 接入由成员 2 按 [GPT 核心链路交接](../docs/FRONTEND_V0.2_BACKEND
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-public-publishable-key
+# 旧项目仍用 anon key 时写 NEXT_PUBLIC_SUPABASE_ANON_KEY，代码两个名字都接受
 ```
 
 仅放公开 anon / publishable key；不要放 service-role、模型 API key、worker secret。公开配置在构建时写入前端，修改后要重启开发服务或重新构建。账号密码在登录框输入，Auth access/refresh token 只在内存，刷新后重新登录；本地草稿保留。
