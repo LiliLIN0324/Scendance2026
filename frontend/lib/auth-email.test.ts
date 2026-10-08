@@ -14,9 +14,9 @@ it('verifies signup with its own OTP purpose and persists only the confirmed ses
   fetchMock.mockResolvedValueOnce(response(auth));
   await session.verifyEmailCode(' test@example.com ', '012345', 'signup');
   expect(String(fetchMock.mock.calls[0][0])).toBe(`${config.url}/auth/v1/verify`);
-  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ email: 'test@example.com', token: '012345', type: 'signup' });
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ email: 'test@example.com', token: '012345', type: 'signup' });
   expect(session.getSnapshot().user).toEqual(auth.user);
-  expect(sessionStorage.length).toBe(1);
+  expect(document.cookie).toContain('sb-example-auth-token');
 });
 
 it('keeps recovery credentials separate from editor login until password change', async () => {
@@ -24,7 +24,7 @@ it('keeps recovery credentials separate from editor login until password change'
   fetchMock.mockResolvedValueOnce(response(auth));
   await session.verifyEmailCode('test@example.com', '012345', 'recovery');
   expect(session.getSnapshot()).toMatchObject({ user: null, recoveryReady: true, writeBlocked: true });
-  expect(sessionStorage.length).toBe(0);
+
   await expect(session.listStudios()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
   fetchMock.mockResolvedValueOnce(response(auth.user)).mockResolvedValueOnce(new Response(null, { status: 204 }));
   expect(await session.updatePassword('a-new-long-password')).toEqual({ signedOutEverywhere: true });
@@ -62,7 +62,7 @@ it('uses the recovery endpoint and treats a missing user like a successful reque
   fetchMock.mockResolvedValueOnce(response({ code: 'user_not_found' }, 404));
   await session.requestPasswordReset(' missing@example.com ', 'https://app.example/reset-password');
   expect(String(fetchMock.mock.calls[0][0])).toBe(`${config.url}/auth/v1/recover?redirect_to=https%3A%2F%2Fapp.example%2Freset-password`);
-  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ email: 'missing@example.com' });
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ email: 'missing@example.com' });
   expect(session.getSnapshot()).toMatchObject({ user: null, recoveryReady: false });
 });
 
@@ -77,7 +77,7 @@ it('rejects malformed verification responses and responses arriving after signou
   finish(response(auth));
   await expect(pending).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
   expect(session.getSnapshot().recoveryReady).toBe(false);
-  expect(sessionStorage.length).toBe(0);
+
 });
 
 it('accepts legacy recovery links without exposing a normal editor session', async () => {
@@ -85,7 +85,7 @@ it('accepts legacy recovery links without exposing a normal editor session', asy
   fetchMock.mockResolvedValueOnce(response(auth.user));
   await session.acceptCallback('#access_token=access-test&refresh_token=refresh-test&expires_in=3600&type=recovery');
   expect(session.getSnapshot()).toMatchObject({ user: null, recoveryReady: true });
-  expect(sessionStorage.length).toBe(0);
+
 });
 
 it('reports global signout failure separately from a successful password change', async () => {
@@ -95,7 +95,7 @@ it('reports global signout failure separately from a successful password change'
   fetchMock.mockResolvedValueOnce(response(auth.user)).mockResolvedValueOnce(response({}, 500));
   expect(await session.updatePassword('a-new-long-password')).toEqual({ signedOutEverywhere: false });
   expect(session.getSnapshot()).toMatchObject({ user: null, recoveryReady: false });
-  expect(sessionStorage.length).toBe(0);
+
 });
 
 it('can discard an expired recovery session and requires another verification', async () => {

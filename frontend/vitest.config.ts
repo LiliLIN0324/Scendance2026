@@ -8,6 +8,7 @@ export default defineConfig({
   // vitest transform must compile it instead for the React-facing suites.
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
+    setupFiles: ['./test-setup.ts'],
     // Most modules under test are React-free and Three.js-free pure logic, so
     // the fast Node environment is the default. The few React-facing suites
     // (e.g. use-layout-store.react.test.ts) opt into jsdom per-file via a

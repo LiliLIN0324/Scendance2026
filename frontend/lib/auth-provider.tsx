@@ -14,13 +14,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    const hash = window.location.hash;
     const path = window.location.pathname.replace(/\/$/, '');
-    const callback = path === '/auth/callback' || path === '/reset-password' && Boolean(hash);
-    // Remove credentials from the address bar before loading any scene assets.
-    if (callback) window.history.replaceState(null, '', window.location.pathname);
-    const task = callback ? controller.acceptCallback(hash, path === '/reset-password' ? 'recovery' : undefined) : controller.restoreSession();
-    void task.catch(err => setError(err instanceof Error ? err.message : '登录验证失败，请重试。')).finally(() => setReady(true));
+    const callback = path === '/auth/callback' || path === '/reset-password';
+    const recovery = path === '/reset-password' || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery';
+    const hash = window.location.hash;
+    const task = recovery && hash.includes('access_token=')
+      ? controller.acceptCallback(hash, 'recovery')
+      : controller.restoreSession(recovery);
+    void task
+      .catch(err => setError(err instanceof Error ? err.message : '登录验证失败，请重试。'))
+      .finally(() => {
+        if (callback) window.history.replaceState(null, '', window.location.pathname);
+        setReady(true);
+      });
   }, [controller]);
   return <AuthContext.Provider value={{ controller, ready, error }}>{children}</AuthContext.Provider>;
 }

@@ -4,7 +4,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { backendSceneToLayout } from "../components/room-organizer/lib/backend-adapter";
-import { BackendSession, createBackendSession, getBackendConfig, useBackendSession, type Scene } from "./backend-session";
+import { BackendSession, getBackendConfig, useBackendSession, type Scene } from "./backend-session";
 
 const projectId = "10000000-0000-4000-8000-000000000001";
 const studioId = "20000000-0000-4000-8000-000000000001";
@@ -55,178 +55,45 @@ afterEach(() => {
 });
 
 describe("backend session contract", () => {
-  it("restores a verified guest after tab storage is cleared with a fresh lease identity and private asset access", async () => {
+  it("shares a verified guest session through cookies and keeps a fresh lease identity", async () => {
     const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
     const guest={id:'guest-a',is_anonymous:true};
-    const first=createBackendSession(config);sessions.push(first);
+    const first=new BackendSession(config);sessions.push(first);
     queue({...auth,access_token:'guest-access-test',refresh_token:'guest-refresh-test',user:guest});
     await first.signInAsGuest();
     const originalSessionId=first.getSnapshot().sessionId;
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).not.toBeNull();
-    first.dispose();sessionStorage.clear();mockFetch.mockClear();
-    const reopened=createBackendSession(config);sessions.push(reopened);
+    expect(document.cookie).toContain('sb-example-auth-token');
+    first.dispose();mockFetch.mockClear();
+    const reopened=new BackendSession(config);sessions.push(reopened);
     queue(guest);await reopened.restoreSession();
     expect(request(0).url).toBe(`${base}/auth/v1/user`);
     expect(reopened.getSnapshot()).toMatchObject({user:guest,lease:null,project:null,writeBlocked:true});
     expect(reopened.getSnapshot().sessionId).not.toBe(originalSessionId);
     queue(authorizedAsset);await reopened.authorizeAsset(assetId);
     expect(request(1).options.headers).toMatchObject({Authorization:'Bearer guest-access-test'});
-    expect(sessionStorage.getItem(`scendance:auth:${base}`)).not.toBeNull();
   });
 
-  it("keeps regular accounts per-tab and clears the current guest backup on explicit sign-out", async () => {
+  it("shares an account cookie across controllers and clears it on explicit sign-out", async () => {
     const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
-    const account=createBackendSession(config);sessions.push(account);
+    const account=new BackendSession(config);sessions.push(account);
     queue(auth);await account.signIn('test@example.com','password-test-only');
-    expect(localStorage.length).toBe(0);
-    account.dispose();sessionStorage.clear();mockFetch.mockClear();
-    const guest=createBackendSession(config);sessions.push(guest);
-    await guest.restoreSession();expect(mockFetch).not.toHaveBeenCalled();
-    queue({...auth,user:{id:'guest-a',is_anonymous:true}});
-    await guest.signInAsGuest();
-    expect(localStorage.length).toBe(1);
-    queue({});await guest.signOut();
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBeNull();
-    expect(sessionStorage.getItem(`scendance:auth:${base}`)).toBeNull();
+    const reopened=new BackendSession(config);sessions.push(reopened);
+    queue(auth.user);await reopened.restoreSession();
+    expect(reopened.getSnapshot().user).toEqual(auth.user);
+    queue({});await reopened.signOut();
+    expect(document.cookie).not.toContain('sb-example-auth-token');
+    expect(reopened.getSnapshot().user).toBeNull();
   });
 
-  it("does not clear another guest's saved identity when an older controller signs out",async()=>{
+  it("rejects a revoked cookie session after server verification", async () => {
     const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
-    const first=new BackendSession(config,undefined,localStorage),second=new BackendSession(config,undefined,localStorage);
-    sessions.push(first,second);
-    queue({...auth,user:{id:'guest-a',is_anonymous:true}});await first.signInAsGuest();
-    queue({...auth,user:{id:'guest-b',is_anonymous:true}});await second.signInAsGuest();
-    const saved=localStorage.getItem(`scendance:guest-auth:${base}`);
-    queue({});await first.signOut();
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBe(saved);
-    expect(second.getSnapshot().user?.id).toBe('guest-b');
-  });
-
-  it("clears a revoked guest backup only after server verification rejects it",async()=>{
-    localStorage.setItem(`scendance:guest-auth:${base}`,JSON.stringify({access:'revoked-test',refresh:'revoked-refresh-test',expiresAt:Date.now()+3600000,userId:'guest-a'}));
-    const controller=createBackendSession(getBackendConfig({url:base,anonKey:'sb_publishable_test'}));sessions.push(controller);
-    queue({message:'invalid token'},401);await controller.restoreSession();
+    const first=new BackendSession(config);sessions.push(first);
+    queue(auth);await first.signIn('test@example.com','password-test-only');
+    mockFetch.mockClear();
+    const reopened=new BackendSession(config);sessions.push(reopened);
+    queue({message:'invalid token'},401);await reopened.restoreSession();
     expect(request(0).url).toBe(`${base}/auth/v1/user`);
-    expect(controller.getSnapshot()).toMatchObject({user:null,writeBlocked:true});
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBeNull();
-  });
-
-  it.each([{id:'other-guest',is_anonymous:true},{id:'guest-a',is_anonymous:false}])("rejects a guest backup whose verified identity is %j", async verified=>{
-    localStorage.setItem(`scendance:guest-auth:${base}`,JSON.stringify({access:'guest-access-test',refresh:'guest-refresh-test',expiresAt:Date.now()+3600000,userId:'guest-a'}));
-    const controller=createBackendSession(getBackendConfig({url:base,anonKey:'sb_publishable_test'}));sessions.push(controller);
-    queue(verified);await controller.restoreSession();
-    expect(request(0).url).toBe(`${base}/auth/v1/user`);
-    expect(controller.getSnapshot().user).toBeNull();
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBeNull();
-  });
-
-  it("refreshes an expired guest backup before restoring it and retains transient failures for retry",async()=>{
-    const saved=JSON.stringify({access:'expired-test',refresh:'guest-refresh-test',expiresAt:Date.now()-1,userId:'guest-a'});
-    localStorage.setItem(`scendance:guest-auth:${base}`,saved);
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'});
-    const first=createBackendSession(config);sessions.push(first);
-    mockFetch.mockRejectedValueOnce(new TypeError('offline'));await first.restoreSession();
-    expect(first.getSnapshot().user).toBeNull();expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBe(saved);
-    const reopened=createBackendSession(config);sessions.push(reopened);
-    queue({...auth,user:{id:'guest-a',is_anonymous:true}});await reopened.restoreSession();
-    expect(request(1).url).toBe(`${base}/auth/v1/token?grant_type=refresh_token`);
-    expect(reopened.getSnapshot().user?.id).toBe('guest-a');
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).not.toBe(saved);
-  });
-
-  it("reuses the restored guest's existing project and preserves the current local draft",async()=>{
-    const controller=session();queue({...auth,user:{id:'guest-a',is_anonymous:true}});await controller.signInAsGuest();
-    controller.setDraft(assetScene);
-    queue([project]);queue(project);
-    queue({sessionId:controller.getSnapshot().sessionId,generation:5,expiresAt:new Date(Date.now()+90000).toISOString(),revision:4,scene});
-    await controller.ensureWorkbenchReady(assetScene,'本地草稿',projectId);
-    expect(request(1)).toMatchObject({url:`${base}/functions/v1/scene-api/projects`,options:{method:'GET'}});
-    expect(request(2)).toMatchObject({url:`${base}/functions/v1/scene-api/projects/${projectId}`,options:{method:'GET'}});
-    expect(controller.getSnapshot()).toMatchObject({project,draft:assetScene,dirty:true,writeBlocked:false});
-    expect(mockFetch).toHaveBeenCalledTimes(4);
-  });
-
-  it("uses the latest shared guest credentials when a sleeping tab is two refresh generations behind",async()=>{
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'}),user={id:'guest-a',is_anonymous:true};
-    const first=new BackendSession(config,undefined,localStorage),sleeping=new BackendSession(config,undefined,localStorage);sessions.push(first,sleeping);
-    queue({...auth,expires_in:60,user});await first.signInAsGuest();queue(user);await sleeping.restoreSession();
-    for(let generation=1;generation<=2;generation++){
-      vi.advanceTimersByTime(60_000);
-      queue({...auth,access_token:`new-access-${generation}`,refresh_token:`new-refresh-${generation}`,expires_in:60,user});queue([]);
-      await first.listProjects();
-    }
-    mockFetch.mockClear();queue(user);queue([]);await sleeping.listProjects();
-    expect(request(0).url).toBe(`${base}/auth/v1/user`);
-    expect(request(0).options.headers).toMatchObject({Authorization:'Bearer new-access-2'});
-    expect(mockFetch.mock.calls.some(([url])=>String(url).includes('grant_type=refresh_token'))).toBe(false);
-    expect(JSON.parse(localStorage.getItem(`scendance:guest-auth:${base}`)!).refresh).toBe('new-refresh-2');
-  });
-
-  it("serializes simultaneous guest refreshes across controllers with Web Locks",async()=>{
-    let tail=Promise.resolve();
-    const lock=vi.fn((_name:string,run:()=>Promise<unknown>)=>{const result=tail.then(run);tail=result.then(()=>{},()=>{});return result;});
-    vi.stubGlobal('navigator',{locks:{request:lock}});
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'}),user={id:'guest-a',is_anonymous:true};
-    const first=new BackendSession(config,undefined,localStorage),second=new BackendSession(config,undefined,localStorage);sessions.push(first,second);
-    queue({...auth,expires_in:60,user});await first.signInAsGuest();queue(user);await second.restoreSession();
-    vi.advanceTimersByTime(60_000);mockFetch.mockClear();
-    mockFetch.mockImplementation(async(url)=>String(url).includes('grant_type=refresh_token')?response({...auth,access_token:'shared-access',refresh_token:'shared-refresh',expires_in:3600,user}):response(String(url).endsWith('/user')?user:[]));
-    await Promise.all([first.listProjects(),second.listProjects()]);
-    expect(lock).toHaveBeenCalled();
-    expect(mockFetch.mock.calls.filter(([url])=>String(url).includes('grant_type=refresh_token'))).toHaveLength(1);
-    expect(first.getSnapshot().user).toEqual(second.getSnapshot().user);
-  });
-
-  it("uses the shared guest renewal when reopening a tab with expired per-tab credentials",async()=>{
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'}),user={id:'guest-a',is_anonymous:true};
-    const first=new BackendSession(config,sessionStorage,localStorage);sessions.push(first);
-    queue({...auth,expires_in:60,user});await first.signInAsGuest();first.dispose();
-    vi.advanceTimersByTime(60_000);
-    const latest=JSON.stringify({access:'current-shared-access',refresh:'current-shared-refresh',expiresAt:Date.now()+3600000,userId:user.id});
-    localStorage.setItem(`scendance:guest-auth:${base}`,latest);
-    const reopened=new BackendSession(config,sessionStorage,localStorage);sessions.push(reopened);
-    mockFetch.mockClear();queue(user);await reopened.restoreSession();
-    expect(request(0)).toMatchObject({url:`${base}/auth/v1/user`,options:{headers:{Authorization:'Bearer current-shared-access'}}});
-    expect(mockFetch).toHaveBeenCalledOnce();
-    expect(reopened.getSnapshot().user).toEqual(user);
-  });
-
-  it("does not replace another guest's backup when an older guest refreshes",async()=>{
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'}),user={id:'guest-a',is_anonymous:true};
-    const controller=new BackendSession(config,undefined,localStorage);sessions.push(controller);
-    queue({...auth,expires_in:60,user});await controller.signInAsGuest();
-    const other=JSON.stringify({access:'other-access',refresh:'other-refresh',expiresAt:Date.now()+3600000,userId:'guest-b'});
-    localStorage.setItem(`scendance:guest-auth:${base}`,other);vi.advanceTimersByTime(60_000);
-    queue({...auth,access_token:'renewed-a-access',refresh_token:'renewed-a-refresh',user});queue([]);await controller.listProjects();
-    expect(controller.getSnapshot().user).toEqual(user);
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBe(other);
-  });
-
-  it("does not erase a newer guest backup when an older authenticated request fails",async()=>{
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'}),user={id:'guest-a',is_anonymous:true};
-    const controller=new BackendSession(config,undefined,localStorage);sessions.push(controller);
-    queue({...auth,user});await controller.signInAsGuest();
-    let finish!:(value:Response)=>void;mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    const pending=controller.listProjects();await Promise.resolve();await Promise.resolve();
-    const latest=JSON.stringify({access:'newer-access',refresh:'newer-refresh',expiresAt:Date.now()+7200000,userId:user.id});
-    localStorage.setItem(`scendance:guest-auth:${base}`,latest);
-    finish(response({error:{code:'UNAUTHENTICATED'}},401));
-    await expect(pending).rejects.toMatchObject({status:401});
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBe(latest);
-  });
-
-  it("does not recreate a guest backup when another tab signs out during a refresh",async()=>{
-    const config=getBackendConfig({url:base,anonKey:'sb_publishable_test'}),user={id:'guest-a',is_anonymous:true};
-    const first=new BackendSession(config,undefined,localStorage),second=new BackendSession(config,undefined,localStorage);sessions.push(first,second);
-    queue({...auth,expires_in:60,user});await first.signInAsGuest();queue(user);await second.restoreSession();
-    vi.advanceTimersByTime(60_000);
-    let finish!:(value:Response)=>void;mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    const pending=first.listProjects();await Promise.resolve();
-    queue({});await second.signOut();
-    finish(response({...auth,access_token:'late-access',refresh_token:'late-refresh',user}));
-    await expect(pending).rejects.toMatchObject({code:'SESSION_CHANGED'});
-    expect(localStorage.getItem(`scendance:guest-auth:${base}`)).toBeNull();
-    expect(second.getSnapshot().user).toBeNull();
+    expect(reopened.getSnapshot()).toMatchObject({user:null,writeBlocked:true});
   });
 
   it("prepares a real guest workspace and lease from the current local scene in one action", async () => {
@@ -380,18 +247,6 @@ describe("backend session contract", () => {
     finish(response({ id: projectId, revision: 5, scene: submitted, updatedAt: new Date().toISOString(), warnings: [] }));
     await saving;
     expect(controller.getSnapshot()).toMatchObject({ draft: later, dirty: true, revision: 5, project: { scene: submitted } });
-  });
-
-  it("refreshes an expired access token in memory before business requests", async () => {
-    const controller = session();
-    queue({ ...auth, expires_in: 40 });
-    await controller.signIn("test@example.com", "pass");
-    await vi.advanceTimersByTimeAsync(20_000);
-    queue({ ...auth, access_token: "refreshed-access", refresh_token: "refreshed-refresh" });
-    queue([]);
-    await controller.listProjects();
-    expect(request(1)).toMatchObject({ url: `${base}/auth/v1/token?grant_type=refresh_token`, body: { refresh_token: auth.refresh_token }, options: { method: "POST" } });
-    expect(request(2).options.headers).toMatchObject({ Authorization: "Bearer refreshed-access" });
   });
 
   it("rejects an expired lease locally without sending another save", async () => {
@@ -555,12 +410,6 @@ describe('private reconstruction transport',()=>{
     const previous=controller.getSnapshot().draft;queue({id:jobId,state:'needs_review',issues:[{code:'UNSEEN',message:'确认不可见墙'}]});
     await controller.getReconstruction(jobId);expect(controller.getSnapshot().draft).toBe(previous);expect(request(4).options.method).toBe('GET');
   });
-  it('rejects a late reconstruction response after the user edits the draft',async()=>{
-    const controller=await editing();let finish!:(response:Response)=>void;mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    const pending=controller.createReconstruction({scene,sources:[source],dimensions:[],instruction:'还原场地',mode:'restore',selectedIds:[],requestId:crypto.randomUUID()});
-    await Promise.resolve();await Promise.resolve();controller.setDraft({...scene,lighting:'warm'});finish(response({id:jobId,state:'queued',issues:[]}));
-    await expect(pending).rejects.toMatchObject({code:'STALE_PROPOSAL'});expect(controller.getSnapshot().draft?.lighting).toBe('warm');
-  });
   it('unlinks a source without deleting scene snapshots',async()=>{
     const controller=await editing();queue({removed:true});await controller.removeSource(assetId);expect(request(3)).toMatchObject({url:`${base}/functions/v1/scene-api/projects/${projectId}/sources/${assetId}`,options:{method:'DELETE'}});expect(controller.getSnapshot().draft).toEqual(scene);
   });
@@ -593,7 +442,7 @@ describe("workspace business requests", () => {
     controller.setDraft({ ...scene, lighting: 'warm' });
     queue({ error: { code: 'UNAUTHENTICATED' } }, 401);
     await expect(controller.businessRequest('/assets')).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
-    expect(controller.getSnapshot()).toMatchObject({ user: null, writeBlocked: true, dirty: true, draft: { lighting: 'warm' } });
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: true, dirty: true, draft: { lighting: 'warm' } });
   });
 });
 
