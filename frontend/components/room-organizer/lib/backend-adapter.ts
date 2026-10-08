@@ -4,6 +4,7 @@ import libraryAssetLabels from '../../../../assets/library/asset-labels.zh.json'
 import { catalog, presetManifest, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
 import { dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
 import { MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
+import { mergeProposalPresentation } from './creative-brief';
 import { presetModelUrl } from './scene-presets';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import { layoutGeometryScene, canApplyLayoutGeometry, stableMeasurement } from './structural-layout';
@@ -249,6 +250,15 @@ export function createMeasuredRoomLayout(base: RoomLayout, dimensions: { width: 
   return mergeMeasuredPresentation(base, candidate);
 }
 function mergeMeasuredPresentation(base: RoomLayout, next: RoomLayout): RoomLayout {
-  return { ...base, ...next, floors: next.floors.map((floor, i) => ({ ...floor,
-    floorColor: base.floors[i]?.floorColor ?? floor.floorColor })) };
+  const merged = mergeProposalPresentation(base, next);
+  const existing = new Map(base.floors.flatMap(floor => floor.items.map(item => [item.id, item] as const)));
+  return { ...merged, floors: merged.floors.map((floor, i) => ({ ...floor,
+    floorColor: base.floors[i]?.floorColor ?? floor.floorColor,
+    items: floor.items.map(item => {
+      const old = existing.get(item.id);
+      return old && old.type === item.type && old.assetId === item.assetId
+        ? { ...item, ...(old.glbUrl ? { glbUrl: old.glbUrl } : {}), ...(old.source ? { source: old.source } : {}) }
+        : item;
+    }),
+  })) };
 }

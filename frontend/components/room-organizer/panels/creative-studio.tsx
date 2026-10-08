@@ -5,26 +5,24 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun } from '@/lib/backend-session';
-import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease } from '@/lib/source-storage';
+import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
 import { readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from '@/lib/material-checkin-storage';
-import { mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
-import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
-import type { ProjectReviewBase, ProjectReviewCaptureOptions } from '@/lib/project-review-workflow';
+import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease } from '@/lib/source-storage';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
+import { mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { useSelection } from '../contexts';
 import { useMaterialCheckins, type MaterialCheckinState } from '../hooks/use-material-checkins';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
-import { appendCreativeBriefTemplate, briefInstruction, IDEA_CARDS, INITIAL_BRIEF, MANUAL_BRIEF_TEMPLATE, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
-import { assertNoLocalRecordsCloudTransition } from '../lib/handoff-cloud-guard';
-import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
-import { ensureGlbAsset } from '../three/glb-assets';
 import { STORAGE_KEY } from '../lib/constants';
+import { appendCreativeBriefTemplate, briefInstruction, IDEA_CARDS, INITIAL_BRIEF, MANUAL_BRIEF_TEMPLATE, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
-import { ProjectReviewPanel } from './project-review-panel';
+import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
+import { ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
-import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ActivityWorkflowGuide } from './activity-workflow-guide';
+import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
+import { ProjectReviewPanel } from './project-review-panel';
 import { ReconstructionPanel } from './reconstruction-panel';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -33,11 +31,13 @@ import { VenueShapePresets } from './venue-shape-presets';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
+import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
+import type { ProjectReviewBase, ProjectReviewCaptureOptions } from '@/lib/project-review-workflow';
 import './creative-studio.css';
 
 type ReferenceImage = VenuePhoto;
 type Message = { id: string; role: 'user' | 'assistant'; text: string; modelSuggestions?: SceneProposal['modelSuggestions']; materialSuggestions?: SceneProposal['materialSuggestions'] };
-type RunMarker = { requestId: string; runId?: string; baseKey: string; briefKey: string };
+type RunMarker = { requestId: string; runId?: string; projectId?: string; baseKey: string; briefKey: string };
 const runStorageKey = (scope: string) => `scendance:agent-run:${scope}`;
 type CandidatePreview = { label: 'A' | 'B' | 'C'; title: string; preview: Preview };
 type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string };
@@ -221,19 +221,32 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   const controllerRef=useRef(controller);controllerRef.current=controller;
   async function assertCurrentLocalRecords(currentLayout:RoomLayout):Promise<void> {
     const currentScope=agentScopeRef.current,currentBrief=briefRef.current;
-    await assertNoLocalRecordsCloudTransition(currentLayout);
+    await assertGeometryActionSource(currentLayout,controller);
     if(!alive.current||layoutRef.current!==currentLayout||agentScopeRef.current!==currentScope||briefRef.current!==currentBrief)throw new Error('核对本机资料期间项目或需求已变化，当前输入已保留，请重试。');
   }
   const requestedCloudCheckins=typeof window!=='undefined'&&new URL(window.location.href).searchParams.has('project');
-  const checkins=useMaterialCheckins({projectId:layout.id,enabled:!!layout.id&&!cloud.project&&!requestedCloudCheckins,prepareWrite:async()=>{
+  const checkins=useMaterialCheckins({projectId:layout.id,enabled:!!layout.id&&isLocalActivityWorkspace(controller,requestedCloudCheckins),prepareWrite:async()=>{
     const target=scopeRef.current,owner=controllerRef.current,lease=editorLease.current,userId=owner.getSnapshot().user?.id;
     if(!lease||lease.scope!==target)throw new Error('项目资料尚未准备完成，请稍后保存点验。');
     const check=()=>{
       if(checkinRecovery.current)throw new Error('上次点验恢复的回退尚未完成，请先重试恢复或撤销恢复。');
-      if(!alive.current||controllerRef.current!==owner||scopeRef.current!==target||editorLease.current!==lease||!lease.lease.acquired||backupBusy.current||restoreWriting.current||owner.getSnapshot().user?.id!==userId||owner.getSnapshot().project||new URL(window.location.href).searchParams.has('project'))throw new Error('项目或资料状态已变化，点验输入已保留，请重新核对后保存。');
+      if(!alive.current||controllerRef.current!==owner||scopeRef.current!==target||editorLease.current!==lease||!lease.lease.acquired||backupBusy.current||restoreWriting.current||owner.getSnapshot().user?.id!==userId||!isLocalActivityWorkspace(owner))throw new Error('项目或资料状态已变化，点验输入已保留，请重新核对后保存。');
     };
     await lease.lease.ready;check();return check;
   }});
+  const geometryAssetKey=[...new Set(layout.floors.flatMap(floor=>floor.items.flatMap(item=>item.assetId?[item.assetId]:[])))].sort().join(',');
+  useEffect(()=>{
+    if(!cloud.user||!controller.isGeometryBound(scope)||!geometryAssetKey)return;
+    const userId=cloud.user.id,projectId=cloud.project?.id;
+    let cancelled=false;
+    const current=()=>!cancelled&&alive.current&&controllerRef.current===controller&&scopeRef.current===scope&&controller.getSnapshot().user?.id===userId&&controller.getSnapshot().project?.id===projectId&&controller.isGeometryBound(scope);
+    void Promise.all(geometryAssetKey.split(',').filter(id=>getGlbAssetState(id).status!=='ready').map(async id=>{
+      // Reauthorize by asset ID only; local scene text and execution records are not required to load a model.
+      const asset=await controller.authorizeAsset(id);
+      if(current())await ensureGlbAsset(id,asset.url);
+    })).catch(()=>{if(current())setNotice('部分模型资源未能重新载入，场景与本机记录已保留。请核对素材访问权限，或重新连接场景服务后重试。');});
+    return()=>{cancelled=true;};
+  },[controller,scope,cloud.user?.id,cloud.project?.id,cloud.geometryBinding,geometryAssetKey]);
   const reviewContextRef=useRef(reviewContext);reviewContextRef.current=reviewContext;
   const reviewResetEpoch=useRef(0);
   const reviewTracker=useRef<{inputs:unknown[];serial:number;prefix:string}>({inputs:[],serial:0,prefix:crypto.randomUUID()});
@@ -282,7 +295,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       if(checkinRecovery.current)throw new Error('上次点验恢复的回退尚未完成，请先重试恢复或撤销恢复，再下载备份。');
       const briefSnapshot={state:'ready' as const,scope:operation.base.scope,brief:saved===undefined?{status:'absent' as const}:{status:'present' as const,value:saved}};
       const ledger=operation.base.layout.id?await readMaterialCheckins(operation.base.layout.id):undefined;operation.check();
-      if(ledger&&(controller.getSnapshot().project||new URL(window.location.href).searchParams.has('project')))throw new Error('此项目还有本机点验记录，请切换到对应本地项目后备份，原记录已保留。');
+      if(ledger&&!isLocalActivityWorkspace(controller))throw new Error('此项目还有本机点验记录，请切换到对应本地项目后备份，原记录已保留。');
       const text=operation.base.layout.id?serializeLocalProjectBackupV3(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.layout.id,
         materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}}):serializeLocalProjectBackup(operation.base.layout,briefSnapshot);
       operation.check();return text;
@@ -309,8 +322,15 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     }finally{endBackupOperation();}
   }
   function assertLocalRestore():void {
-    if(controller.getSnapshot().project)throw new Error('当前工作台连接了云项目，请先切换到本地项目再恢复备份。');
+    if(requestPending.current)throw new Error('助手仍在处理，请先等待或取消当前任务，再恢复或切换活动。');
+    if(!isLocalActivityWorkspace(controller))throw new Error('当前工作台连接了云项目，请先切换到本地项目再恢复备份。');
     if(!prepareRestoreLayout||!commitRestoredLayout)throw new Error('此工作台尚未开放完整备份恢复。');
+  }
+  async function disconnectSceneForRestore():Promise<void> {
+    if(!controller.getSnapshot().geometryBinding)return;
+    const before={layout:layoutRef.current,scope:scopeRef.current,edits:briefEditEpoch.current,user:controller.getSnapshot().user?.id};
+    await controller.disconnectGeometryWorkbench();
+    if(!alive.current||controllerRef.current!==controller||layoutRef.current!==before.layout||scopeRef.current!==before.scope||briefEditEpoch.current!==before.edits||controller.getSnapshot().user?.id!==before.user)throw new Error('断开场景连接期间活动有新改动，未继续恢复。当前资料已保留，请重新核对。');
   }
   async function writeBackupBrief(targetScope:string,value:CreativeBrief|undefined):Promise<void> {
     if(value===undefined)await deleteSourceForm(`${targetScope}:brief`);
@@ -351,9 +371,11 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   async function restoreBackup(candidate:LocalProjectRestoreCandidate):Promise<void> {
     reviewResetEpoch.current++;
     assertLocalRestore();
+    const checked=validateLocalProjectRestoreCandidate(candidate);
+    await disconnectSceneForRestore();
+    assertLocalRestore();
     if(undoRecovery.current)throw new Error('上次撤销恢复的资料回退尚未完成，请先重试撤销；当前所选文件仍保留。');
     // File provenance remains meaningful even for programmatic restore callers.
-    const checked=validateLocalProjectRestoreCandidate(candidate);
     const priorId=preparedRestoreIds.current.get(candidate);
     const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=next.id??'local';
     if(!candidate.layout.id&&next.id)preparedRestoreIds.current.set(candidate,next.id);
@@ -405,10 +427,12 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       });
     } finally {endBackupOperation();}
   }
-  const canUndoRestore=!!undoPoint&&!backupPending&&undoPoint.afterLayout===layout&&undoPoint.afterEdits===briefEditEpoch.current&&!cloud.project&&
+  const canUndoRestore=!!undoPoint&&!backupPending&&!busy&&undoPoint.afterLayout===layout&&undoPoint.afterEdits===briefEditEpoch.current&&isLocalActivityWorkspace(controller)&&
     (!undoPoint.checkinChange||!!checkinRecovery.current||checkins.ready&&sameCheckins(checkins.ledger,undoPoint.checkinChange.attempted));
   async function undoRestore():Promise<void> {
     reviewResetEpoch.current++;
+    assertLocalRestore();
+    await disconnectSceneForRestore();
     assertLocalRestore();
     const point=undoPointRef.current;
     if(!point||point.afterLayout!==layoutRef.current||point.afterEdits!==briefEditEpoch.current)throw new Error('恢复后项目或需求已有新编辑，不能覆盖这些编辑；请保留当前页面和原备份，核对后再处理。');
@@ -487,7 +511,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   },[scope]);
   useEffect(()=>{
     if(preservingPreparation.current)return;
-    if(!cloud.user||cloud.project?.id!==scope)return;
+    if(!cloud.user||!geometryProjectId(controller,scope))return;
     let cancelled=false;
     void uploadQueue.current.then(async()=>{
       const sources=await controller.listSources();
@@ -634,6 +658,8 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     if(!marker)return;
     const epoch=++runEpoch.current;requestPending.current=true;setBusy(true);setRecoverable(false);setNotice('');
     try {
+      await restoreRunConnection(marker,base);
+      if(epoch!==runEpoch.current||scope!==agentScopeRef.current)return;
       const result=marker.runId?await controller.getAgentRun(marker.runId):await controller.getAgentRunByRequest(marker.requestId);
       if(marker.baseKey!==canonical(layoutToBackendScene(base))||marker.briefKey!==submittedBrief){
         if(epoch!==runEpoch.current||scope!==agentScopeRef.current)return;
@@ -647,18 +673,25 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   }
   useEffect(()=>{
     if(preservingPreparation.current)return;
-    if(!cloud.user||cloud.project?.id!==scope||recoveredScope.current===agentScope)return;
+    if(!cloud.user||(!geometryProjectId(controller,scope)&&!isLocalActivityWorkspace(controller))||recoveredScope.current===agentScope)return;
     recoveredScope.current=agentScope;
     try{
       const raw=localStorage.getItem(runStorageKey(agentScope));
       if(!raw)return;
       const marker=JSON.parse(raw) as RunMarker;
-      if(typeof marker.requestId!=='string'||typeof marker.baseKey!=='string'||typeof marker.briefKey!=='string'||(marker.runId!==undefined&&typeof marker.runId!=='string'))throw new Error('任务记录无法读取，请保留此页面记录并联系管理员核对。');
+      if(typeof marker.requestId!=='string'||typeof marker.baseKey!=='string'||typeof marker.briefKey!=='string'||(marker.runId!==undefined&&typeof marker.runId!=='string')||(marker.projectId!==undefined&&typeof marker.projectId!=='string'))throw new Error('任务记录无法读取，请保留此页面记录并联系管理员核对。');
       markerRef.current=marker;setRecoverable(true);if(briefReady)void recoverRun();else recoveredScope.current='';
     }catch(error){setRecoverable(true);setNotice(error instanceof Error?error.message:'任务记录无法读取。');}
     // Recovery runs once after this project's brief has loaded. Changes do not launch another paid run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[agentScope,briefReady,cloud.user,cloud.project?.id,scope]);
+  async function restoreRunConnection(marker:RunMarker,base:RoomLayout):Promise<void> {
+    if(!geometryProjectId(controller,base.id)&&base.id&&isLocalActivityWorkspace(controller)) {
+      await controller.resumeGeometryWorkbench(layoutToBackendScene(base),base.name,base.id);
+    }
+    const projectId=geometryProjectId(controller,base.id);
+    if(!projectId||marker.projectId&&marker.projectId!==projectId)throw new Error('原任务的场景连接未能恢复，未重新提交生成。请核对原活动的连接后再查询或取消。');
+  }
   async function cancelRun():Promise<void> {
     if(preparation.current){preparation.current.cancelled=true;say('任务已取消，当前方案保持不变。');return;}
     const scope=agentScopeRef.current,marker=markerRef.current;
@@ -666,6 +699,8 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     cancelledRequest.current=marker.requestId;
     const epoch=++runEpoch.current;requestPending.current=true;setBusy(true);setPreview(null);setCandidates([]);
     try{
+      await restoreRunConnection(marker,layoutRef.current);
+      if(scope!==agentScopeRef.current||epoch!==runEpoch.current)return;
       const original=marker.runId?{id:marker.runId}:await controller.getAgentRunByRequest(marker.requestId);
       const result=await controller.cancelAgentRun(original.id);
       if(scope!==agentScopeRef.current||epoch!==runEpoch.current)return;
@@ -694,20 +729,23 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       if(!briefStorage.current.ready||briefStorage.current.scope!==(base.id??'local'))throw new Error(briefStorage.current.error??'活动需求尚未读取完成，请稍后重试。');
       if(layoutRef.current!==base)throw new Error('生成期间方案或需求已变化，旧提案未应用。请根据最新内容重新生成。');
       requestedBrief=JSON.stringify({brief:briefValueRef.current,images:imageRef.current.map(image=>({id:image.id,kind:image.kind}))});
-      if(!cloud.user||cloud.writeBlocked||cloud.project?.id!==base.id){
+      if(!cloud.user||cloud.writeBlocked||!geometryProjectId(controller,base.id)){
+        const localGeometry=!!base.id&&isLocalActivityWorkspace(controller);
         const pending={layout:base,userId:cloud.user?.id,cancelled:false,projectId:undefined as string|undefined};
         ownPreparation=pending;preparation.current=pending;
         await flushSourceScope(base.id??'local');
         if(!alive.current||pending.cancelled||epoch!==runEpoch.current)return;
         await assertCurrentLocalRecords(layoutRef.current);
         if(layoutRef.current!==base||briefRef.current!==requestedBrief){say('准备期间方案或需求已变化，本次未提交。请按当前内容重新发送。');return;}
-        const project=await controller.ensureWorkbenchReady(layoutToBackendScene(base),base.name,base.id);
+        const project=localGeometry
+          ?await controller.ensureGeometryWorkbenchReady(layoutToBackendScene(base),base.name,base.id!)
+          :await controller.ensureWorkbenchReady(layoutToBackendScene(base),base.name,base.id);
         if(!alive.current||pending.cancelled||epoch!==runEpoch.current)return;
         await assertCurrentLocalRecords(layoutRef.current);
         if(layoutRef.current!==base||briefRef.current!==requestedBrief){say('准备期间方案或需求已变化，本次未提交。请按当前内容重新发送。');return;}
         pending.userId=controller.getSnapshot().user?.id;pending.projectId=project.id;
         let copied:ReferenceImage[]|undefined;
-        if(base.id!==project.id){
+        if(!localGeometry&&base.id!==project.id){
           try{await copySourceScope(base.id??'local',project.id);const sources=await listStoredSources(project.id);copied=sources.map(source=>({...source,url:URL.createObjectURL(source.blob!)}));}
           catch{
             let releaseNotice='';
@@ -723,7 +761,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
           flushSync(()=>{if(copied){for(const image of imageRef.current)URL.revokeObjectURL(image.url);imageRef.current=copied;setImages(copied);}onBindProject?.(project.id);});
         }else flushSync(()=>setBusy(true));
         base=layoutRef.current;submittedScope=agentScopeRef.current;
-        if(base.id!==project.id)throw new Error('工作台尚未完成连接，请重试；当前草稿已保留。');
+        if(geometryProjectId(controller,base.id)!==project.id)throw new Error('工作台尚未完成连接，请重试；当前草稿已保留。');
         preparation.current=null;
       }
       const submittedBrief=briefRef.current;
@@ -743,7 +781,9 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       const scene=layoutToBackendScene(base),context=buildAgentContext({briefInstruction:modelRequest?modelBrief:message&&!submittedBriefValue.description.trim()?'':briefInstruction(submittedBriefValue,base.width,base.height),message:modelRequest?`仅创建或调整本次请求指定的物料，不重新设计整场。\n${message?.trim()??''}`:message?.trim()||'请按上述需求生成布置方案。',confirmedMaterialDecisions:acceptedDecisions,recentMessages:message?messages.filter(item=>item.id!=='welcome'):[],lastProposalExplanation:message?lastExplanation:''});
       if(context.omittedHistory)say(`已省略 ${context.omittedHistory} 条较早或过长的背景对话；当前需求完整保留。`);
       if(!message)setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'user',text:`生成${submittedBriefValue.event}方案：${submittedBriefValue.description.trim()}`}]);
-      const marker:RunMarker={requestId:crypto.randomUUID(),baseKey:canonical(scene),briefKey:submittedBrief};
+      const remoteProjectId=geometryProjectId(controller,base.id);
+      if(!remoteProjectId)throw new Error('当前活动的场景连接已变化，请重新核对后发送。');
+      const marker:RunMarker={requestId:crypto.randomUUID(),projectId:remoteProjectId,baseKey:canonical(scene),briefKey:submittedBrief};
       try{rememberRun(marker,submittedScope);}catch{throw new Error('无法保存任务编号，尚未提交。请恢复浏览器本机存储后重试。');}
       requestPending.current=true;setBusy(true);setPreview(null);setCandidates([]);setRun(null);dispatched=true;
       const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:context.context,scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:allowDirect?'direct':'preview'});
@@ -1005,7 +1045,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const sourceAssetId=selectedItems.length&&selectedItems.every(item=>item.assetId&&item.assetId===selectedItems[0]!.assetId&&!item.locked)?selectedItems[0]!.assetId:undefined;
   function previewMaterial(input: Omit<MaterialCustomizationSeed,'id'|'scope'|'userId'|'projectId'|'apiUrl'>):void {
     const cloud=studio.controller.getSnapshot();
-    if(!cloud.user||!cloud.project||cloud.project.id!==studio.layout.id)return;
+    if(!cloud.user||!cloud.project||geometryProjectId(studio.controller,studio.layout.id)!==cloud.project.id)return;
     setMaterialSeed({...input,id:crypto.randomUUID(),scope:studio.scope,userId:cloud.user.id,projectId:cloud.project.id,apiUrl:studio.controller.config.apiUrl});
     setModelTool('customize');setModelOpened(true);setMode('model');setBusinessMode('model');setTemplatesOpen(false);
     if(docked)resizeWorkspace(true);

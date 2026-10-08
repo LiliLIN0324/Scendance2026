@@ -29,6 +29,19 @@ const checkinState=(ledger?:MaterialCheckinLedger):MaterialCheckinState=>({proje
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('Binggo scene delivery panel',()=>{
+  it('keeps local checkins and production editing available when the scene service lease is blocked',async()=>{
+    const projectId='91000000-0000-4000-8000-000000000001';
+    const current={...workLayout(),id:checkinProject,productionPlan:productionPlanSchema.parse({})};
+    const state={...controller.getSnapshot(),configured:true,user:{id:'user-a'},writeBlocked:true,
+      project:{id:projectId,studio_id:'studio',name:'远端场景',revision:1,scene:{schemaVersion:1 as const,venue:{width:8,depth:6,height:3,shape:'rectangle' as const,entrances:[]},objects:[],camera:'overview' as const,lighting:'neutral' as const}},
+      geometryBinding:{version:1 as const,localActivityId:checkinProject,cloudProjectId:projectId,userId:'user-a',apiUrl:controller.config.apiUrl}};
+    vi.spyOn(controller,'getSnapshot').mockReturnValue(state);vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>id===checkinProject);
+    render(<SceneDeliveryPanel layout={current} controller={controller} checkins={checkinState(materialCheckinLedgerSchema.parse({projectId:checkinProject}))} onUpdateItem={vi.fn()} onUpdateProductionPlan={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('tab',{name:'数量点验'}));
+    expect(screen.getByRole('button',{name:'新建点验单'}).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
+    expect(screen.getByRole('button',{name:'编辑制作计划'}).hasAttribute('disabled')).toBe(false);
+  });
   it.each(['edit','project','unmount','checkins','checkin-loading'] as const)('does not download an outdated production handoff after %s during task review',async change=>{
     let finish!:(html:string)=>void;
     const pending=new Promise<string>(resolve=>{finish=resolve;});

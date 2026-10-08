@@ -1,18 +1,20 @@
 'use client';
 
+
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
+import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABELS } from '../lib/scene-handoff';
 import { EventOperationsPanel } from './event-operations-panel';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
-import { ProductionPlanPanel } from './production-plan-panel';
 import { MaterialCheckinPanel } from './material-checkin-panel';
-import type { MaterialCheckinState } from '../hooks/use-material-checkins';
+import { ProductionPlanPanel } from './production-plan-panel';
 import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import './scene-delivery-panel.css';
 
@@ -104,7 +106,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
   const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins'>(operationsAvailable ? 'operations' : 'materials');
-  const checkinLocal=!cloud.project&&!(typeof window!=='undefined'&&new URL(window.location.href).searchParams.has('project'));
+  const checkinLocal=isLocalActivityWorkspace(controller);
   const localCheckins=checkinLocal?checkins:undefined;
   const checkinsUnavailable=!!localCheckins&&!localCheckins.ready;
   const latest = useRef({ layout, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable });
@@ -119,7 +121,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     } catch (error) { return { items: [], materials: [], error: error instanceof Error ? error.message : '当前场景暂不能交付。' }; }
   }, [layout]);
   const requestedCloud = typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('project') === layout.id;
-  const cloudBound = !!layout.id && (cloud.project?.id === layout.id || requestedCloud);
+  const cloudBound = !checkinLocal && !!layout.id && (cloud.project?.id === layout.id || requestedCloud);
   const editable = !cloudBound && !!onUpdateItem;
   useEffect(() => { setView(operationsAvailable ? 'operations' : 'materials'); }, [layout.id, operationsAvailable]);
   const [reviews, setReviews] = useState<{ layout: RoomLayout; statuses: Record<string, Handoff['status'] | 'needs_review'> } | null>(null);

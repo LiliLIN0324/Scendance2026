@@ -533,3 +533,26 @@ it('keeps account-panel keys away from canvas shortcuts while preserving native 
   expect(canvasShortcut).not.toHaveBeenCalled();
   offline.dispose();
 });
+
+it('keeps local activity controls available for a scene connection and does not offer whole-project publishing',async()=>{
+  const localId='house-scene-connection',local=backendSceneToLayout(scene,{projectId:localId,name:'本机活动'});
+  const state={...controller.getSnapshot(),geometryBinding:{version:1 as const,localActivityId:localId,cloudProjectId:projectId,userId:'user-a',apiUrl:controller.config.apiUrl}};
+  vi.spyOn(controller,'getSnapshot').mockReturnValue(state);
+  vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>id===localId);
+  vi.spyOn(controller,'listProjects').mockResolvedValue([original]);vi.spyOn(controller,'listStudios').mockResolvedValue([{id:studioId,name:'Test studio',role:'owner',displayName:'A'}]);
+  const disconnect=vi.spyOn(controller,'disconnectGeometryWorkbench').mockResolvedValue(undefined);
+  const actions={prepareBackup:vi.fn(),restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
+  vi.mocked(useLocalProjectBackup).mockReturnValue(actions);
+  render(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'账户与项目'}));
+  expect(await screen.findByRole('region',{name:'当前活动的场景连接'})).toBeTruthy();
+  expect(await screen.findByText('暂无其他云项目')).toBeTruthy();expect(screen.queryByText('这个工作室还没有项目')).toBeNull();
+  expect(vi.mocked(LocalActivitiesPanel).mock.calls.at(-1)?.[0]).toMatchObject({layout:local,actions});
+  expect(screen.queryByRole('button',{name:'保存到云端'})).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'发布管理'}));
+  expect(screen.getByText('当前连接用于场景处理。需要交给客户的资料，请从“方案评审”核对并导出。')).toBeTruthy();
+  expect(PublicationPanel).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'我的项目'}));
+  fireEvent.click(screen.getByRole('button',{name:'断开场景服务'}));await waitFor(()=>expect(disconnect).toHaveBeenCalledOnce());
+  expect(local.id).toBe(localId);
+});
