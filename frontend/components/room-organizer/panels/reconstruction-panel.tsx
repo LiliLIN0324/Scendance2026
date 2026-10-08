@@ -7,6 +7,7 @@ import { Check, Loader2, Ruler, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBackendSession, type BackendSession, type DimensionConstraint, type ReconstructionJob, type SceneProposal, type SceneV2, type SourceImage } from '@/lib/backend-session';
 import { updateReviewedWall, openingLine, imageRegistration, mergeRecognizedDimensions } from '@/lib/reconstruction-review';
+import { referenceSceneBasis, referenceStructure, resolveReferenceImage, type ReferenceRegistration } from '@/lib/reference-image';
 import { containedImagePoint, parseDimensionText, readSourceForm, storeSourceForm, registerSourceFlush, type ImagePoint } from '@/lib/source-storage';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
@@ -18,8 +19,8 @@ import type { VenuePhoto } from './venue-photos-panel';
 import type { RoomLayout } from '../lib/types';
 import './reconstruction-panel.css';
 
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief }
-interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; registration?:{sourceId:string;points:ImagePoint[]}; }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; onAddReferenceImages?:(files:FileList|null)=>Promise<void> }
+interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; registration?:ReferenceRegistration; }
 const EMPTY:Form={width:'',depth:'',height:'',text:'',constraints:[],adjustment:''};
 const LABELS:Record<ReconstructionJob['state'],string>={queued:'已排队',recognizing:'正在识别空间与尺寸',needs_review:'请核对结构与缺失信息',planning:'正在设计活动方案',validating:'正在校验结构与布置',ready:'候选方案已就绪',failed:'生成未完成'};
 const ACTIVE=new Set(['queued','recognizing','planning','validating']);
@@ -50,9 +51,72 @@ function errorText(error:unknown):string{
 function currentSceneKey(layout:RoomLayout):string { try{return canonical(layoutToBackendScene(layout));}catch{return '';}}
 function NumberField({label,value,onChange}:{label:string;value:number;onChange(value:number):void}):JSX.Element{return <label>{label}<input type="number" step="0.001" value={Number.isFinite(value)?value:''} onChange={event=>onChange(event.target.valueAsNumber)}/></label>;}
 
-export function ReconstructionPanel({controller,layout,onApply,onPreview,images,updateImage,brief}:Props):JSX.Element {
+function ReferenceImageReview({scene,layout,images,registration,onChange,onConfirm,updateImage,onAddImages,applied,openRequest=0}: {
+  scene:SceneV2;layout:RoomLayout;images:VenuePhoto[];registration:ReferenceRegistration|undefined;
+  onChange(value:ReferenceRegistration):void;onConfirm(value:ReferenceRegistration):Promise<void>;
+  updateImage:Props['updateImage'];onAddImages:Props['onAddReferenceImages'];applied:boolean;openRequest?:number;
+}):JSX.Element {
+  const details=useRef<HTMLDetailsElement>(null),[selected,setSelected]=useState(''),[registering,setRegistering]=useState(false);
+  const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[opacity,setOpacity]=useState(.55);
+  const scope=layout.id??'local',basis=applied?referenceSceneBasis(layout):canonical({venue:scene.venue,structure:scene.structure,sources:scene.sources});
+  const choices=images.filter(image=>image.blob instanceof Blob&&image.width&&image.height&&
+    (!image.assetId||scene.sources.filter(source=>source.assetId===image.assetId&&source.kind==='floorplan'&&source.width===image.width&&source.height===image.height).length===1));
+  const source=choices.find(image=>image.id===selected&&image.kind==='floorplan')??choices.find(image=>image.id===registration?.sourceId&&image.kind==='floorplan')??choices.find(image=>image.kind==='floorplan');
+  const session=useRef<{scope:string;sourceId:string;basis:string;points:ImagePoint[]}|null>(null);
+  const context=useRef({scope,basis,sourceId:source?.id}),confirming=useRef(false);
+  if(context.current.scope!==scope||context.current.basis!==basis||context.current.sourceId!==source?.id)context.current={scope,basis,sourceId:source?.id};
+  useEffect(()=>{session.current=null;setRegistering(false);setNotice('');},[scope,source?.id,basis]);
+  useEffect(()=>{if(openRequest>0&&details.current){details.current.open=true;details.current.scrollIntoView?.({block:'nearest'});}},[openRequest]);
+  const fixed=registration?.sourceId===source?.id&&registration?.worldWidth===scene.venue.width&&registration?.worldDepth===scene.venue.depth;
+  const transform=source&&fixed?imageRegistration(registration!.points,registration!.worldWidth!,registration!.worldDepth!):null;
+  const drawnPoints=Array.isArray(registration?.points)?registration.points.filter(point=>point&&Number.isFinite(point.x)&&Number.isFinite(point.z)):[];
+  const stored=images.map(image=>({...image,scope,kind:image.kind??'photo',width:image.width??0,height:image.height??0}));
+  const resolved=applied?resolveReferenceImage(layout,stored,{registration}):null;
+  async function confirm():Promise<void>{
+    if(confirming.current||busy||!source||!transform||!registration||!basis)return;
+    const before=context.current;
+    const next:ReferenceRegistration={...registration,sourceId:source.id,worldWidth:scene.venue.width,worldDepth:scene.venue.depth,
+      imageWidth:source.width!,imageHeight:source.height!,appliedBasis:basis,confirmationId:crypto.randomUUID(),...(source.assetId?{sourceAssetId:source.assetId}:{})};
+    if(!source.assetId)delete next.sourceAssetId;
+    const check=resolveReferenceImage(layout,stored,{registration:next});
+    if(check.status!=='ready'){setNotice(check.notice);return;}
+    confirming.current=true;setBusy(true);setNotice('正在保存本机原图对应…');
+    const current=()=>context.current===before;
+    try{await onConfirm(next);if(current())setNotice(check.notice);}catch(error){if(current())setNotice(errorText(error));}finally{confirming.current=false;setBusy(false);}
+  }
+  return <details className={`rc-calibration${applied?' is-applied-reference':''}`} ref={details}><summary>{applied?'核对原图与当前设计':'将墙线叠加到原图核对'}</summary>
+    {applied&&<p className="cr-hint">选择本机平面图并人工标记对应点。确认后才用于当前设计，不调用图片识别。</p>}
+    {applied&&onAddImages&&<label className="cr-label">上传平面图<input type="file" aria-label="上传核对平面图" accept="image/png,image/jpeg,image/webp" multiple disabled={busy} onChange={event=>{const files=event.target.files;void onAddImages(files).catch(error=>setNotice(errorText(error)));event.target.value='';}}/></label>}
+    <label className="cr-label">核对平面图<select aria-label="核对平面图" value={source?.id??''} disabled={busy} onChange={event=>{session.current=null;setRegistering(false);setSelected(event.target.value);updateImage(event.target.value,{kind:'floorplan'});}}><option value="">选择本机原图</option>{choices.map(image=><option key={image.id} value={image.id}>{image.name}{image.kind==='floorplan'?'':' · 选择后按平面图核对'}</option>)}</select></label>
+    {!source?<p className="cr-hint">没有匹配的本机平面图。请上传或选择原图；已有云端引用不会自动改成本机来源。</p>:<>
+      {applied&&<svg className="rc-plan" viewBox={`-0.5 -0.5 ${scene.venue.width+1} ${scene.venue.depth+1}`} aria-label="当前设计结构核对图">{scene.structure.walls.map(w=><line key={w.id} x1={w.start.x} y1={w.start.z} x2={w.end.x} y2={w.end.z} stroke="#355b4b" strokeWidth={Math.max(.08,w.thickness)}/>)}{scene.structure.openings.map(o=>{const line=openingLine(scene,o);return line?<line key={o.id} x1={line.x1} y1={line.z1} x2={line.x2} y2={line.z2} stroke="#61a5c2" strokeWidth={.16}/>:null;})}{scene.structure.columns.map(c=><rect key={c.id} x={c.position.x-c.size.width/2} y={c.position.z-c.size.depth/2} width={c.size.width} height={c.size.depth} fill="#7b8574"/>)}</svg>}
+      <p className="cr-hint">依次点击图上的场地原点 (0,0)、X 轴终点 ({scene.venue.width},0)、Z 轴终点 (0,{scene.venue.depth})。无法对应时，请使用独立结构图核对。照片不使用此平面映射。</p>
+      {registration&&registration.sourceId===source.id&&!fixed&&<p className="cr-hint">原对应未绑定当前场地尺寸，已停用，请重新标记。</p>}
+      {applied&&registration?.appliedBasis&&registration.appliedBasis!==basis&&<p className="cr-hint">项目或场地坐标范围已变化，原图对应已停用，请重新核对。</p>}
+      {fixed&&drawnPoints.length===3&&!transform&&<p className="cr-hint">三个点无法稳定对应场地，请重新标记相距较远且不共线的对应点。</p>}
+      <button type="button" className="rc-secondary" disabled={busy} onClick={()=>{session.current={scope,sourceId:source.id,basis,points:[]};onChange({sourceId:source.id,points:[],worldWidth:scene.venue.width,worldDepth:scene.venue.depth});setRegistering(true);setNotice('');}}>重新标记三个对应点</button>
+      <div className="rc-image-map rc-overlay" role="button" aria-label="标记图纸与场地的三个对应点" tabIndex={0} onClick={event=>{
+        const active=session.current;if(!registering||!active||active.scope!==scope||active.sourceId!==source.id||active.basis!==basis||active.points.length>=3)return;
+        const point=containedImagePoint(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect(),source.width!,source.height!);if(!point)return;
+        active.points=[...active.points,point];onChange({sourceId:source.id,points:active.points,worldWidth:scene.venue.width,worldDepth:scene.venue.depth});
+        if(active.points.length===3){session.current=null;setRegistering(false);}
+      }}><img src={source.url} alt="原图与识别墙线叠加核对"/><svg viewBox={`0 0 ${source.width} ${source.height}`} preserveAspectRatio="xMidYMid meet">
+        {!transform&&scene.structure.walls.flatMap(w=>(w.evidence??[]).filter(e=>e.sourceAssetId===source.assetId).map((e,index)=><line key={`${w.id}-${index}`} x1={e.start.x*source.width!} y1={e.start.z*source.height!} x2={e.end.x*source.width!} y2={e.end.z*source.height!} stroke="#ed7335" opacity={opacity} strokeWidth={source.width!/150}/>))}
+        {transform&&<g transform={transform} opacity={opacity}>{scene.structure.walls.map(w=><line key={w.id} x1={w.start.x} y1={w.start.z} x2={w.end.x} y2={w.end.z} stroke="#ed7335" strokeWidth={Math.max(.06,w.thickness)}/>)}{scene.structure.openings.map(opening=>{const line=openingLine(scene,opening);return line?<line key={opening.id} x1={line.x1} y1={line.z1} x2={line.x2} y2={line.z2} stroke={opening.kind==='door'?'#64a78b':'#61a5c2'} strokeWidth={.16}/>:null;})}</g>}
+        {registration?.sourceId===source.id&&drawnPoints.map((point,index)=><g key={index}><circle cx={point.x} cy={point.z} r={source.width!/70} fill="#355b4b"/><text x={point.x} y={point.z} fill="white" fontSize={source.width!/50}>{index+1}</text></g>)}
+      </svg></div><p className="cr-hint">已标记 {registration?.sourceId===source.id?drawnPoints.length:0}/3 个点。叠加位置依据人工对应点，不代表自动测量。</p>
+      <label className="cr-label">墙线透明度<input type="range" aria-label="叠加墙线透明度" min=".1" max="1" step=".05" value={opacity} onChange={event=>setOpacity(Number(event.target.value))}/></label>
+      {applied&&<><p className="cr-hint">{resolved?.notice}</p><button type="button" className="rc-secondary" disabled={busy||!transform} onClick={()=>void confirm()}>在当前设计中使用此对应</button></>}
+    </>}
+    {notice&&<p className="cr-notice" role="status">{notice}</p>}
+  </details>;
+}
+
+export function ReconstructionPanel({controller,layout,onApply,onPreview,images,updateImage,brief,openReferenceRequest=0,onAddReferenceImages}:Props):JSX.Element {
   const cloud=useBackendSession(controller),selection=useSelection();
   const scope=layout.id??'local';
+  const scopeEpoch=useRef({scope,epoch:0});if(scopeEpoch.current.scope!==scope)scopeEpoch.current={scope,epoch:scopeEpoch.current.epoch+1};
+  const sourceImages=useRef(images);sourceImages.current=images;
   const [form,setForm]=useState<Form>(EMPTY),[loaded,setLoaded]=useState(false);
   const [mode,setMode]=useState<''|'restore'|'redesign'>('');
   const [reidentify,setReidentify]=useState(false);
@@ -60,7 +124,8 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[pollingPaused,setPollingPaused]=useState(false);
   const [selectedSource,setSelectedSource]=useState(''),[points,setPoints]=useState<ImagePoint[]>([]),[distance,setDistance]=useState('');
   const [selectedWall,setSelectedWall]=useState<string|null>(null);
-  const [registering,setRegistering]=useState(false),[opacity,setOpacity]=useState(.55);
+  const inputDetails=useRef<HTMLDetailsElement>(null),formSaveTimer=useRef<ReturnType<typeof setTimeout>>();
+  const formWrites=useRef<Promise<void>>(Promise.resolve()),referenceSaving=useRef(false);
   const [preview,setPreview]=useState<{proposal:SceneProposal;layout:RoomLayout;assets:{assetUrls:Record<string,string>;assetNames:Record<string,string>}}|null>(null);
   const [expired,setExpired]=useState(false);
   const formHydration=useRef<Promise<void>>(Promise.resolve());
@@ -74,15 +139,19 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const reviewStale=!!job&&(form.jobBase!==baseKey||form.jobSources!==canonical(images.map(image=>({id:image.id,kind:image.kind??'photo'}))));
   const stale=!!job&&(form.jobBase!==baseKey||form.jobInput!==inputKey||!!mode&&form.jobMode!==mode||!!preview&&(preview.proposal.base_revision!==cloud.revision||preview.proposal.session_id!==cloud.lease?.sessionId||preview.proposal.generation!==cloud.lease?.generation||expired));
   const source=images.find(image=>image.id===selectedSource&&image.kind==='floorplan')??images.find(image=>image.kind==='floorplan');
+  const currentStructure=useMemo(()=>referenceStructure(layout),[layout]);
   const requestRunning=busy||!!form.jobId&&(!job||ACTIVE.has(job.state));
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  useEffect(()=>{let cancelled=false;setLoaded(false);setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setMode('');setReidentify(false);setNotice('');setPoints([]);setReviewConfirmed(false);formHydration.current=readSourceForm<Form>(scope).then(saved=>{if(!cancelled&&saved){formRef.current={...EMPTY,...saved};setForm(formRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setLoaded(true);});return()=>{cancelled=true;};},[scope]);
+  useEffect(()=>{let cancelled=false;setLoaded(false);formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setMode('');setReidentify(false);setNotice('');setPoints([]);setReviewConfirmed(false);formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{if(!cancelled&&saved){formRef.current={...EMPTY,...saved};setForm(formRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setLoaded(true);});return()=>{cancelled=true;};},[scope]);
+  function saveForm(saveScope:string,value:Form):Promise<void>{const write=formWrites.current.catch(()=>{}).then(()=>storeSourceForm(saveScope,value));formWrites.current=write;return write;}
   useEffect(()=>registerSourceFlush(scope,async()=>{
     await formHydration.current;
+    await formWrites.current;
     if(!alive.current||scopeRef.current!==scope)throw new Error('尺寸表单正在切换，请稍后重试。');
-    await storeSourceForm(scope,formRef.current);
+    await saveForm(scope,formRef.current);
   }),[scope]);
-  useEffect(()=>{if(!loaded)return;const timer=setTimeout(()=>{void storeSourceForm(scope,form).catch(error=>setNotice(errorText(error)));},250);return()=>clearTimeout(timer);},[form,loaded,scope]);
+  useEffect(()=>{if(!loaded||referenceSaving.current)return;formSaveTimer.current=setTimeout(()=>{if(referenceSaving.current||scopeRef.current!==scope)return;void saveForm(scope,formRef.current).catch(error=>{if(scopeRef.current===scope)setNotice(errorText(error));});},250);return()=>clearTimeout(formSaveTimer.current);},[form,loaded,scope]);
+  useEffect(()=>{if(openReferenceRequest>0&&inputDetails.current)inputDetails.current.open=true;},[openReferenceRequest]);
   useEffect(()=>{setPoints([]);},[source?.id]);
   useEffect(()=>{setReviewConfirmed(false);},[review]);
   useEffect(()=>{setExpired(false);if(!preview)return;const remaining=Date.parse(preview.proposal.expires_at)-Date.now();if(remaining<=0){setExpired(true);return;}const timer=setTimeout(()=>setExpired(true),Math.min(remaining,2_147_000_000));return()=>clearTimeout(timer);},[preview]);
@@ -111,12 +180,41 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[loaded,form.jobId,cloud.user?.id,cloud.project?.id,scope,pollingPaused,job?.state]);
 
-  function patch(patch:Partial<Form>){setForm(current=>({...current,...patch}));}
+  function patch(patch:Partial<Form>){formRef.current={...formRef.current,...patch};setForm(formRef.current);}
+  async function confirmReference(registration:ReferenceRegistration):Promise<void>{
+    if(referenceSaving.current||pending.current||!loaded)throw new Error('当前表单仍在读取或保存，请稍后确认原图对应。');
+    const expectedScope=scopeRef.current,basis=referenceSceneBasis(layoutRef.current),expectedEpoch=scopeEpoch.current.epoch;
+    if(!basis||registration.appliedBasis!==basis)throw new Error('当前设计已变化，请重新核对对应点。');
+    referenceSaving.current=true;
+    clearTimeout(formSaveTimer.current);
+    const check=()=>{if(!alive.current||scopeRef.current!==expectedScope||scopeEpoch.current.epoch!==expectedEpoch||referenceSceneBasis(layoutRef.current)!==basis)throw new Error('项目或场地坐标范围已变化，本次对应不用于当前设计。');};
+    const write=formWrites.current.catch(()=>{}).then(async()=>{
+      check();
+      const sources=sourceImages.current.map(image=>({...image,scope:expectedScope,kind:image.kind??'photo',width:image.width??0,height:image.height??0}));
+      const resolved=resolveReferenceImage(layoutRef.current,sources,{registration});if(resolved.status!=='ready')throw new Error(resolved.notice);
+      const previous=formRef.current,next={...previous,registration};let stored=false;
+      try{
+        await storeSourceForm(expectedScope,next);stored=true;
+        const saved=await readSourceForm<Form>(expectedScope);check();
+        if(!saved?.registration||canonical(saved.registration)!==canonical(registration))throw new Error('本机原图对应保存后未能核实，请重试确认。');
+        formRef.current={...formRef.current,registration};setForm(formRef.current);
+      }catch(error){
+        if(stored){
+          const rollback=scopeRef.current===expectedScope&&scopeEpoch.current.epoch===expectedEpoch?{...formRef.current}:{...previous};
+          if(previous.registration)rollback.registration=previous.registration;else delete rollback.registration;
+          try{await storeSourceForm(expectedScope,rollback);}catch(rollbackError){throw new Error(`${errorText(error)} 原对应回退也失败，请保留此页面并重试。${errorText(rollbackError)}`);}
+        }
+        throw error;
+      }
+    });
+    formWrites.current=write;
+    try{await write;}finally{referenceSaving.current=false;if(alive.current&&scopeRef.current===expectedScope)setForm({...formRef.current});}
+  }
   function addConstraint(constraint:Omit<DimensionConstraint,'id'|'status'>){patch({constraints:[...form.constraints,{...constraint,id:crypto.randomUUID(),status:'confirmed'}]});}
   function addCalibration(){if(!source||points.length!==2||!(Number(distance)>0))return;if(Math.hypot(points[0].x-points[1].x,points[0].z-points[1].z)<2){setNotice('请选取两个不同位置。');return;}addConstraint({kind:'distance',label:`${source.name} 两点标定`,valueMeters:Number(distance),sourceAssetId:source.id,start:{x:points[0].x/source.width!,z:points[0].z/source.height!},end:{x:points[1].x/source.width!,z:points[1].z/source.height!}});setPoints([]);setDistance('');}
   async function uploadSources():Promise<SourceImage[]>{const sources:SourceImage[]=[];for(const image of images){const kind=image.kind??'photo';if(image.assetId){sources.push({assetId:image.assetId,kind,name:image.name,width:image.width!,height:image.height!});continue;}if(!image.blob)throw new Error(`缺少 ${image.name} 的原始图片，请重新选择。`);const uploaded=await controller.uploadSource(image.blob,image.name,kind);updateImage(image.id,{assetId:uploaded.assetId,uploadedKind:kind});sources.push(uploaded);}return sources;}
   async function generate(continueReview=false):Promise<void>{
-    if(pending.current)return;setNotice('');
+    if(pending.current)return;if(referenceSaving.current){setNotice('正在保存原图对应，请完成后再生成。');return;}setNotice('');
     if(!connected){setNotice('本机资料已保留。请在云项目中登录、打开当前项目并获取编辑权，才能调用真实识别服务。');return;}
     if(!images.length&&!layout.backendSceneV2){setNotice('请先添加平面图或现场照片。也可以下方按实测尺寸创建矩形场地。');return;}
     const currentStructure=layout.backendSceneV2;
@@ -142,7 +240,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       const requestKey=canonical({reviewedJobId:continueReview?job?.id:undefined,session:controller.getSnapshot().sessionId,leaseGeneration:controller.getSnapshot().lease?.generation,revision:controller.getSnapshot().revision,scene,sources,dimensions:dimensions.map(({id,...dimension})=>dimension),instruction,selectedIds,mode:hasPhotos?mode:'redesign',reviewedScene});
       const requestId=form.requestKey===requestKey&&form.requestId&&job?.state!=='failed'&&job?.state!=='ready'?form.requestId:crypto.randomUUID();
       const nextForm={...form,fixedIds,requestKey,requestId,jobBase:canonical(scene),jobInput:submittedInput,jobSources:canonical(images.map(image=>({id:image.id,kind:image.kind??'photo'}))),jobMode:hasPhotos?mode as 'restore'|'redesign':'redesign' as const,jobId:undefined};
-      setForm(nextForm);await storeSourceForm(submittedScope,nextForm).catch(()=>{});
+      formRef.current=nextForm;setForm(nextForm);await saveForm(submittedScope,nextForm).catch(()=>{});
       if(inputRef.current!==submittedInput||layoutRef.current!==base||scopeRef.current!==submittedScope)throw new Error('上传期间资料或场景发生变化，请核对后重新生成。');
       const result=await controller.createReconstruction({requestId,scene,sources,dimensions,mode:hasPhotos?mode as 'restore'|'redesign':'redesign',instruction,selectedIds,...(reviewedScene?{reviewedScene}:{}),...(continueReview&&job?{reviewedJobId:job.id}:{})});
       if(!alive.current||scopeRef.current!==submittedScope)return;
@@ -155,7 +253,6 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const reviewedWall=review?.structure.walls.find(w=>w.id===selectedWall);
   function updateWall(patch:Partial<SceneV2['structure']['walls'][number]>){if(!reviewedWall||!review)return;setReview(updateReviewedWall(review,reviewedWall.id,patch));}
 
-  const registration=review&&floorplan&&form.registration?.sourceId===floorplan.id?imageRegistration(form.registration.points,review.venue.width,review.venue.depth):null;
   const openingShapes=review?.structure.openings.map(opening=>{const line=openingLine(review,opening);return line?<line key={opening.id} x1={line.x1} y1={line.z1} x2={line.x2} y2={line.z2} stroke={opening.kind==='door'?'#64a78b':'#61a5c2'} strokeWidth={.16}><title>{opening.kind==='door'?'门':'窗'} {opening.width}米</title></line>:null;});
   function focusObject(id:string|undefined){
     if(!id)return;selection.selectOnly?.(id);
@@ -164,7 +261,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   }
   const currentDesign=layout.backendSceneV2?.design;
   return <section className="rc-panel" aria-label="图纸与照片重建">
-    <details className="rc-inputs"><summary><Ruler size={16}/><span>图纸与照片重建</span><small>米制 · 可核对</small></summary>
+    <details className="rc-inputs" ref={inputDetails}><summary><Ruler size={16}/><span>图纸与照片重建</span><small>米制 · 可核对</small></summary>
     <p className="cr-hint">输入实测尺寸，图纸和照片共同补充空间信息。照片遮挡处与手绘不确定部分需要核对。</p>
     <div className="rc-measures">{([['width','总宽'],['depth','总深'],['height','层高']] as const).map(([key,label])=><label key={key}>{label}（米）<input aria-label={`${label}（米）`} type="number" step="0.001" min="0.001" max={key==='height'?30:200} value={form[key]} onChange={e=>patch({[key]:e.target.value})} placeholder="实测值"/></label>)}</div>
     <label className="cr-label">补充尺寸<textarea aria-label="补充尺寸" rows={2} value={form.text} onChange={e=>patch({text:e.target.value})} placeholder="北墙 8 米，入口宽 1.2 米，柱间距 450 厘米"/></label>
@@ -189,14 +286,14 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     {job&&<div className="rc-job" role="status"><strong>{LABELS[job.state]}</strong><small>任务 {job.id.slice(0,8)}</small>{stale&&<p>场景、资料、要求或编辑会话已变化，旧结果仅供核对。请重新生成后应用。</p>}{job.issues.map((issue,index)=><p key={`${issue.code}-${index}`}>{issue.message}</p>)}{job.error_code&&<p>{errorCodeText(job.error_code)}</p>}{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>{setPollingPaused(false);setNotice('');}}>继续查询原任务</button>}</div>}
     {review&&job?.state==='needs_review'&&<div className="rc-review"><h4>核对识别结构</h4><p className="cr-hint">结构示意使用米制坐标。点击墙线编辑，核对门窗、柱子与看不到的区域；确认意味着你已根据现场或图纸核实。</p>
       <svg className="rc-plan" viewBox={`-0.5 -0.5 ${review.venue.width+1} ${review.venue.depth+1}`} aria-label="二维结构核对图">{review.venue.polygon&&<polygon points={review.venue.polygon.map(p=>`${p.x},${p.z}`).join(' ')} fill="#f3efe5"/>}{review.structure.walls.map((wall,index)=><g key={wall.id} onClick={()=>setSelectedWall(wall.id)} role="button" aria-label={`编辑墙 ${index+1}`} tabIndex={0} onKeyDown={event=>{if(event.key==='Enter')setSelectedWall(wall.id);}}><line x1={wall.start.x} y1={wall.start.z} x2={wall.end.x} y2={wall.end.z} stroke={wall.id===selectedWall?'#e17637':wall.status==='confirmed'?'#355b4b':'#b48a50'} strokeWidth={Math.max(.08,wall.thickness)}/><text x={(wall.start.x+wall.end.x)/2} y={(wall.start.z+wall.end.z)/2-.12} fontSize=".25">{index+1}</text></g>)}{openingShapes}{review.structure.columns.map(column=><rect key={column.id} x={column.position.x-column.size.width/2} y={column.position.z-column.size.depth/2} width={column.size.width} height={column.size.depth} transform={`rotate(${column.rotation} ${column.position.x} ${column.position.z})`} fill="#7b8574"/> )}</svg>
-      {floorplan&&<details><summary>将墙线叠加到原图核对</summary><p className="cr-hint">橙线显示模型提供的原图墙线定位；缺少原图定位时，可建立三个已知对应点：依次点击图上的场地原点 (0,0)、X 轴终点 ({review.venue.width},0)、Z 轴终点 (0,{review.venue.depth})。无法对应这三个点时，请使用独立结构图核对。照片不使用此平面映射。</p><button type="button" className="rc-secondary" onClick={()=>{patch({registration:{sourceId:floorplan.id,points:[]}});setRegistering(true);}}>重新标记三个对应点</button><div className="rc-image-map rc-overlay" role="button" aria-label="标记图纸与场地的三个对应点" tabIndex={0} onClick={event=>{if(!registering)return;const point=containedImagePoint(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect(),floorplan.width!,floorplan.height!);if(!point)return;const next=[...(form.registration?.points??[]),point];patch({registration:{sourceId:floorplan.id,points:next}});if(next.length===3)setRegistering(false);}}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}<img src={floorplan.url} alt="原图与识别墙线叠加核对"/><svg viewBox={`0 0 ${floorplan.width} ${floorplan.height}`} preserveAspectRatio="xMidYMid meet">{!registration&&review.structure.walls.flatMap(w=>(w.evidence??[]).filter(e=>e.sourceAssetId===floorplan.assetId).map((e,index)=><line key={`${w.id}-${index}`} x1={e.start.x*floorplan.width!} y1={e.start.z*floorplan.height!} x2={e.end.x*floorplan.width!} y2={e.end.z*floorplan.height!} stroke="#ed7335" opacity={opacity} strokeWidth={floorplan.width!/150}/>))}{registration&&<g transform={registration} opacity={opacity}>{review.structure.walls.map(w=><line key={w.id} x1={w.start.x} y1={w.start.z} x2={w.end.x} y2={w.end.z} stroke="#ed7335" strokeWidth={Math.max(.06,w.thickness)}/>)}{openingShapes}</g>}{form.registration?.sourceId===floorplan.id&&form.registration.points.map((point,index)=><g key={index}><circle cx={point.x} cy={point.z} r={floorplan.width!/70} fill="#355b4b"/><text x={point.x} y={point.z} fill="white" fontSize={floorplan.width!/50}>{index+1}</text></g>)}</svg></div><p className="cr-hint">已标记 {form.registration?.points.length??0}/3 个点。叠加位置依据你的对应点，不代表自动测量。</p><label className="cr-label">墙线透明度<input type="range" aria-label="叠加墙线透明度" min=".1" max="1" step=".05" value={opacity} onChange={event=>setOpacity(Number(event.target.value))}/></label></details>}
+      <ReferenceImageReview scene={review} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={undefined} applied={false} openRequest={openReferenceRequest}/>
       {reviewedWall&&<div className="rc-wall-fields"><strong>墙 {review.structure.walls.findIndex(w=>w.id===reviewedWall.id)+1}</strong><div className="rc-measures"><NumberField label="起点 X" value={reviewedWall.start.x} onChange={x=>updateWall({start:{...reviewedWall.start,x}})}/><NumberField label="起点 Z" value={reviewedWall.start.z} onChange={z=>updateWall({start:{...reviewedWall.start,z}})}/><NumberField label="终点 X" value={reviewedWall.end.x} onChange={x=>updateWall({end:{...reviewedWall.end,x}})}/><NumberField label="终点 Z" value={reviewedWall.end.z} onChange={z=>updateWall({end:{...reviewedWall.end,z}})}/><NumberField label="墙厚" value={reviewedWall.thickness} onChange={thickness=>updateWall({thickness})}/><NumberField label="墙高" value={reviewedWall.height} onChange={height=>updateWall({height})}/></div></div>}
       {review.structure.openings.map((o,index)=><details key={o.id}><summary>{o.kind==='door'?'门':'窗'} {index+1} · 墙 {review.structure.walls.findIndex(w=>w.id===o.wallId)+1} · {o.status==='confirmed'?'已确认':'待核对'}</summary><div className="rc-measures">{(['offset','width','height','sillHeight'] as const).map(key=><NumberField key={key} label={{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'窗台高度'}[key]} value={o[key]} onChange={value=>setReview({...review,structure:{...review.structure,openings:review.structure.openings.map(item=>item.id===o.id?{...item,[key]:value}:item)}})}/>)}</div></details>)}
       {review.structure.columns.map((c,index)=><details key={c.id}><summary>柱子 {index+1} · {c.status==='confirmed'?'已确认':'待核对'}</summary><div className="rc-measures"><NumberField label="中心 X" value={c.position.x} onChange={x=>setReview({...review,structure:{...review.structure,columns:review.structure.columns.map(item=>item.id===c.id?{...item,position:{...item.position,x}}:item)}})}/><NumberField label="中心 Z" value={c.position.z} onChange={z=>setReview({...review,structure:{...review.structure,columns:review.structure.columns.map(item=>item.id===c.id?{...item,position:{...item.position,z}}:item)}})}/>{(['width','depth','height'] as const).map(key=><NumberField key={key} label={{width:'柱宽',depth:'柱深',height:'柱高'}[key]} value={c.size[key]} onChange={value=>setReview({...review,structure:{...review.structure,columns:review.structure.columns.map(item=>item.id===c.id?{...item,size:{...item.size,[key]:value}}:item)}})}/>)}</div></details>)}
       {review.objects.length>0&&<div className="rc-review-objects"><h4>核对识别物件与碰撞</h4><p className="cr-hint">有冲突的物件会标记为「需调整」。修改位置、旋转或尺寸后，服务会重新校验；锁定物件保留。</p>{review.objects.map((object,index)=><details key={object.id}><summary>{job.issues.some(issue=>issue.targetId===object.id)?'需调整 · ':''}物件 {index+1} · {object.materialId}{object.locked?' · 已锁定':''}</summary>{object.locked?<p>此物件已锁定，请先在主场景中解锁并重新生成。</p>:<><div className="rc-measures"><NumberField label="位置 X" value={object.position.x} onChange={x=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,x}}:o)})}/><NumberField label="位置 Z" value={object.position.z} onChange={z=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,z}}:o)})}/><NumberField label="旋转角度" value={object.rotation} onChange={rotation=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,rotation}:o)})}/>{(['width','depth','height'] as const).map(key=><NumberField key={key} label={{width:'宽度',depth:'深度',height:'高度'}[key]} value={object.size[key]} onChange={value=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,size:{...o.size,[key]:value}}:o)})}/>)}</div><button type="button" className="rc-secondary" onClick={()=>setReview({...review,objects:review.objects.filter(o=>o.id!==object.id),...(review.design?{design:{...review.design,highlights:review.design.highlights.map(h=>({...h,objectIds:h.objectIds.filter(id=>id!==object.id)})),requirements:review.design.requirements.map(r=>({...r,objectIds:r.objectIds.filter(id=>id!==object.id)}))}}:{})})}>删除误识别物件</button></>}</details>)}</div>}
       <label className="cr-check"><input type="checkbox" checked={reviewConfirmed} onChange={e=>setReviewConfirmed(e.target.checked)}/><span>我已核对所有墙段、门窗、柱子和不可见区域，确认上述结构与尺寸。</span></label><button className="rc-secondary" type="button" disabled={busy||!reviewConfirmed||reviewStale} onClick={()=>void generate(true)}>确认结构并继续设计</button>
     </div>}
+    {currentStructure&&!(review&&job?.state==='needs_review')&&<ReferenceImageReview scene={currentStructure} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={onAddReferenceImages} applied openRequest={openReferenceRequest}/>}
     {preview&&<div className="rc-candidate"><h4>三维候选方案</h4><p>{preview.proposal.explanation}</p>{preview.proposal.candidate.schemaVersion===2&&preview.proposal.candidate.design&&<><strong>{preview.proposal.candidate.design.concept}</strong>{preview.proposal.candidate.design.highlights.map((h,index)=><button key={index} type="button" className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{preview.proposal.candidate.design.requirements.map((r,index)=><div className={`rc-requirement is-${r.status}`} key={index}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</>}
       <div className="rc-actions"><button type="button" className="cr-generate" disabled={busy||stale||!connected} onClick={()=>void apply()}><Check size={15}/>确认应用并保存</button><button className="rc-secondary" type="button" disabled={busy} onClick={()=>{setPreview(null);setJob(null);patch({jobId:undefined,requestId:undefined});}}>放弃候选</button></div>
     </div>}

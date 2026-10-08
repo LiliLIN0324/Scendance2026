@@ -57,6 +57,18 @@ export async function withSourceRestoreLock<T>(scopes: string[], restore: () => 
   return acquire(0);
 }
 const DATABASE = 'scendance-source-images-v1';
+const sourceListeners = new Map<string, Set<() => void>>();
+/** Read-only views refresh after the original owner has committed its form/images. */
+export function subscribeSourceChanges(scope: string, listener: () => void): () => void {
+  const listeners = sourceListeners.get(scope) ?? new Set<() => void>();
+  listeners.add(listener); sourceListeners.set(scope, listeners);
+  return () => { listeners.delete(listener); if (!listeners.size) sourceListeners.delete(scope); };
+}
+function changedSource(scope?: string): void {
+  for (const [key, listeners] of sourceListeners) if (scope === undefined || scope === key) {
+    for (const listener of listeners) { try { listener(); } catch { /* A view cannot turn a committed save into a failed write. */ } }
+  }
+}
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') { reject(new Error('浏览器未开放本地图片存储；本次图片仅在会话中保留。')); return; }
@@ -82,11 +94,11 @@ async function transact<T>(name: 'sources' | 'forms', mode: IDBTransactionMode, 
   });
 }
 export function listStoredSources(scope: string): Promise<StoredSource[]> { return transact('sources', 'readonly', store => store.index('scope').getAll(scope)); }
-export async function storeSource(source: StoredSource): Promise<void> { await transact('sources', 'readwrite', store => store.put(source)); }
-export async function deleteSource(id: string): Promise<void> { await transact('sources', 'readwrite', store => store.delete(id)); }
+export async function storeSource(source: StoredSource): Promise<void> { await transact('sources', 'readwrite', store => store.put(source)); changedSource(source.scope); }
+export async function deleteSource(id: string): Promise<void> { await transact('sources', 'readwrite', store => store.delete(id)); changedSource(); }
 export function readSourceForm<T>(scope: string): Promise<T | undefined> { return transact('forms', 'readonly', store => store.get(scope)); }
-export async function storeSourceForm(scope: string, value: unknown): Promise<void> { await transact('forms', 'readwrite', store => store.put(value, scope)); }
-export async function deleteSourceForm(scope: string): Promise<void> { await transact('forms', 'readwrite', store => store.delete(scope)); }
+export async function storeSourceForm(scope: string, value: unknown): Promise<void> { await transact('forms', 'readwrite', store => store.put(value, scope)); changedSource(scope); }
+export async function deleteSourceForm(scope: string): Promise<void> { await transact('forms', 'readwrite', store => store.delete(scope)); changedSource(scope); }
 
 /** A suggestion only; users explicitly correct it before identification. No image measurements inferred. */
 export function suggestSourceKind(name: string, pixels?: Uint8ClampedArray): SourceKind {

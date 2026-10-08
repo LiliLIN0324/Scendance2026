@@ -383,6 +383,9 @@ export interface ViewSettings {
   snapToGrid: boolean;
   snapToWall: boolean;
   floorPlan3DEffect: boolean;
+  /** Pure main-canvas presentation; never deletes an image or changes its correspondence. */
+  showReferenceImage?: boolean;
+  referenceImageOpacity?: number;
   /** Hour of the day in [0, 24); drives the continuous sun-arc lighting. */
   timeOfDay: number;
   /** Rain or snow falling over the lot, with matching overcast lighting (#189). */

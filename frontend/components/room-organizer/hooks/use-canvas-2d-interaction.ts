@@ -11,6 +11,7 @@ import { dragThresholdPx, keepsSelectionOnPress } from '../three/drag-handlers';
 import { useLayoutActions } from './use-layout-store';
 import type { DragCancelOptions } from './use-item-drag';
 import type { FloorLayout, FurnitureItem, RoomLayout, ViewSettings } from '../lib/types';
+import type { ReferenceImageLayer } from '@/lib/reference-image';
 
 /**
  * Extra hit margin (CSS px) around wall-mounted and very small items (#286):
@@ -65,7 +66,8 @@ export interface UseCanvas2DInteractionParams {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   layout: RoomLayout;
   activeFloor: FloorLayout;
-  view: Pick<ViewSettings, 'showMeasurements' | 'showWiFiSignals' | 'showHeatmap' | 'drawZoneMode'>;
+  referenceImage?: ReferenceImageLayer;
+  view: Pick<ViewSettings, 'showMeasurements' | 'showWiFiSignals' | 'showHeatmap' | 'drawZoneMode' | 'showReferenceImage' | 'referenceImageOpacity'>;
   selectedItemId: string | null;
   extraSelectedIds: ReadonlySet<string>;
   allSelectedIds: ReadonlySet<string>;
@@ -174,7 +176,7 @@ export function useCanvas2DInteraction(
 
     const paintGhost = (): void => {
       rafId = null;
-      const { layout, activeFloor, view, selectedItemId, extraSelectedIds } = paramsRef.current;
+      const { layout, activeFloor, view, referenceImage, selectedItemId, extraSelectedIds } = paramsRef.current;
       const session = gesture?.started ? gesture : null;
       const items = session
         ? activeFloor.items.map((item) => {
@@ -195,6 +197,9 @@ export function useCanvas2DInteraction(
         showMeasurements: view.showMeasurements,
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
+        ...(referenceImage ? { referenceImage } : {}),
+        showFloorPlan: view.showReferenceImage !== false,
+        ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         zoneDraft: draft,
         hasCollision: (item) =>
           hasCollisions(item, items, layout.width, layout.height, { keepOut, interiorWalls: activeFloor.interiorWalls }),

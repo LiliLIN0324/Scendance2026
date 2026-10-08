@@ -6,6 +6,7 @@ import { layoutGeometryScene } from '../lib/structural-layout';
 import { zoneArea, type ZoneRect } from '../lib/zones';
 import { drawStairsSymbol, drawStairwellHoles } from './stairs-symbol';
 import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, WallId } from '../lib/types';
+import type { ReferenceImageLayer } from '@/lib/reference-image';
 
 export interface Render2DOptions {
   canvas: HTMLCanvasElement;
@@ -19,6 +20,10 @@ export interface Render2DOptions {
   showMeasurements: boolean;
   showWiFiSignals: boolean;
   showHeatmap?: boolean;
+  /** Main-canvas reference display; absent preserves the legacy callers. */
+  showFloorPlan?: boolean;
+  floorPlanOpacity?: number;
+  referenceImage?: ReferenceImageLayer;
   /** The zone rectangle being dragged out, drawn over everything as a dashed outline (#155). */
   zoneDraft?: ZoneRect | null;
   hasCollision: (item: FurnitureItem) => boolean;
@@ -129,7 +134,7 @@ export function render2DTopDown(options: Render2DOptions): void {
     layout.backendVenue.polygon.forEach((p, i) => { if (i) ctx.lineTo(offsetX + p.x * scale, offsetY + p.z * scale); else ctx.moveTo(offsetX + p.x * scale, offsetY + p.z * scale); });
     ctx.closePath(); ctx.clip();
   }
-  drawFloor(ctx, layout, floor, offsetX, offsetY, scale);
+  drawFloor(ctx, layout, floor, offsetX, offsetY, scale, options);
   drawGrid(ctx, layout, offsetX, offsetY, scale);
   ctx.restore();
   // The stairwell the floor below cuts through this slab (#290), under everything placed over it.
@@ -335,14 +340,17 @@ function drawFloor(
   floor: FloorLayout,
   offsetX: number,
   offsetY: number,
-  scale: number
+  scale: number,
+  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage'>
 ): void {
   // The tracing image belongs to the ground floor only, like in 3D
   // (use-scene-effects keys it on floor index 0) — painting it under every
   // storey put the ground-floor scan in upstairs blueprints (#218). Derived
   // here from data both callers already pass, so no caller can forget it.
   const isGroundFloor = layout.floors[0] === floor || layout.floors[0]?.id === floor.id;
-  const url = isGroundFloor ? layout.floorPlanImage : undefined;
+  const referenceImage = isGroundFloor ? options.referenceImage : undefined;
+  const url = isGroundFloor && options.showFloorPlan !== false
+    ? referenceImage?.url ?? (layout.backendSceneV2 ? undefined : layout.floorPlanImage) : undefined;
   if (url) {
     // Fill the floor colour first so there's a base while (or if) the image is
     // still decoding — avoids a flash of the raw canvas background.
@@ -355,6 +363,17 @@ function drawFloor(
     if (floorPlanImageCache?.url === url && floorPlanImageCache.image.complete) {
       const img = floorPlanImageCache.image;
       if (img.naturalWidth > 0) {
+        const opacity = options.floorPlanOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
+        if (referenceImage) {
+          const [a, b, c, d, e, f] = referenceImage.imageToWorld;
+          ctx.save();
+          ctx.globalAlpha = opacity;
+          ctx.transform(a * scale, b * scale, c * scale, d * scale,
+            offsetX + e * scale, offsetY + f * scale);
+          ctx.drawImage(img, 0, 0, referenceImage.pixelWidth, referenceImage.pixelHeight);
+          ctx.restore();
+          return;
+        }
         const { source, dest } = computeFloorPlanPlacement(
           img.naturalWidth,
           img.naturalHeight,
@@ -363,7 +382,7 @@ function drawFloor(
         );
         const roomW = layout.width * scale;
         const roomH = layout.height * scale;
-        ctx.globalAlpha = layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
+        ctx.globalAlpha = opacity;
         ctx.drawImage(
           img,
           source.x,

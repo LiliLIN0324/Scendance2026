@@ -692,3 +692,30 @@
   .sc-brand strong > span, .sc-brand-mark { display: none; }
   .sc-header { gap: 6px; }
 }
+
+/* The scene keeps its own box; optional tools and chat take real columns. */
+.sc-workbench .sc-workspace.is-docked-layout { display:flex; gap:12px; }
+.sc-workbench .is-docked-layout .sc-left-drawer { position:relative; inset:auto; display:flex; flex-direction:column; flex:0 0 250px; width:250px; min-width:0; min-height:0; transform:none; visibility:visible; pointer-events:auto; }
+.sc-workbench .is-docked-layout .sc-left-drawer.has-business { flex-basis:420px; width:420px; }
+.sc-workbench .is-docked-layout .sc-canvas-stage { position:relative; inset:auto; flex:1; min-height:0; }
+.sc-workbench .sc-left-content,.sc-workbench .sc-data-host { flex:1; min-width:0; min-height:0; height:100%; }
+.sc-workbench .sc-left-content[hidden],.sc-workbench .sc-data-host[hidden],.sc-workbench .sc-data-host [hidden] { display:none; }
+.sc-workbench .sc-data-host { overflow:hidden; border:1px solid var(--sc-line); border-radius:14px; background:var(--sc-surface); }
+.sc-workbench .sc-left-context { display:flex; flex-wrap:wrap; gap:5px; flex-shrink:0; padding:7px 0; }
+.sc-workbench .sc-left-context button { padding:6px 8px; border:1px solid var(--sc-line); border-radius:7px; background:var(--sc-surface); color:var(--sc-muted); font-size:11px; }
+.sc-workbench .sc-left-context button[aria-pressed=true] { background:var(--sc-accent-soft); color:var(--sc-accent-ink); }
+.sc-workbench .sc-properties.is-embedded { position:relative; inset:auto; width:100%; height:100%; max-height:none; box-sizing:border-box; }
+.sc-workbench .is-docked-layout .sc-view-tools { max-width:calc(100% - 24px); overflow-x:auto; }
+.sc-workbench .is-docked-layout .sc-canvas-heading { max-width:calc(100% - 125px); flex-wrap:wrap; gap:6px; }
+@media (max-width:1080px) {
+  .sc-workbench .sc-mobile-menu { display:inline-flex; }
+  .sc-workbench .is-docked-layout .sc-left-drawer { position:absolute; inset:0 auto 0 0; width:280px; z-index:45; }
+  .sc-workbench .is-docked-layout .sc-left-drawer.is-collapsed { display:none; }
+  .sc-workbench .is-docked-layout .sc-left-drawer.has-business { position:relative; inset:auto; flex-basis:min(380px,48vw); width:min(380px,48vw); }
+  .sc-workbench .is-docked-layout .sc-left-drawer.has-properties { position:relative; inset:auto; flex-basis:250px; width:250px; }
+}
+@media (max-width:680px) {
+  .sc-workbench .is-docked-layout .sc-left-drawer,.sc-workbench .is-docked-layout .sc-left-drawer.has-business,.sc-workbench .is-docked-layout .sc-left-drawer.has-properties { position:absolute; inset:0 auto 0 0; width:calc(100% - 12px); max-width:420px; z-index:55; }
+  .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-view-tools { display:flex; }
+  .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-canvas-heading { display:flex; }
+}
