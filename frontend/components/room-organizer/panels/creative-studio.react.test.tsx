@@ -1578,6 +1578,42 @@ describe('context continuity and project isolation', () => {
 });
 
 
+describe('review workspace integration',()=>{
+  beforeEach(()=>{vi.stubGlobal('innerWidth',1440);});
+  it('prepares the real brief without re-flushing unrelated image forms, then expires on a layout edit',async()=>{
+    let saved:unknown;
+    vi.mocked(readSourceForm).mockImplementation(async key=>key===`${projectId}:brief`?saved:undefined);
+    vi.mocked(storeSourceForm).mockImplementation(async(key,value)=>{if(key===`${projectId}:brief`)saved=value;});
+    const sources=await import('@/lib/source-storage');const unrelated=vi.fn(async()=>{throw new Error('Unrelated image reload');});
+    const unregister=sources.registerSourceFlush(projectId,unrelated);
+    try{
+      const view=renderUI(<DockedTrial/>);await act(async()=>{});
+      fireEvent.click(screen.getByRole('button',{name:'活动需求'}));
+      fireEvent.change(screen.getByRole('textbox',{name:'客户需求'}),{target:{value:'评审专用活动需求：保留入口'}});
+      fireEvent.click(screen.getByRole('button',{name:'方案评审'}));
+      fireEvent.click(screen.getByRole('checkbox',{name:'包含当前活动需求'}));
+      await waitFor(()=>expect((screen.getByRole('button',{name:'生成评审包'}) as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(screen.getByRole('button',{name:'生成评审包'}));
+      const preview=await screen.findByTitle('客户评审预览');
+      expect(preview.getAttribute('srcdoc')).toContain('评审专用活动需求：保留入口');
+      expect(unrelated).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+      expect(controller.startAgentRun).not.toHaveBeenCalled();
+      view.rerender(<DockedTrial current={{...layout,width:layout.width+1}}/>);
+      await waitFor(()=>expect(screen.queryByRole('button',{name:'下载评审文件（HTML）'})).toBeNull());
+      expect(screen.getByText('评审内容已过期，请重新生成。')).toBeTruthy();
+    }finally{unregister();}
+  });
+  it('keeps the existing model draft while entering and leaving review',async()=>{
+    renderUI(<DockedTrial/>);await act(async()=>{});selectMode('model');
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'一把椅子的未发送需求'}});
+    fireEvent.click(screen.getByRole('button',{name:'方案评审'}));
+    expect(screen.getByRole('region',{name:'客户评审包'})).toBeTruthy();
+    expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
+    fireEvent.click(screen.getByRole('button',{name:'返回素材'}));
+    expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('一把椅子的未发送需求');
+  });
+});
+
 describe('unified Agent', () => {
   it('offers two chat scopes and retains separate planning and modeling drafts', () => {
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);

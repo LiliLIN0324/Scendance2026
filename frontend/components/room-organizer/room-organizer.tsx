@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, Check, ClipboardList, Menu, PanelLeftClose } from 'lucide-react';
+import { Camera, Check, ClipboardList, FileCheck, Menu, PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
@@ -27,6 +27,7 @@ import { usePeopleModel } from './hooks/use-people-model';
 import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
+import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
@@ -169,6 +170,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, []);
   const [workspaceOpenRequest, setWorkspaceOpenRequest] = useState(0);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
+  const [reviewOpenRequest,setReviewOpenRequest]=useState(0);
+  const reviewEntryRef=useRef<HTMLButtonElement>(null);
   const [pendingCatalog, setPendingCatalog] = useState<CatalogItem | null>(null);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
@@ -1196,10 +1199,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     lighting: previewCandidate?.backendLighting ?? layout.backendLighting ?? 'warm', width: previewCandidate?.width ?? layout.width, depth: previewCandidate?.height ?? layout.height,
     ceilingHeight: previewCandidate?.floors[0]?.height ?? activeStoreyHeight });
 
+  const captureReview=useReviewCapture({layout,getLayout:()=>layoutStore.getState().layout,view,activeFloorIndex,
+    ready:isReady||view.view2D,peopleReady:peopleModelReady,selectedItemId,extraSelectedIds,
+    hasCollision:item=>structuralItemCollides(item,layout,activeFloorIndex)||hasCollisions(item,activeFloor.items,layout.width,layout.height,{keepOut,structureValidated:!!layout.backendSceneV2,interiorWalls:layout.backendSceneV2?[]:activeFloor.interiorWalls}),
+    ...(referenceImage.layer?{referenceImage:referenceImage.layer}:{}),
+    canvas:canvasRef,canvas2D:canvas2DRef,scene:sceneRef,renderer:rendererRef,camera:cameraRef,
+    pendingPreview:!!previewCandidate,isInteracting:()=>isDragActive()||!!wallDraft||!!placingId||!!pendingCatalog});
+  const reviewContext=JSON.stringify(referenceImage.layer??null);
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider controller={controller} layout={layout} onApply={onApplyCreative} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+    <CreativeStudioProvider reviewContext={reviewContext} controller={controller} layout={layout} onApply={onApplyCreative} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
@@ -1211,6 +1221,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-header-actions">
             <span className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/>{saveError ? '本地保存失败' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本地验证'}</span>
             <button ref={workspaceEntryRef} type="button" className="sc-button" aria-label="打开活动资料" aria-controls="creative-assistant" onClick={() => { setSidebarCollapsed(false); setLeftMode('business'); setWorkspaceOpenRequest(value => value + 1); }}><ClipboardList size={15}/>活动资料</button>
+            <button ref={reviewEntryRef} type="button" className="sc-button sc-review-button" aria-label="打开方案评审" title="方案评审" onClick={()=>{setSidebarCollapsed(false);setLeftMode('business');setReviewOpenRequest(value=>value+1);}}><FileCheck size={15}/><span>方案评审</span></button>
             <button type="button" className="sc-button sc-screenshot-button" onClick={handleScreenshot} title="导出当前画面"><Camera size={15}/>导出画面</button>
             <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative}/>
           </div>
@@ -1317,7 +1328,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <PlacementHint active={placingId !== null}/>
             <StatusToastHost/>
           </div>
-          <CreativeAssistant docked businessHostRef={businessHostRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+          <CreativeAssistant docked captureReview={captureReview} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} businessHostRef={businessHostRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
         </main>
         <footer className="sc-status-bar"><span><Check size={12}/>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span><span role="status">{saveError ? "本地保存失败，请导出备份" : isSaving ? "正在保存到本机…" : lastSavedAt ? "草稿已保存到本机" : "本地工作台"}</span></footer>
       </div>
