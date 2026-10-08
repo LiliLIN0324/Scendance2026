@@ -1,5 +1,5 @@
 import { layoutForExport } from '../../../lib/layout-export';
-import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from './schema';
+import { MAX_LAYOUT_JSON_BYTES, parseLayoutEventOperations, parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
 const HASH_PREFIX = '#layout=';
@@ -37,7 +37,9 @@ export async function encodeShareUrl(
   origin: string
 ): Promise<EncodeShareUrlResult> {
   const stripped = layout.floorPlanImage !== undefined;
-  const shareable = layoutForExport(layout, true);
+  const checked = parseLayoutEventOperations(layout);
+  if (!checked) throw new Error('制作计划或活动安排无效，请先核对后再分享。');
+  const shareable = layoutForExport(checked, true);
   delete shareable.floorPlanImage;
 
   const json = JSON.stringify(shareable);

@@ -1,7 +1,8 @@
-import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
+import { productionObjectBasis } from '../../../lib/production-plan';
 import { layoutToBackendScene } from './backend-adapter';
 import type { RoomLayout } from './types';
+import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 
 export const HANDOFF_STATUS_LABELS: Record<Handoff['status'] | 'needs_review', string> = {
   todo: '未开始', doing: '进行中', review: '待验收', accepted: '已验收', needs_review: '需复核',
@@ -18,7 +19,9 @@ export async function handoffBasis(layout: RoomLayout, itemId: string, acceptanc
   if (!floor || !item) throw new Error('物件已被移除，请重新打开工作单。');
   const scene = layoutToBackendScene(layout);
   const object = scene.objects.find(entry => entry.id === itemId);
+  const production = productionObjectBasis(layout.productionPlan, itemId);
   const basis = canonical({
+    ...(production ? { production } : {}),
     itemId, type: item.type, materialId: object?.materialId ?? null, assetId: object?.assetId ?? null,
     floorId: floor.id, venue: scene.venue, structure: scene.schemaVersion === 2 ? scene.structure : null,
     size: [item.width, item.depth, item.height], color: item.color,

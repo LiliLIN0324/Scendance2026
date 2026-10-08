@@ -1,6 +1,7 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionTaskBasis } from '../../../lib/production-plan';
 import type { FurnitureItem, RoomLayout } from './types';
 
 export const OPERATION_PHASE_LABELS: Record<EventOperationTask['phase'], string> = {
@@ -26,7 +27,9 @@ function itemBasis(item: FurnitureItem) {
 /** Local physical references also work for text-only tasks and non-exportable venues. */
 export async function operationBasis(layout: RoomLayout, task: EventOperationTask): Promise<string> {
   const all = layout.floors.flatMap(floor => floor.items.map(item => ({ floorId: floor.id, item })));
+  const production = productionTaskBasis(layout.productionPlan, task.id, task.objectIds);
   const basis = canonical({
+    ...(production ? { production } : {}),
     layoutId: layout.id ?? null, dataKind: layout.eventOperations?.dataKind ?? 'unspecified',
     task: { id: task.id, title: task.title.trim(), phase: task.phase,
       plannedStartAt: task.plannedStartAt, plannedEndAt: task.plannedEndAt,

@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
-import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
-import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } from '../lib/scene-delivery';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { createOperation } from '../lib/event-operations';
+import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis } from '../lib/scene-handoff';
-import type { FurnitureItem } from '../lib/types';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
+import type { FurnitureItem } from '../lib/types';
 vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
 let controller:BackendSession;
 const layout=makeLayout({roof:{style:'none'}});
@@ -18,6 +20,45 @@ function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('Binggo scene delivery panel',()=>{
+  it('blocks production export while editing and exports applied records after cancellation independently of model delivery',async()=>{
+    const productionPlan=productionPlanSchema.parse({staffing:[{id:'40000000-0000-4000-8000-000000000001',roleName:'演练布场',headcount:2}]});
+    render(<SceneDeliveryPanel layout={{...workLayout(),scenePreset:'gym',productionPlan}} controller={controller} onUpdateProductionPlan={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
+    fireEvent.click(screen.getByRole('button',{name:'编辑制作计划'}));
+    fireEvent.change(screen.getByLabelText('岗位名称'),{target:{value:'未保存的新岗位'}});
+    expect((screen.getByRole('button',{name:'导出制作交接单 HTML'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'取消编辑'}));
+    fireEvent.click(screen.getByRole('button',{name:'导出制作交接单 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
+    expect(html).toContain('演练布场');expect(html).not.toContain('未保存的新岗位');
+    expect(mime).toBe('text/html;charset=utf-8');expect(name).toContain('内部制作交接');expect(extension).toBe('html');
+    expect(exportDeliveryGlb).not.toHaveBeenCalled();
+  });
+  it('does not offer a production handoff before a plan is saved',()=>{
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateProductionPlan={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
+    expect((screen.getByRole('button',{name:'导出制作交接单 HTML'}) as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('edits production records in the third page through the parent update callback without the model export gate',async()=>{
+    const current={...workLayout(),scenePreset:'gym' as const},update=vi.fn();
+    function Harness():JSX.Element{const [saved,setSaved]=useState(current);return <SceneDeliveryPanel layout={saved} controller={controller} onUpdateProductionPlan={(value:ProductionPlan|undefined)=>{update(value);const {productionPlan:_previous,...base}=saved;setSaved({...base,...(value?{productionPlan:value}:{})});}}/>;}
+    render(<Harness/>);expect(update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));expect(screen.getByRole('tab',{name:'制作计划'}).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button',{name:'创建制作计划'}));expect(update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'添加岗位'}));fireEvent.change(screen.getByLabelText('岗位名称'),{target:{value:'演练布场'}});
+    fireEvent.click(screen.getByRole('button',{name:'保存制作计划'}));
+    await waitFor(()=>expect(update).toHaveBeenCalledOnce());expect(update.mock.calls[0][0].staffing[0]).toMatchObject({roleName:'演练布场',headcount:null});
+    expect(screen.getByRole('form',{name:'制作计划记录'})).toBeDefined();
+    expect((screen.getByRole('button',{name:'导出场景 GLB'}) as HTMLButtonElement).disabled).toBe(true);expect(exportDeliveryGlb).not.toHaveBeenCalled();
+  });
+  it('keeps the production page read-only for a cloud-bound project or a missing parent callback',()=>{
+    const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001'},update=vi.fn();window.history.replaceState({},'',`/?project=${current.id}`);
+    const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateProductionPlan={update}/>);fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
+    expect((screen.getByRole('button',{name:'创建制作计划'}) as HTMLButtonElement).disabled).toBe(true);expect(update).not.toHaveBeenCalled();
+    window.history.replaceState({},'', '/');view.rerender(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    expect((screen.getByRole('button',{name:'创建制作计划'}) as HTMLButtonElement).disabled).toBe(true);
+  });
   it('keeps backup in the existing delivery area and permits a full template backup without the model export gate', async () => {
     const prepareBackup=vi.fn().mockResolvedValue('{"format":"scendance-local-project-backup"}');
     const backupActions={prepareBackup,restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};

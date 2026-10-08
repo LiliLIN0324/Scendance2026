@@ -331,7 +331,7 @@ export async function exportDeliveryGlb(layout: RoomLayout, controller?: Backend
   } finally { disposeOwnedModel(scene); if(loaded)disposeOwnedModel(loaded); }
 }
 
-export function downloadSceneDelivery(data: BlobPart, type: string, name: string, extension: 'glb'|'json'|'csv'): void {
+export function downloadSceneDelivery(data: BlobPart, type: string, name: string, extension: 'glb'|'json'|'csv'|'html'): void {
   const url = URL.createObjectURL(new Blob([data],{type}));
   const anchor = document.createElement('a');
   anchor.href=url;anchor.download=`${(name||'Scendance').replace(/[\\/:*?"<>|\s]+/g,'_')}.${extension}`;

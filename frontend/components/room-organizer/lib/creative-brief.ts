@@ -1,3 +1,4 @@
+import { preserveCurrentActivity } from '../../../lib/production-plan';
 import type { RoomLayout } from './types';
 
 export interface CreativeBrief {
@@ -76,6 +77,7 @@ export function proposalSummary(before: RoomLayout, after: RoomLayout): { added:
 
 /** Preserve presentation metadata absent from the v1 wire scene when applying a proposal. */
 export function mergeProposalPresentation(base: RoomLayout, candidate: RoomLayout): RoomLayout {
+  candidate = preserveCurrentActivity(base, candidate);
   const previous = base.floors[0];
   const next = candidate.floors[0];
   if (!previous || !next) return candidate;
@@ -85,7 +87,7 @@ export function mergeProposalPresentation(base: RoomLayout, candidate: RoomLayou
     items: next.items.map(item => {
       const old = existing.get(item.id);
       return old && old.type === item.type && old.assetId === item.assetId
-        ? { ...item, name: old.name, icon: old.icon, ...(old.groupId ? { groupId: old.groupId } : {}) }
+          ? { ...item, name: old.name, icon: old.icon, ...(old.groupId ? { groupId: old.groupId } : {}) }
         : item;
     }),
   }] };

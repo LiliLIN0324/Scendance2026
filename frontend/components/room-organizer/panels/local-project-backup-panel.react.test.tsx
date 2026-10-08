@@ -7,6 +7,7 @@ import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixture
 import { downloadSceneDelivery } from '../lib/scene-delivery';
 import { createOperation } from '../lib/event-operations';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { RoomLayout } from '../lib/types';
 import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
@@ -41,6 +42,22 @@ beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.mocked(downloadSceneDe
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('local scene and activity backup', () => {
+  it('shows V1 provenance and warns before replacing a current production plan with an older file',async()=>{
+    const {actions,view}=setup();
+    const current={...layout,productionPlan:productionPlanSchema.parse({})};
+    view.rerender(<LocalProjectBackupPanel layout={current} briefState={briefState} actions={actions}/>);
+    const older=JSON.parse(fileText());older.version=1;delete older.coverage.productionPlan;
+    select(file(JSON.stringify(older)));await screen.findByText('完整项目备份 V1');
+    expect(screen.getByText('当前方案未记录制作计划')).toBeTruthy();
+    expect(screen.getByText(/恢复后当前制作计划将清除/)).toBeTruthy();
+    expect(actions.restoreBackup).not.toHaveBeenCalled();
+  });
+  it('shows production rows from a V2 file before confirming',async()=>{
+    const {actions}=setup();const plan=productionPlanSchema.parse({staffing:[{id:'70000000-0000-4000-8000-000000000001',roleName:'签到'}]});
+    select(file(fileText({...layout,productionPlan:plan})));await screen.findByText('完整项目备份 V2');
+    expect(screen.getByText('1 项岗位需求 · 0 项物料取得 · 0 项人工估算')).toBeTruthy();
+    expect(actions.restoreBackup).not.toHaveBeenCalled();
+  });
   it('prechecks the selected file without replacing anything, cancels, then explicitly confirms and awaits verified saving', async () => {
     const pending = deferred<void>(); const { actions } = setup({ restoreBackup: vi.fn(() => pending.promise) });
     const target = { ...layout, name: 'A-文件布局', floors: [makeFloor({ items: [makeItem()] })],
@@ -85,7 +102,7 @@ describe('local scene and activity backup', () => {
 
   it.each([
     ['坏 JSON', '{broken', undefined, '有效的 JSON'],
-    ['未知版本', JSON.stringify({ format: 'scendance-local-project-backup', version: 2 }), undefined, '版本'],
+    ['未知版本', JSON.stringify({ format: 'scendance-local-project-backup', version: 99 }), undefined, '版本'],
     ['交付封套', JSON.stringify({ format: 'scendance-scene-delivery' }), undefined, '这是交付文件'],
     ['过大文件', '{}', MAX_LOCAL_PROJECT_BACKUP_BYTES + 1, '8 MiB'],
   ] as const)('rejects %s before offering replacement', async (_label, text, size, message) => {

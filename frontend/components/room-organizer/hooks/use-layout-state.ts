@@ -1,6 +1,5 @@
 'use client';
 
-import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import {
   INITIAL_GROUND_FLOOR,
   INITIAL_LAYOUT,
@@ -12,6 +11,8 @@ import {
   useLayout,
   useLayoutActions,
 } from './use-layout-store';
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { DormerInput, DormerPatch } from '../lib/dormers';
 import type {
   CatalogItem,
@@ -41,6 +42,7 @@ export { INITIAL_LAYOUT };
 // ---------------------------------------------------------------------------
 
 export interface LayoutActions {
+  setProductionPlan(value: ProductionPlan | undefined): void;
   setEventOperations(value: EventOperations | undefined): void;
   setName(name: string): void;
   setWidth(width: number): void;

@@ -1,14 +1,15 @@
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
 import { withHouseId } from '../components/room-organizer/lib/ids';
 import { backupStoredLayout, localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../components/room-organizer/lib/persistence';
-import { parseStoredLayout } from '../components/room-organizer/lib/schema';
+import { createLocalProjectBackup } from './local-project-backup';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 /** File validation is separate from applying an AI suggestion or inheriting a design book. */
 export function prepareLocalRestoreLayout(layout: RoomLayout): RoomLayout {
-  const parsed = parseStoredLayout(layout);
-  if (!parsed) throw new Error('备份布局无法完整读取，当前项目未改变。');
-  return withHouseId(parsed);
+  // Reuse full V2 validation before assigning an identity or touching either storage domain.
+  return withHouseId(createLocalProjectBackup(layout, {
+    state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },
+  }).layout);
 }
 
 function matches(left: RoomLayout | null, right: RoomLayout): boolean {
@@ -22,6 +23,9 @@ export function commitLocalRestoreLayout(layout: RoomLayout, access: {
   beforeReplace?(): void;
 }, storage: Storage | null = localStorageOrNull()): string {
   if (!storage) throw new Error('本机布局存储不可用，恢复未完成。');
+  const candidate = createLocalProjectBackup(layout, {
+    state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },
+  }).layout;
   const previous = access.current();
   let oldRaw: string | null;
   try { oldRaw = storage.getItem(STORAGE_KEY); }
@@ -29,16 +33,16 @@ export function commitLocalRestoreLayout(layout: RoomLayout, access: {
   if (oldRaw !== null && parseLayoutJson(oldRaw) === null && !backupStoredLayout(storage)) {
     throw new Error('原本机布局无法读取且尚未保全，已停止替换。');
   }
-  const json = JSON.stringify(layout);
+  const json = JSON.stringify(candidate);
   try {
     // Do not evict older recovery copies to force a file restore into a full store.
     storage.setItem(STORAGE_KEY, json);
-    if (!matches(parseLayoutJson(storage.getItem(STORAGE_KEY) ?? ''), layout)) {
+    if (!matches(parseLayoutJson(storage.getItem(STORAGE_KEY) ?? ''), candidate)) {
       throw new Error('布局保存后核对不一致，恢复未完成。');
     }
     access.beforeReplace?.();
-    access.apply(layout);
-    if (!matches(access.current(), layout)) throw new Error('布局替换未被接受，恢复未完成。');
+    access.apply(candidate);
+    if (!matches(access.current(), candidate)) throw new Error('布局替换未被接受，恢复未完成。');
     return json;
   } catch (caught) {
     const failures: string[] = [];
