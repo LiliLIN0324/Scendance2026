@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { clearGlbAssetCache, disposeOwnedModel, ensureGlbAsset } from '../three/glb-assets';
 import { backendSceneToLayout, createMeasuredRoomLayout } from './backend-adapter';
-import { assembleDeliveryScene, deliveryMaterials, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, verifyDeliveryReload } from './scene-delivery';
+import { assembleDeliveryScene, deliveryMaterials, deliveryOperations, eventOperationsCsv, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, verifyDeliveryReload } from './scene-delivery';
 import type { Scene } from '@/lib/backend-session';
 
 const chairId='10000000-0000-4000-8000-000000000001';
@@ -24,6 +26,17 @@ async function load(assetId=chairId) {
 afterEach(()=>{clearGlbAssetCache();vi.restoreAllMocks();});
 
 describe('scene delivery',()=>{
+  it('carries missing production-linked object diagnostics into the task CSV and scene JSON without inventing direct references',async()=>{
+    const current=layout(),taskId=objectId(200),missingId=objectId(201);
+    current.eventOperations=eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:taskId,title:'演练：清点租赁椅',phase:'setup',evidenceNote:'演练短缺，尚待处理'}]});
+    current.productionPlan=productionPlanSchema.parse({acquisitions:[{id:objectId(202),title:'演练租赁计划',taskIds:[taskId],objectIds:[missingId]}]});
+    expect((await deliveryOperations(current))!.tasks[0]).toMatchObject({objectIds:[],missingObjectIds:[],missingProductionObjectIds:[missingId],effectiveStatus:'needs_review'});
+    const exported=JSON.parse(await sceneDeliveryJson(current));
+    expect(exported.operations.tasks[0].missingProductionObjectIds).toEqual([missingId]);
+    const csv=await eventOperationsCsv(current);
+    expect(csv).toContain('"制作计划缺失物件编号"');expect(csv).toContain(`"","${missingId}",""`);expect(csv).toContain('演练短缺，尚待处理');
+    expect(current.eventOperations.tasks[0].objectIds).toEqual([]);
+  });
   it('groups material quantities by immutable asset version, dimensions and visual color without inventing prices',()=>{
     const current=layout([...Array.from({length:10},(_,i)=>object(i)),object(10,variantId),object(11,variantId)]);
     current.floors[0].items[10].source='generated';current.floors[0].items[11].source='generated';

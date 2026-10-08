@@ -7,7 +7,7 @@ import { createOperation, operationBasis, operationReview } from '../components/
 import { assertNoLocalHandoffCloudTransition, hasLocalHandoff } from '../components/room-organizer/lib/handoff-cloud-guard';
 import { handoffBasis, effectiveHandoffStatus } from '../components/room-organizer/lib/scene-handoff';
 import { addDesign, switchDesign } from '../components/room-organizer/lib/scene-layers';
-import { formatMoneyMinor, parseMoneyMinor, preserveCurrentActivity, productionObjectBasis, productionTaskBasis } from './production-plan';
+import { formatMoneyMinor, parseMoneyMinor, preserveCurrentActivity, productionObjectBasis, productionTaskBasis, productionTaskObjectIds } from './production-plan';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -29,6 +29,18 @@ describe('exact manual estimate inputs',()=>{
 });
 
 describe('production changes and local activity facts',()=>{
+ it('expands only explicit task-linked acquisitions, preserves original references, and deduplicates UUID aliases',()=>{
+  const taskId='abcdef00-0000-4000-8000-000000000005',object='abcdef00-0000-4000-8000-000000000002';
+  const value=productionPlanSchema.parse({acquisitions:[
+    {id:id(20),title:'演练取得A',taskIds:[taskId.toUpperCase()],objectIds:[object.toUpperCase(),'legacy-X']},
+    {id:id(21),title:'演练取得B',taskIds:[taskId],objectIds:[object,'legacy-x']},
+    {id:id(22),title:'相同标题不关联',objectIds:['not-task-linked']},
+    {id:id(23),title:'另一任务',taskIds:[id(6)],objectIds:['other-task-object']},
+  ],estimates:[{id:id(24),title:'估算不扩大现场范围',taskIds:[taskId],objectIds:['estimate-only']}]});
+  const original=structuredClone(value);
+  expect(productionTaskObjectIds(value,taskId)).toEqual([object.toUpperCase(),'legacy-X','legacy-x']);
+  expect(productionTaskObjectIds(undefined,taskId)).toEqual([]);expect(value).toEqual(original);
+ });
  it('updates the sole layout action and preserves absence instead of creating an empty block',()=>{
   const store=createLayoutStore({layout:venue(),activeFloorIndex:0});expect(store.getState().layout).not.toHaveProperty('productionPlan');
   store.getState().actions.setProductionPlan(plan());expect(store.getState().layout.productionPlan).toEqual(plan());

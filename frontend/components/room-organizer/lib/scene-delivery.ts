@@ -75,6 +75,7 @@ export async function deliveryExecution(layout: RoomLayout): Promise<DeliveryExe
 
 export interface DeliveryOperation extends Omit<EventOperationTask, 'reviewedBasis'> {
   effectiveStatus: EventOperationTask['status'] | 'needs_review'; missingObjectIds: string[];
+  ambiguousObjectIds?: string[]; missingProductionObjectIds?: string[]; ambiguousProductionObjectIds?: string[];
 }
 export async function deliveryOperations(layout: RoomLayout): Promise<{
   schemaVersion: 1; dataKind: 'unspecified' | 'rehearsal' | 'real'; tasks: DeliveryOperation[];
@@ -84,7 +85,11 @@ export async function deliveryOperations(layout: RoomLayout): Promise<{
   return { schemaVersion: 1, dataKind: operations.dataKind, tasks: await Promise.all(operations.tasks.map(async task => {
     const { reviewedBasis: _localBasis, ...fields } = task;
     const review = await operationReview(layout, task);
-    return { ...fields, effectiveStatus: review.status, missingObjectIds: review.missingObjectIds };
+    return { ...fields, effectiveStatus: review.status, missingObjectIds: review.missingObjectIds,
+      ...(review.ambiguousObjectIds?.length ? { ambiguousObjectIds: review.ambiguousObjectIds } : {}),
+      ...(review.missingProductionObjectIds?.length ? { missingProductionObjectIds: review.missingProductionObjectIds } : {}),
+      ...(review.ambiguousProductionObjectIds?.length ? { ambiguousProductionObjectIds: review.ambiguousProductionObjectIds } : {}),
+    };
   })) };
 }
 
@@ -123,11 +128,12 @@ export async function sceneExecutionCsv(layout: RoomLayout, snapshot?: DeliveryS
 export async function eventOperationsCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
   const kinds = { unspecified: '未标注', rehearsal: '演练', real: '真实' };
   const operations = await deliveryOperations(layout);
-  const rows: unknown[][] = [['任务编号','任务标题','阶段','负责人','承接团队','计划开始','计划结束','实际开始','实际结束','完成条件','记录状态','有效状态','关联物件编号','缺失物件编号','现场核对说明','证据链接','资料类型','界面输入时区','交付编号','生成时间','场景名称','本地项目编号']];
+  const rows: unknown[][] = [['任务编号','任务标题','阶段','负责人','承接团队','计划开始','计划结束','实际开始','实际结束','完成条件','记录状态','有效状态','关联物件编号','缺失物件编号','现场核对说明','证据链接','资料类型','界面输入时区','交付编号','生成时间','场景名称','本地项目编号','歧义物件编号','制作计划缺失物件编号','制作计划歧义物件编号']];
   for (const task of operations?.tasks ?? []) rows.push([task.id,task.title,OPERATION_PHASE_LABELS[task.phase],task.ownerName,
     task.contractorName,task.plannedStartAt,task.plannedEndAt,task.actualStartedAt,task.actualFinishedAt,task.acceptance,
     OPERATION_STATUS_LABELS[task.status],OPERATION_STATUS_LABELS[task.effectiveStatus],task.objectIds.join(';'),task.missingObjectIds.join(';'),
-    task.evidenceNote,task.evidenceUrls.join('\n'),kinds[operations!.dataKind],'Asia/Shanghai',snapshot?.id,snapshot?.generatedAt,layout.name,layout.id]);
+    task.evidenceNote,task.evidenceUrls.join('\n'),kinds[operations!.dataKind],'Asia/Shanghai',snapshot?.id,snapshot?.generatedAt,layout.name,layout.id,
+    task.ambiguousObjectIds?.join(';'),task.missingProductionObjectIds?.join(';'),task.ambiguousProductionObjectIds?.join(';')]);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 

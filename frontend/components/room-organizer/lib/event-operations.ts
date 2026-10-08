@@ -1,7 +1,7 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { productionTaskBasis } from '../../../lib/production-plan';
+import { productionReferenceKey, productionTaskBasis, productionTaskObjectIds } from '../../../lib/production-plan';
 import type { FurnitureItem, RoomLayout } from './types';
 
 export const OPERATION_PHASE_LABELS: Record<EventOperationTask['phase'], string> = {
@@ -24,9 +24,39 @@ function itemBasis(item: FurnitureItem) {
     cameraBracket: item.cameraBracket ?? false, wallRotation: item.wallRotation ?? null };
 }
 
+export interface OperationObjectReview {
+  missingObjectIds: string[];
+  ambiguousObjectIds: string[];
+  missingProductionObjectIds: string[];
+  ambiguousProductionObjectIds: string[];
+}
+function operationObjectScope(layout: RoomLayout, task: EventOperationTask) {
+  const objects = new Map<string,{floorId:string;item:FurnitureItem}[]>();
+  for (const floor of layout.floors) for (const item of floor.items) {
+    const id = productionReferenceKey(item.id);
+    objects.set(id,[...(objects.get(id)??[]),{floorId:floor.id,item}]);
+  }
+  const productionIds = productionTaskObjectIds(layout.productionPlan,task.id);
+  const unique = (ids:readonly string[]) => [...new Map(ids.map(id=>[productionReferenceKey(id),id])).values()];
+  const directIds = unique(task.objectIds);
+  const count = (id:string) => objects.get(productionReferenceKey(id))?.length??0;
+  const review:OperationObjectReview = {
+    missingObjectIds:directIds.filter(id=>count(id)===0),
+    ambiguousObjectIds:directIds.filter(id=>count(id)>1),
+    missingProductionObjectIds:productionIds.filter(id=>count(id)===0),
+    ambiguousProductionObjectIds:productionIds.filter(id=>count(id)>1),
+  };
+  return {objects,ids:unique([...directIds,...productionIds]),review};
+}
+
+/** The same reference diagnostics gate confirmation and explain which source needs correction. */
+export function operationObjectReview(layout: RoomLayout, task: EventOperationTask): OperationObjectReview {
+  return operationObjectScope(layout,task).review;
+}
+
 /** Local physical references also work for text-only tasks and non-exportable venues. */
 export async function operationBasis(layout: RoomLayout, task: EventOperationTask): Promise<string> {
-  const all = layout.floors.flatMap(floor => floor.items.map(item => ({ floorId: floor.id, item })));
+  const scope = operationObjectScope(layout,task);
   const production = productionTaskBasis(layout.productionPlan, task.id, task.objectIds);
   const basis = canonical({
     ...(production ? { production } : {}),
@@ -42,9 +72,11 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
         floorColor: floor.floorColor, floorPattern: floor.floorPattern ?? 'solid',
         walls: floor.interiorWalls ?? [],
         fixtures: floor.items.filter(item => item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId).map(itemBasis) })) },
-    objects: [...task.objectIds].sort().map(id => {
-      const found = all.find(entry => entry.item.id === id);
-      return found ? { floorId: found.floorId, ...itemBasis(found.item) } : { id, missing: true };
+    objects: [...scope.ids].sort().map(id => {
+      const found = scope.objects.get(productionReferenceKey(id));
+      if (!found?.length) return {id,missing:true};
+      if (found.length!==1) return {id,ambiguous:true,count:found.length};
+      return { floorId: found[0].floorId, ...itemBasis(found[0].item) };
     }),
   });
   if (!globalThis.crypto?.subtle) throw new Error('请使用安全连接或本机浏览器核对活动安排。');
@@ -54,12 +86,16 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
 
 export async function operationReview(layout: RoomLayout, task: EventOperationTask): Promise<{
   status: EventOperationTask['status'] | 'needs_review'; missingObjectIds: string[];
+  ambiguousObjectIds?:string[]; missingProductionObjectIds?:string[]; ambiguousProductionObjectIds?:string[];
 }> {
-  const ids = new Set(layout.floors.flatMap(floor => floor.items.map(item => item.id)));
-  const missingObjectIds = task.objectIds.filter(id => !ids.has(id));
+  const review = operationObjectReview(layout,task);
   const previousReview = task.status === 'accepted' || task.status === 'review' && !!task.reviewedBasis;
-  const needsReview = !!missingObjectIds.length || previousReview && task.reviewedBasis !== await operationBasis(layout, task);
-  return { status: needsReview ? 'needs_review' : task.status, missingObjectIds };
+  const needsReview = Object.values(review).some(ids=>ids.length>0) || previousReview && task.reviewedBasis !== await operationBasis(layout, task);
+  return { status: needsReview ? 'needs_review' : task.status, missingObjectIds:review.missingObjectIds,
+    ...(review.ambiguousObjectIds.length?{ambiguousObjectIds:review.ambiguousObjectIds}:{}),
+    ...(review.missingProductionObjectIds.length?{missingProductionObjectIds:review.missingProductionObjectIds}:{}),
+    ...(review.ambiguousProductionObjectIds.length?{ambiguousProductionObjectIds:review.ambiguousProductionObjectIds}:{}),
+  };
 }
 
 export function createOperation(title: string, phase: EventOperationTask['phase']): EventOperationTask {

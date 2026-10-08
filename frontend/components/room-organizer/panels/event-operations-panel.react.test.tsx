@@ -4,12 +4,13 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
 import { eventOperationsSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
+import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { createOperation, operationBasis } from '../lib/event-operations';
 import { parseLayoutEventOperations } from '../lib/schema';
-import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
-import type { RoomLayout } from '../lib/types';
 import { EventOperationsPanel } from './event-operations-panel';
+import type { RoomLayout } from '../lib/types';
 
 beforeEach(() => vi.stubGlobal('crypto', webcrypto));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -45,6 +46,68 @@ function openAdd(): HTMLDetailsElement {
 }
 
 describe('activity operations in the delivery panel', () => {
+  it.each([
+    ['accepted','missing',false],['review','ambiguous',false],['accepted','missing',true],['review','ambiguous',true],
+  ] as const)('blocks %s confirmation for %s production-only objects (reconfirm=%s)', async (target, problem, reconfirm) => {
+    const task={...createOperation('制作物料核对','setup'),ownerName:'现场组',acceptance:'核对租赁椅到场',evidenceNote:'原核对说明',actualStartedAt:'2026-10-09T01:00:00.123Z',actualFinishedAt:'2026-10-09T10:00:00.456+09:00',
+      ...(reconfirm?{status:target,reviewedBasis:`sha256:${'0'.repeat(64)}`}:{})};
+    const layout=taskLayout(task);
+    layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:crypto.randomUUID(),title:'租赁签到椅',taskIds:[task.id],objectIds:[itemId],method:'rental'}]});
+    if(problem==='ambiguous')layout.floors=[makeFloor({items:[makeItem({id:itemId,name:'签到椅'}),makeItem({id:itemId,name:'另一把椅'})]})];
+    const ui=livePanel(layout);openTask('制作物料核对');await settled();
+    if(!reconfirm)fireEvent.change(screen.getByLabelText('任务状态'),{target:{value:target}});
+    const action=reconfirm?(target==='accepted'?'重新确认完成':'重新提交核对'):(target==='accepted'?'确认完成':'提交核对');
+    const button=screen.getByRole('button',{name:action});
+    if(!(button as HTMLButtonElement).disabled)fireEvent.click(button);
+    await waitFor(()=>expect((button as HTMLButtonElement).disabled||screen.queryByRole('alert')!==null||ui.updates.mock.calls.length>0).toBe(true));
+    expect(ui.updates).not.toHaveBeenCalled();
+    expect(ui.layout.eventOperations!.tasks[0]).toMatchObject({id:task.id,objectIds:[],evidenceNote:task.evidenceNote,actualStartedAt:task.actualStartedAt,actualFinishedAt:task.actualFinishedAt});
+    expect(screen.getAllByText(/制作计划.*核对/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText(/已移除的关联物料/)).toBeNull();
+  });
+  it('reviews production-only physical changes, preserves the old basis on ordinary save, and blocks unchanged accepted save after removal',async()=>{
+    const task={...createOperation('租椅现场核对','setup'),status:'accepted' as const,reviewedBasis:`sha256:${'0'.repeat(64)}`,ownerName:'现场组',acceptance:'核对椅子摆放',evidenceNote:'原现场说明',actualStartedAt:'2026-10-09T01:00:00.123Z',actualFinishedAt:'2026-10-09T11:00:00.456+09:00'};
+    const layout=taskLayout(task,true);layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:crypto.randomUUID(),title:'租赁椅',taskIds:[task.id.toUpperCase()],objectIds:[itemId]}]});
+    layout.eventOperations!.tasks[0].reviewedBasis=await operationBasis(layout,task);const oldBasis=layout.eventOperations!.tasks[0].reviewedBasis;
+    const ui=livePanel(layout);openTask(task.title);await settled();
+    ui.replace({...ui.layout,floors:[makeFloor({items:[makeItem({id:itemId,name:'签到椅',position:{x:1,z:0}})]})]});await settled();
+    expect(screen.getByText('需复核')).toBeDefined();fireEvent.click(screen.getByRole('button',{name:'保存任务'}));
+    await waitFor(()=>expect(ui.updates).toHaveBeenCalledOnce());expect(ui.layout.eventOperations!.tasks[0].reviewedBasis).toBe(oldBasis);
+    fireEvent.click(await screen.findByRole('button',{name:'重新确认完成'}));await waitFor(()=>expect(ui.updates).toHaveBeenCalledTimes(2));
+    expect(ui.layout.eventOperations!.tasks[0].reviewedBasis).not.toBe(oldBasis);
+    ui.replace({...ui.layout,floors:[makeFloor({items:[makeItem({id:'replacement-chair',name:'签到椅'})]})]});await settled();
+    ui.updates.mockClear();fireEvent.click(screen.getByRole('button',{name:'保存任务'}));await screen.findByRole('alert');
+    expect(ui.updates).not.toHaveBeenCalled();expect(screen.getByRole('alert').textContent).toContain('制作计划');
+    expect(ui.layout.eventOperations!.tasks[0]).toMatchObject({id:task.id,objectIds:[],evidenceNote:task.evidenceNote,actualStartedAt:task.actualStartedAt,actualFinishedAt:task.actualFinishedAt});
+    expect(ui.layout.productionPlan!.acquisitions[0].objectIds).toEqual([itemId]);
+  });
+  it.each([
+    ['uuid','ab000000-0000-4000-8000-000000000001','AB000000-0000-4000-8000-000000000001',true],
+    ['opaque','Chair-Case','CHAIR-CASE',false],
+  ] as const)('matches direct %s identities without rewriting their original spelling',async(_kind,physicalId,referenceId,matches)=>{
+    const task={...createOperation('直接物料核对','setup'),objectIds:[referenceId]};
+    const ui=livePanel(makeLayout({floors:[makeFloor({items:[makeItem({id:physicalId,name:'核对椅'})]})],eventOperations:eventOperationsSchema.parse({tasks:[task]})}));openTask(task.title);await settled();
+    expect((screen.getByLabelText(/核对椅 · 1/,{selector:'input'}) as HTMLInputElement).checked).toBe(matches);
+    if(matches){
+      expect(screen.queryByLabelText('已移除的关联物料 · 1')).toBeNull();fireEvent.click(screen.getByRole('button',{name:'保存任务'}));
+      await waitFor(()=>expect(ui.updates).toHaveBeenCalledOnce());expect(ui.layout.eventOperations!.tasks[0].objectIds).toEqual([referenceId]);ui.updates.mockClear();
+      fireEvent.click(screen.getByLabelText(/核对椅 · 1/,{selector:'input'}));
+    }
+    else fireEvent.click(screen.getByLabelText('已移除的关联物料 · 1'));
+    fireEvent.click(screen.getByRole('button',{name:'保存任务'}));await waitFor(()=>expect(ui.updates).toHaveBeenCalledOnce());
+    expect(ui.layout.eventOperations!.tasks[0].objectIds).toEqual([]);
+  });
+  it('saves planning status with unresolved production refs and canceling the same direct object still cannot confirm completion',async()=>{
+    const task={...createOperation('待安排运输','preparation'),objectIds:[itemId],ownerName:'运输组',acceptance:'核对椅子到场',evidenceNote:'原记录',actualStartedAt:'2026-10-09T01:00:00.123Z'};
+    const layout=taskLayout(task);layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:crypto.randomUUID(),title:'运输计划',taskIds:[task.id],objectIds:[itemId]}]});const plan=layout.productionPlan;
+    const ui=livePanel(layout);openTask(task.title);await settled();fireEvent.click(screen.getByLabelText('已移除的关联物料 · 1'));
+    expect(screen.queryByLabelText(/已移除的关联物料/)).toBeNull();fireEvent.click(screen.getByRole('button',{name:'保存任务'}));
+    await waitFor(()=>expect(ui.updates).toHaveBeenCalledOnce());expect(ui.layout.eventOperations!.tasks[0]).toMatchObject({id:task.id,status:'todo',objectIds:[],evidenceNote:task.evidenceNote,actualStartedAt:task.actualStartedAt});
+    expect(ui.layout.productionPlan).toBe(plan);expect(ui.layout.productionPlan!.acquisitions[0].objectIds).toEqual([itemId]);
+    ui.updates.mockClear();fireEvent.change(screen.getByLabelText('任务状态'),{target:{value:'accepted'}});fireEvent.click(screen.getByRole('button',{name:'确认完成'}));
+    await screen.findByRole('alert');expect(ui.updates).not.toHaveBeenCalled();expect(screen.getByRole('alert').textContent).toContain('制作计划');
+    expect(ui.layout.productionPlan).toBe(plan);expect(ui.layout.productionPlan!.acquisitions[0].objectIds).toEqual([itemId]);
+  });
   it('puts all six rehearsal task summaries before the folded creation form and requirement details', async () => {
     const layout = makeLayout({ eventOperations: eventOperationsSchema.parse(rehearsalExample) });
     render(<EventOperationsPanel layout={layout} disabled={false} onUpdate={vi.fn()} onOpenBrief={vi.fn()} briefState={{ brief: { ...INITIAL_BRIEF, description: '已保存的完整需求说明' }, ready: true, error: null, hasSavedBrief: true }}/>);
