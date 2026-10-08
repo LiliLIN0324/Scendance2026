@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { applyWallDisplay } from './room-builder';
+import { describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
+import { applyWallDisplay, buildRoom, type RoomBuilderOptions } from './room-builder';
 import type * as ThreeNS from 'three';
 
 /**
@@ -23,6 +24,36 @@ const interior = (wallId: string, visible = true): FakeObject => ({ visible, use
 const outline = (ownerTag: string, wallId: string, visible = true): FakeObject => ({
   visible,
   userData: { type: 'wall-selection', ownerTag, wallId },
+});
+
+it('hides only the tracing material and retains the image-dependent shell', () => {
+  const load = vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation(() => new THREE.Texture());
+  const options = (scene: THREE.Scene, showFloorPlan: boolean): RoomBuilderOptions => ({
+    scene, width: 8, depth: 6, floorColor: '#c9a57d', floorPlanImage: 'data:image/png;base64,REFERENCE',
+    floorPlanOpacity: 0.4, floorPlanFitMode: 'stretch', floorPlan3DEffect: false, showFloorPlan,
+  });
+  try {
+    const shown = new THREE.Scene(), hidden = new THREE.Scene(), zero = new THREE.Scene();
+    buildRoom(THREE, options(shown, true));
+    buildRoom(THREE, options(hidden, false));
+    buildRoom(THREE, { ...options(zero, true), floorPlanOpacity: 0 });
+    expect(shown.children.map(c => c.userData.type)).toEqual(hidden.children.map(c => c.userData.type));
+    expect(zero.children.map(c => c.userData.type)).toEqual(hidden.children.map(c => c.userData.type));
+    // The old image suppresses walls and a foundation; hiding must not add either.
+    expect(hidden.children).toHaveLength(1);
+    const shownMaterial = (shown.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const hiddenMaterial = (hidden.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    expect(shownMaterial.map).not.toBeNull();
+    expect(hiddenMaterial.map).toBeNull();
+    expect(hiddenMaterial.transparent).toBe(false);
+    expect(hiddenMaterial.opacity).toBe(1);
+    expect(hiddenMaterial.color.getHexString()).toBe('c9a57d');
+    const zeroMaterial = (zero.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    expect(zeroMaterial.map).toBeNull();
+    expect(zeroMaterial.transparent).toBe(false); expect(zeroMaterial.opacity).toBe(1);
+    expect(zeroMaterial.color.getHexString()).toBe('c9a57d');
+    expect(load).toHaveBeenCalledTimes(1);
+  } finally { load.mockRestore(); }
 });
 
 describe('applyWallDisplay', () => {

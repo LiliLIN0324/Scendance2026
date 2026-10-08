@@ -1,0 +1,15 @@
+.sc-project-review { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--sc-line, #d9dfd4); font-size: 12px; color: var(--sc-text, #263f2c); }
+.sc-project-review h3 { margin: 0 0 8px; font-size: 14px; }
+.sc-project-review-fields { display: grid; gap: 10px; min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--sc-line, #d9dfd4); border-radius: 8px; }
+.sc-project-review-fields legend { padding: 0 5px; font-weight: 600; }
+.sc-project-review .sc-field { display: grid; gap: 6px; }
+.sc-project-review textarea { resize: vertical; min-height: 70px; width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--sc-line, #d9dfd4); border-radius: 6px; color: inherit; background: var(--sc-surface, #fff); font: inherit; line-height: 1.6; }
+.sc-project-review-option { display: flex; align-items: flex-start; gap: 7px; line-height: 1.6; }
+.sc-project-review-option input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--sc-accent, #44684f); }
+.sc-project-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.sc-project-review-warning { color: #835a16; line-height: 1.6; }
+.sc-project-review-image { margin: 12px 0; padding: 10px; border: 1px solid var(--sc-line, #d9dfd4); border-radius: 8px; }
+.sc-project-review-image img { display: block; max-width: 100%; max-height: 280px; height: auto; margin: 0 auto; object-fit: contain; }
+.sc-project-review-image figcaption { margin: 8px 0; color: var(--sc-muted, #626c64); }
+.sc-project-review-preview { display: block; width: 100%; height: 560px; box-sizing: border-box; margin: 12px 0; border: 1px solid var(--sc-line, #d9dfd4); border-radius: 8px; background: white; }
+.sc-project-review :is(input, textarea, button):focus-visible { outline: 2px solid var(--sc-accent, #44684f); outline-offset: 3px; }

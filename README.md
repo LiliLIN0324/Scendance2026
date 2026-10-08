@@ -2,6 +2,8 @@
 
 面向活动策划团队的三维场景布置与协作网站。主工作台采用 Next.js 静态导出和 Three.js，账号、项目、模型资产与 AI 接口由 Supabase 提供。
 
+**本分支同时合并了交付与执行工作台（来自 `codex/delivery-research-20261007`）**：本地活动安排、逐件物料工作单、变更复核、客户评审、制作计划、内部交接导出、场景助手停靠与场地人工修正。进度与验证边界见 [2026-10-09 开发检查点](docs/DELIVERY-PROGRESS-2026-10-09.md)、[场地编辑与客户评审](docs/DELIVERY-PROGRESS-2026-10-08.md)。
+
 - 在线工作台：<https://scendance-scene-planner-ewz.pages.dev/>
 - 本地体验入口：<https://scendance-scene-planner-ewz.pages.dev/?local=1>
 - 产品介绍：<https://scendance-scene-planner-ewz.pages.dev/introduction>
@@ -13,7 +15,7 @@
 
 ## 本份代码对应什么版本
 
-本仓库已从最初的专用 Supabase 项目迁移到自有部署：前端由 Cloudflare Pages 通过 GitHub 集成构建，后端由自己的 Supabase 项目承载。旧项目的 URL、密钥与数据不再被本仓库引用，相关历史记录见 [docs/archive/](docs/archive/)。
+本仓库已从最初的专用 Supabase 项目迁移到自有部署：前端由 Cloudflare Pages 通过 GitHub 集成构建，后端由自己的 Supabase 项目承载。旧项目的 URL、密钥与数据不再被本仓库引用，相关历史记录见 [docs/archive/](docs/archive/)。交付与执行工作台的功能来自 `codex/delivery-research-20261007`（合并基点 `d139da7`），其开发检查点文档一并收录在 [docs/](docs/) 下。
 
 | 发布面 | 当前配置 |
 |---|---|

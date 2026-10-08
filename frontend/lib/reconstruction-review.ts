@@ -12,12 +12,31 @@ export function updateReviewedWall(scene: SceneV2, id: string, patch: Partial<Sc
   return {...scene,venue:movedBoundary?{...scene.venue,shape:'polygon',polygon,width:Math.max(...polygon.map(p=>p.x)),depth:Math.max(...polygon.map(p=>p.z))}:scene.venue,structure:{...scene.structure,walls}};
 }
 /** Three user-confirmed image/world correspondences, including rotation and skew. */
-export function imageRegistration(points:ImagePoint[],width:number,depth:number):string|null {
-  if(points.length!==3||width<=0||depth<=0)return null;
+export function imageRegistrationMatrix(points:ImagePoint[],width:number,depth:number):readonly[number,number,number,number,number,number]|null {
+  if(!Array.isArray(points)||points.length!==3||![width,depth].every(value=>Number.isFinite(value)&&value>0)||
+    !points.every(point=>point&&Number.isFinite(point.x)&&Number.isFinite(point.z)))return null;
   const [origin,xEnd,zEnd]=points as [ImagePoint,ImagePoint,ImagePoint];
+  const ux=xEnd.x-origin.x,uz=xEnd.z-origin.z,vx=zEnd.x-origin.x,vz=zEnd.z-origin.z;
+  const uLength=Math.hypot(ux,uz),vLength=Math.hypot(vx,vz);
+  if(Math.min(uLength,vLength,Math.hypot(xEnd.x-zEnd.x,xEnd.z-zEnd.z))<2||
+    Math.abs(ux*vz-uz*vx)/(uLength*vLength)<1e-3)return null;
   const a=(xEnd.x-origin.x)/width,b=(xEnd.z-origin.z)/width,c=(zEnd.x-origin.x)/depth,d=(zEnd.z-origin.z)/depth;
-  if(Math.abs(a*d-b*c)<1e-8)return null;
-  return `matrix(${a} ${b} ${c} ${d} ${origin.x} ${origin.z})`;
+  const determinant=a*d-b*c;
+  if(!Number.isFinite(determinant)||Math.abs(determinant)<1e-8)return null;
+  const condition=(a*a+b*b+c*c+d*d)/Math.abs(determinant);
+  if(!Number.isFinite(condition)||condition>1e4)return null;
+  return [a,b,c,d,origin.x,origin.z];
+}
+export function imageRegistration(points:ImagePoint[],width:number,depth:number):string|null {
+  const matrix=imageRegistrationMatrix(points,width,depth);
+  return matrix?`matrix(${matrix.join(' ')})`:null;
+}
+/** Inverse of the same confirmed correspondences: original-image pixels to corner-based meters. */
+export function imageToWorldRegistration(points:ImagePoint[],width:number,depth:number):readonly[number,number,number,number,number,number]|null {
+  const matrix=imageRegistrationMatrix(points,width,depth);if(!matrix)return null;
+  const [a,b,c,d,e,f]=matrix,determinant=a*d-b*c;
+  const inverse=[d/determinant,-b/determinant,-c/determinant,a/determinant,(c*f-d*e)/determinant,(b*e-a*f)/determinant] as const;
+  return inverse.every(Number.isFinite)?inverse:null;
 }
 export function openingLine(scene:SceneV2,opening:SceneV2['structure']['openings'][number]):{x1:number;z1:number;x2:number;z2:number}|null {
   const wall=scene.structure.walls.find(w=>w.id===opening.wallId);if(!wall)return null;

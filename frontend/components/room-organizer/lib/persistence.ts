@@ -1,7 +1,7 @@
 import { STORAGE_KEY } from './constants';
 import { notify } from './editor-notices';
 import { isUntouched } from './restore-point';
-import { parseStoredLayout, storedEntryCount } from './schema';
+import { parseLayoutEventOperations, parseStoredLayout, storedEntryCount } from './schema';
 import { classifyStorageError, type StorageErrorKind } from './storage-errors';
 import { setItemEvictingSnapshots } from './version-history';
 import type { RoomLayout } from './types';
@@ -270,7 +270,9 @@ export function saveLayout(layout: RoomLayout, storage?: VersionHistoryStore): S
   try {
     const target = storage ?? localStorageOrNull();
     if (!target) return { ok: false, reason: 'blocked' };
-    const json = JSON.stringify(layout);
+    const checked = parseLayoutEventOperations(layout);
+    if (!checked) return { ok: false, reason: 'unknown' };
+    const json = JSON.stringify(checked);
     setItemEvictingSnapshots(target, STORAGE_KEY, json);
     return { ok: true, json };
   } catch (error) {

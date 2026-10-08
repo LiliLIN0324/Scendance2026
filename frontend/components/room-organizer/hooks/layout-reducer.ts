@@ -1,3 +1,4 @@
+import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
 import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from '../lib/constants';
 import { MAX_DORMERS, clampDormer, type DormerInput, type DormerPatch } from '../lib/dormers';
 import { rotatedHalfExtents } from '../lib/geometry';
@@ -10,6 +11,7 @@ import {
   MAX_NAME_LENGTH,
   capText,
   clampCoordinate,
+  parseLayoutEventOperations,
 } from '../lib/schema';
 import { clampTerrainY, isStreetSeed } from '../lib/site';
 import { MAX_STAIRS_LEAD_IN } from '../lib/stairs';
@@ -30,6 +32,8 @@ import {
 } from '../lib/street';
 import { canApplyLayoutGeometry, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, sameZone } from '../lib/zones';
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type {
   CatalogItem,
   EntranceSpec,
@@ -55,6 +59,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type LayoutAction =
+  | { type: 'setProductionPlan'; value: ProductionPlan | undefined }
+  | { type: 'setEventOperations'; value: EventOperations | undefined }
   | { type: 'setName'; name: string }
   | { type: 'setWidth'; width: number }
   | { type: 'setHeight'; height: number }
@@ -199,6 +205,18 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
   switch (action.type) {
     // -- building-level properties ------------------------------------------
+    case 'setProductionPlan': {
+      const next: RoomLayout = { ...state.layout, productionPlan: action.value };
+      if (action.value === undefined) delete next.productionPlan;
+      const layout = parseLayoutEventOperations(next);
+      if (!layout || JSON.stringify(layout.productionPlan) === JSON.stringify(state.layout.productionPlan)) return state;
+      return { ...state, layout };
+    }
+    case 'setEventOperations': {
+      const layout = parseLayoutEventOperations({ ...state.layout, eventOperations: action.value });
+      if (!layout || JSON.stringify(layout.eventOperations) === JSON.stringify(state.layout.eventOperations)) return state;
+      return { ...state, layout };
+    }
     case 'setName':
       return withLayout(state, (layout) => {
         const name = capName(action.name);
@@ -452,6 +470,7 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         if (copy.structuralColumnId) copy.structuralColumnId = copy.id;
         delete copy.groupId;
         delete copy.locked;
+        delete copy.handoff;
         return { ...floor, items: [...floor.items, copy] };
       });
 
@@ -779,7 +798,10 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
       const clonedItems: FurnitureItem[] = remapGroupIds(
         source.items
           .filter((item) => item.id !== ENTRANCE_DOOR_ID && item.category !== 'outdoor')
-          .map((item, idx) => ({ ...item, id: `${item.type}-${action.idSuffix}-${idx}` })),
+          .map((item, idx) => {
+            const { handoff: _handoff, ...copy } = item;
+            return { ...copy, id: `${item.type}-${action.idSuffix}-${idx}` };
+          }),
         action.idSuffix
       );
       const clonedWalls: InteriorWall[] | undefined = source.interiorWalls
@@ -847,7 +869,9 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
     }
 
     case 'applyLayout': {
-      const layout = normaliseLayout(action.layout);
+      const parsed = parseLayoutEventOperations(action.layout);
+      if (!parsed) return state;
+      const layout = normaliseLayout(parsed);
       // Clamp instead of resetting to 0 so undo/redo of an edit made on an
       // upper floor doesn't jump the view back to the ground floor.
       return {
@@ -998,6 +1022,12 @@ function clampItemDimension(value: number, dimension: 'width' | 'depth' | 'heigh
 function sanitizeItemPatch(item: FurnitureItem, fields: ItemPatch | null): ItemPatch | null {
   if (fields === null) return null;
   const next: ItemPatch = { ...fields };
+  if (next.handoff !== undefined) {
+    const parsed = handoffSchema.safeParse(next.handoff);
+    if (!parsed.success) return null;
+    // Store the shared contract's canonical value, including any normalisation.
+    next.handoff = JSON.stringify(parsed.data) === JSON.stringify(item.handoff) ? item.handoff : parsed.data;
+  }
   if (item.id === ENTRANCE_DOOR_ID) {
     delete next.position;
     delete next.rotation;

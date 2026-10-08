@@ -27,7 +27,7 @@ export function solveDimensions(raw:SceneV2,provided:DimensionConstraint[]){
     scene.structure.columns=scene.structure.columns.map(c=>({...c,position:scale(c.position)}));
     scene.objects=scene.objects.map(o=>o.locked?o:({...o,position:scale(o.position)}));
   }
-  for(const d of scene.dimensions){if(d.status!=='confirmed')continue;
+  for(const d of scene.dimensions){if(d.status!=='confirmed'||d.targetEndId)continue;
     const opening=scene.structure.openings.find(o=>o.id===d.targetId);
     if(opening){if(d.measure==='height')opening.height=d.valueMeters;else opening.width=d.valueMeters;}
   }

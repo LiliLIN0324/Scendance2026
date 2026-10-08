@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { get2DViewTransform } from '../canvas-2d/render';
+import { get2DViewTransform, render2DTopDown } from '../canvas-2d/render';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { useCanvas2DInteraction, type UseCanvas2DInteractionParams } from './use-canvas-2d-interaction';
+
+vi.mock('../canvas-2d/render', async importOriginal => ({
+  ...await importOriginal<typeof import('../canvas-2d/render')>(), render2DTopDown: vi.fn(),
+}));
 
 const W = 800;
 const H = 600;
@@ -58,7 +62,7 @@ function setup(selected: string[]) {
 }
 
 describe('useCanvas2DInteraction gestures (#291, #292)', () => {
-  const raf = vi.fn(() => 1);
+  const raf = vi.fn((_callback: FrameRequestCallback) => 1);
   beforeEach(() => {
     raf.mockClear();
     vi.stubGlobal('requestAnimationFrame', raf);
@@ -128,5 +132,18 @@ describe('useCanvas2DInteraction gestures (#291, #292)', () => {
     fire('pointerdown', 0, 0);
     fire('pointermove', sixPx, 0);
     expect(params.onItemDragStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('ghost repaints retain a hidden reference and its display opacity', () => {
+    const { params, fire } = setup([]);
+    params.view = { ...params.view, showReferenceImage: false, referenceImageOpacity: 0.2 };
+    params.referenceImage = { url: 'blob:reference-ghost', pixelWidth: 100, pixelHeight: 50,
+      imageToWorld: [0.1, 0, 0, 0.1, 0, 0] };
+    fire('pointerdown', 0, 0); fire('pointermove', 1, 0);
+    const callback = raf.mock.lastCall?.[0] as FrameRequestCallback | undefined;
+    expect(callback).toBeDefined(); callback?.(0);
+    expect(vi.mocked(render2DTopDown).mock.lastCall?.[0]).toMatchObject({
+      referenceImage: params.referenceImage, showFloorPlan: false, floorPlanOpacity: 0.2,
+    });
   });
 });

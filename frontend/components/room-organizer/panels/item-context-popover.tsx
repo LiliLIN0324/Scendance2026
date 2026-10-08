@@ -9,6 +9,7 @@ import { MaterialGlyph, NumberField } from './scendance-workspace';
 import type { FurnitureItem } from '../lib/types';
 
 export interface ItemContextPopoverProps {
+  embedded?: boolean;
   hasCollision: boolean;
   onRemove(id: string): void;
   onDuplicate(id: string): void;
@@ -50,7 +51,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   const locked = item.locked === true;
   const position = item.position ?? { x: 0, z: 0 };
   const rotation = ((item.rotation ?? 0) * 180 / Math.PI % 360 + 360) % 360;
-  return <aside className="sc-properties" aria-label={`${item.name}属性`}>
+  return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
     <header><div><span className="sc-eyebrow">OBJECT PROPERTIES</span><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={17}/></button></header>
     <div className="sc-properties-content">
       <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span></div>

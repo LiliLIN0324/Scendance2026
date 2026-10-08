@@ -214,7 +214,7 @@ export function saveCustomSet(
     name: trimmed,
     savedAt,
     items: arranged.items.map((item) => {
-      const { locked: _movable, ...rest } = item;
+      const { locked: _movable, handoff: _handoff, ...rest } = item;
       return rest;
     }),
   };
@@ -270,7 +270,7 @@ export function customSetToFurnitureSet(set: CustomFurnitureSet): FurnitureSet {
     icon: '⭐',
     description: `${set.items.length} item${set.items.length === 1 ? '' : 's'} · saved set`,
     items: set.items.map((item) => {
-      const { id: _id, position, rotation, locked: _locked, ...snapshot } = item;
+      const { id: _id, position, rotation, locked: _locked, handoff: _handoff, ...snapshot } = item;
       return {
         type: item.type,
         offset: { x: position!.x, z: position!.z },

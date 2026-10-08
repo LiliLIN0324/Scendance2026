@@ -2,7 +2,8 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { StrictMode, createElement, useEffect, useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeItem } from '../lib/__testfixtures__/fixtures';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { INITIAL_LAYOUT } from './layout-reducer';
 import { useHistory } from './use-history';
 import { useLayoutState } from './use-layout-state';
@@ -13,6 +14,43 @@ import type { ReactNode } from 'react';
 interface Doc {
   readonly name: string;
 }
+
+describe('useHistory — activity and geometry snapshots', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); layoutStore.setState({ layout: INITIAL_LAYOUT, activeFloorIndex: 0 }); });
+
+  it('undoes and redoes geometry plus all activity fields through the real store actions', () => {
+    const initial = makeLayout({ id: 'rehearsal-30', floors: [makeFloor({ items: [makeItem()] })] });
+    layoutStore.setState({ layout: initial, activeFloorIndex: 0 });
+    const { result } = renderHook(() => {
+      const state = useLayoutState();
+      return { ...state, history: useHistory(state.layout, state.actions.applyLayout, { debounceMs: 10 }) };
+    });
+    const operations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{
+      id: 'a1000000-0000-4000-8000-000000000001', title: '布场', phase: 'setup', objectIds: ['item-1'],
+      ownerName: '现场团队', acceptance: '位置核对', status: 'accepted', evidenceNote: '现场核对通过',
+      actualStartedAt: '2026-10-09T09:00:00+08:00', actualFinishedAt: '2026-10-09T09:30:00+08:00',
+      reviewedBasis: `sha256:${'a'.repeat(64)}`,
+    }, { id: 'a1000000-0000-4000-8000-000000000002', title: '撤场', phase: 'teardown', objectIds: ['item-1'] }] });
+    act(() => {
+      result.current.actions.setEventOperations(operations);
+      result.current.actions.moveItem('item-1', 2, 1);
+    });
+    act(() => { vi.advanceTimersByTime(10); });
+    const edited = layoutStore.getState().layout;
+    expect(edited.eventOperations).toEqual(operations);
+    expect(edited.floors[0]!.items[0]!.position).toEqual({ x: 2, z: 1 });
+    act(() => result.current.history.undo());
+    expect(layoutStore.getState().layout).toEqual(initial);
+    act(() => result.current.history.redo());
+    expect(layoutStore.getState().layout).toEqual(edited);
+    act(() => result.current.actions.removeItem('item-1'));
+    act(() => { vi.advanceTimersByTime(10); });
+    expect(layoutStore.getState().layout.eventOperations!.tasks.map((task) => task.objectIds)).toEqual([['item-1'], ['item-1']]);
+    act(() => result.current.history.undo());
+    expect(layoutStore.getState().layout).toEqual(edited);
+  });
+});
 
 describe('useHistory — replacing the whole value', () => {
   beforeEach(() => {

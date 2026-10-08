@@ -1,0 +1,11 @@
+.sc-project-backup { margin-top: 16px; border-top: 1px solid var(--sc-line, #d9dfd4); padding-top: 12px; font-size: 12px; }
+.sc-project-backup > summary { cursor: pointer; font-weight: 600; }
+.sc-project-backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.sc-project-backup-file { display: grid; gap: 5px; color: var(--sc-muted, #626c64); }
+.sc-project-backup-file input { max-width: 100%; font: inherit; }
+.sc-project-backup-preview { margin: 12px 0; padding: 10px; border: 1px solid var(--sc-line, #d9dfd4); border-radius: 8px; }
+.sc-project-backup-preview dl { margin: 0; }
+.sc-project-backup-preview dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; margin: 6px 0; }
+.sc-project-backup-preview dt { color: var(--sc-muted, #626c64); }
+.sc-project-backup-preview dd { margin: 0; overflow-wrap: anywhere; }
+.sc-project-backup-warning { color: #835a16; line-height: 1.6; }

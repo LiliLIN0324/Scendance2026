@@ -4,12 +4,12 @@ import {createApi} from '../supabase/functions/_shared/api.ts';
 import {agentRunRequestSchema,agentRunSchema} from '../supabase/functions/_shared/agent-contract.ts';
 import {agentExecutionMode} from '../supabase/functions/_shared/agent-runner.ts';
 import {evaluateCandidates} from '../supabase/functions/_shared/jev.ts';
-import {canonical,sceneHash,sha256} from '../supabase/functions/_shared/domain.ts';
+import {ApiError,canonical,sceneHash,sha256} from '../supabase/functions/_shared/domain.ts';
 import {generationCapabilities} from '../supabase/functions/_shared/generation-contract.ts';
 import {prepareGenerationRequest} from '../supabase/functions/_shared/generation-input.ts';
 const env=(key:string)=>({DEEPSEEK_API_KEY:'fixture',TOKENDANCE_API_KEY:'fixture',HY3_RETIRED:'true'}[key]);
 const plan=(x=2)=>({title:`布局 ${x}`,explanation:'已规划桌子，待程序应用。',commands:[{op:'add',materialId:'table',position:{x,z:3},rotation:0,color:'#ffffff'}]});
-const tool=(name:string,args:unknown)=>({id:crypto.randomUUID(),type:'function',function:{name,arguments:JSON.stringify(args)}});
+const tool=(name:string,args:unknown,id:string=crypto.randomUUID())=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
 const completion=(calls:ReturnType<typeof tool>[])=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:calls}}],usage:{total_tokens:10}}));
 
 describe('durable bounded DeepSeek Agent',()=>{
@@ -23,6 +23,30 @@ describe('durable bounded DeepSeek Agent',()=>{
   const replay=await send(api,i);expect(replay.status).toBe(200);expect((await replay.json()).id).toBe(run.id);expect(fetcher).toHaveBeenCalledTimes(2);
   const p=run.candidates[0].proposal;expect(p.base_scene).toEqual(i.scene);
   const applied=await f.rpc(owner,'proposals.apply',{...i,proposalId:p.id,baseHash:await sceneHash(i.scene)});expect(applied.scene.objects).toHaveLength(1);expect(applied.previousScene).toEqual(i.scene);expect(applied.undoGroup).toBe(p.id);
+ });
+ it.each([
+  {colors:['#ff0000','#0000ff'],groups:2},
+  {colors:['#ff0000','#ff0000'],groups:1},
+ ])('reports draft BOM colors without merging different specifications: $colors',async({colors,groups})=>{
+  const draft={...scene(),objects:colors.map((color,index)=>({...chair(),color,position:{x:2+index*3,z:2}}))};
+  const i=await input({scene:draft,instruction:'仅统计当前草稿物料，不修改场景',executionMode:'preview'});
+  const cloudBefore=(await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene;
+  let bom:{items:{color:string;quantity:number;size:unknown}[];pricing:string}={items:[],pricing:''};
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_bom',{})]);
+   const receipt=JSON.parse(String(init?.body)).messages.find((message:{role:string})=>message.role==='tool');
+   bom=JSON.parse(receipt.content);
+   return completion([tool('submit_candidates',{candidates:[{title:'物料统计',explanation:'按草稿统计，价格和库存待核实。',commands:[]}]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'preview'});
+  expect(bom.items).toHaveLength(groups);
+  expect(bom.items.map(({color,quantity})=>({color,quantity}))).toEqual(groups===1
+   ?[{color:colors[0],quantity:2}]:colors.map(color=>({color,quantity:1})));
+  expect(bom.items.every(item=>canonical(item.size)===canonical(draft.objects[0].size))).toBe(true);
+  expect(bom.pricing).toMatch(/未提供.*价格.*库存/);
+  expect(run.candidates[0].proposal.base_scene).toEqual(draft);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(cloudBefore);
  });
  it('holds 3 independent candidates for JEV and never direct-applies them',async()=>{
   const i=await input({jevEnabled:true}),fetcher=vi.fn(async(url)=>String(url).includes('systemone')?new Response(JSON.stringify({answers:{recommended_plan:{type:'choice',choice:'B',probabilities:{A:0.2,B:0.6,C:0.1,NONE:0.1},confidence:0.7}}})):completion([tool('submit_candidates',{candidates:[plan(2),plan(5),plan(8)]})]));
@@ -70,6 +94,132 @@ describe('durable bounded DeepSeek Agent',()=>{
  it('cancellation during model call prevents tool effects and further calls',async()=>{
   const i=await input();const fetcher=vi.fn(async()=>{const run=await f.backend.agent!(owner,'by_request',{projectId:i.projectId,requestId:i.requestId});await f.backend.agent!(owner,'cancel',{projectId:i.projectId,id:run.id});return completion([tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}}),tool('submit_candidates',{candidates:[plan()]})]);});
   const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.state).toBe('cancelled');expect(run.candidates).toEqual([]);expect(fetcher).toHaveBeenCalledOnce();
+ });
+ it('rejects duplicated model tool IDs before creating any asset or applying a scene',async()=>{
+  const i=await input();
+  const before=await f.db.query<{count:number}>('select count(*)::integer as count from scene_private.assets');
+  const create=tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}});
+  const duplicate={...tool('create_parametric_model',{parameters:{family:'table',width:2,depth:1,height:1}}),id:create.id};
+  const fetcher=vi.fn(async()=>completion([create,duplicate,tool('submit_candidates',{candidates:[plan()]})]));
+  const api=createApi(f.backend,env,fetcher);
+  const run=agentRunSchema.parse(await (await send(api,i)).json());
+  expect(run).toMatchObject({state:'failed',errorCode:'AGENT_INVALID_MODEL_RESPONSE',candidates:[]});
+  expect((await f.db.query<{count:number}>('select count(*)::integer as count from scene_private.assets')).rows[0].count).toBe(before.rows[0].count);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
+  await send(api,i);expect(fetcher).toHaveBeenCalledOnce();
+ });
+ it('rejects an empty tool ID without executing even a valid candidate submission',async()=>{
+  const i=await input(),submit={...tool('submit_candidates',{candidates:[plan()]}),id:'   '};
+  const fetcher=vi.fn(async()=>completion([submit]));
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'failed',errorCode:'AGENT_INVALID_MODEL_RESPONSE',candidates:[]});
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
+  expect(fetcher).toHaveBeenCalledOnce();
+ });
+ it('replays a tool across rounds with normalized parameters without creating another asset',async()=>{
+  const i=await input(),before=(await f.rpc(owner,'assets.list')).length,id='model/create/1';
+  const create=tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}},id);
+  let receipts:{content:string}[]=[];
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([create]);
+   if(fetcher.mock.calls.length===2)return completion([tool('create_parametric_model',{parameters:{height:1,depth:1,width:1,family:'table',color:'#cbb68e',variant:'rectangle',topThickness:0.04,legs:'four',legThickness:0.05}},id)]);
+   receipts=JSON.parse(String(init?.body)).messages.filter((m:{role:string;tool_call_id:string})=>m.role==='tool'&&m.tool_call_id===id);
+   const resourceId=JSON.parse(receipts[0].content).items[0][0];
+   return completion([tool('submit_candidates',{candidates:[{title:'单件桌子',explanation:'待应用',commands:[{op:'add_resource',resourceId,position:{x:3,z:3},rotation:0}]}]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:3});expect(run.candidates[0].proposal.candidate.objects).toHaveLength(1);
+  expect((await f.rpc(owner,'assets.list')).length).toBe(before+1);
+  expect(receipts).toHaveLength(2);expect(receipts[1].content).toBe(receipts[0].content);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
+ });
+ it.each(['parameters','tool'])('rejects a reused tool ID with changed %s while retaining its original receipt',async change=>{
+  const i=await input(),before=(await f.rpc(owner,'assets.list')).length,id='model/conflict/1';
+  const create=tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}},id);
+  const changed=change==='parameters'?tool('create_parametric_model',{parameters:{family:'table',width:2,depth:1,height:1}},id):tool('get_scene',{},id);
+  let receipts:{content:string}[]=[];
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([create]);
+   if(fetcher.mock.calls.length===2)return completion([changed]);
+   if(fetcher.mock.calls.length===3)return completion([create]);
+   receipts=JSON.parse(String(init?.body)).messages.filter((m:{role:string;tool_call_id:string})=>m.role==='tool'&&m.tool_call_id===id);
+   return completion([tool('submit_candidates',{candidates:[plan()]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:4});expect((await f.rpc(owner,'assets.list')).length).toBe(before+1);
+  expect(receipts).toHaveLength(3);expect(JSON.parse(receipts[1].content)).toEqual({code:'AGENT_TOOL_CALL_CONFLICT'});
+  expect(receipts[2].content).toBe(receipts[0].content);
+ });
+ it('lets the model correct schema-invalid arguments under the same tool ID before any execution',async()=>{
+  const i=await input(),before=(await f.rpc(owner,'assets.list')).length,id='model/repair/1';
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('create_parametric_model',{parameters:{family:'table',width:0,depth:1,height:1}},id)]);
+   if(fetcher.mock.calls.length===2)return completion([tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}},id)]);
+   const receipts=JSON.parse(String(init?.body)).messages.filter((m:{role:string;tool_call_id:string})=>m.role==='tool'&&m.tool_call_id===id);
+   expect(JSON.parse(receipts[0].content).code).toBe('INVALID_TOOL_INPUT');expect(JSON.parse(receipts[1].content).items).toHaveLength(1);
+   return completion([tool('submit_candidates',{candidates:[plan()]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:3});expect((await f.rpc(owner,'assets.list')).length).toBe(before+1);
+ });
+ it('replays a partial submission without writing another checkpoint or consuming the remaining repair',async()=>{
+  const i=await input({jevEnabled:true}),id='submission/1',submit=tool('submit_candidates',{candidates:[plan(2),plan(5),{}]},id);
+  const agentRpc=vi.fn(f.backend.agent!);let modelCalls=0,receipts:{content:string}[]=[];
+  const fetcher=vi.fn(async(url,init)=>{
+   if(String(url).includes('systemone'))return new Response(JSON.stringify({answers:{recommended_plan:{type:'choice',choice:'B',probabilities:{A:0.2,B:0.6,C:0.1,NONE:0.1},confidence:0.7}}}));
+   if(++modelCalls<=2)return completion([submit]);
+   receipts=JSON.parse(String(init?.body)).messages.filter((m:{role:string;tool_call_id:string})=>m.role==='tool'&&m.tool_call_id===id);
+   return completion([tool('submit_candidates',{candidates:[plan(2),plan(5),plan(8)]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi({...f.backend,agent:agentRpc},env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:3});expect(run.candidates).toHaveLength(3);expect(run.evaluation?.choice).toBe('B');
+  expect(agentRpc.mock.calls.filter(([,action])=>action==='checkpoint')).toHaveLength(2);
+  expect(receipts).toHaveLength(2);expect(receipts[1].content).toBe(receipts[0].content);
+ });
+ it.each(['before-commit','after-commit'])('does not report an unconfirmed checkpoint as ready when its response fails %s',async failure=>{
+  const i=await input(),submit=tool('submit_candidates',{candidates:[plan()]},'submission/unknown');let checkpointCalls=0;
+  const agentRpc=vi.fn(async(actor,action,data)=>{
+   if(action==='checkpoint'&&++checkpointCalls===1){
+    if(failure==='after-commit')await f.backend.agent!(actor,action,data);
+    throw new ApiError('DATABASE_ERROR',500);
+   }
+   return f.backend.agent!(actor,action,data);
+  });
+  const fetcher=vi.fn(async()=>completion([submit])),api=createApi({...f.backend,agent:agentRpc},env,fetcher);
+  const run=agentRunSchema.parse(await (await send(api,i)).json());
+  expect(run).toMatchObject({state:failure==='before-commit'?'failed':'complete',errorCode:'DATABASE_ERROR',callCount:6});
+  expect(run.candidates).toHaveLength(failure==='before-commit'?0:1);expect(run.progress).not.toBe('方案已准备好');
+  expect(checkpointCalls).toBe(1);expect(agentRpc.mock.calls.some(([,action])=>action==='finish')).toBe(false);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
+  await send(api,i);expect(fetcher).toHaveBeenCalledTimes(6);
+ });
+ it('does not repeat a tool whose asset was committed before its response was lost',async()=>{
+  const i=await input(),before=(await f.rpc(owner,'assets.list')).length,id='model/unknown/1';
+  const sceneRpc=vi.fn(async(actor,action,data)=>{const result=await f.backend.scene(actor,action,data);if(action==='parametric.complete')throw new Error('fixture response lost');return result;});
+  const create=tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}},id);
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length<=2)return completion([create]);
+   const receipts=JSON.parse(String(init?.body)).messages.filter((m:{role:string;tool_call_id:string})=>m.role==='tool'&&m.tool_call_id===id);
+   expect(receipts).toHaveLength(2);expect(receipts.every((m:{content:string})=>JSON.parse(m.content).code==='AGENT_TOOL_FAILED')).toBe(true);
+   return completion([tool('submit_candidates',{candidates:[plan()]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi({...f.backend,scene:sceneRpc},env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:3});expect(sceneRpc.mock.calls.filter(([,action])=>action==='parametric.complete')).toHaveLength(1);
+  expect((await f.rpc(owner,'assets.list')).length).toBe(before+1);
+ });
+ it.each(['cancel','lease'])('checks %s before serving a previously executed tool receipt',async guard=>{
+  const i=await input(),before=(await f.rpc(owner,'assets.list')).length;
+  const create=tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}},'model/guard/1');
+  const fetcher=vi.fn(async()=>{
+   if(fetcher.mock.calls.length===2){
+    if(guard==='cancel'){const run=await f.backend.agent!(owner,'by_request',{projectId:i.projectId,requestId:i.requestId});await f.backend.agent!(owner,'cancel',{projectId:i.projectId,id:run.id});}
+    else await f.rpc(owner,'lease.release',i);
+   }
+   return completion([create]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run.state).toBe(guard==='cancel'?'cancelled':'failed');if(guard==='lease')expect(run.errorCode).toBe('LEASE_LOST');
+  expect(run.candidates).toEqual([]);expect(fetcher).toHaveBeenCalledTimes(2);expect((await f.rpc(owner,'assets.list')).length).toBe(before+1);
  });
  it('cancel after complete fences application, and other users cannot retrieve the run',async()=>{
   const i=await input(),api=createApi(f.backend,env,async()=>completion([tool('submit_candidates',{candidates:[plan()]})]));const run=agentRunSchema.parse(await (await send(api,i)).json());

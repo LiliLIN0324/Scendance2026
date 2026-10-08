@@ -1,4 +1,5 @@
-import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from './schema';
+import { layoutForExport } from '../../../lib/layout-export';
+import { MAX_LAYOUT_JSON_BYTES, parseLayoutEventOperations, parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
 const HASH_PREFIX = '#layout=';
@@ -36,7 +37,9 @@ export async function encodeShareUrl(
   origin: string
 ): Promise<EncodeShareUrlResult> {
   const stripped = layout.floorPlanImage !== undefined;
-  const shareable: RoomLayout = { ...layout };
+  const checked = parseLayoutEventOperations(layout);
+  if (!checked) throw new Error('制作计划或活动安排无效，请先核对后再分享。');
+  const shareable = layoutForExport(checked, true);
   delete shareable.floorPlanImage;
 
   const json = JSON.stringify(shareable);
@@ -85,7 +88,7 @@ export async function readShareHash(hash: string): Promise<ShareDecodeResult> {
     const json = new TextDecoder('utf-8', { fatal: true }).decode(jsonBytes);
     const parsed: unknown = JSON.parse(json);
     const layout = parseStoredLayout(parsed);
-    return layout ? { ok: true, layout } : { ok: false, reason: 'unreadable' };
+    return layout ? { ok: true, layout: layoutForExport(layout, true) } : { ok: false, reason: 'unreadable' };
   } catch {
     return { ok: false, reason: 'unreadable' };
   }

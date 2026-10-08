@@ -22,6 +22,7 @@
 
 import { createStore, useStore } from 'zustand';
 import { randomId, randomSuffix, withHouseId } from '../lib/ids';
+import { parseLayoutEventOperations } from '../lib/schema';
 import { randomStreetSeed } from '../lib/street-row';
 import {
   layoutReducer,
@@ -54,13 +55,25 @@ interface LayoutStoreState extends LayoutState {
 // A store (not a hook) so state lives outside the React tree and can be read by
 // atomic selectors from any component. The actions facade is created ONCE inside
 // the initializer, so `useLayoutActions()` returns a stable reference forever.
-export const layoutStore = createStore<LayoutStoreState>()((set) => {
+export const createLayoutStore = (initialState?: LayoutState) => createStore<LayoutStoreState>()((set, get) => {
   // Internal dispatch: delegate to the existing reducer, never reimplement it.
   const dispatch = (action: LayoutAction): void => {
     set((state) => layoutReducer(state, action));
   };
 
   const actions: LayoutActions = {
+    setProductionPlan: (value) => {
+      if (!parseLayoutEventOperations({ ...get().layout, productionPlan: value })) {
+        throw new Error('制作计划未保存，请核对人数、时间、金额及填写依据。');
+      }
+      dispatch({ type: 'setProductionPlan', value });
+    },
+    setEventOperations: (value) => {
+      if (!parseLayoutEventOperations({ ...get().layout, eventOperations: value })) {
+        throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
+      }
+      dispatch({ type: 'setEventOperations', value });
+    },
     setName: (name) => dispatch({ type: 'setName', name }),
     setWidth: (width) => dispatch({ type: 'setWidth', width }),
     setHeight: (height) => dispatch({ type: 'setHeight', height }),
@@ -164,10 +177,27 @@ export const layoutStore = createStore<LayoutStoreState>()((set) => {
   };
 
   return {
-    layout: withHouseId(INITIAL_LAYOUT),
-    activeFloorIndex: 0,
+    layout: initialState?.layout ?? withHouseId(INITIAL_LAYOUT),
+    activeFloorIndex: initialState?.activeFloorIndex ?? 0,
     actions,
   };
+});
+
+declare global {
+  interface ImportMeta {
+    webpackHot?: {
+      data?: { layoutState?: LayoutState };
+      dispose(callback: (data: { layoutState?: LayoutState }) => void): void;
+    };
+  }
+}
+
+const hot = process.env.NODE_ENV === 'development' ? import.meta.webpackHot : undefined;
+export const layoutStore = createLayoutStore(hot?.data?.layoutState);
+// Fast Refresh can keep the hydrated editor tree alive while replacing this module.
+hot?.dispose((data) => {
+  const { layout, activeFloorIndex } = layoutStore.getState();
+  data.layoutState = { layout, activeFloorIndex };
 });
 
 // Raw hook for arbitrary atomic selectors:
