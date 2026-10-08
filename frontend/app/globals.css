@@ -715,6 +715,7 @@
   .sc-workbench .is-docked-layout .sc-left-drawer.has-properties { position:relative; inset:auto; flex-basis:250px; width:250px; }
 }
 @media (max-width:680px) {
+  .sc-review-button>span { display:none; }
   .sc-workbench .is-docked-layout .sc-left-drawer,.sc-workbench .is-docked-layout .sc-left-drawer.has-business,.sc-workbench .is-docked-layout .sc-left-drawer.has-properties { position:absolute; inset:0 auto 0 0; width:calc(100% - 12px); max-width:420px; z-index:55; }
   .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-view-tools { display:flex; }
   .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-canvas-heading { display:flex; }

@@ -894,6 +894,11 @@ function heatColor(ratio: number): string {
  * rejects: a broken image resolves too, and the render's naturalWidth guard
  * then skips it exactly as it does for a live repaint.
  */
+export function isFloorPlanImageReady(url:string):boolean {
+  const image=floorPlanImageCache?.url===url?floorPlanImageCache.image:undefined;
+  return !!image?.complete&&image.naturalWidth>0&&image.naturalHeight>0;
+}
+
 export function ensureFloorPlanImageDecoded(url: string): Promise<void> {
   let entry = floorPlanImageCache;
   if (entry?.url !== url) {

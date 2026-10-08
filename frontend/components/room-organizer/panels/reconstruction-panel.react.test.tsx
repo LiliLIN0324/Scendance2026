@@ -2,12 +2,12 @@
 import { act,cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import { BackendSession,getBackendConfig,type ReconstructionJob } from '@/lib/backend-session';
+import { referenceSceneBasis,resolveReferenceImage } from '@/lib/reference-image';
+import { flushSourceScope,readSourceForm,storeSourceForm } from '@/lib/source-storage';
 import { backendSceneToLayout,createMeasuredRoomLayout,layoutToBackendScene } from '../lib/backend-adapter';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
-import { flushSourceScope,readSourceForm,storeSourceForm } from '@/lib/source-storage';
-import { referenceSceneBasis,resolveReferenceImage } from '@/lib/reference-image';
-import type { RoomLayout } from '../lib/types';
 import { ReconstructionPanel } from './reconstruction-panel';
+import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/source-storage',async importOriginal=>({...await importOriginal<object>(),readSourceForm:vi.fn().mockResolvedValue(undefined),storeSourceForm:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:new Set<string>(),selectOnly:vi.fn()})}));
 const projectId='10000000-0000-4000-8000-000000000001',assetId='20000000-0000-4000-8000-000000000001',jobId='30000000-0000-4000-8000-000000000001';
@@ -20,6 +20,136 @@ beforeEach(()=>{
  controller=new BackendSession(getBackendConfig({url:'http://localhost:54321',anonKey:'public'}));
  const snapshot={...controller.getSnapshot(),user:{id:'user'},project:{id:projectId,studio_id:'studio',name:'测试',revision:1,scene},lease:{projectId,sessionId:'40000000-0000-4000-8000-000000000001',generation:1,revision:1,expiresAt:new Date(Date.now()+100000).toISOString()},revision:1,writeBlocked:false};
  vi.spyOn(controller,'getSnapshot').mockReturnValue(snapshot);
+});
+describe('manual editing of an applied venue',()=>{
+ function measured(){
+  const base=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});
+  const current=layoutToBackendScene(base);if(current.schemaVersion!==2)throw new Error('v2');
+  current.structure.openings=[{id:'50000000-0000-4000-8000-000000000001',wallId:current.structure.walls[1]!.id,kind:'door',offset:2,width:1.2,height:2.1,sillHeight:0,status:'confirmed'}];
+  return backendSceneToLayout(current,{projectId});
+ }
+ function mount(base=measured(),extra:Partial<React.ComponentProps<typeof ReconstructionPanel>>={}){
+  const apply=vi.fn(),preview=vi.fn(),create=vi.spyOn(controller,'createReconstruction'),upload=vi.spyOn(controller,'uploadSource');
+  const props={controller,layout:base,onApply:apply,onPreview:preview,images:[],updateImage:vi.fn(),brief:INITIAL_BRIEF,...extra};
+  return {view:render(<ReconstructionPanel {...props}/>),apply,preview,create,upload,props,base};
+ }
+ async function start(){await waitFor(()=>expect((screen.getByRole('button',{name:'编辑当前场地'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'编辑当前场地'}));}
+ function width(value='14'){fireEvent.change(screen.getByLabelText('编辑总宽（米）'),{target:{value}});}
+ function confirm(){fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));fireEvent.click(screen.getByRole('button',{name:'确认应用场地修改'}));}
+ it('previews and cancels without changing the scene or making recognition calls',async()=>{
+  const {apply,preview,create,upload,base}=mount();const before=JSON.stringify(base);await start();width();
+  await waitFor(()=>expect(preview.mock.calls.at(-1)?.[0]?.width).toBe(14));
+  expect(screen.getByText('门洞 1 的位置或尺寸有变化，请核对图中橙色标记。')).toBeDefined();
+  expect(apply).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'取消场地编辑'}));
+  await waitFor(()=>expect(preview.mock.calls.at(-1)?.[0]).toBeNull());expect(JSON.stringify(base)).toBe(before);
+  expect(apply).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
+ });
+ it('requires a fresh human check after each edit and applies once through the original callback',async()=>{
+  const trial=mount(),{apply,create,upload}=trial;await start();width();
+  expect((screen.getByRole('button',{name:'确认应用场地修改'}) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));width('15');
+  expect((screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件') as HTMLInputElement).checked).toBe(false);
+  fireEvent.change(screen.getByLabelText('门洞 1 · 宽度（米）'),{target:{value:'1.4'}});confirm();
+  expect(apply).toHaveBeenCalledOnce();const next=apply.mock.calls[0]![0] as RoomLayout;
+  expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={next}/>);
+  const saved=layoutToBackendScene(next);
+  expect(saved.venue.width).toBe(15);if(saved.schemaVersion!==2)throw new Error('v2');expect(saved.structure.openings[0]!.width).toBe(1.4);
+  expect(screen.getByText(/场地修改已应用，可撤销/)).toBeDefined();expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('15');
+ });
+ it('clears an applied-scene success on Undo and never revives it on Redo',async()=>{
+  const trial=mount();await start();width('14');confirm();
+  const applied=trial.apply.mock.calls[0]![0] as RoomLayout;
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
+  expect(await screen.findByText(/场地修改已应用，可撤销/)).toBeDefined();
+  expect(screen.getByText('当前场地 · 14 × 8 米')).toBeDefined();
+  expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={trial.base}/>);
+  await waitFor(()=>expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull());
+  expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('14');
+  expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总宽输入 14 米，当前 12 米');
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
+  expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
+  expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
+  expect(trial.apply).toHaveBeenCalledOnce();expect(trial.create).not.toHaveBeenCalled();expect(trial.upload).not.toHaveBeenCalled();
+ });
+ it('keeps later generation inputs through Undo and same-scope layout changes while showing the current difference',async()=>{
+  const trial=mount();await start();width('14');confirm();
+  const applied=trial.apply.mock.calls[0]![0] as RoomLayout;
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
+  expect(await screen.findByText(/场地修改已应用，可撤销/)).toBeDefined();
+  const submittedWidth=screen.getByLabelText('总宽（米）') as HTMLInputElement;
+  const submittedDepth=screen.getByLabelText('总深（米）') as HTMLInputElement;
+  fireEvent.change(submittedWidth,{target:{value:'17.5'}});fireEvent.change(submittedDepth,{target:{value:'9.25'}});
+  expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总宽输入 17.5 米，当前 14 米');
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={trial.base}/>);
+  expect(submittedWidth.value).toBe('17.5');expect(submittedDepth.value).toBe('9.25');
+  expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
+  expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总深输入 9.25 米，当前 8 米');
+  const later=createMeasuredRoomLayout(layout,{width:16,depth:10,height:3});
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={later}/>);
+  expect(screen.getByLabelText('总宽（米）')).toBe(submittedWidth);expect(screen.getByLabelText('总深（米）')).toBe(submittedDepth);
+  expect(submittedWidth.value).toBe('17.5');expect(submittedDepth.value).toBe('9.25');
+  expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
+  expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总宽输入 17.5 米，当前 16 米');
+  expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总深输入 9.25 米，当前 10 米');
+  fireEvent.change(submittedWidth,{target:{value:'16'}});fireEvent.change(submittedDepth,{target:{value:'10'}});
+  fireEvent.change(screen.getByLabelText('层高（米）'),{target:{value:'3'}});
+  expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
+  expect(screen.getByText(/下方是待提交的生成尺寸，填写不会修改当前场地/).textContent).toContain('当前场地为 16 × 10 米');
+  expect(trial.apply).toHaveBeenCalledOnce();expect(trial.create).not.toHaveBeenCalled();expect(trial.upload).not.toHaveBeenCalled();
+ });
+ it('keeps invalid door edits unapplied and clears their scene preview',async()=>{
+  const {apply,preview}=mount();await start();fireEvent.change(screen.getByLabelText('门洞 1 · 距墙起点（米）'),{target:{value:'7.5'}});
+  await waitFor(()=>expect(screen.getByRole('alert').textContent).toMatch(/门窗|门洞/));
+  expect(preview.mock.calls.at(-1)?.[0]).toBeNull();expect((screen.getByRole('button',{name:'确认应用场地修改'}) as HTMLButtonElement).disabled).toBe(true);expect(apply).not.toHaveBeenCalled();
+ });
+ it('invalidates the draft on a same-project scene change without overwriting the newer scene',async()=>{
+  const trial=mount();await start();width();const changed={...trial.base,backendLighting:'cool' as const};
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={changed}/>);
+  expect(screen.getByRole('alert').textContent).toContain('场景、项目或图纸资料已变化');
+  await waitFor(()=>expect(trial.preview.mock.calls.at(-1)?.[0]).toBeNull());expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('cancels the draft on A→B→A project navigation',async()=>{
+  const trial=mount();await start();width();
+  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={{...trial.base,id:'other-local-project'}}/>);
+  trial.view.rerender(<ReconstructionPanel {...trial.props}/>);
+  expect(screen.queryByLabelText('编辑总宽（米）')).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('invalidates a changed source identity even when the scene stays the same',async()=>{
+  const photo={id:'local-plan',kind:'floorplan' as const,name:'演练图.png',width:100,height:100,url:'blob:plan',blob:new Blob(['a'])};
+  const trial=mount(measured(),{images:[photo]});await start();width();
+  trial.view.rerender(<ReconstructionPanel {...trial.props} images={[{...photo,blob:new Blob(['b'])}]}/>);
+  expect(screen.getByRole('alert').textContent).toContain('图纸资料已变化');expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('rechecks the live lease at confirmation even before a snapshot rerender',async()=>{
+  const trial=mount();await start();width();fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));
+  const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,lease:{...old.lease!,generation:2}});
+  fireEvent.click(screen.getByRole('button',{name:'确认应用场地修改'}));
+  expect(trial.apply).not.toHaveBeenCalled();expect(screen.getByRole('status').textContent).toContain('草稿未应用');
+ });
+ it('allows local-only editing without a cloud project and preserves an onApply rejection',async()=>{
+  const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,project:null,user:null,lease:null,revision:null,writeBlocked:true});
+  const trial=mount(measured(),{onApply:()=>{throw new Error('场地保存被原校验拒绝');}});await start();width();confirm();
+  expect(screen.getByRole('status').textContent).toContain('场地保存被原校验拒绝');expect(screen.getByLabelText('编辑总宽（米）')).toBeDefined();
+  expect(trial.create).not.toHaveBeenCalled();
+ });
+ it('stops preview and confirmation when the captured edit lease expires',async()=>{
+  const trial=mount();await start();width();fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));
+  const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,lease:{...old.lease!,expiresAt:new Date(Date.now()+40).toISOString()}});
+  trial.view.rerender(<ReconstructionPanel {...trial.props}/>);
+  await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain('编辑权已过期'));
+  expect((screen.getByRole('button',{name:'确认应用场地修改'}) as HTMLButtonElement).disabled).toBe(true);
+  expect(trial.preview.mock.calls.at(-1)?.[0]).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('keeps a pending structure review separate from manual editing',async()=>{
+  const current=measured();vi.mocked(readSourceForm).mockResolvedValue({jobId,jobBase:JSON.stringify(layoutToBackendScene(current))});
+  vi.spyOn(controller,'getReconstruction').mockResolvedValue({id:jobId,state:'needs_review',candidate:layoutToBackendScene(current) as never,issues:[]});
+  const trial=mount(current);await screen.findByText('核对识别结构');
+  expect((screen.getByRole('button',{name:'编辑当前场地'}) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByLabelText('编辑总宽（米）')).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
+ });
 });
 describe('local applied reference mapping',()=>{
  const measured=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});

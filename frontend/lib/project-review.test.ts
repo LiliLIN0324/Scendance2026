@@ -346,15 +346,17 @@ describe('customer-readable review rendering', () => {
     expect(JSON.stringify(review)).toBe(before);
   });
 
-  it('prints only opened appendices and starts each layout on a fresh page without hiding screen controls', () => {
+  it('prints compact proportional figures without forcing a fresh layout page or hiding screen controls', () => {
     const document = new DOMParser().parseFromString(projectReviewHtml(createProjectReviewSnapshot(input())), 'text/html');
     const css = document.querySelector('style')!.textContent!;
     const printCss = css.slice(css.indexOf('@media print'));
     const screenCss = css.slice(0, css.indexOf('@media print'));
     expect(printCss).toContain('.appendix:not([open]){display:none}');
     expect(printCss).toContain('.appendix[open]{break-before:page}');
-    expect(printCss).toContain('.layout{break-before:page}');
-    expect(printCss).toContain('.layout>.caption{break-after:avoid}');
+    expect(printCss).toContain('.layout{break-before:auto}');
+    expect(printCss).toContain('.layout>.caption,.layout>.caption+p{break-after:avoid}');
+    expect(printCss).toContain('svg{max-height:100mm;max-width:100%;width:auto;height:auto;margin:0 auto}');
+    expect(printCss).toContain('img{display:block;max-height:95mm;max-width:100%;width:auto;height:auto;object-fit:contain;margin:0 auto}');
     expect(printCss).toContain('.appendix-help{display:none}');
     expect(screenCss).not.toContain('.appendix:not([open]){display:none}');
     expect(screenCss).not.toContain('.appendix-help{display:none}');

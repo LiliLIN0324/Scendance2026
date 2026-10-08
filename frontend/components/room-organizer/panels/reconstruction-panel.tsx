@@ -9,6 +9,7 @@ import { useBackendSession, type BackendSession, type DimensionConstraint, type 
 import { updateReviewedWall, openingLine, imageRegistration, mergeRecognizedDimensions } from '@/lib/reconstruction-review';
 import { referenceSceneBasis, referenceStructure, resolveReferenceImage, type ReferenceRegistration } from '@/lib/reference-image';
 import { containedImagePoint, parseDimensionText, readSourceForm, storeSourceForm, registerSourceFlush, type ImagePoint } from '@/lib/source-storage';
+import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
@@ -50,6 +51,38 @@ function errorText(error:unknown):string{
 }
 function currentSceneKey(layout:RoomLayout):string { try{return canonical(layoutToBackendScene(layout));}catch{return '';}}
 function NumberField({label,value,onChange}:{label:string;value:number;onChange(value:number):void}):JSX.Element{return <label>{label}<input type="number" step="0.001" value={Number.isFinite(value)?value:''} onChange={event=>onChange(event.target.valueAsNumber)}/></label>;}
+
+interface VenueEditDraft {
+  base: RoomLayout; scene: SceneV2; sceneKey: string; sourceKey: string; images: VenuePhoto[];
+  epoch: number; sessionKey: string; width: string; depth: string;
+  openings: SceneV2['structure']['openings']; confirmed: boolean;
+}
+function venueSourceKey(images: VenuePhoto[]): string {
+  return canonical(images.map(image=>({id:image.id,kind:image.kind??'photo',assetId:image.assetId,width:image.width,height:image.height})));
+}
+function venueSessionKey(controller: BackendSession, scope: string): string {
+  const current=controller.getSnapshot(),lease=current.lease;
+  if(current.project){
+    if(current.project.id!==scope||current.writeBlocked||!current.user||!lease||lease.projectId!==scope||
+      !Number.isFinite(Date.parse(lease.expiresAt))||Date.parse(lease.expiresAt)<=Date.now())
+      throw new Error('当前项目没有有效编辑权，请获取编辑权后重新核对场地。');
+    if(current.status==='saving')throw new Error('云端保存正在进行，请完成后重新核对场地。');
+  }
+  return canonical({project:current.project?.id??null,user:current.user?.id??null,session:current.sessionId,
+    lease:lease?{session:lease.sessionId,generation:lease.generation}:null,revision:current.revision});
+}
+function VenueEditDrawing({before,after}: {before:SceneV2;after:SceneV2}):JSX.Element {
+  const draw=(scene:SceneV2,color:string,dashed=false)=><g stroke={color} strokeDasharray={dashed?'.12 .08':undefined}>
+    {scene.structure.walls.map(wall=><line key={wall.id} x1={wall.start.x} y1={wall.start.z} x2={wall.end.x} y2={wall.end.z} strokeWidth={Math.max(.06,wall.thickness)}/>)}
+    {scene.structure.openings.map(opening=>{const line=openingLine(scene,opening);return line?<line key={opening.id} x1={line.x1} y1={line.z1} x2={line.x2} y2={line.z2} strokeWidth=".22" stroke={dashed?color:'#d48536'}/>:null;})}
+  </g>;
+  return <svg className="rc-plan rc-venue-plan" viewBox={`-.5 -.5 ${Math.max(before.venue.width,after.venue.width)+1} ${Math.max(before.venue.depth,after.venue.depth)+1}`} aria-label="当前场地与编辑草稿对比图">
+    {before.objects.map(object=><rect key={object.id} x={object.position.x-object.size.width/2} y={object.position.z-object.size.depth/2} width={object.size.width} height={object.size.depth} transform={`rotate(${object.rotation} ${object.position.x} ${object.position.z})`} fill="#cbd4c5"/>)}
+    {before.structure.columns.map(column=><rect key={column.id} x={column.position.x-column.size.width/2} y={column.position.z-column.size.depth/2} width={column.size.width} height={column.size.depth} transform={`rotate(${column.rotation} ${column.position.x} ${column.position.z})`} fill="#808979"/>)}
+    {draw(before,'#9a9e96',true)}{draw(after,'#355b4b')}
+    <circle cx="0" cy="0" r=".08" fill="#263b31"/><text x=".12" y=".3" fontSize=".22">参考角 (0,0)</text>
+  </svg>;
+}
 
 function ReferenceImageReview({scene,layout,images,registration,onChange,onConfirm,updateImage,onAddImages,applied,openRequest=0}: {
   scene:SceneV2;layout:RoomLayout;images:VenuePhoto[];registration:ReferenceRegistration|undefined;
@@ -128,6 +161,8 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const formWrites=useRef<Promise<void>>(Promise.resolve()),referenceSaving=useRef(false);
   const [preview,setPreview]=useState<{proposal:SceneProposal;layout:RoomLayout;assets:{assetUrls:Record<string,string>;assetNames:Record<string,string>}}|null>(null);
   const [expired,setExpired]=useState(false);
+  const [venueEdit,setVenueEdit]=useState<VenueEditDraft|null>(null),[venueNotice,setVenueNotice]=useState<{text:string;sceneKey?:string}|null>(null);
+  const [venueLeaseExpired,setVenueLeaseExpired]=useState(false);
   const formHydration=useRef<Promise<void>>(Promise.resolve());
   const alive=useRef(true),scopeRef=useRef(scope),layoutRef=useRef(layout),formRef=useRef(form),pending=useRef(false);
   scopeRef.current=scope;layoutRef.current=layout;formRef.current=form;
@@ -136,13 +171,37 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const inputKey=canonical({images:images.map(image=>({id:image.id,kind:image.kind??'photo'})),width:form.width,depth:form.depth,height:form.height,constraints:form.constraints,text:form.text,adjustment:form.adjustment,brief,reidentify});
   const inputRef=useRef(inputKey);inputRef.current=inputKey;
   const baseKey=currentSceneKey(layout);
+  const generationSizeDifferences=layout.backendSceneV2?([
+    ['总宽',form.width,layout.width],['总深',form.depth,layout.height],['层高',form.height,layout.floors[0]?.height],
+  ] as const).filter(([,value,current])=>value.trim()!==''&&Number.isFinite(Number(value))&&current!==undefined&&Math.abs(Number(value)-current)>1e-6):[];
   const reviewStale=!!job&&(form.jobBase!==baseKey||form.jobSources!==canonical(images.map(image=>({id:image.id,kind:image.kind??'photo'}))));
   const stale=!!job&&(form.jobBase!==baseKey||form.jobInput!==inputKey||!!mode&&form.jobMode!==mode||!!preview&&(preview.proposal.base_revision!==cloud.revision||preview.proposal.session_id!==cloud.lease?.sessionId||preview.proposal.generation!==cloud.lease?.generation||expired));
   const source=images.find(image=>image.id===selectedSource&&image.kind==='floorplan')??images.find(image=>image.kind==='floorplan');
   const currentStructure=useMemo(()=>referenceStructure(layout),[layout]);
   const requestRunning=busy||!!form.jobId&&(!job||ACTIVE.has(job.state));
+  const sourcesKey=venueSourceKey(images);
+  const editingVenue=venueEdit!==null,venueLeaseExpires=cloud.project?cloud.lease?.expiresAt:undefined;
+  const venueBlocked=requestRunning||!!preview||job?.state==='needs_review'||!loaded;
+  const venueCandidate=useMemo(()=>{
+    if(!venueEdit)return {layout:null,error:''};
+    try{return {layout:previewVenueEdit(venueEdit.base,{width:venueEdit.width.trim()?Number(venueEdit.width):NaN,depth:venueEdit.depth.trim()?Number(venueEdit.depth):NaN,openings:venueEdit.openings}),error:''};}
+    catch(error){return {layout:null,error:errorText(error)};}
+  },[venueEdit]);
+  const venueStale=(()=>{
+    if(!venueEdit)return '';
+    if(venueEdit.epoch!==scopeEpoch.current.epoch||venueEdit.sceneKey!==baseKey||venueEdit.sourceKey!==sourcesKey||
+      images.some(image=>venueEdit.images.find(old=>old.id===image.id)?.blob!==image.blob))
+      return '场景、项目或图纸资料已变化。本次草稿未应用，请取消后重新编辑。';
+    if(venueLeaseExpired)return '编辑权已过期。本次草稿未应用，请重新获取编辑权后核对。';
+    try{if(venueEdit.sessionKey!==venueSessionKey(controller,scope))return '编辑会话或版本已变化。本次草稿未应用，请重新核对。';}
+    catch(error){return errorText(error);}
+    return '';
+  })();
+  const venueChanged=!!venueEdit&&!!venueCandidate.layout&&currentSceneKey(venueCandidate.layout)!==venueEdit.sceneKey;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  useEffect(()=>{let cancelled=false;setLoaded(false);formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setMode('');setReidentify(false);setNotice('');setPoints([]);setReviewConfirmed(false);formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{if(!cancelled&&saved){formRef.current={...EMPTY,...saved};setForm(formRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setLoaded(true);});return()=>{cancelled=true;};},[scope]);
+  useEffect(()=>{let cancelled=false;setLoaded(false);formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setNotice('');setPoints([]);setReviewConfirmed(false);formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{if(!cancelled&&saved){formRef.current={...EMPTY,...saved};setForm(formRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setLoaded(true);});return()=>{cancelled=true;};},[scope]);
+  useEffect(()=>{setVenueNotice(current=>current?.sceneKey&&current.sceneKey!==baseKey?null:current);},[baseKey]);
+  function notifyVenue(text:string,sceneKey?:string):void {setVenueNotice(text?{text,...(sceneKey?{sceneKey}:{})}:null);}
   function saveForm(saveScope:string,value:Form):Promise<void>{const write=formWrites.current.catch(()=>{}).then(()=>storeSourceForm(saveScope,value));formWrites.current=write;return write;}
   useEffect(()=>registerSourceFlush(scope,async()=>{
     await formHydration.current;
@@ -155,8 +214,39 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   useEffect(()=>{setPoints([]);},[source?.id]);
   useEffect(()=>{setReviewConfirmed(false);},[review]);
   useEffect(()=>{setExpired(false);if(!preview)return;const remaining=Date.parse(preview.proposal.expires_at)-Date.now();if(remaining<=0){setExpired(true);return;}const timer=setTimeout(()=>setExpired(true),Math.min(remaining,2_147_000_000));return()=>clearTimeout(timer);},[preview]);
-  useEffect(()=>{onPreview?.(preview&&!stale?preview.layout:null);},[preview,stale,onPreview]);
+  useEffect(()=>{onPreview?.(venueEdit?(!venueStale?venueCandidate.layout:null):preview&&!stale?preview.layout:null);},[venueEdit,venueStale,venueCandidate.layout,preview,stale,onPreview]);
   useEffect(()=>()=>onPreview?.(null),[onPreview]);
+  useEffect(()=>{
+    setVenueLeaseExpired(false);
+    if(!editingVenue||!venueLeaseExpires)return;
+    const remaining=Date.parse(venueLeaseExpires)-Date.now();
+    if(!Number.isFinite(remaining)||remaining<=0){setVenueLeaseExpired(true);return;}
+    const timer=setTimeout(()=>setVenueLeaseExpired(true),Math.min(remaining,2_147_000_000));
+    return()=>clearTimeout(timer);
+  },[editingVenue,venueLeaseExpires]);
+
+  function startVenueEdit():void {
+    notifyVenue('');
+    if(venueBlocked||pending.current||referenceSaving.current){notifyVenue('请先完成当前核对或任务，再编辑场地。');return;}
+    try{
+      const scene=readEditableVenue(layoutRef.current),sessionKey=venueSessionKey(controller,scopeRef.current);
+      setVenueEdit({base:layoutRef.current,scene,sceneKey:currentSceneKey(layoutRef.current),sourceKey:venueSourceKey(sourceImages.current),images:[...sourceImages.current],
+        epoch:scopeEpoch.current.epoch,sessionKey,width:String(scene.venue.width),depth:String(scene.venue.depth),openings:structuredClone(scene.structure.openings),confirmed:false});
+    }catch(error){notifyVenue(errorText(error));}
+  }
+  function confirmVenueEdit():void {
+    if(!venueEdit||!venueEdit.confirmed||!venueChanged||venueStale||venueBlocked||pending.current||referenceSaving.current)return;
+    try{
+      // Recheck the live scope, sources and editor session immediately before the synchronous commit.
+      if(scopeEpoch.current.epoch!==venueEdit.epoch||currentSceneKey(layoutRef.current)!==venueEdit.sceneKey||
+        venueSourceKey(sourceImages.current)!==venueEdit.sourceKey||sourceImages.current.some(image=>venueEdit.images.find(old=>old.id===image.id)?.blob!==image.blob)||
+        venueSessionKey(controller,scopeRef.current)!==venueEdit.sessionKey)throw new Error('当前场景或编辑会话已变化，草稿未应用，请重新核对。');
+      const next=previewVenueEdit(venueEdit.base,{width:Number(venueEdit.width),depth:Number(venueEdit.depth),openings:venueEdit.openings});
+      const frameChanged=next.width!==venueEdit.base.width||next.height!==venueEdit.base.height;
+      onApply(next);patch({width:String(next.width),depth:String(next.height)});setVenueEdit(null);
+      notifyVenue(`场地修改已应用，可撤销，并沿用当前场景的本机保存。${frameChanged?'总宽或总深已变化，请重新核对原图对应。':'原图对应的尺度保持。'}${cloud.project?'云端保存状态请查看项目面板。':''}`,currentSceneKey(next));
+    }catch(error){notifyVenue(errorText(error));}
+  }
 
   async function acceptJob(result:ReconstructionJob,expectedScope:string):Promise<void> {
     if(!alive.current||scopeRef.current!==expectedScope)return;
@@ -182,6 +272,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
 
   function patch(patch:Partial<Form>){formRef.current={...formRef.current,...patch};setForm(formRef.current);}
   async function confirmReference(registration:ReferenceRegistration):Promise<void>{
+    if(venueEdit)throw new Error('请先确认或取消场地编辑，再核对原图对应。');
     if(referenceSaving.current||pending.current||!loaded)throw new Error('当前表单仍在读取或保存，请稍后确认原图对应。');
     const expectedScope=scopeRef.current,basis=referenceSceneBasis(layoutRef.current),expectedEpoch=scopeEpoch.current.epoch;
     if(!basis||registration.appliedBasis!==basis)throw new Error('当前设计已变化，请重新核对对应点。');
@@ -214,6 +305,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   function addCalibration(){if(!source||points.length!==2||!(Number(distance)>0))return;if(Math.hypot(points[0].x-points[1].x,points[0].z-points[1].z)<2){setNotice('请选取两个不同位置。');return;}addConstraint({kind:'distance',label:`${source.name} 两点标定`,valueMeters:Number(distance),sourceAssetId:source.id,start:{x:points[0].x/source.width!,z:points[0].z/source.height!},end:{x:points[1].x/source.width!,z:points[1].z/source.height!}});setPoints([]);setDistance('');}
   async function uploadSources():Promise<SourceImage[]>{const sources:SourceImage[]=[];for(const image of images){const kind=image.kind??'photo';if(image.assetId){sources.push({assetId:image.assetId,kind,name:image.name,width:image.width!,height:image.height!});continue;}if(!image.blob)throw new Error(`缺少 ${image.name} 的原始图片，请重新选择。`);const uploaded=await controller.uploadSource(image.blob,image.name,kind);updateImage(image.id,{assetId:uploaded.assetId,uploadedKind:kind});sources.push(uploaded);}return sources;}
   async function generate(continueReview=false):Promise<void>{
+    if(venueEdit){setNotice('请先确认或取消场地编辑，再生成方案。');return;}
     if(pending.current)return;if(referenceSaving.current){setNotice('正在保存原图对应，请完成后再生成。');return;}setNotice('');
     if(!connected){setNotice('本机资料已保留。请在云项目中登录、打开当前项目并获取编辑权，才能调用真实识别服务。');return;}
     if(!images.length&&!layout.backendSceneV2){setNotice('请先添加平面图或现场照片。也可以下方按实测尺寸创建矩形场地。');return;}
@@ -261,8 +353,33 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   }
   const currentDesign=layout.backendSceneV2?.design;
   return <section className="rc-panel" aria-label="图纸与照片重建">
+    {layout.backendSceneV2&&<section className="rc-manual-venue" aria-label="人工编辑当前场地">
+      <h4>当前场地 · {layout.width} × {layout.height} 米</h4>
+      {!venueEdit?<><p className="cr-hint">可人工修改矩形场地的总宽、总深及现有门窗，先预览，核对后应用。</p><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
+        <p className="cr-hint">固定图中参考角 (0,0)，调整对边。物料、内墙和柱子的实际位置、尺寸保持；门窗距离从所属墙的起点计算。</p>
+        <fieldset disabled={!!venueStale||venueBlocked} className="rc-venue-fields"><legend>场地编辑草稿 · 尚未应用</legend>
+          <div className="rc-measures rc-venue-measures">{([['width','总宽'],['depth','总深']] as const).map(([key,label])=><label key={key}>{label}（米）<input type="number" step="0.001" min="0.02" max="200" aria-label={`编辑${label}（米）`} value={venueEdit[key]} onChange={event=>{const value=event.target.value;setVenueEdit(current=>current?{...current,[key]:value,confirmed:false}:null);notifyVenue('');}}/></label>)}</div>
+          {venueEdit.openings.map((opening,index)=><details key={opening.id}><summary>{opening.kind==='door'?'门洞':'窗户'} {index+1} · 墙 {venueEdit.scene.structure.walls.findIndex(wall=>wall.id===opening.wallId)+1}</summary><div className="rc-measures rc-venue-measures">
+            {(['offset','width','height','sillHeight'] as const).map(key=><NumberField key={key} label={`${opening.kind==='door'?'门洞':'窗户'} ${index+1} · ${{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'离地高度'}[key]}（米）`} value={opening[key]} onChange={value=>{setVenueEdit(current=>current?{...current,confirmed:false,openings:current.openings.map(item=>item.id===opening.id?{...item,[key]:value}:item)}:null);notifyVenue('');}}/>)}
+          </div></details>)}
+          {venueCandidate.layout?.backendSceneV2&&<><VenueEditDrawing before={venueEdit.scene} after={venueCandidate.layout.backendSceneV2}/><p className="cr-hint">灰色虚线为原场地，绿色为草稿，橙色为门窗。所属外墙移动时，门窗位置也会变化，请对照核实。</p><p>总宽 {venueEdit.scene.venue.width} → {venueCandidate.layout.width} 米；总深 {venueEdit.scene.venue.depth} → {venueCandidate.layout.height} 米。</p>{venueCandidate.layout.backendSceneV2.structure.openings.map((opening,index)=>{
+            const before=venueEdit.scene.structure.openings.find(item=>item.id===opening.id)!;
+            const oldLine=openingLine(venueEdit.scene,before),newLine=openingLine(venueCandidate.layout!.backendSceneV2!,opening);
+            const changed=canonical(before)!==canonical(opening)||canonical(oldLine)!==canonical(newLine);
+            return changed?<p key={opening.id}>{opening.kind==='door'?'门洞':'窗户'} {index+1} 的位置或尺寸有变化，请核对图中橙色标记。</p>:null;
+          })}</>}
+          {venueCandidate.error&&<p role="alert" className="cr-notice">{venueCandidate.error} 草稿尚未应用，原场地保持。</p>}
+          <label className="cr-check"><input type="checkbox" disabled={!venueCandidate.layout||!venueChanged} checked={venueEdit.confirmed} onChange={event=>{const confirmed=event.target.checked;setVenueEdit(current=>current?{...current,confirmed}:null);}}/><span>我已核对修改后的尺寸、门窗位置和现场条件</span></label>
+        </fieldset>
+        {venueStale&&<p role="alert" className="cr-notice">{venueStale}</p>}
+        <div className="rc-actions"><button type="button" className="rc-secondary" onClick={()=>{setVenueEdit(null);notifyVenue('已取消编辑，原场地保持。');}}>取消场地编辑</button><button type="button" className="rc-secondary" disabled={!venueCandidate.layout||!venueEdit.confirmed||!venueChanged||!!venueStale||venueBlocked} onClick={confirmVenueEdit}>确认应用场地修改</button></div>
+      </>}
+      {venueNotice&&(!venueNotice.sceneKey||venueNotice.sceneKey===baseKey)&&<p className="cr-notice" role="status">{venueNotice.text}</p>}
+    </section>}
+    <fieldset className="rc-existing-controls" disabled={!!venueEdit}>
     <details className="rc-inputs" ref={inputDetails}><summary><Ruler size={16}/><span>图纸与照片重建</span><small>米制 · 可核对</small></summary>
     <p className="cr-hint">输入实测尺寸，图纸和照片共同补充空间信息。照片遮挡处与手绘不确定部分需要核对。</p>
+    {layout.backendSceneV2&&<><p className="cr-hint">下方是待提交的生成尺寸，填写不会修改当前场地。当前场地为 {layout.width} × {layout.height} 米。</p>{generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}</>}
     <div className="rc-measures">{([['width','总宽'],['depth','总深'],['height','层高']] as const).map(([key,label])=><label key={key}>{label}（米）<input aria-label={`${label}（米）`} type="number" step="0.001" min="0.001" max={key==='height'?30:200} value={form[key]} onChange={e=>patch({[key]:e.target.value})} placeholder="实测值"/></label>)}</div>
     <label className="cr-label">补充尺寸<textarea aria-label="补充尺寸" rows={2} value={form.text} onChange={e=>patch({text:e.target.value})} placeholder="北墙 8 米，入口宽 1.2 米，柱间距 450 厘米"/></label>
     <button type="button" className="rc-secondary" onClick={()=>{const parsed=parseDimensionText(form.text);if(!parsed.length){setNotice('请描述长度及单位，例如「北墙 8 米」。');return;}patch({constraints:[...form.constraints,...parsed.map(item=>({...item,id:crypto.randomUUID(),status:'confirmed' as const}))]});setNotice('已提取数值，请核对下方尺寸并关联对象；文字会同时提交模型理解。');}}>将文字尺寸加入清单</button>
@@ -298,6 +415,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       <div className="rc-actions"><button type="button" className="cr-generate" disabled={busy||stale||!connected} onClick={()=>void apply()}><Check size={15}/>确认应用并保存</button><button className="rc-secondary" type="button" disabled={busy} onClick={()=>{setPreview(null);setJob(null);patch({jobId:undefined,requestId:undefined});}}>放弃候选</button></div>
     </div>}
     {!preview&&currentDesign&&<details className="rc-candidate"><summary>当前方案的创意与要求核对</summary><p>{currentDesign.concept}</p>{currentDesign.highlights.map((h,index)=><button type="button" key={index} className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{currentDesign.requirements.map((r,index)=><div key={index} className={`rc-requirement is-${r.status}`}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</details>}
+    </fieldset>
     {notice&&<p className="cr-notice" role="alert">{notice}</p>}
   </section>;
 }

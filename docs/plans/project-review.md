@@ -114,3 +114,64 @@ if ($reviewExampleExit -ne 0) { throw '评审样例重建测试未通过。' }
 2026-10-07：最终模块51项定向测试及完整前端类型检查通过。导演在独立浏览器打开真实HTML，通过浏览器打印引擎输出A4，再用Poppler逐页渲染检查。已修复默认折叠附录独占空页、布局标题与首图分离、物件长标签重叠和倒置；默认客户版为3页，评审编号始终可见，打印文件另附页码。快照原始名称和几何保持不变，逐件追溯仍在HTML的可展开附录中。
 
 可检查的[三页PDF样例](../examples/community-open-day-review.pdf)与HTML采用同一评审编号。本次实际打印验证的是默认关闭附录的这份演练内容；不代表任意项目、展开附录、多楼层或真实图片捕获的所有打印组合均已验收。真实工作台入口与捕获仍待整合，真实客户意见仍未记录。
+
+## 2026-10-08 最小工作台接入计划与 props
+
+录音 C01:06:53 的本轮落点是帮助客户对照需求、平面与三维看懂方案。本切片不建设客户审批库或新版本库。实施顺序为独立准备/捕获辅助模块 → 独立评审面板 → 根与主前端接入现有工作台 → 根执行构建和真实浏览器验收。
+
+本对话维护 `frontend/lib/project-review-workflow.ts`、对应测试、`frontend/components/room-organizer/panels/project-review-panel.tsx`、CSS和React测试；原 `project-review.ts` 仅补未批准画面的来源/格式验证复用接口。共享 `creative-studio.tsx`、`room-organizer.tsx`、`use-import-export.ts` 和渲染/保存hooks仍归主前端，不在本对话并行修改。矩形场地编辑由另一负责人继续。
+
+面板契约：
+
+```ts
+interface ProjectReviewBase {
+  layout: RoomLayout;
+  briefSnapshot: BackupBriefSnapshot;
+  source: ProjectReviewSource;
+  dataState: 'saved' | 'unsaved-draft';
+  dataKind: 'unspecified' | 'rehearsal' | 'real';
+}
+interface ProjectReviewPanelActions {
+  getSource(): ProjectReviewSource;
+  prepare(): Promise<ProjectReviewBase>;
+  capture?(snapshot: ProjectReviewSnapshot, options: { includeReference: boolean }): Promise<ProjectReviewCapture>;
+}
+interface ProjectReviewPanelProps {
+  source: ProjectReviewSource;
+  actions: ProjectReviewPanelActions;
+  disabled?: boolean;
+}
+// ProjectReviewCapture 是不含 approvedForCustomer 的单张当前画面。
+```
+
+`source` props须在布局、需求、同ID恢复、切项目或身份变化时更新，`getSource`用于每次异步边界和下载前复核。revision采用不透明epoch，不放账号、令牌或私有地址；仅切换二维/三维视图不改变业务来源，同一内容快照可补充不同视角。`prepare`复用现有需求flusher/保存回读与操作保护，不把默认需求或失败读回当真实来源；当前布局未经保存确认时明确为草稿。准备期间的业务内容变化取消整次准备。
+
+`capture`由主前端接现有真实canvas/renderer/scene/camera，调用本切片的 `captureProjectReviewCanvas(snapshot, adapter, {includeReference})`。适配器提供 `getState()`、`waitForReady(source)`、同步 `render()`：
+
+- `getState`含当前source、canvas、完整已提交frameRevision、viewLabel、ready/assetsReady，以及pendingPreview/interacting/privateReferenceVisible。frameRevision在对应布局、资源和显示效果真正提交并绘制后才更新，不可用引擎isReady或单独家具编号代替。
+- `waitForReady`只等待本次画面已有资源及渲染完成，不发起付费生成或云写入。若资源失败，拒绝画面；二维也须保证对应当前布局已重绘。
+- 模块在等待前、绘制前、绘制后和编码后检查来源、frameRevision与canvas身份。三维同步重绘后在同一任务中取PNG，避免未开启preserveDrawingBuffer造成空图。
+- 有未应用候选、拖拽/分区草稿时拒绝画面，不隐藏候选root来冒充已提交布局。底图默认不允许，但用户可明确勾选“允许在评审画面中包含当前参考底图”，传 `includeReference:true`；画面标明含已允许公开的参考底图，捕获后仍须核对批准。不能用一律排除原图的文字包替代原图/平面/三维帮助客户理解的目标。
+- 等待期间切视图/canvas，或编码期间绘制版本/视图变化，仅拒绝这次画面；业务来源未变时文字快照仍可保留，用户可重试或明确无图导出。同一快照可追加二维/三维画面，最多6张，不能为旧像素重贴新快照编号。
+
+面板默认不公开需求/设计文字，制作者主动勾选。简短说明和待确认项只作为本次文件的明确手工记录，不自动读取内部工单联系人或私密原始转录。捕获画面先本地显示，核对批准后才附入客户HTML；批准不是客户确认。捕获失败保留有效文字快照，须明确选择无图出口。预览使用无脚本sandbox iframe，下载复用既有文本下载工具；不自动分享或打印。
+
+本切片验收覆盖：准备/捕获/编码期间的变化与卸载取消，缺需求/保存失败/草稿保真，画面资源/候选/底图门禁，画面批准前不进入HTML，捕获失败明确无图，编辑/恢复/切项目后旧包过期并禁止下载，联系人/转录不自动导出。根负责真实2D/3D、模板与模型加载失败、实际文件回读与打印验收；模拟canvas测试只证明保护协议。
+
+### 2026-10-08 独立模块冻结回执
+
+上述面板、CSS、React测试、workflow与测试已落盘；原 `project-review.ts` 增加未批准画面单张/整组验证接口，复用既有数量、大小和来源校验。捕获数据仍不含 `approvedForCustomer`；逐张核对后才附入客户文件。追加超限或失败保留原已核对画面与原文件，同一内容快照最多补充6张二维/三维画面。底图许可默认关闭，用户明确允许后仍需核对捕获结果。
+
+捕获状态读取会复制来源与原子状态，避免复用可变 `ref.current` 绕过等待、绘制和编码比较；本轮参考底图许可也在入口固定。已覆盖等待中原地改来源/视图/canvas、绘制中原地改版本、迟到许可改变和canvas尺寸变化的反例。
+
+3套定向测试共111项通过（原模块51、workflow27、面板33），完整前端类型检查通过，面板文案检查 `--strict` 通过。首次联合类型检查曾遇共享二维捕获缺 `hasCollision`，根补齐后最终检查通过；本切片没有修改该共享hook。
+
+本回执冻结的是独立代码与接入契约。根已接共享入口，仍需其完成生产构建、真实2D/3D与底图捕获、多图同编号、变更失效、下载回读和打印检查。本切片没有操作浏览器/服务、运行build、提交/推送，未把1px或合成PNG测试数据当真实画面证据。
+
+### 2026-10-08 当前工作台内容的实际打印复核
+
+根从默认5物件项目实际捕获三维与二维画面、核对并下载同一快照HTML，确认下载内容SHA一致；修改布局后旧包失效。使用该真实导出内容做打印紧凑化，未改变正文、图片字节或业务数据：布局不再强制另页，标题/摘要与首图保留避免断页关联，SVG限高100mm、截图限高95mm，居中保持比例，不裁剪内容。
+
+根已用 `C:/幕景/development-evidence/workbench-review-print-compact.html` 实际打印，得到 `C:/幕景/development-evidence/workbench-review-compact.pdf`，311892字节、3页A4，并逐页查看 `workbench-review-compact-1.png` 至 `-3.png`。回执确认标题与首图同页、图片居中保比例、表格文字无截断，较先前5页版减少大片空白。原真实HTML与紧凑预览除style外字节完全一致。本项打印样式据此冻结，不继续美化扩展。
+
+最终端到端边界仍保留：根从新build的工作台重新生成、下载，并核对新打印样式实际进入文件；上述样式替换后的实际打印不能代替这一项。根对三维参考图按当前referenceUrl等待mesh/纹理就绪、受控捕获失败原因和面板提示的修改继续保留；这不表示此前首帧failed的原因已被解释，其新增回归结果以根的后续回执为准。

@@ -7,6 +7,8 @@ import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun } from '@/lib/backend-session';
 import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease } from '@/lib/source-storage';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
+import type { ProjectReviewBase, ProjectReviewCaptureOptions } from '@/lib/project-review-workflow';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
@@ -14,6 +16,9 @@ import { appendCreativeBriefTemplate, briefInstruction, IDEA_CARDS, INITIAL_BRIE
 import { assertNoLocalHandoffCloudTransition } from '../lib/handoff-cloud-guard';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
+import { STORAGE_KEY } from '../lib/constants';
+import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
+import { ProjectReviewPanel } from './project-review-panel';
 import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ActivityWorkflowGuide } from './activity-workflow-guide';
@@ -32,13 +37,16 @@ type RunMarker = { requestId: string; runId?: string; baseKey: string; briefKey:
 const runStorageKey = (scope: string) => `scendance:agent-run:${scope}`;
 type CandidatePreview = { label: 'A' | 'B' | 'C'; title: string; preview: Preview };
 type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string };
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
+interface Props { reviewContext?: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 export interface LocalProjectBackupActions {
   prepareBackup(): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
   backupPending: boolean; canUndoRestore: boolean;
 }
 interface StudioValue extends LocalProjectBackupActions {
+  reviewSource: ProjectReviewSource;
+  getReviewSource(): ProjectReviewSource;
+  prepareReview(): Promise<ProjectReviewBase>;
   scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   briefReady: boolean; briefError: string | null; hasSavedBrief: boolean; retryBrief(): void;
@@ -59,7 +67,7 @@ export function useCreativeBriefState(): CreativeBriefState | null {
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'连接项目后，可以和我讨论场景布置、物料需求并核对候选方案。' }];
 
-export function CreativeStudioProvider({ controller, layout, onApply, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onBindProject, onPreview, children }: Props): JSX.Element {
+export function CreativeStudioProvider({ reviewContext, controller, layout, onApply, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onBindProject, onPreview, children }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
   const { allSelectedIds }=useSelection();
   const [brief,setBriefValue]=useState<CreativeBrief>(INITIAL_BRIEF);
@@ -202,6 +210,18 @@ export function CreativeStudioProvider({ controller, layout, onApply, prepareRes
   const imageEpoch=useRef(0);
   useLayoutEffect(()=>{operationEpoch.current++;},[layout,controller,cloud.user?.id,cloud.project?.id]);
   const controllerRef=useRef(controller);controllerRef.current=controller;
+  const reviewContextRef=useRef(reviewContext);reviewContextRef.current=reviewContext;
+  const reviewResetEpoch=useRef(0);
+  const reviewTracker=useRef<{inputs:unknown[];serial:number;prefix:string}>({inputs:[],serial:0,prefix:crypto.randomUUID()});
+  function getReviewSource():ProjectReviewSource {
+    const session=controllerRef.current.getSnapshot();
+    const inputs=[layoutRef.current,briefValueRef.current,imageRef.current,controllerRef.current,
+      session.user?.id,session.project?.id,scopeRef.current,reviewContextRef.current,reviewResetEpoch.current];
+    const tracker=reviewTracker.current;
+    if(inputs.some((value,index)=>value!==tracker.inputs[index])){tracker.inputs=inputs;tracker.serial++;}
+    return {scope:scopeRef.current,revision:`${tracker.prefix}:${tracker.serial}`};
+  }
+  const reviewSource=getReviewSource();
   function beginBackupOperation() {
     if(backupBusy.current)throw new Error('正在处理备份，请等待当前操作完成。');
     backupBusy.current=true;setBackupPending(true);
@@ -239,6 +259,25 @@ export function CreativeStudioProvider({ controller, layout, onApply, prepareRes
       operation.check();return text;
     } finally {endBackupOperation();}
   }
+  async function prepareReview():Promise<ProjectReviewBase> {
+    const source=getReviewSource();
+    if(failedRollback.current?.scope===source.scope||undoRecovery.current?.some(entry=>entry.scope===source.scope))throw new Error('请先完成资料恢复或撤销恢复，再准备评审。');
+    const operation=beginBackupOperation();
+    try{
+      // Flush only the brief being exported. Rewriting an unchanged reconstruction
+      // form would reload its reference image and invalidate this very preparation.
+      await briefHydration.current;operation.check();
+      await saveBrief(operation.base.scope);operation.check();
+      await briefSaveQueue.current;operation.check();
+      const brief=await readSourceForm<CreativeBrief>(`${operation.base.scope}:brief`);operation.check();
+      if(source.scope!==getReviewSource().scope||source.revision!==getReviewSource().revision)throw new Error('内容已变化，请重新准备评审。');
+      let saved:RoomLayout|null=null;
+      try{const stored=localStorageOrNull()?.getItem(STORAGE_KEY);saved=stored?parseLayoutJson(stored):null;}catch{/* A valid in-memory review remains explicitly a draft. */}
+      return {layout:operation.base.layout,briefSnapshot:{state:'ready',scope:source.scope,brief:brief===undefined?{status:'absent'}:{status:'present',value:brief}},source,
+        dataState:saved&&(saved.id??'local')===source.scope&&sameLayoutContent(saved,operation.base.layout)?'saved':'unsaved-draft',
+        dataKind:operation.base.layout.eventOperations?.dataKind??'unspecified'};
+    }finally{endBackupOperation();}
+  }
   function assertLocalRestore():void {
     if(controller.getSnapshot().project)throw new Error('当前工作台连接了云项目，请先切换到本地项目再恢复备份。');
     if(!prepareRestoreLayout||!commitRestoredLayout)throw new Error('此工作台尚未开放完整备份恢复。');
@@ -269,6 +308,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, prepareRes
     if(held&&editorLeases.current.get(held.scope)===held.lease)editorLeases.current.delete(held.scope);
   }
   async function restoreBackup(candidate:LocalProjectRestoreCandidate):Promise<void> {
+    reviewResetEpoch.current++;
     assertLocalRestore();
     if(undoRecovery.current)throw new Error('上次撤销恢复的资料回退尚未完成，请先重试撤销；当前所选文件仍保留。');
     // Revalidate even callers that did not use the file picker. Serialization checks
@@ -318,6 +358,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, prepareRes
   }
   const canUndoRestore=!!undoPoint&&!backupPending&&undoPoint.afterLayout===layout&&undoPoint.afterEdits===briefEditEpoch.current&&!cloud.project;
   async function undoRestore():Promise<void> {
+    reviewResetEpoch.current++;
     assertLocalRestore();
     const point=undoPointRef.current;
     if(!point||point.afterLayout!==layoutRef.current||point.afterEdits!==briefEditEpoch.current)throw new Error('恢复后项目或需求已有新编辑，不能覆盖这些编辑；请保留当前页面和原备份，核对后再处理。');
@@ -689,7 +730,7 @@ export function CreativeStudioProvider({ controller, layout, onApply, prepareRes
     catch(error) { if(alive.current && agentScopeRef.current===selected.scope)setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
     finally { if(epoch===runEpoch.current){requestPending.current=false;if(alive.current)setBusy(false);} }
   }
-  const value:StudioValue={scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -758,9 +799,12 @@ function AssistantMascot({ busy }: { busy: boolean }): JSX.Element {
 export type GeneratedVariant = { sourceAssetId: string; variantAssetId: string; objectIds?: string[] };
 export type GenerationContext = { sourceAssetId?: string; sourceObjectIds: string[]; onVariantReady(variant: GeneratedVariant): void };
 type ChatMode = 'plan'|'model';
-type BusinessMode = ChatMode|'delivery';
+type BusinessMode = ChatMode|'delivery'|'review';
 const CHAT_MODES = {plan:'场景策划',model:'物料建模'} as const;
-export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, workspaceEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0 }: {
+export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, workspaceEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview }: {
+  reviewOpenRequest?: number;
+  reviewEntryRef?: RefObject<HTMLButtonElement>;
+  captureReview?: (snapshot:ProjectReviewSnapshot, options:ProjectReviewCaptureOptions, getSource:()=>ProjectReviewSource)=>Promise<ProjectReviewCapture>;
   generationPanel?: ReactNode | ((context: GenerationContext) => ReactNode);
   workspaceOpenRequest?: number;
   workspaceEntryRef?: RefObject<HTMLButtonElement>;
@@ -807,6 +851,8 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const [opened,setOpened]=useState(false);
   const [modelOpened,setModelOpened]=useState(false);
   const [deliveryOpened,setDeliveryOpened]=useState(false);
+  const [reviewOpened,setReviewOpened]=useState(false);
+  const reviewTarget=useRef<HTMLDivElement>(null),focusReview=useRef(false),handledReview=useRef(0);
   const [modelTool,setModelTool]=useState<'generate'|'customize'>('generate');
   const [materialSeed,setMaterialSeed]=useState<MaterialCustomizationSeed>();
   useEffect(()=>{if(studio.expanded)setOpened(true);},[studio.expanded]);
@@ -840,6 +886,11 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const handledDeliveryRequest=useRef(0);
   const wasExpanded=useRef(false);
   const preparingScope=useRef(studio.preparing);preparingScope.current=studio.preparing;
+  useEffect(()=>{
+    if(reviewOpenRequest===handledReview.current)return;handledReview.current=reviewOpenRequest;
+    businessEntry.current=reviewEntryRef?.current??null;openReview();
+  },[reviewOpenRequest]);
+  useEffect(()=>{if(focusReview.current&&businessMode==='review'&&(docked?workspaceExpanded:studio.expanded)&&(!docked||businessHost)){focusReview.current=false;reviewTarget.current?.focus();}},[businessMode,workspaceExpanded,studio.expanded,businessHost,docked]);
   useEffect(()=>{
     if(preparingScope.current)return;
     const restored=afterRestoreScopeRef.current===studio.scope;
@@ -963,11 +1014,16 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   function openReference(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusReference.current=true;focusBrief.current=false;focusDelivery.current=false;returnToReferenceEntry.current=true;returnToWorkspaceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setTemplatesOpen(false);setLocalReferenceRequest(value=>value+1);resizeWorkspace(true);if(!docked)setExpanded(true);}
   function openDelivery(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusDelivery.current=true;returnToDeliveryEntry.current=true;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;setDeliveryOpened(true);setBusinessMode('delivery');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);queueMicrotask(()=>deliveryFocusTarget.current?.focus());}
   function openModelTools(event:React.MouseEvent<HTMLButtonElement>):void{businessEntry.current=event.currentTarget;setBusinessMode('model');setModelOpened(true);setTemplatesOpen(false);resizeWorkspace(true);}
+  function openReview(event?:React.MouseEvent<HTMLButtonElement>):void {
+    if(event)businessEntry.current=event.currentTarget;focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;
+    returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;
+    focusReview.current=true;setReviewOpened(true);setBusinessMode('review');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
+  }
   const businessContent=(
       <div className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
-        {docked&&<header className="cr-business-heading"><strong>{templatesOpen?'场景模板':businessMode==='delivery'?'执行资料':businessMode==='model'?'物料资料':'活动资料'}</strong><div>{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button></div></header>}
+        {docked&&<header className="cr-business-heading"><strong>{templatesOpen?'场景模板':businessMode==='review'?'方案评审':businessMode==='delivery'?'执行资料':businessMode==='model'?'物料资料':'活动资料'}</strong><div>{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button></div></header>}
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-        <div hidden={templatesOpen||businessMode==='model'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief}/></div>
+        <div hidden={templatesOpen||businessMode==='model'||businessMode==='review'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief}/></div>
         <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel}/></details></section>
         <section id="agent-panel-model" aria-label="物料建模" hidden={businessMode!=='model'||templatesOpen}>
           <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
@@ -975,6 +1031,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
           {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={(docked?workspaceExpanded:studio.expanded)&&!templatesOpen&&businessMode==='model'&&modelTool==='customize'}/></div>}
         </section>
         <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel layout={studio.layout} controller={studio.controller} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
+        <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
         <section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>
         <p className="cr-selection-context">当前场景：{sceneItems.length} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
       </div>
@@ -983,7 +1040,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
     {docked&&businessOpened&&businessHost&&createPortal(businessContent,businessHost,'creative-business')}
     {(docked||opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className={`cr-chat ${!docked&&workspaceExpanded?'is-expanded':''}`} aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();studio.setExpanded(false);}}}>
       <header><div className="cr-header-brand"><span className="cr-avatar"><AssistantMascot busy={studio.busy}/></span><div><strong>Binggo</strong><small title={studio.layout.name}>{operationScope} · {studio.layout.name}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'收起聊天':'收起 Agent'} onClick={()=>studio.setExpanded(false)}><X size={18}/>{docked&&<span className="cr-mobile-return">回到场景</span>}</button></div></header>
-      <nav className="cr-docked-tools" aria-label="工作资料入口"><button type="button" onClick={openBrief}>活动需求</button><button type="button" onClick={openReference}>图纸与尺寸</button><button type="button" onClick={openDelivery}>执行资料</button><button type="button" onClick={event=>{businessEntry.current=event.currentTarget;setTemplatesOpen(true);resizeWorkspace(true);}}>场景模板</button>{mode==='model'&&<button type="button" onClick={openModelTools}>物料工具</button>}</nav>
+      <nav className="cr-docked-tools" aria-label="工作资料入口"><button type="button" onClick={openBrief}>活动需求</button><button type="button" onClick={openReference}>图纸与尺寸</button><button type="button" onClick={openDelivery}>执行资料</button><button type="button" onClick={openReview}>方案评审</button><button type="button" onClick={event=>{businessEntry.current=event.currentTarget;setTemplatesOpen(true);resizeWorkspace(true);}}>场景模板</button>{mode==='model'&&<button type="button" onClick={openModelTools}>物料工具</button>}</nav>
       {!docked&&<div className="cr-workspace-tools">{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}><ArrowLeft size={14}/>返回当前工作区</button>}<button className="cr-workspace-toggle" type="button" aria-pressed={workspaceExpanded} onMouseDown={event=>{if(event.button===0)event.preventDefault();}} onClick={()=>resizeWorkspace(!workspaceExpanded)}>{workspaceExpanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}<span>{workspaceExpanded?'恢复浮窗':'展开工作区'}</span></button><span>{studio.connection}</span><div className="cr-chat-toggle-wrap" hidden={!workspaceExpanded}><button ref={chatToggle} className="cr-chat-toggle" type="button" aria-label={chatHidden?'展开聊天':'收起聊天'} aria-controls="creative-conversation" aria-expanded={!chatHidden} aria-describedby={chatHidden&&chatPending?'creative-conversation-status':undefined} onClick={toggleChat}>{chatHidden?'展开聊天':'收起聊天'}</button>{chatHidden&&chatPending&&<span id="creative-conversation-status" className="cr-chat-pending" role="status" aria-live="polite">{chatPending} · 展开聊天查看</span>}</div></div>}
       <div className={`cr-plan-panel cr-workspace-body ${chatHidden?'is-chat-collapsed':''}`}>
       {!docked&&businessContent}
