@@ -10,7 +10,7 @@ import sys
 import urllib.error
 import urllib.request
 
-PROJECT = "hrsrrduwbqxnqddkexoy"
+PROJECT = "wkhfvnzgopjdzxlmycks"
 API = f"https://api.supabase.com/v1/projects/{PROJECT}"
 APP = f"https://{PROJECT}.supabase.co"
 TERMINAL = "('ready','added','failed','rejected')"
