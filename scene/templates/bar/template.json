@@ -361,7 +361,6 @@
     "runtime": "Locally vendored Three.js with MIT license retained"
   },
   "preview": {
-    "page": "index.html",
     "localUrl": "http://127.0.0.1:8779/",
     "images": [
       "previews/bar-overview.jpg",

@@ -1,6 +1,6 @@
 # DeepSeek 发布操作
 
-辅助脚本 `scripts/deepseek-release.py` 只针对项目 `hrsrrduwbqxnqddkexoy`。`inspect` 只读；其他命令默认只输出操作计划，明确加 `--apply` 才执行。它不会自动重试网络结果未知的写入，不输出 HTTP 错误正文、环境变量值、登录会话或密钥。
+辅助脚本 `scripts/deepseek-release.py` 只针对项目 `wkhfvnzgopjdzxlmycks`。`inspect` 只读；其他命令默认只输出操作计划，明确加 `--apply` 才执行。它不会自动重试网络结果未知的写入，不输出 HTTP 错误正文、环境变量值、登录会话或密钥。
 
 ## 已有授权与配置
 
@@ -12,11 +12,11 @@
 
 ## 发布顺序
 
-1. 验证 [回退快照](DEEPSEEK_AGENT_ROLLBACK.md)、相关测试、类型检查和生产构建。
+1. 验证 [回退快照](archive/DEEPSEEK_AGENT_ROLLBACK.md)、相关测试、类型检查和生产构建。
 2. 在最终发布工作树执行迁移预览。已安装 CLI 2.117 支持直接指定项目：
 
    ```sh
-   DO_NOT_TRACK=1 supabase db push --linked --project-ref hrsrrduwbqxnqddkexoy --skip-vault --dry-run
+   DO_NOT_TRACK=1 supabase db push --linked --project-ref wkhfvnzgopjdzxlmycks --skip-vault --dry-run
    ```
 
    确认仅包含本次迁移后，去掉 `--dry-run` 并加 `--yes`。保留 `--skip-vault`，避免新版 CLI 在迁移前将工作树配置同步到线上 Vault。使用 CLI 保留本地迁移版本；`sql-file` 仅执行明确提供的 SQL，不自动登记迁移历史。
@@ -33,7 +33,7 @@
 4. 只部署最终发布工作树的 scene-api：
 
    ```sh
-   DO_NOT_TRACK=1 supabase functions deploy scene-api --project-ref hrsrrduwbqxnqddkexoy --use-api
+   DO_NOT_TRACK=1 supabase functions deploy scene-api --project-ref wkhfvnzgopjdzxlmycks --use-api
    ```
 
    不顺带重新部署 generation-worker 或 reconstruction-worker。核对线上 capabilities 已关闭 HY3，以及旧客户端创建任务也被拒绝。

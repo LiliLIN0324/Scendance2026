@@ -1,5 +1,7 @@
 # DeepSeek Agent 改造前快照与回退
 
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+
 快照目录：`/Users/lwc/Documents/ChatGPT/场景规划Agent产品开发/SNAPSHOTS/pre-deepseek-agent-20261003`。
 
 本文件记录改造开始前的恢复点，不代表后续版本已经上线。快照独立于开发工作树，包含源码、原生产静态构建、三个原始完整 Edge 包、恢复出的各版本源码、版本证据与 SHA-256 清单。没有归档用户业务数据、会话或服务端密钥。

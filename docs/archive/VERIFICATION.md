@@ -1,6 +1,6 @@
 # 本轮验证记录
 
-> 本文保留首次后端配置阶段记录。2026-10-02 后续已配置并实测 DeepSeek、增加每日限额、发布现有编辑器；最新部署与验收结果见 [DeepSeek 与首次上线记录](DEEPSEEK_DAILY_LIMIT.md)。
+> 归档于 2026-10-09：本文为 2026-10-02 首次后端配置阶段记录，其中的额度与部署状态已作废，仅用于追溯。当前入口见 [README](../../README.md)，后续验收见 [首次上线记录](FIRST_LAUNCH.md)、[DeepSeek Agent 发布](DEEPSEEK_AGENT_RELEASE.md)、[最近修复验收](DEBUG1003_REPAIR_REPORT.md)。
 
 
 日期：2026-10-02（America/Chicago）。范围为工作区根目录后端及独立 Supabase 项目 `hrsrrduwbqxnqddkexoy`。本轮已部署数据库与 Edge Functions、创建演示账号并完成真实云端 HTTP 验收；未调用付费模型，也未发布前端。服务配置与执行证据以 [云部署记录](CLOUD_DEPLOYMENT.md) 为准。
@@ -31,7 +31,7 @@
 
 ## 真实云端 HTTP 与权限验证
 
-[云端冒烟脚本](../scripts/smoke-cloud.mjs) 对已部署的 Auth、PostgreSQL、Storage 和 Edge Functions 发起真实请求，不替换网络响应。运行命令为 `npm run smoke:cloud -- --write --remote`；该命令会创建并保留验收项目和资产，不调用付费模型。
+[云端冒烟脚本](../../scripts/smoke-cloud.mjs) 对已部署的 Auth、PostgreSQL、Storage 和 Edge Functions 发起真实请求，不替换网络响应。运行命令为 `npm run smoke:cloud -- --write --remote`；该命令会创建并保留验收项目和资产，不调用付费模型。
 
 | 检查组 | 已通过的实际结果 |
 | --- | --- |
@@ -69,4 +69,4 @@
 3. **前端与设备**：登录页、三维编辑器、客户 `/view/`、浏览器多标签页、离线/过期租约交互、单步撤销、资源释放、手机 FPS 与大陆网络耗时仍待联调。本轮未发布前端；Cloudflare 最终状态见 [独立域名记录](CLOUDFLARE_SETUP.md)。
 4. **完整 Docker 本地栈及专项压测**：本轮未复验本地平台服务、Advisors 和数据库直连检查，也未进行锁等待/死锁专项或持续负载测试。该边界与已通过的远端服务验收分别记录。
 
-后续填写凭据和启停 cron 见 [供应商配置指南](PROVIDER_SETUP.md)，复验命令与恢复方式见 [部署说明](DEPLOYMENT.md)。文档修订只同步已有执行证据，不代表重新运行这些服务检查。
+后续填写凭据和启停 cron 见 [供应商配置指南](../PROVIDER_SETUP.md)，复验命令与恢复方式见 [部署说明](../DEPLOYMENT.md)。文档修订只同步已有执行证据，不代表重新运行这些服务检查。

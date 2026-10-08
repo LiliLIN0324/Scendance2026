@@ -1,5 +1,7 @@
 # debug1003 修复与验收
 
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+
 本次按用户提供的 debug1003 文档修复，并接入用户提供的小狗形象。代码下载、修改、测试均在专属工作树与 `codex/debug1003-repairs` 分支进行。未合并、未发布线上，也未删除任何真实云项目。
 
 ## 在线与本地版本核对
@@ -38,7 +40,7 @@
 - 桌面尺寸：1440 × 960；窄屏：390 × 844，无页面横向溢出。窄屏为 Chromium 视口验证，未冒充手机实机测试。
 - 测试登录恢复曾因本地 fixture 缺少 `/auth/v1/user` 返回 404；先增加失败测试，再补齐 fixture 并通过。生产认证实现未改动。
 
-截图：[桌面属性浮层](evidence/debug1003/desktop.png)、[窄屏助手](evidence/debug1003/mobile.png)、[图层操作](evidence/debug1003/layers.png)、[本地项目删除](evidence/debug1003/project-delete.png)。图层截图记录批量操作时的状态；后续已补充可展开的单件物料列表。
+截图：[桌面属性浮层](../evidence/debug1003/desktop.png)、[窄屏助手](../evidence/debug1003/mobile.png)、[图层操作](../evidence/debug1003/layers.png)、[本地项目删除](../evidence/debug1003/project-delete.png)。图层截图记录批量操作时的状态；后续已补充可展开的单件物料列表。
 
 测试中未调用付费 AI 生成或真实线上删除。AI 确认后归档 A/B 的路径由受控提案响应测试覆盖；不把它称为本次真实模型端到端生成验收。真实云端的删除功能仍需发布 SQL 迁移及 API 后才能使用。
 
@@ -57,7 +59,7 @@
 
 真实 Chromium 浏览器检查通过：输入预览不提前保存；Y +0.4、Z +0.5 后属性分别从 1.4/0.8 变为 1.8/1.3；取消、单次撤销、刷新恢复、负向水平移动、2D 进入三维预览、越界拦截和单件 Z 升降。开发热更新曾重置视图，完整刷新后重新完成视觉验收。3047 端口的生产静态包也完成预览与应用检查，Y/Z 从 1/0 变为 1.2/0.3，无页面运行错误；3037 开发预览已恢复并返回 HTTP 200。
 
-截图：[批量移动预览](evidence/debug1003/batch-movement-preview.png)、[应用后的三维位置](evidence/debug1003/batch-movement-applied.png)。
+截图：[批量移动预览](../evidence/debug1003/batch-movement-preview.png)、[应用后的三维位置](../evidence/debug1003/batch-movement-applied.png)。
 
 ### 追加修复：Safari 扩展引起的 hydration 警告
 
@@ -81,6 +83,6 @@ SCENDANCE_DEV_API_PORT=54347 SCENDANCE_DEV_WEB_PORT=3037 SCENDANCE_DEV_DATA=.loc
 
 ## 发布边界
 
-新增接口及约束见 [API](API.md) 与 [业务契约](contracts/SUPABASE_BUSINESS.md)。数据库使用 tombstone 保留不可变发布、账单与调用证据，同时撤销客户分享和过期提案。任何发布都应按迁移 `20261003120000_project_deletion.sql` → API → 前端的顺序进行。本次仅准备可审查分支与本地验收结果。
+新增接口及约束见 [API](../API.md) 与 [业务契约](../contracts/SUPABASE_BUSINESS.md)。数据库使用 tombstone 保留不可变发布、账单与调用证据，同时撤销客户分享和过期提案。任何发布都应按迁移 `20261003120000_project_deletion.sql` → API → 前端的顺序进行。本次仅准备可审查分支与本地验收结果。
 
-小狗素材及编辑说明见 [素材来源](../frontend/ASSET-SOURCES.md)。动画由 CSS 驱动，没有新增视频播放依赖。
+小狗素材及编辑说明见 [素材来源](../../frontend/ASSET-SOURCES.md)。动画由 CSS 驱动，没有新增视频播放依赖。

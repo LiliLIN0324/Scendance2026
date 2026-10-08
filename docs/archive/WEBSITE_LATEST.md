@@ -1,5 +1,7 @@
 # WEBSITE-LATEST 线上源码快照
 
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+
 核验日期：2026-10-03。工作分支：`codex/website-latest`。交付目录：`/Users/lwc/Documents/ChatGPT/场景规划Agent产品开发/WEBSITE-LATEST/`。
 
 ## 来源与整理范围
@@ -20,7 +22,7 @@
 5. 后端类型检查通过；212 项测试通过。初始沙箱运行中 210 项通过，2 项因回环监听权限失败，允许本地监听后定向复跑两项均通过。
 6. 前端生产构建通过，含类型及 lint 检查；保留既有 `scene-preview.tsx` 的一项 import-order 提示及静态导出 rewrite 提示。场景模板的两份定向测试共 15 项通过；本次未重跑整个前端交互测试集，未进行付费 AI 或 HY3 生成测试。
 
-详细版本、源文件和资源哈希见 [website-latest.json](evidence/website-latest.json)。
+详细版本、源文件和资源哈希见 [website-latest.json](../evidence/website-latest.json)。
 
 ## 本地交付与 Git
 

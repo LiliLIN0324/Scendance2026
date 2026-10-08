@@ -126,7 +126,6 @@
     "vendorLicense": "vendor/three/LICENSE"
   },
   "preview": {
-    "page": "index.html",
     "localUrl": "http://127.0.0.1:8774/",
     "images": [
       "previews/market-overview.png",

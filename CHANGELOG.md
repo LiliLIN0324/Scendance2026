@@ -1,5 +1,13 @@
 # 更新记录
 
+## 1.0.0 — 2026-10-09
+
+- **自有部署**：后端改为自有 Supabase 项目 `wkhfvnzgopjdzxlmycks`；前端由 Cloudflare Pages 通过 GitHub 集成自动构建发布，地址 `https://scendance-scene-planner-ewz.pages.dev`。DeepSeek 仍直连官方 `api.deepseek.com`（`deepseek-flash`），使用自有 API key。
+- **文档整顿**：1.0 之前的发布与验收记录整体移入 [docs/archive/](docs/archive/)，活文档中的旧项目与旧域名引用一并更正。
+- **版本号**：根目录与 `frontend/` 均从 `0.6.0` 升到 `1.0.0`。
+- **清理旧原型**：删除根目录独立静态原型的 `index.html`、`app.js`、`style.css`、`models.html`、`model-preview.js`、`serve.py`、`preview-webgl-desktop.jpg`、`preview-webgl-mobile.jpg`、`VALIDATION.md` 及 `docs/mockups/`。`renderer-webgl.js` 因官网三维演示仍在使用而保留。
+- **验证边界**：本次只改部署配置、发布脚本目标与文档；未改产品功能、数据库结构或 Edge Function 逻辑。
+
 ## 0.6.0 — 2026-10-03
 
 图纸与照片重建的独立预览版本，开发分支为 `codex/floorplan-to-3d`，尚未合并至 main 或部署到原站。
@@ -9,7 +17,7 @@
 - 接入独立重建队列、识别与规划调用、待核对状态、候选预览和确认应用，包含预算、去重、编辑租约及版本检查。
 - 前后端共用放置校验，覆盖移动、旋转、缩放、复制、批量操作及 AI 应用；无效拖放回到有效位置。
 - 支持结构编辑、保存恢复及撤销重做；保留原版默认墙面、地板和材质参数。
-- 提供独立持久化本地预览：`npm run dev:floorplan`。详细验证见 [验收记录](docs/floorplan-verification.md)。
+- 提供独立持久化本地预览：`npm run dev:floorplan`。详细验证见 [验收记录](docs/archive/floorplan-verification.md)。
 - **验证边界**：本地测试与构建通过；真实 DeepSeek／混元调用、识别精度及独立 Supabase 云环境仍待配置和验收。本版本不代表真实识别已验收。
 
 ## 0.5.0 — 2026-10-03
@@ -36,7 +44,7 @@
 ## 0.4.0 — 2026-10-02
 
 - 根目录静态首页替换：旧的「体育馆 / 48 小时黑客松」展示页改为「幕景 Scendance」产品首页。首屏保留透视三维视口，下方新增俯视三维建模区；两个视口共用 `renderer-webgl.js` 与同一套分区数据，点击任一视口会同步选中。
-- 旧首页留档为 `docs/mockups/legacy-venue-index.html`，不再从站点入口链接。
+- 旧首页留档为 `docs/mockups/legacy-venue-index.html`，不再从站点入口链接。（1.0.0 已随旧原型删除。）
 - 首页「导出方案」的 Markdown 标题与下载文件名由「场域 · 体育馆黑客松」改为「幕景 Scendance」。
 - 全仓品牌名「场域」改为「幕景」，含 `frontend/` 的实现文案与测试断言。
 - 主色统一为深青 `#0e7c78`；首页与工作台双向导航（首页「进入场景」↔ 工作台品牌 logo 回官网）。
@@ -56,7 +64,7 @@
 
 - `frontend/`：当前可编辑工作台。
 - `supabase/`、`client/`、`scripts/`、`tests/`：后端、接口辅助与验证。
-- 根目录 `index.html`、`models.html`：独立体育馆展示与模型预览。
+- 根目录 `index.html`、`models.html`：独立体育馆展示与模型预览。（1.0.0 已删除。）
 - `docs/`：设计参考、接口、部署和验证记录。
 
 ### 验证与边界

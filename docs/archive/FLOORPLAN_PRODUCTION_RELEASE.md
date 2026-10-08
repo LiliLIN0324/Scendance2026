@@ -1,5 +1,7 @@
 # 图纸重建与云工作台统一发布记录
 
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+
 发布时间：2026-10-03 02:46 UTC（美国中部时间 10 月 2 日）。
 正式站：https://scendance.charlestech.org
 发布代码：`0644c75`，专用分支 `codex/floorplan-safe-release`。未合并或重写 `main` / `dev`。

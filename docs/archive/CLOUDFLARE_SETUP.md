@@ -1,6 +1,6 @@
 # Scendance 独立 Cloudflare 项目与域名
 
-> 本文保留首次后端配置阶段记录。2026-10-02 后续已配置并实测 DeepSeek、增加每日限额、发布现有编辑器；最新部署与验收结果见 [DeepSeek 与首次上线记录](DEEPSEEK_DAILY_LIMIT.md)。
+> 归档于 2026-10-09：本文为 2026-10-02 首次后端配置阶段记录，其中的 Cloudflare 账号与 Pages 主机名已被后续配置取代，仅用于追溯。当前入口见 [README](../../README.md)，部署与恢复见 [部署说明](../DEPLOYMENT.md)，当前 Cloudflare 与自动部署见 [CLOUDFLARE_GITHUB_DEPLOYMENT.md](../CLOUDFLARE_GITHUB_DEPLOYMENT.md)。
 
 
 记录日期：2026-10-02（America/Chicago）。本次完成独立 Pages 项目与 `scendance.charlestech.org` 的关联和 DNS 配置；没有上传前端或占位页面。

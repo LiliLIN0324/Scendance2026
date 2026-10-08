@@ -1,6 +1,6 @@
 # 邮件注册与六位验证码找回密码
 
-目标项目：`hrsrrduwbqxnqddkexoy`。前端基于用户确认的 `codex/complete-project-version`（`356e06d`），本次分支为 `codex/auth-email-otp`。
+目标项目：`wkhfvnzgopjdzxlmycks`。前端基于用户确认的 `codex/complete-project-version`（`356e06d`），本次分支为 `codex/auth-email-otp`。
 
 ## 已准备的流程
 
@@ -29,7 +29,7 @@ Resend 域名验证与受限密钥已建立，用户报告已保存 SMTP。尚�
 2. Sign In / Providers → Email：邮箱确认开启；Email OTP length = `6`，Email OTP expiration = `600` 秒。
 3. Allow new users to sign up = 开启；不启用匿名登录。
 4. Rate Limits：Emails = `30`/小时；SMTP Minimum interval per user = `60` 秒。Resend 免费套餐另有每日/月度额度，不等于无限发送。
-5. URL Configuration：Site URL = `https://scendance.charlestech.org`，保留精确回调 `https://scendance.charlestech.org/auth/callback`。代码复用这个已允许的回调处理旧模板，不需要通配符。
+5. URL Configuration：Site URL = `https://scendance-scene-planner-ewz.pages.dev`，保留精确回调 `https://scendance-scene-planner-ewz.pages.dev/auth/callback`；旧域名 `https://scendance.charlestech.org` 及其回调保留在重定向白名单。代码复用这个已允许的回调处理旧模板，不需要通配符。
 
 邮件中的链接只指向普通页面，不带一次性 token，邮箱安全扫描不会自动消耗验证码。不要开启点击跟踪。
 

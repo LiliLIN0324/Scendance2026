@@ -2,7 +2,7 @@
 
 按用户提供的 `PLAN.md` v0.2 实现。后端使用 **Supabase Auth / PostgreSQL / 私有 Storage / Edge Functions**，面向活动工作室的项目保存、轮流编辑、AI 提案、三维生成、公共模型导入和客户发布。
 
-本文保留后端实现说明。当前仓库已包含前后端接入与生产部署，最新状态、登录与 AI 验收边界见 [项目交接](docs/PROJECT_STATUS.md)。
+本文保留后端实现说明。当前仓库已包含前后端接入与生产部署，最新状态、登录与 AI 验收边界见 [README](README.md)。
 
 ## 开始
 
@@ -22,9 +22,10 @@ npm run smoke:edge
 ## 开发交接
 
 - [后端设计与数据规则](docs/BACKEND.md)
+- [用自己的 Supabase 项目当后端（tutorial）](docs/OWN_SUPABASE_TUTORIAL.md)
 - [HTTP API、场景格式与前端接入](docs/API.md)
 - [本地运行、云端部署与故障恢复](docs/DEPLOYMENT.md)
-- [验证记录与剩余验收](docs/VERIFICATION.md)
+- [最近修复与验收](docs/archive/DEBUG1003_REPAIR_REPORT.md)；首次后端配置阶段的历史验证见 [归档记录](docs/archive/VERIFICATION.md)
 - [完整 AI 系统提示词](docs/AI_SYSTEM_PROMPT.md)
 - [前端请求与旧提案保护辅助代码](client/scene-client.ts)
 

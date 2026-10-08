@@ -1,6 +1,8 @@
 # AI 助理配置与前端交接
 
-> 本文为原交付过程记录，所述分离工作树路径属于历史环境。当前完整仓库的入口与部署边界见 [项目交接](PROJECT_STATUS.md)。
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+
+> 本文为原交付过程记录，所述分离工作树路径属于历史环境。当前完整仓库的入口与部署边界见 [项目交接](PROJECT_STATUS.md)（已归档）。
 
 2026-10-02。本任务在 `codex/deepseek-assistant` 后端工作树进行配置检查，前端位于本目录下独立 Git 工作树 `scendance/`，分支为 `codex/deepseek-assistant-ui`，起点为已上线前端 `c727f00`，实现提交 `c790c45`，窄屏修正提交 `8fe040c`。未合并 main 或 dev。
 

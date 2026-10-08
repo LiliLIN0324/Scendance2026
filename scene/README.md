@@ -2,23 +2,18 @@
 
 把模型拖进无限网格场景，用固定日光和实时阴影查看效果。不依赖账号、后端或 API Key。
 
-本目录是仓库里的**独立入口**，与根目录的首页和 `frontend/` 工作台互不影响：它不修改任何既有文件，只共享仓库已有的 `../vendor/three/`。
+本目录是仓库里的**独立入口**，与 `frontend/` 工作台互不影响：它不修改任何既有文件，只共享仓库已有的 `../vendor/three/`。
 
 ## 运行
 
 从**仓库根目录**启动（模板要读取 `../vendor/` 与 `../assets/library/`）：
 
 ```sh
-python3 serve.py                 # 仓库自带的服务器，默认 http://127.0.0.1:8766/
+python3 -m http.server 8766 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8766/scene/
 ```
 
-或不用 `serve.py`：
-
-```sh
-python3 -m http.server 8766 --bind 127.0.0.1
-# 同样打开 http://127.0.0.1:8766/scene/
-```
+（旧版仓库自带的 `serve.py` 已在 1.0.0 随独立原型删除，用上面的标准库服务器即可。）
 
 **必须通过 HTTP 服务打开。** 页面用 import map 解析裸模块名 `three`，并且要 `fetch` 本地 GLB；直接双击 `index.html` 会因 `file://` 协议被浏览器拦截而白屏。需要浏览器支持 WebGL 2 与 import maps。
 
@@ -84,4 +79,4 @@ python3 -m http.server 8766 --bind 127.0.0.1
 
 ## 验证状态
 
-本模板的几何、光照与交互通过无头测试验证（真实 three.js，仅 stub WebGL 渲染器），验证明细与**未验证项**见 [`../VALIDATION.md`](../VALIDATION.md)。其中明确记录：**尚未在真实浏览器中人工操作验证**。
+本模板的几何、光照与交互通过无头测试验证（真实 three.js，仅 stub WebGL 渲染器）。原始验证明细与**未验证项**曾记录在根目录 `VALIDATION.md`，该文件已在 1.0.0 随旧原型删除，内容可在 Git 历史中找回；其中明确记录：**尚未在真实浏览器中人工操作验证**。
