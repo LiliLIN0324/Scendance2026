@@ -2,14 +2,14 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { RoomEditorProvider, SelectionProvider, type RoomEditorContextValue } from '../contexts';
+import { RoomEditorProvider, SelectionProvider, type RoomEditorContextValue, type SelectionContextValue } from '../contexts';
 import { layoutStore, useLayout } from '../hooks/use-layout-store';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { addDesign } from '../lib/scene-layers';
 import { SceneLayersPanel } from './scene-layers-panel';
 import type { RoomLayout } from '../lib/types';
 
-function Workspace({ onPreview }: { onPreview?: (layout: RoomLayout | null) => void }) {
+function Workspace({ onPreview, onSelection }: { onPreview?: (layout: RoomLayout | null) => void; onSelection?: SelectionContextValue['selectOnly'] }) {
   const layout = useLayout();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [extraSelectedIds, setExtraSelectedIds] = useState<ReadonlySet<string>>(new Set());
@@ -17,10 +17,25 @@ function Workspace({ onPreview }: { onPreview?: (layout: RoomLayout | null) => v
   const editor = { layout, activeFloor: layout.floors[0], activeFloorIndex: 0, actions: layoutStore.getState().actions,
     history: { canUndo: false, undo: vi.fn() } } as unknown as RoomEditorContextValue;
   return <RoomEditorProvider value={editor}><SelectionProvider value={{ selectedItemId, setSelectedItemId, extraSelectedIds, setExtraSelectedIds, allSelectedIds,
-    selectedItem: layout.floors[0]!.items.find(i => i.id === selectedItemId) ?? null, selectOnly: id => { setSelectedItemId(id); setExtraSelectedIds(new Set()); } }}><SceneLayersPanel {...(onPreview ? { onPreview } : {})}/></SelectionProvider></RoomEditorProvider>;
+    selectedItem: layout.floors[0]!.items.find(i => i.id === selectedItemId) ?? null, selectOnly: (id, options) => { onSelection?.(id, options); setSelectedItemId(id); setExtraSelectedIds(new Set()); } }}><SceneLayersPanel {...(onPreview ? { onPreview } : {})}/></SelectionProvider></RoomEditorProvider>;
 }
 beforeEach(() => layoutStore.setState({ layout: INITIAL_LAYOUT, activeFloorIndex: 0 }));
 afterEach(cleanup);
+
+it('keeps category and single-member layer selection in the tools, but lets a material row open properties', () => {
+  const id = INITIAL_LAYOUT.floors[0]!.items[2]!.id, onSelection = vi.fn();
+  layoutStore.setState({ layout: { ...INITIAL_LAYOUT, itemLayers: [{ id: 'one-chair', name: '单椅演练组', itemIds: [id] }] } });
+  render(<Workspace onSelection={onSelection}/>);
+  fireEvent.click(screen.getByRole('button', { name: /全部椅子/ }));
+  expect(onSelection).toHaveBeenLastCalledWith(id, { keepPanel: true });
+  expect(screen.getByText('批量编辑 · 已选 2 件')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: /^单椅演练组/ }));
+  expect(onSelection).toHaveBeenLastCalledWith(id, { keepPanel: true });
+  expect(screen.getByText('批量编辑 · 已选 1 件')).toBeTruthy();
+  const material = screen.getAllByRole('button', { name: /1\. 活动座椅/, hidden: true })[0]!;
+  fireEvent.click(material);
+  expect(onSelection).toHaveBeenLastCalledWith(id, undefined);
+});
 
 it('previews horizontal Y and vertical Z without saving, then applies the displayed displacement once', () => {
   const onPreview = vi.fn();

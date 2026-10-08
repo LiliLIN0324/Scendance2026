@@ -16,8 +16,10 @@ export interface SelectionContextValue {
    * previous multi-select's extras silently survive into the next group
    * operation (#117). Raw setters remain for the orchestrator's own
    * toggle/promote logic.
+   * Layer/group tools keep their panel open so selection can be followed by
+   * bulk editing. Ordinary selection opens object properties, even on reselect.
    */
-  readonly selectOnly: (id: string | null) => void;
+  readonly selectOnly: (id: string | null, options?: { keepPanel?: boolean }) => void;
 }
 
 const SelectionContext = createContext<SelectionContextValue | null>(null);
