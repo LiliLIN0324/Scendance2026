@@ -21,7 +21,7 @@ function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
   };
 }
 
-function setup(selected: FurnitureItem) {
+function setup(selected: FurnitureItem, embedded = false) {
   const editor = {
     layout: INITIAL_LAYOUT,
     actions: { setLocked: vi.fn(), resizeItem: vi.fn(), moveItem: vi.fn(), setRotation: vi.fn(), setColor: vi.fn(), updateItem: vi.fn() },
@@ -40,7 +40,7 @@ function setup(selected: FurnitureItem) {
   render(
     <RoomEditorProvider value={editor}>
       <SelectionProvider value={selection}>
-        <ItemContextPopover hasCollision={false} onRemove={vi.fn()} onDuplicate={vi.fn()}
+        <ItemContextPopover embedded={embedded} hasCollision={false} onRemove={vi.fn()} onDuplicate={vi.fn()}
           onRotate={vi.fn()} onToggleCameraBracket={vi.fn()} onClose={vi.fn()} />
       </SelectionProvider>
     </RoomEditorProvider>
@@ -114,5 +114,35 @@ describe('selected summary and colour', () => {
     setup(placed({ source: 'builtin', type: 'chair' }));
     expect(document.querySelector('.sc-color-swatches')).toBeTruthy();
     expect(document.querySelectorAll('.sc-color-swatches button')).toHaveLength(8);
+  });
+});
+
+describe('embedded selected properties', () => {
+  afterEach(cleanup);
+
+  it('keeps the original editing fields and callbacks inside the materials panel', () => {
+    const editor = setup(placed({ name: '测试椅', source: 'builtin', type: 'chair', position: { x: 2, z: 3 }, notes: '原备注' }), true);
+    const properties = screen.getByRole('complementary', { name: '测试椅属性' });
+    expect(properties.classList.contains('is-embedded')).toBe(true);
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'X / m' }), { target: { value: '2.5' } });
+    expect(editor.actions.moveItem).toHaveBeenCalledWith('placed-1', 2.5, 3);
+    fireEvent.change(screen.getByRole('textbox', { name: '物料备注' }), { target: { value: '现场核对备注' } });
+    expect(editor.actions.updateItem).toHaveBeenCalledWith('placed-1', { notes: '现场核对备注' });
+    fireEvent.click(screen.getByRole('button', { name: '允许编辑 · 点击锁定' }));
+    expect(editor.actions.setLocked).toHaveBeenCalledWith('placed-1', true);
+    expect(properties.contains(screen.getByRole('spinbutton', { name: 'Z / m' }))).toBe(true);
+  });
+
+  it('preserves locked restrictions and offers the original explicit unlock action', () => {
+    const editor = setup(placed({ locked: true }), true);
+    for (const name of ['X / m', 'Y / m', 'Z / m', '旋转 / °']) {
+      expect((screen.getByRole('spinbutton', { name }) as HTMLInputElement).disabled).toBe(true);
+    }
+    expect((screen.getByRole('textbox', { name: '物料备注' }) as HTMLTextAreaElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '旋转 90°' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '删除物料' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '已锁定 · 点击解锁' }));
+    expect(editor.actions.setLocked).toHaveBeenCalledWith('placed-1', false);
+    expect(editor.actions.moveItem).not.toHaveBeenCalled(); expect(editor.actions.updateItem).not.toHaveBeenCalled();
   });
 });

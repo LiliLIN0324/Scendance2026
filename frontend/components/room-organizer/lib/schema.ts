@@ -1,4 +1,7 @@
+import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
 import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
+import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
@@ -31,11 +34,12 @@ import type {
 /*
  * Caps on what a stored, imported or shared layout may carry (#332, #350).
  * They bound what a crafted file or link can make the tab hold, render and
- * re-save. They REPAIR, never refuse: parseStoredLayout truncates, clamps
+ * re-save. Geometry is repaired: parseStoredLayout truncates, clamps
  * and slices to them, because a save from an older version (or an edit the
  * reducer let through) that broke a cap must still open — a refused main
  * save is replaced by the default house on the next autosave. The reducer
- * applies the same caps, so its output always parses unchanged.
+ * applies the same caps, so its output always parses unchanged. Execution
+ * metadata is validated strictly; an ID repair cannot create an association.
  */
 /** House, floor, item and zone names. */
 export const MAX_NAME_LENGTH = 200;
@@ -154,6 +158,9 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   if (v.assetId !== undefined && !uuid.safeParse(v.assetId).success) return false;
   if (v.venueEntranceId !== undefined && !uuid.safeParse(v.venueEntranceId).success) return false;
   if (v.notes !== undefined && typeof v.notes !== 'string') return false;
+  // Invalid execution records must make the save visibly unreadable, not
+  // disappear during whitelist repair or retain a false accepted status.
+  if (v.handoff !== undefined && !handoffSchema.safeParse(v.handoff).success) return false;
   if (v.source !== undefined && !['builtin', 'public_library', 'generated', 'local_sample'].includes(v.source as string)) return false;
   if (v.glbUrl !== undefined && !isGlbUrl(v.glbUrl)) return false;
   if (v.glbNode !== undefined && (typeof v.glbNode !== 'string' || !/^Preset_Object_\d{1,4}$/.test(v.glbNode))) return false;
@@ -262,6 +269,8 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   if (!isPlainObject(value)) return false;
   const v = value;
 
+  if (v.eventOperations !== undefined && !eventOperationsSchema.safeParse(v.eventOperations).success) return false;
+  if (v.productionPlan !== undefined && !productionPlanSchema.safeParse(v.productionPlan).success) return false;
   if (typeof v.name !== 'string') return false;
   if (v.itemLayers !== undefined && (!Array.isArray(v.itemLayers) || v.itemLayers.length > 100 || !v.itemLayers.every(layer =>
     isPlainObject(layer) && typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= MAX_ID_LENGTH &&
@@ -353,7 +362,8 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
  *
  * The result holds only the fields the app knows (#350), within the caps
  * above, with unique ids (#338). Only a structurally invalid value is
- * refused; anything over a cap is repaired. An input that already is
+ * refused; geometry over a cap is repaired when instance references remain
+ * unambiguous. Invalid execution metadata is refused. An input that already is
  * exactly that comes back as-is.
  */
 export function parseStoredLayout(value: unknown): RoomLayout | null {
@@ -362,7 +372,78 @@ export function parseStoredLayout(value: unknown): RoomLayout | null {
     : isLegacySingleFloorLayout(value)
       ? migrateLegacyLayout(value)
       : null;
-  return layout && withUniqueIds(repairLayout(layout));
+  if (!layout) return null;
+  const parsed = parseLayoutEventOperations(layout);
+  return parsed ? withUniqueIds(repairLayout(parsed)) : null;
+}
+
+/** Validate local business metadata before a load or snapshot can replace the current draft. */
+export function parseLayoutEventOperations(layout: RoomLayout): RoomLayout | null {
+  if ((layout.eventOperations !== undefined || layout.productionPlan !== undefined) && !isRoomLayout(layout)) return null;
+  const parsed = layout.eventOperations === undefined ? undefined : eventOperationsSchema.safeParse(layout.eventOperations);
+  if (parsed && !parsed.success) return null;
+  const production = layout.productionPlan === undefined ? undefined : productionPlanSchema.safeParse(layout.productionPlan);
+  if (production && !production.success) return null;
+  const operations = parsed?.data;
+  let next = JSON.stringify(operations) === JSON.stringify(layout.eventOperations)
+    ? layout : { ...layout, eventOperations: operations };
+  if (JSON.stringify(production?.data) !== JSON.stringify(layout.productionPlan)) next = { ...next, productionPlan: production?.data };
+  if (layout.designBook) {
+    const variants = [];
+    for (const variant of layout.designBook.variants) {
+      const snapshot = parseLayoutEventOperations(variant.layout);
+      if (!snapshot) return null;
+      variants.push(snapshot === variant.layout ? variant : { ...variant, layout: snapshot });
+    }
+    if (variants.some((variant, index) => variant !== layout.designBook!.variants[index])) {
+      next = { ...next, designBook: { ...layout.designBook, variants } };
+    }
+  }
+  return hasAmbiguousExecutionIds(next) || hasAmbiguousProductionIds(next) ? null : next;
+}
+
+/** Geometry repair must not turn a missing planned reference into a new association. */
+function hasAmbiguousProductionIds(layout: RoomLayout): boolean {
+  if (!layout.productionPlan) return !!layout.designBook?.variants.some(variant => hasAmbiguousProductionIds(variant.layout));
+  const key = (id: string) => uuid.safeParse(id).success ? id.toLowerCase() : id;
+  const referenced = new Set([
+    ...(layout.productionPlan?.acquisitions.flatMap(row => row.objectIds) ?? []),
+    ...(layout.productionPlan?.estimates.flatMap(row => row.objectIds) ?? []),
+  ].map(key));
+  const counts = new Map<string, number>();
+  for (const floor of layout.floors) {
+    const repaired = floor.items.map(item => ({ id: capText(item.id, MAX_ID_LENGTH) }));
+    for (const item of floor.items) {
+      const original = key(item.id), shortened = key(capText(item.id, MAX_ID_LENGTH));
+      if (original !== shortened && (referenced.has(original) || referenced.has(shortened))) return true;
+      counts.set(shortened, (counts.get(shortened) ?? 0) + 1);
+    }
+    if (uniqueIds(repaired).some((item, index) => item.id !== repaired[index]!.id && referenced.has(key(item.id)))) return true;
+  }
+  return [...referenced].some(id => (counts.get(id) ?? 0) > 1) ||
+    !!layout.designBook?.variants.some(variant => hasAmbiguousProductionIds(variant.layout));
+}
+
+/** Keep the original save recoverable when an execution record has no unique instance. */
+function hasAmbiguousExecutionIds(layout: RoomLayout): boolean {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  const assigned = new Set(layout.eventOperations?.tasks.flatMap((task) => task.objectIds));
+  for (const floor of layout.floors) {
+    for (const item of floor.items) {
+      // Repair shortens ids; collisions created by that shortening are ambiguous too.
+      const id = capText(item.id, MAX_ID_LENGTH);
+      // A broken reference may stay broken; repair must not turn it into an association.
+      if (id !== item.id && assigned.has(id)) return true;
+      if (seen.has(id)) duplicates.add(id);
+      seen.add(id);
+      if (item.handoff !== undefined) assigned.add(id);
+    }
+    const repaired = floor.items.map((item) => ({ id: capText(item.id, MAX_ID_LENGTH) }));
+    if (uniqueIds(repaired).some((item, index) => item.id !== repaired[index]!.id && assigned.has(item.id))) return true;
+  }
+  return [...assigned].some((id) => duplicates.has(id)) ||
+    !!layout.designBook?.variants.some((variant) => hasAmbiguousExecutionIds(variant.layout));
 }
 
 /*
@@ -378,6 +459,8 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  productionPlan: true,
+  eventOperations: true,
   itemLayers: true,
   designBook: true,
   scenePreset: true,
@@ -413,6 +496,7 @@ const FLOOR_KEYS = keysOf<FloorLayout>({
   height: true,
 });
 const ITEM_KEYS = keysOf<FurnitureItem>({
+  handoff: true,
   structuralOpeningId: true,
   structuralColumnId: true,
   wallId: true,
@@ -559,6 +643,10 @@ function repairItem(item: FurnitureItem): FurnitureItem {
     icon: capText(item.icon, MAX_ICON_LENGTH),
   };
   if (item.notes !== undefined) patch.notes = capText(item.notes, 500);
+  if (item.handoff !== undefined) {
+    const handoff = handoffSchema.parse(item.handoff);
+    patch.handoff = JSON.stringify(handoff) === JSON.stringify(item.handoff) ? item.handoff : handoff;
+  }
   if (item.cctvModelId !== undefined) patch.cctvModelId = capText(item.cctvModelId, MAX_ID_LENGTH);
   if (item.groupId !== undefined) patch.groupId = capText(item.groupId, MAX_ID_LENGTH);
   // A negative price turns the budget and every cost total upside down (#350).
@@ -710,6 +798,8 @@ function uniqueIds<T extends { id: string }>(list: T[]): T[] {
 }
 
 interface LegacySingleFloorLayout {
+  productionPlan?: ProductionPlan | undefined;
+  eventOperations?: EventOperations | undefined;
   id?: string;
   name: string;
   width: number;
@@ -730,6 +820,8 @@ function isLegacySingleFloorLayout(value: unknown): value is LegacySingleFloorLa
   return (
     typeof v.name === 'string' &&
     isOptionalString(v.id) &&
+    (v.eventOperations === undefined || eventOperationsSchema.safeParse(v.eventOperations).success) &&
+    (v.productionPlan === undefined || productionPlanSchema.safeParse(v.productionPlan).success) &&
     isRoomDimension(v.width) &&
     isRoomDimension(v.height) &&
     typeof v.floorColor === 'string' &&
@@ -764,6 +856,8 @@ function migrateLegacyLayout(legacy: LegacySingleFloorLayout): RoomLayout {
     floors: [groundFloor],
   };
   if (legacy.id !== undefined) layout.id = legacy.id;
+  if (legacy.eventOperations !== undefined) layout.eventOperations = legacy.eventOperations;
+  if (legacy.productionPlan !== undefined) layout.productionPlan = legacy.productionPlan;
   // Non-destructive: keep migrating the rest of the layout even if the stored
   // floor plan isn't a safe inline data URL — just drop the image so we never
   // hand a network URL to the texture loader.

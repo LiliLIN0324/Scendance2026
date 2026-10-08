@@ -1,5 +1,6 @@
 import { readFileSync, lstatSync } from 'node:fs';
 import { parseEnv } from 'node:util';
+import { hasPrivateFilePermissions } from './private-env-file.ts';
 
 const file = process.argv[2];
 const allowed = ['HUNYUAN_API_MODE', 'HUNYUAN_API_KEY', 'GENERATION_MAX_TASK_CENTS', 'HUNYUAN_TERMS_URL', 'HUNYUAN_TERMS_REVIEWED_AT'];
@@ -7,8 +8,11 @@ const problems = [];
 let env = {};
 try {
   const stat = lstatSync(file);
-  if (!stat.isFile() || (stat.mode & 0o077) !== 0) problems.push('ENV_FILE: use a regular file with permissions 0600');
-  env = parseEnv(readFileSync(file, 'utf8'));
+  if (!stat.isFile() || !hasPrivateFilePermissions(file, stat.mode)) {
+    problems.push('ENV_FILE: use a private regular file (POSIX 0600; Windows ACL limited to this user, SYSTEM and Administrators)');
+  } else {
+    env = parseEnv(readFileSync(file, 'utf8'));
+  }
 } catch { problems.push('ENV_FILE: supply a readable configuration file path'); }
 for (const key of allowed) if (!env[key]?.trim()) problems.push(`${key}: required`);
 if (Object.keys(env).some(key => !allowed.includes(key))) problems.push('ENV_FILE: only the five Hunyuan fields are permitted; do not upload other service settings');

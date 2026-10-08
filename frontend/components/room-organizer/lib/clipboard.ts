@@ -105,6 +105,7 @@ export function buildPasteItems(options: PasteOptions): FurnitureItem[] {
       position: { x: target.x + entry.position!.x, z: target.z + entry.position!.z },
     };
     delete copy.locked;
+    delete copy.handoff;
 
     const settled = settleWallMountedItem(copy, copy.position!, roomWidth, roomDepth, interiorWalls);
     if (settled) return { ...copy, ...settled };

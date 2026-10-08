@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { makeItem, makeUnplacedItem } from '../lib/__testfixtures__/fixtures';
-import { computeFloorPlanPlacement, computeHeatmapCells, HEATMAP_COLS, HEATMAP_ROWS, render2DTopDown } from './render';
+import { describe, expect, it, vi } from 'vitest';
+import { makeFloor, makeItem, makeLayout, makeUnplacedItem } from '../lib/__testfixtures__/fixtures';
+import { layoutGeometryScene } from '../lib/structural-layout';
+import { computeFloorPlanPlacement, computeHeatmapCells, get2DViewTransform, HEATMAP_COLS, HEATMAP_ROWS, render2DTopDown } from './render';
 
 it('rounds item and room dimension labels to at most two decimal places without rounding scene data', () => {
   const texts: string[] = [];
@@ -21,6 +22,83 @@ it('rounds item and room dimension labels to at most two decimal places without 
 // [col·0.5, (col+1)·0.5) × [row·0.5, (row+1)·0.5) in room space, and room
 // space is world space shifted by +5 on each axis.
 const ROOM = 10;
+
+describe('main canvas reference image', () => {
+  class DecodedImage {
+    complete = true; naturalWidth = 100; naturalHeight = 50;
+    onload: (() => void) | null = null;
+    set src(_url: string) { this.onload?.(); }
+  }
+  const setup = () => {
+    const drawImage = vi.fn(), transform = vi.fn();
+    const target: Record<string, unknown> = { drawImage, transform, globalAlpha: 1 };
+    const alphaStack: number[] = [];
+    target.save = () => alphaStack.push(target.globalAlpha as number);
+    target.restore = () => { target.globalAlpha = alphaStack.pop() ?? 1; };
+    const ctx = new Proxy(target, { get: (obj, key) => obj[key as string] ?? (() => {}) });
+    const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const floor = makeFloor(), layout = makeLayout({ width: 10, height: 8, floors: [floor], floorPlanImage: 'data:legacy-reference' });
+    const options = { canvas, layout, floor, selectedItemId: null, showMeasurements: false, showWiFiSignals: false, hasCollision: () => false };
+    return { options, drawImage, transform, target };
+  };
+  it('hiding keeps the source and paints a solid floor without decoding or drawing', () => {
+    const image = vi.fn(); vi.stubGlobal('Image', image);
+    try {
+      const { options, drawImage } = setup();
+      render2DTopDown({ ...options, showFloorPlan: false });
+      expect(drawImage).not.toHaveBeenCalled();
+      expect(image).not.toHaveBeenCalled();
+      expect(options.layout.floorPlanImage).toBe('data:legacy-reference');
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('uses the same affine mapping for a skewed reference, with display opacity', () => {
+    vi.stubGlobal('Image', DecodedImage);
+    try {
+      const { options, drawImage, transform, target } = setup();
+      const referenceImage = { url: 'blob:skew-reference', pixelWidth: 100, pixelHeight: 50,
+        imageToWorld: [0.05, 0.01, -0.02, 0.08, 2, 1] as const };
+      const shown = { ...options, referenceImage, floorPlanOpacity: 0.25 };
+      const alpha: number[] = [];
+      drawImage.mockImplementation(() => alpha.push(target.globalAlpha as number));
+      render2DTopDown(shown); render2DTopDown(shown);
+      const { scale, offsetX, offsetY } = get2DViewTransform(800, 600, options.layout);
+      expect(transform).toHaveBeenCalledWith(0.05 * scale, 0.01 * scale, -0.02 * scale, 0.08 * scale,
+        offsetX + 2 * scale, offsetY + scale);
+      expect(drawImage.mock.lastCall?.slice(1)).toEqual([0, 0, 100, 50]);
+      expect(alpha).toEqual([0.25]);
+      expect(target.globalAlpha).toBe(1);
+      drawImage.mockClear();
+      render2DTopDown({ ...shown, showFloorPlan: false });
+      expect(drawImage).not.toHaveBeenCalled();
+      const upper = makeFloor({ id: 'upper' });
+      render2DTopDown({ ...shown, layout: { ...options.layout, floors: [options.floor, upper] }, floor: upper });
+      expect(drawImage).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('never stretches an old image into a v2 scene without an applied reference mapping', () => {
+    const image = vi.fn(); vi.stubGlobal('Image', image);
+    try {
+      const { options, drawImage } = setup();
+      const layout = { ...options.layout, backendSceneV2: layoutGeometryScene(options.layout) };
+      render2DTopDown({ ...options, layout });
+      expect(image).not.toHaveBeenCalled(); expect(drawImage).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('leaves the legacy fit unchanged and allows display opacity to override its saved value', () => {
+    vi.stubGlobal('Image', DecodedImage);
+    try {
+      const { options, drawImage, transform, target } = setup();
+      const shown = { ...options, layout: { ...options.layout, floorPlanOpacity: 0.6 }, floorPlanOpacity: 0.3 };
+      const alpha: number[] = [];
+      drawImage.mockImplementation(() => alpha.push(target.globalAlpha as number));
+      render2DTopDown(shown); render2DTopDown(shown);
+      expect(drawImage.mock.lastCall).toHaveLength(9);
+      expect(transform).not.toHaveBeenCalled();
+      expect(alpha).toEqual([0.3]);
+      expect(shown.layout.floorPlanOpacity).toBe(0.6);
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
 
 const sum = (grid: readonly number[]): number => grid.reduce((a, b) => a + b, 0);
 

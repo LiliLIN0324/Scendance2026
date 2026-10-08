@@ -1,3 +1,4 @@
+import { preserveCurrentActivity } from '../../../lib/production-plan';
 import type { FurnitureItem, RoomLayout } from './types';
 
 export const MAX_DESIGNS = 20;
@@ -7,6 +8,7 @@ export function designSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook
 }
 
 export function addDesign(base: RoomLayout, candidate: RoomLayout): RoomLayout {
+  candidate = preserveCurrentActivity(base, candidate);
   const book = base.designBook ?? { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: designSnapshot(base) }] };
   if (book.variants.length >= MAX_DESIGNS) throw new Error('本机已保留 20 个方案，请先在图层面板移除不再需要的方案。');
   const variants = book.variants.map(v => v.id === book.activeId ? { ...v, layout: designSnapshot(base) } : v);
@@ -20,7 +22,7 @@ export function switchDesign(base: RoomLayout, id: string): RoomLayout {
   const book = base.designBook;
   const selected = book?.variants.find(v => v.id === id);
   if (!book || !selected || id === book.activeId) return base;
-  return { ...selected.layout, ...(base.id ? { id: base.id } : {}), designBook: { activeId: id,
+  return { ...preserveCurrentActivity(base, selected.layout), ...(base.id ? { id: base.id } : {}), designBook: { activeId: id,
     variants: book.variants.map(v => v.id === book.activeId ? { ...v, layout: designSnapshot(base) } : v) } };
 }
 

@@ -15,7 +15,60 @@ export function registerSourceFlush(scope: string, flush: FlushSourceCallback): 
 export async function flushSourceScope(scope: string): Promise<void> {
   await Promise.all([...sourceFlushers.get(scope)??[]].map(flush=>flush()));
 }
+export interface SourceEditorLease { ready: Promise<void>; readonly acquired: boolean; release(): Promise<void> }
+const sourceEditors = new Map<string, Set<SourceEditorLease>>();
+const sourceLockName = (scope: string) => `scendance:source-editor:${scope}`;
+/** Live editors hold shared native locks, including editors in other tabs. */
+export function registerSourceEditor(scope: string): SourceEditorLease {
+  let releaseHold!: () => void, signalReady!: () => void, rejectReady!: (error: unknown) => void;
+  const hold = new Promise<void>(resolve => { releaseHold = resolve; });
+  const ready = new Promise<void>((resolve,reject) => { signalReady = resolve;rejectReady=reject; });
+  const abort = new AbortController();
+  let released = false, acquired = false;
+  const request = typeof navigator !== 'undefined' && navigator.locks
+    ? navigator.locks.request(sourceLockName(scope), { mode: 'shared', signal: abort.signal }, async () => { if(released)return;acquired=true;signalReady();await hold; }).catch(rejectReady)
+    : Promise.resolve().then(()=>{if(!released){acquired=true;signalReady();}});
+  // Keep acquisition errors observable by callers without an unhandled rejection.
+  void ready.catch(() => {});
+  const lease: SourceEditorLease = { ready, get acquired(){return acquired&&!released;}, async release() {
+    if (released) return request.catch(() => {});
+    released = true;if(!acquired)rejectReady(new Error('本地资料编辑页面已切换，已取消本次保存。'));releaseHold();abort.abort();
+    const editors = sourceEditors.get(scope); editors?.delete(lease);
+    if (!editors?.size) sourceEditors.delete(scope);
+    await request.catch(() => {});
+  } };
+  const editors = sourceEditors.get(scope) ?? new Set<SourceEditorLease>();
+  editors.add(lease); sourceEditors.set(scope, editors);
+  return lease;
+}
+/** Refuse an occupied scope immediately; never restore without cross-tab protection. */
+export async function withSourceRestoreLock<T>(scopes: string[], restore: () => Promise<T>): Promise<T> {
+  if (typeof navigator === 'undefined' || !navigator.locks) throw new Error('此浏览器无法保护其他页面的本地资料，请使用支持 Web Locks 的浏览器恢复备份。');
+  const unique = [...new Set(scopes)].sort();
+  async function acquire(index: number): Promise<T> {
+    const scope = unique[index];
+    if (scope === undefined) return restore();
+    if (sourceEditors.get(scope)?.size) throw new Error('该项目正被另一编辑页面使用，请关闭那个页面后重试恢复。');
+    return navigator.locks.request(sourceLockName(scope), { mode: 'exclusive', ifAvailable: true }, async lock => {
+      if (!lock) throw new Error('该项目正被另一编辑页面使用，请关闭那个页面后重试恢复。');
+      return acquire(index + 1);
+    });
+  }
+  return acquire(0);
+}
 const DATABASE = 'scendance-source-images-v1';
+const sourceListeners = new Map<string, Set<() => void>>();
+/** Read-only views refresh after the original owner has committed its form/images. */
+export function subscribeSourceChanges(scope: string, listener: () => void): () => void {
+  const listeners = sourceListeners.get(scope) ?? new Set<() => void>();
+  listeners.add(listener); sourceListeners.set(scope, listeners);
+  return () => { listeners.delete(listener); if (!listeners.size) sourceListeners.delete(scope); };
+}
+function changedSource(scope?: string): void {
+  for (const [key, listeners] of sourceListeners) if (scope === undefined || scope === key) {
+    for (const listener of listeners) { try { listener(); } catch { /* A view cannot turn a committed save into a failed write. */ } }
+  }
+}
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') { reject(new Error('浏览器未开放本地图片存储；本次图片仅在会话中保留。')); return; }
@@ -41,10 +94,11 @@ async function transact<T>(name: 'sources' | 'forms', mode: IDBTransactionMode, 
   });
 }
 export function listStoredSources(scope: string): Promise<StoredSource[]> { return transact('sources', 'readonly', store => store.index('scope').getAll(scope)); }
-export async function storeSource(source: StoredSource): Promise<void> { await transact('sources', 'readwrite', store => store.put(source)); }
-export async function deleteSource(id: string): Promise<void> { await transact('sources', 'readwrite', store => store.delete(id)); }
+export async function storeSource(source: StoredSource): Promise<void> { await transact('sources', 'readwrite', store => store.put(source)); changedSource(source.scope); }
+export async function deleteSource(id: string): Promise<void> { await transact('sources', 'readwrite', store => store.delete(id)); changedSource(); }
 export function readSourceForm<T>(scope: string): Promise<T | undefined> { return transact('forms', 'readonly', store => store.get(scope)); }
-export async function storeSourceForm(scope: string, value: unknown): Promise<void> { await transact('forms', 'readwrite', store => store.put(value, scope)); }
+export async function storeSourceForm(scope: string, value: unknown): Promise<void> { await transact('forms', 'readwrite', store => store.put(value, scope)); changedSource(scope); }
+export async function deleteSourceForm(scope: string): Promise<void> { await transact('forms', 'readwrite', store => store.delete(scope)); changedSource(scope); }
 
 /** A suggestion only; users explicitly correct it before identification. No image measurements inferred. */
 export function suggestSourceKind(name: string, pixels?: Uint8ClampedArray): SourceKind {

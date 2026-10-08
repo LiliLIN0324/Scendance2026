@@ -1,0 +1,15 @@
+.sc-production-plan { font-size:12px; }
+.sc-production-plan fieldset { min-width:0; margin:0; padding:0; border:0; }
+.sc-production-plan .sc-field { display:grid; gap:5px; margin:10px 0; }
+.sc-production-plan input,.sc-production-plan textarea,.sc-production-plan select { min-width:0; width:100%; padding:8px; border:1px solid var(--sc-line,#d9dfd4); border-radius:7px; font:inherit; color:inherit; background:#fcfcf7; }
+.sc-production-plan textarea { resize:vertical; }
+.sc-production-section { margin:14px 0; padding-top:10px; border-top:1px solid var(--sc-line,#d9dfd4); }
+.sc-production-section>summary { cursor:pointer; font-weight:600; }
+.sc-production-row { margin:10px 0; padding:10px; border:1px solid var(--sc-line,#d9dfd4); border-radius:8px; }
+.sc-production-row>summary { cursor:pointer; overflow-wrap:anywhere; }
+.sc-production-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.sc-production-refs { margin:10px 0; }
+.sc-production-refs>button { margin-right:6px; }
+.sc-production-summary { margin-top:14px; padding:10px; background:#f3f6ec; border-radius:8px; color:var(--sc-muted,#626c64); line-height:1.6; }
+.sc-production-summary p { margin:5px 0; }
+.sc-production-plan fieldset:disabled { opacity:.75; }
