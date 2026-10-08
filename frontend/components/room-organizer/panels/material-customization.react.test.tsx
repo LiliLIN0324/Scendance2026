@@ -2,6 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
+import { readSourceRecord } from '@/lib/source-storage';
+import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { ScenePreview } from '../../business/scene-preview';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -9,6 +11,7 @@ import { MaterialCustomization, type MaterialCustomizationSeed } from './materia
 import type { RoomLayout } from '../lib/types';
 
 let selection=new Set<string>();
+vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn() }));
 vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:selection})}));
 vi.mock('../three/glb-assets',()=>({ensureGlbAsset:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../../business/scene-preview',()=>({ScenePreview:vi.fn(({scene}:{scene:Scene})=><div data-testid="scene-preview">{scene.objects.map(object=>`${object.id}:${object.assetId}:${object.color}`).join('|')}</div>)}));
@@ -23,10 +26,12 @@ const onApply=vi.fn();
 const slot=(index:number,count=1)=>({index,name:index?'椅腿':'座面',baseColor:'#ffffff',baseColorFactor:[1,1,1,1],metallic:0,roughness:.5,hasBaseColorTexture:index===0,hasMetallicRoughnessTexture:false,primitiveCount:count});
 function seed(extra:Partial<MaterialCustomizationSeed>={}):MaterialCustomizationSeed{return {id:'seed',scope:`${controller.config.apiUrl}:${user}:${project}`,apiUrl:controller.config.apiUrl,userId:user,projectId:project,sourceAssetId:source,objectIds:[first],name:'浅色哑光椅子',reason:'仅修改这把椅子的材质',materialScope:'all_materials',changes:{baseColor:'#eeeeee',roughness:.8},...extra};}
 function proposal(scene:Scene,ids=[first],to=variant):SceneProposal{return {id:'60000000-0000-4000-8000-000000000001',project_id:project,user_id:user,session_id:sessionId,generation:1,base_revision:1,local_revision:0,base_hash:sha,base_scene:scene,candidate:{...scene,objects:scene.objects.map(object=>ids.includes(object.id)?{...object,assetId:to}:object)},explanation:'只替换选定物件的材质版本。',warnings:[],expires_at:new Date(Date.now()+600_000).toISOString(),applied_at:null};}
+function checkinLedger(){return materialCheckinLedgerSchema.parse({projectId:project,dataKind:'rehearsal',sheets:[]});}
 function ui(extra:{seed?:MaterialCustomizationSeed;active?:boolean}={}){return <MaterialCustomization controller={controller} layout={current} onApply={onApply} {...extra}/>;}
 async function preview(){fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));await screen.findByRole('button',{name:'确认应用到选定物件'});}
 beforeEach(()=>{
-  selection=new Set([first]);onApply.mockReset();vi.mocked(ScenePreview).mockClear();vi.mocked(ensureGlbAsset).mockClear();
+  vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined);
+  selection=new Set([first]);onApply.mockReset();vi.mocked(ScenePreview).mockClear();vi.mocked(ensureGlbAsset).mockReset().mockResolvedValue(undefined);
   controller=new BackendSession(getBackendConfig({url:'https://example.supabase.co',anonKey:'sb_publishable_test'}));
   current=backendSceneToLayout(base,{projectId:project,name:'客户场景',assetNames:{[source]:'木椅'}});
   snapshot={...controller.getSnapshot(),configured:true,user:{id:user},project:{id:project,name:'客户场景',studio_id:user,revision:1,scene:base},revision:1,localRevision:0,sessionId,writeBlocked:false,status:'editing',lease:{projectId:project,sessionId,generation:1,revision:1,expiresAt:new Date(Date.now()+90_000).toISOString()}};
@@ -40,6 +45,57 @@ beforeEach(()=>{
 afterEach(()=>{cleanup();controller.dispose();vi.restoreAllMocks();vi.useRealTimers();});
 
 describe('selected material version workflow',()=>{
+  it('blocks customization and proposal preparation for an independent ledger without any layout business block',async()=>{
+    vi.mocked(readSourceRecord).mockResolvedValue(checkinLedger());
+    render(ui({seed:seed()}));fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));
+    await screen.findByText(/点验|本地执行信息/);
+    expect(current.productionPlan).toBeUndefined();expect(current.eventOperations).toBeUndefined();
+    expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(controller.authorizeAssets).not.toHaveBeenCalled();
+    expect(vi.mocked(controller.businessRequest).mock.calls.every(([,method])=>method!=='POST')).toBe(true);
+    expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins',project]);expect(onApply).not.toHaveBeenCalled();
+  });
+  it('blocks applying a prepared material variant when an independent ledger was added',async()=>{
+    render(ui({seed:seed()}));await preview();vi.mocked(readSourceRecord).mockResolvedValue(checkinLedger());
+    fireEvent.click(screen.getByRole('button',{name:'确认应用到选定物件'}));await screen.findByText(/点验|本地执行信息/);
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    expect(layoutToBackendScene(current).objects[0].assetId).toBe(source);
+  });
+  it.each(['prepare','apply'] as const)('refuses %s when the independent ledger cannot be read',async stage=>{
+    render(ui({seed:seed()}));
+    if(stage==='apply')await preview();
+    vi.mocked(readSourceRecord).mockRejectedValue(new Error('独立点验记录读取失败'));
+    fireEvent.click(await screen.findByRole('button',{name:stage==='apply'?'确认应用到选定物件':'制作并预览材质版本'}));
+    await screen.findByText(/点验.*读取失败|点验.*无法|点验.*读取/);
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    if(stage==='prepare')expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();
+  });
+  it.each(['customize','proposal','authorize','glb'] as const)('rejects a ledger added while %s is pending before accepting the preview',async stage=>{
+    let release!:()=>void,started=false;const held=new Promise<void>(resolve=>{release=resolve;});
+    const request=vi.mocked(controller.businessRequest).getMockImplementation()!;
+    const prepare=vi.mocked(controller.prepareMaterialVariantProposal).getMockImplementation()!;
+    const authorize=vi.mocked(controller.authorizeAssets).getMockImplementation()!;
+    vi.mocked(controller.businessRequest).mockImplementation(async(...args)=>{if(stage==='customize'&&args[1]==='POST'){started=true;await held;}return request(...args);});
+    vi.mocked(controller.prepareMaterialVariantProposal).mockImplementation(async(...args)=>{if(stage==='proposal'){started=true;await held;}return prepare(...args);});
+    vi.mocked(controller.authorizeAssets).mockImplementation(async(...args)=>{if(stage==='authorize'){started=true;await held;}return authorize(...args);});
+    vi.mocked(ensureGlbAsset).mockImplementation(async()=>{if(stage==='glb'){started=true;await held;}});
+    const before=structuredClone(current);
+    render(ui({seed:seed()}));fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));
+    await waitFor(()=>expect(started).toBe(true));vi.mocked(readSourceRecord).mockResolvedValue(checkinLedger());
+    await act(async()=>release());await screen.findByText(/点验|本地执行信息/);
+    expect(screen.queryByRole('button',{name:'确认应用到选定物件'})).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(current).toEqual(before);
+    if(stage==='customize')expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();
+    if(stage==='customize'||stage==='proposal')expect(controller.authorizeAssets).not.toHaveBeenCalled();
+    if(stage==='authorize')expect(ensureGlbAsset).not.toHaveBeenCalled();
+  });
+  it('keeps the local scene when an independent ledger is added while cloud apply is pending',async()=>{
+    let release!:()=>void,started=false;const held=new Promise<void>(resolve=>{release=resolve;});
+    const apply=vi.mocked(controller.applySceneProposal).getMockImplementation()!;
+    vi.mocked(controller.applySceneProposal).mockImplementation(async(...args)=>{started=true;await held;return apply(...args);});
+    const before=structuredClone(current);render(ui({seed:seed()}));await preview();
+    fireEvent.click(screen.getByRole('button',{name:'确认应用到选定物件'}));await waitFor(()=>expect(started).toBe(true));
+    vi.mocked(readSourceRecord).mockResolvedValue(checkinLedger());await act(async()=>release());await screen.findByText(/点验|本地执行信息/);
+    expect(controller.applySceneProposal).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();expect(current).toEqual(before);
+  });
   it('previews without saving, then applies the derived version to exactly one of two chairs',async()=>{
     render(ui({seed:seed()}));await screen.findByText('木椅 · 含 UV');
     expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(controller.applySceneProposal).not.toHaveBeenCalled();

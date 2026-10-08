@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { formatMoneyMinor, parseMoneyMinor } from '@/lib/production-plan';
+import { registerSourceFlush } from '@/lib/source-storage';
 import { uuid } from '../../../../supabase/functions/_shared/domain';
 import { productionAcquisitionMethods, productionStaffSources, productionPlanLimits, productionPlanSchema,
   productionEstimateSummary, resolveProductionPlanReferences, type ProductionPlan, type ProductionReferenceReview } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -70,7 +71,10 @@ export function ProductionPlanPanel({layout,disabled=false,onUpdate,onExport,exp
   const baseline=useRef<{epoch:number;scope:string;planKey:string}|null>(null);
   const sourceKey=key(layout.productionPlan),scope=layout.id??'local';
   useEffect(()=>{setNotice(previous=>previous&&(previous.scope!==scope||previous.planKey!==sourceKey)?null:previous);},[scope,sourceKey]);
-  const latest=useRef({layout,disabled,onUpdate,scope,sourceKey,epoch:state.current.epoch});latest.current={layout,disabled,onUpdate,scope,sourceKey,epoch:state.current.epoch};
+  const latest=useRef({layout,disabled,onUpdate,scope,sourceKey,draft,epoch:state.current.epoch});latest.current={layout,disabled,onUpdate,scope,sourceKey,draft,epoch:state.current.epoch};
+  useEffect(()=>registerSourceFlush(scope,async()=>{
+    if(latest.current.scope===scope&&baseline.current?.scope===scope&&latest.current.draft)throw new Error('请先保存或取消制作计划编辑。');
+  }),[scope]);
   const stale=!!draft&&(!baseline.current||baseline.current.epoch!==state.current.epoch||baseline.current.scope!==scope||baseline.current.planKey!==sourceKey);
   const readOnly=disabled||!onUpdate;
   function begin(plan:ProductionPlan):void {if(readOnly)return;baseline.current={epoch:state.current.epoch,scope,planKey:sourceKey};setDraft(copyDraft(plan));setBadTimes([]);setError('');setNotice(null);}

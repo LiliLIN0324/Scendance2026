@@ -9,6 +9,7 @@ import { ScenePreview } from '../../business/scene-preview';
 import { useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { mergeProposalPresentation } from '../lib/creative-brief';
+import { assertNoLocalRecordsCloudTransition } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
 import './material-customization.css';
@@ -106,6 +107,7 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
     const captured=context(),baseScene=target.scene,token=++operation.current;
     pending.current=true;setBusy(true);setNotice('');setPreview(null);
     try {
+      await assertNoLocalRecordsCloudTransition(captured.base);
       if(!stillCurrent(captured))throw new Error('场景或编辑权已变化，请重新选择后预览。');
       const modification=existingVariantId?null:materialChangeSchema.parse(changes);
       if(!existingVariantId&&(!slots.length||slots.some(index=>!inspection.slots.some(slot=>slot.index===index&&slot.primitiveCount>0))))throw new Error('请勾选实际使用的材质槽。');
@@ -117,11 +119,13 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
         if(variant.metadata.parentAssetId!==target.sourceAssetId||variant.metadata.sourceSha256!==inspection.sha256)throw new Error('候选版本与来源不一致，未应用。');
         intent.variantId=variant.id;
       }
+      await assertNoLocalRecordsCloudTransition(captured.base);
       if(!stillCurrent(captured)||token!==operation.current)return;
       const proposalKey=canonical({scene:baseScene,ids:target.ids,revision:captured.revision,localRevision:captured.localRevision,generation:captured.generation,sessionId:captured.sessionId});
       if(intent.proposalKey!==undefined&&(intent.proposalKey!==proposalKey||intent.proposalApplied||intent.proposalExpiresAt!==undefined&&intent.proposalExpiresAt<=Date.now())){intent.proposalId=crypto.randomUUID();delete intent.proposalExpiresAt;delete intent.proposalApplied;}
       intent.proposalKey=proposalKey;
       const proposal=await controller.prepareMaterialVariantProposal({requestId:intent.proposalId,scene:baseScene,objectIds:target.ids,sourceAssetId:target.sourceAssetId,variantAssetId:intent.variantId});
+      await assertNoLocalRecordsCloudTransition(captured.base);
       if(!stillCurrent(captured)||token!==operation.current)return;
       intent.proposalExpiresAt=Date.parse(proposal.expires_at);
       if(proposal.applied_at){intent.proposalApplied=true;throw new Error('此候选已应用，请重新预览。');}
@@ -129,7 +133,10 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
       const expected={...baseScene,objects:baseScene.objects.map(object=>target.ids.includes(object.id)?{...object,assetId:intent.variantId}:object)};
       if(canonical(proposal.base_scene)!==canonical(baseScene)||canonical(proposal.candidate)!==canonical(expected))throw new Error('候选改变了选定版本以外的场景内容，已停止应用。');
       const [before,after]=await Promise.all([controller.authorizeAssets(baseScene),controller.authorizeAssets(proposal.candidate)]);
+      await assertNoLocalRecordsCloudTransition(captured.base);
+      if(!stillCurrent(captured)||token!==operation.current)return;
       await Promise.all(Object.entries({...before.assetUrls,...after.assetUrls}).map(([id,url])=>ensureGlbAsset(id,url)));
+      await assertNoLocalRecordsCloudTransition(captured.base);
       if(!stillCurrent(captured)||token!==operation.current)return;
       if(!Number.isFinite(Date.parse(proposal.expires_at))||Date.parse(proposal.expires_at)<=Date.now())throw new Error('候选已过期，请重新预览。');
       setPreview({intent,context:captured,formKey,proposal,before,after});setShowOriginal(false);
@@ -142,10 +149,13 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
     const selected=preview,token=++operation.current;
     pending.current=true;setBusy(true);setNotice('');
     try {
+      await assertNoLocalRecordsCloudTransition(selected.context.base);
       if(Date.parse(selected.proposal.expires_at)<=Date.now())throw new Error('候选已过期，请重新预览。');
       if(!stillCurrent(selected.context))throw new Error('场景或编辑权已变化，请重新预览。');
       const result=await controller.applySceneProposal(selected.proposal,layoutToBackendScene(selected.context.base));
       selected.intent.proposalApplied=true;
+      if(!mounted.current||token!==operation.current||latest.current.scope!==selected.context.scope)return;
+      await assertNoLocalRecordsCloudTransition(selected.context.base);
       if(!mounted.current||token!==operation.current||latest.current.scope!==selected.context.scope)return;
       if(!result.acceptedLocally||latest.current.layout!==selected.context.base||latest.current.targetKey!==selected.context.targetKey)throw new Error('应用期间本地已有新修改，已保留本地草稿。请核对云端版本后重新打开。');
       const next=mergeProposalPresentation(selected.context.base,backendSceneToLayout(result.scene,{projectId:selected.context.base.id!,name:selected.context.base.name,...selected.after}));

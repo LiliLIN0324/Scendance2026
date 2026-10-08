@@ -57,15 +57,19 @@ export async function withSourceRestoreLock<T>(scopes: string[], restore: () => 
   return acquire(0);
 }
 const DATABASE = 'scendance-source-images-v1';
+/** Compound keys cannot collide with a legacy form whose imported project ID is an arbitrary string. */
+export type SourceFormKey = string | [string, string];
+const sourceChangeKey = (scope: SourceFormKey) => JSON.stringify(scope);
 const sourceListeners = new Map<string, Set<() => void>>();
 /** Read-only views refresh after the original owner has committed its form/images. */
-export function subscribeSourceChanges(scope: string, listener: () => void): () => void {
-  const listeners = sourceListeners.get(scope) ?? new Set<() => void>();
-  listeners.add(listener); sourceListeners.set(scope, listeners);
-  return () => { listeners.delete(listener); if (!listeners.size) sourceListeners.delete(scope); };
+export function subscribeSourceRecordChanges(scope: SourceFormKey, listener: () => void): () => void {
+  const key = sourceChangeKey(scope), listeners = sourceListeners.get(key) ?? new Set<() => void>();
+  listeners.add(listener); sourceListeners.set(key, listeners);
+  return () => { listeners.delete(listener); if (!listeners.size) sourceListeners.delete(key); };
 }
-function changedSource(scope?: string): void {
-  for (const [key, listeners] of sourceListeners) if (scope === undefined || scope === key) {
+export function subscribeSourceChanges(scope: string, listener: () => void): () => void { return subscribeSourceRecordChanges(scope, listener); }
+function changedSource(scope?: SourceFormKey): void {
+  for (const [key, listeners] of sourceListeners) if (scope === undefined || sourceChangeKey(scope) === key) {
     for (const listener of listeners) { try { listener(); } catch { /* A view cannot turn a committed save into a failed write. */ } }
   }
 }
@@ -96,8 +100,58 @@ async function transact<T>(name: 'sources' | 'forms', mode: IDBTransactionMode, 
 export function listStoredSources(scope: string): Promise<StoredSource[]> { return transact('sources', 'readonly', store => store.index('scope').getAll(scope)); }
 export async function storeSource(source: StoredSource): Promise<void> { await transact('sources', 'readwrite', store => store.put(source)); changedSource(source.scope); }
 export async function deleteSource(id: string): Promise<void> { await transact('sources', 'readwrite', store => store.delete(id)); changedSource(); }
-export function readSourceForm<T>(scope: string): Promise<T | undefined> { return transact('forms', 'readonly', store => store.get(scope)); }
+export function readSourceRecord<T>(scope: SourceFormKey): Promise<T | undefined> { return transact('forms', 'readonly', store => store.get(scope)); }
+/** Only enumerate the requested compound-key namespace; legacy private forms stay outside this list. */
+export async function listSourceRecords<T>(namespace: string): Promise<{ key: [string, string]; value: T }[]> {
+  const db = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction('forms', 'readonly');
+      const request = transaction.objectStore('forms').openCursor();
+      const records: { key: [string, string]; value: T }[] = [];
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const key = cursor.key;
+        if (Array.isArray(key) && key.length === 2 && key[0] === namespace && typeof key[1] === 'string') {
+          records.push({ key: [namespace, key[1]], value: cursor.value as T });
+        }
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve(records);
+      transaction.onerror = transaction.onabort = () => reject(transaction.error ?? request.error ?? new Error('本机活动列表读取失败。'));
+    });
+  } finally { db.close(); }
+}
+export function readSourceForm<T>(scope: string): Promise<T | undefined> { return readSourceRecord(scope); }
 export async function storeSourceForm(scope: string, value: unknown): Promise<void> { await transact('forms', 'readwrite', store => store.put(value, scope)); changedSource(scope); }
+/** Read and update within one native transaction so concurrent appenders cannot overwrite each other. */
+export async function updateSourceForm<T>(scope: SourceFormKey, update: (current: unknown) => T): Promise<T> {
+  const key: SourceFormKey = typeof scope === 'string' ? scope : [scope[0], scope[1]];
+  const db = await openDatabase();
+  try {
+    const result = await new Promise<T>((resolve, reject) => {
+    const transaction = db.transaction('forms', 'readwrite');
+    const store = transaction.objectStore('forms');
+    const request = store.get(key);
+    let value: T, failure: unknown;
+    request.onsuccess = () => {
+      try {
+        // The updater must be synchronous; an uncloneable result aborts rather than escaping the transaction.
+        value = structuredClone(update(request.result));
+        if (value === undefined) store.delete(key);
+        else store.put(value, key);
+      } catch (error) { failure = error; transaction.abort(); }
+    };
+    transaction.oncomplete = () => resolve(value);
+    transaction.onerror = transaction.onabort = () => {
+      reject(failure ?? transaction.error ?? request.error ?? new Error('本机资料保存失败，原记录未改变。'));
+    };
+    });
+    changedSource(key);
+    return result;
+  } finally { db.close(); }
+}
 export async function deleteSourceForm(scope: string): Promise<void> { await transact('forms', 'readwrite', store => store.delete(scope)); changedSource(scope); }
 
 /** A suggestion only; users explicitly correct it before identification. No image measurements inferred. */

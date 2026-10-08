@@ -4,14 +4,16 @@ import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@t
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
-import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, readSourceForm, storeSourceForm } from '@/lib/source-storage';
-import { parseLocalProjectBackupJson, serializeLocalProjectBackup } from '@/lib/local-project-backup';
+import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, listSourceRecords, readSourceForm, readSourceRecord, storeSourceForm, updateSourceForm } from '@/lib/source-storage';
+import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
+import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
-import { LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
+import { LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
 import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider, useCreativeBrief, useCreativeBriefState, useLocalProjectBackup, type LocalProjectBackupActions } from './creative-studio';
 import { GeneratedModelLibrary } from './generated-model-library';
+import { LocalActivitiesPanel } from './local-activities-panel';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -19,7 +21,7 @@ import { productionPlanSchema } from '../../../../supabase/functions/_shared/pro
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
-vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn() }));
+vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn() }));
 let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
 vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
@@ -537,6 +539,8 @@ beforeEach(() => {
   onPreview.mockReset();
   forbiddenFetch.mockClear();
   vi.mocked(readSourceForm).mockReset().mockResolvedValue(undefined);
+  vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined);
+  vi.mocked(updateSourceForm).mockReset();
   vi.mocked(storeSourceForm).mockReset().mockResolvedValue(undefined);
   vi.mocked(deleteSourceForm).mockReset().mockResolvedValue(undefined);
   vi.mocked(copySourceScope).mockReset().mockResolvedValue(undefined);
@@ -1066,25 +1070,118 @@ describe('complete local backup transactions', () => {
   const commit = vi.fn<(next: RoomLayout) => void>();
   const prepare = vi.fn<(next:RoomLayout)=>RoomLayout>();
   function Probe() { actions = useLocalProjectBackup()!; return <BriefStateProbe/>; }
-  function Trial() {
+  function ActivityProbe({current,onComplete}:{current:RoomLayout;onComplete:()=>void}) {
+    return <LocalActivitiesPanel layout={current} actions={useLocalProjectBackup()!} onComplete={onComplete}/>;
+  }
+  function Trial({activitiesCompleted}:{activitiesCompleted?:()=>void} = {}) {
     const [current, setCurrent] = useState(layout); changeLayout = setCurrent;
     return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} prepareRestoreLayout={prepare} commitRestoredLayout={next => { commit(next); setCurrent(next); }}>
       <CreativeBriefPanel/><Probe/><output data-testid="backup-layout">{JSON.stringify(current)}</output>
+      {activitiesCompleted&&<ActivityProbe current={current} onComplete={activitiesCompleted}/>}
     </CreativeStudioProvider>;
   }
   const file = (id = projectId, brief: 'present'|'absent'|'legacy' = 'present') => {
     const next = { ...layout, id, name: '文件布局', width: 14 };
     return parseLocalProjectBackupJson(brief === 'legacy' ? JSON.stringify(next) : serializeLocalProjectBackup(next, { state: 'ready', scope: id, brief: brief === 'present' ? { status: 'present', value: fileBrief } : { status: 'absent' } }));
   };
+  const checkinKey=()=>JSON.stringify(['material-checkins',projectId]);
+  const ledger=(n=1)=>materialCheckinLedgerSchema.parse({projectId,dataKind:'rehearsal',sheets:[{
+    id:`aa900000-0000-4000-8000-${String(n).padStart(12,'0')}`,acquisitionId:'aa900000-0000-4000-8000-000000000100',
+    acquisitionSnapshot:{title:'演练租赁椅'},unit:'piece',agreements:[{id:`aa900000-0000-4000-8000-${String(n+1000).padStart(12,'0')}`,
+      agreedQuantity:20,basisNote:'演练约定',recordedAt:'2026-10-09T00:00:00+08:00',recordedBy:'演练统筹'}],events:[]}]});
+  const checkinFile=(value:ReturnType<typeof ledger>|undefined)=>parseLocalProjectBackupJson(serializeLocalProjectBackupV3(
+    {...layout,id:projectId,name:'点验文件布局'}, {state:'ready',scope:projectId,brief:{status:'present',value:fileBrief}},
+    {state:'ready',scope:projectId,materialCheckins:value?{status:'present',value}:{status:'absent'}},
+  ));
   async function mount() { renderUI(<Trial/>); await waitFor(() => expect(briefState().ready).toBe(true)); }
   beforeEach(() => {
     installBackupLocks(); commit.mockReset();prepare.mockReset().mockImplementation(next=>next);
+    vi.mocked(listSourceRecords).mockResolvedValue([]);
     forms = new Map([[`${projectId}:brief`, oldBrief]]);
     vi.mocked(readSourceForm).mockImplementation(async key => forms.get(key));
     vi.mocked(storeSourceForm).mockImplementation(async (key, value) => { forms.set(key, value); });
     vi.mocked(deleteSourceForm).mockImplementation(async key => { forms.delete(key); });
+    vi.mocked(readSourceRecord).mockImplementation(async key=>structuredClone(forms.get(JSON.stringify(key))) as never);
+    vi.mocked(updateSourceForm).mockImplementation(async(key,update)=>{
+      const address=JSON.stringify(key),next=update(structuredClone(forms.get(address)));
+      if(next===undefined)forms.delete(address);else forms.set(address,structuredClone(next));return structuredClone(next) as never;
+    });
   });
   afterEach(() => { Reflect.deleteProperty(navigator, 'locks'); });
+
+  it('completes local-activity navigation after the real provider commits and changes its scope',async()=>{
+    const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
+    renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
+    fireEvent.change(screen.getByLabelText('新活动名称'),{target:{value:'独立活动集成演练'}});
+    fireEvent.click(screen.getByRole('button',{name:'新建活动'}));
+    await waitFor(()=>expect(commit).toHaveBeenCalledOnce());
+    await waitFor(()=>expect(complete).toHaveBeenCalledOnce());
+    const current=JSON.parse(screen.getByTestId('backup-layout').textContent!) as RoomLayout;
+    expect(current.id).not.toBe(projectId);expect(current.name).toBe('独立活动集成演练');
+    expect((screen.getByLabelText('新活动名称') as HTMLInputElement).value).toBe('');
+    expect(forms.get(checkinKey())).toEqual(original);
+    expect(forms.has(JSON.stringify(['local-activity',projectId]))).toBe(true);
+    expect(forms.get(JSON.stringify(['material-checkins',current.id]))).toBeUndefined();
+  });
+
+  it('backs up independent checkins as V3 and preserves them through old or absent-ledger restores',async()=>{
+    const original=ledger();forms.set(checkinKey(),original);await mount();
+    const backup=parseLocalProjectBackupJson(await actions.prepareBackup());
+    expect(backup.backupVersion).toBe(3);expect(backup.materialCheckins).toEqual({status:'present',value:original});
+    await act(async()=>{await actions.restoreBackup(file());});expect(forms.get(checkinKey())).toEqual(original);
+    await act(async()=>{await actions.undoRestore();});
+    await act(async()=>{await actions.restoreBackup(checkinFile(undefined));});expect(forms.get(checkinKey())).toEqual(original);
+    expect(updateSourceForm).not.toHaveBeenCalled();
+  });
+  it('merges V3 facts idempotently and undo removes only this unchanged import',async()=>{
+    const original=ledger();forms.set(checkinKey(),original);await mount();
+    await act(async()=>{await actions.restoreBackup(checkinFile(ledger(2)));});
+    await waitFor(()=>expect(actions.canUndoRestore).toBe(true));
+    expect((forms.get(checkinKey()) as ReturnType<typeof ledger>).sheets).toHaveLength(2);
+    await act(async()=>{await actions.undoRestore();});expect(forms.get(checkinKey())).toEqual(original);
+    await act(async()=>{await actions.restoreBackup(checkinFile(original));});
+    expect(forms.get(checkinKey())).toEqual(original);
+  });
+  it('rejects conflicting checkin content before touching the brief or layout',async()=>{
+    const original=ledger();forms.set(checkinKey(),original);await mount();
+    const conflict=structuredClone(original);conflict.sheets[0].agreements[0].agreedQuantity=19;
+    await act(async()=>{await expect(actions.restoreBackup(checkinFile(conflict))).rejects.toThrow();});
+    expect(commit).not.toHaveBeenCalled();expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief);
+    expect(forms.get(checkinKey())).toEqual(original);expect(updateSourceForm).not.toHaveBeenCalled();
+  });
+  it('does not undo an imported ledger over facts appended afterward',async()=>{
+    forms.set(checkinKey(),ledger());await mount();
+    await act(async()=>{await actions.restoreBackup(checkinFile(ledger(2)));});
+    const newer=mergeMaterialCheckinLedgers(forms.get(checkinKey()) as ReturnType<typeof ledger>,ledger(3));forms.set(checkinKey(),newer);
+    await act(async()=>{await expect(actions.undoRestore()).rejects.toThrow('新的点验记录');});
+    expect(forms.get(checkinKey())).toEqual(newer);expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).name).toBe('点验文件布局');
+  });
+  it('compensates the ledger and brief when applying the restored layout fails',async()=>{
+    const original=ledger();forms.set(checkinKey(),original);await mount();commit.mockImplementationOnce(()=>{throw new Error('模拟布局保存失败');});
+    await act(async()=>{await expect(actions.restoreBackup(checkinFile(ledger(2)))).rejects.toThrow('模拟布局保存失败');});
+    expect(forms.get(checkinKey())).toEqual(original);expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief);
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!)).toEqual(layout);
+  });
+  it('retains a failed fact compensation and repairs it before retrying the restore',async()=>{
+    const original=ledger();forms.set(checkinKey(),original);await mount();
+    const normal=vi.mocked(updateSourceForm).getMockImplementation()!;let writes=0;
+    vi.mocked(updateSourceForm).mockImplementation(async(...args)=>{if(++writes===2)throw new Error('点验回退写入拒绝');return normal(...args);});
+    commit.mockImplementationOnce(()=>{throw new Error('模拟布局保存失败');});
+    await act(async()=>{await expect(actions.restoreBackup(checkinFile(ledger(2)))).rejects.toThrow('点验记录回退未完成');});
+    await expect(actions.prepareBackup()).rejects.toThrow('点验恢复的回退尚未完成');
+    await act(async()=>{await actions.restoreBackup(checkinFile(ledger(2)));});
+    expect((forms.get(checkinKey()) as ReturnType<typeof ledger>).sheets).toHaveLength(2);
+    await waitFor(()=>expect(actions.canUndoRestore).toBe(true));await act(async()=>{await actions.undoRestore();});
+    expect(forms.get(checkinKey())).toEqual(original);
+  });
+  it('restores imported facts again if the layout commit fails during undo',async()=>{
+    const original=ledger();forms.set(checkinKey(),original);await mount();
+    await act(async()=>{await actions.restoreBackup(checkinFile(ledger(2)));});
+    const merged=structuredClone(forms.get(checkinKey()));commit.mockImplementationOnce(()=>{throw new Error('撤销布局失败');});
+    await act(async()=>{await expect(actions.undoRestore()).rejects.toThrow('撤销布局失败');});
+    expect(forms.get(checkinKey())).toEqual(merged);expect(forms.get(`${projectId}:brief`)).toEqual(fileBrief);
+    await act(async()=>{await actions.undoRestore();});expect(forms.get(checkinKey())).toEqual(original);
+  });
 
   it('restores and undoes the complete production plan, but cannot undo over a newer plan edit',async()=>{
     const rowId='70000000-0000-4000-8000-000000000001';
@@ -2021,6 +2118,7 @@ it('keeps a newer task recoverable when a cancelled dispatch is acknowledged lat
   send('摆放桌子');fireEvent.click(await screen.findByRole('button',{name:'取消任务'}));
   await screen.findByText('任务已取消，当前方案保持不变。');
   send('改为摆放椅子');
+  await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledTimes(2));
   const second=vi.mocked(controller.startAgentRun).mock.calls[1]![0];
   const key=Object.keys(localStorage).find(value=>value.startsWith('scendance:agent-run:'))!;
   expect(JSON.parse(localStorage.getItem(key)!).requestId).toBe(second.requestId);
@@ -2028,4 +2126,16 @@ it('keeps a newer task recoverable when a cancelled dispatch is acknowledged lat
   expect(JSON.parse(localStorage.getItem(key)!).requestId).toBe(second.requestId);
   expect(screen.getByRole('button',{name:'取消任务'})).toBeTruthy();
   expect(controller.applySceneProposal).not.toHaveBeenCalled();
+});
+
+it.each(['ledger','unreadable'] as const)('does not dispatch an Agent request when independent checkins are %s',async state=>{
+  connected();
+  if(state==='ledger')vi.mocked(readSourceRecord).mockResolvedValue(materialCheckinLedgerSchema.parse({projectId}));
+  else vi.mocked(readSourceRecord).mockRejectedValue(new Error('本机读取不可用'));
+  render(ui());
+  fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'调整场景布置'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+  await screen.findAllByText(state==='ledger'?LOCAL_CHECKIN_CLOUD_MESSAGE:LOCAL_RECORDS_READ_MESSAGE);
+  expect(controller.startAgentRun).not.toHaveBeenCalled();expect(controller.applySceneProposal).not.toHaveBeenCalled();
+  expect(onApply).not.toHaveBeenCalled();
 });

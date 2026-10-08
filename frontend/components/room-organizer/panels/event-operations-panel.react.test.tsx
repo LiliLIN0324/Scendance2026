@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushSourceScope } from '@/lib/source-storage';
 import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
 import { eventOperationsSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -46,6 +47,125 @@ function openAdd(): HTMLDetailsElement {
 }
 
 describe('activity operations in the delivery panel', () => {
+  it.each(['draft', 'time', 'links', 'objects', 'badTime'] as const)('protects an unsaved %s until it is discarded without writing task facts', async field => {
+    const task = { ...createOperation('任务草稿保护', 'setup'), actualStartedAt: '2026-10-08T01:00:00.123Z' };
+    const ui = livePanel({ ...taskLayout(task, true), id: 'draft-activity' }); openTask(task.title); await settled();
+    if (field === 'draft') fireEvent.change(screen.getByLabelText('负责人'), { target: { value: '待核对人员' } });
+    if (field === 'time') fireEvent.change(screen.getByLabelText('计划开始'), { target: { value: '2026-10-08T08:00' } });
+    if (field === 'links') fireEvent.change(screen.getByLabelText('证据链接'), { target: { value: 'file:///unsaved-proof.txt' } });
+    if (field === 'objects') fireEvent.click(screen.getByLabelText(/签到椅 · 1/, { selector: 'input' }));
+    if (field === 'badTime') {
+      const input = screen.getByLabelText('实际开始');
+      Object.defineProperty(input, 'validity', { configurable: true, value: { badInput: true } });
+      fireEvent.change(input, { target: { value: '2026-10-09T10:00' } });
+    }
+    await act(async () => { await expect(flushSourceScope('draft-activity')).rejects.toThrow('先保存任务或放弃修改'); });
+    await act(async () => { await expect(flushSourceScope('other-activity')).resolves.toBeUndefined(); });
+    expect(ui.updates).not.toHaveBeenCalled(); expect(ui.layout.eventOperations!.tasks[0]).toEqual(task);
+    expect(screen.getByRole('alert').textContent).toContain('先保存任务或放弃修改');
+    fireEvent.click(screen.getByRole('button', { name: '放弃修改' }));
+    await act(async () => { await expect(flushSourceScope('draft-activity')).resolves.toBeUndefined(); });
+    expect((screen.getByLabelText('负责人') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('计划开始') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('实际开始') as HTMLInputElement).value).toBe('2026-10-08T09:00:00.123');
+    expect((screen.getByLabelText('证据链接') as HTMLTextAreaElement).value).toBe('');
+    expect((screen.getByLabelText(/签到椅 · 1/, { selector: 'input' }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole('alert')).toBeNull(); expect(ui.updates).not.toHaveBeenCalled();
+  });
+
+  it('clears the protection after saving normalized inputs and after a parent task update', async () => {
+    const task = createOperation('草稿保存保护', 'preparation');
+    const ui = livePanel({ ...taskLayout(task), id: 'saved-activity' }); openTask(task.title); await settled();
+    fireEvent.change(screen.getByLabelText('负责人'), { target: { value: '现场组' } });
+    fireEvent.change(screen.getByLabelText('计划开始'), { target: { value: '2026-10-08T08:00' } });
+    fireEvent.change(screen.getByLabelText('证据链接'), { target: { value: ' https://example.com/proof \n' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存任务' }));
+    await waitFor(() => expect(ui.updates).toHaveBeenCalledOnce());
+    await act(async () => { await expect(flushSourceScope('saved-activity')).resolves.toBeUndefined(); });
+    expect((screen.getByLabelText('证据链接') as HTMLTextAreaElement).value).toBe('https://example.com/proof');
+    fireEvent.change(screen.getByLabelText('负责人'), { target: { value: '后来输入' } });
+    ui.replace({ ...ui.layout, eventOperations: { ...ui.layout.eventOperations!, tasks: [{ ...ui.layout.eventOperations!.tasks[0], ownerName: '父层已更新人员' }] } });
+    await act(async () => { await expect(flushSourceScope('saved-activity')).resolves.toBeUndefined(); });
+    expect((screen.getByLabelText('负责人') as HTMLInputElement).value).toBe('父层已更新人员');
+  });
+
+  it('clears the accepted-save baseline even before the parent sends updated props', async () => {
+    const task = createOperation('等待父层更新', 'preparation'), update = vi.fn();
+    render(<EventOperationsPanel layout={{ ...taskLayout(task), id: 'accepted-save' }} disabled={false} onUpdate={update}/>);
+    openTask(task.title); await settled();
+    fireEvent.change(screen.getByLabelText('负责人'), { target: { value: '现场组' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存任务' })); await waitFor(() => expect(update).toHaveBeenCalledOnce());
+    await act(async () => { await expect(flushSourceScope('accepted-save')).resolves.toBeUndefined(); });
+    fireEvent.change(screen.getByLabelText('负责人'), { target: { value: '未保存修改' } });
+    fireEvent.click(screen.getByRole('button', { name: '放弃修改' }));
+    expect((screen.getByLabelText('负责人') as HTMLInputElement).value).toBe('现场组');
+  });
+
+  it('protects a new title, clears it on explicit discard or add, and unregisters on scope change and unmount', async () => {
+    const task = createOperation('原活动任务', 'preparation'), update = vi.fn();
+    const initial = { ...taskLayout(task), id: 'activity-a' };
+    const view = render(<EventOperationsPanel layout={initial} disabled={false} onUpdate={update}/>);
+    openAdd(); fireEvent.change(screen.getByLabelText('新任务标题'), { target: { value: '未添加签到' } });
+    fireEvent.change(screen.getByLabelText('新任务阶段'), { target: { value: 'event' } });
+    await act(async () => { await expect(flushSourceScope('activity-a')).rejects.toThrow('先添加任务或放弃新增任务'); });
+    expect(update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '放弃新增任务' }));
+    await act(async () => { await expect(flushSourceScope('activity-a')).resolves.toBeUndefined(); });
+    expect((screen.getByLabelText('新任务标题') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('新任务阶段') as HTMLSelectElement).value).toBe('preparation');
+    fireEvent.change(screen.getByLabelText('新任务标题'), { target: { value: '已添加签到' } });
+    fireEvent.click(screen.getByRole('button', { name: '添加任务' }));
+    await act(async () => { await expect(flushSourceScope('activity-a')).resolves.toBeUndefined(); });
+    expect(update).toHaveBeenCalledOnce();
+    openTask(task.title); await settled();
+    fireEvent.change(screen.getByLabelText('负责人'), { target: { value: 'A人员草稿' } });
+    openAdd(); fireEvent.change(screen.getByLabelText('新任务标题'), { target: { value: 'A新增草稿' } });
+    view.rerender(<EventOperationsPanel layout={{ ...initial, id: 'activity-b' }} disabled={false} onUpdate={update}/>);
+    await act(async () => {
+      await expect(flushSourceScope('activity-a')).resolves.toBeUndefined();
+      await expect(flushSourceScope('activity-b')).resolves.toBeUndefined();
+    });
+    expect((screen.getByLabelText('负责人') as HTMLInputElement).value).toBe('');
+    openAdd(); fireEvent.change(screen.getByLabelText('新任务标题'), { target: { value: 'B新增草稿' } });
+    view.unmount();
+    await expect(flushSourceScope('activity-b')).resolves.toBeUndefined();
+  });
+
+  it('rejects a flush immediately during confirmation instead of waiting for the pending save', async () => {
+    const task = { ...createOperation('等待核对保存', 'setup'), ownerName: '现场组', acceptance: '核对布置', evidenceNote: '现场已检查' };
+    const update = vi.fn();
+    render(<EventOperationsPanel layout={{ ...taskLayout(task), id: 'pending-save' }} disabled={false} onUpdate={update}/>);
+    openTask(task.title); await settled();
+    let release!: (value: ArrayBuffer) => void;
+    const digest = vi.fn(() => new Promise<ArrayBuffer>(resolve => { release = resolve; }));
+    vi.stubGlobal('crypto', { randomUUID: webcrypto.randomUUID.bind(webcrypto), subtle: { digest } });
+    fireEvent.change(screen.getByLabelText('任务状态'), { target: { value: 'accepted' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认完成' }));
+    expect(digest).toHaveBeenCalledOnce();
+    await act(async () => { await expect(flushSourceScope('pending-save')).rejects.toThrow('正在保存，请稍后重试'); });
+    expect(update).not.toHaveBeenCalled();
+    await act(async () => { release(new ArrayBuffer(32)); });
+    await waitFor(() => expect(update).toHaveBeenCalledOnce());
+    await act(async () => { await expect(flushSourceScope('pending-save')).resolves.toBeUndefined(); });
+  });
+
+  it('allows discarding task and creation drafts after editing becomes unavailable', async () => {
+    const task = createOperation('暂不能编辑的任务', 'preparation'), update = vi.fn();
+    const layout = { ...taskLayout(task), id: 'disabled-activity' };
+    const view = render(<EventOperationsPanel layout={layout} disabled={false} onUpdate={update}/>);
+    openTask(task.title); await settled();
+    fireEvent.change(screen.getByLabelText('负责人'), { target: { value: '未保存人员' } });
+    openAdd(); fireEvent.change(screen.getByLabelText('新任务标题'), { target: { value: '未添加任务' } });
+    view.rerender(<EventOperationsPanel layout={layout} disabled onUpdate={update}/>);
+    expect((screen.getByRole('button', { name: '保存任务' }) as HTMLButtonElement).closest('fieldset')!.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '放弃修改' }));
+    fireEvent.click(screen.getByRole('button', { name: '放弃新增任务' }));
+    await act(async () => { await expect(flushSourceScope('disabled-activity')).resolves.toBeUndefined(); });
+    expect((screen.getByLabelText('负责人') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('新任务标题') as HTMLInputElement).value).toBe('');
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['accepted','missing',false],['review','ambiguous',false],['accepted','missing',true],['review','ambiguous',true],
   ] as const)('blocks %s confirmation for %s production-only objects (reconfirm=%s)', async (target, problem, reconfirm) => {

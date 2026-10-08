@@ -8,6 +8,8 @@ import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABE
 import { EventOperationsPanel } from './event-operations-panel';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
 import { ProductionPlanPanel } from './production-plan-panel';
+import { MaterialCheckinPanel } from './material-checkin-panel';
+import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -15,6 +17,7 @@ import type { FurnitureItem, RoomLayout } from '../lib/types';
 import './scene-delivery-panel.css';
 
 interface Props {
+  checkins?: MaterialCheckinState | undefined;
   layout: RoomLayout; controller: BackendSession;
   onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined;
   onLocate?: ((id: string) => void) | undefined;
@@ -96,15 +99,18 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing Binggo entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
-  const [view, setView] = useState<'operations' | 'materials' | 'production'>(operationsAvailable ? 'operations' : 'materials');
-  const latest = useRef({ layout, userId: cloud.user?.id, projectId: cloud.project?.id });
-  latest.current = { layout, userId: cloud.user?.id, projectId: cloud.project?.id };
+  const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins'>(operationsAvailable ? 'operations' : 'materials');
+  const checkinLocal=!cloud.project&&!(typeof window!=='undefined'&&new URL(window.location.href).searchParams.has('project'));
+  const localCheckins=checkinLocal?checkins:undefined;
+  const checkinsUnavailable=!!localCheckins&&!localCheckins.ready;
+  const latest = useRef({ layout, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable });
+  latest.current = { layout, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable };
   const mounted = useRef(true), pending = useRef(false);
-  const exportSnapshot = useRef<{ layout: RoomLayout; userId: string | undefined; projectId: string | undefined; metadata: DeliverySnapshot } | null>(null);
+  const exportSnapshot = useRef<typeof latest.current & { metadata: DeliverySnapshot } | null>(null);
   const preview = useMemo(() => {
     try {
       const scene = deliveryScene(layout);
@@ -131,19 +137,20 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice('');
     const before = latest.current;
-    const stillCurrent = () => mounted.current && latest.current.layout === before.layout && latest.current.userId === before.userId && latest.current.projectId === before.projectId;
+    const stillCurrent = () => mounted.current && latest.current.layout === before.layout && latest.current.userId === before.userId && latest.current.projectId === before.projectId&&latest.current.checkins===before.checkins&&latest.current.checkinsReady===before.checkinsReady;
     const previous = exportSnapshot.current;
-    const snapshot = previous && previous.layout === layout && previous.userId === before.userId && previous.projectId === before.projectId
+    const snapshot = previous && previous.layout === layout && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins
       ? previous : { ...before, metadata: { id: crypto.randomUUID(), generatedAt: new Date().toISOString() } };
     exportSnapshot.current = snapshot;
     const metadata = snapshot.metadata;
     try {
+      if((kind==='operations'||kind==='json'||kind==='production')&&!before.checkinsReady)throw new Error('点验资料尚未读取完成，请重新读取后导出。');
       const { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } = await import('../lib/scene-delivery');
       if (!stillCurrent()) return;
       if (kind === 'production') {
         const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
         if (!stillCurrent()) return;
-        const html = await productionPlanHandoffHtml(layout, metadata);
+        const html = await productionPlanHandoffHtml(layout, metadata, before.checkins);
         if (!stillCurrent()) return;
         downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部制作交接_${metadata.id}`, 'html');
         setNotice('内部制作交接单已导出，可在浏览器打开并打印。请核对未确定的人员、供应方和费用。');
@@ -153,7 +160,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         downloadSceneDelivery(result.buffer, 'model/gltf-binary', `${layout.name}_${metadata.id}`, 'glb');
         setNotice(`GLB 已重新加载复检，保留 ${result.objectCount} 个物件节点及场地结构。`);
       } else {
-        const text = kind === 'json' ? await sceneDeliveryJson(layout, metadata) : kind === 'execution' ? await sceneExecutionCsv(layout, metadata) : kind === 'operations' ? await eventOperationsCsv(layout, metadata) : sceneDeliveryCsv(layout, metadata);
+        const text = kind === 'json' ? await sceneDeliveryJson(layout, metadata, before.checkins) : kind === 'execution' ? await sceneExecutionCsv(layout, metadata) : kind === 'operations' ? await eventOperationsCsv(layout, metadata, before.checkins) : sceneDeliveryCsv(layout, metadata);
         if (!stillCurrent()) return;
         const label = kind === 'json' ? '场景' : kind === 'execution' ? '执行清单' : kind === 'operations' ? '活动安排' : '物料清单';
         downloadSceneDelivery(text, kind === 'json' ? 'application/json' : 'text/csv;charset=utf-8', `${layout.name}_${label}_${metadata.id}`, kind === 'json' ? 'json' : 'csv');
@@ -168,13 +175,20 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
       <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => setView('operations')}>活动安排</button>
       <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => setView('materials')}>物料工作单</button>
       <button type="button" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => setView('production')}>制作计划</button>
+      <button type="button" role="tab" id="delivery-checkins-tab" aria-controls="delivery-checkins" aria-selected={view === 'checkins'} onClick={() => setView('checkins')}>数量点验</button>
     </div>
     <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
       <p className="sc-note">{cloudBound ? '云项目可查看活动安排。本地执行资料尚未接入云端保存。' : '活动安排随当前场景保存在此浏览器。'}</p>
-      <EventOperationsPanel layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief}/>
+      <EventOperationsPanel layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins}/>
     </div>
     <div role="tabpanel" id="delivery-production" aria-labelledby="delivery-production-tab" hidden={view !== 'production'}>
-      <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy} onExport={()=>void download('production')}/>
+      <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
+    </div>
+    <div role="tabpanel" id="delivery-checkins" aria-labelledby="delivery-checkins-tab" hidden={view!=='checkins'}>
+      {localCheckins&&layout.id?<>
+        <MaterialCheckinPanel layout={layout} projectId={layout.id} ledger={localCheckins.ledger} loading={localCheckins.loading} error={localCheckins.error} disabled={busy||backupActions?.backupPending||!localCheckins.ready} onSave={localCheckins.onSave} exporting={busy} onExport={()=>void download('production')}/>
+        {localCheckins.error&&<button className="sc-button" type="button" onClick={localCheckins.retry}>重新读取点验</button>}
+      </>:<p className="sc-note">请在有明确编号的本地项目中记录数量点验。云项目暂不支持此项记录。</p>}
     </div>
     <div role="tabpanel" id="delivery-materials" aria-labelledby="delivery-materials-tab" hidden={view !== 'materials'}>
     {preview.error ? <p className="sc-handoff-error" role="alert">{preview.error}</p> : <>
@@ -191,9 +205,9 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
       <details className="sc-procurement-summary"><summary>采购汇总 · {preview.materials.length} 类</summary><ul>{preview.materials.map(row => <li key={row.objectIds[0]}>{row.name} × {row.quantity}<small>{row.width} × {row.depth} × {row.height} m · {row.procurement}</small></li>)}</ul></details>
     </>}
     </div>
-    <button className="sc-button sc-full" type="button" disabled={busy || !layout.eventOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>
+    <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || !layout.eventOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>
     <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('glb')}>{busy ? '正在准备交付…' : '导出场景 GLB'}</button>
-    <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('json')}>导出场景 JSON</button>
+    <button className="sc-button sc-full" type="button" disabled={busy || checking || checkinsUnavailable || !!preview.error} onClick={() => void download('json')}>导出场景 JSON</button>
     <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('execution')}>导出执行清单 CSV</button>
     <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('csv')}>导出物料清单 CSV</button>
     <p className="sc-note">交付当前单层项目。完整场馆预设需保留原文件；环境光与后处理不会随 GLB 交付。采购规格需另行确认。</p>

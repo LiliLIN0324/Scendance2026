@@ -5,19 +5,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { PublicationPanel } from '@/components/business/publication-panel';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
-import { registerSourceFlush } from '@/lib/source-storage';
+import { readSourceRecord, registerSourceFlush } from '@/lib/source-storage';
+import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { backendSceneToLayout } from '../lib/backend-adapter';
-import { LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
+import { LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { addDesign } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { CloudPanel } from './cloud-panel';
+import { useLocalProjectBackup } from './creative-studio';
+import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
 vi.mock('@/lib/backend-session', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/backend-session')>();
   return { ...actual, createBackendSession: vi.fn() };
 });
+vi.mock('@/lib/source-storage', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/source-storage')>();
+  return { ...actual, readSourceRecord: vi.fn() };
+});
 vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn() }));
+vi.mock('./creative-studio', () => ({ useLocalProjectBackup: vi.fn(() => null) }));
+vi.mock('./local-activities-panel', () => ({ LocalActivitiesPanel: vi.fn(() => null) }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
 vi.mock('@/components/business/publication-panel', () => ({ PublicationPanel: vi.fn(() => null) }));
 vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: vi.fn(() => null) }));
@@ -29,6 +38,8 @@ const scene: Scene = { schemaVersion: 1, venue: { width: 12, depth: 10, height: 
 const original = { id: projectId, name: '原云项目', studio_id: studioId, revision: 2, scene };
 const other = { ...original, id: otherId, name: '另一个云项目' };
 const mockFetch = vi.fn<typeof fetch>();
+const pointRecords = new Map<string, unknown>();
+const unreadablePointScopes = new Set<string>();
 let controller: BackendSession;
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
@@ -38,6 +49,14 @@ beforeEach(async () => {
   localStorage.clear();
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
+  vi.mocked(useLocalProjectBackup).mockReturnValue(null);
+  vi.mocked(LocalActivitiesPanel).mockClear();
+  pointRecords.clear();unreadablePointScopes.clear();
+  vi.mocked(readSourceRecord).mockReset().mockImplementation(async key => {
+    if (typeof key === 'string' || key[0] !== 'material-checkins') return undefined;
+    if (unreadablePointScopes.has(key[1])) throw new Error('演练点验读取失败');
+    return pointRecords.get(key[1]);
+  });
   vi.mocked(AssetsPanel).mockClear();
   vi.mocked(PublicationPanel).mockClear();
   vi.stubGlobal('fetch', mockFetch);
@@ -50,6 +69,82 @@ beforeEach(async () => {
   await controller.signIn('test@example.com', 'password');
   queue(original);
   await controller.getProject(projectId);
+});
+
+describe('CloudPanel independent quantity ledger protection', () => {
+  const actionLabels = { create: '把当前画布创建为新项目', open: '打开', acquire: '获取编辑权', save: '保存到云端' } as const;
+  function points(id = projectId) { return materialCheckinLedgerSchema.parse({ projectId: id, dataKind: 'rehearsal', sheets: [] }); }
+  async function editable(): Promise<void> {
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    await controller.acquireLease(projectId);
+  }
+  function projectLists(): void { queue([other]);queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]); }
+
+  it.each((['create', 'open', 'acquire', 'save'] as const).flatMap(action => (['ledger', 'corrupt', 'read failure'] as const).map(record => ({ action, record }))))('refuses $action before its cloud request for an independent $record', async ({ action, record }) => {
+    if (action === 'save') await editable();
+    if (record === 'read failure') unreadablePointScopes.add(projectId);
+    else pointRecords.set(projectId, record === 'ledger' ? points() : { corrupt: true });
+    const getProject = vi.spyOn(controller, 'getProject'), acquire = vi.spyOn(controller, 'acquireLease');
+    const create = vi.spyOn(controller, 'createProject'), saveScene = vi.spyOn(controller, 'saveScene');
+    const initial = backendSceneToLayout(scene, { projectId, name: original.name }), onLoadLayout = vi.fn();
+    projectLists();render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+    fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+    const button = await screen.findByRole('button', { name: actionLabels[action] });
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+    const requests = mockFetch.mock.calls.length;fireEvent.click(button);
+    expect(await screen.findByText(record === 'ledger' ? LOCAL_CHECKIN_CLOUD_MESSAGE : LOCAL_RECORDS_READ_MESSAGE)).toBeTruthy();
+    expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins', projectId]);
+    expect(getProject).not.toHaveBeenCalled();expect(acquire).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();expect(saveScene).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(requests);expect(onLoadLayout).not.toHaveBeenCalled();
+    expect(initial.id).toBe(projectId);expect(controller.getSnapshot().project?.id).toBe(projectId);
+  });
+
+  it.each(['already recorded', 'during authorization'] as const)('keeps the original canvas when the target project has a ledger %s', async timing => {
+    const initial = backendSceneToLayout(scene, { projectId, name: original.name }), onLoadLayout = vi.fn();
+    let finishAssets!: (value: { assetUrls: Record<string, string>;assetNames: Record<string, string> }) => void;
+    const authorize = vi.spyOn(controller, 'authorizeAssets');
+    if (timing === 'already recorded') pointRecords.set(otherId, points(otherId));
+    else authorize.mockImplementationOnce(() => new Promise(resolve => { finishAssets = resolve; }));
+    projectLists();render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+    fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+    const open = await screen.findByRole('button', { name: '打开' });queue(other);fireEvent.click(open);
+    if (timing === 'during authorization') {
+      await waitFor(() => expect(finishAssets).toBeTypeOf('function'));pointRecords.set(otherId, points(otherId));
+      await act(async () => { finishAssets({ assetUrls: {}, assetNames: {} }); });
+    }
+    expect(await screen.findByText(LOCAL_CHECKIN_CLOUD_MESSAGE)).toBeTruthy();
+    expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins', otherId]);
+    expect(onLoadLayout).not.toHaveBeenCalled();expect(initial.id).toBe(projectId);
+    if (timing === 'already recorded') expect(authorize).not.toHaveBeenCalled();
+    else expect(authorize).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/已打开云端方案|已打开项目/)).toBeNull();
+  });
+
+  it.each(['create', 'open', 'acquire', 'save'] as const)('keeps the original canvas when a ledger appears while the $0 cloud request is pending', async action => {
+    if (action === 'save') await editable();
+    const initial = backendSceneToLayout(scene, { projectId, name: original.name }), onLoadLayout = vi.fn();
+    projectLists();render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+    fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+    const button = await screen.findByRole('button', { name: actionLabels[action] });
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+    let finish!: (response: Response) => void;
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));fireEvent.click(button);
+    await waitFor(() => expect(finish).toBeTypeOf('function'));const currentPoints = points();pointRecords.set(projectId, currentPoints);
+    const sessionId = controller.getSnapshot().sessionId;
+    if (action === 'acquire') queue({ sessionId, generation: 4, revision: 2, expiresAt: new Date().toISOString() });
+    await act(async () => {
+      finish(json(action === 'acquire' ? { sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() }
+        : action === 'save' ? { id: projectId, revision: 3, scene, updatedAt: new Date().toISOString(), warnings: [] } : other));
+    });
+    expect(await screen.findByText(action === 'create' ? /云端创建请求已返回，结果待核对；当前画布未替换/ : LOCAL_CHECKIN_CLOUD_MESSAGE)).toBeTruthy();
+    expect(pointRecords.get(projectId)).toEqual(currentPoints);expect(onLoadLayout).not.toHaveBeenCalled();expect(initial.id).toBe(projectId);
+    expect(screen.queryByText(/新项目已保存|已载入最新版本并获得编辑权|已打开云端方案|已保存云端版本/)).toBeNull();
+    if (action === 'save') {
+      expect(screen.queryByText('云端已保存')).toBeNull();
+      expect(vi.mocked(PublicationPanel).mock.calls.at(-1)?.[0].dirty).toBe(true);
+    }
+    if (action === 'acquire') expect(String(mockFetch.mock.calls.at(-1)![0])).toContain(`/projects/${projectId}/lease/release`);
+  });
 });
 
 afterEach(() => {
@@ -405,6 +500,23 @@ it('reports a failed project list without claiming the account is empty and allo
   fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
   expect(await screen.findByText('另一个云项目')).toBeTruthy();
   expect(list).toHaveBeenCalledTimes(2);
+});
+
+it('offers local activities without cloud configuration but excludes a requested or connected cloud project', () => {
+  const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
+  const actions = { prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false };
+  vi.mocked(useLocalProjectBackup).mockReturnValue(actions);
+  const local = backendSceneToLayout(scene, { projectId: 'house-local-activity' });
+  const view = render(<CloudPanel controller={offline} layout={local} onLoadLayout={vi.fn()}/>);
+  expect(vi.mocked(LocalActivitiesPanel).mock.calls.at(-1)?.[0]).toMatchObject({ layout: local, actions, disabled: false });
+  vi.mocked(LocalActivitiesPanel).mockClear();
+  window.history.replaceState(null, '', `/?project=${projectId}`);
+  view.rerender(<CloudPanel controller={offline} layout={local} onLoadLayout={vi.fn()}/>);
+  expect(LocalActivitiesPanel).not.toHaveBeenCalled();
+  window.history.replaceState(null, '', '/');
+  view.rerender(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()}/>);
+  expect(LocalActivitiesPanel).not.toHaveBeenCalled();
+  offline.dispose();
 });
 
 it('keeps account-panel keys away from canvas shortcuts while preserving native dialog defaults', () => {
