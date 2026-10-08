@@ -1,6 +1,7 @@
-import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
 import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
+import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 
 export type Vec2 = Readonly<{ x: number; z: number }>;
 
@@ -339,6 +340,8 @@ export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | '
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /** Internal local production planning; excluded from public sharing. */
+  productionPlan?: ProductionPlan | undefined;
   /** Local activity execution metadata, saved and restored with the layout. */
   eventOperations?: EventOperations | undefined;
   /** Local editor metadata; cloud scenes contain only the active design. */

@@ -120,7 +120,7 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
   const blocking = actions.backupPending || (!!working && working !== 'read');
   return <details className="sc-project-backup">
     <summary>场景与活动备份</summary>
-    <p className="sc-note">保存可编辑布局、方案快照、活动需求、活动任务、物料工作单及两类核对依据。</p>
+    <p className="sc-note">保存可编辑布局、方案快照、活动需求、活动任务、物料工作单、制作计划及核对依据。</p>
     <p className="sc-note">不包含照片附件、模型文件、聊天或重建表单。模型只保留引用，换设备或授权失效后可能无法加载。</p>
     {hasExternalModel(layout) && <p className="sc-project-backup-warning">当前场景或方案快照含未归档模型引用，请保留原模型文件及可用地址。</p>}
     <div className="sc-project-backup-actions">
@@ -132,14 +132,17 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
       <strong>已预检 · {candidate.layout.name}</strong>
       <dl>
         <div><dt>文件</dt><dd>{candidateFileName}</dd></div>
+        <div><dt>格式</dt><dd>{candidate.source==='legacy-layout'?'旧布局文件':candidate.backupVersion?`完整项目备份 V${candidate.backupVersion}`:'完整项目备份'}</dd></div>
         <div><dt>项目</dt><dd>{candidate.layout.name}</dd></div>
         <div><dt>生成时间</dt><dd>{candidate.createdAt ? new Date(candidate.createdAt).toLocaleString() : '旧布局文件未记录'}</dd></div>
         <div><dt>内容</dt><dd>{candidate.layout.eventOperations?.tasks.length ?? 0} 个活动任务 · {candidate.layout.floors.reduce((count, floor) => count + floor.items.length, 0)} 个物件</dd></div>
         <div><dt>活动需求</dt><dd>{candidate.brief.status === 'present' ? '已包含' : candidate.brief.status === 'absent' ? '备份明确无已保存需求' : '旧文件未包含活动需求'}</dd></div>
+        <div><dt>当前方案制作计划</dt><dd>{candidate.layout.productionPlan?`${candidate.layout.productionPlan.staffing.length} 项岗位需求 · ${candidate.layout.productionPlan.acquisitions.length} 项物料取得 · ${candidate.layout.productionPlan.estimates.length} 项人工估算`:'当前方案未记录制作计划'}</dd></div>
       </dl>
       {candidate.layoutWasRepaired && <p className="sc-project-backup-warning">旧布局经兼容修复，请核对后再替换。</p>}
       {hasExternalModel(candidate.layout) && <p className="sc-project-backup-warning">文件或方案快照含未归档模型引用，模型文件未打包，可能无法跨设备使用。预检没有加载模型。</p>}
       <p className="sc-note">确认后会覆盖当前布局和目标项目的活动需求。{candidate.brief.status !== 'present' ? '目标项目原有需求将清除。' : ''}</p>
+      {layout.productionPlan&&!candidate.layout.productionPlan&&<p className="sc-project-backup-warning">待恢复的当前方案未记录制作计划，恢复后当前制作计划将清除。需要时可使用“撤销本次恢复”回退。</p>}
       <div className="sc-project-backup-actions">
         <button type="button" className="sc-button" disabled={busy} onClick={() => void restore()}>{working === 'restore' ? '正在恢复并核实保存…' : '确认替换布局与活动需求'}</button>
         <button type="button" className="sc-button" disabled={blocking} onClick={cancel}>取消恢复</button>

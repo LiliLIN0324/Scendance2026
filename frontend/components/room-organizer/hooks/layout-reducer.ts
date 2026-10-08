@@ -1,6 +1,5 @@
-import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from '../lib/constants';
 import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
-import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from '../lib/constants';
 import { MAX_DORMERS, clampDormer, type DormerInput, type DormerPatch } from '../lib/dormers';
 import { rotatedHalfExtents } from '../lib/geometry';
 import { remapGroupIds } from '../lib/groups';
@@ -33,6 +32,8 @@ import {
 } from '../lib/street';
 import { canApplyLayoutGeometry, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, sameZone } from '../lib/zones';
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type {
   CatalogItem,
   EntranceSpec,
@@ -58,6 +59,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type LayoutAction =
+  | { type: 'setProductionPlan'; value: ProductionPlan | undefined }
   | { type: 'setEventOperations'; value: EventOperations | undefined }
   | { type: 'setName'; name: string }
   | { type: 'setWidth'; width: number }
@@ -203,6 +205,13 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
   switch (action.type) {
     // -- building-level properties ------------------------------------------
+    case 'setProductionPlan': {
+      const next: RoomLayout = { ...state.layout, productionPlan: action.value };
+      if (action.value === undefined) delete next.productionPlan;
+      const layout = parseLayoutEventOperations(next);
+      if (!layout || JSON.stringify(layout.productionPlan) === JSON.stringify(state.layout.productionPlan)) return state;
+      return { ...state, layout };
+    }
     case 'setEventOperations': {
       const layout = parseLayoutEventOperations({ ...state.layout, eventOperations: action.value });
       if (!layout || JSON.stringify(layout.eventOperations) === JSON.stringify(state.layout.eventOperations)) return state;

@@ -1,6 +1,7 @@
-import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
+import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
@@ -269,6 +270,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   const v = value;
 
   if (v.eventOperations !== undefined && !eventOperationsSchema.safeParse(v.eventOperations).success) return false;
+  if (v.productionPlan !== undefined && !productionPlanSchema.safeParse(v.productionPlan).success) return false;
   if (typeof v.name !== 'string') return false;
   if (v.itemLayers !== undefined && (!Array.isArray(v.itemLayers) || v.itemLayers.length > 100 || !v.itemLayers.every(layer =>
     isPlainObject(layer) && typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= MAX_ID_LENGTH &&
@@ -375,14 +377,17 @@ export function parseStoredLayout(value: unknown): RoomLayout | null {
   return parsed ? withUniqueIds(repairLayout(parsed)) : null;
 }
 
-/** Validate activity metadata before a load or snapshot can replace the current draft. */
+/** Validate local business metadata before a load or snapshot can replace the current draft. */
 export function parseLayoutEventOperations(layout: RoomLayout): RoomLayout | null {
-  if (layout.eventOperations !== undefined && !isRoomLayout(layout)) return null;
+  if ((layout.eventOperations !== undefined || layout.productionPlan !== undefined) && !isRoomLayout(layout)) return null;
   const parsed = layout.eventOperations === undefined ? undefined : eventOperationsSchema.safeParse(layout.eventOperations);
   if (parsed && !parsed.success) return null;
+  const production = layout.productionPlan === undefined ? undefined : productionPlanSchema.safeParse(layout.productionPlan);
+  if (production && !production.success) return null;
   const operations = parsed?.data;
   let next = JSON.stringify(operations) === JSON.stringify(layout.eventOperations)
     ? layout : { ...layout, eventOperations: operations };
+  if (JSON.stringify(production?.data) !== JSON.stringify(layout.productionPlan)) next = { ...next, productionPlan: production?.data };
   if (layout.designBook) {
     const variants = [];
     for (const variant of layout.designBook.variants) {
@@ -394,7 +399,29 @@ export function parseLayoutEventOperations(layout: RoomLayout): RoomLayout | nul
       next = { ...next, designBook: { ...layout.designBook, variants } };
     }
   }
-  return hasAmbiguousExecutionIds(next) ? null : next;
+  return hasAmbiguousExecutionIds(next) || hasAmbiguousProductionIds(next) ? null : next;
+}
+
+/** Geometry repair must not turn a missing planned reference into a new association. */
+function hasAmbiguousProductionIds(layout: RoomLayout): boolean {
+  if (!layout.productionPlan) return !!layout.designBook?.variants.some(variant => hasAmbiguousProductionIds(variant.layout));
+  const key = (id: string) => uuid.safeParse(id).success ? id.toLowerCase() : id;
+  const referenced = new Set([
+    ...(layout.productionPlan?.acquisitions.flatMap(row => row.objectIds) ?? []),
+    ...(layout.productionPlan?.estimates.flatMap(row => row.objectIds) ?? []),
+  ].map(key));
+  const counts = new Map<string, number>();
+  for (const floor of layout.floors) {
+    const repaired = floor.items.map(item => ({ id: capText(item.id, MAX_ID_LENGTH) }));
+    for (const item of floor.items) {
+      const original = key(item.id), shortened = key(capText(item.id, MAX_ID_LENGTH));
+      if (original !== shortened && (referenced.has(original) || referenced.has(shortened))) return true;
+      counts.set(shortened, (counts.get(shortened) ?? 0) + 1);
+    }
+    if (uniqueIds(repaired).some((item, index) => item.id !== repaired[index]!.id && referenced.has(key(item.id)))) return true;
+  }
+  return [...referenced].some(id => (counts.get(id) ?? 0) > 1) ||
+    !!layout.designBook?.variants.some(variant => hasAmbiguousProductionIds(variant.layout));
 }
 
 /** Keep the original save recoverable when an execution record has no unique instance. */
@@ -432,6 +459,7 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  productionPlan: true,
   eventOperations: true,
   itemLayers: true,
   designBook: true,
@@ -770,6 +798,7 @@ function uniqueIds<T extends { id: string }>(list: T[]): T[] {
 }
 
 interface LegacySingleFloorLayout {
+  productionPlan?: ProductionPlan | undefined;
   eventOperations?: EventOperations | undefined;
   id?: string;
   name: string;
@@ -792,6 +821,7 @@ function isLegacySingleFloorLayout(value: unknown): value is LegacySingleFloorLa
     typeof v.name === 'string' &&
     isOptionalString(v.id) &&
     (v.eventOperations === undefined || eventOperationsSchema.safeParse(v.eventOperations).success) &&
+    (v.productionPlan === undefined || productionPlanSchema.safeParse(v.productionPlan).success) &&
     isRoomDimension(v.width) &&
     isRoomDimension(v.height) &&
     typeof v.floorColor === 'string' &&
@@ -827,6 +857,7 @@ function migrateLegacyLayout(legacy: LegacySingleFloorLayout): RoomLayout {
   };
   if (legacy.id !== undefined) layout.id = legacy.id;
   if (legacy.eventOperations !== undefined) layout.eventOperations = legacy.eventOperations;
+  if (legacy.productionPlan !== undefined) layout.productionPlan = legacy.productionPlan;
   // Non-destructive: keep migrating the rest of the layout even if the stored
   // floor plan isn't a safe inline data URL — just drop the image so we never
   // hand a network URL to the texture loader.

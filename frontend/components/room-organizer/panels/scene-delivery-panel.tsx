@@ -6,9 +6,11 @@ import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase
 import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABELS } from '../lib/scene-handoff';
 import { EventOperationsPanel } from './event-operations-panel';
-import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
+import { ProductionPlanPanel } from './production-plan-panel';
+import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import './scene-delivery-panel.css';
 
@@ -17,6 +19,7 @@ interface Props {
   onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined;
   onLocate?: ((id: string) => void) | undefined;
   onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined;
+  onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined;
   briefState?: CreativeBriefState | null | undefined;
   onOpenBrief?: (() => void) | undefined;
   backupActions?: LocalProjectBackupActions | null | undefined;
@@ -93,11 +96,11 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing Binggo entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, briefState, onOpenBrief, backupActions, onBackupRestored }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
-  const [view, setView] = useState<'operations' | 'materials'>(operationsAvailable ? 'operations' : 'materials');
+  const [view, setView] = useState<'operations' | 'materials' | 'production'>(operationsAvailable ? 'operations' : 'materials');
   const latest = useRef({ layout, userId: cloud.user?.id, projectId: cloud.project?.id });
   latest.current = { layout, userId: cloud.user?.id, projectId: cloud.project?.id };
   const mounted = useRef(true), pending = useRef(false);
@@ -124,7 +127,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const checking = reviews?.layout !== layout && preview.items.some(item => item.handoff?.status === 'review' || item.handoff?.status === 'accepted');
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setNotice(''); exportSnapshot.current = null; }, [layout.id, cloud.user?.id, cloud.project?.id]);
-  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations'): Promise<void> {
+  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production'): Promise<void> {
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice('');
     const before = latest.current;
@@ -137,7 +140,13 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     try {
       const { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } = await import('../lib/scene-delivery');
       if (!stillCurrent()) return;
-      if (kind === 'glb') {
+      if (kind === 'production') {
+        const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
+        if (!stillCurrent()) return;
+        const html = productionPlanHandoffHtml(layout, metadata);
+        downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部制作交接_${metadata.id}`, 'html');
+        setNotice('内部制作交接单已导出，可在浏览器打开并打印。请核对未确定的人员、供应方和费用。');
+      } else if (kind === 'glb') {
         const result = await exportDeliveryGlb(layout, controller);
         if (!stillCurrent()) throw new Error('场景或账号已变化，请按当前方案重新导出。');
         downloadSceneDelivery(result.buffer, 'model/gltf-binary', `${layout.name}_${metadata.id}`, 'glb');
@@ -157,10 +166,14 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
       <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => setView('operations')}>活动安排</button>
       <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => setView('materials')}>物料工作单</button>
+      <button type="button" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => setView('production')}>制作计划</button>
     </div>
     <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
       <p className="sc-note">{cloudBound ? '云项目可查看活动安排。本地执行资料尚未接入云端保存。' : '活动安排随当前场景保存在此浏览器。'}</p>
       <EventOperationsPanel layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief}/>
+    </div>
+    <div role="tabpanel" id="delivery-production" aria-labelledby="delivery-production-tab" hidden={view !== 'production'}>
+      <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy} onExport={()=>void download('production')}/>
     </div>
     <div role="tabpanel" id="delivery-materials" aria-labelledby="delivery-materials-tab" hidden={view !== 'materials'}>
     {preview.error ? <p className="sc-handoff-error" role="alert">{preview.error}</p> : <>

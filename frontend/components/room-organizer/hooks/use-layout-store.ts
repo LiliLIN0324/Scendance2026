@@ -62,6 +62,12 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
   };
 
   const actions: LayoutActions = {
+    setProductionPlan: (value) => {
+      if (!parseLayoutEventOperations({ ...get().layout, productionPlan: value })) {
+        throw new Error('制作计划未保存，请核对人数、时间、金额及填写依据。');
+      }
+      dispatch({ type: 'setProductionPlan', value });
+    },
     setEventOperations: (value) => {
       if (!parseLayoutEventOperations({ ...get().layout, eventOperations: value })) {
         throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');

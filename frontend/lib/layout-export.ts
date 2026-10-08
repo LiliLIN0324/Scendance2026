@@ -34,5 +34,6 @@ export function layoutForExport(layout: RoomLayout, stripHandoffs = false): Room
     } : {}),
   };
   if (stripHandoffs) delete exported.eventOperations;
+  if (stripHandoffs) delete exported.productionPlan;
   return exported;
 }

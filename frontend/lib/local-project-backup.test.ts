@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handoffSchema } from '../../supabase/functions/_shared/delivery-contract';
 import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
-import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import { INITIAL_LAYOUT } from '../components/room-organizer/lib/initial-layout';
-import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 import {
-  createLocalProjectBackup, LOCAL_PROJECT_BACKUP_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_BYTES,
-  parseLocalProjectBackupJson, readLocalProjectBackupFile, serializeLocalProjectBackup,
+  createLocalProjectBackup, LOCAL_PROJECT_BACKUP_COVERAGE, LOCAL_PROJECT_BACKUP_V1_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_BYTES,
+  parseLocalProjectBackupJson, readLocalProjectBackupFile, serializeLocalProjectBackup, validateLocalProjectRestoreCandidate,
   type BackupBriefSnapshot,
 } from './local-project-backup';
+import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
+import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 
 const createdAt = '2026-10-07T09:30:00.000Z';
 const scope = 'rehearsal-project-1';
@@ -42,9 +43,172 @@ function layout(): RoomLayout {
 }
 const backup = () => createLocalProjectBackup(layout(), ready(), createdAt);
 const json = (value: unknown) => JSON.stringify(value);
+const plan = (): ProductionPlan => productionPlanSchema.parse({
+  dataKind: 'rehearsal', budget: { limitMinor: null, scopeNote: '  布场与撤场\n范围待确认  ', basisNote: '' },
+  staffing: [{ id: 'b1000000-0000-4000-8000-000000000001', roleName: '签到', shiftLabel: '晚班',
+    taskIds: ['a1000000-0000-4000-8000-000000000001'], headcount: 2, sourceType: 'outsourced', sourceName: '演练执行团队',
+    plannedArrivalAt: '2026-10-08T23:00:00+08:00', plannedDepartureAt: '2026-10-09T01:00:00+08:00' }],
+  acquisitions: [{ id: 'b1000000-0000-4000-8000-000000000002', title: '演练椅子取得', method: 'rental',
+    taskIds: ['a1000000-0000-4000-8000-000000000003'], objectIds: ['same-name-1', 'missing-original'],
+    supplierName: '', specificationNote: '  规格未确认  ', sourceNote: '人工待询', transportScope: '送达与回收', installationScope: '按原位置摆放' }],
+  estimates: [{ id: 'b1000000-0000-4000-8000-000000000003', title: '待询人工估算',
+    taskIds: ['a1000000-0000-4000-8000-000000000001'], objectIds: ['same-name-2'], amountMinor: null, basisNote: '' },
+  { id: 'b1000000-0000-4000-8000-000000000004', title: '明确零金额的演练项', amountMinor: 0, basisNote: '演练假设已有，不是报价' }],
+});
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('scene and activity backup', () => {
+  it('revalidates V1 provenance and refuses a valid plan added to an already parsed old candidate', () => {
+    const old = { ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE };
+    const candidate = parseLocalProjectBackupJson(json(old));
+    expect(validateLocalProjectRestoreCandidate(candidate)).toEqual(candidate);
+    const tampered = { ...candidate, layout: { ...candidate.layout, productionPlan: plan() } };
+    expect(() => validateLocalProjectRestoreCandidate(tampered)).toThrow('V1');
+    const nested = { ...candidate, layout: { ...candidate.layout, designBook: { activeId: 'v1', variants: [{
+      id: 'v1', name: '后来混入的制作计划', layout: { ...layout(), productionPlan: plan() },
+    }] } } };
+    expect(() => validateLocalProjectRestoreCandidate(nested)).toThrow('V1');
+    expect(candidate.layout).not.toHaveProperty('productionPlan');
+  });
+
+  it('keeps V2 plans and supports old unversioned callers without inventing source provenance', () => {
+    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackup({ ...layout(), productionPlan: plan() }, ready(), createdAt));
+    expect(validateLocalProjectRestoreCandidate(candidate)).toEqual(candidate);
+    const { backupVersion: _version, ...unversioned } = candidate;
+    const checked = validateLocalProjectRestoreCandidate(unversioned);
+    expect(checked).toEqual(unversioned);
+    expect(checked).not.toHaveProperty('backupVersion');
+    expect(checked.layout.productionPlan).toEqual(plan());
+    expect(checked.layout).not.toBe(candidate.layout);
+    const explicitUndefined = validateLocalProjectRestoreCandidate({ ...unversioned, backupVersion: undefined });
+    expect(explicitUndefined).not.toHaveProperty('backupVersion');
+    const old = parseLocalProjectBackupJson(json({ ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE }));
+    const { backupVersion: _oldVersion, ...olderCaller } = old;
+    expect(validateLocalProjectRestoreCandidate(olderCaller).layout).not.toHaveProperty('productionPlan');
+  });
+
+  it('preserves parsed legacy presence and repair metadata without claiming the old file contained a brief', () => {
+    const old = { id: scope, name: '旧单层', width: 8, height: 6, items: [], floorColor: '#fff' };
+    const candidate = parseLocalProjectBackupJson(json(old));
+    expect(validateLocalProjectRestoreCandidate(candidate)).toEqual(candidate);
+    expect(candidate.layoutWasRepaired).toBe(true);
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion: 1 })).toThrow('候选格式');
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, brief: { status: 'absent' } })).toThrow('候选格式');
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, createdAt })).toThrow('候选格式');
+  });
+
+  it.each([0, 3, 99, '1', null])('refuses an unknown candidate version without silently repackaging it: %j', backupVersion => {
+    const candidate = parseLocalProjectBackupJson(json(backup()));
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion })).toThrow('备份版本');
+  });
+
+  it('rechecks malformed and non-JSON candidate values before returning a detached replacement', () => {
+    const candidate = parseLocalProjectBackupJson(json(backup()));
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, layout: null })).toThrow('候选格式');
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, brief: { status: 'error' } })).toThrow('候选格式');
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, hidden: true })).toThrow('候选格式');
+    const transform = vi.fn(() => ({ ...layout(), id: 'other-project' }));
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, layout: { ...layout(), toJSON: transform } })).toThrow('不支持的 JSON');
+    expect(transform).not.toHaveBeenCalled();
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, layout: { ...layout(), productionPlan: null } })).toThrow('制作计划');
+  });
+
+  it('writes V2 and round-trips the complete root and design-variant production plans without inventing facts', async () => {
+    const base = { ...layout(), productionPlan: plan() };
+    const original = { ...base, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '计划方案', layout: base }] } };
+    const text = serializeLocalProjectBackup(original, ready(), createdAt);
+    const parsed = await readLocalProjectBackupFile(new File([text], 'production-v2.json'));
+    expect(JSON.parse(text)).toMatchObject({ version: 2, coverage: { productionPlan: true } });
+    expect(parsed.backupVersion).toBe(2);
+    expect(parsed.layout).toEqual(original);
+    expect(parsed.layout.productionPlan!.budget!.limitMinor).toBeNull();
+    expect(parsed.layout.productionPlan!.estimates.map(row => row.amountMinor)).toEqual([null, 0]);
+    expect(parsed.layout.productionPlan!.acquisitions[0]!.objectIds).toEqual(['same-name-1', 'missing-original']);
+    expect(parsed.layout.productionPlan!.acquisitions[0]!.taskIds).toEqual(['a1000000-0000-4000-8000-000000000003']);
+    expect(parsed.layout.productionPlan!.staffing[0]).not.toHaveProperty('actualArrivalAt');
+    parsed.layout.productionPlan!.staffing[0]!.roleName = '候选修改';
+    expect(original.productionPlan.staffing[0]!.roleName).toBe('签到');
+  });
+
+  it('keeps missing plans absent and distinguishes an explicitly recorded empty planning block', () => {
+    const original = layout();
+    const noPlan = parseLocalProjectBackupJson(serializeLocalProjectBackup(original, ready(), createdAt));
+    expect(noPlan.layout).not.toHaveProperty('productionPlan');
+    const empty = { ...original, productionPlan: {} as ProductionPlan };
+    expect(createLocalProjectBackup(empty, ready(), createdAt).layout.productionPlan).toEqual(productionPlanSchema.parse({}));
+    const nested = { ...original, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '旧方案', layout: original }] } };
+    expect(createLocalProjectBackup(nested, ready()).layout.designBook!.variants[0]!.layout).not.toHaveProperty('productionPlan');
+  });
+
+  it('explicitly reads strict old V1 backups and upgrades new writes to V2 without a default plan', () => {
+    const old = { ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE };
+    const restored = parseLocalProjectBackupJson(json(old));
+    expect(restored).toMatchObject({ source: 'backup', backupVersion: 1, createdAt,
+      layout: layout(), brief: { status: 'present', value: brief() } });
+    expect(restored.layout).not.toHaveProperty('productionPlan');
+    const upgraded = createLocalProjectBackup(restored.layout, ready(), createdAt);
+    expect(upgraded.version).toBe(2);
+    expect(upgraded.coverage.productionPlan).toBe(true);
+    expect(upgraded.layout).toEqual(old.layout);
+  });
+
+  it('refuses mixed-version V1 coverage or new plans in the root and any design variant', () => {
+    const old = { ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE };
+    expect(() => parseLocalProjectBackupJson(json({ ...old, coverage: LOCAL_PROJECT_BACKUP_COVERAGE }))).toThrow('字段无效');
+    for (const value of [plan(), {}, null]) {
+      expect(() => parseLocalProjectBackupJson(json({ ...old, layout: { ...layout(), productionPlan: value } }))).toThrow('V1');
+      expect(() => parseLocalProjectBackupJson(json({ ...old, layout: { ...layout(), designBook: {
+        activeId: 'v1', variants: [{ id: 'v1', name: '混版', layout: { ...layout(), productionPlan: value } }],
+      } } }))).toThrow('V1');
+    }
+  });
+
+  it.each([
+    LOCAL_PROJECT_BACKUP_V1_COVERAGE,
+    { ...LOCAL_PROJECT_BACKUP_COVERAGE, productionPlan: false },
+    { ...LOCAL_PROJECT_BACKUP_COVERAGE, paidFacts: true },
+  ])('requires the exact V2 coverage even when no plan is present: %j', coverage => {
+    expect(() => parseLocalProjectBackupJson(json({ ...backup(), coverage }))).toThrow('字段无效');
+  });
+
+  it('keeps a valid plan from headerless current-layout JSON, but refuses repair that changes its associations', () => {
+    const original = { ...layout(), productionPlan: plan() };
+    const restored = parseLocalProjectBackupJson(json(original));
+    expect(restored).toMatchObject({ source: 'legacy-layout', brief: { status: 'not-in-file' } });
+    expect(restored.backupVersion).toBeUndefined();
+    expect(restored.layout.productionPlan).toEqual(plan());
+    const singleFloor = { id: original.id, name: original.name, width: original.width, height: original.height,
+      items: original.floors[0]!.items, floorColor: original.floors[0]!.floorColor,
+      eventOperations: original.eventOperations, productionPlan: original.productionPlan };
+    const migrated = parseLocalProjectBackupJson(json(singleFloor));
+    expect(migrated.layout.productionPlan).toEqual(plan());
+    expect(migrated.layout.eventOperations).toEqual(original.eventOperations);
+    expect(migrated.layout.floors[0]!.items.map(item => item.id)).toEqual(original.floors[0]!.items.map(item => item.id));
+    expect(migrated.layoutWasRepaired).toBe(true);
+    const broken = { ...makeLayout({ id: scope }), productionPlan: plan(), floors: [makeFloor({ items: [
+      makeItem({ id: 'a' }), makeItem({ id: 'a' }),
+    ] })] };
+    broken.productionPlan.acquisitions[0]!.objectIds = ['a-2'];
+    expect(() => parseLocalProjectBackupJson(json(broken))).toThrow(/计划|执行资料/);
+  });
+
+  it.each([
+    null, { ...plan(), schemaVersion: 2 }, { ...plan(), actualPaidMinor: 0 },
+    { ...plan(), budget: { limitMinor: -1, scopeNote: '演练', basisNote: '演练' } },
+    { ...plan(), estimates: [{ ...plan().estimates[0]!, amountMinor: 1.2, basisNote: '演练' }] },
+    { ...plan(), estimates: [{ ...plan().estimates[0]!, amountMinor: Number.MAX_SAFE_INTEGER + 1, basisNote: '演练' }] },
+    { ...plan(), estimates: [{ ...plan().estimates[0]!, id: plan().staffing[0]!.id.toUpperCase() }] },
+  ])('refuses invalid plan data in V2 and legacy without mutating the source: %j', invalid => {
+    const original = { ...layout(), productionPlan: invalid } as unknown as RoomLayout;
+    const before = json(original);
+    expect(() => createLocalProjectBackup(original, ready())).toThrow('制作计划');
+    expect(() => parseLocalProjectBackupJson(json({ ...backup(), layout: original }))).toThrow('制作计划');
+    expect(() => parseLocalProjectBackupJson(before)).toThrow('制作计划');
+    const nested = { ...layout(), designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '非法计划方案', layout: original }] } };
+    expect(() => createLocalProjectBackup(nested, ready())).toThrow('制作计划');
+    expect(json(original)).toBe(before);
+  });
+
   it('round-trips the real default activity layout with stable project and execution IDs', () => {
     const before = json(INITIAL_LAYOUT);
     const initial = { ...INITIAL_LAYOUT, id: scope, eventOperations: eventOperationsSchema.parse({
@@ -89,9 +253,9 @@ describe('scene and activity backup', () => {
     const input = ready();
     const text = serializeLocalProjectBackup(original, input, createdAt);
     const restored = await readLocalProjectBackupFile(new File([text], '场景与活动备份.json'));
-    expect(JSON.parse(text)).toMatchObject({ format: 'scendance-local-project-backup', version: 1,
+    expect(JSON.parse(text)).toMatchObject({ format: 'scendance-local-project-backup', version: 2,
       createdAt, coverage: LOCAL_PROJECT_BACKUP_COVERAGE });
-    expect(restored).toEqual({ source: 'backup', createdAt, layout: original,
+    expect(restored).toEqual({ source: 'backup', backupVersion: 2, createdAt, layout: original,
       brief: { status: 'present', value: brief() }, layoutWasRepaired: false });
     expect(restored.layout).not.toBe(original);
     expect(restored.layout.eventOperations!.tasks[0]!.objectIds).toEqual(['same-name-1', 'missing-original']);

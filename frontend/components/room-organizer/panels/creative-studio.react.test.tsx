@@ -14,6 +14,7 @@ import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider, useCreat
 import { GeneratedModelLibrary } from './generated-model-library';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
@@ -1084,6 +1085,30 @@ describe('complete local backup transactions', () => {
     vi.mocked(deleteSourceForm).mockImplementation(async key => { forms.delete(key); });
   });
   afterEach(() => { Reflect.deleteProperty(navigator, 'locks'); });
+
+  it('restores and undoes the complete production plan, but cannot undo over a newer plan edit',async()=>{
+    const rowId='70000000-0000-4000-8000-000000000001';
+    const original=productionPlanSchema.parse({dataKind:'rehearsal',staffing:[{id:rowId,roleName:'签到岗位',headcount:2}]});
+    layout={...layout,productionPlan:original};await mount();
+    const candidate=file();const updated=productionPlanSchema.parse({...original,staffing:[{...original.staffing[0]!,headcount:3}]});
+    candidate.layout.productionPlan=updated;
+    await act(async()=>{await actions.restoreBackup(candidate);});
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).productionPlan).toEqual(updated);
+    await act(async()=>{await actions.undoRestore();});
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).productionPlan).toEqual(original);
+    await act(async()=>{await actions.restoreBackup(candidate);});
+    act(()=>changeLayout({...candidate.layout,productionPlan:{...updated,staffing:[{...updated.staffing[0]!,headcount:4}]}}));
+    expect(actions.canUndoRestore).toBe(false);
+    await expect(actions.undoRestore()).rejects.toThrow('新编辑');
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).productionPlan.staffing[0].headcount).toBe(4);
+  });
+  it('rejects an in-memory V1 candidate augmented with new production data before writing either source',async()=>{
+    await mount();const candidate=file();candidate.backupVersion=1;candidate.layout.productionPlan=productionPlanSchema.parse({});
+    const writes=vi.mocked(storeSourceForm).mock.calls.length;
+    await expect(actions.restoreBackup(candidate)).rejects.toThrow();
+    expect(commit).not.toHaveBeenCalled();expect(vi.mocked(storeSourceForm).mock.calls).toHaveLength(writes);
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief);
+  });
 
   it('flushes the currently dirty provider and exports the real readback with empty/fractional facts preserved', async () => {
     await mount(); fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '刚输入的真实需求' } });
