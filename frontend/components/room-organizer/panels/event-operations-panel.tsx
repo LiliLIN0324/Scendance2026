@@ -2,16 +2,21 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { productionReferenceKey as objectKey } from '@/lib/production-plan';
+import { registerSourceFlush } from '@/lib/source-storage';
 import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
 import { handoffLimits } from '../../../../supabase/functions/_shared/delivery-contract';
+import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationPhases, eventOperationsLimits, eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
+import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { CreativeBrief } from '../lib/creative-brief';
 import type { RoomLayout } from '../lib/types';
 import './scene-delivery-panel.css';
 import './event-operations-panel.css';
 
 interface Props {
+  checkins?: MaterialCheckinState | undefined;
   layout: RoomLayout;
   disabled: boolean;
   onUpdate(value: EventOperations | undefined): void;
@@ -46,9 +51,10 @@ function inputError(field: string | undefined): string {
   return messages[field ?? ''] ?? '请检查活动安排，填写内容已保留。';
 }
 
-function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave, onDelete, onLocate }: {
+function OperationEditor({ layout, task, status, reviewFailed, disabled, checkins, onSave, onDelete, onLocate }: {
   layout: RoomLayout; task: EventOperationTask; status: ReviewStatus; reviewFailed: boolean; disabled: boolean;
   onSave(task: EventOperationTask): boolean; onDelete(): void; onLocate: Props['onLocate'];
+  checkins: MaterialCheckinLedger | undefined;
 }): JSX.Element {
   const [draft, setDraft] = useState(task);
   const [times, setTimes] = useState(() => timeInputs(task));
@@ -58,12 +64,25 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
   const [saving, setSaving] = useState(false);
   const pending = useRef(false), mounted = useRef(true);
   const taskSnapshot = JSON.stringify(task);
-  const latest = useRef({ layout, task, disabled }); latest.current = { layout, task, disabled };
+  const scope = layout.id ?? 'local';
+  const savedTask = useRef(task);
+  const dirty = canonical(draft) !== canonical(savedTask.current) || canonical(times) !== canonical(timeInputs(savedTask.current)) || links !== savedTask.current.evidenceUrls.join('\n') || badTimeFields.length > 0;
+  const latest = useRef({ layout, task, disabled, checkins, dirty }); latest.current = { layout, task, disabled, checkins, dirty };
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     const restored = eventOperationTaskSchema.parse(JSON.parse(taskSnapshot));
+    savedTask.current = restored;
     setDraft(restored); setTimes(timeInputs(restored)); setBadTimeFields([]); setLinks(restored.evidenceUrls.join('\n')); setError('');
-  }, [taskSnapshot]);
+  }, [taskSnapshot, scope]);
+  useEffect(() => registerSourceFlush(scope, async () => {
+    if ((latest.current.layout.id ?? 'local') !== scope) return;
+    const message = pending.current ? '任务正在保存，请稍后重试。' : latest.current.dirty ? '任务有未保存修改，请先保存任务或放弃修改。' : '';
+    if (message) { setError(message); throw new Error(message); }
+  }), [scope]);
+  function discard(): void {
+    const restored = savedTask.current;
+    setDraft(restored); setTimes(timeInputs(restored)); setBadTimeFields([]); setLinks(restored.evidenceUrls.join('\n')); setError(''); setNotice('');
+  }
   const objects = layout.floors.flatMap(floor => floor.items.map(item => ({ ...item, floorName: floor.name })));
   const objectReview=operationObjectReview(layout,draft),missing=objectReview.missingObjectIds,ambiguous=objectReview.ambiguousObjectIds;
   const productionMissing=objectReview.missingProductionObjectIds,productionAmbiguous=objectReview.ambiguousProductionObjectIds;
@@ -102,15 +121,19 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
         if(issues.ambiguousProductionObjectIds.length){setError('制作计划关联的物料不唯一，请到“制作计划”页核对，原制作关联已保留。');return;}
       }
       if (confirming) {
-        next.reviewedBasis = await operationBasis(layout, next);
+        next.reviewedBasis = await operationBasis(layout, next, checkins);
       } else if (task.reviewedBasis) next.reviewedBasis = task.reviewedBasis;
       const parsed = eventOperationTaskSchema.safeParse(next);
       if (!parsed.success) { setError(inputError(String(parsed.error.issues[0]?.path[0] ?? ''))); return; }
       if (!mounted.current) return;
-      if (latest.current.disabled || latest.current.layout !== before.layout || latest.current.task !== before.task) {
+      if (latest.current.disabled || latest.current.layout !== before.layout || latest.current.task !== before.task || canonical(latest.current.checkins??null)!==canonical(before.checkins??null)) {
         setError('场景或任务已变化，请按当前内容重新保存。'); return;
       }
-      if (onSave(parsed.data)) { setError(''); setNotice('任务已更新，请留意本机保存状态。'); }
+      if (onSave(parsed.data)) {
+        savedTask.current = parsed.data;
+        setDraft(parsed.data); setTimes(timeInputs(parsed.data)); setBadTimeFields([]); setLinks(parsed.data.evidenceUrls.join('\n'));
+        setError(''); setNotice('任务已更新，请留意本机保存状态。');
+      }
     } catch { if (mounted.current) setError('任务核对失败，填写内容已保留，请重试。'); }
     finally { pending.current = false; if (mounted.current) setSaving(false); }
   }
@@ -155,12 +178,13 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
         <button className="sc-button" type="button" onClick={onDelete}>删除任务</button>
       </div>
     </fieldset>
+    <div className="sc-handoff-actions"><button className="sc-button" type="button" disabled={!dirty || saving} onClick={discard}>放弃修改</button></div>
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
   </form>;
 }
 
-export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief }: Props): JSX.Element {
+export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins }: Props): JSX.Element {
   const operations = layout.eventOperations ?? emptyOperations;
   const [title, setTitle] = useState(''), [phase, setPhase] = useState<EventOperationTask['phase']>('preparation');
   const [openedTask, setOpenedTask] = useState<string | null>(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -168,17 +192,25 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
   const [addOpen, setAddOpen] = useState(operations.tasks.length === 0);
   const pendingFocus = useRef<{ id: string; scope: string | undefined } | null>(null);
   const taskDetails = useRef(new Map<string, HTMLDetailsElement>());
-  const [reviews, setReviews] = useState<{ layout: RoomLayout; statuses: Record<string, { status: ReviewStatus; failed: boolean }> } | null>(null);
-  const latest = useRef({ layout, disabled }); latest.current = { layout, disabled };
+  const [reviews, setReviews] = useState<{ layout: RoomLayout; checkins: MaterialCheckinLedger | undefined; statuses: Record<string, { status: ReviewStatus; failed: boolean }> } | null>(null);
+  const checkinsUnavailable=!!checkins&&!checkins.ready;
+  const latest = useRef({ layout, disabled, title }); latest.current = { layout, disabled, title };
+  const scope = layout.id ?? 'local';
+  useEffect(() => registerSourceFlush(scope, async () => {
+    if ((latest.current.layout.id ?? 'local') !== scope || !latest.current.title) return;
+    const message = '新任务尚未添加，请先添加任务或放弃新增任务。';
+    setError(message); throw new Error(message);
+  }), [scope]);
   useEffect(() => {
+    if(checkinsUnavailable){setReviews(null);return;}
     let cancelled = false;
     void Promise.all(operations.tasks.map(async task => {
-      try { return [task.id, { status: (await operationReview(layout, task)).status, failed: false }] as const; }
+      try { return [task.id, { status: (await operationReview(layout, task, checkins?.ledger)).status, failed: false }] as const; }
       catch { return [task.id, { status: task.status === 'accepted' || task.status === 'review' ? 'needs_review' as const : task.status, failed: true }] as const; }
-    })).then(entries => { if (!cancelled) setReviews({ layout, statuses: Object.fromEntries(entries) }); });
+    })).then(entries => { if (!cancelled) setReviews({ layout, checkins: checkins?.ledger, statuses: Object.fromEntries(entries) }); });
     return () => { cancelled = true; };
-  }, [layout, operations.tasks]);
-  useEffect(() => { setDeleted(null); setError(''); setNotice(''); setOpenedTask(null); pendingFocus.current = null; setAddOpen(!latest.current.layout.eventOperations?.tasks.length); }, [layout.id]);
+  }, [layout, operations.tasks, checkins?.ledger, checkinsUnavailable]);
+  useEffect(() => { setTitle(''); setPhase('preparation'); setDeleted(null); setError(''); setNotice(''); setOpenedTask(null); pendingFocus.current = null; setAddOpen(!latest.current.layout.eventOperations?.tasks.length); }, [layout.id]);
   useEffect(() => {
     const pending = pendingFocus.current;
     if (!pending) return;
@@ -218,10 +250,12 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
   const missingPlans = operations.tasks.filter(task => !task.plannedStartAt || !task.plannedEndAt).length;
   const missingConditions = operations.tasks.filter(task => !task.acceptance.trim()).length;
   const missingSummary = [missingOwners && `负责人 ${missingOwners} 项`, missingPlans && `计划时间 ${missingPlans} 项`, missingConditions && `完成条件 ${missingConditions} 项`].filter(Boolean).join(' · ');
-  const currentReviews = reviews?.layout === layout ? operations.tasks.map(task => reviews.statuses[task.id]) : [];
+  const reviewsCurrent=reviews?.layout===layout&&reviews.checkins===checkins?.ledger&&!checkinsUnavailable;
+  const currentReviews = reviewsCurrent ? operations.tasks.map(task => reviews.statuses[task.id]) : [];
   const needsReview = currentReviews.filter(review => review?.status === 'needs_review' && !review.failed).length;
   const failedReviews = currentReviews.filter(review => review?.failed).length;
   return <section className="sc-event-operations" aria-label="活动安排">
+    {checkinsUnavailable&&<p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p>}
     <div className="sc-operation-brief">
       <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.event} · 预计 {brief.guests} 人</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
@@ -237,7 +271,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       const tasks = operations.tasks.filter(task => task.phase === value);
       return <div key={value} className="sc-operation-phase"><h3>{OPERATION_PHASE_LABELS[value]} <small>{tasks.length} 项</small></h3>
         <div className="sc-handoff-list">{tasks.map(task => {
-          const review = reviews?.layout === layout ? reviews.statuses[task.id] : undefined;
+          const review = reviewsCurrent ? reviews.statuses[task.id] : undefined;
           const status = review?.status ?? (task.status === 'accepted' || task.status === 'review' ? 'checking' : task.status);
           const objectIssues=operationObjectReview(layout,task),missingCount=objectIssues.missingObjectIds.length;
           const plannedTime = (time: string | null): string => time ? toShanghaiDateTimeInput(time).replace('T', ' ').replace(/:00$/, '') : '待安排';
@@ -245,7 +279,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
           const incomplete = [!task.acceptance && '完成条件待填写', task.status !== 'todo' && (!task.actualStartedAt || !task.actualFinishedAt) && '实际时间未完整记录'].filter(Boolean);
           return <details key={task.id} ref={element => { if (element) taskDetails.current.set(task.id, element); else taskDetails.current.delete(task.id); }} className="sc-handoff-item" open={openedTask === task.id ? true : undefined} onToggle={event => { if (!event.currentTarget.open && openedTask === task.id) setOpenedTask(null); }}>
             <summary><span>{task.title}<small className="sc-operation-task-plan">{task.ownerName ? `负责人 · ${task.ownerName}` : '负责人待安排'} · {plan}</small>{incomplete.length > 0 && <small>{incomplete.join(' · ')}</small>}{missingCount > 0 && <small className="sc-handoff-review">{missingCount} 件关联物料已移除</small>}{objectIssues.ambiguousObjectIds.length>0&&<small className="sc-handoff-review">{objectIssues.ambiguousObjectIds.length} 件直接关联物料不唯一</small>}{(objectIssues.missingProductionObjectIds.length>0||objectIssues.ambiguousProductionObjectIds.length>0)&&<small className="sc-handoff-review">制作计划物料关联待核对，请在制作计划页检查。</small>}</span><span className={`sc-handoff-status ${status === 'needs_review' ? 'needs-review' : ''}`}>{status === 'checking' ? '正在核对…' : OPERATION_STATUS_LABELS[status]}</span></summary>
-            <OperationEditor layout={layout} task={task} status={status} reviewFailed={review?.failed ?? false} disabled={disabled} onLocate={onLocate} onSave={next => update({ ...operations, tasks: operations.tasks.map(current => current.id === task.id ? next : current) })} onDelete={() => {
+            <OperationEditor layout={layout} task={task} status={status} reviewFailed={review?.failed ?? false} disabled={disabled||checkinsUnavailable} checkins={checkins?.ledger} onLocate={onLocate} onSave={next => update({ ...operations, tasks: operations.tasks.map(current => current.id === task.id ? next : current) })} onDelete={() => {
               if (update({ ...operations, tasks: operations.tasks.filter(current => current.id !== task.id) })) { setDeleted({ task, index: operations.tasks.indexOf(task) }); setNotice('任务已删除，可撤销删除。'); }
             }}/>
           </details>;
@@ -261,6 +295,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
         <label className="sc-field">新任务标题<input value={title} maxLength={eventOperationsLimits.title} placeholder="如签到、主持或撤场交接" onChange={event => setTitle(event.target.value)}/></label>
         <div className="sc-operation-add-actions"><label className="sc-field">新任务阶段<select value={phase} onChange={event => setPhase(event.target.value as EventOperationTask['phase'])}>{eventOperationPhases.map(value => <option key={value} value={value}>{OPERATION_PHASE_LABELS[value]}</option>)}</select></label><button className="sc-button" type="submit">添加任务</button></div>
       </fieldset>
+      <div className="sc-handoff-actions"><button className="sc-button" type="button" disabled={!title} onClick={() => { setTitle(''); setPhase('preparation'); setError(''); setNotice(''); }}>放弃新增任务</button></div>
     </form></details>
     {!operations.tasks.length && <div className="sc-operation-example"><p className="sc-note">30人共创示例，共6项任务；载入后请按当前活动调整。需求和场景保持原样。</p><button type="button" className="sc-button" disabled={disabled} onClick={loadRehearsal}>载入演练任务示例</button></div>}
     {operations.tasks.length >= eventOperationsLimits.tasks && <p className="sc-note">已达到 {eventOperationsLimits.tasks} 项任务，请整理已有安排。</p>}

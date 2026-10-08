@@ -10,9 +10,11 @@ import { createBackendSession, useBackendSession, type BackendSession, type Proj
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
-import { assertNoLocalHandoffCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
+import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { AccountTeamDemo } from './account-team-demo';
+import { useLocalProjectBackup } from './creative-studio';
+import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
 interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void }
@@ -21,6 +23,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
+  const localActivities = useLocalProjectBackup();
   const requestedProjectId = useSearchParams()?.get('project');
   const dialog = useRef<HTMLDialogElement>(null);
   const layoutRef = useRef(layout);
@@ -32,6 +35,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const [notice, setNotice] = useState('');
   const [boundLayout, setBoundLayout] = useState<string | undefined>();
   const [savedFingerprint, setSavedFingerprint] = useState<string | null>(null);
+  const [recordsBlockedScope, setRecordsBlockedScope] = useState<string | undefined>();
   const lastObserved = useRef('');
   const openRequested = useRef<(id: string) => Promise<void>>(async () => {});
   const openedRequest = useRef('');
@@ -49,7 +53,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const localHandoff = hasLocalHandoff(layout);
   const bound = !!cloud.project && layout.id === cloud.project.id && (boundLayout === layout.id ||
     (!cloud.writeBlocked && cloud.lease?.projectId === layout.id && cloud.lease.sessionId === cloud.sessionId && Date.parse(cloud.lease.expiresAt) > Date.now()));
-  const dirty = localHandoff || (bound ? cloud.dirty : fingerprint !== savedFingerprint);
+  const dirty = localHandoff || !!layout.id && recordsBlockedScope === layout.id || (bound ? cloud.dirty : fingerprint !== savedFingerprint);
 
   const userId = cloud.user?.id;
   const studioProjects = projects.filter(project => project.studio_id === studioId);
@@ -94,7 +98,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     actionPending.current = true; setBusy(true); setNotice('');
     try { await action(); }
     catch (error) {
-      setNotice(controller.getSnapshot().error?.message ?? (error instanceof Error ? error.message : '操作失败，请重试。'));
+      setNotice(error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。');
     } finally { actionPending.current = false; setBusy(false); }
   }
   async function refreshProjects(): Promise<void> {
@@ -102,20 +106,39 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     setProjects(nextProjects); setStudios(nextStudios); setProjectsLoaded(true);
     setStudioId(current => nextStudios.some(studio => studio.id === current) ? current : nextStudios[0]?.id ?? '');
   }
+  async function assertCloudTransition(value: RoomLayout): Promise<void> {
+    try {
+      await assertNoLocalRecordsCloudTransition(value);
+      setRecordsBlockedScope(current => current === value.id ? undefined : current);
+    } catch(error) {
+      if (value.id && value.id === layoutRef.current.id) setRecordsBlockedScope(value.id);
+      throw error;
+    }
+  }
   async function flushBeforeReplacement(openingFrom: RoomLayout): Promise<void> {
-    assertNoLocalHandoffCloudTransition(openingFrom);
+    await assertCloudTransition(openingFrom);
     await flushSourceScope(openingFrom.id ?? 'local');
-    assertNoLocalHandoffCloudTransition(layoutRef.current);
+    await assertCloudTransition(layoutRef.current);
     if(layoutRef.current!==openingFrom)throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新打开。');
   }
   async function acceptScene(scene: unknown, projectId: string, name: string, openingFrom: RoomLayout): Promise<void> {
-    assertNoLocalHandoffCloudTransition(layoutRef.current);
+    await assertCloudTransition(openingFrom);
+    await assertCloudTransition(layoutRef.current);
     // Include the initial project/lease request in the guard, not only GLB loading.
     if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     const candidate = backendSceneToLayout(scene, { projectId, name });
+    await assertCloudTransition(candidate);
+    await assertCloudTransition(layoutRef.current);
+    if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     const assets = await controller.authorizeAssets(layoutToBackendScene(candidate));
+    await assertCloudTransition(candidate);
+    await assertCloudTransition(openingFrom);
+    await assertCloudTransition(layoutRef.current);
+    if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     await Promise.all(Object.entries(assets.assetUrls).map(([assetId, url]) => ensureGlbAsset(assetId, url)));
-    assertNoLocalHandoffCloudTransition(layoutRef.current);
+    await assertCloudTransition(candidate);
+    await assertCloudTransition(openingFrom);
+    await assertCloudTransition(layoutRef.current);
     if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
     const next = backendSceneToLayout(scene, { projectId, name, ...assets });
     if (openingFrom.id === projectId) {
@@ -143,22 +166,30 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     }
     const openingFrom = layoutRef.current;
     try {
-      assertNoLocalHandoffCloudTransition(openingFrom);
+      await assertCloudTransition(openingFrom);
       const current = controller.getSnapshot();
       if (openingFrom.id && openingFrom.id !== id && current.dirty && !confirmReplace()) return;
       await flushBeforeReplacement(openingFrom);
       const project = current.project?.id === id && !current.writeBlocked ? current.project :
         await controller.getProject(id, incoming => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(incoming.scene, { projectId: incoming.id, name: incoming.name }); });
-      assertNoLocalHandoffCloudTransition(layoutRef.current);
+      await assertCloudTransition(openingFrom);
+      await assertCloudTransition(layoutRef.current);
       if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
       const localScene = openingFrom.id === id ? layoutToBackendScene(openingFrom) : null;
       if (localScene && JSON.stringify(localScene) !== JSON.stringify(project.scene)) {
         controller.setDraft(localScene);
         // Restored private GLB URLs may have expired while the tab was closed.
         // Refresh the UUID-keyed cache without replacing the draft or its history.
+        await assertCloudTransition(backendSceneToLayout(project.scene, { projectId: project.id, name: project.name }));
+        await assertCloudTransition(layoutRef.current);
+        if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
         const assets = await controller.authorizeAssets(localScene);
+        await assertCloudTransition(openingFrom);
+        await assertCloudTransition(layoutRef.current);
+        if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
         await Promise.all(Object.entries(assets.assetUrls).map(([assetId, url]) => ensureGlbAsset(assetId, url)));
-        assertNoLocalHandoffCloudTransition(layoutRef.current);
+        await assertCloudTransition(openingFrom);
+        await assertCloudTransition(layoutRef.current);
         if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
         setBoundLayout(id); setSavedFingerprint(JSON.stringify(project.scene));
         syncProjectUrl(id);
@@ -200,6 +231,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       <div className="sc-account-body">
       <section hidden={section !== 'projects'} aria-label="我的项目">
       <div className="sc-account-canvas"><span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={21}/></span><div><small>当前画布</small><strong>{layout.name || '未命名活动'}</strong></div><span className="sc-cloud-badge">{saveStatus}</span></div>
+      {localActivities && !cloud.project && !requestedProjectId && <LocalActivitiesPanel layout={layout} actions={localActivities} disabled={busy} onComplete={() => dialog.current?.close()}/>}
       {!cloud.configured ? <div className="sc-cloud-offline">
         <span className="sc-cloud-badge">本地工作台</span>
         <h3>当前使用本地工作台</h3>
@@ -220,7 +252,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           if (!confirmReplace()) return;
           void run(async () => {
             const openingFrom = layoutRef.current;
-            assertNoLocalHandoffCloudTransition(openingFrom);
+            await assertCloudTransition(openingFrom);
             await flushBeforeReplacement(openingFrom);
             setBoundLayout(undefined);
             const opened = await controller.getProject(project.id, candidate => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(candidate.scene, { projectId: candidate.id, name: candidate.name }); });
@@ -234,16 +266,25 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           <p className="sc-cloud-muted">{selectedStudio ? `新项目将归属「${selectedStudio.name}」` : '请先创建或加入工作室。'}</p>
           <button type="button" disabled={busy || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
             const current = layoutRef.current;
-            assertNoLocalHandoffCloudTransition(current);
+            await assertCloudTransition(current);
             await flushSourceScope(current.id ?? 'local');
-            assertNoLocalHandoffCloudTransition(layoutRef.current);
+            await assertCloudTransition(layoutRef.current);
             if(layoutRef.current!==current)throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新创建。');
             setBoundLayout(undefined);
             const created = await controller.createProject(studioId, current.name, layoutToBackendScene(current));
             let sourceNotice = '';
-            try { await copySourceScope(current.id ?? 'local', created.id); }
-            catch { sourceNotice = ' 本机资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
-            await acceptScene(created.scene, created.id, created.name, current); await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
+            try {
+              await assertCloudTransition(current);
+              await assertCloudTransition(backendSceneToLayout(created.scene, { projectId: created.id, name: created.name }));
+              await assertCloudTransition(layoutRef.current);
+              if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
+              try { await copySourceScope(current.id ?? 'local', created.id); }
+              catch { sourceNotice = ' 本机资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
+              await acceptScene(created.scene, created.id, created.name, current);
+            } catch(error) {
+              throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对本机资料。'}`);
+            }
+            await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
           })}>把当前画布创建为新项目</button>
         </div>
         </section><aside aria-label="当前项目管理">
@@ -257,10 +298,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
               if (!confirmReplace()) return;
               void run(async () => {
                 const openingFrom = layoutRef.current;
-                assertNoLocalHandoffCloudTransition(openingFrom);
+                await assertCloudTransition(openingFrom);
                 await flushBeforeReplacement(openingFrom);
                 setBoundLayout(undefined);
                 const project = controller.getSnapshot().project!;
+                await assertCloudTransition(backendSceneToLayout(project.scene, { projectId: project.id, name: project.name }));
+                await assertCloudTransition(layoutRef.current);
+                if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
                 const lease = await controller.acquireLease(project.id, scene => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(scene, { projectId: project.id, name: project.name }); });
                 try { await acceptScene(lease.scene, project.id, project.name, openingFrom); }
                 catch (error) { await controller.releaseLease(); throw error; }
@@ -268,11 +312,15 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
               });
             }}>获取编辑权</button>
             <button className="sc-cloud-primary" type="button" disabled={busy || cloud.writeBlocked || !bound || !!conversionError} onClick={() => void run(async () => {
+              const current = layoutRef.current;
+              await assertCloudTransition(current);
               assertNoLocalHandoffCloudTransition(layoutRef.current);
-              const scene = layoutToBackendScene(layoutRef.current);
+              if (layoutRef.current !== current) throw new Error('保存前画布有新改动，当前草稿已保留。请核对后重新保存。');
+              const scene = layoutToBackendScene(current);
               const submitted = JSON.stringify(scene);
               const saved = await controller.saveScene(scene);
-              assertNoLocalHandoffCloudTransition(layoutRef.current);
+              await assertCloudTransition(current);
+              await assertCloudTransition(layoutRef.current);
               setSavedFingerprint(submitted);
               setNotice(`已保存云端版本 ${saved.revision}${saved.warnings.length ? '，请留意场地重叠提示' : ''}。`);
             })}>保存到云端</button>
