@@ -33,7 +33,50 @@ import { buildStructureShell } from '../three/structure-builder';
 import { computeFloorOpenings, computeWallOpenings } from '../three/wall-openings';
 import { useGlbAssets } from './use-glb-assets';
 import type { FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
+import type { ReferenceImageLayer } from '@/lib/reference-image';
 import type * as ThreeNS from 'three';
+
+/** A view-only image plane. Its pixels use the existing canonical metre mapping. */
+export function mountReferenceImage(
+  THREE: typeof import('three'),
+  scene: ThreeNS.Scene,
+  image: ReferenceImageLayer,
+  roomWidth: number,
+  roomDepth: number,
+  opacity: number,
+  invalidate: () => void,
+  isCurrent: () => boolean = () => true
+): () => void {
+  const [a, b, c, d, e, f] = image.imageToWorld;
+  const corners = [[0, 0], [image.pixelWidth, 0], [image.pixelWidth, image.pixelHeight], [0, image.pixelHeight]];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(corners.flatMap(([x, y]) => [
+    a * x + c * y + e - roomWidth / 2, 0.002, b * x + d * y + f - roomDepth / 2,
+  ]), 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  const material = new THREE.MeshBasicMaterial({ transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData.type = 'reference-image';
+  mesh.raycast = () => {};
+  let alive = true;
+  const texture = new THREE.TextureLoader().load(image.url, (loaded) => {
+    if (!alive || !isCurrent()) { loaded.dispose(); return; }
+    loaded.colorSpace = THREE.SRGBColorSpace;
+    material.map = loaded;
+    material.needsUpdate = true;
+    scene.add(mesh);
+    invalidate();
+  });
+  return () => {
+    alive = false;
+    scene.remove(mesh);
+    geometry.dispose();
+    material.dispose();
+    texture.dispose();
+    invalidate();
+  };
+}
 
 interface MaterialLike {
   transparent: boolean;
@@ -91,6 +134,7 @@ export interface UseSceneEffectsParams {
   layout: RoomLayout;
   activeFloor: FloorLayout;
   activeFloorIndex: number;
+  referenceImage?: ReferenceImageLayer;
   view: ViewSettings;
   selectedItemId: string | null;
   extraSelectedIds: ReadonlySet<string>;
@@ -115,6 +159,7 @@ export function useSceneEffects({
   layout,
   activeFloor,
   activeFloorIndex,
+  referenceImage,
   view,
   selectedItemId,
   extraSelectedIds,
@@ -293,9 +338,10 @@ export function useSceneEffects({
         ...(floor.hiddenWalls ? { hiddenWalls: floor.hiddenWalls } : {}),
         floorOpenings,
         floorPlanImage: index === 0 ? layout.floorPlanImage ?? null : null,
-        floorPlanOpacity: layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
+        floorPlanOpacity: view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
         floorPlanFitMode: layout.floorPlanFitMode ?? 'stretch',
         floorPlan3DEffect: view.floorPlan3DEffect,
+        showFloorPlan: view.showReferenceImage !== false,
         yOffset: floorElevation(layout.floors, index),
         wallHeight: storeyHeight(floor),
         groundY: lowestGround(layout.terrain),
@@ -343,8 +389,29 @@ export function useSceneEffects({
     layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
+    view.showReferenceImage, view.referenceImageOpacity,
     activeFloorIndex,
   ]);
+
+  // Separate from the shell: v2 walls/floors never depend on image visibility.
+  const referenceImageKey = referenceImage
+    ? JSON.stringify([referenceImage.url, referenceImage.pixelWidth, referenceImage.pixelHeight, ...referenceImage.imageToWorld]) : '';
+  const referenceScene = isReady ? sceneRef.current : null;
+  useEffect(() => {
+    if (!isReady || !referenceImage || view.showReferenceImage === false ||
+        (activeFloorIndex !== 0 && !view.showAllFloors)) return;
+    const THREE = threeModuleRef.current;
+    const scene = referenceScene;
+    if (!THREE || !scene) return;
+    return mountReferenceImage(THREE, scene, referenceImage, layout.width, layout.height,
+      view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY, invalidate,
+      () => sceneRef.current === scene && threeModuleRef.current === THREE);
+    // The value signature covers every image field; equivalent resolver results
+    // during furniture edits must not re-decode or re-upload the same texture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, referenceImageKey, referenceScene, layout.id, layout.width, layout.height, layout.floorPlanOpacity,
+    view.showReferenceImage, view.referenceImageOpacity, view.showAllFloors, activeFloorIndex,
+    threeModuleRef, sceneRef, invalidate]);
 
   // Cutaway on orbit
   useEffect(() => {
@@ -850,6 +917,9 @@ export function useSceneEffects({
         showMeasurements: view.showMeasurements,
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
+        ...(referenceImage ? { referenceImage } : {}),
+        showFloorPlan: view.showReferenceImage !== false,
+        ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         hasCollision: (item) => structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls }),
       });
     };
@@ -882,7 +952,9 @@ export function useSceneEffects({
       observer.disconnect();
       removeRepaintHandler();
     };
-  }, [invalidate, canvas2DRef, view.view2D, view.showMeasurements, view.showWiFiSignals, view.showHeatmap, layout, activeFloor, activeFloorIndex, entranceBuilding, selectedItemId, extraSelectedIds]);
+  }, [invalidate, canvas2DRef, view.view2D, view.showMeasurements, view.showWiFiSignals, view.showHeatmap,
+    view.showReferenceImage, view.referenceImageOpacity, referenceImage, layout, activeFloor, activeFloorIndex,
+    entranceBuilding, selectedItemId, extraSelectedIds]);
 }
 
 export { measurementDistance } from '../three/measurement';

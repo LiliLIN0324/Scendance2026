@@ -158,6 +158,8 @@ export interface RoomBuilderOptions {
   floorPlanOpacity: number;
   floorPlanFitMode: FloorPlanFitMode;
   floorPlan3DEffect: boolean;
+  /** View-only: keep the source image's shell semantics when it is hidden. */
+  showFloorPlan?: boolean;
   /** Vertical offset for this floor (y in metres). Defaults to 0 (ground). */
   yOffset?: number;
   /** Exterior wall height — the storey height (#202). Defaults to 3 m. */
@@ -177,7 +179,8 @@ export function buildRoom(THREE: ThreeModule, options: RoomBuilderOptions): void
   const isGhost = options.ghostOpacity !== undefined && options.ghostOpacity < 1;
 
   const hasFloorOpenings = options.floorOpenings && options.floorOpenings.length > 0;
-  const useDisplacement = options.floorPlanImage && options.floorPlan3DEffect;
+  const showFloorPlan = options.showFloorPlan !== false && options.floorPlanOpacity > 0;
+  const useDisplacement = options.floorPlanImage && showFloorPlan && options.floorPlan3DEffect;
 
   // When the floor has stairwell openings we use ShapeGeometry so we can
   // punch rectangular holes. Otherwise keep the simpler PlaneGeometry
@@ -187,7 +190,7 @@ export function buildRoom(THREE: ThreeModule, options: RoomBuilderOptions): void
     : new THREE.PlaneGeometry(options.width, options.depth, useDisplacement ? 100 : 1, useDisplacement ? 100 : 1);
 
   let material: ThreeNS.Material;
-  if (options.floorPlanImage) {
+  if (options.floorPlanImage && showFloorPlan) {
     material = buildFloorPlanMaterial(THREE, options, options.floorPlanImage);
   } else {
     // Note: an image-less call must NOT drop the decoded-image cache here —
