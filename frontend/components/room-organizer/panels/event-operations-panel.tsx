@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { productionReferenceKey as objectKey } from '@/lib/production-plan';
 import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
 import { handoffLimits } from '../../../../supabase/functions/_shared/delivery-contract';
 import { eventOperationPhases, eventOperationsLimits, eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
+import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
 import type { CreativeBrief } from '../lib/creative-brief';
 import type { RoomLayout } from '../lib/types';
 import './scene-delivery-panel.css';
@@ -64,8 +65,13 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
     setDraft(restored); setTimes(timeInputs(restored)); setBadTimeFields([]); setLinks(restored.evidenceUrls.join('\n')); setError('');
   }, [taskSnapshot]);
   const objects = layout.floors.flatMap(floor => floor.items.map(item => ({ ...item, floorName: floor.name })));
-  const missing = draft.objectIds.filter(id => !objects.some(item => item.id === id));
-  const toggleObject = (id: string, checked: boolean): void => setDraft(current => ({ ...current, objectIds: checked ? [...current.objectIds, id] : current.objectIds.filter(value => value !== id) }));
+  const objectReview=operationObjectReview(layout,draft),missing=objectReview.missingObjectIds,ambiguous=objectReview.ambiguousObjectIds;
+  const productionMissing=objectReview.missingProductionObjectIds,productionAmbiguous=objectReview.ambiguousProductionObjectIds;
+  const hasObjectProblems=missing.length+ambiguous.length+productionMissing.length+productionAmbiguous.length>0;
+  const objectCounts=new Map<string,number>();objects.forEach(item=>objectCounts.set(objectKey(item.id),(objectCounts.get(objectKey(item.id))??0)+1));
+  const toggleObject = (id: string, checked: boolean): void => setDraft(current => ({ ...current, objectIds: checked
+    ? current.objectIds.some(value=>objectKey(value)===objectKey(id))?current.objectIds:[...current.objectIds,id]
+    : current.objectIds.filter(value=>objectKey(value)!==objectKey(id)) }));
   function changeTime(field: TimeField, event: ChangeEvent<HTMLInputElement>): void {
     if (event.currentTarget.validity.badInput) {
       setBadTimeFields(current => current.includes(field) ? current : [...current, field]);
@@ -88,8 +94,14 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
         next[field] = value;
       }
       const confirming = (next.status === 'accepted' || next.status === 'review') && (reconfirm || next.status !== task.status);
+      if(next.status==='accepted'||next.status==='review'){
+        const issues=operationObjectReview(before.layout,next);
+        if(issues.missingObjectIds.length){setError('直接关联物料已移除，请重新选择或取消关联后核对任务。');return;}
+        if(issues.ambiguousObjectIds.length){setError('直接关联物料不唯一，请取消该关联或核对场景中的原物件。');return;}
+        if(issues.missingProductionObjectIds.length){setError('制作计划关联的物料已移除，请到“制作计划”页核对，原制作关联已保留。');return;}
+        if(issues.ambiguousProductionObjectIds.length){setError('制作计划关联的物料不唯一，请到“制作计划”页核对，原制作关联已保留。');return;}
+      }
       if (confirming) {
-        if (missing.length) { setError('关联物料已移除，请重新选择或取消关联后核对任务。'); return; }
         next.reviewedBasis = await operationBasis(layout, next);
       } else if (task.reviewedBasis) next.reviewedBasis = task.reviewedBasis;
       const parsed = eventOperationTaskSchema.safeParse(next);
@@ -106,6 +118,7 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
   return <form className="sc-handoff-form sc-operation-form" onSubmit={submit}>
     {status === 'needs_review' && <p className="sc-handoff-review">任务条件、时间或关联场景已变化，请重新核对。原现场核对说明已保留。</p>}
     {reviewFailed && <p className="sc-handoff-error" role="alert">任务核对失败，请检查当前场景后重试。</p>}
+    {(productionMissing.length>0||productionAmbiguous.length>0)&&<p className="sc-handoff-review">制作计划关联物料{productionMissing.length?`缺失 ${productionMissing.length} 件`:''}{productionMissing.length&&productionAmbiguous.length?'，':''}{productionAmbiguous.length?`不唯一 ${productionAmbiguous.length} 件`:''}，请到“制作计划”页核对。原制作关联保留，不会在此取消或重挂。</p>}
     <fieldset disabled={disabled || saving || status === 'checking'}>
       <label className="sc-field">任务标题<input value={draft.title} maxLength={eventOperationsLimits.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
       <div className="sc-handoff-pair">
@@ -127,16 +140,18 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, onSave,
         <label className="sc-field">证据链接<textarea rows={2} maxLength={(handoffLimits.evidenceUrl + 1) * handoffLimits.evidenceUrls} value={links} placeholder="每行一个可供执行方访问的链接" onChange={event => setLinks(event.target.value)}/></label>
         <p className="sc-note">签到、主持等任务可以不关联物料。</p>
         {!!missing.length && <p className="sc-handoff-review">已有 {missing.length} 件关联物料不在当前场景，请重新选择或取消关联。不会自动关联同名物料。</p>}
+        {!!ambiguous.length&&<p className="sc-handoff-review">有 {ambiguous.length} 件直接关联物料不唯一，请取消关联或核对场景中的原物件。</p>}
         <div className="sc-operation-object-list">
           {missing.map((id, index) => <label key={id} className="sc-operation-object missing"><input type="checkbox" checked onChange={() => toggleObject(id, false)}/>已移除的关联物料 · {index + 1}</label>)}
-          {objects.map((item, index) => <div key={`${item.id}:${index}`} className="sc-operation-object-row"><label className="sc-operation-object"><input type="checkbox" checked={draft.objectIds.includes(item.id)} onChange={event => toggleObject(item.id, event.target.checked)}/>{item.name} · {index + 1}<small>{item.floorName}</small></label>{onLocate && <button className="sc-button" type="button" aria-label={`定位${item.name} · ${index + 1}`} onClick={() => onLocate(item.id)}>定位</button>}</div>)}
+          {ambiguous.map((id,index)=><label key={id} className="sc-operation-object missing"><input type="checkbox" checked onChange={()=>toggleObject(id,false)}/>关联不唯一的物料 · {index+1}</label>)}
+          {objects.map((item, index) => <div key={`${item.id}:${index}`} className="sc-operation-object-row"><label className="sc-operation-object"><input type="checkbox" checked={draft.objectIds.some(id=>objectKey(id)===objectKey(item.id))} disabled={(objectCounts.get(objectKey(item.id))??0)>1} onChange={event => toggleObject(item.id, event.target.checked)}/>{item.name} · {index + 1}<small>{item.floorName}</small></label>{onLocate && <button className="sc-button" type="button" aria-label={`定位${item.name} · ${index + 1}`} onClick={() => onLocate(item.id)}>定位</button>}</div>)}
         </div>
-        {!objects.length && !missing.length && <p className="sc-note">当前场景暂无物料，可直接保存任务。</p>}
+        {!objects.length && !hasObjectProblems && <p className="sc-note">当前场景暂无物料，可直接保存任务。</p>}
       </details>
       <div className="sc-handoff-actions">
         <button className="sc-button" type="submit">{saving ? '正在保存…' : draft.status === 'accepted' && task.status !== 'accepted' ? '确认完成' : draft.status === 'review' && task.status !== 'review' ? '提交核对' : '保存任务'}</button>
-        {status === 'needs_review' && draft.status === 'accepted' && task.status === 'accepted' && <button className="sc-button" type="button" disabled={missing.length > 0} onClick={() => void save(true)}>重新确认完成</button>}
-        {status === 'needs_review' && draft.status === 'review' && task.status === 'review' && <button className="sc-button" type="button" disabled={missing.length > 0} onClick={() => void save(true)}>重新提交核对</button>}
+        {status === 'needs_review' && draft.status === 'accepted' && task.status === 'accepted' && <button className="sc-button" type="button" disabled={hasObjectProblems} onClick={() => void save(true)}>重新确认完成</button>}
+        {status === 'needs_review' && draft.status === 'review' && task.status === 'review' && <button className="sc-button" type="button" disabled={hasObjectProblems} onClick={() => void save(true)}>重新提交核对</button>}
         <button className="sc-button" type="button" onClick={onDelete}>删除任务</button>
       </div>
     </fieldset>
@@ -224,12 +239,12 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
         <div className="sc-handoff-list">{tasks.map(task => {
           const review = reviews?.layout === layout ? reviews.statuses[task.id] : undefined;
           const status = review?.status ?? (task.status === 'accepted' || task.status === 'review' ? 'checking' : task.status);
-          const missingCount = task.objectIds.filter(id => !layout.floors.some(floor => floor.items.some(item => item.id === id))).length;
+          const objectIssues=operationObjectReview(layout,task),missingCount=objectIssues.missingObjectIds.length;
           const plannedTime = (time: string | null): string => time ? toShanghaiDateTimeInput(time).replace('T', ' ').replace(/:00$/, '') : '待安排';
           const plan = task.plannedStartAt || task.plannedEndAt ? `${plannedTime(task.plannedStartAt)} → ${plannedTime(task.plannedEndAt)} · 北京时间` : '计划时间待安排';
           const incomplete = [!task.acceptance && '完成条件待填写', task.status !== 'todo' && (!task.actualStartedAt || !task.actualFinishedAt) && '实际时间未完整记录'].filter(Boolean);
           return <details key={task.id} ref={element => { if (element) taskDetails.current.set(task.id, element); else taskDetails.current.delete(task.id); }} className="sc-handoff-item" open={openedTask === task.id ? true : undefined} onToggle={event => { if (!event.currentTarget.open && openedTask === task.id) setOpenedTask(null); }}>
-            <summary><span>{task.title}<small className="sc-operation-task-plan">{task.ownerName ? `负责人 · ${task.ownerName}` : '负责人待安排'} · {plan}</small>{incomplete.length > 0 && <small>{incomplete.join(' · ')}</small>}{missingCount > 0 && <small className="sc-handoff-review">{missingCount} 件关联物料已移除</small>}</span><span className={`sc-handoff-status ${status === 'needs_review' ? 'needs-review' : ''}`}>{status === 'checking' ? '正在核对…' : OPERATION_STATUS_LABELS[status]}</span></summary>
+            <summary><span>{task.title}<small className="sc-operation-task-plan">{task.ownerName ? `负责人 · ${task.ownerName}` : '负责人待安排'} · {plan}</small>{incomplete.length > 0 && <small>{incomplete.join(' · ')}</small>}{missingCount > 0 && <small className="sc-handoff-review">{missingCount} 件关联物料已移除</small>}{objectIssues.ambiguousObjectIds.length>0&&<small className="sc-handoff-review">{objectIssues.ambiguousObjectIds.length} 件直接关联物料不唯一</small>}{(objectIssues.missingProductionObjectIds.length>0||objectIssues.ambiguousProductionObjectIds.length>0)&&<small className="sc-handoff-review">制作计划物料关联待核对，请在制作计划页检查。</small>}</span><span className={`sc-handoff-status ${status === 'needs_review' ? 'needs-review' : ''}`}>{status === 'checking' ? '正在核对…' : OPERATION_STATUS_LABELS[status]}</span></summary>
             <OperationEditor layout={layout} task={task} status={status} reviewFailed={review?.failed ?? false} disabled={disabled} onLocate={onLocate} onSave={next => update({ ...operations, tasks: operations.tasks.map(current => current.id === task.id ? next : current) })} onDelete={() => {
               if (update({ ...operations, tasks: operations.tasks.filter(current => current.id !== task.id) })) { setDeleted({ task, index: operations.tasks.indexOf(task) }); setNotice('任务已删除，可撤销删除。'); }
             }}/>

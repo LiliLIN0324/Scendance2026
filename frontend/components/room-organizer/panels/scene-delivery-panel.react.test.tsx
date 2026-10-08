@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { productionPlanHandoffHtml } from '@/lib/production-plan-export';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
@@ -13,6 +14,10 @@ import { blankHandoff, effectiveHandoffStatus, handoffBasis } from '../lib/scene
 import { SceneDeliveryPanel } from './scene-delivery-panel';
 import type { FurnitureItem } from '../lib/types';
 vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
+vi.mock('@/lib/production-plan-export',async importOriginal=>{
+  const original=await importOriginal<typeof import('@/lib/production-plan-export')>();
+  return {...original,productionPlanHandoffHtml:vi.fn(original.productionPlanHandoffHtml)};
+});
 let controller:BackendSession;
 const layout=makeLayout({roof:{style:'none'}});
 const itemId='30000000-0000-4000-8000-000000000001';
@@ -20,6 +25,20 @@ function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('Binggo scene delivery panel',()=>{
+  it.each(['edit','project','unmount'] as const)('does not download an outdated production handoff after %s during task review',async change=>{
+    let finish!:(html:string)=>void;
+    const pending=new Promise<string>(resolve=>{finish=resolve;});
+    vi.mocked(productionPlanHandoffHtml).mockReturnValueOnce(pending);
+    const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001',productionPlan:productionPlanSchema.parse({})};
+    const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
+    fireEvent.click(screen.getByRole('button',{name:'导出制作交接单 HTML'}));
+    await waitFor(()=>expect(productionPlanHandoffHtml).toHaveBeenCalledOnce());
+    if(change==='unmount')view.unmount();
+    else view.rerender(<SceneDeliveryPanel layout={change==='project'?{...current,id:'20000000-0000-4000-8000-000000000002'}:{...current,name:'已经调整的场景'}} controller={controller}/>);
+    await act(async()=>{finish('<!doctype html><title>旧快照</title>');await pending;});
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
   it('blocks production export while editing and exports applied records after cancellation independently of model delivery',async()=>{
     const productionPlan=productionPlanSchema.parse({staffing:[{id:'40000000-0000-4000-8000-000000000001',roleName:'演练布场',headcount:2}]});
     render(<SceneDeliveryPanel layout={{...workLayout(),scenePreset:'gym',productionPlan}} controller={controller} onUpdateProductionPlan={vi.fn()}/>);

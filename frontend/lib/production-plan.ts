@@ -20,9 +20,21 @@ export function formatMoneyMinor(value: number | null): string {
   return `${amount / hundred}.${String(amount % hundred).padStart(2, '0')}`;
 }
 
-const key = (id: string) => uuid.safeParse(id).success ? id.toLowerCase() : id;
+export const productionReferenceKey = (id: string): string => uuid.safeParse(id).success ? id.toLowerCase() : id;
+const key = productionReferenceKey;
 const matches = (values: readonly string[], ids: readonly string[]) => values.some(value => ids.some(id => key(value) === key(id)));
 const ordered = <T extends {id: string}>(rows: T[]) => [...rows].sort((a,b)=>key(a.id).localeCompare(key(b.id)));
+
+/** Only explicit task-linked acquisitions expand the physical review scope. */
+export function productionTaskObjectIds(plan: ProductionPlan | undefined, taskId: string): string[] {
+  if (!plan) return [];
+  const ids = new Map<string,string>();
+  for (const row of productionPlanSchema.parse(plan).acquisitions) {
+    if (!matches(row.taskIds,[taskId])) continue;
+    for (const id of row.objectIds) if (!ids.has(key(id))) ids.set(key(id),id);
+  }
+  return [...ids.values()];
+}
 
 /** Financial estimates alone do not invalidate an on-site execution check. */
 export function productionTaskBasis(plan: ProductionPlan | undefined, taskId: string, objectIds: readonly string[]): unknown | null {

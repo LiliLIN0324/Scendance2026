@@ -5,7 +5,9 @@ import {
   productionEstimateSummary, productionPlanSchema, resolveProductionPlanReferences,
   type ProductionReferenceReview,
 } from '../../supabase/functions/_shared/production-plan-contract';
-import { OPERATION_PHASE_LABELS, toShanghaiDateTimeInput } from '../components/room-organizer/lib/event-operations';
+import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../components/room-organizer/lib/event-operations';
+import { DEFAULT_SVG_MARGIN, DEFAULT_SVG_PX_PER_METRE, layoutToSvg } from '../components/room-organizer/lib/plan-export/svg';
+import { isRoomLayout } from '../components/room-organizer/lib/schema';
 import type { DeliverySnapshot } from '../components/room-organizer/lib/scene-delivery';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 import { formatMoneyMinor } from './production-plan';
@@ -17,10 +19,12 @@ const methods = { unspecified: '待确认', existing: '已有物料', rental: '�
 const unknown = (value: string) => value.trim() ? value : '待确认';
 const money = (value: number | null) => value === null ? '待确认' : `¥${formatMoneyMinor(value)}`;
 const time = (value: string | null) => value === null ? '待确认' : toShanghaiDateTimeInput(value).replace('T', ' ');
+const number = (value: number) => String(Number(value.toFixed(2)));
+const safeColor = (value: string | undefined) => /^#[\da-f]{6}$/i.test(value ?? '') ? value! : '#e9e5db';
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g,
   char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 const para = (value: string, warning = false) => `<p class="text${warning ? ' warning' : ''}">${escape(value)}</p>`;
-const table = (headers: string[], rows: unknown[][]) => `<div class="table-wrap"><table><thead><tr>${headers.map(value => `<th>${escape(value)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(value => `<td>${escape(value)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const table = (headers: string[], rows: unknown[][], className = '') => `<div class="table-wrap"><table${className ? ` class="${escape(className)}"` : ''}><thead><tr>${headers.map(value => `<th>${escape(value)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(value => `<td>${escape(value)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
 /** Reject executable serializers/getters before reading the saved data; do not invoke input callbacks. */
 function assertData(value: unknown, ancestors = new Set<object>(), depth = 0): void {
@@ -51,12 +55,14 @@ const duplicateIds = (ids: string[]) => uniqueIds(ids.filter((id, index) => ids.
 const objectSchema = z.strictObject({
   id: z.string().min(1).max(eventOperationsLimits.objectId).refine(value => value.trim().length > 0),
   name: z.string(), floorName: z.string(), width: z.number().positive(), depth: z.number().positive(), height: z.number().positive(),
+  position: z.strictObject({ x: z.number(), z: z.number() }).optional(), rotation: z.number().optional(), elevation: z.number().optional(),
 });
 type HandoffObject = z.infer<typeof objectSchema> & { label: string };
 
-/** Current applied data only. This synchronously returns an internal file; it never reads/writes storage or loads assets. */
-export function productionPlanHandoffHtml(layout: RoomLayout, snapshot: DeliverySnapshot): string {
-  assertData(layout); assertData(snapshot);
+/** Freeze current applied data before asynchronous task review; no storage writes or resource loading. */
+export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapshot: DeliverySnapshot): Promise<string> {
+  assertData(sourceLayout); assertData(snapshot);
+  const layout = structuredClone(sourceLayout);
   if (layout.productionPlan === undefined) throw new Error('当前项目尚未记录制作计划，请先填写并保存，再导出内部交接文件。');
   const parsed = productionPlanSchema.safeParse(layout.productionPlan);
   if (!parsed.success) throw new Error('制作计划字段无效，请核对并保存后再导出。');
@@ -80,7 +86,9 @@ export function productionPlanHandoffHtml(layout: RoomLayout, snapshot: Delivery
   let objects: HandoffObject[];
   try {
     objects = layout.floors.flatMap(floor => floor.items.map(item => objectSchema.parse({ id: item.id, name: item.name,
-      floorName: floor.name, width: item.width, depth: item.depth, height: item.height })))
+      floorName: floor.name, width: item.width, depth: item.depth, height: item.height,
+      ...(item.position ? { position: item.position } : {}), ...(item.rotation !== undefined ? { rotation: item.rotation } : {}),
+      ...(item.elevation !== undefined ? { elevation: item.elevation } : {}) })))
       .map((object, index) => ({ ...object, label: `物件${index + 1}` }));
   } catch { throw new Error('场景物件资料无效，请核对原物件后再导出交接。'); }
   const taskIndex = buckets(tasks), objectIndex = buckets(objects);
@@ -132,6 +140,76 @@ export function productionPlanHandoffHtml(layout: RoomLayout, snapshot: Delivery
   const knownAmounts = plan.estimates.filter(row => row.amountMinor !== null).length;
   const sourceAmbiguities = duplicateIds(tasks.map(task => task.id)).length + duplicateIds(objects.map(object => object.id)).length;
   const taskObjectIssues = linkedTasks.filter(task => duplicateIds(task.objectIds).length || task.objectIds.some(id => objectIndex.get(identity(id))?.length !== 1));
+  const effectiveStatuses = new Map<string, string>();
+  const taskDiagnostics = new Map<string, { checked: boolean; reason: string; directMissing: string[]; directAmbiguous: string[];
+    productionMissing: string[]; productionAmbiguous: string[] }>();
+  await Promise.all(linkedTasks.map(async task => {
+    let status: string;
+    try {
+      const result = await operationReview(layout, task);
+      status = OPERATION_STATUS_LABELS[result.status];
+      if (sourceAmbiguities || duplicateIds(task.objectIds).length) status = '需核对（关联编号不唯一）';
+      const directMissing = result.missingObjectIds;
+      const directAmbiguous = result.ambiguousObjectIds ?? [];
+      const productionMissing = result.missingProductionObjectIds ?? [];
+      const productionAmbiguous = result.ambiguousProductionObjectIds ?? [];
+      const reason = [directMissing.length ? `直接关联物件缺失 ${directMissing.length} 项` : '',
+        directAmbiguous.length ? `直接关联物件编号歧义 ${directAmbiguous.length} 项` : '',
+        productionMissing.length ? `制作计划间接关联物件缺失 ${productionMissing.length} 项` : '',
+        productionAmbiguous.length ? `制作计划间接关联物件编号歧义 ${productionAmbiguous.length} 项` : '',
+        sourceAmbiguities || duplicateIds(task.objectIds).length ? '当前关联源编号需核对' : '',
+      ].filter(Boolean).join('；');
+      taskDiagnostics.set(identity(task.id), { checked: true, reason: reason || (result.status === 'needs_review' ? '当前记录与场景或制作依据已变化' : ''),
+        directMissing, directAmbiguous, productionMissing, productionAmbiguous });
+    } catch {
+      status = '待核对（复核未完成）';
+      taskDiagnostics.set(identity(task.id), { checked: false, reason: '当前依据未完成核对，请在活动安排中重试',
+        directMissing: [], directAmbiguous: [], productionMissing: [], productionAmbiguous: [] });
+    }
+    effectiveStatuses.set(identity(task.id), status);
+  }));
+
+  const simplePlan = !sourceAmbiguities && isRoomLayout(layout) && !layout.scenePreset && !layout.backendSceneV2?.structure &&
+    (layout.backendVenue?.shape ?? 'rectangle') === 'rectangle' && !layout.entrance &&
+    (!layout.roof || layout.roof.style === 'none') && (!layout.terrain || layout.terrain.frontY === 0 && layout.terrain.backY === 0) &&
+    !layout.floors.some(floor => floor.items.some(item => !!item.glbNode || item.mirrored && (item.type === 'door' || item.type === 'window')));
+  const safeFloors = simplePlan ? layout.floors.map(floor => ({
+    id: floor.id, name: floor.name, floorColor: safeColor(floor.floorColor),
+    ...(floor.height !== undefined ? { height: floor.height } : {}),
+    ...(floor.hiddenWalls ? { hiddenWalls: [...floor.hiddenWalls] } : {}),
+    ...(floor.interiorWalls ? { interiorWalls: floor.interiorWalls.map(wall => ({ id: wall.id,
+      x1: wall.x1, z1: wall.z1, x2: wall.x2, z2: wall.z2,
+      ...(wall.height !== undefined ? { height: wall.height } : {}),
+      ...(wall.thickness !== undefined ? { thickness: wall.thickness } : {}), color: safeColor(wall.color) })) } : {}),
+    ...(floor.zones ? { zones: floor.zones.map(zone => ({ ...zone, color: safeColor(zone.color) })) } : {}),
+    items: floor.items.map(item => ({ id: item.id, type: item.type, name: '', icon: '',
+      width: item.width, depth: item.depth, height: item.height, color: safeColor(item.color),
+      ...(item.position ? { position: { x: item.position.x, z: item.position.z } } : {}),
+      ...(item.rotation !== undefined ? { rotation: item.rotation } : {}),
+      ...(item.elevation !== undefined ? { elevation: item.elevation } : {}),
+      ...(item.wallId !== undefined ? { wallId: item.wallId } : {}),
+      ...(item.wallRotation !== undefined ? { wallRotation: item.wallRotation } : {}),
+      ...(item.sillHeight !== undefined ? { sillHeight: item.sillHeight } : {}),
+      ...(item.mirrored !== undefined ? { mirrored: item.mirrored } : {}),
+      ...(item.sofaShape !== undefined ? { sofaShape: item.sofaShape } : {}),
+      ...(item.stairsShape !== undefined ? { stairsShape: item.stairsShape } : {}),
+      ...(item.stairsLeadIn !== undefined ? { stairsLeadIn: item.stairsLeadIn } : {}),
+    })),
+  })) : [];
+  const planLayout: RoomLayout = { name: layout.name, width: layout.width, height: layout.height, floors: safeFloors };
+  const plans = simplePlan ? safeFloors.map(floor => {
+    const scale = DEFAULT_SVG_PX_PER_METRE, margin = DEFAULT_SVG_MARGIN;
+    const labels = floor.items.filter(item => item.position).map(item => {
+      const object = objectIndex.get(identity(item.id))![0];
+      const x = margin + (item.position!.x + layout.width / 2) * scale;
+      const y = margin + (item.position!.z + layout.height / 2) * scale;
+      return `<text class="instance-number" aria-label="${escape(object.label)}" x="${x}" y="${y}" dy="0.35em" font-size="13" text-anchor="middle" fill="#20372d" stroke="white" stroke-width="2" paint-order="stroke">${escape(object.label.slice(2))}</text>`;
+    }).join('');
+    // Add upright numbers inside the shared emitter's translated plan group; its geometry and bounds remain authoritative.
+    const svg = layoutToSvg(planLayout, floor).replace('</g>\n<text class="plan-title"', `${labels}</g>\n<text class="plan-title"`);
+    return `<figure class="handoff-plan">${svg}<figcaption>${escape(floor.name)} · 同快照编辑平面占位示意，非实测或施工图。家具表示占位包络，不表达L/U形等实物细部；图中数字对应正文物件编号，例如 1 = 物件1；薄型物件也按中心标注。</figcaption></figure>`;
+  }).join('') : para('当前结构、场馆或关联源不适合普通矩形示意，需附当前图纸；以下原坐标与朝向可供定位核对。', true);
+  const unplacedCount = objects.filter(object => !object.position).length;
   const staffing = plan.staffing.length ? table(['岗位／班次', '计划人数', '人员来源（内部记录）', '计划到场／离场', '关联任务与核对'], plan.staffing.map((row, index) => [
     `岗位${index + 1} · ${row.roleName}\n班次：${unknown(row.shiftLabel)}`,
     row.headcount === null ? '待确认' : `${row.headcount} 人（需求）`,
@@ -150,12 +228,13 @@ export function productionPlanHandoffHtml(layout: RoomLayout, snapshot: Delivery
     `估算${index + 1} · ${row.title}`, money(row.amountMinor), unknown(row.basisNote),
     `${taskRefs(row.taskIds)}\n${objectRefs(row.objectIds)}\n${reviewText(reviewIndex.get(identity(row.id)))}`,
   ])) : para('尚无人工估算记录，费用范围待确认，不视为零费用。');
-  const taskDetails = linkedTasks.length ? table(['活动任务', '计划时间（北京时间）', '负责人／承接方', '完成条件', '关联场景物件'], linkedTasks.map(task => [
-    `${task.label} · ${task.title}\n${OPERATION_PHASE_LABELS[task.phase]}`,
-    `开始：${time(task.plannedStartAt)}\n结束：${time(task.plannedEndAt)}`,
-    `负责人：${unknown(task.ownerName)}\n承接方：${unknown(task.contractorName)}`, unknown(task.acceptance),
+  const taskDetails = linkedTasks.length ? table(['活动任务／状态', '计划／实际时间（北京时间）', '负责人／承接方', '完成条件／现场核对', '关联场景物件'], linkedTasks.map(task => [
+    `${task.label} · ${task.title}\n${OPERATION_PHASE_LABELS[task.phase]}\n记录状态：${OPERATION_STATUS_LABELS[task.status]}\n有效状态：${effectiveStatuses.get(identity(task.id))}${taskDiagnostics.get(identity(task.id))?.reason ? `\n复核事项：${taskDiagnostics.get(identity(task.id))!.reason}（原编号见附录）` : ''}`,
+    `计划开始：${time(task.plannedStartAt)}\n计划结束：${time(task.plannedEndAt)}\n实际开始：${time(task.actualStartedAt)}\n实际结束：${time(task.actualFinishedAt)}`,
+    `负责人：${unknown(task.ownerName)}\n承接方：${unknown(task.contractorName)}`,
+    `完成条件：${unknown(task.acceptance)}\n现场核对说明：${task.evidenceNote.trim() ? task.evidenceNote : '未记录'}\n证据文本：${task.evidenceUrls.length ? task.evidenceUrls.join('\n') : '未记录'}`,
     `${compactObjectRefs(task.objectIds)}${duplicateIds(task.objectIds).length ? '\n同一编号重复引用，需核对；不按多件计算' : ''}`,
-  ])) : para('没有可唯一对应的明确关联任务。缺失或歧义编号须核对，不能按同名任务代替。');
+  ]), 'handoff-tasks') : para('没有可唯一对应的明确关联任务。缺失或歧义编号须核对，不能按同名任务代替。');
   const appendixRows = [
     ...plan.staffing.map((row, index) => [`岗位${index + 1}`, row.id, row.taskIds.join('\n') || '未关联', '不适用', reviewText(reviewIndex.get(identity(row.id)))]),
     ...plan.acquisitions.map((row, index) => [`取得${index + 1}`, row.id, row.taskIds.join('\n') || '未关联', row.objectIds.join('\n') || '未关联', reviewText(reviewIndex.get(identity(row.id)))]),
@@ -163,7 +242,7 @@ export function productionPlanHandoffHtml(layout: RoomLayout, snapshot: Delivery
   ];
 
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"><title>${escape(unknown(layout.name))} · 内部制作交接</title><style>
-body{margin:0;background:#f3f5f1;color:#20372d;font:14px/1.65 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1050px;margin:24px auto;padding:30px;background:white}h1{font-size:27px;line-height:1.35}h2{font-size:20px;border-bottom:1px solid #a5b9a4;padding-bottom:7px;margin-top:28px}h3{font-size:16px;margin:16px 0 8px}.text,td{white-space:pre-wrap;overflow-wrap:anywhere}.notice{padding:10px 14px;background:#edf3e9}.warning{color:#835a16;border-left:3px solid #a98c42;padding-left:10px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;margin:12px 0}th,td{border:1px solid #d5dfd2;padding:9px;text-align:left;vertical-align:top}th{background:#edf3e9}article table th:first-child{width:26%}details{border:1px solid #d5dfd2;margin-top:26px;padding:12px}summary{cursor:pointer;font-weight:600}summary:focus-visible{outline:2px solid #44684f;outline-offset:4px}footer{font-size:12px;color:#526654;margin-top:24px}@media(max-width:640px){main{margin:0;padding:20px 16px}h1{font-size:23px}}@page{size:A4;margin:14mm}@media print{body{background:white;font-size:10px}main{margin:0;padding:0;max-width:none}h1{font-size:22px}h2{font-size:16px}h3{font-size:12px}table{font-size:9px}.table-wrap{overflow:visible}thead{display:table-header-group}tr{break-inside:avoid}h2,h3{break-after:avoid}details:not([open]){display:none}details[open]{break-before:page}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+body{margin:0;background:#f3f5f1;color:#20372d;font:14px/1.65 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1050px;margin:24px auto;padding:30px;background:white}h1{font-size:27px;line-height:1.35}h2{font-size:20px;border-bottom:1px solid #a5b9a4;padding-bottom:7px;margin-top:28px}h3{font-size:16px;margin:16px 0 8px}.text,td{white-space:pre-wrap;overflow-wrap:anywhere}.notice{padding:10px 14px;background:#edf3e9}.warning{color:#835a16;border-left:3px solid #a98c42;padding-left:10px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;margin:12px 0}th,td{border:1px solid #d5dfd2;padding:9px;text-align:left;vertical-align:top}th{background:#edf3e9}article table th:first-child{width:26%}.handoff-tasks{table-layout:fixed}.handoff-tasks th:nth-child(1){width:15%}.handoff-tasks th:nth-child(2){width:18%}.handoff-tasks th:nth-child(3){width:14%}.handoff-tasks th:nth-child(4){width:35%}.handoff-tasks th:nth-child(5){width:18%}.handoff-plan{margin:16px 0;padding:10px;border:1px solid #d5dfd2}.handoff-plan svg{display:block;max-width:100%;height:auto;margin:0 auto}.handoff-plan figcaption{font-size:11px;color:#526654;overflow-wrap:anywhere}details{border:1px solid #d5dfd2;margin-top:26px;padding:12px}summary{cursor:pointer;font-weight:600}summary:focus-visible{outline:2px solid #44684f;outline-offset:4px}footer{font-size:12px;color:#526654;margin-top:24px}@media(max-width:640px){main{margin:0;padding:20px 16px}h1{font-size:23px}}@page{size:A4;margin:14mm}@media print{body{background:white;font-size:10px}main{margin:0;padding:0;max-width:none}h1{font-size:22px}h2{font-size:16px}h3{font-size:12px}table{font-size:9px}.table-wrap{overflow:visible}thead{display:table-header-group}tr,figure{break-inside:avoid}.handoff-plan svg{max-height:110mm;max-width:100%;width:auto;height:auto}h2,h3{break-after:avoid}details:not([open]){display:none}details[open]{break-before:page}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><main><header><p>幕景 · 内部制作交接</p><h1>${escape(unknown(layout.name))}</h1><div class="notice">${para(`制作计划：${kinds[plan.dataKind]}\n活动任务：${operationsKind === null ? '未记录' : kinds[operationsKind]}\n冻结时间：${time(metadata.data.generatedAt)}（北京时间）`)}${para('供执行团队内部交接，含内部来源与供应方记录。不要作为客户评审或公开分享文件。')}</div>
 ${operationsKind !== null && operationsKind !== plan.dataKind ? para('制作计划与活动任务的资料性质不同，需先核对；不自动改成真实或已确认。', true) : ''}
 ${sourceAmbiguities ? para('当前任务或物件源中存在重复编号。相关引用需核对，不能自动取第一条或按名称匹配，详见附录。', true) : ''}
@@ -175,8 +254,10 @@ ${para(`已知金额小计：${knownAmounts ? money(summary.knownTotalMinor) : '
 ${summary.overLimit === true ? para('已知部分估算已超过人工预算上限，请核对范围、重复计入与未知费用。', true) : para(summary.overLimit === null ? '上限比较待确认。' : '这些已录入估算未超过该上限；不代表全项目费用范围完整。')}
 ${para('仅汇总已录入的人工估算，未知与零不同。估算不是供应商报价、已发生费用、付款或收款；漏项及重复计入仍须人工核对。')}</section>
 <section><h2>明确关联的活动任务</h2>${para('仅列可唯一对应的明确关联任务。执行进展请查看活动安排。')}${taskDetails}</section>
-<section><h2>关联场景实例</h2>${relatedObjects.length ? table(['实例（用于定位）', '示意尺寸（米）'], relatedObjects.map(object => [
+<section><h2>同快照摆位示意</h2>${plans}${unplacedCount ? para(`${unplacedCount} 个物件未记录位置，未画入平面；需核对其摆位。`, true) : ''}</section>
+<section><h2>关联场景实例</h2>${para('横纵坐标以场地中心为原点，横向向右、纵向向下为正；朝向由原编辑弧度换算为度。')}${relatedObjects.length ? table(['实例（用于定位）', '示意尺寸（米）', '原编辑位置／朝向'], relatedObjects.map(object => [
   `${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}`, `${object.width} × ${object.depth} × ${object.height}\n非实物规格确认`,
+  object.position ? `横向 ${number(object.position.x)} 米 / 纵向 ${number(object.position.z)} 米\n朝向 ${number((object.rotation ?? 0) * 180 / Math.PI)}°\n离地 ${number(object.elevation ?? 0)} 米` : '位置待确认',
 ])) : para('没有可唯一对应的关联场景实例；物件来源与规格待核对。')}</section>
 ${para('追溯附录默认折叠，需要完整打印时请先展开并核对打印预览。')}
 <details><summary>追溯附录 · 原编号与时间</summary>${para(`本地项目编号：${layout.id ?? '未记录'}\n交接编号：${metadata.data.id}\n原冻结时间：${metadata.data.generatedAt}`)}
@@ -185,7 +266,13 @@ ${table(['任务源', '原任务编号', '原物件引用', '原计划开始／�
   `${task.label} · ${task.title}${taskIndex.get(identity(task.id))!.length !== 1 ? '\n编号歧义，禁止自动关联' : ''}`, task.id,
   task.objectIds.join('\n') || '未关联', `${task.plannedStartAt ?? '待确认'}\n${task.plannedEndAt ?? '待确认'}`,
 ]))}
-${table(['物件源', '原物件编号', '核对状态'], objects.map(object => [`${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}`, object.id,
+${table(['任务复核', '直接缺失／歧义原编号', '制作间接缺失／歧义原编号'], linkedTasks.map(task => {
+  const review = taskDiagnostics.get(identity(task.id))!;
+  return [task.label, review.checked ? `缺失：${review.directMissing.join('、') || '无'}\n歧义：${review.directAmbiguous.join('、') || '无'}` : '复核未完成，未判定',
+    review.checked ? `缺失：${review.productionMissing.join('、') || '无'}\n歧义：${review.productionAmbiguous.join('、') || '无'}` : '复核未完成，未判定'];
+}))}
+${table(['物件源', '原物件编号', '原坐标／朝向', '核对状态'], objects.map(object => [`${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}`, object.id,
+  object.position ? `${object.position.x}, ${object.position.z}\n旋转 ${object.rotation ?? 0} 弧度\n离地 ${object.elevation ?? 0} 米` : '未记录位置',
   objectIndex.get(identity(object.id))!.length === 1 ? '编号唯一' : '编号歧义，禁止自动关联']))}
 ${table(['岗位', '原计划到场', '原计划离场'], plan.staffing.map((row, index) => [`岗位${index + 1}`, row.plannedArrivalAt ?? '待确认', row.plannedDepartureAt ?? '待确认']))}</details>
 <footer>${para(`交接编号：${metadata.data.id}\n这是冻结时的内部制作计划，不自动取得后续修改。场景与制作计划的保存/草稿状态由工作台导出入口核对，本文件不证明云端保存、客户批准或现场履约。`)}</footer></main></body></html>`;

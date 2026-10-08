@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, eventOperationTaskSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { createMeasuredRoomLayout } from './backend-adapter';
-import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationReview, toShanghaiDateTimeInput } from './event-operations';
+import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, toShanghaiDateTimeInput } from './event-operations';
 import { parseLayoutJson } from './persistence';
 import { deliveryOperations, eventOperationsCsv, sceneDeliveryJson } from './scene-delivery';
 import type { RoomLayout } from './types';
@@ -21,6 +22,43 @@ async function accepted(layout: RoomLayout, refs: string[] = []): Promise<EventO
 }
 
 describe('activity operations references and review', () => {
+  it.each(['move', 'delete'] as const)('requires review after %s of a task-linked acquisition object outside the direct selection', async change => {
+    const layout=venue(),task=await accepted(layout);
+    layout.productionPlan=productionPlanSchema.parse({dataKind:'rehearsal',acquisitions:[{id:'abcdef00-0000-4000-8000-000000000020',title:'演练取得计划',taskIds:[task.id],objectIds:[objectId]}]});
+    task.reviewedBasis=await operationBasis(layout,task);
+    const before=structuredClone(task),planBefore=structuredClone(layout.productionPlan);
+    const changed={...layout,floors:[{...layout.floors[0],items:change==='delete'?[]:layout.floors[0].items.map(item=>({...item,position:{x:0.4,z:0}}))}]};
+    expect((await operationReview(changed,task)).status).toBe('needs_review');
+    if(change==='delete')expect(await operationReview(changed,task)).toMatchObject({missingObjectIds:[],missingProductionObjectIds:[objectId]});
+    expect(task).toEqual(before);expect(task.objectIds).toEqual([]);expect(layout.productionPlan).toEqual(planBefore);
+  });
+  it('tracks acquisition physical state without expanding estimates or unrelated tasks',async()=>{
+    const layout=venue(),task=await accepted(layout),unrelated=await accepted(layout);
+    const second={...layout.floors[0].items[0],id:'abcdef00-0000-4000-8000-000000000003',position:{x:1,z:1}};
+    layout.floors[0].items.push(second);
+    layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:'abcdef00-0000-4000-8000-000000000020',title:'取得C1',taskIds:[task.id],objectIds:[objectId]}],estimates:[{id:'abcdef00-0000-4000-8000-000000000021',title:'C2费用估算',taskIds:[task.id],objectIds:[second.id]}]});
+    task.reviewedBasis=await operationBasis(layout,task);unrelated.reviewedBasis=await operationBasis(layout,unrelated);
+    const secondChanged={...layout,floors:[{...layout.floors[0],items:layout.floors[0].items.map(item=>item.id===second.id?{...item,position:{x:1.2,z:1}}:item)}]};
+    expect((await operationReview(secondChanged,task)).status).toBe('accepted');
+    const firstChanged={...layout,floors:[{...layout.floors[0],items:layout.floors[0].items.map(item=>item.id===objectId?{...item,width:item.width+.1,rotation:0.5,color:'#123456'}:item)}]};
+    expect((await operationReview(firstChanged,task)).status).toBe('needs_review');expect((await operationReview(firstChanged,unrelated)).status).toBe('accepted');
+  });
+  it('resolves UUID aliases but never chooses one of multiple physical instances',async()=>{
+    const layout=venue(),task=await accepted(layout),known='abcdef00-0000-4000-8000-000000000002';
+    layout.floors[0].items[0].id=known;
+    layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:'abcdef00-0000-4000-8000-000000000020',title:'演练取得',taskIds:[task.id.toUpperCase()],objectIds:[known.toUpperCase()]}]});
+    expect(operationObjectReview(layout,task)).toEqual({missingObjectIds:[],ambiguousObjectIds:[],missingProductionObjectIds:[],ambiguousProductionObjectIds:[]});
+    task.reviewedBasis=await operationBasis(layout,task);expect((await operationReview(layout,task)).status).toBe('accepted');
+    const ambiguous={...layout,floors:[{...layout.floors[0],items:[layout.floors[0].items[0],{...layout.floors[0].items[0],id:known.toUpperCase()}]}]};
+    expect(operationObjectReview(ambiguous,task).ambiguousProductionObjectIds).toEqual([known.toUpperCase()]);expect((await operationReview(ambiguous,task)).status).toBe('needs_review');
+    expect(operationObjectReview(ambiguous,{...task,objectIds:[known]}).ambiguousObjectIds).toEqual([known]);
+  });
+  it('keeps direct and production missing references separate, with case-sensitive legacy IDs',()=>{
+    const layout=venue(),task=createOperation('演练缺失关系','setup');task.objectIds=['direct-missing'];layout.floors[0].items[0].id='legacy-X';
+    layout.productionPlan=productionPlanSchema.parse({acquisitions:[{id:'abcdef00-0000-4000-8000-000000000020',title:'演练取得',taskIds:[task.id],objectIds:['legacy-x']}]});
+    expect(operationObjectReview(layout,task)).toEqual({missingObjectIds:['direct-missing'],ambiguousObjectIds:[],missingProductionObjectIds:['legacy-x'],ambiguousProductionObjectIds:[]});
+    expect(task.objectIds).toEqual(['direct-missing']);
+  });
   it('confirms a task without inventing material or actual completion times', async () => {
     const layout = { ...venue(), floors: [makeFloor()] }; const task = await accepted(layout);
     expect(await operationReview(layout, task)).toEqual({ status: 'accepted', missingObjectIds: [] });

@@ -143,7 +143,8 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
       if (kind === 'production') {
         const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
         if (!stillCurrent()) return;
-        const html = productionPlanHandoffHtml(layout, metadata);
+        const html = await productionPlanHandoffHtml(layout, metadata);
+        if (!stillCurrent()) return;
         downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部制作交接_${metadata.id}`, 'html');
         setNotice('内部制作交接单已导出，可在浏览器打开并打印。请核对未确定的人员、供应方和费用。');
       } else if (kind === 'glb') {
