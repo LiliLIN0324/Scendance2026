@@ -15,7 +15,7 @@ const ZERO_DELTA = { x: '0', y: '0', z: '0' };
 
 export function SceneLayersPanel({ controller, onPreview }: { controller?: BackendSession; onPreview?(layout: RoomLayout | null): void }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, history } = useRoomEditor();
-  const { allSelectedIds, setSelectedItemId, setExtraSelectedIds, selectOnly } = useSelection();
+  const { allSelectedIds, setExtraSelectedIds, selectOnly } = useSelection();
   const [name, setName] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -52,7 +52,7 @@ export function SceneLayersPanel({ controller, onPreview }: { controller?: Backe
   const custom = layout.itemLayers ?? [];
   const select = (ids: string[]) => {
     const [first, ...rest] = ids.filter(id => available.has(id));
-    setSelectedItemId(first ?? null); setExtraSelectedIds(new Set(rest));
+    selectOnly(first ?? null, { keepPanel: true }); setExtraSelectedIds(new Set(rest));
   };
   const applyBatch = (paint: boolean) => {
     try {
