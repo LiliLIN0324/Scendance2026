@@ -93,6 +93,100 @@ function DockedTrial({ current = layout, generator, onWorkspace, onConversation 
 
 describe('docked workspace integration', () => {
   beforeEach(() => { vi.stubGlobal('innerWidth', 1440); });
+  it('[chat independence] keeps model scope and its sendable draft through every business destination', async () => {
+    connected(); vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '原策划草稿' } });
+    selectMode('model');
+    const instruction = '生成一把宽0.5米的椅子，保留其他物件';
+    fireEvent.change(composer, { target: { value: instruction } });
+    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '场景模板']) {
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+      expect(composer.value).toBe(instruction);
+      expect((screen.getByRole('button', { name: '发送消息' }) as HTMLButtonElement).disabled).toBe(false);
+    }
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await screen.findByText('方案提案 · 尚未应用');
+    const request = vi.mocked(controller.startAgentRun).mock.calls[0]![0];
+    expect(request.instruction).toContain('仅创建或调整本次请求指定的物料');
+    expect(request.executionMode).toBe('preview'); expect(controller.startAgentRun).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: '返回当前工作区' }));
+    selectMode('plan'); expect(composer.value).toBe('原策划草稿');
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[composer settings] keeps one associated form, real settings and IME protection through two Escape presses', async () => {
+    connected(); let finish!: (run: AgentRun) => void;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    const mode = screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement;
+    const submit = screen.getByRole('button', { name: '发送消息' }) as HTMLButtonElement;
+    const launcher = screen.getByRole('button', { name: '关闭 Binggo Agent' });
+    expect(document.querySelectorAll('#creative-message')).toHaveLength(1);
+    expect(document.querySelectorAll('#creative-work-mode')).toHaveLength(1);
+    expect(document.querySelectorAll('.cr-assistant-launcher')).toHaveLength(1);
+    expect(composer.form).not.toBeNull(); expect(mode.form).toBe(composer.form); expect(submit.form).toBe(composer.form);
+    const settings = screen.getByLabelText('助手设置'); fireEvent.click(settings);
+    const details = settings.closest('details')!;
+    const direct = screen.getByRole('checkbox', { name: '明确指令直接应用' }) as HTMLInputElement;
+    const jev = screen.getByRole('checkbox', { name: 'JEV 决策模式' }) as HTMLInputElement;
+    expect(direct.form).toBe(composer.form); expect(jev.form).toBe(composer.form);
+    expect(direct.checked).toBe(true); expect(jev.checked).toBe(false);
+    fireEvent.click(jev); expect(jev.checked).toBe(true); expect(direct.disabled).toBe(true);
+    fireEvent.click(jev); expect(jev.checked).toBe(false); expect(direct.disabled).toBe(false);
+    fireEvent.click(direct); expect(direct.checked).toBe(false);
+    fireEvent.change(composer, { target: { value: '仍在输入法组合中' } });
+    fireEvent.keyDown(composer, { key: 'Enter', isComposing: true });
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(composer.value).toBe('仍在输入法组合中');
+    jev.focus(); fireEvent.keyDown(jev, { key: 'Escape' });
+    expect(details.open).toBe(false); expect(document.activeElement).toBe(settings);
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+    fireEvent.keyDown(settings, { key: 'Escape' });
+    expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+    expect(screen.getByRole('button', { name: '打开 Binggo Agent' })).toBe(launcher);
+    fireEvent.click(launcher);
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('仍在输入法组合中');
+    fireEvent.click(submit); await waitFor(() => expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    fireEvent.click(settings);
+    expect(direct.checked).toBe(false); expect(jev.checked).toBe(false);
+    expect(direct.disabled).toBe(true); expect(jev.disabled).toBe(true);
+    expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0]).toMatchObject({ executionMode: 'preview', jevEnabled: false });
+    await act(async () => finish(runFrom(proposal))); await screen.findByText('方案提案 · 尚未应用');
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[business Escape] closes each focused Portal destination without closing chat or consuming a nested handled Escape', async () => {
+    renderUI(<DockedTrial/>); await act(async () => {});
+    selectMode('model');
+    const host = screen.getByTestId('docked-business-host');
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' });
+    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '场景模板']) {
+      const entry = screen.getByRole('button', { name }); fireEvent.click(entry);
+      const target = name === '活动需求' ? screen.getByRole('textbox', { name: '客户需求' })
+        : name === '执行资料' ? screen.getByRole('group', { name: '执行工作单' })
+          : name === '物料工具' ? screen.getByRole('button', { name: '椅' })
+            : name === '场景模板' ? screen.getByRole('button', { name: '返回当前工作区' })
+          : host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
+      target.focus(); fireEvent.keyDown(target, { key: 'Escape', cancelable: true });
+      await waitFor(() => expect(host.hidden).toBe(true));
+      await waitFor(() => expect(document.activeElement).toBe(entry));
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+    }
+    const entry = screen.getByRole('button', { name: '活动需求' }); fireEvent.click(entry);
+    const demand = screen.getByRole('textbox', { name: '客户需求' });
+    const consume = (event: Event) => event.preventDefault(); demand.addEventListener('keydown', consume);
+    fireEvent.keyDown(demand, { key: 'Escape', cancelable: true });
+    expect(host.hidden).toBe(false); expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand);
+    demand.removeEventListener('keydown', consume);
+    fireEvent.keyDown(demand, { key: 'Escape', cancelable: true });
+    await waitFor(() => expect(host.hidden).toBe(true));
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+  });
+
   it('keeps business and generator nodes in a stable host while changing tools, templates and chat visibility', async () => {
     const mounted = vi.fn(), reconstructionMounted = vi.fn();
     const reconstruction = await import('./reconstruction-panel'), Original = reconstruction.ReconstructionPanel;
@@ -117,6 +211,7 @@ describe('docked workspace integration', () => {
     expect(host.contains(demand)).toBe(true); expect(host.contains(composer)).toBe(false);
     fireEvent.change(demand, { target: { value: '保留原需求文字' } });
     selectMode('model');
+    fireEvent.click(screen.getByRole('button', { name: '物料工具' }));
     const model = screen.getByRole('textbox', { name: '停靠测试模型描述' });
     fireEvent.change(model, { target: { value: '模型字段保留' } });
     fireEvent.click(screen.getByRole('button', { name: '椅' }));
@@ -134,6 +229,7 @@ describe('docked workspace integration', () => {
     expect((model as HTMLInputElement).value).toBe('模型字段保留'); expect(mounted).toHaveBeenCalledOnce();
     expect(reconstructionMounted).toHaveBeenCalledOnce();
     selectMode('plan'); expect(composer.value).toBe('停靠策划草稿');
+    fireEvent.click(screen.getByRole('button', { name: '活动需求' }));
     expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand); expect(demand.value).toBe('保留原需求文字');
     expect(document.querySelectorAll('#creative-message')).toHaveLength(1);
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
@@ -148,6 +244,22 @@ describe('docked workspace integration', () => {
     expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan');
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('');
     selectMode('model'); expect(composer.value).toBe(''); expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each([390, 768])('[narrow chat scopes] retains visible chat and both drafts when only the range changes at %s px', async width => {
+    vi.stubGlobal('innerWidth', width);
+    renderUI(<DockedTrial/>); await act(async () => {});
+    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    const host = screen.getByTestId('docked-business-host');
+    fireEvent.change(composer, { target: { value: '窄屏策划草稿' } });
+    selectMode('model');
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(host.hidden).toBe(true);
+    fireEvent.change(composer, { target: { value: '窄屏建模草稿' } });
+    selectMode('plan'); expect(composer.value).toBe('窄屏策划草稿');
+    selectMode('model'); expect(composer.value).toBe('窄屏建模草稿');
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(host.hidden).toBe(true);
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
 
   it('keeps a pending proposal discoverable and reopens the same confirmation without dispatching a second task', async () => {
@@ -180,7 +292,8 @@ describe('docked workspace integration', () => {
     act(() => restored?.());
     const destination = screen.getByRole('group', { name: '执行工作单' });
     expect(host.contains(destination)).toBe(true); expect(document.activeElement).toBe(destination);
-    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('delivery');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan');
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
   });
 
@@ -236,13 +349,14 @@ describe('direct local delivery shortcut', () => {
     fireEvent.click(screen.getByRole('button', { name: '收起 Agent' }));
     const entry = screen.getByRole('button', { name: '核对参考底图' }); fireEvent.click(entry);
     const review = rendered.container.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
-    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
     expect(document.activeElement).toBe(review);
     expect(rendered.container.querySelector<HTMLDetailsElement>('.rc-inputs')?.open).toBe(true);
     expect(rendered.container.querySelector('.rc-panel')).toBe(originalPanel); expect(mounted).toHaveBeenCalledOnce();
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(originalComposer);
-    expect((originalComposer as HTMLTextAreaElement).value).toBe('未发送策划草稿');
+    expect((originalComposer as HTMLTextAreaElement).value).toBe('未发送建模草稿');
     expect(rendered.container.querySelectorAll('#creative-message')).toHaveLength(1);
+    selectMode('plan'); expect((originalComposer as HTMLTextAreaElement).value).toBe('未发送策划草稿');
     selectMode('model'); expect((originalComposer as HTMLTextAreaElement).value).toBe('未发送建模草稿');
     fireEvent.click(screen.getByRole('button', { name: '收起 Agent' })); expect(document.activeElement).toBe(entry);
     expect(onApply).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
@@ -260,10 +374,10 @@ describe('direct local delivery shortcut', () => {
     });
     const view=renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'旧项目策划输入'}});
-    selectMode('model');fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'旧项目建模输入'}});selectMode('delivery');
+    selectMode('model');fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'旧项目建模输入'}});openExecution();
     const mode=screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement;
     mode.focus();view.rerender(ui({...layout,id:restoredId,name:'恢复完成项目'}));
-    expect(completed).toHaveBeenCalledOnce();expect(mode.value).toBe('delivery');
+    expect(completed).toHaveBeenCalledOnce();expect(mode.value).toBe('plan');
     expect(document.activeElement).toBe(mode);
     expect(screen.getByRole('group',{name:'执行工作单'})).toBeTruthy();
     selectMode('plan');expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('');
@@ -277,11 +391,11 @@ describe('direct local delivery shortcut', () => {
     let restored:(()=>void)|undefined;
     vi.spyOn(delivery,'SceneDeliveryPanel').mockImplementation(props=>{restored=props.onBackupRestored;return <Original {...props}/>;});
     const view=renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
-    selectMode('model');fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'旧项目的未发送建模输入'}});selectMode('delivery');
+    selectMode('model');fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'旧项目的未发送建模输入'}});openExecution();
     const changed={...layout,id:'restored-local-project',name:'恢复后的项目'};view.rerender(ui(changed));
     const mode=screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement;
     expect(mode.value).toBe('plan');expect(restored).toBeTypeOf('function');
-    act(()=>{restored!();});expect(mode.value).toBe('delivery');
+    act(()=>{restored!();});expect(mode.value).toBe('plan');
     expect(screen.getByRole('group',{name:'执行工作单'})).toBeTruthy();
     selectMode('model');expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('');
     expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();
@@ -302,7 +416,7 @@ describe('direct local delivery shortcut', () => {
     selectMode('model');fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'建模未发送文字'}});
     fireEvent.click(screen.getByRole('button',{name:'材质调整'}));fireEvent.keyDown(screen.getByRole('region',{name:'Agent'}),{key:'Escape'});
     expect(document.activeElement).toBe(entry);fireEvent.click(entry);
-    expect(mode.value).toBe('model');expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
+    expect(mode.value).toBe('model');selectMode('model');expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('region',{name:'Agent'}).classList.contains('is-expanded')).toBe(true);
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('建模未发送文字');
     selectMode('plan');expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('策划未发送文字');
@@ -343,7 +457,8 @@ describe('direct local delivery shortcut', () => {
     fireEvent.click(screen.getByRole('button',{name:'打开执行工作单'}));
     const work=await screen.findByRole('group',{name:'执行工作单'});
     expect(document.activeElement).toBe(work);
-    expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('delivery');
+    expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
+    expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('一把绿色椅子，尚未发送');
     selectMode('model');
     expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('一把绿色椅子，尚未发送');
@@ -382,12 +497,15 @@ function render(element: React.ReactElement) {
   fireEvent.click(screen.getByText('风格、配色与氛围（可选）'));
   fireEvent.click(screen.getByText('图纸、照片与现场条件（可选）'));
   fireEvent.click(screen.getByText('图纸与照片重建'));
-  fireEvent.click(screen.getByText('助手设置',{exact:false}));
+  fireEvent.click(screen.getByLabelText('助手设置'));
   fireEvent.click(screen.getByRole('checkbox', {name:'明确指令直接应用'}));
   return view;
 }
-function selectMode(value:'plan'|'model'|'delivery'):void {
+function selectMode(value:'plan'|'model'):void {
   fireEvent.change(screen.getByRole('combobox',{name:'工作模式'}),{target:{value}});
+}
+function openExecution():void {
+  fireEvent.click(screen.getByRole('button',{name:'执行资料'}));
 }
 
 function connected(): void {
@@ -698,7 +816,7 @@ describe('creative brief and assistant interaction', () => {
     expect(JSON.parse(screen.getByTestId('material-seed').textContent!)).toMatchObject({sourceAssetId:suggestion.sourceAssetId,objectIds:suggestion.objectIds,changes:suggestion.changes,materialScope:'choose_materials',projectId,userId:'test-user'});
     expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();
     expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
-    selectMode('delivery');
+    openExecution();
     expect(screen.getByRole('button',{name:'导出场景 GLB'})).toBeTruthy();
     selectMode('model');
     expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
@@ -1461,11 +1579,11 @@ describe('context continuity and project isolation', () => {
 
 
 describe('unified Agent', () => {
-  it('offers three work modes and retains separate planning and modeling drafts', () => {
+  it('offers two chat scopes and retains separate planning and modeling drafts', () => {
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
     const modes=screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement;
-    expect(Array.from(modes.options).map(option=>option.text)).toEqual(['场景策划','物料建模','执行交付']);
+    expect(Array.from(modes.options).map(option=>option.text)).toEqual(['场景策划','物料建模']);
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加两把椅子' } });
     selectMode('model');
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('');
@@ -1496,7 +1614,7 @@ describe('unified Agent', () => {
     expect(view.container.querySelector<HTMLDetailsElement>('.rc-inputs')!.open).toBe(false);
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     expect(panel.classList.contains('is-expanded')).toBe(true);
-    expect(screen.getByText('活动工作区',{exact:true})).toBeTruthy();
+    expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).form).toBe(input.form);
     content.scrollTop=21;feed.scrollTop=3; // A taller viewport can clamp either browser scroll position.
     fireEvent.click(screen.getByRole('button',{name:'恢复浮窗'}));
     expect(panel.classList.contains('is-expanded')).toBe(false);
@@ -1552,7 +1670,7 @@ describe('unified Agent', () => {
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await screen.findByText('方案提案 · 尚未应用');
     const confirm=screen.getByRole('button',{name:'确认应用'});
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
-    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));selectMode('delivery');
+    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
     const reopen=screen.getByRole('button',{name:'展开聊天'});
     expect(reopen.getAttribute('aria-describedby')).toBe('creative-conversation-status');
@@ -1564,7 +1682,7 @@ describe('unified Agent', () => {
     const previewCalls=onPreview.mock.calls.length;fireEvent.click(reopen);
     expect(screen.getByRole('button',{name:'确认应用'})).toBe(confirm);
     expect(screen.getByText('方案提案 · 尚未应用')).toBeTruthy();
-    expect(screen.queryByRole('textbox',{name:'告诉助手你的想法'})).toBeNull();
+    expect(screen.getByRole('textbox',{name:'告诉助手你的想法'})).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole('region',{name:'Binggo 聊天'}));
     expect(onPreview.mock.calls).toHaveLength(previewCalls);
     expect(controller.startAgentRun).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();
@@ -1596,7 +1714,7 @@ describe('unified Agent', () => {
     expect(screen.getByText('方案提案 · 尚未应用')).toBeTruthy();expect(onPreview.mock.calls).toHaveLength(previewCalls);
     expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button',{name:'确认应用'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByText('助手设置',{exact:false}));
+    fireEvent.click(screen.getByLabelText('助手设置'));
     expect((screen.getByRole('checkbox',{name:'明确指令直接应用'}) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole('checkbox',{name:'明确指令直接应用'}).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('仅用于场景策划；物料建模始终先预览')).toBeTruthy();
@@ -1727,7 +1845,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
   }
   it('keeps JEV off by default and presents three independently selectable candidates without applying',async()=>{
     connected();renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
-    fireEvent.click(screen.getByText('助手设置',{exact:false}));
+    fireEvent.click(screen.getByLabelText('助手设置'));
     const toggle=screen.getByRole('checkbox',{name:'JEV 决策模式'}) as HTMLInputElement;
     expect(toggle.checked).toBe(false);fireEvent.click(toggle);
     vi.mocked(controller.startAgentRun).mockResolvedValueOnce(comparison());send();
@@ -1736,7 +1854,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     expect(onApply).not.toHaveBeenCalled();expect(controller.applySceneProposal).not.toHaveBeenCalled();
     expect(controller.startAgentRun).toHaveBeenCalledWith(expect.objectContaining({jevEnabled:true,scene:layoutToBackendScene(layout)}));
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
-    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));selectMode('delivery');
+    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('有方案待确认');
     fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
     expect(screen.queryByRole('button',{name:/方案 B.*布局2.*50\.0/})).toBeNull();
@@ -1768,7 +1886,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     const recover=await screen.findByRole('button',{name:'查询原任务'});
     const original=vi.mocked(controller.startAgentRun).mock.calls[0]![0];
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
-    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));selectMode('delivery');
+    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
     const reopen=screen.getByRole('button',{name:'展开聊天'});
     expect(reopen.getAttribute('aria-describedby')).toBe('creative-conversation-status');
@@ -1787,7 +1905,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     vi.mocked(controller.cancelAgentRun).mockResolvedValueOnce({...running,state:'cancelled'});
     render(ui());send();await act(async()=>{await Promise.resolve();});
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
-    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));selectMode('delivery');
+    fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('正在查找物料');
     fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
     expect(screen.queryByRole('button',{name:'取消任务'})).toBeNull();
