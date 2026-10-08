@@ -5,6 +5,14 @@ import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { backendSceneToLayout } from "../components/room-organizer/lib/backend-adapter";
 import { BackendSession, createBackendSession, getBackendConfig, useBackendSession, type Scene } from "./backend-session";
+import { geometryWorkbenchBindingKey, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
+
+const bindingStore = vi.hoisted(() => ({
+  values: new Map<string, unknown>(),
+  read: vi.fn<(key: unknown) => Promise<unknown>>(),
+  update: vi.fn<(key: unknown, update: (value: unknown) => unknown) => Promise<unknown>>(),
+}));
+vi.mock("./source-storage", () => ({ readSourceRecord: bindingStore.read, updateSourceForm: bindingStore.update }));
 
 const projectId = "10000000-0000-4000-8000-000000000001";
 const studioId = "20000000-0000-4000-8000-000000000001";
@@ -17,6 +25,12 @@ const assetScene: Scene = { ...scene, objects: [{ id: "50000000-0000-4000-8000-0
 const authorizedAsset = { id: assetId, name: "公共模型椅子", format: "glb", url: `${base}/storage/v1/object/sign/scene-assets/chair.glb?token=temporary-test`, expiresIn: 300, metadata: { sourceSize: { width: 1, depth: 1, height: 1 }, groundOffset: [0, 0, 0] } };
 const mockFetch = vi.fn<typeof fetch>();
 const sessions: BackendSession[] = [];
+function browserStorage(): Storage {
+  const values = new Map<string, string>();
+  return { get length() { return values.size; }, clear: () => values.clear(),
+    getItem: key => values.get(String(key)) ?? null, key: index => [...values.keys()][index] ?? null,
+    removeItem: key => { values.delete(String(key)); }, setItem: (key, value) => { values.set(String(key), String(value)); } };
+}
 
 function response(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
 function queue(body: unknown, status = 200) { mockFetch.mockResolvedValueOnce(response(body, status)); }
@@ -41,7 +55,17 @@ async function editing() {
 }
 
 beforeEach(() => {
+  const local = browserStorage(), tab = browserStorage();
+  vi.stubGlobal("localStorage", local);vi.stubGlobal("sessionStorage", tab);
+  Object.defineProperty(window, "localStorage", { configurable: true, value: local });
+  Object.defineProperty(window, "sessionStorage", { configurable: true, value: tab });
   sessionStorage.clear(); localStorage.clear();
+  bindingStore.values.clear();
+  bindingStore.read.mockReset().mockImplementation(async key => bindingStore.values.get(JSON.stringify(key)));
+  bindingStore.update.mockReset().mockImplementation(async (key, update) => {
+    const storedKey = JSON.stringify(key), value = structuredClone(update(bindingStore.values.get(storedKey)));
+    bindingStore.values.set(storedKey, value); return value;
+  });
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-02T08:00:00Z"));
   vi.stubGlobal("fetch", mockFetch);
@@ -52,6 +76,255 @@ afterEach(() => {
   for (const controller of sessions.splice(0)) controller.dispose();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("local activity geometry bindings", () => {
+  const localId = "house-local-activity";
+  const otherId = "10000000-0000-4000-8000-000000000002";
+  const studio = { id: studioId, name: "工作室", role: "owner", displayName: "负责人" };
+  const mapping = (id = localId, cloudProjectId = projectId, userId = auth.user.id, apiUrl = `${base}/functions/v1/scene-api`): GeometryWorkbenchBinding =>
+    ({ version: 1, localActivityId: id, cloudProjectId, userId, apiUrl });
+  function stored(binding: GeometryWorkbenchBinding): void {
+    bindingStore.values.set(JSON.stringify(geometryWorkbenchBindingKey(binding)), binding);
+  }
+  async function login(controller: BackendSession, value = auth): Promise<void> {
+    queue(value); await controller.signIn(value.user.email, "test-password-only");
+  }
+  function grant(controller: BackendSession, generation = 1, currentScene = scene) {
+    return { sessionId: controller.getSnapshot().sessionId, generation, expiresAt: new Date(Date.now() + 90_000).toISOString(), revision: 4, scene: currentScene };
+  }
+  async function bind(controller: BackendSession, id = localId, remote = project): Promise<void> {
+    queue([studio]); queue(remote); queue(grant(controller));
+    await controller.ensureGeometryWorkbenchReady(scene, "本地活动", id);
+  }
+  const creates = () => mockFetch.mock.calls.filter(call => String(call[0]).endsWith("/scene-api/projects") && call[1]?.method === "POST");
+
+  it("keeps the local ID distinct and persists only the authenticated identity mapping", async () => {
+    const controller = session(); await login(controller);
+    await bind(controller, projectId, { ...project, id: otherId });
+    expect(controller.isGeometryBound(projectId)).toBe(true);
+    expect(controller.isGeometryBound(otherId)).toBe(false);
+    expect(controller.getSnapshot()).toMatchObject({ geometryBinding: mapping(projectId, otherId), project: { id: otherId }, writeBlocked: false });
+    expect([...bindingStore.values.values()]).toEqual([mapping(projectId, otherId)]);
+    expect(JSON.stringify([...bindingStore.values.values()])).not.toMatch(/access|refresh|lease|sessionId|generation/);
+    expect(creates()).toHaveLength(1);
+    expect(JSON.parse(String(creates()[0]![1]!.body))).toEqual({ studioId, name: "本地活动", scene });
+  });
+
+  it("deduplicates first-time preparation even after guest authentication becomes visible", async () => {
+    const controller = session();queue({ ...auth, user: { id: "guest-a", is_anonymous: true } });
+    let finish!: (value: Response) => void;
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    queue(project);queue(grant(controller));
+    const first = controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    expect(controller.getSnapshot().user?.id).toBe("guest-a");
+    const second = controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId);
+    finish(response([studio]));expect(await first).toEqual(await second);
+    expect(creates()).toHaveLength(1);expect(controller.isGeometryBound(localId)).toBe(true);
+  });
+
+  it("resumes a reopened activity with a fresh lease without creating or dispatching a task", async () => {
+    const first = session(); await login(first); await bind(first);first.dispose();
+    const reopened = session(); await login(reopened);
+    const changed = { ...scene, lighting: "cool" as const };
+    queue(project); queue(grant(reopened, 8));
+    const result = await reopened.resumeGeometryWorkbench(changed, "本地活动", localId);
+    expect(result?.id).toBe(projectId);expect(reopened.isGeometryBound(localId)).toBe(true);
+    expect(reopened.getSnapshot()).toMatchObject({ draft: changed, dirty: true, lease: { generation: 8 } });
+    expect(reopened.getSnapshot().sessionId).not.toBe(first.getSnapshot().sessionId);
+    expect(creates()).toHaveLength(1);
+    expect(mockFetch.mock.calls.some(call => String(call[0]).includes("agent-runs"))).toBe(false);
+  });
+
+  it("requires authentication for resume and returns null for an absent mapping without creating anything", async () => {
+    const controller = session();
+    await expect(controller.resumeGeometryWorkbench(scene, "本地活动", localId)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(mockFetch).not.toHaveBeenCalled();
+    await login(controller);const calls = mockFetch.mock.calls.length;
+    expect(await controller.resumeGeometryWorkbench(scene, "本地活动", localId)).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(calls);expect(bindingStore.update).not.toHaveBeenCalled();
+  });
+
+  it.each(["invalid", "unreadable"] as const)("does not create a replacement for a %s mapping", async reason => {
+    const controller = session();await login(controller);
+    if (reason === "invalid") bindingStore.values.set(JSON.stringify(geometryWorkbenchBindingKey(mapping())), { ...mapping(), userId: "wrong-user" });
+    else bindingStore.read.mockRejectedValueOnce(new Error("storage unavailable"));
+    const calls = mockFetch.mock.calls.length;
+    await expect(controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId)).rejects.toMatchObject({
+      code: reason === "invalid" ? "GEOMETRY_BINDING_INVALID" : "GEOMETRY_BINDING_READ_FAILED",
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(calls);expect(creates()).toHaveLength(0);
+    expect(controller.getSnapshot().draft).toEqual(scene);
+  });
+
+  it.each([403, 404])("retains a mapped project rejected with %s and never creates another", async status => {
+    const controller = session();await login(controller);stored(mapping());
+    queue({ error: { code: status === 403 ? "FORBIDDEN" : "PROJECT_NOT_FOUND", details: {} } }, status);
+    await expect(controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId)).rejects.toMatchObject({ status });
+    expect([...bindingStore.values.values()]).toEqual([mapping()]);expect(creates()).toHaveLength(0);
+    queue({ error: { code: "FORBIDDEN", details: {} } }, 403);
+    await expect(controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId)).rejects.toMatchObject({ status: 403 });
+    expect(creates()).toHaveLength(0);
+  });
+
+  it("remembers a newly created mirror after binding persistence fails and retries that same project", async () => {
+    const controller = session();await login(controller);
+    bindingStore.update.mockRejectedValueOnce(new Error("write refused"));
+    queue([studio]);queue(project);
+    await expect(controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId)).rejects.toMatchObject({ code: "GEOMETRY_BINDING_WRITE_FAILED" });
+    expect(controller.getSnapshot()).toMatchObject({ project, geometryBinding: mapping(), writeBlocked: true, error: { code: "GEOMETRY_BINDING_WRITE_FAILED" } });
+    queue(grant(controller));await controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId);
+    expect(creates()).toHaveLength(1);expect([...bindingStore.values.values()]).toEqual([mapping()]);
+    expect(controller.getSnapshot().writeBlocked).toBe(false);
+  });
+
+  it("disconnects even a blocked live mirror lease while preserving draft and the mapping", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    queue({ error: { code: "LEASE_LOST", details: {} } }, 409);
+    await expect(controller.saveScene(assetScene)).rejects.toMatchObject({ code: "LEASE_LOST" });
+    expect(controller.isGeometryBound(localId)).toBe(true);
+    queue({});await controller.disconnectGeometryWorkbench();
+    expect(controller.getSnapshot()).toMatchObject({ geometryBinding: null, project: null, lease: null, draft: assetScene });
+    expect([...bindingStore.values.values()]).toEqual([mapping()]);
+    queue(project);queue(grant(controller, 5));
+    await controller.resumeGeometryWorkbench(assetScene, "本地活动", localId);
+    expect(controller.isGeometryBound(localId)).toBe(true);expect(creates()).toHaveLength(1);
+  });
+
+  it("keeps binding identity valid after lease expiry while AI writes remain blocked", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    vi.setSystemTime(new Date(Date.now() + 100_000));
+    await expect(controller.saveScene(scene)).rejects.toMatchObject({ code: "LEASE_LOST" });
+    expect(controller.isGeometryBound(localId)).toBe(true);expect(controller.getSnapshot().writeBlocked).toBe(true);
+  });
+
+  it("isolates accounts and API endpoints, clearing only geometry cloud context on account changes", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    await login(controller, { ...auth, user: { id: "user-b", email: "other@example.com" } });
+    expect(controller.getSnapshot()).toMatchObject({ project: null, geometryBinding: null, lease: null, draft: scene });
+    expect(await controller.resumeGeometryWorkbench(scene, "本地活动", localId)).toBeNull();
+    expect(creates()).toHaveLength(1);
+    const other = new BackendSession(getBackendConfig({ url: "https://other.supabase.co", anonKey: "sb_publishable_test" }));sessions.push(other);await login(other);
+    expect(await other.resumeGeometryWorkbench(scene, "本地活动", localId)).toBeNull();
+    expect(creates()).toHaveLength(1);expect([...bindingStore.values.values()]).toEqual([mapping()]);
+  });
+
+  it("clears a geometry project on sign-out or revoked auth without changing ordinary cloud sign-out", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    queue({});queue({});await controller.signOut();
+    expect(controller.getSnapshot()).toMatchObject({ project: null, geometryBinding: null, lease: null, user: null, draft: scene });
+    expect([...bindingStore.values.values()]).toEqual([mapping()]);
+    await login(controller);queue(project);queue(grant(controller));await controller.resumeGeometryWorkbench(scene, "本地活动", localId);
+    queue({ error: { code: "UNAUTHENTICATED", details: {} } }, 401);
+    await expect(controller.listStudios()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(controller.getSnapshot()).toMatchObject({ project: null, geometryBinding: null, user: null, draft: scene });
+    const ordinary = await editing();queue({});queue({});await ordinary.signOut();
+    expect(ordinary.getSnapshot().project?.id).toBe(projectId);
+  });
+
+  it("switches local activities using each saved mapping without reusing another activity's mirror", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    queue({});queue([studio]);queue({ ...project, id: otherId });queue(grant(controller, 2));
+    await controller.ensureGeometryWorkbenchReady(scene, "另一个本地活动", "house-other-activity");
+    expect(controller.isGeometryBound(localId)).toBe(false);expect(controller.isGeometryBound("house-other-activity")).toBe(true);
+    queue({});queue(project);queue(grant(controller, 3));
+    await controller.resumeGeometryWorkbench(scene, "本地活动", localId);
+    expect(controller.isGeometryBound(localId)).toBe(true);expect(creates()).toHaveLength(2);
+  });
+
+  it("leaves geometry mode for an ordinary project or ordinary workbench request", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    queue({});await controller.releaseLease();queue({ ...project, id: otherId });
+    await controller.getProject(otherId);
+    expect(controller.getSnapshot().geometryBinding).toBeNull();expect(controller.isGeometryBound(localId)).toBe(false);
+    queue(grant(controller));await controller.ensureWorkbenchReady(scene, "完整云方案", otherId);
+    expect(controller.getSnapshot().geometryBinding).toBeNull();expect(controller.getSnapshot().project?.id).toBe(otherId);
+    expect([...bindingStore.values.values()]).toEqual([mapping()]);
+  });
+
+  it.each(["open", "create", "prepare"] as const)("keeps the geometry workspace accessible after an ordinary %s fails", async action => {
+    const controller = session();await login(controller);await bind(controller);
+    queue({});await controller.releaseLease();
+    const draft = { ...scene, lighting: "cool" as const };controller.setDraft(draft);
+    if (action === "prepare") queue([studio]);
+    queue({ error: { code: "FORBIDDEN", details: {} } }, 403);
+    const failed = action === "open" ? controller.getProject(otherId) : action === "create"
+      ? controller.createProject(studioId, "完整云项目", scene) : controller.ensureWorkbenchReady(scene, "完整云项目", "new-full-project");
+    await expect(failed).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.getSnapshot()).toMatchObject({ geometryBinding: mapping(), project: { id: projectId }, draft, writeBlocked: true });
+    expect(controller.isGeometryBound(localId)).toBe(true);expect([...bindingStore.values.values()]).toEqual([mapping()]);
+  });
+
+  it("can explicitly resume the same saved mirror after it was opened as a complete cloud project", async () => {
+    const controller = session();await login(controller);await bind(controller);
+    queue({});await controller.releaseLease();queue(project);await controller.getProject(projectId);
+    queue(grant(controller, 2));await controller.acquireLease(projectId);
+    expect(controller.isGeometryBound(localId)).toBe(false);
+    const calls = mockFetch.mock.calls.length;
+    await controller.resumeGeometryWorkbench(scene, "本地活动", localId);
+    expect(controller.isGeometryBound(localId)).toBe(true);expect(mockFetch).toHaveBeenCalledTimes(calls);
+  });
+
+  it.each(["create", "acquire", "prepare"] as const)("exits projection mode only after an ordinary %s succeeds", async action => {
+    const controller = session();await login(controller);await bind(controller);
+    if (action !== "prepare") { queue({});await controller.releaseLease(); }
+    if (action === "create") { queue({ ...project, id: otherId });await controller.createProject(studioId, "完整云项目", scene); }
+    else if (action === "acquire") { queue(grant(controller, 2));await controller.acquireLease(projectId); }
+    else await controller.ensureWorkbenchReady(scene, "完整云项目", projectId);
+    expect(controller.getSnapshot().geometryBinding).toBeNull();expect(controller.isGeometryBound(localId)).toBe(false);
+    expect(controller.getSnapshot().project?.id).toBe(action === "create" ? otherId : projectId);
+    expect([...bindingStore.values.values()]).toEqual([mapping()]);
+  });
+
+  it("rejects an old binding read after another complete project was selected", async () => {
+    const controller = session();await login(controller);
+    let finish!: (value: unknown) => void;
+    bindingStore.read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = controller.resumeGeometryWorkbench(scene, "本地活动", localId);void pending.catch(() => {});
+    queue({ ...project, id: otherId });await controller.getProject(otherId);finish(mapping());
+    await expect(pending).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    expect(controller.getSnapshot()).toMatchObject({ project: { id: otherId }, geometryBinding: null, error: null });
+    expect(creates()).toHaveLength(0);
+  });
+
+  it("does not let a late mapped-project response restore a disconnected geometry context", async () => {
+    const controller = session();await login(controller);stored(mapping());
+    let finish!: (value: Response) => void;
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = controller.resumeGeometryWorkbench(scene, "本地活动", localId);void pending.catch(() => {});
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    await expect(controller.disconnectGeometryWorkbench()).rejects.toMatchObject({ code: "CLOUD_OPERATION_BUSY" });
+    finish(response(project));await expect(pending).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    expect(controller.getSnapshot()).toMatchObject({ project: null, geometryBinding: null, lease: null, error: null });
+  });
+
+  it("releases a late acquired geometry grant without committing it after disconnect", async () => {
+    const controller = session();await login(controller);stored(mapping());queue(project);
+    let finish!: (value: Response) => void;
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = controller.resumeGeometryWorkbench(scene, "本地活动", localId);void pending.catch(() => {});
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    await expect(controller.disconnectGeometryWorkbench()).rejects.toMatchObject({ code: "CLOUD_OPERATION_BUSY" });
+    queue({});finish(response(grant(controller, 7)));
+    await expect(pending).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+    expect(request(3)).toMatchObject({ url: `${base}/functions/v1/scene-api/projects/${projectId}/lease/release`, body: { sessionId: controller.getSnapshot().sessionId, generation: 7 } });
+    expect(controller.getSnapshot()).toMatchObject({ lease: null, error: null });
+    await controller.disconnectGeometryWorkbench();expect(controller.getSnapshot().project).toBeNull();
+  });
+
+  it("preserves local edits made during binding reads and remote lease acquisition", async () => {
+    const controller = session();await login(controller);stored(mapping());
+    let read!: (value: unknown) => void, finish!: (value: Response) => void;
+    bindingStore.read.mockImplementationOnce(() => new Promise(resolve => { read = resolve; }));
+    queue(project);mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = controller.resumeGeometryWorkbench(scene, "本地活动", localId);
+    const firstEdit = { ...scene, lighting: "cool" as const };controller.setDraft(firstEdit);read(mapping());
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    const later = { ...scene, lighting: "warm" as const };controller.setDraft(later);
+    finish(response(grant(controller)));await pending;
+    expect(controller.getSnapshot()).toMatchObject({ draft: later, dirty: true, writeBlocked: false });
+  });
 });
 
 describe("backend session contract", () => {

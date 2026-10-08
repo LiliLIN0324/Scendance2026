@@ -7,6 +7,9 @@ import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, typ
 import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, listSourceRecords, readSourceForm, readSourceRecord, storeSourceForm, updateSourceForm } from '@/lib/source-storage';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import { canonical } from '../../../../supabase/functions/_shared/domain';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -641,8 +644,8 @@ describe('creative brief and assistant interaction', () => {
     expect(button.hasAttribute('disabled')).toBe(false);
   });
 
-  it.each(['activity', 'nested activity'] as const)('preserves a local %s without preparing cloud or starting Agent work', async kind => {
-    snapshot = { ...snapshot, configured: true };
+  it.each(['activity', 'nested activity'] as const)('keeps unsupported %s out of a complete cloud project', async kind => {
+    connected();
     const operations = { schemaVersion: 1 as const, dataKind: 'unspecified' as const, tasks: [] };
     const local = { ...layout, eventOperations: operations };
     const current = kind === 'activity' ? local : { ...layout, designBook: { activeId: 'parent', variants: [{ id: 'parent', name: '方案', layout: { ...layout, designBook: { activeId: 'leaf', variants: [{ id: 'leaf', name: '活动方案', layout: local }] } } }] } };
@@ -1122,6 +1125,19 @@ describe('complete local backup transactions', () => {
     expect(forms.get(checkinKey())).toEqual(original);
     expect(forms.has(JSON.stringify(['local-activity',projectId]))).toBe(true);
     expect(forms.get(JSON.stringify(['material-checkins',current.id]))).toBeUndefined();
+  });
+  it('backs up a scene-connected local activity and disconnects only its remote context before restoring',async()=>{
+    connected();snapshot={...snapshot,geometryBinding:{version:1,localActivityId:projectId,cloudProjectId:projectId,userId:'test-user',apiUrl:controller.config.apiUrl}};
+    vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>id===projectId&&!!snapshot.geometryBinding);
+    const disconnect=vi.spyOn(controller,'disconnectGeometryWorkbench').mockImplementation(async()=>{
+      snapshot={...snapshot,geometryBinding:null,project:null,lease:null,writeBlocked:true};controller.setDraft(scene);
+    });
+    const original=ledger();forms.set(checkinKey(),original);await mount();
+    const backup=parseLocalProjectBackupJson(await actions.prepareBackup());expect(backup.materialCheckins).toEqual({status:'present',value:original});
+    expect(disconnect).not.toHaveBeenCalled();
+    await act(async()=>{await actions.restoreBackup(file('different-local-activity'));});
+    expect(disconnect).toHaveBeenCalledOnce();expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe('different-local-activity');
+    expect(forms.get(checkinKey())).toEqual(original);
   });
 
   it('backs up independent checkins as V3 and preserves them through old or absent-ledger restores',async()=>{
@@ -1636,25 +1652,23 @@ describe('original CreativeBrief storage state', () => {
     expect(vi.mocked(storeSourceForm).mock.calls.filter(([key])=>key.endsWith(':brief'))).toHaveLength(0);
   });
 
-  it('keeps the original local scope and input when migration to a prepared cloud project fails', async () => {
+  it('keeps the local identity and inputs when its scene binding cannot be saved', async () => {
     snapshot={...snapshot,configured:true};
     const local={...layout,id:'10000000-0000-4000-8000-000000000009'};
     const bind=vi.fn();
-    const ready=vi.spyOn(controller,'ensureWorkbenchReady').mockImplementation(async()=>{connected();return snapshot.project!;});
-    const release=vi.spyOn(controller,'releaseLease').mockResolvedValue(undefined);
-    vi.mocked(copySourceScope).mockRejectedValueOnce(new Error('本机资料复制失败'));
+    const ready=vi.spyOn(controller,'ensureGeometryWorkbenchReady').mockRejectedValue(new Error('场景连接记录保存失败，请重试。'));
     render(<CreativeStudioProvider controller={controller} layout={local} onApply={onApply} onBindProject={bind}><CreativeAssistant/><BriefStateProbe/></CreativeStudioProvider>);
     enterBrief();
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一张桌子'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    await screen.findByText('云项目已准备好，但活动需求和场地资料未能迁移。原本地草稿与当前输入已保留，请重试后再发送。',{selector:'.cr-agent-notice'});
-    expect(ready).toHaveBeenCalledOnce(); expect(copySourceScope).toHaveBeenCalledWith(local.id,projectId);
-    expect(release).toHaveBeenCalledOnce(); expect(bind).not.toHaveBeenCalled();
+    await screen.findByText('场景连接记录保存失败，请重试。',{selector:'.cr-agent-notice'});
+    expect(ready).toHaveBeenCalledOnce(); expect(copySourceScope).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
     expect(briefState().brief.description).toBe('给 24 位来宾布置一个交流会，保留中心通道。');
     expect(storeSourceForm).toHaveBeenCalledWith(`${local.id}:brief`,expect.objectContaining({description:'给 24 位来宾布置一个交流会，保留中心通道。'}));
     expect(local.id).toBe('10000000-0000-4000-8000-000000000009');
-    expect(controller.getSnapshot().project?.id).toBe(projectId);
+    expect(controller.getSnapshot().project).toBeNull();
   });
 });
 
@@ -2128,7 +2142,7 @@ it('keeps a newer task recoverable when a cancelled dispatch is acknowledged lat
   expect(controller.applySceneProposal).not.toHaveBeenCalled();
 });
 
-it.each(['ledger','unreadable'] as const)('does not dispatch an Agent request when independent checkins are %s',async state=>{
+it.each(['ledger','unreadable'] as const)('does not dispatch through a complete cloud project when independent checkins are %s',async state=>{
   connected();
   if(state==='ledger')vi.mocked(readSourceRecord).mockResolvedValue(materialCheckinLedgerSchema.parse({projectId}));
   else vi.mocked(readSourceRecord).mockRejectedValue(new Error('本机读取不可用'));
@@ -2138,4 +2152,82 @@ it.each(['ledger','unreadable'] as const)('does not dispatch an Agent request wh
   await screen.findAllByText(state==='ledger'?LOCAL_CHECKIN_CLOUD_MESSAGE:LOCAL_RECORDS_READ_MESSAGE);
   expect(controller.startAgentRun).not.toHaveBeenCalled();expect(controller.applySceneProposal).not.toHaveBeenCalled();
   expect(onApply).not.toHaveBeenCalled();
+});
+
+describe('same local activity with a remote scene connection',()=>{
+  const localId='house-bound-activity';
+  const acquisitionId='81000000-0000-4000-8000-000000000001';
+  const nextScene={...candidate,objects:candidate.objects.map(item=>({...item,position:{...item.position,x:item.position.x+1}}))};
+  function activity(){
+    const local=backendSceneToLayout(candidate,{projectId:localId,name:'本地活动演练'});
+    local.eventOperations=eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:'82000000-0000-4000-8000-000000000001',title:'私有执行分工',phase:'setup',ownerName:'内部负责人',objectIds:[candidate.objects[0]!.id]}]});
+    local.productionPlan=productionPlanSchema.parse({dataKind:'rehearsal',acquisitions:[{id:acquisitionId,title:'内部租赁方案',supplierName:'内部供应方',objectIds:[candidate.objects[0]!.id]}]});
+    local.floors[0]!.items[0]!.handoff={ownerName:'内部物件负责人',dueDate:'',acceptance:'内部摆放核对',status:'todo',evidenceUrls:[],evidenceNote:'内部记录'};
+    return local;
+  }
+  function facts(){return materialCheckinLedgerSchema.parse({projectId:localId,dataKind:'rehearsal',sheets:[{
+    id:'83000000-0000-4000-8000-000000000001',acquisitionId,acquisitionSnapshot:{title:'内部租赁方案'},unit:'piece',
+    agreements:[{id:'84000000-0000-4000-8000-000000000001',agreedQuantity:20,basisNote:'演练约定',recordedAt:'2026-10-09T01:00:00Z',recordedBy:'内部记录人'}],
+    events:(['receive','return'] as const).map((kind,index)=>({id:`85000000-0000-4000-8000-00000000000${index+1}`,kind,batchRef:`内部批次${index+1}`,quantity:18,checkState:'checked',occurredAt:`2026-10-09T0${index+2}:00:00Z`,fromPartyName:'内部交出方',toPartyName:'内部接收方',evidenceNote:'内部现场记录',evidenceUrls:[],recordedAt:`2026-10-09T0${index+2}:01:00Z`,recordedBy:'内部记录人'})),
+  }]});}
+  function installBindingCheck(){
+    vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>!!snapshot.geometryBinding&&snapshot.geometryBinding.localActivityId===id&&snapshot.geometryBinding.cloudProjectId===snapshot.project?.id&&snapshot.geometryBinding.userId===snapshot.user?.id);
+  }
+  function bind(){
+    connected();snapshot={...snapshot,geometryBinding:{version:1,localActivityId:localId,cloudProjectId:projectId,userId:'test-user',apiUrl:controller.config.apiUrl}};
+    controller.setDraft(candidate);
+  }
+  function prepareResponse(){
+    prepareProposal.mockResolvedValue({...proposal,base_scene:candidate,candidate:nextScene});
+    vi.mocked(controller.applySceneProposal).mockResolvedValue({id:projectId,revision:2,scene:nextScene,previousScene:candidate,updatedAt:'2026-10-09T00:00:00Z',undoGroup:'group',acceptedLocally:true});
+  }
+  it('previews and applies geometry without changing identity, execution records or 20/18/18 facts',async()=>{
+    installBindingCheck();bind();prepareResponse();const local=activity(),ledger=facts();
+    vi.mocked(readSourceRecord).mockResolvedValue(ledger);
+    render(ui(local));enterBrief();
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'把椅子向右移动一米，先预览'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await screen.findByText('方案提案 · 尚未应用');
+    const request=vi.mocked(controller.startAgentRun).mock.calls[0]![0];
+    expect(request.scene).toEqual(candidate);expect(JSON.stringify(request)).not.toContain('内部');
+    fireEvent.click(screen.getByRole('button',{name:'确认应用'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    const next=onApply.mock.calls[0]![0];expect(next.id).toBe(localId);
+    expect(next.eventOperations).toEqual(local.eventOperations);expect(next.productionPlan).toEqual(local.productionPlan);
+    expect(next.floors[0]!.items[0]!.handoff).toEqual(local.floors[0]!.items[0]!.handoff);
+    expect(layoutToBackendScene(next)).toEqual(nextScene);expect(updateSourceForm).not.toHaveBeenCalled();
+    expect(copySourceScope).not.toHaveBeenCalled();expect(ledger.sheets[0]!.events.map(event=>'quantity' in event?event.quantity:null)).toEqual([18,18]);
+  });
+  it('prepares a first scene connection without rebinding or copying the local activity',async()=>{
+    installBindingCheck();prepareResponse();snapshot={...snapshot,configured:true};const local=activity(),rebind=vi.fn();
+    vi.mocked(readSourceRecord).mockResolvedValue(facts());
+    const ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady').mockImplementation(async()=>{bind();return snapshot.project!;});
+    render(<CreativeStudioProvider controller={controller} layout={local} onApply={onApply} onBindProject={rebind}><CreativeAssistant/></CreativeStudioProvider>);
+    enterBrief();fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'移动椅子，先预览'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await screen.findByText('方案提案 · 尚未应用');
+    expect(ensure).toHaveBeenCalledWith(candidate,local.name,localId);expect(rebind).not.toHaveBeenCalled();expect(copySourceScope).not.toHaveBeenCalled();
+    expect(local.id).toBe(localId);expect(controller.startAgentRun).toHaveBeenCalledOnce();
+  });
+  it('restores only the original scene connection and queries the saved run after reopening',async()=>{
+    installBindingCheck();snapshot={...snapshot,configured:true,user:{id:'test-user'}};const local=activity();
+    const requestId='86000000-0000-4000-8000-000000000001',runId='87000000-0000-4000-8000-000000000001';
+    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${localId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(candidate),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]})}));
+    const resume=vi.spyOn(controller,'resumeGeometryWorkbench').mockImplementation(async()=>{bind();return snapshot.project!;});
+    const ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady');
+    vi.mocked(controller.getAgentRun).mockResolvedValue({...runFrom(proposal),id:runId,state:'cancelled',candidates:[]});
+    render(ui(local));await screen.findByText('任务已取消，当前方案保持不变。');
+    expect(resume).toHaveBeenCalledWith(candidate,local.name,localId);expect(controller.getAgentRun).toHaveBeenCalledWith(runId);
+    expect(ensure).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  it.each([false,true])('reauthorizes saved model references without transmitting scene records (identity changed: %s)',async changed=>{
+    vi.mocked(ensureGlbAsset).mockClear();
+    installBindingCheck();bind();const assetId='88000000-0000-4000-8000-000000000001';
+    const local=backendSceneToLayout({...candidate,objects:[{...candidate.objects[0]!,materialId:'asset',assetId}]},{projectId:localId,name:'模型重开演练'});
+    let finish!:(value:{id:string;url:string;name:string})=>void;
+    const authorize=vi.spyOn(controller,'authorizeAsset').mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    const view=renderUI(ui(local));await waitFor(()=>expect(authorize).toHaveBeenCalledWith(assetId));
+    if(changed){snapshot={...snapshot,user:{id:'another-user'}};view.rerender(ui(local));}
+    await act(async()=>finish({id:assetId,url:'https://storage.example/fresh.glb',name:'原模型'}));
+    if(changed)expect(ensureGlbAsset).not.toHaveBeenCalled();else await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledWith(assetId,'https://storage.example/fresh.glb'));
+    expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();expect(copySourceScope).not.toHaveBeenCalled();
+    expect(local.id).toBe(localId);
+  });
 });

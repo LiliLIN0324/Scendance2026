@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 import { act,cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
-import { BackendSession,getBackendConfig,type ReconstructionJob } from '@/lib/backend-session';
+import { BackendSession,getBackendConfig,type ReconstructionJob,type SceneProposal } from '@/lib/backend-session';
+import { readMaterialCheckins } from '@/lib/material-checkin-storage';
 import { referenceSceneBasis,resolveReferenceImage } from '@/lib/reference-image';
 import { flushSourceScope,readSourceForm,storeSourceForm } from '@/lib/source-storage';
+import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { backendSceneToLayout,createMeasuredRoomLayout,layoutToBackendScene } from '../lib/backend-adapter';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { ReconstructionPanel } from './reconstruction-panel';
 import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/source-storage',async importOriginal=>({...await importOriginal<object>(),readSourceForm:vi.fn().mockResolvedValue(undefined),storeSourceForm:vi.fn().mockResolvedValue(undefined)}));
+vi.mock('@/lib/material-checkin-storage',()=>({readMaterialCheckins:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:new Set<string>(),selectOnly:vi.fn()})}));
 const projectId='10000000-0000-4000-8000-000000000001',assetId='20000000-0000-4000-8000-000000000001',jobId='30000000-0000-4000-8000-000000000001';
 const scene={schemaVersion:1 as const,venue:{width:12,depth:8,height:3,shape:'rectangle' as const,entrances:[]},objects:[],camera:'overview' as const,lighting:'neutral' as const};
@@ -16,6 +19,7 @@ const layout=backendSceneToLayout(scene,{projectId});
 const image={id:assetId,assetId,name:'现场.png',kind:'photo' as const,width:1000,height:600,url:'blob:photo'};
 let controller:BackendSession;
 beforeEach(()=>{
+ vi.mocked(readMaterialCheckins).mockReset().mockResolvedValue(undefined);
  vi.mocked(readSourceForm).mockReset().mockResolvedValue(undefined);vi.mocked(storeSourceForm).mockReset().mockResolvedValue(undefined);
  controller=new BackendSession(getBackendConfig({url:'http://localhost:54321',anonKey:'public'}));
  const snapshot={...controller.getSnapshot(),user:{id:'user'},project:{id:projectId,studio_id:'studio',name:'测试',revision:1,scene},lease:{projectId,sessionId:'40000000-0000-4000-8000-000000000001',generation:1,revision:1,expiresAt:new Date(Date.now()+100000).toISOString()},revision:1,writeBlocked:false};
@@ -308,5 +312,109 @@ describe('reconstruction entry',()=>{
   fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));
   expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
   fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));expect(create.mock.calls[1]![0].reviewedScene?.structure.walls.every(w=>w.status==='confirmed')).toBe(true);
+ });
+});
+
+
+describe('local activity with an independent scene connection',()=>{
+ const localId='local-activity-diagram';
+ const local={...createMeasuredRoomLayout({...layout,id:localId},{width:12,depth:8,height:3}),eventOperations:{schemaVersion:1 as const,dataKind:'rehearsal' as const,tasks:[]}};
+ function bind(){
+  const old=controller.getSnapshot();
+  const geometryBinding={version:1 as const,localActivityId:localId,cloudProjectId:projectId,userId:old.user!.id,apiUrl:controller.config.apiUrl};
+  vi.mocked(controller.getSnapshot).mockReturnValue({...old,geometryBinding});
+  vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>{const state=controller.getSnapshot();return state.geometryBinding?.localActivityId===id&&state.geometryBinding.userId===state.user?.id&&state.geometryBinding.apiUrl===controller.config.apiUrl&&state.geometryBinding.cloudProjectId===state.project?.id;});
+  return geometryBinding;
+ }
+ function identity(){const state=controller.getSnapshot();return canonical({scope:localId,project:projectId,user:state.user!.id,api:controller.config.apiUrl,binding:state.geometryBinding});}
+ function session(){const state=controller.getSnapshot();return canonical({identity:identity(),session:state.sessionId,lease:{session:state.lease!.sessionId,generation:state.lease!.generation},revision:state.revision});}
+ function proposal(remote=projectId):SceneProposal {return {id:'60000000-0000-4000-8000-000000000001',project_id:remote,session_id:controller.getSnapshot().lease!.sessionId,generation:1,base_revision:1,local_revision:0,base_hash:'test',base_scene:layoutToBackendScene(local),candidate:layoutToBackendScene(local),expires_at:new Date(Date.now()+100000).toISOString(),applied_at:null,explanation:'场景候选'} as SceneProposal;}
+ function mount(extra:Partial<React.ComponentProps<typeof ReconstructionPanel>>={}){const apply=vi.fn(),preview=vi.fn();const props={controller,layout:local,onApply:apply,onPreview:preview,images:[],updateImage:vi.fn(),brief:INITIAL_BRIEF,...extra};const view=render(<ReconstructionPanel {...props}/>);openInputs();return {view,apply,preview,props};}
+ async function generate(){await waitFor(()=>expect((screen.getByRole('button',{name:'Generate 重建并设计方案'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));}
+ it('uses local source forms, preserves records on apply, and sends scene-only input to the remote connection',async()=>{
+  bind();vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',text:'原尺寸资料'});
+  vi.mocked(readMaterialCheckins).mockResolvedValue({schemaVersion:1,projectId:localId,dataKind:'rehearsal',sheets:[]});
+  const result=proposal();const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:result});
+  vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{},assetNames:{}});
+  const apply=vi.spyOn(controller,'applySceneProposal').mockResolvedValue({scene:result.candidate,acceptedLocally:true} as never);
+  const trial=mount();await generate();await screen.findByText('三维候选方案');
+  expect(create.mock.calls[0]![0].scene).toEqual(layoutToBackendScene(local));
+  expect(JSON.stringify(create.mock.calls[0]![0])).not.toMatch(/eventOperations|material-checkins|rehearsal/);
+  expect(readSourceForm).toHaveBeenCalledWith(localId);expect(readMaterialCheckins).toHaveBeenCalledWith(localId);
+  expect(vi.mocked(storeSourceForm).mock.calls.every(([scope])=>scope===localId)).toBe(true);
+  fireEvent.click(screen.getByRole('button',{name:'确认应用并保存'}));await waitFor(()=>expect(trial.apply).toHaveBeenCalledOnce());
+  expect(apply.mock.calls[0]![0].project_id).toBe(projectId);expect(trial.apply.mock.calls[0]![0]).toMatchObject({id:localId,eventOperations:local.eventOperations});
+  expect((screen.getByLabelText('补充尺寸') as HTMLTextAreaElement).value).toBe('原尺寸资料');
+ });
+ it('prepares only the scene connection explicitly without generating or changing the local activity',async()=>{
+  const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,project:null,lease:null,revision:null,writeBlocked:true});
+  const ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady').mockResolvedValue(old.project!);
+  const create=vi.spyOn(controller,'createReconstruction');const trial=mount();
+  await waitFor(()=>expect((screen.getByRole('button',{name:'准备场景连接'}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button',{name:'准备场景连接'}));await waitFor(()=>expect(ensure).toHaveBeenCalledOnce());
+  expect(ensure.mock.calls[0]).toEqual([layoutToBackendScene(local),local.name,localId]);expect(create).not.toHaveBeenCalled();expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('refuses unreadable facts before generation or uploads',async()=>{
+  bind();vi.mocked(readMaterialCheckins).mockRejectedValue(new Error('本机点验记录无法完整读取'));
+  const create=vi.spyOn(controller,'createReconstruction'),upload=vi.spyOn(controller,'uploadSource');mount();await generate();
+  await screen.findByText('本机点验记录无法完整读取');expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
+ });
+ it('queries only the persisted remote job and rejects a proposal for a different remote project',async()=>{
+  bind();vi.mocked(readSourceForm).mockResolvedValue({jobId,jobIdentity:identity(),jobSession:session(),jobBase:canonical(layoutToBackendScene(local))});
+  const get=vi.spyOn(controller,'getReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:proposal('other-project')});
+  const create=vi.spyOn(controller,'createReconstruction'),authorize=vi.spyOn(controller,'authorizeAssets');mount();
+  await screen.findByText(/候选属于其他场景连接/);expect(get).toHaveBeenCalledWith(jobId);expect(create).not.toHaveBeenCalled();expect(authorize).not.toHaveBeenCalled();expect(screen.queryByText('三维候选方案')).toBeNull();
+ });
+ it('restores an existing binding for the original job without creating a project or a new request',async()=>{
+  bind();const state=controller.getSnapshot();vi.mocked(readSourceForm).mockResolvedValue({jobId,jobIdentity:identity(),jobSession:session()});
+  vi.mocked(controller.getSnapshot).mockReturnValue({...state,project:null,lease:null,geometryBinding:null,writeBlocked:true});
+  const resume=vi.spyOn(controller,'resumeGeometryWorkbench').mockResolvedValue(null),ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady'),create=vi.spyOn(controller,'createReconstruction');mount();
+  await screen.findByText('原任务的场景连接未能恢复，任务编号与本机资料已保留。');
+  expect(resume).toHaveBeenCalledWith(layoutToBackendScene(local),local.name,localId);expect(ensure).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();
+ });
+ it('does not restore an old local job for another account',async()=>{
+  bind();const state=controller.getSnapshot();vi.mocked(readSourceForm).mockResolvedValue({jobId,jobIdentity:identity()});
+  vi.mocked(controller.getSnapshot).mockReturnValue({...state,user:{id:'another-user'},project:null,lease:null,geometryBinding:null});
+  const resume=vi.spyOn(controller,'resumeGeometryWorkbench'),get=vi.spyOn(controller,'getReconstruction');mount();
+  await waitFor(()=>expect(readSourceForm).toHaveBeenCalledWith(localId));await act(async()=>{await Promise.resolve();});expect(resume).not.toHaveBeenCalled();expect(get).not.toHaveBeenCalled();
+ });
+ it('drops a pending candidate when the account changes before asset authorization finishes',async()=>{
+  bind();const result=proposal();vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:result});
+  let finish!:(value:{assetUrls:Record<string,string>;assetNames:Record<string,string>})=>void;
+  const authorize=vi.spyOn(controller,'authorizeAssets').mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+  const trial=mount();await generate();await waitFor(()=>expect(authorize).toHaveBeenCalledOnce());
+  vi.mocked(controller.getSnapshot).mockReturnValue({...controller.getSnapshot(),user:{id:'another-user'}});
+  trial.view.rerender(<ReconstructionPanel {...trial.props}/>);await act(async()=>{finish({assetUrls:{},assetNames:{}});});
+  expect(screen.queryByText('三维候选方案')).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('keeps original-image registration and dimensions under the local ID with a remote binding',async()=>{
+  bind();const source={id:'local-plan',name:'原图.png',kind:'floorplan' as const,width:1000,height:600,url:'blob:local-plan',blob:new Blob(['plan'])};
+  const registration={sourceId:source.id,points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}],worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(local),confirmationId:'original'};
+  vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',registration});mount({images:[source]});
+  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。');
+  expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12');
+  expect(resolveReferenceImage(local,[{...source,scope:localId}],{registration}).status).toBe('ready');
+  await act(async()=>{await flushSourceScope(localId);});
+  expect(storeSourceForm).toHaveBeenCalledWith(localId,expect.objectContaining({registration,width:'12'}));expect(vi.mocked(storeSourceForm).mock.calls.every(([scope])=>scope===localId)).toBe(true);
+ });
+ it('rechecks the independent facts before applying a ready candidate',async()=>{
+  bind();const result=proposal();vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:result});
+  vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{},assetNames:{}});const apply=vi.spyOn(controller,'applySceneProposal');const trial=mount();
+  await generate();await screen.findByText('三维候选方案');vi.mocked(readMaterialCheckins).mockRejectedValue(new Error('本机点验记录无法完整读取'));
+  fireEvent.click(screen.getByRole('button',{name:'确认应用并保存'}));await screen.findByText('本机点验记录无法完整读取');expect(apply).not.toHaveBeenCalled();expect(trial.apply).not.toHaveBeenCalled();
+ });
+ it('invalidates a ready candidate when the same source record gets a different original image',async()=>{
+  bind();const source={...image,kind:'floorplan' as const,blob:new Blob(['first'])};const withSource=structuredClone(local);withSource.backendSceneV2!.sources=[{assetId,kind:'floorplan',name:image.name,width:1000,height:600}];
+  const result=proposal();vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:result});vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{},assetNames:{}});
+  const trial=mount({layout:withSource,images:[source]});await generate();await screen.findByText('三维候选方案');
+  trial.view.rerender(<ReconstructionPanel {...trial.props} images={[{...source,blob:new Blob(['replacement'])}]}/>);
+  expect((screen.getByRole('button',{name:'确认应用并保存'}) as HTMLButtonElement).disabled).toBe(true);expect(trial.preview.mock.calls.at(-1)?.[0]).toBeNull();
+ });
+ it('allows manual venue edits with an expired scene lease and keeps local activity records',async()=>{
+  bind();vi.mocked(controller.getSnapshot).mockReturnValue({...controller.getSnapshot(),lease:null,writeBlocked:true});const trial=mount();
+  await waitFor(()=>expect((screen.getByRole('button',{name:'编辑当前场地'}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button',{name:'编辑当前场地'}));fireEvent.change(screen.getByLabelText('编辑总宽（米）'),{target:{value:'14'}});
+  fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));fireEvent.click(screen.getByRole('button',{name:'确认应用场地修改'}));
+  expect(trial.apply).toHaveBeenCalledOnce();expect(trial.apply.mock.calls[0]![0]).toMatchObject({id:localId,width:14,eventOperations:local.eventOperations});
  });
 });

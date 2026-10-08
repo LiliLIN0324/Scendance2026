@@ -3,7 +3,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal } from '@/lib/backend-session';
 import { readSourceRecord } from '@/lib/source-storage';
-import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import { canonical, sceneSchema } from '../../../../supabase/functions/_shared/domain';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { materialCheckinLedgerSchema, materialCheckinSummary } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { ScenePreview } from '../../business/scene-preview';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -18,39 +21,221 @@ vi.mock('../../business/scene-preview',()=>({ScenePreview:vi.fn(({scene}:{scene:
 const source='10000000-0000-4000-8000-000000000001',variant='10000000-0000-4000-8000-000000000002';
 const project='20000000-0000-4000-8000-000000000001',user='30000000-0000-4000-8000-000000000001',sessionId='40000000-0000-4000-8000-000000000001';
 const first='50000000-0000-4000-8000-000000000001',second='50000000-0000-4000-8000-000000000002';
+const localId='house-material-local-activity';
+const acquisitionId='70000000-0000-4000-8000-000000000001';
 const sha='a'.repeat(64);
 const base:Scene={schemaVersion:1,venue:{width:8,depth:6,height:3,shape:'rectangle',entrances:[]},camera:'overview',lighting:'warm',objects:[first,second].map((id,index)=>({id,materialId:'asset',assetId:source,position:{x:2+index,z:3},rotation:0,size:{width:.5,depth:.5,height:1},color:index===0?'#eeddcc':'#ffffff',locked:false,notes:''}))};
 let controller:BackendSession,snapshot:BackendSnapshot,current:RoomLayout;
 let inspection:Record<string,unknown>;
 const onApply=vi.fn();
 const slot=(index:number,count=1)=>({index,name:index?'椅腿':'座面',baseColor:'#ffffff',baseColorFactor:[1,1,1,1],metallic:0,roughness:.5,hasBaseColorTexture:index===0,hasMetallicRoughnessTexture:false,primitiveCount:count});
-function seed(extra:Partial<MaterialCustomizationSeed>={}):MaterialCustomizationSeed{return {id:'seed',scope:`${controller.config.apiUrl}:${user}:${project}`,apiUrl:controller.config.apiUrl,userId:user,projectId:project,sourceAssetId:source,objectIds:[first],name:'浅色哑光椅子',reason:'仅修改这把椅子的材质',materialScope:'all_materials',changes:{baseColor:'#eeeeee',roughness:.8},...extra};}
-function proposal(scene:Scene,ids=[first],to=variant):SceneProposal{return {id:'60000000-0000-4000-8000-000000000001',project_id:project,user_id:user,session_id:sessionId,generation:1,base_revision:1,local_revision:0,base_hash:sha,base_scene:scene,candidate:{...scene,objects:scene.objects.map(object=>ids.includes(object.id)?{...object,assetId:to}:object)},explanation:'只替换选定物件的材质版本。',warnings:[],expires_at:new Date(Date.now()+600_000).toISOString(),applied_at:null};}
+function seed(extra:Partial<MaterialCustomizationSeed>={}):MaterialCustomizationSeed{return {id:'seed',scope:`${controller.config.apiUrl}:${user}:${current.id}`,apiUrl:controller.config.apiUrl,userId:user,projectId:project,sourceAssetId:source,objectIds:[first],name:'浅色哑光椅子',reason:'仅修改这把椅子的材质',materialScope:'all_materials',changes:{baseColor:'#eeeeee',roughness:.8},...extra};}
+function proposal(scene:Scene,ids=[first],to=variant):SceneProposal{return {id:'60000000-0000-4000-8000-000000000001',project_id:project,user_id:user,session_id:sessionId,generation:1,base_revision:1,local_revision:snapshot.localRevision,base_hash:sha,base_scene:scene,candidate:{...scene,objects:scene.objects.map(object=>ids.includes(object.id)?{...object,assetId:to}:object)},explanation:'只替换选定物件的材质版本。',warnings:[],expires_at:new Date(Date.now()+600_000).toISOString(),applied_at:null};}
 function checkinLedger(){return materialCheckinLedgerSchema.parse({projectId:project,dataKind:'rehearsal',sheets:[]});}
+function localLedger(){return materialCheckinLedgerSchema.parse({projectId:localId,dataKind:'rehearsal',sheets:[{
+  id:'80000000-0000-4000-8000-000000000001',acquisitionId,acquisitionSnapshot:{title:'私密-取得计划',supplierName:'私密-供应方',specificationNote:'演练椅规格'},unit:'piece',
+  agreements:[{id:'80000000-0000-4000-8000-000000000002',agreedQuantity:20,basisNote:'私密-约定依据',recordedAt:'2026-10-08T01:00:00Z',recordedBy:'演练记录人'}],
+  events:(['receive','return'] as const).map((kind,index)=>({id:`80000000-0000-4000-8000-00000000000${index+3}`,kind,batchRef:`演练批次${index}`,quantity:18,checkState:'checked',occurredAt:`2026-10-08T0${index+2}:00:00Z`,fromPartyName:'演练交出方',toPartyName:'演练接收方',evidenceNote:'私密-点验现场说明',evidenceUrls:[],recordedAt:'2026-10-08T05:00:00Z',recordedBy:'演练记录人'})),
+}]});}
+function bindLocal():void {snapshot={...snapshot,geometryBinding:{version:1,localActivityId:localId,cloudProjectId:project,userId:user,apiUrl:controller.config.apiUrl}};}
+function localActivity(bound=true):void {
+  current={...current,id:localId,name:'独立演练本地活动',
+    floors:current.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,notes:'私密-物件备注',handoff:{ownerName:'私密-工单负责人',dueDate:'',acceptance:'',status:'todo' as const,evidenceNote:'',evidenceUrls:[]}}))})),
+    eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:'90000000-0000-4000-8000-000000000001',title:'私密-执行任务',phase:'event',objectIds:[first],ownerName:'私密-活动负责人'}]}),
+    productionPlan:productionPlanSchema.parse({dataKind:'rehearsal',acquisitions:[{id:acquisitionId,title:'私密-取得计划',supplierName:'私密-供应方',objectIds:[first,second]}]}),
+  };
+  if(bound)bindLocal();else snapshot={...snapshot,project:null,geometryBinding:null,lease:null,writeBlocked:true,status:'ready'};
+  vi.mocked(readSourceRecord).mockResolvedValue(localLedger());
+}
 function ui(extra:{seed?:MaterialCustomizationSeed;active?:boolean}={}){return <MaterialCustomization controller={controller} layout={current} onApply={onApply} {...extra}/>;}
 async function preview(){fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));await screen.findByRole('button',{name:'确认应用到选定物件'});}
 beforeEach(()=>{
+  window.history.replaceState({},'', '/');
   vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined);
   selection=new Set([first]);onApply.mockReset();vi.mocked(ScenePreview).mockClear();vi.mocked(ensureGlbAsset).mockReset().mockResolvedValue(undefined);
   controller=new BackendSession(getBackendConfig({url:'https://example.supabase.co',anonKey:'sb_publishable_test'}));
   current=backendSceneToLayout(base,{projectId:project,name:'客户场景',assetNames:{[source]:'木椅'}});
   snapshot={...controller.getSnapshot(),configured:true,user:{id:user},project:{id:project,name:'客户场景',studio_id:user,revision:1,scene:base},revision:1,localRevision:0,sessionId,writeBlocked:false,status:'editing',lease:{projectId:project,sessionId,generation:1,revision:1,expiresAt:new Date(Date.now()+90_000).toISOString()}};
   vi.spyOn(controller,'getSnapshot').mockImplementation(()=>snapshot);
+  vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>{
+    const binding=snapshot.geometryBinding;
+    return !!binding&&binding.localActivityId===id&&binding.userId===snapshot.user?.id&&binding.apiUrl===controller.config.apiUrl&&binding.cloudProjectId===snapshot.project?.id;
+  });
+  vi.spyOn(controller,'ensureGeometryWorkbenchReady').mockImplementation(async()=>{
+    snapshot={...snapshot,project:{id:project,name:'活动场景服务',studio_id:user,revision:1,scene:base},lease:{projectId:project,sessionId,generation:1,revision:1,expiresAt:new Date(Date.now()+90_000).toISOString()},writeBlocked:false,status:'editing'};bindLocal();return snapshot.project!;
+  });
+  vi.spyOn(controller,'disconnectGeometryWorkbench').mockResolvedValue(undefined);
+  vi.spyOn(controller,'setDraft').mockImplementation(scene=>{snapshot={...snapshot,draft:scene,dirty:true,localRevision:snapshot.localRevision+1};});
   inspection={id:source,name:'木椅',sha256:sha,slots:[slot(0),slot(1),slot(2,0)],validation:{hasUV:true,geometryUVSignature:sha,validationWarnings:0}};
   vi.spyOn(controller,'businessRequest').mockImplementation(async(path)=>path.endsWith('/materials')?inspection:{id:variant,name:'材质变体',source:'derived',format:'glb',sha256:'b'.repeat(64),byte_size:1234,metadata:{parentAssetId:source,sourceSha256:sha,changeMode:'material',materialVariant:{materialIndices:[0,1],changes:{baseColor:'#eeeeee',roughness:.8},validation:{geometryUVPreserved:true,geometryUVSignature:sha},procurementStatus:'needs_confirmation'}}});
   vi.spyOn(controller,'prepareMaterialVariantProposal').mockImplementation(async input=>proposal(input.scene,input.objectIds,input.variantAssetId));
   vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{[source]:'https://storage.example/old.glb',[variant]:'https://storage.example/new.glb'},assetNames:{[source]:'木椅',[variant]:'材质变体'}});
   vi.spyOn(controller,'applySceneProposal').mockImplementation(async selected=>({id:project,revision:2,scene:selected.candidate,previousScene:selected.base_scene,updatedAt:new Date().toISOString(),undoGroup:selected.id,acceptedLocally:true}));
 });
+
+describe('local activity geometry binding for material versions',()=>{
+  it('synchronizes a private chat or reconstruction draft once on explicit preview before proposalState-style revision capture',async()=>{
+    localActivity();const before=structuredClone(current),listeners=new Set<()=>void>();let notifications=0,automaticSyncs=0,preparedRevision=-1;
+    vi.spyOn(controller,'subscribe').mockImplementation(listener=>{listeners.add(listener);return()=>{listeners.delete(listener);};});
+    vi.mocked(controller.setDraft).mockImplementation(scene=>{
+      snapshot={...snapshot,draft:sceneSchema.parse(scene),dirty:true,localRevision:snapshot.localRevision+1};
+      for(const listener of listeners){notifications++;listener();}
+    });
+    // Mirror BackendSession.proposalState: synchronize only unequal wire scenes, then read the actual revision.
+    function proposalStateScene(scene:Scene):Scene {
+      const parsed=sceneSchema.parse(scene);
+      if(canonical(snapshot.draft)!==canonical(parsed)){automaticSyncs++;controller.setDraft(parsed);}
+      return parsed;
+    }
+    vi.mocked(controller.prepareMaterialVariantProposal).mockImplementationOnce(async input=>{
+      const parsed=proposalStateScene(input.scene);preparedRevision=snapshot.localRevision;
+      return {...proposal(parsed,input.objectIds,input.variantAssetId),local_revision:preparedRevision};
+    });
+    const apply=vi.mocked(controller.applySceneProposal).getMockImplementation()!;
+    vi.mocked(controller.applySceneProposal).mockImplementationOnce(async(selected,scene)=>{
+      const parsed=proposalStateScene(scene);expect(snapshot.localRevision).toBe(selected.local_revision);return apply(selected,parsed);
+    });
+    const rawScene=layoutToBackendScene(current);expect(rawScene.objects.some(object=>object.notes==='私密-物件备注')).toBe(true);
+    snapshot={...snapshot,localRevision:6};controller.setDraft(rawScene);const rawRevision=snapshot.localRevision;
+    expect(rawRevision).toBe(7);vi.mocked(controller.setDraft).mockClear();
+    render(ui({seed:seed()}));await screen.findByText('木椅 · 含 UV');
+    expect(listeners.size).toBeGreaterThan(0);expect(controller.setDraft).not.toHaveBeenCalled();expect(snapshot.localRevision).toBe(rawRevision);
+    await preview();
+    expect(controller.setDraft).toHaveBeenCalledOnce();expect(notifications).toBe(1);expect(automaticSyncs).toBe(0);
+    expect(preparedRevision).toBe(rawRevision+1);expect(snapshot.localRevision).toBe(rawRevision+1);
+    const wire=vi.mocked(controller.prepareMaterialVariantProposal).mock.calls[0]![0].scene;
+    expect(wire.objects.every(object=>object.notes==='')).toBe(true);expect(JSON.stringify(wire)).not.toContain('私密-');
+    fireEvent.click(screen.getByRole('button',{name:'确认应用到选定物件'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    expect(automaticSyncs).toBe(0);expect(controller.setDraft).toHaveBeenCalledOnce();expect(snapshot.localRevision).toBe(rawRevision+1);
+    const next=onApply.mock.calls[0]![0] as RoomLayout;
+    expect(next.id).toBe(localId);expect(next.eventOperations).toEqual(before.eventOperations);expect(next.productionPlan).toEqual(before.productionPlan);
+    expect(next.floors[0]!.items[0]!.notes).toBe('私密-物件备注');expect(next.floors[0]!.items[0]!.handoff).toEqual(before.floors[0]!.items[0]!.handoff);
+    expect(JSON.stringify(vi.mocked(controller.applySceneProposal).mock.calls)).not.toContain('私密-');
+  });
+
+  it('uses the remote proposal ID while preserving local activity records and withholding private notes from every scene payload',async()=>{
+    localActivity();let ledger=localLedger();vi.mocked(readSourceRecord).mockImplementation(async()=>ledger);
+    Object.assign(current.floors[0]!.items[0]!,{name:'联调签到椅',icon:'席',groupId:'local-seating-group'});
+    const before=structuredClone(current);render(ui({seed:seed()}));await preview();
+    expect(controller.setDraft).toHaveBeenCalledOnce();expect(snapshot.localRevision).toBe(1);
+    expect(vi.mocked(controller.prepareMaterialVariantProposal).mock.calls[0]![0].scene.objects.every(object=>object.notes==='')).toBe(true);
+    ledger=materialCheckinLedgerSchema.parse({...ledger,sheets:[{...ledger.sheets[0]!,events:[...ledger.sheets[0]!.events,{
+      id:'80000000-0000-4000-8000-000000000005',kind:'receive',batchRef:'演练后补核零',quantity:0,checkState:'checked',occurredAt:'2026-10-08T04:00:00Z',
+      fromPartyName:'演练交出方',toPartyName:'演练接收方',evidenceNote:'私密-最新点验说明',evidenceUrls:[],recordedAt:'2026-10-08T05:00:00Z',recordedBy:'演练记录人',
+    }]}]});
+    fireEvent.click(screen.getByRole('button',{name:'确认应用到选定物件'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    const next=onApply.mock.calls[0]![0] as RoomLayout;
+    expect(next.id).toBe(localId);expect(next.eventOperations).toEqual(before.eventOperations);expect(next.productionPlan).toEqual(before.productionPlan);
+    expect(next.floors[0]!.items[0]!.handoff).toEqual(before.floors[0]!.items[0]!.handoff);expect(next.floors[0]!.items[0]!.notes).toBe('私密-物件备注');
+    expect(next.floors[0]!.items[0]).toMatchObject({name:'联调签到椅',icon:'席',groupId:'local-seating-group'});
+    expect(next.floors[0]!.items[0]!.assetId).toBe(variant);expect(next.floors[0]!.items[1]!.assetId).toBe(source);
+    expect(vi.mocked(controller.applySceneProposal).mock.calls[0]![0].project_id).toBe(project);
+    expect(JSON.stringify([vi.mocked(controller.prepareMaterialVariantProposal).mock.calls,vi.mocked(controller.authorizeAssets).mock.calls,vi.mocked(controller.applySceneProposal).mock.calls,vi.mocked(controller.businessRequest).mock.calls])).not.toContain('私密-');
+    expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins',localId]);
+    expect(ledger.sheets[0]!.events).toHaveLength(3);expect(materialCheckinSummary(ledger.sheets[0]!)).toMatchObject({agreedQuantity:20,receivedQuantity:18,returnedQuantity:18,notReceivedQuantity:2,notReturnedQuantity:0});
+  });
+
+  it('rejects a proposal belonging to another remote project even when the local activity identity stays unchanged',async()=>{
+    localActivity();vi.mocked(controller.prepareMaterialVariantProposal).mockImplementationOnce(async input=>({...proposal(input.scene,input.objectIds,input.variantAssetId),project_id:'20000000-0000-4000-8000-000000000002'}));
+    render(ui({seed:seed()}));fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));
+    await screen.findByText(/候选版本或编辑权不匹配/);expect(controller.authorizeAssets).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each(['inspection','connection','paid preview','apply'] as const)('blocks %s when the local activity ledger is unreadable',async stage=>{
+    localActivity(stage!=='connection');
+    if(stage==='inspection')vi.mocked(readSourceRecord).mockRejectedValue(new Error('独立点验记录读取失败'));
+    render(ui(stage==='connection'?{}:{seed:seed()}));
+    if(stage!=='inspection')await screen.findByText('木椅 · 含 UV');
+    if(stage==='apply')await preview();
+    vi.mocked(readSourceRecord).mockRejectedValue(new Error('独立点验记录读取失败'));
+    if(stage!=='inspection')fireEvent.click(screen.getByRole('button',{name:stage==='connection'?'准备当前活动的场景服务':stage==='apply'?'确认应用到选定物件':'制作并预览材质版本'}));
+    await screen.findByText(/点验.*读取失败|点验.*无法|点验.*读取/);
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(controller.ensureGeometryWorkbenchReady).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    if(stage==='inspection')expect(controller.businessRequest).not.toHaveBeenCalled();
+    if(stage!=='apply'){
+      expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();
+      expect(vi.mocked(controller.businessRequest).mock.calls.every(([,method])=>method!=='POST')).toBe(true);
+    }
+  });
+
+  it.each(['account','API mapping','remote project','binding ABA'] as const)('ignores a pending local proposal after an %s change',async change=>{
+    localActivity();let finish!:(value:SceneProposal)=>void;
+    vi.mocked(controller.prepareMaterialVariantProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const chosen=seed(),view=render(ui({seed:chosen}));fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));
+    await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    const scene=vi.mocked(controller.prepareMaterialVariantProposal).mock.calls[0]![0].scene,response=proposal(scene);
+    const savedBinding=snapshot.geometryBinding!;
+    if(change==='account')snapshot={...snapshot,user:{id:'30000000-0000-4000-8000-000000000002'}};
+    else if(change==='API mapping')snapshot={...snapshot,geometryBinding:{...savedBinding,apiUrl:'https://changed.example/scene-api'}};
+    else if(change==='remote project')snapshot={...snapshot,project:{...snapshot.project!,id:'20000000-0000-4000-8000-000000000002'}};
+    else {snapshot={...snapshot,geometryBinding:{...savedBinding,localActivityId:'house-other-local'}};view.rerender(ui({seed:chosen}));snapshot={...snapshot,geometryBinding:savedBinding};}
+    view.rerender(ui({seed:chosen}));await act(async()=>finish(response));
+    expect(controller.authorizeAssets).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'确认应用到选定物件'})).toBeNull();
+  });
+
+  it('prepares an unconnected local activity explicitly without paid requests and retains edits after preparation failure',async()=>{
+    localActivity(false);vi.mocked(controller.ensureGeometryWorkbenchReady).mockRejectedValueOnce(new Error('演练场景连接失败'));
+    render(ui());await screen.findByText('木椅 · 含 UV');
+    fireEvent.click(screen.getByRole('checkbox',{name:'修改基础色'}));fireEvent.change(screen.getByLabelText('基础色'),{target:{value:'#aabbcc'}});
+    fireEvent.click(screen.getByRole('button',{name:'准备当前活动的场景服务'}));await screen.findByText('演练场景连接失败');
+    expect((screen.getByLabelText('基础色') as HTMLInputElement).value).toBe('#aabbcc');
+    fireEvent.click(screen.getByRole('button',{name:'准备当前活动的场景服务'}));
+    await screen.findByText(/当前活动的场景服务已准备/);
+    expect(controller.ensureGeometryWorkbenchReady).toHaveBeenCalledTimes(2);
+    expect(controller.ensureGeometryWorkbenchReady).toHaveBeenCalledWith(expect.objectContaining({objects:expect.any(Array)}),current.name,localId);
+    expect(JSON.stringify(vi.mocked(controller.ensureGeometryWorkbenchReady).mock.calls)).not.toContain('私密-');
+    expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(vi.mocked(controller.businessRequest).mock.calls.every(([,method])=>method!=='POST')).toBe(true);expect(onApply).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('基础色') as HTMLInputElement).value).toBe('#aabbcc');
+  });
+
+  it.each(['layout','account','mapping'] as const)('does not report an old connector ready after its %s changed while preparing',async change=>{
+    localActivity(false);let finish!:(value:NonNullable<BackendSnapshot['project']>)=>void;
+    let finishRead!:(value:ReturnType<typeof localLedger>)=>void,postRead=false;
+    const ensure=vi.mocked(controller.ensureGeometryWorkbenchReady).getMockImplementation()!;
+    if(change==='mapping'){
+      const held=new Promise<ReturnType<typeof localLedger>>(resolve=>{finishRead=resolve;});
+      let preparationReturned=false;
+      vi.mocked(readSourceRecord).mockImplementation(async()=>{if(preparationReturned){postRead=true;return held;}return localLedger();});
+      vi.mocked(controller.ensureGeometryWorkbenchReady).mockImplementationOnce(async(...args)=>{const result=await ensure(...args);preparationReturned=true;return result;});
+    }else vi.mocked(controller.ensureGeometryWorkbenchReady).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const view=render(ui());await screen.findByText('木椅 · 含 UV');
+    fireEvent.click(screen.getByRole('button',{name:'准备当前活动的场景服务'}));
+    if(change==='mapping')await waitFor(()=>expect(postRead).toBe(true));else await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    if(change==='layout')current={...current,name:'演练准备期间的新修改'};
+    else if(change==='account')snapshot={...snapshot,user:{id:'30000000-0000-4000-8000-000000000002'}};
+    else {
+      const nextRemote='20000000-0000-4000-8000-000000000002';
+      snapshot={...snapshot,project:{...snapshot.project!,id:nextRemote},geometryBinding:{...snapshot.geometryBinding!,cloudProjectId:nextRemote},lease:{...snapshot.lease!,projectId:nextRemote}};
+      expect(controller.isGeometryBound(localId)).toBe(true);
+    }
+    view.rerender(ui());await act(async()=>{if(change==='mapping')finishRead(localLedger());else finish({id:project,name:'迟到场景服务',studio_id:user,revision:1,scene:base});});
+    expect(screen.queryByText(/当前活动的场景服务已准备/)).toBeNull();expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    expect(vi.mocked(controller.businessRequest).mock.calls.every(([,method])=>method!=='POST')).toBe(true);
+  });
+
+  it('does not start a paid preview merely because a local geometry binding exists without an editing lease',async()=>{
+    localActivity();snapshot={...snapshot,lease:null,writeBlocked:true};render(ui({seed:seed()}));await screen.findByText('木椅 · 含 UV');
+    const button=screen.getByRole('button',{name:'制作并预览材质版本'});expect(button.hasAttribute('disabled')).toBe(true);fireEvent.click(button);
+    expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(controller.ensureGeometryWorkbenchReady).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    expect(vi.mocked(controller.businessRequest).mock.calls.every(([,method])=>method!=='POST')).toBe(true);
+  });
+});
 afterEach(()=>{cleanup();controller.dispose();vi.restoreAllMocks();vi.useRealTimers();});
 
 describe('selected material version workflow',()=>{
+  it('explains an asset without usable material slots and does not offer an impossible version request',async()=>{
+    inspection={...inspection,slots:[]};render(ui());
+    await screen.findByText('这个模型没有可调整的材质槽，暂不能创建材质版本。原模型保持不变。');
+    const create=screen.getByRole('button',{name:'制作并预览材质版本'});expect(create.hasAttribute('disabled')).toBe(true);fireEvent.click(create);
+    expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(vi.mocked(controller.businessRequest).mock.calls.some(([,method])=>method==='POST')).toBe(false);
+  });
   it('blocks customization and proposal preparation for an independent ledger without any layout business block',async()=>{
     vi.mocked(readSourceRecord).mockResolvedValue(checkinLedger());
-    render(ui({seed:seed()}));fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));
+    render(ui({seed:seed()}));
     await screen.findByText(/点验|本地执行信息/);
     expect(current.productionPlan).toBeUndefined();expect(current.eventOperations).toBeUndefined();
     expect(controller.prepareMaterialVariantProposal).not.toHaveBeenCalled();expect(controller.authorizeAssets).not.toHaveBeenCalled();
+    expect(controller.businessRequest).not.toHaveBeenCalled();
     expect(vi.mocked(controller.businessRequest).mock.calls.every(([,method])=>method!=='POST')).toBe(true);
     expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins',project]);expect(onApply).not.toHaveBeenCalled();
   });
@@ -62,6 +247,7 @@ describe('selected material version workflow',()=>{
   });
   it.each(['prepare','apply'] as const)('refuses %s when the independent ledger cannot be read',async stage=>{
     render(ui({seed:seed()}));
+    await screen.findByText('木椅 · 含 UV');
     if(stage==='apply')await preview();
     vi.mocked(readSourceRecord).mockRejectedValue(new Error('独立点验记录读取失败'));
     fireEvent.click(await screen.findByRole('button',{name:stage==='apply'?'确认应用到选定物件':'制作并预览材质版本'}));
@@ -112,9 +298,10 @@ describe('selected material version workflow',()=>{
   });
   it('requires selecting actual slots when DeepSeek asks the user to choose materials',async()=>{
     render(ui({seed:seed({materialScope:'choose_materials'})}));
-    fireEvent.click(await screen.findByRole('button',{name:'制作并预览材质版本'}));await screen.findByText('请勾选实际使用的材质槽。');
+    const create=await screen.findByRole('button',{name:'制作并预览材质版本'});expect(create.hasAttribute('disabled')).toBe(true);fireEvent.click(create);
     expect(controller.businessRequest).not.toHaveBeenCalledWith(expect.stringContaining('/customize'),expect.anything(),expect.anything());
     fireEvent.click(screen.getByRole('checkbox',{name:/座面/}));
+    expect(create.hasAttribute('disabled')).toBe(false);
     fireEvent.click(screen.getByRole('checkbox',{name:'移除选中材质的原颜色贴图'}));
     await preview();
     expect(controller.businessRequest).toHaveBeenCalledWith(`/assets/${source}/customize`,'POST',expect.objectContaining({materialIndices:[0],removeBaseColorTexture:true}));

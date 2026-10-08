@@ -65,8 +65,8 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         <NumberField label="旋转 / °" value={rotation} min={0} max={360} step={15} disabled={locked} onChange={value => actions.setRotation(item.id, value * Math.PI / 180)}/>
         <button type="button" className="sc-button" disabled={locked} onClick={() => props.onRotate(item.id)}><RotateCcw size={15}/>旋转 90°</button>
       </div></section>
-      {item.glbUrl
-        ? <p className="sc-note">该模型保留自身材质，暂不支持改色。</p>
+      {item.glbUrl || item.assetId
+        ? <p className="sc-note">{item.assetId?'该模型保留原材质。需要调整时，请打开助手的“物料工具 → 材质调整”核对材质槽并预览新版本。':'该模型保留自身材质，暂不支持改色。'}</p>
         : <section><h3>物料颜色 <input type="color" aria-label="物料颜色" value={item.color} disabled={locked} onChange={event => { actions.setColor(item.id, event.target.value); pushColor(event.target.value); }}/></h3><div className="sc-color-swatches">{COLORS.map(color => <button type="button" key={color} style={{ background: color }} aria-label={`颜色 ${color}`} aria-pressed={item.color.toUpperCase() === color} disabled={locked} onClick={() => { actions.setColor(item.id, color); pushColor(color); }}/>)}</div></section>}
       <section><h3>物料备注</h3><textarea className="sc-notes" aria-label="物料备注" placeholder="例如：预留电源 / 实物待确认" maxLength={500} disabled={locked} value={item.notes ?? ''} onChange={event => actions.updateItem(item.id, { notes: event.target.value })}/></section>
       <div className="sc-property-actions"><button type="button" className="sc-button" disabled={activeFloor.items.length >= editorItemLimit(layout)} onClick={() => props.onDuplicate(item.id)}><Copy size={15}/>复制</button></div>

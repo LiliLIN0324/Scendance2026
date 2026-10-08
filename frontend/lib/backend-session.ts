@@ -9,6 +9,7 @@ import { materialVariantProposalRequestSchema } from "../../supabase/functions/_
 import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
+import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 export { SceneApiError };
 export type { AgentRun };
 export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
@@ -71,6 +72,7 @@ export interface BackendSnapshot {
   user: BackendUser | null;
   recoveryReady: boolean;
   project: BackendProject | null;
+  geometryBinding?: GeometryWorkbenchBinding | null;
   lease: Lease | null;
   revision: number | null;
   /** The latest locally submitted draft survives auth, network, and revision failures. */
@@ -144,6 +146,11 @@ interface RequestScope {
   lease: Pick<Lease, "projectId" | "sessionId" | "generation"> | null;
 }
 type LeaseResponse = Omit<Lease, "projectId">;
+interface GeometryPreparation {
+  current(): boolean;
+  bindingFor(project: BackendProject): GeometryWorkbenchBinding;
+  persist(binding: GeometryWorkbenchBinding): Promise<void>;
+}
 
 function failure(error: unknown): BackendFailure {
   const localCode = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : null;
@@ -178,6 +185,7 @@ function failure(error: unknown): BackendFailure {
     PROVIDER_INVALID_JSON: "AI 服务返回异常，请稍后手动重试。",
     PROVIDER_TIMEOUT: "AI 响应超时，请稍后手动重试。",
     PROJECT_SWITCH_REQUIRES_RELEASE: "请先交接当前项目的编辑权。",
+    LOCAL_ACTIVITY_ID_REQUIRED: "请先打开一个本地活动，再连接场景处理。",
     STALE_PROPOSAL: "方案生成期间场景或编辑权已变化，请根据当前场景重新生成。",
     LAYOUT_REQUIRES_EMPTY_SCENE: "生成初稿需要空白场景；已有物料请使用修改方案。",
     AI_BUSY: "已有方案正在生成，请等待本次请求完成。",
@@ -208,15 +216,20 @@ export class BackendSession {
   private generationPending = false;
   private workbenchPending: { key: string; promise: Promise<BackendProject> } | null = null;
   private workbenchBinding: { localId: string | undefined; projectId: string; userId: string } | null = null;
+  private geometryEpoch = 0;
+  private geometryPending: { key: string; scope: string; promise: Promise<BackendProject | null> } | null = null;
+  private readonly geometryBindings = new Map<string, GeometryWorkbenchBinding>();
+  private readonly clientApiUrl: string;
   private guestUserId: string | null = null;
   private readonly client: ReturnType<typeof createSceneClient>;
 
   constructor(config: BackendConfig = getBackendConfig(), private readonly storage?: Storage, private readonly guestStorage?: Storage) {
     this.config = config;
+    this.clientApiUrl = config.apiUrl;
     // Never persist this in local/sessionStorage: duplicated tabs must not share a lease identity.
     const sessionId = crypto.randomUUID();
     this.snapshot = {
-      configured: config.configured, sessionId, user: null, recoveryReady: false, project: null, lease: null, revision: null,
+      configured: config.configured, sessionId, user: null, recoveryReady: false, project: null, geometryBinding: null, lease: null, revision: null,
       draft: null, localRevision: 0, dirty: false,
       status: config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null,
     };
@@ -224,6 +237,11 @@ export class BackendSession {
   }
 
   getSnapshot = (): BackendSnapshot => this.snapshot;
+  isGeometryBound(localActivityId: string): boolean {
+    const binding = this.snapshot.geometryBinding;
+    return !!binding && binding.localActivityId === localActivityId && binding.userId === this.snapshot.user?.id &&
+      binding.apiUrl === this.config.apiUrl && binding.apiUrl === this.clientApiUrl && binding.cloudProjectId === this.snapshot.project?.id;
+  }
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
@@ -251,6 +269,19 @@ export class BackendSession {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
   }
+  private cancelGeometryPreparation(): void {
+    ++this.geometryEpoch;
+    if (this.snapshot.geometryBinding) this.workbenchBinding = null;
+  }
+  private invalidateGeometryWorkbench(dropProject = false): void {
+    this.cancelGeometryPreparation();
+    const drop = dropProject && !!this.snapshot.geometryBinding;
+    if (drop) this.stopRenewal();
+    this.update({ geometryBinding: null, ...(drop ? { project: null, revision: null, lease: null, writeBlocked: true } : {}) });
+  }
+  private assertGeometryCurrent(geometry?: GeometryPreparation): void {
+    if (geometry && !geometry.current()) throw new SceneApiError("SESSION_CHANGED", 409, null);
+  }
   private block(error: unknown) {
     this.stopRenewal();
     this.update({ writeBlocked: true, status: "blocked", error: failure(error) });
@@ -272,6 +303,7 @@ export class BackendSession {
   }
   private acceptAuth(result: AuthResponse) {
     if (!result.access_token || !result.refresh_token || !result.user?.id || !Number.isFinite(result.expires_in) || result.expires_in <= 0) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    if (this.snapshot.user && this.snapshot.user.id !== result.user.id) this.invalidateGeometryWorkbench(true);
     this.tokens = { access: result.access_token, refresh: result.refresh_token, expiresAt: result.expires_at ? result.expires_at * 1000 : Date.now() + result.expires_in * 1000 };
     this.update({ user: result.user });
     this.persistTokens();
@@ -352,7 +384,7 @@ export class BackendSession {
     return current.projectId === scope.projectId && current.lease?.projectId === scope.lease?.projectId &&
       current.lease?.sessionId === scope.lease?.sessionId && current.lease?.generation === scope.lease?.generation;
   }
-  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true): Promise<T> {
+  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation): Promise<T> {
     const epoch = this.epoch;
     const credentials = this.tokens;
     try {
@@ -361,11 +393,12 @@ export class BackendSession {
       if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
       return result;
     } catch (error) {
-      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
+      if (epoch === this.epoch && (!geometry || geometry.current()) && this.isCurrentRequestScope(scope)) {
         if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
           if (!this.tokens || this.tokens === credentials) {
             this.tokens = null;
             this.persistTokens(credentials);
+            this.invalidateGeometryWorkbench(true);
             this.update({ user: null });
           }
         }
@@ -384,6 +417,7 @@ export class BackendSession {
   async signIn(email: string, password: string): Promise<BackendUser> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     this.stopRenewal();
+    this.invalidateGeometryWorkbench(true);
     const epoch = ++this.epoch;
     this.tokens = null;
     this.recoveryTokens = null;
@@ -542,6 +576,7 @@ export class BackendSession {
     this.recoveryTokens = null;
     this.persistTokens();
     this.stopRenewal();
+    this.invalidateGeometryWorkbench(true);
     this.update({ user: null, recoveryReady: false, project: null, lease: null, revision: null, status: "signed_out", writeBlocked: true, error: null });
     try {
       const response = await fetch(`${this.config.url}/auth/v1/logout?scope=global`, { method: "POST", headers: { apikey: this.config.anonKey, Authorization: `Bearer ${recovery.access}` } });
@@ -573,6 +608,7 @@ export class BackendSession {
     this.recoveryTokens = null;
     this.persistTokens();
     this.stopRenewal();
+    this.invalidateGeometryWorkbench(true);
     this.update({ user: null, recoveryReady: false, lease: null, status: this.config.configured ? "signed_out" : "unconfigured", writeBlocked: true, error: null });
     if (token) {
       try {
@@ -582,15 +618,100 @@ export class BackendSession {
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
+  /** Scene processing uses a remote project without replacing the caller's local activity identity. */
+  async ensureGeometryWorkbenchReady(scene: Scene, name: string, localActivityId: string): Promise<BackendProject> {
+    const project = await this.prepareGeometryWorkbench(scene, name, localActivityId, true);
+    if (!project) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+    return project;
+  }
+  /** Restore only a known mapping; this never creates an account, project or paid request. */
+  resumeGeometryWorkbench(scene: Scene, name: string, localActivityId: string): Promise<BackendProject | null> {
+    return this.prepareGeometryWorkbench(scene, name, localActivityId, false);
+  }
+  private prepareGeometryWorkbench(scene: Scene, name: string, localActivityId: string, create: boolean): Promise<BackendProject | null> {
+    const parsed = sceneSchema.parse(scene);
+    if (!localActivityId.trim()) throw new SceneApiError("LOCAL_ACTIVITY_ID_REQUIRED", 422, null);
+    const scope = canonical({ localActivityId, epoch: this.epoch, apiUrl: this.config.apiUrl });
+    const key = canonical({ scene: parsed, name, create, scope });
+    if (this.geometryPending) {
+      if (this.geometryPending.key === key) return this.geometryPending.promise;
+      if (create || this.geometryPending.scope !== scope) ++this.geometryEpoch;
+      return Promise.reject(new SceneApiError("CLOUD_OPERATION_BUSY", 409, null));
+    }
+    const epoch = this.epoch, generation = ++this.geometryEpoch, apiUrl = this.config.apiUrl, draftRevision = this.snapshot.localRevision;
+    let userId: string | undefined;
+    const active = () => epoch === this.epoch && generation === this.geometryEpoch && apiUrl === this.config.apiUrl &&
+      apiUrl === this.clientApiUrl && (userId === undefined || userId === this.snapshot.user?.id);
+    const current = () => { if (!active()) throw new SceneApiError("SESSION_CHANGED", 409, null); };
+    const promise = (async () => {
+      this.requireConfig(); current();
+      if (this.operationPending || this.snapshot.recoveryReady) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+      if (!this.snapshot.user) {
+        if (!create) throw new SceneApiError("UNAUTHENTICATED", 401, null);
+        await this.signInAsGuest(); current();
+      }
+      userId = this.snapshot.user!.id;
+      const identity = { localActivityId, userId, apiUrl }, storageKey = geometryWorkbenchBindingKey(identity)[1];
+      if (create && this.snapshot.localRevision === draftRevision && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed);
+      const binding = this.geometryBindings.get(storageKey) ?? await readGeometryWorkbenchBinding(identity);
+      current();
+      if (!binding && !create) return null;
+      if (binding) this.geometryBindings.set(storageKey, binding);
+      if (!create && this.snapshot.localRevision === draftRevision && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed);
+      const geometry: GeometryPreparation = {
+        current: active,
+        bindingFor: project => {
+          const cloudProjectId = uuid.parse(project.id), known = this.geometryBindings.get(storageKey);
+          if (known && known.cloudProjectId !== cloudProjectId) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+          const next: GeometryWorkbenchBinding = { version: 1, ...identity, cloudProjectId };
+          this.geometryBindings.set(storageKey, next);
+          return next;
+        },
+        persist: async value => { current(); await writeGeometryWorkbenchBinding(value); current(); },
+      };
+      if (binding && this.snapshot.project?.id !== binding.cloudProjectId) {
+        if (this.snapshot.lease && !this.snapshot.writeBlocked) { await this.releaseLease(); current(); }
+        await this.getProjectInSession(binding.cloudProjectId, undefined, geometry); current();
+      }
+      const localId = `geometry:${storageKey}`;
+      if (binding) this.workbenchBinding = { localId, projectId: binding.cloudProjectId, userId };
+      return await this.prepareWorkbenchReady(parsed, name, localId, geometry);
+    })().catch(error => { if (active()) this.block(error); throw error; }).finally(() => {
+      if (this.geometryPending?.promise === promise) this.geometryPending = null;
+    });
+    this.geometryPending = { key, scope, promise };
+    return promise;
+  }
+  /** Release only the mirror; mapping and local facts remain available for a later reconnect. */
+  async disconnectGeometryWorkbench(): Promise<void> {
+    ++this.geometryEpoch;
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    const binding = this.snapshot.geometryBinding;
+    if (!binding) return;
+    const lease = this.snapshot.lease;
+    if (lease?.projectId === binding.cloudProjectId && Date.parse(lease.expiresAt) > Date.now()) {
+      this.operationPending = true;
+      this.stopRenewal();
+      try {
+        await this.request(`/projects/${lease.projectId}/lease/release`, "POST", { sessionId: lease.sessionId, generation: lease.generation });
+      } finally { this.operationPending = false; }
+    }
+    this.invalidateGeometryWorkbench(true);
+    this.update({ status: this.snapshot.user ? "ready" : this.config.configured ? "signed_out" : "unconfigured", error: null });
+  }
   /** First use creates a real private guest workspace; the local scene remains authoritative. */
   ensureWorkbenchReady(scene: Scene, name: string, localId?: string): Promise<BackendProject> {
+    this.cancelGeometryPreparation();
+    return this.prepareWorkbenchReady(scene, name, localId);
+  }
+  private prepareWorkbenchReady(scene: Scene, name: string, localId?: string, geometry?: GeometryPreparation): Promise<BackendProject> {
     const parsed = sceneSchema.parse(scene);
     const key = canonical({ scene: parsed, name, localId: localId ?? null });
     if (this.workbenchPending) {
       return this.workbenchPending.key === key ? this.workbenchPending.promise : Promise.reject(new SceneApiError("CLOUD_OPERATION_BUSY", 409, null));
     }
     const epoch = this.epoch;
-    const current = () => { if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null); };
+    const current = () => { if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null); this.assertGeometryCurrent(geometry); };
     const promise = (async () => {
       this.requireConfig();
       if (this.operationPending || this.snapshot.recoveryReady) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
@@ -603,8 +724,8 @@ export class BackendSession {
         const projects = await this.listProjects();
         current();
         if (projects.some(item => item.id === localId)) {
-          try { project = await this.getProject(localId); }
-          finally { if (epoch === this.epoch && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed); }
+          try { project = await this.getProjectInSession(localId, undefined, geometry); }
+          finally { if (!geometry && epoch === this.epoch && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed); }
           current();
         }
       }
@@ -613,22 +734,30 @@ export class BackendSession {
       if (!bound) {
         if (this.snapshot.lease && !this.snapshot.writeBlocked) await this.releaseLease();
         current();
-        const studios = await this.listStudios();
+        const studios = await this.request<Studio[]>("/studios", "GET", undefined, this.captureRequestScope(), true, geometry);
         current();
-        const studio = studios.find(item => item.role === "owner") ?? studios[0] ?? await this.businessRequest<Studio>("/studios", "POST", {
+        const studio = studios.find(item => item.role === "owner") ?? studios[0] ?? await this.request<Studio>("/studios", "POST", {
           requestId: crypto.randomUUID(), name: "我的工作室", displayName: "访客",
-        });
+        }, this.captureRequestScope(), "business", geometry);
         current();
-        project = await this.createProject(studio.id, name.trim() || "未命名方案", parsed);
+        project = await this.createProjectInSession(studio.id, name.trim() || "未命名方案", parsed, geometry);
         current();
         this.workbenchBinding = { localId, projectId: project.id, userId: this.snapshot.user!.id };
       }
+      if (geometry) {
+        const binding = geometry.bindingFor(project!);
+        current(); this.update({ geometryBinding: binding });
+        await geometry.persist(binding); current();
+      }
       if (!this.snapshot.lease || this.snapshot.writeBlocked || Date.parse(this.snapshot.lease.expiresAt) <= Date.now()) {
-        try { await this.acquireLease(project!.id); }
-        finally { if (epoch === this.epoch && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed); }
+        try { await this.acquireLeaseInSession(project!.id, undefined, geometry); }
+        finally { if (!geometry && epoch === this.epoch && canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed); }
         current();
       }
-      if (canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed);
+      if (!geometry) {
+        if (canonical(this.snapshot.draft) !== canonical(parsed)) this.setDraft(parsed);
+        this.update({ geometryBinding: null });
+      }
       return this.snapshot.project!;
     })().finally(() => { if (this.workbenchPending?.promise === promise) this.workbenchPending = null; });
     this.workbenchPending = { key, promise };
@@ -705,47 +834,76 @@ export class BackendSession {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     if (this.snapshot.lease && !this.snapshot.writeBlocked) throw new SceneApiError("PROJECT_SWITCH_REQUIRES_RELEASE", 409, null);
   }
-  private selectProject(project: BackendProject) {
+  private selectProject(project: BackendProject, geometryBinding?: GeometryWorkbenchBinding) {
     const scene = sceneSchema.parse(project.scene);
-    this.update({ project: { ...project, scene }, revision: project.revision, draft: scene, dirty: false, localRevision: this.snapshot.localRevision + 1, lease: null, writeBlocked: true, status: "ready", error: null });
+    this.update({ project: { ...project, scene }, revision: project.revision,
+      draft: geometryBinding ? this.snapshot.draft ?? scene : scene, dirty: geometryBinding ? true : false,
+      geometryBinding: geometryBinding ?? null,
+      localRevision: this.snapshot.localRevision + 1, lease: null, writeBlocked: true, status: "ready", error: null });
   }
   async createProject(studioId: string, name: string, scene: Scene): Promise<BackendProject> {
     this.ensureCanSwitch();
+    this.cancelGeometryPreparation();
+    return this.createProjectInSession(studioId, name, scene);
+  }
+  private async createProjectInSession(studioId: string, name: string, scene: Scene, geometry?: GeometryPreparation): Promise<BackendProject> {
+    this.ensureCanSwitch();
     this.operationPending = true;
     try {
-      const project = await this.request<BackendProject>("/projects", "POST", { studioId, name, scene: sceneSchema.parse(scene) });
-      this.selectProject(project);
+      const project = await this.request<BackendProject>("/projects", "POST", { studioId, name, scene: sceneSchema.parse(scene) }, this.captureRequestScope(), true, geometry);
+      const binding = geometry?.bindingFor(project);
+      this.assertGeometryCurrent(geometry);
+      this.selectProject(project, binding);
       return project;
     } finally { this.operationPending = false; }
   }
   async getProject(projectId: string, validate?: (project: BackendProject) => void): Promise<BackendProject> {
     this.ensureCanSwitch();
+    this.cancelGeometryPreparation();
+    return this.getProjectInSession(projectId, validate);
+  }
+  private async getProjectInSession(projectId: string, validate?: (project: BackendProject) => void, geometry?: GeometryPreparation): Promise<BackendProject> {
+    this.ensureCanSwitch();
     this.operationPending = true;
     try {
-      const project = await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`);
+      const project = await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`, "GET", undefined, this.captureRequestScope(), true, geometry);
+      this.assertGeometryCurrent(geometry);
+      if (geometry && project.id !== projectId) throw new SceneApiError("INVALID_RESPONSE", 502, null);
       // The renderer can reject unsupported geometry before changing the active project.
       validate?.(project);
-      this.selectProject(project);
+      this.selectProject(project, geometry?.bindingFor(project));
       return project;
     } catch (error) {
-      this.block(error);
+      if (!geometry || geometry.current()) this.block(error);
       throw error;
     } finally { this.operationPending = false; }
   }
   async acquireLease(projectId: string, validate?: (scene: Scene, project: BackendProject) => void): Promise<LeaseResponse & { scene: Scene }> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     if (this.snapshot.lease && !this.snapshot.writeBlocked && this.snapshot.lease.projectId !== projectId) throw new SceneApiError("PROJECT_SWITCH_REQUIRES_RELEASE", 409, null);
+    this.cancelGeometryPreparation();
+    return this.acquireLeaseInSession(projectId, validate);
+  }
+  private async acquireLeaseInSession(projectId: string, validate?: (scene: Scene, project: BackendProject) => void, geometry?: GeometryPreparation): Promise<LeaseResponse & { scene: Scene }> {
+    if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    if (this.snapshot.lease && !this.snapshot.writeBlocked && this.snapshot.lease.projectId !== projectId) throw new SceneApiError("PROJECT_SWITCH_REQUIRES_RELEASE", 409, null);
     this.operationPending = true;
     let acquired: LeaseResponse | null = null;
     try {
-      const project = this.snapshot.project?.id === projectId ? this.snapshot.project : await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`);
-      const result = await this.request<LeaseResponse & { scene: Scene }>(`/projects/${encodeURIComponent(projectId)}/lease/acquire`, "POST", { sessionId: this.snapshot.sessionId });
+      const project = this.snapshot.project?.id === projectId ? this.snapshot.project : await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`, "GET", undefined, this.captureRequestScope(), true, geometry);
+      this.assertGeometryCurrent(geometry);
+      if (geometry && project.id !== projectId) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+      const result = await this.request<LeaseResponse & { scene: Scene }>(`/projects/${encodeURIComponent(projectId)}/lease/acquire`, "POST", { sessionId: this.snapshot.sessionId }, this.captureRequestScope(), true, geometry);
       acquired = result;
+      this.assertGeometryCurrent(geometry);
       const scene = sceneSchema.parse(result.scene);
       if (result.sessionId !== this.snapshot.sessionId || !Number.isFinite(Date.parse(result.expiresAt))) throw new SceneApiError("INVALID_RESPONSE", 502, null);
       validate?.(scene, project);
       this.stopRenewal();
-      this.update({ lease: { projectId, sessionId: result.sessionId, generation: result.generation, expiresAt: result.expiresAt, revision: result.revision }, revision: result.revision, draft: scene, project: { ...project, scene, revision: result.revision }, dirty: false, localRevision: this.snapshot.localRevision + 1, writeBlocked: false, status: "editing", error: null });
+      this.update({ lease: { projectId, sessionId: result.sessionId, generation: result.generation, expiresAt: result.expiresAt, revision: result.revision }, revision: result.revision,
+        draft: geometry ? this.snapshot.draft ?? scene : scene, project: { ...project, scene, revision: result.revision }, dirty: !!geometry,
+        geometryBinding: geometry ? geometry.bindingFor(project) : null,
+        localRevision: this.snapshot.localRevision + 1, writeBlocked: false, status: "editing", error: null });
       this.timer = setInterval(() => { void this.renewLease().catch(() => { /* Exposed through snapshot.error. */ }); }, 30_000);
       return { ...result, scene };
     } catch (error) {
@@ -756,7 +914,7 @@ export class BackendSession {
           await this.client.request(`/projects/${encodeURIComponent(projectId)}/lease/release`, "POST", { sessionId: acquired.sessionId, generation: acquired.generation });
         } catch { /* A failed release remains blocked locally and expires server-side. */ }
       }
-      this.block(error);
+      if (!geometry || geometry.current()) this.block(error);
       throw error;
     } finally { this.operationPending = false; }
   }
@@ -1106,6 +1264,7 @@ export class BackendSession {
     this.stopRenewal();
     this.tokens = null;
     this.recoveryTokens = null;
+    this.invalidateGeometryWorkbench(true);
     this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true, status: this.config.configured ? "signed_out" : "unconfigured" });
     this.listeners.clear();
   }
