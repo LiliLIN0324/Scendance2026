@@ -669,11 +669,11 @@ h2, h3 { line-height: var(--sc-lh-tight); }
   --fs-hero:min(12vw,19svh);                          /* 1 主标题：分类大标题 */
   --fs-mega:min(9vw,18svh);                           /* 2 巨型展示：Process / Tech powered */
   --fs-display:min(clamp(34px,5.4vw,104px),9svh);     /* 3 首屏 h1 / 大数字 */
-  --fs-h2:min(3.5vw,6.2svh);                          /* 4 段落标题 */
-  --fs-lead:min(2.2vw,4svh);                          /* 5 引导语 */
-  --fs-sub:min(1.55vw,2.8svh);                        /* 6 卡标题 / tab / 引语 / 面板小标题 */
-  --fs-body:min(1.2vw,2.2svh);                        /* 7 正文 / 列表 / 按钮 / 链接 */
-  --fs-meta:min(1vw,1.8svh);                          /* 8 标签 / 序号 / 备注 */
+  --fs-h2:max(20px,min(3.5vw,6.2svh));                 /* 4 段落标题 */
+  --fs-lead:max(15px,min(2.2vw,4svh));                 /* 5 引导语 */
+  --fs-sub:max(13.5px,min(1.55vw,2.8svh));             /* 6 卡标题 / tab / 引语 / 面板小标题 */
+  --fs-body:max(14px,min(1.2vw,2.2svh));               /* 7 正文 / 列表 / 按钮 / 链接 */
+  --fs-meta:max(11.5px,min(1vw,1.8svh));               /* 8 标签 / 序号 / 备注 */
   --fs-brand:23px;                                    /* 品牌字（logo，不参与正文层级） */
 }
 /* 1 主标题（用 .offers .offers-title 两段式：单类会被 .band h2 靠优先级压掉） */
@@ -775,11 +775,9 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 .tl-people input{flex:1;min-width:0;accent-color:#365949}
 .tl-people output{min-width:16px;font-size:11px;font-weight:600;color:#3d5b48;text-align:right}
 .tl-note{font-size:9.5px;color:#98a08f}
-@media(max-width:700px){
-  .scene-native{grid-template-columns:1fr;grid-template-rows:58% minmax(0,1fr)}
-  .nv-stage{grid-row:1}
-  .nv-panel{grid-row:2;border-right:0;border-top:1px solid #d7dec9}
-}
+/* 窄屏的堆叠版式统一放在样式表末尾的 @media(max-width:900px) 里 ——
+   那里在无条件规则之后，才不会被后面的 .scene-native 覆盖（原先放在这里的
+   700px 版本因为被后面的规则盖掉，从来没有生效过）。 */
 
 /* ============================================================
    场景库版式：一个框里切换十个场景（不再满铺长滚动）
@@ -839,11 +837,29 @@ body,.lede,.intro-split .lede,.counter span,.offers-cells dd,.offers-sub p,.nav-
 
 @media (max-width:900px){
   .library-frame{height:auto;min-height:min(88svh,760px)}
+  .scene-native{grid-template-columns:1fr}
   .scene-block.is-active{grid-template-rows:minmax(0,56%) minmax(0,1fr)}
   .nv-stage{grid-row:1;border-left:0}
-  .nv-panel{grid-row:2;border-right:0;border-top:1px solid #e3e6d8}
+  .nv-panel{grid-row:2;border-right:0;border-top:1px solid #e3e6d8;overflow-y:auto;overscroll-behavior:contain}
   .nv-index{font-size:40px}
 }
+
+/* ============================================================
+   滚动吸附：整站按「屏」推进
+   ------------------------------------------------------------
+   首屏（.hero）、各段落（.band，含收尾白页）都是一屏量级的版式，
+   让滚动在段落边界附近自动吸附过去。
+   · 用 proximity 而不是 mandatory：段落里有高于一屏的内容（例如场景库
+     的框体 + 工具栏），mandatory 会把停在段落中间的滚动位置强行弹走。
+   · .band 已有 scroll-margin-top:96px，吸附位置正好让开固定导航。
+   · 段落内部的横向滚动（场景卡轨）不受影响；reduced-motion 下整体关闭。
+   ============================================================ */
+html{scroll-snap-type:y proximity}
+.hero,.band{scroll-snap-align:start}
+.hero{scroll-margin-top:0}
+/* 收尾白页是满屏的一段，顶到视口顶端才是完整一「屏」，所以不吃导航让位 */
+.band.blank{scroll-margin-top:0}
+@media (prefers-reduced-motion:reduce){html{scroll-snap-type:none}}
 </style>
 </head>
 <body>
