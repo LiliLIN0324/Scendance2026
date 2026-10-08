@@ -1,16 +1,16 @@
 # 提供商配置入口
 
-目标项目：`hrsrrduwbqxnqddkexoy`。最新接口复核与发布归属见 [PLAN_API_RELEASE.md](PLAN_API_RELEASE.md)。用户已授权与图纸三维工作流统一发布，由统一发布任务记录实际部署版本。
+目标项目：`wkhfvnzgopjdzxlmycks`。最新接口复核与发布归属见 [PLAN_API_RELEASE.md](archive/PLAN_API_RELEASE.md)。用户已授权与图纸三维工作流统一发布，由统一发布任务记录实际部署版本。
 
 ## DeepSeek
 
-沿用当前线上 `DEEPSEEK_API_KEY`、`AI_MAX_REQUEST_CENTS`、每日与累计额度。既有文字提案配置和历史调用边界见 [DEEPSEEK_DAILY_LIMIT.md](DEEPSEEK_DAILY_LIMIT.md)。不要为上线这组业务接口重置密钥、提高额度或推送旧 Auth 配置。
+沿用当前线上 `DEEPSEEK_API_KEY`、`AI_MAX_REQUEST_CENTS`。应用内每日与累计额度已取消，见 [AI 使用额度](AI_USAGE_LIMITS.md)；调用边界与发布操作见 [DeepSeek 发布操作](DEEPSEEK_RELEASE_OPERATIONS.md)。不要为上线这组业务接口重置密钥或推送旧 Auth 配置。
 
 图纸重建使用独立 `reconstruction-worker`、`RECONSTRUCTION_WORKER_SECRET` 与请求预留配置，按图纸分支实际共享契约、迁移和服务部署说明接入；不能混用混元的 worker secret 或任务定时器。
 
 ## 腾讯混元
 
-本次止于需要用户手工开通和创建密钥的步骤，未启用付费生成。完整可操作步骤、官方资料和费用边界见 [HUNYUAN_ACTIVATION.md](HUNYUAN_ACTIVATION.md)。当前 TokenHub 接口需要 API Key，不需要 SecretId/SecretKey。
+本次止于需要用户手工开通和创建密钥的步骤，未启用付费生成。完整可操作步骤、官方资料和费用边界见 [HUNYUAN_ACTIVATION.md](archive/HUNYUAN_ACTIVATION.md)。当前 TokenHub 接口需要 API Key，不需要 SecretId/SecretKey。
 
 已创建仅供本机填写的配置文件（权限 0600，Git 忽略）：
 

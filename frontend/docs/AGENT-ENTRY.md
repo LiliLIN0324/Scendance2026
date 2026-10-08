@@ -23,7 +23,7 @@ Node 24.19.0：最终前端完整测试 **127 个文件、1614 项通过**，包
 
 ## 生产发布与回退
 
-- 正式站点：<https://scendance.charlestech.org>。
+- 正式站点：<https://scendance-scene-planner-ewz.pages.dev>（旧域名 `scendance.charlestech.org` 保留为跳转白名单）。
 - Cloudflare Pages 项目：`scendance-scene-planner`；生产部署 `99b80ba8-5a19-40c1-bcd9-a5f4cdc8e326`，来源 `99ca1e8`。
 - 预览部署：`118e7b4c-dc4e-4b9e-9a09-82349e4c1b96`。正式发布复用同一构建，157 个文件全部命中上传缓存。
 - 发布前与提升前均确认生产基线仍是 `5a50ff84-fa07-4746-8d02-659ca6024b2c` / `7c9125c`。该部署保留为回退版本：<https://5a50ff84.scendance-scene-planner.pages.dev>，必要时通过 Pages 部署管理回退。

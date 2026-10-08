@@ -266,7 +266,6 @@
     "notes": "ASSET-SOURCES.md"
   },
   "preview": {
-    "page": "index.html",
     "url": "http://127.0.0.1:8778/",
     "images": [
       "previews/studio-overview.png",

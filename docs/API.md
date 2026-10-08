@@ -54,7 +54,7 @@ Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
 
 编辑器 `RoomLayout.itemLayers/designBook` 是本机编组与方案历史，不属于 v1/v2 场景协议。云端保存/发布当前选中的场景；本机方案切换保留每个方案最新编辑状态，最多 20 个方案，可移除非当前方案并撤销恢复。
 
-v0.4.1 公共模型目录随前端完整提供，不依赖 `/assets` 的本人最近 100 项列表。管理员用 `register_library_asset(p_owner,p_model_id,p_record)` RPC 批量登记后，工作室成员通过原 `/assets/:assetId/url` 和场景保存接口使用这些模型。RPC 仅 service_role 可调用；原 `/assets/import` 仍只导入 Poly Haven。登记、授权范围与上线顺序见 [v0.4.1 兼容记录](V041_COMPATIBILITY.md)。
+v0.4.1 公共模型目录随前端完整提供，不依赖 `/assets` 的本人最近 100 项列表。管理员用 `register_library_asset(p_owner,p_model_id,p_record)` RPC 批量登记后，工作室成员通过原 `/assets/:assetId/url` 和场景保存接口使用这些模型。RPC 仅 service_role 可调用；原 `/assets/import` 仍只导入 Poly Haven。登记、授权范围与上线顺序见 [v0.4.1 兼容记录](archive/V041_COMPATIBILITY.md)。
 
 ## 场景契约
 
@@ -173,14 +173,14 @@ DeepSeek 通过 `add_resource` / `replace_resource` 命令引用索引中的 `re
 | 409 | LEASE_LOST / REVISION_CONFLICT / STALE_PROPOSAL / IDEMPOTENCY_CONFLICT | 保留草稿、停止自动保存，重新获得租约/更新提案 |
 | 413 | FILE_TOO_LARGE | 更换或优化模型 |
 | 422 | AI_INVALID_PROPOSAL / OUT_OF_BOUNDS / MODEL_TOO_COMPLEX | 显示具体问题；不能当作成功 |
-| 429 | GENERATION_BUSY / AI_BUSY / BUDGET_EXCEEDED | 等任务结束或人工核对预算，不更换幂等键重试付费提交 |
+| 429 | GENERATION_BUSY / AI_BUSY / RECONSTRUCTION_BUSY | 等任务结束，不更换幂等键重试付费提交 |
 | 502/503 | PROVIDER_HTTP_ERROR / SERVICE_NOT_CONFIGURED / BILLING_NOT_CONFIGURED | 保留现有场景，报告服务不可用 |
 
 数据库业务冲突主要为409；AI 校验问题为422。提交付费任务必须在一次用户意图内复用同一个 requestId，网络重试不能生成新 UUID。
 
-## DeepSeek 每日预算
+## AI 用量与额度
 
-AI 提案接口按北京时间执行全站共享的 10 元日预留上限；每次提供商调用（含修复）先预留 0.20 元。超额返回 `429 DAILY_BUDGET_EXCEEDED`，重复 attempt 拒绝再次发出模型请求；输入过大返回 `413 AI_INPUT_TOO_LARGE`。现有场景/提案 JSON 契约不变，客户端不能指定限额、费用或日期。详细语义见 [每日预算记录](DEEPSEEK_DAILY_LIMIT.md)。
+2026-10-03 起应用内不再限制 DeepSeek/HY3 的每日及累计额度：迁移 `20261003180000_unlimited_ai_usage.sql` 将 `scene_private.budgets.limit_cents` 置空，并去除日预留上限的判断，因此不再返回 `429 DAILY_BUDGET_EXCEEDED` / `BUDGET_EXCEEDED`。用量预留与记账、幂等键、并发互斥（`429 AI_BUSY` / `GENERATION_BUSY` / `RECONSTRUCTION_BUSY`）和供应商配置校验仍然生效；供应商账户余额与限流由供应商决定，输入过大仍返回 `413 AI_INPUT_TOO_LARGE`。现有场景/提案 JSON 契约不变，客户端不能指定限额、费用或日期。当前语义见 [AI 使用额度](AI_USAGE_LIMITS.md)。
 
 ### 工作室管理
 

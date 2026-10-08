@@ -1,8 +1,8 @@
 # 独立后端部署记录
 
-> 本文为原交付过程记录，所述分离工作树路径属于历史环境。当前完整仓库的入口与部署边界见 [项目交接](PROJECT_STATUS.md)。
+> 本文为原交付过程记录，所述分离工作树路径属于历史环境。当前完整仓库的入口与部署边界见 [项目交接](PROJECT_STATUS.md)（已归档）。
 
-> 本文保留首次后端配置阶段记录。2026-10-02 后续已配置并实测 DeepSeek、增加每日限额、发布现有编辑器；最新部署与验收结果见 [DeepSeek 与首次上线记录](DEEPSEEK_DAILY_LIMIT.md)。
+> 归档于 2026-10-09：本文为 2026-10-02 首次后端配置阶段记录，其中的额度与部署状态已作废，仅用于追溯。当前入口见 [README](../../README.md)，部署与恢复见 [部署说明](../DEPLOYMENT.md)，AI 额度语义见 [AI 使用额度](../AI_USAGE_LIMITS.md)。
 
 
 执行日期：2026-10-02（America/Chicago）。以工作区根目录后端为准；未修改或发布 `scendance/` 前端。
@@ -26,7 +26,7 @@
 - `scene-api`、`generation-worker` 已部署为 `ACTIVE` v1。两者 `verify_jwt=false`，分别由业务函数验证真实 Auth JWT、由 worker 校验独立服务密钥；匿名分享也在函数内校验令牌及撤销状态。
 - `scene-assets` 为私有桶，上限 `10,485,760` 字节，允许 GLB/PNG/JPEG；匿名用户没有直接下载权限。
 - 远端 Auth：允许邮箱密码登录，禁止公开注册及匿名登录，最小密码长度 12。站点为独立域名，跳转白名单和 CORS 包含该域名及 `localhost:3000`、`127.0.0.1:3000`。
-- 云配置单独保存在 [cloud-config.toml](../supabase/ops/cloud-config.toml)。实际发现 CLI 将 `auth.email.enable_signup=false` 映射为关闭邮箱 provider，已修正为该项 true、顶级 `auth.enable_signup=false`，并通过真实登录验证。
+- 云配置单独保存在 [cloud-config.toml](../../supabase/ops/cloud-config.toml)。实际发现 CLI 将 `auth.email.enable_signup=false` 映射为关闭邮箱 provider，已修正为该项 true、顶级 `auth.enable_signup=false`，并通过真实登录验证。
 - 已初始化独立演示工作室 `8abe853a-31f1-4f60-83ae-1cbbd7a3738e` 及负责人、编辑成员两个真实 Auth 账号。两份随机密码不同，不复用原站用户。
 - Vault 已保存 `scene_project_url`、`scene_worker_secret`。每分钟任务 `scene-generation-poll` 已安装，当前 **active=false**；提供商凭据未填齐前保持停用。
 
@@ -45,7 +45,7 @@
 | 数据库权限 | `anon`、`authenticated` 均无 `scene_rpc`/`job_rpc` 执行权及 `scene_private` 使用权；`service_role` 有权 |
 | 免费公共素材 | 真实推荐返回 HTTP 200/8 项；Poly Haven `chinese_armchair` 导入返回 HTTP 201，GLB 为 1,702,284 字节，云端校验及私有归档成功 |
 
-真实服务验收使用 [smoke-cloud.mjs](../scripts/smoke-cloud.mjs)，未替换 Auth、Storage、PostgreSQL 或网络响应。验收项目 ID 为 `6c59bbb1-b48c-4075-b161-01f288dcf769`；项目和资产保留作证据，主验收临时非成员已删除、租约已释放、分享已撤销。这证明实际 HTTP 并发保护，不替代浏览器两标签页交互验收。
+真实服务验收使用 [smoke-cloud.mjs](../../scripts/smoke-cloud.mjs)，未替换 Auth、Storage、PostgreSQL 或网络响应。验收项目 ID 为 `6c59bbb1-b48c-4075-b161-01f288dcf769`；项目和资产保留作证据，主验收临时非成员已删除、租约已释放、分享已撤销。这证明实际 HTTP 并发保护，不替代浏览器两标签页交互验收。
 
 新增修复覆盖：根目录测试不再扫描独立 `scendance/`；TokenHub 新接口及旧接口显式选择；积压过期任务在付费提交前拒绝；worker 方法、认证和缺配置返回稳定的 JSON 405/401/503，错误不会领取付费任务。
 
@@ -59,7 +59,7 @@
 
 以上文件均为本机 `0600`，由 `.gitignore` 排除，不上传到前端或版本库。演示账号邮箱使用 `scendance.example`，通过管理员预置且已完成真实密码登录，不用于邮件收取或密码恢复。
 
-按 [供应商配置指南](PROVIDER_SETUP.md) 填写 DeepSeek、腾讯广州 TokenHub 密钥及费用/条款字段，再验证云端配置、启用调度。**本轮没有调用付费模型，没有真实 AI 提案或 HY-3D 生成成功记录。**
+按 [供应商配置指南](../PROVIDER_SETUP.md) 填写 DeepSeek、腾讯广州 TokenHub 密钥及费用/条款字段，再验证云端配置、启用调度。**本轮没有调用付费模型，没有真实 AI 提案或 HY-3D 生成成功记录。**
 
 补充 GLB 保存后已从远端只读 SQL 确认验收项目为 revision 4、2 个物件；该次补充发布分享 `edc6bd8c-d989-4258-bca0-7e69afe49522` 已通过负责人业务 API 撤销，HTTP 200。补充流程未取得完整成功输出，不计为匿名 GLB 下载或浏览器绘制验收。
 

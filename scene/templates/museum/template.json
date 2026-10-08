@@ -163,7 +163,6 @@
     "notes": "ASSET-SOURCES.md"
   },
   "preview": {
-    "page": "index.html",
     "localUrl": "http://127.0.0.1:8775/",
     "images": [
       "previews/museum-overview.jpg",

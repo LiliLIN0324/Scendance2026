@@ -70,7 +70,6 @@
     "benches": 2
   },
   "preview": {
-    "page": "index.html",
     "images": [
       "previews/lawn-overview.jpg",
       "previews/lawn-top.jpg",

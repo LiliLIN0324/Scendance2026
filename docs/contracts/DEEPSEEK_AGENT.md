@@ -18,7 +18,7 @@ TokenDance TypeSafe请求发往 `https://tokendance.space/gateway/typesafe/v1/sy
 
 ## 回退与HY3
 
-`DEEPSEEK_AGENT_MODE=legacy` 可切回原单提案生成器，强制预览，JEV不做三方评价；不恢复HY3。常规模式为 tools（省略亦可）。完全版本回退见 `docs/DEEPSEEK_AGENT_ROLLBACK.md`。两份新增迁移保持旧API兼容，回退时不删表、资产或历史。
+`DEEPSEEK_AGENT_MODE=legacy` 可切回原单提案生成器，强制预览，JEV不做三方评价；不恢复HY3。常规模式为 tools（省略亦可）。完全版本回退见 `docs/archive/DEEPSEEK_AGENT_ROLLBACK.md`。两份新增迁移保持旧API兼容，回退时不删表、资产或历史。
 
 `HY3_RETIRED=true` 时所有新text/image/texture请求在读取素材或计费前返回410 HY3_RETIRED，capabilities三项false。原worker仍按任务固定provider处理遗留请求；submit_unknown不重发。队列全终态后仅停generation cron并移除HUNYUAN_API_KEY；reconstruction worker/cron保持运行。原历史模型、纹理/材质版本和导出保留。
 

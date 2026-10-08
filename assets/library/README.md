@@ -33,7 +33,7 @@ python3 tools/catalog/export_library.py --output output/model-library/幕景模�
 
 模型来自 [3DAssets.dev](https://3dassets.dev)，许可为 CC0 1.0。新文件逐项原站许可已核对；`model200.json` 保留许可对象和来源链接。旧来源记录继续保留，见 [ASSET-SOURCES.md](../../ASSET-SOURCES.md)。用户原始 `model200` 目录未修改。
 
-已有 234 项保留云端注册身份和 Agent 资源引用顺序；294 项新增可用模型通过既有 `register_library_asset` RPC 登记后再生成发布目录。`npm run library:check` 只校验本地模型；实际登记需显式 `--write --remote --owner <existing-owner>` 及环境中的服务端凭据。脚本每批 6 项、保留回执、相同内容按确定的 UUID 重试，不改旧资产。网站和 Agent 均从 `merged.json` 选择同一批 528 项，使用原有授权和保存接口。发布与实测状态见 [验收记录](../../docs/MODEL_LIBRARY_MERGE.md)。
+已有 234 项保留云端注册身份和 Agent 资源引用顺序；294 项新增可用模型通过既有 `register_library_asset` RPC 登记后再生成发布目录。`npm run library:check` 只校验本地模型；实际登记需显式 `--write --remote --owner <existing-owner>` 及环境中的服务端凭据。脚本每批 6 项、保留回执、相同内容按确定的 UUID 重试，不改旧资产。网站和 Agent 均从 `merged.json` 选择同一批 528 项，使用原有授权和保存接口。发布与实测状态见 [验收记录](../../docs/archive/MODEL_LIBRARY_MERGE.md)。
 
 “巧克力工坊生产线场景”含 240,036 个三角形，超过当前单件物料 150,000 的上限。完整文件仍在目录和压缩包中，不进入工作台或 Agent 可调用索引；未放宽加载或云端校验规则。
 

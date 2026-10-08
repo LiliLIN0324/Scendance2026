@@ -1,12 +1,12 @@
 # Scendance 登录接入
 
-目标项目：`hrsrrduwbqxnqddkexoy`。与 CharlesTech 的用户、密钥及邮件服务隔离。
+目标项目：`wkhfvnzgopjdzxlmycks`。与 CharlesTech 的用户、密钥及邮件服务隔离。
 
 ## 页面与数据流
 
 - `/introduction#scene` 的「进入场景」进入 `/auth?next=%2F`。
 - `/auth` 提供邮箱密码登录、注册；密码至少 12 位。
-- 注册邮件回到 `https://scendance.charlestech.org/auth/callback`。浏览器先移除 URL 中的令牌，再向 Supabase 验证身份。
+- 注册邮件回到 `https://scendance-scene-planner-ewz.pages.dev/auth/callback`。浏览器先移除 URL 中的令牌，再向 Supabase 验证身份。
 - 邮箱确认时，数据库触发器为无工作室的账号创建一个私人工作室及 owner 成员。已有成员关系保持不变。
 - 登录状态保存在当前标签页的 sessionStorage；刷新后向 Auth 验证或刷新令牌。退出清除会话。编辑租约 ID 不持久化。
 - 场景入口要求登录，业务 API 继续通过 Supabase JWT 和服务端成员权限验证，前端跳转不替代后端鉴权。

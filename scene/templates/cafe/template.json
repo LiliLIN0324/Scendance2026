@@ -21,9 +21,7 @@
     "extensionsRequired": []
   },
   "preview": {
-    "page": "index.html",
     "localUrl": "http://127.0.0.1:8780/",
-    "server": "serve.py",
     "images": [
       "previews/overview.jpg",
       "previews/top.jpg",

@@ -71,4 +71,4 @@ npm --prefix frontend test -- --maxWorkers=2
 npm --prefix frontend run build
 ```
 
-本地联调测试需允许绑定 loopback 端口。`tests/local-persistence.test.ts` 检查数据库与私有来源在重启后恢复；前端重建联调测试调用真实 API 与 PGlite，模型返回使用显式测试响应，不能算真实识别验收。详细执行结果和未验证项另见 `docs/floorplan-verification.md`。
+本地联调测试需允许绑定 loopback 端口。`tests/local-persistence.test.ts` 检查数据库与私有来源在重启后恢复；前端重建联调测试调用真实 API 与 PGlite，模型返回使用显式测试响应，不能算真实识别验收。详细执行结果和未验证项另见 `docs/archive/floorplan-verification.md`。

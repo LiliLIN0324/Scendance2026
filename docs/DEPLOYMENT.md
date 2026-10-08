@@ -1,8 +1,8 @@
 # 本地运行、云端维护与恢复
 
-本说明适用于工作区根目录后端，记录日期为 2026-10-02。独立 Supabase 项目 `scendance-scene-planner`（ref `hrsrrduwbqxnqddkexoy`，区域 `ap-southeast-1`）已部署。继续使用该专用项目，无需重新创建或连接其他业务项目。已执行的配置与证据见 [云部署记录](CLOUD_DEPLOYMENT.md)，功能范围见 [PLAN 后端对照](PLAN_BACKEND_AUDIT.md)。
+本说明适用于工作区根目录后端。第 1–2 节是可直接执行的本地运行与构建步骤；第 3–4 节是 2026-10-02 首次云端部署的记录，其中的迁移数量、函数版本与资源数量以记录日期为准。当前部署目标是自有 Supabase 项目 `wkhfvnzgopjdzxlmycks`，完整的初始化、迁移推送、函数部署与验收步骤见 [自有 Supabase 部署](OWN_SUPABASE_TUTORIAL.md)，当前接口范围见 [API 契约](API.md)，首次配置阶段的过程记录见 [归档的云部署记录](archive/CLOUD_DEPLOYMENT.md)。
 
-前端目标域名为 `https://scendance.charlestech.org`，本轮没有发布前端静态构建；Cloudflare 项目、DNS 与证书的实际状态以 [Cloudflare 配置记录](CLOUDFLARE_SETUP.md) 为准。
+前端由 Cloudflare Pages 项目 `scendance-scene-planner` 构建与发布；实际地址、DNS、构建设置与构建环境变量以 [Cloudflare 与 GitHub 自动部署](CLOUDFLARE_GITHUB_DEPLOYMENT.md) 为准。
 
 ## 1. 本地测试（不依赖 Docker）
 
@@ -63,7 +63,7 @@ DeepSeek 直连官方 `deepseek-flash`；一次应用请求的费用预留覆盖
 
 ```sh
 npm run check:config:full
-npx supabase secrets set --project-ref hrsrrduwbqxnqddkexoy --env-file .env.edge.local
+npx supabase secrets set --project-ref wkhfvnzgopjdzxlmycks --env-file .env.edge.local
 ```
 
 写入 secrets 不提交生成请求。真实付费验收须由用户明确提交一件物件，再核对供应商记录、Storage GLB、预览、加入、保存与重开；不自动批量生成或重试结果未知的付费提交。
@@ -78,7 +78,7 @@ npx supabase secrets set --project-ref hrsrrduwbqxnqddkexoy --env-file .env.edge
 | 迁移版本 | `20261002060304`、`20261002060307`、`20261002060309`、`20261002061700` |
 | Edge | `scene-api`、`generation-worker` 均为 ACTIVE v1，`verify_jwt=false`，在服务内部验证 Auth JWT 或 worker secret |
 | Auth | 邮箱注册与确认开启；独立 SMTP 由用户配置，真实收信按 [验证码验收](AUTH_EMAIL_OTP.md) 记录；匿名登录关闭，最短密码 12 位 |
-| 站点与允许来源 | 正式站点 `https://scendance.charlestech.org`；CORS/跳转白名单另允许 `http://localhost:3000`、`http://127.0.0.1:3000` |
+| 站点与允许来源 | [最小云端配置](../supabase/ops/cloud-config.toml)：`site_url` = `https://scendance-scene-planner-ewz.pages.dev`，跳转白名单保留旧域名 `https://scendance.charlestech.org`、`http://localhost:3000`、`http://127.0.0.1:3000` |
 | 私有 Storage | `scene-assets`，最大文件 `10,485,760` 字节（10 MiB）；GLB/PNG/JPEG |
 | 演示账号 | 两成员已初始化，真实密码登录成功 |
 
@@ -87,7 +87,7 @@ npx supabase secrets set --project-ref hrsrrduwbqxnqddkexoy --env-file .env.edge
 后续函数更新部署到明确的专用项目：
 
 ```sh
-npx supabase functions deploy scene-api generation-worker --project-ref hrsrrduwbqxnqddkexoy --use-api
+npx supabase functions deploy scene-api generation-worker --project-ref wkhfvnzgopjdzxlmycks --use-api
 ```
 
 部署前通过相关测试与类型检查，部署后复查函数状态并运行云端冒烟。`verify_jwt=false` 支持匿名分享入口和 worker 独立凭据，业务接口继续在函数内认证。
@@ -104,7 +104,7 @@ npm run smoke:cloud -- --write --remote
 
 此命令实际写入验收项目与资产，临时创建非成员账号；结束时撤销测试分享、释放租约、删除临时账号，保留验收项目和资产。它不调用付费模型。成功输出应为 `ok: true`、9 组检查通过、`cleanupIssues: []`。
 
-本轮验收项目为 `6c59bbb1-b48c-4075-b161-01f288dcf769`。双账号登录、租约竞态、成员隔离、Storage、保存重开、发布与撤销均已实际通过。公共目录推荐返回 `200` 和 8 项，真实 GLB 导入返回 `201`，大小 `1,702,284` 字节；后续模型保存/发布及浏览器展示验证以 [云部署记录](CLOUD_DEPLOYMENT.md) 为准。
+本轮验收项目为 `6c59bbb1-b48c-4075-b161-01f288dcf769`。双账号登录、租约竞态、成员隔离、Storage、保存重开、发布与撤销均已实际通过。公共目录推荐返回 `200` 和 8 项，真实 GLB 导入返回 `201`，大小 `1,702,284` 字节；后续模型保存/发布及浏览器展示验证以 [归档的云部署记录](archive/CLOUD_DEPLOYMENT.md) 为准。
 
 ### 定时归档
 

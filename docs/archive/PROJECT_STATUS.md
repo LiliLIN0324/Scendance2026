@@ -1,5 +1,7 @@
 # 完整项目交接 · 2026-10-02
 
+> 归档于 2026-10-09：本文为 2026-10-02 的交接快照，入口、功能范围与本地验证命令均已由 [README](../../README.md) 取代，保留仅用于追溯；表内文档链接指向当时的位置。
+
 本快照汇总已经开发和部署的前端、Supabase 后端、数据库迁移与文档，通过 PR 提交到 `version`。不包含本机密钥、构建产物或运行缓存。
 
 ## 当前入口
@@ -19,14 +21,14 @@
 
 | 内容 | 文档 |
 | --- | --- |
-| 前端启动、构建 | [前端 README](../frontend/README.md) |
-| 后端入口 | [后端说明](BACKEND.md) |
-| API 与共享协议 | [API](API.md)、[客户端](../client/scene-client.ts) |
-| 生产部署 | [部署步骤](DEPLOYMENT.md)、[云端记录](CLOUD_DEPLOYMENT.md)、[Cloudflare](CLOUDFLARE_SETUP.md) |
-| 登录、注册与邮件边界 | [登录接入](AUTH_SETUP.md) |
-| AI 前端与服务端 | [AI 助理](AI_ASSISTANT.md)、[服务配置](AI_ASSISTANT_SETUP.md)、[提示词](AI_SYSTEM_PROMPT.md) |
-| AI 配额与供应商 | [每日限制](DEEPSEEK_DAILY_LIMIT.md)、[供应商配置](PROVIDER_SETUP.md) |
-| 验证记录 | [后端验证](VERIFICATION.md)、[前后端联调](INTEGRATION.md)、[首次上线](FIRST_LAUNCH.md) |
+| 前端启动、构建 | [前端 README](../../frontend/README.md) |
+| 后端入口 | [后端说明](../BACKEND.md) |
+| API 与共享协议 | [API](../API.md)、[客户端](../../client/scene-client.ts) |
+| 生产部署 | [部署步骤](../DEPLOYMENT.md)、[云端记录](CLOUD_DEPLOYMENT.md)、[Cloudflare](CLOUDFLARE_SETUP.md) |
+| 登录、注册与邮件边界 | [登录接入](../AUTH_SETUP.md) |
+| AI 前端与服务端 | [AI 助理](../AI_ASSISTANT.md)、[服务配置](AI_ASSISTANT_SETUP.md)、[提示词](../AI_SYSTEM_PROMPT.md) |
+| AI 额度与供应商 | [AI 使用额度](../AI_USAGE_LIMITS.md)、[供应商配置](../PROVIDER_SETUP.md) |
+| 验证记录 | [后端验证](VERIFICATION.md)、[前后端联调](../INTEGRATION.md)、[首次上线](FIRST_LAUNCH.md) |
 
 ## 本地验证
 
