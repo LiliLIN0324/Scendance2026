@@ -158,6 +158,9 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   if(images.length!==sourceImages.current.length||images.some((image,index)=>{const previous=sourceImages.current[index];return image.id!==previous?.id||image.blob!==previous.blob||image.width!==previous.width||image.height!==previous.height||image.kind!==previous.kind;}))sourceVersion.current++;
   sourceImages.current=images;
   const [form,setForm]=useState<Form>(EMPTY),[loaded,setLoaded]=useState(false);
+  const [loadError,setLoadError]=useState(''),[loadAttempt,setLoadAttempt]=useState(0);
+  const hydratedScope=useRef<string|null>(null);
+  const formReady=loaded&&hydratedScope.current===scope;
   const [mode,setMode]=useState<''|'restore'|'redesign'>('');
   const [reidentify,setReidentify]=useState(false);
   const [job,setJob]=useState<ReconstructionJob|null>(null),[review,setReview]=useState<SceneV2|null>(null),[reviewConfirmed,setReviewConfirmed]=useState(false);
@@ -192,7 +195,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const requestRunning=busy||!!form.jobId&&(!job||ACTIVE.has(job.state));
   const sourcesKey=venueSourceKey(images);
   const venueLeaseExpires=cloud.project?cloud.lease?.expiresAt:undefined;
-  const venueBlocked=requestRunning||!!preview||job?.state==='needs_review'||!loaded;
+  const venueBlocked=requestRunning||!!preview||job?.state==='needs_review'||!formReady;
   const venueCandidate=useMemo(()=>{
     if(!venueEdit)return {layout:null,error:''};
     try{return {layout:previewVenueEdit(venueEdit.base,{width:venueEdit.width.trim()?Number(venueEdit.width):NaN,depth:venueEdit.depth.trim()?Number(venueEdit.depth):NaN,openings:venueEdit.openings}),error:''};}
@@ -210,18 +213,36 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   })();
   const venueChanged=!!venueEdit&&!!venueCandidate.layout&&currentSceneKey(venueCandidate.layout)!==venueEdit.sceneKey;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  useEffect(()=>{let cancelled=false;setLoaded(false);formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');setPoints([]);setReviewConfirmed(false);formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{if(!cancelled&&saved){formRef.current={...EMPTY,...saved};setForm(formRef.current);}}).catch(()=>{}).finally(()=>{if(!cancelled)setLoaded(true);});return()=>{cancelled=true;};},[scope]);
+  useEffect(()=>{
+    let cancelled=false;hydratedScope.current=null;setLoaded(false);setLoadError('');
+    formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');setPoints([]);setReviewConfirmed(false);
+    formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{
+      if(cancelled)return;
+      if(saved!==undefined){
+        if(!saved||typeof saved!=='object'||Array.isArray(saved)||
+          (['width','depth','height','text','adjustment'] as const).some(key=>saved[key]!==undefined&&typeof saved[key]!=='string')||
+          saved.constraints!==undefined&&!Array.isArray(saved.constraints))throw new Error('Invalid saved form');
+        formRef.current={...EMPTY,...saved};setForm(formRef.current);
+      }
+      hydratedScope.current=scope;setLoaded(true);
+    }).catch(()=>{if(!cancelled)setLoadError('本机图纸资料读取失败，自动保存已暂停。请重试读取。');});
+    return()=>{cancelled=true;};
+  },[scope,loadAttempt]);
   useEffect(()=>{setVenueNotice(current=>current?.sceneKey&&current.sceneKey!==baseKey?null:current);},[baseKey]);
   function notifyVenue(text:string,sceneKey?:string):void {setVenueNotice(text?{text,...(sceneKey?{sceneKey}:{})}:null);}
-  function saveForm(saveScope:string,value:Form):Promise<void>{const write=formWrites.current.catch(()=>{}).then(()=>storeSourceForm(saveScope,value));formWrites.current=write;return write;}
+  function saveForm(saveScope:string,value:Form):Promise<void>{
+    if(hydratedScope.current!==saveScope)return Promise.reject(new Error('图纸资料尚未读取成功，请重试读取后再保存。'));
+    const write=formWrites.current.catch(()=>{}).then(()=>storeSourceForm(saveScope,value));formWrites.current=write;return write;
+  }
   useEffect(()=>registerSourceFlush(scope,async()=>{
     await formHydration.current;
+    if(hydratedScope.current!==scope)throw new Error('图纸资料尚未读取成功，请重试读取后再保存。');
     await formWrites.current;
     if(!alive.current||scopeRef.current!==scope)throw new Error('尺寸表单正在切换，请稍后重试。');
     await saveForm(scope,formRef.current);
   }),[scope]);
-  useEffect(()=>{if(!loaded||referenceSaving.current)return;formSaveTimer.current=setTimeout(()=>{if(referenceSaving.current||scopeRef.current!==scope)return;void saveForm(scope,formRef.current).catch(error=>{if(scopeRef.current===scope)setNotice(errorText(error));});},250);return()=>clearTimeout(formSaveTimer.current);},[form,loaded,scope]);
-  useEffect(()=>{if(openReferenceRequest>0&&inputDetails.current)inputDetails.current.open=true;},[openReferenceRequest]);
+  useEffect(()=>{if(!formReady||referenceSaving.current)return;formSaveTimer.current=setTimeout(()=>{if(referenceSaving.current||scopeRef.current!==scope||hydratedScope.current!==scope)return;void saveForm(scope,formRef.current).catch(error=>{if(scopeRef.current===scope)setNotice(errorText(error));});},250);return()=>clearTimeout(formSaveTimer.current);},[form,formReady,scope]);
+  useEffect(()=>{if(openReferenceRequest>0&&inputDetails.current)inputDetails.current.open=true;},[openReferenceRequest,formReady]);
   useEffect(()=>{setPoints([]);},[source?.id]);
   useEffect(()=>{setReviewConfirmed(false);},[review]);
   useEffect(()=>{setExpired(false);if(!preview)return;const remaining=Date.parse(preview.proposal.expires_at)-Date.now();if(remaining<=0){setExpired(true);return;}const timer=setTimeout(()=>setExpired(true),Math.min(remaining,2_147_000_000));return()=>clearTimeout(timer);},[preview]);
@@ -274,7 +295,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   }
   // Only an authenticated, persisted binding can restore this local activity's original job.
   useEffect(()=>{
-    if(!loaded||!form.jobId||!form.jobIdentity||!cloud.user||cloud.project||pollingPaused)return;
+    if(!formReady||!form.jobId||!form.jobIdentity||!cloud.user||cloud.project||pollingPaused)return;
     let saved:{scope?:string;user?:string;api?:string;binding?:{localActivityId?:string;cloudProjectId?:string;userId?:string;apiUrl?:string}};
     try{saved=JSON.parse(form.jobIdentity);}catch{return;}
     if(saved.scope!==scope||saved.user!==cloud.user.id||saved.api!==controller.config.apiUrl||
@@ -285,10 +306,10 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       if(!project||project.id!==saved.binding?.cloudProjectId){setPollingPaused(true);setNotice('原任务的场景连接未能恢复，任务编号与本机资料已保留。');}
     }).catch(error=>{if(!cancelled){setPollingPaused(true);setNotice(`原任务连接恢复暂停：${errorText(error)}`);}});
     return()=>{cancelled=true;};
-  },[controller,loaded,form.jobId,form.jobIdentity,cloud.user,cloud.project,scope,pollingPaused]);
+  },[controller,formReady,form.jobId,form.jobIdentity,cloud.user,cloud.project,scope,pollingPaused]);
   // Resume the same paid task after refresh; status reads never resubmit generation.
   useEffect(()=>{
-    if(busy||!loaded||!form.jobId||!cloud.user||!remoteProjectId||pollingPaused||job&&!ACTIVE.has(job.state))return;
+    if(busy||!formReady||!form.jobId||!cloud.user||!remoteProjectId||pollingPaused||job&&!ACTIVE.has(job.state))return;
     if(form.jobIdentity?form.jobIdentity!==identityKey:remoteProjectId!==scope)return;
     let cancelled=false;let timer:ReturnType<typeof setTimeout>;const expectedScope=scope,epoch=scopeEpoch.current.epoch,expectedIdentity=identityKey,expectedSession=sessionKey,expectedSource=sourceVersion.current;
     const current=()=>!cancelled&&scopeEpoch.current.epoch===epoch&&sourceVersion.current===expectedSource&&geometryIdentity(controller,expectedScope)===expectedIdentity&&venueSessionKey(controller,expectedScope)===expectedSession;
@@ -296,12 +317,12 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     void poll();return()=>{cancelled=true;clearTimeout(timer);};
     // acceptJob reads current refs; rerendering the form should not restart a polling request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[busy,loaded,form.jobId,form.jobIdentity,cloud.user?.id,remoteProjectId,identityKey,sessionKey,scope,pollingPaused,job?.state]);
+  },[busy,formReady,form.jobId,form.jobIdentity,cloud.user?.id,remoteProjectId,identityKey,sessionKey,scope,pollingPaused,job?.state]);
 
-  function patch(patch:Partial<Form>){formRef.current={...formRef.current,...patch};setForm(formRef.current);}
+  function patch(patch:Partial<Form>){if(hydratedScope.current!==scope)return;formRef.current={...formRef.current,...patch};setForm(formRef.current);}
   async function confirmReference(registration:ReferenceRegistration):Promise<void>{
     if(venueEdit)throw new Error('请先确认或取消场地编辑，再核对原图对应。');
-    if(referenceSaving.current||pending.current||!loaded)throw new Error('当前表单仍在读取或保存，请稍后确认原图对应。');
+    if(referenceSaving.current||pending.current||!formReady)throw new Error('当前表单仍在读取或保存，请稍后确认原图对应。');
     const expectedScope=scopeRef.current,basis=referenceSceneBasis(layoutRef.current),expectedEpoch=scopeEpoch.current.epoch;
     if(!basis||registration.appliedBasis!==basis)throw new Error('当前设计已变化，请重新核对对应点。');
     referenceSaving.current=true;
@@ -375,7 +396,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     finally{pending.current=false;if(alive.current)setBusy(false);}
   }
   async function prepareConnection():Promise<void>{
-    if(pending.current||referenceSaving.current||!loaded)return;
+    if(pending.current||referenceSaving.current||!formReady)return;
     pending.current=true;setBusy(true);setNotice('');
     const base=layoutRef.current,epoch=scopeEpoch.current.epoch,identity=geometryIdentity(controller,scopeRef.current);
     try{
@@ -417,6 +438,8 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   }
   const currentDesign=layout.backendSceneV2?.design;
   return <section className="rc-panel" aria-label="图纸与照片重建">
+    {!formReady&&<p className="cr-hint" role={loadError?'alert':'status'}>{loadError||'正在读取本机图纸资料…'}</p>}
+    {loadError&&<button type="button" className="rc-secondary" onClick={()=>setLoadAttempt(value=>value+1)}>重试读取图纸资料</button>}
     {layout.backendSceneV2&&<section className="rc-manual-venue" aria-label="人工编辑当前场地">
       <h4>当前场地 · {layout.width} × {layout.height} 米</h4>
       {!venueEdit?<><p className="cr-hint">可人工修改矩形场地的总宽、总深及现有门窗，先预览，核对后应用。</p><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
@@ -440,10 +463,10 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       </>}
       {venueNotice&&(!venueNotice.sceneKey||venueNotice.sceneKey===baseKey)&&<p className="cr-notice" role="status">{venueNotice.text}</p>}
     </section>}
-    <fieldset className="rc-existing-controls" disabled={!!venueEdit}>
+    <fieldset className="rc-existing-controls" disabled={!!venueEdit||!formReady}>
     <details className="rc-inputs" ref={inputDetails}><summary><Ruler size={16}/><span>图纸与照片重建</span><small>米制 · 可核对</small></summary>
     <p className="cr-hint">输入实测尺寸，图纸和照片共同补充空间信息。照片遮挡处与手绘不确定部分需要核对。</p>
-    {localActivity&&!connected&&<button type="button" className="rc-secondary" disabled={busy||!loaded} onClick={()=>void prepareConnection()}>准备场景连接</button>}
+    {localActivity&&!connected&&<button type="button" className="rc-secondary" disabled={busy||!formReady} onClick={()=>void prepareConnection()}>准备场景连接</button>}
     {layout.backendSceneV2&&<><p className="cr-hint">下方是待提交的生成尺寸，填写不会修改当前场地。当前场地为 {layout.width} × {layout.height} 米。</p>{generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}</>}
     <div className="rc-measures">{([['width','总宽'],['depth','总深'],['height','层高']] as const).map(([key,label])=><label key={key}>{label}（米）<input aria-label={`${label}（米）`} type="number" step="0.001" min="0.001" max={key==='height'?30:200} value={form[key]} onChange={e=>patch({[key]:e.target.value})} placeholder="实测值"/></label>)}</div>
     <label className="cr-label">补充尺寸<textarea aria-label="补充尺寸" rows={2} value={form.text} onChange={e=>patch({text:e.target.value})} placeholder="北墙 8 米，入口宽 1.2 米，柱间距 450 厘米"/></label>
@@ -461,7 +484,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       {layout.backendSceneV2&&images.length>0&&<label className="cr-check"><input type="checkbox" checked={reidentify} onChange={event=>setReidentify(event.target.checked)}/><span><strong>重新识别结构</strong><small>默认沿用已确认的墙、门窗与柱子，直接规划风格和布置。换图或需要重测时开启。</small></span></label>}
       {hasPhotos&&<fieldset className="rc-mode"><legend>本次照片生成模式 <small>每次请选择</small></legend>{([['restore','还原现场','保留已有家具与外观'],['redesign','重新布置','保留固定结构与锁定物件']] as const).map(([value,label,hint])=><label key={value}><input type="radio" name={`photo-mode-${scope}`} value={value} checked={mode===value} onChange={()=>setMode(value)}/><span><strong>{label}</strong><small>{hint}</small></span></label>)}</fieldset>}
       <label className="cr-label">局部修改或保留要求<textarea aria-label="局部修改或保留要求" value={form.adjustment} maxLength={1000} rows={2} onChange={e=>patch({adjustment:e.target.value})} placeholder="保留座位和结构，只调整展示区。可在场景中锁定要保留的物件。"/></label>
-      <button type="button" className="cr-generate" disabled={requestRunning||!loaded} onClick={()=>void generate()}>{requestRunning?<Loader2 size={16} className="cr-spin"/>:<Sparkles size={16}/>} {requestRunning?(busy?'正在处理当前操作…':'重建任务进行中…'):'Generate 重建并设计方案'}</button>
+      <button type="button" className="cr-generate" disabled={requestRunning||!formReady} onClick={()=>void generate()}>{requestRunning?<Loader2 size={16} className="cr-spin"/>:<Sparkles size={16}/>} {requestRunning?(busy?'正在处理当前操作…':'重建任务进行中…'):'Generate 重建并设计方案'}</button>
     </>}
     </details>
     {form.jobId&&!job&&<div className="rc-job" role="status"><strong>{form.jobIdentity&&form.jobIdentity!==identityKey?'原任务等待恢复场景连接':'正在恢复原重建任务'}</strong><small>任务 {form.jobId.slice(0,8)}</small>{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>setPollingPaused(false)}>继续查询原任务</button>}</div>}
@@ -475,7 +498,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       {review.objects.length>0&&<div className="rc-review-objects"><h4>核对识别物件与碰撞</h4><p className="cr-hint">有冲突的物件会标记为「需调整」。修改位置、旋转或尺寸后，服务会重新校验；锁定物件保留。</p>{review.objects.map((object,index)=><details key={object.id}><summary>{job.issues.some(issue=>issue.targetId===object.id)?'需调整 · ':''}物件 {index+1} · {object.materialId}{object.locked?' · 已锁定':''}</summary>{object.locked?<p>此物件已锁定，请先在主场景中解锁并重新生成。</p>:<><div className="rc-measures"><NumberField label="位置 X" value={object.position.x} onChange={x=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,x}}:o)})}/><NumberField label="位置 Z" value={object.position.z} onChange={z=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,z}}:o)})}/><NumberField label="旋转角度" value={object.rotation} onChange={rotation=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,rotation}:o)})}/>{(['width','depth','height'] as const).map(key=><NumberField key={key} label={{width:'宽度',depth:'深度',height:'高度'}[key]} value={object.size[key]} onChange={value=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,size:{...o.size,[key]:value}}:o)})}/>)}</div><button type="button" className="rc-secondary" onClick={()=>setReview({...review,objects:review.objects.filter(o=>o.id!==object.id),...(review.design?{design:{...review.design,highlights:review.design.highlights.map(h=>({...h,objectIds:h.objectIds.filter(id=>id!==object.id)})),requirements:review.design.requirements.map(r=>({...r,objectIds:r.objectIds.filter(id=>id!==object.id)}))}}:{})})}>删除误识别物件</button></>}</details>)}</div>}
       <label className="cr-check"><input type="checkbox" checked={reviewConfirmed} onChange={e=>setReviewConfirmed(e.target.checked)}/><span>我已核对所有墙段、门窗、柱子和不可见区域，确认上述结构与尺寸。</span></label><button className="rc-secondary" type="button" disabled={busy||!reviewConfirmed||reviewStale} onClick={()=>void generate(true)}>确认结构并继续设计</button>
     </div>}
-    {currentStructure&&!(review&&job?.state==='needs_review')&&<ReferenceImageReview scene={currentStructure} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={onAddReferenceImages} applied openRequest={openReferenceRequest}/>}
+    {formReady&&currentStructure&&!(review&&job?.state==='needs_review')&&<ReferenceImageReview scene={currentStructure} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={onAddReferenceImages} applied openRequest={openReferenceRequest}/>}
     {preview&&<div className="rc-candidate"><h4>三维候选方案</h4><p>{preview.proposal.explanation}</p>{preview.proposal.candidate.schemaVersion===2&&preview.proposal.candidate.design&&<><strong>{preview.proposal.candidate.design.concept}</strong>{preview.proposal.candidate.design.highlights.map((h,index)=><button key={index} type="button" className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{preview.proposal.candidate.design.requirements.map((r,index)=><div className={`rc-requirement is-${r.status}`} key={index}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</>}
       <div className="rc-actions"><button type="button" className="cr-generate" disabled={busy||stale||!connected} onClick={()=>void apply()}><Check size={15}/>确认应用并保存</button><button className="rc-secondary" type="button" disabled={busy} onClick={()=>{setPreview(null);setJob(null);patch({jobId:undefined,requestId:undefined});}}>放弃候选</button></div>
     </div>}
