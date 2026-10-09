@@ -1,6 +1,6 @@
 'use client';
 
-import { Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
+import { Camera, Grid, Layers, Maximize2, Minus, MousePointer2, Plus, Redo2, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -70,14 +70,15 @@ interface ViewToolsProps {
   onApplyPreset(preset: CameraPreset): void;
   onFit(): void;
   onZoom(direction: '+' | '-'): void;
+  onScreenshot?(): void;
 }
 
-export function ScendanceViewTools({ onApplyPreset, onFit, onZoom }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onScreenshot }: ViewToolsProps): JSX.Element {
   const { view, setView, toggle, history } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const choosePreset = (next: CameraPreset) => { setView(current => ({ ...current, view2D: false })); onApplyPreset(next); setPreset(next); };
   return <div className="sc-view-tools" aria-label="视角与编辑工具">
-    <div className="sc-tool-group"><button type="button" title="撤销 Ctrl / ⌘ Z" aria-label="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={17}/></button><button type="button" title="重做 Ctrl / ⌘ Shift Z" aria-label="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={17}/></button></div>
+    <div className="sc-tool-group"><button type="button" title="撤销 Ctrl / ⌘ Z" aria-label="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={17}/></button><button type="button" title="重做 Ctrl / ⌘ Shift Z" aria-label="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={17}/></button>{onScreenshot&&<button type="button" title="导出当前画面" aria-label="导出当前画面" onClick={onScreenshot}><Camera size={16}/><span>画面</span></button>}</div>
     <div className="sc-tool-group sc-view-tabs"><button type="button" className={!view.view2D && preset === 'iso' ? 'is-active' : ''} onClick={() => choosePreset('iso')}><Layers size={15}/>整体</button><button type="button" className={!view.view2D && preset === 'top' ? 'is-active' : ''} onClick={() => choosePreset('top')}>俯视</button><button type="button" className={!view.view2D && preset === 'front' ? 'is-active' : ''} onClick={() => choosePreset('front')}>客户视角</button><button type="button" className={view.view2D ? 'is-active' : ''} onClick={() => toggle('view2D')}>2D</button></div>
     <div className="sc-tool-group"><button type="button" title="缩小" aria-label="缩小" onClick={() => onZoom('-')} disabled={view.view2D}><Minus size={16}/></button><button type="button" title="适应场地" aria-label="适应场地" onClick={onFit} disabled={view.view2D}><Maximize2 size={16}/></button><button type="button" title="放大" aria-label="放大" onClick={() => onZoom('+')} disabled={view.view2D}><Plus size={16}/></button></div>
     <div className="sc-tool-group"><button type="button" title="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}><Grid size={16}/></button><button type="button" title="显示尺寸" aria-label="显示尺寸" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}><MousePointer2 size={16}/></button></div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpRight, ChevronDown, FolderOpen, Search, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, FolderOpen, Search, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -227,8 +227,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const accountName = cloud.user?.is_anonymous ? '访客' : cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : '本地体验');
 
   return <>
-    <button className="sc-cloud-trigger" type="button" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
-      <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={15}/></span><span>账户与项目</span><ChevronDown size={13} aria-hidden="true"/>
+    <button className="sc-cloud-trigger" type="button" aria-label="账户与项目" title="账户与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
+      <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={17}/></span>
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">

@@ -29,6 +29,7 @@ interface Props {
   onOpenBrief?: (() => void) | undefined;
   backupActions?: LocalProjectBackupActions | null | undefined;
   onBackupRestored?: (() => void) | undefined;
+  deliveryViewRequest?: { serial: number; view: 'operations' | 'materials' } | undefined;
 }
 
 function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
@@ -101,17 +102,20 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing Binggo entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
-  const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins'>(operationsAvailable ? 'operations' : 'materials');
+  const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
+  useEffect(() => { setView(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials')); }, [deliveryViewRequest, layout.id, operationsAvailable]);
   const checkinLocal=isLocalActivityWorkspace(controller);
   const localCheckins=checkinLocal?checkins:undefined;
   const checkinsUnavailable=!!localCheckins&&!localCheckins.ready;
   const briefUnavailable=!!briefState&&(!briefState.ready||!!briefState.error);
-  const latest = useRef({ layout, controller, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable, brief:briefState?.brief });
-  latest.current = { layout, controller, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable, brief:briefState?.brief };
+  const source = { layout, controller, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable, brief:briefState?.brief, briefReady:!briefUnavailable };
+  const latest = useRef({ ...source, epoch: 0 });
+  const sourceChanged = Object.entries(source).some(([key, value]) => latest.current[key as keyof typeof source] !== value);
+  latest.current = { ...source, epoch: latest.current.epoch + (sourceChanged ? 1 : 0) };
   const mounted = useRef(true), pending = useRef(false);
   const exportSnapshot = useRef<typeof latest.current & { metadata: DeliverySnapshot } | null>(null);
   const preview = useMemo(() => {
@@ -124,7 +128,6 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const requestedCloud = typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('project') === layout.id;
   const cloudBound = !checkinLocal && !!layout.id && (cloud.project?.id === layout.id || requestedCloud);
   const editable = !cloudBound && !!onUpdateItem;
-  useEffect(() => { setView(operationsAvailable ? 'operations' : 'materials'); }, [layout.id, operationsAvailable]);
   const [reviews, setReviews] = useState<{ layout: RoomLayout; statuses: Record<string, Handoff['status'] | 'needs_review'> } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -136,36 +139,45 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const checking = reviews?.layout !== layout && preview.items.some(item => item.handoff?.status === 'review' || item.handoff?.status === 'accepted');
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setNotice(''); exportSnapshot.current = null; }, [layout.id, cloud.user?.id, cloud.project?.id]);
-  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production' | 'activity'): Promise<void> {
+  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production' | 'activity' | 'timetable'): Promise<void> {
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice('');
     const before = latest.current;
-    const stillCurrent = () => mounted.current && latest.current.layout === before.layout && latest.current.controller === before.controller && latest.current.userId === before.userId && latest.current.projectId === before.projectId&&latest.current.checkins===before.checkins&&latest.current.checkinsReady===before.checkinsReady&&latest.current.brief===before.brief;
+    const stillCurrent = () => mounted.current && latest.current.epoch === before.epoch && latest.current.layout === before.layout && latest.current.controller === before.controller && latest.current.userId === before.userId && latest.current.projectId === before.projectId&&latest.current.checkins===before.checkins&&latest.current.checkinsReady===before.checkinsReady&&latest.current.brief===before.brief&&latest.current.briefReady===before.briefReady;
     const previous = exportSnapshot.current;
-    const snapshot = kind !== 'activity' && previous && previous.layout === layout && previous.controller === before.controller && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins&&previous.brief===before.brief
+    const snapshot = kind !== 'activity' && kind !== 'timetable' && previous && previous.epoch === before.epoch && previous.layout === layout && previous.controller === before.controller && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins&&previous.brief===before.brief&&previous.briefReady===before.briefReady
       ? previous : { ...before, metadata: { id: crypto.randomUUID(), generatedAt: new Date().toISOString() } };
     exportSnapshot.current = snapshot;
     const metadata = snapshot.metadata;
     try {
-      if((kind==='operations'||kind==='json'||kind==='production'||kind==='activity')&&!before.checkinsReady)throw new Error('点验资料尚未读取完成，请重新读取后导出。');
+      if((kind==='operations'||kind==='json'||kind==='production'||kind==='activity'||kind==='timetable')&&!before.checkinsReady)throw new Error('点验资料尚未读取完成，请重新读取后导出。');
       const { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } = await import('../lib/scene-delivery');
       if (!stillCurrent()) return;
-      if (kind === 'activity') {
+      if (kind === 'activity' || kind === 'timetable') {
         if (!backupActions) throw new Error('当前工作台尚未准备完整活动资料，未生成交接文件。');
         const { parseLocalProjectBackupJson } = await import('@/lib/local-project-backup');
-        const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
         if (!stillCurrent()) return;
         const saved = parseLocalProjectBackupJson(await backupActions.prepareBackup());
         if (!stillCurrent()) return;
         if (saved.layout.id !== before.layout.id || saved.brief.status === 'not-in-file' || saved.materialCheckins.status === 'not-in-file') {
           throw new Error('活动资料未完整对应当前项目，请重新读取后导出。');
         }
-        const html = await productionPlanHandoffHtml(saved.layout, metadata,
-          saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined,
-          { scope: 'activity', brief: saved.brief });
-        if (!stillCurrent()) return;
-        downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部活动交接_${metadata.id}`, 'html');
-        setNotice('完整活动交接文件已导出，可离线打开与打印。文件包含内部执行资料，请核对后交给执行团队。');
+        const ledger = saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined;
+        if (kind === 'timetable') {
+          const { executionTimetableHtml } = await import('@/lib/execution-timetable-export');
+          if (!stillCurrent()) return;
+          const html = await executionTimetableHtml(saved.layout, metadata, ledger);
+          if (!stillCurrent()) return;
+          downloadSceneDelivery(html, 'text/html;charset=utf-8', `${saved.layout.name}_执行时间表_${metadata.id}`, 'html');
+          setNotice('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。');
+        } else {
+          const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
+          if (!stillCurrent()) return;
+          const html = await productionPlanHandoffHtml(saved.layout, metadata, ledger, { scope: 'activity', brief: saved.brief });
+          if (!stillCurrent()) return;
+          downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部活动交接_${metadata.id}`, 'html');
+          setNotice('完整活动交接文件已导出，可离线打开与打印。文件包含内部执行资料，请核对后交给执行团队。');
+        }
       } else if (kind === 'production') {
         const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
         if (!stillCurrent()) return;
@@ -185,7 +197,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         downloadSceneDelivery(text, kind === 'json' ? 'application/json' : 'text/csv;charset=utf-8', `${layout.name}_${label}_${metadata.id}`, kind === 'json' ? 'json' : 'csv');
         setNotice(kind === 'json' ? '场景与执行记录已导出，私有模型重开时仍需授权。' : kind === 'execution' ? '执行清单已导出，请按验收条件核对。' : kind === 'operations' ? '活动安排已导出；计划与实际记录分别保留，请按条件核对。' : '物料清单已导出，尺寸与采购规格仍需确认。');
       }
-    } catch (error) { if (mounted.current && latest.current.userId === before.userId && latest.current.projectId === before.projectId) setNotice(error instanceof Error ? error.message : '导出失败，请重试。'); }
+    } catch (error) { if (mounted.current && latest.current.userId === before.userId && latest.current.projectId === before.projectId && (kind !== 'timetable' || stillCurrent())) setNotice(error instanceof Error ? error.message : '导出失败，请重试。'); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
@@ -227,6 +239,8 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     {backupActions && <>
       <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || briefUnavailable || backupActions.backupPending} onClick={() => void download('activity')}>导出完整活动交接 HTML</button>
       <p className="sc-note">包含需求、全部活动任务、物件工作单、制作计划和点验。请先保存各表单，再导出给执行团队；照片和模型文件需另行提供。</p>
+      <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || briefUnavailable || backupActions.backupPending || !layout.eventOperations?.tasks.length} onClick={() => void download('timetable')}>导出执行时间表 HTML</button>
+      <p className="sc-note">{layout.eventOperations?.tasks.length ? '保留每项任务的计划与实际时间、负责人及复核信息。未定项保持待确认，文件冻结在本次生成时。' : '先在活动安排中保存任务，再导出执行时间表。'}</p>
       {briefUnavailable && <p className="sc-note">活动需求尚未准备好，请在活动需求中重试读取。</p>}
     </>}
     <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || !layout.eventOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>

@@ -10,12 +10,15 @@ import {
   type PreparedProjectReview, type ProjectReviewPanelActions, type ProjectReviewSettings,
 } from '@/lib/project-review-workflow';
 import { downloadTextFile } from '../lib/plan-export/download';
+import { ProjectReviewLibraryPanel } from './project-review-library';
 import './project-review-panel.css';
 
 export interface ProjectReviewPanelProps {
+  storageIdentity?: string;
   source: ProjectReviewSource;
   actions: ProjectReviewPanelActions;
   disabled?: boolean;
+  inputLocked?: boolean;
 }
 
 const initialSettings = (): ProjectReviewSettings => ({
@@ -27,7 +30,7 @@ type ReviewFile = { snapshot: ProjectReviewSnapshot; html: string };
 type Work = 'prepare' | 'capture' | null;
 
 /** One review draft only. The editor owns source reads and canvas capture. */
-export function ProjectReviewPanel({ source, actions, disabled = false }: ProjectReviewPanelProps): JSX.Element {
+export function ProjectReviewPanel({ source, actions, disabled = false, inputLocked = false, storageIdentity }: ProjectReviewPanelProps): JSX.Element {
   const [settings, setSettings] = useState(initialSettings);
   const [prepared, setPrepared] = useState<PreparedProjectReview | null>(null);
   const [captures, setCaptures] = useState<CheckedCapture[]>([]);
@@ -39,10 +42,12 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
   const latestActions = useRef(actions);
   latestActions.current = actions;
   const operation = useRef({ id: 0, kind: null as Work });
-  const baseline = useRef({ source: { ...source }, disabled, epoch: 0 });
+  const baseline = useRef({ source: { ...source }, disabled, storageIdentity, epoch: 0 });
   const previousScope = useRef(source.scope);
-  if (!sameSource(baseline.current.source, source) || baseline.current.disabled !== disabled) {
-    baseline.current = { source: { ...source }, disabled, epoch: baseline.current.epoch + 1 };
+  const previousIdentity = useRef(storageIdentity);
+  const inputLock = useRef(inputLocked); inputLock.current = inputLocked;
+  if (!sameSource(baseline.current.source, source) || baseline.current.disabled !== disabled || baseline.current.storageIdentity !== storageIdentity) {
+    baseline.current = { source: { ...source }, disabled, storageIdentity, epoch: baseline.current.epoch + 1 };
     operation.current = { id: operation.current.id + 1, kind: null };
   }
   const epoch = baseline.current.epoch;
@@ -56,7 +61,8 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
   }
   const liveSource = readSource();
   const sourceMatches = sameSource(liveSource, source);
-  const usable = !!prepared && !disabled && !stale && sourceMatches && sameSource(prepared.snapshot.source, source);
+  const identityMatches = previousIdentity.current === storageIdentity;
+  const usable = !!prepared && !disabled && identityMatches && !stale && sourceMatches && sameSource(prepared.snapshot.source, source);
 
   useEffect(() => {
     mounted.current = true;
@@ -65,7 +71,9 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
   useEffect(() => {
     setWorking(null); setPrepared(null); setCaptures([]); setFile(null); setError(''); setNotice('');
     setStale(previous => previous || !!prepared || working !== null);
-    if (previousScope.current !== source.scope) { setSettings(initialSettings()); previousScope.current = source.scope; }
+    if (previousScope.current !== source.scope || previousIdentity.current !== storageIdentity) {
+      setSettings(initialSettings()); previousScope.current = source.scope; previousIdentity.current = storageIdentity;
+    }
     // Source/disabled changes cancel outstanding work; its eventual result cannot repopulate this panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epoch]);
@@ -82,7 +90,11 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
     setStale(previous => previous || !!prepared || working !== null);
     setWorking(null); setPrepared(null); setCaptures([]); setFile(null); setError(''); setNotice('');
   }
-  function change(next: ProjectReviewSettings): void { invalidate(); setSettings(next); }
+  function canChange(): boolean {
+    return !inputLock.current && !baseline.current.disabled && previousScope.current === baseline.current.source.scope &&
+      previousIdentity.current === baseline.current.storageIdentity;
+  }
+  function change(next: ProjectReviewSettings): void { if (!canChange()) return; invalidate(); setSettings(next); }
   function expire(): void {
     invalidate(); setStale(true);
     setError(readSource() ? '当前内容已变化，请重新生成评审包。' : '暂时无法读取当前内容，请稍后重试。');
@@ -112,7 +124,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
     return { snapshot: finalSnapshot, html };
   }
   async function generate(): Promise<void> {
-    if (disabled || operation.current.kind) return;
+    if (!canChange() || operation.current.kind) return;
     try { currentSource(source); } catch { expire(); return; }
     const token = begin('prepare');
     setStale(false); setPrepared(null); setCaptures([]); setFile(null);
@@ -142,7 +154,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
     }
   }
   async function addCapture(): Promise<void> {
-    if (!usable || !prepared || operation.current.kind || captures.length >= 6) return;
+    if (!canChange() || !usable || !prepared || operation.current.kind || captures.length >= 6) return;
     try { currentSource(prepared.snapshot.source); } catch { expire(); return; }
     const token = begin('capture');
     try {
@@ -164,7 +176,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
     }
   }
   function approve(index: number, approved: boolean): void {
-    if (!usable || !prepared || operation.current.kind) return;
+    if (!canChange() || !usable || !prepared || operation.current.kind) return;
     try {
       currentSource(prepared.snapshot.source);
       const next = captures.map((capture, i) => i === index ? { ...capture, approved } : capture);
@@ -176,7 +188,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
     }
   }
   function withoutImages(): void {
-    if (!usable || !prepared || operation.current.kind) return;
+    if (!canChange() || !usable || !prepared || operation.current.kind) return;
     try {
       const nextFile = makeFile(prepared.snapshot, []);
       setPrepared({ snapshot: prepared.snapshot, capture: { state: 'omitted' } });
@@ -209,7 +221,12 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
   return <section className="sc-project-review" aria-label="客户评审包">
     <h3>客户评审包</h3>
     <p className="sc-note">准备一份可预览、下载和打印的方案文件。选择本次允许公开的内容。</p>
-    <fieldset className="sc-project-review-fields" disabled={disabled}>
+    {storageIdentity && <details className="sc-review-library-entry"><summary>本机草稿与文件</summary>
+      <ProjectReviewLibraryPanel key={storageIdentity} identityKey={storageIdentity} scope={source.scope}
+        draft={identityMatches?{summary:settings.summary,pending:settings.pending}:{summary:'',pending:''}} onLoadDraft={draft=>change({...initialSettings(),...draft})}
+        file={ready?file:null} getSource={actions.getSource} disabled={disabled||inputLocked||!identityMatches||working!==null||!sourceMatches}/>
+    </details>}
+    <fieldset className="sc-project-review-fields" disabled={disabled||inputLocked||!identityMatches}>
       <legend>本次文件内容</legend>
       <label className="sc-project-review-option"><input type="checkbox" checked={settings.disclosure.brief}
         onChange={event => change({ ...settings, disclosure: { ...settings.disclosure, brief: event.target.checked } })}/>包含当前活动需求</label>
@@ -227,7 +244,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
       <p className="sc-note">参考底图可能进入画面，捕获后仍需逐张核对。</p>
     </fieldset>
     <div className="sc-project-review-actions">
-      <button type="button" className="sc-button" disabled={disabled || working !== null || !sourceMatches}
+      <button type="button" className="sc-button" disabled={disabled || inputLocked || !identityMatches || working !== null || !sourceMatches}
         onClick={() => void generate()}>{working === 'prepare' ? '正在准备评审包…' : '生成评审包'}</button>
       {working && <button type="button" className="sc-button" disabled={disabled} onClick={cancel}>{working === 'capture' ? '取消补充画面' : '取消本次准备'}</button>}
     </div>
@@ -237,14 +254,14 @@ export function ProjectReviewPanel({ source, actions, disabled = false }: Projec
       {captures.map((capture, index) => <figure className="sc-project-review-image" key={index}>
         <img src={capture.image.dataUrl} alt={`待核对的评审画面 ${index + 1}`}/>
         <figcaption>画面 {index + 1} · {capture.approved ? '已核对' : '待核对'}</figcaption>
-        <label className="sc-project-review-option"><input type="checkbox" checked={capture.approved} disabled={working !== null}
+        <label className="sc-project-review-option"><input type="checkbox" checked={capture.approved} disabled={disabled || inputLocked || working !== null}
           onChange={event => approve(index, event.target.checked)}/>我已核对这张画面，可以放入评审文件</label>
       </figure>)}
       {!!captures.length && !ready && <p className="sc-note">逐张核对并勾选后，才会生成包含这些画面的评审文件。</p>}
       <div className="sc-project-review-actions">
-        <button type="button" className="sc-button" disabled={working !== null || captures.length >= 6}
+        <button type="button" className="sc-button" disabled={disabled || inputLocked || working !== null || captures.length >= 6}
           onClick={() => void addCapture()}>{working === 'capture' ? '正在补充画面…' : '补充当前画面'}</button>
-        {(prepared.capture.state === 'failed' || captures.length > 0) && <button type="button" className="sc-button" disabled={working !== null}
+        {(prepared.capture.state === 'failed' || captures.length > 0) && <button type="button" className="sc-button" disabled={disabled || inputLocked || working !== null}
           onClick={withoutImages}>改为无图评审</button>}
       </div>
       <p className="sc-note">同一份评审最多包含 6 张画面。切换视角后可补充当前画面。</p>
