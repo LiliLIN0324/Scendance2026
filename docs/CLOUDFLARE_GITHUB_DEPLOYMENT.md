@@ -11,6 +11,9 @@
 | GitHub 仓库 | `LiliLIN0324/Scendance2026` |
 | 生产分支 | `main` |
 | Pages 地址 | `https://scendance-scene-planner-ewz.pages.dev` |
+| 自定义域名 | `https://scendance.lilicoding.space` |
+
+`scendance-scene-planner.pages.dev` 与 `scendance.charlestech.org` **不属于本项目**：它们指向另一个 Cloudflare 账号下的同名 Pages 项目，连的是旧 Supabase 项目。本项目实际使用的地址是上表中的 `-ewz.pages.dev` 与自定义域名。
 
 Cloudflare Pages 已通过 GitHub 集成连接到仓库。推送到 `main` 会触发生产构建；推送到其他分支会触发预览构建并更新 GitHub PR 评论。
 
@@ -51,11 +54,36 @@ NEXT_PUBLIC_GENERATION_ENABLED=false
 
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 是兼容 `main` 旧代码的变量名，值与 publishable key 相同。两个 key 都是浏览器公开配置，但仍保存在 Cloudflare 的项目环境中，不写入仓库。
 
+## 自定义域名 `scendance.lilicoding.space`
+
+`lilicoding.space` 的 zone 与本 Pages 项目在同一个 Cloudflare 账号，因此域名直接挂在项目上，由 Cloudflare 自动签发证书（CA 为 Google）：
+
+| 设置 | 值 |
+| --- | --- |
+| 项目 → Custom domains | `scendance.lilicoding.space`（status/verification/validation 均为 `active`） |
+| DNS | `CNAME scendance` → `scendance-scene-planner-ewz.pages.dev`，代理开启 |
+| 目标后缀 | 必须带 `-ewz`。不带后缀的 `scendance-scene-planner.pages.dev` 属于另一个账号 |
+
+**Worker 路由会抢占子域。** 该 zone 里存在一条通配路由 `*.lilicoding.space/*`（脚本 `minigame`），它会拦截所有子域，使请求在到达 Pages 之前就被 Worker 处理掉，对外表现为访问域名返回 `200` 且正文只有 `disabled`（`Content-Type: text/plain`），而 DNS、证书、域名状态全部正常。排查时不要被这些「正常」指标误导。
+
+解决办法是在该域名上放一条脚本为空的更具体路由，让请求绕过 Worker；`minigame` 通配路由本身不需要改动：
+
+```sh
+# 列出当前路由
+curl -sS "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" -H "Authorization: Bearer $CF_TOKEN"
+# 为具体主机名建一条无脚本路由（script 为空 = 该主机不经过任何 Worker）
+curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" \
+  -H "Authorization: Bearer $CF_TOKEN" -H 'Content-Type: application/json' \
+  --data '{"pattern":"scendance.lilicoding.space/*","script":null}'
+```
+
+用 API token 操作时注意权限是分开的：`pages:write` 能加自定义域，但改 DNS 需要 `Zone → DNS → Edit`，改 Worker 路由需要 `Workers Routes → Edit`。
+
 ## 验证
 
 1. 在 GitHub 推送一个提交到 `main`。
 2. 打开 Cloudflare 控制台中的 Pages 项目，确认出现新的 Production 部署。
 3. 检查构建日志中的 `clone_repo`、`build` 和 `deploy` 阶段均为成功。
-4. 访问 `https://scendance-scene-planner-ewz.pages.dev/`，确认页面正常。
+4. 访问 `https://scendance-scene-planner-ewz.pages.dev/` 与 `https://scendance.lilicoding.space/`，确认页面正常。若自定义域名只返回正文 `disabled`，见上一节的 Worker 路由说明。
 
 Cloudflare 只构建和发布前端静态产物。Supabase 数据库迁移和 Edge Functions 仍按 [OWN_SUPABASE_TUTORIAL.md](OWN_SUPABASE_TUTORIAL.md) 单独部署。

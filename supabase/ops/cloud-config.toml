@@ -6,8 +6,8 @@ project_id = "scendance-scene-planner"
 schemas = ["public", "graphql_public"]
 
 [auth]
-site_url = "https://scendance-scene-planner-ewz.pages.dev"
-additional_redirect_urls = ["https://scendance-scene-planner-ewz.pages.dev", "https://scendance-scene-planner-ewz.pages.dev/auth/callback", "https://scendance.charlestech.org", "https://scendance.charlestech.org/auth/callback", "http://localhost:3000/auth/callback", "http://127.0.0.1:3000/auth/callback"]
+site_url = "https://scendance.lilicoding.space"
+additional_redirect_urls = ["https://scendance.lilicoding.space", "https://scendance.lilicoding.space/auth/callback", "https://scendance-scene-planner-ewz.pages.dev", "https://scendance-scene-planner-ewz.pages.dev/auth/callback", "https://scendance.charlestech.org", "https://scendance.charlestech.org/auth/callback", "http://localhost:3000/auth/callback", "http://127.0.0.1:3000/auth/callback"]
 enable_signup = true
 # The web client opens a guest session for visitors who have not signed in.
 enable_anonymous_sign_ins = true
