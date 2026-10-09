@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { generateProposal } from './providers.ts';
+import { chatRequest, generateProposal } from './providers.ts';
 import { buildProposal, modificationSchema } from './ai.ts';
 import { agentRunRequestSchema, type AgentRunRequest } from './agent-contract.ts';
 import { ApiError, canonical, catalog, type Scene } from './domain.ts';
@@ -10,7 +10,7 @@ import { createParametricAsset } from './parametric.ts';
 import { createMaterialVariant, readAssetMaterials } from './material-variants.ts';
 import { materialChangeSchema } from './asset-customization-contract.ts';
 import { evaluateCandidates } from './jev.ts';
-import { fetchJson, required, type Env, type Fetcher } from './http.ts';
+import { fetchJson, type Env, type Fetcher } from './http.ts';
 import { parseAgentModelReply } from './agent-model-reply.ts';
 import type { Backend } from './backend.ts';
 
@@ -96,9 +96,10 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     for(let turn=1;turn<=6&&!finished;turn++) {
       await check();await call('step',{progress:`DeepSeek 正在处理（${turn}/6）`});
       if(turn===6)messages.push({role:'user',content:`这是最后一次模型调用。请现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个完整候选（title、explanation、commands），不要继续读取或校验。此前 validate_candidate 的结果未提交；提交仍需通过程序校验，JEV 方案由用户最终选择。`});
-      const body={model:'deepseek-flash',messages,tools,tool_choice:turn===6?{type:'function',function:{name:'submit_candidates'}}:'auto',max_tokens:7000,thinking:{type:'disabled'}};
-      if(new TextEncoder().encode(JSON.stringify(body)).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
-      const raw=await fetchJson('https://api.deepseek.com/chat/completions',{method:'POST',headers:{authorization:`Bearer ${required(env,'DEEPSEEK_API_KEY')}`,'content-type':'application/json'},body:JSON.stringify(body)},fetcher,150000,Math.min(35000,Math.max(1,deadline-Date.now())));
+      const { url, init } = chatRequest(env, { messages, tools, tool_choice:turn===6?{type:'function',function:{name:'submit_candidates'}}:'auto', max_tokens:7000 });
+      // Bytes, not characters: the prompt and the scene payload are largely Chinese.
+      if(new TextEncoder().encode(init.body as string).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
+      const raw=await fetchJson(url,init,fetcher,150000,Math.min(35000,Math.max(1,deadline-Date.now())));
       const reply=parseAgentModelReply(raw);
       await call('usage',{usage:{provider:'deepseek',turn,usage:reply.usage}});await check();
       if(reply.finishReason==='length')throw new ApiError('AGENT_OUTPUT_TRUNCATED',502);

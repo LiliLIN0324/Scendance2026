@@ -51,6 +51,21 @@ export function hunyuan(env: Env, fetcher: Fetcher = fetch, pinned?:GenerationPr
     },
   };
 }
+/** Shared chat provider for the Binggo tool loop and single-shot proposals. */
+export const CHAT_API_KEY_ENV = 'TOKENDANCE_API_KEY';
+const CHAT_URL = 'https://tokendance.space/gateway/v1/chat/completions';
+const CHAT_MODEL = 'deepseek-v4.1-flash';
+/**
+ * OpenAI-compatible chat request against the Tokendance gateway. Keeping the endpoint, model and
+ * key in one place stops the two call sites from drifting; `thinking` is always disabled because
+ * this is a reasoning model and each caller bounds its own output tokens.
+ */
+export function chatRequest(env: Env, body: Record<string, unknown>): { url: string; init: RequestInit } {
+  return { url: CHAT_URL, init: {
+    method: 'POST', headers: { Authorization: `Bearer ${required(env, CHAT_API_KEY_ENV)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
+  } };
+}
 export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch, resources: readonly SceneResource[] = []) {
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -62,10 +77,8 @@ export async function generateProposal(input: ProposalRequest, env: Env, reserve
     // 65,536 bytes + framing at CNY 2/M input, plus 4,096 output at CNY 8/M < CNY 0.20.
     if(new TextEncoder().encode(JSON.stringify(messages)).length>65_536) throw new ApiError('AI_INPUT_TOO_LARGE',413);
     await reserveCall(attempt);
-    const raw = await fetchJson('https://api.deepseek.com/chat/completions', {
-      method: 'POST', headers: { Authorization: `Bearer ${required(env, 'DEEPSEEK_API_KEY')}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'deepseek-flash', messages, response_format: { type: 'json_object' }, max_tokens: 4096, thinking: { type: 'disabled' } }),
-    }, fetcher);
+    const { url, init } = chatRequest(env, { messages, response_format: { type: 'json_object' }, max_tokens: 4096 });
+    const raw = await fetchJson(url, init, fetcher);
     const response = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }), finish_reason: z.string() })).min(1), usage: z.unknown().optional() }).parse(raw);
     usage.push(response.usage ?? null);
     const content = response.choices[0].message.content;

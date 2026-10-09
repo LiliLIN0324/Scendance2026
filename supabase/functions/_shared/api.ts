@@ -8,7 +8,7 @@ import { reconstructionRequestSchema } from './reconstruction-contract.ts';
 import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, recommendations } from './assets.ts';
-import { generateProposal } from './providers.ts';
+import { CHAT_API_KEY_ENV, generateProposal } from './providers.ts';
 import { readSceneResources } from './scene-resources.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
 import { generationCapabilities } from './generation-contract.ts';
@@ -101,7 +101,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
           const input=agentRunRequestSchema.parse(await json());
           if(input.selectedIds.some(id=>!input.scene.objects.some(object=>object.id===id)))throw new ApiError('INVALID_SELECTION',422);
-          required(env,'DEEPSEEK_API_KEY');
+          required(env,CHAT_API_KEY_ENV);
           const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await sha256(canonical(input)),baseHash:await sceneHash(input.scene),executionMode:env('DEEPSEEK_AGENT_MODE')==='legacy'?'preview':agentExecutionMode(input)});
           if(!stored.reused){
             const task=executeAgentRun(backend,actor,projectId,stored.id,env,fetcher).catch(()=>{});
@@ -164,7 +164,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const input=proposalRequestSchema.parse(projectBody(await json(),projectId));
           if(input.selectedIds.some(id=>!input.scene.objects.some(o=>o.id===id))) throw new ApiError('INVALID_SELECTION',422);
           await backend.scene(actor,'lease.check',input);
-          required(env,'DEEPSEEK_API_KEY');
+          required(env,CHAT_API_KEY_ENV);
           const reserveCents=reserveCost(env,'AI_MAX_REQUEST_CENTS');
           if(reserveCents<40) throw new ApiError('BILLING_NOT_CONFIGURED',503);
           const reservation=await backend.jobs(actor,'reserve',{requestId:input.requestId,fingerprint:await sha256(canonical(input)),reserveCents});

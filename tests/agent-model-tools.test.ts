@@ -5,7 +5,7 @@ import {createParametricAsset} from '../supabase/functions/_shared/parametric.ts
 import {sceneHash,type Scene} from '../supabase/functions/_shared/domain.ts';
 import {database,owner,studio,session,scene,chair} from './fixtures.ts';
 
-const env=(key:string)=>key==='DEEPSEEK_API_KEY'?'fixture':undefined;
+const env=(key:string)=>key==='TOKENDANCE_API_KEY'?'fixture':undefined;
 const tool=(name:string,args:unknown)=>({id:crypto.randomUUID(),type:'function',function:{name,arguments:JSON.stringify(args)}});
 const completion=(calls:ReturnType<typeof tool>[])=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:calls}}],usage:{total_tokens:10}}));
 const toolResources=(init?:RequestInit):string[]=>JSON.parse(String(init?.body)).messages.filter((m:{role:string})=>m.role==='tool').flatMap((m:{content:string})=>JSON.parse(m.content).items?.map((row:string[])=>row[0])??[]);
@@ -57,7 +57,7 @@ describe('Agent model tools preserve instance boundaries and meaningful alternat
   it('counts three differently colored copies of one parametric shape as only one option',async()=>{
     const i=await input(scene(),{jevEnabled:true});let ids:string[]=[];
     const fetcher=vi.fn(async(url:RequestInfo|URL,init?:RequestInit)=>{
-      expect(String(url)).toContain('api.deepseek.com');
+      expect(String(url)).toContain('tokendance.space');
       if(fetcher.mock.calls.length===1)return completion(['#ff0000','#00ff00','#0000ff'].map(color=>tool('create_parametric_model',{parameters:{family:'table',width:1.2,depth:0.7,height:0.75,color}})));
       ids=toolResources(init).slice(0,3);return completion([tool('submit_candidates',{candidates:ids.map(resourceId=>candidate([{op:'add_resource',resourceId,position:{x:3,z:3},rotation:0}]))})]);
     });
@@ -66,7 +66,7 @@ describe('Agent model tools preserve instance boundaries and meaningful alternat
   it('does not count color-only material asset IDs as different plans',async()=>{
     const draft=scaledInstances(),target=draft.objects[1],i=await input(draft,{jevEnabled:true});let ids:string[]=[];
     const fetcher=vi.fn(async(url:RequestInfo|URL,init?:RequestInit)=>{
-      expect(String(url)).toContain('api.deepseek.com');
+      expect(String(url)).toContain('tokendance.space');
       if(fetcher.mock.calls.length===1)return completion(['#ff0000','#00ff00','#0000ff'].map(baseColor=>tool('customize_material',{resourceId:source.resource.resourceId,objectIds:[target.id],materialIndices:[0],changes:{baseColor}})));
       ids=toolResources(init).slice(0,3);return completion([tool('submit_candidates',{candidates:ids.map(resourceId=>candidate([{op:'replace_resource',resourceId,id:target.id}]))})]);
     });

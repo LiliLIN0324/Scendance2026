@@ -6,7 +6,7 @@ import { libraryResources,readSceneResources,resourceIndex } from '../supabase/f
 import type { Env } from '../supabase/functions/_shared/http.ts';
 import type { Scene } from '../supabase/functions/_shared/domain.ts';
 
-const env:Env=key=>({DEEPSEEK_API_KEY:'fixture-key',AI_MAX_REQUEST_CENTS:'40'}[key]);
+const env:Env=key=>({TOKENDANCE_API_KEY:'fixture-key',DEEPSEEK_API_KEY:'fixture-key',AI_MAX_REQUEST_CENTS:'40'}[key]);
 const resource=libraryResources.find(item=>item.name==='抱臂站立人物')!;
 const suggestion={name:'定制花朵装置',reason:'现有资源中没有客户所需造型',prompt:'单件白色花朵装置，独立底座，不含场景'};
 const completion=(value:unknown)=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{total_tokens:100}}));

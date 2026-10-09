@@ -46,7 +46,7 @@ describe('archived public scene references', () => {
     const input = { requestId: crypto.randomUUID(), sessionId: session, generation: lease.generation,
       expectedRevision: 0, localRevision: 0, scene: base, selectedIds: [], instruction: '添加一张桌子，先预览', executionMode: 'preview' };
     let calls = 0;
-    const api = createApi(f.backend, key => key === 'DEEPSEEK_API_KEY' ? 'fixture' : undefined, async (_url, init) => {
+    const api = createApi(f.backend, key => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, async (_url, init) => {
       const request = JSON.parse(String(init?.body));
       expect(JSON.parse(request.messages[1].content).presetObjectLabels[base.objects[0].id]).toBe(presetManifest.gym[0]);
       if (++calls === 1) return new Response(JSON.stringify({ choices: [{ finish_reason: 'tool_calls', message: { content: null,

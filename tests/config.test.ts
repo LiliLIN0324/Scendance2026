@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const directory=mkdtempSync(join(tmpdir(),'scene-config-'));
 const script=fileURLToPath(new URL('../scripts/check-config.mjs',import.meta.url));
 const core={SUPABASE_URL:'http://127.0.0.1:54321',SUPABASE_SERVICE_ROLE_KEY:'private-test-key',SUPABASE_PUBLISHABLE_KEY:'public-test-key',PUBLIC_APP_URL:'http://localhost:3000',ALLOWED_ORIGINS:'http://localhost:3000',GENERATION_WORKER_SECRET:'a-separate-random-test-token-with-32-bytes'};
-const providers={DEEPSEEK_API_KEY:'deepseek-private-test-key',AI_MAX_REQUEST_CENTS:'40',HUNYUAN_API_KEY:'hunyuan-private-test-key',GENERATION_MAX_TASK_CENTS:'100',HUNYUAN_TERMS_URL:'https://example.com/terms',HUNYUAN_TERMS_REVIEWED_AT:'2020-01-01'};
+const providers={DEEPSEEK_API_KEY:'deepseek-private-test-key',TOKENDANCE_API_KEY:'tokendance-private-test-key',AI_MAX_REQUEST_CENTS:'40',HUNYUAN_API_KEY:'hunyuan-private-test-key',GENERATION_MAX_TASK_CENTS:'100',HUNYUAN_TERMS_URL:'https://example.com/terms',HUNYUAN_TERMS_REVIEWED_AT:'2020-01-01'};
 const demo={DEMO_STUDIO_ID:'cf214d55-1d5a-48c0-b2b0-fe0f4d9848f2',DEMO_STUDIO_NAME:'Demo',DEMO_OWNER_EMAIL:'owner@example.com',DEMO_OWNER_PASSWORD:'owner-test-password',DEMO_EDITOR_EMAIL:'editor@example.com',DEMO_EDITOR_PASSWORD:'editor-test-password'};
 function check(env:Record<string,string>={},args:string[]=[]) {
   const result=spawnSync(process.execPath,[script,...args],{cwd:directory,env:{PATH:process.env.PATH,...env},encoding:'utf8'});
@@ -52,7 +52,7 @@ describe('offline backend configuration preflight',()=>{
   it('requires all provider fields in full mode and rejects partial optional providers in core mode',()=>{
     const full=check(core,['--mode','full']);expect(full.status).toBe(1);
     for(const key of Object.keys(providers)) expect(full.output).toContain(key);
-    for(const key of ['DEEPSEEK_API_KEY','HUNYUAN_API_KEY'] as const) expect(check({...core,[key]:providers[key]}).status).toBe(1);
+    for(const key of ['DEEPSEEK_API_KEY','TOKENDANCE_API_KEY','HUNYUAN_API_KEY'] as const) expect(check({...core,[key]:providers[key]}).status).toBe(1);
     expect(check({...core,...providers},['--mode','full']).status).toBe(0);
   });
   it('validates the Hunyuan API mode without enabling an unconfigured provider',()=>{
@@ -88,7 +88,7 @@ describe('offline backend configuration preflight',()=>{
   it('parses explicit env files without shell execution or interpolation; process values take priority',()=>{
     const marker=join(directory,'must-not-exist'),first=join(directory,'first.env'),second=join(directory,'second.env'),hook=join(directory,'hook.cjs');
     writeFileSync(hook,`require('node:fs').writeFileSync(${JSON.stringify(marker)},'executed')`);
-    writeFileSync(first,Object.entries(core).map(([key,value])=>`${key}=${value}`).join('\n')+`\nNODE_OPTIONS=--require ${hook}\nUNRELATED_SECRET=$(touch ${marker})\nDEEPSEEK_API_KEY=\`touch ${marker}\`\nAI_MAX_REQUEST_CENTS=40\n`);
+    writeFileSync(first,Object.entries(core).map(([key,value])=>`${key}=${value}`).join('\n')+`\nNODE_OPTIONS=--require ${hook}\nUNRELATED_SECRET=$(touch ${marker})\nDEEPSEEK_API_KEY=\`touch ${marker}\`\nTOKENDANCE_API_KEY=tokendance-private-test-key\nAI_MAX_REQUEST_CENTS=40\n`);
     writeFileSync(second,'PUBLIC_APP_URL=https://app.example.com\nALLOWED_ORIGINS=https://app.example.com\n');
     const result=check({PUBLIC_APP_URL:core.PUBLIC_APP_URL,ALLOWED_ORIGINS:core.ALLOWED_ORIGINS},['--env',first,'--env',second]);
     expect(result.status).toBe(0);expect(existsSync(marker)).toBe(false);expect(result.output).not.toContain(marker);

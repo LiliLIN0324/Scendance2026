@@ -5,7 +5,7 @@ import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 import { packGltf } from '../supabase/functions/_shared/models.ts';
 import { tetrahedron } from './model-fixture.ts';
 import type { Env,Fetcher } from '../supabase/functions/_shared/http.ts';
-const env:Env=key=>({HUNYUAN_API_MODE:'legacy',HUNYUAN_API_KEY:'test-key',DEEPSEEK_API_KEY:'test-key',HUNYUAN_TERMS_URL:'https://example.test/terms',HUNYUAN_TERMS_REVIEWED_AT:'2026-10-02'}[key]);
+const env:Env=key=>({HUNYUAN_API_MODE:'legacy',HUNYUAN_API_KEY:'test-key',DEEPSEEK_API_KEY:'test-key',TOKENDANCE_API_KEY:'test-key',HUNYUAN_TERMS_URL:'https://example.test/terms',HUNYUAN_TERMS_REVIEWED_AT:'2026-10-02'}[key]);
 const response=(body:unknown)=>new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
 
 describe('real provider request formats with controlled responses',()=>{
@@ -66,7 +66,7 @@ describe('real provider request formats with controlled responses',()=>{
       return response({choices:[{finish_reason:'stop',message:{content:bodies.length===1?'invalid JSON':JSON.stringify({explanation:'No changes',commands:[]})}}],usage:{total_tokens:10}});
     }) as unknown as Fetcher;
     const input={projectId:crypto.randomUUID(),requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),instruction:'Move',mode:'modify' as const,selectedIds:[]};
-    const proposal=await generateProposal(input,env,async()=>{},fetcher);expect(proposal.usage).toHaveLength(2);expect(bodies[0]).toMatchObject({model:'deepseek-flash',response_format:{type:'json_object'}});
+    const proposal=await generateProposal(input,env,async()=>{},fetcher);expect(proposal.usage).toHaveLength(2);expect(bodies[0]).toMatchObject({model:'deepseek-v4.1-flash',response_format:{type:'json_object'}});
     const bad=vi.fn(async()=>response({choices:[{finish_reason:'stop',message:{content:'{}'}}]}));
     await expect(generateProposal(input,env,async()=>{},bad)).rejects.toThrow('AI_INVALID_PROPOSAL');expect(bad).toHaveBeenCalledTimes(2);
   });

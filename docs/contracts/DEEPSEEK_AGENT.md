@@ -2,7 +2,7 @@
 
 ## 请求与运行
 
-唯一 wire schema 在 `supabase/functions/_shared/agent-contract.ts`。`POST /projects/:id/agent-runs` 使用现有租约字段与 requestId，提交当前未保存场景、选中物件、独立 instruction/context、executionMode、jevEnabled。生产使用 EdgeRuntime.waitUntil 返回202，后台最多6次 DeepSeek 调用，总期限90秒；GET按运行ID或原requestId恢复，POST cancel使整组候选不可应用。未知网络结果不会重发原付费请求。
+唯一 wire schema 在 `supabase/functions/_shared/agent-contract.ts`。`POST /projects/:id/agent-runs` 使用现有租约字段与 requestId，提交当前未保存场景、选中物件、独立 instruction/context、executionMode、jevEnabled。生产使用 EdgeRuntime.waitUntil 返回202，后台最多6次模型调用（Tokendance 网关的 `deepseek-v4.1-flash`，`TOKENDANCE_API_KEY`；端点与模型集中在 `providers.ts` 的 `chatRequest()`），总期限90秒；GET按运行ID或原requestId恢复，POST cancel使整组候选不可应用。未知网络结果不会重发原付费请求。
 
 服务端 `agent_rpc` 检查项目成员、创建者、租约、云修订及资产授权；每次模型调用前原子计数，每个工具前重新检查。运行、检查点、候选与用量持久保存；取消与应用争用同一运行锁。运行失效后不会重启旧请求。旧每日AI额度维持不限，不恢复日限额。
 

@@ -61,9 +61,9 @@ for(const key of ['SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY']) {
 }
 if(present('GENERATION_WORKER_SECRET')) {
   if(Buffer.byteLength(env.GENERATION_WORKER_SECRET,'utf8')<32) problem('GENERATION_WORKER_SECRET','must contain at least 32 bytes; generate a random token');
-  if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY','DEEPSEEK_API_KEY','HUNYUAN_API_KEY'].some(key=>present(key) && env[key]===env.GENERATION_WORKER_SECRET)) problem('GENERATION_WORKER_SECRET','must be independent from API keys');
+  if(['SUPABASE_SERVICE_ROLE_KEY','SUPABASE_PUBLISHABLE_KEY','SUPABASE_ANON_KEY','DEEPSEEK_API_KEY','TOKENDANCE_API_KEY','HUNYUAN_API_KEY'].some(key=>present(key) && env[key]===env.GENERATION_WORKER_SECRET)) problem('GENERATION_WORKER_SECRET','must be independent from API keys');
 }
-const ai=group(['DEEPSEEK_API_KEY','AI_MAX_REQUEST_CENTS'],mode==='full');
+const ai=group(['TOKENDANCE_API_KEY','DEEPSEEK_API_KEY','AI_MAX_REQUEST_CENTS'],mode==='full');
 const generation=group(['HUNYUAN_API_KEY','GENERATION_MAX_TASK_CENTS','HUNYUAN_TERMS_URL','HUNYUAN_TERMS_REVIEWED_AT'],mode==='full');
 if(present('HUNYUAN_API_MODE') && !['tokenhub','legacy'].includes(env.HUNYUAN_API_MODE)) problem('HUNYUAN_API_MODE','must be tokenhub or legacy');
 // Keep these limits aligned with 20261002060307_scene_jobs.sql.

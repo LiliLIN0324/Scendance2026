@@ -70,7 +70,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
   };
   const env = (key: string) => ({
     ALLOWED_ORIGINS: origins.join(','), PUBLIC_APP_URL: origins[0],
-    ...(aiFetcher ? { DEEPSEEK_API_KEY: 'test-provider-only', AI_MAX_REQUEST_CENTS: '40' } : {}),
+    ...(aiFetcher ? { DEEPSEEK_API_KEY: 'test-provider-only', TOKENDANCE_API_KEY: 'test-provider-only', AI_MAX_REQUEST_CENTS: '40' } : {}),
   })[key] ?? options.env?.(key);
   const api = createApi(backend, env, aiFetcher);
   const server = createServer(async (req, res) => {

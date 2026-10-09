@@ -55,9 +55,9 @@ Supabase 自动注入函数使用的 `SUPABASE_URL` 与 service role key；不�
 
 ## 3. 供应商配置与付费验收
 
-本轮尚未调用 DeepSeek / Hunyuan。按 [供应商配置指南](PROVIDER_SETUP.md) 在已有 `.env.edge.local` 中填写 6 项待配置字段：`DEEPSEEK_API_KEY`、`AI_MAX_REQUEST_CENTS`、`HUNYUAN_API_KEY`、`GENERATION_MAX_TASK_CENTS`、`HUNYUAN_TERMS_URL`、`HUNYUAN_TERMS_REVIEWED_AT`。
+本轮尚未调用 Tokendance / DeepSeek / Hunyuan。按 [供应商配置指南](PROVIDER_SETUP.md) 在已有 `.env.edge.local` 中填写 7 项待配置字段：`TOKENDANCE_API_KEY`、`DEEPSEEK_API_KEY`、`AI_MAX_REQUEST_CENTS`、`HUNYUAN_API_KEY`、`GENERATION_MAX_TASK_CENTS`、`HUNYUAN_TERMS_URL`、`HUNYUAN_TERMS_REVIEWED_AT`。
 
-DeepSeek 直连官方 `deepseek-flash`；一次应用请求的费用预留覆盖最多两次调用、每次最多 4096 输出 tokens 和相应输入。腾讯新账号使用已适配的 `HUNYUAN_API_MODE=tokenhub`，当前模型参数为 `hy-3d-3.0 / LowPoly / triangle`。真实账号权限、费用上界及适用条款由账号使用者核对，不把免费额度作为硬依赖。
+Binggo Agent 与单次方案生成走 Tokendance 网关的 `deepseek-v4.1-flash`（`TOKENDANCE_API_KEY`）；一次应用请求的费用预留覆盖最多两次调用、每次最多 4096 输出 tokens 和相应输入。图纸重建仍直连官方 `deepseek-flash`（`DEEPSEEK_API_KEY`）。腾讯新账号使用已适配的 `HUNYUAN_API_MODE=tokenhub`，当前模型参数为 `hy-3d-3.0 / LowPoly / triangle`。真实账号权限、费用上界及适用条款由账号使用者核对，不把免费额度作为硬依赖。
 
 保留已有 worker secret、应用 URL 与 CORS；worker secret 已与 Vault 配对，无需重新生成。填写并完成预检后，仅将 Edge 文件上传到当前专用项目：
 
