@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { generateProposal } from './providers.ts';
 import { buildProposal, modificationSchema } from './ai.ts';
 import { agentRunRequestSchema, type AgentRunRequest } from './agent-contract.ts';
-import { ApiError, canonical, catalog, type Scene } from './domain.ts';
+import { ApiError, canonical, catalog, uuid, type Scene } from './domain.ts';
 import { dimensionConflicts } from './structural-geometry.ts';
-import { readSceneResources, resourceIndex, sceneResourceRefs, presetObjectLabels, type SceneResource } from './scene-resources.ts';
+import { assetUuidKey, readSceneResources, resourceIndex, sceneResourceRefs, presetObjectLabels, type SceneResource } from './scene-resources.ts';
 import { parametricParametersSchema } from './parametric-contract.ts';
 import { createParametricAsset } from './parametric.ts';
 import { createMaterialVariant, readAssetMaterials } from './material-variants.ts';
@@ -39,7 +39,7 @@ export function agentExecutionMode(input:AgentRunRequest) {
 }
 function diversityKey(scene:Scene,identities:Map<string,string>) {
   // Presentation text, random instance IDs and flat color changes do not make a new plan.
-  return canonical(scene.objects.map(({id,notes,color,...object})=>{void id;void notes;void color;return {...object,...(object.assetId?{assetId:identities.get(object.assetId)??object.assetId}:{})};}).sort((a,b)=>canonical(a).localeCompare(canonical(b))));
+  return canonical(scene.objects.map(({id,notes,color,...object})=>{void id;void notes;void color;return {...object,...(object.assetId?{assetId:identities.get(assetUuidKey(object.assetId))??assetUuidKey(object.assetId)}:{})};}).sort((a,b)=>canonical(a).localeCompare(canonical(b))));
 }
 /** Model-only transport; persisted scenes keep the canonical object schema. */
 function sceneContext(scene: Scene) {
@@ -71,7 +71,11 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       await call('finish',{candidates:[{...proposal,modelSuggestions:[],label:'A',title:'布置方案'}],evaluation:input.jevEnabled?{status:'partial',message:'兼容模式只生成一个方案，未进行三方案评价。'}:null});
       return;
     }
-    const currentResource=(resourceId:string)=>{const resource=resources.find(r=>r.resourceId===resourceId.trim()||r.assetId===resourceId.trim());if(!resource)throw new ApiError('RESOURCE_NOT_FOUND',422);return resource;};
+    const currentResource=(resourceId:string)=>{
+      const requested=resourceId.trim(),asset=uuid.safeParse(requested.startsWith('asset:')?requested.slice(6):requested);
+      const resource=resources.find(r=>r.resourceId===requested||(asset.success&&assetUuidKey(r.assetId)===assetUuidKey(asset.data)));
+      if(!resource)throw new ApiError('RESOURCE_NOT_FOUND',422);return resource;
+    };
     const build=(raw:unknown)=>{
       const parsed=candidateSchema.parse(raw);
       if(input.selectedIds.length&&parsed.commands.some(c=>'id' in c&&!input.selectedIds.includes(c.id)))throw new ApiError('INVALID_SELECTION',422);
@@ -80,7 +84,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         command.resourceId=currentResource(command.resourceId).resourceId;
         const variant=materialVariants.get(command.resourceId);if(!variant)continue;
         if(command.op!=='replace_resource'||!variant.objectIds.includes(command.id))throw new ApiError('INVALID_MATERIAL_TARGET',422);
-        const original=input.scene.objects.find(o=>o.id===command.id&&o.assetId===variant.sourceAssetId&&!o.locked);
+        const original=input.scene.objects.find(o=>o.id===command.id&&o.assetId&&assetUuidKey(o.assetId)===assetUuidKey(variant.sourceAssetId)&&!o.locked);
         if(!original)throw new ApiError('INVALID_MATERIAL_TARGET',422);
         command.size={...original.size};
       }
@@ -90,7 +94,8 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(dimensionConflicts(proposal.scene).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(proposal.scene));
       return {...proposal,title:parsed.title};
     };
-    const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId===r.assetId))),jevEnabled:input.jevEnabled,catalog})}];
+    const currentResources=()=>resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId&&assetUuidKey(o.assetId)===assetUuidKey(r.assetId))));
+    const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog})}];
     // ponytail: run-local receipts; terminal run fencing still prevents worker restarts.
     const receipts=new Map<string,{fingerprint:string;content:string}>();
     for(let turn=1;turn<=6&&!finished;turn++) {
@@ -119,7 +124,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             await call('progress',{progress:progressLabels[name]});
             if(name==='get_scene')result=input.scene.objects.length>50
               ?{sameAsInitialScene:true,objectCount:input.scene.objects.length,selectedIds:input.selectedIds,message:'当前草稿未变化。完整scene、presetObjectLabels与资源引用已在首条用户消息中，请使用该数据；重复省略以保留工具调用空间。'}
-              :{scene:input.scene,presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId===r.assetId)))};
+              :{scene:input.scene,presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources()};
             else if(name==='search_resources') {
               const query=(args as z.infer<typeof schemas.search_resources>).query.toLowerCase();
               const matches=query?resources.filter(r=>`${r.name} ${r.category} ${r.resourceId} ${r.assetId}`.toLowerCase().includes(query)):resources;
@@ -127,7 +132,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             } else if(name==='create_parametric_model') {
               const parameters=(args as z.infer<typeof schemas.create_parametric_model>).parameters;
               const created=await createParametricAsset(backend,actor,start.studioId,crypto.randomUUID(),parameters);
-              const {color,...shape}=parameters;void color;identities.set(created.resource.assetId,canonical(shape));
+              const {color,...shape}=parameters;void color;identities.set(assetUuidKey(created.resource.assetId),canonical(shape));
               resources.push(created.resource);result=resourceIndex([created.resource]);
             } else if(name==='inspect_materials') {
               const resource=currentResource((args as z.infer<typeof schemas.inspect_materials>).resourceId);
@@ -135,14 +140,14 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               result={...await readAssetMaterials(backend,actor,resource.assetId),parametric:asset.metadata?.parametric??null};
             } else if(name==='customize_material') {
               const a=args as z.infer<typeof schemas.customize_material>,resource=currentResource(a.resourceId);
-              if(a.objectIds.some(id=>!input.scene.objects.some(o=>o.id===id&&o.assetId===resource.assetId&&!o.locked)||(input.selectedIds.length>0&&!input.selectedIds.includes(id))))throw new ApiError('INVALID_MATERIAL_TARGET',422);
+              if(a.objectIds.some(id=>!input.scene.objects.some(o=>o.id===id&&o.assetId&&assetUuidKey(o.assetId)===assetUuidKey(resource.assetId)&&!o.locked)||(input.selectedIds.length>0&&!input.selectedIds.includes(id))))throw new ApiError('INVALID_MATERIAL_TARGET',422);
               const inspected=await readAssetMaterials(backend,actor,resource.assetId);
               const created=await createMaterialVariant(backend,actor,resource.assetId,{requestId:crypto.randomUUID(),sourceSha256:inspected.sha256,materialIndices:a.materialIndices,...a.changes});
               const next:SceneResource={...resource,resourceId:`asset:${created.asset.id}`,assetId:created.asset.id,name:created.asset.name};resources.push(next);materialVariants.set(next.resourceId,{sourceAssetId:resource.assetId,objectIds:a.objectIds});
-              const {baseColor,...nonColor}=a.changes;void baseColor;identities.set(next.assetId,canonical({source:identities.get(resource.assetId)??resource.assetId,changes:nonColor}));result=resourceIndex([next]);
+              const {baseColor,...nonColor}=a.changes;void baseColor;identities.set(assetUuidKey(next.assetId),canonical({source:identities.get(assetUuidKey(resource.assetId))??assetUuidKey(resource.assetId),changes:nonColor}));result=resourceIndex([next]);
             } else if(name==='get_bom') {
               const items=new Map<string,{name:string;quantity:number;size:unknown;color:string}>(),labels=presetObjectLabels(input.scene);
-              for(const object of input.scene.objects){const key=canonical({material:object.assetId??labels[object.id]??object.materialId,size:object.size,color:object.color});const old=items.get(key);if(old)old.quantity++;else items.set(key,{name:labels[object.id]??resources.find(r=>r.assetId===object.assetId)?.name??catalog.find(m=>m.id===object.materialId)?.name??object.materialId,quantity:1,size:object.size,color:object.color});}
+              for(const object of input.scene.objects){const key=canonical({material:object.assetId?assetUuidKey(object.assetId):labels[object.id]??object.materialId,size:object.size,color:object.color});const old=items.get(key);if(old)old.quantity++;else items.set(key,{name:labels[object.id]??resources.find(r=>object.assetId&&assetUuidKey(r.assetId)===assetUuidKey(object.assetId))?.name??catalog.find(m=>m.id===object.materialId)?.name??object.materialId,quantity:1,size:object.size,color:object.color});}
               result={items:[...items.values()],pricing:'未提供供应商价格与库存，需另行核实'};
             } else if(name==='validate_candidate') {const candidate=build(args);result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length};}
             else if(name==='submit_candidates') {

@@ -246,6 +246,35 @@ describe('durable bounded DeepSeek Agent',()=>{
   expect(generationCapabilities(env)).toMatchObject({textToModel:false,imageToModel:false,texture:false});
   for(const kind of ['text','image','texture'])await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'x',kind},env)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
  });
+ it('groups one asset UUID casing alias once, keeps real names, and separates color, size and different assets',async()=>{
+  const assetA='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',assetB='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  await f.rpc(owner,'assets.register',{id:assetA,name:'真实物料A',source:'upload',format:'glb',byteSize:100,sha256:'a'.repeat(64),storagePath:'asset-a.glb',license:{},metadata:{}});
+  await f.rpc(owner,'assets.register',{id:assetB,name:'真实物料B',source:'upload',format:'glb',byteSize:100,sha256:'b'.repeat(64),storagePath:'asset-b.glb',license:{},metadata:{}});
+  const baseSize=chair().size;
+  const object=(assetId:string,color:string,size=baseSize)=>({...chair(),materialId:'asset' as const,assetId,color,size});
+  const alias=object(assetA.toUpperCase(),'#ffffff');
+  const draft={...scene(),objects:[object(assetA,'#ffffff'),alias,object(assetA,'#ff0000'),object(assetA,'#ffffff',{...baseSize,width:1}),object(assetB,'#ffffff')]};
+  const original=structuredClone(draft),i=await input({scene:draft,instruction:'仅统计当前草稿物料，不修改场景',executionMode:'preview'});
+  const cloudBefore=(await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene;
+  let bom:{items:{name:string;quantity:number;color:string;size:unknown}[];pricing:string}={items:[],pricing:''};
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_bom',{})]);
+   const receipt=JSON.parse(String(init?.body)).messages.find((message:{role:string})=>message.role==='tool');
+   bom=JSON.parse(receipt.content);
+   return completion([tool('submit_candidates',{candidates:[{title:'物料统计',explanation:'按草稿统计，价格和库存待核实。',commands:[]}]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'preview'});
+  expect(bom.items).toHaveLength(4);
+  const aItems=bom.items.filter(item=>item.name==='真实物料A');
+  expect(aItems).toHaveLength(3);
+  expect(aItems.map(item=>item.quantity).sort((a,b)=>a-b)).toEqual([1,1,2]);
+  expect(aItems).toContainEqual(expect.objectContaining({quantity:2,color:'#ffffff',size:baseSize}));
+  expect(bom.items).toContainEqual(expect.objectContaining({name:'真实物料B',quantity:1,color:'#ffffff',size:baseSize}));
+  expect(run.candidates[0].proposal.base_scene).toEqual(draft);
+  expect(draft).toEqual(original);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(cloudBefore);
+ });
 });
 it.each(['不要直接删除桌子','暂时不要直接改','直接说明原因','先给我看一个方案','能否直接添加椅子？'])('does not auto-apply ambiguous or negative intent: %s',instruction=>{expect(agentExecutionMode(agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction,executionMode:'direct'}))).toBe('preview');});
 it('validates JEV output instead of inventing probabilities',async()=>{

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { canApplyStructuralChange, structuralWarnings } from './structural-geometry.ts';
 import { ApiError, catalog, colorSchema, materialIds, objectSchema, pointSchema, sceneSchema, sceneWarnings, sizeSchema, uuid, type Scene, type SceneObject } from './domain.ts';
-import type { SceneResource } from './scene-resources.ts';
+import { assetUuidKey, type SceneResource } from './scene-resources.ts';
 import {materialSuggestionSchema,type MaterialSuggestion} from './agent-material-contract.ts';
 
 // The complete prompt is intentionally kept here as a reviewable source of truth.
@@ -117,8 +117,8 @@ export function buildProposal(scene: Scene, mode: 'layout' | 'modify', output: u
     materialSuggestions=parsed.materialSuggestions.map(suggestion=>{
       const targets=suggestion.objectIds.map(id=>scene.objects.find(object=>object.id===id));
       const sourceAssetId=targets[0]?.assetId;
-      if(!sourceAssetId || targets.some(object=>!object || object.locked || object.assetId!==sourceAssetId ||
-        (selectedIds.length>0 && !selectedIds.includes(object.id)) || !next.objects.some(nextObject=>nextObject.id===object.id && nextObject.assetId===sourceAssetId))) {
+      if(!sourceAssetId || targets.some(object=>!object || object.locked || !object.assetId || assetUuidKey(object.assetId)!==assetUuidKey(sourceAssetId) ||
+        (selectedIds.length>0 && !selectedIds.includes(object.id)) || !next.objects.some(nextObject=>nextObject.id===object.id && nextObject.assetId&&assetUuidKey(nextObject.assetId)===assetUuidKey(sourceAssetId)))) {
         throw new ApiError('INVALID_MATERIAL_TARGET',422);
       }
       return {...suggestion,sourceAssetId};

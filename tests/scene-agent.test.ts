@@ -49,4 +49,25 @@ describe('resource constraints and model handoff',()=>{
     const original={...chair(),materialId:'asset' as const,assetId:tent.assetId};
     expect(()=>buildProposal({...scene(),objects:[original]},'modify',{explanation:'recolor',commands:[{op:'recolor',id:original.id,color:'#ff0000'}]})).toThrow('ASSET_MATERIAL_UNSUPPORTED');
   });
+  it('keeps opaque library references case-sensitive',()=>{
+    for(const resourceId of ['library:TENT','LIBRARY:tent'])expect(()=>buildProposal(scene(),'modify',{explanation:'add',commands:[add(resourceId)]},[tent])).toThrow('RESOURCE_NOT_FOUND');
+  });
+});
+
+describe('material suggestions use asset identity without widening instance permission',()=>{
+  const assetId='abcdef00-0000-4000-8000-000000000001';
+  const instances=()=>[{...chair(),materialId:'asset' as const,assetId},{...chair('原说明'),materialId:'asset' as const,assetId:assetId.toUpperCase(),position:{x:7,z:6},color:'#abcdef'}];
+  const suggestion=(objectIds:string[])=>({objectIds,name:'只建议原模型材质',reason:'同源模型待人工核对材质槽',scope:'choose_materials',changes:{roughness:0.2}});
+  it('permits same-source UUID aliases and preserves original scene IDs, sizes, colors and positions',()=>{
+    const objects=instances(),base={...scene(),objects},value=suggestion(objects.map(object=>object.id));
+    const result=buildProposal(base,'modify',{explanation:'提出材质建议，不应用。',commands:[],materialSuggestions:[value]},[],value.objectIds);
+    expect(result.scene).toEqual(base);expect(result.materialSuggestions).toEqual([{...value,sourceAssetId:assetId}]);expect(objects[1].assetId).toBe(assetId.toUpperCase());
+  });
+  it.each(['different-asset','locked','unselected','replaced-source'])('rejects a material suggestion with %s',boundary=>{
+    const objects=instances();if(boundary==='different-asset')objects[1].assetId='abcdef00-0000-4000-8000-000000000002';if(boundary==='locked')objects[1].locked=true;
+    const base={...scene(),objects},original=structuredClone(base),value=suggestion(objects.map(object=>object.id));
+    const commands=boundary==='replaced-source'?[{op:'replace_resource',id:objects[0].id,resourceId:tent.resourceId}]:[];
+    expect(()=>buildProposal(base,'modify',{explanation:'invalid',commands,materialSuggestions:[value]},[tent],boundary==='unselected'?[objects[0].id]:value.objectIds)).toThrow('INVALID_MATERIAL_TARGET');
+    expect(base).toEqual(original);
+  });
 });
