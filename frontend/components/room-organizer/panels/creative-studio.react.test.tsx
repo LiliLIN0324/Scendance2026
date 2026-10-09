@@ -2217,15 +2217,17 @@ describe('same local activity with a remote scene connection',()=>{
     expect(resume).toHaveBeenCalledWith(candidate,local.name,localId);expect(controller.getAgentRun).toHaveBeenCalledWith(runId);
     expect(ensure).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
-  it.each([false,true])('reauthorizes saved model references without transmitting scene records (identity changed: %s)',async changed=>{
+  it.each([[true,false],[true,true],[false,false],[false,true]])('reauthorizes saved model references without transmitting scene records (scene bound: %s, identity changed: %s)',async(bound,changed)=>{
     vi.mocked(ensureGlbAsset).mockClear();
     installBindingCheck();bind();const assetId='88000000-0000-4000-8000-000000000001';
+    if(!bound)snapshot={...snapshot,project:null,geometryBinding:null,lease:null};
     const local=backendSceneToLayout({...candidate,objects:[{...candidate.objects[0]!,materialId:'asset',assetId}]},{projectId:localId,name:'模型重开演练'});
     let finish!:(value:{id:string;url:string;name:string})=>void;
     const authorize=vi.spyOn(controller,'authorizeAsset').mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
     const view=renderUI(ui(local));await waitFor(()=>expect(authorize).toHaveBeenCalledWith(assetId));
+    const firstAuthorization=finish;
     if(changed){snapshot={...snapshot,user:{id:'another-user'}};view.rerender(ui(local));}
-    await act(async()=>finish({id:assetId,url:'https://storage.example/fresh.glb',name:'原模型'}));
+    await act(async()=>firstAuthorization({id:assetId,url:'https://storage.example/fresh.glb',name:'原模型'}));
     if(changed)expect(ensureGlbAsset).not.toHaveBeenCalled();else await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledWith(assetId,'https://storage.example/fresh.glb'));
     expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();expect(copySourceScope).not.toHaveBeenCalled();
     expect(local.id).toBe(localId);

@@ -236,17 +236,17 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   }});
   const geometryAssetKey=[...new Set(layout.floors.flatMap(floor=>floor.items.flatMap(item=>item.assetId?[item.assetId]:[])))].sort().join(',');
   useEffect(()=>{
-    if(!cloud.user||!controller.isGeometryBound(scope)||!geometryAssetKey)return;
-    const userId=cloud.user.id,projectId=cloud.project?.id;
+    if(!cloud.user||!isLocalActivityWorkspace(controller,requestedCloudCheckins)||!geometryAssetKey)return;
+    const userId=cloud.user.id,projectId=cloud.project?.id,apiUrl=controller.config.apiUrl;
     let cancelled=false;
-    const current=()=>!cancelled&&alive.current&&controllerRef.current===controller&&scopeRef.current===scope&&controller.getSnapshot().user?.id===userId&&controller.getSnapshot().project?.id===projectId&&controller.isGeometryBound(scope);
+    const current=()=>!cancelled&&alive.current&&controllerRef.current===controller&&controller.config.apiUrl===apiUrl&&scopeRef.current===scope&&controller.getSnapshot().user?.id===userId&&controller.getSnapshot().project?.id===projectId&&isLocalActivityWorkspace(controller,requestedCloudCheckins);
     void Promise.all(geometryAssetKey.split(',').filter(id=>getGlbAssetState(id).status!=='ready').map(async id=>{
       // Reauthorize by asset ID only; local scene text and execution records are not required to load a model.
       const asset=await controller.authorizeAsset(id);
       if(current())await ensureGlbAsset(id,asset.url);
-    })).catch(()=>{if(current())setNotice('部分模型资源未能重新载入，场景与本机记录已保留。请核对素材访问权限，或重新连接场景服务后重试。');});
+    })).catch(()=>{if(current())setNotice('部分模型尚未载入，场景与本机记录已保留。请核对素材访问权限，重新登录后重试。');});
     return()=>{cancelled=true;};
-  },[controller,scope,cloud.user?.id,cloud.project?.id,cloud.geometryBinding,geometryAssetKey]);
+  },[controller,scope,cloud.user?.id,cloud.project?.id,cloud.geometryBinding,geometryAssetKey,requestedCloudCheckins]);
   const reviewContextRef=useRef(reviewContext);reviewContextRef.current=reviewContext;
   const reviewResetEpoch=useRef(0);
   const reviewTracker=useRef<{inputs:unknown[];serial:number;prefix:string}>({inputs:[],serial:0,prefix:crypto.randomUUID()});
