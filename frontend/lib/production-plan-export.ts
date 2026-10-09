@@ -70,7 +70,7 @@ const duplicateIds = (ids: string[]) => uniqueIds(ids.filter((id, index) => ids.
 
 const objectSchema = z.strictObject({
   id: z.string().min(1).max(eventOperationsLimits.objectId).refine(value => value.trim().length > 0),
-  name: z.string(), floorName: z.string(), width: z.number().positive(), depth: z.number().positive(), height: z.number().positive(),
+  name: z.string(), notes: z.string().default(''), floorName: z.string(), width: z.number().positive(), depth: z.number().positive(), height: z.number().positive(),
   position: z.strictObject({ x: z.number(), z: z.number() }).optional(), rotation: z.number().optional(), elevation: z.number().optional(),
 });
 type HandoffObject = z.infer<typeof objectSchema> & { label: string; handoff?: Handoff };
@@ -111,6 +111,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
   let objects: HandoffObject[];
   try {
     objects = layout.floors.flatMap(floor => floor.items.map(item => objectSchema.parse({ id: item.id, name: item.name,
+      ...(activityScope ? { notes: item.notes ?? '' } : {}),
       floorName: floor.name, width: item.width, depth: item.depth, height: item.height,
       ...(item.position ? { position: item.position } : {}), ...(item.rotation !== undefined ? { rotation: item.rotation } : {}),
       ...(item.elevation !== undefined ? { elevation: item.elevation } : {}) })))
@@ -224,7 +225,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
   const objectWorkSheets = activityScope ? `<section id="handoff-workorders"><h2>逐件物料工作单</h2>${para('物件编号与同快照摆位示意一致。记录状态保留原填写内容，执行前以有效状态和完成条件核对；未填工作单不表示已完成。')}${objects.length ? table(
     ['物件／位置', '负责人／期限', '完成条件', '记录状态／有效状态', '现场核对说明／证据文本'], objects.map(object => {
       const handoff = object.handoff;
-      return [`${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}`,
+      return [`${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}\n物件备注：${object.notes.trim() ? object.notes : '未记录'}`,
         `负责人：${unknown(handoff?.ownerName ?? '')}\n期限：${unknown(handoff?.dueDate ?? '')}`,
         unknown(handoff?.acceptance ?? ''),
         handoff ? `记录状态：${HANDOFF_STATUS_LABELS[handoff.status]}\n有效状态：${objectStatuses.get(object.label)}` : '尚未填写工作单；分工与进展待确认',

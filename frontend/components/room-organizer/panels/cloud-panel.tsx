@@ -18,9 +18,9 @@ import { useLocalProjectBackup } from './creative-studio';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
@@ -230,7 +230,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     <button className="sc-cloud-trigger" type="button" aria-label="账户与项目" title="账户与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={17}/></span>
     </button>
-    <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onKeyDown={event => event.stopPropagation()}>
+    <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={onClose} onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={21}/></button></div>
       <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" onClick={() => dialog.current?.close()}>前往登录</Link>}</div>

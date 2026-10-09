@@ -821,7 +821,7 @@ describe('complete internal activity handoff HTML', () => {
     const started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
     vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
     const output = productionPlanHandoffHtml(source, meta, undefined, { scope: 'activity', brief }); await started.promise;
-    source.eventOperations!.tasks[0].title = '后改任务'; source.floors[0].items[0].handoff!.ownerName = '后改负责人';
+    source.eventOperations!.tasks[0].title = '后改任务'; source.floors[0].items[0].notes = '后改备注'; source.floors[0].items[0].handoff!.ownerName = '后改负责人';
     source.floors[0].items[0].handoff!.evidenceNote = '后改证据'; source.floors[0].items[0].position = { x: 200, z: 0 };
     if (brief.status === 'present') brief.value.description = '后改活动目的';
     meta.id = '后改快照'; meta.generatedAt = '2027-01-01T00:00:00Z';
@@ -850,7 +850,8 @@ describe('complete internal activity handoff HTML', () => {
     const needs = section(document, '活动需求与现场条件');
     expect(needs.textContent).toContain(payload); expect(needs.textContent).toContain('预计人数0');
     expect(needs.textContent).toContain('照片、原图纸附件和模型文件需另行提供');
-    for (const excluded of ['allowIdeas', 'hasFloorplan', 'PRIVATE_', '98765', 'sha256:', 'reviewedBasis']) expect(html).not.toContain(excluded);
+    expect(section(document, '逐件物料工作单').textContent).toContain(source.floors[0].items[0].notes!);
+    for (const excluded of ['allowIdeas', 'hasFloorplan', 'PRIVATE_TOKEN', 'PRIVATE_ACCOUNT_TOKEN', 'PRIVATE_FUTURE_OBJECT_DATA', 'PRIVATE_NEW_FIELD', '98765', 'sha256:', 'reviewedBasis']) expect(html).not.toContain(excluded);
     if (brief.status === 'present') Object.assign(brief.value, { internalToken: 'PRIVATE_NEW_FIELD' });
     await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief })).rejects.toThrow('活动需求字段无效');
   });
@@ -861,5 +862,32 @@ describe('complete internal activity handoff HTML', () => {
     expect(section(document, '同快照摆位示意').textContent).toContain('不适合普通矩形示意');
     expect(document.querySelectorAll('svg')).toHaveLength(0);
     expect(section(document, '全部场景实例').textContent).toContain('物件2 · 同名椅');
+  });
+
+  it('shows item notes only in activity scope with an explicit label, escaping text and preserving handoff geometry', async () => {
+    const attack = '<img src=x onerror=alert(1)><script>alert(2)</script>';
+    const source = layout();
+    source.floors[0].items[0].notes = attack;
+    source.floors[0].items[0].handoff = handoffSchema.parse({ ownerName: '原负责人', dueDate: '2027-02-03', acceptance: '逐件核对', status: 'todo' });
+    const before = structuredClone(source);
+    const activityHtml = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' });
+    const activity = new DOMParser().parseFromString(activityHtml, 'text/html');
+    const work = section(activity, '逐件物料工作单');
+    expect(work.textContent).toContain(attack);
+    expect(work.textContent).toMatch(/备注[：:]\s*/);
+    expect(work.textContent).toContain('原负责人');
+    expect(activity.querySelectorAll('script,img,iframe,object,embed,link,form,[onload],[onerror]')).toHaveLength(0);
+    expect(activityHtml).not.toContain('<img');
+    const internalHtml = await productionPlanHandoffHtml(source, snapshot);
+    expect(internalHtml).not.toContain(attack);
+    expect(internalHtml).not.toContain('原负责人');
+    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source,
+      briefSnapshot: { state: 'ready', scope: source.id!, brief: { status: 'absent' } }, snapshot,
+      source: { scope: source.id!, revision: 'notes-disclosure-check' }, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: true } }));
+    expect(new DOMParser().parseFromString(customer, 'text/html').body.textContent).not.toContain(attack);
+    const empty = layout(); empty.floors[0].items[0].notes = ' \t\n ';
+    const emptyActivity = new DOMParser().parseFromString(await productionPlanHandoffHtml(empty, snapshot, undefined, { scope: 'activity' }), 'text/html');
+    expect(section(emptyActivity, '逐件物料工作单').textContent).toMatch(/备注[：:]\s*未记录/);
+    expect(source).toEqual(before);
   });
 });

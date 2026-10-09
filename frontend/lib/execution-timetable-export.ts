@@ -100,6 +100,7 @@ export async function executionTimetableHtml(sourceLayout: RoomLayout, snapshot:
       <div class="planned"><span class="label">计划开始</span><time${task.plannedStartAt ? ` datetime="${escape(task.plannedStartAt)}"` : ''}>${escape(time(task.plannedStartAt, '待安排'))}</time>
         <span class="label">计划结束</span><time${task.plannedEndAt ? ` datetime="${escape(task.plannedEndAt)}"` : ''}>${escape(time(task.plannedEndAt, '待安排'))}</time><span class="phase">${OPERATION_PHASE_LABELS[task.phase]}</span></div>
       <div class="work"><span class="label">任务${index + 1}</span><h4>${escape(task.title)}</h4><span class="label">完成条件</span><p class="acceptance">${escape(present(task.acceptance))}</p>
+        ${task.evidenceNote.trim() ? `<span class="label">现场核对说明</span><p class="acceptance task-evidence">${escape(task.evidenceNote)}</p>` : ''}
         <p class="reference">${task.objectIds.length ? `物件引用 ${task.objectIds.length} 个 · 不代表到货或库存数量` : '无物件关联 · 安排与沟通任务照常保留'}</p>
         ${review.reason ? `<p class="warning">${escape(review.reason)}</p>` : ''}
         <details><summary>任务编号与原记录</summary><p>任务编号：${escape(task.id)}</p>

@@ -476,4 +476,25 @@ describe('execution timetable HTML', () => {
     await expect(executionTimetableHtml(layout(), snapshot, facts)).rejects.toThrow();
     expect(serializer).not.toHaveBeenCalled();
   });
+
+  it('puts nonblank evidence in the print-visible task body, preserves source details, and does not invent handling for blank notes', async () => {
+    const attack = '<img src=x onerror=alert(1)><script>alert(2)</script>';
+    const source = layout([task(20, { evidenceNote: attack }), task(21, { evidenceNote: ' \t\n ' })]);
+    const before = structuredClone(source);
+    const document = await doc(source);
+    const first = taskArticle(document, id(20));
+    const main = first.querySelector('.work')!.cloneNode(true) as HTMLElement;
+    main.querySelectorAll('details').forEach(value => value.remove());
+    expect(main.textContent).toContain(attack);
+    expect(first.querySelector('details')!.textContent).toContain(id(20));
+    expect(first.querySelector('details')!.textContent).toContain('2027-02-03T10:00:00+08:00');
+    expect(document.querySelectorAll('script,img,iframe,object,embed,link,form,[onload],[onerror]')).toHaveLength(0);
+    expect(document.querySelector('style')!.textContent).toContain('@media print');
+    expect(document.querySelector('style')!.textContent).toContain('.task details{display:none}');
+    const blank = taskArticle(document, id(21));
+    const blankMain = blank.querySelector('.work')!.cloneNode(true) as HTMLElement;
+    blankMain.querySelectorAll('details').forEach(value => value.remove());
+    expect(blankMain.textContent).not.toContain('已处理');
+    expect(source).toEqual(before);
+  });
 });
