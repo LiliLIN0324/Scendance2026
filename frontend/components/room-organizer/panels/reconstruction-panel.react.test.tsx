@@ -25,6 +25,53 @@ beforeEach(()=>{
  const snapshot={...controller.getSnapshot(),user:{id:'user'},project:{id:projectId,studio_id:'studio',name:'测试',revision:1,scene},lease:{projectId,sessionId:'40000000-0000-4000-8000-000000000001',generation:1,revision:1,expiresAt:new Date(Date.now()+100000).toISOString()},revision:1,writeBlocked:false};
  vi.spyOn(controller,'getSnapshot').mockReturnValue(snapshot);
 });
+describe('reconstruction form read protection',()=>{
+ it('never overwrites saved registration after a failed read, including an explicit flush, and retries the original data',async()=>{
+  const measured=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});
+  const original={width:'12',depth:'8',height:'3',text:'原图纸说明',constraints:[],registration:{sourceId:'original-reference',
+   points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}],worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,
+   appliedBasis:referenceSceneBasis(measured),confirmationId:'original-confirmation'}};
+  let stored:unknown=structuredClone(original);
+  vi.mocked(readSourceForm).mockRejectedValueOnce(new Error('Transient read failure')).mockImplementation(async()=>stored as never);
+  vi.mocked(storeSourceForm).mockImplementation(async(_scope,value)=>{stored=structuredClone(value);});
+  render(<ReconstructionPanel controller={controller} layout={measured} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(readSourceForm).toHaveBeenCalledOnce());
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,300));});
+  expect(storeSourceForm).not.toHaveBeenCalled();expect(stored).toEqual(original);
+  expect(screen.getByRole('alert').textContent).toContain('读取失败');
+  expect(screen.getByLabelText('总宽（米）').matches(':disabled')).toBe(true);
+  await expect(flushSourceScope(projectId)).rejects.toThrow('读取');
+  expect(storeSourceForm).not.toHaveBeenCalled();expect(stored).toEqual(original);
+  fireEvent.click(screen.getByRole('button',{name:'重试读取图纸资料'}));
+  await waitFor(()=>expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12'));
+  await act(async()=>{await flushSourceScope(projectId);});
+  expect(stored).toMatchObject(original);
+ });
+ it('blocks a flush already waiting for a read that later fails',async()=>{
+  let fail!:(error:Error)=>void;
+  vi.mocked(readSourceForm).mockImplementation(()=>new Promise((_resolve,reject)=>{fail=reject;}));
+  render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(readSourceForm).toHaveBeenCalledOnce());
+  const flushed=flushSourceScope(projectId).catch(error=>error as Error);
+  await act(async()=>fail(new Error('Read interrupted')));
+  expect(await flushed).toMatchObject({message:expect.stringContaining('读取')});
+  expect(storeSourceForm).not.toHaveBeenCalled();
+ });
+ it.each([null,[],{width:12},{constraints:{}}])('does not replace an unreadable saved form %j with defaults',async invalid=>{
+  vi.mocked(readSourceForm).mockResolvedValue(invalid as never);
+  render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await screen.findByRole('alert');
+  await expect(flushSourceScope(projectId)).rejects.toThrow('读取');
+  expect(storeSourceForm).not.toHaveBeenCalled();
+ });
+ it('permits a genuinely absent record to be edited and saved',async()=>{
+  render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  await waitFor(()=>expect(screen.getByLabelText('总宽（米）').matches(':disabled')).toBe(false));
+  fireEvent.change(screen.getByLabelText('总宽（米）'),{target:{value:'15'}});
+  await act(async()=>{await flushSourceScope(projectId);});
+  expect(storeSourceForm).toHaveBeenLastCalledWith(projectId,expect.objectContaining({width:'15'}));
+ });
+});
 describe('manual editing of an applied venue',()=>{
  function measured(){
   const base=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});
