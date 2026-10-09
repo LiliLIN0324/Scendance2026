@@ -9,7 +9,8 @@ schemas = ["public", "graphql_public"]
 site_url = "https://scendance-scene-planner-ewz.pages.dev"
 additional_redirect_urls = ["https://scendance-scene-planner-ewz.pages.dev", "https://scendance-scene-planner-ewz.pages.dev/auth/callback", "https://scendance.charlestech.org", "https://scendance.charlestech.org/auth/callback", "http://localhost:3000/auth/callback", "http://127.0.0.1:3000/auth/callback"]
 enable_signup = true
-enable_anonymous_sign_ins = false
+# The web client opens a guest session for visitors who have not signed in.
+enable_anonymous_sign_ins = true
 minimum_password_length = 12
 
 [auth.email]
