@@ -4,16 +4,17 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
 import { productionPlanHandoffHtml } from '@/lib/production-plan-export';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { materialCheckinLedgerSchema, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
-import type { MaterialCheckinState } from '../hooks/use-material-checkins';
+import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { createOperation } from '../lib/event-operations';
 import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis } from '../lib/scene-handoff';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
+import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { FurnitureItem } from '../lib/types';
 vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
 vi.mock('@/lib/production-plan-export',async importOriginal=>{
@@ -26,9 +27,50 @@ const itemId='30000000-0000-4000-8000-000000000001';
 function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor({items:[makeItem({id:itemId,name:'签到椅',materialId:'chair'})]})]}); }
 const checkinProject='20000000-0000-4000-8000-000000000001';
 const checkinState=(ledger?:MaterialCheckinLedger):MaterialCheckinState=>({projectId:checkinProject,ledger,ready:true,loading:false,saving:false,error:null,onSave:vi.fn().mockResolvedValue(undefined),retry:vi.fn()});
+function completeActivity() {
+  const current={...workLayout(),id:checkinProject,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:itemId,title:'未关联制作计划的主持任务',phase:'event'}]})};
+  const brief={event:'演练开放日',guests:30,description:'保存的活动目标',mustHave:'保留通道',allowIdeas:false};
+  const briefSnapshot={state:'ready' as const,scope:checkinProject,brief:{status:'present' as const,value:brief}};
+  const text=serializeLocalProjectBackupV3(current,briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}});
+  const backupActions={prepareBackup:vi.fn(async()=>text),restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
+  return {current,brief,briefSnapshot,text,backupActions};
+}
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
 describe('Binggo scene delivery panel',()=>{
+  it('exports full saved activity records without requiring a production plan or generating models',async()=>{
+    const f=completeActivity();
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
+    expect(productionPlanHandoffHtml).toHaveBeenCalledWith(expect.objectContaining({id:checkinProject}),expect.anything(),undefined,{scope:'activity',brief:f.briefSnapshot.brief});
+    const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
+    expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('保存的活动目标');
+    expect(mime).toBe('text/html;charset=utf-8');expect(name).toContain('内部活动交接');expect(extension).toBe('html');
+    expect(exportDeliveryGlb).not.toHaveBeenCalled();
+  });
+  it.each(['error','wrong-project','incomplete'] as const)('does not substitute partial activity data when preparation returns %s',async kind=>{
+    const f=completeActivity();
+    if(kind==='error')f.backupActions.prepareBackup.mockRejectedValue(new Error('活动资料读取失败'));
+    else if(kind==='wrong-project')f.backupActions.prepareBackup.mockResolvedValue(f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
+    else f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackup(f.current,f.briefSnapshot));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    await screen.findByText(kind==='error'?'活动资料读取失败':'活动资料未完整对应当前项目，请重新读取后导出。');
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
+  it.each(['layout','brief'] as const)('discards prepared activity output when %s changes during preparation',async field=>{
+    const f=completeActivity();let finish!:(value:string)=>void;
+    f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true};
+    const view=render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} briefState={briefState}/>);
+    fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
+    view.rerender(<SceneDeliveryPanel layout={field==='layout'?{...f.current,name:'后续编辑'}:f.current} controller={controller} backupActions={f.backupActions} briefState={field==='brief'?{...briefState,brief:{...f.brief,description:'后续需求'}}:briefState}/>);
+    await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
   it('keeps local checkins and production editing available when the scene service lease is blocked',async()=>{
     const projectId='91000000-0000-4000-8000-000000000001';
     const current={...workLayout(),id:checkinProject,productionPlan:productionPlanSchema.parse({})};
