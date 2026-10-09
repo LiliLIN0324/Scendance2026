@@ -212,6 +212,48 @@ describe('local applied reference mapping',()=>{
  }
  function point(x:number,z:number){const map=screen.getByRole('button',{name:'标记图纸与场地的三个对应点'});vi.spyOn(map,'getBoundingClientRect').mockReturnValue({left:0,top:0,width:1000,height:600,right:1000,bottom:600,x:0,y:0,toJSON:()=>({})});fireEvent.click(map,{clientX:x,clientY:z});}
  function mark(){fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));point(10,20);point(610,20);point(10,420);}
+ function typePoint(x:string,z:string){fireEvent.change(screen.getByLabelText('对应点横向像素'),{target:{value:x}});fireEvent.change(screen.getByLabelText('对应点纵向像素'),{target:{value:z}});fireEvent.keyDown(screen.getByLabelText('对应点纵向像素'),{key:'Enter'});}
+ it.each(['Enter',' '])('does not forward the handled map key %s to scene placement shortcuts',async key=>{
+  memory();open();await screen.findByRole('button',{name:'重新标记三个对应点'});
+  fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));
+  const shortcut=vi.fn();window.addEventListener('keydown',shortcut);
+  try{fireEvent.keyDown(screen.getByRole('button',{name:'标记图纸与场地的三个对应点'}),{key});
+   expect(document.activeElement).toBe(screen.getByLabelText('对应点横向像素'));expect(shortcut).not.toHaveBeenCalled();
+  }finally{window.removeEventListener('keydown',shortcut);}
+ });
+ it('accepts three keyboard points once each and still requires explicit confirmation',async()=>{
+  const saved=memory(),create=vi.spyOn(controller,'createReconstruction'),upload=vi.spyOn(controller,'uploadSource');open();
+  await screen.findByRole('button',{name:'重新标记三个对应点'});
+  fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));
+  fireEvent.keyDown(screen.getByRole('button',{name:'标记图纸与场地的三个对应点'}),{key:' '});
+  expect(document.activeElement).toBe(screen.getByLabelText('对应点横向像素'));
+  typePoint('10.5','20');typePoint('610.5','20');typePoint('10.5','420');
+  await act(async()=>{await flushSourceScope(projectId);});
+  expect(saved().registration?.points).toEqual([{x:10.5,z:20},{x:610.5,z:20},{x:10.5,z:420}]);
+  expect(saved().registration?.appliedBasis).toBeUndefined();
+  expect((screen.getByLabelText('对应点纵向像素') as HTMLInputElement).readOnly).toBe(true);
+  fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
+  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'});
+  expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('ready');
+  expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
+ });
+ it.each([['','20'],['10',''],['-1','20'],['1001','20'],['10','601'],['Infinity','20']])('rejects invalid keyboard coordinates %s / %s',async(x,z)=>{
+  const saved=memory();open();await screen.findByRole('button',{name:'重新标记三个对应点'});
+  fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));typePoint(x,z);
+  expect(screen.getByRole('alert').textContent).toContain('请输入图内坐标');
+  await act(async()=>{await flushSourceScope(projectId);});expect(saved().registration?.points).toEqual([]);
+ });
+ it('clears keyboard drafts when changing sources and requires a new marking session',async()=>{
+  const saved=memory();open(measured,[sourceA,sourceB]);await screen.findByRole('button',{name:'重新标记三个对应点'});
+  fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));typePoint('10','20');
+  fireEvent.change(screen.getByLabelText('对应点横向像素'),{target:{value:'610'}});
+  fireEvent.change(screen.getByLabelText('核对平面图'),{target:{value:sourceB.id}});
+  expect((screen.getByLabelText('对应点横向像素') as HTMLInputElement).value).toBe('');
+  fireEvent.keyDown(screen.getByLabelText('对应点纵向像素'),{key:'Enter'});
+  await act(async()=>{await flushSourceScope(projectId);});
+  expect(saved().registration).toMatchObject({sourceId:sourceA.id,points:[{x:10,z:20}]});
+  expect((screen.getByRole('button',{name:'添加当前对应点'}) as HTMLButtonElement).disabled).toBe(true);
+ });
  it('reads the original persisted form, keeps legacy points unadopted, and confirms a local v2 image without AI or cloud registration',async()=>{
   const saved=memory({registration:{sourceId:sourceA.id,points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}]}});
   const create=vi.spyOn(controller,'createReconstruction'),upload=vi.spyOn(controller,'uploadSource');open();

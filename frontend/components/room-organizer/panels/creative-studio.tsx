@@ -57,7 +57,7 @@ interface StudioValue extends LocalProjectBackupActions {
   scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   briefReady: boolean; briefError: string | null; hasSavedBrief: boolean; retryBrief(): void;
-  images: ReferenceImage[]; addImages(files: FileList | null): Promise<void>; removeImage(id: string): void;
+  images: ReferenceImage[]; addImages(files: FileList | null, kind?: ReferenceImage['kind']): Promise<void>; removeImage(id: string): void;
   busy: boolean; preparing: boolean; notice: string; connection: string; generate(message?: string, options?: {intent:'model'}): Promise<void>;
   messages: Message[]; expanded: boolean; setExpanded(value: boolean): void; preview: Preview | null; stale: boolean; expired: boolean;
   jevEnabled: boolean; setJevEnabled(value:boolean):void; run: AgentRun | null; candidates: CandidatePreview[]; selectCandidate(label: 'A'|'B'|'C'):void; cancelRun():Promise<void>; recoverRun():Promise<void>; recoverable:boolean;
@@ -554,7 +554,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   useEffect(()=>()=>onPreview?.(null),[onPreview]);
   function say(text:string,modelSuggestions?:SceneProposal['modelSuggestions'],materialSuggestions?:SceneProposal['materialSuggestions']):void { setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'assistant',text,modelSuggestions,materialSuggestions}]); }
 
-  async function addImages(files: FileList|null):Promise<void> {
+  async function addImages(files: FileList|null, requestedKind?: ReferenceImage['kind']):Promise<void> {
     if(!files?.length) return;
     // Snapshot before the input is cleared. Every selection is processed in
     // order; a second selection no longer invalidates the first decode.
@@ -575,7 +575,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
           const width=bitmap.width,height=bitmap.height;
           let pixels:Uint8ClampedArray|undefined;
           try { const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64; const context=canvas.getContext('2d');if(context){context.drawImage(bitmap,0,0,64,64);pixels=context.getImageData(0,0,64,64).data;} } catch { /* Filename suggestion still available. */ }
-          const kind=suggestSourceKind(file.name,pixels);
+          const kind=requestedKind??suggestSourceKind(file.name,pixels);
           bitmap.close();
           if(!valid) throw new Error('图片长宽请控制在 4096 像素以内。');
           if(!active()) break;
@@ -880,7 +880,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
     <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
     </details>
-    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对"><ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={studio.addImages}/></div>
+    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对"><ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/></div>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||templateOnly||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <p className="cr-hint">根据当前场景与资源库生成布置方案。本轮策划不读取照片；图纸与照片重建需单独确认。</p>

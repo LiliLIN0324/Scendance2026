@@ -903,6 +903,52 @@ describe('creative brief and assistant interaction', () => {
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
 
+  it('persists the upload entry classification and restores it without reclassifying existing photos', async () => {
+    const storage = await import('@/lib/source-storage');
+    const stored = vi.spyOn(storage, 'storeSource').mockResolvedValue(undefined);
+    const cloudUpload = vi.spyOn(controller, 'uploadSource');
+    const current = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
+    const view = render(ui(current));
+    await screen.findByLabelText('上传核对平面图');
+    upload(view.container, [new File(['photo'], 'camera.png', { type: 'image/png' })]);
+    await screen.findByRole('img', { name: '现场照片：camera.png' });
+    fireEvent.change(screen.getByLabelText('上传核对平面图'), {
+      target: { files: [new File(['plan'], 'scan.png', { type: 'image/png' })] },
+    });
+    await screen.findByRole('img', { name: '平面图：scan.png' });
+    await waitFor(() => expect(stored).toHaveBeenCalledTimes(2));
+    expect(stored.mock.calls.map(([image]) => ({ name: image.name, kind: image.kind, scope: image.scope }))).toEqual([
+      { name: 'camera.png', kind: 'photo', scope: projectId }, { name: 'scan.png', kind: 'floorplan', scope: projectId },
+    ]);
+    expect((screen.getByRole('combobox', { name: 'camera.png 的资料类型' }) as HTMLSelectElement).value).toBe('photo');
+    expect((screen.getByRole('combobox', { name: 'scan.png 的资料类型' }) as HTMLSelectElement).value).toBe('floorplan');
+    const records = stored.mock.calls.map(([image]) => image);
+    view.unmount(); vi.mocked(listStoredSources).mockResolvedValue(records);
+    render(ui(current));
+    expect(await screen.findByRole('img', { name: '现场照片：camera.png' })).toBeTruthy();
+    expect(await screen.findByRole('img', { name: '平面图：scan.png' })).toBeTruthy();
+    expect(cloudUpload).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['photo', 'floorplan'] as const)('discards an in-flight %s upload after switching projects', async kind => {
+    const storage = await import('@/lib/source-storage');
+    const stored = vi.spyOn(storage, 'storeSource').mockResolvedValue(undefined), close = vi.fn();
+    let finish!: (bitmap: { width: number; height: number; close(): void }) => void;
+    createBitmap.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const current = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
+    const view = render(ui(current)), file = new File(['old project'], 'old-scan.png', { type: 'image/png' });
+    await screen.findByLabelText('上传核对平面图');
+    if (kind === 'photo') upload(view.container, [file]);
+    else fireEvent.change(screen.getByLabelText('上传核对平面图'), { target: { files: [file] } });
+    await waitFor(() => expect(createBitmap).toHaveBeenCalledOnce());
+    view.rerender(ui({ ...current, id: 'different-local-project' }));
+    await act(async () => finish({ width: 1024, height: 768, close }));
+    expect(close).toHaveBeenCalledOnce(); expect(stored).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByRole('img', { name: /old-scan/ })).toBeNull();
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['unsupported format', () => new File(['vector'], 'venue.svg', { type: 'image/svg+xml' }), '请选择 PNG、JPEG 或 WebP 图片。'],
     ['oversized file', () => new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'venue.png', { type: 'image/png' }), '每张图片不能超过 5 MB。'],
