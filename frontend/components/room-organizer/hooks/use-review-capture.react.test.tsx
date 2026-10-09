@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, renderHook } from '@testing-library/react';
 import { startTransition, Suspense, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createProjectReviewSnapshot } from '@/lib/project-review';
-import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
-import { render2DTopDown } from '../canvas-2d/render';
+import { ensureFloorPlanImageDecoded, render2DTopDown } from '../canvas-2d/render';
+import { makeFloor, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { reviewSceneAssetsReady, useReviewCapture } from './use-review-capture';
 
 vi.mock('../canvas-2d/render',()=>({render2DTopDown:vi.fn(),ensureFloorPlanImageDecoded:vi.fn(async()=>{}),isFloorPlanImageReady:()=>true}));
@@ -25,6 +25,47 @@ function fixture(){
 }
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 describe('editor review capture binding',()=>{
+  it.each(['legacy','registered'] as const)('requires permission for a ground-floor %s reference in upstairs all-floor 3D',async kind=>{
+    const f=fixture();
+    f.inputs.layout.floors.push(makeFloor({id:'upper',name:'上层'}));
+    f.inputs.activeFloorIndex=1;f.inputs.view=makeViewSettings({view2D:false,showAllFloors:true});
+    if(kind==='legacy')f.inputs.layout.floorPlanImage=png;
+    else f.inputs.referenceImage={url:'blob:current',pixelWidth:10,pixelHeight:10,imageToWorld:[1,0,0,1,0,0]};
+    f.inputs.renderer.current={render:vi.fn()} as unknown as THREE.WebGLRenderer;
+    f.inputs.camera.current=new THREE.PerspectiveCamera();
+    const {result}=renderHook(()=>useReviewCapture(f.inputs));
+    await expect(result.current(f.snapshot,{includeReference:false},()=>f.source)).rejects.toThrow('参考图');
+    expect(f.canvas.toDataURL).not.toHaveBeenCalled();
+  });
+  it.each(['upper-2d','upper-only-3d','hidden','transparent'] as const)('does not request or decode a reference absent from the %s capture',async mode=>{
+    const f=fixture();f.inputs.layout.floorPlanImage=png;
+    f.inputs.layout.floors.push(makeFloor({id:'upper',name:'上层'}));
+    f.inputs.activeFloorIndex=mode==='hidden'||mode==='transparent'?0:1;
+    f.inputs.view=makeViewSettings({view2D:mode!=='upper-only-3d',showAllFloors:mode!=='upper-only-3d',
+      ...(mode==='hidden'?{showReferenceImage:false}:{}),...(mode==='transparent'?{referenceImageOpacity:0}:{})});
+    f.inputs.renderer.current={render:vi.fn()} as unknown as THREE.WebGLRenderer;
+    f.inputs.camera.current=new THREE.PerspectiveCamera();
+    const {result}=renderHook(()=>useReviewCapture(f.inputs));
+    const capture=await result.current(f.snapshot,{includeReference:false},()=>f.source);
+    expect(capture.caption).not.toContain('含已允许公开');
+    expect(ensureFloorPlanImageDecoded).not.toHaveBeenCalled();
+    expect(f.canvas.toDataURL).toHaveBeenCalledOnce();
+  });
+  it('waits for and labels an approved registered ground reference in all-floor 3D',async()=>{
+    const f=fixture();f.inputs.layout.floors.push(makeFloor({id:'upper',name:'上层'}));
+    f.inputs.activeFloorIndex=1;f.inputs.view=makeViewSettings({view2D:false,showAllFloors:true});
+    f.inputs.referenceImage={url:'blob:current',pixelWidth:10,pixelHeight:10,imageToWorld:[1,0,0,1,0,0]};
+    f.inputs.renderer.current={render:vi.fn()} as unknown as THREE.WebGLRenderer;
+    f.inputs.camera.current=new THREE.PerspectiveCamera();
+    const {result}=renderHook(()=>useReviewCapture(f.inputs));
+    const pending=result.current(f.snapshot,{includeReference:true},()=>f.source);
+    await new Promise(resolve=>setTimeout(resolve,40));
+    expect(f.canvas.toDataURL).not.toHaveBeenCalled();
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(),new THREE.MeshBasicMaterial({map:new THREE.Texture({width:10,height:10,src:'blob:current'})}));
+    mesh.userData.type='reference-image';f.inputs.scene.current!.add(mesh);
+    expect((await pending).caption).toContain('含已允许公开的参考底图');
+    expect(f.canvas.toDataURL).toHaveBeenCalledOnce();
+  });
   it('renders the committed 2D layout and encodes it before yielding',async()=>{
     const f=fixture(),{result}=renderHook(()=>useReviewCapture(f.inputs));
     const captured=await result.current(f.snapshot,{includeReference:false},()=>f.source);

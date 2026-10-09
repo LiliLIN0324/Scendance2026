@@ -2,6 +2,8 @@ import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionReferenceKey, productionTaskBasis, productionTaskObjectIds } from '../../../lib/production-plan';
+import { materialCheckinTaskBasis } from '../../../lib/material-checkin-basis';
+import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import type { FurnitureItem, RoomLayout } from './types';
 
 export const OPERATION_PHASE_LABELS: Record<EventOperationTask['phase'], string> = {
@@ -55,11 +57,13 @@ export function operationObjectReview(layout: RoomLayout, task: EventOperationTa
 }
 
 /** Local physical references also work for text-only tasks and non-exportable venues. */
-export async function operationBasis(layout: RoomLayout, task: EventOperationTask): Promise<string> {
+export async function operationBasis(layout: RoomLayout, task: EventOperationTask, checkins?: MaterialCheckinLedger): Promise<string> {
   const scope = operationObjectScope(layout,task);
   const production = productionTaskBasis(layout.productionPlan, task.id, task.objectIds);
+  const materialCheckins = materialCheckinTaskBasis(layout, task, checkins);
   const basis = canonical({
     ...(production ? { production } : {}),
+    ...(materialCheckins ? { materialCheckins } : {}),
     layoutId: layout.id ?? null, dataKind: layout.eventOperations?.dataKind ?? 'unspecified',
     task: { id: task.id, title: task.title.trim(), phase: task.phase,
       plannedStartAt: task.plannedStartAt, plannedEndAt: task.plannedEndAt,
@@ -84,13 +88,13 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
   return 'sha256:' + Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function operationReview(layout: RoomLayout, task: EventOperationTask): Promise<{
+export async function operationReview(layout: RoomLayout, task: EventOperationTask, checkins?: MaterialCheckinLedger): Promise<{
   status: EventOperationTask['status'] | 'needs_review'; missingObjectIds: string[];
   ambiguousObjectIds?:string[]; missingProductionObjectIds?:string[]; ambiguousProductionObjectIds?:string[];
 }> {
   const review = operationObjectReview(layout,task);
   const previousReview = task.status === 'accepted' || task.status === 'review' && !!task.reviewedBasis;
-  const needsReview = Object.values(review).some(ids=>ids.length>0) || previousReview && task.reviewedBasis !== await operationBasis(layout, task);
+  const needsReview = Object.values(review).some(ids=>ids.length>0) || previousReview && task.reviewedBasis !== await operationBasis(layout, task, checkins);
   return { status: needsReview ? 'needs_review' : task.status, missingObjectIds:review.missingObjectIds,
     ...(review.ambiguousObjectIds.length?{ambiguousObjectIds:review.ambiguousObjectIds}:{}),
     ...(review.missingProductionObjectIds.length?{missingProductionObjectIds:review.missingProductionObjectIds}:{}),

@@ -1,8 +1,11 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
+import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
 import { corners, sceneSchema, type Scene } from '../../../../supabase/functions/_shared/domain';
+import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { layoutReducer, type LayoutState } from '../hooks/layout-reducer';
-import { backendSceneToLayout, layoutToBackendScene, SceneAdapterError } from './backend-adapter';
+import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene, SceneAdapterError } from './backend-adapter';
 import { parseStoredLayout } from './schema';
 
 const objectId = '00000000-0000-4000-8000-000000000001';
@@ -142,4 +145,59 @@ describe('backend dimensions survive the editor', () => {
       expect(JSON.stringify(input)).toBe(before);
     },
   );
+});
+
+
+describe('measured venue upgrade preserves the current local activity', () => {
+  it('keeps named materials, handoff, asset loading references and floor style while upgrading geometry', () => {
+    const input = scene(), modelId = '00000000-0000-4000-8000-000000000004';
+    input.objects.push({ ...input.objects[0], id: modelId, materialId: 'asset', assetId,
+      position: { x: 7, z: 5 }, notes: '模型原备注' });
+    const base = backendSceneToLayout(input, { projectId: 'local-measured-activity', name: '原本机活动',
+      assetUrls: { [assetId]: 'https://example.test/model.glb?token=original' } });
+    const floor = base.floors[0], table = floor.items.find(item => item.id === objectId)!, model = floor.items.find(item => item.id === modelId)!;
+    floor.id = 'local-floor'; floor.name = '交流区'; floor.floorColor = '#bba577'; floor.floorPattern = 'wood';
+    Object.assign(table, { name: '演练桌子1', icon: '桌', groupId: 'local-group',
+      handoff: handoffSchema.parse({ ownerName: '演练负责人', status: 'doing', evidenceNote: '本机点验前说明' }) });
+    Object.assign(model, { name: '演练资产1', icon: '模', groupId: 'asset-group', source: 'generated',
+      handoff: handoffSchema.parse({ ownerName: '模型负责人', acceptance: '核对原模型', status: 'todo' }) });
+    base.eventOperations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [
+      { id: '00000000-0000-4000-8000-000000000005', title: '原活动任务', phase: 'setup', objectIds: [objectId] },
+    ] });
+    base.productionPlan = productionPlanSchema.parse({ dataKind: 'rehearsal', acquisitions: [
+      { id: '00000000-0000-4000-8000-000000000006', title: '原桌子取得计划', objectIds: [objectId], method: 'rental' },
+    ] });
+    const before = structuredClone(base), next = createMeasuredRoomLayout(base, { width: 11, depth: 8, height: 3.5 });
+    expect(base).toEqual(before);
+    expect(next).toMatchObject({ id: base.id, name: base.name, width: 11, height: 8,
+      eventOperations: base.eventOperations, productionPlan: base.productionPlan });
+    expect(next.floors[0]).toMatchObject({ id: floor.id, name: floor.name, floorColor: floor.floorColor, floorPattern: 'wood', height: 3.5 });
+    expect(next.floors[0].items.map(item => item.id)).toEqual(floor.items.map(item => item.id));
+    expect(next.floors[0].items.find(item => item.id === objectId)).toMatchObject({
+      name: table.name, icon: table.icon, groupId: table.groupId, handoff: table.handoff, notes: table.notes,
+      position: { x: -3.5, z: -1 },
+    });
+    expect(next.floors[0].items.find(item => item.id === modelId)).toMatchObject({
+      name: model.name, icon: model.icon, groupId: model.groupId, handoff: model.handoff,
+      assetId, glbUrl: model.glbUrl, source: 'generated', notes: model.notes, position: { x: 1.5, z: 1 },
+    });
+    const entrance = next.floors[0].items.find(item => item.id === entranceId)!;
+    expect(entrance.venueEntranceId).toBeUndefined();
+    expect(entrance).toMatchObject({ structuralOpeningId: entranceId, wallId: expect.any(String), depth: 0.16 });
+    const wire = layoutToBackendScene(next);
+    expect(wire.schemaVersion).toBe(2); expect(wire.venue).toMatchObject({ width: 11, depth: 8, height: 3.5, entrances: [] });
+    expect(wire.objects).toEqual(layoutToBackendScene(before).objects);
+    if (wire.schemaVersion !== 2) throw new Error('expected measured v2');
+    expect(wire.structure.walls).toHaveLength(4); expect(wire.structure.walls[0]).toMatchObject({ start: { x: 0, z: 0 }, end: { x: 11, z: 0 }, height: 3.5 });
+    expect(wire.structure.openings[0]).toMatchObject({ id: entranceId, offset: 4.1, width: 1.8 });
+    expect(wire.finishes).toMatchObject({ floorColor: floor.floorColor, floorPattern: 'wood' });
+    expect(JSON.stringify(wire)).not.toMatch(/eventOperations|productionPlan|handoff|glbUrl|original/);
+  });
+
+  it.each([0, -1, NaN, Infinity])('rejects invalid measured width %s without altering current records', width => {
+    const base = backendSceneToLayout(scene()); base.floors[0].items[0].name = '原命名物件';
+    const before = structuredClone(base);
+    expect(() => createMeasuredRoomLayout(base, { width, depth: 8, height: 3 })).toThrow();
+    expect(base).toEqual(before);
+  });
 });

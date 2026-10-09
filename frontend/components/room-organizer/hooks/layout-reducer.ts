@@ -1,4 +1,5 @@
 import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
+import { syncDesignWorkOrders } from '../../../lib/production-plan';
 import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from '../lib/constants';
 import { MAX_DORMERS, clampDormer, type DormerInput, type DormerPatch } from '../lib/dormers';
 import { rotatedHalfExtents } from '../lib/geometry';
@@ -174,6 +175,16 @@ const STRUCTURAL_ACTIONS = new Set<LayoutAction['type']>([
   'removeItem', 'removeInteriorWall', 'clearInteriorWalls', 'setSillHeight', 'clearItems',
 ]);
 export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
+  const next = reduceLayoutWithGeometry(state, action);
+  // Imports and undo/redo adopt a complete snapshot, including its work orders.
+  if (next === state || action.type === 'applyLayout') return next;
+  // Before-removal facts still matter to alternatives where the object exists.
+  // After-edit facts win, including an explicitly cleared work order.
+  const layout = syncDesignWorkOrders(syncDesignWorkOrders(next.layout, state.layout));
+  return layout === next.layout ? next : { ...next, layout };
+}
+
+function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): LayoutState {
   // A measured outline cannot be resized by the legacy rectangle sliders.
   if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'addFloor', 'duplicateFloor'].includes(action.type)) return state;
   let next = reduceLayout(state, action);

@@ -1,11 +1,12 @@
 import { useEffect, useRef, type RefObject, type MutableRefObject } from 'react';
 import { captureProjectReviewCanvas, ProjectReviewCaptureError, ProjectReviewChangedError, type ProjectReviewCaptureOptions } from '@/lib/project-review-workflow';
-import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
-import type { ReferenceImageLayer } from '@/lib/reference-image';
 import { ensureFloorPlanImageDecoded, isFloorPlanImageReady, render2DTopDown } from '../canvas-2d/render';
+import { DEFAULT_FLOOR_PLAN_OPACITY } from '../lib/constants';
 import { presetModelUrl } from '../lib/scene-presets';
 import { getGlbAssetRevision, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
 import type { FurnitureItem, RoomLayout, ViewSettings } from '../lib/types';
+import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
+import type { ReferenceImageLayer } from '@/lib/reference-image';
 import type * as THREE from 'three';
 
 interface Inputs {
@@ -17,6 +18,14 @@ interface Inputs {
   scene: MutableRefObject<THREE.Scene|null>; renderer: MutableRefObject<THREE.WebGLRenderer|null>;
   camera: MutableRefObject<THREE.PerspectiveCamera|null>;
   pendingPreview: boolean; isInteracting(): boolean;
+}
+
+/** 2D shows one floor; all-floor 3D can show the ground image from upstairs. */
+function visibleReferenceUrl({ layout, view, activeFloorIndex, referenceImage }: Inputs): string | undefined {
+  if (view.showReferenceImage === false ||
+      (activeFloorIndex !== 0 && (view.view2D || !view.showAllFloors)) ||
+      (view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY) <= 0) return undefined;
+  return referenceImage?.url ?? (!layout.backendSceneV2 ? layout.floorPlanImage : undefined);
 }
 
 /** Checks rendered resources, not just download completion or the presence of placeholder meshes. */
@@ -72,10 +81,7 @@ export function useReviewCapture(inputs:Inputs):(
       const keys=items.map(glbAssetKey).filter((key):key is string=>!!key);
       if(now.layout.scenePreset)keys.push(presetModelUrl(now.layout.scenePreset));
       const modelsReady=view2D||keys.every(key=>getGlbAssetState(key).status==='ready');
-      const referenceVisible=floorIndex===0&&now.view.showReferenceImage!==false&&
-        !!(now.referenceImage||!now.layout.backendSceneV2&&now.layout.floorPlanImage)&&
-        (now.view.referenceImageOpacity??now.layout.floorPlanOpacity??.55)>0;
-      const referenceUrl=now.referenceImage?.url??(!now.layout.backendSceneV2?now.layout.floorPlanImage:undefined);
+      const referenceUrl=visibleReferenceUrl(now),referenceVisible=!!referenceUrl;
       const committedFrame=!!frame&&frame.layout===now.layout&&frame.view===now.view&&frame.floor===floorIndex&&
         frame.reference===referenceKey(now.referenceImage)&&frame.assets===getGlbAssetRevision();
       return {source:getSource(),canvas:view2D?now.canvas2D.current:now.canvas.current,
@@ -87,7 +93,7 @@ export function useReviewCapture(inputs:Inputs):(
     return captureProjectReviewCanvas(snapshot,{
       getState,
       waitForReady:async()=>{
-        const url=start.view.showReferenceImage!==false?(start.referenceImage?.url??(!start.layout.backendSceneV2?start.layout.floorPlanImage:undefined)):undefined;
+        const url=visibleReferenceUrl(start);
         if(view2D&&url){
           let timeout:ReturnType<typeof setTimeout>|undefined;
           try{await Promise.race([ensureFloorPlanImageDecoded(url),new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new ProjectReviewCaptureError('参考图尚未载入，请稍后重试。')),10000);})]);}

@@ -351,10 +351,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // Make `id` the sole selection (null clears). The one way panels set a
   // primary — pairing the two setters at every call site is how stale extras
   // leaked into later group operations (#117).
-  const selectOnly = useCallback((id: string | null) => {
+  const inspectSelection = useCallback(() => {
+    setLeftMode('properties'); setSidebarCollapsed(false);
+    if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
+  }, []);
+  const selectOnly = useCallback<SelectionContextValue['selectOnly']>((id, options) => {
     setSelectedItemId(id);
     setExtraSelectedIds((extras) => (extras.size === 0 ? extras : new Set()));
-  }, []);
+    if (id && !options?.keepPanel) inspectSelection();
+  }, [inspectSelection]);
 
   // A whole-layout replacement (import, share/local hydration, adopting
   // another tab's save) invalidates every piece of transient selection state,
@@ -378,10 +383,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // (Alt+click) is the escape hatch that picks one member on its own.
   const handleSelect = useCallback(
     (id: string, mode: 'replace' | 'toggle' | 'single') => {
+      inspectSelection();
       const members = mode === 'single' ? new Set([id]) : expandSelection(activeFloor.items, id);
       if (mode !== 'toggle') {
         if (members.size === 1) {
-          selectOnly(id);
+          selectOnly(id, { keepPanel: true });
           return;
         }
         setSelectedItemId(id);
@@ -424,7 +430,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       setExtraSelectedIds(next);
     },
-    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly]
+    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly, inspectSelection]
   );
 
   const allSelectedIds = useMemo(() => {
@@ -637,10 +643,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       commitHistoryNow();
       actions.replaceItems(candidate.layout.floors[activeFloorIndex]!.items);
-      setSelectedItemId(ids[0]!);
+      selectOnly(ids[0]!);
       setExtraSelectedIds(new Set(ids.slice(1)));
     },
-    [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds]
+    [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds, selectOnly]
   );
 
   const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout, acknowledgeRestoredLayout } = useLayoutPersistence({
@@ -674,10 +680,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   );
   const selectedObjectId = selectedItem?.id;
   useEffect(() => {
-    if (selectedObjectId) {
-      setLeftMode('properties'); setSidebarCollapsed(false);
-      if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
-    } else setLeftMode(current => current === 'properties' ? 'materials' : current);
+    if (!selectedObjectId) setLeftMode(current => current === 'properties' ? 'materials' : current);
   }, [selectedObjectId]);
 
   const hasSignalItems = useMemo(

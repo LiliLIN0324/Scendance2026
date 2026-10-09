@@ -12,8 +12,8 @@ export function blankHandoff(): Handoff {
   return { ownerName: '', dueDate: '', acceptance: '', status: 'todo', evidenceUrls: [], evidenceNote: '' };
 }
 
-/** Stable local review basis, independent of expiring asset loading URLs. */
-export async function handoffBasis(layout: RoomLayout, itemId: string, acceptance: string): Promise<string> {
+/** Freeze the submitted responsibility and physical requirements, not an older form record. */
+export async function handoffBasis(layout: RoomLayout, itemId: string, criteria: Pick<Handoff, 'ownerName' | 'dueDate' | 'acceptance'>): Promise<string> {
   const floor = layout.floors.find(entry => entry.items.some(item => item.id === itemId));
   const item = floor?.items.find(entry => entry.id === itemId);
   if (!floor || !item) throw new Error('物件已被移除，请重新打开工作单。');
@@ -26,7 +26,8 @@ export async function handoffBasis(layout: RoomLayout, itemId: string, acceptanc
     floorId: floor.id, venue: scene.venue, structure: scene.schemaVersion === 2 ? scene.structure : null,
     size: [item.width, item.depth, item.height], color: item.color,
     position: item.position ?? null, rotation: item.rotation ?? 0, elevation: item.elevation ?? 0,
-    mirrored: item.mirrored ?? false, acceptance: acceptance.trim(),
+    mirrored: item.mirrored ?? false, acceptance: criteria.acceptance.trim(),
+    assignment: { ownerName: criteria.ownerName.trim(), dueDate: criteria.dueDate.trim() },
   });
   if (!globalThis.crypto?.subtle) throw new Error('请使用安全连接或本机浏览器核对工作单。');
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(basis));
@@ -37,6 +38,6 @@ export async function effectiveHandoffStatus(layout: RoomLayout, itemId: string)
   const handoff = layout.floors.flatMap(floor => floor.items).find(item => item.id === itemId)?.handoff;
   if (!handoff) return 'todo';
   if ((handoff.status === 'review' || handoff.status === 'accepted') &&
-      handoff.reviewedBasis !== await handoffBasis(layout, itemId, handoff.acceptance)) return 'needs_review';
+      handoff.reviewedBasis !== await handoffBasis(layout, itemId, handoff)) return 'needs_review';
   return handoff.status;
 }

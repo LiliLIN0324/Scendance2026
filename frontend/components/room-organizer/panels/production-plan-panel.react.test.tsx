@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushSourceScope } from '@/lib/source-storage';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
@@ -64,6 +66,84 @@ function change(input: HTMLElement, value: string): void { fireEvent.change(inpu
 function save(): void { fireEvent.click(screen.getByRole('button', { name: '保存制作计划' })); }
 
 describe('local production plan draft UI', () => {
+  it('blocks source actions for a new draft without submitting and allows them after cancellation', async () => {
+    const ui = livePanel(trialLayout());
+    await expect(flushSourceScope(ui.layout.id!)).resolves.toBeUndefined();
+    fireEvent.click(screen.getByRole('button', { name: '创建制作计划' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加岗位' }));
+    change(row('新岗位').getByLabelText('岗位名称'), '尚未保存的演练岗位');
+    await expect(flushSourceScope(ui.layout.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
+    expect(ui.updates).not.toHaveBeenCalled();
+    expect(ui.layout.productionPlan).toBeUndefined();
+    expect((row('尚未保存的演练岗位').getByLabelText('岗位名称') as HTMLInputElement).value).toBe('尚未保存的演练岗位');
+    fireEvent.click(screen.getByRole('button', { name: '取消编辑' }));
+    await expect(flushSourceScope(ui.layout.id!)).resolves.toBeUndefined();
+    expect(ui.updates).not.toHaveBeenCalled();
+  });
+
+  it('keeps source actions blocked after an invalid save and releases them after a valid save', async () => {
+    const ui = livePanel(trialLayout(plan()));edit();
+    change(row('演练安装估算').getByLabelText('人工估算金额（元）'), '12.345');
+    change(row('演练安装估算').getByLabelText('估算依据'), '演练人工录入总额');save();
+    expect(screen.getByRole('alert').textContent).toContain('两位小数');
+    await expect(flushSourceScope(ui.layout.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
+    expect(ui.updates).not.toHaveBeenCalled();
+    expect((row('演练安装估算').getByLabelText('人工估算金额（元）') as HTMLInputElement).value).toBe('12.345');
+    change(row('演练安装估算').getByLabelText('人工估算金额（元）'), '12.34');save();
+    await expect(flushSourceScope(ui.layout.id!)).resolves.toBeUndefined();
+    expect(ui.updates).toHaveBeenCalledOnce();
+    expect(ui.layout.productionPlan!.estimates[0]!.amountMinor).toBe(1234);
+  });
+
+  it('isolates source guards by project scope and unregisters them on scope change and unmount', async () => {
+    const firstLayout = trialLayout(plan()), secondLayout = { ...trialLayout(plan()), id: 'second-production-trial' };
+    const first = render(<ProductionPlanPanel layout={firstLayout} onUpdate={vi.fn()}/>);
+    const second = render(<ProductionPlanPanel layout={secondLayout} onUpdate={vi.fn()}/>);
+    fireEvent.click(within(first.container).getByRole('button', { name: '编辑制作计划' }));
+    await expect(flushSourceScope(firstLayout.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
+    await expect(flushSourceScope(secondLayout.id!)).resolves.toBeUndefined();
+    first.unmount();
+    await expect(flushSourceScope(firstLayout.id!)).resolves.toBeUndefined();
+    const nextLayout = { ...secondLayout, id: 'next-production-trial' };
+    second.rerender(<ProductionPlanPanel layout={nextLayout} onUpdate={vi.fn()}/>);
+    fireEvent.click(within(second.container).getByRole('button', { name: '编辑制作计划' }));
+    await expect(flushSourceScope(secondLayout.id!)).resolves.toBeUndefined();
+    await expect(flushSourceScope(nextLayout.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
+    second.unmount();
+    await expect(flushSourceScope(nextLayout.id!)).resolves.toBeUndefined();
+  });
+
+  it('keeps an old draft isolated across scope changes and allows cancellation while stale or readonly', async () => {
+    const initial = trialLayout(plan()), next = { ...initial, id: 'next-production-trial' };
+    const update = vi.fn();
+    let previousScopeFlush: Promise<void> | undefined;
+    function ScopeTransition({ layout, disabled = false }: { layout: RoomLayout; disabled?: boolean }) {
+      useLayoutEffect(() => {
+        if (layout.id === next.id) previousScopeFlush = flushSourceScope(initial.id!);
+      }, [layout.id]);
+      return <ProductionPlanPanel layout={layout} disabled={disabled} onUpdate={update}/>;
+    }
+    const view = render(<ScopeTransition layout={initial}/>);edit();
+    change(row('演练签到岗').getByLabelText('班次'), 'A 项目未保存班次');
+    await expect(flushSourceScope(initial.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
+    view.rerender(<ScopeTransition layout={next}/>);
+    expect(previousScopeFlush).toBeDefined();
+    await expect(previousScopeFlush).resolves.toBeUndefined();
+    await expect(flushSourceScope(next.id!)).resolves.toBeUndefined();
+    expect((row('演练签到岗').getByLabelText('班次') as HTMLInputElement).value).toBe('A 项目未保存班次');
+    expect(screen.getByRole('alert').textContent).toContain('原草稿已保留');
+    const staleCancel = screen.getByRole('button', { name: '取消编辑' });
+    expect(staleCancel.matches(':disabled')).toBe(false);fireEvent.click(staleCancel);edit();
+    change(row('演练签到岗').getByLabelText('班次'), 'B 项目未保存班次');
+    await expect(flushSourceScope(next.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
+    view.rerender(<ScopeTransition layout={next} disabled/>);
+    expect(row('演练签到岗').getByLabelText('班次').matches(':disabled')).toBe(true);
+    const readonlyCancel = screen.getByRole('button', { name: '取消编辑' });
+    expect(readonlyCancel.matches(':disabled')).toBe(false);fireEvent.click(readonlyCancel);
+    await expect(flushSourceScope(next.id!)).resolves.toBeUndefined();
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('only creates an explicit plan on save and cancels draft additions without writing', () => {
     const ui = livePanel(trialLayout());
     expect(screen.getByText('制作计划未记录。')).toBeTruthy();

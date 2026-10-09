@@ -1,14 +1,23 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
+import { handoffSchema } from '../../supabase/functions/_shared/delivery-contract';
 import { sceneSchema } from '../../supabase/functions/_shared/domain';
+import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
+import {
+  materialCheckinLedgerSchema, materialCheckinSheetSchema, materialCheckinSummary, projectMaterialCheckinEvents,
+  type MaterialCheckinLedger, type MaterialCheckinSheet, type MaterialCheckinEvent,
+} from '../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
-import type { RoomLayout } from '../components/room-organizer/lib/types';
 import * as operations from '../components/room-organizer/lib/event-operations';
 import { operationBasis, operationReview, OPERATION_STATUS_LABELS } from '../components/room-organizer/lib/event-operations';
+import * as handoffs from '../components/room-organizer/lib/scene-handoff';
+import { handoffBasis } from '../components/room-organizer/lib/scene-handoff';
 import { productionPlanHandoffHtml } from './production-plan-export';
+import { createProjectReviewSnapshot, projectReviewHtml } from './project-review';
+import type { BackupBrief } from './local-project-backup';
+import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 const id = (n: number) => `ab100000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const snapshot = { id: 'internal-handoff-001', generatedAt: '2026-10-09T01:30:15.123Z' };
@@ -36,7 +45,7 @@ function layout(): RoomLayout {
       objectIds: [id(30), id(31)], plannedStartAt: '2026-10-09T06:00:00+08:00', plannedEndAt: '2026-10-09T07:00:00+08:00' }] }),
   });
 }
-const doc = async (source: RoomLayout = layout()) => new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot), 'text/html');
+const doc = async (source: RoomLayout = layout(), ledger?: MaterialCheckinLedger) => new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, ledger), 'text/html');
 beforeEach(() => { vi.stubGlobal('crypto', webcrypto); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 function section(document: Document, heading: string): HTMLElement {
@@ -55,6 +64,42 @@ function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; });
   return { promise, resolve };
+}
+function checkPayload(quantity: number | null, kind: 'receive' | 'return', checkState: 'pending' | 'checked' | 'disputed' = 'checked') {
+  return { batchRef: kind === 'receive' ? '演练收取批次' : '演练退回批次', quantity, checkState,
+    occurredAt: kind === 'receive' ? '2026-10-09T09:00:00+08:00' : '2026-10-09T17:00:00+08:00',
+    fromPartyName: kind === 'receive' ? '内部供应方乙' : '演练执行方A',
+    toPartyName: kind === 'receive' ? '演练执行方A' : '内部供应方乙',
+    evidenceNote: kind === 'receive' ? '演练收28件，差额原因待核' : '演练退26件，差额原因待核',
+    evidenceUrls: [kind === 'receive' ? 'https://evidence.example/receipt.jpg' : 'https://evidence.example/return.jpg'] };
+}
+function checkEvent(number: number, kind: 'receive' | 'return', quantity: number | null,
+  checkState: 'pending' | 'checked' | 'disputed' = 'checked'): MaterialCheckinEvent {
+  return { id: id(number), kind, ...checkPayload(quantity, kind, checkState),
+    recordedAt: kind === 'receive' ? '2026-10-09T09:05:00+08:00' : '2026-10-09T17:05:00+08:00', recordedBy: '演练记录人丙' };
+}
+function checkSheet(seed = 200, unit: 'piece' | 'set' = 'piece'): MaterialCheckinSheet {
+  return materialCheckinSheetSchema.parse({ id: id(seed), acquisitionId: id(11), unit,
+    acquisitionSnapshot: { title: '签到椅取得', supplierName: '内部供应方乙', specificationNote: '实物规格须按供应方清单核对' },
+    agreements: [{ id: id(seed + 1), agreedQuantity: 30, basisNote: '演练约定30件', recordedAt: '2026-10-09T08:00:00+08:00', recordedBy: '演练约定记录人' }],
+    events: [checkEvent(seed + 10, 'receive', 28), checkEvent(seed + 11, 'return', 26)],
+  });
+}
+function checkLedger(sheets: MaterialCheckinSheet[] = [checkSheet()]): MaterialCheckinLedger {
+  return materialCheckinLedgerSchema.parse({ projectId: id(1), dataKind: 'rehearsal', sheets });
+}
+function movement(sheet: MaterialCheckinSheet, kind: 'receive' | 'return'): Extract<MaterialCheckinEvent, { kind: 'receive' | 'return' }> {
+  const value = sheet.events.find(event => event.kind === kind);
+  if (!value || (value.kind !== 'receive' && value.kind !== 'return')) throw new Error('Missing movement fixture');
+  return value;
+}
+function quantityArticles(document: Document): HTMLElement[] {
+  return [...section(document, '数量点验').querySelectorAll<HTMLElement>('article')];
+}
+function quantityValue(article: HTMLElement, label: string): string {
+  const row = [...article.querySelector('table')!.querySelectorAll('tbody tr')].find(row => row.children[0].textContent === label);
+  if (!row) throw new Error(`Missing quantity row: ${label}`);
+  return row.children[1].textContent!;
 }
 
 // File-level checks do not replace a real editor review, download or print acceptance.
@@ -392,5 +437,379 @@ describe('internal production-plan handoff HTML', () => {
     expect(row.textContent).toContain('-1.8'); expect(row.textContent).toContain('2.5');
     expect(row.textContent).toContain('0.5 × 0.5 × 0.85');
     expect(row.textContent).not.toContain('99'); expect(row.textContent).not.toContain('88');
+  });
+});
+
+describe('material-checkin facts in internal handoff HTML', () => {
+  it('exports the shared 30-agreed, 28-received, 26-returned result as two separate outstanding gaps and preserves batch provenance', async () => {
+    const source = layout(), facts = checkLedger(), before = JSON.stringify({ source, facts });
+    expect(materialCheckinSummary(facts.sheets[0])).toMatchObject({ agreedQuantity: 30, receivedQuantity: 28,
+      returnedQuantity: 26, notReceivedQuantity: 2, notReturnedQuantity: 2 });
+    const document = await doc(source, facts), article = quantityArticles(document)[0];
+    expect(quantityValue(article, '当前约定数量／依据')).toBe('30 件\n演练约定30件');
+    expect(quantityValue(article, '当前有效收取数量')).toBe('28 件');
+    expect(quantityValue(article, '当前有效退回数量')).toBe('26 件');
+    expect(quantityValue(article, '已核部分收取／退回')).toBe('收取：28 件\n退回：26 件');
+    expect(quantityValue(article, '未收／未退差额')).toBe('相对约定未收：2 件\n相对已收未退：2 件');
+    expect(quantityValue(article, '超收／超退差额')).toBe('超收：0 件\n超退：0 件');
+    for (const text of ['内部供应方乙', '演练执行方A', '演练记录人丙', '2026-10-09 09:00:00',
+      '2026-10-09 09:05:00', 'https://evidence.example/receipt.jpg', '演练收28件，差额原因待核']) expect(article.textContent).toContain(text);
+    expect(article.textContent).toContain('不等于已获施工或客户批准');
+    expect(section(document, '数量点验').textContent).toContain('不据此判断遗失、可用库存或任务完成');
+    expect(taskRow(document).textContent).not.toContain(OPERATION_STATUS_LABELS.accepted);
+    expect(source.eventOperations!.tasks[0].status).toBe('todo');
+    expect(JSON.stringify({ source, facts })).toBe(before);
+  });
+
+  it('keeps pending and disputed quantities out of complete totals while retaining the actual checked portions', async () => {
+    const facts = checkLedger();
+    facts.sheets[0].events.push(checkEvent(212, 'receive', 2, 'pending'), checkEvent(213, 'return', 1, 'disputed'));
+    expect(materialCheckinLedgerSchema.safeParse(facts).success).toBe(true);
+    expect(materialCheckinSummary(facts.sheets[0])).toMatchObject({ receivedQuantity: null, returnedQuantity: null,
+      knownReceivedQuantity: 28, knownReturnedQuantity: 26, notReceivedQuantity: null, notReturnedQuantity: null });
+    const article = quantityArticles(await doc(layout(), facts))[0];
+    expect(quantityValue(article, '当前有效收取数量')).toBe('待确认');
+    expect(quantityValue(article, '当前有效退回数量')).toBe('待确认');
+    expect(quantityValue(article, '已核部分收取／退回')).toBe('收取：28 件\n退回：26 件');
+    expect(quantityValue(article, '未收／未退差额')).toBe('相对约定未收：待确认\n相对已收未退：待确认');
+    expect(quantityValue(article, '异常与待核')).toContain('存在争议批次');
+    expect(quantityValue(article, '异常与待核')).toContain('完整收退数量待确认');
+    expect(article.textContent).toContain('待核'); expect(article.textContent).toContain('争议待核');
+  });
+
+  it.each(['explicit zero', 'unknown', 'no events'] as const)('distinguishes %s from an inferred checked zero', async kind => {
+    const facts = checkLedger(), sheet = facts.sheets[0];
+    if (kind === 'explicit zero') {
+      sheet.agreements[0].agreedQuantity = 0; sheet.agreements[0].basisNote = '演练明确零约定';
+      movement(sheet, 'receive').quantity = 0; movement(sheet, 'return').quantity = 0;
+    } else if (kind === 'unknown') {
+      sheet.agreements[0].agreedQuantity = null; sheet.agreements[0].basisNote = '';
+      for (const movementKind of ['receive', 'return'] as const) {
+        movement(sheet, movementKind).quantity = null; movement(sheet, movementKind).checkState = 'pending';
+      }
+    } else sheet.events = [];
+    expect(materialCheckinLedgerSchema.safeParse(facts).success).toBe(true);
+    const article = quantityArticles(await doc(layout(), facts))[0];
+    if (kind === 'explicit zero') {
+      expect(quantityValue(article, '当前约定数量／依据')).toBe('0 件\n演练明确零约定');
+      expect(quantityValue(article, '当前有效收取数量')).toBe('0 件');
+      expect(quantityValue(article, '当前有效退回数量')).toBe('0 件');
+      expect(quantityValue(article, '已核部分收取／退回')).toBe('收取：0 件\n退回：0 件');
+    } else {
+      expect(quantityValue(article, '当前有效收取数量')).toBe('待确认');
+      expect(quantityValue(article, '当前有效退回数量')).toBe('待确认');
+      expect(quantityValue(article, '已核部分收取／退回')).toContain('尚无已核收取记录');
+      expect(quantityValue(article, '已核部分收取／退回')).toContain('尚无已核退回记录');
+      expect(quantityValue(article, '已核部分收取／退回')).not.toContain('0 件');
+      if (kind === 'unknown') expect(quantityValue(article, '当前约定数量／依据')).toBe('待确认\n待确认');
+      else expect(article.textContent).toContain('尚无有效收退批次；未记录不表示数量为零');
+    }
+  });
+
+  it('displays each sheet in its piece or set unit without creating a mixed ledger total', async () => {
+    const set = checkSheet(300, 'set'); set.agreements[0].agreedQuantity = 2; set.agreements[0].basisNote = '演练两套约定';
+    movement(set, 'receive').quantity = 2; movement(set, 'return').quantity = 1;
+    const document = await doc(layout(), checkLedger([checkSheet(), set])), articles = quantityArticles(document);
+    expect(articles).toHaveLength(2);
+    expect(quantityValue(articles[0], '当前有效收取数量')).toBe('28 件');
+    expect(quantityValue(articles[1], '当前有效收取数量')).toBe('2 套');
+    expect(quantityValue(articles[1], '当前有效退回数量')).toBe('1 套');
+    expect(section(document, '数量点验').textContent).toContain('不混计件/套');
+    expect(section(document, '数量点验').textContent).not.toContain('收取合计：30');
+    expect(section(document, '数量点验').textContent).not.toContain('数量合计：');
+  });
+
+  it('replaces corrections, excludes voided receipts and follows the agreement successor even when its array is reversed', async () => {
+    const facts = checkLedger(), sheet = facts.sheets[0];
+    sheet.agreements = [{ id: id(202), supersedesId: id(201), agreedQuantity: 29, basisNote: '最新更替约定29件',
+      recordedAt: '2026-10-09T08:30:00+08:00', recordedBy: '更替约定人' }, ...sheet.agreements];
+    sheet.events.push({ id: id(212), kind: 'correction', targetId: id(210), reason: '原收取数量录错，应为27件',
+      replacement: { ...checkPayload(27, 'receive'), evidenceNote: '更正后已核27件', fromPartyName: '更正交出方' },
+      recordedAt: '2026-10-09T09:10:00+08:00', recordedBy: '更正记录人' },
+      checkEvent(213, 'receive', 1), { id: id(214), kind: 'void', targetId: id(213), reason: '重复录入的收取记录作废',
+        evidenceNote: '作废依据原文', evidenceUrls: ['https://evidence.example/void.txt'], recordedAt: '2026-10-09T09:15:00+08:00', recordedBy: '作废记录人' });
+    expect(materialCheckinLedgerSchema.safeParse(facts).success).toBe(true);
+    expect(projectMaterialCheckinEvents(sheet)).toMatchObject({ agreement: { id: id(202), agreedQuantity: 29 }, voidedRootIds: [id(213)] });
+    expect(materialCheckinSummary(sheet)).toMatchObject({ receivedQuantity: 27, returnedQuantity: 26 });
+    const document = await doc(layout(), facts), article = quantityArticles(document)[0], appendix = document.querySelector('details')!;
+    expect(quantityValue(article, '当前约定数量／依据')).toBe('29 件\n最新更替约定29件');
+    expect(quantityValue(article, '当前有效收取数量')).toBe('27 件');
+    expect(quantityValue(article, '当前有效退回数量')).toBe('26 件');
+    expect(article.textContent).toContain('已作废 1 条原收退记录');
+    expect(article.textContent).toContain('更正交出方'); expect(article.textContent).toContain('更正记录人');
+    for (const value of ['原收取数量录错，应为27件', '重复录入的收取记录作废', '作废依据原文',
+      '演练收28件，差额原因待核', '数量：28 件', '数量：27 件', id(210), id(212), id(213), id(214), id(201), id(202)]) expect(appendix.textContent).toContain(value);
+    const effectiveTable = [...appendix.querySelectorAll('table')].find(table => table.querySelector('th')?.textContent === '有效根原编号')!;
+    expect([...effectiveTable.querySelectorAll('tbody tr')].some(row => row.children[0].textContent === id(210) && row.children[1].textContent === id(212))).toBe(true);
+    expect([...effectiveTable.querySelectorAll('tbody tr')].some(row => row.children[0].textContent === id(213))).toBe(false);
+  });
+
+  it.each(['cross project', 'idless local', 'invalid ledger'] as const)('refuses the %s ledger before emitting any handoff file', async reason => {
+    const source = layout(), facts = checkLedger();
+    if (reason === 'cross project') facts.projectId = 'another-project';
+    if (reason === 'idless local') { delete source.id; facts.projectId = 'local'; }
+    if (reason === 'invalid ledger') movement(facts.sheets[0], 'receive').quantity = -1;
+    await expect(productionPlanHandoffHtml(source, snapshot, facts)).rejects.toThrow(reason === 'invalid ledger' ? '账册资料无效' : '项目不一致');
+  });
+
+  it('exports a same-project ledger after plan removal without creating a plan or reattaching its acquisition by name', async () => {
+    const source = layout(), facts = checkLedger(); delete source.productionPlan;
+    const before = JSON.stringify(source), document = await doc(source, facts);
+    expect(document.querySelector('header')!.textContent).toContain('制作计划：当前未记录');
+    expect(section(document, '数量点验').textContent).toContain('当前制作计划未记录');
+    expect(quantityArticles(document)[0].textContent).toContain('当前取得关联未找到，需核对');
+    expect(quantityValue(quantityArticles(document)[0], '当前有效收取数量')).toBe('28 件');
+    expect(JSON.stringify(source)).toBe(before); expect(source.productionPlan).toBeUndefined();
+    source.productionPlan = productionPlanSchema.parse({ dataKind: 'rehearsal', acquisitions: [{ id: id(888),
+      ...facts.sheets[0].acquisitionSnapshot }] });
+    const sameName = await doc(source, facts);
+    expect(quantityArticles(sameName)[0].textContent).toContain('当前取得关联未找到，需核对');
+    expect(quantityArticles(sameName)[0].textContent).not.toContain('当前取得编号对应');
+    expect(sameName.querySelector('details')!.textContent).toContain(id(11));
+  });
+
+  it.each(['title', 'supplierName', 'specificationNote'] as const)('flags changed current acquisition %s without silently replacing its frozen source', async field => {
+    const source = layout(), facts = checkLedger(); source.productionPlan!.acquisitions[0][field] = '当前新记录';
+    const article = quantityArticles(await doc(source, facts))[0];
+    expect(article.textContent).toContain('当前取得资料与原冻结来源不同，需核对');
+    expect(article.textContent).toContain(facts.sheets[0].acquisitionSnapshot[field]);
+    expect(article.textContent).not.toContain('当前新记录');
+  });
+
+  it('passes the frozen third ledger into real task review and invalidates an earlier acceptance after a related quantity changes', async () => {
+    const source = await acceptedLayout(), facts = checkLedger(), task = source.eventOperations!.tasks[0];
+    task.reviewedBasis = await operationBasis(source, task, facts);
+    expect((await operationReview(source, task, facts)).status).toBe('accepted');
+    const current = taskRow(await doc(source, facts));
+    expect(current.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(2);
+    const changed = structuredClone(facts); movement(changed.sheets[0], 'receive').quantity = 27;
+    expect((await operationReview(source, task, changed)).status).toBe('needs_review');
+    const stale = taskRow(await doc(source, changed));
+    expect(stale.textContent).toContain(OPERATION_STATUS_LABELS.needs_review);
+    expect(stale.textContent!.match(new RegExp(OPERATION_STATUS_LABELS.accepted, 'g'))).toHaveLength(1);
+    expect(task.status).toBe('accepted');
+  });
+
+  it('freezes original ledger parties, agreement, quantities and evidence before a deferred operation review completes', async () => {
+    const source = layout(), facts = checkLedger(), started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
+    const spy = vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
+    const output = productionPlanHandoffHtml(source, snapshot, facts); await started.promise;
+    const frozenLedger = spy.mock.calls[0][2]!;
+    expect(frozenLedger).not.toBe(facts); expect(frozenLedger.sheets[0]).not.toBe(facts.sheets[0]);
+    facts.dataKind = 'real'; facts.sheets[0].agreements[0].agreedQuantity = 999;
+    movement(facts.sheets[0], 'receive').quantity = 999; movement(facts.sheets[0], 'receive').fromPartyName = '后改交出方';
+    movement(facts.sheets[0], 'receive').evidenceNote = '后改收货说明'; movement(facts.sheets[0], 'receive').evidenceUrls.push('https://evidence.example/later');
+    pending.resolve({ status: 'todo', missingObjectIds: [] });
+    const document = new DOMParser().parseFromString(await output, 'text/html'), article = quantityArticles(document)[0];
+    expect(quantityValue(article, '当前约定数量／依据')).toBe('30 件\n演练约定30件');
+    expect(quantityValue(article, '当前有效收取数量')).toBe('28 件');
+    expect(article.textContent).toContain('内部供应方乙'); expect(article.textContent).toContain('演练收28件，差额原因待核');
+    expect(article.textContent).not.toContain('后改'); expect(article.textContent).not.toContain('https://evidence.example/later');
+    expect(section(document, '数量点验').textContent).toContain('账册资料：假设演练');
+  });
+
+  it('escapes ledger party names, notes, agreement and correction/void reasons and keeps evidence as non-loading text', async () => {
+    const facts = checkLedger(), sheet = facts.sheets[0];
+    const payload = '<img src="https://evil.test/x" onerror="x()"><script>x()</script>&';
+    expect(payload.length).toBeLessThanOrEqual(80);
+    sheet.acquisitionSnapshot.title = payload; sheet.acquisitionSnapshot.supplierName = payload;
+    sheet.agreements[0].basisNote = payload; sheet.agreements[0].recordedBy = payload;
+    for (const kind of ['receive', 'return'] as const) {
+      const event = movement(sheet, kind); event.fromPartyName = payload; event.toPartyName = payload;
+      event.recordedBy = payload; event.evidenceNote = payload;
+    }
+    sheet.events.push({ id: id(212), kind: 'correction', targetId: id(210), reason: payload,
+      replacement: { ...checkPayload(28, 'receive'), fromPartyName: payload, toPartyName: payload, evidenceNote: payload },
+      recordedAt: '2026-10-09T09:10:00+08:00', recordedBy: payload },
+      { id: id(213), kind: 'void', targetId: id(212), reason: payload, evidenceNote: payload, evidenceUrls: ['https://evidence.example/void?a=1&b=2'],
+        recordedAt: '2026-10-09T09:15:00+08:00', recordedBy: payload });
+    expect(materialCheckinLedgerSchema.safeParse(facts).success).toBe(true);
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    const html = await productionPlanHandoffHtml(layout(), snapshot, facts), document = new DOMParser().parseFromString(html, 'text/html');
+    expect(document.querySelectorAll('script,img,iframe,object,link,a[href],[onload],[onerror]')).toHaveLength(0);
+    expect(document.body.textContent).toContain(payload);
+    expect(document.querySelector('details')!.textContent).toContain('https://evidence.example/void?a=1&b=2');
+    expect(html).not.toContain('PRIVATE_ITEM_NOTE'); expect(html).not.toContain('PRIVATE_TOKEN');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes an explicitly empty ledger from an omitted ledger without inventing quantity zero', async () => {
+    const empty = await doc(layout(), checkLedger([]));
+    expect(section(empty, '数量点验').textContent).toContain('账册已记录，尚未建立点验单；当前数量待确认');
+    expect(quantityArticles(empty)).toHaveLength(0);
+    const absent = await doc();
+    expect([...absent.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('数量点验');
+  });
+});
+
+const activityDoc = async (source: RoomLayout = layout(), brief?: BackupBrief) => new DOMParser().parseFromString(
+  await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', ...(brief ? { brief } : {}) }), 'text/html');
+const briefFixture = (): BackupBrief => ({ status: 'present', value: { event: '演练工作坊', guests: 0,
+  description: '活动目的原记录', mustHave: '必须保留入口通道', allowIdeas: false, hasFloorplan: true,
+  venueConditions: '现场供电待确认', style: '简洁', palette: '绿色', atmosphere: '交流' } });
+async function acceptedObjectLayout() {
+  const source = layout(), item = source.floors[0].items[0];
+  item.materialId = 'asset';
+  source.floors[0].items[1].materialId = 'chair';
+  const record = handoffSchema.parse({ ownerName: '物件负责人甲', dueDate: '2026-10-09', acceptance: '逐件核对位置',
+    status: 'todo', evidenceNote: '原现场核对证据', evidenceUrls: ['https://evidence.example/object?a=1&b=2'] });
+  item.handoff = record;
+  record.reviewedBasis = await handoffBasis(source, item.id, record); record.status = 'accepted';
+  return source;
+}
+
+describe('complete internal activity handoff HTML', () => {
+  it('retains budgets, quantity calculations and the same object numbers in the expanded scope', async () => {
+    const source = layout(), facts = checkLedger();
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, facts, { scope: 'activity' }), 'text/html');
+    expect(section(document, '预算范围与人工估算').textContent).toContain('已知金额小计：¥1250.50');
+    expect(quantityValue(quantityArticles(document)[0], '当前有效收取数量')).toBe('28 件');
+    expect(quantityValue(quantityArticles(document)[0], '当前有效退回数量')).toBe('26 件');
+    expect(section(document, '逐件物料工作单').textContent).toContain('物件2 · 同名椅');
+    expect(document.querySelector('svg [aria-label="物件2"]')).not.toBeNull();
+    Object.assign(source.floors[0].items[0], { futurePrivateField: 'PRIVATE_FUTURE_OBJECT_DATA' });
+    expect(await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' })).not.toContain('PRIVATE_FUTURE_OBJECT_DATA');
+  });
+
+  it('includes every phase and unlinked task in source order while keeping the legacy and customer scopes unchanged', async () => {
+    const source = layout();
+    source.eventOperations!.tasks.push(...eventOperationsSchema.parse({ tasks: [
+      { id: id(23), title: '独立撤场任务', phase: 'teardown', ownerName: '撤场负责人' },
+      { id: id(22), title: '独立准备任务', phase: 'preparation', acceptance: '准备完成条件' },
+      { id: id(24), title: '独立活动任务', phase: 'event' },
+    ] }).tasks);
+    source.floors[0].items[0].handoff = handoffSchema.parse({ ownerName: '物件工作单私有负责人', dueDate: '2026-10-09' });
+    const document = await activityDoc(source), rows = [...section(document, '全部活动任务').querySelectorAll('tbody tr')];
+    expect(rows.map(row => row.children[0].textContent!.split('\n')[0])).toEqual([
+      '任务1 · 签到台布置', '任务2 · 独立撤场任务', '任务3 · 独立准备任务', '任务4 · 独立活动任务']);
+    expect(rows[1].textContent).toContain('撤场'); expect(rows[2].textContent).toContain('准备');
+    expect(rows[3].textContent).toContain('负责人：待确认');
+    expect(document.title).toContain('内部活动交接');
+    expect(document.querySelector('header')!.textContent).toContain('任务：4 项；物件：2 项；已填工作单：1 / 2 项');
+    expect(document.body.textContent).toContain('已下载文件是冻结版本');
+    const old = await doc(source); old.querySelector('details')!.remove();
+    expect(old.title).toContain('内部制作交接');
+    for (const excluded of ['独立撤场任务', '物件工作单私有负责人', '逐件物料工作单']) expect(old.body.textContent).not.toContain(excluded);
+    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source,
+      briefSnapshot: { state: 'ready', scope: source.id!, brief: { status: 'absent' } }, snapshot,
+      source: { scope: source.id!, revision: 'r1' }, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: true } }));
+    for (const excluded of ['独立撤场任务', '物件工作单私有负责人', '内部供应方乙', '逐件物料工作单']) expect(customer).not.toContain(excluded);
+  });
+
+  it('exports existing activities and object work without any production plan or ledger', async () => {
+    const source = await acceptedObjectLayout(); delete source.productionPlan;
+    const document = await activityDoc(source);
+    expect(section(document, '全部活动任务').textContent).toContain('签到台布置');
+    expect(section(document, '逐件物料工作单').textContent).toContain('原现场核对证据');
+    expect(document.querySelector('header')!.textContent).toContain('制作计划：当前未记录');
+    expect([...document.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('数量点验');
+    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('尚未记录制作计划或点验账册');
+  });
+
+  it('states missing tasks, unassigned objects, empty work sheets and missing briefs without manufacturing completion', async () => {
+    const source = layout(); delete source.productionPlan; delete source.eventOperations;
+    source.floors[0].items[1].handoff = handoffSchema.parse({});
+    const document = await activityDoc(source), work = section(document, '逐件物料工作单');
+    expect(section(document, '全部活动任务').textContent).toContain('当前未记录活动任务');
+    expect(work.textContent).toContain('尚未填写工作单；分工与进展待确认');
+    expect(work.textContent).toContain('负责人：待确认'); expect(work.textContent).toContain('期限：待确认');
+    expect(work.textContent).not.toContain('已验收');
+    expect(document.querySelector('header')!.textContent).toContain('已填工作单：0 / 2 项');
+    expect(section(document, '活动需求与现场条件').textContent).toContain('本次未提供活动需求快照');
+    const absent = await activityDoc(source, { status: 'absent' });
+    expect(section(absent, '活动需求与现场条件').textContent).toContain('当前未记录活动需求');
+  });
+
+  it.each(['ownerName', 'dueDate', 'acceptance', 'geometry'] as const)('recomputes effective object status after %s changes and retains evidence', async field => {
+    const source = await acceptedObjectLayout(), item = source.floors[0].items[0];
+    if (field === 'geometry') item.width += 0.25;
+    else item.handoff![field] = field === 'dueDate' ? '2026-10-10' : '变更后的分工或条件';
+    const work = section(await activityDoc(source), '逐件物料工作单');
+    expect(work.textContent).toContain('记录状态：已验收\n有效状态：需复核');
+    expect(work.textContent).toContain('原现场核对证据');
+    expect(work.textContent).toContain('https://evidence.example/object?a=1&b=2');
+    expect(item.handoff!.status).toBe('accepted');
+  });
+
+  it('keeps unlinked task acceptance subject to the same current geometry review', async () => {
+    const source = await acceptedLayout(); source.productionPlan = productionPlanSchema.parse({});
+    const task = source.eventOperations!.tasks[0]; task.reviewedBasis = await operationBasis(source, task);
+    source.floors[0].items[0].width += 1;
+    expect(section(await activityDoc(source), '全部活动任务').textContent).toContain('有效状态：需复核');
+  });
+
+  it('uses unconfirmed effective statuses when either review fails', async () => {
+    const source = await acceptedObjectLayout();
+    vi.spyOn(handoffs, 'effectiveHandoffStatus').mockRejectedValue(new Error('PRIVATE_HANDOFF_FAILURE'));
+    vi.spyOn(operations, 'operationReview').mockRejectedValue(new Error('PRIVATE_TASK_FAILURE'));
+    const html = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' });
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    expect(section(document, '逐件物料工作单').textContent).toContain('有效状态：待核对（复核未完成）');
+    expect(section(document, '全部活动任务').textContent).toContain('有效状态：待核对（复核未完成）');
+    expect(html).not.toContain('PRIVATE_HANDOFF_FAILURE'); expect(html).not.toContain('PRIVATE_TASK_FAILURE');
+  });
+
+  it('does not use first-match acceptance for ambiguous object identities', async () => {
+    const source = await acceptedObjectLayout();
+    source.floors[0].items[1] = { ...source.floors[0].items[0], id: source.floors[0].items[0].id.toUpperCase() };
+    const review = vi.spyOn(handoffs, 'effectiveHandoffStatus');
+    const document = await activityDoc(source), work = section(document, '逐件物料工作单');
+    expect(work.textContent!.match(/有效状态：待核对（物件编号不唯一）/g)).toHaveLength(2);
+    expect(review).not.toHaveBeenCalled(); expect(document.querySelector('svg')).toBeNull();
+  });
+
+  it.each(['status', 'url', 'unknown field'] as const)('refuses invalid handoff %s rather than silently omitting it', async reason => {
+    const source = layout(), record = handoffSchema.parse({}); source.floors[0].items[0].handoff = record;
+    if (reason === 'status') Object.assign(record, { status: 'accepted' });
+    if (reason === 'url') record.evidenceUrls = ['javascript:alert(1)'];
+    if (reason === 'unknown field') Object.assign(record, { futurePrivateData: 'PRIVATE_NEW_FIELD' });
+    await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' })).rejects.toThrow('物件1工作单资料无效');
+  });
+
+  it('freezes layout, work sheets, brief and metadata before deferred review', async () => {
+    const source = await acceptedObjectLayout(), brief = briefFixture(), meta = { ...snapshot };
+    const started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
+    vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
+    const output = productionPlanHandoffHtml(source, meta, undefined, { scope: 'activity', brief }); await started.promise;
+    source.eventOperations!.tasks[0].title = '后改任务'; source.floors[0].items[0].handoff!.ownerName = '后改负责人';
+    source.floors[0].items[0].handoff!.evidenceNote = '后改证据'; source.floors[0].items[0].position = { x: 200, z: 0 };
+    if (brief.status === 'present') brief.value.description = '后改活动目的';
+    meta.id = '后改快照'; meta.generatedAt = '2027-01-01T00:00:00Z';
+    pending.resolve({ status: 'todo', missingObjectIds: [] });
+    const html = await output;
+    expect(html).not.toContain('后改'); expect(html).toContain('原现场核对证据');
+    expect(html).toContain('活动目的原记录'); expect(html).toContain(snapshot.generatedAt);
+  });
+
+  it('shows only validated brief business fields and escapes all new visible text without loading evidence or leaking model URLs', async () => {
+    const source = await acceptedObjectLayout(), brief = briefFixture();
+    const payload = '<img src="https://evil.test/x" onerror="x()">&';
+    const record = source.floors[0].items[0].handoff!; record.ownerName = payload; record.acceptance = payload; record.evidenceNote = payload;
+    if (brief.status === 'present') brief.value.description = payload;
+    const html = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief });
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    expect(document.querySelectorAll('script,img,iframe,object,link,[onload],[onerror]')).toHaveLength(0);
+    const links = [...document.querySelectorAll('a[href]')];
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link.closest('nav[aria-label="交接目录"]')).not.toBeNull();
+      expect(link.getAttribute('href')).toMatch(/^#handoff-[a-z]+$/);
+      expect(document.querySelector(link.getAttribute('href')!)).not.toBeNull();
+    }
+    expect(section(document, '逐件物料工作单').textContent).toContain(payload);
+    const needs = section(document, '活动需求与现场条件');
+    expect(needs.textContent).toContain(payload); expect(needs.textContent).toContain('预计人数0');
+    expect(needs.textContent).toContain('照片、原图纸附件和模型文件需另行提供');
+    for (const excluded of ['allowIdeas', 'hasFloorplan', 'PRIVATE_', '98765', 'sha256:', 'reviewedBasis']) expect(html).not.toContain(excluded);
+    if (brief.status === 'present') Object.assign(brief.value, { internalToken: 'PRIVATE_NEW_FIELD' });
+    await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief })).rejects.toThrow('活动需求字段无效');
+  });
+
+  it('retains non-rectangular structure restrictions in activity mode', async () => {
+    const source = layout(); source.entrance = { width: 2, depth: 1 };
+    const document = await activityDoc(source);
+    expect(section(document, '同快照摆位示意').textContent).toContain('不适合普通矩形示意');
+    expect(document.querySelectorAll('svg')).toHaveLength(0);
+    expect(section(document, '全部场景实例').textContent).toContain('物件2 · 同名椅');
   });
 });
