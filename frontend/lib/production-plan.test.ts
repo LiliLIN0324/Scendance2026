@@ -60,7 +60,7 @@ describe('production changes and local activity facts',()=>{
   expect(task).toMatchObject({status:'accepted',actualStartedAt:'2026-10-08T08:00:00+08:00',actualFinishedAt:'2026-10-08T09:00:00+08:00',evidenceNote:'演练证据'});
  });
  it('invalidates related material checks after acquisition changes, while money edits leave them intact',async()=>{
-  const base={...venue(),productionPlan:plan()};const handoff={ownerName:'演练岗位',dueDate:'',acceptance:'核对演练规格',status:'accepted' as const,evidenceNote:'演练说明',evidenceUrls:[],reviewedBasis:await handoffBasis(base,id(2),'核对演练规格')};
+  const base={...venue(),productionPlan:plan()};const handoff={ownerName:'演练岗位',dueDate:'',acceptance:'核对演练规格',status:'accepted' as const,evidenceNote:'演练说明',evidenceUrls:[],reviewedBasis:await handoffBasis(base,id(2),{ownerName:'演练岗位',dueDate:'',acceptance:'核对演练规格'})};
   base.floors[0].items[0].handoff=handoff;
   const changed={...base,productionPlan:{...plan(),acquisitions:[{...plan().acquisitions[0],transportScope:'人工演练运输范围'}]}};
   expect(await effectiveHandoffStatus(changed,id(2))).toBe('needs_review');expect(handoff.status).toBe('accepted');expect(handoff.evidenceNote).toBe('演练说明');

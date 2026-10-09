@@ -186,14 +186,18 @@ describe('Binggo scene delivery panel',()=>{
     fireEvent.click(screen.getByRole('button',{name:'确认验收'}));
     await waitFor(()=>expect(update).toHaveBeenCalledWith(itemId,{handoff:expect.objectContaining({ownerName:'执行甲',status:'accepted',evidenceNote:'已实测并现场核对',reviewedBasis:expect.any(String)})}));
   });
-  it('keeps the previous basis when saving changed criteria until an explicit reconfirmation',async()=>{
+  it.each([
+    {label:'验收条件',value:'还需安装固定件'},
+    {label:'负责人',value:'执行乙'},
+    {label:'期限',value:'2026-10-12'},
+  ])('keeps the previous basis when saving changed $label until an explicit reconfirmation',async({label,value})=>{
     const current=workLayout(), update=vi.fn(); const acceptance='按原图摆放';
-    current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,acceptance)};
+    current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,{ownerName:'执行甲',dueDate:'2026-10-09',acceptance})};
     const previousBasis=current.floors[0].items[0].handoff!.reviewedBasis;
     const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
     fireEvent.click(screen.getByText('签到椅 · 1'));
     await waitFor(()=>expect(screen.queryByText('正在核对…')).toBeNull());
-    fireEvent.change(screen.getByLabelText('验收条件'),{target:{value:'还需安装固定件'}});
+    fireEvent.change(screen.getByLabelText(label),{target:{value}});
     fireEvent.click(screen.getByRole('button',{name:'保存工作单'}));
     const patch=update.mock.calls[0][1] as Partial<FurnitureItem>;
     expect(patch.handoff!.reviewedBasis).toBe(previousBasis);
@@ -202,7 +206,7 @@ describe('Binggo scene delivery panel',()=>{
     view.rerender(<SceneDeliveryPanel layout={changed} controller={controller} onUpdateItem={update}/>);
     await waitFor(()=>expect(screen.getByText('需复核')).toBeDefined());
     fireEvent.click(screen.getByRole('button',{name:'重新确认验收'}));
-    const nextBasis=await handoffBasis(changed,itemId,'还需安装固定件'); await waitFor(()=>expect(update.mock.calls[1][1].handoff.reviewedBasis).toBe(nextBasis));
+    const nextBasis=await handoffBasis(changed,itemId,patch.handoff!); await waitFor(()=>expect(update.mock.calls[1][1].handoff.reviewedBasis).toBe(nextBasis));
     const confirmed={...changed,floors:[{...changed.floors[0],items:[{...changed.floors[0].items[0],...update.mock.calls[1][1]}]}]};
     view.rerender(<SceneDeliveryPanel layout={confirmed} controller={controller} onUpdateItem={update}/>);
     await waitFor(()=>expect(screen.getByText('已验收')).toBeDefined());
@@ -210,7 +214,7 @@ describe('Binggo scene delivery panel',()=>{
   });
   it('rejects clearing the last evidence from an accepted record',async()=>{
     const current=workLayout(), update=vi.fn(); const acceptance='核对尺寸';
-    current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,acceptance)};
+    current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,{ownerName:'执行甲',dueDate:'2026-10-09',acceptance})};
     render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
     fireEvent.click(screen.getByText('签到椅 · 1')); await waitFor(()=>expect(screen.queryByText('正在核对…')).toBeNull()); fireEvent.change(screen.getByLabelText('验收说明'),{target:{value:''}});
     fireEvent.click(screen.getByRole('button',{name:'保存工作单'}));

@@ -77,7 +77,7 @@ describe('scene layers', () => {
     candidate.floors[0]!.items[0]!.position = { x: 0, z: 0 };
     const added = addDesign(base, candidate);
     const handoff = { ...blankHandoff(), ownerName: '演练搭建乙', dueDate: '2026-10-10', acceptance: '核对位置', status: 'accepted' as const,
-      evidenceNote: '演练位置核对', reviewedBasis: await handoffBasis(added, item.id, '核对位置') };
+      evidenceNote: '演练位置核对', reviewedBasis: await handoffBasis(added, item.id, {ownerName:'演练搭建乙',dueDate:'2026-10-10',acceptance:'核对位置'}) };
     const store = createLayoutStore({ layout: added, activeFloorIndex: 0 });
     store.getState().actions.updateItem(item.id, { handoff });
     expect(await effectiveHandoffStatus(store.getState().layout, item.id)).toBe('accepted');

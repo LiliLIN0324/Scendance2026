@@ -53,7 +53,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
     const next: Handoff = { ...draft, evidenceUrls: links.split(/\r?\n/).map(url => url.trim()).filter(Boolean) };
     if (next.status === 'review' || next.status === 'accepted') {
       next.reviewedBasis = reconfirm || next.status !== item.handoff?.status
-        ? await handoffBasis(layout, item.id, next.acceptance) : item.handoff?.reviewedBasis;
+        ? await handoffBasis(layout, item.id, next) : item.handoff?.reviewedBasis;
     }
     const result = handoffSchema.safeParse(next);
     if (!result.success) {
@@ -77,7 +77,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
   }
   function submit(event: FormEvent): void { event.preventDefault(); void save(); }
   return <form className="sc-handoff-form" onSubmit={submit}>
-    {needsReview && <p className="sc-handoff-review">规格、摆放或验收条件已变化，请重新核对。原证据已保留。</p>}
+    {needsReview && <p className="sc-handoff-review">负责人、期限或物件要求需要重新核对，原证据已保留。</p>}
     <fieldset disabled={disabled || saving}>
       <div className="sc-handoff-pair">
         <label className="sc-field">负责人<input value={draft.ownerName} maxLength={handoffLimits.ownerName} onChange={event => setDraft({ ...draft, ownerName: event.target.value })}/></label>
