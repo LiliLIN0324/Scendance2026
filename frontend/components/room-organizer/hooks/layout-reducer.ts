@@ -1,6 +1,6 @@
 import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
 import { syncDesignWorkOrders } from '../../../lib/production-plan';
-import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from '../lib/constants';
+import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
 import { MAX_DORMERS, clampDormer, type DormerInput, type DormerPatch } from '../lib/dormers';
 import { rotatedHalfExtents } from '../lib/geometry';
 import { remapGroupIds } from '../lib/groups';
@@ -1013,9 +1013,6 @@ function patchItem(
     return changed ? { ...floor, items } : floor;
   });
 }
-
-const MIN_ITEM_FOOTPRINT = 0.1;
-const MIN_ITEM_HEIGHT = 0.01; // The shared activity catalogue includes 1 cm carpets.
 
 function clampItemDimension(value: number, dimension: 'width' | 'depth' | 'height'): number {
   const minimum = dimension === 'height' ? MIN_ITEM_HEIGHT : MIN_ITEM_FOOTPRINT;

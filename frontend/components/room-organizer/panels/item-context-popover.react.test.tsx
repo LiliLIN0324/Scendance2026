@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from '../contexts/selection-context';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
+import { MAX_ITEM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
+import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { ItemContextPopover } from './item-context-popover';
 import type { FurnitureItem } from '../lib/types';
 
@@ -22,11 +24,14 @@ function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
 }
 
 function setup(selected: FurnitureItem, embedded = false) {
+  const floor = { ...INITIAL_LAYOUT.floors[0]!, items: [selected] };
   const editor = {
-    layout: INITIAL_LAYOUT,
+    layout: { ...INITIAL_LAYOUT, floors: [floor] },
     actions: { setLocked: vi.fn(), resizeItem: vi.fn(), moveItem: vi.fn(), setRotation: vi.fn(), setColor: vi.fn(), updateItem: vi.fn() },
     pushColor: vi.fn(),
-    activeFloor: { items: [] },
+    activeFloor: floor,
+    activeFloorIndex: 0,
+    history: { commitNow: vi.fn() },
   } as unknown as RoomEditorContextValue;
   const selection: SelectionContextValue = {
     selectedItemId: selected.id,
@@ -37,15 +42,19 @@ function setup(selected: FurnitureItem, embedded = false) {
     allSelectedIds: new Set<string>(),
     selectOnly: vi.fn(),
   };
-  render(
-    <RoomEditorProvider value={editor}>
-      <SelectionProvider value={selection}>
+  const tree = (current: FurnitureItem, currentEditor: RoomEditorContextValue) => (
+    <RoomEditorProvider value={currentEditor}>
+      <SelectionProvider value={{ ...selection, selectedItemId: current.id, selectedItem: current }}>
         <ItemContextPopover embedded={embedded} hasCollision={false} onRemove={vi.fn()} onDuplicate={vi.fn()}
           onRotate={vi.fn()} onToggleCameraBracket={vi.fn()} onClose={vi.fn()} />
       </SelectionProvider>
     </RoomEditorProvider>
   );
-  return editor;
+  const view = render(tree(selected, editor));
+  return { ...editor, rerenderSelected(current: FurnitureItem) {
+    const nextFloor = { ...floor, items: [current] };
+    view.rerender(tree(current, { ...editor, layout: { ...editor.layout, floors: [nextFloor] }, activeFloor: nextFloor }));
+  } };
 }
 
 const origin = (): string | null =>
@@ -88,7 +97,7 @@ describe('selected summary and colour', () => {
     expect((ground as HTMLInputElement).value).toBe('3');
     fireEvent.change(ground, { target: { value: '3.2' } });
     expect(editor.actions.moveItem).toHaveBeenCalledWith('placed-1', 2, 3.2);
-    expect(screen.queryByRole('spinbutton', { name: '宽' })).toBeNull();
+    expect((screen.getByRole('spinbutton', { name: '宽 / 米' }) as HTMLInputElement).value).toBe('0.78');
     expect(screen.getByRole('button', { name: '旋转 90°' }).closest('section')?.textContent).toContain('位置与角度');
   });
 
@@ -141,7 +150,7 @@ describe('embedded selected properties', () => {
 
   it('preserves locked restrictions and offers the original explicit unlock action', () => {
     const editor = setup(placed({ locked: true }), true);
-    for (const name of ['X / m', 'Y / m', 'Z / m', '旋转 / °']) {
+    for (const name of ['宽 / 米', '深 / 米', '高 / 米', 'X / m', 'Y / m', 'Z / m', '旋转 / °']) {
       expect((screen.getByRole('spinbutton', { name }) as HTMLInputElement).disabled).toBe(true);
     }
     expect((screen.getByRole('textbox', { name: '物料备注' }) as HTMLTextAreaElement).disabled).toBe(true);
@@ -150,5 +159,115 @@ describe('embedded selected properties', () => {
     fireEvent.click(screen.getByRole('button', { name: '已锁定 · 点击解锁' }));
     expect(editor.actions.setLocked).toHaveBeenCalledWith('placed-1', false);
     expect(editor.actions.moveItem).not.toHaveBeenCalled(); expect(editor.actions.updateItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('manual selected item dimensions', () => {
+  afterEach(cleanup);
+
+  it.each([
+    ['宽 / 米', 'width', '6.25'], ['深 / 米', 'depth', '6.1'], ['高 / 米', 'height', '4.2345'],
+  ] as const)('shows the current %s and submits one built-in dimension only after leaving the field', (name, dimension, value) => {
+    const editor = setup(placed({ source: 'builtin', type: 'table' }));
+    const input = screen.getByRole('spinbutton', { name }) as HTMLInputElement;
+    expect(input.value).toBe(String(editor.activeFloor.items[0]![dimension]));
+    expect(input.max).toBe(String(MAX_ITEM_DIMENSION));
+    expect(input.min).toBe(String(dimension === 'height' ? MIN_ITEM_HEIGHT : MIN_ITEM_FOOTPRINT));
+    const original = JSON.stringify(editor.layout);
+    fireEvent.change(input, { target: { value } });
+    expect(editor.actions.resizeItem).not.toHaveBeenCalled(); expect(editor.history.commitNow).not.toHaveBeenCalled();
+    fireEvent.blur(input); fireEvent.blur(input);
+    expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('placed-1', dimension, Number(value));
+    expect(editor.history.commitNow).toHaveBeenCalledOnce(); expect(JSON.stringify(editor.layout)).toBe(original);
+  });
+
+  it('submits Enter once, ignores its following blur, and keeps the one-centimetre height boundary', () => {
+    const editor = setup(placed({ source: 'builtin', type: 'carpet', height: MIN_ITEM_HEIGHT }));
+    const input = screen.getByRole('spinbutton', { name: '高 / 米' });
+    expect((input as HTMLInputElement).value).toBe(String(MIN_ITEM_HEIGHT));
+    fireEvent.change(input, { target: { value: '0.01234' } });
+    fireEvent.keyDown(input, { key: 'Enter' }); fireEvent.blur(input);
+    expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('placed-1', 'height', 0.01234);
+    expect(editor.history.commitNow).toHaveBeenCalledOnce();
+  });
+
+  it('keeps focus and the same input after Enter applies a value, without another resize on blur, and refills external undo', () => {
+    const selected = placed(), editor = setup(selected), input = screen.getByRole('spinbutton', { name: '宽 / 米' }) as HTMLInputElement;
+    input.focus(); fireEvent.change(input, { target: { value: '1.8' } }); fireEvent.keyDown(input, { key: 'Enter' });
+    editor.rerenderSelected({ ...selected, width: 1.8 });
+    expect(screen.getByRole('spinbutton', { name: '宽 / 米' })).toBe(input); expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('1.8'); input.blur();
+    expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('placed-1', 'width', 1.8);
+    editor.rerenderSelected(selected);
+    expect(screen.getByRole('spinbutton', { name: '宽 / 米' })).toBe(input); expect(input.value).toBe(String(selected.width));
+    expect(editor.actions.resizeItem).toHaveBeenCalledOnce();
+  });
+
+  it.each(['', '0', '-1', 'Infinity', '51', '0.001'])('does not submit an empty, non-finite or out-of-range width (%s)', value => {
+    const editor = setup(placed()); const input = screen.getByRole('spinbutton', { name: '宽 / 米' });
+    fireEvent.change(input, { target: { value } }); fireEvent.blur(input); fireEvent.keyDown(input, { key: 'Enter' });
+    expect(editor.actions.resizeItem).not.toHaveBeenCalled(); expect(editor.history.commitNow).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain(`${MIN_ITEM_FOOTPRINT}～${MAX_ITEM_DIMENSION}`);
+  });
+
+  it('does not create a resize or history entry for an unchanged value, and lets an invalid draft be corrected', () => {
+    const editor = setup(placed()); const input = screen.getByRole('spinbutton', { name: '宽 / 米' });
+    fireEvent.blur(input); expect(editor.actions.resizeItem).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: '' } }); fireEvent.blur(input); expect(screen.getByRole('alert')).toBeTruthy();
+    fireEvent.change(input, { target: { value: '1.45' } }); fireEvent.blur(input);
+    expect(screen.queryByRole('alert')).toBeNull(); expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('placed-1', 'width', 1.45);
+  });
+
+  it.each([
+    { source: 'public_library', assetId: '11111111-1111-4111-8111-111111111111', glbUrl: 'https://cdn.example.com/a.glb' },
+    { source: 'local_sample', glbUrl: '/scene-presets/gym/gym.glb', glbNode: 'Preset_Object_0' },
+  ] as const)('resizes a GLB instance while preserving its model reference (%j)', references => {
+    const selected = placed(references), editor = setup(selected), original = JSON.stringify(editor.layout);
+    fireEvent.change(screen.getByRole('spinbutton', { name: '高 / 米' }), { target: { value: '1.3' } });
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '高 / 米' }));
+    expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('placed-1', 'height', 1.3);
+    expect(editor.actions.updateItem).not.toHaveBeenCalled(); expect(JSON.stringify(editor.layout)).toBe(original);
+    expect(screen.getByText(/只调整当前物件尺寸，原模型保持不变/)).toBeTruthy();
+  });
+
+  it.each([
+    { type: 'door', structuralOpeningId: 'measured-door' }, { type: 'window', structuralOpeningId: 'measured-window' },
+    { type: 'column', structuralColumnId: 'measured-column' }, { venueEntranceId: 'main-entrance' }, { id: ENTRANCE_DOOR_ID, type: 'door' },
+  ])('disables structural dimensions and points to their own editing entry (%j)', marker => {
+    const editor = setup(placed(marker));
+    for (const name of ['宽 / 米', '深 / 米', '高 / 米']) {
+      const input = screen.getByRole('spinbutton', { name }); expect((input as HTMLInputElement).disabled).toBe(true);
+      fireEvent.change(input, { target: { value: '1.2' } }); fireEvent.blur(input);
+    }
+    expect(screen.getByText(/结构微调|补充尺寸/)).toBeTruthy(); expect(editor.actions.resizeItem).not.toHaveBeenCalled();
+  });
+
+  it('does not commit a locked dimension even when an input event is simulated', () => {
+    const editor = setup(placed({ locked: true })), input = screen.getByRole('spinbutton', { name: '宽 / 米' });
+    fireEvent.change(input, { target: { value: '1.2' } }); fireEvent.blur(input); fireEvent.keyDown(input, { key: 'Enter' });
+    expect(editor.actions.resizeItem).not.toHaveBeenCalled(); expect(editor.history.commitNow).not.toHaveBeenCalled();
+  });
+
+  it('discards an A draft when selection switches to B, including A→B→A and late blur', () => {
+    const a = placed({ id: 'item-a' }), b = placed({ id: 'item-b', width: 1.1 }), editor = setup(a);
+    const oldInput = screen.getByRole('spinbutton', { name: '宽 / 米' }); fireEvent.change(oldInput, { target: { value: '2.8' } });
+    editor.rerenderSelected(b); fireEvent.blur(oldInput);
+    expect((screen.getByRole('spinbutton', { name: '宽 / 米' }) as HTMLInputElement).value).toBe('1.1');
+    expect(editor.actions.resizeItem).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole('spinbutton', { name: '宽 / 米' }), { target: { value: '1.4' } });
+    fireEvent.blur(screen.getByRole('spinbutton', { name: '宽 / 米' }));
+    expect(editor.actions.resizeItem).toHaveBeenCalledExactlyOnceWith('item-b', 'width', 1.4);
+    editor.rerenderSelected(a); fireEvent.blur(oldInput);
+    expect((screen.getByRole('spinbutton', { name: '宽 / 米' }) as HTMLInputElement).value).toBe('0.78');
+    expect(editor.actions.resizeItem).toHaveBeenCalledOnce();
+  });
+
+  it('reports a resize refused by the existing scene boundary instead of submitting a silent no-op', () => {
+    const editor = setup(placed({ source: 'builtin', type: 'table', position: { x: 0, z: 0 } }));
+    const original = JSON.stringify(editor.layout), input = screen.getByRole('spinbutton', { name: '宽 / 米' });
+    fireEvent.change(input, { target: { value: '12' } }); fireEvent.blur(input);
+    expect(screen.getByRole('alert').textContent).toContain('这个尺寸无法应用');
+    expect(editor.actions.resizeItem).not.toHaveBeenCalled(); expect(editor.history.commitNow).not.toHaveBeenCalled();
+    expect(JSON.stringify(editor.layout)).toBe(original);
   });
 });
