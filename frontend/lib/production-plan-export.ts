@@ -141,7 +141,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       if (!found?.length) return `${kind}缺失，需核对（原编号见附录）`;
       if (found.length !== 1) return `${kind}编号歧义，需核对（原编号见附录）`;
       return `${found[0].label} · ${title(found[0])}`;
-    }).join('\n') : '尚未关联，待确认';
+    }).join('\n') : `未关联${kind}`;
   const taskRefs = (ids: string[]) => refs(ids, taskIndex, '任务', row => row.title);
   const objectRefs = (ids: string[]) => refs(ids, objectIndex, '物件', row => `${unknown(row.name)}（${unknown(row.floorName)}）`);
   const compactObjectRefs = (ids: string[]) => {
@@ -153,7 +153,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       else labels.push(found[0].label);
     }
     return [labels.join('、'), missing ? `缺失物件 ${missing} 项，需核对（原编号见附录）` : '',
-      ambiguous ? `物件编号歧义 ${ambiguous} 项，需核对（原编号见附录）` : ''].filter(Boolean).join('\n') || '尚未关联，待确认';
+      ambiguous ? `物件编号歧义 ${ambiguous} 项，需核对（原编号见附录）` : ''].filter(Boolean).join('\n') || '未关联场景物件';
   };
   const reviewText = (review: ProductionReferenceReview | undefined) => {
     if (!review) return '关联核对待确认';
@@ -323,7 +323,12 @@ ${sheetData.length ? sheetData.map(({ sheet, projection, summary }, index) => {
     ['已核部分收取／退回', `收取：${checkedReceived ? quantityText(summary.knownReceivedQuantity, sheet.unit) : '待确认（尚无已核收取记录）'}\n退回：${checkedReturned ? quantityText(summary.knownReturnedQuantity, sheet.unit) : '待确认（尚无已核退回记录）'}`],
     ['未收／未退差额', `相对约定未收：${quantityText(summary.notReceivedQuantity, sheet.unit)}\n相对已收未退：${quantityText(summary.notReturnedQuantity, sheet.unit)}`],
     ['超收／超退差额', `超收：${quantityText(summary.overReceivedQuantity, sheet.unit)}\n超退：${quantityText(summary.overReturnedQuantity, sheet.unit)}`],
-    ['异常与待核', summary.issues.length ? summary.issues.map(issue => checkinIssues[issue.code]).join('\n') : '未发现契约列出的数量异常；不等于已获施工或客户批准'],
+    ['异常与待核', [
+      `数量校验：${summary.issues.length ? summary.issues.map(issue => checkinIssues[issue.code]).join('；') : '未发现已定义的数量校验异常'}`,
+      summary.notReceivedQuantity === null ? '相对约定未收数量待确认' : `相对约定${summary.notReceivedQuantity > 0 ? '仍' : ''}未收 ${quantityText(summary.notReceivedQuantity, sheet.unit)}${summary.notReceivedQuantity > 0 ? '，需跟进' : ''}`,
+      summary.notReturnedQuantity === null ? '相对实收未退数量待确认' : `相对实收${summary.notReturnedQuantity > 0 ? '仍' : ''}未退 ${quantityText(summary.notReturnedQuantity, sheet.unit)}${summary.notReturnedQuantity > 0 ? '，需跟进' : ''}`,
+      '不等于已获施工或客户批准',
+    ].join('\n')],
   ])}<h4>当前有效批次记录（含待核与争议）</h4>${projection.effectiveEvents.length ? table(['批次／类型', '数量／核对标记', '实际发生／录入时间', '交接双方／记录人', '说明与证据文本'], projection.effectiveEvents.map(event => [
     `${unknown(event.batchRef)}\n${checkinKinds[event.kind]}`, `${quantityText(event.quantity, sheet.unit)}\n${checkinStates[event.checkState]}`,
     `发生：${time(event.occurredAt)}\n录入：${time(event.recordedAt)}`,

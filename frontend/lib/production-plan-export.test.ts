@@ -235,6 +235,9 @@ describe('internal production-plan handoff HTML', () => {
     const section = [...document.querySelectorAll('section')].find(s => s.querySelector('h2')?.textContent === '预算范围与人工估算')!;
     const row = [...section.querySelectorAll('tr')].find(r => r.textContent?.includes('已录入零额'))!;
     expect(row.textContent).toContain('无关联引用（独立估算）');
+    expect(row.textContent).toContain('未关联任务');
+    expect(row.textContent).toContain('未关联物件');
+    expect(row.textContent).not.toContain('尚未关联，待确认');
     expect(row.textContent).not.toContain('编号关联唯一');
     expect(row.textContent).not.toContain('需核对：未明确关联');
   });
@@ -441,6 +444,25 @@ describe('internal production-plan handoff HTML', () => {
 });
 
 describe('material-checkin facts in internal handoff HTML', () => {
+  it.each(['production', 'activity'] as const)('keeps the 20/18/18 outstanding receipt visible in %s handoff even without validation anomalies', async scope => {
+    const source = layout(), facts = checkLedger(), sheet = facts.sheets[0];
+    sheet.agreements[0].agreedQuantity = 20; sheet.agreements[0].basisNote = '原约定20件，差额原因待现场核对';
+    movement(sheet, 'receive').quantity = 18; movement(sheet, 'receive').evidenceNote = '原收取18件说明';
+    movement(sheet, 'return').quantity = 18; movement(sheet, 'return').evidenceNote = '原退回18件说明';
+    const before = JSON.stringify({ source, facts });
+    expect(materialCheckinSummary(sheet)).toMatchObject({ issues: [], notReceivedQuantity: 2, notReturnedQuantity: 0 });
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, facts,
+      scope === 'activity' ? { scope: 'activity' } : undefined), 'text/html');
+    const article = quantityArticles(document)[0], followup = quantityValue(article, '异常与待核');
+    expect(followup).toContain('数量校验：未发现已定义的数量校验异常');
+    expect(followup).toContain('相对约定仍未收 2 件，需跟进');
+    expect(followup).toContain('相对实收未退 0 件'); expect(followup).not.toContain('结清');
+    for (const value of ['原约定20件，差额原因待现场核对', '原收取18件说明', '原退回18件说明',
+      'https://evidence.example/receipt.jpg', 'https://evidence.example/return.jpg']) expect(article.textContent).toContain(value);
+    expect(section(document, scope === 'activity' ? '全部活动任务' : '明确关联的活动任务').textContent).toContain('有效状态：未开始');
+    expect(JSON.stringify({ source, facts })).toBe(before);
+  });
+
   it('exports the shared 30-agreed, 28-received, 26-returned result as two separate outstanding gaps and preserves batch provenance', async () => {
     const source = layout(), facts = checkLedger(), before = JSON.stringify({ source, facts });
     expect(materialCheckinSummary(facts.sheets[0])).toMatchObject({ agreedQuantity: 30, receivedQuantity: 28,
@@ -452,6 +474,8 @@ describe('material-checkin facts in internal handoff HTML', () => {
     expect(quantityValue(article, '已核部分收取／退回')).toBe('收取：28 件\n退回：26 件');
     expect(quantityValue(article, '未收／未退差额')).toBe('相对约定未收：2 件\n相对已收未退：2 件');
     expect(quantityValue(article, '超收／超退差额')).toBe('超收：0 件\n超退：0 件');
+    expect(quantityValue(article, '异常与待核')).toContain('相对约定仍未收 2 件，需跟进');
+    expect(quantityValue(article, '异常与待核')).toContain('相对实收仍未退 2 件，需跟进');
     for (const text of ['内部供应方乙', '演练执行方A', '演练记录人丙', '2026-10-09 09:00:00',
       '2026-10-09 09:05:00', 'https://evidence.example/receipt.jpg', '演练收28件，差额原因待核']) expect(article.textContent).toContain(text);
     expect(article.textContent).toContain('不等于已获施工或客户批准');
@@ -474,7 +498,18 @@ describe('material-checkin facts in internal handoff HTML', () => {
     expect(quantityValue(article, '未收／未退差额')).toBe('相对约定未收：待确认\n相对已收未退：待确认');
     expect(quantityValue(article, '异常与待核')).toContain('存在争议批次');
     expect(quantityValue(article, '异常与待核')).toContain('完整收退数量待确认');
+    expect(quantityValue(article, '异常与待核')).toContain('相对约定未收数量待确认');
+    expect(quantityValue(article, '异常与待核')).toContain('相对实收未退数量待确认');
     expect(article.textContent).toContain('待核'); expect(article.textContent).toContain('争议待核');
+  });
+
+  it('does not infer an agreed receipt gap from a fully checked receipt and return when the agreement is unknown', async () => {
+    const facts = checkLedger(), sheet = facts.sheets[0]; sheet.agreements[0].agreedQuantity = null;
+    movement(sheet, 'receive').quantity = 18; movement(sheet, 'return').quantity = 18;
+    expect(materialCheckinSummary(sheet)).toMatchObject({ notReceivedQuantity: null, notReturnedQuantity: 0 });
+    const followup = quantityValue(quantityArticles(await doc(layout(), facts))[0], '异常与待核');
+    expect(followup).toContain('约定数量待确认'); expect(followup).toContain('相对约定未收数量待确认');
+    expect(followup).toContain('相对实收未退 0 件'); expect(followup).not.toContain('相对约定未收 0 件');
   });
 
   it.each(['explicit zero', 'unknown', 'no events'] as const)('distinguishes %s from an inferred checked zero', async kind => {
@@ -495,12 +530,16 @@ describe('material-checkin facts in internal handoff HTML', () => {
       expect(quantityValue(article, '当前有效收取数量')).toBe('0 件');
       expect(quantityValue(article, '当前有效退回数量')).toBe('0 件');
       expect(quantityValue(article, '已核部分收取／退回')).toBe('收取：0 件\n退回：0 件');
+      expect(quantityValue(article, '异常与待核')).toContain('相对约定未收 0 件');
+      expect(quantityValue(article, '异常与待核')).toContain('相对实收未退 0 件');
     } else {
       expect(quantityValue(article, '当前有效收取数量')).toBe('待确认');
       expect(quantityValue(article, '当前有效退回数量')).toBe('待确认');
       expect(quantityValue(article, '已核部分收取／退回')).toContain('尚无已核收取记录');
       expect(quantityValue(article, '已核部分收取／退回')).toContain('尚无已核退回记录');
       expect(quantityValue(article, '已核部分收取／退回')).not.toContain('0 件');
+      expect(quantityValue(article, '异常与待核')).toContain('相对约定未收数量待确认');
+      expect(quantityValue(article, '异常与待核')).toContain('相对实收未退数量待确认');
       if (kind === 'unknown') expect(quantityValue(article, '当前约定数量／依据')).toBe('待确认\n待确认');
       else expect(article.textContent).toContain('尚无有效收退批次；未记录不表示数量为零');
     }
@@ -514,6 +553,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
     expect(quantityValue(articles[0], '当前有效收取数量')).toBe('28 件');
     expect(quantityValue(articles[1], '当前有效收取数量')).toBe('2 套');
     expect(quantityValue(articles[1], '当前有效退回数量')).toBe('1 套');
+    expect(quantityValue(articles[1], '异常与待核')).toContain('相对实收仍未退 1 套，需跟进');
     expect(section(document, '数量点验').textContent).toContain('不混计件/套');
     expect(section(document, '数量点验').textContent).not.toContain('收取合计：30');
     expect(section(document, '数量点验').textContent).not.toContain('数量合计：');
@@ -659,6 +699,16 @@ async function acceptedObjectLayout() {
 }
 
 describe('complete internal activity handoff HTML', () => {
+  it.each(['production', 'activity'] as const)('uses neutral task text for an empty object association in %s scope', async scope => {
+    const source = layout(); source.eventOperations!.tasks[0].objectIds = [];
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, undefined,
+      scope === 'activity' ? { scope: 'activity' } : undefined), 'text/html');
+    const task = section(document, scope === 'activity' ? '全部活动任务' : '明确关联的活动任务').querySelector('tbody tr')!;
+    expect(task.children[4].textContent).toBe('未关联场景物件');
+    expect(task.children[4].textContent).not.toContain('待确认');
+    expect(task.children[4].textContent).not.toContain('缺失');
+  });
+
   it('retains budgets, quantity calculations and the same object numbers in the expanded scope', async () => {
     const source = layout(), facts = checkLedger();
     const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, facts, { scope: 'activity' }), 'text/html');

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeUnplacedItem } from '../lib/__testfixtures__/fixtures';
 import { layoutGeometryScene } from '../lib/structural-layout';
-import { computeFloorPlanPlacement, computeHeatmapCells, get2DViewTransform, HEATMAP_COLS, HEATMAP_ROWS, render2DTopDown } from './render';
+import { computeFloorPlanPlacement, computeHeatmapCells, get2DViewTransform, HEATMAP_COLS, HEATMAP_ROWS, placeDimensionLabels, render2DTopDown, type DimensionLabel } from './render';
 
 it('rounds item and room dimension labels to at most two decimal places without rounding scene data', () => {
   const texts: string[] = [];
@@ -15,6 +15,92 @@ it('rounds item and room dimension labels to at most two decimal places without 
   expect(texts).toContain('10.12m');
   expect(texts).toContain('8.78m');
   expect(item.width).toBe(1.2367);
+});
+
+describe('dimension label placement', () => {
+  const label = (id: string, x: number, y: number, priority: DimensionLabel['priority'] = 2): DimensionLabel =>
+    ({ id, text: id, x, y, width: 84, height: 14, priority });
+  function expectSeparated(placed: ReturnType<typeof placeDimensionLabels>): void {
+    for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i]!.bounds, b = placed[j]!.bounds;
+      expect(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom).toBe(true);
+    }
+  }
+  it('keeps selected labels ahead of overview labels and separates multiple selected labels', () => {
+    const labels = [label('overview', 140, 80), { ...label('extra', 140, 80, 1), alternatives: [{ x: 140, y: 50 }] }, label('primary', 140, 80, 0)];
+    const original = JSON.stringify(labels), placed = placeDimensionLabels(labels, { width: 300, height: 180 });
+    expect(placed.map(value => value.id)).toEqual(['primary', 'extra']);
+    expect(placed[1]!.y).toBe(50); expectSeparated(placed);
+    expect(JSON.stringify(labels)).toBe(original);
+  });
+  it('omits overlapping labels in a dense 39-item overview without changing the input', () => {
+    const labels = Array.from({ length: 39 }, (_, index) => label(String(index), 50 + index % 13 * 18, 50 + Math.floor(index / 13) * 22));
+    const original = JSON.stringify(labels), placed = placeDimensionLabels(labels, { width: 400, height: 180 });
+    expect(placed.length).toBeGreaterThan(0); expect(placed.length).toBeLessThan(39); expectSeparated(placed);
+    expect(JSON.stringify(labels)).toBe(original);
+  });
+  it('keeps edge labels inside the CSS viewport and avoids reserved room dimensions', () => {
+    const blocked = [{ left: 100, top: 10, right: 190, bottom: 30 }];
+    const labels = [
+      { ...label('selected', 145, 20, 0), alternatives: [{ x: 145, y: 60 }] },
+      label('left', -50, 100), label('right', 500, 130), label('bottom', 145, 500),
+    ];
+    const placed = placeDimensionLabels(labels, { width: 300, height: 180 }, blocked);
+    expect(placed).toHaveLength(4); expect(placed[0]!.y).toBe(60); expectSeparated(placed);
+    for (const { bounds } of placed) {
+      expect(bounds.left).toBeGreaterThanOrEqual(2); expect(bounds.top).toBeGreaterThanOrEqual(2);
+      expect(bounds.right).toBeLessThanOrEqual(298); expect(bounds.bottom).toBeLessThanOrEqual(178);
+      expect(bounds.right <= 100 || bounds.left >= 190 || bounds.bottom <= 10 || bounds.top >= 30).toBe(true);
+    }
+    expect(placeDimensionLabels([label('cannot fit', 10, 10)], { width: 60, height: 40 })).toEqual([]);
+  });
+});
+
+it('draws readable dimensions after all 39 footprints, preserves geometry, and uses CSS pixels at either DPR', () => {
+  const items = Array.from({ length: 39 }, (_, index) => makeItem({ id: `chair-${index}`, width: 0.45, depth: 0.45,
+    position: { x: index % 13 * 0.5 - 3, z: Math.floor(index / 13) * 0.5 - 0.5 } }));
+  const floor = makeFloor({ items }), layout = makeLayout({ width: 10, height: 8, floors: [floor] });
+  const original = JSON.stringify(layout);
+  const paint = (dpr: number, showMeasurements = true) => {
+    let order = 0;
+    const texts: { text: string; x: number; y: number; order: number }[] = [], footprints: { args: number[]; order: number }[] = [];
+    const methods = {
+      measureText: (text: string) => ({ width: text.length * 6 }),
+      fillText: (text: string, x: number, y: number) => texts.push({ text, x, y, order: ++order }),
+      fillRect: (...args: number[]) => { if (args[0] === -args[2]! / 2 && args[1] === -args[3]! / 2) footprints.push({ args, order: ++order }); },
+    };
+    const ctx = new Proxy(methods, { get: (target, key) => target[key as keyof typeof methods] ?? (() => {}) });
+    const canvas = { width: 800 * dpr, height: 600 * dpr, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    render2DTopDown({ canvas, layout, floor, selectedItemId: items[38]!.id, extraSelectedIds: new Set([items[37]!.id]),
+      showMeasurements, showWiFiSignals: false, hasCollision: () => false });
+    return { dimensions: texts.filter(value => value.text.includes(' × ')), texts, footprints };
+  };
+  const shown = paint(1), retina = paint(2), hidden = paint(1, false);
+  expect(shown.footprints).toHaveLength(39); expect(shown.dimensions.length).toBeGreaterThan(0); expect(shown.dimensions.length).toBeLessThan(39);
+  expect(Math.min(...shown.dimensions.map(value => value.order))).toBeGreaterThan(Math.max(...shown.footprints.map(value => value.order)));
+  const positions = (painted: ReturnType<typeof paint>) => painted.dimensions.map(({ text, x, y }) => ({ text, x, y }));
+  expect(positions(retina)).toEqual(positions(shown));
+  expect(hidden.texts.some(value => /m/.test(value.text))).toBe(false);
+  expect(hidden.footprints.map(value => value.args)).toEqual(shown.footprints.map(value => value.args));
+  for (let i = 0; i < shown.dimensions.length; i++) for (let j = i + 1; j < shown.dimensions.length; j++) {
+    const a = shown.dimensions[i]!, b = shown.dimensions[j]!;
+    expect(Math.abs(a.x - b.x) >= a.text.length * 6 + 6 || Math.abs(a.y - b.y) >= 14).toBe(true);
+  }
+  expect(JSON.stringify(layout)).toBe(original);
+});
+
+it('does not move a fully offscreen selected item dimension onto the viewport edge', () => {
+  const visible = makeItem({ width: 0.45, depth: 0.45 });
+  const outside = makeItem({ id: 'offscreen', width: 0.82, depth: 0.83, rotation: Math.PI / 4, position: { x: 100, z: 0 } });
+  const floor = makeFloor({ items: [visible, outside] }), layout = makeLayout({ width: 10, height: 8, floors: [floor] });
+  const original = JSON.stringify(layout), texts: string[] = [], rectangles: number[][] = [];
+  const methods = { measureText: (text: string) => ({ width: text.length * 6 }), fillText: (text: string) => texts.push(text),
+    fillRect: (...args: number[]) => { if (args[0] === -args[2]! / 2 && args[1] === -args[3]! / 2) rectangles.push(args); } };
+  const ctx = new Proxy(methods, { get: (target, key) => target[key as keyof typeof methods] ?? (() => {}) });
+  const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+  render2DTopDown({ canvas, layout, floor, selectedItemId: outside.id, showMeasurements: true, showWiFiSignals: false, hasCollision: () => false });
+  expect(rectangles).toHaveLength(2); expect(texts).toContain('0.45m × 0.45m'); expect(texts).not.toContain('0.82m × 0.83m');
+  expect(JSON.stringify(layout)).toBe(original);
 });
 
 // A 10×10 m room with the default 20×20 grid gives 0.5 m cells, so grid
