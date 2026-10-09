@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
+import { handoffSchema } from '../../supabase/functions/_shared/delivery-contract';
 import { sceneSchema } from '../../supabase/functions/_shared/domain';
-import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
+import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
 import {
   materialCheckinLedgerSchema, materialCheckinSheetSchema, materialCheckinSummary, projectMaterialCheckinEvents,
   type MaterialCheckinLedger, type MaterialCheckinSheet, type MaterialCheckinEvent,
 } from '../../supabase/functions/_shared/material-checkin-contract';
+import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
-import type { RoomLayout } from '../components/room-organizer/lib/types';
 import * as operations from '../components/room-organizer/lib/event-operations';
 import { operationBasis, operationReview, OPERATION_STATUS_LABELS } from '../components/room-organizer/lib/event-operations';
+import * as handoffs from '../components/room-organizer/lib/scene-handoff';
+import { handoffBasis } from '../components/room-organizer/lib/scene-handoff';
 import { productionPlanHandoffHtml } from './production-plan-export';
+import { createProjectReviewSnapshot, projectReviewHtml } from './project-review';
+import type { BackupBrief } from './local-project-backup';
+import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 const id = (n: number) => `ab100000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const snapshot = { id: 'internal-handoff-001', generatedAt: '2026-10-09T01:30:15.123Z' };
@@ -634,5 +639,177 @@ describe('material-checkin facts in internal handoff HTML', () => {
     expect(quantityArticles(empty)).toHaveLength(0);
     const absent = await doc();
     expect([...absent.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('数量点验');
+  });
+});
+
+const activityDoc = async (source: RoomLayout = layout(), brief?: BackupBrief) => new DOMParser().parseFromString(
+  await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', ...(brief ? { brief } : {}) }), 'text/html');
+const briefFixture = (): BackupBrief => ({ status: 'present', value: { event: '演练工作坊', guests: 0,
+  description: '活动目的原记录', mustHave: '必须保留入口通道', allowIdeas: false, hasFloorplan: true,
+  venueConditions: '现场供电待确认', style: '简洁', palette: '绿色', atmosphere: '交流' } });
+async function acceptedObjectLayout() {
+  const source = layout(), item = source.floors[0].items[0];
+  item.materialId = 'asset';
+  source.floors[0].items[1].materialId = 'chair';
+  const record = handoffSchema.parse({ ownerName: '物件负责人甲', dueDate: '2026-10-09', acceptance: '逐件核对位置',
+    status: 'todo', evidenceNote: '原现场核对证据', evidenceUrls: ['https://evidence.example/object?a=1&b=2'] });
+  item.handoff = record;
+  record.reviewedBasis = await handoffBasis(source, item.id, record); record.status = 'accepted';
+  return source;
+}
+
+describe('complete internal activity handoff HTML', () => {
+  it('retains budgets, quantity calculations and the same object numbers in the expanded scope', async () => {
+    const source = layout(), facts = checkLedger();
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, facts, { scope: 'activity' }), 'text/html');
+    expect(section(document, '预算范围与人工估算').textContent).toContain('已知金额小计：¥1250.50');
+    expect(quantityValue(quantityArticles(document)[0], '当前有效收取数量')).toBe('28 件');
+    expect(quantityValue(quantityArticles(document)[0], '当前有效退回数量')).toBe('26 件');
+    expect(section(document, '逐件物料工作单').textContent).toContain('物件2 · 同名椅');
+    expect(document.querySelector('svg [aria-label="物件2"]')).not.toBeNull();
+    Object.assign(source.floors[0].items[0], { futurePrivateField: 'PRIVATE_FUTURE_OBJECT_DATA' });
+    expect(await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' })).not.toContain('PRIVATE_FUTURE_OBJECT_DATA');
+  });
+
+  it('includes every phase and unlinked task in source order while keeping the legacy and customer scopes unchanged', async () => {
+    const source = layout();
+    source.eventOperations!.tasks.push(...eventOperationsSchema.parse({ tasks: [
+      { id: id(23), title: '独立撤场任务', phase: 'teardown', ownerName: '撤场负责人' },
+      { id: id(22), title: '独立准备任务', phase: 'preparation', acceptance: '准备完成条件' },
+      { id: id(24), title: '独立活动任务', phase: 'event' },
+    ] }).tasks);
+    source.floors[0].items[0].handoff = handoffSchema.parse({ ownerName: '物件工作单私有负责人', dueDate: '2026-10-09' });
+    const document = await activityDoc(source), rows = [...section(document, '全部活动任务').querySelectorAll('tbody tr')];
+    expect(rows.map(row => row.children[0].textContent!.split('\n')[0])).toEqual([
+      '任务1 · 签到台布置', '任务2 · 独立撤场任务', '任务3 · 独立准备任务', '任务4 · 独立活动任务']);
+    expect(rows[1].textContent).toContain('撤场'); expect(rows[2].textContent).toContain('准备');
+    expect(rows[3].textContent).toContain('负责人：待确认');
+    expect(document.title).toContain('内部活动交接');
+    expect(document.querySelector('header')!.textContent).toContain('任务：4 项；物件：2 项；已填工作单：1 / 2 项');
+    expect(document.body.textContent).toContain('已下载文件是冻结版本');
+    const old = await doc(source); old.querySelector('details')!.remove();
+    expect(old.title).toContain('内部制作交接');
+    for (const excluded of ['独立撤场任务', '物件工作单私有负责人', '逐件物料工作单']) expect(old.body.textContent).not.toContain(excluded);
+    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source,
+      briefSnapshot: { state: 'ready', scope: source.id!, brief: { status: 'absent' } }, snapshot,
+      source: { scope: source.id!, revision: 'r1' }, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: true } }));
+    for (const excluded of ['独立撤场任务', '物件工作单私有负责人', '内部供应方乙', '逐件物料工作单']) expect(customer).not.toContain(excluded);
+  });
+
+  it('exports existing activities and object work without any production plan or ledger', async () => {
+    const source = await acceptedObjectLayout(); delete source.productionPlan;
+    const document = await activityDoc(source);
+    expect(section(document, '全部活动任务').textContent).toContain('签到台布置');
+    expect(section(document, '逐件物料工作单').textContent).toContain('原现场核对证据');
+    expect(document.querySelector('header')!.textContent).toContain('制作计划：当前未记录');
+    expect([...document.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('数量点验');
+    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('尚未记录制作计划或点验账册');
+  });
+
+  it('states missing tasks, unassigned objects, empty work sheets and missing briefs without manufacturing completion', async () => {
+    const source = layout(); delete source.productionPlan; delete source.eventOperations;
+    source.floors[0].items[1].handoff = handoffSchema.parse({});
+    const document = await activityDoc(source), work = section(document, '逐件物料工作单');
+    expect(section(document, '全部活动任务').textContent).toContain('当前未记录活动任务');
+    expect(work.textContent).toContain('尚未填写工作单；分工与进展待确认');
+    expect(work.textContent).toContain('负责人：待确认'); expect(work.textContent).toContain('期限：待确认');
+    expect(work.textContent).not.toContain('已验收');
+    expect(document.querySelector('header')!.textContent).toContain('已填工作单：0 / 2 项');
+    expect(section(document, '活动需求与现场条件').textContent).toContain('本次未提供活动需求快照');
+    const absent = await activityDoc(source, { status: 'absent' });
+    expect(section(absent, '活动需求与现场条件').textContent).toContain('当前未记录活动需求');
+  });
+
+  it.each(['ownerName', 'dueDate', 'acceptance', 'geometry'] as const)('recomputes effective object status after %s changes and retains evidence', async field => {
+    const source = await acceptedObjectLayout(), item = source.floors[0].items[0];
+    if (field === 'geometry') item.width += 0.25;
+    else item.handoff![field] = field === 'dueDate' ? '2026-10-10' : '变更后的分工或条件';
+    const work = section(await activityDoc(source), '逐件物料工作单');
+    expect(work.textContent).toContain('记录状态：已验收\n有效状态：需复核');
+    expect(work.textContent).toContain('原现场核对证据');
+    expect(work.textContent).toContain('https://evidence.example/object?a=1&b=2');
+    expect(item.handoff!.status).toBe('accepted');
+  });
+
+  it('keeps unlinked task acceptance subject to the same current geometry review', async () => {
+    const source = await acceptedLayout(); source.productionPlan = productionPlanSchema.parse({});
+    const task = source.eventOperations!.tasks[0]; task.reviewedBasis = await operationBasis(source, task);
+    source.floors[0].items[0].width += 1;
+    expect(section(await activityDoc(source), '全部活动任务').textContent).toContain('有效状态：需复核');
+  });
+
+  it('uses unconfirmed effective statuses when either review fails', async () => {
+    const source = await acceptedObjectLayout();
+    vi.spyOn(handoffs, 'effectiveHandoffStatus').mockRejectedValue(new Error('PRIVATE_HANDOFF_FAILURE'));
+    vi.spyOn(operations, 'operationReview').mockRejectedValue(new Error('PRIVATE_TASK_FAILURE'));
+    const html = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' });
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    expect(section(document, '逐件物料工作单').textContent).toContain('有效状态：待核对（复核未完成）');
+    expect(section(document, '全部活动任务').textContent).toContain('有效状态：待核对（复核未完成）');
+    expect(html).not.toContain('PRIVATE_HANDOFF_FAILURE'); expect(html).not.toContain('PRIVATE_TASK_FAILURE');
+  });
+
+  it('does not use first-match acceptance for ambiguous object identities', async () => {
+    const source = await acceptedObjectLayout();
+    source.floors[0].items[1] = { ...source.floors[0].items[0], id: source.floors[0].items[0].id.toUpperCase() };
+    const review = vi.spyOn(handoffs, 'effectiveHandoffStatus');
+    const document = await activityDoc(source), work = section(document, '逐件物料工作单');
+    expect(work.textContent!.match(/有效状态：待核对（物件编号不唯一）/g)).toHaveLength(2);
+    expect(review).not.toHaveBeenCalled(); expect(document.querySelector('svg')).toBeNull();
+  });
+
+  it.each(['status', 'url', 'unknown field'] as const)('refuses invalid handoff %s rather than silently omitting it', async reason => {
+    const source = layout(), record = handoffSchema.parse({}); source.floors[0].items[0].handoff = record;
+    if (reason === 'status') Object.assign(record, { status: 'accepted' });
+    if (reason === 'url') record.evidenceUrls = ['javascript:alert(1)'];
+    if (reason === 'unknown field') Object.assign(record, { futurePrivateData: 'PRIVATE_NEW_FIELD' });
+    await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' })).rejects.toThrow('物件1工作单资料无效');
+  });
+
+  it('freezes layout, work sheets, brief and metadata before deferred review', async () => {
+    const source = await acceptedObjectLayout(), brief = briefFixture(), meta = { ...snapshot };
+    const started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
+    vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
+    const output = productionPlanHandoffHtml(source, meta, undefined, { scope: 'activity', brief }); await started.promise;
+    source.eventOperations!.tasks[0].title = '后改任务'; source.floors[0].items[0].handoff!.ownerName = '后改负责人';
+    source.floors[0].items[0].handoff!.evidenceNote = '后改证据'; source.floors[0].items[0].position = { x: 200, z: 0 };
+    if (brief.status === 'present') brief.value.description = '后改活动目的';
+    meta.id = '后改快照'; meta.generatedAt = '2027-01-01T00:00:00Z';
+    pending.resolve({ status: 'todo', missingObjectIds: [] });
+    const html = await output;
+    expect(html).not.toContain('后改'); expect(html).toContain('原现场核对证据');
+    expect(html).toContain('活动目的原记录'); expect(html).toContain(snapshot.generatedAt);
+  });
+
+  it('shows only validated brief business fields and escapes all new visible text without loading evidence or leaking model URLs', async () => {
+    const source = await acceptedObjectLayout(), brief = briefFixture();
+    const payload = '<img src="https://evil.test/x" onerror="x()">&';
+    const record = source.floors[0].items[0].handoff!; record.ownerName = payload; record.acceptance = payload; record.evidenceNote = payload;
+    if (brief.status === 'present') brief.value.description = payload;
+    const html = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief });
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    expect(document.querySelectorAll('script,img,iframe,object,link,[onload],[onerror]')).toHaveLength(0);
+    const links = [...document.querySelectorAll('a[href]')];
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link.closest('nav[aria-label="交接目录"]')).not.toBeNull();
+      expect(link.getAttribute('href')).toMatch(/^#handoff-[a-z]+$/);
+      expect(document.querySelector(link.getAttribute('href')!)).not.toBeNull();
+    }
+    expect(section(document, '逐件物料工作单').textContent).toContain(payload);
+    const needs = section(document, '活动需求与现场条件');
+    expect(needs.textContent).toContain(payload); expect(needs.textContent).toContain('预计人数0');
+    expect(needs.textContent).toContain('照片、原图纸附件和模型文件需另行提供');
+    for (const excluded of ['allowIdeas', 'hasFloorplan', 'PRIVATE_', '98765', 'sha256:', 'reviewedBasis']) expect(html).not.toContain(excluded);
+    if (brief.status === 'present') Object.assign(brief.value, { internalToken: 'PRIVATE_NEW_FIELD' });
+    await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief })).rejects.toThrow('活动需求字段无效');
+  });
+
+  it('retains non-rectangular structure restrictions in activity mode', async () => {
+    const source = layout(); source.entrance = { width: 2, depth: 1 };
+    const document = await activityDoc(source);
+    expect(section(document, '同快照摆位示意').textContent).toContain('不适合普通矩形示意');
+    expect(document.querySelectorAll('svg')).toHaveLength(0);
+    expect(section(document, '全部场景实例').textContent).toContain('物件2 · 同名椅');
   });
 });

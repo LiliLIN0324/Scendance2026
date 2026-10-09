@@ -109,8 +109,9 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const checkinLocal=isLocalActivityWorkspace(controller);
   const localCheckins=checkinLocal?checkins:undefined;
   const checkinsUnavailable=!!localCheckins&&!localCheckins.ready;
-  const latest = useRef({ layout, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable });
-  latest.current = { layout, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable };
+  const briefUnavailable=!!briefState&&(!briefState.ready||!!briefState.error);
+  const latest = useRef({ layout, controller, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable, brief:briefState?.brief });
+  latest.current = { layout, controller, userId: cloud.user?.id, projectId: cloud.project?.id, checkins:localCheckins?.ledger, checkinsReady:!checkinsUnavailable, brief:briefState?.brief };
   const mounted = useRef(true), pending = useRef(false);
   const exportSnapshot = useRef<typeof latest.current & { metadata: DeliverySnapshot } | null>(null);
   const preview = useMemo(() => {
@@ -135,21 +136,37 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const checking = reviews?.layout !== layout && preview.items.some(item => item.handoff?.status === 'review' || item.handoff?.status === 'accepted');
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setNotice(''); exportSnapshot.current = null; }, [layout.id, cloud.user?.id, cloud.project?.id]);
-  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production'): Promise<void> {
+  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production' | 'activity'): Promise<void> {
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice('');
     const before = latest.current;
-    const stillCurrent = () => mounted.current && latest.current.layout === before.layout && latest.current.userId === before.userId && latest.current.projectId === before.projectId&&latest.current.checkins===before.checkins&&latest.current.checkinsReady===before.checkinsReady;
+    const stillCurrent = () => mounted.current && latest.current.layout === before.layout && latest.current.controller === before.controller && latest.current.userId === before.userId && latest.current.projectId === before.projectId&&latest.current.checkins===before.checkins&&latest.current.checkinsReady===before.checkinsReady&&latest.current.brief===before.brief;
     const previous = exportSnapshot.current;
-    const snapshot = previous && previous.layout === layout && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins
+    const snapshot = kind !== 'activity' && previous && previous.layout === layout && previous.controller === before.controller && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins&&previous.brief===before.brief
       ? previous : { ...before, metadata: { id: crypto.randomUUID(), generatedAt: new Date().toISOString() } };
     exportSnapshot.current = snapshot;
     const metadata = snapshot.metadata;
     try {
-      if((kind==='operations'||kind==='json'||kind==='production')&&!before.checkinsReady)throw new Error('点验资料尚未读取完成，请重新读取后导出。');
+      if((kind==='operations'||kind==='json'||kind==='production'||kind==='activity')&&!before.checkinsReady)throw new Error('点验资料尚未读取完成，请重新读取后导出。');
       const { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } = await import('../lib/scene-delivery');
       if (!stillCurrent()) return;
-      if (kind === 'production') {
+      if (kind === 'activity') {
+        if (!backupActions) throw new Error('当前工作台尚未准备完整活动资料，未生成交接文件。');
+        const { parseLocalProjectBackupJson } = await import('@/lib/local-project-backup');
+        const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
+        if (!stillCurrent()) return;
+        const saved = parseLocalProjectBackupJson(await backupActions.prepareBackup());
+        if (!stillCurrent()) return;
+        if (saved.layout.id !== before.layout.id || saved.brief.status === 'not-in-file' || saved.materialCheckins.status === 'not-in-file') {
+          throw new Error('活动资料未完整对应当前项目，请重新读取后导出。');
+        }
+        const html = await productionPlanHandoffHtml(saved.layout, metadata,
+          saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined,
+          { scope: 'activity', brief: saved.brief });
+        if (!stillCurrent()) return;
+        downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部活动交接_${metadata.id}`, 'html');
+        setNotice('完整活动交接文件已导出，可离线打开与打印。文件包含内部执行资料，请核对后交给执行团队。');
+      } else if (kind === 'production') {
         const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
         if (!stillCurrent()) return;
         const html = await productionPlanHandoffHtml(layout, metadata, before.checkins);
@@ -207,6 +224,11 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
       <details className="sc-procurement-summary"><summary>采购汇总 · {preview.materials.length} 类</summary><ul>{preview.materials.map(row => <li key={row.objectIds[0]}>{row.name} × {row.quantity}<small>{row.width} × {row.depth} × {row.height} m · {row.procurement}</small></li>)}</ul></details>
     </>}
     </div>
+    {backupActions && <>
+      <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || briefUnavailable || backupActions.backupPending} onClick={() => void download('activity')}>导出完整活动交接 HTML</button>
+      <p className="sc-note">包含需求、全部活动任务、物件工作单、制作计划和点验。请先保存各表单，再导出给执行团队；照片和模型文件需另行提供。</p>
+      {briefUnavailable && <p className="sc-note">活动需求尚未准备好，请在活动需求中重试读取。</p>}
+    </>}
     <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || !layout.eventOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>
     <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('glb')}>{busy ? '正在准备交付…' : '导出场景 GLB'}</button>
     <button className="sc-button sc-full" type="button" disabled={busy || checking || checkinsUnavailable || !!preview.error} onClick={() => void download('json')}>导出场景 JSON</button>
