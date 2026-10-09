@@ -3,13 +3,16 @@ import { materialCheckinLedgerSchema, type MaterialCheckinLedger } from '../../s
 import { productionPlanSchema } from '../../supabase/functions/_shared/production-plan-contract';
 import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from '../components/room-organizer/lib/schema';
 import { layoutForExport } from './layout-export';
+import { encodeSourceDocuments, sourceDocumentsSchema, type SourceBackupSnapshot, type SourceDocuments, type RestoredSourceDocuments } from './source-backup';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 export const LOCAL_PROJECT_BACKUP_FORMAT = 'scendance-local-project-backup';
 export const LOCAL_PROJECT_BACKUP_VERSION = 2;
 export const LOCAL_PROJECT_BACKUP_V3_VERSION = 3;
+export const LOCAL_PROJECT_BACKUP_V4_VERSION = 4;
 export const MAX_LOCAL_PROJECT_BACKUP_BYTES = MAX_LAYOUT_JSON_BYTES;
+export const MAX_LOCAL_PROJECT_BACKUP_V4_BYTES = 96 * 1024 * 1024;
 
 /** Coverage describes editable records, not packaged external resources. */
 export const LOCAL_PROJECT_BACKUP_V1_COVERAGE = {
@@ -18,6 +21,7 @@ export const LOCAL_PROJECT_BACKUP_V1_COVERAGE = {
 } as const;
 export const LOCAL_PROJECT_BACKUP_COVERAGE = { ...LOCAL_PROJECT_BACKUP_V1_COVERAGE, productionPlan: true } as const;
 export const LOCAL_PROJECT_BACKUP_V3_COVERAGE = { ...LOCAL_PROJECT_BACKUP_COVERAGE, materialCheckins: true } as const;
+export const LOCAL_PROJECT_BACKUP_V4_COVERAGE = { ...LOCAL_PROJECT_BACKUP_V3_COVERAGE, attachments: true, sourceDocuments: true } as const;
 
 // Local forms can save empty text, 0, fractions and counts beyond the AI service's
 // limit. Preserve these values; generation validation belongs to briefInstruction.
@@ -61,9 +65,10 @@ export interface LocalProjectBackup {
 export interface LocalProjectRestoreCandidate {
   source: 'backup' | 'legacy-layout';
   /** V1 has no production-plan coverage; V1/V2 and legacy have no checkin coverage. */
-  backupVersion?: 1 | 2 | 3;
+  backupVersion?: 1 | 2 | 3 | 4;
   /** Parser/validator always return a status. Optional only for old programmatic callers. */
   materialCheckins?: RestoredMaterialCheckins;
+  sourceDocuments?: RestoredSourceDocuments;
   createdAt: string | null;
   layout: RoomLayout;
   /** A legacy layout says nothing about the browser's current or former brief. */
@@ -77,7 +82,14 @@ export interface LocalProjectBackupV3 extends Omit<LocalProjectBackup, 'version'
   coverage: typeof LOCAL_PROJECT_BACKUP_V3_COVERAGE;
   materialCheckins: BackupMaterialCheckins;
 }
-export type ValidatedLocalProjectRestoreCandidate = LocalProjectRestoreCandidate & { materialCheckins: RestoredMaterialCheckins };
+export interface LocalProjectBackupV4 extends Omit<LocalProjectBackupV3, 'version' | 'coverage'> {
+  version: typeof LOCAL_PROJECT_BACKUP_V4_VERSION;
+  coverage: typeof LOCAL_PROJECT_BACKUP_V4_COVERAGE;
+  sourceDocuments: SourceDocuments;
+}
+export type ValidatedLocalProjectRestoreCandidate = LocalProjectRestoreCandidate & {
+  materialCheckins: RestoredMaterialCheckins; sourceDocuments: RestoredSourceDocuments;
+};
 
 const envelopeFields = {
   format: z.literal(LOCAL_PROJECT_BACKUP_FORMAT),
@@ -103,10 +115,14 @@ const backupV3Schema = z.strictObject({
   coverage: z.strictObject({ ...coverageFields, productionPlan: z.literal(true), materialCheckins: z.literal(true) }),
   materialCheckins: z.unknown(),
 });
-const candidateFields = { layout: z.unknown(), layoutWasRepaired: z.boolean(), materialCheckins: z.unknown().optional() };
+const backupV4Schema = backupV3Schema.extend({ version: z.literal(LOCAL_PROJECT_BACKUP_V4_VERSION),
+  coverage: z.strictObject({ ...coverageFields, attachments: z.literal(true), productionPlan: z.literal(true), materialCheckins: z.literal(true), sourceDocuments: z.literal(true) }),
+  sourceDocuments: sourceDocumentsSchema,
+});
+const candidateFields = { layout: z.unknown(), layoutWasRepaired: z.boolean(), materialCheckins: z.unknown().optional(), sourceDocuments: z.unknown().optional() };
 const candidateSchema = z.discriminatedUnion('source', [
   z.strictObject({ ...candidateFields, source: z.literal('backup'),
-    backupVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+    backupVersion: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
     createdAt: envelopeFields.createdAt, brief: backupBriefSchema }),
   z.strictObject({ ...candidateFields, source: z.literal('legacy-layout'),
     backupVersion: z.undefined().optional(), createdAt: z.null(),
@@ -327,10 +343,29 @@ export function serializeLocalProjectBackupV3(
   return encodeJson(createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt));
 }
 
+function checkedV4Size(value: LocalProjectBackupV4): string {
+  // Count the layout, ledger, form and image metadata against the original limit; only image bytes get the larger budget.
+  checkedText(JSON.stringify({ ...value, sourceDocuments: { ...value.sourceDocuments,
+    sources: value.sourceDocuments.sources.map(({ base64: _bytes, ...metadata }) => metadata) } }));
+  const text = JSON.stringify(value, null, 2);
+  if (new TextEncoder().encode(text).byteLength > MAX_LOCAL_PROJECT_BACKUP_V4_BYTES) throw new Error('完整备份超过 96 MiB，未读取或生成文件。');
+  return text;
+}
+
+export async function serializeLocalProjectBackupV4(
+  layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
+  sourceSnapshot: SourceBackupSnapshot, createdAt?: string,
+): Promise<string> {
+  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt);
+  if (sourceSnapshot.scope !== base.layout.id) throw new Error('图片快照与场景项目范围不一致，未生成完整备份。');
+  const sourceDocuments = await encodeSourceDocuments(sourceSnapshot);
+  return checkedV4Size({ ...base, version: LOCAL_PROJECT_BACKUP_V4_VERSION, coverage: LOCAL_PROJECT_BACKUP_V4_COVERAGE, sourceDocuments });
+}
+
 /** Revalidate mutable/direct candidates without silently upgrading an explicitly declared V1 source. */
 export function validateLocalProjectRestoreCandidate(candidate: unknown): ValidatedLocalProjectRestoreCandidate {
   if (isRecord(candidate) && candidate.backupVersion !== undefined &&
-      candidate.backupVersion !== 1 && candidate.backupVersion !== 2 && candidate.backupVersion !== 3) {
+      candidate.backupVersion !== 1 && candidate.backupVersion !== 2 && candidate.backupVersion !== 3 && candidate.backupVersion !== 4) {
     throw new Error('不支持此恢复候选的备份版本。');
   }
   const parsed = candidateSchema.safeParse(candidate);
@@ -339,8 +374,12 @@ export function validateLocalProjectRestoreCandidate(candidate: unknown): Valida
   }
   const candidateLayout = parsed.data.layout;
   const input = parsed.data;
-  if (input.backupVersion !== 3 && input.materialCheckins !== undefined && !notInFileSchema.safeParse(input.materialCheckins).success) {
+  if (input.backupVersion === 4) checkedText(JSON.stringify(candidateLayout));
+  if (input.backupVersion !== 3 && input.backupVersion !== 4 && input.materialCheckins !== undefined && !notInFileSchema.safeParse(input.materialCheckins).success) {
     throw new Error('旧候选未覆盖点验事实，请使用明确的 V3 备份候选。');
+  }
+  if (input.backupVersion !== 4 && input.sourceDocuments !== undefined && !notInFileSchema.safeParse(input.sourceDocuments).success) {
+    throw new Error('旧候选未覆盖图片附件，请使用明确的 V4 备份候选。');
   }
   // Old callers may omit provenance. Validate current complete data, but do not fabricate a source version.
   const scope = typeof candidateLayout.id === 'string' ? candidateLayout.id : 'local';
@@ -348,55 +387,75 @@ export function validateLocalProjectRestoreCandidate(candidate: unknown): Valida
     state: 'ready', scope,
     brief: input.brief.status === 'present' ? input.brief as BackupBrief : { status: 'absent' },
   };
-  const backup = input.backupVersion === 3
+  const backup = input.backupVersion === 3 || input.backupVersion === 4
     ? createLocalProjectBackupV3(candidateLayout as unknown as RoomLayout, briefSnapshot, {
       state: 'ready', scope, materialCheckins: input.materialCheckins as BackupMaterialCheckins,
     }, input.createdAt ?? undefined)
     : createLocalProjectBackup(candidateLayout as unknown as RoomLayout, briefSnapshot, input.createdAt ?? undefined);
+  let sourceDocuments: RestoredSourceDocuments = { status: 'not-in-file' };
+  if (input.backupVersion === 4) {
+    assertJsonValues(input.sourceDocuments);
+    const documents = sourceDocumentsSchema.safeParse(input.sourceDocuments);
+    if (!documents.success || !('materialCheckins' in backup)) throw new Error('V4 图片附件或恢复表单无效。');
+    sourceDocuments = documents.data;
+    checkedV4Size({ ...backup, version: LOCAL_PROJECT_BACKUP_V4_VERSION, coverage: LOCAL_PROJECT_BACKUP_V4_COVERAGE, sourceDocuments });
+  }
   if (input.source === 'legacy-layout') {
     return { source: input.source, createdAt: null, layout: backup.layout,
-      brief: { status: 'not-in-file' }, materialCheckins: { status: 'not-in-file' }, layoutWasRepaired: input.layoutWasRepaired };
+      brief: { status: 'not-in-file' }, materialCheckins: { status: 'not-in-file' }, sourceDocuments, layoutWasRepaired: input.layoutWasRepaired };
   }
   if (input.backupVersion === 1) validateProductionPlans(backup.layout, true);
   const materialCheckins: RestoredMaterialCheckins = 'materialCheckins' in backup
     ? backup.materialCheckins : { status: 'not-in-file' };
   return { source: input.source, ...(input.backupVersion === undefined ? {} : { backupVersion: input.backupVersion }),
-    createdAt: backup.createdAt, layout: backup.layout, brief: backup.brief, materialCheckins, layoutWasRepaired: input.layoutWasRepaired };
+    createdAt: backup.createdAt, layout: backup.layout, brief: backup.brief, materialCheckins, sourceDocuments, layoutWasRepaired: input.layoutWasRepaired };
 }
 
 /** Validate everything before returning a detached candidate; do not apply it here. */
 export function parseLocalProjectBackupJson(text: string): ValidatedLocalProjectRestoreCandidate {
-  const value = parseJson(text);
+  const bytes = new TextEncoder().encode(text).byteLength;
+  if (bytes > MAX_LOCAL_PROJECT_BACKUP_V4_BYTES) throw new Error('完整备份超过 96 MiB，未读取文件。');
+  let value: unknown;
+  try { value = JSON.parse(text); }
+  catch { checkedText(text); throw new Error('文件不是有效的 JSON，当前项目未改变。'); }
+  if (!isRecord(value) || value.version !== 4) checkedText(text);
   if (isRecord(value) && value.format === 'scendance-scene-delivery') {
     throw new Error('这是交付文件，缺少可恢复布局和完整核对依据；请使用场景与活动备份。');
   }
   if (isRecord(value) && ('format' in value || 'version' in value)) {
     if (value.format !== LOCAL_PROJECT_BACKUP_FORMAT) throw new Error('不支持此备份文件格式。');
-    if (value.version !== 1 && value.version !== LOCAL_PROJECT_BACKUP_VERSION && value.version !== LOCAL_PROJECT_BACKUP_V3_VERSION) throw new Error('不支持此备份文件版本。');
-    if (value.version === 3 && !Object.prototype.hasOwnProperty.call(value, 'materialCheckins')) {
+    if (value.version !== 1 && value.version !== LOCAL_PROJECT_BACKUP_VERSION && value.version !== LOCAL_PROJECT_BACKUP_V3_VERSION && value.version !== LOCAL_PROJECT_BACKUP_V4_VERSION) throw new Error('不支持此备份文件版本。');
+    if ((value.version === 3 || value.version === 4) && !Object.prototype.hasOwnProperty.call(value, 'materialCheckins')) {
       throw new Error('V3 备份缺少点验账本的明确存在状态，当前记录未改变。');
     }
     const parsed = value.version === 1 ? backupV1Schema.safeParse(value)
-      : value.version === 3 ? backupV3Schema.safeParse(value) : backupSchema.safeParse(value);
+      : value.version === 4 ? backupV4Schema.safeParse(value) : value.version === 3 ? backupV3Schema.safeParse(value) : backupSchema.safeParse(value);
     if (!parsed.success) throw new Error('备份信息或活动需求字段无效，当前项目未改变。');
     if (parsed.data.version === 1) validateProductionPlans(parsed.data.layout, true);
     const checked = checkedLayout(parsed.data.layout, true);
-    const materialCheckins: RestoredMaterialCheckins = parsed.data.version === 3
+    const materialCheckins: RestoredMaterialCheckins = parsed.data.version === 3 || parsed.data.version === 4
       ? checkedMaterialCheckins(value.materialCheckins, checked.layout.id) : { status: 'not-in-file' };
+    const sourceDocuments: RestoredSourceDocuments = parsed.data.version === 4 ? parsed.data.sourceDocuments : { status: 'not-in-file' };
+    if (parsed.data.version === 4 && materialCheckins.status !== 'not-in-file') checkedV4Size({ ...parsed.data,
+      layout: parsed.data.layout as RoomLayout, brief: parsed.data.brief as BackupBrief, materialCheckins });
     return { source: 'backup', backupVersion: parsed.data.version, createdAt: parsed.data.createdAt, layout: checked.layout,
-      brief: parsed.data.brief as BackupBrief, materialCheckins, layoutWasRepaired: false };
+      brief: parsed.data.brief as BackupBrief, materialCheckins, sourceDocuments, layoutWasRepaired: false };
   }
   const checked = checkedLayout(value, false);
   return { source: 'legacy-layout', createdAt: null, layout: checked.layout,
-    brief: { status: 'not-in-file' }, materialCheckins: { status: 'not-in-file' }, layoutWasRepaired: checked.repaired };
+    brief: { status: 'not-in-file' }, materialCheckins: { status: 'not-in-file' }, sourceDocuments: { status: 'not-in-file' }, layoutWasRepaired: checked.repaired };
 }
 
 /** Size is checked before reading, then actual UTF-8 size is checked again. */
 export async function readLocalProjectBackupFile(
   file: Pick<File, 'size' | 'text'>,
+  options?: { allowSourceDocuments: true },
 ): Promise<ValidatedLocalProjectRestoreCandidate> {
-  if (!Number.isFinite(file.size) || file.size < 0 || file.size > MAX_LOCAL_PROJECT_BACKUP_BYTES) {
-    throw new Error('场景与活动备份文件大小无效或超过 8 MiB，未读取文件。');
+  const limit = options?.allowSourceDocuments ? MAX_LOCAL_PROJECT_BACKUP_V4_BYTES : MAX_LOCAL_PROJECT_BACKUP_BYTES;
+  if (!Number.isFinite(file.size) || file.size < 0 || file.size > limit) {
+    throw new Error(`场景与活动备份文件大小无效或超过 ${options?.allowSourceDocuments ? '96' : '8'} MiB，未读取文件。`);
   }
-  return parseLocalProjectBackupJson(await file.text());
+  const text = await file.text();
+  if (!options?.allowSourceDocuments) checkedText(text);
+  return parseLocalProjectBackupJson(text);
 }

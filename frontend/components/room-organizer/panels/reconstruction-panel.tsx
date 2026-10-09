@@ -184,6 +184,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const [form,setForm]=useState<Form>(EMPTY),[loaded,setLoaded]=useState(false);
   const [loadError,setLoadError]=useState(''),[loadAttempt,setLoadAttempt]=useState(0);
   const hydratedScope=useRef<string|null>(null);
+  const savedForm=useRef<{scope:string;value:Form}|null>(null);
   const formReady=loaded&&hydratedScope.current===scope;
   const [mode,setMode]=useState<''|'restore'|'redesign'>('');
   const [reidentify,setReidentify]=useState(false);
@@ -248,7 +249,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
           saved.constraints!==undefined&&!Array.isArray(saved.constraints))throw new Error('Invalid saved form');
         formRef.current={...EMPTY,...saved};setForm(formRef.current);
       }
-      hydratedScope.current=scope;setLoaded(true);
+      savedForm.current={scope,value:formRef.current};hydratedScope.current=scope;setLoaded(true);
     }).catch(()=>{if(!cancelled)setLoadError('本机图纸资料读取失败，自动保存已暂停。请重试读取。');});
     return()=>{cancelled=true;};
   },[scope,loadAttempt]);
@@ -256,7 +257,10 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   function notifyVenue(text:string,sceneKey?:string):void {setVenueNotice(text?{text,...(sceneKey?{sceneKey}:{})}:null);}
   function saveForm(saveScope:string,value:Form):Promise<void>{
     if(hydratedScope.current!==saveScope)return Promise.reject(new Error('图纸资料尚未读取成功，请重试读取后再保存。'));
-    const write=formWrites.current.catch(()=>{}).then(()=>storeSourceForm(saveScope,value));formWrites.current=write;return write;
+    const write=formWrites.current.catch(()=>{}).then(async()=>{
+      if(savedForm.current?.scope===saveScope&&canonical(savedForm.current.value)===canonical(value))return;
+      await storeSourceForm(saveScope,value);savedForm.current={scope:saveScope,value};
+    });formWrites.current=write;return write;
   }
   useEffect(()=>registerSourceFlush(scope,async()=>{
     await formHydration.current;

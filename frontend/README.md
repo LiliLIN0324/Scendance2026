@@ -4,6 +4,8 @@
 
 当前前端版本：**v0.6.0 · 图纸重建预览**。上游项目的原始许可与来源继续保留。
 
+本机文件交接已支持可选 V4：在执行资料的“场景与活动备份”勾选“包含图纸、照片与对应点”，将本机原图与可编辑图纸表单一起保存/恢复。默认普通备份及本机活动归档仍使用 V3，旧文件不清除目标活动图纸。完整包不含模型文件、聊天、临时地址或后台识别任务；不是实时多人同步。迁移、撤销与失败回退证据见[图纸验收记录](../docs/floorplan-verification.md)。
+
 v0.6.0 的运行、接口与验证边界见 [图纸／照片重建说明](../docs/floorplan-v2.md) 和 [验收记录](../docs/floorplan-verification.md)。下方 v0.3/v0.4 说明保留为历史背景，旧版功能限制以本次说明为准。真实模型与独立云环境尚未完成验收。
 
 前端首版基于 PLAN 指定的 `threejs-sims-house-builder` 提交 `ab64647640a493657929246d62a2a37ebfc0ed42` 定向改造，使用 Next.js 静态导出、React、TypeScript、Three.js、Zustand。上游 MIT 许可见 [UPSTREAM-LICENSE](UPSTREAM-LICENSE)。原体育馆展示页仍在仓库根目录。

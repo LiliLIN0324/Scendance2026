@@ -6,7 +6,9 @@ import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun } from '@/lib/backend-session';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
-import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { decodeSourceDocuments } from '@/lib/source-backup';
+import { readSourceScopeSnapshot, sameSourceScopeSnapshot, restoreSourceScopeIfUnchanged, type SourceScopeSnapshot } from '@/lib/source-storage';
 import { readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from '@/lib/material-checkin-storage';
 import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease } from '@/lib/source-storage';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
@@ -42,14 +44,16 @@ const runStorageKey = (scope: string) => `scendance:agent-run:${scope}`;
 type CandidatePreview = { label: 'A' | 'B' | 'C'; title: string; preview: Preview };
 type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string };
 type CheckinRestoreWrite = { scope: string; before: MaterialCheckinLedger | undefined; attempted: MaterialCheckinLedger | undefined };
+type SourceRestoreWrite = { scope: string; before: SourceScopeSnapshot; attempted: SourceScopeSnapshot };
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
 interface Props { reviewContext?: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 export interface LocalProjectBackupActions {
-  prepareBackup(): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
+  prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
   backupPending: boolean; canUndoRestore: boolean;
 }
 interface StudioValue extends LocalProjectBackupActions {
+  sourcesRestoring: boolean;
   checkins: MaterialCheckinState;
   reviewSource: ProjectReviewSource;
   getReviewSource(): ProjectReviewSource;
@@ -91,16 +95,18 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   const briefTimer=useRef<ReturnType<typeof setTimeout>>();
   const briefEditEpoch=useRef(0);
   const [backupPending,setBackupPending]=useState(false);
+  const [sourcesRestoring,setSourcesRestoring]=useState(false);
   const backupBusy=useRef(false), restoreWriting=useRef(false);
   const operationEpoch=useRef(0);
   const editorLease=useRef<{scope:string;lease:SourceEditorLease}>();
   const editorLeases=useRef(new Map<string,SourceEditorLease>());
   const adoptedScope=useRef<string>();
-  const [undoPoint,setUndoPoint]=useState<{beforeLayout:RoomLayout;beforeBrief:CreativeBrief|undefined;targetScope:string;targetBrief:CreativeBrief|undefined;targetDraft:ReturnType<typeof briefDrafts.current.get>;afterLayout:RoomLayout;afterEdits:number;afterBrief:CreativeBrief|undefined;checkinChange?:CheckinRestoreWrite}|null>(null);
+  const [undoPoint,setUndoPoint]=useState<{beforeLayout:RoomLayout;beforeBrief:CreativeBrief|undefined;targetScope:string;targetBrief:CreativeBrief|undefined;targetDraft:ReturnType<typeof briefDrafts.current.get>;afterLayout:RoomLayout;afterEdits:number;afterBrief:CreativeBrief|undefined;checkinChange?:CheckinRestoreWrite;sourceChange?:SourceRestoreWrite}|null>(null);
   const undoPointRef=useRef<typeof undoPoint>(null);
   const failedRollback=useRef<{scope:string;original:CreativeBrief|undefined;attempted:CreativeBrief|undefined}|null>(null);
   const undoRecovery=useRef<{scope:string;before:CreativeBrief|undefined;attempted:CreativeBrief|undefined}[]|null>(null);
   const checkinRecovery=useRef<CheckinRestoreWrite|null>(null);
+  const sourceRecovery=useRef<SourceRestoreWrite|null>(null);
   const preparedRestoreIds=useRef(new WeakMap<LocalProjectRestoreCandidate,string>());
   const setBrief=useCallback<React.Dispatch<React.SetStateAction<CreativeBrief>>>(update=>{
     const next=typeof update==='function'?update(briefValueRef.current):update;
@@ -111,6 +117,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     briefValueRef.current=next;setBriefValue(next);setHasSavedBrief(false);
   },[]);
   const [images,setImages]=useState<ReferenceImage[]>([]);
+  const savedImages=useRef(new WeakSet<ReferenceImage>());
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState('');
   const [messages,setMessages]=useState<Message[]>(initialMessages);
@@ -125,11 +132,12 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   useLayoutEffect(()=>{
     const lease=registerSourceEditor(scope);editorLease.current={scope,lease};editorLeases.current.set(scope,lease);
     return()=>{
+      const pendingImageWrites=uploadQueue.current;
       const replacement=editorLease.current?.scope===scope?editorLease.current.lease:undefined;
       if(replacement)editorLease.current=undefined;
       if(!lease.acquired)void lease.release();
       if(replacement&&!replacement.acquired)void replacement.release();
-      queueMicrotask(()=>{void briefSaveQueue.current.catch(()=>{}).then(async()=>{
+      queueMicrotask(()=>{void Promise.allSettled([briefSaveQueue.current,pendingImageWrites]).then(async()=>{
         await Promise.all([lease.release(),replacement?.release()]);
         const held=editorLeases.current.get(scope);if(held===lease||held===replacement)editorLeases.current.delete(scope);
       });});
@@ -276,6 +284,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         const nextScope=scopeRef.current,lease=registerSourceEditor(nextScope);editorLease.current={scope:nextScope,lease};editorLeases.current.set(nextScope,lease);
       }
       setBackupPending(false);
+      if(!sourceRecovery.current)setSourcesRestoring(false);
     }
   }
   async function flushBackupBase(operation:ReturnType<typeof beginBackupOperation>):Promise<CreativeBrief|undefined> {
@@ -286,7 +295,8 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     const saved=await readSourceForm<CreativeBrief>(`${operation.base.scope}:brief`);operation.check();
     return saved;
   }
-  async function prepareBackup():Promise<string> {
+  async function prepareBackup(options?:{includeSourceDocuments?:boolean}):Promise<string> {
+    if(sourceRecovery.current)throw new Error('图纸资料回退尚未完成，请先重试恢复或撤销恢复。');
     const activeScope=scopeRef.current;
     if(failedRollback.current?.scope===activeScope||undoRecovery.current?.some(entry=>entry.scope===activeScope))throw new Error('当前项目的资料回退尚未完成，请先重试恢复或撤销恢复，再下载场景与活动备份。');
     const operation=beginBackupOperation();
@@ -296,12 +306,22 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       const briefSnapshot={state:'ready' as const,scope:operation.base.scope,brief:saved===undefined?{status:'absent' as const}:{status:'present' as const,value:saved}};
       const ledger=operation.base.layout.id?await readMaterialCheckins(operation.base.layout.id):undefined;operation.check();
       if(ledger&&!isLocalActivityWorkspace(controller))throw new Error('此项目还有本机点验记录，请切换到对应本地项目后备份，原记录已保留。');
+      if(options?.includeSourceDocuments){
+        if(!operation.base.layout.id)throw new Error('请先保存活动编号，再备份图纸。');
+        const documents=await readSourceScopeSnapshot(operation.base.scope);operation.check();
+        const text=await serializeLocalProjectBackupV4(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.scope,
+          materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}},documents);
+        const after=await readSourceScopeSnapshot(operation.base.scope);operation.check();
+        if(!await sameSourceScopeSnapshot(documents,after))throw new Error('打包期间图纸已有改动，请重新下载。');
+        operation.check();return text;
+      }
       const text=operation.base.layout.id?serializeLocalProjectBackupV3(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.layout.id,
         materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}}):serializeLocalProjectBackup(operation.base.layout,briefSnapshot);
       operation.check();return text;
     } finally {endBackupOperation();}
   }
   async function prepareReview():Promise<ProjectReviewBase> {
+    if(sourceRecovery.current)throw new Error('请先完成图纸资料的恢复回退，再准备评审。');
     if(checkinRecovery.current)throw new Error('请先完成点验资料的恢复回退，再准备评审。');
     const source=getReviewSource();
     if(failedRollback.current?.scope===source.scope||undoRecovery.current?.some(entry=>entry.scope===source.scope))throw new Error('请先完成资料恢复或撤销恢复，再准备评审。');
@@ -347,6 +367,31 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     try{await restoreMaterialCheckinsIfUnchanged(change.scope,change.attempted,change.before);}
     catch(error){checkinRecovery.current=change;throw error;}
   }
+  function adoptSourceImages(snapshot:SourceScopeSnapshot):void {
+    if(snapshot.scope!==scopeRef.current)return;
+    const restored=snapshot.sources.filter(source=>source.blob).map(source=>({...source,url:URL.createObjectURL(source.blob!)}));
+    for(const image of restored)savedImages.current.add(image);
+    imageEpoch.current++;
+    for(const image of imageRef.current)URL.revokeObjectURL(image.url);
+    imageRef.current=restored;setImages(restored);
+  }
+  async function verifySourceWrite(snapshot:SourceScopeSnapshot,check:()=>void):Promise<void> {
+    const saved=await readSourceScopeSnapshot(snapshot.scope);check();
+    if(!await sameSourceScopeSnapshot(saved,snapshot))throw new Error('图纸保存后的核对失败，恢复未完成。');
+    check();
+  }
+  async function compensateSources(change:SourceRestoreWrite):Promise<void> {
+    // Keep the recovery point until both atomic replacement and readback succeed.
+    sourceRecovery.current=change;
+    const current=await readSourceScopeSnapshot(change.scope);
+    if(!await sameSourceScopeSnapshot(current,change.before))await restoreSourceScopeIfUnchanged(change.scope,change.attempted,change.before);
+    await verifySourceWrite(change.before,()=>{});
+    adoptSourceImages(change.before);sourceRecovery.current=null;
+  }
+  async function repairSourceRecovery(check:()=>void):Promise<void> {
+    const recovery=sourceRecovery.current;if(!recovery)return;
+    check();await compensateSources(recovery);check();
+  }
   const sameBrief=(a:CreativeBrief|undefined,b:CreativeBrief|undefined)=>a===undefined||b===undefined?a===b:canonical(a)===canonical(b);
   async function writeAndReadBrief(targetScope:string,value:CreativeBrief|undefined,check:()=>void):Promise<CreativeBrief|undefined> {
     check();
@@ -362,7 +407,8 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     adoptedScope.current=targetScope;briefHydration.current=Promise.resolve();
     setBriefValue(briefValueRef.current);setBriefReady(true);setBriefError(null);setHasSavedBrief(saved!==undefined);setBriefLoadAttempt(value=>value+1);
   }
-  async function releaseEditorForRestore():Promise<void> {
+  async function releaseEditorForRestore(pauseSources=false):Promise<void> {
+    if(pauseSources)flushSync(()=>setSourcesRestoring(true));
     restoreWriting.current=true;
     const held=editorLease.current;editorLease.current=undefined;
     await held?.lease.release();
@@ -378,15 +424,17 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     // File provenance remains meaningful even for programmatic restore callers.
     const priorId=preparedRestoreIds.current.get(candidate);
     const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=next.id??'local';
+    const incomingSources=checked.sourceDocuments?.status==='present'?{scope:targetScope,...await decodeSourceDocuments(checked.sourceDocuments,targetScope)}:undefined;
     if(!candidate.layout.id&&next.id)preparedRestoreIds.current.set(candidate,next.id);
     const desired=checked.brief.status==='present'?checked.brief.value:undefined;
     const targetDraft=briefDrafts.current.get(targetScope);
     const operation=beginBackupOperation();
     try {
       let beforeBrief=await flushBackupBase(operation);assertLocalRestore();
-      await releaseEditorForRestore();operation.check();
-      await withSourceRestoreLock([operation.base.scope,targetScope,...(failedRollback.current?[failedRollback.current.scope]:[]),...(checkinRecovery.current?[checkinRecovery.current.scope]:[])],async()=>{
+      await releaseEditorForRestore(!!incomingSources||!!sourceRecovery.current);operation.check();
+      await withSourceRestoreLock([operation.base.scope,targetScope,...(failedRollback.current?[failedRollback.current.scope]:[]),...(checkinRecovery.current?[checkinRecovery.current.scope]:[]),...(sourceRecovery.current?[sourceRecovery.current.scope]:[])],async()=>{
         operation.check();assertLocalRestore();
+        await repairSourceRecovery(operation.check);
         await repairCheckinRecovery(operation.check);
         const recovery=failedRollback.current;
         if(recovery){
@@ -400,17 +448,24 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         const desiredCheckins=checked.materialCheckins.status==='present'
           ?targetCheckins?mergeMaterialCheckinLedgers(targetCheckins,checked.materialCheckins.value):checked.materialCheckins.value:targetCheckins;
         const checkinChange:CheckinRestoreWrite|undefined=sameCheckins(targetCheckins,desiredCheckins)?undefined:{scope:targetScope,before:targetCheckins,attempted:desiredCheckins};
-        let touched=false,checkinsTouched=false;
+        const sourceChange:SourceRestoreWrite|undefined=incomingSources?{scope:targetScope,before:await readSourceScopeSnapshot(targetScope),attempted:incomingSources}:undefined;
+        operation.check();
+        let touched=false,checkinsTouched=false,sourcesTouched=false;
         try {
+          if(sourceChange){await restoreSourceScopeIfUnchanged(targetScope,sourceChange.before,sourceChange.attempted,operation.check);sourcesTouched=true;
+            await verifySourceWrite(sourceChange.attempted,operation.check);}
           if(checkinChange){await restoreMaterialCheckinsIfUnchanged(targetScope,targetCheckins,desiredCheckins,operation.check);checkinsTouched=true;operation.check();}
           touched=true;
           const saved=await writeAndReadBrief(targetScope,desired,operation.check);assertLocalRestore();
           flushSync(()=>{commitRestoredLayout!(next);adoptRestoredBrief(targetScope,saved);});
           const afterLayout=layoutRef.current;
-          const point={beforeLayout:operation.base.layout,beforeBrief,targetScope,targetBrief,targetDraft,afterLayout,afterEdits:briefEditEpoch.current,afterBrief:saved,...(checkinChange?{checkinChange}:{})};
+          const point={beforeLayout:operation.base.layout,beforeBrief,targetScope,targetBrief,targetDraft,afterLayout,afterEdits:briefEditEpoch.current,afterBrief:saved,...(checkinChange?{checkinChange}:{}),...(sourceChange?{sourceChange}:{})};
           undoPointRef.current=point;setUndoPoint(point);
+          if(sourceChange)adoptSourceImages(sourceChange.attempted);
           if(checkinChange)checkins.retry();
         } catch(error) {
+          let sourceRollbackError:unknown;
+          if(sourcesTouched&&sourceChange)try{await compensateSources(sourceChange);}catch(caught){sourceRollbackError=caught;}
           let checkinRollbackError:unknown;
           if(checkinsTouched&&checkinChange)try{await compensateCheckins(checkinChange);}catch(caught){checkinRollbackError=caught;}
           if(touched)try {await writeAndReadBrief(targetScope,targetBrief,()=>{});}catch(rollbackError){
@@ -421,6 +476,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
             }
             throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 原活动需求回退也失败，当前草稿与所选文件仍保留，请保留此页面并重试。${checkinRollbackError?' 点验记录回退也未完成。':''}${rollbackError instanceof Error?` ${rollbackError.message}`:''}`);
           }
+          if(sourceRollbackError)throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 图纸资料回退未完成，已暂停图纸编辑，请保留本页并重试恢复。`);
           if(checkinRollbackError)throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 点验记录回退未完成，原恢复值仍保留，请保留此页面重试。`);
           throw error;
         }
@@ -440,9 +496,10 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     const operation=beginBackupOperation();
     try {
       await flushBackupBase(operation);
-      await releaseEditorForRestore();operation.check();
-      await withSourceRestoreLock([point.targetScope,nextScope,...(checkinRecovery.current?[checkinRecovery.current.scope]:[])],async()=>{
+      await releaseEditorForRestore(!!point.sourceChange||!!sourceRecovery.current);operation.check();
+      await withSourceRestoreLock([point.targetScope,nextScope,...(checkinRecovery.current?[checkinRecovery.current.scope]:[]),...(sourceRecovery.current?[sourceRecovery.current.scope]:[])],async()=>{
         operation.check();assertLocalRestore();
+        await repairSourceRecovery(operation.check);
         await repairCheckinRecovery(operation.check);
         const recovery=undoRecovery.current;
         if(recovery){
@@ -465,8 +522,11 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         const currentCheckins=point.checkinChange?await readMaterialCheckins(point.targetScope):undefined;operation.check();
         if(point.checkinChange&&!sameCheckins(currentCheckins,point.checkinChange.attempted))throw new Error('恢复后已有新的点验记录，不能覆盖这些记录；原恢复点仍保留。');
         const checkinUndo:CheckinRestoreWrite|undefined=point.checkinChange?{scope:point.targetScope,before:currentCheckins,attempted:point.checkinChange.before}:undefined;
-        let touched=false,checkinsTouched=false;
+        const sourceUndo:SourceRestoreWrite|undefined=point.sourceChange?{scope:point.targetScope,before:point.sourceChange.attempted,attempted:point.sourceChange.before}:undefined;
+        let touched=false,checkinsTouched=false,sourcesTouched=false;
         try {
+          if(sourceUndo){await restoreSourceScopeIfUnchanged(sourceUndo.scope,sourceUndo.before,sourceUndo.attempted,operation.check);sourcesTouched=true;
+            await verifySourceWrite(sourceUndo.attempted,operation.check);}
           if(checkinUndo){await restoreMaterialCheckinsIfUnchanged(checkinUndo.scope,checkinUndo.before,checkinUndo.attempted,operation.check);checkinsTouched=true;operation.check();}
           touched=true;
           const saved=await writeAndReadBrief(nextScope,point.beforeBrief,operation.check);
@@ -478,7 +538,10 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
             undoPointRef.current=null;setUndoPoint(null);
             if(checkinUndo)checkins.retry();
           });
+          if(sourceUndo)adoptSourceImages(sourceUndo.attempted);
         } catch(error) {
+          let sourceRollbackError:unknown;
+          if(sourcesTouched&&sourceUndo)try{await compensateSources(sourceUndo);}catch(caught){sourceRollbackError=caught;}
           let checkinRollbackError:unknown;
           if(checkinsTouched&&checkinUndo)try{await compensateCheckins(checkinUndo);}catch(caught){checkinRollbackError=caught;}
           if(touched){
@@ -491,6 +554,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
               throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 活动需求回退也失败，原恢复点仍保留，请在本地存储恢复后重试撤销。${checkinRollbackError?' 点验记录回退也未完成。':''}${failures[0] instanceof Error?` ${failures[0].message}`:''}`);
             }
           }
+          if(sourceRollbackError)throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 图纸资料回退未完成，已暂停图纸编辑，请保留本页并重试撤销。`);
           if(checkinRollbackError)throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 点验记录回退未完成，原恢复点仍保留，请保留此页面重试撤销。`);
           throw error;
         }
@@ -503,6 +567,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     uploadQueue.current=listStoredSources(scope).then(stored=>{
       if(!alive.current || epoch!==imageEpoch.current)return;
       const restored=stored.filter(source=>source.blob).map(source=>({...source,url:URL.createObjectURL(source.blob!)}));
+      for(const image of restored)savedImages.current.add(image);
       imageRef.current=restored;setImages(restored);
     }).catch(()=>{ /* Saving reports unavailable IndexedDB when files are selected. */ });
     for(const image of imageRef.current) URL.revokeObjectURL(image.url);
@@ -528,7 +593,9 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     if(!alive.current||scopeRef.current!==scope)throw new Error('场地资料正在切换，请稍后重试创建项目。');
     await Promise.all([
       saveBrief(scope),
-      ...imageRef.current.map(({url,...image})=>storeSource({...image,scope,kind:image.kind??'photo',width:image.width!,height:image.height!})),
+      ...(sourceRecovery.current?[]:imageRef.current.filter(image=>!savedImages.current.has(image)).map(async image=>{
+        const {url,...stored}=image;await storeSource({...stored,scope,kind:image.kind??'photo',width:image.width!,height:image.height!});savedImages.current.add(image);
+      })),
     ]);
   }),[scope,saveBrief]);
   const briefKey=JSON.stringify({brief,images:images.map(i=>({id:i.id,kind:i.kind}))});
@@ -555,6 +622,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   function say(text:string,modelSuggestions?:SceneProposal['modelSuggestions'],materialSuggestions?:SceneProposal['materialSuggestions']):void { setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'assistant',text,modelSuggestions,materialSuggestions}]); }
 
   async function addImages(files: FileList|null, requestedKind?: ReferenceImage['kind']):Promise<void> {
+    if(backupBusy.current||sourceRecovery.current)throw new Error('正在处理备份或图纸回退，请完成后再添加图片。');
     if(!files?.length) return;
     // Snapshot before the input is cleared. Every selection is processed in
     // order; a second selection no longer invalidates the first decode.
@@ -586,22 +654,34 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         // before React commits this state, and must still see the new count.
         imageRef.current=[...imageRef.current,...added];
         setImages(imageRef.current);
-        try { await Promise.all(added.map(({url,...image})=>storeSource({...image,scope:imageScope,kind:image.kind??'photo',width:image.width!,height:image.height!}))); } catch(error) { if(active()) setNotice(error instanceof Error?error.message:'本机保存失败，图片仍在本次会话中。'); }
+        try { await Promise.all(added.map(async image=>{const {url,...stored}=image;await storeSource({...stored,scope:imageScope,kind:image.kind??'photo',width:image.width!,height:image.height!});savedImages.current.add(image);})); } catch(error) { if(active()) setNotice(error instanceof Error?error.message:'本机保存失败，图片仍在本次会话中。'); }
       } catch(error) { for(const img of added) URL.revokeObjectURL(img.url); if(active()) setNotice(error instanceof Error?error.message:'图片无法读取，请更换文件。'); }
     });
     uploadQueue.current=task;
     return task;
   }
   function removeImage(id:string):void {
+    if(backupBusy.current||sourceRecovery.current)return;
     const image=imageRef.current.find(value=>value.id===id);if(!image)return;
-    const requestedScope=scopeRef.current;
-    const remove=()=>{if(scopeRef.current!==requestedScope)return;URL.revokeObjectURL(image.url);imageRef.current=imageRef.current.filter(value=>value.id!==id);setImages(imageRef.current);void deleteSource(id).catch(error=>setNotice(error instanceof Error?error.message:'删除本机记录失败。'));};
-    if(image.assetId){void controller.removeSource(image.assetId).then(remove).catch(error=>setNotice(error instanceof Error?error.message:'项目资料移除失败，请重试。'));}else remove();
+    const requestedScope=scopeRef.current,epoch=imageEpoch.current;
+    const task=uploadQueue.current.then(async()=>{
+      if(scopeRef.current!==requestedScope||imageEpoch.current!==epoch)return;
+      if(image.assetId)await controller.removeSource(image.assetId);
+      if(scopeRef.current!==requestedScope||imageEpoch.current!==epoch||!imageRef.current.includes(image))return;
+      await deleteSource(id);
+      if(scopeRef.current!==requestedScope||imageEpoch.current!==epoch)return;
+      URL.revokeObjectURL(image.url);imageRef.current=imageRef.current.filter(value=>value.id!==id);setImages(imageRef.current);
+    });
+    uploadQueue.current=task.catch(error=>{if(scopeRef.current===requestedScope)setNotice(error instanceof Error?error.message:'项目资料移除失败，请重试。');});
   }
   function updateImage(id:string,patch:Partial<VenuePhoto>):void {
+    if(backupBusy.current||sourceRecovery.current)return;
     imageRef.current=imageRef.current.map(image=>image.id===id?{...image,...patch}:image);setImages(imageRef.current);
     const updated=imageRef.current.find(image=>image.id===id);
-    if(updated){const {url,...stored}=updated;void storeSource({...stored,scope,kind:stored.kind??'photo',width:stored.width!,height:stored.height!}).catch(error=>setNotice(error instanceof Error?error.message:'资料保存失败。'));}
+    if(updated){const {url,...stored}=updated;const epoch=imageEpoch.current;
+      const current=()=>alive.current&&scopeRef.current===scope&&imageEpoch.current===epoch;
+      const write=uploadQueue.current.then(async()=>{if(current()){await storeSource({...stored,scope,kind:stored.kind??'photo',width:stored.width!,height:stored.height!});savedImages.current.add(updated);}});
+      uploadQueue.current=write.catch(error=>{if(current())setNotice(error instanceof Error?error.message:'资料保存失败。');});}
   }
   function forgetRun():void {
     markerRef.current=null;setRecoverable(false);
@@ -830,7 +910,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     finally { if(epoch===runEpoch.current){requestPending.current=false;if(alive.current)setBusy(false);} }
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -851,7 +931,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
   // One idea at a time, swapped on demand: three stacked articles were mostly noise.
   const [ideaIndex,setIdeaIndex]=useState(0);
   const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
-  return <div className="cr-brief">
+  return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
     <div className="sc-section-heading"><div><h2>活动需求</h2></div></div>
     {!studio.briefReady&&!studio.briefError&&<p className="cr-hint" role="status">正在读取活动需求，当前输入会保留。</p>}
     {studio.briefReady&&!studio.hasSavedBrief&&!studio.briefError&&<p className="cr-hint">当前需求尚未保存；默认活动类型和人数仅供参考，请按实际情况填写。</p>}
@@ -880,14 +960,14 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
     <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
     </details>
-    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对"><ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/></div>
+    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对">{studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/>}</div>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||templateOnly||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <p className="cr-hint">根据当前场景与资源库生成布置方案。本轮策划不读取照片；图纸与照片重建需单独确认。</p>
 
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
-  </div>;
+  </fieldset>;
 }
 
 function AssistantMascot({ busy }: { busy: boolean }): JSX.Element {

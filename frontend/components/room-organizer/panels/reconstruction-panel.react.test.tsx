@@ -233,7 +233,7 @@ describe('local applied reference mapping',()=>{
   expect(saved().registration?.appliedBasis).toBeUndefined();
   expect((screen.getByLabelText('对应点纵向像素') as HTMLInputElement).readOnly).toBe(true);
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'});
+  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('ready');
   expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
  });
@@ -261,7 +261,7 @@ describe('local applied reference mapping',()=>{
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('needs-review');
   mark();expect(saved().registration?.appliedBasis).toBeUndefined();
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'});
+  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
   expect(saved().registration).toMatchObject({sourceId:sourceA.id,worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(measured),confirmationId:expect.any(String)});
   expect(saved().registration!.sourceAssetId).toBeUndefined();expect(measured.backendSceneV2!.sources).toEqual([]);
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('ready');expect(readSourceForm).toHaveBeenCalledWith(projectId);
@@ -276,7 +276,7 @@ describe('local applied reference mapping',()=>{
   expect((screen.getByRole('button',{name:'在当前设计中使用此对应'}) as HTMLButtonElement).disabled).toBe(true);
   expect(saved().registration?.sourceId).toBe(sourceA.id);expect(saved().registration?.points).toHaveLength(2);
   mark();fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'});
+  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
   expect(saved().registration?.sourceId).toBe(sourceB.id);expect(saved().registration?.points).toHaveLength(3);
  });
  it('uses the existing upload action and explicitly selected photo record as a floorplan, with no recognition call',async()=>{
@@ -289,7 +289,7 @@ describe('local applied reference mapping',()=>{
  });
  it('keeps the applied mapping while walls are edited against the same fixed coordinate frame',async()=>{
   const saved=memory({registration:{sourceId:sourceA.id,points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}],worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(measured),confirmationId:'before'}});
-  const view=open();await waitFor(()=>expect(screen.getByText('本机原图对应已核对，仅在此浏览器使用。')).toBeDefined());
+  const view=open();await waitFor(()=>expect(screen.getByText('本机原图对应已核对，尚未同步到云端。')).toBeDefined());
   const changed={...measured,floors:[{...measured.floors[0]!,interiorWalls:measured.floors[0]!.interiorWalls!.map((wall,index)=>index===0?{...wall,thickness:wall.thickness!+.02}:wall)}]};
   view.rerender(<ReconstructionPanel controller={controller} layout={changed} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
   expect(screen.queryByText('项目或场地坐标范围已变化，原图对应已停用，请重新核对。')).toBeNull();
@@ -303,7 +303,7 @@ describe('local applied reference mapping',()=>{
   point(10,420);expect(screen.getByText('原对应未绑定当前场地尺寸，已停用，请重新标记。')).toBeDefined();
   expect((screen.getByRole('button',{name:'在当前设计中使用此对应'}) as HTMLButtonElement).disabled).toBe(true);
   mark();fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'});
+  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
   expect(saved().registration?.worldWidth).toBe(16);const result=resolveReferenceImage(resized,[{...sourceA,scope:projectId}],saved());
   expect(result.status).toBe('ready');const [a,,c,,e]=result.imageToWorld!;expect(a*610+c*20+e).toBeCloseTo(16);
  });
@@ -312,7 +312,7 @@ describe('local applied reference mapping',()=>{
   vi.mocked(storeSourceForm).mockRejectedValueOnce(new Error('本机对应保存失败'));
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));await screen.findByText('本机对应保存失败');
   expect(saved().registration?.appliedBasis).toBeUndefined();
-  expect(screen.queryByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'})).toBeNull();
+  expect(screen.queryByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'})).toBeNull();
  });
  it('serializes an already-started old form write before manual confirmation and scope flush, preserving newer body input',async()=>{
   const saved=memory();open();await waitFor(()=>expect(readSourceForm).toHaveBeenCalledWith(projectId));await act(async()=>{await Promise.resolve();});vi.useFakeTimers();mark();
@@ -340,7 +340,7 @@ describe('local applied reference mapping',()=>{
   await act(async()=>{release();});await waitFor(()=>expect(storeSourceForm).toHaveBeenCalledTimes(2));
   expect(saved().registration?.appliedBasis).toBeUndefined();expect(saved()).toMatchObject({text:'A-原正文'});
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('needs-review');
-  expect(screen.queryByText('本机原图对应已核对，仅在此浏览器使用。',{selector:'p[role="status"]'})).toBeNull();
+  expect(screen.queryByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'})).toBeNull();
  });
 });
 afterEach(()=>{cleanup();controller.dispose();vi.restoreAllMocks();vi.useRealTimers();});
@@ -480,9 +480,12 @@ describe('local activity with an independent scene connection',()=>{
   bind();const source={id:'local-plan',name:'原图.png',kind:'floorplan' as const,width:1000,height:600,url:'blob:local-plan',blob:new Blob(['plan'])};
   const registration={sourceId:source.id,points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}],worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(local),confirmationId:'original'};
   vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',registration});mount({images:[source]});
-  await screen.findByText('本机原图对应已核对，仅在此浏览器使用。');
+  await screen.findByText('本机原图对应已核对，尚未同步到云端。');
   expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12');
   expect(resolveReferenceImage(local,[{...source,scope:localId}],{registration}).status).toBe('ready');
+  await act(async()=>{await flushSourceScope(localId);});
+  expect(storeSourceForm).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('补充尺寸'),{target:{value:'原图核对后的补充'}});
   await act(async()=>{await flushSourceScope(localId);});
   expect(storeSourceForm).toHaveBeenCalledWith(localId,expect.objectContaining({registration,width:'12'}));expect(vi.mocked(storeSourceForm).mock.calls.every(([scope])=>scope===localId)).toBe(true);
  });

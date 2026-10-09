@@ -3,9 +3,12 @@
 import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Blob as NodeBlob, Buffer as NodeBuffer } from 'node:buffer';
+import * as sourceStorage from '@/lib/source-storage';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
-import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, listSourceRecords, readSourceForm, readSourceRecord, storeSourceForm, updateSourceForm } from '@/lib/source-storage';
-import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
+import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, listSourceRecords, readSourceForm, readSourceRecord, storeSourceForm, updateSourceForm,
+  readSourceScopeSnapshot, restoreSourceScopeIfUnchanged, sameSourceScopeSnapshot, type StoredSource, type SourceScopeSnapshot } from '@/lib/source-storage';
+import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4 } from '@/lib/local-project-backup';
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
@@ -24,7 +27,7 @@ import { productionPlanSchema } from '../../../../supabase/functions/_shared/pro
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
-vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn() }));
+vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn(), readSourceScopeSnapshot: vi.fn(), restoreSourceScopeIfUnchanged: vi.fn() }));
 let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
 vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
@@ -548,6 +551,8 @@ beforeEach(() => {
   vi.mocked(deleteSourceForm).mockReset().mockResolvedValue(undefined);
   vi.mocked(copySourceScope).mockReset().mockResolvedValue(undefined);
   vi.mocked(listStoredSources).mockReset().mockResolvedValue([]);
+  vi.mocked(readSourceScopeSnapshot).mockReset();
+  vi.mocked(restoreSourceScopeIfUnchanged).mockReset();
   vi.stubGlobal('fetch', forbiddenFetch);
   createBitmap.mockReset().mockImplementation(async () => ({ width: 1024, height: 768, close: vi.fn() }));
   createObjectURL.mockReset().mockReturnValue('blob:local-reference');
@@ -885,6 +890,8 @@ describe('creative brief and assistant interaction', () => {
   });
 
   it('shows local reference images, tells users they are not sent to the model, and releases their URLs', async () => {
+    vi.spyOn(sourceStorage, 'storeSource').mockResolvedValue(undefined);
+    vi.spyOn(sourceStorage, 'deleteSource').mockResolvedValue(undefined);
     const rendered = render(ui());
     const file = new File(['image fixture'], 'venue.png', { type: 'image/png' });
     upload(rendered.container, [file]);
@@ -895,7 +902,7 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByText(/图片保存在本机；连接项目并生成时会上传至私有存储/)).toBeTruthy();
     expect(prepareProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
-    expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull());
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-reference');
     upload(rendered.container, [file]);
     await screen.findByRole('img', { name: '现场照片：venue.png' });
@@ -1116,6 +1123,8 @@ describe('complete local backup transactions', () => {
   let actions: LocalProjectBackupActions;
   let changeLayout: (next: RoomLayout) => void;
   let forms: Map<string, unknown>;
+  let sourceRecords: Map<string, StoredSource[]>;
+  const sourceState = (scope = projectId): SourceScopeSnapshot => structuredClone({ scope, sources: sourceRecords.get(scope) ?? [], form: forms.get(scope) });
   const commit = vi.fn<(next: RoomLayout) => void>();
   const prepare = vi.fn<(next:RoomLayout)=>RoomLayout>();
   function Probe() { actions = useLocalProjectBackup()!; return <BriefStateProbe/>; }
@@ -1142,11 +1151,27 @@ describe('complete local backup transactions', () => {
     {...layout,id:projectId,name:'点验文件布局'}, {state:'ready',scope:projectId,brief:{status:'present',value:fileBrief}},
     {state:'ready',scope:projectId,materialCheckins:value?{status:'present',value}:{status:'absent'}},
   ));
-  async function mount() { renderUI(<Trial/>); await waitFor(() => expect(briefState().ready).toBe(true)); }
+  async function mount() { const view = renderUI(<Trial/>); await waitFor(() => expect(briefState().ready).toBe(true)); return view; }
   beforeEach(() => {
     installBackupLocks(); commit.mockReset();prepare.mockReset().mockImplementation(next=>next);
     vi.mocked(listSourceRecords).mockResolvedValue([]);
     forms = new Map([[`${projectId}:brief`, oldBrief]]);
+    sourceRecords = new Map();
+    vi.mocked(listStoredSources).mockImplementation(async scope => structuredClone((sourceRecords.get(scope) ?? []).filter(source => source.blob)));
+    vi.mocked(readSourceScopeSnapshot).mockImplementation(async scope => sourceState(scope));
+    vi.mocked(restoreSourceScopeIfUnchanged).mockImplementation(async (scope, expected, desired, check = () => {}) => {
+      check();
+      if (!await sameSourceScopeSnapshot(sourceState(scope), expected)) throw new Error('图纸资料已有新变化，不能覆盖较新的记录。');
+      check(); sourceRecords.set(scope, structuredClone(desired.sources));
+      if (desired.form === undefined) forms.delete(scope); else forms.set(scope, structuredClone(desired.form));
+    });
+    vi.spyOn(sourceStorage, 'storeSource').mockImplementation(async source => {
+      const records = sourceRecords.get(source.scope) ?? [];
+      sourceRecords.set(source.scope, [...records.filter(record => record.id !== source.id), structuredClone(source)]);
+    });
+    vi.spyOn(sourceStorage, 'deleteSource').mockImplementation(async id => {
+      for (const [scope, records] of sourceRecords) sourceRecords.set(scope, records.filter(record => record.id !== id));
+    });
     vi.mocked(readSourceForm).mockImplementation(async key => forms.get(key));
     vi.mocked(storeSourceForm).mockImplementation(async (key, value) => { forms.set(key, value); });
     vi.mocked(deleteSourceForm).mockImplementation(async key => { forms.delete(key); });
@@ -1157,6 +1182,126 @@ describe('complete local backup transactions', () => {
     });
   });
   afterEach(() => { Reflect.deleteProperty(navigator, 'locks'); });
+
+  const imageFixture = (id = 'original-image', name = '原现场照片.png', kind: StoredSource['kind'] = 'photo'): StoredSource => {
+    const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/3ioAAAAASUVORK5CYII='), char => char.charCodeAt(0));
+    return { id, scope: projectId, name, kind, width: 1, height: 1, blob: new NodeBlob([bytes], { type: 'image/png' }) as Blob };
+  };
+  const oldDrawing = { width: '12', depth: '10', height: '3', text: '原图纸现场条件', constraints: [], adjustment: '' };
+  const newDrawing = { ...oldDrawing, width: '14', text: '文件图纸现场条件' };
+  async function sourceFile(id = 'file-image', options?: { form: unknown }) {
+    return parseLocalProjectBackupJson(await serializeLocalProjectBackupV4({ ...layout, name: '图纸文件布局', width: 14 },
+      { state: 'ready', scope: projectId, brief: { status: 'present', value: fileBrief } },
+      { state: 'ready', scope: projectId, materialCheckins: { status: 'absent' } },
+      { scope: projectId, sources: [imageFixture(id, '文件平面图.png', 'floorplan')], form: options ? options.form : newDrawing }));
+  }
+  function seedSources() {
+    vi.stubGlobal('Blob', NodeBlob);
+    // Node's real Blob produces native ArrayBuffers; align jsdom's constructor for the production byte comparator.
+    vi.stubGlobal('ArrayBuffer', NodeBuffer.alloc(0).buffer.constructor);
+    createBitmap.mockResolvedValue({ width: 1, height: 1, close: vi.fn() });
+    sourceRecords.set(projectId, [imageFixture()]); forms.set(projectId, structuredClone(oldDrawing));
+  }
+
+  it('[V4 sources] restores same-scope images and drawing form in the mounted editor and undo restores originals', async () => {
+    seedSources(); const before = sourceState(); await mount(); const candidate = await sourceFile();
+    await act(async () => { await actions.restoreBackup(candidate); });
+    await waitFor(() => expect(document.querySelector('img[alt="平面图：文件平面图.png"]')).not.toBeNull());
+    expect(document.querySelector('img[alt="现场照片：原现场照片.png"]')).toBeNull();
+    expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('14');
+    expect(forms.get(projectId)).toEqual(newDrawing); expect(sourceRecords.get(projectId)!.map(source => source.id)).toEqual(['file-image']);
+    expect(briefState().brief.description).toBe(fileBrief.description); expect(actions.canUndoRestore).toBe(true);
+    await act(async () => { await actions.undoRestore(); });
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    await waitFor(() => expect(document.querySelector('img[alt="现场照片：原现场照片.png"]')).not.toBeNull());
+    expect(document.querySelector('img[alt="平面图：文件平面图.png"]')).toBeNull();
+    expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12');
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief); expect(JSON.parse(screen.getByTestId('backup-layout').textContent!)).toEqual(layout);
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('[V4 sources] preserves existing source bytes and form when restoring an older V3 file', async () => {
+    seedSources(); const before = sourceState(); await mount();
+    await act(async () => { await actions.restoreBackup(checkinFile(undefined)); });
+    expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    await act(async () => { await actions.undoRestore(); });
+    expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+  });
+
+  it.each(['absent', 'registration only'] as const)('[V4 sources] keeps a restored %s form unchanged past autosave and allows undo', async kind => {
+    seedSources(); const before = sourceState(); await mount();
+    const form = kind === 'absent' ? undefined : { registration: { sourceId: 'file-image', points: [{ x: 0, z: 0 }] } };
+    const candidate = await sourceFile('file-image', { form });
+    await act(async () => { await actions.restoreBackup(candidate); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+    expect(forms.get(projectId)).toEqual(form);
+    await act(async () => { await actions.undoRestore(); });
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    expect(actions.canUndoRestore).toBe(false);
+  });
+
+  it('[V4 sources] compensates written image bytes and form after layout commit fails', async () => {
+    seedSources(); const before = sourceState(); await mount(); const candidate = await sourceFile();
+    commit.mockImplementationOnce(() => { throw new Error('图纸恢复布局提交拒绝'); });
+    await act(async () => { await expect(actions.restoreBackup(candidate)).rejects.toThrow('图纸恢复布局提交拒绝'); });
+    expect(restoreSourceScopeIfUnchanged).toHaveBeenCalledTimes(2);
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief); expect(actions.canUndoRestore).toBe(false);
+    await waitFor(() => expect(document.querySelector('img[alt="现场照片：原现场照片.png"]')).not.toBeNull());
+    expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12');
+  });
+
+  it('[V4 sources] treats readback failure as a completed write requiring compensation', async () => {
+    seedSources(); const before = sourceState(); await mount(); const candidate = await sourceFile(); let failed = false;
+    vi.mocked(readSourceScopeSnapshot).mockImplementation(async scope => {
+      const saved = sourceState(scope);
+      if (!failed && saved.sources.some(source => source.id === 'file-image')) { failed = true; throw new Error('图片写入后的读回拒绝'); }
+      return saved;
+    });
+    await act(async () => { await expect(actions.restoreBackup(candidate)).rejects.toThrow('图片写入后的读回拒绝'); });
+    expect(failed).toBe(true); expect(restoreSourceScopeIfUnchanged).toHaveBeenCalledTimes(2);
+    expect(commit).not.toHaveBeenCalled(); expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief); expect(actions.canUndoRestore).toBe(false);
+  });
+
+  it.each(['form', 'image'] as const)('[V4 sources] refuses undo over newer %s edits', async change => {
+    seedSources(); await mount(); const candidate = await sourceFile();
+    await act(async () => { await actions.restoreBackup(candidate); });
+    if (change === 'form') forms.set(projectId, { ...newDrawing, text: '恢复后新图纸说明' });
+    else sourceRecords.get(projectId)![0]!.blob = new NodeBlob(['newer image bytes'], { type: 'image/png' }) as Blob;
+    const edited = sourceState(), commits = commit.mock.calls.length;
+    await act(async () => { await expect(actions.undoRestore()).rejects.toThrow('已有新变化'); });
+    expect(await sameSourceScopeSnapshot(sourceState(), edited)).toBe(true); expect(commit).toHaveBeenCalledTimes(commits);
+    expect(forms.get(`${projectId}:brief`)).toEqual(fileBrief);
+  });
+
+  it('[V4 sources] refuses complete backup with a cloud-only source instead of emitting a partial package', async () => {
+    seedSources(); const { blob: _blob, ...reference } = imageFixture(); sourceRecords.set(projectId, [reference]); await mount();
+    let output: string | undefined;
+    await act(async () => { await expect(actions.prepareBackup({ includeSourceDocuments: true }).then(text => { output = text; })).rejects.toThrow('缺少本机原图'); });
+    expect(output).toBeUndefined(); expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    expect(sourceRecords.get(projectId)).toEqual([reference]); expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('[V4 sources] waits for queued cloud removal and keeps the subsequently restored image with the same local id', async () => {
+    seedSources(); sourceRecords.get(projectId)![0]!.assetId = '80000000-0000-4000-8000-000000000001';
+    let finish!: () => void;
+    const remove = vi.spyOn(controller, 'removeSource').mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await mount(); const candidate = await sourceFile('original-image');
+    fireEvent.click(screen.getByRole('button', { name: '移除 原现场照片.png', hidden: true }));
+    await waitFor(() => expect(remove).toHaveBeenCalledOnce());
+    let pending!: Promise<void>;
+    await act(async () => { pending = actions.restoreBackup(candidate); void pending.catch(() => {}); await Promise.resolve(); });
+    expect(commit).not.toHaveBeenCalled(); expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    await act(async () => { finish(); await pending; });
+    await waitFor(() => expect(document.querySelector('img[alt="平面图：文件平面图.png"]')).not.toBeNull());
+    expect(sourceRecords.get(projectId)).toEqual([expect.objectContaining({ id: 'original-image', name: '文件平面图.png', kind: 'floorplan' })]);
+    await act(async () => { await flushSourceScope(projectId); });
+    expect(sourceRecords.get(projectId)!.map(source => source.name)).toEqual(['文件平面图.png']);
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
 
   it('completes local-activity navigation after the real provider commits and changes its scope',async()=>{
     const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
