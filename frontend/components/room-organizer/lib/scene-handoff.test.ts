@@ -5,6 +5,7 @@ import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from './backend-adapter';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis } from './scene-handoff';
 import { deliveryExecution, deliveryMaterials, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv } from './scene-delivery';
+import { parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
 const id = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -15,13 +16,32 @@ function ordinary(): RoomLayout {
 async function reviewed(layout: RoomLayout, n = 1) {
   const acceptance = '按图定位并核对尺寸';
   return handoffSchema.parse({ ...blankHandoff(), ownerName: '现场甲', dueDate: '2026-10-09', acceptance,
-    status: 'accepted', evidenceNote: '已在现场实测，摆放与尺寸符合条件。', reviewedBasis: await handoffBasis(layout, id(n), acceptance) });
+    status: 'accepted', evidenceNote: '已在现场实测，摆放与尺寸符合条件。', reviewedBasis: await handoffBasis(layout, id(n), { ownerName: '现场甲', dueDate: '2026-10-09', acceptance }) });
 }
 function edit(layout: RoomLayout, patch: Partial<RoomLayout['floors'][number]['items'][number]>): RoomLayout {
   return { ...layout, floors: [{ ...layout.floors[0], items: layout.floors[0].items.map((item, i) => i === 0 ? { ...item, ...patch } : item) }] };
 }
 
 describe('local execution handoff and reviewable delivery', async () => {
+  it('keeps pre-assignment review records readable but requires explicit reconfirmation', async () => {
+    const layout = ordinary();
+    // Captured from the real 92b8b99 basis function, before assignment was included.
+    const legacy = { ...await reviewed(layout), reviewedBasis: 'sha256:88438af12d1032ddc6a25675d2729fdef21565b4d0ca1dc5983f725978d5bef3' };
+    layout.floors[0].items[0].handoff = legacy;
+    const restored = parseStoredLayout(JSON.parse(JSON.stringify(layout)))!;
+    expect(restored.floors[0].items[0].handoff).toEqual(legacy);
+    expect(await effectiveHandoffStatus(restored, id(1))).toBe('needs_review');
+    expect((await deliveryExecution(restored))[0]).toMatchObject({ status: 'accepted', effectiveStatus: 'needs_review', evidenceNote: legacy.evidenceNote });
+  });
+  it.each([{ ownerName: '现场乙' }, { dueDate: '2026-10-12' }])('requires review when the assignment changes: %j', async patch => {
+    const layout = ordinary(); layout.floors[0].items[0].handoff = await reviewed(layout);
+    const original = layout.floors[0].items[0].handoff!;
+    const changed = edit(layout, { handoff: { ...original, ...patch } });
+    expect(await effectiveHandoffStatus(changed, id(1))).toBe('needs_review');
+    expect((await deliveryExecution(changed))[0]).toMatchObject({ ...patch, status: 'accepted', effectiveStatus: 'needs_review', evidenceNote: original.evidenceNote });
+    expect(changed.floors[0].items[0].handoff!.reviewedBasis).toBe(original.reviewedBasis);
+    expect(await effectiveHandoffStatus(layout, id(1))).toBe('accepted');
+  });
   it.each(['width', 'position', 'rotation', 'color'] as const)('requires a new review after changing %s without discarding evidence', async field => {
     const layout = ordinary(); layout.floors[0].items[0].handoff = await reviewed(layout);
     const changed = edit(layout, { [field]: field === 'position' ? { x: -1, z: -1 } : field === 'color' ? '#aaaaaa' : 2 });

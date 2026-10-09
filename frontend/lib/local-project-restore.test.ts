@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { materialCheckinLedgerSchema } from '../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema } from '../../supabase/functions/_shared/production-plan-contract';
 import { makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
 import { parseLayoutJson } from '../components/room-organizer/lib/persistence';
-import { parseLocalProjectBackupJson, serializeLocalProjectBackup } from './local-project-backup';
+import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from './local-project-backup';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from './local-project-restore';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 beforeEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('complete local layout restore domain', () => {
   const before = makeLayout({ id: 'activity-a', name: '演练原活动' });
@@ -103,6 +105,22 @@ describe('production-plan restore and compensation domain', () => {
     const access = { current: () => current, apply: vi.fn((layout: RoomLayout) => { current = layout; }), beforeReplace: vi.fn() };
     return { values, storage, access };
   }
+  it('restores and undoes only layout data from V3 without loading or rewriting the separate fact ledger', () => {
+    const ledger = materialCheckinLedgerSchema.parse({ projectId: next.id, dataKind: 'rehearsal', sheets: [] });
+    const text = serializeLocalProjectBackupV3(next,
+      { state: 'ready', scope: next.id!, brief: { status: 'absent' } },
+      { state: 'ready', scope: next.id!, materialCheckins: { status: 'present', value: ledger } });
+    const candidate = parseLocalProjectBackupJson(text), originalFacts = JSON.stringify(candidate.materialCheckins);
+    const sideEffect = vi.fn(() => { throw new Error('layout restore must not open fact storage'); });
+    vi.stubGlobal('indexedDB', new Proxy({}, { get: sideEffect })); vi.stubGlobal('fetch', sideEffect);
+    const { storage, access } = trial();
+    commitLocalRestoreLayout(prepareLocalRestoreLayout(candidate.layout), access, storage);
+    commitLocalRestoreLayout(prepareLocalRestoreLayout(before), access, storage);
+    expect(access.current()).toEqual(before);
+    expect(JSON.stringify(candidate.materialCheckins)).toBe(originalFacts);
+    expect(parseLayoutJson(storage.getItem(STORAGE_KEY)!)).not.toHaveProperty('materialCheckins');
+    expect(sideEffect).not.toHaveBeenCalled();
+  });
   it('restores V2 root/variant plans and undoes by restoring the original plan and stable references', () => {
     const variant = { ...next, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '文件计划', layout: next }] } };
     const text = serializeLocalProjectBackup(variant, { state: 'ready', scope: next.id!, brief: { status: 'absent' } });

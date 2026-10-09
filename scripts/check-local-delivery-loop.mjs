@@ -61,7 +61,7 @@ task.reviewedBasis = await operationBasis(layout, task);
 for (const [index, item] of layout.floors[0].items.entries()) {
   item.handoff = { ownerName: `合成演练组${index + 1}`, dueDate: '2026-10-08', acceptance: '演练：逐件核对尺寸',
     status: 'accepted', evidenceUrls: [], evidenceNote: '合成说明，不代表真实验收' };
-  item.handoff.reviewedBasis = await handoffBasis(layout, item.id, item.handoff.acceptance);
+  item.handoff.reviewedBasis = await handoffBasis(layout, item.id, item.handoff);
 }
 const checks = [];
 const passed = name => checks.push({ name, passed: true });
@@ -121,6 +121,16 @@ assert.equal(execution.find(item => item.objectId === objectIds[1]).effectiveSta
 assert.equal(deliveryMaterials(changed).length, 2);
 assert.equal((await operationReview(changed, changed.eventOperations.tasks[1])).status, 'needs_review');
 passed('one-instance-change-invalidates-linked-reviews-and-splits-procurement');
+
+const reassigned = structuredClone(restored.layout);
+const workOrder = reassigned.floors[0].items[0].handoff;
+workOrder.ownerName = '合成演练新责任组'; workOrder.dueDate = '2026-10-12';
+assert.equal(await effectiveHandoffStatus(reassigned, objectIds[0]), 'needs_review');
+assert.equal((await deliveryExecution(reassigned))[0].effectiveStatus, 'needs_review');
+assert.equal(workOrder.evidenceNote, restored.layout.floors[0].items[0].handoff.evidenceNote);
+workOrder.reviewedBasis = await handoffBasis(reassigned, objectIds[0], workOrder);
+assert.equal(await effectiveHandoffStatus(reassigned, objectIds[0]), 'accepted');
+passed('responsibility-change-requires-explicit-handoff-reconfirmation');
 
 const removed = structuredClone(restored.layout);
 removed.floors[0].items = [removed.floors[0].items[1], { ...removed.floors[0].items[0], id: 'b1000000-0000-4000-8000-000000000003' }];

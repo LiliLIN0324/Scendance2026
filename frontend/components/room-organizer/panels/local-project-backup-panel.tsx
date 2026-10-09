@@ -120,7 +120,7 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
   const blocking = actions.backupPending || (!!working && working !== 'read');
   return <details className="sc-project-backup">
     <summary>场景与活动备份</summary>
-    <p className="sc-note">保存可编辑布局、方案快照、活动需求、活动任务、物料工作单、制作计划及核对依据。</p>
+    <p className="sc-note">保存可编辑布局、方案快照、活动需求、活动任务、物料工作单、制作计划、已提交的数量点验及核对依据。</p>
     <p className="sc-note">不包含照片附件、模型文件、聊天或重建表单。模型只保留引用，换设备或授权失效后可能无法加载。</p>
     {hasExternalModel(layout) && <p className="sc-project-backup-warning">当前场景或方案快照含未归档模型引用，请保留原模型文件及可用地址。</p>}
     <div className="sc-project-backup-actions">
@@ -138,13 +138,15 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
         <div><dt>内容</dt><dd>{candidate.layout.eventOperations?.tasks.length ?? 0} 个活动任务 · {candidate.layout.floors.reduce((count, floor) => count + floor.items.length, 0)} 个物件</dd></div>
         <div><dt>活动需求</dt><dd>{candidate.brief.status === 'present' ? '已包含' : candidate.brief.status === 'absent' ? '备份明确无已保存需求' : '旧文件未包含活动需求'}</dd></div>
         <div><dt>当前方案制作计划</dt><dd>{candidate.layout.productionPlan?`${candidate.layout.productionPlan.staffing.length} 项岗位需求 · ${candidate.layout.productionPlan.acquisitions.length} 项物料取得 · ${candidate.layout.productionPlan.estimates.length} 项人工估算`:'当前方案未记录制作计划'}</dd></div>
+        <div><dt>数量点验</dt><dd>{candidate.materialCheckins?.status==='present'?`${candidate.materialCheckins.value.sheets.length} 张点验单 · ${candidate.materialCheckins.value.sheets.reduce((count,sheet)=>count+sheet.agreements.length+sheet.events.length,0)} 条原始记录`:'文件未含点验记录，保留本机已有账册'}</dd></div>
       </dl>
       {candidate.layoutWasRepaired && <p className="sc-project-backup-warning">旧布局经兼容修复，请核对后再替换。</p>}
       {hasExternalModel(candidate.layout) && <p className="sc-project-backup-warning">文件或方案快照含未归档模型引用，模型文件未打包，可能无法跨设备使用。预检没有加载模型。</p>}
-      <p className="sc-note">确认后会覆盖当前布局和目标项目的活动需求。{candidate.brief.status !== 'present' ? '目标项目原有需求将清除。' : ''}</p>
+      <p className="sc-note">确认后会替换当前场景、活动安排、物料工作单和制作计划，并覆盖目标项目的活动需求。{candidate.brief.status !== 'present' ? '目标项目原有需求将清除。' : ''}</p>
+      <p className="sc-note">点验记录按原编号合并；旧文件不会清除本机记录。出现内容冲突时保留双方资料并停止恢复。合并后若又新增点验记录，不能直接撤回此前合并。</p>
       {layout.productionPlan&&!candidate.layout.productionPlan&&<p className="sc-project-backup-warning">待恢复的当前方案未记录制作计划，恢复后当前制作计划将清除。需要时可使用“撤销本次恢复”回退。</p>}
       <div className="sc-project-backup-actions">
-        <button type="button" className="sc-button" disabled={busy} onClick={() => void restore()}>{working === 'restore' ? '正在恢复并核实保存…' : '确认替换布局与活动需求'}</button>
+        <button type="button" className="sc-button" disabled={busy} onClick={() => void restore()}>{working === 'restore' ? '正在恢复并核实保存…' : candidate.materialCheckins?.status==='present'?'确认恢复并合并点验':'确认替换布局与活动需求'}</button>
         <button type="button" className="sc-button" disabled={blocking} onClick={cancel}>取消恢复</button>
       </div>
     </div>}

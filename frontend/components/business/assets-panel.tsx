@@ -91,7 +91,7 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
     if (before !== layoutRef.current) throw new Error('确认期间画布已变化，请检查后重新加入素材。');
     const next = addAssetToLayout(before, { ...preview.asset, ...authorized }, size);
     onApplyLayout(next); setPreview(null);
-    setNotice('素材已加入当前画布，可撤销；尚未保存到云端。请使用“保存到云端”提交。');
+    setNotice(bound?'素材已加入当前画布，可撤销；尚未保存到云端。请使用“保存到云端”提交。':'素材已加入当前画布，可撤销。请留意本机保存状态。');
   }
 
   return <section className="sc-assets" aria-label="个人云素材">
@@ -112,7 +112,7 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
           <div className="sc-assets-dimensions">{([['width', '宽'], ['depth', '深'], ['height', '高']] as const).map(([field, label]) => <label key={field}>{label}（米）<input aria-label={`模型${label}（米）`} type="number" min={field === 'height' ? .01 : .1} max={field === 'height' ? 30 : 50} step="0.01" value={Number.isNaN(size[field]) ? '' : size[field]} onChange={event => setSize(value => ({ ...value, [field]: event.target.value === '' ? NaN : Number(event.target.value) }))}/></label>)}</div>
           <div className="sc-assets-actions"><button type="button" className="sc-assets-primary" disabled={!validAssetSize(size) || !canAdd || !!pending} onClick={() => void run('加入模型', addPreview)}>确认加入当前画布</button><button type="button" disabled={!!pending || busy} onClick={() => void run('更新素材授权', account => loadPreview(preview.asset.id, account))}>重新授权</button></div>
           {!canAdd && <p>当前项目正在操作或尚无编辑权，请获取编辑权后加入。</p>}
-          <small>加入位置为场地中央。可在画布移动、复制或撤销；加入后仍需保存到云端。</small>
+          <small>加入位置为场地中央。可在画布移动、复制或撤销；{bound?'加入后仍需保存到云端。':'加入后请核对本机保存状态，模型保留原引用。'}</small>
         </section>}
       </>}
       {pending && <p role="status">正在{pending}…</p>}

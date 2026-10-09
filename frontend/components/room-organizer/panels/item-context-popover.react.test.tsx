@@ -133,6 +133,12 @@ describe('embedded selected properties', () => {
     expect(properties.contains(screen.getByRole('spinbutton', { name: 'Z / m' }))).toBe(true);
   });
 
+  it.each([true,false])('points a registered cloud model to material previews with or without a loading URL (%s)',hasUrl=>{
+    setup(placed({source:'generated',...(hasUrl?{glbUrl:'https://storage.example/model.glb'}:{}),assetId:'91000000-0000-4000-8000-000000000001'}));
+    expect(document.querySelector('.sc-color-swatches')).toBeNull();
+    expect(screen.getByText('该模型保留原材质。需要调整时，请打开助手的“物料工具 → 材质调整”核对材质槽并预览新版本。')).toBeTruthy();
+  });
+
   it('preserves locked restrictions and offers the original explicit unlock action', () => {
     const editor = setup(placed({ locked: true }), true);
     for (const name of ['X / m', 'Y / m', 'Z / m', '旋转 / °']) {

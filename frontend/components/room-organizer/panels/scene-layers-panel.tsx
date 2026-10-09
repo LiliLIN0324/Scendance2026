@@ -7,7 +7,7 @@ import { layoutReducer } from '../hooks/layout-reducer';
 import { layoutStore } from '../hooks/use-layout-store';
 import { batchLayerEdit, materialLayers, switchDesign } from '../lib/scene-layers';
 import { canApplyLayoutGeometry } from '../lib/structural-layout';
-import { ensureGlbAsset } from '../three/glb-assets';
+import { ensureGlbAsset, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -15,10 +15,13 @@ const ZERO_DELTA = { x: '0', y: '0', z: '0' };
 
 export function SceneLayersPanel({ controller, onPreview }: { controller?: BackendSession; onPreview?(layout: RoomLayout | null): void }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, history } = useRoomEditor();
-  const { allSelectedIds, setSelectedItemId, setExtraSelectedIds, selectOnly } = useSelection();
+  const { allSelectedIds, setExtraSelectedIds, selectOnly } = useSelection();
   const [name, setName] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const switching = useRef(false), latestController = useRef(controller), controllerGeneration = useRef(0);
+  if (latestController.current !== controller) controllerGeneration.current++;
+  latestController.current = controller;
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const selectionKey = JSON.stringify([...allSelectedIds].sort());
@@ -52,7 +55,7 @@ export function SceneLayersPanel({ controller, onPreview }: { controller?: Backe
   const custom = layout.itemLayers ?? [];
   const select = (ids: string[]) => {
     const [first, ...rest] = ids.filter(id => available.has(id));
-    setSelectedItemId(first ?? null); setExtraSelectedIds(new Set(rest));
+    selectOnly(first ?? null, { keepPanel: true }); setExtraSelectedIds(new Set(rest));
   };
   const applyBatch = (paint: boolean) => {
     try {
@@ -64,24 +67,58 @@ export function SceneLayersPanel({ controller, onPreview }: { controller?: Backe
     } catch (error) { setNotice(error instanceof Error ? error.message : '批量修改失败，原布置已保留。'); }
   };
   const chooseDesign = async (id: string) => {
+    if (switching.current) return;
     const base = layoutStore.getState();
     const next = switchDesign(base.layout, id);
     if (next === base.layout) return;
-    setBusy(true); setNotice('');
-    const scope = controller?.getSnapshot();
+    switching.current = true; setBusy(true); setNotice('');
+    const identity = () => {
+      const current = controller?.getSnapshot();
+      return JSON.stringify([controller?.config.apiUrl, current?.user?.id, current?.project?.id,
+        current?.sessionId, current?.geometryBinding ?? null]);
+    };
+    const scope = controller?.getSnapshot(), initialIdentity = identity(), generation = controllerGeneration.current;
+    let changedIdentity = false;
+    const stopWatching = controller?.subscribe(() => { if (identity() !== initialIdentity) changedIdentity = true; });
+    const current = () => alive.current && controllerGeneration.current === generation && latestController.current === controller && !changedIdentity && identity() === initialIdentity;
+    const check = () => {
+      if (!current()) throw new Error('项目或账号已变化，请重新选择方案。');
+      if (layoutStore.getState() !== base) throw new Error('加载期间场景已变化，请重新选择方案。');
+    };
     try {
       const urls = new Map<string, string>();
-      await Promise.all(next.floors.flatMap(f => f.items).filter(i => i.glbUrl).map(async item => {
-        const key = item.assetId ?? item.glbUrl!;
-        const url = controller && scope?.user && uuid.safeParse(item.assetId).success ? (await controller.authorizeAsset(item.assetId!)).url : item.glbUrl!;
-        await ensureGlbAsset(key, url); urls.set(key, url);
+      const models = new Map<string, { assetId?: string; urls: Set<string> }>();
+      for (const item of next.floors.flatMap(floor => floor.items)) {
+        const key = glbAssetKey(item);
+        if (!key) continue;
+        const model = models.get(key) ?? { ...(item.assetId ? { assetId: item.assetId } : {}), urls: new Set<string>() };
+        if (item.glbUrl) model.urls.add(item.glbUrl);
+        models.set(key, model);
+      }
+      const results = await Promise.allSettled([...models].map(async ([key, model]) => {
+        check();
+        let url: string | undefined;
+        if (controller && scope?.user && uuid.safeParse(model.assetId).success) {
+          url = (await controller.authorizeAsset(model.assetId!)).url;
+          check();
+        } else {
+          // A model already loaded in this local workspace can be used offline.
+          if (getGlbAssetState(key).status === 'ready') return;
+          if (model.urls.size > 1) throw new Error('同一模型的来源不一致，请登录后重新核对。当前方案已保留。');
+          url = [...model.urls][0];
+          if (!url) throw new Error('方案中的模型尚未载入，请先登录有权访问模型的账号，再重新选择方案。');
+        }
+        await ensureGlbAsset(key, url); check(); urls.set(key, url);
       }));
-      if (!alive.current) return;
-      if (controller?.getSnapshot().user?.id !== scope?.user?.id || controller?.getSnapshot().project?.id !== scope?.project?.id) throw new Error('项目或账号已变化，请重新选择方案。');
-      if (layoutStore.getState() !== base) throw new Error('加载期间场景已变化，请重新选择方案。');
-      actions.applyLayout({ ...next, floors: next.floors.map(floor => ({ ...floor, items: floor.items.map(item => item.glbUrl ? { ...item, glbUrl: urls.get(item.assetId ?? item.glbUrl)! } : item) })) }); selectOnly(null);
-    } catch (error) { if (alive.current) setNotice(error instanceof Error ? error.message : '方案加载失败，当前布置已保留。'); }
-    finally { if (alive.current) setBusy(false); }
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failure) throw failure.reason;
+      check();
+      actions.applyLayout({ ...next, floors: next.floors.map(floor => ({ ...floor, items: floor.items.map(item => {
+        const key = glbAssetKey(item), url = key ? urls.get(key) : undefined;
+        return url ? { ...item, glbUrl: url } : item;
+      }) })) }); selectOnly(null);
+    } catch (error) { if (current()) setNotice(error instanceof Error ? error.message : '方案加载失败，当前布置已保留。'); }
+    finally { stopWatching?.(); switching.current = false; if (alive.current) setBusy(false); }
   };
   const row = (layer: { id: string; name: string; itemIds: string[] }, removable = false) => <div key={layer.id} className="sc-layer-branch"><div className="sc-layer-row">
     <button type="button" className={layer.itemIds.length > 0 && layer.itemIds.every(id => allSelectedIds.has(id)) ? 'is-selected' : ''} onClick={() => select(layer.itemIds)}><span>{layer.name}</span><small>{layer.itemIds.filter(id => available.has(id)).length}</small></button>
@@ -90,6 +127,7 @@ export function SceneLayersPanel({ controller, onPreview }: { controller?: Backe
   </div>;
   return <section className="sc-layers" aria-label="方案与图层">
     <h2>方案与图层</h2><p className="sc-note">方案历史和编组保存在本机，云端保存当前场景。切换方案后可继续编辑并保存到云端。</p>
+    {busy && <p className="sc-note" role="status">正在载入方案模型，当前布置保持不变。</p>}
     {layout.designBook?.variants.map(variant => <div key={variant.id} className="sc-design-row">
       <button type="button" aria-pressed={variant.id === layout.designBook!.activeId} disabled={busy} onClick={() => void chooseDesign(variant.id)}>{variant.name}<small>{variant.id === layout.designBook!.activeId ? '当前' : '切换'}</small></button>
       {variant.id !== layout.designBook!.activeId && <button type="button" aria-label={`移除方案 ${variant.name}`} disabled={busy} onClick={() => {

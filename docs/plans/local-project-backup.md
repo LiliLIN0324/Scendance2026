@@ -271,3 +271,21 @@ const legacyChair = {
 为兼容旧调用者，`source: 'backup'` 的候选可省略 `backupVersion` 或传 `undefined`；此时按当前完整 V2 数据规则校验，不自动补计划，也不在返回中伪造来源版本。只有调用方显式声明 V1 才施加 V1 不含制作计划的限制。文件读取入口始终提供真实 `1 / 2`，不采用缺省规则绕过文件版本校验。Root 应使用这个统一函数替换手工候选检查与一律 serialize→parse 重包 V2 的校验步骤；接入后的 Provider 全链仍由 root 验收。
 
 Root/前端集成仍需验证预检的 V1/V2 范围提示、实际 Provider 需求事务配合、同 scope/跨 scope 的计划恢复、Undo 及失败补偿重试、新计划编辑使旧 Undo 失效，以及保存后刷新回读。此处 16 项恢复测试验证的是布局域与原补偿链，不能代替整工作台浏览器验收。根负责集成及统一构建，本轮未启停服务、未 production build、未付费或 push。
+
+## 物料点验 V3 过渡接入 · 2026-10-09
+
+本切片保留当前 V2 默认创建/序列化调用；显式 V3 创建与读取已实现并冻结，由 root 接线后协调默认切换和过渡 API 收敛。V2 不能声明覆盖独立点验账本。点验事实独立于 `RoomLayout` 与设计快照，root 存储使用 forms 的原生复合键 `['material-checkins', projectId]`，避免任意导入编号碰撞旧表单裸键。本模块不拼接或访问存储键，原图附件/模型文件仍不打包。
+
+新增 `createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt?): LocalProjectBackupV3` 与对应 `serializeLocalProjectBackupV3(...): string`。点验快照须明确 `state: 'ready'`、同一真实项目 `scope`，且 `materialCheckins` 为 `present + MaterialCheckinLedger` 或成功读取确认的 `absent`；仍加载、保存未完成或读取失败禁止创建 V3，不能降成 absent。校验只引用已落盘的共享 `material-checkin-contract.ts`，不定义第二份事件结构。V3 不接受无编号草稿的 `local` 回退；已经持久化的 `house-*` 等非 UUID 编号按原拼写绑定，文件账本的 projectId 必须逐字相同。
+
+V3 封套在根单列 `materialCheckins`，覆盖声明新增 `materialCheckins: true`，不夹入根布局或方案快照。V1/V2 封套禁止新增该字段；这些旧文件及 legacy 的恢复候选明确为 `not-in-file`。旧手造候选未带此字段，可兼容归一为 not-in-file；明确 V3 候选未带点验状态则拒绝，不暗中降级。显式旧版本或无版本候选若携 `present / absent` 新事实也拒绝，只有明确 V3 才能声明覆盖。`LocalProjectRestoreCandidate` 的新输入字段保持可选以便旧调用编译；parser/read/validator 的返回类型为 `ValidatedLocalProjectRestoreCandidate`，保证状态始终存在。
+
+恢复的三种状态都不授权直接清空本机事实。`present` 表示文件有待合并账本；`absent` 表示文件保存时该项目没有账本；`not-in-file` 表示旧格式未覆盖。后两者保留本机原事实，不复用 Brief 的删除语义。`present` 由 root 在目标 scope 的恢复锁/原子更新中读取当前账本并调用共享 merge，保留当前事件顺序和内容，同事件同内容幂等；同 ID 不同内容、分叉或其他共享契约冲突明确拒绝并保全原账本，模块不猜着改数量或抹掉新事实。
+
+必须由 root 同批覆盖当前事实变化后的失效检查、跨 scope 不搬错资料、点验写入后布局提交失败、撤销/失败补偿及新事实保护。布局恢复模块仍只负责布局域，设计 Undo 不回卷已发生的数量事实。恢复锁、保存回读、事实合并与补偿未完成时不能显示成功或生成“完整覆盖点验”的下载。已存在的 V2 调用可继续编译、创建原覆盖文件，页面切到完整事实备份前需显式接上 V3。
+
+冻结接口与限制：默认 `LOCAL_PROJECT_BACKUP_VERSION / COVERAGE` 仍对应 V2；新增 `LOCAL_PROJECT_BACKUP_V3_VERSION / COVERAGE`、`LocalProjectBackupV3`、`BackupMaterialCheckinSnapshot`、`BackupMaterialCheckins / RestoredMaterialCheckins`。整体文件 8 MiB 上限在 V3 创建、读取以及直接/可变候选统一验证中都包含独立账本。所有原始记录、修正/作废链、项目/单/约定/事件编号与数组顺序保留；未知 quantity 为 null，明确 checked 0 不冒充未知。原模型加载地址清理只作用于布局导出副本，不重写事实文字或证据。
+
+本次定向备份 71 项、布局恢复 17 项，共 88 项通过；四个 owned 文件/测试 eslint 以 `--max-warnings 0` 退出 0，diff 检查通过。覆盖显式 ready/scope、house编号与无ID拒绝、V3/空账本/absent/旧not-in-file、混版与缺状态、校验异常保原输入、原更正/作废链、事实独立、共享 merge 的幂等/当前事件顺序/同 ID 冲突/分叉拒绝、包含账本的总字节上限及预检零网络/存储动作。独立审阅复现并修复直接候选总预算遗漏，以及 legacy 容器误放事实被白名单剥离的问题；后者现递归检查物理 `materialCheckins` 键，包含 designBook、variant容器、floor/item和未知容器，不扫描普通文字。
+
+已执行整体前端 typecheck，本轮 owned 无类型错误；当时共享契约 exactOptionalPropertyTypes 与复合键迁移的三个旧测试文件有外部报错，均交 root/相应负责人处理，未越权改动。Root 后续通知旧 string API 与新 record API 已分离，要求不反复等待外部改动，因此本回执不冒称本对话完成最新整库检查。Root 将在显式 V3/ValidatedCandidate 和实际事务接入后统一测试、构建及真实回读。本阶段未改 Provider/UI/storage/RoomLayout，未启停服务、付费、push或新建定时任务。
