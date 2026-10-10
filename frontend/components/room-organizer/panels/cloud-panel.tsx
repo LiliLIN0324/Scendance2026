@@ -1,8 +1,8 @@
 'use client';
 
-import { ArrowUpRight, ChevronDown, FolderOpen, Search, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, FolderOpen, Search, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { PublicationPanel } from '@/components/business/publication-panel';
@@ -18,14 +18,15 @@ import { useLocalProjectBackup } from './creative-studio';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
   const localActivities = useLocalProjectBackup();
   const requestedProjectId = useSearchParams()?.get('project');
+  const router = useRouter();
   const dialog = useRef<HTMLDialogElement>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -109,6 +110,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     catch (error) {
       setNotice(error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。');
     } finally { actionPending.current = false; setBusy(false); }
+  }
+  async function navigateFromWorkspace(path: '/auth' | '/projects/'): Promise<void> {
+    await run(async () => {
+      await flushSourceScope(layoutRef.current.id ?? 'local');
+      router.push(path);
+      dialog.current?.close();
+    });
   }
   async function refreshProjects(): Promise<void> {
     const [nextProjects, nextStudios] = await Promise.all([controller.listProjects(), controller.listStudios()]);
@@ -227,13 +235,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const accountName = cloud.user?.is_anonymous ? '访客' : cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : '本地体验');
 
   return <>
-    <button className="sc-cloud-trigger" type="button" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
-      <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={15}/></span><span>账户与项目</span><ChevronDown size={13} aria-hidden="true"/>
+    <button className="sc-cloud-trigger" type="button" aria-label="账户与项目" title="账户与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
+      <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={17}/></span>
     </button>
-    <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onKeyDown={event => event.stopPropagation()}>
+    <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={onClose} onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={21}/></button></div>
-      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" onClick={() => dialog.current?.close()}>前往登录</Link>}</div>
+      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>前往登录</Link>}</div>
       <nav className="sc-account-nav" aria-label="账户导航">{[
         ['projects', '我的项目'], ['team', '团队演示'], ['permissions', '权限演示'], ['assets', '素材库'], ['publication', '发布管理'],
       ].map(([id, label]) => <button type="button" key={id} aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}</nav>
@@ -345,7 +353,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           </div>
           {!bound && <p className="sc-cloud-muted">画布已切换到另一份本地草稿。请重新获取编辑权，或将当前草稿创建为新项目。</p>}
         </section>}
-        <Link className="sc-account-manage-link" href="/projects/" onClick={() => dialog.current?.close()}>管理工作室、项目与成员 <ArrowUpRight size={14} aria-hidden="true"/></Link>
+        <Link className="sc-account-manage-link" href="/projects/" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/projects/'); }}>管理工作室、项目与成员 <ArrowUpRight size={14} aria-hidden="true"/></Link>
         </aside></div>
       </div>}
       </section>

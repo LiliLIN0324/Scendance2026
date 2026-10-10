@@ -2,15 +2,18 @@
 import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readProjectReviewLibrary } from '@/lib/project-review-library';
+import { flushSourceScope } from '@/lib/source-storage';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
-import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
-import type { ProjectReviewBase, ProjectReviewPanelActions } from '@/lib/project-review-workflow';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { downloadTextFile } from '../lib/plan-export/download';
 import { ProjectReviewPanel, type ProjectReviewPanelProps } from './project-review-panel';
+import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
+import type { ProjectReviewBase, ProjectReviewPanelActions } from '@/lib/project-review-workflow';
 
 // The preparation/approval workflow is real; only the final browser download is intercepted.
 vi.mock('../lib/plan-export/download', () => ({ downloadTextFile: vi.fn() }));
+vi.mock('@/lib/project-review-library', async original => ({ ...await original<object>(), readProjectReviewLibrary: vi.fn() }));
 const initialSource = { scope: 'review-panel-a', revision: 'content-1' };
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/3ioAAAAASUVORK5CYII=';
 const approval = '我已核对这张画面，可以放入评审文件';
@@ -35,13 +38,13 @@ function deferred<T>() {
   const promise = new Promise<T>((ok, no) => { resolve = ok; reject = no; });
   return { promise, resolve, reject };
 }
-function setup(overrides: Partial<ProjectReviewPanelActions> = {}) {
+function setup(overrides: Partial<ProjectReviewPanelActions> = {}, storageIdentity?: string) {
   let live: ProjectReviewSource = { ...initialSource };
   const actions: ProjectReviewPanelActions = {
     getSource: vi.fn(() => live), prepare: vi.fn(async () => base(live)),
     capture: vi.fn(async snapshot => picture(snapshot)), ...overrides,
   };
-  let props: ProjectReviewPanelProps = { source: live, actions };
+  let props: ProjectReviewPanelProps = { source: live, actions, ...(storageIdentity?{storageIdentity}:{}) };
   const view = render(<ProjectReviewPanel {...props}/>);
   return { actions, view,
     setLive(next: ProjectReviewSource, rerender = true) {
@@ -49,6 +52,7 @@ function setup(overrides: Partial<ProjectReviewPanelActions> = {}) {
       if (rerender) { props = { ...props, source: next }; view.rerender(<ProjectReviewPanel {...props}/>); }
     },
     setDisabled(disabled: boolean) { props = { ...props, disabled }; view.rerender(<ProjectReviewPanel {...props}/>); },
+    setStorageIdentity(identity: string) { props = { ...props, storageIdentity: identity }; view.rerender(<ProjectReviewPanel {...props}/>); },
     rerender() { view.rerender(<ProjectReviewPanel {...props}/>); },
   };
 }
@@ -62,10 +66,32 @@ function expectNoFile(): void {
   expect(screen.queryByRole('button', { name: '下载评审文件' })).toBeNull();
   expect(screen.queryByRole('button', { name: '下载评审文件（HTML）' })).toBeNull();
 }
-beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('fetch', vi.fn()); vi.mocked(downloadTextFile).mockReset(); });
+beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('fetch', vi.fn()); vi.mocked(downloadTextFile).mockReset();
+  vi.mocked(readProjectReviewLibrary).mockReset().mockResolvedValue({version:1,draft:null,files:[]}); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('independent customer review panel', () => {
+  it('loads only saved text and clears every disclosure and capture permission', async () => {
+    vi.mocked(readProjectReviewLibrary).mockResolvedValue({version:1,files:[],draft:{revision:'draft-1',summary:'保存的方案说明',pending:'保存的待确认项',savedAt:'2026-10-09T00:00:00Z'}});
+    setup({},JSON.stringify(['api','account-a',initialSource.scope]));
+    fireEvent.click(screen.getByText('本机草稿与文件',{exact:true}));
+    for(const name of ['包含当前活动需求','包含当前设计说明','包含当前画面','允许在评审画面中包含当前参考底图'])fireEvent.click(screen.getByLabelText(name,{exact:true}));
+    const load=await screen.findByRole('button',{name:'载入已保存说明'});await waitFor(()=>expect((load as HTMLButtonElement).disabled).toBe(false));fireEvent.click(load);
+    await waitFor(()=>expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe('保存的方案说明'));
+    expect((screen.getByLabelText('待确认项（选填）') as HTMLTextAreaElement).value).toBe('保存的待确认项');
+    for(const checkbox of screen.getAllByRole('checkbox'))expect((checkbox as HTMLInputElement).checked).toBe(false);
+    expectNoFile();await expect(flushSourceScope(initialSource.scope)).resolves.toBeUndefined();
+  });
+  it('clears the same-project review and permissions when account/API identity changes', async () => {
+    const current=setup({},JSON.stringify(['api','account-a',initialSource.scope]));
+    fireEvent.change(screen.getByLabelText('简短方案说明（选填）'),{target:{value:'旧身份未保存说明'}});
+    fireEvent.click(screen.getByLabelText('包含当前活动需求',{exact:true}));generate();await screen.findByTitle('客户评审预览');
+    current.setStorageIdentity(JSON.stringify(['other-api','account-b',initialSource.scope]));
+    await waitFor(()=>expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe(''));
+    expectNoFile();expect((screen.getByLabelText('包含当前活动需求',{exact:true}) as HTMLInputElement).checked).toBe(false);
+    await waitFor(()=>expect(readProjectReviewLibrary).toHaveBeenLastCalledWith(JSON.stringify(['other-api','account-b',initialSource.scope])));
+    await expect(flushSourceScope(initialSource.scope)).resolves.toBeUndefined();
+  });
   it('starts with no disclosure or picture permission and explicitly prepares, previews and downloads a detached file', async () => {
     const { actions } = setup();
     for (const checkbox of screen.getAllByRole('checkbox')) expect((checkbox as HTMLInputElement).checked).toBe(false);

@@ -1,18 +1,19 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
 import assetIds from '../../../../assets/library/asset-ids.json';
 import catalogue from '../../../../assets/library/catalogue.json';
+import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
+import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { createFurnitureModel } from '../three/furniture-builders';
-import { disposeOwnedModel, ensureGlbAsset, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
+import { disposeOwnedModel, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
 import { buildRoom } from '../three/room-builder';
 import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
-import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
-import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
-import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
+import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
 import type { RoomLayout } from './types';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import type { BackendSession } from '@/lib/backend-session';
@@ -148,8 +149,8 @@ export async function prepareDeliveryAssets(layout: RoomLayout, controller?: Bac
     const key = glbAssetKey(item) ?? object.assetId;
     if (getGlbAssetState(key).status === 'ready') continue;
     const url = controller?.getSnapshot().user ? (await controller.authorizeAsset(object.assetId)).url : item.glbUrl;
-    if (!url) throw new Error(`“${item.name}”模型尚未加载，请连接项目后重试。`);
-    await ensureGlbAsset(key, url);
+    if (!url && !publicAssetLocalUrl(object.assetId)) throw new Error(`“${item.name}”模型尚未加载，请连接项目后重试。`);
+    await ensureRecoverableGlbAsset(key, object.assetId, url, controller?.config?.url);
   }
 }
 

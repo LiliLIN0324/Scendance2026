@@ -6,8 +6,10 @@ import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun } from '@/lib/backend-session';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
-import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
 import { readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from '@/lib/material-checkin-storage';
+import { decodeSourceDocuments } from '@/lib/source-backup';
+import { readSourceScopeSnapshot, sameSourceScopeSnapshot, restoreSourceScopeIfUnchanged, type SourceScopeSnapshot } from '@/lib/source-storage';
 import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease } from '@/lib/source-storage';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
@@ -28,6 +30,7 @@ import { SceneDeliveryPanel } from './scene-delivery-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import { VenueShapePresets } from './venue-shape-presets';
+import type { ActivityTaskPanelContext } from './activity-task-workspace';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
@@ -42,14 +45,16 @@ const runStorageKey = (scope: string) => `scendance:agent-run:${scope}`;
 type CandidatePreview = { label: 'A' | 'B' | 'C'; title: string; preview: Preview };
 type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<string,string> }; proposal: SceneProposal; layout: RoomLayout; base: RoomLayout; briefKey: string; scope: string };
 type CheckinRestoreWrite = { scope: string; before: MaterialCheckinLedger | undefined; attempted: MaterialCheckinLedger | undefined };
+type SourceRestoreWrite = { scope: string; before: SourceScopeSnapshot; attempted: SourceScopeSnapshot };
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
 interface Props { reviewContext?: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 export interface LocalProjectBackupActions {
-  prepareBackup(): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
+  prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
   backupPending: boolean; canUndoRestore: boolean;
 }
 interface StudioValue extends LocalProjectBackupActions {
+  sourcesRestoring: boolean;
   checkins: MaterialCheckinState;
   reviewSource: ProjectReviewSource;
   getReviewSource(): ProjectReviewSource;
@@ -57,7 +62,7 @@ interface StudioValue extends LocalProjectBackupActions {
   scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   briefReady: boolean; briefError: string | null; hasSavedBrief: boolean; retryBrief(): void;
-  images: ReferenceImage[]; addImages(files: FileList | null): Promise<void>; removeImage(id: string): void;
+  images: ReferenceImage[]; addImages(files: FileList | null, kind?: ReferenceImage['kind']): Promise<void>; removeImage(id: string): void;
   busy: boolean; preparing: boolean; notice: string; connection: string; generate(message?: string, options?: {intent:'model'}): Promise<void>;
   messages: Message[]; expanded: boolean; setExpanded(value: boolean): void; preview: Preview | null; stale: boolean; expired: boolean;
   jevEnabled: boolean; setJevEnabled(value:boolean):void; run: AgentRun | null; candidates: CandidatePreview[]; selectCandidate(label: 'A'|'B'|'C'):void; cancelRun():Promise<void>; recoverRun():Promise<void>; recoverable:boolean;
@@ -73,7 +78,8 @@ export function useCreativeBriefState(): CreativeBriefState | null {
 }
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 export function useMaterialCheckinState(): MaterialCheckinState { return useStudio().checkins; }
-const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'连接项目后，可以和我讨论场景布置、物料需求并核对候选方案。' }];
+const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。' }];
+const PARTIAL_RUN_NOTICE='后续处理中断，已保留通过检查的方案，请核对后继续。';
 
 export function CreativeStudioProvider({ reviewContext, controller, layout, onApply, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
@@ -91,16 +97,18 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   const briefTimer=useRef<ReturnType<typeof setTimeout>>();
   const briefEditEpoch=useRef(0);
   const [backupPending,setBackupPending]=useState(false);
+  const [sourcesRestoring,setSourcesRestoring]=useState(false);
   const backupBusy=useRef(false), restoreWriting=useRef(false);
   const operationEpoch=useRef(0);
   const editorLease=useRef<{scope:string;lease:SourceEditorLease}>();
   const editorLeases=useRef(new Map<string,SourceEditorLease>());
   const adoptedScope=useRef<string>();
-  const [undoPoint,setUndoPoint]=useState<{beforeLayout:RoomLayout;beforeBrief:CreativeBrief|undefined;targetScope:string;targetBrief:CreativeBrief|undefined;targetDraft:ReturnType<typeof briefDrafts.current.get>;afterLayout:RoomLayout;afterEdits:number;afterBrief:CreativeBrief|undefined;checkinChange?:CheckinRestoreWrite}|null>(null);
+  const [undoPoint,setUndoPoint]=useState<{beforeLayout:RoomLayout;beforeBrief:CreativeBrief|undefined;targetScope:string;targetBrief:CreativeBrief|undefined;targetDraft:ReturnType<typeof briefDrafts.current.get>;afterLayout:RoomLayout;afterEdits:number;afterBrief:CreativeBrief|undefined;checkinChange?:CheckinRestoreWrite;sourceChange?:SourceRestoreWrite}|null>(null);
   const undoPointRef=useRef<typeof undoPoint>(null);
   const failedRollback=useRef<{scope:string;original:CreativeBrief|undefined;attempted:CreativeBrief|undefined}|null>(null);
   const undoRecovery=useRef<{scope:string;before:CreativeBrief|undefined;attempted:CreativeBrief|undefined}[]|null>(null);
   const checkinRecovery=useRef<CheckinRestoreWrite|null>(null);
+  const sourceRecovery=useRef<SourceRestoreWrite|null>(null);
   const preparedRestoreIds=useRef(new WeakMap<LocalProjectRestoreCandidate,string>());
   const setBrief=useCallback<React.Dispatch<React.SetStateAction<CreativeBrief>>>(update=>{
     const next=typeof update==='function'?update(briefValueRef.current):update;
@@ -111,6 +119,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     briefValueRef.current=next;setBriefValue(next);setHasSavedBrief(false);
   },[]);
   const [images,setImages]=useState<ReferenceImage[]>([]);
+  const savedImages=useRef(new WeakSet<ReferenceImage>());
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState('');
   const [messages,setMessages]=useState<Message[]>(initialMessages);
@@ -125,11 +134,12 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   useLayoutEffect(()=>{
     const lease=registerSourceEditor(scope);editorLease.current={scope,lease};editorLeases.current.set(scope,lease);
     return()=>{
+      const pendingImageWrites=uploadQueue.current;
       const replacement=editorLease.current?.scope===scope?editorLease.current.lease:undefined;
       if(replacement)editorLease.current=undefined;
       if(!lease.acquired)void lease.release();
       if(replacement&&!replacement.acquired)void replacement.release();
-      queueMicrotask(()=>{void briefSaveQueue.current.catch(()=>{}).then(async()=>{
+      queueMicrotask(()=>{void Promise.allSettled([briefSaveQueue.current,pendingImageWrites]).then(async()=>{
         await Promise.all([lease.release(),replacement?.release()]);
         const held=editorLeases.current.get(scope);if(held===lease||held===replacement)editorLeases.current.delete(scope);
       });});
@@ -249,6 +259,11 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   },[controller,scope,cloud.user?.id,cloud.project?.id,cloud.geometryBinding,geometryAssetKey,requestedCloudCheckins]);
   const reviewContextRef=useRef(reviewContext);reviewContextRef.current=reviewContext;
   const reviewResetEpoch=useRef(0);
+  const [,refreshReviewSource]=useState(0);
+  function invalidateReviewSource():void {
+    reviewResetEpoch.current++;
+    if(alive.current)refreshReviewSource(value=>value+1);
+  }
   const reviewTracker=useRef<{inputs:unknown[];serial:number;prefix:string}>({inputs:[],serial:0,prefix:crypto.randomUUID()});
   function getReviewSource():ProjectReviewSource {
     const session=controllerRef.current.getSnapshot();
@@ -276,6 +291,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         const nextScope=scopeRef.current,lease=registerSourceEditor(nextScope);editorLease.current={scope:nextScope,lease};editorLeases.current.set(nextScope,lease);
       }
       setBackupPending(false);
+      if(!sourceRecovery.current)setSourcesRestoring(false);
     }
   }
   async function flushBackupBase(operation:ReturnType<typeof beginBackupOperation>):Promise<CreativeBrief|undefined> {
@@ -286,7 +302,8 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     const saved=await readSourceForm<CreativeBrief>(`${operation.base.scope}:brief`);operation.check();
     return saved;
   }
-  async function prepareBackup():Promise<string> {
+  async function prepareBackup(options?:{includeSourceDocuments?:boolean}):Promise<string> {
+    if(sourceRecovery.current)throw new Error('图纸资料回退尚未完成，请先重试恢复或撤销恢复。');
     const activeScope=scopeRef.current;
     if(failedRollback.current?.scope===activeScope||undoRecovery.current?.some(entry=>entry.scope===activeScope))throw new Error('当前项目的资料回退尚未完成，请先重试恢复或撤销恢复，再下载场景与活动备份。');
     const operation=beginBackupOperation();
@@ -296,12 +313,22 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       const briefSnapshot={state:'ready' as const,scope:operation.base.scope,brief:saved===undefined?{status:'absent' as const}:{status:'present' as const,value:saved}};
       const ledger=operation.base.layout.id?await readMaterialCheckins(operation.base.layout.id):undefined;operation.check();
       if(ledger&&!isLocalActivityWorkspace(controller))throw new Error('此项目还有本机点验记录，请切换到对应本地项目后备份，原记录已保留。');
+      if(options?.includeSourceDocuments){
+        if(!operation.base.layout.id)throw new Error('请先保存活动编号，再备份图纸。');
+        const documents=await readSourceScopeSnapshot(operation.base.scope);operation.check();
+        const text=await serializeLocalProjectBackupV4(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.scope,
+          materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}},documents);
+        const after=await readSourceScopeSnapshot(operation.base.scope);operation.check();
+        if(!await sameSourceScopeSnapshot(documents,after))throw new Error('打包期间图纸已有改动，请重新下载。');
+        operation.check();return text;
+      }
       const text=operation.base.layout.id?serializeLocalProjectBackupV3(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.layout.id,
         materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}}):serializeLocalProjectBackup(operation.base.layout,briefSnapshot);
       operation.check();return text;
     } finally {endBackupOperation();}
   }
   async function prepareReview():Promise<ProjectReviewBase> {
+    if(sourceRecovery.current)throw new Error('请先完成图纸资料的恢复回退，再准备评审。');
     if(checkinRecovery.current)throw new Error('请先完成点验资料的恢复回退，再准备评审。');
     const source=getReviewSource();
     if(failedRollback.current?.scope===source.scope||undoRecovery.current?.some(entry=>entry.scope===source.scope))throw new Error('请先完成资料恢复或撤销恢复，再准备评审。');
@@ -347,6 +374,31 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     try{await restoreMaterialCheckinsIfUnchanged(change.scope,change.attempted,change.before);}
     catch(error){checkinRecovery.current=change;throw error;}
   }
+  function adoptSourceImages(snapshot:SourceScopeSnapshot):void {
+    if(snapshot.scope!==scopeRef.current)return;
+    const restored=snapshot.sources.filter(source=>source.blob).map(source=>({...source,url:URL.createObjectURL(source.blob!)}));
+    for(const image of restored)savedImages.current.add(image);
+    imageEpoch.current++;
+    for(const image of imageRef.current)URL.revokeObjectURL(image.url);
+    imageRef.current=restored;setImages(restored);
+  }
+  async function verifySourceWrite(snapshot:SourceScopeSnapshot,check:()=>void):Promise<void> {
+    const saved=await readSourceScopeSnapshot(snapshot.scope);check();
+    if(!await sameSourceScopeSnapshot(saved,snapshot))throw new Error('图纸保存后的核对失败，恢复未完成。');
+    check();
+  }
+  async function compensateSources(change:SourceRestoreWrite):Promise<void> {
+    // Keep the recovery point until both atomic replacement and readback succeed.
+    sourceRecovery.current=change;
+    const current=await readSourceScopeSnapshot(change.scope);
+    if(!await sameSourceScopeSnapshot(current,change.before))await restoreSourceScopeIfUnchanged(change.scope,change.attempted,change.before);
+    await verifySourceWrite(change.before,()=>{});
+    adoptSourceImages(change.before);sourceRecovery.current=null;
+  }
+  async function repairSourceRecovery(check:()=>void):Promise<void> {
+    const recovery=sourceRecovery.current;if(!recovery)return;
+    check();await compensateSources(recovery);check();
+  }
   const sameBrief=(a:CreativeBrief|undefined,b:CreativeBrief|undefined)=>a===undefined||b===undefined?a===b:canonical(a)===canonical(b);
   async function writeAndReadBrief(targetScope:string,value:CreativeBrief|undefined,check:()=>void):Promise<CreativeBrief|undefined> {
     check();
@@ -362,14 +414,15 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     adoptedScope.current=targetScope;briefHydration.current=Promise.resolve();
     setBriefValue(briefValueRef.current);setBriefReady(true);setBriefError(null);setHasSavedBrief(saved!==undefined);setBriefLoadAttempt(value=>value+1);
   }
-  async function releaseEditorForRestore():Promise<void> {
+  async function releaseEditorForRestore(pauseSources=false):Promise<void> {
+    if(pauseSources)flushSync(()=>setSourcesRestoring(true));
     restoreWriting.current=true;
     const held=editorLease.current;editorLease.current=undefined;
     await held?.lease.release();
     if(held&&editorLeases.current.get(held.scope)===held.lease)editorLeases.current.delete(held.scope);
   }
   async function restoreBackup(candidate:LocalProjectRestoreCandidate):Promise<void> {
-    reviewResetEpoch.current++;
+    invalidateReviewSource();
     assertLocalRestore();
     const checked=validateLocalProjectRestoreCandidate(candidate);
     await disconnectSceneForRestore();
@@ -378,15 +431,17 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     // File provenance remains meaningful even for programmatic restore callers.
     const priorId=preparedRestoreIds.current.get(candidate);
     const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=next.id??'local';
+    const incomingSources=checked.sourceDocuments?.status==='present'?{scope:targetScope,...await decodeSourceDocuments(checked.sourceDocuments,targetScope)}:undefined;
     if(!candidate.layout.id&&next.id)preparedRestoreIds.current.set(candidate,next.id);
     const desired=checked.brief.status==='present'?checked.brief.value:undefined;
     const targetDraft=briefDrafts.current.get(targetScope);
     const operation=beginBackupOperation();
     try {
       let beforeBrief=await flushBackupBase(operation);assertLocalRestore();
-      await releaseEditorForRestore();operation.check();
-      await withSourceRestoreLock([operation.base.scope,targetScope,...(failedRollback.current?[failedRollback.current.scope]:[]),...(checkinRecovery.current?[checkinRecovery.current.scope]:[])],async()=>{
+      await releaseEditorForRestore(!!incomingSources||!!sourceRecovery.current);operation.check();
+      await withSourceRestoreLock([operation.base.scope,targetScope,...(failedRollback.current?[failedRollback.current.scope]:[]),...(checkinRecovery.current?[checkinRecovery.current.scope]:[]),...(sourceRecovery.current?[sourceRecovery.current.scope]:[])],async()=>{
         operation.check();assertLocalRestore();
+        await repairSourceRecovery(operation.check);
         await repairCheckinRecovery(operation.check);
         const recovery=failedRollback.current;
         if(recovery){
@@ -400,17 +455,24 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         const desiredCheckins=checked.materialCheckins.status==='present'
           ?targetCheckins?mergeMaterialCheckinLedgers(targetCheckins,checked.materialCheckins.value):checked.materialCheckins.value:targetCheckins;
         const checkinChange:CheckinRestoreWrite|undefined=sameCheckins(targetCheckins,desiredCheckins)?undefined:{scope:targetScope,before:targetCheckins,attempted:desiredCheckins};
-        let touched=false,checkinsTouched=false;
+        const sourceChange:SourceRestoreWrite|undefined=incomingSources?{scope:targetScope,before:await readSourceScopeSnapshot(targetScope),attempted:incomingSources}:undefined;
+        operation.check();
+        let touched=false,checkinsTouched=false,sourcesTouched=false;
         try {
+          if(sourceChange){await restoreSourceScopeIfUnchanged(targetScope,sourceChange.before,sourceChange.attempted,operation.check);sourcesTouched=true;
+            await verifySourceWrite(sourceChange.attempted,operation.check);}
           if(checkinChange){await restoreMaterialCheckinsIfUnchanged(targetScope,targetCheckins,desiredCheckins,operation.check);checkinsTouched=true;operation.check();}
           touched=true;
           const saved=await writeAndReadBrief(targetScope,desired,operation.check);assertLocalRestore();
           flushSync(()=>{commitRestoredLayout!(next);adoptRestoredBrief(targetScope,saved);});
           const afterLayout=layoutRef.current;
-          const point={beforeLayout:operation.base.layout,beforeBrief,targetScope,targetBrief,targetDraft,afterLayout,afterEdits:briefEditEpoch.current,afterBrief:saved,...(checkinChange?{checkinChange}:{})};
+          const point={beforeLayout:operation.base.layout,beforeBrief,targetScope,targetBrief,targetDraft,afterLayout,afterEdits:briefEditEpoch.current,afterBrief:saved,...(checkinChange?{checkinChange}:{}),...(sourceChange?{sourceChange}:{})};
           undoPointRef.current=point;setUndoPoint(point);
+          if(sourceChange)adoptSourceImages(sourceChange.attempted);
           if(checkinChange)checkins.retry();
         } catch(error) {
+          let sourceRollbackError:unknown;
+          if(sourcesTouched&&sourceChange)try{await compensateSources(sourceChange);}catch(caught){sourceRollbackError=caught;}
           let checkinRollbackError:unknown;
           if(checkinsTouched&&checkinChange)try{await compensateCheckins(checkinChange);}catch(caught){checkinRollbackError=caught;}
           if(touched)try {await writeAndReadBrief(targetScope,targetBrief,()=>{});}catch(rollbackError){
@@ -421,6 +483,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
             }
             throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 原活动需求回退也失败，当前草稿与所选文件仍保留，请保留此页面并重试。${checkinRollbackError?' 点验记录回退也未完成。':''}${rollbackError instanceof Error?` ${rollbackError.message}`:''}`);
           }
+          if(sourceRollbackError)throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 图纸资料回退未完成，已暂停图纸编辑，请保留本页并重试恢复。`);
           if(checkinRollbackError)throw new Error(`${error instanceof Error?error.message:'恢复失败。'} 点验记录回退未完成，原恢复值仍保留，请保留此页面重试。`);
           throw error;
         }
@@ -430,7 +493,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   const canUndoRestore=!!undoPoint&&!backupPending&&!busy&&undoPoint.afterLayout===layout&&undoPoint.afterEdits===briefEditEpoch.current&&isLocalActivityWorkspace(controller)&&
     (!undoPoint.checkinChange||!!checkinRecovery.current||checkins.ready&&sameCheckins(checkins.ledger,undoPoint.checkinChange.attempted));
   async function undoRestore():Promise<void> {
-    reviewResetEpoch.current++;
+    invalidateReviewSource();
     assertLocalRestore();
     await disconnectSceneForRestore();
     assertLocalRestore();
@@ -440,9 +503,10 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     const operation=beginBackupOperation();
     try {
       await flushBackupBase(operation);
-      await releaseEditorForRestore();operation.check();
-      await withSourceRestoreLock([point.targetScope,nextScope,...(checkinRecovery.current?[checkinRecovery.current.scope]:[])],async()=>{
+      await releaseEditorForRestore(!!point.sourceChange||!!sourceRecovery.current);operation.check();
+      await withSourceRestoreLock([point.targetScope,nextScope,...(checkinRecovery.current?[checkinRecovery.current.scope]:[]),...(sourceRecovery.current?[sourceRecovery.current.scope]:[])],async()=>{
         operation.check();assertLocalRestore();
+        await repairSourceRecovery(operation.check);
         await repairCheckinRecovery(operation.check);
         const recovery=undoRecovery.current;
         if(recovery){
@@ -465,8 +529,11 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         const currentCheckins=point.checkinChange?await readMaterialCheckins(point.targetScope):undefined;operation.check();
         if(point.checkinChange&&!sameCheckins(currentCheckins,point.checkinChange.attempted))throw new Error('恢复后已有新的点验记录，不能覆盖这些记录；原恢复点仍保留。');
         const checkinUndo:CheckinRestoreWrite|undefined=point.checkinChange?{scope:point.targetScope,before:currentCheckins,attempted:point.checkinChange.before}:undefined;
-        let touched=false,checkinsTouched=false;
+        const sourceUndo:SourceRestoreWrite|undefined=point.sourceChange?{scope:point.targetScope,before:point.sourceChange.attempted,attempted:point.sourceChange.before}:undefined;
+        let touched=false,checkinsTouched=false,sourcesTouched=false;
         try {
+          if(sourceUndo){await restoreSourceScopeIfUnchanged(sourceUndo.scope,sourceUndo.before,sourceUndo.attempted,operation.check);sourcesTouched=true;
+            await verifySourceWrite(sourceUndo.attempted,operation.check);}
           if(checkinUndo){await restoreMaterialCheckinsIfUnchanged(checkinUndo.scope,checkinUndo.before,checkinUndo.attempted,operation.check);checkinsTouched=true;operation.check();}
           touched=true;
           const saved=await writeAndReadBrief(nextScope,point.beforeBrief,operation.check);
@@ -478,7 +545,10 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
             undoPointRef.current=null;setUndoPoint(null);
             if(checkinUndo)checkins.retry();
           });
+          if(sourceUndo)adoptSourceImages(sourceUndo.attempted);
         } catch(error) {
+          let sourceRollbackError:unknown;
+          if(sourcesTouched&&sourceUndo)try{await compensateSources(sourceUndo);}catch(caught){sourceRollbackError=caught;}
           let checkinRollbackError:unknown;
           if(checkinsTouched&&checkinUndo)try{await compensateCheckins(checkinUndo);}catch(caught){checkinRollbackError=caught;}
           if(touched){
@@ -491,6 +561,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
               throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 活动需求回退也失败，原恢复点仍保留，请在本地存储恢复后重试撤销。${checkinRollbackError?' 点验记录回退也未完成。':''}${failures[0] instanceof Error?` ${failures[0].message}`:''}`);
             }
           }
+          if(sourceRollbackError)throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 图纸资料回退未完成，已暂停图纸编辑，请保留本页并重试撤销。`);
           if(checkinRollbackError)throw new Error(`${error instanceof Error?error.message:'撤销恢复失败。'} 点验记录回退未完成，原恢复点仍保留，请保留此页面重试撤销。`);
           throw error;
         }
@@ -503,6 +574,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     uploadQueue.current=listStoredSources(scope).then(stored=>{
       if(!alive.current || epoch!==imageEpoch.current)return;
       const restored=stored.filter(source=>source.blob).map(source=>({...source,url:URL.createObjectURL(source.blob!)}));
+      for(const image of restored)savedImages.current.add(image);
       imageRef.current=restored;setImages(restored);
     }).catch(()=>{ /* Saving reports unavailable IndexedDB when files are selected. */ });
     for(const image of imageRef.current) URL.revokeObjectURL(image.url);
@@ -528,7 +600,9 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     if(!alive.current||scopeRef.current!==scope)throw new Error('场地资料正在切换，请稍后重试创建项目。');
     await Promise.all([
       saveBrief(scope),
-      ...imageRef.current.map(({url,...image})=>storeSource({...image,scope,kind:image.kind??'photo',width:image.width!,height:image.height!})),
+      ...(sourceRecovery.current?[]:imageRef.current.filter(image=>!savedImages.current.has(image)).map(async image=>{
+        const {url,...stored}=image;await storeSource({...stored,scope,kind:image.kind??'photo',width:image.width!,height:image.height!});savedImages.current.add(image);
+      })),
     ]);
   }),[scope,saveBrief]);
   const briefKey=JSON.stringify({brief,images:images.map(i=>({id:i.id,kind:i.kind}))});
@@ -554,7 +628,8 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   useEffect(()=>()=>onPreview?.(null),[onPreview]);
   function say(text:string,modelSuggestions?:SceneProposal['modelSuggestions'],materialSuggestions?:SceneProposal['materialSuggestions']):void { setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'assistant',text,modelSuggestions,materialSuggestions}]); }
 
-  async function addImages(files: FileList|null):Promise<void> {
+  async function addImages(files: FileList|null, requestedKind?: ReferenceImage['kind']):Promise<void> {
+    if(backupBusy.current||sourceRecovery.current)throw new Error('正在处理备份或图纸回退，请完成后再添加图片。');
     if(!files?.length) return;
     // Snapshot before the input is cleared. Every selection is processed in
     // order; a second selection no longer invalidates the first decode.
@@ -575,7 +650,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
           const width=bitmap.width,height=bitmap.height;
           let pixels:Uint8ClampedArray|undefined;
           try { const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64; const context=canvas.getContext('2d');if(context){context.drawImage(bitmap,0,0,64,64);pixels=context.getImageData(0,0,64,64).data;} } catch { /* Filename suggestion still available. */ }
-          const kind=suggestSourceKind(file.name,pixels);
+          const kind=requestedKind??suggestSourceKind(file.name,pixels);
           bitmap.close();
           if(!valid) throw new Error('图片长宽请控制在 4096 像素以内。');
           if(!active()) break;
@@ -586,22 +661,34 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         // before React commits this state, and must still see the new count.
         imageRef.current=[...imageRef.current,...added];
         setImages(imageRef.current);
-        try { await Promise.all(added.map(({url,...image})=>storeSource({...image,scope:imageScope,kind:image.kind??'photo',width:image.width!,height:image.height!}))); } catch(error) { if(active()) setNotice(error instanceof Error?error.message:'本机保存失败，图片仍在本次会话中。'); }
+        try { await Promise.all(added.map(async image=>{const {url,...stored}=image;await storeSource({...stored,scope:imageScope,kind:image.kind??'photo',width:image.width!,height:image.height!});savedImages.current.add(image);})); } catch(error) { if(active()) setNotice(error instanceof Error?error.message:'本机保存失败，图片仍在本次会话中。'); }
       } catch(error) { for(const img of added) URL.revokeObjectURL(img.url); if(active()) setNotice(error instanceof Error?error.message:'图片无法读取，请更换文件。'); }
     });
     uploadQueue.current=task;
     return task;
   }
   function removeImage(id:string):void {
+    if(backupBusy.current||sourceRecovery.current)return;
     const image=imageRef.current.find(value=>value.id===id);if(!image)return;
-    const requestedScope=scopeRef.current;
-    const remove=()=>{if(scopeRef.current!==requestedScope)return;URL.revokeObjectURL(image.url);imageRef.current=imageRef.current.filter(value=>value.id!==id);setImages(imageRef.current);void deleteSource(id).catch(error=>setNotice(error instanceof Error?error.message:'删除本机记录失败。'));};
-    if(image.assetId){void controller.removeSource(image.assetId).then(remove).catch(error=>setNotice(error instanceof Error?error.message:'项目资料移除失败，请重试。'));}else remove();
+    const requestedScope=scopeRef.current,epoch=imageEpoch.current;
+    const task=uploadQueue.current.then(async()=>{
+      if(scopeRef.current!==requestedScope||imageEpoch.current!==epoch)return;
+      if(image.assetId)await controller.removeSource(image.assetId);
+      if(scopeRef.current!==requestedScope||imageEpoch.current!==epoch||!imageRef.current.includes(image))return;
+      await deleteSource(id);
+      if(scopeRef.current!==requestedScope||imageEpoch.current!==epoch)return;
+      URL.revokeObjectURL(image.url);imageRef.current=imageRef.current.filter(value=>value.id!==id);setImages(imageRef.current);
+    });
+    uploadQueue.current=task.catch(error=>{if(scopeRef.current===requestedScope)setNotice(error instanceof Error?error.message:'项目资料移除失败，请重试。');});
   }
   function updateImage(id:string,patch:Partial<VenuePhoto>):void {
+    if(backupBusy.current||sourceRecovery.current)return;
     imageRef.current=imageRef.current.map(image=>image.id===id?{...image,...patch}:image);setImages(imageRef.current);
     const updated=imageRef.current.find(image=>image.id===id);
-    if(updated){const {url,...stored}=updated;void storeSource({...stored,scope,kind:stored.kind??'photo',width:stored.width!,height:stored.height!}).catch(error=>setNotice(error instanceof Error?error.message:'资料保存失败。'));}
+    if(updated){const {url,...stored}=updated;const epoch=imageEpoch.current;
+      const current=()=>alive.current&&scopeRef.current===scope&&imageEpoch.current===epoch;
+      const write=uploadQueue.current.then(async()=>{if(current()){await storeSource({...stored,scope,kind:stored.kind??'photo',width:stored.width!,height:stored.height!});savedImages.current.add(updated);}});
+      uploadQueue.current=write.catch(error=>{if(current())setNotice(error instanceof Error?error.message:'资料保存失败。');});}
   }
   function forgetRun():void {
     markerRef.current=null;setRecoverable(false);
@@ -619,9 +706,18 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     const scene=layoutToBackendScene(base), first=result.candidates[0]!.proposal;
     if(result.candidates.some(({proposal})=>canonical(proposal.base_scene)!==canonical(scene)||proposal.project_id!==first.project_id||proposal.base_revision!==first.base_revision||proposal.local_revision!==first.local_revision||proposal.session_id!==first.session_id||proposal.generation!==first.generation))throw new Error('返回的候选方案基线不一致，原方案已保留。');
     if(result.candidates.some(({proposal})=>!Number.isFinite(Date.parse(proposal.expires_at))||Date.parse(proposal.expires_at)<=Date.now()))throw new Error('提案已过期，请重新生成。');
+    const interrupted=result.state==='complete'&&!!result.errorCode;
+    const canAnnounceRetained=():boolean=>{
+      if(!interrupted||result.jevEnabled&&result.evaluation?.status==='partial'||!alive.current||agentScopeRef.current!==submittedScope||epoch!==runEpoch.current||layoutRef.current!==base||briefRef.current!==submittedBrief)return false;
+      const current=controller.getSnapshot();
+      return !current.writeBlocked&&result.candidates.every(({proposal})=>Date.parse(proposal.expires_at)>Date.now()&&proposal.project_id===current.project?.id&&proposal.base_revision===current.revision&&proposal.local_revision===current.localRevision&&proposal.session_id===current.sessionId&&proposal.generation===current.lease?.generation);
+    };
+    const announceRetained=():void=>{setNotice(current=>current?`${current}\n${PARTIAL_RUN_NOTICE}`:PARTIAL_RUN_NOTICE);};
     setLastExplanation(first.explanation);
     if(result.candidates.length===1&&canonical(first.candidate)===canonical(scene)){
-      forgetRun();say(first.explanation||result.message||'已读取当前场景，本次没有修改物件。',first.modelSuggestions,first.materialSuggestions);return;
+      const announce=canAnnounceRetained();
+      forgetRun();say(first.explanation||(!interrupted?result.message:undefined)||'已读取当前场景，本次没有修改物件。',first.modelSuggestions,first.materialSuggestions);
+      if(announce)announceRetained();return;
     }
     const prepared=await Promise.all(result.candidates.map(async item=>{
       const assets=await controller.authorizeAssets(item.proposal.candidate);
@@ -631,9 +727,11 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     }));
     if(!alive.current||agentScopeRef.current!==submittedScope||epoch!==runEpoch.current)return;
     if(layoutRef.current!==base||briefRef.current!==submittedBrief)throw new Error('生成期间方案或需求已变化，旧提案未应用。请根据最新内容重新生成。');
+    const announce=canAnnounceRetained();
     const preferred=prepared.find(item=>item.label===result.evaluation?.choice)??prepared[0]!;
     if(allowDirect&&result.executionMode==='direct'&&!result.jevEnabled&&prepared.length===1){await applyCandidate(preferred.preview);}
     else {setCandidates(prepared);setPreview(preferred.preview);say(result.jevEnabled?'候选方案已准备好。可以分别预览比较，最终由你选择并确认应用。':first.explanation||'方案提案已返回，请核对修改范围后确认应用。',first.modelSuggestions,first.materialSuggestions);}
+    if(announce&&alive.current&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current)announceRetained();
   }
   async function followRun(initial:AgentRun,base:RoomLayout,submittedBrief:string,submittedScope:string,epoch:number,allowDirect:boolean):Promise<void> {
     let result=initial;
@@ -830,7 +928,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     finally { if(epoch===runEpoch.current){requestPending.current=false;if(alive.current)setBusy(false);} }
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -851,7 +949,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
   // One idea at a time, swapped on demand: three stacked articles were mostly noise.
   const [ideaIndex,setIdeaIndex]=useState(0);
   const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
-  return <div className="cr-brief">
+  return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
     <div className="sc-section-heading"><div><h2>活动需求</h2></div></div>
     {!studio.briefReady&&!studio.briefError&&<p className="cr-hint" role="status">正在读取活动需求，当前输入会保留。</p>}
     {studio.briefReady&&!studio.hasSavedBrief&&!studio.briefError&&<p className="cr-hint">当前需求尚未保存；默认活动类型和人数仅供参考，请按实际情况填写。</p>}
@@ -880,34 +978,42 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
     <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
     </details>
-    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对"><ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={studio.addImages}/></div>
+    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对">{studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/>}</div>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||templateOnly||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <p className="cr-hint">根据当前场景与资源库生成布置方案。本轮策划不读取照片；图纸与照片重建需单独确认。</p>
 
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
-  </div>;
+  </fieldset>;
 }
 
-function AssistantMascot({ busy }: { busy: boolean }): JSX.Element {
-  // A transparent user-provided character; only the element moves, never the launcher.
+function AssistantMascot(): JSX.Element {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className={`cr-mascot ${busy ? 'is-thinking' : ''}`} src="/assets/assistant/puppy.png" alt="Binggo 小狗" draggable={false} width={60} height={60}/>;
+  return <img className="cr-mascot" src="/assets/assistant/puppy.png" alt="Binggo 小狗" draggable={false} width={30} height={30}/>;
 }
 
 export type GeneratedVariant = { sourceAssetId: string; variantAssetId: string; objectIds?: string[] };
 export type GenerationContext = { sourceAssetId?: string; sourceObjectIds: string[]; onVariantReady(variant: GeneratedVariant): void };
 type ChatMode = 'plan'|'model';
-type BusinessMode = ChatMode|'delivery'|'review';
+type BusinessMode = ChatMode|'delivery'|'review'|'commercial';
 const CHAT_MODES = {plan:'场景策划',model:'物料建模'} as const;
-export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, workspaceEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview }: {
+export function CreativeAssistant({ generationPanel, commercialPanel, activityTaskPanel, onOpenTemplates, workspaceOpenRequest = 0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef }: {
+  onOpenTemplates?:()=>void;
+  localSaveError?: boolean|undefined;
+  conversationOpenRequest?: number;
+  conversationEntryRef?: RefObject<HTMLButtonElement>;
+  assistantEntryHostRef?: RefObject<HTMLDivElement>;
   reviewOpenRequest?: number;
   reviewEntryRef?: RefObject<HTMLButtonElement>;
   captureReview?: (snapshot:ProjectReviewSnapshot, options:ProjectReviewCaptureOptions, getSource:()=>ProjectReviewSource)=>Promise<ProjectReviewCapture>;
   generationPanel?: ReactNode | ((context: GenerationContext) => ReactNode);
+  commercialPanel?: ReactNode;
+  activityTaskPanel?: (context: ActivityTaskPanelContext) => ReactNode;
   workspaceOpenRequest?: number;
   workspaceEntryRef?: RefObject<HTMLButtonElement>;
+  toolsOpenRequest?: number;
+  toolsEntryRef?: RefObject<HTMLButtonElement>;
   deliveryOpenRequest?: number;
   deliveryEntryRef?: RefObject<HTMLButtonElement>;
   referenceOpenRequest?: number;
@@ -924,9 +1030,13 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const businessEntry=useRef<HTMLButtonElement|null>(null);
   const conversation=useRef<HTMLElement>(null);
   const chatToggle=useRef<HTMLButtonElement>(null);
+  const suggestionsToggle=useRef<HTMLButtonElement>(null),suggestionsCard=useRef<HTMLElement>(null);
   const focusChat=useRef(false);
   const [mode,setMode]=useState<ChatMode>('plan');
   const [businessMode,setBusinessMode]=useState<BusinessMode>('plan');
+  const [planCategory,setPlanCategory]=useState<'brief'|'reference'>('brief');
+  const [suggestionsOpen,setSuggestionsOpen]=useState(false);
+  const [suggestionsDismissed,setSuggestionsDismissed]=useState(false);
   const [localReferenceRequest,setLocalReferenceRequest]=useState(0);
   const latestScopeRef=useRef(studio.scope);latestScopeRef.current=studio.scope;
   const lastResetScopeRef=useRef<string|null>(null);
@@ -937,22 +1047,56 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const [chatCollapsed,setChatCollapsed]=useState(false);
   const chatHidden=docked?!studio.expanded:workspaceExpanded&&chatCollapsed;
   const [businessHost,setBusinessHost]=useState<HTMLDivElement|null>(businessHostRef?.current??null);
+  const [assistantEntryHost,setAssistantEntryHost]=useState<HTMLDivElement|null>(assistantEntryHostRef?.current??null);
   const dockingInitialized=useRef(false);
-  const handledConversationClose=useRef(0);
+  const handledConversationClose=useRef(0),handledConversationOpen=useRef(0);
+  const returnConversationFocus=useRef(false),currentExpanded=useRef(studio.expanded);currentExpanded.current=studio.expanded;
+  const closeFocusOrigin=useRef<Element|null>(null);
+  const closeChat=useCallback(()=>{returnConversationFocus.current=true;closeFocusOrigin.current=document.activeElement;setExpanded(false);},[setExpanded]);
   const mobile=()=>typeof window!=='undefined'&&(window.matchMedia?window.matchMedia('(max-width:680px)').matches:window.innerWidth<=680);
   const narrow=()=>typeof window!=='undefined'&&window.innerWidth<=1080;
   useLayoutEffect(()=>{if(docked&&businessHostRef?.current)setBusinessHost(businessHostRef.current);},[docked,businessHostRef]);
+  useLayoutEffect(()=>{if(docked&&assistantEntryHostRef?.current)setAssistantEntryHost(assistantEntryHostRef.current);},[docked,assistantEntryHostRef]);
   useEffect(()=>{if(!docked||dockingInitialized.current)return;dockingInitialized.current=true;setOpened(true);setExpanded(!mobile());},[docked,setExpanded]);
   useEffect(()=>{if(docked)onConversationVisibilityChange?.(studio.expanded);},[docked,studio.expanded,onConversationVisibilityChange]);
   useEffect(()=>{if(docked)onWorkspaceVisibilityChange?.(workspaceExpanded);},[docked,workspaceExpanded,onWorkspaceVisibilityChange]);
-  useEffect(()=>{if(conversationCloseRequest===handledConversationClose.current)return;handledConversationClose.current=conversationCloseRequest;setExpanded(false);},[conversationCloseRequest,setExpanded]);
+  useEffect(()=>{if(conversationCloseRequest===handledConversationClose.current)return;handledConversationClose.current=conversationCloseRequest;closeChat();},[conversationCloseRequest,closeChat]);
+  useEffect(()=>{
+    if(studio.expanded||!returnConversationFocus.current||!conversationEntryRef?.current)return undefined;
+    returnConversationFocus.current=false;const entry=conversationEntryRef.current,origin=closeFocusOrigin.current;
+    let cancelled=false;
+    const canReturnFocus=()=>{
+      if(cancelled||currentExpanded.current||!entry.isConnected)return false;
+      const active=document.activeElement;
+      return !active||active===document.body||active===origin||active===entry||active.getClientRects().length===0||getComputedStyle(active).visibility==='hidden';
+    };
+    if(typeof requestAnimationFrame!=='function'){
+      queueMicrotask(()=>{if(canReturnFocus())entry.focus();});
+      return()=>{cancelled=true;};
+    }
+    let frame:number,attempts=0;
+    const focusWhenVisible=():void=>{
+      if(!canReturnFocus())return;
+      attempts++;
+      if(entry.getClientRects().length>0&&getComputedStyle(entry).visibility!=='hidden'){
+        entry.focus();if(document.activeElement===entry)return;
+      }
+      if(attempts<8)frame=requestAnimationFrame(focusWhenVisible);
+    };
+    frame=requestAnimationFrame(focusWhenVisible);
+    return()=>{cancelled=true;cancelAnimationFrame(frame);};
+  },[studio.expanded,conversationEntryRef,conversationCloseRequest,toolsOpenRequest]);
   const workspaceScroll=useRef<Partial<Record<'floating'|'expanded',{content:number;conversation:number}>>>({});
   const pendingWorkspaceScroll=useRef<{content:number;conversation:number}>();
   const [opened,setOpened]=useState(false);
   const [modelOpened,setModelOpened]=useState(false);
   const [deliveryOpened,setDeliveryOpened]=useState(false);
+  const [deliveryViewRequest,setDeliveryViewRequest]=useState<{serial:number;view:'operations'|'materials'}>();
+  const deliveryViewSerial=useRef(0);
   const [reviewOpened,setReviewOpened]=useState(false);
   const reviewTarget=useRef<HTMLDivElement>(null),focusReview=useRef(false),handledReview=useRef(0);
+  const [commercialOpened,setCommercialOpened]=useState(false);
+  const commercialTarget=useRef<HTMLDivElement>(null),focusCommercial=useRef(false);
   const [modelTool,setModelTool]=useState<'generate'|'customize'>('generate');
   const [materialSeed,setMaterialSeed]=useState<MaterialCustomizationSeed>();
   useEffect(()=>{if(studio.expanded)setOpened(true);},[studio.expanded]);
@@ -972,7 +1116,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const messageInput=useRef<HTMLTextAreaElement>(null);
   const settings=useRef<HTMLDetailsElement>(null),settingsToggle=useRef<HTMLElement>(null);
   useEffect(()=>{if((!studio.expanded||chatHidden)&&settings.current)settings.current.open=false;},[studio.expanded,chatHidden]);
-  const launcher=useRef<HTMLButtonElement>(null);
+  const fallbackEntry=useRef<HTMLButtonElement>(null);
   const deliveryFocusTarget=useRef<HTMLDivElement>(null);
   const briefDetails=useRef<HTMLDetailsElement>(null);
   const briefDescription=useRef<HTMLTextAreaElement>(null);
@@ -980,9 +1124,11 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const focusReference=useRef(false), returnToReferenceEntry=useRef(false), handledReferenceRequest=useRef(0);
   const focusBrief=useRef(false);
   const focusDelivery=useRef(false);
+  const focusWorkspace=useRef(false);
   const returnToDeliveryEntry=useRef(false);
   const returnToWorkspaceEntry=useRef(false);
   const handledWorkspaceRequest=useRef(0);
+  const handledToolsRequest=useRef(0);
   const handledDeliveryRequest=useRef(0);
   const wasExpanded=useRef(false);
   const preparingScope=useRef(studio.preparing);preparingScope.current=studio.preparing;
@@ -996,27 +1142,34 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
     const restored=afterRestoreScopeRef.current===studio.scope;
     afterRestoreScopeRef.current=null;lastResetScopeRef.current=studio.scope;
     setDrafts({plan:'',model:''});setMaterialSeed(undefined);setModelTool('generate');
-    setMode('plan');setBusinessMode(restored?'delivery':'plan');if(restored)setDeliveryOpened(true);setTemplatesOpen(false);
+    setMode('plan');setBusinessMode(restored?'delivery':'plan');setPlanCategory('brief');setSuggestionsOpen(false);setSuggestionsDismissed(false);setDeliveryViewRequest(undefined);if(restored)setDeliveryOpened(true);setTemplatesOpen(false);
   },[studio.scope]);
   useEffect(()=>{
     if(workspaceOpenRequest===handledWorkspaceRequest.current)return;
     handledWorkspaceRequest.current=workspaceOpenRequest;
-    businessEntry.current=null;
+    businessEntry.current=workspaceEntryRef?.current??null;
     returnToWorkspaceEntry.current=true;returnToDeliveryEntry.current=false;returnToReferenceEntry.current=false;
-    if(studio.briefReady&&!studio.brief.description.trim())focusBrief.current=true;
-    setBusinessMode('plan');resizeWorkspace(true);setTemplatesOpen(false);if(!docked)setExpanded(true);
+    focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;focusReview.current=false;focusCommercial.current=false;focusWorkspace.current=false;
+    if(!businessOpened){setBusinessMode('plan');setPlanCategory('brief');setTemplatesOpen(false);focusBrief.current=true;}
+    else if(templatesOpen||businessMode==='model')focusWorkspace.current=true;
+    else if(businessMode==='review')focusReview.current=true;
+    else if(businessMode==='delivery')focusDelivery.current=true;
+    else if(businessMode==='commercial')focusCommercial.current=true;
+    else if(planCategory==='reference')focusReference.current=true;
+    else focusBrief.current=true;
+    resizeWorkspace(true);if(!docked)setExpanded(true);
   },[workspaceOpenRequest,setExpanded]);
   useEffect(()=>{
     if(referenceOpenRequest===handledReferenceRequest.current)return;
     handledReferenceRequest.current=referenceOpenRequest;focusReference.current=true;
-    businessEntry.current=null;
+    businessEntry.current=referenceEntryRef?.current??null;
     focusBrief.current=false;focusDelivery.current=false;returnToReferenceEntry.current=true;
-    setBusinessMode('plan');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
+    setBusinessMode('plan');setPlanCategory('reference');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
   },[referenceOpenRequest,setExpanded]);
   useEffect(()=>{
     if(deliveryOpenRequest===handledDeliveryRequest.current)return;
     handledDeliveryRequest.current=deliveryOpenRequest;
-    businessEntry.current=null;
+    businessEntry.current=deliveryEntryRef?.current??null;
     returnToDeliveryEntry.current=true;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;
     focusDelivery.current=true;
     setDeliveryOpened(true);setBusinessMode('delivery');setTemplatesOpen(false);if(docked)resizeWorkspace(true);else setExpanded(true);
@@ -1032,11 +1185,17 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
       briefDescription.current?.focus();
     }else if(businessVisible && !templatesOpen && businessMode==='delivery' && (focusDelivery.current||!docked&&!wasExpanded.current)){
       focusDelivery.current=false;deliveryFocusTarget.current?.focus();
+    }else if(businessVisible && !templatesOpen && businessMode==='review' && focusReview.current){
+      focusReview.current=false;reviewTarget.current?.focus();
+    }else if(businessVisible && !templatesOpen && businessMode==='commercial' && focusCommercial.current && (!docked||businessHost)){
+      focusCommercial.current=false;commercialTarget.current?.focus();
+    }else if(businessVisible && focusWorkspace.current && (!docked||businessHost)){
+      focusWorkspace.current=false;content.current?.focus();
     }else if(!docked&&studio.expanded && !wasExpanded.current && chatHidden) chatToggle.current?.focus();
     else if(!docked&&studio.expanded && !wasExpanded.current && !templatesOpen && (mode==='plan'||mode==='model'&&modelTool==='generate')) (chatHidden?chatToggle.current:messageInput.current)?.focus();
-    else if(!studio.expanded&&wasExpanded.current) (returnToReferenceEntry.current ? referenceEntryRef?.current ?? workspaceEntryRef?.current ?? launcher.current : returnToWorkspaceEntry.current ? workspaceEntryRef?.current ?? launcher.current : returnToDeliveryEntry.current ? deliveryEntryRef?.current ?? launcher.current : launcher.current)?.focus();
+    else if(!studio.expanded&&wasExpanded.current&&!conversationEntryRef) (returnToReferenceEntry.current ? referenceEntryRef?.current ?? workspaceEntryRef?.current ?? fallbackEntry.current : returnToWorkspaceEntry.current ? workspaceEntryRef?.current ?? fallbackEntry.current : returnToDeliveryEntry.current ? deliveryEntryRef?.current ?? fallbackEntry.current : fallbackEntry.current)?.focus();
     wasExpanded.current=studio.expanded;
-  },[studio.expanded,workspaceExpanded,businessHost,mode,businessMode,modelTool,templatesOpen,chatHidden,workspaceOpenRequest,workspaceEntryRef,deliveryOpenRequest,deliveryEntryRef,referenceOpenRequest,localReferenceRequest,referenceEntryRef]);
+  },[studio.expanded,workspaceExpanded,businessHost,mode,businessMode,planCategory,modelTool,templatesOpen,chatHidden,workspaceOpenRequest,workspaceEntryRef,deliveryOpenRequest,deliveryEntryRef,referenceOpenRequest,localReferenceRequest,referenceEntryRef,conversationEntryRef]);
   useEffect(()=>{feed.current?.scrollTo({top:feed.current.scrollHeight,behavior:'smooth'});},[studio.messages,studio.busy]);
   const sceneItems=studio.layout.floors.flatMap(floor=>floor.items);
   const selectedItems=sceneItems.filter(item=>allSelectedIds.has(item.id));
@@ -1060,7 +1219,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   const draftMode=mode==='model'?'model':'plan';
   const draft=drafts[draftMode];
   const setDraft=(value:string)=>setDrafts(current=>({...current,[draftMode]:value}));
-  const submit=()=>{if(!draft.trim()||studio.busy||studio.recoverable)return;const text=draft;setDraft('');void studio.generate(text,mode==='model'?{intent:'model'}:undefined);};
+  const submit=()=>{if(!draft.trim()||studio.busy||studio.recoverable)return;const text=draft;setDraft('');setSuggestionsOpen(false);void studio.generate(text,mode==='model'?{intent:'model'}:undefined);};
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
   const chatPending=studio.busy?studio.run?.progress||'正在提交任务…':studio.recoverable?'原任务结果待核对':studio.preview||studio.candidates.length>0?studio.stale?'候选需重新生成':'有方案待确认':studio.notice?'有助手提示待查看':'';
@@ -1070,23 +1229,40 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
     pendingWorkspaceScroll.current=workspaceScroll.current[next?'expanded':'floating']??current;
     if(next&&chatCollapsed&&conversation.current?.contains(document.activeElement))setChatCollapsed(false);
     setWorkspaceExpanded(next);
-    if(next&&docked)setBusinessOpened(true);
+    if(next)setBusinessOpened(true);
     if(docked){
       onWorkspaceVisibilityChange?.(next);if(next&&narrow())setExpanded(false);
       if(!next&&content.current?.contains(document.activeElement))queueMicrotask(()=>{
         const clicked=businessEntry.current;
         const entry=clicked?.isConnected&&!clicked.closest('[hidden]')?clicked:returnToReferenceEntry.current?referenceEntryRef?.current:returnToDeliveryEntry.current?deliveryEntryRef?.current:workspaceEntryRef?.current;
-        (entry??(studio.expanded?messageInput.current:launcher.current))?.focus();
+        (entry??(studio.expanded?messageInput.current:(conversationEntryRef?.current??fallbackEntry.current)))?.focus();
       });
     }
   }
+  function openTools():void {
+    returnConversationFocus.current=false;businessEntry.current=toolsEntryRef?.current??null;
+    focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;focusReview.current=false;focusCommercial.current=false;focusWorkspace.current=false;
+    resizeWorkspace(false);if(docked&&narrow())setExpanded(false);
+  }
+  const openToolsRef=useRef(openTools);openToolsRef.current=openTools;
+  useEffect(()=>{
+    if(toolsOpenRequest===handledToolsRequest.current)return;handledToolsRequest.current=toolsOpenRequest;
+    openToolsRef.current();
+  },[toolsOpenRequest]);
   function openChat():void {
     if(docked){if(narrow())resizeWorkspace(false);if(studio.expanded)queueMicrotask(()=>messageInput.current?.focus());else{focusChat.current=true;setExpanded(true);}return;}
+    if(!studio.expanded){focusChat.current=true;setExpanded(true);return;}
     if(chatHidden){focusChat.current=true;setChatCollapsed(false);}
     else messageInput.current?.focus();
   }
+  const openChatRef=useRef(openChat);openChatRef.current=openChat;
+  useEffect(()=>{
+    if(conversationOpenRequest===handledConversationOpen.current)return;handledConversationOpen.current=conversationOpenRequest;
+    returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;
+    openChatRef.current();
+  },[conversationOpenRequest]);
   function toggleChat():void {
-    if(docked){if(studio.expanded)setExpanded(false);else openChat();return;}
+    if(docked){if(studio.expanded)closeChat();else openChat();return;}
     if(!workspaceExpanded)return;
     if(chatHidden)openChat();
     else{
@@ -1103,6 +1279,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
   }
   function openBrief(event?:React.MouseEvent<HTMLButtonElement>):void {
     if(event)businessEntry.current=event.currentTarget;
+    setPlanCategory('brief');focusReference.current=false;focusDelivery.current=false;focusReview.current=false;
     if(docked){focusBrief.current=true;returnToWorkspaceEntry.current=true;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setTemplatesOpen(false);resizeWorkspace(true);queueMicrotask(()=>briefDescription.current?.focus());return;}
     if(studio.expanded&&businessMode==='plan'&&!templatesOpen){
       if(briefDetails.current)briefDetails.current.open=true;
@@ -1111,44 +1288,86 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
       focusBrief.current=true;setBusinessMode('plan');setTemplatesOpen(false);setExpanded(true);
     }
   }
-  function openReference(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusReference.current=true;focusBrief.current=false;focusDelivery.current=false;returnToReferenceEntry.current=true;returnToWorkspaceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setTemplatesOpen(false);setLocalReferenceRequest(value=>value+1);resizeWorkspace(true);if(!docked)setExpanded(true);}
+  function openReference(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusReference.current=true;focusBrief.current=false;focusDelivery.current=false;returnToReferenceEntry.current=true;returnToWorkspaceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setPlanCategory('reference');setTemplatesOpen(false);setLocalReferenceRequest(value=>value+1);resizeWorkspace(true);if(!docked)setExpanded(true);}
   function openDelivery(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusDelivery.current=true;returnToDeliveryEntry.current=true;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;setDeliveryOpened(true);setBusinessMode('delivery');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);queueMicrotask(()=>deliveryFocusTarget.current?.focus());}
-  function openModelTools(event:React.MouseEvent<HTMLButtonElement>):void{businessEntry.current=event.currentTarget;setBusinessMode('model');setModelOpened(true);setTemplatesOpen(false);resizeWorkspace(true);}
+  function openDeliveryView(view:'operations'|'materials',event:React.MouseEvent<HTMLButtonElement>):void {
+    setDeliveryViewRequest({serial:++deliveryViewSerial.current,view});openDelivery(event);
+  }
+  function openModelTools(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;setBusinessMode('model');setModelOpened(true);setTemplatesOpen(false);resizeWorkspace(true);}
+  function chooseModelExample(label:string,prompt:string):void {
+    if(drafts.model.trim()&&drafts.model!==prompt&&!window.confirm(`是否用“${label}”示例替换当前建模输入？`))return;
+    setMode('model');setDrafts(current=>({...current,model:prompt}));openChat();
+  }
   function openReview(event?:React.MouseEvent<HTMLButtonElement>):void {
     if(event)businessEntry.current=event.currentTarget;focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;
     returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;
     focusReview.current=true;setReviewOpened(true);setBusinessMode('review');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
   }
+  function openTemplates():void {
+    if(onOpenTemplates){resizeWorkspace(false);onOpenTemplates();return;}
+    setTemplatesOpen(true);resizeWorkspace(true);
+  }
+  function openCommercial():void {
+    if(commercialPanel==null)return;
+    focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;focusReview.current=false;
+    focusCommercial.current=true;setCommercialOpened(true);setBusinessMode('commercial');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
+  }
+  const businessCategory=templatesOpen?'templates':businessMode==='plan'?planCategory:businessMode;
+  function selectBusinessCategory(event:React.ChangeEvent<HTMLSelectElement>):void {
+    if(!businessEntry.current)businessEntry.current=workspaceEntryRef?.current??referenceEntryRef?.current??deliveryEntryRef?.current??(conversationEntryRef?.current??fallbackEntry.current);
+    switch(event.target.value){
+      case 'brief':openBrief();break;
+      case 'reference':openReference();break;
+      case 'delivery':openDelivery();break;
+      case 'review':openReview();break;
+      case 'templates':openTemplates();break;
+      case 'model':openModelTools();break;
+      case 'commercial':openCommercial();break;
+    }
+  }
+  const hasConversation=studio.messages.some(message=>message.id!=='welcome');
+  const assistantLauncher=!studio.expanded?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开 Binggo Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>Binggo</span></button>:null;
+  const suggestionsVisible=!suggestionsDismissed&&(!hasConversation||suggestionsOpen);
+  const hasBrief=studio.briefReady&&!studio.briefError&&studio.hasSavedBrief&&!!studio.brief.description.trim();
+  const resultSuggestions:Array<{label:string;open:(event:React.MouseEvent<HTMLButtonElement>)=>void}>=[];
+  if(!hasBrief)resultSuggestions.push({label:'完善活动需求',open:openBrief});
+  if(!studio.images.some(image=>image.kind==='floorplan'))resultSuggestions.push({label:'准备场地图纸',open:openReference});
+  if(studio.layout.eventOperations?.tasks.length)resultSuggestions.push({label:'整理执行时间表',open:event=>openDeliveryView('operations',event)});
+  if(sceneItems.length)resultSuggestions.push({label:'核对物料交接',open:event=>openDeliveryView('materials',event)});
+  if(hasBrief)resultSuggestions.push({label:'准备客户方案',open:openReview});
+  function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'Binggo':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸，让 DeepSeek 查找资源或使用参数化建模；不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
   const businessContent=(
-      <div className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
-        {docked&&<header className="cr-business-heading"><strong>{templatesOpen?'场景模板':businessMode==='review'?'方案评审':businessMode==='delivery'?'执行资料':businessMode==='model'?'物料资料':'活动资料'}</strong><div>{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button></div></header>}
+      <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
+        <header className="cr-business-heading"><label className="cr-business-category">资料分类<select value={businessCategory} onChange={selectBusinessCategory}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="delivery">执行资料</option><option value="review">方案评审</option><option value="templates">场景模板</option><option value="model">物料工具</option>{commercialPanel!=null&&<option value="commercial">合同与约定</option>}</select></label>{!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button>}</div>}</header>
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-        <div hidden={templatesOpen||businessMode==='model'||businessMode==='review'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief}/></div>
+        <div hidden={templatesOpen||businessMode==='model'||businessMode==='review'||businessMode==='commercial'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief}/></div>
         <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel}/></details></section>
         <section id="agent-panel-model" aria-label="物料建模" hidden={businessMode!=='model'||templatesOpen}>
           <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
-          <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>{setMode('model');setDrafts(current=>({...current,model:prompt!}));openChat();}}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
+          <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>chooseModelExample(label!,prompt!)}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
           {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={(docked?workspaceExpanded:studio.expanded)&&!templatesOpen&&businessMode==='model'&&modelTool==='customize'}/></div>}
         </section>
-        <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
-        <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
-        <section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>
-        <p className="cr-selection-context">当前场景：{sceneItems.length} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
+        <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
+        <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel storageIdentity={JSON.stringify([studio.controller.config.apiUrl,studio.controller.getSnapshot().user?.id??null,studio.reviewSource.scope])} source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} inputLocked={studio.backupPending} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
+        {commercialPanel!=null&&<section id="agent-panel-commercial" aria-label="合同与约定" hidden={businessMode!=='commercial'||templatesOpen}>{commercialOpened&&<div ref={commercialTarget} tabIndex={-1} role="group" aria-label="合同与约定资料">{commercialPanel}</div>}</section>}
+        {!onOpenTemplates&&<section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>}
+        <p className="cr-selection-context" hidden={businessMode==='commercial'}>当前场景：{sceneItems.length} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
       </div>
   );
   return <div className={`cr-assistant ${docked?'is-docked':''} ${studio.expanded?'is-open':''} ${!docked&&studio.expanded&&workspaceExpanded?'is-workspace-expanded':''} ${selectedItem?'has-properties':''}`}>
     {docked&&businessOpened&&businessHost&&createPortal(businessContent,businessHost,'creative-business')}
-    {(docked||opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className={`cr-chat ${!docked&&workspaceExpanded?'is-expanded':''}`} aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();studio.setExpanded(false);}}}>
-      <header><div className="cr-header-brand"><span className="cr-avatar"><AssistantMascot busy={studio.busy}/></span><div><strong>Binggo</strong><small title={studio.layout.name}>{operationScope} · {studio.layout.name}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'收起聊天':'收起 Agent'} onClick={()=>studio.setExpanded(false)}><X size={18}/>{docked&&<span className="cr-mobile-return">回到场景</span>}</button></div></header>
-      <nav className="cr-docked-tools" aria-label="工作资料入口"><button type="button" onClick={openBrief}>活动需求</button><button type="button" onClick={openReference}>图纸与尺寸</button><button type="button" onClick={openDelivery}>执行资料</button><button type="button" onClick={openReview}>方案评审</button><button type="button" onClick={event=>{businessEntry.current=event.currentTarget;setTemplatesOpen(true);resizeWorkspace(true);}}>场景模板</button>{mode==='model'&&<button type="button" onClick={openModelTools}>物料工具</button>}</nav>
+    {(docked||opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className={`cr-chat ${!docked&&workspaceExpanded?'is-expanded':''}`} aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();closeChat();}}}>
+      <header><div className="cr-header-brand"><div><strong>Binggo</strong><small title={localSaveError?undefined:studio.layout.name} role={localSaveError?'alert':undefined}>{localSaveError?'本机保存失败，请导出备份':`${operationScope} · ${studio.layout.name}`}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'收起聊天':'收起 Agent'} onClick={closeChat}><X size={18}/></button></div></header>
       {!docked&&<div className="cr-workspace-tools">{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}><ArrowLeft size={14}/>返回当前工作区</button>}<button className="cr-workspace-toggle" type="button" aria-pressed={workspaceExpanded} onMouseDown={event=>{if(event.button===0)event.preventDefault();}} onClick={()=>resizeWorkspace(!workspaceExpanded)}>{workspaceExpanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}<span>{workspaceExpanded?'恢复浮窗':'展开工作区'}</span></button><span>{studio.connection}</span><div className="cr-chat-toggle-wrap" hidden={!workspaceExpanded}><button ref={chatToggle} className="cr-chat-toggle" type="button" aria-label={chatHidden?'展开聊天':'收起聊天'} aria-controls="creative-conversation" aria-expanded={!chatHidden} aria-describedby={chatHidden&&chatPending?'creative-conversation-status':undefined} onClick={toggleChat}>{chatHidden?'展开聊天':'收起聊天'}</button>{chatHidden&&chatPending&&<span id="creative-conversation-status" className="cr-chat-pending" role="status" aria-live="polite">{chatPending} · 展开聊天查看</span>}</div></div>}
       <div className={`cr-plan-panel cr-workspace-body ${chatHidden?'is-chat-collapsed':''}`}>
       {!docked&&businessContent}
       <section id="creative-conversation" className="cr-conversation" aria-label="Binggo 聊天" hidden={chatHidden} ref={conversation} tabIndex={-1}>
 
       <div className="cr-chat-feed" ref={feed}>
-
-        <div aria-live="polite"><div>{studio.messages.map(m=><div key={m.id} className={`cr-message is-${m.role}`}><span>{m.role==='assistant'?'Binggo':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸，让 DeepSeek 查找资源或使用参数化建模；不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div>)}</div>
+        {studio.messages.filter(message=>message.id==='welcome').map(renderMessage)}
+        {!suggestionsVisible&&<button ref={suggestionsToggle} type="button" className="cr-suggestions-toggle" aria-expanded={false} aria-controls="creative-result-suggestions" onClick={()=>{setSuggestionsDismissed(false);setSuggestionsOpen(true);queueMicrotask(()=>suggestionsCard.current?.focus());}}>查看建议</button>}
+        <section ref={suggestionsCard} tabIndex={-1} id="creative-result-suggestions" className="cr-result-suggestions" aria-label="成果建议" hidden={!suggestionsVisible}><header><strong>想先处理哪一项？</strong><button type="button" aria-label="关闭成果建议" onClick={()=>{setSuggestionsDismissed(true);setSuggestionsOpen(false);queueMicrotask(()=>suggestionsToggle.current?.focus());}}><X size={16}/></button></header><div>{resultSuggestions.slice(0,3).map((suggestion,index)=><button type="button" key={suggestion.label} onClick={suggestion.open}><span className="cr-suggestion-letter" aria-hidden="true">{['A','B','C'][index]}</span><span>{suggestion.label}</span></button>)}</div></section>
+        <div aria-live="polite"><div>{studio.messages.filter(message=>message.id!=='welcome').map(renderMessage)}</div>
         {studio.busy&&<div className="cr-chat-working"><Loader2 className="cr-spin" size={15}/><span>{studio.run?.progress||'正在提交任务…'}</span>{(!studio.run||['queued','running'].includes(studio.run.state))&&<button type="button" onClick={()=>void studio.cancelRun()}>取消任务</button>}</div>}
         {studio.recoverable&&<div className="cr-proposal"><p>原任务结果待核对。查询会继续读取原任务，不会再次提交生成。</p><button type="button" disabled={studio.busy} onClick={()=>void studio.recoverRun()}>查询原任务</button><button type="button" disabled={studio.busy} onClick={()=>void studio.cancelRun()}>取消原任务</button></div>}
         {studio.candidates.length>0&&studio.run?.jevEnabled&&<div className="cr-candidates" aria-label="JEV 方案比较">
@@ -1177,7 +1396,7 @@ export function CreativeAssistant({ generationPanel, workspaceOpenRequest = 0, w
       </section>
       </div>
     </section>}
-    {docked&&!studio.expanded&&chatPending&&<span className="cr-docked-pending" role="status">{chatPending} · 打开聊天查看</span>}
-    <button ref={launcher} aria-controls="creative-assistant" className="cr-assistant-launcher" type="button" onClick={()=>{if(!studio.expanded){returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;}if(docked){if(studio.expanded)setExpanded(false);else openChat();}else studio.setExpanded(!studio.expanded);}} aria-expanded={studio.expanded} aria-label={studio.expanded?'关闭 Binggo Agent':'打开 Binggo Agent'}><span><AssistantMascot busy={studio.busy}/></span>{!studio.expanded&&<>Binggo · Agent<i/></>}</button>
+    {!studio.expanded&&chatPending&&<span className="sr-only" role="status" aria-live="polite">{chatPending}</span>}
+    {assistantLauncher&&(docked&&assistantEntryHost?createPortal(assistantLauncher,assistantEntryHost):assistantLauncher)}
   </div>;
 }

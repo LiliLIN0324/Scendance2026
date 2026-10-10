@@ -56,7 +56,8 @@
 
 /* Account panel keeps project work and the optional team demo in one place. */
 .sc-account-trigger-avatar{display:grid;place-items:center;width:24px;height:24px;background:#e2e8d8;border-radius:50%;color:var(--sc-accent-ink)}
-.sc-cloud-trigger{padding:5px 11px 5px 6px;gap:8px}
+.sc-cloud-trigger{justify-content:center;width:34px;height:34px;padding:0;border:1px solid var(--sc-line);background:transparent;flex-shrink:0;box-shadow:none}
+.sc-account-trigger-avatar{width:28px;height:28px}
 .sc-account-dialog{width:min(1040px,calc(100vw - 48px));padding:0;background:#fafbf7;max-height:calc(100dvh - 48px);overflow:hidden}
 .sc-account-dialog[open]{display:flex;flex-direction:column}
 .sc-account-scroll{min-height:0;overflow:auto;overscroll-behavior:contain;border-radius:inherit}

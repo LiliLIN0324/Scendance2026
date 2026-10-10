@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { executionTimetableHtml } from '@/lib/execution-timetable-export';
 import { serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
 import { productionPlanHandoffHtml } from '@/lib/production-plan-export';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
@@ -21,6 +22,10 @@ vi.mock('@/lib/production-plan-export',async importOriginal=>{
   const original=await importOriginal<typeof import('@/lib/production-plan-export')>();
   return {...original,productionPlanHandoffHtml:vi.fn(original.productionPlanHandoffHtml)};
 });
+vi.mock('@/lib/execution-timetable-export',async importOriginal=>{
+  const original=await importOriginal<typeof import('@/lib/execution-timetable-export')>();
+  return {...original,executionTimetableHtml:vi.fn(original.executionTimetableHtml)};
+});
 let controller:BackendSession;
 const layout=makeLayout({roof:{style:'none'}});
 const itemId='30000000-0000-4000-8000-000000000001';
@@ -34,6 +39,31 @@ function completeActivity() {
   const text=serializeLocalProjectBackupV3(current,briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}});
   const backupActions={prepareBackup:vi.fn(async()=>text),restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
   return {current,brief,briefSnapshot,text,backupActions};
+}
+function timetableActivity() {
+  const f=completeActivity();
+  const acquisitionId='b1700000-0000-4000-8000-000000000001';
+  const current={...f.current,name:'独立演练活动',productionPlan:productionPlanSchema.parse({dataKind:'rehearsal',acquisitions:[{
+    id:acquisitionId,title:'演练椅租赁',method:'rental',taskIds:[itemId],objectIds:[itemId],
+  }]}),eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[
+    {id:itemId,title:'仅文字的主持沟通 <核对>',phase:'event',ownerName:'演练负责人',acceptance:'确认串场说明'},
+    {id:'b1700000-0000-4000-8000-000000000002',title:'核对椅摆放',phase:'setup',ownerName:'演练负责人',objectIds:[itemId],
+      plannedStartAt:'2027-02-03T10:00:00+08:00',plannedEndAt:'2027-02-03T11:00:00+08:00'},
+  ]})};
+  const ledger=materialCheckinLedgerSchema.parse({projectId:checkinProject,dataKind:'rehearsal',sheets:[{
+    id:'b1700000-0000-4000-8000-000000000003',acquisitionId,unit:'piece',acquisitionSnapshot:{title:'演练椅租赁'},
+    agreements:[{id:'b1700000-0000-4000-8000-000000000004',agreedQuantity:20,basisNote:'独立演练约定',recordedAt:'2027-02-03T08:00:00+08:00',recordedBy:'演练记录人'}],
+    events:[{id:'b1700000-0000-4000-8000-000000000005',kind:'receive',quantity:18,checkState:'checked',batchRef:'演练实收批次',fromPartyName:'演练交出方',toPartyName:'演练接收方',evidenceNote:'独立假设收取核对',occurredAt:'2027-02-03T09:00:00+08:00',recordedAt:'2027-02-03T09:05:00+08:00',recordedBy:'演练记录人'},
+      {id:'b1700000-0000-4000-8000-000000000006',kind:'return',quantity:18,checkState:'checked',batchRef:'演练归还批次',fromPartyName:'演练接收方',toPartyName:'演练交出方',evidenceNote:'独立假设归还核对',occurredAt:'2027-02-03T17:00:00+08:00',recordedAt:'2027-02-03T17:05:00+08:00',recordedBy:'演练记录人'}],
+  }]});
+  const text=serializeLocalProjectBackupV3(current,f.briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'present',value:ledger}});
+  f.backupActions.prepareBackup.mockResolvedValue(text);
+  return {...f,current,ledger,text};
+}
+function deferred<T>() {
+  let resolve!:(value:T)=>void;
+  const promise=new Promise<T>(done=>{resolve=done;});
+  return {promise,resolve};
 }
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
@@ -179,6 +209,31 @@ describe('Binggo scene delivery panel',()=>{
     expect(screen.queryByText('场景与活动备份')).toBeNull();
     expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(false);
   });
+  it('preserves task and material drafts across explicit delivery navigation without reselecting a repeated request',async()=>{
+    const f=completeActivity(),updateOperations=vi.fn(),updateItem=vi.fn();
+    const props={layout:f.current,controller,backupActions:f.backupActions,onUpdateEventOperations:updateOperations,onUpdateItem:updateItem};
+    const initialMaterialsRequest={serial:1,view:'materials' as const},operationsRequest={serial:2,view:'operations' as const},materialsRequest={serial:3,view:'materials' as const};
+    const view=render(<SceneDeliveryPanel {...props} deliveryViewRequest={initialMaterialsRequest}/>);
+    expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
+    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={operationsRequest}/>);
+    const taskSummary=screen.getByText('未关联制作计划的主持任务');fireEvent.click(taskSummary);taskSummary.closest('details')!.open=true;
+    const taskTitle=within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题') as HTMLInputElement;
+    fireEvent.change(taskTitle,{target:{value:'未保存的演练主持说明'}});
+    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/>);
+    expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
+    const itemSummary=within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByText('签到椅 · 1');fireEvent.click(itemSummary);itemSummary.closest('details')!.open=true;
+    const acceptance=within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByLabelText('验收条件') as HTMLTextAreaElement;
+    fireEvent.change(acceptance,{target:{value:'未保存的演练摆放要求'}});
+    fireEvent.click(screen.getByRole('tab',{name:'活动安排'}));
+    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/>);
+    expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
+    expect(within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题')).toBe(taskTitle);expect(taskTitle.value).toBe('未保存的演练主持说明');
+    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={{serial:4,view:'operations'}}/>);
+    expect(within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题')).toBe(taskTitle);expect(taskTitle.value).toBe('未保存的演练主持说明');
+    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={{serial:5,view:'materials'}}/>);
+    expect(within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByLabelText('验收条件')).toBe(acceptance);expect(acceptance.value).toBe('未保存的演练摆放要求');
+    expect(updateOperations).not.toHaveBeenCalled();expect(updateItem).not.toHaveBeenCalled();expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
+  });
   it('only prepares and downloads after an explicit click',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     expect(exportDeliveryGlb).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
@@ -306,5 +361,131 @@ describe('Binggo scene delivery panel',()=>{
     fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledTimes(2));
     view.rerender(<SceneDeliveryPanel layout={{...current,eventOperations:{...current.eventOperations,tasks:[{...current.eventOperations.tasks[0],title:'新演练任务'}]}}} controller={controller}/>);
     await act(async()=>{done('old operations');});expect(downloadSceneDelivery).toHaveBeenCalledTimes(before);
+  });
+});
+
+describe('saved execution timetable delivery',()=>{
+  const exportButton=()=>screen.getByRole('button',{name:'导出执行时间表 HTML'}) as HTMLButtonElement;
+  it('exports the actual saved V3 tasks, unknown dates, owner links and 20/18/18 ledger without model delivery',async()=>{
+    const f=timetableActivity();
+    const live={...f.current,name:'尚未保存的画面名称',eventOperations:eventOperationsSchema.parse({tasks:[{id:itemId,title:'画面中的其他任务',phase:'event'}]}),scenePreset:'gym' as const};
+    render(<SceneDeliveryPanel layout={live} controller={controller} backupActions={f.backupActions} checkins={checkinState(f.ledger)}/>);
+    expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();
+    expect(exportButton().disabled).toBe(false);
+    fireEvent.click(exportButton());
+    await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
+    expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),f.ledger);
+    const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
+    expect(typeof html).toBe('string');
+    const document=new DOMParser().parseFromString(html as string,'text/html');
+    expect([...document.querySelectorAll('#chronology article[data-task-id]')].map(row=>row.getAttribute('data-task-id')).sort()).toEqual(f.current.eventOperations.tasks.map(row=>row.id).sort());
+    const textTask=document.querySelector(`#chronology [data-task-id="${itemId}"]`)!;
+    expect(textTask.textContent).toContain('仅文字的主持沟通 <核对>');expect(textTask.textContent).toContain('无物件关联');
+    expect(textTask.querySelector('time')!.textContent).toBe('待安排');expect(textTask.querySelector('time')!.hasAttribute('datetime')).toBe(false);
+    expect(document.querySelector('[data-day="unknown"]')!.textContent).toContain('计划日期待安排');
+    expect(document.querySelector('[data-day="2027-02-03"]')).not.toBeNull();
+    for(const link of document.querySelectorAll<HTMLAnchorElement>('#owners a[data-task-ref]'))expect(document.querySelector(link.getAttribute('href')!)?.getAttribute('data-task-id')).toBe(link.dataset.taskRef);
+    expect(document.querySelectorAll('#owners a[data-task-ref]')).toHaveLength(2);
+    for(const [key,value] of [['agreedQuantity','20 件'],['receivedQuantity','18 件'],['returnedQuantity','18 件'],['notReceivedQuantity','2 件'],['notReturnedQuantity','0 件']])expect(document.querySelector(`[data-quantity="${key}"] dd`)!.textContent).toBe(value);
+    expect(html).not.toContain('画面中的其他任务');expect(document.querySelector('script')).toBeNull();
+    expect(mime).toBe('text/html;charset=utf-8');expect(name).toContain('独立演练活动_执行时间表_');expect(extension).toBe('html');
+    expect(exportDeliveryGlb).not.toHaveBeenCalled();expect(productionPlanHandoffHtml).not.toHaveBeenCalled();
+  });
+  it('accepts explicitly absent brief and ledger, preserving unknown quantities without a production plan',async()=>{
+    const f=completeActivity();
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current,{state:'ready',scope:checkinProject,brief:{status:'absent'}},{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.anything(),undefined);
+    const html=vi.mocked(downloadSceneDelivery).mock.calls[0][0];expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('本次未提供点验账册，收退数量与差额待确认。');
+  });
+  it.each(['legacy-scene','legacy-v2','wrong-project'] as const)('rejects %s instead of treating uncovered saved records as absent',async kind=>{
+    const f=completeActivity();
+    f.backupActions.prepareBackup.mockResolvedValue(kind==='legacy-scene'?JSON.stringify(f.current):kind==='legacy-v2'?serializeLocalProjectBackup(f.current,f.briefSnapshot):f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    fireEvent.click(exportButton());await screen.findByText('活动资料未完整对应当前项目，请重新读取后导出。');
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();expect(exportButton().disabled).toBe(false);
+  });
+  it.each(['empty','no-callback','backup-pending','brief-loading','brief-error','checkin-unreadable'] as const)('does not offer an actionable timetable for %s',kind=>{
+    const f=completeActivity();
+    const briefState={brief:f.brief,ready:kind!=='brief-loading',error:kind==='brief-error'?'需求读取失败':null,hasSavedBrief:true};
+    render(<SceneDeliveryPanel layout={kind==='empty'?{...f.current,eventOperations:eventOperationsSchema.parse({})}:f.current} controller={controller}
+      backupActions={kind==='no-callback'?undefined:{...f.backupActions,backupPending:kind==='backup-pending'}} briefState={briefState}
+      checkins={kind==='checkin-unreadable'?{...checkinState(),ready:false,error:'点验读取失败'}:checkinState()}/>);
+    if(kind==='no-callback')expect(screen.queryByRole('button',{name:'导出执行时间表 HTML'})).toBeNull();
+    else{expect(exportButton().disabled).toBe(true);fireEvent.click(exportButton());}
+    if(kind==='empty')expect(screen.getByText('先在活动安排中保存任务，再导出执行时间表。')).toBeDefined();
+    if(kind==='brief-loading'||kind==='brief-error')expect(screen.getByText('活动需求尚未准备好，请在活动需求中重试读取。')).toBeDefined();
+    expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();
+  });
+  it.each(['未保存的评审说明须先保存或放弃','点验账册无法读取'] as const)('keeps a failed preparation retryable without downloading: %s',async message=>{
+    const f=completeActivity();f.backupActions.prepareBackup.mockRejectedValueOnce(new Error(message));
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    fireEvent.click(exportButton());await screen.findByText(message);
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();expect(exportButton().disabled).toBe(false);
+    fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());expect(f.backupActions.prepareBackup).toHaveBeenCalledTimes(2);
+  });
+  it('freezes each downloaded HTML and gives unchanged and subsequently saved exports independent file IDs',async()=>{
+    const f=completeActivity();const view=render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(1));
+    const first=vi.mocked(downloadSceneDelivery).mock.calls[0],firstHtml=first[0];
+    fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(2));
+    const metadata=vi.mocked(executionTimetableHtml).mock.calls.map(call=>call[1]);expect(metadata[0].id).not.toBe(metadata[1].id);expect(first[2]).not.toBe(vi.mocked(downloadSceneDelivery).mock.calls[1][2]);
+    const changed={...f.current,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:itemId,title:'后续保存的主持安排',phase:'event'}]})};
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(changed,f.briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
+    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller} backupActions={f.backupActions}/>);
+    fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(downloadSceneDelivery).mock.calls[2][0]).toContain('后续保存的主持安排');
+    expect(first[0]).toBe(firstHtml);expect(firstHtml).toContain('未关联制作计划的主持任务');expect(firstHtml).not.toContain('后续保存的主持安排');
+  });
+  it.each(['layout','controller','account','unmount'] as const)('drops a late prepared timetable after %s changes',async change=>{
+    const f=completeActivity(),held=deferred<string>();f.backupActions.prepareBackup.mockReturnValueOnce(held.promise);
+    let snapshot=controller.getSnapshot();vi.spyOn(controller,'getSnapshot').mockImplementation(()=>snapshot);
+    const props={layout:f.current,controller,backupActions:f.backupActions};const view=render(<SceneDeliveryPanel {...props}/>);
+    fireEvent.click(exportButton());fireEvent.click(exportButton());await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
+    let other:BackendSession|undefined;
+    if(change==='unmount')view.unmount();
+    else if(change==='layout')view.rerender(<SceneDeliveryPanel {...props} layout={{...f.current,name:'后续场景'}}/>);
+    else if(change==='controller'){other=new BackendSession(getBackendConfig({url:'',anonKey:''}));view.rerender(<SceneDeliveryPanel {...props} controller={other}/>);}
+    else{snapshot={...snapshot,user:{id:'后续账号'}};view.rerender(<SceneDeliveryPanel {...props}/>);}
+    await act(async()=>held.resolve(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();
+    other?.dispose();
+  });
+  it.each(['layout','brief','brief-loading','ledger','checkin-loading','cloud-project','unmount'] as const)('drops a late generated timetable after %s changes',async change=>{
+    const f=timetableActivity(),held=deferred<string>();vi.mocked(executionTimetableHtml).mockReturnValueOnce(held.promise);
+    const project=(id:string)=>({id,studio_id:'studio',name:'演练场景服务',revision:1,scene:{schemaVersion:1 as const,venue:{width:8,depth:6,height:3,shape:'rectangle' as const,entrances:[]},objects:[],camera:'overview' as const,lighting:'neutral' as const}});
+    let snapshot=controller.getSnapshot();
+    if(change==='cloud-project'){
+      snapshot={...snapshot,user:{id:'演练账号'},project:project('20000000-0000-4000-8000-000000000010'),geometryBinding:{version:1,localActivityId:checkinProject,cloudProjectId:'20000000-0000-4000-8000-000000000010',userId:'演练账号',apiUrl:controller.config.apiUrl}};
+      vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>id===checkinProject);
+    }
+    vi.spyOn(controller,'getSnapshot').mockImplementation(()=>snapshot);
+    const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true},checkins=checkinState(f.ledger);
+    const props={layout:f.current,controller,backupActions:f.backupActions,briefState,checkins};const view=render(<SceneDeliveryPanel {...props}/>);
+    fireEvent.click(exportButton());await waitFor(()=>expect(executionTimetableHtml).toHaveBeenCalledOnce());
+    if(change==='unmount')view.unmount();
+    else if(change==='layout')view.rerender(<SceneDeliveryPanel {...props} layout={{...f.current,name:'后续场景'}}/>);
+    else if(change==='brief')view.rerender(<SceneDeliveryPanel {...props} briefState={{...briefState,brief:{...f.brief,description:'后续需求'}}}/>);
+    else if(change==='brief-loading')view.rerender(<SceneDeliveryPanel {...props} briefState={{...briefState,ready:false}}/>);
+    else if(change==='ledger')view.rerender(<SceneDeliveryPanel {...props} checkins={checkinState(materialCheckinLedgerSchema.parse({...f.ledger,sheets:[]}))}/>);
+    else if(change==='checkin-loading')view.rerender(<SceneDeliveryPanel {...props} checkins={{...checkins,ready:false,loading:true}}/>);
+    else{const remoteId='20000000-0000-4000-8000-000000000011';snapshot={...snapshot,project:project(remoteId),geometryBinding:{...snapshot.geometryBinding!,cloudProjectId:remoteId}};view.rerender(<SceneDeliveryPanel {...props}/>);expect(controller.isGeometryBound(checkinProject)).toBe(true);}
+    await act(async()=>held.resolve('<html>原活动的迟到结果</html>'));expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    expect(screen.queryByText('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。')).toBeNull();
+  });
+  it.each(['brief-readiness','activity-scope'] as const)('does not revive a pending timetable after %s leaves and returns to the original references',async change=>{
+    const f=timetableActivity(),held=deferred<string>();vi.mocked(executionTimetableHtml).mockReturnValueOnce(held.promise);
+    const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true},checkins=checkinState(f.ledger);
+    const props={layout:f.current,controller,backupActions:f.backupActions,briefState,checkins};const view=render(<SceneDeliveryPanel {...props}/>);
+    fireEvent.click(exportButton());await waitFor(()=>expect(executionTimetableHtml).toHaveBeenCalledOnce());
+    if(change==='brief-readiness')view.rerender(<SceneDeliveryPanel {...props} briefState={{...briefState,ready:false}}/>);
+    else view.rerender(<SceneDeliveryPanel {...props} layout={{...f.current,id:'20000000-0000-4000-8000-000000000002',name:'另一演练活动'}}/>);
+    // Commit both transitions; the final render deliberately reuses every original source reference.
+    view.rerender(<SceneDeliveryPanel {...props}/>);
+    await act(async()=>held.resolve('<html>往返切换前的时间表</html>'));
+    expect(downloadSceneDelivery).not.toHaveBeenCalled();
+    expect(screen.queryByText('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。')).toBeNull();
+    expect(exportButton().disabled).toBe(false);
   });
 });

@@ -70,7 +70,7 @@ const duplicateIds = (ids: string[]) => uniqueIds(ids.filter((id, index) => ids.
 
 const objectSchema = z.strictObject({
   id: z.string().min(1).max(eventOperationsLimits.objectId).refine(value => value.trim().length > 0),
-  name: z.string(), floorName: z.string(), width: z.number().positive(), depth: z.number().positive(), height: z.number().positive(),
+  name: z.string(), notes: z.string().default(''), floorName: z.string(), width: z.number().positive(), depth: z.number().positive(), height: z.number().positive(),
   position: z.strictObject({ x: z.number(), z: z.number() }).optional(), rotation: z.number().optional(), elevation: z.number().optional(),
 });
 type HandoffObject = z.infer<typeof objectSchema> & { label: string; handoff?: Handoff };
@@ -111,6 +111,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
   let objects: HandoffObject[];
   try {
     objects = layout.floors.flatMap(floor => floor.items.map(item => objectSchema.parse({ id: item.id, name: item.name,
+      ...(activityScope ? { notes: item.notes ?? '' } : {}),
       floorName: floor.name, width: item.width, depth: item.depth, height: item.height,
       ...(item.position ? { position: item.position } : {}), ...(item.rotation !== undefined ? { rotation: item.rotation } : {}),
       ...(item.elevation !== undefined ? { elevation: item.elevation } : {}) })))
@@ -141,7 +142,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       if (!found?.length) return `${kind}缺失，需核对（原编号见附录）`;
       if (found.length !== 1) return `${kind}编号歧义，需核对（原编号见附录）`;
       return `${found[0].label} · ${title(found[0])}`;
-    }).join('\n') : '尚未关联，待确认';
+    }).join('\n') : `未关联${kind}`;
   const taskRefs = (ids: string[]) => refs(ids, taskIndex, '任务', row => row.title);
   const objectRefs = (ids: string[]) => refs(ids, objectIndex, '物件', row => `${unknown(row.name)}（${unknown(row.floorName)}）`);
   const compactObjectRefs = (ids: string[]) => {
@@ -153,7 +154,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       else labels.push(found[0].label);
     }
     return [labels.join('、'), missing ? `缺失物件 ${missing} 项，需核对（原编号见附录）` : '',
-      ambiguous ? `物件编号歧义 ${ambiguous} 项，需核对（原编号见附录）` : ''].filter(Boolean).join('\n') || '尚未关联，待确认';
+      ambiguous ? `物件编号歧义 ${ambiguous} 项，需核对（原编号见附录）` : ''].filter(Boolean).join('\n') || '未关联场景物件';
   };
   const reviewText = (review: ProductionReferenceReview | undefined) => {
     if (!review) return '关联核对待确认';
@@ -224,7 +225,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
   const objectWorkSheets = activityScope ? `<section id="handoff-workorders"><h2>逐件物料工作单</h2>${para('物件编号与同快照摆位示意一致。记录状态保留原填写内容，执行前以有效状态和完成条件核对；未填工作单不表示已完成。')}${objects.length ? table(
     ['物件／位置', '负责人／期限', '完成条件', '记录状态／有效状态', '现场核对说明／证据文本'], objects.map(object => {
       const handoff = object.handoff;
-      return [`${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}`,
+      return [`${object.label} · ${unknown(object.name)}\n${unknown(object.floorName)}\n物件备注：${object.notes.trim() ? object.notes : '未记录'}`,
         `负责人：${unknown(handoff?.ownerName ?? '')}\n期限：${unknown(handoff?.dueDate ?? '')}`,
         unknown(handoff?.acceptance ?? ''),
         handoff ? `记录状态：${HANDOFF_STATUS_LABELS[handoff.status]}\n有效状态：${objectStatuses.get(object.label)}` : '尚未填写工作单；分工与进展待确认',
@@ -323,7 +324,12 @@ ${sheetData.length ? sheetData.map(({ sheet, projection, summary }, index) => {
     ['已核部分收取／退回', `收取：${checkedReceived ? quantityText(summary.knownReceivedQuantity, sheet.unit) : '待确认（尚无已核收取记录）'}\n退回：${checkedReturned ? quantityText(summary.knownReturnedQuantity, sheet.unit) : '待确认（尚无已核退回记录）'}`],
     ['未收／未退差额', `相对约定未收：${quantityText(summary.notReceivedQuantity, sheet.unit)}\n相对已收未退：${quantityText(summary.notReturnedQuantity, sheet.unit)}`],
     ['超收／超退差额', `超收：${quantityText(summary.overReceivedQuantity, sheet.unit)}\n超退：${quantityText(summary.overReturnedQuantity, sheet.unit)}`],
-    ['异常与待核', summary.issues.length ? summary.issues.map(issue => checkinIssues[issue.code]).join('\n') : '未发现契约列出的数量异常；不等于已获施工或客户批准'],
+    ['异常与待核', [
+      `数量校验：${summary.issues.length ? summary.issues.map(issue => checkinIssues[issue.code]).join('；') : '未发现已定义的数量校验异常'}`,
+      summary.notReceivedQuantity === null ? '相对约定未收数量待确认' : `相对约定${summary.notReceivedQuantity > 0 ? '仍' : ''}未收 ${quantityText(summary.notReceivedQuantity, sheet.unit)}${summary.notReceivedQuantity > 0 ? '，需跟进' : ''}`,
+      summary.notReturnedQuantity === null ? '相对实收未退数量待确认' : `相对实收${summary.notReturnedQuantity > 0 ? '仍' : ''}未退 ${quantityText(summary.notReturnedQuantity, sheet.unit)}${summary.notReturnedQuantity > 0 ? '，需跟进' : ''}`,
+      '不等于已获施工或客户批准',
+    ].join('\n')],
   ])}<h4>当前有效批次记录（含待核与争议）</h4>${projection.effectiveEvents.length ? table(['批次／类型', '数量／核对标记', '实际发生／录入时间', '交接双方／记录人', '说明与证据文本'], projection.effectiveEvents.map(event => [
     `${unknown(event.batchRef)}\n${checkinKinds[event.kind]}`, `${quantityText(event.quantity, sheet.unit)}\n${checkinStates[event.checkState]}`,
     `发生：${time(event.occurredAt)}\n录入：${time(event.recordedAt)}`,

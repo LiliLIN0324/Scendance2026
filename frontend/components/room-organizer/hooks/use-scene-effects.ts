@@ -550,7 +550,10 @@ export function useSceneEffects({
         edges,
         new THREE.LineBasicMaterial({ color: accent, linewidth: 2 })
       );
-      outline.position.y = (band.bottom + band.top) / 2;
+      // Item dimensions are metres; a cached GLB root already carries its normalization scale.
+      // Cancel that scale for this decoration while inheriting placement and rotation.
+      outline.scale.set(1 / group.scale.x, 1 / group.scale.y, 1 / group.scale.z);
+      outline.position.y = (band.bottom + band.top) / (2 * group.scale.y);
       outline.userData.type = 'selection-outline';
       // Decoration, not a pointer target: the furniture raycast is recursive
       // and a line's pick threshold would give the item a hit halo (#333).
@@ -566,7 +569,7 @@ export function useSceneEffects({
     isReady, invalidate, threeModuleRef, sceneRef,
     activeFloor, activeFloorIndex, layout, layout.width, layout.height, entranceBuilding,
     selectedItemId, extraSelectedIds, highlightedIds,
-    layout.floors, view.showAllFloors, view.wallDisplay, peopleModelReady,
+    layout.floors, view.showAllFloors, view.wallDisplay, peopleModelReady, glbAssetsRevision,
   ]);
 
   // Wi-Fi rings + camera vision cones. Independently tagged overlays, so

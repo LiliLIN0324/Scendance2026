@@ -36,6 +36,8 @@ export const MAX_ROOM_DIMENSION = 100;
 // width of 1e12 passes a bare positivity check and destroys the scene scale
 // (camera framing, collision math, shadow map) (#121).
 export const MAX_ITEM_DIMENSION = 50;
+export const MIN_ITEM_FOOTPRINT = 0.1;
+export const MIN_ITEM_HEIGHT = 0.01; // The shared activity catalogue includes 1 cm carpets.
 
 /** How far a bracketed security camera stands off the wall, in metres. */
 export const CAMERA_BRACKET_ARM = 0.22;

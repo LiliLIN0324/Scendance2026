@@ -1,5 +1,6 @@
 import { reconstructionJobSchema, type ReconstructionRequest } from '../supabase/functions/_shared/reconstruction-contract.ts';
-import { sceneHash, type SourceImage, type Scene } from '../supabase/functions/_shared/domain.ts';
+import { canonical, sceneHash, sha256, uuid, type SourceImage, type Scene } from '../supabase/functions/_shared/domain.ts';
+import { activityTaskRunRequestSchema, activityTaskRunSchema, type ActivityTaskRunRequest, type ActivityTaskRun } from '../supabase/functions/_shared/activity-task-contract.ts';
 
 export class SceneApiError extends Error {
   constructor(public code:string,public status:number,public details:unknown) {super(code);}
@@ -26,8 +27,39 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
     if(!response.ok) throw new SceneApiError(data.error?.code??'HTTP_ERROR',response.status,data.error?.details);
     return data as T;
   }
+  function activityResponse(data:unknown,expected:{projectId:string;id?:string;requestId?:string;activityId?:string;contextHash?:string;cancelled?:boolean}):ActivityTaskRun {
+    const parsed=activityTaskRunSchema.safeParse(data),same=(left:string,right:string)=>left.toLowerCase()===right.toLowerCase();
+    if(!parsed.success)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const run=parsed.data;
+    if(!same(run.projectId,expected.projectId)||(expected.id!==undefined&&!same(run.id,expected.id))
+      ||(expected.requestId!==undefined&&!same(run.requestId,expected.requestId))
+      ||(expected.activityId!==undefined&&run.activityId!==expected.activityId)
+      ||(expected.contextHash!==undefined&&run.contextHash!==expected.contextHash)
+      ||(expected.cancelled&&run.state!=='cancelled'))throw new SceneApiError('INVALID_RESPONSE',502,null);
+    return run;
+  }
   return {
     request,
+    /** The caller records this request ID before dispatch; an uncertain POST is recovered only by GET. */
+    async startActivityTaskRun(projectId:string,input:ActivityTaskRunRequest):Promise<ActivityTaskRun> {
+      const remoteId=uuid.parse(projectId),body=activityTaskRunRequestSchema.parse(input);
+      const contextHash=await sha256(canonical(body.activityContext));
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs`,'POST',body),{
+        projectId:remoteId,requestId:body.requestId,activityId:body.activityContext.projectId,contextHash,
+      });
+    },
+    async getActivityTaskRun(projectId:string,id:string):Promise<ActivityTaskRun> {
+      const remoteId=uuid.parse(projectId),runId=uuid.parse(id);
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs/${runId}`),{projectId:remoteId,id:runId});
+    },
+    async getActivityTaskRunByRequest(projectId:string,requestId:string):Promise<ActivityTaskRun> {
+      const remoteId=uuid.parse(projectId),requestKey=uuid.parse(requestId);
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs/by-request/${requestKey}`),{projectId:remoteId,requestId:requestKey});
+    },
+    async cancelActivityTaskRun(projectId:string,id:string):Promise<ActivityTaskRun> {
+      const remoteId=uuid.parse(projectId),runId=uuid.parse(id);
+      return activityResponse(await request(`/projects/${remoteId}/agent-runs/${runId}/cancel`,'POST'),{projectId:remoteId,id:runId,cancelled:true});
+    },
     listSources(projectId:string){return request<SourceImage[]>(`/projects/${projectId}/sources`);},
     uploadSource(projectId:string,file:File,kind:SourceImage['kind']){const body=new FormData();body.set('projectId',projectId);body.set('file',file);body.set('kind',kind);return request<SourceImage>('/assets/sources','POST',body);},
     removeSource(projectId:string,assetId:string){return request<{removed:true}>(`/projects/${projectId}/sources/${assetId}`,'DELETE');},

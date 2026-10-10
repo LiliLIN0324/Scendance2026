@@ -13,6 +13,7 @@ export type { HoverInfo, SelectionMode } from '../three/drag-handlers';
 
 export interface UseThreeSceneOptions extends SceneEventHandlers {
   canvasRef: React.RefObject<HTMLCanvasElement>;
+  onViewportResize?: () => void;
 }
 
 export interface UseThreeSceneResult {
@@ -69,6 +70,8 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
   // init-effect dependency list (which would tear down the scene unnecessarily).
   const handlersRef = useRef<SceneEventHandlers>(options);
   handlersRef.current = options;
+  const viewportResizeRef = useRef(options.onViewportResize);
+  viewportResizeRef.current = options.onViewportResize;
 
   // Load Three.js + OrbitControls once.
   const [isModuleLoaded, setModuleLoaded] = useState(false);
@@ -253,6 +256,7 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
       // visible again after the 2D view, which fixes a resize that happened
       // while it was hidden. A hidden canvas reports 0×0: skip it (#363). The
       // window listener stays for devicePixelRatio changes (zoom, monitor).
+      let viewportResizeTimer: ReturnType<typeof setTimeout> | undefined;
       const onResize = () => {
         const width = canvas.clientWidth;
         const height = canvas.clientHeight;
@@ -262,11 +266,14 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height, false);
         dirtyRef.current = true;
+        clearTimeout(viewportResizeTimer);
+        viewportResizeTimer = setTimeout(() => viewportResizeRef.current?.(), 120);
       };
       const resizeObserver = new ResizeObserver(onResize);
       resizeObserver.observe(canvas);
       window.addEventListener('resize', onResize);
       cleanup.push(() => {
+        clearTimeout(viewportResizeTimer);
         resizeObserver.disconnect();
         window.removeEventListener('resize', onResize);
       });

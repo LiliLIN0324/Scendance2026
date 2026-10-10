@@ -10,6 +10,9 @@ export interface SceneResource {
   size?: { width: number; depth: number; height: number };
 }
 
+/** UUID comparison only; keep original asset IDs and opaque resource references unchanged. */
+export const assetUuidKey = (assetId: string) => uuid.parse(assetId).toLowerCase();
+
 // Use the same reviewed placement dimensions as the visible model library.
 // Raw GLB bounds are not a statement of real-world dimensions.
 export const libraryResources: readonly SceneResource[] = library.models.filter(model => model.assetId && !('blockedReason' in model)).map((model,index) => ({
@@ -21,20 +24,21 @@ export const libraryResources: readonly SceneResource[] = library.models.filter(
 
 /** Server-owned inventory. No storage paths, URLs, owner IDs or license payloads reach the model. */
 export async function readSceneResources(backend: Backend, actor: string, scene: Scene): Promise<SceneResource[]> {
-  const resources = new Map(libraryResources.map(resource => [resource.assetId,resource]));
+  const resources = new Map(libraryResources.map(resource => [assetUuidKey(resource.assetId),resource]));
   const own: { id: string; name: string; format: string }[] = await backend.scene(actor,'assets.list');
   for (const asset of own) {
-    if (asset.format !== 'glb' || resources.has(asset.id)) continue;
-    resources.set(asset.id,{ resourceId:`asset:${uuid.parse(asset.id)}`,assetId:asset.id,name:asset.name.slice(0,120),category:'个人素材；尺寸待指定' });
+    if (asset.format !== 'glb' || resources.has(assetUuidKey(asset.id))) continue;
+    resources.set(assetUuidKey(asset.id),{ resourceId:`asset:${uuid.parse(asset.id)}`,assetId:asset.id,name:asset.name.slice(0,120),category:'个人素材；尺寸待指定' });
   }
   for (const object of scene.objects) {
     if (!object.assetId) continue;
-    let resource=resources.get(object.assetId);
+    const assetKey=assetUuidKey(object.assetId);
+    let resource=resources.get(assetKey);
     if (!resource) {
       const asset=await backend.scene(actor,'assets.get',{assetId:object.assetId});
       resource={resourceId:`asset:${object.assetId}`,assetId:object.assetId,name:String(asset.name).slice(0,120),category:'当前场景素材'};
     }
-    if (!resource.size) resources.set(object.assetId,{...resource,size:{...object.size}});
+    if (!resource.size) resources.set(assetKey,{...resource,size:{...object.size}});
   }
   return [...resources.values()];
 }
@@ -47,9 +51,9 @@ export function resourceIndex(resources: readonly SceneResource[]) {
 
 /** Link existing instances to their catalogue identity without trusting client labels. */
 export function sceneResourceRefs(scene: Scene, resources: readonly SceneResource[]) {
-  const refs=new Map(resources.map(resource=>[resource.assetId,resource.resourceId]));
-  return Object.fromEntries(scene.objects.filter(object=>object.assetId && refs.has(object.assetId))
-    .map(object=>[object.id,refs.get(object.assetId!)]));
+  const refs=new Map(resources.map(resource=>[assetUuidKey(resource.assetId),resource.resourceId]));
+  return Object.fromEntries(scene.objects.filter(object=>object.assetId && refs.has(assetUuidKey(object.assetId)))
+    .map(object=>[object.id,refs.get(assetUuidKey(object.assetId!))]));
 }
 
 /** Names come from the packaged archives, never from user-supplied asset URLs. */

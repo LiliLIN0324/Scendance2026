@@ -58,5 +58,5 @@ export function resolveReferenceImage(layout:RoomLayout,storedSources:readonly S
       point.x>=0&&point.z>=0&&point.x<=source.width&&point.z<=source.height))return review;
   const imageToWorld=imageToWorldRegistration(raw.points as ImagePoint[],raw.worldWidth as number,raw.worldDepth as number);
   if(!imageToWorld)return review;
-  return {status:'ready',notice:source.assetId?'原图对应已核对，可在当前设计中使用。':'本机原图对应已核对，仅在此浏览器使用。',source,imageToWorld};
+  return {status:'ready',notice:source.assetId?'原图对应已核对，可在当前设计中使用。':'本机原图对应已核对，尚未同步到云端。',source,imageToWorld};
 }

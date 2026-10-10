@@ -46,6 +46,33 @@ export interface View2DTransform {
   offsetY: number;
 }
 
+interface LabelBounds { left: number; top: number; right: number; bottom: number }
+export interface DimensionLabel {
+  id: string; text: string; x: number; y: number; width: number; height: number;
+  /** Primary selection, other selected items, then the remaining items. */
+  priority: 0 | 1 | 2;
+  alternatives?: readonly { x: number; y: number }[];
+}
+function labelBounds(x: number, y: number, width: number, height: number): LabelBounds {
+  return { left: x - width / 2, top: y - height / 2, right: x + width / 2, bottom: y + height / 2 };
+}
+/** CSS-pixel labels only. Dense overview labels may be omitted; scene dimensions never change. */
+export function placeDimensionLabels(labels: readonly DimensionLabel[], viewport: { width: number; height: number }, blocked: readonly LabelBounds[] = []): (DimensionLabel & { bounds: LabelBounds })[] {
+  const placed: (DimensionLabel & { bounds: LabelBounds })[] = [];
+  const occupied = [...blocked];
+  for (const label of [...labels].sort((a, b) => a.priority - b.priority)) {
+    if (label.width <= 0 || label.height <= 0 || label.width > viewport.width - 4 || label.height > viewport.height - 4) continue;
+    for (const point of [label, ...(label.alternatives ?? [])]) {
+      const x = Math.max(2 + label.width / 2, Math.min(viewport.width - 2 - label.width / 2, point.x));
+      const y = Math.max(2 + label.height / 2, Math.min(viewport.height - 2 - label.height / 2, point.y));
+      const bounds = labelBounds(x, y, label.width, label.height);
+      if (occupied.some(other => bounds.left < other.right && bounds.right > other.left && bounds.top < other.bottom && bounds.bottom > other.top)) continue;
+      placed.push({ ...label, x, y, bounds }); occupied.push(bounds); break;
+    }
+  }
+  return placed;
+}
+
 /**
  * The exact fit-and-centre transform `render2DTopDown` paints with, exposed so
  * pointer handling and drop placement can invert it (#166, #219). The renderer
@@ -159,7 +186,16 @@ export function render2DTopDown(options: Render2DOptions): void {
     drawVisionCones(ctx, floor.items, offsetX, offsetY, scale, layout);
   }
 
-  drawFurniture(ctx, options, offsetX, offsetY, scale);
+  const dimensionBlockers: LabelBounds[] = [];
+  if (options.showMeasurements) {
+    ctx.save(); ctx.font = 'bold 12px Arial';
+    dimensionBlockers.push(labelBounds(offsetX + layout.width * scale / 2, offsetY - 10,
+      ctx.measureText(`${Number(layout.width.toFixed(2))}m`).width + 6, 16));
+    dimensionBlockers.push(labelBounds(offsetX - 10, offsetY + layout.height * scale / 2,
+      16, ctx.measureText(`${Number(layout.height.toFixed(2))}m`).width + 6));
+    ctx.restore();
+  }
+  drawFurniture(ctx, options, offsetX, offsetY, scale, { width: viewWidth, height: viewHeight }, dimensionBlockers);
 
   if (options.showMeasurements) {
     drawRoomDimensions(ctx, layout, offsetX, offsetY, scale);
@@ -599,8 +635,11 @@ function drawFurniture(
   options: Render2DOptions,
   offsetX: number,
   offsetY: number,
-  scale: number
+  scale: number,
+  viewport: { width: number; height: number },
+  dimensionBlockers: readonly LabelBounds[]
 ): void {
+  const labels: DimensionLabel[] = [];
   // Layer order (#286): rugs first, then floor furniture, tabletop items,
   // wall-mounted — so a rug listed after its sofa still paints beneath it.
   for (const item of planDrawOrder(options.floor.items)) {
@@ -647,18 +686,27 @@ function drawFurniture(
     if (item.type === 'stairs') drawStairsSymbol(ctx, item, options.layout, { scale, offsetX, offsetY });
 
     if (options.showMeasurements) {
-      // The label is drawn in screen space (outside the rotated transform), so
-      // offset it by the rotation-aware AABB half-depth to clear the footprint.
-      const { halfD } = rotatedHalfExtents(item);
-      ctx.save();
-      ctx.fillStyle = '#333';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Number(item.width.toFixed(2))}m × ${Number(item.depth.toFixed(2))}m`, cx, cy + halfD * scale + 15);
+      const { halfW, halfD } = rotatedHalfExtents(item);
+      if (cx + halfW * scale <= 0 || cx - halfW * scale >= viewport.width ||
+          cy + halfD * scale <= 0 || cy - halfD * scale >= viewport.height) continue;
+      const text = `${Number(item.width.toFixed(2))}m × ${Number(item.depth.toFixed(2))}m`;
+      ctx.save(); ctx.font = '10px Arial';
+      const width = ctx.measureText(text).width + 6;
       ctx.restore();
+      const priority = options.selectedItemId === item.id ? 0 : options.extraSelectedIds?.has(item.id) ? 1 : 2;
+      labels.push({ id: item.id, text, x: cx, y: cy + halfD * scale + 15, width, height: 14, priority,
+        ...(priority < 2 ? { alternatives: [
+          { x: cx, y: cy - halfD * scale - 15 },
+          { x: cx + halfW * scale + width / 2 + 5, y: cy },
+          { x: cx - halfW * scale - width / 2 - 5, y: cy },
+        ] } : {}) });
     }
   }
   drawSelectionOutlines(ctx, options, offsetX, offsetY, scale);
+  // Paint after every footprint, so later furniture cannot cover an earlier label.
+  ctx.save(); ctx.fillStyle = '#333'; ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const label of placeDimensionLabels(labels, viewport, dimensionBlockers)) ctx.fillText(label.text, label.x, label.y);
+  ctx.restore();
 }
 
 /**
@@ -704,6 +752,7 @@ function drawRoomDimensions(
   ctx.fillStyle = '#333';
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.fillText(`${Number(layout.width.toFixed(2))}m`, offsetX + (layout.width * scale) / 2, offsetY - 10);
   ctx.save();
   ctx.translate(offsetX - 10, offsetY + (layout.height * scale) / 2);

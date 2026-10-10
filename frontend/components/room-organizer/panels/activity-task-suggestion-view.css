@@ -1,0 +1,50 @@
+.ats-view {
+  margin-block: var(--sc-space-md, 16px);
+  border: 1px solid var(--sc-line, #dce2d2);
+  border-radius: 8px;
+  background: var(--sc-surface, #ffffffbf);
+  color: var(--sc-ink, #26392f);
+  font: var(--sc-type-body, 14px)/1.6 var(--sc-font, sans-serif);
+}
+.ats-view > summary { padding: var(--sc-space-md, 16px); cursor: pointer; }
+.ats-view > summary strong { font-size: var(--sc-type-section, 16px); font-weight: 600; }
+.ats-view > summary > span { display: block; margin-top: var(--sc-space-sm, 8px); color: var(--sc-muted, #6a7268); font-size: var(--sc-type-meta, 12px); }
+.ats-body { display: grid; gap: var(--sc-space-md, 16px); padding: 0 var(--sc-space-md, 16px) var(--sc-space-md, 16px); }
+.ats-body p { margin: 0; }
+.ats-body h3 { margin: 0 0 var(--sc-space-sm, 8px); font-size: var(--sc-type-section, 16px); font-weight: 600; }
+.ats-body h4 { margin: var(--sc-space-md, 16px) 0 var(--sc-space-sm, 8px); font-size: var(--sc-type-body, 14px); font-weight: 600; }
+.ats-selection { display: grid; gap: var(--sc-space-md, 16px); }
+.ats-field { display: grid; gap: var(--sc-space-sm, 8px); }
+.ats-field textarea { width: 100%; min-width: 0; resize: vertical; box-sizing: border-box; padding: var(--sc-space-sm, 8px); border: 1px solid var(--sc-line, #dce2d2); border-radius: 8px; background: #fff; color: inherit; font: inherit; }
+.ats-field textarea::placeholder { color: var(--sc-muted, #6a7268); }
+.ats-picks { min-width: 0; margin: 0; padding: var(--sc-space-sm, 8px); border: 1px solid var(--sc-line, #dce2d2); border-radius: 8px; }
+.ats-picks legend { padding-inline: var(--sc-space-sm, 8px); font-weight: 600; }
+.ats-view .ats-choice-list { min-width: 0; max-height: 160px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.ats-pick { display: flex; align-items: flex-start; gap: var(--sc-space-sm, 8px); padding-block: var(--sc-space-sm, 8px); cursor: pointer; }
+.ats-pick > input, .ats-approval > input { flex: none; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--sc-accent-ink, #465c33); }
+.ats-pick > span { min-width: 0; overflow-wrap: anywhere; }
+.ats-pick small, .ats-meta { display: block; color: var(--sc-muted, #6a7268); font-size: var(--sc-type-meta, 12px); }
+.ats-note { color: var(--sc-muted, #6a7268); font-size: var(--sc-type-meta, 12px); overflow-wrap: anywhere; }
+.ats-warning, .ats-error { padding: var(--sc-space-sm, 8px); border-inline-start: 3px solid #9d7445; background: #f5efe3; overflow-wrap: anywhere; }
+.ats-error { border-color: #a55142; background: #faf0ec; }
+.ats-disclosure, .ats-proposal { min-width: 0; padding-top: var(--sc-space-md, 16px); border-top: 1px solid var(--sc-line, #dce2d2); }
+.ats-facts { display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr); gap: var(--sc-space-sm, 8px); margin: var(--sc-space-sm, 8px) 0 0; }
+.ats-facts dt { color: var(--sc-muted, #6a7268); }
+.ats-facts dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ats-records { display: grid; gap: var(--sc-space-sm, 8px); margin: 0; padding: 0; list-style: none; }
+.ats-records > li { min-width: 0; padding: var(--sc-space-sm, 8px); border: 1px solid var(--sc-line, #dce2d2); border-radius: 8px; }
+.ats-records > li > strong { display: block; overflow-wrap: anywhere; }
+.ats-records .ats-pick { padding-top: 0; }
+.ats-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-sm, 8px); margin-top: var(--sc-space-md, 16px); }
+.ats-actions > .ats-note { flex-basis: 100%; }
+.ats-approval { display: flex; gap: var(--sc-space-sm, 8px); align-items: flex-start; min-width: 0; }
+.ats-view button.sc-button { white-space: normal; text-align: center; }
+.ats-view button.ats-primary { border-color: var(--sc-accent, #6f8f52); background: var(--sc-accent-soft, #e7ecd7); color: var(--sc-accent-ink, #465c33); }
+.ats-view :is(button, input, textarea):disabled { opacity: .55; cursor: not-allowed; }
+.ats-view :is(summary, button, input, textarea):focus-visible { outline: 2px solid var(--sc-accent-ink, #465c33); outline-offset: 3px; }
+.ats-result-actions:empty { display: none; }
+@media (max-width: 420px) {
+  .ats-facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .ats-facts dd { margin-bottom: var(--sc-space-sm, 8px); }
+  .ats-actions > button { flex: 1 1 auto; }
+}

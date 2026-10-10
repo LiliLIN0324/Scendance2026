@@ -1,5 +1,11 @@
 # 更新记录
 
+## 1.0.1 — 2026-10-10
+
+活动场地与执行工作台合入main：紧凑单排素材、侧边工具和助手共享画布，按剩余比例完整取景；资料关闭与未发送草稿保留。任务候选、合同原件、执行时间表、项目成果及可信公共模型恢复沿用已核流程。保留main的自有Supabase、Tokendance网关、匿名登录、域名及标准资源打包配置，根与前端版本同步1.0.1。
+
+具体功能和验证边界见[1.0.1发布说明](docs/RELEASE-1.0.1.md)。Pages自动部署前端；新后台任务接口和数据库、真实模型与现场效果分别验收。
+
 ## 1.0.0 — 2026-10-09
 
 - **自有部署**：后端改为自有 Supabase 项目 `wkhfvnzgopjdzxlmycks`；前端由 Cloudflare Pages 通过 GitHub 集成自动构建发布，地址 `https://scendance-scene-planner-ewz.pages.dev`。DeepSeek 仍直连官方 `api.deepseek.com`（`deepseek-flash`），使用自有 API key。
@@ -7,6 +13,12 @@
 - **版本号**：根目录与 `frontend/` 均从 `0.6.0` 升到 `1.0.0`。
 - **清理旧原型**：删除根目录独立静态原型的 `index.html`、`app.js`、`style.css`、`models.html`、`model-preview.js`、`serve.py`、`preview-webgl-desktop.jpg`、`preview-webgl-mobile.jpg`、`VALIDATION.md` 及 `docs/mockups/`。`renderer-webgl.js` 因官网三维演示仍在使用而保留。
 - **验证边界**：本次只改部署配置、发布脚本目标与文档；未改产品功能、数据库结构或 Edge Function 逻辑。
+
+## 开发分支工作台检查点 — 2026-10-10
+
+活动任务建议接入人工选择、摘要确认、稳定提案、保存读回及原执行表；合同原件可在资料分类管理。底部素材按需展开，Agent异常持久化停止继续执行，修改已有物件遵守选中范围。公共模型在可信编号和来源核对后恢复，保存失败及新几何继续编辑保持可核对。
+
+本机演练、真实模型与正式云分别记录，包版本仍为0.6.0。详见[功能与验证边界](docs/DELIVERY-PROGRESS-2026-10-10-WORKBENCH.md)。
 
 ## 0.6.0 — 2026-10-03
 

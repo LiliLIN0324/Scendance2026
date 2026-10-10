@@ -4,6 +4,11 @@ export interface StoredSource {
   id: string; scope: string; name: string; kind: SourceKind; width: number; height: number;
   blob?: Blob; assetId?: string; uploadedKind?: SourceKind;
 }
+export interface SourceScopeSnapshot {
+  scope: string;
+  sources: StoredSource[];
+  form: unknown;
+}
 type FlushSourceCallback = () => Promise<void>;
 const sourceFlushers = new Map<string, Set<FlushSourceCallback>>();
 /** Register live editor state that must reach IndexedDB before a project scope changes. */
@@ -153,6 +158,142 @@ export async function updateSourceForm<T>(scope: SourceFormKey, update: (current
   } finally { db.close(); }
 }
 export async function deleteSourceForm(scope: string): Promise<void> { await transact('forms', 'readwrite', store => store.delete(scope)); changedSource(scope); }
+
+/** Read images and their drawing form from the same native transaction. */
+export async function readSourceScopeSnapshot(scope: string): Promise<SourceScopeSnapshot> {
+  const db = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(['sources', 'forms'], 'readonly');
+      const images = transaction.objectStore('sources').index('scope').getAll(scope);
+      const drawing = transaction.objectStore('forms').get(scope);
+      let sources: StoredSource[] = [], form: unknown;
+      images.onsuccess = () => { sources = images.result; };
+      drawing.onsuccess = () => { form = drawing.result; };
+      transaction.oncomplete = () => resolve({ scope, sources, form });
+      transaction.onerror = transaction.onabort = () => reject(transaction.error ?? images.error ?? drawing.error ?? new Error('本机图纸资料读取失败。'));
+    });
+  } finally { db.close(); }
+}
+
+/** Compare structured-clone data without JSON dropping undefined, holes or unknown fields. */
+async function sameSourceValue(left: unknown, right: unknown, seen = new WeakMap<object, WeakSet<object>>()): Promise<boolean> {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+  const tag = Object.prototype.toString.call(left);
+  if (tag !== Object.prototype.toString.call(right)) return false;
+  if (seen.get(left)?.has(right)) return true;
+  const matches = seen.get(left) ?? new WeakSet<object>();
+  matches.add(right); seen.set(left, matches);
+  if (left instanceof Blob && right instanceof Blob) {
+    if (left.size !== right.size || left.type !== right.type) return false;
+    if (tag === '[object File]') {
+      const a = left as File, b = right as File;
+      if (a.name !== b.name || a.lastModified !== b.lastModified) return false;
+    }
+    const [a, b] = await Promise.all([left.arrayBuffer(), right.arrayBuffer()]);
+    return sameSourceValue(a, b, seen);
+  }
+  if (left instanceof Date && right instanceof Date) return Object.is(left.getTime(), right.getTime());
+  if (left instanceof RegExp && right instanceof RegExp) return left.source === right.source && left.flags === right.flags;
+  if (left instanceof ArrayBuffer && right instanceof ArrayBuffer) {
+    if (left.byteLength !== right.byteLength) return false;
+    const a = new Uint8Array(left), b = new Uint8Array(right);
+    return a.every((value, index) => value === b[index]);
+  }
+  if (ArrayBuffer.isView(left) && ArrayBuffer.isView(right)) {
+    if (left.byteLength !== right.byteLength) return false;
+    const a = new Uint8Array(left.buffer, left.byteOffset, left.byteLength);
+    const b = new Uint8Array(right.buffer, right.byteOffset, right.byteLength);
+    return a.every((value, index) => value === b[index]);
+  }
+  if (left instanceof Map && right instanceof Map) return sameSourceValue([...left], [...right], seen);
+  if (left instanceof Set && right instanceof Set) return sameSourceValue([...left], [...right], seen);
+  if (['[object Number]', '[object String]', '[object Boolean]', '[object BigInt]'].includes(tag)) {
+    return Object.is(left.valueOf(), right.valueOf());
+  }
+  // An unsupported persisted type is never mistaken for an empty plain object.
+  if (!['[object Object]', '[object Array]', '[object Error]'].includes(tag)) return false;
+  if (left instanceof Error && right instanceof Error && left.name !== right.name) return false;
+  const keys = Object.getOwnPropertyNames(left), otherKeys = Object.getOwnPropertyNames(right);
+  if (keys.length !== otherKeys.length || keys.some(key => !Object.prototype.hasOwnProperty.call(right, key))) return false;
+  for (const key of keys) {
+    if (!await sameSourceValue((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key], seen)) return false;
+  }
+  return true;
+}
+
+/** Source array order is not persisted; every metadata field and each Blob byte is. */
+export async function sameSourceScopeSnapshot(left: SourceScopeSnapshot, right: SourceScopeSnapshot): Promise<boolean> {
+  const a = structuredClone(left), b = structuredClone(right);
+  if (a.scope !== b.scope || a.sources.length !== b.sources.length) return false;
+  const ordered = (sources: StoredSource[]) => [...sources].sort((first, second) => first.id < second.id ? -1 : first.id > second.id ? 1 : 0);
+  return await sameSourceValue(ordered(a.sources), ordered(b.sources)) && await sameSourceValue(a.form, b.form);
+}
+
+function checkSourceSnapshotScope(scope: string, snapshot: SourceScopeSnapshot): void {
+  if (snapshot.scope !== scope || snapshot.sources.some(source => source.scope !== scope)) {
+    throw new Error('图纸资料属于另一个活动，未恢复。');
+  }
+  const ids = snapshot.sources.map(source => source.id);
+  if (ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length) {
+    throw new Error('图纸资料编号缺失或重复，未恢复。');
+  }
+}
+
+/**
+ * Caller MUST hold withSourceRestoreLock for this scope through comparison,
+ * replacement, readback and any compensation. Blob comparison cannot keep an
+ * IDB transaction alive. The exclusive editor lock protects that read/write gap.
+ * Resolves only after commit; does not read back. Caller performs readback after
+ * recording that this write committed, so a read failure cannot masquerade as a
+ * failed write. Images and drawing form change atomically; other form keys stay.
+ */
+export async function restoreSourceScopeIfUnchanged(scope: string, expected: SourceScopeSnapshot,
+  desired: SourceScopeSnapshot, check: () => void = () => {}): Promise<void> {
+  const before = structuredClone(expected), next = structuredClone(desired);
+  checkSourceSnapshotScope(scope, before); checkSourceSnapshotScope(scope, next);
+  check();
+  const current = await readSourceScopeSnapshot(scope);
+  if (!await sameSourceScopeSnapshot(current, before)) throw new Error('图纸资料已有新变化，不能覆盖较新的记录。');
+  check();
+  const db = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(['sources', 'forms'], 'readwrite');
+      const images = transaction.objectStore('sources'), forms = transaction.objectStore('forms');
+      let failure: unknown, remaining = next.sources.length;
+      const abort = (error: unknown) => { failure = error; transaction.abort(); };
+      const replace = () => {
+        try {
+          check();
+          for (const source of current.sources) images.delete(source.id);
+          for (const source of next.sources) images.put(source);
+          const last = next.form === undefined ? forms.delete(scope) : forms.put(next.form, scope);
+          // Recheck in the last request callback, while abort can still undo all
+          // queued writes. There are no awaited operations inside this transaction.
+          last.onsuccess = () => { try { check(); } catch (error) { abort(error); } };
+        } catch (error) { abort(error); }
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = transaction.onabort = () => reject(failure ?? transaction.error ?? new Error('本机图纸资料保存失败，原资料未改变。'));
+      // IDs are global in the sources store. A lock on this scope alone cannot
+      // authorize overwriting another activity's image with the same local ID.
+      for (const source of next.sources) {
+        const request = images.get(source.id);
+        request.onsuccess = () => {
+          if (failure !== undefined) return;
+          if (request.result !== undefined && request.result.scope !== scope) {
+            abort(new Error('图纸编号已被另一个活动使用，原图纸未改变。')); return;
+          }
+          if (--remaining === 0) replace();
+        };
+      }
+      if (remaining === 0) replace();
+    });
+    changedSource(scope);
+  } finally { db.close(); }
+}
 
 /** A suggestion only; users explicitly correct it before identification. No image measurements inferred. */
 export function suggestSourceKind(name: string, pixels?: Uint8ClampedArray): SourceKind {
