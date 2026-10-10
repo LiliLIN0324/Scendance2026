@@ -1,0 +1,896 @@
+import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
+import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
+import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
+import { MAX_DORMERS, isDormerSpec } from './dormers';
+import { isGlbUrl } from './glb-url';
+import { SCENE_PRESET_KEYS, type ScenePresetKey } from './scene-presets';
+import { NEIGHBOUR_FLAGS, isStreetSeed, isTerrainY } from './site';
+import { isStairsLeadIn, isStairsShape } from './stairs';
+import { isStoreyHeight } from './storeys';
+import { ENTRANCE_DOOR_ID, ENTRANCE_WALL_ID, isEntranceSpec, isSillHeight } from './street';
+import { MAX_ZONES, isRoomZone } from './zones';
+import type {
+  DormerOpening,
+  DormerSpec,
+  EntranceSpec,
+  FloorLayout,
+  FloorPattern,
+  FloorPlanFitMode,
+  FurnitureItem,
+  InteriorWall,
+  NeighbourFlag,
+  RoofSpec,
+  RoofStyle,
+  RoomLayout,
+  RoomZone,
+  SofaShape,
+  TerrainSpec,
+  WallId,
+  WallPattern,
+} from './types';
+
+/*
+ * Caps on what a stored, imported or shared layout may carry (#332, #350).
+ * They bound what a crafted file or link can make the tab hold, render and
+ * re-save. Geometry is repaired: parseStoredLayout truncates, clamps
+ * and slices to them, because a save from an older version (or an edit the
+ * reducer let through) that broke a cap must still open — a refused main
+ * save is replaced by the default house on the next autosave. The reducer
+ * applies the same caps, so its output always parses unchanged. Execution
+ * metadata is validated strictly; an ID repair cannot create an association.
+ */
+/** House, floor, item and zone names. */
+export const MAX_NAME_LENGTH = 200;
+/** Ids, group ids, item types and CCTV model ids. */
+export const MAX_ID_LENGTH = 128;
+/** Any colour string: `#rrggbb` in practice, room for a CSS colour name. */
+export const MAX_COLOR_LENGTH = 64;
+/** An item's emoji icon (multi-code-point sequences included). */
+export const MAX_ICON_LENGTH = 32;
+export const MAX_ITEMS_PER_FLOOR = 2000;
+export const MAX_INTERIOR_WALLS_PER_FLOOR = 1000;
+/**
+ * Item positions and wall ends, in metres from the room centre. The largest
+ * room's lot reaches ±306 m (`outdoorGroundSize`), and a drag ray can land
+ * beyond it, so this leaves room for both. `1e300` used to pass and turned
+ * the camera fit and every matrix non-finite (#350).
+ */
+export const MAX_COORDINATE = 10 * MAX_ROOM_DIMENSION;
+/**
+ * Largest layout JSON the app will read, in bytes — a share link's inflated
+ * payload or an imported file (#332). The biggest house the editor can save
+ * (localStorage holds ~5 M characters, floor plan included) fits with room
+ * to spare; a deflate bomb is cut off here instead of filling the tab.
+ */
+export const MAX_LAYOUT_JSON_BYTES = 8 * 1024 * 1024;
+
+const WALL_IDS: readonly WallId[] = ['north', 'south', 'east', 'west'];
+
+const FIT_MODES: readonly FloorPlanFitMode[] = ['stretch', 'cover', 'contain'];
+const FLOOR_PATTERNS: readonly FloorPattern[] = ['solid', 'wood', 'tile', 'carpet', 'concrete'];
+const WALL_PATTERNS: readonly WallPattern[] = [
+  'solid',
+  'brick',
+  'wallpaper',
+  'panel',
+  'plaster',
+  'siding',
+];
+const ROOF_STYLES: readonly RoofStyle[] = ['none', 'flat', 'gable', 'hipped'];
+const SOFA_SHAPES: readonly SofaShape[] = ['standard', 'L-shape', 'U-shape'];
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isPositiveNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value > 0;
+}
+
+/**
+ * A room dimension must be finite AND strictly positive (0/negative break
+ * PlaneGeometry, fitTextureToRoom, and collision math) and sanely bounded so a
+ * corrupt value can't blow up the geometry.
+ */
+function isRoomDimension(value: unknown): value is number {
+  return isPositiveNumber(value) && value <= MAX_ROOM_DIMENSION;
+}
+
+/**
+ * Item dims need an upper bound too: room dims are capped at 100 but a
+ * crafted item `width: 1e12` passed a bare positivity check and destroyed
+ * the scene scale (#121).
+ */
+function isItemDimension(value: unknown): value is number {
+  return isPositiveNumber(value) && value <= MAX_ITEM_DIMENSION;
+}
+
+function isOptionalPositiveNumber(value: unknown): boolean {
+  return value === undefined || isPositiveNumber(value);
+}
+
+function isOptionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === 'boolean';
+}
+
+/**
+ * A floor-plan image flows straight into `new THREE.TextureLoader().load(url)`
+ * in three/room-builder.ts. A poisoned localStorage entry or imported JSON
+ * could point it at `http://attacker/beacon.png`, firing an outbound request on
+ * load. Only accept inline `data:image/...` URLs so nothing can trigger a
+ * network fetch.
+ */
+function isDataImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^data:image\//.test(value);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isVec2(value: unknown): boolean {
+  return isPlainObject(value) && isFiniteNumber(value.x) && isFiniteNumber(value.z);
+}
+
+export function isFurnitureItem(value: unknown): value is FurnitureItem {
+  if (!isPlainObject(value)) return false;
+  const v = value;
+  if (
+    typeof v.id !== 'string' ||
+    typeof v.type !== 'string' ||
+    typeof v.name !== 'string' ||
+    !isItemDimension(v.width) ||
+    !isItemDimension(v.depth) ||
+    !isItemDimension(v.height) ||
+    typeof v.color !== 'string' ||
+    typeof v.icon !== 'string'
+  ) {
+    return false;
+  }
+  for (const key of ['structuralOpeningId', 'structuralColumnId', 'wallId']) if (!isOptionalString(v[key])) return false;
+  if (v.materialId !== undefined && ![...materialIds, 'asset'].some(id => id === v.materialId)) return false;
+  if (v.assetId !== undefined && !uuid.safeParse(v.assetId).success) return false;
+  if (v.venueEntranceId !== undefined && !uuid.safeParse(v.venueEntranceId).success) return false;
+  if (v.notes !== undefined && typeof v.notes !== 'string') return false;
+  // Invalid execution records must make the save visibly unreadable, not
+  // disappear during whitelist repair or retain a false accepted status.
+  if (v.handoff !== undefined && !handoffSchema.safeParse(v.handoff).success) return false;
+  if (v.source !== undefined && !['builtin', 'public_library', 'generated', 'local_sample'].includes(v.source as string)) return false;
+  if (v.glbUrl !== undefined && !isGlbUrl(v.glbUrl)) return false;
+  if (v.glbNode !== undefined && (typeof v.glbNode !== 'string' || !/^Preset_Object_\d{1,4}$/.test(v.glbNode))) return false;
+  if (v.elevation !== undefined && (!isFiniteNumber(v.elevation) || (v.glbNode ? Math.abs(v.elevation) > MAX_ROOM_DIMENSION : v.elevation < 0 || v.elevation > 30))) return false;
+  if (v.price !== undefined && !isFiniteNumber(v.price)) return false;
+  if (!isOptionalString(v.category)) return false;
+  if (v.position !== undefined && !isVec2(v.position)) return false;
+  if (v.rotation !== undefined && !isFiniteNumber(v.rotation)) return false;
+  // Ranges must be positive: negative signal/vision values invert ring and
+  // cone geometry (#121). FOV additionally caps at a full circle.
+  if (!isOptionalPositiveNumber(v.signalRange)) return false;
+  if (!isOptionalPositiveNumber(v.visionRange)) return false;
+  if (v.visionFov !== undefined && (!isPositiveNumber(v.visionFov) || v.visionFov > 360)) return false;
+  if (v.wallRotation !== undefined && !isFiniteNumber(v.wallRotation)) return false;
+  // Sill height places the window hole in the wall (#204).
+  if (v.sillHeight !== undefined && !(v.structuralOpeningId ? isFiniteNumber(v.sillHeight) && v.sillHeight >= 0 && v.sillHeight <= 30 : isSillHeight(v.sillHeight))) return false;
+  // Enum-ish fields ingested from external data must match their unions —
+  // an unknown sofaShape reaches builder switch statements unchecked (#121).
+  // cctvModelId only needs to be a string: unknown ids fall back to the
+  // default model at lookup time. The retired `stairsDirection` is not
+  // checked at all — parseStoredLayout strips it (#410).
+  if (v.sofaShape !== undefined && !SOFA_SHAPES.includes(v.sofaShape as SofaShape)) return false;
+  if (v.stairsShape !== undefined && !isStairsShape(v.stairsShape)) return false;
+  if (v.stairsLeadIn !== undefined && !isStairsLeadIn(v.stairsLeadIn)) return false;
+  if (!isOptionalString(v.cctvModelId)) return false;
+  // A group id only ever compares equal to other items' ids (#154): any
+  // non-empty string is a valid group, anything else is corruption.
+  if (v.groupId !== undefined && (typeof v.groupId !== 'string' || v.groupId === '')) return false;
+  // Booleans must be real booleans: a corrupt `locked:"no"` reads truthy for
+  // keyboard-delete guards yet fails `=== true` drag checks, desyncing the two.
+  if (!isOptionalBoolean(v.locked)) return false;
+  if (!isOptionalBoolean(v.mirrored)) return false;
+  if (!isOptionalBoolean(v.cameraBracket)) return false;
+  if (!isOptionalBoolean(v.isCCTV)) return false;
+  if (!isOptionalBoolean(v.isWiFiAccessPoint)) return false;
+  if (!isOptionalBoolean(v.hasVisionCone)) return false;
+  return true;
+}
+
+export function isFloorLayout(value: unknown, measured = false): value is FloorLayout {
+  if (!isPlainObject(value)) return false;
+  const v = value;
+  if (typeof v.id !== 'string') return false;
+  if (typeof v.name !== 'string') return false;
+  if (typeof v.floorColor !== 'string') return false;
+  if (!isItemList(v.items)) return false;
+  // Patterns must match their unions, not just be strings: an unknown key
+  // reaches `PATTERNS[pattern].draw(...)` in the texture builders and throws
+  // on every scene build — and because the layout would keep validating, it
+  // would keep autosaving and crash every subsequent mount too (#208). Same
+  // class as the sofaShape check above (#121).
+  if (v.floorPattern !== undefined && !FLOOR_PATTERNS.includes(v.floorPattern as FloorPattern)) {
+    return false;
+  }
+  if (v.wallPattern !== undefined && !WALL_PATTERNS.includes(v.wallPattern as WallPattern)) {
+    return false;
+  }
+  // Keys other than the four walls, and unknown or repeated hidden walls,
+  // are dropped by parseStoredLayout rather than refused (#350).
+  if (v.wallColors !== undefined && !isWallColors(v.wallColors)) return false;
+  if (v.hiddenWalls !== undefined) {
+    if (!Array.isArray(v.hiddenWalls)) return false;
+    if (!v.hiddenWalls.every((wall) => typeof wall === 'string')) return false;
+  }
+  if (v.interiorWalls !== undefined) {
+    if (!Array.isArray(v.interiorWalls)) return false;
+    for (const wall of v.interiorWalls) {
+      if (!isPlainObject(wall)) return false;
+      if (
+        typeof wall.id !== 'string' ||
+        !isFiniteNumber(wall.x1) ||
+        !isFiniteNumber(wall.z1) ||
+        !isFiniteNumber(wall.x2) ||
+        !isFiniteNumber(wall.z2)
+      ) {
+        return false;
+      }
+      if (!isOptionalString(wall.color)) return false;
+      if (wall.height !== undefined && (!isPositiveNumber(wall.height) || wall.height > 30)) return false;
+      if (wall.thickness !== undefined && (!isPositiveNumber(wall.thickness) || wall.thickness > 5)) return false;
+    }
+  }
+  // Storey height feeds every floor's elevation and the roof base: a zero,
+  // negative or absurd value collapses or launches the whole stack (#202).
+  if (v.height !== undefined && !(measured ? isPositiveNumber(v.height) && v.height <= 30 : isStoreyHeight(v.height))) return false;
+  // Zone rectangles are painted and measured as-is: a NaN corner or a
+  // negative size must not reach the renderer or the stats (#155).
+  if (v.zones !== undefined) {
+    if (!Array.isArray(v.zones)) return false;
+    if (!v.zones.every(isRoomZone)) return false;
+  }
+  return true;
+}
+
+function isItemList(value: unknown): value is FurnitureItem[] {
+  return Array.isArray(value) && value.every(isFurnitureItem);
+}
+
+function isWallColors(value: unknown): value is Record<string, string> {
+  return (
+    isPlainObject(value) && Object.values(value).every((color) => typeof color === 'string')
+  );
+}
+
+export function isRoomLayout(value: unknown): value is RoomLayout {
+  if (!isPlainObject(value)) return false;
+  const v = value;
+
+  if (v.eventOperations !== undefined && !eventOperationsSchema.safeParse(v.eventOperations).success) return false;
+  if (v.productionPlan !== undefined && !productionPlanSchema.safeParse(v.productionPlan).success) return false;
+  if (typeof v.name !== 'string') return false;
+  if (v.itemLayers !== undefined && (!Array.isArray(v.itemLayers) || v.itemLayers.length > 100 || !v.itemLayers.every(layer =>
+    isPlainObject(layer) && typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= MAX_ID_LENGTH &&
+    typeof layer.name === 'string' && layer.name.length <= MAX_NAME_LENGTH && Array.isArray(layer.itemIds) && layer.itemIds.length <= MAX_ITEMS_PER_FLOOR &&
+    layer.itemIds.every(id => typeof id === 'string' && id.length <= MAX_ID_LENGTH)))) return false;
+  if (v.designBook !== undefined) {
+    const book = v.designBook;
+    if (!isPlainObject(book) || typeof book.activeId !== 'string' || !Array.isArray(book.variants) || book.variants.length > 20 ||
+      !book.variants.every(variant => isPlainObject(variant) && typeof variant.id === 'string' && variant.id.length <= MAX_ID_LENGTH &&
+        typeof variant.name === 'string' && variant.name.length <= MAX_NAME_LENGTH && isPlainObject(variant.layout) &&
+        variant.layout.designBook === undefined && isRoomLayout(variant.layout)) ||
+      !book.variants.some(variant => variant.id === book.activeId) || new Set(book.variants.map(variant => variant.id)).size !== book.variants.length) return false;
+  }
+  if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
+  if (v.scenePreset !== undefined && !SCENE_PRESET_KEYS.includes(v.scenePreset as ScenePresetKey)) return false;
+  if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
+  if (v.backendCamera !== undefined && !['overview', 'top', 'customer'].includes(v.backendCamera as string)) return false;
+  if (v.backendLighting !== undefined && !['neutral', 'warm', 'cool'].includes(v.backendLighting as string)) return false;
+  if (!isOptionalString(v.id)) return false;
+  if (!isRoomDimension(v.width)) return false;
+  if (!isRoomDimension(v.height)) return false;
+  if (
+    !Array.isArray(v.floors) ||
+    v.floors.length === 0 ||
+    v.floors.length > MAX_FLOORS ||
+    !v.floors.every(floor => isFloorLayout(floor, v.backendSceneV2 !== undefined))
+  ) {
+    return false;
+  }
+
+  if (v.floorPlanImage !== undefined && !isDataImageUrl(v.floorPlanImage)) return false;
+  // Opacity outside [0,1] is corruption, not preference — the UI slider only
+  // produces this range and canvas globalAlpha silently misbehaves outside it.
+  if (
+    v.floorPlanOpacity !== undefined &&
+    (!isFiniteNumber(v.floorPlanOpacity) || v.floorPlanOpacity < 0 || v.floorPlanOpacity > 1)
+  ) {
+    return false;
+  }
+  if (
+    v.floorPlanFitMode !== undefined &&
+    !FIT_MODES.includes(v.floorPlanFitMode as FloorPlanFitMode)
+  ) {
+    return false;
+  }
+
+  if (v.roof !== undefined) {
+    if (!isPlainObject(v.roof)) return false;
+    const roof = v.roof;
+    if (!ROOF_STYLES.includes(roof.style as RoofStyle)) return false;
+    if (!isOptionalString(roof.color)) return false;
+    // Dormer numbers size real geometry on the roof; an absurd width or a
+    // non-finite offset must not reach the builder (#203).
+    if (roof.dormers !== undefined) {
+      if (!Array.isArray(roof.dormers) || roof.dormers.length > MAX_DORMERS) return false;
+      if (!roof.dormers.every(isDormerSpec)) return false;
+    }
+  }
+
+  // Terrain heights place the whole outdoor scene and the plinth depth; a
+  // non-finite or absurd value would sink or launch the lot (#202).
+  if (v.terrain !== undefined) {
+    if (!isPlainObject(v.terrain)) return false;
+    if (!isTerrainY(v.terrain.frontY) || !isTerrainY(v.terrain.backY)) return false;
+  }
+  if (v.entrance !== undefined && !isEntranceSpec(v.entrance)) return false;
+  if (v.frontage !== undefined && v.frontage !== 'garden' && v.frontage !== 'pavement') return false;
+  // The street's houses are generated from these (#310): an unknown flag or
+  // a non-integer seed must not reach the generator.
+  if (v.neighbours !== undefined) {
+    if (!isPlainObject(v.neighbours)) return false;
+    for (const [key, value] of Object.entries(v.neighbours)) {
+      if (key === 'seed') {
+        if (!isStreetSeed(value)) return false;
+      } else if (!NEIGHBOUR_FLAGS.includes(key as NeighbourFlag) || typeof value !== 'boolean') {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Accepts either the current multi-floor shape or the legacy single-floor
+ * shape (with top-level `items` / `floorColor` / `wallColors` / etc.) and
+ * normalises both to the current `RoomLayout` shape. Returns `null` if the
+ * input matches neither.
+ *
+ * The result holds only the fields the app knows (#350), within the caps
+ * above, with unique ids (#338). Only a structurally invalid value is
+ * refused; geometry over a cap is repaired when instance references remain
+ * unambiguous. Invalid execution metadata is refused. An input that already is
+ * exactly that comes back as-is.
+ */
+export function parseStoredLayout(value: unknown): RoomLayout | null {
+  const layout = isRoomLayout(value)
+    ? value
+    : isLegacySingleFloorLayout(value)
+      ? migrateLegacyLayout(value)
+      : null;
+  if (!layout) return null;
+  const parsed = parseLayoutEventOperations(layout);
+  return parsed ? withUniqueIds(repairLayout(parsed)) : null;
+}
+
+/** Validate local business metadata before a load or snapshot can replace the current draft. */
+export function parseLayoutEventOperations(layout: RoomLayout): RoomLayout | null {
+  if ((layout.eventOperations !== undefined || layout.productionPlan !== undefined) && !isRoomLayout(layout)) return null;
+  const parsed = layout.eventOperations === undefined ? undefined : eventOperationsSchema.safeParse(layout.eventOperations);
+  if (parsed && !parsed.success) return null;
+  const production = layout.productionPlan === undefined ? undefined : productionPlanSchema.safeParse(layout.productionPlan);
+  if (production && !production.success) return null;
+  const operations = parsed?.data;
+  let next = JSON.stringify(operations) === JSON.stringify(layout.eventOperations)
+    ? layout : { ...layout, eventOperations: operations };
+  if (JSON.stringify(production?.data) !== JSON.stringify(layout.productionPlan)) next = { ...next, productionPlan: production?.data };
+  if (layout.designBook) {
+    const variants = [];
+    for (const variant of layout.designBook.variants) {
+      const snapshot = parseLayoutEventOperations(variant.layout);
+      if (!snapshot) return null;
+      variants.push(snapshot === variant.layout ? variant : { ...variant, layout: snapshot });
+    }
+    if (variants.some((variant, index) => variant !== layout.designBook!.variants[index])) {
+      next = { ...next, designBook: { ...layout.designBook, variants } };
+    }
+  }
+  return hasAmbiguousExecutionIds(next) || hasAmbiguousProductionIds(next) ? null : next;
+}
+
+/** Geometry repair must not turn a missing planned reference into a new association. */
+function hasAmbiguousProductionIds(layout: RoomLayout): boolean {
+  if (!layout.productionPlan) return !!layout.designBook?.variants.some(variant => hasAmbiguousProductionIds(variant.layout));
+  const key = (id: string) => uuid.safeParse(id).success ? id.toLowerCase() : id;
+  const referenced = new Set([
+    ...(layout.productionPlan?.acquisitions.flatMap(row => row.objectIds) ?? []),
+    ...(layout.productionPlan?.estimates.flatMap(row => row.objectIds) ?? []),
+  ].map(key));
+  const counts = new Map<string, number>();
+  for (const floor of layout.floors) {
+    const repaired = floor.items.map(item => ({ id: capText(item.id, MAX_ID_LENGTH) }));
+    for (const item of floor.items) {
+      const original = key(item.id), shortened = key(capText(item.id, MAX_ID_LENGTH));
+      if (original !== shortened && (referenced.has(original) || referenced.has(shortened))) return true;
+      counts.set(shortened, (counts.get(shortened) ?? 0) + 1);
+    }
+    if (uniqueIds(repaired).some((item, index) => item.id !== repaired[index]!.id && referenced.has(key(item.id)))) return true;
+  }
+  return [...referenced].some(id => (counts.get(id) ?? 0) > 1) ||
+    !!layout.designBook?.variants.some(variant => hasAmbiguousProductionIds(variant.layout));
+}
+
+/** Keep the original save recoverable when an execution record has no unique instance. */
+function hasAmbiguousExecutionIds(layout: RoomLayout): boolean {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  const assigned = new Set(layout.eventOperations?.tasks.flatMap((task) => task.objectIds));
+  for (const floor of layout.floors) {
+    for (const item of floor.items) {
+      // Repair shortens ids; collisions created by that shortening are ambiguous too.
+      const id = capText(item.id, MAX_ID_LENGTH);
+      // A broken reference may stay broken; repair must not turn it into an association.
+      if (id !== item.id && assigned.has(id)) return true;
+      if (seen.has(id)) duplicates.add(id);
+      seen.add(id);
+      if (item.handoff !== undefined) assigned.add(id);
+    }
+    const repaired = floor.items.map((item) => ({ id: capText(item.id, MAX_ID_LENGTH) }));
+    if (uniqueIds(repaired).some((item, index) => item.id !== repaired[index]!.id && assigned.has(item.id))) return true;
+  }
+  return [...assigned].some((id) => duplicates.has(id)) ||
+    !!layout.designBook?.variants.some((variant) => hasAmbiguousExecutionIds(variant.layout));
+}
+
+/*
+ * Whitelists (#350). Every object in a parsed layout is rebuilt from these,
+ * so unknown keys — `bloat`, an own `__proto__`, fields nothing reads any
+ * more like the retired `stairsDirection` (#410) — stop riding along in
+ * every save and share link. Each list is a full `Record` of its type's
+ * keys, so a field added to the type without being listed here fails to
+ * compile instead of being silently dropped on load.
+ */
+function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
+  return Object.keys(keys);
+}
+
+const LAYOUT_KEYS = keysOf<RoomLayout>({
+  productionPlan: true,
+  eventOperations: true,
+  itemLayers: true,
+  designBook: true,
+  scenePreset: true,
+  backendVenue: true,
+  backendSceneV2: true,
+  backendCamera: true,
+  backendLighting: true,
+  id: true,
+  name: true,
+  width: true,
+  height: true,
+  floors: true,
+  roof: true,
+  floorPlanImage: true,
+  floorPlanOpacity: true,
+  floorPlanFitMode: true,
+  terrain: true,
+  neighbours: true,
+  entrance: true,
+  frontage: true,
+});
+const FLOOR_KEYS = keysOf<FloorLayout>({
+  id: true,
+  name: true,
+  items: true,
+  floorColor: true,
+  floorPattern: true,
+  wallPattern: true,
+  wallColors: true,
+  hiddenWalls: true,
+  interiorWalls: true,
+  zones: true,
+  height: true,
+});
+const ITEM_KEYS = keysOf<FurnitureItem>({
+  handoff: true,
+  structuralOpeningId: true,
+  structuralColumnId: true,
+  wallId: true,
+  elevation: true,
+  materialId: true,
+  assetId: true,
+  notes: true,
+  source: true,
+  glbUrl: true,
+  glbNode: true,
+  venueEntranceId: true,
+  id: true,
+  type: true,
+  name: true,
+  width: true,
+  depth: true,
+  height: true,
+  color: true,
+  icon: true,
+  price: true,
+  category: true,
+  position: true,
+  rotation: true,
+  isWiFiAccessPoint: true,
+  isCCTV: true,
+  signalRange: true,
+  hasVisionCone: true,
+  visionRange: true,
+  visionFov: true,
+  cctvModelId: true,
+  wallRotation: true,
+  cameraBracket: true,
+  sofaShape: true,
+  locked: true,
+  mirrored: true,
+  stairsShape: true,
+  stairsLeadIn: true,
+  sillHeight: true,
+  groupId: true,
+});
+const VEC2_KEYS = ['x', 'z'] as const;
+const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true, thickness: true, height: true, kind: true, status: true });
+const ZONE_KEYS = keysOf<RoomZone>({ id: true, name: true, color: true, x: true, z: true, w: true, d: true });
+const ROOF_KEYS = keysOf<RoofSpec>({ style: true, color: true, dormers: true });
+const DORMER_KEYS = keysOf<DormerSpec>({
+  id: true,
+  side: true,
+  width: true,
+  offset: true,
+  height: true,
+  setback: true,
+  openings: true,
+  window: true,
+  balcony: true,
+  color: true,
+});
+const OPENING_KEYS = keysOf<DormerOpening>({ kind: true, from: true, to: true });
+const TERRAIN_KEYS = keysOf<TerrainSpec>({ frontY: true, backY: true });
+const ENTRANCE_KEYS = keysOf<EntranceSpec>({ width: true, depth: true, offset: true, height: true, door: true });
+
+/** `value` itself when it has no other own keys; otherwise a copy holding only `keys`. */
+function pick<T extends object>(value: T, keys: readonly string[]): T {
+  if (Object.keys(value).every((key) => keys.includes(key))) return value;
+  const source = value as Record<string, unknown>;
+  const copy: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) copy[key] = source[key];
+  }
+  return copy as T;
+}
+
+/** `list.map(fn)`, or `list` itself when `fn` changed nothing (copy-on-write). */
+function mapSame<T>(list: T[], fn: (entry: T) => T): T[] {
+  let changed = false;
+  const next = list.map((entry) => {
+    const mapped = fn(entry);
+    if (mapped !== entry) changed = true;
+    return mapped;
+  });
+  return changed ? next : list;
+}
+
+/** `pick`, then overwrite the fields `patch` cleaned; `value` itself when nothing changed. */
+function rebuild<T extends object>(value: T, keys: readonly string[], patch: Partial<T>): T {
+  const picked = pick(value, keys);
+  const changed = (Object.keys(patch) as (keyof T)[]).filter((key) => patch[key] !== picked[key]);
+  if (changed.length === 0) return picked;
+  return { ...picked, ...patch };
+}
+
+/** `text` cut to `max` UTF-16 units, never leaving half a surrogate pair. */
+export function capText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
+export function clampCoordinate(value: number): number {
+  return Math.min(MAX_COORDINATE, Math.max(-MAX_COORDINATE, value));
+}
+
+/** The first `max` entries; `list` itself when it already fits. */
+function sliceTo<T>(list: T[], max: number): T[] {
+  return list.length <= max ? list : list.slice(0, max);
+}
+
+/**
+ * Cut a floor's list to its cap while always keeping the porch entry
+ * (`keep`): the porch door and back wall are added by the entrance re-fit
+ * after everything else, so a plain slice dropped them on every reload of a
+ * full floor. Other entries get `max - 1` — the slot the reducer keeps free
+ * for the porch (#332). Returns the input when nothing is cut.
+ */
+function capKeeping<T extends { id: string }>(list: T[], max: number, keep: string): T[] {
+  if (list.length < max) return list;
+  let porchKept = false;
+  let others = 0;
+  const kept = list.filter((entry) => {
+    if (entry.id === keep && !porchKept) {
+      porchKept = true;
+      return true;
+    }
+    if (others >= max - 1) return false;
+    others += 1;
+    return true;
+  });
+  return kept.length === list.length ? list : kept;
+}
+
+function repairVec2(vec: { x: number; z: number }): { x: number; z: number } {
+  const picked = pick(vec, VEC2_KEYS);
+  const x = clampCoordinate(picked.x);
+  const z = clampCoordinate(picked.z);
+  return x === picked.x && z === picked.z ? picked : { x, z };
+}
+
+function repairItem(item: FurnitureItem): FurnitureItem {
+  const patch: Partial<FurnitureItem> = {
+    id: capText(item.id, MAX_ID_LENGTH),
+    type: capText(item.type, MAX_ID_LENGTH),
+    name: capText(item.name, MAX_NAME_LENGTH),
+    color: capText(item.color, MAX_COLOR_LENGTH),
+    icon: capText(item.icon, MAX_ICON_LENGTH),
+  };
+  if (item.notes !== undefined) patch.notes = capText(item.notes, 500);
+  if (item.handoff !== undefined) {
+    const handoff = handoffSchema.parse(item.handoff);
+    patch.handoff = JSON.stringify(handoff) === JSON.stringify(item.handoff) ? item.handoff : handoff;
+  }
+  if (item.cctvModelId !== undefined) patch.cctvModelId = capText(item.cctvModelId, MAX_ID_LENGTH);
+  if (item.groupId !== undefined) patch.groupId = capText(item.groupId, MAX_ID_LENGTH);
+  // A negative price turns the budget and every cost total upside down (#350).
+  if (item.price !== undefined && item.price < 0) patch.price = 0;
+  if (item.position) patch.position = repairVec2(item.position);
+  return rebuild(item, ITEM_KEYS, patch);
+}
+
+function repairWall(wall: InteriorWall): InteriorWall {
+  const patch: Partial<InteriorWall> = {
+    id: capText(wall.id, MAX_ID_LENGTH),
+    x1: clampCoordinate(wall.x1),
+    z1: clampCoordinate(wall.z1),
+    x2: clampCoordinate(wall.x2),
+    z2: clampCoordinate(wall.z2),
+  };
+  if (wall.color !== undefined) patch.color = capText(wall.color, MAX_COLOR_LENGTH);
+  return rebuild(wall, WALL_KEYS, patch);
+}
+
+function repairFloor(floor: FloorLayout): FloorLayout {
+  const patch: Partial<FloorLayout> = {
+    id: capText(floor.id, MAX_ID_LENGTH),
+    name: capText(floor.name, MAX_NAME_LENGTH),
+    floorColor: capText(floor.floorColor, MAX_COLOR_LENGTH),
+    items: mapSame(capKeeping(floor.items, MAX_ITEMS_PER_FLOOR, ENTRANCE_DOOR_ID), repairItem),
+  };
+  if (floor.wallColors) {
+    const all = floor.wallColors;
+    const colors = Object.entries(all).filter(([wall]) => WALL_IDS.includes(wall as WallId));
+    const clean = colors.every(([, color]) => color.length <= MAX_COLOR_LENGTH);
+    patch.wallColors =
+      clean && colors.length === Object.keys(all).length
+        ? all
+        : Object.fromEntries(colors.map(([wall, color]) => [wall, capText(color, MAX_COLOR_LENGTH)]));
+  }
+  if (floor.hiddenWalls) {
+    const all = floor.hiddenWalls;
+    const clean = all.filter((wall, index) => WALL_IDS.includes(wall) && all.indexOf(wall) === index);
+    patch.hiddenWalls = clean.length === all.length ? all : clean;
+  }
+  if (floor.interiorWalls) {
+    // A zero-length wall has no direction to build, cut or snap to (#350).
+    const repaired = mapSame(floor.interiorWalls, repairWall);
+    const walls = repaired.filter((wall) => wall.x1 !== wall.x2 || wall.z1 !== wall.z2);
+    patch.interiorWalls = capKeeping(
+      walls.length === repaired.length ? repaired : walls,
+      MAX_INTERIOR_WALLS_PER_FLOOR,
+      ENTRANCE_WALL_ID
+    );
+  }
+  if (floor.zones) {
+    patch.zones = mapSame(sliceTo(floor.zones, MAX_ZONES), (zone) =>
+      rebuild(zone, ZONE_KEYS, {
+        id: capText(zone.id, MAX_ID_LENGTH),
+        name: capText(zone.name, MAX_NAME_LENGTH),
+        color: capText(zone.color, MAX_COLOR_LENGTH),
+      })
+    );
+  }
+  return rebuild(floor, FLOOR_KEYS, patch);
+}
+
+function repairRoof(roof: RoofSpec): RoofSpec {
+  const patch: Partial<RoofSpec> = {};
+  if (roof.color !== undefined) patch.color = capText(roof.color, MAX_COLOR_LENGTH);
+  if (roof.dormers) {
+    patch.dormers = mapSame(roof.dormers, (dormer) => {
+      const fields: Partial<DormerSpec> = { id: capText(dormer.id, MAX_ID_LENGTH) };
+      if (dormer.color !== undefined) fields.color = capText(dormer.color, MAX_COLOR_LENGTH);
+      if (dormer.openings) {
+        fields.openings = mapSame(dormer.openings, (opening) => pick(opening, OPENING_KEYS));
+      }
+      return rebuild(dormer, DORMER_KEYS, fields);
+    });
+  }
+  return rebuild(roof, ROOF_KEYS, patch);
+}
+
+/** Whitelist every object (#350) and bring every field within the caps above. */
+function repairLayout(layout: RoomLayout): RoomLayout {
+  const patch: Partial<RoomLayout> = {
+    name: capText(layout.name, MAX_NAME_LENGTH),
+    floors: mapSame(layout.floors, repairFloor),
+  };
+  if (layout.id !== undefined) patch.id = capText(layout.id, MAX_ID_LENGTH);
+  if (layout.itemLayers) patch.itemLayers = layout.itemLayers.map(({ id, name, itemIds }) => ({ id, name, itemIds: [...new Set(itemIds)] }));
+  if (layout.designBook) patch.designBook = { activeId: layout.designBook.activeId, variants: layout.designBook.variants.map(({ id, name, layout: snapshot }) => ({ id, name, layout: withUniqueIds(repairLayout(snapshot)) })) };
+  if (layout.roof) patch.roof = repairRoof(layout.roof);
+  if (layout.terrain) patch.terrain = pick(layout.terrain, TERRAIN_KEYS);
+  if (layout.entrance) patch.entrance = pick(layout.entrance, ENTRANCE_KEYS);
+  return rebuild(layout, LAYOUT_KEYS, patch);
+}
+
+/**
+ * Ids are the only handle the reducer has on an item, a floor, a wall or a
+ * zone: two items sharing one recolour, delete and drag together (#338). A
+ * repeat gets the first free `-2`, `-3`… suffix instead of failing the
+ * file. The porch door and the porch's back wall are singletons the
+ * reducer re-fits by id, so every copy after the first in the building is
+ * dropped.
+ */
+function withUniqueIds(layout: RoomLayout): RoomLayout {
+  const keepFirst = new Set<string>();
+  const dropRepeats = <T extends { id: string }>(list: T[], singleton: string): T[] => {
+    const kept = list.filter((entry) => {
+      if (entry.id !== singleton) return true;
+      if (keepFirst.has(singleton)) return false;
+      keepFirst.add(singleton);
+      return true;
+    });
+    return kept.length === list.length ? list : kept;
+  };
+  const floors = mapSame(layout.floors, (floor) => {
+    const items = uniqueIds(dropRepeats(floor.items, ENTRANCE_DOOR_ID));
+    const walls = floor.interiorWalls && uniqueIds(dropRepeats(floor.interiorWalls, ENTRANCE_WALL_ID));
+    const zones = floor.zones && uniqueIds(floor.zones);
+    if (items === floor.items && walls === floor.interiorWalls && zones === floor.zones) return floor;
+    return { ...floor, items, ...(walls ? { interiorWalls: walls } : {}), ...(zones ? { zones } : {}) };
+  });
+  const unique = uniqueIds(floors);
+  // Dormers are edited and removed by id too (#338).
+  const dormers = layout.roof?.dormers && uniqueIds(layout.roof.dormers);
+  const roof = layout.roof && dormers && dormers !== layout.roof.dormers ? { ...layout.roof, dormers } : layout.roof;
+  if (unique === layout.floors && roof === layout.roof) return layout;
+  return { ...layout, floors: unique, ...(roof ? { roof } : {}) };
+}
+
+/** `list` itself when its ids are already unique. */
+function uniqueIds<T extends { id: string }>(list: T[]): T[] {
+  const taken = new Set(list.map((entry) => entry.id));
+  if (taken.size === list.length) return list;
+  const seen = new Set<string>();
+  return list.map((entry) => {
+    if (!seen.has(entry.id)) {
+      seen.add(entry.id);
+      return entry;
+    }
+    let id = entry.id;
+    for (let n = 2; taken.has(id); n++) {
+      const suffix = `-${n}`;
+      // Stay under the id cap, or the next load would refuse the house.
+      id = `${entry.id.slice(0, MAX_ID_LENGTH - suffix.length)}${suffix}`;
+    }
+    taken.add(id);
+    seen.add(id);
+    return { ...entry, id };
+  });
+}
+
+interface LegacySingleFloorLayout {
+  productionPlan?: ProductionPlan | undefined;
+  eventOperations?: EventOperations | undefined;
+  id?: string;
+  name: string;
+  width: number;
+  height: number;
+  items: FurnitureItem[];
+  floorColor: string;
+  floorPattern?: string;
+  wallPattern?: string;
+  wallColors?: Record<string, string>;
+  floorPlanImage?: string;
+  floorPlanOpacity?: number;
+  floorPlanFitMode?: FloorPlanFitMode;
+}
+
+function isLegacySingleFloorLayout(value: unknown): value is LegacySingleFloorLayout {
+  if (!isPlainObject(value)) return false;
+  const v = value;
+  return (
+    typeof v.name === 'string' &&
+    isOptionalString(v.id) &&
+    (v.eventOperations === undefined || eventOperationsSchema.safeParse(v.eventOperations).success) &&
+    (v.productionPlan === undefined || productionPlanSchema.safeParse(v.productionPlan).success) &&
+    isRoomDimension(v.width) &&
+    isRoomDimension(v.height) &&
+    typeof v.floorColor === 'string' &&
+    isItemList(v.items) &&
+    (v.wallColors === undefined || isWallColors(v.wallColors)) &&
+    !('floors' in v)
+  );
+}
+
+function migrateLegacyLayout(legacy: LegacySingleFloorLayout): RoomLayout {
+  const groundFloor: FloorLayout = {
+    id: 'ground',
+    name: 'Ground Floor',
+    items: legacy.items,
+    floorColor: legacy.floorColor,
+    // Only carry patterns the current schema would accept: an unknown value
+    // copied verbatim would fail `isRoomLayout` on the NEXT load, turning a
+    // recoverable legacy save into an unreadable one (#208).
+    ...(legacy.floorPattern && FLOOR_PATTERNS.includes(legacy.floorPattern as FloorPattern)
+      ? { floorPattern: legacy.floorPattern as FloorPattern }
+      : {}),
+    ...(legacy.wallPattern && WALL_PATTERNS.includes(legacy.wallPattern as WallPattern)
+      ? { wallPattern: legacy.wallPattern as WallPattern }
+      : {}),
+    ...(legacy.wallColors ? { wallColors: legacy.wallColors } : {}),
+  };
+
+  const layout: RoomLayout = {
+    name: legacy.name,
+    width: legacy.width,
+    height: legacy.height,
+    floors: [groundFloor],
+  };
+  if (legacy.id !== undefined) layout.id = legacy.id;
+  if (legacy.eventOperations !== undefined) layout.eventOperations = legacy.eventOperations;
+  if (legacy.productionPlan !== undefined) layout.productionPlan = legacy.productionPlan;
+  // Non-destructive: keep migrating the rest of the layout even if the stored
+  // floor plan isn't a safe inline data URL — just drop the image so we never
+  // hand a network URL to the texture loader.
+  if (isDataImageUrl(legacy.floorPlanImage)) layout.floorPlanImage = legacy.floorPlanImage;
+  // Same non-destructive rule for the other floor-plan fields: the legacy
+  // shape check doesn't validate them, and a value `isRoomLayout` rejects
+  // would brick the migrated save on its second load (#208). Clamp opacity
+  // into the accepted [0,1]; drop anything else invalid.
+  if (isFiniteNumber(legacy.floorPlanOpacity)) {
+    layout.floorPlanOpacity = Math.min(1, Math.max(0, legacy.floorPlanOpacity));
+  }
+  if (
+    legacy.floorPlanFitMode !== undefined &&
+    FIT_MODES.includes(legacy.floorPlanFitMode as FloorPlanFitMode)
+  ) {
+    layout.floorPlanFitMode = legacy.floorPlanFitMode;
+  }
+  return layout;
+}
+
+/**
+ * How many items, interior walls and zones a stored layout holds, read from
+ * raw JSON in either the current or the legacy single-floor shape. Compared
+ * before and after parsing, it tells whether the repair cut anything (#332).
+ */
+export function storedEntryCount(value: unknown): number {
+  if (!isPlainObject(value)) return 0;
+  const length = (list: unknown): number => (Array.isArray(list) ? list.length : 0);
+  if (!Array.isArray(value.floors)) return length(value.items) + length(value.interiorWalls);
+  let count = 0;
+  for (const floor of value.floors as unknown[]) {
+    if (!isPlainObject(floor)) continue;
+    count += length(floor.items) + length(floor.interiorWalls) + length(floor.zones);
+  }
+  return count;
+}

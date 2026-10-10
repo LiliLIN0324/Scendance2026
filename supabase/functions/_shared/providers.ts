@@ -1,0 +1,95 @@
+import { z } from 'zod';
+import { SYSTEM_PROMPT, buildProposal } from './ai.ts';
+import { ApiError, catalog, type ProposalRequest } from './domain.ts';
+import { fetchJson, required, type Env, type Fetcher } from './http.ts';
+import type { GenerationProvider } from './generation-contract.ts';
+import { resourceIndex, sceneResourceRefs, type SceneResource } from './scene-resources.ts';
+
+const submitSchema = z.object({ JobId: z.string().min(1), RequestId: z.string().optional() });
+export const querySchema = z.object({
+  Status: z.enum(['WAIT','RUN','FAIL','DONE']), ErrorCode: z.string().optional(),
+  ResultFile3Ds: z.array(z.object({ Type: z.string(), Url: z.url(), PreviewImageUrl: z.string().optional() })).optional(),
+  ResultCreditConsumed: z.number().optional(), ResultCreditDetails: z.string().optional(), RequestId: z.string().optional(),
+});
+const tokenhubSubmitSchema = z.object({ id: z.string().min(1), request_id: z.string().optional() });
+const tokenhubQuerySchema = z.object({
+  status: z.enum(['queued','in_progress','failed','completed']), request_id: z.string().optional(),
+  data: z.array(z.object({ type: z.string(), url: z.url(), preview_image_url: z.string().optional() })).optional(),
+});
+function unwrap(value: unknown) {
+  const outer = z.record(z.string(), z.unknown()).parse(value);
+  const body = outer.Response ?? outer;
+  if (body && typeof body === 'object' && 'Error' in body) throw new ApiError('PROVIDER_REJECTED', 502);
+  return body;
+}
+export function hunyuan(env: Env, fetcher: Fetcher = fetch, pinned?:GenerationProvider) {
+  const mode=pinned?.providerMode??env('HUNYUAN_API_MODE')??'tokenhub';
+  const model=pinned?.providerModel??'hy-3d-3.0';
+  if(mode!=='tokenhub' && mode!=='legacy') throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:'HUNYUAN_API_MODE'});
+  if(!['hy-3d-3.0','hy-3d-3.1','hy-3d-texture'].includes(model)||(mode==='legacy'&&model!=='hy-3d-3.0'))throw new ApiError('SERVICE_NOT_CONFIGURED',503);
+  const base=mode==='tokenhub'?'https://tokenhub.tencentmaas.com/v1/api/3d':'https://api.ai3d.cloud.tencent.com/v1/ai3d';
+  const call = (path: string, body: unknown) => fetchJson(`${base}/${path}`, {
+    method: 'POST', headers: { Authorization: `${mode==='tokenhub'?'Bearer ':''}${required(env, 'HUNYUAN_API_KEY')}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }, fetcher).then(unwrap);
+  return {
+    async submit(prompt: string, assets?:{imageUrl?:string;sourceUrl?:string}) {
+      if(mode==='legacy') return submitSchema.parse(await call('submit', { Prompt: prompt, Model: '3.0', GenerateType: 'LowPoly', PolygonType: 'triangle' }));
+      if(model==='hy-3d-texture'&&(!assets?.imageUrl||!assets.sourceUrl))throw new ApiError('INVALID_GENERATION_INPUT',422);
+      const body=model==='hy-3d-texture'
+        ?{model,file_3d:{url:assets!.sourceUrl},image:{url:assets!.imageUrl},enable_pbr:true,enable_keep_uv:true,texture_size:1024}
+        :{model,...(assets?.imageUrl?{image_url:assets.imageUrl}:{prompt}),...(model==='hy-3d-3.1'?{generate_type:'Normal',face_count:20000,enable_pbr:true}:{generate_type:'LowPoly',polygon_type:'triangle'})};
+      const result=tokenhubSubmitSchema.parse(await call('submit',body));
+      return {JobId:result.id,RequestId:result.request_id};
+    },
+    async query(id: string):Promise<z.infer<typeof querySchema>> {
+      if(mode==='legacy') return querySchema.parse(await call('query', { JobId: id }));
+      const result=tokenhubQuerySchema.parse(await call('query',{model,id}));
+      return {
+        Status:({queued:'WAIT',in_progress:'RUN',failed:'FAIL',completed:'DONE'} as const)[result.status],RequestId:result.request_id,
+        ResultFile3Ds:result.data?.map(file=>({Type:file.type,Url:file.url,PreviewImageUrl:file.preview_image_url})),
+      };
+    },
+  };
+}
+/** Shared chat provider for the Binggo tool loop and single-shot proposals. */
+export const CHAT_API_KEY_ENV = 'TOKENDANCE_API_KEY';
+const CHAT_URL = 'https://tokendance.space/gateway/v1/chat/completions';
+const CHAT_MODEL = 'deepseek-v4.1-flash';
+/**
+ * OpenAI-compatible chat request against the Tokendance gateway. Keeping the endpoint, model and
+ * key in one place stops the two call sites from drifting; `thinking` is always disabled because
+ * this is a reasoning model and each caller bounds its own output tokens.
+ */
+export function chatRequest(env: Env, body: Record<string, unknown>): { url: string; init: RequestInit } {
+  return { url: CHAT_URL, init: {
+    method: 'POST', headers: { Authorization: `Bearer ${required(env, CHAT_API_KEY_ENV)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
+  } };
+}
+export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch, resources: readonly SceneResource[] = []) {
+  const messages: { role: string; content: string }[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: JSON.stringify({ mode: input.mode, instruction: input.instruction, scene: input.scene, selectedIds: input.selectedIds, catalog, resources:resourceIndex(resources), sceneResourceRefs:sceneResourceRefs(input.scene,resources) }) },
+  ];
+  const usage: unknown[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // UTF-8 bytes conservatively bound input tokens; cap output and reserve peak-rate cost.
+    // 65,536 bytes + framing at CNY 2/M input, plus 4,096 output at CNY 8/M < CNY 0.20.
+    if(new TextEncoder().encode(JSON.stringify(messages)).length>65_536) throw new ApiError('AI_INPUT_TOO_LARGE',413);
+    await reserveCall(attempt);
+    const { url, init } = chatRequest(env, { messages, response_format: { type: 'json_object' }, max_tokens: 4096 });
+    const raw = await fetchJson(url, init, fetcher);
+    const response = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }), finish_reason: z.string() })).min(1), usage: z.unknown().optional() }).parse(raw);
+    usage.push(response.usage ?? null);
+    const content = response.choices[0].message.content;
+    try {
+      if (response.choices[0].finish_reason !== 'stop') throw new ApiError('AI_INCOMPLETE_OUTPUT', 422);
+      return { ...buildProposal(input.scene, input.mode, JSON.parse(content),resources,input.selectedIds), usage };
+    } catch (error) {
+      const details = error instanceof z.ZodError ? error.issues : error instanceof ApiError ? { code: error.code, details: error.details } : { code: 'INVALID_JSON' };
+      if (attempt === 1) throw new ApiError('AI_INVALID_PROPOSAL', 422, { validation: details, usage });
+      messages.push({ role: 'assistant', content }, { role: 'user', content: JSON.stringify({ repair: details, instruction: '只修复校验错误，再次输出符合系统约束的 JSON。' }) });
+    }
+  }
+  throw new ApiError('AI_INVALID_PROPOSAL', 422);
+}

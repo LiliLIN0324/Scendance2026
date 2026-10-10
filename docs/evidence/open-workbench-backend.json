@@ -1,0 +1,34 @@
+{
+  "anonymousEnabled": true,
+  "functions": [
+    {
+      "slug": "scene-api",
+      "version": 24
+    },
+    {
+      "slug": "generation-worker",
+      "version": 8
+    },
+    {
+      "slug": "reconstruction-worker",
+      "version": 4
+    }
+  ],
+  "migrationLatest": "20261003210000",
+  "legacyPendingJobs": 0,
+  "cron": [
+    {
+      "active": false,
+      "jobname": "scene-generation-poll",
+      "schedule": "* * * * *"
+    },
+    {
+      "active": true,
+      "jobname": "scene-reconstruction-poll",
+      "schedule": "* * * * *"
+    }
+  ],
+  "hunyuanKeyRemoved": true,
+  "jevConfigured": true,
+  "backendSource": "726da8ffac90c8a7be17ddaeb4b8ded35ee77c58"
+}

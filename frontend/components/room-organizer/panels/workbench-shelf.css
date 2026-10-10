@@ -1,0 +1,257 @@
+.sc-compact-shelf.sc-library {
+  --sc-shelf-tab-height: 30px;
+  --sc-shelf-toolbar-height: 30px;
+  --sc-shelf-card-height: 98px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  animation: none;
+}
+
+.sc-compact-shelf .sc-library-heading {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--sc-shelf-tab-height);
+  min-height: 0;
+  gap: 4px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--sc-line);
+}
+.sc-compact-shelf .sc-library-heading .sc-library-tabs {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: var(--sc-shelf-tab-height);
+  gap: 2px;
+  padding: 2px 0;
+  border: 0;
+}
+.sc-compact-shelf .sc-library-tabs button {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.sc-compact-shelf .sc-library-heading > .sc-icon-button {
+  flex: none;
+  min-width: 26px;
+  width: 26px;
+  min-height: 26px;
+  height: 26px;
+  padding: 4px;
+}
+.sc-compact-shelf .sc-library-content {
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  overflow: hidden;
+  animation: none;
+}
+.sc-compact-shelf .sc-library-materials {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 4px;
+}
+.sc-compact-shelf [hidden] { display: none; }
+.sc-compact-shelf .sc-library-other {
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.sc-compact-shelf .sc-material-load-state {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+}
+.sc-compact-shelf .sc-material-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex: 0 0 var(--sc-shelf-toolbar-height);
+  min-width: 0;
+  min-height: 0;
+  height: var(--sc-shelf-toolbar-height);
+  gap: 6px;
+  margin: 0;
+}
+.sc-compact-shelf .sc-bucket-rail {
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  height: 100%;
+  padding: 0;
+  overscroll-behavior-x: contain;
+}
+.sc-compact-shelf .sc-bucket-rail button {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sc-compact-shelf .sc-search-mini {
+  box-sizing: border-box;
+  flex: 0 0 144px;
+  min-width: 0;
+  height: 26px;
+  gap: 4px;
+  padding: 3px 7px;
+}
+.sc-compact-shelf .sc-search-mini > svg { flex: none; }
+.sc-compact-shelf .sc-search-mini input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  opacity: 1;
+  font-size: 11px;
+}
+.sc-compact-shelf .sc-search-mini:focus-within input { width: 100%; }
+.sc-compact-shelf .sc-material-grid {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  min-height: 0;
+  max-height: calc(var(--sc-shelf-card-height) + 4px);
+  gap: 6px;
+  padding: 0 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: stretch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #a4b29a #e8eddf;
+}
+.sc-compact-shelf .sc-material-card {
+  box-sizing: border-box;
+  flex: 0 0 118px;
+  width: 118px;
+  min-height: 0;
+  height: 100%;
+  max-height: var(--sc-shelf-card-height);
+  grid-template-rows: minmax(0, 1fr) 28px 14px;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 7px;
+}
+.sc-compact-shelf .sc-material-preview {
+  min-height: 0;
+  aspect-ratio: auto;
+  overflow: hidden;
+}
+.sc-compact-shelf .sc-material-thumb { object-fit: contain; }
+.sc-compact-shelf .sc-material-thumb-empty {
+  color: var(--sc-muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+.sc-compact-shelf .sc-material-add { width: 16px; height: 16px; right: 3px; bottom: 3px; }
+.sc-compact-shelf .sc-material-name {
+  font-size: 11px;
+  line-height: 14px;
+  -webkit-line-clamp: 2;
+}
+.sc-compact-shelf .sc-material-size {
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sc-compact-shelf .sc-material-more,
+.sc-compact-shelf .sc-material-status-card {
+  box-sizing: border-box;
+  flex: 0 0 150px;
+  width: 150px;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 8px;
+  white-space: normal;
+  overflow-y: auto;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.sc-canvas-rail .sc-tool-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  padding: 4px 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--sc-line);
+}
+.sc-canvas-rail .sc-tool-group:last-child { border-bottom: 0; }
+.sc-canvas-rail .sc-tool-group button {
+  flex: none;
+  min-width: 30px;
+  width: 30px;
+  min-height: 30px;
+  height: 30px;
+  padding: 4px;
+}
+.sc-canvas-rail .sc-rail-2d { font-size: 11px; font-weight: 700; }
+.sc-canvas-rail button:disabled { opacity: .38; cursor: default; }
+.sc-canvas-rail button:focus-visible,
+.sc-material-entry-bar button:focus-visible,
+.sc-compact-shelf button:focus-visible,
+.sc-compact-shelf .sc-material-grid:focus-visible {
+  outline: 2px solid var(--sc-accent-ink);
+  outline-offset: -2px;
+}
+.sc-material-entry-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sc-muted);
+  font-size: 11px;
+}
+.sc-material-entry-bar button.is-active {
+  border-color: #6f8f5233;
+  background: var(--sc-accent-soft);
+  color: var(--sc-accent-ink);
+}
+@media (max-width: 640px), (max-height: 580px) {
+  .sc-compact-shelf.sc-library {
+    --sc-shelf-tab-height: 26px;
+    --sc-shelf-toolbar-height: 26px;
+    --sc-shelf-card-height: 80px;
+  }
+  .sc-compact-shelf .sc-library-tabs button { padding: 0 7px; }
+  .sc-compact-shelf .sc-library-content { padding: 2px 4px; }
+  .sc-compact-shelf .sc-library-materials { gap: 2px; }
+  .sc-compact-shelf .sc-search-mini { flex-basis: 118px; }
+  .sc-compact-shelf .sc-material-grid { padding-bottom: 2px; }
+  .sc-compact-shelf .sc-material-card {
+    flex-basis: 112px;
+    width: 112px;
+    grid-template-rows: minmax(0, 1fr) 26px 12px;
+    gap: 1px;
+    padding: 3px;
+  }
+  .sc-compact-shelf .sc-material-name { line-height: 13px; }
+  .sc-compact-shelf .sc-material-size { line-height: 12px; }
+  .sc-canvas-rail .sc-tool-group { gap: 1px; padding: 3px 0; }
+  .sc-canvas-rail .sc-tool-group button {
+    min-width: 28px;
+    width: 28px;
+    min-height: 28px;
+    height: 28px;
+  }
+}

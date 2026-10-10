@@ -1,0 +1,1390 @@
+{
+  "beach-surf-and-paddle-kit-folding-beach-chair-68794f97": {
+    "assetId": "6a4e04d0-57a7-528b-863c-41ee15c91fa7",
+    "sha256": "eb631b23a79b71a6f20e779d7441b3ef19f5f29192ab25d168065324950af3f6"
+  },
+  "bedroom-and-living-room-furniture-desk-task-chair-e1320da0": {
+    "assetId": "963ffe9c-7039-5d58-a2c8-10bbc333154e",
+    "sha256": "9a1efb2112523ab1757ec7eed96dbb44c6001b1246004ce64bcd66da403e2dc6"
+  },
+  "casino-floor-and-back-rooms-dealer-chair-f39054bd": {
+    "assetId": "2db22d3b-be1b-5a18-b6c4-f1624d3aadbc",
+    "sha256": "1cc1fd391235debc537875d639688436c7935b3ecfc192c284d09cdf9119696f"
+  },
+  "bedroom-and-living-room-furniture-dining-chair-upholst-7ec33345": {
+    "assetId": "7c6d543f-119f-51a1-aa75-8df98dfeb94a",
+    "sha256": "6e33750ba18aacf0a61054f5b30f5edb229c91eebfdddb1a2ea37c3883518707"
+  },
+  "voxel-city-districts-bar-stool-15ad652a": {
+    "assetId": "cfd1cd8c-e833-54a1-935c-320ffa64ef66",
+    "sha256": "7af8aa7857d61ee2de75911eaefef657547e0a877fcd03320189f1115795f9c1"
+  },
+  "indoor-market-hall-and-traders-stall-stool-3c24a76c": {
+    "assetId": "7f9f127b-121b-5987-8766-5985ca3911c5",
+    "sha256": "6665e85b34c47fc9090146a8b1b7844beacc7315b988146fe4ca8bc05c87a0fc"
+  },
+  "music-recording-studio-and-instruments-studio-stool-a2c0747a": {
+    "assetId": "c6f4c8aa-1e34-5027-a576-bf509acb19cc",
+    "sha256": "b197167f21d5a0314220fbd4b418b385b8ab236a649360df7deaeb1c236b14b2"
+  },
+  "tattoo-and-piercing-studio-artists-stool-4b12a1fb": {
+    "assetId": "56dd12c9-2284-5ffb-a8b9-a2d57abb5735",
+    "sha256": "bd1e1a82ac3ea63b29b0ba856c7c7d33c8fa13b6501098236b61f1a667c26c3f"
+  },
+  "bedroom-and-living-room-furniture-sofa-three-seat-6be9b44b": {
+    "assetId": "61187f0f-2517-592e-b1c9-3b6fd8b9b62a",
+    "sha256": "a7c5c20b00ce057815785a9bd393707de0bc84c9926278cac0882b369ab2b4d7"
+  },
+  "hotel-and-resort-operations-lobby-sofa-79174bf1": {
+    "assetId": "20f8eeb2-fc1d-5dc1-83cf-456ad17c90fd",
+    "sha256": "7fbafcb6e11ab4a3f93c1dc793d048b99e55f3fdce254e53d52722dade3f31b4"
+  },
+  "bedroom-and-living-room-furniture-sofa-two-seat-904fa140": {
+    "assetId": "ac6e46dc-8452-5541-ba09-3c347c3b1348",
+    "sha256": "39a320b26c6f497dd8d61fa1684fd030804fb7b96a84ec5a44a5725f114bdff9"
+  },
+  "clinic-and-veterinary-practice-examination-couch-adjus-ac07fdf2": {
+    "assetId": "7d6dd788-6b9d-5f82-a359-6f511bdb35e0",
+    "sha256": "8282b8141efed6699e8da072287b954705f40f4011423ed326dd3d12bf4cc97f"
+  },
+  "hospital-wards-and-clinic-operations-waiting-bench-row-4a483ebb": {
+    "assetId": "029b8cd2-2c18-5e47-8eec-68d12ed1251e",
+    "sha256": "98faa2c29551a8a6863d1bf033518908179b5056c2964860d981f0ee0029b567"
+  },
+  "steampunk-airship-dock-and-workshop-workbench-ed991aad": {
+    "assetId": "fb3f755e-0433-5b5c-8572-0a0a35e0ff27",
+    "sha256": "ea9600244e249d09b94ae0e6f6c1026961bdba354dcbbc148b14b709657d99d1"
+  },
+  "distillery-and-bonded-warehouse-racking-bench-5530b468": {
+    "assetId": "c60d3287-581b-54bd-9587-80aaf9bf4d9b",
+    "sha256": "cd452d344b6a53b4881ba720a626d0c94d51fb029c131c536907b1a72e1196fe"
+  },
+  "distillery-and-bonded-warehouse-stencil-bench-92b00a0a": {
+    "assetId": "dfd0c4bf-90b6-56a3-baf9-a00d1feba6f6",
+    "sha256": "98ba91f36857f514cac990205d2870f3d7b330b3951a73a31955e8a5181d3f5a"
+  },
+  "marina-and-yacht-club-marina-and-yacht-club-terrace-ta-e463ef37": {
+    "assetId": "0e4401c0-17d9-5a51-8977-6627ca08a032",
+    "sha256": "dbde45e527c24e4f63163b112c48bb8fa93111ef43aa1ca61f1f7e31afa5a492"
+  },
+  "andean-terraces-and-stone-village-terrace-wall-high-54f771ed": {
+    "assetId": "51ae1b90-ecab-56a7-8f95-23e8fdeea669",
+    "sha256": "e0348b27fe35e01c25a5921a2c0a3de87d3f0783b00590c0303e808336d1e390"
+  },
+  "football-soccer-club-grounds-terrace-tier-d060e188": {
+    "assetId": "9dd9286d-e2c1-5940-8962-3aefa8d8565e",
+    "sha256": "7d243a526cbfb4250b04e3639150d3556d397b844bf4bd795e7f4ffb966ff9d3"
+  },
+  "baseball-park-and-batting-cages-bleacher-stand-2ab80b42": {
+    "assetId": "8c689d00-eb59-50f4-b423-295f05abce10",
+    "sha256": "eb3862147748300a819b504abc0475b989d3a6d7599b092dadc8116d45633883"
+  },
+  "zombie-quarantine-streets-food-distribution-table-b72c37f7": {
+    "assetId": "ce8c458c-e6d3-5fe4-a480-e675ce7ac857",
+    "sha256": "1bf8b8c3dbdf461c965c2ddefcbba6dfd7db37f42978a681a1b8d81fcea0d2ab"
+  },
+  "human-anatomy-and-education-kit-bench-table-775888b5": {
+    "assetId": "dad57fa2-22ab-5039-9ddb-c7d4e4135525",
+    "sha256": "d32ef4fae83c27036187dbe5ba942ff140030adf9c9794b54aa9b09cb595273a"
+  },
+  "steampunk-airship-dock-and-workshop-chart-table-6d4aed38": {
+    "assetId": "1af54d11-3fe1-5cd8-b3d9-ec105eeeaaac",
+    "sha256": "4bb10328fcd7ffa4767bd2df1dc8e1a6b5e5fa6d09578e069f1bb25af10bb510"
+  },
+  "casino-floor-and-back-rooms-cocktail-table-329ca6f8": {
+    "assetId": "37a64fb0-6644-5694-a6dc-f0dc48597ee6",
+    "sha256": "af7835669bb70ff28530e81e864105c85c9fc5e524b7e91e4bc17fc1baa6961e"
+  },
+  "downtown-office-interiors-desk-executive-6ef42aca": {
+    "assetId": "dbae222c-ce85-589d-9a9c-533b0d2f4862",
+    "sha256": "11eb01714e730e122ad5f56593c421ef4c8d79d1d6f54aeca7a5ecc0ee95d067"
+  },
+  "tv-studio-and-broadcast-gallery-gallery-desk-run-a72b3947": {
+    "assetId": "59059be1-a53e-52b1-8bd7-6a4fa4db6398",
+    "sha256": "88cb6b897d64ac9d68bd5ea2cadef173a449e8a0272f422659e381323709c5de"
+  },
+  "downtown-office-interiors-desk-1600-panel-end-9c79542d": {
+    "assetId": "325de090-db43-502c-9ea6-5e8f13b7c060",
+    "sha256": "85d303cd0d4bc3c216723d8392148e7a21544d9c4c1c49ae5d65ca80cf8d4bbd"
+  },
+  "computers-and-desk-gadgets-desk-1400-c38edf1c": {
+    "assetId": "c551e00b-c327-578c-b948-fd700d12a503",
+    "sha256": "2bf3d597c84b859b26e05fe1644c5674b846c85efa9dbf304d3616a595359b20"
+  },
+  "distillery-and-bonded-warehouse-tasting-counter-5c8e94aa": {
+    "assetId": "edeb64aa-f6bd-5839-ad89-3215fc108483",
+    "sha256": "74877c6c95a1882fa0d57568c8d9500cde22221cf51165132d4365ed914f6de2"
+  },
+  "fast-food-and-drive-thru-holding-cabinet-door-open-1b2f4d59": {
+    "assetId": "2a6dd64d-985e-5860-a593-e8d1e9d9e665",
+    "sha256": "a47451167e7615648ca183d680da94e90ad668e195b255b4107e3081e0061be9"
+  },
+  "cinema-multiplex-and-foyer-nacho-and-hot-dog-counter-686a7c9e": {
+    "assetId": "59221d84-aa70-5d0e-ac2b-7a05828958c0",
+    "sha256": "a1ac04b952cebb7ae184fde76fe4b3b3154ff219330e077ca27cd99cf4ae2291"
+  },
+  "hearing-aid-and-audiology-clinic-appointment-reception-95ca2b14": {
+    "assetId": "d698af02-96bf-5484-a868-4cd5db8f7b00",
+    "sha256": "3b3de4daa3433d219cd02a4949957ebed2be98af7002353385a3f6b47ce88afe"
+  },
+  "city-courthouse-and-records-office-city-courthouse-and-6bcfd40f": {
+    "assetId": "27459d5f-08ef-574d-a396-968c4d5263b0",
+    "sha256": "35fd493b72ec92840809872e3d1088d030998535cea4e2ca83781db81b9fe8a3"
+  },
+  "griffin-airmail-roost-and-posthouse-route-map-lectern-8634b74f": {
+    "assetId": "1eb1e2a7-5937-5c8f-808a-5dd9e3c8159e",
+    "sha256": "eca298af37d309bbcf37a2a0584965aa4237a8771acbdbdfdc5dc67757ebe614"
+  },
+  "abandoned-cinema-and-projection-booth-abandoned-cinema-dbdc40c1": {
+    "assetId": "06cac673-19a4-5469-b6c1-8281cbdf3fe0",
+    "sha256": "08b94caf5a1762acce72f6cf4d8ccd00b0429345af4557baa3138ef8a3a6d980"
+  },
+  "wedding-and-chapel-kit-chapel-lectern-df983527": {
+    "assetId": "f9922ab2-066f-5ba4-9cfa-4dd35663bdf5",
+    "sha256": "4e38398021496ec0d8c2b6478d80965cfdbea6e1ca4638184a36d67160046a3d"
+  },
+  "travelling-circus-and-big-top-circus-ticket-booth-428cc272": {
+    "assetId": "6c0a4c98-15a1-5d74-b4b5-ed3a06e4f351",
+    "sha256": "2629efa3750f8ebbeb14c1ce3793f20c643421f4a7027ffb5613661741ec5b01"
+  },
+  "restaurant-kitchen-and-dining-booth-2-cover-accent-5fa7aeaf": {
+    "assetId": "1a1964c4-ad2a-5069-893c-51ee2553df8e",
+    "sha256": "4a02a66384f25642dddfbf814b9a9ee44409dd8283a379d27f4e19b71a16d18f"
+  },
+  "nightclub-and-dj-booth-lighting-truss-straight-8d2acafa": {
+    "assetId": "bfec9313-c05a-56fd-9e27-884288018f08",
+    "sha256": "e6d773732f9de2d90a7aa84d2279f9778dc4fbd1cf2a5d80933253172d87558b"
+  },
+  "restaurant-kitchen-and-dining-booth-4-cover-31918298": {
+    "assetId": "78319171-5081-5e66-a6f3-17e5dfe36234",
+    "sha256": "90c036ce2bfc246595549bc06dfb8ca316a3d71a81f5d108fc94ab283d2e711d"
+  },
+  "harbor-and-tackle-fish-market-stall-d82006ea": {
+    "assetId": "e05218d1-c752-57d7-b835-40809f766332",
+    "sha256": "bc9c96d00fdac35998b6d84095c782afee395ae077081de156d7d46ce971c809"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-55e52c8d": {
+    "assetId": "d43cb42e-81ab-564e-8ddd-5d2396d86d01",
+    "sha256": "a087d22d6cf183d85e56ccc9ffcdc882112dacdda794e9ab538fd39586e5ca3c"
+  },
+  "medieval-mmo-starter-realm-market-stall-e0677cc9": {
+    "assetId": "ed84a366-684f-5073-9667-64a723c64299",
+    "sha256": "00f1841a50e5335f752a28c1463957d54029b8f3bef198605b026ad007e72fcf"
+  },
+  "canal-town-and-windmill-market-stall-with-awning-a330661e": {
+    "assetId": "3ccfab9a-7a29-56fd-9c78-ac0e112e85d0",
+    "sha256": "f0081855bd0999063fb524358679b6c200a75fd4cff32d82728143a3f1737ee4"
+  },
+  "music-recording-studio-and-instruments-electric-guitar-7ef7ab5a": {
+    "assetId": "e68e2179-5267-532c-8e1b-24e004219d61",
+    "sha256": "20fb0a755e3e6e663695d2762ea81d24abc3951280721ea5e9a242199248eecf"
+  },
+  "velodrome-and-track-cycling-bell-on-stand-31ceff7b": {
+    "assetId": "14b16daa-559a-529e-920d-cc18726e9044",
+    "sha256": "f4df36d1bd9e6e876f0dc287c4a84d67ee908ee211a3a91f2f461e9ee8c1cf91"
+  },
+  "steampunk-airship-dock-and-workshop-flight-gear-stand-b2d883bc": {
+    "assetId": "e28650b8-5f62-5045-888d-e8c6b180b7b6",
+    "sha256": "4269c423a836dc551ff86a9db36d66cf832cad98f7b54af9643d0c6f1a5a9a52"
+  },
+  "music-recording-studio-and-instruments-bass-guitar-on--c2780ecc": {
+    "assetId": "be7178da-dbfd-536c-b278-cbe4abe2b50b",
+    "sha256": "bac6a90341ea811aa9b8938390996449082b33af4633a31d8595825b831a1c2b"
+  },
+  "fresh-produce-and-groceries-greengrocer--86f48b0c-starter-scene": {
+    "assetId": "ec3d459b-d508-5e29-b5c9-d10328e33c34",
+    "sha256": "eee69e406765a716401f0fa9ff76f22f9148dfddb6224466e120d8c38a37b911"
+  },
+  "modern-rail-and-metro-network-information-display-1f74d599": {
+    "assetId": "9222e189-2968-5384-9ac1-9ba8b486e57f",
+    "sha256": "1f49a5ae93e003df97a9afca0c631d4ded8b12ed77f39d072c221849692201da"
+  },
+  "steampunk-airship-dock-and-workshop-gear-stand-1f118594": {
+    "assetId": "e1bb2725-528c-55eb-91d8-83f0e950e5ee",
+    "sha256": "fdc655bc50047ec6e127cbc20f12f6ec030508eb12361c357e6e5db82f27c61d"
+  },
+  "garden-centre-and-florist-fence-panel-display-rack-3d4aa56d": {
+    "assetId": "d1b5c987-521a-5195-ae50-9e4770668125",
+    "sha256": "1080a4ce1047f510ce5ec2993942a3db4413019c3fe37ec23507c8773c5193fa"
+  },
+  "hotel-and-resort-operations-spa-reception-desk-8e1bcf19": {
+    "assetId": "d2215304-e679-5f18-8b59-a636ed60166e",
+    "sha256": "e5943c33999c50a94cbdef2c3146da464073d1909a753c43ff3d75a3fc2cdf8f"
+  },
+  "solar-system-and-astronauts-brochure-stand-167bd36f": {
+    "assetId": "960fb8d3-d30c-59dd-88e0-b1b389643877",
+    "sha256": "ed71ffe71f47c70b0a0569ab5eb00b50d0aa133407d123f69841f4d409ca75c9"
+  },
+  "airport-terminal-and-ground-operations-check-in-desk-ba7d92dc": {
+    "assetId": "e622c71b-4a9f-575f-916e-a60a3642d088",
+    "sha256": "c2f5ebbdeed67a83688c6cc439b442b7516e612c3e84297527a4fb04d1aced34"
+  },
+  "medieval-mmo-starter-realm-market-stall-blue-f5cbc408": {
+    "assetId": "0cb95bff-3585-5b77-8a16-0c716a12c22a",
+    "sha256": "dab1741f0d0a12b58ff622ff1b5eab2183c9682d335b93f0a0fb6c9468abd2f4"
+  },
+  "live-music-venue-and-festival-stage-backdrop-banner-fr-7ebd4df6": {
+    "assetId": "00a20896-aa4e-5e2d-aa76-f960e8b4e3c8",
+    "sha256": "774a13c10685813ddc51aed6a9a14ca7275c8a766a72857444896bf162cf50d8"
+  },
+  "bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7": {
+    "assetId": "36b79bbc-bc95-508b-b09d-75729f180b5b",
+    "sha256": "41ceb2de779a5f237bc4b77101199362e36a9526b3d8a64003d4404746cb7380"
+  },
+  "indian-bazaar-street-and-temple-speaker-horn-on-pole-4788391b": {
+    "assetId": "8f31ff39-8c9c-5263-943b-204466440204",
+    "sha256": "68db722508c5b5a2167559bc457dc0f07336e8c7dde38df299289e70b4b28f22"
+  },
+  "abandoned-cinema-and-projection-booth-abandoned-cinema-765a1a5b": {
+    "assetId": "4b575581-c010-5f2c-a8da-3060268b7997",
+    "sha256": "6666ffb733f1750b16e0cae281bb4ad470dc1c7e17abd91b820f27dfcb943cf8"
+  },
+  "japanese-school-and-city-street-lectern-f8b909de": {
+    "assetId": "8ab42e14-8558-55f7-bd8b-85cfcb3de94e",
+    "sha256": "fdbd9f2e1e8ae96e30c98d758dee82301eb32b5811e925d96854e56d685d65ea"
+  },
+  "medieval-monastery-and-scriptorium-trestle-table-2a0801e0": {
+    "assetId": "fbb0c74a-203e-5dcf-9c35-b0110b3ca8b0",
+    "sha256": "774b974756875549fd608e72f11cd24c6c1fdcb0d1c9f18381845591c2f446fc"
+  },
+  "live-music-venue-and-festival-stage-microphone-on-boom-b553a46d": {
+    "assetId": "b51d5ff0-050c-5f8a-af89-afda95dda5aa",
+    "sha256": "ce4e75c881e8186395ec196ea4bbd6a747b4904f2c0811ba7e4beadf5b7dcfa0"
+  },
+  "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc": {
+    "assetId": "53fc80d0-8598-5e6a-9ed2-a3e455aac36f",
+    "sha256": "6872fe59b1af5389a379eb53aa1003767d8c899af988b79ebcf92ba1f8b4364a"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-spotlight-yoke-335ca905": {
+    "assetId": "96d3f453-e096-5e40-a57a-4219aa705006",
+    "sha256": "f48480b62627c273eb41af094ee9fbde2f5b1e8f5c561a633000b43cd4417867"
+  },
+  "street-food-market-and-food-trucks-planter-with-shrub-0eedba0e": {
+    "assetId": "e7a02b7e-9abb-5b4c-ac6f-f3fadaeb346e",
+    "sha256": "5ff09e626c231efe65a4c163caea4b5fd84d002da304749161e472c666454f20"
+  },
+  "trampoline-park-and-soft-play-basketball-dunk-hoop-58e31467": {
+    "assetId": "6889b5fd-2ec6-5bb0-bb77-a1248994b6ec",
+    "sha256": "25a3c10e5ff23fe6989f4f8ad26559223f900f0f22eeb7f874192f955e6f088e"
+  },
+  "community-sports-hall-and-changing-rooms-hall-scoreboa-1aac26ec": {
+    "assetId": "4e26051c-ed90-56b4-8576-6ccee6b05a2f",
+    "sha256": "981363b34eceed11214360b3b7d126321229b12a2825e36e67ec786888ac9a0b"
+  },
+  "beach-surf-and-paddle-kit-warning-flag-pole-04ad1969": {
+    "assetId": "0f9290b1-8a4d-5606-bfee-0d62edd667f0",
+    "sha256": "13b0da5dbec5480048865870c94993b9088056b8138ecccc44da6c1e2c57b33e"
+  },
+  "live-music-venue-and-festival-stage-truss-straight-bay-3e0706d1": {
+    "assetId": "e49b3d68-c070-5b8f-9c1f-213167a18562",
+    "sha256": "47bab471fb589adcbc9517bf7b22086efc7292dad6623d6f364d1e0561f7d966"
+  },
+  "football-soccer-club-grounds-full-size-goal-08c07f03": {
+    "assetId": "4770d1eb-f95f-5d0f-9c74-d4e7bb989ab1",
+    "sha256": "905b1dbd2b4916b16fbda408e262ada896d3e2d17e30d08a15c278ded832d4be"
+  },
+  "ferry-terminal-and-harbour-crossing-ferry-terminal-and-4f8d77f5": {
+    "assetId": "0e3662c6-832b-5dd2-a070-7a83a11b982f",
+    "sha256": "2537fb5ae17f19a9bdd318733f570a256512632045d8ed776067c77160fe7bfb"
+  },
+  "bunker-shelter-construction-waste-bin-foot-pedal-f50124e7": {
+    "assetId": "8a7379e0-242b-5f38-8880-a40b92df305d",
+    "sha256": "3138813599ae643bae98c0d1c0765b5d9e2c47172a892df095e1fe41eddc74e6"
+  },
+  "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a": {
+    "assetId": "65598c4c-fd34-53d4-a606-ba28e54f19a7",
+    "sha256": "6a38cb16a82bbe0c8a1f22c4e404381d97b7eaf65bc463bc7847e55b43b0940d"
+  },
+  "zombie-quarantine-streets-chain-fence-bay-014919d4": {
+    "assetId": "90753af2-2228-56eb-b0b9-bd8918d59925",
+    "sha256": "1e8ccd059ace370a544a5e1a6c6636bacfdecd8a45f75ebf6a4da37ae825e352"
+  },
+  "almanac-gardens-terracotta-planter-1472f447": {
+    "assetId": "f2b418b2-5b97-522f-bde8-4b12b45d2f2c",
+    "sha256": "6258a123c55837bc26fce46d7ee9903686e8408c536060a28c8848e1bfc62aa2"
+  },
+  "trading-post-and-barter-market-canopy-market-booth-46c6c10f": {
+    "assetId": "571bac5d-850d-5419-94db-d9760a30572d",
+    "sha256": "995d3a855331d70b24c863f509238be35e56d33bee826b415b696e8af3393b84"
+  },
+  "robots-and-drones-kit-battery-trolley-c1d0113b": {
+    "assetId": "4d315848-9087-5e40-8191-4aba4f1f4f6b",
+    "sha256": "19cf7d163bc7b8c33807de6cadd243f6a326cfc8c99246620464ce211a08d316"
+  },
+  "pixel-modern-apartments-wall-art-6f3f2e8b": {
+    "assetId": "51221aac-1c9c-5a3b-b0a9-718a0dc4737b",
+    "sha256": "9b9b42050ed44c4d85b735570706c4bb2dfe08113397a3ec37380bc1ad6dfbe8"
+  },
+  "medieval-mmo-starter-realm-rug-5064c4c7": {
+    "assetId": "6c75c4c7-2263-535e-abce-f556edd28b99",
+    "sha256": "8d0580475f4f53c9080181acf55d4ae3c38b9c066084be5e07591ab1284067bc"
+  },
+  "computers-and-desk-gadgets-laptop-open-14-ad4c2b1d": {
+    "assetId": "c4ac2d49-a0c1-57b5-bd58-c2839684bcb0",
+    "sha256": "1b623e3f71045a2d62a73fe32fa113ade275a43e1284052de753c94baaad44e2"
+  },
+  "mountaineering-and-summit-expedition-base-camp-dome-te-e93b01ea": {
+    "assetId": "db5b3d5f-31bc-5c46-b893-6b38eb2d47af",
+    "sha256": "37024b4ef118e177f5b07677a2ec268f3a5093f8e1d320c2c7173de83fa0ad27"
+  },
+  "hero-shooter-harbour-payload-cafe-parasol-3af84c9f": {
+    "assetId": "26d5b812-47ed-5a3d-bd6b-5918c14f2cb3",
+    "sha256": "5711e4a9ea8f34e54f9c945109c3964a8b7654aed97fcb396e056fc814522d43"
+  },
+  "village-hall-and-community-events-pa-speaker-on-stand-7ffa787e": {
+    "assetId": "f44e9eed-41db-5140-9091-fd04928f2b9b",
+    "sha256": "46083c231cbd4d24dd60ef7306f35577aea7c8b8f6b3f74b8fc4ea160b28106a"
+  },
+  "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8": {
+    "assetId": "152216e1-96bb-515e-9c97-40cadb0aa1de",
+    "sha256": "0ef21a9011a00e92766aa88fb434927ccbf85b47d4746c6e39228ca27e2f9813"
+  },
+  "hot-air-balloon-festival-pa-speaker-on-stand-43f5125f": {
+    "assetId": "08f2785a-235b-5023-b055-f5d66362df49",
+    "sha256": "364beba4dca6781dc18ca1e6a128c759004df1d3379e92b7906df90cc97eace9"
+  },
+  "american-football-stadium-kit-field-microphone-1129c7a5": {
+    "assetId": "6def928c-f8ae-51e1-9d57-d52c4c8df529",
+    "sha256": "b01c6e09ee6aae5ce4fbd8b07d7ebb530395bb33c5603b978c84f019d661ccde"
+  },
+  "hotel-and-resort-operations-conference-table-module-a6abb373": {
+    "assetId": "893c4c7f-4a52-5515-afdd-e41adad67078",
+    "sha256": "85a08d3f62713c7c78df5a6974b2025b240fae163b795dd61ff1b7011c23f854"
+  },
+  "tattoo-and-piercing-studio-studio-plant-pot-7ee5b536": {
+    "assetId": "9b4c4a52-0195-5104-a9c8-e83d376ee74c",
+    "sha256": "a4ecf82c56717032ca0cb588d1664c3de7867971f2dce6a364a794a341b6df9a"
+  },
+  "live-music-venue-and-festival-stage-di-box-63bef201": {
+    "assetId": "7d9bbeca-f1cc-5330-ba20-99e4e92d2829",
+    "sha256": "c7fba4438f0dc4e4855e8b3c041cc3bb75442985e8c6a452d6e9eb34536995dd"
+  },
+  "music-recording-studio-and-instruments-mic-stand-empty-3a0d7a1c": {
+    "assetId": "cd5434ac-b3cb-5696-8804-4192733619f9",
+    "sha256": "a31e68aa92c230821621e5849cf69afec27df9762199248fe6c4e00f5ea5f4c8"
+  },
+  "live-music-venue-and-festival-stage-guitar-amp-stack-9d8c42bd": {
+    "assetId": "55374ed2-635b-58b2-9863-20de9c7577e5",
+    "sha256": "4adce3f1867459b969666dc6621eb8287f653e601fc7d7342582ee62adce4de0"
+  },
+  "live-music-venue-and-festival-stage-guitar-stand-with--e8d04dcb": {
+    "assetId": "cbafef7d-0b00-504f-979d-0ce25d607071",
+    "sha256": "46b6ba6a23bb40acc153373c45394b4711bec9fb16094aca4bc57b501611bd1d"
+  },
+  "live-music-venue-and-festival-stage-keyboard-rig-c2846152": {
+    "assetId": "90c8e183-9d8d-59b0-bba4-81b7dde12a21",
+    "sha256": "6fa8deb5eb8f58d50f69224f26e0f3cc50bf1828e77c2264f68a02600d2070a3"
+  },
+  "live-music-venue-and-festival-stage-guitar-stand-with--12a05ac1": {
+    "assetId": "b8845b59-bc28-52e7-b162-fb7ed3474685",
+    "sha256": "f9e4ab3cd40dbbadc3b6a96a8158caae5ac46508c7dc4fa0f8ba5a0f90397037"
+  },
+  "racecourse-and-parade-ring-big-screen-frame-9bea9827": {
+    "assetId": "607ea7d1-a26d-5adc-a648-aff3f6f4a404",
+    "sha256": "44cf8e67fc9a50e4bdb4f37ea22f09b47ab24475eeea507a50fd8f5d293adcb3"
+  },
+  "nightclub-and-dj-booth-dj-monitor-wedge-78f6b1b0": {
+    "assetId": "5ce0f5b7-6b4b-5b3d-b06c-a3c7d56f7cfa",
+    "sha256": "fc14a435aaffbc8ac552d167ec02f412da4ddf7d1c58ffc137ff0ff739b01b50"
+  },
+  "theatre-stage-and-backstage-tannoy-speaker-efacfc9d": {
+    "assetId": "f702c480-acd2-5d17-9174-547d84dedad9",
+    "sha256": "69354a087e0746e75d564a79867321456a26d93c73e41c3b4a5e1ce49cc43db4"
+  },
+  "nightclub-and-dj-booth-dj-headphones-68ba5562": {
+    "assetId": "f3abd45a-5c69-5f77-bc7d-30b8021372d8",
+    "sha256": "b12cad3dc57b586a720dc7da6175638a23d8172d482aba357fd8bf63a7723b65"
+  },
+  "nightclub-and-dj-booth-optics-rail-a5550ac4": {
+    "assetId": "d741c231-3412-529b-bea1-e93739b63ae9",
+    "sha256": "59a7538b219deb90f3ab8c73e34eee97b18c3ee61feed6a260c22dff0d3870b8"
+  },
+  "orchestra-and-band-instruments-flute-8c1f6878": {
+    "assetId": "abe94a03-dbec-538d-ac6b-756894ad3501",
+    "sha256": "7dae15017d2ff4c4bdfda1c6cc9a48bc468250f86169bf65555c26c3a0d43011"
+  },
+  "low-poly-character-figures-civilian-arms-crossed-d539191f": {
+    "assetId": "fcd30fd1-3594-561b-a23e-8cb2c50ba22a",
+    "sha256": "ad2ef44c4ab8caf988345caf5e20039b6df67fbb726e3cae4b1ec6f2a7665a20"
+  },
+  "low-poly-character-figures-civilian-coat-standing-d311fc0b": {
+    "assetId": "03f8cc34-6728-5cd2-a5ac-8c13897dad0e",
+    "sha256": "da6f7dbeda210d4fee60e1d8c448a8d289918cb390dbf3f4047ffd0a50706a69"
+  },
+  "tv-studio-and-broadcast-gallery-boom-microphone-on-pol-952f926e": {
+    "assetId": "a61797d7-b1e9-5b0a-8743-700aee60f5c6",
+    "sha256": "fa0b8483f8f8158762f7110e5ae6ed5d7d1011e26f8472f630eccd81c8e73216"
+  },
+  "university-lecture-hall-and-campus-projection-screen-f41396d5": {
+    "assetId": "1b17df48-f4ec-54b7-be17-8d9acdb93fae",
+    "sha256": "a46b079727be28f323d05c8a9558d53b8c946b50a139614dec853f51d332a7b2"
+  },
+  "low-poly-character-figures-builder-standing-41a26918": {
+    "assetId": "b3c28103-43e3-54ad-8092-63c5726785de",
+    "sha256": "4ea8efc243e534b8744df7e7fa68c1d6e23658c10382193d0b1b0f8652b1e616"
+  },
+  "low-poly-character-figures-chef-standing-107eec87": {
+    "assetId": "bc6ccf8a-6129-5b92-bfba-ab7b39f52d22",
+    "sha256": "38f9773568fa45438b6aad9a02e18e5b896c2e8f96ad196ef87eb66fdca92284"
+  },
+  "low-poly-character-figures-civilian-on-phone-57698df1": {
+    "assetId": "7c4ef63e-a590-5e47-91fa-955b1cac88d3",
+    "sha256": "f3276ddba76429bf450e22a04ac5422bacc8a8253a5f3f330383551ba29aad47"
+  },
+  "low-poly-character-figures-civilian-coat-walking-52e652ed": {
+    "assetId": "b7aa070e-0e2b-5c6b-a9dc-459fe94d6c7b",
+    "sha256": "ac41ae1195a8681d6ab7fc95e168c9009de1b5cbf5e3931e3cc0997c97884808"
+  },
+  "low-poly-character-figures-civilian-pushing-trolley-02fba33e": {
+    "assetId": "a88c42cb-d097-59e9-a7ac-b478e62fe589",
+    "sha256": "117fbd82504267d792b4310a5df3770da3136aecfbe8a737ca8ea170132383d3"
+  },
+  "low-poly-character-figures-civilian-running-de3617e6": {
+    "assetId": "bd2d3758-14be-53e9-93b9-1d7142c487c1",
+    "sha256": "e1381a1d7729fcab826dbb61983d6571f4ada4f36bc9f3d899351e6a447f8130"
+  },
+  "low-poly-character-figures-civilian-hands-in-pockets-65efe4c2": {
+    "assetId": "7336bb14-9fd5-506d-a3b2-417bc69d1e54",
+    "sha256": "c6161b86cdcd1d7fece1121462b98265f21c4025946b95a3b84eeadd98167d9a"
+  },
+  "low-poly-character-figures-civilian-leaning-7dd8a161": {
+    "assetId": "3e2e0a6d-1ba7-58bc-b037-cda90c2a7b1a",
+    "sha256": "0074dc03153ba6cee87bdbc029df89b0fcc46ff262b156ca7d5f9b7a5dffa460"
+  },
+  "low-poly-character-figures-civilian-standing-idle-514e9033": {
+    "assetId": "2a0c4f08-d4f1-592e-b847-10bd9bf968cc",
+    "sha256": "34a6d575c226e38cde1ba8bfa3cb18fee0805b0ba380dc361745a70f7fdd1b96"
+  },
+  "low-poly-character-figures-civilian-waving-a7248cbd": {
+    "assetId": "4e41e2a3-66ca-510f-a2a8-9914689b2723",
+    "sha256": "5469cce569b23a78455bf9763ba5dd0f752978a13d26fc15b39703267a86eee4"
+  },
+  "low-poly-character-figures-cleaner-with-mop-579c8a9e": {
+    "assetId": "d82630b9-eeeb-597b-87a4-4e3b7f9afa9a",
+    "sha256": "280d166e31e34d40bd6a67b75c4fa85398a28a92497b03ecd3858ec89c447fc7"
+  },
+  "low-poly-character-figures-civilian-walking-06de0354": {
+    "assetId": "71caf0ac-5306-54be-9b5f-ed3e49cd5ab1",
+    "sha256": "377f0d6db652dd6fad166f7f19f906b4c42fd32e9017d9de6aefcee5613d1637"
+  },
+  "low-poly-character-figures-courier-with-parcel-9ba10dd9": {
+    "assetId": "db6503f2-d7f5-5269-88c3-f74345bd89a0",
+    "sha256": "86fe19883b899a87d268cf9e97ed35498535320b14caa82c9685b64fd4307923"
+  },
+  "low-poly-character-figures-civilian-sitting-f51129df": {
+    "assetId": "92f4d4f5-2834-530d-8cf0-54b6941405b7",
+    "sha256": "4c30f47ef88c04bfa03c68321a2a3a59b006f2a36f72ebae4c9cff61b495e202"
+  },
+  "art-gallery-and-exhibition-rooms-wall-text-panel-c987f386": {
+    "assetId": "7fba53e8-2470-5f82-975c-08386aea29cc",
+    "sha256": "f1591184c39d2a7dd9c1629a7e0085d81fa180beb54127b5d48ce827e60ee1d3"
+  },
+  "low-poly-character-figures-medic-standing-c9e96efa": {
+    "assetId": "fff5b64b-9e36-5e6e-91ba-e7dde316d49d",
+    "sha256": "8d7387840d82f88f3325b7346b95202f584c8907d2e82cb7a40426d52645b095"
+  },
+  "low-poly-character-figures-waiter-with-tray-59369bb3": {
+    "assetId": "6f18620e-de8a-5df5-92de-8a297d643977",
+    "sha256": "f1353a65f626be1f53d128548f53c6d9f23bb4c9f3cf22446201eaf6042ae8e4"
+  },
+  "low-poly-character-figures-shop-worker-standing-44c74d70": {
+    "assetId": "42238f74-5087-57cd-aa00-a160b5617a61",
+    "sha256": "fe4e3112684dc22d51866a7af4d06398e33662a068007fca16de8ead3bd5ec48"
+  },
+  "american-football-stadium-kit-championship-trophy-6989e4ff": {
+    "assetId": "95e4b60f-5bf3-59cf-a734-3444837b69ce",
+    "sha256": "83bae12eec500ef02afc6a54e3d046fa13253a3e827f5b6e12e217e3681fa62d"
+  },
+  "low-poly-character-figures-firefighter-standing-8ded7b6f": {
+    "assetId": "30df7f61-520e-5456-8262-dbe7856d46dd",
+    "sha256": "cc41a1ae6ebebdae89e29f89bdbffdf711cb905cb4bcbff961959f60ddcb7d66"
+  },
+  "football-soccer-club-grounds-tactics-wall-board-15e2a3e2": {
+    "assetId": "c28a25ed-33ac-5bc0-8693-dd3755558c7a",
+    "sha256": "f3170b28ab2cebab5fe004526944c5bb26aaf1b4ed4b9a0ec487122527aa619f"
+  },
+  "football-soccer-club-grounds-trophy-plinth-99e2c1de": {
+    "assetId": "bb9c05ac-a6dd-5fc8-acdb-642feed37e26",
+    "sha256": "3f8e9118888e7924e7256e262033be905224e080e13ef0444cfc40195c0c7864"
+  },
+  "football-soccer-club-grounds-substitution-board-05e2171f": {
+    "assetId": "84f8f4db-1642-5310-aead-45e4281863f2",
+    "sha256": "af82cde6e951d936873ca68b1709224b52f5a2c9668692b9988a0bbf60ee2448"
+  },
+  "football-soccer-club-grounds-wall-hook-rail-618b9d6b": {
+    "assetId": "1f85496b-f1ca-5212-9629-0f0f9cb2db2b",
+    "sha256": "b8a7c3fdb10b53907ee61403039756fccdcb2faf734cdb56f24cafff97529407"
+  },
+  "hot-air-balloon-festival-briefing-board-81a73204": {
+    "assetId": "2a78b6fd-415f-56c4-880e-c47a40baff69",
+    "sha256": "d00f8f72d004b7ce126283f599a75da775635a3d163db1a97cb574a4dc8e9b48"
+  },
+  "go-kart-track-and-pit-lane-trophy-set-7acab0eb": {
+    "assetId": "4274e380-76ff-57d2-ad7d-daa6c3487acb",
+    "sha256": "a9616eb89a784ea94293bd4d64c59291892390e6c0b5f2ad26c983ff4b174165"
+  },
+  "public-aquarium-and-marine-centre-wall-graphic-panel-a5dfb6e6": {
+    "assetId": "9b7ebb63-980c-5530-a371-1af67b6a4ed0",
+    "sha256": "7c5065ae8cffb8a3defd336c223b74ff256175217fb4cb33ac909c1cabe1ffb8"
+  },
+  "indoor-market-hall-and-traders-hanging-trader-sign-b77a654b": {
+    "assetId": "222f0cb7-5487-5ee2-9861-b956556b35a5",
+    "sha256": "8c503efbe69718a898dde033f99be0be9572f343905f9b760d35f2c56b908fb8"
+  },
+  "nightclub-and-dj-booth-fire-exit-sign-b7435ec3": {
+    "assetId": "c8d59522-550b-57e2-bc93-90dc3fa971e4",
+    "sha256": "11c7745c7cba3c1804292c239d923cd9640a97a0c45205e30f1d4f4c2e103e98"
+  },
+  "indoor-market-hall-and-traders-hanging-trader-sign-blu-1948335a": {
+    "assetId": "831b8815-8a11-5042-a048-c370263690f7",
+    "sha256": "172bf74c3d2afe0ecced3933a7477f6faf90b14755b29831b72dbdc5cc91d864"
+  },
+  "public-aquarium-and-marine-centre-tank-interpretive-si-a078150f": {
+    "assetId": "7f09ae02-8995-586c-8a42-b0498f247a41",
+    "sha256": "15f6edaf75560693247fcfefbda30bf081e437e286d5c0b1ded49104c56993b8"
+  },
+  "indoor-market-hall-and-traders-information-board-04c099de": {
+    "assetId": "80880a42-16a2-57a5-9240-c05042bd651a",
+    "sha256": "91ab28e72b863579bd5cdd53895c353a345fff604fbb975ecb8dc6b41fca6a26"
+  },
+  "art-gallery-and-exhibition-rooms-gallery-floor-tile-8d6d082b": {
+    "assetId": "881cf23e-a581-567e-bcba-69f614665cc1",
+    "sha256": "70bc91c2b96ec81172e8081d1d37bdc4e99cddd30aa57f6b4425bda4fe2dae68"
+  },
+  "theatre-stage-and-backstage-wig-block-stand-347eee98": {
+    "assetId": "a5ccd105-1f03-5f66-b48a-11ef361022be",
+    "sha256": "244ee8ab99aa0a17648f22704ae08d04704998fa86d7e9d8eb4ccc776e1144a9"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-stage-wing-pan-fad76803": {
+    "assetId": "077ee633-58a2-5146-97db-373959716e26",
+    "sha256": "feef3ad2d6f0539370dc6fe235aba0f4f999138c729759a3c84da7a84cf27d03"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-gathered-stage-cebd22a1": {
+    "assetId": "6883c2f2-9354-55c1-a85f-c68bba8ac071",
+    "sha256": "c293d5d52f773d0fe33a212e9ccee042962a0203713444a32d1e18430750e839"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-raised-puppet--3ae52a70": {
+    "assetId": "1b067301-816a-5e12-8c01-276101a32ae4",
+    "sha256": "b16baa914816c73a384629db2c98d33486be810a785bab3ef1c714285e2232a0"
+  },
+  "art-gallery-and-exhibition-rooms-single-room-hang-a32f2fd9": {
+    "assetId": "a5668abb-b1ff-5875-b185-13854b88708d",
+    "sha256": "2e96bb12c13ad7f142c1a5e0411c3c1da835c8a1fb60995033d75caee41a7a5b"
+  },
+  "community-sports-hall-and-changing-rooms-changing-room-b2debb51": {
+    "assetId": "3024562a-b6d2-5736-8377-f297aefdc159",
+    "sha256": "34cf828e4139dd42c77b3238ca4da571ee4a563dbef33e8c80855e416fed79e7"
+  },
+  "football-soccer-club-grounds-shower-column-2aeb12a4": {
+    "assetId": "d7fba0e1-4f45-5c1f-a7e5-a46c266e142e",
+    "sha256": "912e00d3d8cdb1734ef3cf6b42c5d618deb7e077cd311e892049b227e6018f40"
+  },
+  "football-soccer-club-grounds-drink-cooler-e552e4f8": {
+    "assetId": "33d7266c-5630-52e2-818b-eb4b755af7ee",
+    "sha256": "eedce45d846fcae3a47cab3166e4c0327a68fea93ab346a7911e97bb13c72b8d"
+  },
+  "football-soccer-club-grounds-laundry-trolley-8899c51b": {
+    "assetId": "c11a3162-ce0b-57d1-979b-7177c313dbaa",
+    "sha256": "611b6323dcf73b7979a2ddf1d961bdc5f51c5a7cff851e5acb6fcf947bc4549f"
+  },
+  "community-sports-hall-and-changing-rooms-cleaning-trol-ae0faab6": {
+    "assetId": "0d533a30-59ec-5d7c-b7a9-80e5240d4de3",
+    "sha256": "420bfa1367ca604377079ab3e816fd4592c1e194f678062ecab159966a362b43"
+  },
+  "chocolate-making-and-confectionery-roofed-chocolate-wo-7d76ee5b": {
+    "assetId": "30ea9b07-8977-5956-b94b-9905c00cc8a0",
+    "sha256": "6517a750194dd6beb832c89e1bf3e6b425474ae65fe174a99283a75020540f55"
+  },
+  "hot-air-balloon-festival-blank-finger-post-5c68f83a": {
+    "assetId": "ba8ed66f-4e42-50a0-be7c-3b72686e1d43",
+    "sha256": "e5d9b8c945b5d25413a970d26686c0f14d47a5348993db75431fcdbaa7be46a6"
+  },
+  "football-soccer-club-grounds-wash-basin-3be77db0": {
+    "assetId": "278c2e33-417a-56fb-a0fa-2d120da2257c",
+    "sha256": "e2984cf2f03cf1cb1fed2a99093803b62475b3ba81ca442b07cd1794329e55d2"
+  },
+  "live-music-venue-and-festival-stage-stage-riser-block-0d3aaf5f": {
+    "assetId": "c35682fb-9233-55a2-810c-1e7d9ca29611",
+    "sha256": "8823ec8249095d3fd83f03e1dbac040bd5813d4d3588dd5b2a25fc2f9c4f72e8"
+  },
+  "live-music-venue-and-festival-stage-ground-support-bas-c4711f51": {
+    "assetId": "c6546962-a805-5486-8d79-45cd249fc026",
+    "sha256": "187551e6752b28f4398c28c0ac9ffabc1ea5a6fec2c771540dcc34e8683bc265"
+  },
+  "indoor-market-hall-and-traders-hanging-stock-rail-d052326c": {
+    "assetId": "09970224-9e2d-5d8e-9673-448d8c40607c",
+    "sha256": "e6cf347b787de0e239a1e397ba101e0474d6169269a46701ddfcda6892d45474"
+  },
+  "live-music-venue-and-festival-stage-pa-stack-frame-189c8a7c": {
+    "assetId": "00c007bd-296b-53d3-b3f6-919838b871a3",
+    "sha256": "8e66f269c01eeef450bbd726f22b8ed77a2c8526e7f854a0b7cde4d9b5d64bea"
+  },
+  "live-music-venue-and-festival-stage-stage-step-unit-f141dc1c": {
+    "assetId": "775e1ad4-6262-5187-9c2b-4938f3796c1b",
+    "sha256": "481ad6bc04b6adc6399dee3369e53e2a3724bbb2f3ce49d256459906773102b6"
+  },
+  "nightclub-and-dj-booth-cocktail-station-d186e438": {
+    "assetId": "6063aa66-434f-505e-b86f-1f6b599cb0f3",
+    "sha256": "ebf35c051579ab720ce7cdbc609a909a151fa365140eb1ca1583fa363df7b97a"
+  },
+  "live-music-venue-and-festival-stage-stage-roof-canopy--543b5fb3": {
+    "assetId": "4f969ba6-9933-5377-bdf5-6d4349b20d34",
+    "sha256": "55d45e1427e402742479db5c7b7501fcff24e76ecb67b36bdbf8a4e6bb657d26"
+  },
+  "nightclub-and-dj-booth-cleaning-trolley-58c22c92": {
+    "assetId": "71fe86dd-eb5f-5284-bf5f-c0ce1c4c0100",
+    "sha256": "61f512009051714c05e60ac961d1b6bde47397c4be2fed5b4ea94910e110ea60"
+  },
+  "nightclub-and-dj-booth-laptop-on-stand-6c305e35": {
+    "assetId": "e383d531-9b70-5aab-9f2d-824a94ffb7fa",
+    "sha256": "7eb103a3db42545a09fd5eaf9c568669940ceaaa71dcc3e2080efb2bb38e2d95"
+  },
+  "nightclub-and-dj-booth-glass-washer-d7ae8ae5": {
+    "assetId": "66a90c22-c365-5f34-800c-777b147c172e",
+    "sha256": "22aeed2f8109079b41ff22d05acfd69e4ecfb981264fe990d5a210ffe5b47f38"
+  },
+  "rocket-launch-pad-and-gantry-stage-transport-cradle-7c9f60ce": {
+    "assetId": "7a6baaed-5e4e-5396-a9af-6ac52345a1ba",
+    "sha256": "17aea5f11ff965eb6a65bd4fbabaf214cd11de36775a6eca3bce93c82b3a715d"
+  },
+  "retro-diner-and-roadside-motel-napkin-dispenser-2df9b069": {
+    "assetId": "9f07412a-41f4-5a62-9d76-40777803d3d2",
+    "sha256": "f1146cdffd96c121e5e83258b360756a3dda56c51c1a7021285f60d46e001a65"
+  },
+  "orchestra-and-band-instruments-stage-platform-module-6be1e985": {
+    "assetId": "237ae710-eac8-5be0-b28f-4e19eadd2e30",
+    "sha256": "26e9e498209ae71952d1594381a482b07a429caef19dbe2e67fbb148e23ecee1"
+  },
+  "nightclub-and-dj-booth-riser-platform-module-1e135c35": {
+    "assetId": "36e25168-29e6-59ce-b8e1-79051b9cf231",
+    "sha256": "560549da2d8175f3b50a7287be06bf50c37c782b4da0b104e473d571932a809e"
+  },
+  "orchestra-and-band-instruments-folding-music-stand-20723b66": {
+    "assetId": "4e155d67-1b64-54f2-9e79-6fed1e572b1f",
+    "sha256": "c355570e8e585fe9dbd21d3061d6fcb715536c2ee3698dc32714dc47a44c750b"
+  },
+  "storybook-christmas-market-santa-toy-workshop-01bea88e": {
+    "assetId": "4df8b37b-c7bd-5122-b67f-f60abc8e0ed3",
+    "sha256": "c10de7799e872cd1ad2302681a6d83ef24f46ef7824223a225d88071910b0a92"
+  },
+  "theatre-stage-and-backstage-costume-rail-with-covers-8ed59fc5": {
+    "assetId": "5e7a7b73-293e-536e-b8a1-f99656aea3c2",
+    "sha256": "dbb0c1737d1ef81b1bf79bc9873b94dcc4632bb153f1b5fb1c696d1021689c3f"
+  },
+  "theatre-stage-and-backstage-orchestra-pit-rail-45132244": {
+    "assetId": "ed3ddf7e-36e8-5d93-8bff-62b2eb5c46fc",
+    "sha256": "5462c0eac5d4f6dfaa710e46a7b67c2bb79945cd0f64c732376efb3077e3f7fc"
+  },
+  "theatre-stage-and-backstage-proscenium-arch-frame-f9dcb7bb": {
+    "assetId": "7d21293a-5f66-52e8-8842-2a5799354d02",
+    "sha256": "c33dba4775c7190345b02991c8e57045f805f46db59c5914860b05325791d691"
+  },
+  "theatre-stage-and-backstage-row-letter-plate-160b8d03": {
+    "assetId": "3093f1e0-469d-53ca-8ae5-23d86b8af320",
+    "sha256": "16308e7e853b710b35ec93feef4484ec7d42722b67e89d5214d0163bf7fd3277"
+  },
+  "theatre-stage-and-backstage-orchestra-pit-rostrum-8834f48d": {
+    "assetId": "748d1561-8979-5859-ad09-10825e745a45",
+    "sha256": "9090446362e8aac0645a98e294dcdf6f406e06a47d5a5b3fdc89973d1c22a71a"
+  },
+  "theatre-stage-and-backstage-dressing-room-mirror-stati-97cf3af1": {
+    "assetId": "64affdb4-62aa-5dbb-89cc-5df864c27d7e",
+    "sha256": "687bb638cd7e68d5a3c820ecf7bdf85feb7c5aa4265740d8fe64c94f6011185f"
+  },
+  "tv-studio-and-broadcast-gallery-scenery-brace-and-weig-9e0bb91c": {
+    "assetId": "9acb7257-3227-56a1-8108-7ed0f178f4ab",
+    "sha256": "bd5887f60517c5703bad457478f49d1d93a5f3028e105bc089dfd3a950ccbb10"
+  },
+  "theatre-stage-and-backstage-stage-brace-and-weight-c75020db": {
+    "assetId": "6201b648-3713-5fc9-8538-ee112b3311eb",
+    "sha256": "39aea600e9465d10cfdd2674dc2de68951d949b77af9ce7287d0041514725230"
+  },
+  "village-hall-and-community-events-parquet-floor-tile-b-965c446f": {
+    "assetId": "911959ec-889b-5918-a1a3-24164f067866",
+    "sha256": "d21e5e64c20e48953ad7d66d0a2e7e858b1b9c81f159b7647cb44b747517e0d3"
+  },
+  "theatre-stage-and-backstage-scenery-flat-eef5eda8": {
+    "assetId": "f2ebc73c-48ab-5a12-b104-c8b942177ade",
+    "sha256": "3f00624aeb87053eb39323e5d8addd0a2cfe76b966c3142de4df6662f78e78da"
+  },
+  "theatre-stage-and-backstage-stage-trap-section-c946022f": {
+    "assetId": "54eb4dbd-6a3b-5002-915d-948415507538",
+    "sha256": "cde9ad60644a5fbdec4ddc0d2d68d7de5b20c0ee2d1bab90084d815a6a6c9a05"
+  },
+  "village-hall-and-community-events-stage-curtain-rail-20c284fc": {
+    "assetId": "32ff1667-53e8-58a3-a5b9-ba18ca5c0ed0",
+    "sha256": "b6636ba6dc70e285694e02891b3cc8b174da0f8a702d4b7f70ffa48c71e4bb30"
+  },
+  "village-hall-and-community-events-stage-platform-modul-208d60a2": {
+    "assetId": "2476e655-516e-5563-baad-aa821272acb7",
+    "sha256": "9a7eec43728466b87ce3b61fdb127b9bd52fcd22cb4698aaa914e12f1114e92b"
+  },
+  "american-football-stadium-kit-tackle-wheel-ae0b39f3": {
+    "assetId": "d79be01b-e658-5cb7-b602-64d017ab0884",
+    "sha256": "e32048ca2af08427f9dafa1de08880715f5bb4a627b5d3f2d3039c6d9eb4d337"
+  },
+  "american-football-stadium-kit-snap-trainer-36159cec": {
+    "assetId": "31ffe739-1b7a-5c4d-a8e8-36e09fff5316",
+    "sha256": "44ff61139ca5b9217a458c35c44069ba10f0338980cfc4aa57c09fb0836acfc3"
+  },
+  "american-football-stadium-kit-resistance-parachute-309496f5": {
+    "assetId": "99d16cff-32e3-5dc9-8bb1-d367636f5ccb",
+    "sha256": "b00ba7651b082a7a29d4899d1e789780e00d63a218437890108eae8bc8dfbe7b"
+  },
+  "american-football-stadium-kit-agility-chute-fecff344": {
+    "assetId": "192cbfcf-7c22-53fb-94d4-c57b0f3079aa",
+    "sha256": "0fbc52de647a0422a2ab9c2ff6ac2f84887af697448c2aa196dfc27bed409437"
+  },
+  "basketball-club-and-street-courts-sports-duffel-5c80a427": {
+    "assetId": "024190b7-c3b0-5539-8b10-3d3b5f1a3b6d",
+    "sha256": "619236b4f0eddebc7f91275a77216df146a83d61e303eb7200751d408c065832"
+  },
+  "football-soccer-club-grounds-equipment-carry-bag-787b6642": {
+    "assetId": "be68483a-5656-5037-af63-dc12d12d3541",
+    "sha256": "0b5ad59fb83fac7afd8b7d44e236b46d0f472a6bcdc6537238ae7054bd45136c"
+  },
+  "football-soccer-club-grounds-soccer-ball-118e3a67": {
+    "assetId": "37578d6c-2730-53e4-8153-48b018e20b90",
+    "sha256": "4bac4acdaebef1fc031b46ad4e2d355337f806309162f90f4e45da5308c05028"
+  },
+  "squash-club-and-racket-workshop-equipment-bag-487e54a5": {
+    "assetId": "80ff8b9f-2c76-5b92-b903-b14fb0de532a",
+    "sha256": "b82a7d059f54847813b943c572c0951ba16d83a37d7330e7c091ea72c7a365ed"
+  },
+  "squash-club-and-racket-workshop-resistance-band-statio-854fd051": {
+    "assetId": "7f2c03c0-1f29-50c2-8e20-e792390f1187",
+    "sha256": "17409ef8f0ab0d902f8e83cea1c3551b25b57cdc24c981edf3ff35586da96924"
+  },
+  "football-soccer-club-grounds-agility-ladder-75e84ad2": {
+    "assetId": "0177cfed-2bf8-5628-b1f9-c020eb6d3e59",
+    "sha256": "ee26b06497c0e6266486262a7e4f15ba80595b3d2b6f1a730418c911bf31dac3"
+  },
+  "nursery-and-primary-classroom-fire-exit-door-module-1f2b7548": {
+    "assetId": "0dabed57-b6af-5b06-a430-57318d4df03b",
+    "sha256": "1f54cd56d4c29d10c171b50f45f8cb906456ccf2ffd29fd68d34e758206df0ef"
+  },
+  "live-music-venue-and-festival-stage-moving-head-light-0781fce0": {
+    "assetId": "9d1fd40b-c65f-5241-aede-a826843b5ea1",
+    "sha256": "fc98ffcb25d9507cd217e3b9aed4a3c2c4d73a61b87d113196d1c72b63b261bf"
+  },
+  "live-music-venue-and-festival-stage-truss-vertical-tow-8ea841b9": {
+    "assetId": "68665f5b-ff03-5d32-90c0-5d494c162558",
+    "sha256": "3263f338ec3819d42d43ce5345d9a28dc5d085bc95a1f467f1c88104c05aedd2"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-stage-spotligh-998dc62f": {
+    "assetId": "2b4a86a8-adfa-500e-807b-cfef7f97eedc",
+    "sha256": "5239277e8b93fbddf59a50e7681d2ef376b0979a4d37124f2aa808180cb9e221"
+  },
+  "tennis-club-and-courts-sports-bag-73697f1c": {
+    "assetId": "4414997a-0e24-5e99-881f-1c84f7dccb6f",
+    "sha256": "d8aaecd2a22c465a9ffd7f01d2adea9a0b5f63f23331e0f38cc147de1b036102"
+  },
+  "live-music-venue-and-festival-stage-truss-corner-block-be643b18": {
+    "assetId": "bec79e8c-d11b-597b-a6cf-794de3a5a174",
+    "sha256": "a4b9a346c0908f9f31ff9c839c2a4e8f52205348783fdefc9c26885b8166b5c3"
+  },
+  "nightclub-and-dj-booth-ceiling-truss-grid-module-49574ae0": {
+    "assetId": "9a11e899-8c47-5bab-bda0-6fb83a08ecd3",
+    "sha256": "496ce4eb714e6264bf9eb090b01e8fbcb4cb7c95685c131b8f95202cd3eabbb5"
+  },
+  "car-park-and-road-vehicle-fleet-payment-kiosk-c5c914df": {
+    "assetId": "49697cdb-4737-51b0-80c8-c8937dd7beac",
+    "sha256": "a843284aa73f5916d95094e0e6a4922ccb9b6af8bafb309f0d79efda120f521a"
+  },
+  "village-hall-and-community-events-ceiling-pendant-ligh-7acec826": {
+    "assetId": "42ff495a-67a7-5c7e-8585-a606b3052502",
+    "sha256": "ef556db81ba80bdb80e9e168f0390bcbfa09589c5432509ef2ea6c9f65ed444f"
+  },
+  "storybook-christmas-market-festoon-bulb-string-9422da4e": {
+    "assetId": "02340e9c-62e7-5220-86c8-25a254551a35",
+    "sha256": "59a941e620e58d10c25abf93ccbff34712ddcd4cef778c60b25f83cae0bb87dd"
+  },
+  "nightclub-and-dj-booth-disco-ball-on-motor-055bf9ff": {
+    "assetId": "0d47fa19-671d-5e03-bf73-79025368d064",
+    "sha256": "7d1e353bde1764513fc3e83f728e044beaf0f6fd181395136f2b3894c7ff6dbd"
+  },
+  "christmas-storybook-market-chalet-f8bf72ba": {
+    "assetId": "f0c52293-c49c-50a6-870b-77fc05b68078",
+    "sha256": "bb986097c121156f2ecc96c6f72dccc96dcceb124c34181e6fb36ba985a8fcad"
+  },
+  "christmas-storybook-christmas-bakery-market-a78eca89": {
+    "assetId": "601a5c95-82a9-521a-8fc2-c13372758c08",
+    "sha256": "0644546825ca87536bb2f94fa87dd16501486476a2e49466b7a4fe4f61d3cf87"
+  },
+  "hot-air-balloon-festival-trestle-table-5be944ba": {
+    "assetId": "fef9ac2c-1106-525f-bb8e-33571a20e148",
+    "sha256": "9b7ad3834f66d3261a25eb30711825c58ac95748241a64f47439e99fc18c6659"
+  },
+  "hero-shooter-harbour-payload-market-stall-awning-358921d2": {
+    "assetId": "0dc54d33-3784-59ac-950e-b099ce6b0a4b",
+    "sha256": "d2526f91c486072ed80c780faf7fc4ceae4cbb63082653cdf7ddeeef277f823b"
+  },
+  "christmas-village-christmas-market-stall-4fcc8838": {
+    "assetId": "0ec6e469-60f7-5072-a7b1-dfc12aa6417a",
+    "sha256": "1b2c9f66824c2c5b68f341fa68f724a913a46de508db365e205ba08e613d9430"
+  },
+  "football-soccer-club-grounds-ticket-booth-e23acd9f": {
+    "assetId": "0f3b0569-3cfa-5fb4-b076-1aeb8f617a93",
+    "sha256": "8d82ca2144b5b8c3986532a62af3d233b52c62e2412a5ffe155fd4db100087d7"
+  },
+  "football-soccer-club-grounds-concession-kiosk-fc162fe3": {
+    "assetId": "d15aaac7-dfd8-5def-a964-462fb7ccde27",
+    "sha256": "240b4f1862356fde7fc08a6beae5ff23f8ad8148a7d6707ab4cdbd744a7c8aa0"
+  },
+  "fantasy-mmo-city-and-townsfolk-market-stall-5d9f093b": {
+    "assetId": "19da8e8f-d04a-5763-89ae-0bfeb380a608",
+    "sha256": "ca6fc12200a72606008765808cab0b11973abbc22721ce18ec6710837e8f825b"
+  },
+  "indian-bazaar-street-and-temple-cloth-stall-with-bolt--a2faee3a": {
+    "assetId": "6c3f76fc-5d5b-56ae-97b0-296af301dee1",
+    "sha256": "8be0a9baae8c237c05deecc114e7ce689c014b610d99d98bdab195ab2c9414ac"
+  },
+  "indian-bazaar-street-and-temple-tea-stall-865b528a": {
+    "assetId": "5c52cc28-03ce-5f5c-9368-d00b48a979b6",
+    "sha256": "dead0b93f31e74c040d895c5d7949e689f7ad82639661209be9b2e425574aa68"
+  },
+  "indian-bazaar-street-and-temple-spice-stall-1b95bd16": {
+    "assetId": "406c53ae-27ef-55ae-af4b-1c79ffea564a",
+    "sha256": "5a0b404e10eb800a3c111d4cb702c2ac4f85b2420bee99597682216e0e83e6bc"
+  },
+  "indian-bazaar-street-and-temple-fruit-and-vegetable-st-280ccd20": {
+    "assetId": "ff0b3f17-d01e-53d8-abe3-4ace5e27030a",
+    "sha256": "97a4ea19341acfdf46d4a53919c3cf178a5f4b251f7462437bafee835521ab64"
+  },
+  "indoor-market-hall-and-traders-corner-stall-unit-62d7d118": {
+    "assetId": "b5539265-a401-595a-aa7a-4e71c6e67ab9",
+    "sha256": "76d57adfd3efb3182ac6fed433dc2561b52dc99a1600119b76e1d0083e972081"
+  },
+  "indian-bazaar-street-and-temple-flower-garland-stall-1de92b5c": {
+    "assetId": "d02deec9-acb2-5821-870e-95e6a86fe3e5",
+    "sha256": "a76799171ae4c27f1a4f49bd1ccb212936394c9df3feac6c2ddf3906070a8022"
+  },
+  "indoor-market-hall-and-traders-open-stall-unit-5124bc70": {
+    "assetId": "5321b8d8-e48b-52b6-a6f9-2449087a0cec",
+    "sha256": "0394d0f15854fe93885a57cce3eb04eab93955ce08c7a8aae071c8f4588e0d9f"
+  },
+  "indoor-market-hall-and-traders-lock-up-stall-unit-open-83b67308": {
+    "assetId": "6a1a3885-2bc2-55ba-bb24-41c8dd639515",
+    "sha256": "348fcc188a473e1b77ccc816fcb86e948d8ea5f035aa1a05adec1d5766081716"
+  },
+  "indoor-market-hall-and-traders-lock-up-stall-unit-3085836b": {
+    "assetId": "fb8d7145-b515-528c-a83c-9517999d3f63",
+    "sha256": "df97fddcf54dcfb5c39b4a0b4410257afb2a7ab0330ce98b4edd2e6076dde535"
+  },
+  "indoor-market-hall-and-traders-market-hall-floor-bay-d36d1956": {
+    "assetId": "274a9c71-3a4f-5c8f-ab34-354dd741aa8b",
+    "sha256": "e4669b845f3bf58358e8c86ff7e6a70cf5c7a80eaef1bdc5c3ae346c1b14e308"
+  },
+  "indoor-market-hall-and-traders-open-stall-unit-blue-7bc77762": {
+    "assetId": "33518db7-48e3-51b8-8973-5fdb52ad8929",
+    "sha256": "ebfac9b198ba713dccab9715b51d48b1850251d59c6d57169d641b46dc55fb70"
+  },
+  "indoor-market-hall-and-traders-lock-up-stall-unit-red-3f955420": {
+    "assetId": "203424d8-60c8-5611-8bbe-1eeb6540570b",
+    "sha256": "ee541eeb544c001510877522f11c8bb06df979c757077649b9db97c47cd21807"
+  },
+  "live-music-venue-and-festival-stage-merch-stall-3fd15894": {
+    "assetId": "9fd2821c-78b3-502f-95ad-384c53e4c13b",
+    "sha256": "319170846deb5870064e578a00734a6778ca1d41f412f4abb36264d074a225c9"
+  },
+  "korean-hanok-village-and-street-market-stall-with-awni-064ed223": {
+    "assetId": "7426726a-e4e8-5873-a30c-bba00100178a",
+    "sha256": "8e6f9b619e1233d10c97c12aa2f23f714b53984f42b94e536efafcbb749a89fc"
+  },
+  "indoor-market-hall-and-traders-stall-price-board-85782807": {
+    "assetId": "987895e3-861d-5d4c-9e01-77fa59b12736",
+    "sha256": "faf91851e40c1d5dba158d9f90d45514458f03ded89868e330aa76e4c9371de0"
+  },
+  "live-music-venue-and-festival-stage-food-stall-unit-da74e65f": {
+    "assetId": "eeb966c3-c41c-5354-ae96-ee7828644711",
+    "sha256": "73673ec26e83d899dd8a01c2a38af7af74a29259c4d42cae3ed3668c882b2ac3"
+  },
+  "indoor-market-hall-and-traders-stall-counter-module-0979a957": {
+    "assetId": "3937a19d-860d-5d5a-9cd9-f8a5af401cea",
+    "sha256": "235cf24e8764a448797dbec09e19070ca628209bc838298e7b0aa5de1064e3f8"
+  },
+  "indoor-market-hall-and-traders-stall-back-shelving-3462e261": {
+    "assetId": "dee1e110-4eb9-5d12-ab3a-6d4e26c60a11",
+    "sha256": "cc7b83eb15f01b1dac16a5edfcc27284aae5b87288629c501a3ed9c0d5b9823f"
+  },
+  "racecourse-and-parade-ring-bar-and-food-kiosk-7eefd7a3": {
+    "assetId": "cf20fab8-dbc2-5b06-b985-fcf249e33724",
+    "sha256": "3546cff4e2284d5593488a5c660f33f7c9ac9bf91c2ef834a5848f256b3d66fb"
+  },
+  "nightclub-and-dj-booth-dj-booth-desk-b052b722": {
+    "assetId": "cf7596a5-54ae-53e6-9598-4b156a3a6497",
+    "sha256": "5917ab331b3eb45ba66f8c0698efb80e9793af57564173d32dc1f71fd6d4cdd0"
+  },
+  "meadow-courier-parcel-market-awning": {
+    "assetId": "ebb75f7c-6b76-5733-adaf-9b2eb9fb18fd",
+    "sha256": "e319f0b80c28d3bb8e0a8c520e280b2b7a99675e69377d11e77c8e935a7cae96"
+  },
+  "pixel-modern-farm-market-stall-acecc44a": {
+    "assetId": "573d5d6c-dcd1-5115-8eb4-6ad637370d2b",
+    "sha256": "4e8e48192b29ccdd8d89c50aad68b9f409d2b7a66ac03f4a18d81976d4f5cf1d"
+  },
+  "medieval-mmo-starter-realm-market-stall-cream-e095e409": {
+    "assetId": "5122ffee-e47c-5f0d-bf8a-1c67b5297312",
+    "sha256": "0f419325e94b16b15906569090b59f67097e0da9ff96cd4fbc8e490e2c6535a9"
+  },
+  "medieval-tournament-and-jousting-ground-merchant-stall-9a839369": {
+    "assetId": "33bee9d6-4753-5ea7-8b3e-9068134ff3ed",
+    "sha256": "fadf139ef3182f0698c515f27541982ec6a73d111d02550e005362a9f3effee8"
+  },
+  "street-food-market-and-food-trucks-gazebo-stall-with-c-e8a7b705": {
+    "assetId": "9cc74a8f-871e-5da0-8b0b-0208d71ff5d0",
+    "sha256": "ce1a17c9b49af0e77e6016e9e2be00bd58f72b00b202ea82dec18d7ce34f0777"
+  },
+  "street-food-market-and-food-trucks-stall-number-sign-99e7d623": {
+    "assetId": "b7f0e946-ccbf-56d8-bbb0-2d4d3dff9fa7",
+    "sha256": "4e1799573330939628e00d0b2e8194cea3fdd8855aaa175a9e0dcf9ff6f038f6"
+  },
+  "street-food-market-and-food-trucks-trestle-stall-red-a-b0ea3177": {
+    "assetId": "31f85af4-4094-5064-a3dc-d3980a1b003f",
+    "sha256": "8d8f9935a162f208fe12ba6e06142efca3958af7b2dc74e1bc18e97334ae4912"
+  },
+  "street-food-market-and-food-trucks-market-stall-frame--b7c13845": {
+    "assetId": "373b37da-ecdd-5fad-95f2-766349cfaa22",
+    "sha256": "8b75fc1cd197c220e40584ce16075bf5ecf7d9c88352eef159295b829df05221"
+  },
+  "roman-bathhouse-and-palaestra-vendor-stall-42493924": {
+    "assetId": "e60f35b5-ca54-57ee-9799-068f9d8d97d3",
+    "sha256": "7e58f46b434295d4a3605f787b2be6a2b3aa97f01a01ec6f9674066198bb3720"
+  },
+  "storybook-christmas-market-cocoa-market-stall-76043373": {
+    "assetId": "d0c26563-af12-58ee-9017-d04e97570c1c",
+    "sha256": "665e1bab36a341470da8128a2eb6c5987a406ee715587830d50e4c1a27c3f895"
+  },
+  "community-sports-hall-and-changing-rooms-gym-mat-singl-70cf5ea8": {
+    "assetId": "c2d05aa4-b08c-5d41-b4be-ae8d55c3f8a1",
+    "sha256": "5d47086d4d801d690b042b1245e4a264edaabd98712232bb1ab510cb2cc8c413"
+  },
+  "street-food-market-and-food-trucks-trestle-stall-with--2858ba1d": {
+    "assetId": "f29a1c81-5575-5a2a-8bf2-db16a067570b",
+    "sha256": "73a5f3c3660fee0fcc9a74c57609fee8d2f57811b0eae02622cc425b793c9a27"
+  },
+  "community-sports-hall-and-changing-rooms-gym-mat-stack-d3bfc381": {
+    "assetId": "ab0756bb-3062-5274-b441-1ad152e05ca1",
+    "sha256": "4dc2ac9e5c18cd112570a3875b490386d76bc88f1add0bcc449ddaa28093c26e"
+  },
+  "theme-park-rides-and-coasters-theme-park-rides-and-coa-df93cdea": {
+    "assetId": "b4f52f69-64f5-5c0c-be0c-41b7246df70c",
+    "sha256": "2993e1daab356ab1203a80ac89e0ae8a37b141d373f57dc01769f5b8fdd22a77"
+  },
+  "community-sports-hall-and-changing-rooms-gym-bench-76cb03bd": {
+    "assetId": "f4047f39-d906-5880-8bd8-2892e0f24029",
+    "sha256": "0348bd762a41a42756de9183daf00e1cde31438b873ae21512c8e743004aa35d"
+  },
+  "village-hall-and-community-events-book-stall-table-11610050": {
+    "assetId": "cbab336d-7cf0-5b03-8a96-b10d24a89d7d",
+    "sha256": "a38c42c3865b65ae55b41089431ef37560d8767c78b166adf0bff15fe49a56ef"
+  },
+  "football-soccer-club-grounds-bucket-seat-1a72cd60": {
+    "assetId": "ee25780a-88f9-584c-af15-f880f8b9bd92",
+    "sha256": "427a713c09910bddd883a532469f626370889672a353e01f078f69127b143771"
+  },
+  "gym-and-fitness-studio-adjustable-bench-4624177a": {
+    "assetId": "daeeea83-df89-5e17-92b6-46c8f8311e1d",
+    "sha256": "15c93cec9018507ffe735298ae1a6149c2a9d5982e81bd6df98a22506e7e52f1"
+  },
+  "public-aquarium-and-marine-centre-visitor-bench-teal-d3402427": {
+    "assetId": "d9b5ae25-47f8-5299-8619-be6969dc70a9",
+    "sha256": "9ca48bb4d93c4d6bb32b816d18cd45c3d39e658808af7fc1d858fbd1975e26d5"
+  },
+  "football-soccer-club-grounds-changing-bench-912e20bc": {
+    "assetId": "c0b18479-68ea-54e0-8f3b-9964b9f8ee4a",
+    "sha256": "ab55c91a03e058241cc9b70de04e04d14c39b17facccb69735ed16c9852a9ce5"
+  },
+  "hot-air-balloon-festival-folding-camp-chair-ba5bb3d0": {
+    "assetId": "63b2010a-6457-5ab2-967c-87530b21a0f0",
+    "sha256": "4f5b9806eaaf204575dc98a025f9663ef9e0c1918ccb3e16ca409554d20c3307"
+  },
+  "football-soccer-club-grounds-folding-coach-chair-3a02f4ca": {
+    "assetId": "b0a2d96f-38e2-59ef-b994-46542ba577a6",
+    "sha256": "312467b166a1877be39c70ebd2d992990c85431b67f6ae5390b63bba82699d4f"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-scenery-track--6838572e": {
+    "assetId": "30bef099-4715-5669-a713-0c7d406bcaf0",
+    "sha256": "b2bde38bb78fdccdc65e408978ef72a91663d6d5df1d01cce0e29bcf40c1f861"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-scenery-track--493f526d": {
+    "assetId": "73b299ab-42fd-5c5f-87ff-63f13d0c42af",
+    "sha256": "eeee99a16a1d91557ec0f7092e6de21078f98bb070605d3b052c69565d13a9a8"
+  },
+  "tennis-club-and-courts-terrace-chair-db8478f6": {
+    "assetId": "e7bba583-0d2c-5557-9ac4-8aaa95445d55",
+    "sha256": "8cfd10641ea1d832330a9596ba602175893481d9608154cddffdc69ecf880d3a"
+  },
+  "street-food-market-and-food-trucks-bar-stool-aed9cea8": {
+    "assetId": "5cfd393f-9338-5483-95a3-c4ef29fd35b1",
+    "sha256": "f04734927bc54fc96280db395025e2f96fed00c629003fb523b5a5d4642ca8ec"
+  },
+  "village-hall-and-community-events-stacking-chair-row-fcb22800": {
+    "assetId": "3ba8987f-b63c-59cf-8003-c7c3da77f9b2",
+    "sha256": "ccc8d9b6d9d33b3bd23f6b39742bacfb86d3e65d951312fb1f69088803c887cd"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-property-stora-20930b33": {
+    "assetId": "4a2cf1b4-aeb7-5aee-ae7c-e74d6d608f9e",
+    "sha256": "a16418906b8ab543f7d4427170aa28210a1c105c2747172f8cba7185cc27bf70"
+  },
+  "art-gallery-and-exhibition-rooms-lighting-track-sectio-c570a9a8": {
+    "assetId": "4b151835-06b8-5996-8053-719166877a53",
+    "sha256": "e9baed3361b45c49b82bf8c9431c1fca0947d68c8975914b79fa42f66abb490c"
+  },
+  "art-gallery-and-exhibition-rooms-track-spot-head-44353656": {
+    "assetId": "2d05e39d-f01b-5321-b376-77a2ae365f02",
+    "sha256": "8cf71e8ad8c440dc45b1754b2e0cd69a02bc76e47d5d259ae437c51be5b5fdba"
+  },
+  "aircraft-fleet-and-airfield-fuel-drum-pallet-8abe06a7": {
+    "assetId": "8b4567a1-aae9-580a-a4e6-44a0f5301da8",
+    "sha256": "02aef37cfeed889d72506fe7a8c182cbd35b55b17f1ac45d6ca2bf55d097dab3"
+  },
+  "abandoned-tidal-model-testing-hall-optical-tracking-ca-5a93f82e": {
+    "assetId": "a678edf7-f448-5804-a17a-255a9f1348ea",
+    "sha256": "7bd1463f317f248be7dfce47acd5abf613fb0f285a29622e4815ea394490aab2"
+  },
+  "art-gallery-and-exhibition-rooms-vitrine-case-ca6b50af": {
+    "assetId": "09b87b68-102c-5d11-bb24-21d59fbeef08",
+    "sha256": "22225a81fa819dc51a268cac68db2e27593f3399e5a671a8bdb3f14be1cde7e4"
+  },
+  "arable-fields-and-farm-machinery-tracked-tractor-f59c2454": {
+    "assetId": "75846150-603d-503c-947d-568cfd3de5fe",
+    "sha256": "e3f1a182f74148b15ef8138e69b7508a76ddef66fe56a3e57fc8ac1eaf1d9c63"
+  },
+  "football-soccer-club-grounds-boot-rack-1112eb8f": {
+    "assetId": "4437ce93-3fd0-58ea-a5b8-e6afc3b3a182",
+    "sha256": "8819741150c7d289f437287ce57cf5bb228fcd4611e13224a5b2be12d2a14d75"
+  },
+  "community-sports-hall-and-changing-rooms-foyer-bin-b2789118": {
+    "assetId": "23e9f9fc-a4eb-50bf-9656-7c45fe2684d8",
+    "sha256": "3e8cd75f2e11f1fb42f9fec1cf6531762a5564775b145976d6025f95f414b99e"
+  },
+  "dog-agility-and-training-field-equipment-store-rack-6c5ec6c3": {
+    "assetId": "7ec7b674-9491-5ba1-ab10-738fbb69111a",
+    "sha256": "d7829f181b623ffdd7c75310680ae09fb3651bb3cc086b3efe38faacdfe03cf5"
+  },
+  "cinema-multiplex-and-foyer-spare-lamp-case-9f73b1ff": {
+    "assetId": "c59a0a5c-e2f7-51ea-aa42-f00ceb4da7d0",
+    "sha256": "e1c7de6fe3034ea4135b77c758be01378482e8f402d707ffd05ac2f75ae38638"
+  },
+  "basketball-club-and-street-courts-spectator-bin-94bb1439": {
+    "assetId": "eb0cf615-74f4-5635-be71-abe07fbea87b",
+    "sha256": "297bf6c234a06f971583ac0ac67b0314f5092fac805eb1021471709aef03573d"
+  },
+  "community-sports-hall-and-changing-rooms-trophy-cabine-51c36706": {
+    "assetId": "f2acc6d3-e248-56fe-9e3c-c70e2ad78e51",
+    "sha256": "b973afb3571d7ff71e7145df302c42bc0a73add77aae539d28739c1b9b8452b0"
+  },
+  "football-soccer-club-grounds-towel-shelf-8d7f3ef9": {
+    "assetId": "4e2b43f5-170a-5da1-beb1-ca8f0922b389",
+    "sha256": "4764213e37cfd37dd889590f0f12e83bc506509c7f16a0b10ef1be47fc93d493"
+  },
+  "football-soccer-club-grounds-open-kit-locker-d10c9b5a": {
+    "assetId": "85d12dee-c1de-5bcb-9839-11ec4c0a80bb",
+    "sha256": "8279a7ba02ef42bc3bf2cb79ffde5b8029f5d807ef183b0dc432f587d37361b9"
+  },
+  "gym-and-fitness-studio-water-bottle-97b8b284": {
+    "assetId": "94387d0a-492f-577e-9337-d333ea3faf75",
+    "sha256": "6d994c408d5ef5fa3cadaadcf76036b2a5d95f2a56e8a43bb8b976edb0618df1"
+  },
+  "football-soccer-club-grounds-first-aid-cabinet-feff73ae": {
+    "assetId": "4d9f7c0f-8245-5625-9589-cf2709198839",
+    "sha256": "786f37e8ee8ace5a4b583cbba538d1fc1458052e6eeb3745398187cf6196b1df"
+  },
+  "football-soccer-club-grounds-waste-bin-15a6b427": {
+    "assetId": "9fc7e856-3746-5e0e-b3b2-e886125160b5",
+    "sha256": "f37badafc7ee37129a86119a12f87660c84148120a9d8ad15ff9b0aca8dabfaa"
+  },
+  "football-soccer-club-grounds-water-bottle-carrier-3c5028a4": {
+    "assetId": "8750f1dd-49ee-50bc-b0ad-e7bc54b81127",
+    "sha256": "cf39836d9b83ed1c863010d34a1abd324feae49b637b1be47b92c7d423638abd"
+  },
+  "hot-air-balloon-festival-propane-cylinder-rack-b1de839d": {
+    "assetId": "651cbd4b-90b3-5046-9ad1-e6ef733d640c",
+    "sha256": "84635ce55e0772ee93fd1adf53b6615f8993c2627323657f62dfd9f64452a904"
+  },
+  "indian-bazaar-street-and-temple-produce-crate-stack-a539d636": {
+    "assetId": "b1578aee-5995-58ea-88c3-e5c4a3c57547",
+    "sha256": "6fd7231590e2e70f5cfe1f2566155fa8c9c6223a42825ef2951094bdb2090b0a"
+  },
+  "indoor-market-hall-and-traders-ceramic-and-homeware-sh-fcd061ca": {
+    "assetId": "3483b7db-64d0-5578-a726-0f6add0bc2c4",
+    "sha256": "f4c1cb958fd8bd7f36532210d9800540a110dfeb61ef3174a6ff4b4697e128dc"
+  },
+  "indoor-market-hall-and-traders-glass-display-case-8f12ea4d": {
+    "assetId": "a53540f3-062d-5d40-8df4-c6ce81b11b75",
+    "sha256": "2db362851c302633149c03dec5dd8c8e2e25a424ac0a11a17bec8a3491b153fe"
+  },
+  "indian-bazaar-street-and-temple-street-bin-3aeaa2eb": {
+    "assetId": "56d74585-2993-5e3a-9593-fd6dc767f8c9",
+    "sha256": "6a052ba0c187516742466ccd7548855d271c86d8b9435efd64b92c22cbe8ff79"
+  },
+  "indoor-market-hall-and-traders-fruit-and-veg-crate-set-222d673b": {
+    "assetId": "f1a4f90d-bf3a-55e3-8595-01695f7433f6",
+    "sha256": "b9a50f11538b25c2023aee3eb616c793ef46869aa2c778d820d386f74b6853c8"
+  },
+  "live-music-venue-and-festival-stage-litter-bin-d65ec1dd": {
+    "assetId": "11d8b1be-ab32-5369-8caf-4d7ada46b60e",
+    "sha256": "b1d010941a088db239cea6b344f061ddcb9b3176363b37c0c66c6a057554beeb"
+  },
+  "korean-hanok-village-and-street-produce-basket-set-0d57d77d": {
+    "assetId": "46879d8b-8db2-5621-ad54-e8a6edaffd81",
+    "sha256": "12b71d22e1824d01fd42f92d2b8b118dbdbf595376713bfb4e707b8d85f318c9"
+  },
+  "indoor-market-hall-and-traders-litter-bin-06bd3ac5": {
+    "assetId": "dcf83140-79aa-50eb-8bd8-dca6e0f81436",
+    "sha256": "7ec74b90031adfb8be48a50fa33b850fcb0ca1a3d277584e21eb01100dc21653"
+  },
+  "live-music-venue-and-festival-stage-drum-riser-fb450f31": {
+    "assetId": "7c324db4-23a1-5568-9884-b487130f5d01",
+    "sha256": "75e2159168f5d6f46d2f1b6c700c83a90de176c7872670a430679f99ce1bf0db"
+  },
+  "indoor-market-hall-and-traders-vinyl-record-crate-set-672bf283": {
+    "assetId": "ef4dc2ef-3fc6-582c-a665-22ebe0f98bc9",
+    "sha256": "574e167c9cca90c569b2e8831c34d282d28c280115157cc4f775741a0a20a2ce"
+  },
+  "indoor-market-hall-and-traders-preserve-and-cheese-she-99589905": {
+    "assetId": "368dd120-3ac0-55eb-b0ef-76da8be65575",
+    "sha256": "0e04583312e0cf7d7eddc291aa9c1bb3f497a84ec5727a3eadb8aac73d67e5c6"
+  },
+  "live-music-venue-and-festival-stage-subwoofer-cabinet-76be2833": {
+    "assetId": "69a188a0-2132-5583-9f9b-77ffbdae13ce",
+    "sha256": "2fc18b955e57de9d9a24d05099177fc6f186d0909f9c61488399a531b632e4d8"
+  },
+  "live-music-venue-and-festival-stage-multicore-cable-dr-67864f73": {
+    "assetId": "1a383d62-e814-56a3-a080-35fed59eb691",
+    "sha256": "be2e8fbafd2e621d784fb1c59f26d63cceb861f7c794cc6d3fddc20a8a8e7b38"
+  },
+  "live-music-venue-and-festival-stage-road-case-large-483e15ad": {
+    "assetId": "f821a295-4df9-5d56-afb5-e3f31eba93e7",
+    "sha256": "1b21d141f2a4947ecc1a3041414e3f3771becd57d39ddae6c23bfa0166bcf853"
+  },
+  "live-music-venue-and-festival-stage-road-case-small-ea804af6": {
+    "assetId": "a078aea9-2181-58a8-aa64-abe8123bf55b",
+    "sha256": "3bc2d2cef23739a7a0ba9d848eefdd73e9ceb8a29e67a81968b01a8ba26f431b"
+  },
+  "music-recording-studio-and-instruments-drum-snare-on-s-d42c8c13": {
+    "assetId": "bbdfa6a2-3a43-5b56-9f9d-97f7ad465db0",
+    "sha256": "6360a7ec4ad8cd552078e14c159f803e42ffcbc3a5032d090c5c87fd24be70ff"
+  },
+  "live-music-venue-and-festival-stage-water-bottle-crate-0c59da5b": {
+    "assetId": "396c056e-cecd-5ecf-8752-4d97739978ac",
+    "sha256": "b397d25366032640aafb488fd2398c0f060ff2ef95a0db5204171b1aea256601"
+  },
+  "racecourse-and-parade-ring-divot-fork-rack-c3450a2d": {
+    "assetId": "56576ab3-2391-5d41-9db6-5b7f8fb0720f",
+    "sha256": "44501eb82a2b7395675f6765f5be9a571a3f37766d81748dd1c4e1c48dd5b244"
+  },
+  "nightclub-and-dj-booth-speaker-stack-sub-cabinet-77151eb8": {
+    "assetId": "b516147f-c28e-5b85-9b43-e27df248986b",
+    "sha256": "198319f62df100b0bf3cadda5313d669bf3aabcaa668a67b40171ab0d8c5f5ad"
+  },
+  "pixel-modern-farm-produce-crates-c20feab2": {
+    "assetId": "adc83291-bf53-5448-a00a-3d0e32b988fa",
+    "sha256": "415786df56ce787cb326d243236f88563036cf22f416120d65eaddd263652b74"
+  },
+  "nightclub-and-dj-booth-speaker-mid-cabinet-2e417753": {
+    "assetId": "07bf9efa-30e8-57b4-802a-f71db56cfb45",
+    "sha256": "65478b27a5797341b10666f2c54a84d8eb5f15e0d4b56f737a93ef613ff223a0"
+  },
+  "petrol-station-and-forecourt-shop-screen-wash-pallet-e983d54e": {
+    "assetId": "c5047ec0-9d1a-508b-8337-f635257f7e59",
+    "sha256": "85c7813a58e79b804a796710b9df706b1833647454b8df4c6e208cc29527fbe6"
+  },
+  "radio-telescope-array-and-field-station-supply-crate-s-6a5d3508": {
+    "assetId": "38f8388a-8b94-50f8-82ad-815226cdd1d2",
+    "sha256": "67aa5cdd89927f0055305fdd0d7e03591039fe9c69cf1f5f9ca22e9f135aa634"
+  },
+  "theatre-stage-and-backstage-house-lighting-bracket-381e7e7d": {
+    "assetId": "d2fbf369-37f0-5751-a9a0-001b79e8ae65",
+    "sha256": "e89373315026db056df0bab16c5274a2d4efe80d1f0df24d2cc4194d4408686b"
+  },
+  "tennis-club-and-courts-water-bottle-abd2477f": {
+    "assetId": "45facab7-ebe6-5b9b-9ca8-35204c9cd4cb",
+    "sha256": "4087b3c0a6063f31a498515837f575568bfb321cff29f9f30516b6c43d5145e8"
+  },
+  "theatre-stage-and-backstage-prop-shelf-unit-791c9034": {
+    "assetId": "5efa4553-d392-513e-9526-c2474e0ca0dd",
+    "sha256": "d0d7c4e413f75e3d62251693c72d9dc4f1077e50187941be4ea98e54c8fad37b"
+  },
+  "retail-store-fixtures-and-mall-ceiling-track-lighting--9cadd166": {
+    "assetId": "41d01920-39d1-5931-92cc-bc43446a89e1",
+    "sha256": "a314799655f89f1cfc55e3fe28d4c3a18e55b3b3a0868b1ab2323941df6756b1"
+  },
+  "theatre-stage-and-backstage-house-tabs-on-track-2201a546": {
+    "assetId": "ffa81758-6336-5463-96c6-28e3f47979ad",
+    "sha256": "c5c684a0ef68221b678cdee2f027ae5005f1c9055d3218dfff91c69b8569ceb4"
+  },
+  "theatre-stage-and-backstage-house-tabs-on-track-open-00c29a91": {
+    "assetId": "65f78562-9bca-5579-bbf5-2db6ec3d9b29",
+    "sha256": "66a8fe1f2e6103ef82fc7b2d852c26565f3054617bf5ac09e5549515e8fb2841"
+  },
+  "art-gallery-and-exhibition-rooms-reception-desk-0494fe21": {
+    "assetId": "29e90442-c8e4-5293-8497-7df9f8a7332d",
+    "sha256": "dea92a3e40b016ef0241c2fc9efe453a8e78fef8bde10fa5b39acbd12a9b1af6"
+  },
+  "american-football-stadium-kit-tablet-station-ec47a183": {
+    "assetId": "e5ad5ab2-5470-52bd-8b66-e69fd2a34d99",
+    "sha256": "2e0dd8e4ba1e6fc51ac86c3b65be7b1ce7410234fea37f4eaa8499970caea312"
+  },
+  "butchers-shop-and-deli-counter-stainless-prep-table-7c8a3bb8": {
+    "assetId": "77a2094c-4707-5380-8932-5c04fe05b8fb",
+    "sha256": "515a5ef2c0bfb99b54423e6cab748bc29a2b27b7214c2d9ace8219d4ce1aac7c"
+  },
+  "art-gallery-and-exhibition-rooms-shop-counter-d42a2ff0": {
+    "assetId": "ba004ff5-91cc-53f4-9e2f-521c4b72b770",
+    "sha256": "8c34172536d6bb1e19052e8b34f928c74bbb6877e80cf5963de83cfc235de4ce"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-lighting-contr-fa7fd39b": {
+    "assetId": "93261ccb-7386-50dc-9ede-0e2fb5bb81e5",
+    "sha256": "3dc86b74d5b730b2cffc36d1225eba8aa091e5020836d7db3edf79639aae7e58"
+  },
+  "village-hall-and-community-events-crockery-crate-ed80f580": {
+    "assetId": "a40dc85f-1c68-594f-9899-fcc746afc242",
+    "sha256": "c1eb0d0d4c5cd6eb08ba371dc110296ea6fefb3d29893efb1e0f3cb0324e1120"
+  },
+  "football-soccer-club-grounds-treatment-table-2eeb6a53": {
+    "assetId": "0e881deb-2aea-55f9-9668-caed27d985d7",
+    "sha256": "21f76276c0d31c914cf92bfcd56976f0d5c8e9cd4d0420bf8ccd46992105cf9d"
+  },
+  "dog-agility-and-training-field-rosette-and-trophy-tabl-e70911a3": {
+    "assetId": "018177f4-72d7-5c09-9976-aa5818a48c30",
+    "sha256": "993ce70a0fc157a2a1870c2bcac4a0edbaa26a5aad09badc52c8fdeffafb0096"
+  },
+  "indian-bazaar-street-and-temple-sweet-counter-3a98de40": {
+    "assetId": "55036904-9508-5587-ad17-1f018ed79e2f",
+    "sha256": "4309f81c60a24d71fd1e4c541fa4fad1e2d3faf2f700d8405d8cfa4d02c0029e"
+  },
+  "indoor-market-hall-and-traders-folding-trader-table-c8986b1d": {
+    "assetId": "662122e0-170e-5967-a894-2bdd6f1b6751",
+    "sha256": "1160554b0525ec1296d9c93fd64a6c8494c9cfa992fd2ce4cde15a382b103ce8"
+  },
+  "downtown-office-interiors-desk-sit-stand-raised-19facdb2": {
+    "assetId": "386ca245-7137-51fd-ba7b-a8bdbde5ff31",
+    "sha256": "d1417098b2a1ad518b8fbc33c1fadc952ec130e8c8b2cfc0a797286829925e85"
+  },
+  "downtown-office-interiors-sit-stand-desk-frame-39615259": {
+    "assetId": "6a7c5449-1cbd-5451-ad1b-c51e7dd477a5",
+    "sha256": "7b05eb7f49d098a7119a0d5d6df8f884c6ee591826084f0caba83b296d601ad1"
+  },
+  "nightclub-and-dj-booth-cloakroom-counter-with-rails-c6d08198": {
+    "assetId": "5e23a0fa-7120-581f-916d-8bde4b607ba1",
+    "sha256": "c71a4062908714f52bca8759935849c47780530f9c14314a8dd888eacbf940d4"
+  },
+  "nightclub-and-dj-booth-turntable-deck-aa917183": {
+    "assetId": "e582b7e3-c08d-56f2-b601-b6dd3a22a557",
+    "sha256": "2436c3fe76148e7a018fa1c5689690f5df705ba7102b2f4fa5d4def72f2a2b3b"
+  },
+  "indoor-market-hall-and-traders-till-and-card-reader-facdd132": {
+    "assetId": "2a99c152-80a5-5535-b5dd-24d3812874df",
+    "sha256": "737673ca24d5786643d4095fa6af6ff111a6fb1f18c87b6cee0d24a8adad54b5"
+  },
+  "parcel-depot-and-sorting-hall-parcel-depot-and-sorting-83979c04": {
+    "assetId": "5c64d55b-b391-55fc-8b8e-55b68c6c923c",
+    "sha256": "fdc769f627e999dbf48ea94223de0247ead4d29fa64396755a96a2a0564c9b69"
+  },
+  "recycling-centre-and-material-sorting-sample-sorting-t-453f97fd": {
+    "assetId": "6fea2859-1276-5755-b117-0b3ca3e19d72",
+    "sha256": "a777edd555288300c5e4e4029ce5b9b2aab74f6dd77daec6a084fe623d9778f2"
+  },
+  "live-music-venue-and-festival-stage-front-of-house-mix-ab9b61a6": {
+    "assetId": "22da226a-edfa-5b2d-9894-f4a6fe06e5be",
+    "sha256": "3c2b774b7f25e41e7ef78a5acc6d78e616ca5ff9d115a2a1f2e9b4783e8a8c61"
+  },
+  "theatre-stage-and-backstage-stage-manager-desk-with-pa-e34d027a": {
+    "assetId": "b0617682-3326-51fa-b7e5-f8123caa05a9",
+    "sha256": "c64eda26aa852b7ccd26d23cf24df95a4a553ac7d84d431fee8ecae690044ce4"
+  },
+  "theatre-stage-and-backstage-counterweight-frame-with-w-65d65714": {
+    "assetId": "4f5fb3e7-3806-5c2c-be47-4f18d1107346",
+    "sha256": "e93c50fd383643754f99c57351ea262beb5e8bd457a111cecfb57a3e480ba7c8"
+  },
+  "theatre-stage-and-backstage-set-dressing-table-5d0f7164": {
+    "assetId": "7ed0463a-a578-5623-a063-921a74b36b4a",
+    "sha256": "e7a8e1ec2143d677a8e48d5fa45e233f1de657c30c452876fc3c41f579c7fa68"
+  },
+  "abandoned-puppet-theatre-and-prop-vault-string-spool-s-43bbc017": {
+    "assetId": "e216f5de-d7f8-5f3f-976b-0742bd543af3",
+    "sha256": "c4e8914fb44818a18b5969dd15d3f0096c00cde758bc367b0847b9ee27ec1f62"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--09eae188": {
+    "assetId": "3ce441b7-806c-5a97-ab40-3e99bc8f28c7",
+    "sha256": "bd11a3f7ea712feeaaf5c916f6d83f06c37ecb31f203bb1bd4f8ada9c77f2982"
+  },
+  "village-hall-and-community-events-raffle-table-af0f6485": {
+    "assetId": "b3be8c1c-e2bd-5b77-a9b7-6e6042cd971c",
+    "sha256": "3dff4b6ede8dcafe3a794dff0ff8ab2ea962383f530081a15fa8f3a372124318"
+  },
+  "football-soccer-club-grounds-ball-pump-46d4eaeb": {
+    "assetId": "b1baca0c-dc62-5433-9ec5-48d882f4f1ca",
+    "sha256": "54b591f9d69d5334dd64b97ba459a9a2a065672e62021d2514ccadecbaa1fbc7"
+  },
+  "community-sports-hall-and-changing-rooms-pump-and-whis-2e97e815": {
+    "assetId": "d2424ac3-6345-5708-bed4-27d644e00ed5",
+    "sha256": "fb053a65b3c0e79c90be64f96d9e92ff629ef33a913098546b789a12d42a6748"
+  },
+  "community-sports-hall-and-changing-rooms-vending-machi-3def4990": {
+    "assetId": "2c75ea34-b25e-5c3e-bceb-0e385c1fe4af",
+    "sha256": "d0a7e55c2eacfdae36cc6d58598948e3267645719927167f8f78bed82f32cbfb"
+  },
+  "escape-room-and-puzzle-venue-drinks-vending-machine-d751cf4a": {
+    "assetId": "165bfebd-0093-5219-84da-30c348398099",
+    "sha256": "f72e358a37e2e7b35ff712b9d4f3118c71bd67579b2c4141d5879bd0c4e4e4d3"
+  },
+  "bakery-and-cafe-grinder-retail-bulk-3668d9ae": {
+    "assetId": "86cafb01-9a26-5cea-8e6b-25731ab64ff3",
+    "sha256": "b33b5930ef5d79e8f4af5bf92db7c8098739297c9ae9d7b10751216c88fbe54d"
+  },
+  "laser-tag-arena-and-activity-centre-vending-machine-73e45792": {
+    "assetId": "66b21797-cc7a-54df-832c-290fff155f93",
+    "sha256": "3d223ff929dafa1688138b99b99e79b2af3b56e5cd94f96389ad79efebaf5a2d"
+  },
+  "live-music-venue-and-festival-stage-cable-ramp-6576a82f": {
+    "assetId": "b57b3c86-703b-5534-9262-6b8198ee8735",
+    "sha256": "55e202e96f474a860c7433f9c2efe24e4952e397b1714c1b3f34e52e72a014a0"
+  },
+  "live-music-venue-and-festival-stage-haze-machine-f83afacc": {
+    "assetId": "3034e02f-63da-5228-bb9e-a267cc6b3a60",
+    "sha256": "9d4968bfc7aac8c25f6c6ddc36797fc0f892165a5acf78a595fb3ee436c70d95"
+  },
+  "live-music-venue-and-festival-stage-power-distro-box-28b03233": {
+    "assetId": "5f721935-8387-5d61-928e-03f5128fcf91",
+    "sha256": "2f3ba2ece0f935532685c02c4a113cfd1f9f744a21cbb12c719ae83af4addbd8"
+  },
+  "racecourse-and-parade-ring-tractor-harrow-99591e72": {
+    "assetId": "fbfa585e-ae04-5985-af89-4b56214c2fbc",
+    "sha256": "9a8d6d4c1d4d6edbd6c265f50fd23691cd4cde14a56d1bd7a9ced81b2414c8d6"
+  },
+  "live-music-venue-and-festival-stage-generator-trailer-354a33e9": {
+    "assetId": "abaec1d8-47ab-549c-a07c-eaa83bf20924",
+    "sha256": "e3e2427004ea2516beb8a606724614bd4adc9a147fd446485285bf4bb7aa3717"
+  },
+  "music-recording-studio-and-instruments-tape-machine-680673b8": {
+    "assetId": "c1697a6f-7857-5dfd-88ca-63573017f1f7",
+    "sha256": "f6bd1212e35d790a9d9e5c200ed0e164aa0685df2aceed91214f64c4368cf066"
+  },
+  "skate-park-and-street-sports-grind-box-25236bc8": {
+    "assetId": "39178d45-0075-5d21-a622-d162ee123983",
+    "sha256": "86efa296dc6efdc69572867e85beceb08982bdae761fa6e7f5bb32f37b22db95"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--af108527": {
+    "assetId": "c30ad2e9-3ed5-5990-b8ce-4e8f815bd8e8",
+    "sha256": "604a0a504547be042d8355e64e6dafcb8af8bb3dc22572403b6e6b4201ecc377"
+  },
+  "trampoline-park-and-soft-play-vending-machine-0b02ec87": {
+    "assetId": "570aaa75-d969-5474-894d-44f10f02c31e",
+    "sha256": "3d4143fc7e956a9bbb96b1c769ca6068577abc8a1e58d5ca987d3e91567730e5"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--64e716a2": {
+    "assetId": "f7374c3e-43b5-57f8-9117-ec00d6bf883e",
+    "sha256": "acb1c8bd0c15dc2b394f952b48cf0cc96ecebc7572d767ac72a75414db0bbb09"
+  },
+  "textile-weaving-and-dye-workshop-warp-beam-stand-515559b5": {
+    "assetId": "d19c600a-9782-5c67-8547-ab1dfa624acc",
+    "sha256": "c60a9b464bc52a5e50c7d135a278680a4a8600864fd1b6add085aa9e819eb492"
+  },
+  "woodworking-workshop-and-joinery-woodworking-workshop--87d87bf5": {
+    "assetId": "b9623ab7-7466-535e-bb4e-6e6dec316d37",
+    "sha256": "99ab347ed09efeb41d1db8fb34daab0d08b54e3767b1adb47bf17707eb524c86"
+  }
+}

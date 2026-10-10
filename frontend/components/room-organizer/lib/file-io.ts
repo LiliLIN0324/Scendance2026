@@ -1,0 +1,279 @@
+import { layoutForExport } from '../../../lib/layout-export';
+import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from './schema';
+import type { RoomLayout } from './types';
+
+export function downloadLayoutAsJson(layout: RoomLayout): void {
+  const blob = new Blob([JSON.stringify(layoutForExport(layout), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    // Guard the empty-name case (mirrors the CSV path) so we never produce a
+    // bare `.json` filename.
+    link.download = `${(layout.name || 'layout').replace(/\s+/g, '_')}.json`;
+    link.click();
+  } finally {
+    // Defer the revoke: revoking synchronously right after click() can cancel
+    // the download mid-flight in some browsers. A 0ms timeout releases the URL
+    // after the click has been dispatched.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+export async function readLayoutFromFile(file: File): Promise<RoomLayout> {
+  // Checked before reading: a multi-hundred-MB file would otherwise be read
+  // and parsed whole before the schema ever saw it (#332).
+  if (file.size > MAX_LAYOUT_JSON_BYTES) {
+    const limitMb = MAX_LAYOUT_JSON_BYTES / (1024 * 1024);
+    throw new Error(
+      `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB, far larger than any house layout (the limit is ${limitMb} MB), so it was not opened.`
+    );
+  }
+  const text = await file.text();
+  const parsed: unknown = JSON.parse(text);
+  const layout = parseStoredLayout(parsed);
+  if (!layout) {
+    throw new Error('Invalid layout file: structure does not match the expected schema.');
+  }
+  return layout;
+}
+
+/** Longest-edge cap for a stored floor plan, in pixels. */
+const MAX_IMAGE_EDGE = 1500;
+
+export async function readImageAsDataUrl(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('请选择图片文件（PNG、JPG等）。');
+  }
+  const rawDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    const failed = () => { reject(new Error('图片读取失败，请重新选择。')); };
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && reader.result.startsWith('data:image/')) resolve(reader.result);
+      else failed();
+    };
+    reader.onerror = failed;
+    reader.onabort = failed;
+    reader.readAsDataURL(file);
+  }).catch(() => {
+    throw new Error('图片读取失败，请重新选择。');
+  });
+
+  // A full-resolution floor plan can easily be several MB of base64, which
+  // exhausts the ~5MB localStorage budget and makes every save fail. Downscale
+  // anything larger than MAX_IMAGE_EDGE on its long edge and re-encode as JPEG
+  // so the stored layout stays well within budget.
+  return downscaleDataUrl(rawDataUrl);
+}
+
+function downscaleDataUrl(dataUrl: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    const release = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.src = '';
+    };
+    image.onload = () => {
+      let canvas: HTMLCanvasElement | undefined;
+      try {
+        const width = image.naturalWidth, height = image.naturalHeight;
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+          throw new Error('Invalid image dimensions.');
+        }
+        const longEdge = Math.max(width, height);
+        if (longEdge <= MAX_IMAGE_EDGE) {
+          resolve(dataUrl);
+          return;
+        }
+        const scale = MAX_IMAGE_EDGE / longEdge;
+        canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas unavailable.');
+        // JPEG has no alpha; keep transparent floor plans on a white background.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const result = canvas.toDataURL('image/jpeg', 0.85);
+        if (!result.startsWith('data:image/')) throw new Error('Image encoding failed.');
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      } finally {
+        if (canvas) { canvas.width = 0; canvas.height = 0; }
+        release();
+      }
+    };
+    image.onerror = () => {
+      release();
+      reject(new Error('Image decode failed.'));
+    };
+    image.src = dataUrl;
+  }).catch(() => {
+    throw new Error('图片处理失败，请重新选择有效的平面图。');
+  });
+}
+
+export function downloadInventoryCsv(layout: RoomLayout): void {
+  const lines = ['Floor,Category,Type,Name,Width (m),Depth (m),Height (m),Color,Price'];
+  for (const floor of layout.floors) {
+    for (const item of floor.items) {
+      const fields: string[] = [
+        floor.name,
+        item.category ?? '',
+        item.type,
+        item.name,
+        item.width.toFixed(2),
+        item.depth.toFixed(2),
+        item.height.toFixed(2),
+        item.color,
+        (item.price ?? 0).toString(),
+      ];
+      lines.push(fields.map(csvField).join(','));
+    }
+  }
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(layout.name || 'inventory').replace(/\s+/g, '_')}_inventory.csv`;
+    link.click();
+  } finally {
+    // Defer the revoke so it can't truncate the download (see downloadLayoutAsJson).
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+function csvField(value: string): string {
+  // Neutralize spreadsheet formula injection: a value beginning with =, +, -,
+  // @, or a tab is interpreted as a formula by Excel/Sheets, so an imported
+  // layout with an item named `=HYPERLINK(...)` would execute on export.
+  // Prefix a single quote to force it to a literal string.
+  const safe = /^[=+\-@\t]/.test(value) ? `'${value}` : value;
+  if (/[",\n\r]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
+}
+
+/**
+ * userData.type tags that make up the "meaningful" model the user expects in an
+ * exported .glb: the furniture and the room shell (walls incl. the floor grid
+ * helper + baseboards, interior walls, floor incl. the foundation, and the
+ * roof). Everything else — lights (`light:*`), the sky, the ground/outdoor
+ * scenery, NPCs, Wi-Fi/vision overlays, measurement markers, and item labels —
+ * is deliberately excluded.
+ */
+const GLB_EXPORT_TAGS: ReadonlySet<string> = new Set([
+  'furniture',
+  'floor',
+  'wall',
+  'interior-wall',
+  'roof',
+]);
+
+/**
+ * Build a throwaway group holding CLONES of just the meaningful scene objects.
+ * Cloning (rather than reparenting) keeps the live scene untouched and lets us
+ * discard the group without disposing the shared geometries/materials the
+ * clones borrow by reference. Transforms are preserved by clone().
+ */
+function collectExportGroup(
+  THREE: typeof import('three'),
+  scene: import('three').Object3D,
+  cloneSkinned: (source: import('three').Object3D) => import('three').Object3D
+): import('three').Group {
+  const group = new THREE.Group();
+  for (const child of scene.children) {
+    const tag = child.userData.type as string | undefined;
+    if (tag === undefined || !GLB_EXPORT_TAGS.has(tag)) continue;
+    // Plain clone() shares the LIVE scene's skeleton, so the exporter writes
+    // skins whose joints point at nodes outside the exported graph — the
+    // file then fails to parse (GLTFLoader: "Cannot set … 'isBone'"). Rigged
+    // people need SkeletonUtils.clone, which brings their bones (at the
+    // current pose) into the export group.
+    let hasSkinned = false;
+    child.traverse((node) => {
+      if ((node as import('three').SkinnedMesh).isSkinnedMesh) hasSkinned = true;
+    });
+    group.add(hasSkinned ? cloneSkinned(child) : child.clone());
+  }
+  return group;
+}
+
+export async function downloadSceneAsGlb(scene: import('three').Object3D, baseName: string): Promise<void> {
+  const THREE = await import('three');
+  const [{ GLTFExporter }, SkeletonUtils] = await Promise.all([
+    import('three/examples/jsm/exporters/GLTFExporter.js'),
+    import('three/examples/jsm/utils/SkeletonUtils.js'),
+  ]);
+  const exporter = new GLTFExporter();
+  // Export a temporary group of cloned meshes so the .glb carries only the
+  // furniture + room shell — not lights, sky, NPCs, overlays, or markers.
+  const exportGroup = collectExportGroup(THREE, scene, SkeletonUtils.clone);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      exporter.parse(
+        exportGroup,
+        (result) => {
+          const blob =
+            result instanceof ArrayBuffer
+              ? new Blob([result], { type: 'model/gltf-binary' })
+              : new Blob([JSON.stringify(result)], { type: 'application/json' });
+          const extension = result instanceof ArrayBuffer ? 'glb' : 'gltf';
+          const url = URL.createObjectURL(blob);
+          try {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${baseName.replace(/\s+/g, '_')}.${extension}`;
+            link.click();
+          } finally {
+            // Defer the revoke so it can't truncate the download (see downloadLayoutAsJson).
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+          }
+          resolve();
+        },
+        (error) => reject(error instanceof Error ? error : new Error('GLB export failed.')),
+        { binary: true }
+      );
+    });
+  } finally {
+    // Discard the temp group. The clones borrow the live scene's geometries and
+    // materials by reference, so only detach them (clear) — never dispose, or
+    // we'd destroy resources the on-screen scene is still using.
+    exportGroup.clear();
+  }
+}
+
+/**
+ * Trigger a PNG download of the canvas. Resolves to `true` after dispatch and
+ * `false` when encoding or download setup fails; this does not verify a file on disk.
+ */
+export function downloadCanvasAsPng(canvas: HTMLCanvasElement, baseName: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      canvas.toBlob((blob) => {
+        try {
+          if (!blob) { resolve(false); return; }
+          const url = URL.createObjectURL(blob);
+          try {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${(baseName || 'screenshot').replace(/\s+/g, '_')}.png`;
+            link.click();
+          } finally {
+            // Revoke after dispatch so the browser can start the download.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+          }
+          resolve(true);
+        } catch {
+          resolve(false);
+        }
+      }, 'image/png');
+    } catch {
+      resolve(false);
+    }
+  });
+}

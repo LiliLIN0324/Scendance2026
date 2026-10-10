@@ -1,0 +1,12 @@
+.awg-guide { margin:0 0 14px; padding:12px; border:1px solid #dce2d2; border-radius:10px; background:#f5f8ee; color:#526348; }
+.awg-start { display:flex; align-items:center; gap:10px; }
+.awg-start img { flex:none; width:60px; height:60px; object-fit:contain; }
+.awg-start>div { min-width:0; }
+.awg-start strong { font-size:12px; font-weight:550; }
+.awg-route { margin:5px 0 0; font-size:10px; line-height:1.7; color:#74806b; }
+.awg-record { margin:8px 0; font-size:10px; line-height:1.7; overflow-wrap:anywhere; }
+.awg-next { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.awg-next button,.awg-template-button { padding:7px 9px; border:1px solid #c6d3b6; border-radius:7px; background:#fcfcf7; color:#43583a; font:inherit; font-size:11px; cursor:pointer; }
+.awg-next button:disabled,.awg-template-button:disabled { opacity:.5; cursor:not-allowed; }
+.awg-next small { flex:1; min-width:160px; font-size:9px; line-height:1.6; color:#7d8a71; }
+.awg-template-button { margin-top:8px; }
