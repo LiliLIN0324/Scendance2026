@@ -43,7 +43,7 @@ export function ReferenceImageControls({ layout, view, ready, notice, onShow, on
     <label>底图透明度 {Math.round(opacity * 100)}%<input aria-label="底图透明度" type="range" min="0" max="1" step="0.05" value={opacity} disabled={!available || busy} onChange={event => onOpacity(Number(event.target.value))}/></label>
     {v2 ? <button ref={reviewButtonRef} type="button" onClick={onReview}>选择图纸并核对对应</button> : <p>旧图按场地宽深示意放置，不代表已标定或实测准确。</p>}
     {v2 && <button type="button" className="sc-reference-reload" onClick={onReload}>重新读取本机资料</button>}
-    <small>隐藏只改变显示，保留图片和对应记录。图片附件另行保留；布局备份不包含重建图纸文件。</small>
+    <small>隐藏只改变显示，保留图片和对应记录。换设备时，请在活动备份中勾选“包含图纸、照片与对应点”。</small>
     {error && <p role="alert">{error}</p>}
   </div></details>;
 }

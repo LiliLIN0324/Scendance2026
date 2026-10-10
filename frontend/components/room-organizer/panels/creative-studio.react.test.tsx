@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
+import { Blob as NodeBlob, Buffer as NodeBuffer } from 'node:buffer';
+import { act, cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
-import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, listSourceRecords, readSourceForm, readSourceRecord, storeSourceForm, updateSourceForm } from '@/lib/source-storage';
-import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
-import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4 } from '@/lib/local-project-backup';
+import * as sourceStorage from '@/lib/source-storage';
+import { copySourceScope, deleteSourceForm, flushSourceScope, listStoredSources, listSourceRecords, readSourceForm, readSourceRecord, storeSourceForm, updateSourceForm,
+  readSourceScopeSnapshot, restoreSourceScopeIfUnchanged, sameSourceScopeSnapshot, type StoredSource, type SourceScopeSnapshot } from '@/lib/source-storage';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { INITIAL_BRIEF } from '../lib/creative-brief';
+import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
@@ -19,12 +23,11 @@ import { GeneratedModelLibrary } from './generated-model-library';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
-import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
-vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn() }));
+vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), readSourceForm: vi.fn(), readSourceRecord: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn(), readSourceScopeSnapshot: vi.fn(), restoreSourceScopeIfUnchanged: vi.fn() }));
 let materialProps: { seed?: MaterialCustomizationSeed; layout: RoomLayout; onApply(next:RoomLayout):void };
 vi.mock('./material-customization', () => ({ MaterialCustomization: (props: typeof materialProps) => { materialProps=props;return <output data-testid="material-seed">{JSON.stringify(props.seed ?? null)}</output>; } }));
 
@@ -78,27 +81,145 @@ function DeliveryShortcutTrial({ current = layout, operations = false }: { curre
   </CreativeStudioProvider>;
 }
 
-function DockedTrial({ current = layout, generator, onWorkspace, onConversation }: {
-  current?: RoomLayout; generator?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void;
+function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace, onConversation, onTemplates, operations = false, localSaveError = false }: {
+  current?: RoomLayout; generator?: ReactNode; commercialPanel?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; onTemplates?:()=>void; operations?: boolean; localSaveError?: boolean;
 }) {
-  const host = useRef<HTMLDivElement>(null), referenceEntry = useRef<HTMLButtonElement>(null);
+  const host = useRef<HTMLDivElement>(null), referenceEntry = useRef<HTMLButtonElement>(null), conversationEntry = useRef<HTMLButtonElement>(null);
+  const workspaceEntry = useRef<HTMLButtonElement>(null), toolsEntry = useRef<HTMLButtonElement>(null);
   const [workspaceVisible, setWorkspaceVisible] = useState(false), [referenceRequest, setReferenceRequest] = useState(0);
-  const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
+  const [workspaceRequest, setWorkspaceRequest] = useState(0), [toolsRequest, setToolsRequest] = useState(0);
+  const [conversationCloseRequest, setConversationCloseRequest] = useState(0), [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const workspaceChanged = useCallback((visible: boolean) => { setWorkspaceVisible(visible); onWorkspace?.(visible); }, [onWorkspace]);
   const conversationChanged = useCallback((visible: boolean) => { onConversation?.(visible); }, [onConversation]);
-  return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onPreview={onPreview}>
+  return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onPreview={onPreview} onUpdateEventOperations={operations?()=>{}:undefined}>
+    <button ref={toolsEntry} onClick={() => setToolsRequest(value => value + 1)}>素材</button>
+    <button ref={workspaceEntry} onClick={() => setWorkspaceRequest(value => value + 1)}>资料</button>
+    <button ref={conversationEntry} onClick={() => setConversationOpenRequest(value => value + 1)}>助手</button>
     <button ref={referenceEntry} onClick={() => setReferenceRequest(value => value + 1)}>外部图纸核对</button>
     <button onClick={() => setConversationCloseRequest(value => value + 1)}>外部收起聊天</button>
     <div data-testid="docked-business-host" ref={host} hidden={!workspaceVisible}/>
-    <CreativeAssistant docked businessHostRef={host} generationPanel={generator}
+    <CreativeAssistant docked businessHostRef={host} generationPanel={generator} commercialPanel={commercialPanel}
+      {...(onTemplates?{onOpenTemplates:onTemplates}:{})}
+      workspaceOpenRequest={workspaceRequest} workspaceEntryRef={workspaceEntry}
+      toolsOpenRequest={toolsRequest} toolsEntryRef={toolsEntry}
       referenceOpenRequest={referenceRequest} referenceEntryRef={referenceEntry}
       conversationCloseRequest={conversationCloseRequest}
+      conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntry}
+      localSaveError={localSaveError}
       onWorkspaceVisibilityChange={workspaceChanged} onConversationVisibilityChange={conversationChanged}/>
   </CreativeStudioProvider>;
 }
 
 describe('docked workspace integration', () => {
   beforeEach(() => { vi.stubGlobal('innerWidth', 1440); });
+  it('opens the shared shelf template destination and resumes the same unsaved activity form',async()=>{
+    const onTemplates=vi.fn();
+    renderUI(<DockedTrial onTemplates={onTemplates}/>);await act(async()=>{});
+    fireEvent.click(screen.getByRole('button',{name:'资料'}));
+    const demand=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;
+    fireEvent.change(demand,{target:{value:'独立演练：尚未保存的活动说明'}});
+    selectBusiness('场景模板');
+    expect(onTemplates).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('region',{name:'场景模板资源'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'返回素材'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'返回当前工作区'})).toBeNull();
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'资料'}));
+    expect(screen.getByRole('textbox',{name:'客户需求'})).toBe(demand);
+    expect(demand.value).toBe('独立演练：尚未保存的活动说明');
+    expect((screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement).value).toBe('brief');
+    expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+  it('[compact navigation] keeps every old destination in the business area and removes the chat button grid',async()=>{
+    renderUI(<DockedTrial/>);await act(async()=>{});
+    expect(document.querySelector('.cr-docked-tools')).toBeNull();
+    expect(screen.queryByRole('combobox',{name:'资料分类'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'完善活动需求'}));
+    const categories=screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement;
+    expect(Array.from(categories.options).map(option=>option.text)).toEqual(['活动需求','图纸与尺寸','执行资料','方案评审','场景模板','物料工具']);
+    expect(screen.getByTestId('docked-business-host').contains(categories)).toBe(true);
+    const input=screen.getByRole('textbox',{name:'客户需求'});input.focus();fireEvent.keyDown(input,{key:'Escape'});
+    await waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('button',{name:'完善活动需求'})));
+    expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[new project suggestions] opens real preparation screens without changing either chat draft or scope',async()=>{
+    renderUI(<DockedTrial/>);await act(async()=>{});
+    const suggestions=screen.getByRole('region',{name:'成果建议'});
+    expect(within(suggestions).getAllByRole('button')).toHaveLength(3);
+    for(const name of ['完善活动需求','准备场地图纸'])expect(within(suggestions).getByRole('button',{name})).toBeTruthy();
+    expect(screen.getByText('活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。')).toBeTruthy();
+    const composer=screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement;
+    fireEvent.change(composer,{target:{value:'未发送的策划草稿'}});selectMode('model');
+    fireEvent.change(composer,{target:{value:'未发送的物料草稿'}});
+    fireEvent.click(screen.getByRole('button',{name:'完善活动需求'}));
+    expect(screen.getByRole('textbox',{name:'客户需求'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'返回素材'}));
+    fireEvent.click(screen.getByRole('button',{name:'准备场地图纸'}));
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('图纸与场地对应核对');
+    expect(composer.value).toBe('未发送的物料草稿');
+    expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
+    selectMode('plan');expect(composer.value).toBe('未发送的策划草稿');
+    expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[ready project suggestions] shows only existing outputs once a saved brief, drawing, items and tasks are present',async()=>{
+    vi.mocked(readSourceForm).mockImplementation(async key=>key===`${projectId}:brief`?{...INITIAL_BRIEF,description:'假设演练：保留入口通道'}:undefined);
+    vi.mocked(listStoredSources).mockResolvedValue([{id:'drawing',scope:projectId,name:'假设演练图纸',kind:'floorplan',width:1024,height:768,blob:new Blob(['drawing'],{type:'image/png'})}]);
+    const operations=eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:'c0a00000-0000-4000-8000-000000000111',title:'假设演练布场',phase:'setup'}]});
+    const prepared={...backendSceneToLayout(candidate,{projectId,name:'假设演练'}),eventOperations:operations};
+    renderUI(<DockedTrial current={prepared}/>);await act(async()=>{});
+    const suggestions=screen.getByRole('region',{name:'成果建议'});
+    expect(within(suggestions).getAllByRole('button')).toHaveLength(4);
+    for(const name of ['整理执行时间表','核对物料交接','准备客户方案'])expect(within(suggestions).getByRole('button',{name})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'整理执行时间表'}));
+    expect(screen.getByRole('group',{name:'执行工作单'})).toBeTruthy();
+    expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button',{name:'核对物料交接'}));
+    expect(screen.getByRole('group',{name:'执行工作单'})).toBeTruthy();
+    expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button',{name:'整理执行时间表'}));
+    expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button',{name:'准备客户方案'}));
+    expect(screen.getByRole('region',{name:'客户评审包'})).toBeTruthy();
+    expect(screen.queryByTitle('客户评审预览')).toBeNull();
+    expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    expect(document.querySelector('a[download]')).toBeNull();
+  });
+
+  it('[suggestions after conversation] hides suggestions after sending and lets users reopen them without sending another request',async()=>{
+    connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    renderUI(<DockedTrial/>);await act(async()=>{});
+    const composer=screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement;
+    fireEvent.change(composer,{target:{value:'先预览椅子布置'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await screen.findByText('方案提案 · 尚未应用');
+    expect(screen.queryByRole('region',{name:'成果建议'})).toBeNull();
+    const confirm=screen.getByRole('button',{name:'确认应用'});
+    fireEvent.change(composer,{target:{value:'下一条未发送输入'}});
+    fireEvent.click(screen.getByRole('button',{name:'查看建议'}));
+    expect(within(screen.getByRole('region',{name:'成果建议'})).getAllByRole('button').length).toBeLessThanOrEqual(4);
+    fireEvent.click(screen.getByRole('button',{name:'准备场地图纸'}));
+    expect(composer.value).toBe('下一条未发送输入');expect(screen.getByRole('button',{name:'确认应用'})).toBe(confirm);
+    expect(controller.startAgentRun).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'关闭成果建议'}));expect(screen.queryByRole('region',{name:'成果建议'})).toBeNull();
+  });
+
+  it('[suggestion scope reset] starts the next activity with its own preparation suggestions and default execution tab',async()=>{
+    const current=backendSceneToLayout(candidate,{projectId,name:'假设演练A'});
+    const view=renderUI(<DockedTrial current={current} operations/>);await act(async()=>{});
+    fireEvent.click(screen.getByRole('button',{name:'核对物料交接'}));
+    expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
+    view.rerender(<DockedTrial current={{...layout,id:'suggestion-activity-B',name:'假设演练B'}} operations/>);await act(async()=>{});
+    expect((screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement).value).toBe('brief');
+    expect(screen.queryByRole('button',{name:'核对物料交接'})).toBeNull();
+    const suggestions=screen.getByRole('region',{name:'成果建议'});
+    expect(within(suggestions).getAllByRole('button')).toHaveLength(3);
+    for(const name of ['完善活动需求','准备场地图纸'])expect(within(suggestions).getByRole('button',{name})).toBeTruthy();
+    selectBusiness('执行资料');
+    expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
+    expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+
   it('[chat independence] keeps model scope and its sendable draft through every business destination', async () => {
     connected(); vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
     renderUI(<DockedTrial/>); await act(async () => {});
@@ -107,8 +228,8 @@ describe('docked workspace integration', () => {
     selectMode('model');
     const instruction = '生成一把宽0.5米的椅子，保留其他物件';
     fireEvent.change(composer, { target: { value: instruction } });
-    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '场景模板']) {
-      fireEvent.click(screen.getByRole('button', { name }));
+    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '方案评审', '场景模板']) {
+      selectBusiness(name);
       expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
       expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
       expect(composer.value).toBe(instruction);
@@ -131,10 +252,11 @@ describe('docked workspace integration', () => {
     const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
     const mode = screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement;
     const submit = screen.getByRole('button', { name: '发送消息' }) as HTMLButtonElement;
-    const launcher = screen.getByRole('button', { name: '关闭 Binggo Agent' });
+    const launcher = screen.getByRole('button', { name: '助手' });
     expect(document.querySelectorAll('#creative-message')).toHaveLength(1);
     expect(document.querySelectorAll('#creative-work-mode')).toHaveLength(1);
-    expect(document.querySelectorAll('.cr-assistant-launcher')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: '助手' })).toHaveLength(1);
+    expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
     expect(composer.form).not.toBeNull(); expect(mode.form).toBe(composer.form); expect(submit.form).toBe(composer.form);
     const settings = screen.getByLabelText('助手设置'); fireEvent.click(settings);
     const details = settings.closest('details')!;
@@ -153,7 +275,7 @@ describe('docked workspace integration', () => {
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
     fireEvent.keyDown(settings, { key: 'Escape' });
     expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
-    expect(screen.getByRole('button', { name: '打开 Binggo Agent' })).toBe(launcher);
+    expect(screen.getByRole('button', { name: '助手' })).toBe(launcher);
     fireEvent.click(launcher);
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('仍在输入法组合中');
     fireEvent.click(submit); await waitFor(() => expect(controller.startAgentRun).toHaveBeenCalledOnce());
@@ -170,19 +292,20 @@ describe('docked workspace integration', () => {
     selectMode('model');
     const host = screen.getByTestId('docked-business-host');
     const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' });
-    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '场景模板']) {
-      const entry = screen.getByRole('button', { name }); fireEvent.click(entry);
+    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '方案评审', '场景模板']) {
+      const entry = screen.getByRole('button', { name: '外部图纸核对' }); fireEvent.click(entry); selectBusiness(name);
       const target = name === '活动需求' ? screen.getByRole('textbox', { name: '客户需求' })
         : name === '执行资料' ? screen.getByRole('group', { name: '执行工作单' })
           : name === '物料工具' ? screen.getByRole('button', { name: '椅' })
-            : name === '场景模板' ? screen.getByRole('button', { name: '返回当前工作区' })
+          : name === '场景模板' ? screen.getByRole('button', { name: '返回当前工作区' })
+          : name === '方案评审' ? screen.getByRole('group', { name: '当前方案评审' })
           : host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
       target.focus(); fireEvent.keyDown(target, { key: 'Escape', cancelable: true });
       await waitFor(() => expect(host.hidden).toBe(true));
       await waitFor(() => expect(document.activeElement).toBe(entry));
       expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
     }
-    const entry = screen.getByRole('button', { name: '活动需求' }); fireEvent.click(entry);
+    const entry = screen.getByRole('button', { name: '外部图纸核对' }); fireEvent.click(entry); selectBusiness('活动需求');
     const demand = screen.getByRole('textbox', { name: '客户需求' });
     const consume = (event: Event) => event.preventDefault(); demand.addEventListener('keydown', consume);
     fireEvent.keyDown(demand, { key: 'Escape', cancelable: true });
@@ -211,13 +334,13 @@ describe('docked workspace integration', () => {
     expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
     expect(host.hidden).toBe(true);
     fireEvent.change(composer, { target: { value: '停靠策划草稿' } });
-    fireEvent.click(screen.getByRole('button', { name: '活动需求' }));
+    selectBusiness('活动需求');
     const demand = screen.getByRole('textbox', { name: '客户需求' }) as HTMLTextAreaElement;
     expect(document.activeElement).toBe(demand);
     expect(host.contains(demand)).toBe(true); expect(host.contains(composer)).toBe(false);
     fireEvent.change(demand, { target: { value: '保留原需求文字' } });
     selectMode('model');
-    fireEvent.click(screen.getByRole('button', { name: '物料工具' }));
+    selectBusiness('物料工具');
     const model = screen.getByRole('textbox', { name: '停靠测试模型描述' });
     fireEvent.change(model, { target: { value: '模型字段保留' } });
     fireEvent.click(screen.getByRole('button', { name: '椅' }));
@@ -226,19 +349,148 @@ describe('docked workspace integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
     expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
     expect(screen.getByRole('textbox', { name: '停靠测试模型描述' })).toBe(model);
-    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    fireEvent.click(screen.getByRole('button', { name: '助手' }));
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
-    fireEvent.click(screen.getByRole('button', { name: '场景模板' }));
+    selectBusiness('场景模板');
     expect(host.contains(screen.getAllByRole('button', { name: /载入工作台/ })[0])).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '返回当前工作区' }));
     expect(screen.getByRole('textbox', { name: '停靠测试模型描述' })).toBe(model);
     expect((model as HTMLInputElement).value).toBe('模型字段保留'); expect(mounted).toHaveBeenCalledOnce();
     expect(reconstructionMounted).toHaveBeenCalledOnce();
     selectMode('plan'); expect(composer.value).toBe('停靠策划草稿');
-    fireEvent.click(screen.getByRole('button', { name: '活动需求' }));
+    selectBusiness('活动需求');
     expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand); expect(demand.value).toBe('保留原需求文字');
     expect(document.querySelectorAll('#creative-message')).toHaveLength(1);
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  describe('model example draft protection', () => {
+    const examples = [
+      ['桌', '长 1.6 米'], ['椅', '座面宽 0.5 米'], ['柜台', '长 2 米'],
+      ['地台', '高 0.3 米'], ['背景板', '高 2.4 米'], ['柜体', '分 4 层'],
+    ] as const;
+
+    it.each(examples)('[model example empty] fills %s without confirmation, retains the planning draft and waits for send', async (name, dimensions) => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderUI(<DockedTrial/>); await act(async () => {});
+      const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+      fireEvent.change(composer, { target: { value: '演练：保留原策划输入' } });
+      selectBusiness('物料工具'); fireEvent.click(screen.getByRole('button', { name }));
+      expect(confirm).not.toHaveBeenCalled();
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+      expect(composer.value).toContain(dimensions);
+      const example = composer.value;
+      selectMode('plan'); expect(composer.value).toBe('演练：保留原策划输入');
+      selectMode('model'); expect(composer.value).toBe(example);
+      expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it.each(examples)('[model example cancel] protects a hidden model draft when cancelling %s from planning', async name => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false), conversation = vi.fn();
+      renderUI(<DockedTrial onConversation={conversation}/>); await act(async () => {});
+      const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+      fireEvent.change(composer, { target: { value: '演练：仍在编辑的策划草稿' } }); selectMode('model');
+      fireEvent.change(composer, { target: { value: '演练：已填写的定制建模草稿' } }); selectMode('plan');
+      selectBusiness('物料工具'); conversation.mockClear();
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect(confirm).toHaveBeenCalledOnce();
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan');
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+      expect(composer.value).toBe('演练：仍在编辑的策划草稿'); expect(conversation).not.toHaveBeenCalled();
+      selectMode('model'); expect(composer.value).toBe('演练：已填写的定制建模草稿');
+      selectMode('plan'); expect(composer.value).toBe('演练：仍在编辑的策划草稿');
+      expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it('[model example accept] replaces only the model draft, switches mode and opens chat without sending', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderUI(<DockedTrial/>); await act(async () => {});
+      const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+      fireEvent.change(composer, { target: { value: '演练：被保留的策划草稿' } }); selectMode('model');
+      fireEvent.change(composer, { target: { value: '演练：同意替换的建模草稿' } }); selectMode('plan');
+      selectBusiness('物料工具'); fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+      expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: '桌' }));
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+      expect(composer.value).toContain('长 1.6 米'); expect(composer.value).not.toContain('同意替换');
+      const example = composer.value;
+      selectMode('plan'); expect(composer.value).toBe('演练：被保留的策划草稿');
+      selectMode('model'); expect(composer.value).toBe(example);
+      expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it('[model example closed cancel] leaves chat closed and restores both original drafts on manual reopen', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false), conversation = vi.fn();
+      renderUI(<DockedTrial onConversation={conversation}/>); await act(async () => {});
+      const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+      fireEvent.change(composer, { target: { value: '演练：关闭前的策划输入' } }); selectMode('model');
+      fireEvent.change(composer, { target: { value: '演练：关闭前的建模输入' } }); selectMode('plan');
+      selectBusiness('物料工具'); fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+      conversation.mockClear(); fireEvent.click(screen.getByRole('button', { name: '柜台' }));
+      expect(confirm).toHaveBeenCalledOnce(); expect(conversation).not.toHaveBeenCalled();
+      expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: '助手' }));
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan');
+      expect(composer.value).toBe('演练：关闭前的策划输入');
+      selectMode('model'); expect(composer.value).toBe('演练：关闭前的建模输入');
+      expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it('[model example same] opens the same selected example again without an overwrite confirmation', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderUI(<DockedTrial/>); await act(async () => {});
+      const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+      fireEvent.change(composer, { target: { value: '演练：相同示例仍保留策划输入' } });
+      selectBusiness('物料工具'); fireEvent.click(screen.getByRole('button', { name: '椅' }));
+      const example = composer.value; expect(example).toContain('座面宽 0.5 米');
+      selectMode('plan'); fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+      fireEvent.click(screen.getByRole('button', { name: '椅' }));
+      expect(confirm).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe(example);
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+      selectMode('plan'); expect(composer.value).toBe('演练：相同示例仍保留策划输入');
+      expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it.each(['activity', 'api', 'user'] as const)('[model example scope reset] clears both drafts when %s changes and does not restore them when returning', async change => {
+      connected(); const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const originalController = controller, originalSnapshot = snapshot;
+      const alternateController = change === 'api' ? new BackendSession(getBackendConfig({ url: 'https://another-service.example', anonKey: 'public-key' })) : null;
+      const alternateDispatch = alternateController ? vi.spyOn(alternateController, 'startAgentRun') : null;
+      if (alternateController) {
+        vi.spyOn(alternateController, 'getSnapshot').mockImplementation(() => snapshot);
+        vi.spyOn(alternateController, 'listSources').mockResolvedValue([]);
+      }
+      const view = renderUI(<DockedTrial/>); await act(async () => {});
+      const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+      fireEvent.change(composer, { target: { value: '演练：旧范围策划输入' } }); selectMode('model');
+      fireEvent.change(composer, { target: { value: '演练：旧范围建模输入' } }); selectMode('plan');
+      selectBusiness('物料工具');
+      if (alternateController) controller = alternateController;
+      if (change === 'user') snapshot = { ...snapshot, user: { id: 'another-user' } };
+      view.rerender(<DockedTrial current={change === 'activity' ? { ...layout, id: 'model-example-activity-B', name: '演练活动B' } : layout}/>);
+      await act(async () => {});
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan'); expect(composer.value).toBe('');
+      selectMode('model'); expect(composer.value).toBe('');
+      selectBusiness('物料工具'); fireEvent.click(screen.getByRole('button', { name: '地台' }));
+      expect(confirm).not.toHaveBeenCalled(); expect(composer.value).toContain('高 0.3 米');
+      selectMode('plan'); fireEvent.change(composer, { target: { value: '演练：新范围策划输入' } });
+      controller = originalController; snapshot = originalSnapshot;
+      view.rerender(<DockedTrial/>); await act(async () => {});
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('plan'); expect(composer.value).toBe('');
+      selectMode('model'); expect(composer.value).toBe('');
+      expect(originalController.startAgentRun).not.toHaveBeenCalled(); if (alternateDispatch) expect(alternateDispatch).not.toHaveBeenCalled();
+      expect(onApply).not.toHaveBeenCalled(); alternateController?.dispose();
+    });
   });
 
   it('clears both chat drafts when the project scope changes without remounting the host composer', async () => {
@@ -255,7 +507,7 @@ describe('docked workspace integration', () => {
   it.each([390, 768])('[narrow chat scopes] retains visible chat and both drafts when only the range changes at %s px', async width => {
     vi.stubGlobal('innerWidth', width);
     renderUI(<DockedTrial/>); await act(async () => {});
-    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(screen.getByRole('button', { name: '助手' }));
     const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
     const host = screen.getByTestId('docked-business-host');
     fireEvent.change(composer, { target: { value: '窄屏策划草稿' } });
@@ -276,8 +528,11 @@ describe('docked workspace integration', () => {
     const confirm = screen.getByRole('button', { name: '确认应用' });
     fireEvent.click(screen.getByRole('button', { name: '外部收起聊天' }));
     expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
-    expect(screen.getAllByText(/有方案待确认/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    const launch = screen.getByRole('button', { name: '助手' });
+    expect(screen.getByRole('status').textContent).toBe('有方案待确认');
+    expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite');
+    expect(document.querySelector('.cr-docked-pending')).toBeNull();
+    fireEvent.click(launch);
     expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
     expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(onApply).not.toHaveBeenCalled();
   });
@@ -292,9 +547,9 @@ describe('docked workspace integration', () => {
     const reference = host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
     expect(document.activeElement).toBe(reference); expect(host.hidden).toBe(false);
     expect(host.querySelector<HTMLDetailsElement>('.rc-inputs')?.open).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: '执行资料' }));
+    selectBusiness('执行资料');
     expect(host.contains(screen.getByRole('group', { name: '执行工作单' }))).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: '活动需求' }));
+    selectBusiness('活动需求');
     act(() => restored?.());
     const destination = screen.getByRole('group', { name: '执行工作单' });
     expect(host.contains(destination)).toBe(true); expect(document.activeElement).toBe(destination);
@@ -313,7 +568,7 @@ describe('docked workspace integration', () => {
     const reference = screen.getByTestId('docked-business-host').querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
     expect(reference.closest('[hidden]')).toBeNull(); expect(document.activeElement).toBe(reference);
     expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    fireEvent.click(screen.getByRole('button', { name: '助手' }));
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
     expect(workspace).toHaveBeenLastCalledWith(false); expect(conversation).toHaveBeenLastCalledWith(true);
@@ -327,6 +582,325 @@ describe('docked workspace integration', () => {
     expect(workspace).toHaveBeenLastCalledWith(false);
     await waitFor(() => expect(document.activeElement).toBe(referenceEntry));
     expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('workspace navigation continuity', () => {
+  it('[commercial category] adds the supplied destination without mounting it until first open', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    const mounted = vi.fn();
+    function CommercialNode() { useEffect(() => { mounted(); }, []); return <input aria-label="演练约定名称"/>; }
+    renderUI(<DockedTrial commercialPanel={<CommercialNode/>}/>); await act(async () => {});
+    expect(mounted).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '资料' }));
+    const categories = screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement;
+    expect(Array.from(categories.options).map(option => option.text)).toEqual(['活动需求', '图纸与尺寸', '执行资料', '方案评审', '场景模板', '物料工具', '合同与约定']);
+    expect(mounted).not.toHaveBeenCalled();
+    selectBusiness('图纸与尺寸'); expect(mounted).not.toHaveBeenCalled();
+    selectBusiness('合同与约定'); expect(mounted).toHaveBeenCalledOnce();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('group', { name: '合同与约定资料' })));
+    expect(screen.getByText(/当前场景：/).hidden).toBe(true);
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[commercial continuity] keeps the same unsaved node and source protection through categories, shelf, close and parent view rerender', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    const mounted = vi.fn(), unmounted = vi.fn(), onTemplates = vi.fn();
+    function CommercialNode() {
+      const [value, setValue] = useState(''), valueRef = useRef(value); valueRef.current = value;
+      useEffect(() => { mounted(); return () => { unmounted(); }; }, []);
+      useEffect(() => sourceStorage.registerSourceFlush(projectId, async () => { if (valueRef.current) throw new Error('演练约定有未保存修改'); }), []);
+      return <input aria-label="演练约定名称" value={value} onChange={event => setValue(event.target.value)}/>;
+    }
+    const view = renderUI(<DockedTrial commercialPanel={<CommercialNode/>} onTemplates={onTemplates}/>); await act(async () => {});
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry); selectBusiness('合同与约定');
+    const input = screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement;
+    const target = screen.getByRole('group', { name: '合同与约定资料' });
+    fireEvent.change(input, { target: { value: '演练：尚未保存的约定' } });
+    for (const name of ['活动需求', '图纸与尺寸', '执行资料', '方案评审', '物料工具']) {
+      selectBusiness(name); expect(screen.queryByRole('textbox', { name: '演练约定名称' })).toBeNull();
+      await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+      selectBusiness('合同与约定'); expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input);
+    }
+    selectBusiness('场景模板'); expect(onTemplates).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+    fireEvent.click(dataEntry);
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('commercial');
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry);
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    view.rerender(<DockedTrial current={{ ...layout, backendCamera: 'top' }} commercialPanel={<CommercialNode/>} onTemplates={onTemplates}/>); await act(async () => {});
+    view.rerender(<DockedTrial current={{ ...layout, backendCamera: 'overview' }} commercialPanel={<CommercialNode/>} onTemplates={onTemplates}/>); await act(async () => {});
+    await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+    fireEvent.click(dataEntry);
+    expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input); expect(input.value).toBe('演练：尚未保存的约定');
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    act(() => { input.focus(); }); fireEvent.keyDown(input, { key: 'Escape', cancelable: true });
+    await waitFor(() => expect(document.activeElement).toBe(dataEntry));
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+    fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
+    expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input);
+    expect(mounted).toHaveBeenCalledOnce(); expect(unmounted).not.toHaveBeenCalled();
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each([1440, 390])('[commercial chat separation] preserves both drafts and model mode while returning data focus at %s px', async width => {
+    vi.stubGlobal('innerWidth', width);
+    renderUI(<DockedTrial commercialPanel={<input aria-label="演练约定名称"/>}/>); await act(async () => {});
+    const chatEntry = screen.getByRole('button', { name: '助手' }), dataEntry = screen.getByRole('button', { name: '资料' });
+    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(chatEntry);
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '演练：未发送的策划草稿' } }); selectMode('model');
+    fireEvent.change(composer, { target: { value: '演练：未发送的物料草稿' } });
+    fireEvent.click(dataEntry); selectBusiness('合同与约定');
+    const target = screen.getByRole('group', { name: '合同与约定资料' });
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    fireEvent.keyDown(target, { key: 'Escape', cancelable: true });
+    await waitFor(() => expect(document.activeElement).toBe(dataEntry));
+    fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('commercial');
+    fireEvent.click(chatEntry);
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：未发送的物料草稿');
+    selectMode('plan'); expect(composer.value).toBe('演练：未发送的策划草稿');
+    fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each(['执行资料', '图纸与尺寸'] as const)('[repeat data entry] restores %s after materials without resetting fields or dispatching', async destination => {
+    vi.stubGlobal('innerWidth', 1440);
+    renderUI(<DockedTrial operations/>); await act(async () => {});
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry);
+    const demand = screen.getByRole('textbox', { name: '客户需求' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(document.activeElement).toBe(demand));
+    fireEvent.change(demand, { target: { value: '演练：资料返回时保留原需求。' } });
+    selectBusiness(destination);
+    const host = screen.getByTestId('docked-business-host');
+    const target = destination === '执行资料' ? screen.getByRole('group', { name: '执行工作单' }) : host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); expect(host.hidden).toBe(true);
+    fireEvent.click(dataEntry);
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe(destination === '执行资料' ? 'delivery' : 'reference');
+    expect(host.contains(target)).toBe(true); await waitFor(() => expect(document.activeElement).toBe(target));
+    selectBusiness('活动需求');
+    expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand); expect(demand.value).toBe('演练：资料返回时保留原需求。');
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each([1440, 390])('[materials entry] hides business and naturally closes narrow chat while preserving the same proposal and both drafts at %s px', async width => {
+    vi.stubGlobal('innerWidth', width); connected(); vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const chatEntry = screen.getByRole('button', { name: '助手' });
+    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(chatEntry);
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '演练：先预览一个椅子方案' } }); fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await screen.findByText('方案提案 · 尚未应用'); const confirm = screen.getByRole('button', { name: '确认应用' });
+    fireEvent.change(composer, { target: { value: '演练：素材切换前的策划草稿' } }); selectMode('model');
+    fireEvent.change(composer, { target: { value: '演练：素材切换前的物料草稿' } });
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry); expect(screen.getByTestId('docked-business-host').hidden).toBe(false);
+    fireEvent.click(chatEntry);
+    await waitFor(() => expect(document.activeElement).toBe(composer));
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); await act(async () => {});
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true); expect(document.activeElement).toBe(toolsEntry);
+    if (width === 390) expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+    else expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+    fireEvent.click(dataEntry); fireEvent.click(chatEntry);
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：素材切换前的物料草稿');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
+    selectMode('plan'); expect(composer.value).toBe('演练：素材切换前的策划草稿');
+    expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[materials source protection] keeps an unsaved review registered while hidden and resumes its fields and focus from data', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry); selectBusiness('方案评审');
+    const review = screen.getByRole('group', { name: '当前方案评审' });
+    fireEvent.click(screen.getByText('本机草稿与文件'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存说明草稿' }).hasAttribute('disabled')).toBe(false));
+    const summary = screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: '演练：素材页往返仍未保存的方案说明。' } });
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    await act(async () => { await expect(flushSourceScope(projectId)).rejects.toThrow('评审说明有未保存修改'); });
+    fireEvent.click(dataEntry);
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('review');
+    expect(screen.getByLabelText('简短方案说明（选填）')).toBe(summary); expect(summary.value).toBe('演练：素材页往返仍未保存的方案说明。');
+    await waitFor(() => expect(document.activeElement).toBe(review));
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+});
+
+describe('top assistant entry', () => {
+  it.each([1440, 390])('[external assistant entry] opens from the top and returns focus after X and Escape at %s px', async width => {
+    vi.stubGlobal('innerWidth', width);
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const entry = screen.getByRole('button', { name: '助手' });
+    const entryRect = new DOMRect(0, 0, 44, 40);
+    const visibleRects: DOMRectList = Object.assign([entryRect], { item: (index: number) => index === 0 ? entryRect : null });
+    const hiddenRects: DOMRectList = Object.assign([] as DOMRect[], { item: () => null });
+    let entryVisible = true;
+    vi.spyOn(entry, 'getClientRects').mockImplementation(() => entryVisible ? visibleRects : hiddenRects);
+    const entryFocus = vi.spyOn(entry, 'focus');
+    const nativeRequestFrame = globalThis.requestAnimationFrame, nativeCancelFrame = globalThis.cancelAnimationFrame;
+    const frames = new Map<number, FrameRequestCallback>(); let nextFrame = 0;
+    const flushFrame = async () => { await act(async () => {
+      const currentFrames = Array.from(frames); frames.clear();
+      for (const [id, callback] of currentFrames) callback(id * 16);
+    }); };
+    if (width === 390) {
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++nextFrame; frames.set(id, callback); return id; });
+      vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id); });
+    }
+    if (screen.queryByRole('textbox', { name: '告诉助手你的想法' })) {
+      expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+      await waitFor(() => expect(document.activeElement).toBe(entry));
+    }
+    const capsule = screen.getByRole('button', { name: '打开 Binggo Agent' });
+    expect(capsule.classList.contains('cr-assistant-capsule')).toBe(true); expect(capsule.textContent).toBe('Binggo');
+    expect(capsule.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/puppy.png');
+    fireEvent.click(entry);
+    expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(document.activeElement).toBe(composer));
+    fireEvent.change(composer, { target: { value: '演练：顶部入口策划草稿' } }); selectMode('model');
+    fireEvent.change(composer, { target: { value: '演练：顶部入口物料草稿' } });
+    const close = screen.getByRole('button', { name: '收起聊天' });
+    if (width === 390) { entryVisible = false; entryFocus.mockClear(); }
+    act(() => { close.focus(); }); fireEvent.click(close);
+    expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+    expect(screen.getByRole('button', { name: '打开 Binggo Agent' }).classList.contains('cr-assistant-capsule')).toBe(true);
+    if (width === 390) {
+      await flushFrame(); expect(entryFocus).not.toHaveBeenCalled(); expect(document.activeElement).not.toBe(entry);
+      expect(frames.size).toBeGreaterThan(0);
+      entryVisible = true; await flushFrame(); expect(document.activeElement).toBe(entry); expect(frames.size).toBe(0);
+    } else await waitFor(() => expect(document.activeElement).toBe(entry));
+    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：顶部入口物料草稿');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    if (width === 390) { entryVisible = false; entryFocus.mockClear(); }
+    act(() => { composer.focus(); }); fireEvent.keyDown(composer, { key: 'Escape', cancelable: true });
+    expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+    expect(screen.getByRole('button', { name: '打开 Binggo Agent' }).classList.contains('cr-assistant-capsule')).toBe(true);
+    if (width === 390) {
+      await flushFrame(); expect(entryFocus).not.toHaveBeenCalled(); expect(frames.size).toBeGreaterThan(0);
+      entryVisible = true; fireEvent.click(entry);
+      expect(frames.size).toBe(0); await flushFrame();
+      expect(entryFocus).not.toHaveBeenCalled(); expect(document.activeElement).toBe(composer);
+      expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：顶部入口物料草稿');
+      expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+      fireEvent.keyDown(composer, { key: 'Escape', cancelable: true });
+      const workEntry = screen.getByRole('button', { name: '外部图纸核对' });
+      vi.spyOn(workEntry, 'getClientRects').mockReturnValue(visibleRects);
+      act(() => { workEntry.focus(); }); await flushFrame();
+      expect(document.activeElement).toBe(workEntry); expect(entryFocus).not.toHaveBeenCalled(); expect(frames.size).toBe(0);
+      vi.stubGlobal('requestAnimationFrame', nativeRequestFrame); vi.stubGlobal('cancelAnimationFrame', nativeCancelFrame);
+    } else await waitFor(() => expect(document.activeElement).toBe(entry));
+    fireEvent.click(entry); expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
+    selectMode('plan'); expect(composer.value).toBe('演练：顶部入口策划草稿');
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('[closed assistant capsule] keeps the dog and Binggo entry only while closed without an external button (docked=%s)', async docked => {
+    vi.stubGlobal('innerWidth', 390);
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant docked={docked}/></CreativeStudioProvider>);
+    await act(async () => {});
+    const entry = screen.getByRole('button', { name: '打开 Binggo Agent' });
+    expect(entry.classList.contains('cr-assistant-capsule')).toBe(true); expect(entry.textContent).toBe('Binggo');
+    expect(entry.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/puppy.png');
+    expect(entry.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(entry);
+    expect(screen.queryByRole('button', { name: '打开 Binggo Agent' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '关闭 Binggo Agent' })).toBeNull();
+    expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '演练：简单入口保留草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: docked ? '收起聊天' : '收起 Agent' }));
+    expect(screen.getByRole('button', { name: '打开 Binggo Agent' }).textContent).toBe('Binggo');
+    fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    expect(document.querySelector('.cr-assistant-capsule')).toBeNull();
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：简单入口保留草稿');
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[dismissible outcome card] follows the welcome, closes and reopens without changing drafts or mode', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '演练：成果卡策划草稿' } }); selectMode('model');
+    fireEvent.change(composer, { target: { value: '演练：成果卡物料草稿' } });
+    const card = screen.getByRole('region', { name: '成果建议' });
+    expect(within(card).getByText('想先处理哪一项？')).toBeTruthy();
+    expect(within(card).getAllByRole('button')).toHaveLength(3);
+    const welcome = screen.getByText('活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。');
+    expect(welcome.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    const close = within(card).getByRole('button', { name: '关闭成果建议' });
+    act(() => { close.focus(); }); fireEvent.click(close);
+    expect(screen.queryByRole('region', { name: '成果建议' })).toBeNull();
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：成果卡物料草稿');
+    const restore = screen.getByRole('button', { name: '查看建议' });
+    await waitFor(() => expect(document.activeElement).toBe(restore));
+    fireEvent.click(restore);
+    const restoredCard = screen.getByRole('region', { name: '成果建议' });
+    await waitFor(() => expect(document.activeElement).toBe(restoredCard));
+    fireEvent.click(within(restoredCard).getByRole('button', { name: '完善活动需求' }));
+    expect(screen.getByRole('textbox', { name: '客户需求' })).toBeTruthy();
+    expect(composer.value).toBe('演练：成果卡物料草稿');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    selectMode('plan'); expect(composer.value).toBe('演练：成果卡策划草稿');
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[closed assistant status] announces actual work and reopens the same confirmation through the external entry', async () => {
+    vi.stubGlobal('innerWidth', 390); connected();
+    let finish!: (run: AgentRun) => void;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const view = renderUI(<DockedTrial/>); await act(async () => {});
+    const assistant = view.container.querySelector('.cr-assistant') as HTMLElement;
+    expect(within(assistant).queryByRole('status')).toBeNull();
+    const entry = screen.getByRole('button', { name: '助手' }); fireEvent.click(entry);
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' });
+    fireEvent.change(composer, { target: { value: '演练：保留待确认椅子方案' } }); fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+    const status = within(assistant).getByRole('status');
+    expect(status.textContent).toBe('正在提交任务…'); expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status.classList.contains('sr-only')).toBe(true); expect(document.querySelector('.cr-docked-pending')).toBeNull();
+    await act(async () => { finish(runFrom(proposal)); });
+    expect(within(assistant).getByRole('status')).toBe(status); expect(status.textContent).toBe('有方案待确认');
+    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    fireEvent.click(entry);
+    const confirm = screen.getByRole('button', { name: '确认应用' });
+    expect(within(assistant).queryByRole('status')).toBeNull(); expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+    fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+    expect(within(assistant).getByRole('status').textContent).toBe('有方案待确认'); fireEvent.click(entry);
+    expect(within(assistant).queryByRole('status')).toBeNull(); expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
+    expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[assistant save error] restores project context after the alert without changing mode or input', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    const view = renderUI(<DockedTrial/>); await act(async () => {});
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    selectMode('model'); fireEvent.change(composer, { target: { value: '演练：保存失败仍保留输入' } });
+    const caption = document.querySelector('.cr-header-brand small')!;
+    const context = caption.textContent; expect(context).toContain('单件物料'); expect(context).toContain(layout.name);
+    expect(screen.queryByText('本机保存失败，请导出备份')).toBeNull();
+    view.rerender(<DockedTrial localSaveError/>); await act(async () => {});
+    expect(screen.getByRole('alert').textContent).toBe('本机保存失败，请导出备份');
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：保存失败仍保留输入');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    view.rerender(<DockedTrial localSaveError={false}/>); await act(async () => {});
+    expect(screen.queryByText('本机保存失败，请导出备份')).toBeNull(); expect(caption.textContent).toBe(context);
+    expect(composer.value).toBe('演练：保存失败仍保留输入'); expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
 });
 
@@ -510,8 +1084,13 @@ function render(element: React.ReactElement) {
 function selectMode(value:'plan'|'model'):void {
   fireEvent.change(screen.getByRole('combobox',{name:'工作模式'}),{target:{value}});
 }
+function selectBusiness(name:string):void {
+  const destinations:Record<string,string>={'活动需求':'brief','图纸与尺寸':'reference','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
+  if(!screen.queryByRole('combobox',{name:'资料分类'}))fireEvent.click(screen.getByRole('button',{name:'外部图纸核对'}));
+  fireEvent.change(screen.getByRole('combobox',{name:'资料分类'}),{target:{value:destinations[name]}});
+}
 function openExecution():void {
-  fireEvent.click(screen.getByRole('button',{name:'执行资料'}));
+  selectBusiness('执行资料');
 }
 
 function connected(): void {
@@ -548,6 +1127,8 @@ beforeEach(() => {
   vi.mocked(deleteSourceForm).mockReset().mockResolvedValue(undefined);
   vi.mocked(copySourceScope).mockReset().mockResolvedValue(undefined);
   vi.mocked(listStoredSources).mockReset().mockResolvedValue([]);
+  vi.mocked(readSourceScopeSnapshot).mockReset();
+  vi.mocked(restoreSourceScopeIfUnchanged).mockReset();
   vi.stubGlobal('fetch', forbiddenFetch);
   createBitmap.mockReset().mockImplementation(async () => ({ width: 1024, height: 768, close: vi.fn() }));
   createObjectURL.mockReset().mockReturnValue('blob:local-reference');
@@ -733,11 +1314,11 @@ describe('creative brief and assistant interaction', () => {
     renderUI(ui());
     fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'保留这条未发送的需求'}});
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     expect(screen.getAllByRole('button',{name:/载入工作台/})).toHaveLength(10);
     fireEvent.click(screen.getByRole('button',{name:'返回当前工作区'}));
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('保留这条未发送的需求');
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
     await waitFor(()=>expect(onApply).toHaveBeenCalledWith({...preset,id:layout.id,name:layout.name}));
     expect(loadScenePreset).toHaveBeenCalledWith('office');
@@ -752,7 +1333,7 @@ describe('creative brief and assistant interaction', () => {
     vi.spyOn(window,'confirm').mockReturnValue(true);
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Binggo Agent'}));selectMode('model');
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'仍在建模的未发送输入'}});
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
     expect(loadScenePreset).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button',{name:'返回当前工作区'}));
@@ -859,16 +1440,16 @@ describe('creative brief and assistant interaction', () => {
     expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('moves keyboard focus into the assistant and returns it on Escape', () => {
+  it('moves keyboard focus into the assistant and returns it on Escape', async () => {
     renderUI(ui());
     const launch = screen.getByRole('button', { name: '打开 Binggo Agent' });
-    expect(screen.getByRole('img',{name:'Binggo 小狗'}).getAttribute('src')).toBe('/assets/assistant/puppy.png');
     fireEvent.click(launch);
+    expect(screen.getByRole('region',{name:'Agent'}).querySelector<HTMLImageElement>('img[alt="Binggo 小狗"]')?.getAttribute('src')).toBe('/assets/assistant/puppy.png');
     const input = screen.getByRole('textbox', { name: '告诉助手你的想法' });
     expect(document.activeElement).toBe(input);
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(screen.queryByRole('region', { name: 'Agent' })).toBeNull();
-    expect(document.activeElement).toBe(launch);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: '打开 Binggo Agent' })));
   });
 
   it('explains the missing AI connection offline without fabricating a proposal or changing the scene', async () => {
@@ -885,6 +1466,8 @@ describe('creative brief and assistant interaction', () => {
   });
 
   it('shows local reference images, tells users they are not sent to the model, and releases their URLs', async () => {
+    vi.spyOn(sourceStorage, 'storeSource').mockResolvedValue(undefined);
+    vi.spyOn(sourceStorage, 'deleteSource').mockResolvedValue(undefined);
     const rendered = render(ui());
     const file = new File(['image fixture'], 'venue.png', { type: 'image/png' });
     upload(rendered.container, [file]);
@@ -895,12 +1478,58 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByText(/图片保存在本机；连接项目并生成时会上传至私有存储/)).toBeTruthy();
     expect(prepareProposal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
-    expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull());
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-reference');
     upload(rendered.container, [file]);
     await screen.findByRole('img', { name: '现场照片：venue.png' });
     rendered.unmount();
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+  });
+
+  it('persists the upload entry classification and restores it without reclassifying existing photos', async () => {
+    const storage = await import('@/lib/source-storage');
+    const stored = vi.spyOn(storage, 'storeSource').mockResolvedValue(undefined);
+    const cloudUpload = vi.spyOn(controller, 'uploadSource');
+    const current = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
+    const view = render(ui(current));
+    await screen.findByLabelText('上传核对平面图');
+    upload(view.container, [new File(['photo'], 'camera.png', { type: 'image/png' })]);
+    await screen.findByRole('img', { name: '现场照片：camera.png' });
+    fireEvent.change(screen.getByLabelText('上传核对平面图'), {
+      target: { files: [new File(['plan'], 'scan.png', { type: 'image/png' })] },
+    });
+    await screen.findByRole('img', { name: '平面图：scan.png' });
+    await waitFor(() => expect(stored).toHaveBeenCalledTimes(2));
+    expect(stored.mock.calls.map(([image]) => ({ name: image.name, kind: image.kind, scope: image.scope }))).toEqual([
+      { name: 'camera.png', kind: 'photo', scope: projectId }, { name: 'scan.png', kind: 'floorplan', scope: projectId },
+    ]);
+    expect((screen.getByRole('combobox', { name: 'camera.png 的资料类型' }) as HTMLSelectElement).value).toBe('photo');
+    expect((screen.getByRole('combobox', { name: 'scan.png 的资料类型' }) as HTMLSelectElement).value).toBe('floorplan');
+    const records = stored.mock.calls.map(([image]) => image);
+    view.unmount(); vi.mocked(listStoredSources).mockResolvedValue(records);
+    render(ui(current));
+    expect(await screen.findByRole('img', { name: '现场照片：camera.png' })).toBeTruthy();
+    expect(await screen.findByRole('img', { name: '平面图：scan.png' })).toBeTruthy();
+    expect(cloudUpload).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['photo', 'floorplan'] as const)('discards an in-flight %s upload after switching projects', async kind => {
+    const storage = await import('@/lib/source-storage');
+    const stored = vi.spyOn(storage, 'storeSource').mockResolvedValue(undefined), close = vi.fn();
+    let finish!: (bitmap: { width: number; height: number; close(): void }) => void;
+    createBitmap.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const current = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
+    const view = render(ui(current)), file = new File(['old project'], 'old-scan.png', { type: 'image/png' });
+    await screen.findByLabelText('上传核对平面图');
+    if (kind === 'photo') upload(view.container, [file]);
+    else fireEvent.change(screen.getByLabelText('上传核对平面图'), { target: { files: [file] } });
+    await waitFor(() => expect(createBitmap).toHaveBeenCalledOnce());
+    view.rerender(ui({ ...current, id: 'different-local-project' }));
+    await act(async () => finish({ width: 1024, height: 768, close }));
+    expect(close).toHaveBeenCalledOnce(); expect(stored).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByRole('img', { name: /old-scan/ })).toBeNull();
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1070,16 +1699,20 @@ describe('complete local backup transactions', () => {
   let actions: LocalProjectBackupActions;
   let changeLayout: (next: RoomLayout) => void;
   let forms: Map<string, unknown>;
+  let sourceRecords: Map<string, StoredSource[]>;
+  const sourceState = (scope = projectId): SourceScopeSnapshot => structuredClone({ scope, sources: sourceRecords.get(scope) ?? [], form: forms.get(scope) });
   const commit = vi.fn<(next: RoomLayout) => void>();
   const prepare = vi.fn<(next:RoomLayout)=>RoomLayout>();
   function Probe() { actions = useLocalProjectBackup()!; return <BriefStateProbe/>; }
   function ActivityProbe({current,onComplete}:{current:RoomLayout;onComplete:()=>void}) {
     return <LocalActivitiesPanel layout={current} actions={useLocalProjectBackup()!} onComplete={onComplete}/>;
   }
-  function Trial({activitiesCompleted}:{activitiesCompleted?:()=>void} = {}) {
+  function Trial({activitiesCompleted,review=false}:{activitiesCompleted?:()=>void;review?:boolean} = {}) {
     const [current, setCurrent] = useState(layout); changeLayout = setCurrent;
+    const [reviewRequest,setReviewRequest]=useState(0);
     return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} prepareRestoreLayout={prepare} commitRestoredLayout={next => { commit(next); setCurrent(next); }}>
       <CreativeBriefPanel/><Probe/><output data-testid="backup-layout">{JSON.stringify(current)}</output>
+      {review&&<><button onClick={()=>setReviewRequest(value=>value+1)}>打开生产方案评审</button><CreativeAssistant reviewOpenRequest={reviewRequest}/></>}
       {activitiesCompleted&&<ActivityProbe current={current} onComplete={activitiesCompleted}/>}
     </CreativeStudioProvider>;
   }
@@ -1096,11 +1729,27 @@ describe('complete local backup transactions', () => {
     {...layout,id:projectId,name:'点验文件布局'}, {state:'ready',scope:projectId,brief:{status:'present',value:fileBrief}},
     {state:'ready',scope:projectId,materialCheckins:value?{status:'present',value}:{status:'absent'}},
   ));
-  async function mount() { renderUI(<Trial/>); await waitFor(() => expect(briefState().ready).toBe(true)); }
+  async function mount() { const view = renderUI(<Trial/>); await waitFor(() => expect(briefState().ready).toBe(true)); return view; }
   beforeEach(() => {
     installBackupLocks(); commit.mockReset();prepare.mockReset().mockImplementation(next=>next);
     vi.mocked(listSourceRecords).mockResolvedValue([]);
     forms = new Map([[`${projectId}:brief`, oldBrief]]);
+    sourceRecords = new Map();
+    vi.mocked(listStoredSources).mockImplementation(async scope => structuredClone((sourceRecords.get(scope) ?? []).filter(source => source.blob)));
+    vi.mocked(readSourceScopeSnapshot).mockImplementation(async scope => sourceState(scope));
+    vi.mocked(restoreSourceScopeIfUnchanged).mockImplementation(async (scope, expected, desired, check = () => {}) => {
+      check();
+      if (!await sameSourceScopeSnapshot(sourceState(scope), expected)) throw new Error('图纸资料已有新变化，不能覆盖较新的记录。');
+      check(); sourceRecords.set(scope, structuredClone(desired.sources));
+      if (desired.form === undefined) forms.delete(scope); else forms.set(scope, structuredClone(desired.form));
+    });
+    vi.spyOn(sourceStorage, 'storeSource').mockImplementation(async source => {
+      const records = sourceRecords.get(source.scope) ?? [];
+      sourceRecords.set(source.scope, [...records.filter(record => record.id !== source.id), structuredClone(source)]);
+    });
+    vi.spyOn(sourceStorage, 'deleteSource').mockImplementation(async id => {
+      for (const [scope, records] of sourceRecords) sourceRecords.set(scope, records.filter(record => record.id !== id));
+    });
     vi.mocked(readSourceForm).mockImplementation(async key => forms.get(key));
     vi.mocked(storeSourceForm).mockImplementation(async (key, value) => { forms.set(key, value); });
     vi.mocked(deleteSourceForm).mockImplementation(async key => { forms.delete(key); });
@@ -1111,6 +1760,188 @@ describe('complete local backup transactions', () => {
     });
   });
   afterEach(() => { Reflect.deleteProperty(navigator, 'locks'); });
+
+  const imageFixture = (id = 'original-image', name = '原现场照片.png', kind: StoredSource['kind'] = 'photo'): StoredSource => {
+    const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/3ioAAAAASUVORK5CYII='), char => char.charCodeAt(0));
+    return { id, scope: projectId, name, kind, width: 1, height: 1, blob: new NodeBlob([bytes], { type: 'image/png' }) as Blob };
+  };
+  const oldDrawing = { width: '12', depth: '10', height: '3', text: '原图纸现场条件', constraints: [], adjustment: '' };
+  const newDrawing = { ...oldDrawing, width: '14', text: '文件图纸现场条件' };
+  async function sourceFile(id = 'file-image', options?: { form: unknown }) {
+    return parseLocalProjectBackupJson(await serializeLocalProjectBackupV4({ ...layout, name: '图纸文件布局', width: 14 },
+      { state: 'ready', scope: projectId, brief: { status: 'present', value: fileBrief } },
+      { state: 'ready', scope: projectId, materialCheckins: { status: 'absent' } },
+      { scope: projectId, sources: [imageFixture(id, '文件平面图.png', 'floorplan')], form: options ? options.form : newDrawing }));
+  }
+  function seedSources() {
+    vi.stubGlobal('Blob', NodeBlob);
+    // Node's real Blob produces native ArrayBuffers; align jsdom's constructor for the production byte comparator.
+    vi.stubGlobal('ArrayBuffer', NodeBuffer.alloc(0).buffer.constructor);
+    createBitmap.mockResolvedValue({ width: 1, height: 1, close: vi.fn() });
+    sourceRecords.set(projectId, [imageFixture()]); forms.set(projectId, structuredClone(oldDrawing));
+  }
+
+  const reviewAddress=()=>JSON.stringify(['project-review-library',JSON.stringify([controller.config.apiUrl,snapshot.user?.id??null,projectId])]);
+  const savedReview=()=>({version:1 as const,draft:{revision:'saved-review-a',summary:'已保存A说明',pending:'已保存A待确认',savedAt:'2026-10-09T00:00:00Z'},files:[]});
+  async function mountReview(){
+    renderUI(<Trial review/>);await waitFor(()=>expect(briefState().ready).toBe(true));
+    fireEvent.click(screen.getByRole('button',{name:'打开生产方案评审'}));
+    const entry=await screen.findByText('本机草稿与文件',{exact:true});fireEvent.click(entry);entry.closest('details')!.open=true;
+    await waitFor(()=>expect((screen.getByRole('button',{name:'保存说明草稿'}) as HTMLButtonElement).disabled).toBe(false));
+  }
+
+  it('[review restore lock] rejects late review edits while the real provider restores a new activity and still completes normal review preparation',async()=>{
+    const saved=savedReview();forms.set(reviewAddress(),saved);await mountReview();
+    fireEvent.click(screen.getByRole('button',{name:'生成评审包'}));await screen.findByTitle('客户评审预览');
+    fireEvent.change(screen.getByLabelText('简短方案说明（选填）'),{target:{value:'恢复前原本未保存的A说明'}});
+    await act(async()=>{await expect(actions.restoreBackup(file('review-original-dirty-b'))).rejects.toThrow('评审说明有未保存修改');});
+    expect(commit).not.toHaveBeenCalled();expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe('恢复前原本未保存的A说明');
+    fireEvent.click(screen.getByRole('button',{name:'放弃说明修改'}));
+    fireEvent.click(screen.getByRole('button',{name:'生成评审包'}));await screen.findByTitle('客户评审预览');
+    const target='review-restored-b';let release!:()=>void,writing=false;
+    const held=new Promise<void>(resolve=>{release=resolve;}),normal=vi.mocked(storeSourceForm).getMockImplementation()!;
+    vi.mocked(storeSourceForm).mockImplementation(async(key,value)=>{if(key===`${target}:brief`){writing=true;await held;}return normal(key,value);});
+    let pending!:Promise<void>;
+    await act(async()=>{pending=actions.restoreBackup(file(target));void pending.catch(()=>{});await Promise.resolve();});
+    await waitFor(()=>expect(writing).toBe(true));
+    const summary=screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
+    const pendingNote=screen.getByLabelText('待确认项（选填）') as HTMLTextAreaElement;
+    const disabledDuring=summary.matches(':disabled')&&pendingNote.matches(':disabled');
+    const publicInputs=['包含当前活动需求','包含当前设计说明','包含当前画面','允许在评审画面中包含当前参考底图'].map(name=>screen.getByLabelText(name,{exact:true}) as HTMLInputElement);
+    const disclosuresDisabled=publicInputs.every(input=>input.matches(':disabled'));
+    const discard=screen.queryByRole('button',{name:'放弃说明修改'}) as HTMLButtonElement|null;
+    const libraryDisabled=['保存说明草稿','载入已保存说明'].every(name=>(screen.getByRole('button',{name}) as HTMLButtonElement).disabled)&&(!discard||discard.disabled);
+    fireEvent.change(summary,{target:{value:'恢复期间不应接受的新说明'}});fireEvent.change(pendingNote,{target:{value:'恢复期间不应接受的新待确认'}});
+    fireEvent.click(publicInputs[0]!);const disclosureAccepted=publicInputs[0]!.checked;
+    const acceptedSummary=summary.value,acceptedPending=pendingNote.value;
+    const flushFailure=await flushSourceScope(projectId).then(()=>'',error=>error instanceof Error?error.message:String(error));
+    await act(async()=>{release();await pending;});
+    expect(disabledDuring).toBe(true);expect(disclosuresDisabled).toBe(true);expect(disclosureAccepted).toBe(false);expect(libraryDisabled).toBe(true);
+    expect(acceptedSummary).toBe('');expect(acceptedPending).toBe('');expect(flushFailure).not.toContain('评审说明有未保存修改');
+    expect(forms.get(reviewAddress())).toEqual(saved);
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(target);expect(commit).toHaveBeenCalledOnce();
+    expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('[review restore lock] ignores a saved-review load already awaiting its read when provider restoration locks review input',async()=>{
+    const saved=savedReview();forms.set(reviewAddress(),saved);await mountReview();
+    fireEvent.click(screen.getByLabelText('包含当前活动需求',{exact:true}));
+    const normalRead=vi.mocked(readSourceRecord).getMockImplementation()!,normalWrite=vi.mocked(storeSourceForm).getMockImplementation()!;
+    let finishRead!:(value:unknown)=>void,loadReading=false,release!:()=>void,writing=false;
+    const load=new Promise<unknown>(resolve=>{finishRead=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+    vi.mocked(readSourceRecord).mockImplementation(async key=>{if(JSON.stringify(key)===reviewAddress()){loadReading=true;return load;}return normalRead(key);});
+    fireEvent.click(screen.getByRole('button',{name:'载入已保存说明'}));await waitFor(()=>expect(loadReading).toBe(true));
+    const target='review-load-restored-b';
+    vi.mocked(storeSourceForm).mockImplementation(async(key,value)=>{if(key===`${target}:brief`){writing=true;await held;}return normalWrite(key,value);});
+    let pending!:Promise<void>;
+    await act(async()=>{pending=actions.restoreBackup(file(target));void pending.catch(()=>{});await Promise.resolve();});
+    await waitFor(()=>expect(writing).toBe(true));await act(async()=>{finishRead(saved);});
+    const loadedSummary=(screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value;
+    const disclosure=(screen.getByLabelText('包含当前活动需求',{exact:true}) as HTMLInputElement).checked;
+    await act(async()=>{release();await pending;});
+    expect(loadedSummary).toBe('');expect(disclosure).toBe(true);expect(forms.get(reviewAddress())).toEqual(saved);
+    expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(target);expect(commit).toHaveBeenCalledOnce();
+  });
+
+  it('[V4 sources] restores same-scope images and drawing form in the mounted editor and undo restores originals', async () => {
+    seedSources(); const before = sourceState(); await mount(); const candidate = await sourceFile();
+    await act(async () => { await actions.restoreBackup(candidate); });
+    await waitFor(() => expect(document.querySelector('img[alt="平面图：文件平面图.png"]')).not.toBeNull());
+    expect(document.querySelector('img[alt="现场照片：原现场照片.png"]')).toBeNull();
+    expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('14');
+    expect(forms.get(projectId)).toEqual(newDrawing); expect(sourceRecords.get(projectId)!.map(source => source.id)).toEqual(['file-image']);
+    expect(briefState().brief.description).toBe(fileBrief.description); expect(actions.canUndoRestore).toBe(true);
+    await act(async () => { await actions.undoRestore(); });
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    await waitFor(() => expect(document.querySelector('img[alt="现场照片：原现场照片.png"]')).not.toBeNull());
+    expect(document.querySelector('img[alt="平面图：文件平面图.png"]')).toBeNull();
+    expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12');
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief); expect(JSON.parse(screen.getByTestId('backup-layout').textContent!)).toEqual(layout);
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('[V4 sources] preserves existing source bytes and form when restoring an older V3 file', async () => {
+    seedSources(); const before = sourceState(); await mount();
+    await act(async () => { await actions.restoreBackup(checkinFile(undefined)); });
+    expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    await act(async () => { await actions.undoRestore(); });
+    expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+  });
+
+  it.each(['absent', 'registration only'] as const)('[V4 sources] keeps a restored %s form unchanged past autosave and allows undo', async kind => {
+    seedSources(); const before = sourceState(); await mount();
+    const form = kind === 'absent' ? undefined : { registration: { sourceId: 'file-image', points: [{ x: 0, z: 0 }] } };
+    const candidate = await sourceFile('file-image', { form });
+    await act(async () => { await actions.restoreBackup(candidate); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+    expect(forms.get(projectId)).toEqual(form);
+    await act(async () => { await actions.undoRestore(); });
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    expect(actions.canUndoRestore).toBe(false);
+  });
+
+  it('[V4 sources] compensates written image bytes and form after layout commit fails', async () => {
+    seedSources(); const before = sourceState(); await mount(); const candidate = await sourceFile();
+    commit.mockImplementationOnce(() => { throw new Error('图纸恢复布局提交拒绝'); });
+    await act(async () => { await expect(actions.restoreBackup(candidate)).rejects.toThrow('图纸恢复布局提交拒绝'); });
+    expect(restoreSourceScopeIfUnchanged).toHaveBeenCalledTimes(2);
+    expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief); expect(actions.canUndoRestore).toBe(false);
+    await waitFor(() => expect(document.querySelector('img[alt="现场照片：原现场照片.png"]')).not.toBeNull());
+    expect((screen.getByLabelText('总宽（米）') as HTMLInputElement).value).toBe('12');
+  });
+
+  it('[V4 sources] treats readback failure as a completed write requiring compensation', async () => {
+    seedSources(); const before = sourceState(); await mount(); const candidate = await sourceFile(); let failed = false;
+    vi.mocked(readSourceScopeSnapshot).mockImplementation(async scope => {
+      const saved = sourceState(scope);
+      if (!failed && saved.sources.some(source => source.id === 'file-image')) { failed = true; throw new Error('图片写入后的读回拒绝'); }
+      return saved;
+    });
+    await act(async () => { await expect(actions.restoreBackup(candidate)).rejects.toThrow('图片写入后的读回拒绝'); });
+    expect(failed).toBe(true); expect(restoreSourceScopeIfUnchanged).toHaveBeenCalledTimes(2);
+    expect(commit).not.toHaveBeenCalled(); expect(await sameSourceScopeSnapshot(sourceState(), before)).toBe(true);
+    expect(forms.get(`${projectId}:brief`)).toEqual(oldBrief); expect(actions.canUndoRestore).toBe(false);
+  });
+
+  it.each(['form', 'image'] as const)('[V4 sources] refuses undo over newer %s edits', async change => {
+    seedSources(); await mount(); const candidate = await sourceFile();
+    await act(async () => { await actions.restoreBackup(candidate); });
+    if (change === 'form') forms.set(projectId, { ...newDrawing, text: '恢复后新图纸说明' });
+    else sourceRecords.get(projectId)![0]!.blob = new NodeBlob(['newer image bytes'], { type: 'image/png' }) as Blob;
+    const edited = sourceState(), commits = commit.mock.calls.length;
+    await act(async () => { await expect(actions.undoRestore()).rejects.toThrow('已有新变化'); });
+    expect(await sameSourceScopeSnapshot(sourceState(), edited)).toBe(true); expect(commit).toHaveBeenCalledTimes(commits);
+    expect(forms.get(`${projectId}:brief`)).toEqual(fileBrief);
+  });
+
+  it('[V4 sources] refuses complete backup with a cloud-only source instead of emitting a partial package', async () => {
+    seedSources(); const { blob: _blob, ...reference } = imageFixture(); sourceRecords.set(projectId, [reference]); await mount();
+    let output: string | undefined;
+    await act(async () => { await expect(actions.prepareBackup({ includeSourceDocuments: true }).then(text => { output = text; })).rejects.toThrow('缺少本机原图'); });
+    expect(output).toBeUndefined(); expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    expect(sourceRecords.get(projectId)).toEqual([reference]); expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('[V4 sources] waits for queued cloud removal and keeps the subsequently restored image with the same local id', async () => {
+    seedSources(); sourceRecords.get(projectId)![0]!.assetId = '80000000-0000-4000-8000-000000000001';
+    let finish!: () => void;
+    const remove = vi.spyOn(controller, 'removeSource').mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await mount(); const candidate = await sourceFile('original-image');
+    fireEvent.click(screen.getByRole('button', { name: '移除 原现场照片.png', hidden: true }));
+    await waitFor(() => expect(remove).toHaveBeenCalledOnce());
+    let pending!: Promise<void>;
+    await act(async () => { pending = actions.restoreBackup(candidate); void pending.catch(() => {}); await Promise.resolve(); });
+    expect(commit).not.toHaveBeenCalled(); expect(restoreSourceScopeIfUnchanged).not.toHaveBeenCalled();
+    await act(async () => { finish(); await pending; });
+    await waitFor(() => expect(document.querySelector('img[alt="平面图：文件平面图.png"]')).not.toBeNull());
+    expect(sourceRecords.get(projectId)).toEqual([expect.objectContaining({ id: 'original-image', name: '文件平面图.png', kind: 'floorplan' })]);
+    await act(async () => { await flushSourceScope(projectId); });
+    expect(sourceRecords.get(projectId)!.map(source => source.name)).toEqual(['文件平面图.png']);
+    expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
 
   it('completes local-activity navigation after the real provider commits and changes its scope',async()=>{
     const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
@@ -1724,9 +2555,9 @@ describe('review workspace integration',()=>{
     const unregister=sources.registerSourceFlush(projectId,unrelated);
     try{
       const view=renderUI(<DockedTrial/>);await act(async()=>{});
-      fireEvent.click(screen.getByRole('button',{name:'活动需求'}));
+      selectBusiness('活动需求');
       fireEvent.change(screen.getByRole('textbox',{name:'客户需求'}),{target:{value:'评审专用活动需求：保留入口'}});
-      fireEvent.click(screen.getByRole('button',{name:'方案评审'}));
+      selectBusiness('方案评审');
       fireEvent.click(screen.getByRole('checkbox',{name:'包含当前活动需求'}));
       await waitFor(()=>expect((screen.getByRole('button',{name:'生成评审包'}) as HTMLButtonElement).disabled).toBe(false));
       fireEvent.click(screen.getByRole('button',{name:'生成评审包'}));
@@ -1742,7 +2573,7 @@ describe('review workspace integration',()=>{
   it('keeps the existing model draft while entering and leaving review',async()=>{
     renderUI(<DockedTrial/>);await act(async()=>{});selectMode('model');
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'一把椅子的未发送需求'}});
-    fireEvent.click(screen.getByRole('button',{name:'方案评审'}));
+    selectBusiness('方案评审');
     expect(screen.getByRole('region',{name:'客户评审包'})).toBeTruthy();
     expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
     fireEvent.click(screen.getByRole('button',{name:'返回素材'}));
@@ -1843,7 +2674,7 @@ describe('unified Agent', () => {
     const confirm=screen.getByRole('button',{name:'确认应用'});
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     const reopen=screen.getByRole('button',{name:'展开聊天'});
     expect(reopen.getAttribute('aria-describedby')).toBe('creative-conversation-status');
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('有方案待确认');
@@ -1954,8 +2785,9 @@ describe('unified Agent', () => {
     expect(screen.getByRole('textbox',{name:'告诉助手你的想法'})).toBe(input);
     expect(screen.queryByRole('button',{name:'展开聊天'})).toBeNull();
     expect(input.value).toBe('尚未发送的建模草稿');
+    input.focus();
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
-    fireEvent.click(screen.getByRole('button',{name:'展开聊天'}));
+    expect(screen.getByRole('button',{name:'收起聊天'}).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('textbox',{name:'告诉助手你的想法'})).toBe(input);
     expect(input.value).toBe('尚未发送的建模草稿');expect(document.activeElement).toBe(input);
     selectMode('plan');
@@ -2009,6 +2841,124 @@ describe('unified Agent', () => {
   });
 });
 
+describe('retained Agent partial results', () => {
+  const partialNotice = '后续处理中断，已保留通过检查的方案，请核对后继续。';
+  const providerMessage = '演练供应方内部正文，不应显示给操作者。';
+  const providerProgress = '演练供应方内部进度，不应作为终态提示。';
+  function partialRun(value = proposal, input?: AgentRunInput): AgentRun {
+    return { ...runFrom(value, input), executionMode: 'preview', errorCode: 'DATABASE_ERROR', message: providerMessage, progress: providerProgress };
+  }
+  function send(instruction = '演练：先核对椅子方案'): void {
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: instruction } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+  }
+  function expectSafeText(container: HTMLElement): void {
+    expect(container.textContent).not.toContain('DATABASE_ERROR');
+    expect(container.textContent).not.toContain(providerMessage); expect(container.textContent).not.toContain(providerProgress);
+  }
+
+  it.each(['preview', 'unchanged', 'direct'] as const)('[retained partial POST] keeps the valid %s result and shows a safe interruption notice', async mode => {
+    connected();
+    const value = mode === 'unchanged' ? { ...proposal, candidate: scene, explanation: '已核对当前场景，本次不调整物件。' } : proposal;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input => ({ ...partialRun(value, input), executionMode: mode === 'direct' ? 'direct' : 'preview' }));
+    function AppliedWorkspace() {
+      const [current, setCurrent] = useState(layout);
+      return <CreativeStudioProvider controller={controller} layout={current} onApply={next => { onApply(next); setCurrent(next); }} onPreview={onPreview}><CreativeAssistant/></CreativeStudioProvider>;
+    }
+    const view = renderUI(mode === 'direct' ? <AppliedWorkspace/> : ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    send();
+    if (mode === 'preview') {
+      await screen.findByText('方案提案 · 尚未应用');
+      expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy();
+      expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
+      expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    } else if (mode === 'unchanged') {
+      await screen.findByText(value.explanation);
+      expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull(); expect(controller.authorizeAssets).not.toHaveBeenCalled();
+      expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+      expect(controller.applySceneProposal).toHaveBeenCalledOnce();
+      expect(controller.applySceneProposal).toHaveBeenCalledWith(value, layoutToBackendScene(layout));
+      expect(layoutToBackendScene(onApply.mock.calls[0]![0])).toEqual(candidate);
+      expect(screen.getByText(/提案已应用/)).toBeTruthy(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    }
+    expect((await screen.findByText(partialNotice)).getAttribute('role')).toBe('status');
+    expect(controller.startAgentRun).toHaveBeenCalledOnce(); expectSafeText(view.container);
+  });
+
+  it.each(['requestId', 'runId'] as const)('[retained partial GET] reads the original %s without another paid dispatch', async route => {
+    connected();
+    let requestId = '70000000-0000-4000-8000-000000000001';
+    const runId = partialRun().id;
+    let view: ReturnType<typeof renderUI>;
+    if (route === 'requestId') {
+      vi.mocked(controller.startAgentRun).mockRejectedValueOnce(new TypeError('演练：首次提交结果未知'));
+      view = renderUI(ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' })); send();
+      const recover = await screen.findByRole('button', { name: '查询原任务' });
+      requestId = vi.mocked(controller.startAgentRun).mock.calls[0]![0].requestId;
+      vi.mocked(controller.getAgentRunByRequest).mockResolvedValueOnce({ ...partialRun(), requestId }); fireEvent.click(recover);
+    } else {
+      localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`, JSON.stringify({ requestId, runId, projectId, baseKey: canonical(scene), briefKey: JSON.stringify({ brief: INITIAL_BRIEF, images: [] }) }));
+      let finish!: (run: AgentRun) => void;
+      vi.mocked(controller.getAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      vi.stubGlobal('innerWidth', 390); view = renderUI(<DockedTrial/>);
+      await waitFor(() => expect(controller.getAgentRun).toHaveBeenCalledWith(runId));
+      fireEvent.click(screen.getByRole('button', { name: '资料' })); fireEvent.click(screen.getByRole('button', { name: '素材' }));
+      await act(async () => { finish({ ...partialRun(), requestId }); });
+      fireEvent.click(screen.getByRole('button', { name: '助手' }));
+    }
+    await screen.findByText('方案提案 · 尚未应用'); expect((await screen.findByText(partialNotice)).getAttribute('role')).toBe('status');
+    expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy(); expect(onApply).not.toHaveBeenCalled();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(controller.startAgentRun).toHaveBeenCalledTimes(route === 'requestId' ? 1 : 0);
+    if (route === 'requestId') {
+      expect(controller.getAgentRunByRequest).toHaveBeenCalledOnce(); expect(controller.getAgentRunByRequest).toHaveBeenCalledWith(requestId);
+      expect(controller.getAgentRun).not.toHaveBeenCalled();
+    } else {
+      expect(controller.getAgentRun).toHaveBeenCalledOnce(); expect(controller.getAgentRun).toHaveBeenCalledWith(runId);
+      expect(controller.getAgentRunByRequest).not.toHaveBeenCalled();
+    }
+    const marker = JSON.parse(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`)!);
+    expect(marker.requestId).toBe(requestId); expect(marker.runId).toBe(runId);
+    expect(screen.queryByRole('button', { name: '查询原任务' })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '演练：核对后继续的新输入' } });
+    expect(screen.getByRole('button', { name: '发送消息' }).hasAttribute('disabled')).toBe(false); expectSafeText(view.container);
+  });
+
+  it.each(['activity', 'lease', 'expired', 'scene', 'brief'] as const)('[retained partial invalid] never claims retained checked work after %s invalidates the late response', async change => {
+    connected();
+    let finish!: (run: AgentRun) => void;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const view = renderUI(ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' })); send();
+    await waitFor(() => expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    const original = vi.mocked(controller.startAgentRun).mock.calls[0]![0];
+    if (change === 'activity') view.rerender(ui({ ...layout, id: '10000000-0000-4000-8000-000000000002', name: '演练活动B' }));
+    if (change === 'lease') {
+      snapshot = { ...snapshot, sessionId: '40000000-0000-4000-8000-000000000002', lease: { ...snapshot.lease!, generation: 2 } }; view.rerender(ui());
+    }
+    if (change === 'scene') view.rerender(ui({ ...layout, width: 13 }));
+    if (change === 'brief') fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '演练：改为新的参与目标。' } });
+    const value = change === 'expired' ? { ...proposal, expires_at: '2000-01-01T00:00:00Z' } : proposal;
+    await act(async () => { finish(partialRun(value, original)); });
+    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(onApply).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expectSafeText(view.container);
+  });
+
+  it('[retained partial source wait] announces no retained result before asset checks finish or after its brief changes', async () => {
+    connected();
+    let finishAssets!: (assets: Awaited<ReturnType<BackendSession['authorizeAssets']>>) => void;
+    vi.mocked(controller.authorizeAssets).mockImplementationOnce(() => new Promise(resolve => { finishAssets = resolve; }));
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input => partialRun(proposal, input));
+    const view = renderUI(ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' })); send();
+    await waitFor(() => expect(controller.authorizeAssets).toHaveBeenCalledOnce());
+    expect(screen.queryByText(partialNotice)).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '演练：等待资源核对期间修改需求。' } });
+    await act(async () => { finishAssets({ assetUrls: {}, assetNames: {} }); });
+    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(onApply).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expectSafeText(view.container);
+  });
+});
+
 describe('bounded Agent runs and JEV decisions',()=>{
   const send=()=>{fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'直接把交流区布置好'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));};
   function comparison():AgentRun {
@@ -2028,7 +2978,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('有方案待确认');
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     expect(screen.queryByRole('button',{name:/方案 B.*布局2.*50\.0/})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'展开聊天'}));
     expect(screen.getByRole('button',{name:/方案 B.*布局2.*50\.0/})).toBe(second);
@@ -2048,9 +2998,11 @@ describe('bounded Agent runs and JEV decisions',()=>{
     expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();
   });
   it('retains partial candidates when evaluation is unavailable without inventing probabilities',async()=>{
-    connected();const run=comparison();vi.mocked(controller.startAgentRun).mockResolvedValueOnce({...run,candidates:run.candidates.slice(0,2),evaluation:{status:'partial',message:'只有两个有效方案，未执行三选评价。'}});render(ui());send();
+    connected();const run=comparison();vi.mocked(controller.startAgentRun).mockResolvedValueOnce({...run,errorCode:'DATABASE_ERROR',candidates:run.candidates.slice(0,2),evaluation:{status:'partial',message:'只有两个有效方案，未执行三选评价。'}});render(ui());send();
     await screen.findByText('只有两个有效方案，未执行三选评价。');
     expect(screen.getAllByRole('button',{name:/方案 [AB] ·/})).toHaveLength(2);
+    expect(screen.getAllByText('只有两个有效方案，未执行三选评价。')).toHaveLength(1);
+    expect(screen.queryByText('后续处理中断，已保留通过检查的方案，请核对后继续。')).toBeNull();
     expect(screen.queryByText(/模型推荐概率/)).toBeNull();expect(onApply).not.toHaveBeenCalled();
   });
   it('recovers an uncertain dispatch by the original request ID without posting again',async()=>{
@@ -2059,7 +3011,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     const original=vi.mocked(controller.startAgentRun).mock.calls[0]![0];
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     const reopen=screen.getByRole('button',{name:'展开聊天'});
     expect(reopen.getAttribute('aria-describedby')).toBe('creative-conversation-status');
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('原任务结果待核对');
@@ -2079,7 +3031,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('正在查找物料');
-    fireEvent.click(screen.getByRole('button',{name:'场景模板'}));
+    selectBusiness('场景模板');
     expect(screen.queryByRole('button',{name:'取消任务'})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'展开聊天'}));
     expect(document.querySelector('.cr-chat-feed')?.textContent).toContain('正在查找物料');
@@ -2104,6 +3056,7 @@ it('honors the server preview decision even when direct application is selected'
   fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'有没有更好的布局'}});
   fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
   await screen.findByText('方案提案 · 尚未应用');
+  expect(screen.queryByText('后续处理中断，已保留通过检查的方案，请核对后继续。')).toBeNull();
   expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
 });
 

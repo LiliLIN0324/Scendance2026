@@ -3,9 +3,11 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { canonical, sha256 } from "../../supabase/functions/_shared/domain";
 import { backendSceneToLayout } from "../components/room-organizer/lib/backend-adapter";
 import { BackendSession, getBackendConfig, useBackendSession, type Scene } from "./backend-session";
 import { geometryWorkbenchBindingKey, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
+import type { ActivityTaskContext, ActivityTaskRun } from "../../supabase/functions/_shared/activity-task-contract";
 
 const bindingStore = vi.hoisted(() => ({
   values: new Map<string, unknown>(),
@@ -53,6 +55,79 @@ async function editing() {
   await controller.acquireLease(projectId);
   return controller;
 }
+
+describe('typed activity task session transport', () => {
+  const requestId = '70000000-0000-4000-8000-000000000001', runId = '70000000-0000-4000-8000-000000000002';
+  const context: ActivityTaskContext = { projectId, dataKind: 'rehearsal', briefText: 'Explicit task transport rehearsal', tasks: [], objects: [] };
+  async function run(state: ActivityTaskRun['state'] = 'complete'): Promise<ActivityTaskRun> {
+    return { kind: 'activity_tasks', id: runId, projectId, requestId, activityId: context.projectId,
+      contextHash: await sha256(canonical(context)), state, progress: 'rehearsal', callCount: 1,
+      activityResult: state === 'complete' ? { suggestions: [{ title: 'Rehearsal handover', phase: 'teardown', acceptance: 'Review the handover list', objectIds: [] }] } : null,
+      expiresAt: new Date(Date.now() + 90_000).toISOString() };
+  }
+  it('sends only the typed disclosure with the current lease and does not upload or change a scene', async () => {
+    const controller = await editing(), before = controller.getSnapshot();
+    queue(await run());
+    expect((await controller.startActivityTaskRun({ requestId, instruction: 'Prepare tasks', activityContext: context })).kind).toBe('activity_tasks');
+    const sent = request(3);
+    expect(sent.body).toEqual({ kind: 'activity_tasks', requestId, instruction: 'Prepare tasks', activityContext: context,
+      sessionId: before.sessionId, generation: 3, expectedRevision: 4 });
+    expect(controller.getSnapshot()).toBe(before);
+    expect(sent.options.method).toBe('POST');
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+  it('refuses a different local activity without creating a service project', async () => {
+    const controller = await editing();
+    await expect(controller.startActivityTaskRun({ requestId, instruction: 'Prepare tasks', activityContext: { ...context, projectId: 'another-local-activity' } }))
+      .rejects.toMatchObject({ code: 'ACTIVITY_SERVICE_REQUIRED' });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+  it('refuses an expired lease before POST', async () => {
+    const controller = await editing();
+    vi.setSystemTime(Date.now() + 91_000);
+    await expect(controller.startActivityTaskRun({ requestId, instruction: 'Prepare tasks', activityContext: context })).rejects.toBeTruthy();
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+  it('keeps an uncertain dispatch recoverable through one GET, with no automatic POST retry', async () => {
+    const controller = await editing();
+    mockFetch.mockRejectedValueOnce(new TypeError('explicit task dispatch network failure'));
+    await expect(controller.startActivityTaskRun({ requestId, instruction: 'Prepare tasks', activityContext: context })).rejects.toBeTruthy();
+    expect(controller.getSnapshot().writeBlocked).toBe(false);
+    queue(await run());
+    expect((await controller.getActivityTaskRunByRequest(requestId)).id).toBe(runId);
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(request(4).options.method).toBe('GET');
+    expect(request(4).url).toContain(`/projects/${projectId}/agent-runs/by-request/${requestId}`);
+  });
+  it('permits reading the original run after lease expiry and enforces the cancellation DTO', async () => {
+    const controller = await editing();
+    vi.setSystemTime(Date.now() + 91_000);
+    queue(await run());
+    expect((await controller.getActivityTaskRun(runId)).state).toBe('complete');
+    queue(await run('cancelled'));
+    expect((await controller.cancelActivityTaskRun(runId)).state).toBe('cancelled');
+    expect(request(4).url).toContain(`/agent-runs/${runId}/cancel`);
+  });
+  it('invalidates an in-flight task result across project A to B to A', async () => {
+    const controller = await editing(), result = await run();
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const sent = new Promise<void>(resolve => { started = resolve; });
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { release = resolve; started(); }));
+    const pending = controller.startActivityTaskRun({ requestId, instruction: 'Prepare tasks', activityContext: context }).catch(error => error);
+    await sent;
+    queue({}); await controller.releaseLease();
+    queue({ ...project, id: '10000000-0000-4000-8000-000000000099' });
+    await controller.getProject('10000000-0000-4000-8000-000000000099');
+    queue(project); await controller.getProject(projectId);
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 3, expiresAt: new Date(Date.now() + 90_000).toISOString(), revision: 4, scene });
+    await controller.acquireLease(projectId);
+    release(response(result));
+    expect(await pending).toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(controller.getSnapshot().project?.id).toBe(projectId);
+    expect(controller.getSnapshot().writeBlocked).toBe(false);
+  });
+});
 
 beforeEach(() => {
   const local = browserStorage(), tab = browserStorage();

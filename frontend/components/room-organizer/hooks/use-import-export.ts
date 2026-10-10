@@ -46,14 +46,19 @@ export function useImportExport({
   const handleScreenshot = useCallback(() => {
     const canvas = view2D ? canvas2DRef.current : canvasRef.current;
     if (!canvas) return;
-    // The renderer runs without preserveDrawingBuffer, so render a fresh
-    // frame synchronously — the buffer is valid within the same task.
-    if (!view2D && rendererRef.current && sceneRef.current && cameraRef.current) {
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
+    const failed = () => { notify('画面导出失败，请稍后重试。', 'error'); };
+    try {
+      // The renderer runs without preserveDrawingBuffer, so render a fresh
+      // frame synchronously — the buffer is valid within the same task.
+      if (!view2D && rendererRef.current && sceneRef.current && cameraRef.current) {
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      }
+      void downloadCanvasAsPng(canvas, layout.name || 'room-layout').then((ok) => {
+        if (!ok) failed();
+      }, failed);
+    } catch {
+      failed();
     }
-    void downloadCanvasAsPng(canvas, layout.name || 'room-layout').then((ok) => {
-      if (!ok) notify('Could not export the screenshot — the image failed to encode.', 'error');
-    });
   }, [view2D, layout.name, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef]);
 
   const handleExportGlb = useCallback(async () => {

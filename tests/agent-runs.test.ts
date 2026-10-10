@@ -11,12 +11,15 @@ const env=(key:string)=>({DEEPSEEK_API_KEY:'fixture',TOKENDANCE_API_KEY:'fixture
 const plan=(x=2)=>({title:`布局 ${x}`,explanation:'已规划桌子，待程序应用。',commands:[{op:'add',materialId:'table',position:{x,z:3},rotation:0,color:'#ffffff'}]});
 const tool=(name:string,args:unknown,id:string=crypto.randomUUID())=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
 const completion=(calls:ReturnType<typeof tool>[])=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:calls}}],usage:{total_tokens:10}}));
+const scopedObjectA='40000000-0000-4000-8000-000000000001',scopedObjectB='40000000-0000-4000-8000-000000000002';
+const scopedScene=()=>{const value=scene();return {...value,objects:[{...chair(),id:scopedObjectA,position:{x:2,z:2}},{...chair(),id:scopedObjectB,position:{x:8,z:8}}]};};
 
 describe('durable bounded DeepSeek Agent',()=>{
  let f:Awaited<ReturnType<typeof database>>;
  beforeAll(async()=>{f=await database();},30000);afterAll(async()=>{await f.db.close();});
  async function input(extra:Record<string,unknown>={}) {const base=scene(),p=await f.rpc(owner,'projects.create',{studioId:studio,name:'Agent test',scene:base});const lease=await f.rpc(owner,'lease.acquire',{projectId:p.id,sessionId:session});return {projectId:p.id,...agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:lease.generation,expectedRevision:0,localRevision:0,scene:base,selectedIds:[],instruction:'直接添加桌子',executionMode:'direct',...extra})};}
  function send(api:ReturnType<typeof createApi>,i:Awaited<ReturnType<typeof input>>) {const {projectId,...body}=i;return api(new Request(`https://api.test/projects/${projectId}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(body)}));}
+ function byRequest(api:ReturnType<typeof createApi>,i:Awaited<ReturnType<typeof input>>) {return api(new Request(`https://api.test/projects/${i.projectId}/agent-runs/by-request/${i.requestId}`,{method:'GET',headers:{authorization:`Bearer ${owner}`}}));}
  it('runs read tool then submit, stores original draft, replays without calling again, applies one undo group',async()=>{
   const i=await input(),fetcher=vi.fn(async()=>fetcher.mock.calls.length===1?completion([tool('get_scene',{})]):completion([tool('submit_candidates',{candidates:[plan()]})]));
   const api=createApi(f.backend,env,fetcher),res=await send(api,i);expect(res.status).toBe(202);const run=agentRunSchema.parse(await res.json());expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'direct'});expect(run.candidates).toHaveLength(1);
@@ -84,9 +87,35 @@ describe('durable bounded DeepSeek Agent',()=>{
   const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.candidates).toHaveLength(1);expect(run.evaluation).toBeNull();expect(fetcher).toHaveBeenCalledTimes(2);
  });
  it('supports a server feature flag back to the prior proposal flow without re-enabling HY3',async()=>{
-  const i=await input({jevEnabled:true});const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'兼容方案',commands:plan().commands})}}],usage:{total_tokens:10}})));
-  const run=agentRunSchema.parse(await (await send(createApi(f.backend,key=>key==='DEEPSEEK_AGENT_MODE'?'legacy':env(key),fetcher),i)).json());expect(run.state).toBe('complete');expect(run.executionMode).toBe('preview');expect(run.candidates).toHaveLength(1);expect(run.evaluation?.status).toBe('partial');expect(fetcher).toHaveBeenCalledOnce();
- });
+   const i=await input({jevEnabled:true});const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'兼容方案',commands:plan().commands})}}],usage:{total_tokens:10}})));
+   const run=agentRunSchema.parse(await (await send(createApi(f.backend,key=>key==='DEEPSEEK_AGENT_MODE'?'legacy':env(key),fetcher),i)).json());expect(run.state).toBe('complete');expect(run.executionMode).toBe('preview');expect(run.candidates).toHaveLength(1);expect(run.evaluation?.status).toBe('partial');expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it('legacy handler rejects a command for an unselected existing object without writing, and replays the terminal result',async()=>{
+   const i=await input({scene:scopedScene(),selectedIds:[scopedObjectA],instruction:'只移动选中的椅子',executionMode:'direct'});
+   const payload={explanation:'移动未选中的物件',commands:[{op:'move',id:scopedObjectB,position:{x:7,z:7}}],modelSuggestions:[],materialSuggestions:[]};
+   const bodies:{messages:{role:string;content:string}[]}[]=[],response=()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(payload)}}],usage:{total_tokens:10}}));
+   const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{bodies.push(JSON.parse(init?.body as string));return response();});
+   const api=createApi(f.backend,key=>key==='DEEPSEEK_AGENT_MODE'?'legacy':env(key),fetcher),before=(await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene;
+   const run=agentRunSchema.parse(await (await send(api,i)).json());
+   expect(run).toMatchObject({state:'failed',candidates:[],errorCode:'AI_INVALID_PROPOSAL',executionMode:'preview'});
+   expect(fetcher).toHaveBeenCalledTimes(2);expect(JSON.parse(bodies[1].messages.at(-1)!.content).repair).toMatchObject({code:'INVALID_SELECTION'});expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(before);
+   const proposals=await f.db.query<{count:number}>('select count(*)::integer as count from scene_private.agent_proposals where run_id=$1',[run.id]);expect(proposals.rows[0].count).toBe(0);
+   const replay=agentRunSchema.parse(await (await send(api,i)).json()),recovered=agentRunSchema.parse(await (await byRequest(api,i)).json());
+   expect(replay).toEqual(run);expect(recovered).toEqual(run);expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it('ordinary handler repairs an unselected-object rejection once, then moves only the selected object',async()=>{
+   const i=await input({scene:scopedScene(),selectedIds:[scopedObjectA],instruction:'只移动选中的椅子',executionMode:'preview'});
+   const cloudBefore=(await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene;
+   const invalid={title:'越选修复前',explanation:'先误选了未选中物件',commands:[{op:'move',id:scopedObjectB,position:{x:7,z:7}}]};
+   const valid={title:'选中物件已修复',explanation:'只移动选中的物件',commands:[{op:'move',id:scopedObjectA,position:{x:4,z:4}}]};
+   const fetcher=vi.fn(async()=>fetcher.mock.calls.length===1?completion([tool('submit_candidates',{candidates:[invalid]})]):completion([tool('submit_candidates',{candidates:[valid]})]));
+   const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+   expect(run).toMatchObject({state:'complete',callCount:2});expect(run.candidates).toHaveLength(1);expect(fetcher).toHaveBeenCalledTimes(2);
+   const objects=run.candidates[0].proposal.candidate.objects;
+   expect(objects.find(object=>object.id===scopedObjectA)?.position).toEqual({x:4,z:4});
+   expect(objects.find(object=>object.id===scopedObjectB)?.position).toEqual({x:8,z:8});
+   expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(cloudBefore);
+  });
  it('stops after 6 calls and replays a terminal failed request without rerunning',async()=>{
   const i=await input(),fetcher=vi.fn(async()=>completion([tool('validate_candidate',plan())]));const api=createApi(f.backend,env,fetcher);
   const run=agentRunSchema.parse(await (await send(api,i)).json());expect(run).toMatchObject({state:'failed',callCount:6,errorCode:'AGENT_NO_VALID_CANDIDATE',candidates:[]});await send(api,i);expect(fetcher).toHaveBeenCalledTimes(6);
@@ -176,23 +205,44 @@ describe('durable bounded DeepSeek Agent',()=>{
   expect(agentRpc.mock.calls.filter(([,action])=>action==='checkpoint')).toHaveLength(2);
   expect(receipts).toHaveLength(2);expect(receipts[1].content).toBe(receipts[0].content);
  });
- it.each(['before-commit','after-commit'])('does not report an unconfirmed checkpoint as ready when its response fails %s',async failure=>{
-  const i=await input(),submit=tool('submit_candidates',{candidates:[plan()]},'submission/unknown');let checkpointCalls=0;
-  const agentRpc=vi.fn(async(actor,action,data)=>{
-   if(action==='checkpoint'&&++checkpointCalls===1){
-    if(failure==='after-commit')await f.backend.agent!(actor,action,data);
+  it.each(['before-commit','after-commit'])('retains only a checkpoint-safe result when its response fails %s',async failure=>{
+   const i=await input(),submit=tool('submit_candidates',{candidates:[plan()]},'submission/unknown');let checkpointCalls=0;
+   const agentRpc=vi.fn(async(actor,action,data)=>{
+    if(action==='checkpoint'&&++checkpointCalls===1){
+     if(failure==='after-commit')await f.backend.agent!(actor,action,data);
     throw new ApiError('DATABASE_ERROR',500);
    }
-   return f.backend.agent!(actor,action,data);
+    return f.backend.agent!(actor,action,data);
+   });
+   const fetcher=vi.fn(async()=>completion([submit])),api=createApi({...f.backend,agent:agentRpc},env,fetcher);
+   const run=agentRunSchema.parse(await (await send(api,i)).json());
+   expect(run).toMatchObject({state:failure==='before-commit'?'failed':'complete',errorCode:'DATABASE_ERROR',callCount:1});
+   expect(run.candidates).toHaveLength(failure==='before-commit'?0:1);expect(run.progress).toContain('中断');
+   expect(checkpointCalls).toBe(1);expect(agentRpc.mock.calls.some(([,action])=>action==='finish')).toBe(false);
+   expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
+   expect(fetcher).toHaveBeenCalledOnce();
+   const recovered=agentRunSchema.parse(await (await byRequest(api,i)).json());
+   expect(recovered).toEqual(run);expect(fetcher).toHaveBeenCalledOnce();
+   const replay=agentRunSchema.parse(await (await send(api,i)).json());
+   expect(replay).toEqual(run);expect(fetcher).toHaveBeenCalledOnce();
   });
-  const fetcher=vi.fn(async()=>completion([submit])),api=createApi({...f.backend,agent:agentRpc},env,fetcher);
-  const run=agentRunSchema.parse(await (await send(api,i)).json());
-  expect(run).toMatchObject({state:failure==='before-commit'?'failed':'complete',errorCode:'DATABASE_ERROR',callCount:6});
-  expect(run.candidates).toHaveLength(failure==='before-commit'?0:1);expect(run.progress).not.toBe('方案已准备好');
-  expect(checkpointCalls).toBe(1);expect(agentRpc.mock.calls.some(([,action])=>action==='finish')).toBe(false);
-  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
-  await send(api,i);expect(fetcher).toHaveBeenCalledTimes(6);
- });
+  it.each(['before-commit','after-commit'])('does not execute a trailing side-effect tool after a failed checkpoint %s',async failure=>{
+   const i=await input(),before=(await f.rpc(owner,'assets.list')).length;
+   const submit=tool('submit_candidates',{candidates:[plan()]},'submission/trailing'),create=tool('create_parametric_model',{parameters:{family:'table',width:1,depth:1,height:1}},'model/trailing/1');let checkpointCalls=0;
+   const agentRpc=vi.fn(async(actor,action,data)=>{
+    if(action==='checkpoint'&&++checkpointCalls===1){
+     if(failure==='after-commit')await f.backend.agent!(actor,action,data);
+     throw new ApiError('DATABASE_ERROR',500);
+    }
+    return f.backend.agent!(actor,action,data);
+   });
+   const fetcher=vi.fn(async()=>completion([submit,create])),api=createApi({...f.backend,agent:agentRpc},env,fetcher);
+   const run=agentRunSchema.parse(await (await send(api,i)).json());
+   expect(run).toMatchObject({state:failure==='before-commit'?'failed':'complete',errorCode:'DATABASE_ERROR',callCount:1});
+   expect(run.candidates).toHaveLength(failure==='before-commit'?0:1);expect(checkpointCalls).toBe(1);
+   expect(fetcher).toHaveBeenCalledOnce();expect(agentRpc.mock.calls.some(([,action])=>action==='finish')).toBe(false);
+   expect((await f.rpc(owner,'assets.list')).length).toBe(before);
+  });
  it('does not repeat a tool whose asset was committed before its response was lost',async()=>{
   const i=await input(),before=(await f.rpc(owner,'assets.list')).length,id='model/unknown/1';
   const sceneRpc=vi.fn(async(actor,action,data)=>{const result=await f.backend.scene(actor,action,data);if(action==='parametric.complete')throw new Error('fixture response lost');return result;});
@@ -245,6 +295,35 @@ describe('durable bounded DeepSeek Agent',()=>{
  it('retirement rejects every new HY3 input before assets or provider calls',async()=>{
   expect(generationCapabilities(env)).toMatchObject({textToModel:false,imageToModel:false,texture:false});
   for(const kind of ['text','image','texture'])await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'x',kind},env)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
+ });
+ it('groups one asset UUID casing alias once, keeps real names, and separates color, size and different assets',async()=>{
+  const assetA='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',assetB='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  await f.rpc(owner,'assets.register',{id:assetA,name:'真实物料A',source:'upload',format:'glb',byteSize:100,sha256:'a'.repeat(64),storagePath:'asset-a.glb',license:{},metadata:{}});
+  await f.rpc(owner,'assets.register',{id:assetB,name:'真实物料B',source:'upload',format:'glb',byteSize:100,sha256:'b'.repeat(64),storagePath:'asset-b.glb',license:{},metadata:{}});
+  const baseSize=chair().size;
+  const object=(assetId:string,color:string,size=baseSize)=>({...chair(),materialId:'asset' as const,assetId,color,size});
+  const alias=object(assetA.toUpperCase(),'#ffffff');
+  const draft={...scene(),objects:[object(assetA,'#ffffff'),alias,object(assetA,'#ff0000'),object(assetA,'#ffffff',{...baseSize,width:1}),object(assetB,'#ffffff')]};
+  const original=structuredClone(draft),i=await input({scene:draft,instruction:'仅统计当前草稿物料，不修改场景',executionMode:'preview'});
+  const cloudBefore=(await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene;
+  let bom:{items:{name:string;quantity:number;color:string;size:unknown}[];pricing:string}={items:[],pricing:''};
+  const fetcher=vi.fn(async(_url,init)=>{
+   if(fetcher.mock.calls.length===1)return completion([tool('get_bom',{})]);
+   const receipt=JSON.parse(String(init?.body)).messages.find((message:{role:string})=>message.role==='tool');
+   bom=JSON.parse(receipt.content);
+   return completion([tool('submit_candidates',{candidates:[{title:'物料统计',explanation:'按草稿统计，价格和库存待核实。',commands:[]}]})]);
+  });
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());
+  expect(run).toMatchObject({state:'complete',callCount:2,executionMode:'preview'});
+  expect(bom.items).toHaveLength(4);
+  const aItems=bom.items.filter(item=>item.name==='真实物料A');
+  expect(aItems).toHaveLength(3);
+  expect(aItems.map(item=>item.quantity).sort((a,b)=>a-b)).toEqual([1,1,2]);
+  expect(aItems).toContainEqual(expect.objectContaining({quantity:2,color:'#ffffff',size:baseSize}));
+  expect(bom.items).toContainEqual(expect.objectContaining({name:'真实物料B',quantity:1,color:'#ffffff',size:baseSize}));
+  expect(run.candidates[0].proposal.base_scene).toEqual(draft);
+  expect(draft).toEqual(original);
+  expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(cloudBefore);
  });
 });
 it.each(['不要直接删除桌子','暂时不要直接改','直接说明原因','先给我看一个方案','能否直接添加椅子？'])('does not auto-apply ambiguous or negative intent: %s',instruction=>{expect(agentExecutionMode(agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction,executionMode:'direct'}))).toBe('preview');});

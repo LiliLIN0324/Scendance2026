@@ -2,7 +2,7 @@ import { beforeAll,afterAll,describe,it,expect,vi } from 'vitest';
 import { database,owner,editor,studio,session,scene,chair } from './fixtures.ts';
 import { createApi } from '../supabase/functions/_shared/api.ts';
 import { generateProposal } from '../supabase/functions/_shared/providers.ts';
-import { libraryResources,readSceneResources,resourceIndex } from '../supabase/functions/_shared/scene-resources.ts';
+import { libraryResources,readSceneResources,resourceIndex,sceneResourceRefs } from '../supabase/functions/_shared/scene-resources.ts';
 import type { Env } from '../supabase/functions/_shared/http.ts';
 import type { Scene } from '../supabase/functions/_shared/domain.ts';
 
@@ -58,6 +58,23 @@ describe('scene Agent -> real authorization -> proposal -> database application'
     expect(response.status).toBe(422);expect((await response.json()).error.code).toBe('AI_INVALID_PROPOSAL');expect(fetcher).toHaveBeenCalledTimes(2);
     expect((await f.rpc(editor,'projects.get',{projectId:input.projectId})).scene.objects).toEqual([]);
     const own=await readSceneResources(f.backend,owner,input.scene);expect(own.find(item=>item.assetId===privateId)).toMatchObject({name:'Private model'});expect(own.find(item=>item.assetId===privateId)?.size).toBeUndefined();
+  });
+  it('uses one catalog/own resource identity for UUID casing aliases and never borrows a private alias',async()=>{
+    const catalogScene={...scene(),objects:[{...chair(),materialId:'asset' as const,assetId:resource.assetId.toUpperCase(),size:resource.size!}]};
+    const catalogResources=await readSceneResources(f.backend,owner,catalogScene);
+    const catalogAliases=catalogResources.filter(item=>item.assetId.toLowerCase()===resource.assetId.toLowerCase());
+    expect(catalogAliases).toHaveLength(1);expect(catalogAliases[0]).toMatchObject({assetId:resource.assetId,resourceId:resource.resourceId,name:resource.name});
+    expect(sceneResourceRefs(catalogScene,catalogResources)).toEqual({[catalogScene.objects[0].id]:resource.resourceId});
+    const privateId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    await f.rpc(owner,'assets.register',{id:privateId,name:'私有物料',source:'upload',format:'glb',byteSize:100,sha256:'c'.repeat(64),storagePath:'private-case.glb',license:{},metadata:{}});
+    const privateScene={...scene(),objects:[{...chair(),materialId:'asset' as const,assetId:privateId.toUpperCase()}]};
+    const publicResources=await readSceneResources(f.backend,editor,scene());
+    expect(publicResources.some(item=>item.assetId.toLowerCase()===privateId)).toBe(false);
+    expect(sceneResourceRefs(privateScene,publicResources)).toEqual({});
+    const ownResources=await readSceneResources(f.backend,owner,privateScene);
+    const ownAliases=ownResources.filter(item=>item.assetId.toLowerCase()===privateId);
+    expect(ownAliases).toHaveLength(1);expect(ownAliases[0]).toMatchObject({assetId:privateId,resourceId:`asset:${privateId}`,name:'私有物料'});
+    expect(sceneResourceRefs(privateScene,ownResources)).toEqual({[privateScene.objects[0].id]:`asset:${privateId}`});
   });
   it('rechecks real registration even for an ID appearing in the shipped catalogue',async()=>{
     const other=libraryResources.find(item=>item.assetId!==resource.assetId)!;

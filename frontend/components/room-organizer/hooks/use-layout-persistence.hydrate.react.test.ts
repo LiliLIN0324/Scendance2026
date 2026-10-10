@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../lib/constants';
@@ -8,6 +8,8 @@ import { readRecoveryCopies } from '../lib/persistence';
 import { decodeShareUrl } from '../lib/share';
 import { VERSION_HISTORY_STORAGE_KEY } from '../lib/version-history';
 import { useLayoutPersistence } from './use-layout-persistence';
+import { useLayoutState } from './use-layout-state';
+import { layoutStore } from './use-layout-store';
 import type { RoomLayout } from '../lib/types';
 
 // The decode itself is covered by share.test.ts — here it's mocked so the
@@ -42,6 +44,58 @@ describe('useLayoutPersistence — apply-throw must not clobber the save (#206)'
         debounceMs,
       })
     );
+
+  it('refuses identity persistence while async share decoding remains in flight, then allows retry after hydration', async () => {
+    const local = makeLayout({ id: 'local-activity' });
+    const raw = JSON.stringify(local);
+    window.localStorage.setItem(STORAGE_KEY, raw);
+    window.location.hash = '#layout=pending';
+    let finish!: (layout: RoomLayout) => void;
+    mockedDecode.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    layoutStore.setState({ layout: makeLayout({ id: 'fallback' }), activeFloorIndex: 0 });
+    const tab = renderHook(() => {
+      const state = useLayoutState();
+      return { ...state, persistence: useLayoutPersistence({ layout: state.layout, onHydrate: state.actions.applyLayout, debounceMs: 20 }) };
+    });
+    // A render while decoding does not mean the shared activity has landed.
+    act(() => tab.result.current.actions.setWidth(9));
+    act(() => expect(() => tab.result.current.persistence.ensurePersistentIdentity()).toThrow('仍在载入'));
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);
+    expect(tab.result.current.persistence.lastSavedAt).toBeNull();
+    await act(async () => { finish({ ...local, width: 10 }); });
+    expect(tab.result.current.layout.id).toBe(local.id);
+    expect(window.location.hash).toBe('');
+    act(() => tab.result.current.persistence.ensurePersistentIdentity());
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);
+    expect(tab.result.current.layout.width).toBe(10);
+  });
+
+  it('refuses task saving during share decoding and allows guarded saving only after the hydration dispatch', async () => {
+    const local = makeLayout({ id: 'local-activity' });
+    const raw = JSON.stringify(local);
+    window.localStorage.setItem(STORAGE_KEY, raw);
+    window.location.hash = '#layout=pending-task-save';
+    let finish!: (layout: RoomLayout) => void;
+    mockedDecode.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    layoutStore.setState({ layout: makeLayout({ id: 'fallback' }), activeFloorIndex: 0 });
+    const tab = renderHook(() => {
+      const state = useLayoutState();
+      return { ...state, persistence: useLayoutPersistence({ layout: state.layout, onHydrate: state.actions.applyLayout, debounceMs: 20 }) };
+    });
+    const waiting = tab.result.current.layout;
+    const write = vi.spyOn(Storage.prototype, 'setItem');
+    await act(async () => { await expect(tab.result.current.persistence.persistVerifiedLayout(waiting, waiting, () => {})).rejects.toThrow('仍在载入'); });
+    expect(write).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(raw);
+    await act(async () => { finish({ ...local, width: 10 }); });
+    const hydrated = tab.result.current.layout;
+    const next = { ...hydrated, width: 11 };
+    await act(async () => { await tab.result.current.persistence.persistVerifiedLayout(hydrated, next, () => {}); });
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(next);
+    expect(tab.result.current.layout).toBe(hydrated);
+    expect(hydrated.width).toBe(10);
+    write.mockRestore();
+  });
 
   it('backs up a saved layout that parses but throws on apply before autosave resumes', async () => {
     const blob = JSON.stringify(makeLayout({ name: 'Local house' }));

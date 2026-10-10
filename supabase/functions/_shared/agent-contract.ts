@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { leaseSchema, sceneSchema, uuid } from './domain.ts';
 import { materialSuggestionSchema } from './agent-material-contract.ts';
 import { modelSuggestionSchema } from './ai.ts';
+import { activityTaskRunRequestSchema, activityTaskRunSchema } from './activity-task-contract.ts';
 
 export const agentContextSchema=z.strictObject({
   brief:z.string().max(12000).default(''),acceptedDecisions:z.array(z.string().max(1000)).max(20).default([]),
@@ -14,6 +15,8 @@ export const agentRunRequestSchema=z.strictObject({
   jevEnabled:z.boolean().default(false),executionMode:z.enum(['preview','direct']).default('preview'),
 });
 export type AgentRunRequest=z.infer<typeof agentRunRequestSchema>;
+// Keep the Scene parser unchanged: absent kind must not change stored request fingerprints.
+export const agentDispatchRequestSchema=z.union([activityTaskRunRequestSchema,agentRunRequestSchema]);
 export const agentProposalSchema=z.object({
   id:uuid,project_id:uuid,user_id:z.string().min(1),session_id:uuid,generation:z.number(),base_revision:z.number(),local_revision:z.number(),base_hash:z.string(),
   base_scene:sceneSchema,candidate:sceneSchema,explanation:z.string(),warnings:z.array(z.object({code:z.string(),ids:z.array(z.string())})),
@@ -32,4 +35,10 @@ export const agentRunSchema=z.object({
   executionMode:z.enum(['preview','direct']),jevEnabled:z.boolean(),expiresAt:z.string(),
 });
 export type AgentRun=z.infer<typeof agentRunSchema>;
+export const agentDispatchRunSchema=z.preprocess((value,ctx)=>{
+  if(value&&typeof value==='object'&&'kind' in value&&value.kind==='activity_tasks'&&!activityTaskRunSchema.safeParse(value).success){
+    ctx.addIssue({code:'custom',message:'Invalid activity task run'});
+  }
+  return value;
+},z.union([activityTaskRunSchema,agentRunSchema]));
 export type AgentEvaluation=z.infer<typeof agentEvaluationSchema>;

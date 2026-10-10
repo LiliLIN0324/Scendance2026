@@ -10,7 +10,9 @@ import {
   LOCAL_PROJECT_BACKUP_V3_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_BYTES,
   parseLocalProjectBackupJson, readLocalProjectBackupFile, serializeLocalProjectBackup, serializeLocalProjectBackupV3, validateLocalProjectRestoreCandidate,
   type BackupBriefSnapshot, type BackupMaterialCheckinSnapshot,
+  serializeLocalProjectBackupV4, LOCAL_PROJECT_BACKUP_V4_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_V4_BYTES,
 } from './local-project-backup';
+import { decodeSourceDocuments, MAX_SOURCE_BYTES } from './source-backup';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 
@@ -286,7 +288,7 @@ describe('scene and activity backup', () => {
     expect(() => validateLocalProjectRestoreCandidate({ ...candidate, createdAt })).toThrow('候选格式');
   });
 
-  it.each([0, 4, 99, '1', null])('refuses an unknown candidate version without silently repackaging it: %j', backupVersion => {
+  it.each([0, 5, 99, '1', null])('refuses an unknown candidate version without silently repackaging it: %j', backupVersion => {
     const candidate = parseLocalProjectBackupJson(json(backup()));
     expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion })).toThrow('备份版本');
   });
@@ -444,7 +446,7 @@ describe('scene and activity backup', () => {
     const restored = await readLocalProjectBackupFile(new File([text], '场景与活动备份.json'));
     expect(JSON.parse(text)).toMatchObject({ format: 'scendance-local-project-backup', version: 2,
       createdAt, coverage: LOCAL_PROJECT_BACKUP_COVERAGE });
-    expect(restored).toEqual({ source: 'backup', backupVersion: 2, createdAt, layout: original, materialCheckins: { status: 'not-in-file' },
+    expect(restored).toEqual({ source: 'backup', backupVersion: 2, createdAt, layout: original, materialCheckins: { status: 'not-in-file' }, sourceDocuments: { status: 'not-in-file' },
       brief: { status: 'present', value: brief() }, layoutWasRepaired: false });
     expect(restored.layout).not.toBe(original);
     expect(restored.layout.eventOperations!.tasks[0]!.objectIds).toEqual(['same-name-1', 'missing-original']);
@@ -481,7 +483,7 @@ describe('scene and activity backup', () => {
 
   it('opens current and single-floor legacy layouts without claiming a brief was in the file', () => {
     const current = parseLocalProjectBackupJson(json(layout()));
-    expect(current).toEqual({ source: 'legacy-layout', createdAt: null, layout: layout(), materialCheckins: { status: 'not-in-file' },
+    expect(current).toEqual({ source: 'legacy-layout', createdAt: null, layout: layout(), materialCheckins: { status: 'not-in-file' }, sourceDocuments: { status: 'not-in-file' },
       brief: { status: 'not-in-file' }, layoutWasRepaired: false });
     const base = layout();
     const old = { id: scope, name: '旧单层', width: 8, height: 6,
@@ -651,5 +653,97 @@ describe('scene and activity backup', () => {
     await readLocalProjectBackupFile({ size: new TextEncoder().encode(text).length, text: async () => text });
     expect(sideEffect).not.toHaveBeenCalled();
     expect(json(original)).toBe(originalText);
+  });
+});
+
+describe('V4 optional local source documents', () => {
+  const imageBytes = () => Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/3ioAAAAASUVORK5CYII='), char => char.charCodeAt(0));
+  const sources = () => [{ id: 'local-floorplan', scope, name: '现场图.png', kind: 'floorplan' as const, width: 1, height: 1,
+    blob: new Blob([imageBytes()], { type: 'image/png' }) }];
+  const full = () => serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope, sources: sources(),
+    form: { width: '12', depth: '10', height: '3', text: '现场条件原文', constraints: [], adjustment: '', requestId: 'must-not-travel' } }, createdAt);
+
+  it('reuses V3 facts and exposes explicit attachment coverage with a detached pure candidate', async () => {
+    const text = await full(), envelope = JSON.parse(text);
+    expect(envelope.version).toBe(4); expect(envelope.coverage).toEqual(LOCAL_PROJECT_BACKUP_V4_COVERAGE);
+    expect(envelope.coverage).toMatchObject({ attachments: true, sourceDocuments: true, modelFiles: false });
+    const forbidden = vi.fn(() => { throw new Error('not allowed in parser'); });
+    vi.stubGlobal('createImageBitmap', forbidden); vi.stubGlobal('fetch', forbidden);
+    vi.stubGlobal('indexedDB', new Proxy({}, { get: forbidden }));
+    const candidate = parseLocalProjectBackupJson(text);
+    expect(candidate.backupVersion).toBe(4); expect(candidate.layout).toEqual(layout());
+    expect(candidate.brief).toEqual({ status: 'present', value: brief() });
+    expect(candidate.materialCheckins).toEqual({ status: 'present', value: checkinLedger() });
+    expect(candidate.sourceDocuments).toMatchObject({ status: 'present', sources: [{ id: 'local-floorplan', kind: 'floorplan' }],
+      form: { text: '现场条件原文' } });
+    expect(text).not.toContain('must-not-travel');
+    expect(validateLocalProjectRestoreCandidate(candidate)).toEqual(candidate); expect(forbidden).not.toHaveBeenCalled();
+    expect((await readLocalProjectBackupFile(new File([text], 'v4.json'), { allowSourceDocuments: true })).sourceDocuments).toEqual(candidate.sourceDocuments);
+  });
+
+  it('marks V1/V2/V3 and bare layouts as not containing source documents', () => {
+    const v1 = { ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE };
+    for (const text of [json(v1), json(backup()), serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(), createdAt), json(layout())]) {
+      const candidate = parseLocalProjectBackupJson(text);
+      expect(candidate.sourceDocuments).toEqual({ status: 'not-in-file' });
+      expect(validateLocalProjectRestoreCandidate(candidate).sourceDocuments).toEqual({ status: 'not-in-file' });
+    }
+  });
+
+  it.each(['missing documents', 'false coverage', 'invalid checkins', 'source in old version'] as const)('refuses %s without falling back to a partial restore', async reason => {
+    const envelope = JSON.parse(await full());
+    if (reason === 'missing documents') delete envelope.sourceDocuments;
+    if (reason === 'false coverage') envelope.coverage.attachments = false;
+    if (reason === 'invalid checkins') envelope.materialCheckins.value.projectId = 'other';
+    if (reason === 'source in old version') { envelope.version = 3; envelope.coverage = LOCAL_PROJECT_BACKUP_V3_COVERAGE; }
+    expect(() => parseLocalProjectBackupJson(json(envelope))).toThrow();
+  });
+
+  it('requires declared V4 provenance for a mutable candidate with image documents', async () => {
+    const candidate = parseLocalProjectBackupJson(await full());
+    for (const version of [1, 2, 3, undefined]) {
+      expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion: version, materialCheckins: { status: 'not-in-file' } })).toThrow();
+    }
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, sourceDocuments: { status: 'not-in-file' } })).toThrow('图片附件');
+  });
+
+  it('rejects cross-project source snapshots and missing local Blobs instead of fetching cloud references', async () => {
+    await expect(serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope: 'other', sources: [], form: undefined })).rejects.toThrow('项目范围');
+    const { blob: _blob, ...withoutBytes } = sources()[0]!;
+    await expect(serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope, sources: [withoutBytes], form: undefined })).rejects.toThrow('缺少本机原图');
+  });
+
+  it('allows an attachment package above 8 MiB without raising the old metadata limit', async () => {
+    const data = new Uint8Array(MAX_SOURCE_BYTES); data.set(imageBytes());
+    const packed = await serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope,
+      sources: [0, 1].map(index => ({ ...sources()[0]!, id: `large-${index}`, blob: new Blob([data], { type: 'image/png' }) })), form: undefined }, createdAt);
+    expect(new TextEncoder().encode(packed).length).toBeGreaterThan(MAX_LOCAL_PROJECT_BACKUP_BYTES);
+    expect(new TextEncoder().encode(packed).length).toBeLessThan(MAX_LOCAL_PROJECT_BACKUP_V4_BYTES);
+    expect(parseLocalProjectBackupJson(packed).backupVersion).toBe(4);
+    await expect(readLocalProjectBackupFile(new File([packed], 'v4.json'))).rejects.toThrow('8 MiB');
+    await expect(readLocalProjectBackupFile({ size: 1, text: async () => packed })).rejects.toThrow('8 MiB');
+    expect((await readLocalProjectBackupFile(new File([packed], 'v4.json'), { allowSourceDocuments: true })).backupVersion).toBe(4);
+    const oversized = { ...JSON.parse(await full()), sourceDocuments: { status: 'present', sources: [], form: { text: 'a'.repeat(MAX_LOCAL_PROJECT_BACKUP_BYTES) } } };
+    expect(() => parseLocalProjectBackupJson(json(oversized))).toThrow('8 MiB');
+    const candidate = parseLocalProjectBackupJson(await full());
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, sourceDocuments: oversized.sourceDocuments })).toThrow('8 MiB');
+  });
+
+  it('checks the explicit 96 MiB file cap before reading', async () => {
+    const read = vi.fn().mockResolvedValue('{}');
+    await expect(readLocalProjectBackupFile({ size: MAX_LOCAL_PROJECT_BACKUP_V4_BYTES + 1, text: read }, { allowSourceDocuments: true })).rejects.toThrow('96 MiB');
+    expect(read).not.toHaveBeenCalled();
+    expect(MAX_LOCAL_PROJECT_BACKUP_BYTES).toBe(8 * 1024 * 1024);
+  });
+
+  it('preserves applied reference fields and original source identity through local decoding', async () => {
+    const original = sources(), registration = { sourceId: original[0]!.id, points: [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 0, z: 1 }],
+      worldWidth: 12, worldDepth: 10, imageWidth: 1, imageHeight: 1, appliedBasis: 'original-scope-basis', confirmationId: 'original-confirmation' };
+    const candidate = parseLocalProjectBackupJson(await serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(),
+      { scope, sources: original, form: { registration } }, createdAt));
+    if (candidate.sourceDocuments.status !== 'present') throw new Error('fixture');
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 1, height: 1, close: vi.fn() }));
+    const restored = await decodeSourceDocuments(candidate.sourceDocuments, scope);
+    expect(restored.form).toEqual({ registration }); expect(restored.sources[0]!.id).toBe(original[0]!.id);
   });
 });

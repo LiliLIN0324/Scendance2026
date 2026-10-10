@@ -96,6 +96,8 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
 }):JSX.Element {
   const details=useRef<HTMLDetailsElement>(null),[selected,setSelected]=useState(''),[registering,setRegistering]=useState(false);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[opacity,setOpacity]=useState(.55);
+  const [pixelPoint,setPixelPoint]=useState({x:'',z:''}),[pointError,setPointError]=useState('');
+  const pointInput=useRef<HTMLInputElement>(null);
   const scope=layout.id??'local',basis=applied?referenceSceneBasis(layout):canonical({venue:scene.venue,structure:scene.structure,sources:scene.sources});
   const choices=images.filter(image=>image.blob instanceof Blob&&image.width&&image.height&&
     (!image.assetId||scene.sources.filter(source=>source.assetId===image.assetId&&source.kind==='floorplan'&&source.width===image.width&&source.height===image.height).length===1));
@@ -103,13 +105,30 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
   const session=useRef<{scope:string;sourceId:string;basis:string;points:ImagePoint[]}|null>(null);
   const context=useRef({scope,basis,sourceId:source?.id}),confirming=useRef(false);
   if(context.current.scope!==scope||context.current.basis!==basis||context.current.sourceId!==source?.id)context.current={scope,basis,sourceId:source?.id};
-  useEffect(()=>{session.current=null;setRegistering(false);setNotice('');},[scope,source?.id,basis]);
+  useEffect(()=>{session.current=null;setRegistering(false);setNotice('');setPixelPoint({x:'',z:''});setPointError('');},[scope,source?.id,basis]);
   useEffect(()=>{if(openRequest>0&&details.current){details.current.open=true;details.current.scrollIntoView?.({block:'nearest'});}},[openRequest]);
   const fixed=registration?.sourceId===source?.id&&registration?.worldWidth===scene.venue.width&&registration?.worldDepth===scene.venue.depth;
   const transform=source&&fixed?imageRegistration(registration!.points,registration!.worldWidth!,registration!.worldDepth!):null;
   const drawnPoints=Array.isArray(registration?.points)?registration.points.filter(point=>point&&Number.isFinite(point.x)&&Number.isFinite(point.z)):[];
   const stored=images.map(image=>({...image,scope,kind:image.kind??'photo',width:image.width??0,height:image.height??0}));
   const resolved=applied?resolveReferenceImage(layout,stored,{registration}):null;
+  function addPoint(point:ImagePoint):void {
+    const active=session.current;
+    if(busy||!source||!registering||!active||active.scope!==scope||active.sourceId!==source.id||active.basis!==basis||active.points.length>=3)return;
+    if(!Number.isFinite(point.x)||!Number.isFinite(point.z)||point.x<0||point.z<0||point.x>source.width!||point.z>source.height!)return;
+    active.points=[...active.points,point];
+    onChange({sourceId:source.id,points:active.points,worldWidth:scene.venue.width,worldDepth:scene.venue.depth});
+    setPixelPoint({x:'',z:''});setPointError('');
+    if(active.points.length===3){session.current=null;setRegistering(false);}
+  }
+  function addTypedPoint():void {
+    if(!registering||busy||!source)return;
+    const x=Number(pixelPoint.x),z=Number(pixelPoint.z);
+    if(!pixelPoint.x.trim()||!pixelPoint.z.trim()||!Number.isFinite(x)||!Number.isFinite(z)||x<0||z<0||x>source.width!||z>source.height!){
+      setPointError(`请输入图内坐标：横向 0–${source.width}，纵向 0–${source.height} 像素。`);return;
+    }
+    addPoint({x,z});
+  }
   async function confirm():Promise<void>{
     if(confirming.current||busy||!source||!transform||!registration||!basis)return;
     const before=context.current;
@@ -132,12 +151,17 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
       {registration&&registration.sourceId===source.id&&!fixed&&<p className="cr-hint">原对应未绑定当前场地尺寸，已停用，请重新标记。</p>}
       {applied&&registration?.appliedBasis&&registration.appliedBasis!==basis&&<p className="cr-hint">项目或场地坐标范围已变化，原图对应已停用，请重新核对。</p>}
       {fixed&&drawnPoints.length===3&&!transform&&<p className="cr-hint">三个点无法稳定对应场地，请重新标记相距较远且不共线的对应点。</p>}
-      <button type="button" className="rc-secondary" disabled={busy} onClick={()=>{session.current={scope,sourceId:source.id,basis,points:[]};onChange({sourceId:source.id,points:[],worldWidth:scene.venue.width,worldDepth:scene.venue.depth});setRegistering(true);setNotice('');}}>重新标记三个对应点</button>
-      <div className="rc-image-map rc-overlay" role="button" aria-label="标记图纸与场地的三个对应点" tabIndex={0} onClick={event=>{
-        const active=session.current;if(!registering||!active||active.scope!==scope||active.sourceId!==source.id||active.basis!==basis||active.points.length>=3)return;
+      <button type="button" className="rc-secondary" disabled={busy} onClick={()=>{session.current={scope,sourceId:source.id,basis,points:[]};onChange({sourceId:source.id,points:[],worldWidth:scene.venue.width,worldDepth:scene.venue.depth});setRegistering(true);setNotice('');setPixelPoint({x:'',z:''});setPointError('');}}>重新标记三个对应点</button>
+      <p className="cr-hint">也可输入原图像素坐标，左上角为 (0,0)。在图上按回车或空格进入坐标输入。</p>
+      <div className="rc-measures rc-venue-measures" onKeyDown={event=>{if(event.key==='Enter'&&event.target instanceof HTMLInputElement){event.preventDefault();addTypedPoint();}}}>
+        <label className="cr-label">对应点横向像素<input ref={pointInput} type="number" min="0" max={source.width} step="any" readOnly={!registering} disabled={busy} value={pixelPoint.x} onChange={event=>setPixelPoint({...pixelPoint,x:event.target.value})}/></label>
+        <label className="cr-label">对应点纵向像素<input type="number" min="0" max={source.height} step="any" readOnly={!registering} disabled={busy} value={pixelPoint.z} onChange={event=>setPixelPoint({...pixelPoint,z:event.target.value})}/></label>
+        <button type="button" className="rc-secondary" disabled={!registering||busy} onClick={addTypedPoint}>添加当前对应点</button>
+      </div>
+      {pointError&&<p className="cr-notice" role="alert">{pointError}</p>}
+      <div className="rc-image-map rc-overlay" role="button" aria-label="标记图纸与场地的三个对应点" aria-disabled={!registering||busy} tabIndex={registering&&!busy?0:-1} onKeyDown={event=>{if(registering&&!busy&&(event.key==='Enter'||event.key===' ')){event.preventDefault();event.stopPropagation();pointInput.current?.focus();}}} onClick={event=>{
         const point=containedImagePoint(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect(),source.width!,source.height!);if(!point)return;
-        active.points=[...active.points,point];onChange({sourceId:source.id,points:active.points,worldWidth:scene.venue.width,worldDepth:scene.venue.depth});
-        if(active.points.length===3){session.current=null;setRegistering(false);}
+        addPoint(point);
       }}><img src={source.url} alt="原图与识别墙线叠加核对"/><svg viewBox={`0 0 ${source.width} ${source.height}`} preserveAspectRatio="xMidYMid meet">
         {!transform&&scene.structure.walls.flatMap(w=>(w.evidence??[]).filter(e=>e.sourceAssetId===source.assetId).map((e,index)=><line key={`${w.id}-${index}`} x1={e.start.x*source.width!} y1={e.start.z*source.height!} x2={e.end.x*source.width!} y2={e.end.z*source.height!} stroke="#ed7335" opacity={opacity} strokeWidth={source.width!/150}/>))}
         {transform&&<g transform={transform} opacity={opacity}>{scene.structure.walls.map(w=><line key={w.id} x1={w.start.x} y1={w.start.z} x2={w.end.x} y2={w.end.z} stroke="#ed7335" strokeWidth={Math.max(.06,w.thickness)}/>)}{scene.structure.openings.map(opening=>{const line=openingLine(scene,opening);return line?<line key={opening.id} x1={line.x1} y1={line.z1} x2={line.x2} y2={line.z2} stroke={opening.kind==='door'?'#64a78b':'#61a5c2'} strokeWidth={.16}/>:null;})}</g>}
@@ -160,6 +184,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const [form,setForm]=useState<Form>(EMPTY),[loaded,setLoaded]=useState(false);
   const [loadError,setLoadError]=useState(''),[loadAttempt,setLoadAttempt]=useState(0);
   const hydratedScope=useRef<string|null>(null);
+  const savedForm=useRef<{scope:string;value:Form}|null>(null);
   const formReady=loaded&&hydratedScope.current===scope;
   const [mode,setMode]=useState<''|'restore'|'redesign'>('');
   const [reidentify,setReidentify]=useState(false);
@@ -224,7 +249,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
           saved.constraints!==undefined&&!Array.isArray(saved.constraints))throw new Error('Invalid saved form');
         formRef.current={...EMPTY,...saved};setForm(formRef.current);
       }
-      hydratedScope.current=scope;setLoaded(true);
+      savedForm.current={scope,value:formRef.current};hydratedScope.current=scope;setLoaded(true);
     }).catch(()=>{if(!cancelled)setLoadError('本机图纸资料读取失败，自动保存已暂停。请重试读取。');});
     return()=>{cancelled=true;};
   },[scope,loadAttempt]);
@@ -232,7 +257,10 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   function notifyVenue(text:string,sceneKey?:string):void {setVenueNotice(text?{text,...(sceneKey?{sceneKey}:{})}:null);}
   function saveForm(saveScope:string,value:Form):Promise<void>{
     if(hydratedScope.current!==saveScope)return Promise.reject(new Error('图纸资料尚未读取成功，请重试读取后再保存。'));
-    const write=formWrites.current.catch(()=>{}).then(()=>storeSourceForm(saveScope,value));formWrites.current=write;return write;
+    const write=formWrites.current.catch(()=>{}).then(async()=>{
+      if(savedForm.current?.scope===saveScope&&canonical(savedForm.current.value)===canonical(value))return;
+      await storeSourceForm(saveScope,value);savedForm.current={scope:saveScope,value};
+    });formWrites.current=write;return write;
   }
   useEffect(()=>registerSourceFlush(scope,async()=>{
     await formHydration.current;

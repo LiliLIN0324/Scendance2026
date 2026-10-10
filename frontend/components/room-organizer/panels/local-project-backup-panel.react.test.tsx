@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
+import { Blob as NodeBlob } from 'node:buffer';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_LOCAL_PROJECT_BACKUP_BYTES, serializeLocalProjectBackup } from '@/lib/local-project-backup';
+import { MAX_LOCAL_PROJECT_BACKUP_BYTES, MAX_LOCAL_PROJECT_BACKUP_V4_BYTES, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4 } from '@/lib/local-project-backup';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { downloadSceneDelivery } from '../lib/scene-delivery';
 import { createOperation } from '../lib/event-operations';
@@ -22,6 +23,16 @@ function fileText(next: RoomLayout = { ...layout, name: 'A-文件布局' }, stat
   return serializeLocalProjectBackup(next, { state: 'ready', scope: next.id ?? 'local', brief: status === 'present'
     ? { status, value: { ...brief, description: 'A-文件恢复' } } : { status } }, '2026-10-07T09:30:00.000Z');
 }
+async function sourceFileText(withImages = true, withForm = true): Promise<string> {
+  const next = { ...layout, id: layout.id!, name: 'A-图纸备份' };
+  const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), value => value.charCodeAt(0));
+  return serializeLocalProjectBackupV4(next, { state: 'ready', scope: next.id, brief: { status: 'present', value: brief } },
+    { state: 'ready', scope: next.id, materialCheckins: { status: 'absent' } },
+    { scope: next.id, sources: withImages ? (['floorplan', 'photo'] as const).map((kind, index) => ({
+      id: `source-${index}`, scope: next.id, name: `${kind}.png`, kind, width: 1, height: 1, blob: new Blob([png], { type: 'image/png' }),
+    })) : [], form: withForm ? { width: '8', depth: '8', registration: { sourceId: 'source-0', points: [{ x: 0, z: 0 }] } } : undefined },
+    '2026-10-09T09:30:00.000Z');
+}
 function file(text: string, read?: () => Promise<string>, size?: number, name = '场景与活动备份.json'): File {
   const chosen = new File([text], name, { type: 'application/json' });
   Object.defineProperty(chosen, 'text', { value: read ?? (() => Promise.resolve(text)) });
@@ -38,10 +49,45 @@ function setup(overrides: Partial<LocalProjectBackupActions> = {}) {
 }
 function deferred<T>() { let resolve!: (value: T) => void, reject!: (reason: Error) => void;
   const promise = new Promise<T>((ok, no) => { resolve = ok; reject = no; }); return { promise, resolve, reject }; }
-beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.mocked(downloadSceneDelivery).mockReset(); });
+beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.stubGlobal('Blob', NodeBlob); vi.mocked(downloadSceneDelivery).mockReset(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('local scene and activity backup', () => {
+  it.each([1, 2, 3, 'legacy'] as const)('preserves existing source documents when prechecking %s', async version => {
+    const { actions } = setup();
+    let text = fileText();
+    if (version === 1) { const older = JSON.parse(text); older.version = 1; delete older.coverage.productionPlan; text = JSON.stringify(older); }
+    if (version === 3) text = serializeLocalProjectBackupV3({ ...layout, name: 'A-文件布局' },
+      { state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief } },
+      { state: 'ready', scope: layout.id!, materialCheckins: { status: 'absent' } });
+    if (version === 'legacy') text = JSON.stringify(layout);
+    select(file(text)); await screen.findByLabelText('备份预检');
+    expect(screen.getByText('文件未含图纸资料，保留目标项目已有图纸与对应点')).toBeTruthy();
+    expect(screen.queryByText(/这份文件的图纸、照片与对应点替换/)).toBeNull();
+    expect(actions.restoreBackup).not.toHaveBeenCalled();
+  });
+
+  it('prechecks V4 image count and source form without loading resources, then uses the existing restore action', async () => {
+    const fetch = vi.fn(), decode = vi.fn(); vi.stubGlobal('fetch', fetch); vi.stubGlobal('createImageBitmap', decode);
+    const { actions } = setup(); select(file(await sourceFileText())); await screen.findByText('完整项目备份 V4');
+    expect(screen.getByText('2 张图片 · 已包含图纸表单')).toBeTruthy();
+    expect(screen.getByText(/替换目标项目的原资料/)).toBeTruthy();
+    expect(actions.restoreBackup).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled(); expect(decode).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '确认替换布局与活动需求' })); await screen.findByRole('status');
+    expect(actions.restoreBackup).toHaveBeenCalledOnce();
+    expect(vi.mocked(actions.restoreBackup).mock.calls[0][0].sourceDocuments).toMatchObject({ status: 'present', sources: [{ id: 'source-0' }, { id: 'source-1' }] });
+    expect(screen.getByRole('status').textContent).toContain('本机图纸资料已保存并核实');
+    expect(screen.getByRole('status').textContent).toContain('模型资源仍需另行加载');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('warns that a V4 backup with no images or form clears the target source documents before confirmation', async () => {
+    const { actions } = setup(); select(file(await sourceFileText(false, false))); await screen.findByText('完整项目备份 V4');
+    expect(screen.getByText('0 张图片 · 未包含图纸表单')).toBeTruthy();
+    expect(screen.getByText(/目标项目原表单及对应点将清除/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '取消恢复' })); expect(actions.restoreBackup).not.toHaveBeenCalled();
+  });
+
   it('shows V1 provenance and warns before replacing a current production plan with an older file',async()=>{
     const {actions,view}=setup();
     const current={...layout,productionPlan:productionPlanSchema.parse({})};
@@ -104,12 +150,20 @@ describe('local scene and activity backup', () => {
     ['坏 JSON', '{broken', undefined, '有效的 JSON'],
     ['未知版本', JSON.stringify({ format: 'scendance-local-project-backup', version: 99 }), undefined, '版本'],
     ['交付封套', JSON.stringify({ format: 'scendance-scene-delivery' }), undefined, '这是交付文件'],
-    ['过大文件', '{}', MAX_LOCAL_PROJECT_BACKUP_BYTES + 1, '8 MiB'],
+    ['过大文件', '{}', MAX_LOCAL_PROJECT_BACKUP_V4_BYTES + 1, '96 MiB'],
   ] as const)('rejects %s before offering replacement', async (_label, text, size, message) => {
     const { actions } = setup(); const read = vi.fn().mockResolvedValue(text); select(file(text, read, size));
     expect((await screen.findByRole('alert')).textContent).toContain(message);
     expect(screen.queryByRole('button', { name: '确认替换布局与活动需求' })).toBeNull();
     expect(actions.restoreBackup).not.toHaveBeenCalled(); if (size) expect(read).not.toHaveBeenCalled();
+  });
+
+  it('keeps the 8 MiB ordinary backup limit while allowing V4 file inspection', async () => {
+    const { actions } = setup(), text = fileText() + ' '.repeat(MAX_LOCAL_PROJECT_BACKUP_BYTES);
+    const read = vi.fn().mockResolvedValue(text); select(file(text, read));
+    expect((await screen.findByRole('alert')).textContent).toContain('8 MiB');
+    expect(read).toHaveBeenCalledOnce(); expect(screen.queryByLabelText('备份预检')).toBeNull();
+    expect(actions.restoreBackup).not.toHaveBeenCalled();
   });
 
   it('checks external model dependencies in a design snapshot without fetching or changing its unarchived URL', async () => {
@@ -170,12 +224,32 @@ describe('local scene and activity backup', () => {
 
   it('starts one download after preparation and reports only that the browser download was initiated', async () => {
     const pending = deferred<string>(); const { actions } = setup({ prepareBackup: vi.fn(() => pending.promise) });
+    expect((screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }) as HTMLInputElement).checked).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: '下载场景与活动备份' }));
     fireEvent.click(screen.getByRole('button', { name: '正在准备备份…' })); expect(actions.prepareBackup).toHaveBeenCalledOnce();
+    expect(actions.prepareBackup).toHaveBeenCalledWith();
     expect(downloadSceneDelivery).not.toHaveBeenCalled(); await act(async () => { pending.resolve(fileText()); });
     await waitFor(() => expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(downloadSceneDelivery).toHaveBeenCalledWith(fileText(), 'application/json', expect.stringContaining('场景与活动备份'), 'json');
     expect(screen.getByRole('status').textContent).toContain('已发起');
+  });
+
+  it('includes source documents only when checked and explains the local privacy and size limits', async () => {
+    const text = await sourceFileText(); const { actions } = setup({ prepareBackup: vi.fn().mockResolvedValue(text) });
+    expect(screen.getByText(/普通备份.*8 MiB/)).toBeTruthy();
+    expect(screen.getByText(/本机.*96 MiB.*客户资料/)).toBeTruthy();
+    expect(screen.getByText(/不会下载云端图片.*后台识别任务/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }));
+    fireEvent.click(screen.getByRole('button', { name: '下载场景与活动备份' }));
+    await waitFor(() => expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+    expect(actions.prepareBackup).toHaveBeenCalledWith({ includeSourceDocuments: true });
+    expect(downloadSceneDelivery).toHaveBeenCalledWith(text, 'application/json', expect.stringContaining('场景与活动备份'), 'json');
+  });
+
+  it('resets source document inclusion when switching projects', () => {
+    const { actions, view } = setup(); fireEvent.click(screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }));
+    view.rerender(<LocalProjectBackupPanel layout={{ ...layout, id: 'backup-review-b' }} briefState={briefState} actions={actions}/>);
+    expect((screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }) as HTMLInputElement).checked).toBe(false);
   });
 
   it.each(['prepare', 'download', 'changed baseline'] as const)('preserves the project when %s prevents a download', async reason => {
@@ -220,6 +294,7 @@ describe('local scene and activity backup', () => {
     view.rerender(<LocalProjectBackupPanel layout={layout} actions={{ ...actions, backupPending: true }} briefState={briefState}/>);
     for (const name of ['下载场景与活动备份', '确认替换布局与活动需求', '取消恢复']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('选择备份文件') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }) as HTMLInputElement).disabled).toBe(true);
   });
 
   it('reports undo completion only after the provider verifies the original saved layout and requirements', async () => {
