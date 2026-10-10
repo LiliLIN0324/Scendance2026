@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { productionReferenceKey as objectKey } from '@/lib/production-plan';
 import { registerSourceFlush } from '@/lib/source-storage';
 import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
@@ -16,6 +16,7 @@ import './scene-delivery-panel.css';
 import './event-operations-panel.css';
 
 interface Props {
+  suggestionsPanel?: ReactNode;
   checkins?: MaterialCheckinState | undefined;
   layout: RoomLayout;
   disabled: boolean;
@@ -184,7 +185,7 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
   </form>;
 }
 
-export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins }: Props): JSX.Element {
+export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel }: Props): JSX.Element {
   const operations = layout.eventOperations ?? emptyOperations;
   const [title, setTitle] = useState(''), [phase, setPhase] = useState<EventOperationTask['phase']>('preparation');
   const [openedTask, setOpenedTask] = useState<string | null>(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -261,6 +262,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.event} · 预计 {brief.guests} 人</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
     </div>
     <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
+    {suggestionsPanel}
     <div className="sc-operation-toolbar"><strong className="sc-operation-kind-label">{operations.dataKind === 'rehearsal' ? '演练安排' : operations.dataKind === 'real' ? '真实活动安排' : '活动任务'} · {operations.tasks.length} 项</strong><label className="sc-field sc-operation-kind">资料类型<select disabled={disabled} value={operations.dataKind} onChange={event => { if (update({ ...operations, dataKind: event.target.value as EventOperations['dataKind'] })) setNotice('资料类型已更新，请留意本机保存状态。'); }}><option value="unspecified">未标注</option><option value="rehearsal">演练</option><option value="real">真实</option></select></label></div>
     {(missingSummary || needsReview > 0 || failedReviews > 0) && <div className="sc-operation-overview" role="group" aria-label="任务待补与复核">
       {missingSummary && <p className="sc-note">待补 · {missingSummary}</p>}

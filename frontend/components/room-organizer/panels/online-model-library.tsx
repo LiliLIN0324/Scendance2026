@@ -3,6 +3,7 @@
 import { Loader2, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
+import { captureCatalogPlacement, type CatalogPlacementGuard } from '../lib/catalog-placement-guard';
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
 import { filterOnlineModels, formatModelBytes, loadOnlineModels } from '../lib/online-models';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
@@ -27,12 +28,13 @@ export function onlineModelDisplayName(model: OnlineModel): string {
 
 export interface OnlineModelLibraryProps {
   controller?: BackendSession;
+  capturePlacement?: () => CatalogPlacementGuard;
   /** True while the active floor is full, so tiles stop pretending to be clickable. */
   disabled?: boolean;
   onAdd(item: CatalogItem): void;
 }
 
-export function OnlineModelLibrary({ disabled = false, onAdd, controller }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, onAdd, controller, capturePlacement }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
@@ -43,8 +45,20 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const bucketRail = useRef<HTMLDivElement>(null);
+  const cardRail = useRef<HTMLDivElement>(null);
+  const placementIdentity = useRef({ controller, apiUrl: controller?.config.apiUrl, epoch: 0 });
+  if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller?.config.apiUrl) {
+    placementIdentity.current = { controller, apiUrl: controller?.config.apiUrl, epoch: placementIdentity.current.epoch + 1 };
+  }
+  const latest = useRef({ disabled, onAdd, controller, capturePlacement, busy });
+  latest.current = { disabled, onAdd, controller, capturePlacement, busy };
+  const placements = useRef(new Set<CatalogPlacementGuard>());
   const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => { const activePlacements = placements.current; alive.current = true; return () => {
+    alive.current = false;
+    for (const guard of activePlacements) guard.dispose();
+    activePlacements.clear();
+  }; }, []);
 
   useEffect(() => {
     let alive = true;
@@ -63,41 +77,51 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
   useEffect(() => { setVisible(PAGE_SIZE); }, [query, bucket]);
 
   useEffect(() => {
-    const rail = bucketRail.current;
-    if (!rail) return;
-    const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
-      const max = rail.scrollWidth - rail.clientWidth;
-      if (max <= 0) return;
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rail.clientWidth : 1;
-      const next = Math.max(0, Math.min(max, rail.scrollLeft + event.deltaY * unit));
-      if (next === rail.scrollLeft) return;
-      // A non-passive listener prevents the surrounding list from scrolling too.
-      event.preventDefault();
-      rail.scrollLeft = next;
-    };
-    rail.addEventListener('wheel', onWheel, { passive: false });
-    return () => rail.removeEventListener('wheel', onWheel);
+    const detach = [bucketRail.current, cardRail.current].flatMap(rail => {
+      if (!rail) return [];
+      const onWheel = (event: WheelEvent) => {
+        if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+        const max = rail.scrollWidth - rail.clientWidth;
+        if (max <= 0) return;
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rail.clientWidth : 1;
+        const next = Math.max(0, Math.min(max, rail.scrollLeft + event.deltaY * unit));
+        if (next === rail.scrollLeft) return;
+        // A non-passive listener prevents the surrounding list from scrolling too.
+        event.preventDefault();
+        rail.scrollLeft = next;
+      };
+      rail.addEventListener('wheel', onWheel, { passive: false });
+      return [() => rail.removeEventListener('wheel', onWheel)];
+    });
+    return () => { for (const stop of detach) stop(); };
   }, [loadState]);
 
   const filtered = useMemo(
-    () => (index ? filterOnlineModels(index.models, query, bucket) : []),
+    () => (index ? filterOnlineModels(index.models, query, query.trim() ? '' : bucket) : []),
     [index, query, bucket]
   );
   const shown = filtered.slice(0, visible);
 
   const addOnline = async (model: OnlineModel) => {
-    if (disabled || busy) return;
+    if (latest.current.disabled || latest.current.busy) return;
+    latest.current.busy = model.slug;
     setBusy(model.slug);
     setPlaceError('');
+    let guard: CatalogPlacementGuard | undefined;
     try {
-      const item = await loadOnlineCatalogItem(model, controller);
+      const current = latest.current;
+      guard = current.capturePlacement?.() ?? captureCatalogPlacement(current.controller, () => placementIdentity.current.epoch);
+      placements.current.add(guard);
+      const item = await loadOnlineCatalogItem(model, current.controller);
       if (!alive.current) return;
-      onAdd(item);
+      guard.assertCurrent();
+      if (latest.current.disabled) throw new Error('当前场景物料已满，请腾出位置后重新添加。');
+      latest.current.onAdd(item);
     } catch (error) {
       if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能下载，请重试或换一个。');
     } finally {
-      if (alive.current) setBusy(null);
+      if (guard && placements.current.delete(guard)) guard.dispose();
+      if (alive.current) { latest.current.busy = null; setBusy(null); }
     }
   };
 
@@ -115,16 +139,24 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
   return <>
     <div className="sc-material-toolbar">
       <div ref={bucketRail} className="sc-bucket-rail" role="group" aria-label="线上模型分类">
-        <button type="button" aria-pressed={bucket === ''} className={bucket === '' ? 'is-active' : ''} onClick={() => setBucket('')}>全部 <b>{index.models.length}</b></button>
-        {index.buckets.map(entry => <button key={entry.key} type="button" aria-pressed={bucket === entry.key} className={bucket === entry.key ? 'is-active' : ''} onClick={() => setBucket(entry.key)}>{entry.label} <b>{entry.count}</b></button>)}
+        <button type="button" aria-pressed={!query.trim() && bucket === ''} className={!query.trim() && bucket === '' ? 'is-active' : ''} onClick={() => { setQuery(''); setBucket(''); }}>全部 <b>{index.models.length}</b></button>
+        {index.buckets.map(entry => <button key={entry.key} type="button" aria-pressed={!query.trim() && bucket === entry.key} className={!query.trim() && bucket === entry.key ? 'is-active' : ''} onClick={() => { setQuery(''); setBucket(entry.key); }}>{entry.label} <b>{entry.count}</b></button>)}
       </div>
       <label className="sc-search-mini">
         <Search size={15}/>
-        <input aria-label="搜索线上模型" placeholder="搜索" value={query} onChange={event => setQuery(event.target.value)}/>
+        <input aria-label="搜索全库线上模型" placeholder="搜索全库模型" value={query} onChange={event => setQuery(event.target.value)}/>
       </label>
     </div>
     {placeError && <p className="sc-warning" role="alert">{placeError}</p>}
-    <div className="sc-material-grid">
+    <div ref={cardRail} className="sc-material-grid" role="group" aria-label="线上模型，横向浏览" tabIndex={0}
+      onKeyDown={event => {
+        if (event.target !== event.currentTarget || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const rail = cardRail.current;
+        if (!rail) return;
+        rail.scrollLeft = event.key === 'Home' ? 0 : event.key === 'End' ? rail.scrollWidth :
+          rail.scrollLeft + (event.key === 'ArrowRight' ? 1 : -1) * rail.clientWidth * 0.75;
+      }}>
       {shown.map(model => <button type="button" key={model.slug} className="sc-material-card" disabled={disabled || busy !== null}
         draggable={!disabled && busy === null} onDragStart={event => {
           if (disabled || busy !== null) { event.preventDefault(); return; }
@@ -144,11 +176,11 @@ export function OnlineModelLibrary({ disabled = false, onAdd, controller }: Onli
         <span className="sc-material-size">{Number(model.width.toFixed(2))} × {Number(model.depth.toFixed(2))} × {Number(model.height.toFixed(2))} m</span>
         {model.bytes > 0 && <span className="sc-material-size">{formatModelBytes(model.bytes)}</span>}
       </button>)}
+      {filtered.length > shown.length && <button type="button" className="sc-button sc-material-more" onClick={() => setVisible(current => current + PAGE_SIZE)}>
+        再显示 {Math.min(PAGE_SIZE, filtered.length - shown.length)} 个（共 {filtered.length}）
+      </button>}
     </div>
     {shown.length === 0 && <p className="sc-muted">没有匹配的线上模型，换个词或切回「全部」。</p>}
-    {filtered.length > shown.length && <button type="button" className="sc-button sc-full sc-more" onClick={() => setVisible(current => current + PAGE_SIZE)}>
-      再显示 {Math.min(PAGE_SIZE, filtered.length - shown.length)} 个（共 {filtered.length}）
-    </button>}
     <p className="sc-note">拖到场地中放置，也可以点击添加。模型需要联网加载。</p>
   </>;
 }

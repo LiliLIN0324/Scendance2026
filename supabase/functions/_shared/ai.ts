@@ -95,6 +95,7 @@ export function buildProposal(scene: Scene, mode: 'layout' | 'modify', output: u
     description = parsed.explanation;
     commands = parsed.commands;
     modelSuggestions = parsed.modelSuggestions;
+    if(selectedIds.length&&commands.some(c=>'id' in c&&!selectedIds.includes(c.id)))throw new ApiError('INVALID_SELECTION',422);
     for (const c of commands) {
       if (c.op === 'add') {
         next.objects.push({ ...makeObject(c.materialId, c.position.x, c.position.z, c.color), rotation: c.rotation });

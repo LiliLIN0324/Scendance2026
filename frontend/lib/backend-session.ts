@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
+import { activityTaskRunRequestSchema, type ActivityTaskRun, type ActivityTaskRunRequest } from "../../supabase/functions/_shared/activity-task-contract";
 import { agentRunRequestSchema, agentRunSchema, type AgentRun, type AgentRunRequest } from "../../supabase/functions/_shared/agent-contract";
 import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
@@ -13,6 +14,8 @@ import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometr
 export { SceneApiError };
 export type { AgentRun };
 export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
+export type ActivityTaskRunInput = Pick<ActivityTaskRunRequest, "requestId" | "instruction" | "activityContext">;
+export type { ActivityTaskRun };
 export type { SourceImage, DimensionConstraint, SceneV2 } from "../../supabase/functions/_shared/reconstruction-contract";
 export type ReconstructionJob = Pick<z.infer<typeof reconstructionJobSchema>, 'id' | 'state' | 'candidate' | 'issues' | 'error_code'> & { proposal?: SceneProposal | null | undefined };
 export type ReconstructionInput = Pick<ReconstructionRequest, 'scene' | 'sources' | 'dimensions' | 'mode' | 'instruction' | 'selectedIds' | 'reviewedScene' | 'reviewedJobId'> & { requestId: string };
@@ -384,12 +387,12 @@ export class BackendSession {
     return current.projectId === scope.projectId && current.lease?.projectId === scope.lease?.projectId &&
       current.lease?.sessionId === scope.lease?.sessionId && current.lease?.generation === scope.lease?.generation;
   }
-  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation): Promise<T> {
+  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation, transport?: () => Promise<T>): Promise<T> {
     const epoch = this.epoch;
     const credentials = this.tokens;
     try {
       this.requireConfig();
-      const result = await this.client.request<T>(path, method, body);
+      const result = await (transport ? transport() : this.client.request<T>(path, method, body));
       if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
       return result;
     } catch (error) {
@@ -1057,6 +1060,52 @@ export class BackendSession {
     const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}/cancel`, 'POST'));
     if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
+  }
+  /** Task runs use the typed transport and existing session boundary, without synchronizing or uploading a scene. */
+  private async activityRunRequest(path: string, method: 'GET' | 'POST', transport: () => Promise<ActivityTaskRun>): Promise<ActivityTaskRun> {
+    const actor = this.snapshot.user?.id, projectId = this.snapshot.project?.id;
+    if (!actor || !projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    const binding = this.snapshot.geometryBinding;
+    const requestScope = this.captureRequestScope(), revision = this.snapshot.revision;
+    const identity = () => this.snapshot.user?.id === actor && this.snapshot.project?.id === projectId &&
+      this.snapshot.geometryBinding?.localActivityId === binding?.localActivityId &&
+      this.snapshot.geometryBinding?.cloudProjectId === binding?.cloudProjectId &&
+      this.isCurrentRequestScope(requestScope) && this.snapshot.revision === revision;
+    let invalidated = false;
+    const stop = this.subscribe(() => { if (!identity()) invalidated = true; });
+    try {
+      const run = await this.request(path, method, undefined, this.captureRequestScope(), 'business', undefined, transport);
+      if (invalidated || !identity()) throw new SceneApiError('SESSION_CHANGED', 409, null);
+      return run;
+    } finally { stop(); }
+  }
+  async startActivityTaskRun(input: ActivityTaskRunInput): Promise<ActivityTaskRun> {
+    if (this.operationPending) throw new SceneApiError('CLOUD_OPERATION_BUSY', 409, null);
+    const lease = this.writableLease(), projectId = this.snapshot.project?.id;
+    if (!projectId || lease.projectId !== projectId || this.snapshot.revision === null || !this.snapshot.user || !Number.isFinite(Date.parse(lease.expiresAt))) {
+      throw new SceneApiError('CLOUD_WRITE_BLOCKED', 409, null);
+    }
+    if (this.snapshot.geometryBinding ? !this.isGeometryBound(input.activityContext.projectId) : projectId !== input.activityContext.projectId) {
+      throw new SceneApiError('ACTIVITY_SERVICE_REQUIRED', 409, null);
+    }
+    const body = activityTaskRunRequestSchema.parse({ ...input, kind: 'activity_tasks', sessionId: lease.sessionId,
+      generation: lease.generation, expectedRevision: this.snapshot.revision });
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', () => this.client.startActivityTaskRun(projectId, body));
+  }
+  async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs/${uuid.parse(id)}`, 'GET', () => this.client.getActivityTaskRun(projectId, id));
+  }
+  async getActivityTaskRunByRequest(requestId: string): Promise<ActivityTaskRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs/by-request/${uuid.parse(requestId)}`, 'GET', () => this.client.getActivityTaskRunByRequest(projectId, requestId));
+  }
+  async cancelActivityTaskRun(id: string): Promise<ActivityTaskRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs/${uuid.parse(id)}/cancel`, 'POST', () => this.client.cancelActivityTaskRun(projectId, id));
   }
   /** Deterministic asset replacement prepares a preview; only applySceneProposal saves it. */
   async prepareMaterialVariantProposal(input: { requestId: string; scene: Scene; objectIds: string[]; sourceAssetId: string; variantAssetId: string }): Promise<SceneProposal> {

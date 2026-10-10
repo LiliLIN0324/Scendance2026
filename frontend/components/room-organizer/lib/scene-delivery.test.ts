@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
-import { clearGlbAssetCache, disposeOwnedModel, ensureGlbAsset } from '../three/glb-assets';
+import { useGlbAssets } from '../hooks/use-glb-assets';
+import { clearGlbAssetCache, disposeOwnedModel, ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { backendSceneToLayout, createMeasuredRoomLayout } from './backend-adapter';
-import { assembleDeliveryScene, deliveryMaterials, deliveryOperations, eventOperationsCsv, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, verifyDeliveryReload } from './scene-delivery';
-import type { Scene } from '@/lib/backend-session';
+import { assembleDeliveryScene, deliveryMaterials, deliveryOperations, eventOperationsCsv, exportDeliveryGlb, prepareDeliveryAssets, sceneDeliveryCsv, sceneDeliveryJson, verifyDeliveryReload } from './scene-delivery';
+import type { BackendSession, Scene } from '@/lib/backend-session';
 
 const chairId='10000000-0000-4000-8000-000000000001';
 const variantId='10000000-0000-4000-8000-000000000002';
@@ -26,6 +28,84 @@ async function load(assetId=chairId) {
 afterEach(()=>{clearGlbAssetCache();vi.restoreAllMocks();});
 
 describe('scene delivery',()=>{
+  it('shares one public recovery between the rendered layout and delivery without changing the saved URL',async()=>{
+    const publicId='6a4e04d0-57a7-528b-863c-41ee15c91fa7';
+    const sha='eb631b23a79b71a6f20e779d7441b3ef19f5f29192ab25d168065324950af3f6';
+    const origin='https://supabase.example.test';
+    const expired=`${origin}/storage/v1/object/sign/scene-assets/11111111-1111-4111-8111-111111111111/${publicId}/${sha}.glb?token=expired-test`;
+    const local='/showcase/assets/library/model/beach-surf-and-paddle-kit-folding-beach-chair-68794f97.glb';
+    const current=backendSceneToLayout({...base,objects:[object(1,publicId)]},{assetUrls:{[publicId]:expired}});
+    const before=JSON.stringify(current);
+    const bytes=new Uint8Array(readFileSync('../assets/library/model/beach-surf-and-paddle-kit-folding-beach-chair-68794f97.glb')).buffer;
+    const fetcher=vi.spyOn(globalThis,'fetch').mockImplementation(async url=>{
+      if(url===expired)return new Response(null,{status:403});
+      if(url===local)return new Response(bytes);
+      throw new Error('Unexpected test request');
+    });
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL',origin);
+    try {
+      renderHook(()=>useGlbAssets(current));
+      await act(async()=>{await prepareDeliveryAssets(current);});
+      expect(getGlbAssetState(publicId).status).toBe('ready');
+      expect(fetcher.mock.calls.map(([url])=>url)).toEqual([expired,local]);
+      expect(JSON.stringify(current)).toBe(before);
+    } finally {cleanup();vi.unstubAllEnvs();}
+  });
+
+  it('propagates an authorization refusal before public recovery and does not request model bytes',async()=>{
+    const publicId='6a4e04d0-57a7-528b-863c-41ee15c91fa7';
+    const current=backendSceneToLayout({...base,objects:[object(1,publicId)]});
+    const refusal=new Error('SESSION_CHANGED');
+    const authorizeAsset=vi.fn().mockRejectedValue(refusal);
+    const controller={getSnapshot:()=>({user:{id:'test-user'}}),authorizeAsset,
+      config:{url:'https://supabase.example.test'}} as unknown as BackendSession;
+    const fetcher=vi.spyOn(globalThis,'fetch');
+    await expect(prepareDeliveryAssets(current,controller)).rejects.toBe(refusal);
+    expect(authorizeAsset).toHaveBeenCalledWith(publicId);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(getGlbAssetState(publicId).status).toBe('idle');
+  });
+
+  it('recovers a confirmed expired public archive URL using the same shipped GLB before delivery',async()=>{
+    const publicId='6a4e04d0-57a7-528b-863c-41ee15c91fa7';
+    const sha='eb631b23a79b71a6f20e779d7441b3ef19f5f29192ab25d168065324950af3f6';
+    const origin='https://supabase.example.test';
+    const expired=`${origin}/storage/v1/object/sign/scene-assets/11111111-1111-4111-8111-111111111111/${publicId}/${sha}.glb?token=expired-test`;
+    const local='/showcase/assets/library/model/beach-surf-and-paddle-kit-folding-beach-chair-68794f97.glb';
+    const current=backendSceneToLayout({...base,objects:[object(1,publicId)]},{assetUrls:{[publicId]:expired}});
+    const before=JSON.stringify(current);
+    const bytes=new Uint8Array(readFileSync('../assets/library/model/beach-surf-and-paddle-kit-folding-beach-chair-68794f97.glb')).buffer;
+    const fetcher=vi.spyOn(globalThis,'fetch').mockImplementation(async url=>{
+      if(url===expired)return new Response(null,{status:403});
+      if(url===local)return new Response(bytes);
+      throw new Error('Unexpected test request');
+    });
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL',origin);
+    try {
+      await prepareDeliveryAssets(current);
+      expect(getGlbAssetState(publicId).status).toBe('ready');
+      expect(fetcher.mock.calls.map(([url])=>url)).toEqual([expired,local]);
+      expect(JSON.stringify(current)).toBe(before);
+      const delivered=assembleDeliveryScene(current);
+      expect(delivered.children.some(child=>child.userData.deliveryObjectId===objectId(1))).toBe(true);
+      disposeOwnedModel(delivered);
+    } finally {vi.unstubAllEnvs();}
+  });
+
+  it('keeps a known public ID with an unproven custom private URL failed instead of rolling it back',async()=>{
+    const publicId='6a4e04d0-57a7-528b-863c-41ee15c91fa7';
+    const custom='https://supabase.example.test/private/custom-version.glb?token=expired-test';
+    const current=backendSceneToLayout({...base,objects:[object(1,publicId)]},{assetUrls:{[publicId]:custom}});
+    const fetcher=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(null,{status:403}));
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://supabase.example.test');
+    try {
+      await expect(prepareDeliveryAssets(current)).rejects.toThrow('HTTP 403');
+      expect(getGlbAssetState(publicId).status).toBe('error');
+      expect(fetcher.mock.calls.map(([url])=>url)).toEqual([custom]);
+      expect(()=>assembleDeliveryScene(current)).toThrow('未导出占位物件');
+    } finally {vi.unstubAllEnvs();}
+  });
+
   it('carries missing production-linked object diagnostics into the task CSV and scene JSON without inventing direct references',async()=>{
     const current=layout(),taskId=objectId(200),missingId=objectId(201);
     current.eventOperations=eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:taskId,title:'演练：清点租赁椅',phase:'setup',evidenceNote:'演练短缺，尚待处理'}]});

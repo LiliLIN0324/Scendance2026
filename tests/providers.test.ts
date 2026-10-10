@@ -1,5 +1,5 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect,vi } from 'vitest';
-import { database,owner,scene,session } from './fixtures.ts';
+import { database,owner,scene,chair,session } from './fixtures.ts';
 import { generateProposal,hunyuan } from '../supabase/functions/_shared/providers.ts';
 import { processGeneration } from '../supabase/functions/_shared/worker.ts';
 import { packGltf } from '../supabase/functions/_shared/models.ts';
@@ -71,6 +71,41 @@ describe('real provider request formats with controlled responses',()=>{
     await expect(generateProposal(input,env,async()=>{},bad)).rejects.toThrow('AI_INVALID_PROPOSAL');expect(bad).toHaveBeenCalledTimes(2);
   });
 });
+describe('provider proposal selection boundaries',()=>{
+  function input() {
+    const selected={...chair(),position:{x:3,z:3}},other={...chair(),position:{x:8,z:8}};
+    return {selected,other,request:{projectId:crypto.randomUUID(),requestId:crypto.randomUUID(),sessionId:session,generation:1,
+      expectedRevision:0,localRevision:0,scene:{...scene(),objects:[selected,other]},instruction:'只移动选中物件',mode:'modify' as const,selectedIds:[selected.id]}};
+  }
+  const completion=(id:string,x:number)=>response({choices:[{finish_reason:'stop',message:{content:JSON.stringify({
+    explanation:'固定响应：移动指定物件',commands:[{op:'move',id,position:{x,z:8}}],
+  })}}],usage:{total_tokens:10}});
+  it('rejects repeated unselected commands after the existing single repair attempt',async()=>{
+    const {selected,other,request}=input(),original=structuredClone(request.scene);
+    const bodies:{messages:{role:string;content:string}[]}[]=[],reserve=vi.fn(async()=>{});
+    const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{bodies.push(JSON.parse(init?.body as string));return completion(other.id,9);});
+    await expect(generateProposal(request,env,reserve,fetcher)).rejects.toMatchObject({
+      code:'AI_INVALID_PROPOSAL',status:422,details:{validation:{code:'INVALID_SELECTION'}},
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);expect(reserve.mock.calls).toEqual([[0],[1]]);
+    expect(JSON.parse(bodies[0].messages[1].content).selectedIds).toEqual([selected.id]);
+    expect(JSON.parse(bodies[1].messages.at(-1)!.content).repair).toMatchObject({code:'INVALID_SELECTION'});
+    expect(request.scene).toEqual(original);
+  });
+  it('repairs an unselected command into a selected move without adding a retry',async()=>{
+    const {selected,other,request}=input(),original=structuredClone(request.scene);
+    const bodies:{messages:{role:string;content:string}[]}[]=[],reserve=vi.fn(async()=>{});
+    const fetcher=vi.fn(async(_url:unknown,init?:RequestInit)=>{
+      bodies.push(JSON.parse(init?.body as string));return bodies.length===1?completion(other.id,9):completion(selected.id,4);
+    });
+    const result=await generateProposal(request,env,reserve,fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(2);expect(reserve.mock.calls).toEqual([[0],[1]]);expect(result.usage).toHaveLength(2);
+    expect(JSON.parse(bodies[1].messages.at(-1)!.content).repair).toMatchObject({code:'INVALID_SELECTION'});
+    expect(result.scene.objects[0]).toEqual({...selected,position:{x:4,z:8}});
+    expect(result.scene.objects[1]).toEqual(other);expect(request.scene).toEqual(original);
+  });
+});
+
 describe('worker recovery against PostgreSQL queue',()=>{
   let f:Awaited<ReturnType<typeof database>>;
   beforeAll(async()=>{f=await database();},30000);afterAll(async()=>{await f?.db.close();});

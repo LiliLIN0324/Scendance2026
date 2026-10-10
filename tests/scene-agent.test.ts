@@ -71,3 +71,50 @@ describe('material suggestions use asset identity without widening instance perm
     expect(base).toEqual(original);
   });
 });
+
+describe('shared proposal selection boundaries',()=>{
+  function input() {
+    const selected={...chair(),position:{x:3,z:3}},other={...chair(),position:{x:8,z:8}};
+    return {selected,other,base:{...scene(),objects:[selected,other]}};
+  }
+  it.each([
+    ['move',(id:string)=>({op:'move',id,position:{x:9,z:8}})],
+    ['remove',(id:string)=>({op:'remove',id})],
+    ['recolor',(id:string)=>({op:'recolor',id,color:'#ff0000'})],
+    ['rotate',(id:string)=>({op:'rotate',id,rotation:45})],
+    ['replace',(id:string)=>({op:'replace',id,materialId:'table'})],
+    ['replace_resource',(id:string)=>({op:'replace_resource',id,resourceId:tent.resourceId})],
+  ] as const)('rejects unselected %s through the shared builder without changing the input',(_op,command)=>{
+    const {selected,other,base}=input(),original=structuredClone(base);
+    expect(()=>buildProposal(base,'modify',{explanation:'只修改选中物件',commands:[command(other.id)]},[tent],[selected.id])).toThrow('INVALID_SELECTION');
+    expect(base).toEqual(original);
+  });
+  it('rejects a whole batch containing a selected move followed by an unselected move',()=>{
+    const {selected,other,base}=input(),original=structuredClone(base);
+    expect(()=>buildProposal(base,'modify',{explanation:'混合范围命令',commands:[
+      {op:'move',id:selected.id,position:{x:4,z:3}},
+      {op:'move',id:other.id,position:{x:9,z:8}},
+    ]},[],[selected.id])).toThrow('INVALID_SELECTION');
+    expect(base).toEqual(original);
+  });
+  it('allows a selected existing object to move and preserves the other instance',()=>{
+    const {selected,other,base}=input(),original=structuredClone(base);
+    const result=buildProposal(base,'modify',{explanation:'移动选中物件',commands:[{op:'move',id:selected.id,position:{x:4,z:3}}]},[],[selected.id]);
+    expect(result.scene.objects[0]).toEqual({...selected,position:{x:4,z:3}});
+    expect(result.scene.objects[1]).toEqual(other);expect(base).toEqual(original);
+  });
+  it('allows ordinary existing-object modifications when the selection is empty',()=>{
+    const {other,base}=input(),original=structuredClone(base);
+    const result=buildProposal(base,'modify',{explanation:'未限制选中范围',commands:[{op:'move',id:other.id,position:{x:9,z:8}}]},[],[]);
+    expect(result.scene.objects[1]).toEqual({...other,position:{x:9,z:8}});expect(base).toEqual(original);
+  });
+  it.each([
+    {op:'add',materialId:'chair',position:{x:6,z:5},rotation:0,color:'#ffffff'},
+    {op:'add_resource',resourceId:tent.resourceId,position:{x:6,z:5},rotation:0},
+  ])('allows $op because it does not target an existing object ID',command=>{
+    const {selected,base}=input(),original=structuredClone(base);
+    const result=buildProposal(base,'modify',{explanation:'增加新物件',commands:[command]},[tent],[selected.id]);
+    expect(result.scene.objects).toHaveLength(3);expect(result.scene.objects.slice(0,2)).toEqual(base.objects);
+    expect(result.scene.objects[2].id).not.toBe(selected.id);expect(base).toEqual(original);
+  });
+});

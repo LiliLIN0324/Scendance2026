@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
 import { presetModelUrl } from '../lib/scene-presets';
 import { ensureGlbAsset, getGlbAssetRevision, getGlbAssetState, glbAssetKey, subscribeGlbAssets } from '../three/glb-assets';
 import type { RoomLayout } from '../lib/types';
@@ -14,8 +15,8 @@ export function useGlbAssets(layout: RoomLayout): number {
     }
     for (const floor of layout.floors) for (const item of floor.items) {
       const key = glbAssetKey(item);
-      if (key && item.glbUrl && getGlbAssetState(key).status === 'idle') {
-        void ensureGlbAsset(key, item.glbUrl).catch(() => { /* Error remains in the queryable cache state. */ });
+      if (key && (item.glbUrl || publicAssetLocalUrl(item.assetId)) && getGlbAssetState(key).status === 'idle') {
+        void ensureRecoverableGlbAsset(key, item.assetId, item.glbUrl).catch(() => { /* Error remains in the queryable cache state. */ });
       }
     }
   }, [layout.floors, layout.scenePreset, revision]);

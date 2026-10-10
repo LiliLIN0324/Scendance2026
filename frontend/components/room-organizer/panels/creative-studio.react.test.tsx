@@ -81,20 +81,27 @@ function DeliveryShortcutTrial({ current = layout, operations = false }: { curre
   </CreativeStudioProvider>;
 }
 
-function DockedTrial({ current = layout, generator, onWorkspace, onConversation, operations = false, localSaveError = false }: {
-  current?: RoomLayout; generator?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; operations?: boolean; localSaveError?: boolean;
+function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace, onConversation, onTemplates, operations = false, localSaveError = false }: {
+  current?: RoomLayout; generator?: ReactNode; commercialPanel?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; onTemplates?:()=>void; operations?: boolean; localSaveError?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null), referenceEntry = useRef<HTMLButtonElement>(null), conversationEntry = useRef<HTMLButtonElement>(null);
+  const workspaceEntry = useRef<HTMLButtonElement>(null), toolsEntry = useRef<HTMLButtonElement>(null);
   const [workspaceVisible, setWorkspaceVisible] = useState(false), [referenceRequest, setReferenceRequest] = useState(0);
+  const [workspaceRequest, setWorkspaceRequest] = useState(0), [toolsRequest, setToolsRequest] = useState(0);
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0), [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const workspaceChanged = useCallback((visible: boolean) => { setWorkspaceVisible(visible); onWorkspace?.(visible); }, [onWorkspace]);
   const conversationChanged = useCallback((visible: boolean) => { onConversation?.(visible); }, [onConversation]);
   return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onPreview={onPreview} onUpdateEventOperations={operations?()=>{}:undefined}>
+    <button ref={toolsEntry} onClick={() => setToolsRequest(value => value + 1)}>素材</button>
+    <button ref={workspaceEntry} onClick={() => setWorkspaceRequest(value => value + 1)}>资料</button>
     <button ref={conversationEntry} onClick={() => setConversationOpenRequest(value => value + 1)}>助手</button>
     <button ref={referenceEntry} onClick={() => setReferenceRequest(value => value + 1)}>外部图纸核对</button>
     <button onClick={() => setConversationCloseRequest(value => value + 1)}>外部收起聊天</button>
     <div data-testid="docked-business-host" ref={host} hidden={!workspaceVisible}/>
-    <CreativeAssistant docked businessHostRef={host} generationPanel={generator}
+    <CreativeAssistant docked businessHostRef={host} generationPanel={generator} commercialPanel={commercialPanel}
+      {...(onTemplates?{onOpenTemplates:onTemplates}:{})}
+      workspaceOpenRequest={workspaceRequest} workspaceEntryRef={workspaceEntry}
+      toolsOpenRequest={toolsRequest} toolsEntryRef={toolsEntry}
       referenceOpenRequest={referenceRequest} referenceEntryRef={referenceEntry}
       conversationCloseRequest={conversationCloseRequest}
       conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntry}
@@ -105,6 +112,24 @@ function DockedTrial({ current = layout, generator, onWorkspace, onConversation,
 
 describe('docked workspace integration', () => {
   beforeEach(() => { vi.stubGlobal('innerWidth', 1440); });
+  it('opens the shared shelf template destination and resumes the same unsaved activity form',async()=>{
+    const onTemplates=vi.fn();
+    renderUI(<DockedTrial onTemplates={onTemplates}/>);await act(async()=>{});
+    fireEvent.click(screen.getByRole('button',{name:'资料'}));
+    const demand=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;
+    fireEvent.change(demand,{target:{value:'独立演练：尚未保存的活动说明'}});
+    selectBusiness('场景模板');
+    expect(onTemplates).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('region',{name:'场景模板资源'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'返回素材'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'返回当前工作区'})).toBeNull();
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'资料'}));
+    expect(screen.getByRole('textbox',{name:'客户需求'})).toBe(demand);
+    expect(demand.value).toBe('独立演练：尚未保存的活动说明');
+    expect((screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement).value).toBe('brief');
+    expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
   it('[compact navigation] keeps every old destination in the business area and removes the chat button grid',async()=>{
     renderUI(<DockedTrial/>);await act(async()=>{});
     expect(document.querySelector('.cr-docked-tools')).toBeNull();
@@ -428,6 +453,158 @@ describe('docked workspace integration', () => {
     expect(workspace).toHaveBeenLastCalledWith(false);
     await waitFor(() => expect(document.activeElement).toBe(referenceEntry));
     expect(controller.startAgentRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('workspace navigation continuity', () => {
+  it('[commercial category] adds the supplied destination without mounting it until first open', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    const mounted = vi.fn();
+    function CommercialNode() { useEffect(() => { mounted(); }, []); return <input aria-label="演练约定名称"/>; }
+    renderUI(<DockedTrial commercialPanel={<CommercialNode/>}/>); await act(async () => {});
+    expect(mounted).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '资料' }));
+    const categories = screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement;
+    expect(Array.from(categories.options).map(option => option.text)).toEqual(['活动需求', '图纸与尺寸', '执行资料', '方案评审', '场景模板', '物料工具', '合同与约定']);
+    expect(mounted).not.toHaveBeenCalled();
+    selectBusiness('图纸与尺寸'); expect(mounted).not.toHaveBeenCalled();
+    selectBusiness('合同与约定'); expect(mounted).toHaveBeenCalledOnce();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('group', { name: '合同与约定资料' })));
+    expect(screen.getByText(/当前场景：/).hidden).toBe(true);
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[commercial continuity] keeps the same unsaved node and source protection through categories, shelf, close and parent view rerender', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    const mounted = vi.fn(), unmounted = vi.fn(), onTemplates = vi.fn();
+    function CommercialNode() {
+      const [value, setValue] = useState(''), valueRef = useRef(value); valueRef.current = value;
+      useEffect(() => { mounted(); return () => { unmounted(); }; }, []);
+      useEffect(() => sourceStorage.registerSourceFlush(projectId, async () => { if (valueRef.current) throw new Error('演练约定有未保存修改'); }), []);
+      return <input aria-label="演练约定名称" value={value} onChange={event => setValue(event.target.value)}/>;
+    }
+    const view = renderUI(<DockedTrial commercialPanel={<CommercialNode/>} onTemplates={onTemplates}/>); await act(async () => {});
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry); selectBusiness('合同与约定');
+    const input = screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement;
+    const target = screen.getByRole('group', { name: '合同与约定资料' });
+    fireEvent.change(input, { target: { value: '演练：尚未保存的约定' } });
+    for (const name of ['活动需求', '图纸与尺寸', '执行资料', '方案评审', '物料工具']) {
+      selectBusiness(name); expect(screen.queryByRole('textbox', { name: '演练约定名称' })).toBeNull();
+      await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+      selectBusiness('合同与约定'); expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input);
+    }
+    selectBusiness('场景模板'); expect(onTemplates).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+    fireEvent.click(dataEntry);
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('commercial');
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry);
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    view.rerender(<DockedTrial current={{ ...layout, backendCamera: 'top' }} commercialPanel={<CommercialNode/>} onTemplates={onTemplates}/>); await act(async () => {});
+    view.rerender(<DockedTrial current={{ ...layout, backendCamera: 'overview' }} commercialPanel={<CommercialNode/>} onTemplates={onTemplates}/>); await act(async () => {});
+    await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+    fireEvent.click(dataEntry);
+    expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input); expect(input.value).toBe('演练：尚未保存的约定');
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    act(() => { input.focus(); }); fireEvent.keyDown(input, { key: 'Escape', cancelable: true });
+    await waitFor(() => expect(document.activeElement).toBe(dataEntry));
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
+    fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
+    expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input);
+    expect(mounted).toHaveBeenCalledOnce(); expect(unmounted).not.toHaveBeenCalled();
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each([1440, 390])('[commercial chat separation] preserves both drafts and model mode while returning data focus at %s px', async width => {
+    vi.stubGlobal('innerWidth', width);
+    renderUI(<DockedTrial commercialPanel={<input aria-label="演练约定名称"/>}/>); await act(async () => {});
+    const chatEntry = screen.getByRole('button', { name: '助手' }), dataEntry = screen.getByRole('button', { name: '资料' });
+    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(chatEntry);
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '演练：未发送的策划草稿' } }); selectMode('model');
+    fireEvent.change(composer, { target: { value: '演练：未发送的物料草稿' } });
+    fireEvent.click(dataEntry); selectBusiness('合同与约定');
+    const target = screen.getByRole('group', { name: '合同与约定资料' });
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    fireEvent.keyDown(target, { key: 'Escape', cancelable: true });
+    await waitFor(() => expect(document.activeElement).toBe(dataEntry));
+    fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('commercial');
+    fireEvent.click(chatEntry);
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：未发送的物料草稿');
+    selectMode('plan'); expect(composer.value).toBe('演练：未发送的策划草稿');
+    fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each(['执行资料', '图纸与尺寸'] as const)('[repeat data entry] restores %s after materials without resetting fields or dispatching', async destination => {
+    vi.stubGlobal('innerWidth', 1440);
+    renderUI(<DockedTrial operations/>); await act(async () => {});
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry);
+    const demand = screen.getByRole('textbox', { name: '客户需求' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(document.activeElement).toBe(demand));
+    fireEvent.change(demand, { target: { value: '演练：资料返回时保留原需求。' } });
+    selectBusiness(destination);
+    const host = screen.getByTestId('docked-business-host');
+    const target = destination === '执行资料' ? screen.getByRole('group', { name: '执行工作单' }) : host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); expect(host.hidden).toBe(true);
+    fireEvent.click(dataEntry);
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe(destination === '执行资料' ? 'delivery' : 'reference');
+    expect(host.contains(target)).toBe(true); await waitFor(() => expect(document.activeElement).toBe(target));
+    selectBusiness('活动需求');
+    expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand); expect(demand.value).toBe('演练：资料返回时保留原需求。');
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it.each([1440, 390])('[materials entry] hides business and naturally closes narrow chat while preserving the same proposal and both drafts at %s px', async width => {
+    vi.stubGlobal('innerWidth', width); connected(); vi.mocked(controller.startAgentRun).mockResolvedValueOnce(runFrom(proposal));
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const chatEntry = screen.getByRole('button', { name: '助手' });
+    if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(chatEntry);
+    const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
+    fireEvent.change(composer, { target: { value: '演练：先预览一个椅子方案' } }); fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await screen.findByText('方案提案 · 尚未应用'); const confirm = screen.getByRole('button', { name: '确认应用' });
+    fireEvent.change(composer, { target: { value: '演练：素材切换前的策划草稿' } }); selectMode('model');
+    fireEvent.change(composer, { target: { value: '演练：素材切换前的物料草稿' } });
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry); expect(screen.getByTestId('docked-business-host').hidden).toBe(false);
+    fireEvent.click(chatEntry);
+    await waitFor(() => expect(document.activeElement).toBe(composer));
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); await act(async () => {});
+    expect(screen.getByTestId('docked-business-host').hidden).toBe(true); expect(document.activeElement).toBe(toolsEntry);
+    if (width === 390) expect(screen.queryByRole('textbox', { name: '告诉助手你的想法' })).toBeNull();
+    else expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
+    fireEvent.click(dataEntry); fireEvent.click(chatEntry);
+    expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：素材切换前的物料草稿');
+    expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
+    expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
+    selectMode('plan'); expect(composer.value).toBe('演练：素材切换前的策划草稿');
+    expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('[materials source protection] keeps an unsaved review registered while hidden and resumes its fields and focus from data', async () => {
+    vi.stubGlobal('innerWidth', 1440);
+    renderUI(<DockedTrial/>); await act(async () => {});
+    const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
+    fireEvent.click(dataEntry); selectBusiness('方案评审');
+    const review = screen.getByRole('group', { name: '当前方案评审' });
+    fireEvent.click(screen.getByText('本机草稿与文件'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存说明草稿' }).hasAttribute('disabled')).toBe(false));
+    const summary = screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: '演练：素材页往返仍未保存的方案说明。' } });
+    act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
+    await act(async () => { await expect(flushSourceScope(projectId)).rejects.toThrow('评审说明有未保存修改'); });
+    fireEvent.click(dataEntry);
+    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('review');
+    expect(screen.getByLabelText('简短方案说明（选填）')).toBe(summary); expect(summary.value).toBe('演练：素材页往返仍未保存的方案说明。');
+    await waitFor(() => expect(document.activeElement).toBe(review));
+    expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
 });
 
@@ -779,7 +956,7 @@ function selectMode(value:'plan'|'model'):void {
   fireEvent.change(screen.getByRole('combobox',{name:'工作模式'}),{target:{value}});
 }
 function selectBusiness(name:string):void {
-  const destinations:Record<string,string>={'活动需求':'brief','图纸与尺寸':'reference','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model'};
+  const destinations:Record<string,string>={'活动需求':'brief','图纸与尺寸':'reference','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
   if(!screen.queryByRole('combobox',{name:'资料分类'}))fireEvent.click(screen.getByRole('button',{name:'外部图纸核对'}));
   fireEvent.change(screen.getByRole('combobox',{name:'资料分类'}),{target:{value:destinations[name]}});
 }
@@ -2535,6 +2712,124 @@ describe('unified Agent', () => {
   });
 });
 
+describe('retained Agent partial results', () => {
+  const partialNotice = '后续处理中断，已保留通过检查的方案，请核对后继续。';
+  const providerMessage = '演练供应方内部正文，不应显示给操作者。';
+  const providerProgress = '演练供应方内部进度，不应作为终态提示。';
+  function partialRun(value = proposal, input?: AgentRunInput): AgentRun {
+    return { ...runFrom(value, input), executionMode: 'preview', errorCode: 'DATABASE_ERROR', message: providerMessage, progress: providerProgress };
+  }
+  function send(instruction = '演练：先核对椅子方案'): void {
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: instruction } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+  }
+  function expectSafeText(container: HTMLElement): void {
+    expect(container.textContent).not.toContain('DATABASE_ERROR');
+    expect(container.textContent).not.toContain(providerMessage); expect(container.textContent).not.toContain(providerProgress);
+  }
+
+  it.each(['preview', 'unchanged', 'direct'] as const)('[retained partial POST] keeps the valid %s result and shows a safe interruption notice', async mode => {
+    connected();
+    const value = mode === 'unchanged' ? { ...proposal, candidate: scene, explanation: '已核对当前场景，本次不调整物件。' } : proposal;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input => ({ ...partialRun(value, input), executionMode: mode === 'direct' ? 'direct' : 'preview' }));
+    function AppliedWorkspace() {
+      const [current, setCurrent] = useState(layout);
+      return <CreativeStudioProvider controller={controller} layout={current} onApply={next => { onApply(next); setCurrent(next); }} onPreview={onPreview}><CreativeAssistant/></CreativeStudioProvider>;
+    }
+    const view = renderUI(mode === 'direct' ? <AppliedWorkspace/> : ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' }));
+    send();
+    if (mode === 'preview') {
+      await screen.findByText('方案提案 · 尚未应用');
+      expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy();
+      expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
+      expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    } else if (mode === 'unchanged') {
+      await screen.findByText(value.explanation);
+      expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull(); expect(controller.authorizeAssets).not.toHaveBeenCalled();
+      expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+      expect(controller.applySceneProposal).toHaveBeenCalledOnce();
+      expect(controller.applySceneProposal).toHaveBeenCalledWith(value, layoutToBackendScene(layout));
+      expect(layoutToBackendScene(onApply.mock.calls[0]![0])).toEqual(candidate);
+      expect(screen.getByText(/提案已应用/)).toBeTruthy(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    }
+    expect((await screen.findByText(partialNotice)).getAttribute('role')).toBe('status');
+    expect(controller.startAgentRun).toHaveBeenCalledOnce(); expectSafeText(view.container);
+  });
+
+  it.each(['requestId', 'runId'] as const)('[retained partial GET] reads the original %s without another paid dispatch', async route => {
+    connected();
+    let requestId = '70000000-0000-4000-8000-000000000001';
+    const runId = partialRun().id;
+    let view: ReturnType<typeof renderUI>;
+    if (route === 'requestId') {
+      vi.mocked(controller.startAgentRun).mockRejectedValueOnce(new TypeError('演练：首次提交结果未知'));
+      view = renderUI(ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' })); send();
+      const recover = await screen.findByRole('button', { name: '查询原任务' });
+      requestId = vi.mocked(controller.startAgentRun).mock.calls[0]![0].requestId;
+      vi.mocked(controller.getAgentRunByRequest).mockResolvedValueOnce({ ...partialRun(), requestId }); fireEvent.click(recover);
+    } else {
+      localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`, JSON.stringify({ requestId, runId, projectId, baseKey: canonical(scene), briefKey: JSON.stringify({ brief: INITIAL_BRIEF, images: [] }) }));
+      let finish!: (run: AgentRun) => void;
+      vi.mocked(controller.getAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      vi.stubGlobal('innerWidth', 390); view = renderUI(<DockedTrial/>);
+      await waitFor(() => expect(controller.getAgentRun).toHaveBeenCalledWith(runId));
+      fireEvent.click(screen.getByRole('button', { name: '资料' })); fireEvent.click(screen.getByRole('button', { name: '素材' }));
+      await act(async () => { finish({ ...partialRun(), requestId }); });
+      fireEvent.click(screen.getByRole('button', { name: '助手' }));
+    }
+    await screen.findByText('方案提案 · 尚未应用'); expect((await screen.findByText(partialNotice)).getAttribute('role')).toBe('status');
+    expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy(); expect(onApply).not.toHaveBeenCalled();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(controller.startAgentRun).toHaveBeenCalledTimes(route === 'requestId' ? 1 : 0);
+    if (route === 'requestId') {
+      expect(controller.getAgentRunByRequest).toHaveBeenCalledOnce(); expect(controller.getAgentRunByRequest).toHaveBeenCalledWith(requestId);
+      expect(controller.getAgentRun).not.toHaveBeenCalled();
+    } else {
+      expect(controller.getAgentRun).toHaveBeenCalledOnce(); expect(controller.getAgentRun).toHaveBeenCalledWith(runId);
+      expect(controller.getAgentRunByRequest).not.toHaveBeenCalled();
+    }
+    const marker = JSON.parse(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`)!);
+    expect(marker.requestId).toBe(requestId); expect(marker.runId).toBe(runId);
+    expect(screen.queryByRole('button', { name: '查询原任务' })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '演练：核对后继续的新输入' } });
+    expect(screen.getByRole('button', { name: '发送消息' }).hasAttribute('disabled')).toBe(false); expectSafeText(view.container);
+  });
+
+  it.each(['activity', 'lease', 'expired', 'scene', 'brief'] as const)('[retained partial invalid] never claims retained checked work after %s invalidates the late response', async change => {
+    connected();
+    let finish!: (run: AgentRun) => void;
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const view = renderUI(ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' })); send();
+    await waitFor(() => expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    const original = vi.mocked(controller.startAgentRun).mock.calls[0]![0];
+    if (change === 'activity') view.rerender(ui({ ...layout, id: '10000000-0000-4000-8000-000000000002', name: '演练活动B' }));
+    if (change === 'lease') {
+      snapshot = { ...snapshot, sessionId: '40000000-0000-4000-8000-000000000002', lease: { ...snapshot.lease!, generation: 2 } }; view.rerender(ui());
+    }
+    if (change === 'scene') view.rerender(ui({ ...layout, width: 13 }));
+    if (change === 'brief') fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '演练：改为新的参与目标。' } });
+    const value = change === 'expired' ? { ...proposal, expires_at: '2000-01-01T00:00:00Z' } : proposal;
+    await act(async () => { finish(partialRun(value, original)); });
+    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(onApply).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expectSafeText(view.container);
+  });
+
+  it('[retained partial source wait] announces no retained result before asset checks finish or after its brief changes', async () => {
+    connected();
+    let finishAssets!: (assets: Awaited<ReturnType<BackendSession['authorizeAssets']>>) => void;
+    vi.mocked(controller.authorizeAssets).mockImplementationOnce(() => new Promise(resolve => { finishAssets = resolve; }));
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input => partialRun(proposal, input));
+    const view = renderUI(ui()); fireEvent.click(screen.getByRole('button', { name: '打开 Binggo Agent' })); send();
+    await waitFor(() => expect(controller.authorizeAssets).toHaveBeenCalledOnce());
+    expect(screen.queryByText(partialNotice)).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '演练：等待资源核对期间修改需求。' } });
+    await act(async () => { finishAssets({ assetUrls: {}, assetNames: {} }); });
+    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(onApply).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expectSafeText(view.container);
+  });
+});
+
 describe('bounded Agent runs and JEV decisions',()=>{
   const send=()=>{fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'直接把交流区布置好'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));};
   function comparison():AgentRun {
@@ -2574,9 +2869,11 @@ describe('bounded Agent runs and JEV decisions',()=>{
     expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();
   });
   it('retains partial candidates when evaluation is unavailable without inventing probabilities',async()=>{
-    connected();const run=comparison();vi.mocked(controller.startAgentRun).mockResolvedValueOnce({...run,candidates:run.candidates.slice(0,2),evaluation:{status:'partial',message:'只有两个有效方案，未执行三选评价。'}});render(ui());send();
+    connected();const run=comparison();vi.mocked(controller.startAgentRun).mockResolvedValueOnce({...run,errorCode:'DATABASE_ERROR',candidates:run.candidates.slice(0,2),evaluation:{status:'partial',message:'只有两个有效方案，未执行三选评价。'}});render(ui());send();
     await screen.findByText('只有两个有效方案，未执行三选评价。');
     expect(screen.getAllByRole('button',{name:/方案 [AB] ·/})).toHaveLength(2);
+    expect(screen.getAllByText('只有两个有效方案，未执行三选评价。')).toHaveLength(1);
+    expect(screen.queryByText('后续处理中断，已保留通过检查的方案，请核对后继续。')).toBeNull();
     expect(screen.queryByText(/模型推荐概率/)).toBeNull();expect(onApply).not.toHaveBeenCalled();
   });
   it('recovers an uncertain dispatch by the original request ID without posting again',async()=>{
@@ -2630,6 +2927,7 @@ it('honors the server preview decision even when direct application is selected'
   fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'有没有更好的布局'}});
   fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
   await screen.findByText('方案提案 · 尚未应用');
+  expect(screen.queryByText('后续处理中断，已保留通过检查的方案，请核对后继续。')).toBeNull();
   expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
 });
 

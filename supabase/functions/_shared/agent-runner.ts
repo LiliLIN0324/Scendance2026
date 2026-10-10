@@ -110,7 +110,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(!reply.toolCalls.length){messages.push({role:'assistant',content:reply.content??''},{role:'user',content:'请调用 submit_candidates 完成本次结果；说明性回答也使用一个空 commands 候选。'});continue;}
       messages.push({role:'assistant',content:reply.content,tool_calls:reply.toolCalls});
       for(const tool of reply.toolCalls) {
-        await check();let result:unknown,fingerprint:string|undefined,replayed=false;
+        await check();let result:unknown,fingerprint:string|undefined,replayed=false,checkpointFailed=false;
         try {
           const name=tool.function.name as keyof typeof schemas;
           if(!(name in schemas))throw new ApiError('UNKNOWN_TOOL',422);
@@ -159,7 +159,8 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               }catch(error){errors.push(safeError(error));}
               const expected=input.jevEnabled?3:1;
               const nextCandidates=valid.length>=candidates.length?valid.slice(0,expected):candidates;
-              if(nextCandidates.length)await call('checkpoint',{candidates:nextCandidates});
+              if(nextCandidates.length)try{await call('checkpoint',{candidates:nextCandidates});}
+              catch(error){checkpointFailed=true;throw error;}
               candidates=nextCandidates;
               if(valid.length===expected){finished=true;result={accepted:valid.length};}
               else if(++repair>1){finished=true;result={accepted:valid.length,partial:true};}
@@ -170,6 +171,8 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         const content=JSON.stringify(result);
         // Keep execution failures too: a lost response may follow a committed effect.
         if(fingerprint!==undefined&&!receipts.has(tool.id))receipts.set(tool.id,{fingerprint,content});
+        // An unconfirmed checkpoint is a persistence boundary, not a candidate repair.
+        if(checkpointFailed)throw lastError;
         await call('usage',{usage:{tool:tool.function.name,...(replayed?{replayed:true}:{}),...(result&&typeof result==='object'&&'code' in result?{errorCode:result.code}:{ok:true})}});
         messages.push({role:'tool',tool_call_id:tool.id,content});
         // Any further tools in this message are acknowledged without side effects.

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { PublicationPanel } from '@/components/business/publication-panel';
@@ -27,7 +28,8 @@ vi.mock('@/lib/source-storage', async importOriginal => {
 vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn() }));
 vi.mock('./creative-studio', () => ({ useLocalProjectBackup: vi.fn(() => null) }));
 vi.mock('./local-activities-panel', () => ({ LocalActivitiesPanel: vi.fn(() => null) }));
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search), useRouter: () => ({ push }) }));
 vi.mock('@/components/business/publication-panel', () => ({ PublicationPanel: vi.fn(() => null) }));
 vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: vi.fn(() => null) }));
 
@@ -49,6 +51,7 @@ beforeEach(async () => {
   localStorage.clear();
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
+  push.mockReset();
   vi.mocked(useLocalProjectBackup).mockReturnValue(null);
   vi.mocked(LocalActivitiesPanel).mockClear();
   pointRecords.clear();unreadablePointScopes.clear();
@@ -415,14 +418,15 @@ describe('CloudPanel delayed project replacement', () => {
 });
 
 
-it('uses the canonical auth page instead of a second cloud login form', () => {
+it('uses the canonical auth page instead of a second cloud login form', async () => {
   const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
   const rendered = render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   fireEvent.click(rendered.container.querySelector('.sc-cloud-trigger')!);
   expect(screen.queryByLabelText('密码')).toBeNull();
   expect(screen.getByRole('link', { name: '前往登录' }).getAttribute('href')).toBe('/auth');
   fireEvent.click(screen.getByRole('link', { name: '前往登录' }));
-  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+  await waitFor(() => expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false));
+  expect(push).toHaveBeenCalledExactlyOnceWith('/auth');
   anonymous.dispose();
 });
 
@@ -517,6 +521,84 @@ it('offers local activities without cloud configuration but excludes a requested
   view.rerender(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()}/>);
   expect(LocalActivitiesPanel).not.toHaveBeenCalled();
   offline.dispose();
+});
+
+describe('CloudPanel source protection before leaving the workspace', () => {
+  const entries = ['login', 'manage', 'logout'] as const;
+  const labels = { login: '前往登录', manage: '管理工作室、项目与成员', logout: '退出登录' };
+  const message = '演练约定有未保存修改，请先保存或放弃修改。';
+
+  function entryControl(entry: typeof entries[number]): HTMLElement {
+    return screen.getByRole(entry === 'logout' ? 'button' : 'link', { name: labels[entry] });
+  }
+
+  it.each(entries)('keeps the dialog and live draft when %s cannot flush, then proceeds once after saving', async entry => {
+    const scope = 'house-navigation-draft';
+    const flush = vi.fn();
+    function Draft(): JSX.Element {
+      const [value, setValue] = useState('');
+      const [saved, setSaved] = useState('');
+      useEffect(() => registerSourceFlush(scope, async () => {
+        flush();
+        if (value !== saved) throw new Error(message);
+      }), [value, saved]);
+      return <><input aria-label="演练约定名称" value={value} onChange={event => setValue(event.target.value)}/><button type="button" onClick={() => setSaved(value)}>保存演练输入</button></>;
+    }
+    const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+    const current = entry === 'login' ? anonymous : controller;
+    const signOut = vi.spyOn(current, 'signOut');
+    if (entry !== 'login') { queue([]); queue([]); }
+    const view = render(<><Draft/><CloudPanel controller={current} layout={backendSceneToLayout(scene, { projectId: scope })} onLoadLayout={vi.fn()}/></>);
+    try {
+      if (entry !== 'login') await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+      fireEvent.change(screen.getByRole('textbox', { name: '演练约定名称' }), { target: { value: '演练：保留这份约定输入' } });
+      fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+      expect(fireEvent.click(entryControl(entry))).toBe(entry === 'logout');
+      expect(await screen.findByText(message)).toBeTruthy();
+      expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+      expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
+      expect(push).not.toHaveBeenCalled();
+      expect(signOut).not.toHaveBeenCalled();
+      expect(flush).toHaveBeenCalledOnce();
+      fireEvent.click(screen.getByRole('button', { name: '保存演练输入' }));
+      if (entry === 'logout') queue({});
+      const control = entryControl(entry);
+      fireEvent.click(control); fireEvent.click(control);
+      await waitFor(() => expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(false));
+      expect(flush).toHaveBeenCalledTimes(2);
+      expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
+      if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
+      else { expect(push).toHaveBeenCalledExactlyOnceWith(entry === 'login' ? '/auth' : '/projects/'); expect(signOut).not.toHaveBeenCalled(); }
+    } finally { view.unmount(); anonymous.dispose(); }
+  });
+
+  it.each(entries)('waits for the actual %s flush and ignores repeated clicks', async entry => {
+    const scope = 'house-navigation-pending';
+    let finish!: () => void;
+    const flush = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const unregister = registerSourceFlush(scope, flush);
+    const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+    const current = entry === 'login' ? anonymous : controller;
+    const signOut = vi.spyOn(current, 'signOut');
+    if (entry !== 'login') { queue([]); queue([]); }
+    const view = render(<CloudPanel controller={current} layout={backendSceneToLayout(scene, { projectId: scope })} onLoadLayout={vi.fn()}/>);
+    try {
+      if (entry !== 'login') await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+      fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+      const control = entryControl(entry);
+      fireEvent.click(control); fireEvent.click(control);
+      await waitFor(() => expect(flush).toHaveBeenCalledOnce());
+      expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+      expect(entry === 'logout' ? control.hasAttribute('disabled') : control.getAttribute('aria-disabled') === 'true').toBe(true);
+      expect(push).not.toHaveBeenCalled(); expect(signOut).not.toHaveBeenCalled();
+      if (entry === 'logout') queue({});
+      await act(async () => { finish(); });
+      await waitFor(() => expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(false));
+      expect(flush).toHaveBeenCalledOnce();
+      if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
+      else { expect(push).toHaveBeenCalledExactlyOnceWith(entry === 'login' ? '/auth' : '/projects/'); expect(signOut).not.toHaveBeenCalled(); }
+    } finally { unregister(); view.unmount(); anonymous.dispose(); }
+  });
 });
 
 it('keeps account-panel keys away from canvas shortcuts while preserving native dialog defaults', () => {

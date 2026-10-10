@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { agentRunRequestSchema } from './agent-contract.ts';
+import { agentDispatchRequestSchema } from './agent-contract.ts';
 import { agentExecutionMode, executeAgentRun } from './agent-runner.ts';
+import { executeActivityTaskRun } from './activity-task-runner.ts';
 import { parametricAssetRequestSchema } from './parametric-contract.ts';
 import { createParametricAsset } from './parametric.ts';
 import { canApplyStructuralChange, structuralViolations, dimensionConflicts } from './structural-geometry.ts';
@@ -99,12 +100,14 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const projectId=uuid.parse(project[1]), tail=project[2];
         if(tail==='/agent-runs'&&method==='POST') {
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
-          const input=agentRunRequestSchema.parse(await json());
-          if(input.selectedIds.some(id=>!input.scene.objects.some(object=>object.id===id)))throw new ApiError('INVALID_SELECTION',422);
+          const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;
+          if(!activity&&input.selectedIds.some(id=>!input.scene.objects.some(object=>object.id===id)))throw new ApiError('INVALID_SELECTION',422);
           required(env,'DEEPSEEK_API_KEY');
-          const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await sha256(canonical(input)),baseHash:await sceneHash(input.scene),executionMode:env('DEEPSEEK_AGENT_MODE')==='legacy'?'preview':agentExecutionMode(input)});
+          const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await sha256(canonical(input)),
+            baseHash:activity?await sha256(canonical(input.activityContext)):await sceneHash(input.scene),
+            executionMode:activity||env('DEEPSEEK_AGENT_MODE')==='legacy'?'preview':agentExecutionMode(input)});
           if(!stored.reused){
-            const task=executeAgentRun(backend,actor,projectId,stored.id,env,fetcher).catch(()=>{});
+            const task=(activity?executeActivityTaskRun(backend,actor,projectId,stored.id,env,fetcher):executeAgentRun(backend,actor,projectId,stored.id,env,fetcher)).catch(()=>{});
             if(waitUntil)waitUntil(task);else await task;
           }
           return respond(waitUntil?stored:await backend.agent(actor,'get',{projectId,id:stored.id}),stored.reused?200:202);

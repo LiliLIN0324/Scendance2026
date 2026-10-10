@@ -43,13 +43,20 @@ const MAX_IMAGE_EDGE = 1500;
 
 export async function readImageAsDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) {
-    throw new Error('Please upload an image file (PNG, JPG, etc.)');
+    throw new Error('请选择图片文件（PNG、JPG等）。');
   }
   const rawDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image'));
+    const failed = () => { reject(new Error('图片读取失败，请重新选择。')); };
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && reader.result.startsWith('data:image/')) resolve(reader.result);
+      else failed();
+    };
+    reader.onerror = failed;
+    reader.onabort = failed;
     reader.readAsDataURL(file);
+  }).catch(() => {
+    throw new Error('图片读取失败，请重新选择。');
   });
 
   // A full-resolution floor plan can easily be several MB of base64, which
@@ -60,35 +67,52 @@ export async function readImageAsDataUrl(file: File): Promise<string> {
 }
 
 function downscaleDataUrl(dataUrl: string): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const image = new Image();
-    image.onload = () => {
-      const longEdge = Math.max(image.width, image.height);
-      if (longEdge <= MAX_IMAGE_EDGE || longEdge === 0) {
-        resolve(dataUrl);
-        return;
-      }
-      const scale = MAX_IMAGE_EDGE / longEdge;
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(dataUrl);
-        return;
-      }
-      // JPEG has no alpha and composites transparency on black — a
-      // transparent-background plan (typical CAD export) turned into
-      // line-work on a black slab. Fill white first (#146).
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    const release = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.src = '';
     };
-    // On decode failure, fall back to the original data URL rather than losing
-    // the upload entirely.
-    image.onerror = () => resolve(dataUrl);
+    image.onload = () => {
+      let canvas: HTMLCanvasElement | undefined;
+      try {
+        const width = image.naturalWidth, height = image.naturalHeight;
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+          throw new Error('Invalid image dimensions.');
+        }
+        const longEdge = Math.max(width, height);
+        if (longEdge <= MAX_IMAGE_EDGE) {
+          resolve(dataUrl);
+          return;
+        }
+        const scale = MAX_IMAGE_EDGE / longEdge;
+        canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas unavailable.');
+        // JPEG has no alpha; keep transparent floor plans on a white background.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const result = canvas.toDataURL('image/jpeg', 0.85);
+        if (!result.startsWith('data:image/')) throw new Error('Image encoding failed.');
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      } finally {
+        if (canvas) { canvas.width = 0; canvas.height = 0; }
+        release();
+      }
+    };
+    image.onerror = () => {
+      release();
+      reject(new Error('Image decode failed.'));
+    };
     image.src = dataUrl;
+  }).catch(() => {
+    throw new Error('图片处理失败，请重新选择有效的平面图。');
   });
 }
 
@@ -224,28 +248,32 @@ export async function downloadSceneAsGlb(scene: import('three').Object3D, baseNa
 }
 
 /**
- * Trigger a PNG download of the canvas. Resolves to `true` on success and
- * `false` when `toBlob` yields null (e.g. a tainted canvas or an out-of-memory
- * encode) so the caller can surface a failure instead of a silent no-op.
+ * Trigger a PNG download of the canvas. Resolves to `true` after dispatch and
+ * `false` when encoding or download setup fails; this does not verify a file on disk.
  */
 export function downloadCanvasAsPng(canvas: HTMLCanvasElement, baseName: string): Promise<boolean> {
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        resolve(false);
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${(baseName || 'screenshot').replace(/\s+/g, '_')}.png`;
-        link.click();
-      } finally {
-        // Defer the revoke so it can't truncate the download (see downloadLayoutAsJson).
-        setTimeout(() => URL.revokeObjectURL(url), 0);
-      }
-      resolve(true);
-    }, 'image/png');
+    try {
+      canvas.toBlob((blob) => {
+        try {
+          if (!blob) { resolve(false); return; }
+          const url = URL.createObjectURL(blob);
+          try {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${(baseName || 'screenshot').replace(/\s+/g, '_')}.png`;
+            link.click();
+          } finally {
+            // Revoke after dispatch so the browser can start the download.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+          }
+          resolve(true);
+        } catch {
+          resolve(false);
+        }
+      }, 'image/png');
+    } catch {
+      resolve(false);
+    }
   });
 }
