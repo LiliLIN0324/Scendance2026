@@ -1,7 +1,7 @@
 /** v2.4 布置第 1–3 步：右栏 Agent 状态机的纯函数部分（无 schema 变更，全部是页面本地状态）。 */
 
 export type AgentState =
-  | 'empty' | 'dragHover' | 'baseNoDims' | 'baseReady' | 'cadRejected'
+  | 'empty' | 'dragHover' | 'baseNoDims' | 'baseReady' | 'nonImageRejected'
   | 'fileUnsupported' | 'fileTooLarge' | 'fileReadFailed' | 'dimsInvalid'
   | 'generating' | 'generatePaused' | 'generateFailed' | 'planReady' | 'planEdited';
 
@@ -11,8 +11,8 @@ export const DIM_MIN = 1;
 export const DIM_MAX = 500;
 export const FILE_LIMIT_BYTES = 20 * 1024 * 1024;
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const;
-/** PM 2026-10-19：本期底图只收图片；DXF / DWG 统一给这句。 */
-export const CAD_MESSAGE = '下一期支持自动识别，现在可以先导出成图片放进来';
+/** 本期底图只收图片；DXF / DWG / PDF 共用 nonImageRejected 这一句（handoff v2.4 更新版）。 */
+export const NON_IMAGE_MESSAGE = '下一期支持自动识别，现在可以先导出成图片放进来。';
 
 export const GEN_STEPS = ['读场地', '定舞台位置', '摆桌椅', '放绿植', '检查重叠'] as const;
 
@@ -56,11 +56,11 @@ export function checkDim(raw: string, label: '长度' | '宽度'): DimCheck {
   return { ok: true, value: Math.round(value * 10) / 10 };
 }
 
-export type FileVerdict = 'image' | 'cad' | 'unsupported' | 'tooLarge';
+export type FileVerdict = 'image' | 'nonImage' | 'unsupported' | 'tooLarge';
 
 export function classifyFile(file: { name: string; size: number }): FileVerdict {
   const ext = file.name.toLowerCase().split('.').pop() ?? '';
-  if (ext === 'dxf' || ext === 'dwg') return 'cad';
+  if (ext === 'dxf' || ext === 'dwg' || ext === 'pdf') return 'nonImage';
   if (!(IMAGE_EXTENSIONS as readonly string[]).includes(ext)) return 'unsupported';
   if (file.size > FILE_LIMIT_BYTES) return 'tooLarge';
   return 'image';

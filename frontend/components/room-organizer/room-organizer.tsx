@@ -175,6 +175,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'properties'|'business'|'materials'>('materials');
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
+  const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
   const [railExpanded, setRailExpanded] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
@@ -991,8 +992,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     invalidate,
     threeModuleRef,
     sceneRef,
-    roomWidth: layout.width,
-    roomDepth: layout.height,
+    // v2.4 户外场地：不画顶（雨的干燥区清零），默认视角就能看到场地里在下雨。仅预览，不写入场景。
+    roomWidth: outdoorVenue ? 0 : layout.width,
+    roomDepth: outdoorVenue ? 0 : layout.height,
   });
 
   useCameraVision({
@@ -1340,7 +1342,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider callbacks={{
+      <LayoutAgentProvider onVenueIOChange={io => setOutdoorVenue(io === 'outdoor')} callbacks={{
         workbenchMode,
         onOpenMaterials: () => { setWorkbenchMode('layout'); setLeftMode('materials'); setMaterialsOpen(true); setBusinessOpen(false); setSidebarCollapsed(false); },
         onSelectMode: selectWorkbenchMode,
@@ -1348,7 +1350,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onOpenDelivery: () => { setSidebarCollapsed(false); setLeftMode('business'); setBusinessOpen(true); setDeliveryOpenRequest(value => value + 1); },
         onFit: fitToRoom,
       }}>
-      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${workbenchMode === 'review' ? ' is-client-preview' : ''}`}>
+      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}`}>
         <header ref={headerRef} className="sc-header">
           <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={19} /></span><strong>幕景</strong></a>
           <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/><span className="sc-save-label">{saveError ? '本机保存失败，请导出备份' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本机草稿'}</span></span></div>

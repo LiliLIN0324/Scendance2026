@@ -244,7 +244,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false, inputLoc
       <p className="sc-note">参考底图可能进入画面，捕获后仍需逐张核对。</p>
     </fieldset>
     <div className="sc-project-review-actions">
-      <button type="button" className="sc-button" disabled={disabled || inputLocked || !identityMatches || working !== null || !sourceMatches}
+      <button type="button" className="sc-button btn-outline" disabled={disabled || inputLocked || !identityMatches || working !== null || !sourceMatches}
         onClick={() => void generate()}>{working === 'prepare' ? '正在准备评审包…' : '生成评审包'}</button>
       {working && <button type="button" className="sc-button" disabled={disabled} onClick={cancel}>{working === 'capture' ? '取消补充画面' : '取消本次准备'}</button>}
     </div>
