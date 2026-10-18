@@ -102,7 +102,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
   </form>;
 }
 
-/** Delivery and local execution stay inside the existing Binggo entry point. */
+/** Delivery and local execution stay inside the existing 晴光 Agent entry point. */
 export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
