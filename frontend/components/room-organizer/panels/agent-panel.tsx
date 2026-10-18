@@ -17,7 +17,7 @@ import { surpriseLayout } from '../lib/surprise';
 import type { FurnitureItem } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import {
-  CAD_MESSAGE, canGenerate, checkDim, classifyFile, DEFAULT_ANSWERS, EVENT_TYPES, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNTS,
+  NON_IMAGE_MESSAGE, canGenerate, checkDim, classifyFile, DEFAULT_ANSWERS, EVENT_TYPES, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNTS,
   isStopCommand, sanitizeDimInput, type AgentAnswers, type AgentState, type DimCheck, type VenueIO,
 } from '../lib/workbench-agent';
 import { useStudioAgent } from './creative-studio';
@@ -26,8 +26,8 @@ import './agent-panel.css';
 const MASCOT_SRC = '/assets/assistant/qingguang-24@2x.png';
 const STEP_DELAY_MS = 420;
 
-type FileIssue = { kind: 'cad' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
-type Bubble = { id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string };
+type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
+type Bubble = { id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean };
 
 export interface LayoutAgentCallbacks {
   workbenchMode: WorkbenchMode;
@@ -58,7 +58,7 @@ const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? cry
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 const withId = (item: FurnitureItem): FurnitureItem => ({ ...item, id: uid() });
 
-export function LayoutAgentProvider({ callbacks, children }: { callbacks: LayoutAgentCallbacks; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   const [venueIO, setVenueIO] = useState<VenueIO>('indoor');
@@ -108,7 +108,7 @@ export function LayoutAgentProvider({ callbacks, children }: { callbacks: Layout
     : phase === 'generating' ? 'generating' : phase === 'paused' ? 'generatePaused' : phase === 'failed' ? 'generateFailed'
     : phase === 'edited' ? 'planEdited' : phase === 'ready' ? 'planReady'
     : hasBase && dimsTouched && dimsInvalid ? 'dimsInvalid'
-    : issue ? (issue.kind === 'cad' ? 'cadRejected' : issue.kind === 'tooLarge' ? 'fileTooLarge' : issue.kind === 'readFailed' ? 'fileReadFailed' : 'fileUnsupported')
+    : issue ? (issue.kind === 'nonImage' ? 'nonImageRejected' : issue.kind === 'tooLarge' ? 'fileTooLarge' : issue.kind === 'readFailed' ? 'fileReadFailed' : 'fileUnsupported')
     : hasBase ? (lengthCheck.ok && widthCheck.ok ? 'baseReady' : 'baseNoDims') : 'empty';
 
   const ctaEnabled = canGenerate(state, hasBase, lengthCheck, widthCheck) && !(phase === 'generating');
@@ -118,15 +118,15 @@ export function LayoutAgentProvider({ callbacks, children }: { callbacks: Layout
     const verdict = classifyFile(file);
     if (verdict !== 'image') {
       setIssue({ kind: verdict, name: file.name, size: file.size });
-      say({ role: 'user', text: file.name, warn: verdict === 'cad' ? '图纸暂时读不了' : verdict === 'tooLarge' ? `${fileSizeLabel(file.size)} · 超过 20 MB` : '格式不支持' });
-      say({ role: 'agent', text: verdict === 'cad' ? CAD_MESSAGE : verdict === 'tooLarge' ? '文件太大，压到 20 MB 以内再拖进来。' : '这个格式读不了，换成 PNG、JPG 或 WEBP 图片。' });
+      say({ role: 'user', text: file.name, warn: verdict === 'nonImage' ? `${(file.name.split('.').pop() ?? '').toUpperCase()} 暂时放不了` : verdict === 'tooLarge' ? `${fileSizeLabel(file.size)} · 超过 20 MB` : '格式不支持' });
+      say({ role: 'agent', amber: true, text: verdict === 'nonImage' ? NON_IMAGE_MESSAGE : verdict === 'tooLarge' ? '文件太大，压到 20 MB 以内再拖进来。' : '这个格式读不了，换成 PNG 或 JPG 图片。' });
       return;
     }
     try {
       const url = await readImageAsDataUrl(file);
       await new Promise<void>((resolve, reject) => { const image = new Image(); image.onload = () => image.naturalWidth > 0 ? resolve() : reject(new Error('empty')); image.onerror = () => reject(new Error('decode')); image.src = url; });
       actions.setFloorPlan(url);
-      setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: 0.3 }));
+      setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: 0.6 }));
       setIssue(null); setBaseName(file.name);
       say({ role: 'user', text: file.name, meta: '图片 · 1 页' });
       say({ role: 'agent', text: '图纸已铺成底图，照着填一下长宽就行。' });
@@ -134,7 +134,7 @@ export function LayoutAgentProvider({ callbacks, children }: { callbacks: Layout
     } catch {
       setIssue({ kind: 'readFailed', name: file.name, size: file.size });
       say({ role: 'user', text: file.name, warn: '没读出来' });
-      say({ role: 'agent', text: '文件没读出来，可能损坏了，再试一次？' });
+      say({ role: 'agent', amber: true, text: '文件没读出来，可能损坏了，再试一次？' });
     }
   }
 
@@ -219,7 +219,7 @@ export function LayoutAgentProvider({ callbacks, children }: { callbacks: Layout
 
   const value: AgentValue = {
     callbacks, state, venueIO, answers, setAnswers, baseName, issue, dragging,
-    setVenueIO: next => { setVenueIO(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
+    setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
     lengthText, widthText, setLengthText, setWidthText, lengthCheck, widthCheck,
     showDimErrors: dimsTouched, touchDims: () => setDimsTouched(true),
     progress, failed: phase === 'failed', overlapCount, bubbles, ctaEnabled, generate, stop, regenerate, editSettings,
@@ -230,7 +230,7 @@ export function LayoutAgentProvider({ callbacks, children }: { callbacks: Layout
   };
   return <AgentContext.Provider value={value}>
     {children}
-    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,.dxf,.dwg" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void acceptFile(file); }}/>
+    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void acceptFile(file); }}/>
   </AgentContext.Provider>;
 }
 
@@ -303,7 +303,7 @@ function SummaryCard({ agent }: { agent: AgentValue }): JSX.Element {
 function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
   return <>{agent.bubbles.map(bubble => bubble.role === 'user'
     ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={15} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
-    : <p key={bubble.id} className="ap-agent">{bubble.text}</p>)}</>;
+    : <p key={bubble.id} className={`ap-agent${bubble.amber ? ' is-amber' : ''}`}>{bubble.text}</p>)}</>;
 }
 
 function GenProgress({ agent }: { agent: AgentValue }): JSX.Element {
@@ -325,8 +325,12 @@ function GenProgress({ agent }: { agent: AgentValue }): JSX.Element {
 export function AgentPanel(): JSX.Element {
   const agent = useAgent();
   const studio = useStudioAgent();
-  const { layout, activeFloor } = useRoomEditor();
+  const { layout, activeFloor, view } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
+  // S12：漫游退出后补一句（评审步）。
+  const [walkDone, setWalkDone] = useState(false);
+  const wasWalking = useRef(false);
+  useEffect(() => { if (wasWalking.current && !view.walkthroughMode && mode === 'review') setWalkDone(true); wasWalking.current = view.walkthroughMode; }, [view.walkthroughMode, mode]);
   const [draft, setDraft] = useState('');
   const feed = useRef<HTMLDivElement>(null);
   const status = headerStatus(agent, mode);
@@ -383,6 +387,7 @@ export function AgentPanel(): JSX.Element {
         <p className="ap-agent">方案 {formatArea(venueArea(layout))} ㎡ · {items} 件物料。发个链接给甲方看。</p>
         <div className="ap-card">
           <button id="step-cta" type="button" className="btn-primary" aria-disabled={signedIn ? 'false' : 'true'} onClick={() => { if (signedIn) agent.callbacks.onOpenReview(); }}>生成评审链接</button>
+          {walkDone && <p className="ap-agent">走完了，要给甲方发链接吗？</p>}
           {!signedIn && <p id="cta-hint" className="ap-why">评审链接要存到云端：先点右上角头像登录并同步，就能生成。</p>}
           <div className="ap-chips"><button type="button" className="chip" onClick={agent.walkthrough}>走一遍给客户看</button>{agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}</div>
         </div>
@@ -412,13 +417,16 @@ export function AgentPanel(): JSX.Element {
 export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
   const { activeFloor, collidingIds } = useRoomEditor();
+  const { view, setView } = useRoomEditor();
   const overlapNames = useMemo(() => Array.from(new Set(activeFloor.items.filter(item => collidingIds.has(item.id)).map(item => item.name))), [activeFloor.items, collidingIds]);
+  // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
+  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><button id="walk-exit" type="button" className="ap-canvas-pill is-top" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>退出漫游 · Esc</button></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;
   return <div className="ap-canvas-layer" aria-live="polite">
     {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={20} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {(s === 'empty' || s === 'cadRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => document.getElementById('step-cta')?.focus()}>Agent 已先填好，确认就出方案 →</button>}
+    {(s === 'empty' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => document.getElementById('step-cta')?.focus()}>Agent 已先填好，确认就出方案 →</button>}
     {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={12} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/5</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
     {(s === 'planReady' || s === 'planEdited' || s === 'generatePaused') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}

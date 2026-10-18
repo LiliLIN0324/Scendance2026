@@ -20,10 +20,10 @@ describe('workbench agent v2.4', () => {
   it('classifies dropped files (images only this round)', () => {
     expect(classifyFile({ name: 'a.PNG', size: 10 })).toBe('image');
     expect(classifyFile({ name: 'a.jpg', size: 21 * 1024 * 1024 })).toBe('tooLarge');
-    expect(classifyFile({ name: 'a.dxf', size: 1 })).toBe('cad');
-    expect(classifyFile({ name: 'a.dwg', size: 1 })).toBe('cad');
+    expect(classifyFile({ name: 'a.dxf', size: 1 })).toBe('nonImage');
+    expect(classifyFile({ name: 'a.dwg', size: 1 })).toBe('nonImage');
     expect(classifyFile({ name: 'a.heic', size: 1 })).toBe('unsupported');
-    expect(classifyFile({ name: 'a.pdf', size: 1 })).toBe('unsupported');
+    expect(classifyFile({ name: 'a.pdf', size: 1 })).toBe('nonImage');
   });
   it('enables the CTA only with valid dims once a base plan exists', () => {
     const ok = checkDim('10', '长度'), bad = checkDim('', '宽度');

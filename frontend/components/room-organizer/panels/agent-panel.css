@@ -89,3 +89,6 @@
 .ap-canvas-pill.is-warn { background:#fbf6ec; border-color:#F2B54A; color:#a8742a; }
 /* 头像只出现在 Agent 头部：旧的底栏助手胶囊收起（右栏已常驻）。 */
 .sc-workbench .sc-assistant-entry-host:has(.cr-assistant-capsule) { display:none; }
+.ap-agent.is-amber { background:var(--ap-amber-bg); border:1px solid var(--ap-amber-line); color:var(--ap-amber); border-radius:8px; padding:6px 9px; }
+#walk-exit { background:#fff; border:1px solid #dfe2d7; color:#394a37; cursor:pointer; }
+.sc-workbench.is-walkthrough .sc-material-shelf { display:none !important; }

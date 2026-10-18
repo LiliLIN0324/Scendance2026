@@ -829,11 +829,8 @@
 .sc-workbench .sc-weather-pop button { border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; text-align: left; color: var(--sc-ink); font-size: 12px; width: 100%; }
 .sc-workbench .sc-weather-pop button.is-active { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
 .sc-workbench .sc-time-presets { display: flex; flex-direction: row; gap: 2px; align-items: center; }
-/* 布置编辑态默认浅色；发给客户 / 评审预览用深色壳 */
-.sc-workbench.is-client-preview {
-  --sc-surface: #1c2420; --sc-ink: #e8efe4; --sc-muted: #9aab9a; --sc-line: #2f3b34; --sc-accent-soft: #2a3a2e;
-}
-.sc-workbench.is-client-preview .sc-float-layer {
-  background: #243029; border-color: #3a4a40; color: #e8efe4;
-}
-.sc-workbench.is-client-preview .sc-header { background: #18201c; border-bottom-color: #2f3b34; }
+/* v2.4：评审也沿用暖色浅色主题（不再切深色壳）。 */
+/* 漫游预览：抽屉与右栏收起，只留「退出漫游 · Esc」。 */
+.sc-workbench.is-walkthrough .sc-left-drawer,
+.sc-workbench.is-walkthrough .sc-agent-panel,
+.sc-workbench.is-walkthrough .cr-assistant { display: none !important; }
