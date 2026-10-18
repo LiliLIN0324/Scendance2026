@@ -391,7 +391,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
               <Icon name="live" size={14} />
               {props.walkthroughLockRefused
                 ? 'Click again to look around'
-                : 'WASD to walk · Shift to sprint · Esc to release'}
+                : 'WASD 走动 · Shift 加速 · Esc 退出'}
             </StatusChip>
           </div>
         </>
