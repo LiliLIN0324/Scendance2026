@@ -23,6 +23,7 @@ import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
 import { ActivityWorkflowGuide } from './activity-workflow-guide';
+import { WORKFLOW_GUIDE_DISMISS_KEY, type WorkbenchMode } from '../lib/workbench-mode';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ProjectReviewPanel } from './project-review-panel';
 import { ReconstructionPanel } from './reconstruction-panel';
@@ -978,7 +979,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
     <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
     </details>
-    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对">{studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/>}</div>
+    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对"><details className="cr-optional cr-more-tools"><summary>更多：图纸重建与场地核对</summary>{studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/>}</details></div>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||templateOnly||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <p className="cr-hint">根据当前场景与资源库生成布置方案。本轮策划不读取照片；图纸与照片重建需单独确认。</p>
@@ -998,7 +999,7 @@ export type GenerationContext = { sourceAssetId?: string; sourceObjectIds: strin
 type ChatMode = 'plan'|'model';
 type BusinessMode = ChatMode|'delivery'|'review'|'commercial';
 const CHAT_MODES = {plan:'场景策划',model:'物料建模'} as const;
-export function CreativeAssistant({ generationPanel, commercialPanel, activityTaskPanel, onOpenTemplates, workspaceOpenRequest = 0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef }: {
+export function CreativeAssistant({ generationPanel, commercialPanel, activityTaskPanel, onOpenTemplates, workspaceOpenRequest = 0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0 }: {
   onOpenTemplates?:()=>void;
   localSaveError?: boolean|undefined;
   conversationOpenRequest?: number;
@@ -1023,6 +1024,9 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   onConversationVisibilityChange?: (open:boolean)=>void;
   onWorkspaceVisibilityChange?: (open:boolean)=>void;
   conversationCloseRequest?: number;
+  /** Phase 1 top-level IA: 布置 | 评审 | 执行 */
+  workbenchMode?: WorkbenchMode;
+  workbenchModeSerial?: number;
 }):JSX.Element {
   const studio=useStudio(); const {setExpanded}=studio; const {selectedItem,allSelectedIds,selectOnly}=useSelection();
   const [drafts,setDrafts]=useState({plan:'',model:''}); const feed=useRef<HTMLDivElement>(null);
@@ -1097,6 +1101,10 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   const reviewTarget=useRef<HTMLDivElement>(null),focusReview=useRef(false),handledReview=useRef(0);
   const [commercialOpened,setCommercialOpened]=useState(false);
   const commercialTarget=useRef<HTMLDivElement>(null),focusCommercial=useRef(false);
+  const [guideDismissed,setGuideDismissed]=useState(()=>{
+    try{return typeof localStorage!=='undefined'&&localStorage.getItem(WORKFLOW_GUIDE_DISMISS_KEY)==='1';}catch{return false;}
+  });
+  const handledWorkbenchMode=useRef(0);
   const [modelTool,setModelTool]=useState<'generate'|'customize'>('generate');
   const [materialSeed,setMaterialSeed]=useState<MaterialCustomizationSeed>();
   useEffect(()=>{if(studio.expanded)setOpened(true);},[studio.expanded]);
@@ -1174,6 +1182,14 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
     focusDelivery.current=true;
     setDeliveryOpened(true);setBusinessMode('delivery');setTemplatesOpen(false);if(docked)resizeWorkspace(true);else setExpanded(true);
   },[deliveryOpenRequest,setExpanded]);
+  useEffect(()=>{
+    if(workbenchModeSerial===handledWorkbenchMode.current)return;
+    handledWorkbenchMode.current=workbenchModeSerial;
+    setTemplatesOpen(false);
+    if(workbenchMode==='review'){focusReview.current=true;setReviewOpened(true);setBusinessMode('review');resizeWorkspace(true);if(!docked)setExpanded(true);}
+    else if(workbenchMode==='delivery'){focusDelivery.current=true;setDeliveryOpened(true);setBusinessMode('delivery');resizeWorkspace(true);if(!docked)setExpanded(true);}
+    else {setBusinessMode('plan');setPlanCategory('brief');focusBrief.current=true;resizeWorkspace(true);if(!docked)setExpanded(true);}
+  },[workbenchModeSerial,workbenchMode,setExpanded]);
   useEffect(()=>{
     const businessVisible=docked?workspaceExpanded:studio.expanded;
     if(businessVisible && !templatesOpen && businessMode==='plan' && focusReference.current){
@@ -1313,18 +1329,11 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
     focusCommercial.current=true;setCommercialOpened(true);setBusinessMode('commercial');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
   }
   const businessCategory=templatesOpen?'templates':businessMode==='plan'?planCategory:businessMode;
-  function selectBusinessCategory(event:React.ChangeEvent<HTMLSelectElement>):void {
-    if(!businessEntry.current)businessEntry.current=workspaceEntryRef?.current??referenceEntryRef?.current??deliveryEntryRef?.current??(conversationEntryRef?.current??fallbackEntry.current);
-    switch(event.target.value){
-      case 'brief':openBrief();break;
-      case 'reference':openReference();break;
-      case 'delivery':openDelivery();break;
-      case 'review':openReview();break;
-      case 'templates':openTemplates();break;
-      case 'model':openModelTools();break;
-      case 'commercial':openCommercial();break;
-    }
+  function dismissWorkflowGuide():void {
+    setGuideDismissed(true);
+    try{localStorage.setItem(WORKFLOW_GUIDE_DISMISS_KEY,'1');}catch{/* ignore */}
   }
+  const primaryCategoryValue = businessCategory === 'commercial' ? 'more' : businessCategory;
   const hasConversation=studio.messages.some(message=>message.id!=='welcome');
   const assistantLauncher=!studio.expanded?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开 Binggo Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>Binggo</span></button>:null;
   const suggestionsVisible=!suggestionsDismissed&&(!hasConversation||suggestionsOpen);
@@ -1338,9 +1347,14 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'Binggo':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸，让 DeepSeek 查找资源或使用参数化建模；不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
   const businessContent=(
       <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
-        <header className="cr-business-heading"><label className="cr-business-category">资料分类<select value={businessCategory} onChange={selectBusinessCategory}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="delivery">执行资料</option><option value="review">方案评审</option><option value="templates">场景模板</option><option value="model">物料工具</option>{commercialPanel!=null&&<option value="commercial">合同与约定</option>}</select></label>{!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button>}</div>}</header>
+        <header className="cr-business-heading">
+          {workbenchMode==='review'?<div className="cr-mode-banner"><strong>发给客户</strong><span>核对方案后导出或发布客户查看链接</span></div>:workbenchMode==='delivery'?<div className="cr-mode-banner"><strong>执行</strong><span>活动安排、点验、导出与本机备份</span></div>:
+          <label className="cr-business-category">布置工具<select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>}
+          {!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button>}</div>}
+        </header>
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-        <div hidden={templatesOpen||businessMode==='model'||businessMode==='review'||businessMode==='commercial'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief}/></div>
+        <div hidden={guideDismissed||templatesOpen||businessMode==='model'||businessMode==='review'||businessMode==='commercial'||workbenchMode!=='layout'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onDismiss={dismissWorkflowGuide}/></div>
+        {businessMode==='commercial'&&workbenchMode==='layout'&&<p className="cr-hint" role="status">合同与约定已放入「更多」。深度商业档案仍保留，不占主流程。</p>}
         <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel}/></details></section>
         <section id="agent-panel-model" aria-label="物料建模" hidden={businessMode!=='model'||templatesOpen}>
           <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>

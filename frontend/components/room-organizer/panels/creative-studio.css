@@ -244,3 +244,7 @@
 .cr-settings-panel { position:absolute; right:0; bottom:calc(100% + 10px); z-index:5; box-sizing:border-box; width:min(300px,calc(100vw - 48px)); max-height:clamp(140px,30dvh,260px); overflow:auto; padding:var(--sc-space-sm,8px) 0; border:1px solid #d4ddc7; border-radius:9px; background:#fcfcf7; box-shadow:0 8px 24px #293d3026; }
 .cr-settings-panel>.cr-hint { margin:var(--sc-space-sm,8px) var(--sc-space-md,16px); }
 @media (max-width:680px) { .cr-composer-toolbar { gap:var(--sc-space-sm,8px); } .cr-composer-toolbar .cr-agent-settings>summary small { max-width:60px; } }
+
+.cr-mode-banner { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.cr-mode-banner strong { color:#344a35; font-size:var(--sc-type-title,18px); }
+.cr-mode-banner span { color:#68785b; font-size:var(--sc-type-meta,12px); }

@@ -1,6 +1,6 @@
 'use client';
 
-import { ClipboardList, MessageSquare, PanelLeftClose } from 'lucide-react';
+import { ClipboardList, ListChecks, MessageSquare, PanelLeftClose, Send, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -57,6 +57,9 @@ import { canApplyLayoutGeometry, structuralItemCollides, venueArea, materialCoun
 import { snapWallEndpoint } from './lib/wall-snap';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CloudPanel } from './panels/cloud-panel';
+import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODE_ICONS, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
+
+const WORKBENCH_MODE_ICON_COMPONENTS = { SquareStack, Send, ListChecks } as const;
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
@@ -169,8 +172,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [compactViewport, setCompactViewport] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
-  const [leftMode, setLeftMode] = useState<'properties'|'business'>('business');
+  const [leftMode, setLeftMode] = useState<'properties'|'business'|'materials'>('materials');
+  const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
+  const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
+  const [railExpanded, setRailExpanded] = useState(false);
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
+  const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
+  const deliveryEntryRef = useRef<HTMLButtonElement>(null);
+  const reviewEntryRef = useRef<HTMLButtonElement>(null);
   const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'|'layers'}>({serial:0,tab:'materials'});
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
   const businessHostRef = useRef<HTMLDivElement>(null);
@@ -205,18 +215,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, []);
   const handleWorkspaceVisibility = useCallback((open: boolean) => {
     setBusinessOpen(open);
-    if (open) { setLeftMode('business'); setSidebarCollapsed(false); }
-    else setSidebarCollapsed(true);
-  }, []);
+    if (open) { setLeftMode('business'); setMaterialsOpen(false); setSidebarCollapsed(false); }
+    else if (leftMode === 'business') setSidebarCollapsed(true);
+  }, [leftMode]);
   const [workspaceOpenRequest, setWorkspaceOpenRequest] = useState(0);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   const closeMaterialsShelf = useCallback(() => {
-    setMaterialsOpen(false); toolsEntryRef.current?.focus();
-  }, []);
+    setMaterialsOpen(false);
+    if (leftMode === 'materials') setSidebarCollapsed(true);
+    toolsEntryRef.current?.focus();
+  }, [leftMode]);
   const toggleMaterialsShelf = useCallback(() => {
-    if (!materialsOpen && conversationOpen && window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
-    setMaterialsOpen(current => !current);
-  }, [materialsOpen, conversationOpen]);
+    if (leftMode === 'materials' && !sidebarCollapsed && materialsOpen) {
+      setMaterialsOpen(false);
+      setSidebarCollapsed(true);
+      return;
+    }
+    if (conversationOpen && window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
+    setWorkbenchMode('layout');
+    setLeftMode('materials');
+    setMaterialsOpen(true);
+    setBusinessOpen(false);
+    setSidebarCollapsed(false);
+  }, [leftMode, sidebarCollapsed, materialsOpen, conversationOpen]);
   const openTemplates = useCallback(() => {
     if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
     setMaterialTabRequest(current => ({serial:current.serial+1,tab:'presets'}));
@@ -225,9 +246,27 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, []);
   const closeLeftPanel = useCallback(() => {
     setBusinessOpen(false);
+    setMaterialsOpen(false);
     setSidebarCollapsed(true);
     (leftMode === 'business' ? workspaceEntryRef.current : toolsEntryRef.current)?.focus();
   }, [leftMode]);
+  const selectWorkbenchMode = useCallback((mode: WorkbenchMode) => {
+    setWorkbenchMode(mode);
+    setWorkbenchModeSerial(value => value + 1);
+    setSidebarCollapsed(false);
+    setMaterialsOpen(false);
+    if (mode === 'layout') {
+      setLeftMode('materials');
+      setMaterialsOpen(true);
+      setBusinessOpen(false);
+      setWorkspaceOpenRequest(value => value + 1);
+      return;
+    }
+    setLeftMode('business');
+    setBusinessOpen(true);
+    if (mode === 'review') setReviewOpenRequest(value => value + 1);
+    else setDeliveryOpenRequest(value => value + 1);
+  }, []);
   const openIntroduction = async () => {
     if (navigationPending.current) return;
     navigationPending.current = true;
@@ -749,10 +788,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   );
   const selectedObjectId = selectedItem?.id;
   useEffect(() => {
-    if (!selectedObjectId && leftMode === 'properties') {
-      setLeftMode('business'); setSidebarCollapsed(!businessOpen);
+    if (selectedObjectId) {
+      setLeftMode('properties');
+      setSidebarCollapsed(false);
+      setMaterialsOpen(false);
+      return;
     }
-  }, [selectedObjectId,leftMode,businessOpen]);
+    if (leftMode === 'properties') {
+      setLeftMode(workbenchMode === 'layout' ? 'materials' : 'business');
+      if (workbenchMode === 'layout') setMaterialsOpen(true);
+      else setBusinessOpen(true);
+    }
+  }, [selectedObjectId, leftMode, workbenchMode]);
 
   const hasSignalItems = useMemo(
     () => activeFloor.items.some((item) => item.isWiFiAccessPoint || item.isCCTV),
@@ -1292,7 +1339,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}`}>
+      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${workbenchMode === 'review' ? ' is-client-preview' : ''}`}>
         <header ref={headerRef} className="sc-header">
           <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={19} /></span><strong>幕景</strong></a>
           <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-save-state ${saveError ? 'has-error' : ''}`}><span className="sc-status-dot"/><span className="sc-save-label">{saveError ? '本机保存失败，请导出备份' : isSaving ? '正在保存到本机…' : lastSavedAt ? '已保存到本机' : '本机草稿'}</span></span></div>
@@ -1302,12 +1349,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
         </header>
-        <main className={`sc-workspace is-docked-layout${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
-          <div id="workbench-left-panel" className={`sc-left-drawer ${sidebarCollapsed||!(leftMode==='business'?businessOpen:selectedItem) ? 'is-collapsed' : ''}${businessOpen&&leftMode==='business'?' has-business':''}${selectedItem&&leftMode==='properties'?' has-properties':''}`}>
-            <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">{selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>setLeftMode('properties')}>选中物料</button>}{businessOpen&&<button type="button" aria-pressed={leftMode==='business'} onClick={()=>setLeftMode('business')}>活动资料</button>}</nav><button type="button" className="sc-left-close sc-icon-button" aria-label="关闭左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
+        <main className={`sc-workspace is-docked-layout is-mode-rail${conversationOpen?' has-conversation':''}${leftMode==='materials'&&!sidebarCollapsed?' has-material-shelf':''}${railExpanded?' is-rail-expanded':''}`}>
+          <nav className={`sc-mode-rail${railExpanded?' is-expanded':''}`} aria-label="工作流程">
+            <button type="button" className="sc-mode-rail-toggle" aria-label={railExpanded?'收起流程轨':'展开流程轨'} aria-expanded={railExpanded} onClick={()=>setRailExpanded(open=>!open)} title={railExpanded?'收起':'展开'}>{railExpanded?'‹':'›'}</button>
+            {WORKBENCH_MODES.map(mode=>{
+              const Icon = WORKBENCH_MODE_ICON_COMPONENTS[WORKBENCH_MODE_ICONS[mode.id]];
+              const active = workbenchMode===mode.id;
+              return <button key={mode.id} type="button" className={active?'is-active':''} aria-pressed={active} title={mode.hint} aria-label={mode.label} onClick={()=>selectWorkbenchMode(mode.id)}><Icon size={18}/><span className="sc-mode-rail-label">{mode.label}</span></button>;
+            })}
+            <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
+            <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
+          </nav>
+          <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}${leftMode==='materials'?' has-materials':''}`}>
+            <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
+              {workbenchMode==='layout'&&<button type="button" aria-pressed={leftMode==='materials'} onClick={()=>{setLeftMode('materials');setMaterialsOpen(true);setBusinessOpen(false);}}>素材</button>}
+              {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);}}>选中物料</button>}
+              {(businessOpen||workbenchMode!=='layout')&&<button type="button" aria-pressed={leftMode==='business'} onClick={()=>{setLeftMode('business');setMaterialsOpen(false);setBusinessOpen(true);}}>{workbenchMode==='review'?'发给客户':workbenchMode==='delivery'?'执行':'活动资料'}</button>}
+            </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="关闭左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
+            <div id="workbench-material-shelf" className="sc-material-shelf sc-float-materials" hidden={leftMode!=='materials'} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
+              {leftMode==='materials'&&<ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} onPreviewMovement={onPreviewMovement} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog}/>}
+            </div>
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
           </div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}`} onPointerDownCapture={event => {
@@ -1399,10 +1463,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-              <div id="workbench-material-shelf" className="sc-material-shelf" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
-                <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} onPreviewMovement={onPreviewMovement} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog}/>
-              </div>
-            <ScendanceViewTools materialsOpen={materialsOpen} materialsButtonRef={toolsEntryRef} assistantEntryHostRef={assistantEntryHostRef} onToggleMaterials={toggleMaterialsShelf} onScreenshot={handleScreenshot} onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
+            <ScendanceViewTools showAtmosphere={workbenchMode==='layout'} materialsOpen={leftMode==='materials'&&!sidebarCollapsed} materialsButtonRef={toolsEntryRef} assistantEntryHostRef={assistantEntryHostRef} onToggleMaterials={toggleMaterialsShelf} onScreenshot={handleScreenshot} onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
@@ -1411,7 +1472,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             }}/>
             </div>
           </div>
-          <CreativeAssistant docked assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+          <CreativeAssistant docked workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
         </main>
       </div>
     </CreativeStudioProvider>

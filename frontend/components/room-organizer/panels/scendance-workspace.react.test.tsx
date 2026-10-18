@@ -83,7 +83,7 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     test.props.openTabRequest = { serial: 1, tab: 'presets' };
     test.update();
     expect(screen.getByRole('tab', { name: '场景模板' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('combobox', { name: '灯光氛围' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '现场灯光' })).toBeTruthy();
     expect(test.placeCatalogItem).not.toHaveBeenCalled();
     expect(test.onLoadPreset).not.toHaveBeenCalled();
     expect(loadScenePreset).not.toHaveBeenCalled();
@@ -227,5 +227,51 @@ describe('ScendanceViewTools material toggle', () => {
     viewButton.focus();
     expect(document.activeElement).toBe(viewButton);
     expect(viewButton.getAttribute('title')).toBe('俯视');
+  });
+});
+
+describe('ScendanceViewTools inline atmosphere (Phase 1.5)', () => {
+  it('exposes 漫游｜人群｜天气▾｜时段 in the capsule and wires ViewSettings without a float panel', () => {
+    const values = contexts();
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    expect(screen.getByRole('group', { name: '氛围' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '氛围' })).toBeNull();
+    expect(screen.queryByLabelText('氛围')?.className ?? '').not.toContain('sc-atmosphere-panel');
+    expect(screen.queryByText('约 3 人')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '漫游' }));
+    const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
+    expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
+    expect(walk(makeViewSettings({ view2D: true })).view2D).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: '人群' }));
+    expect(values.toggle).toHaveBeenCalledWith('showNpcs');
+  });
+
+  it('shows 约 3 人 when crowds are on and keeps outdoor weather/time copy off lighting', () => {
+    const values = contexts(makeLayout(), makeViewSettings({ showNpcs: true }));
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    expect(screen.getByText('约 3 人')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '室外天气' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: '室外时段' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: '现场灯光' })).toBeNull();
+    expect(screen.queryByText(/灯光/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '室外天气' }));
+    fireEvent.click(screen.getByRole('option', { name: '降雨' }));
+    const weather = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
+    expect(weather(makeViewSettings()).weather).toBe('rain');
+
+    fireEvent.click(screen.getByRole('button', { name: '室外时段 黄昏' }));
+    const time = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
+    expect(time(makeViewSettings()).timeOfDay).toBe(18);
+    expect(screen.queryByRole('group', { name: 'View options' })).toBeNull();
+  });
+
+  it('hides inline atmosphere when showAtmosphere is false', () => {
+    const values = contexts();
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
   });
 });

@@ -16,5 +16,7 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     include: ['app/**/*.test.{ts,tsx}', 'components/**/*.test.{ts,tsx}', 'lib/**/*.test.{ts,tsx}'],
+    // Node 20: undici 8 (via jsdom 30) needs worker_threads.markAsUncloneable.
+    execArgv: ['--require', './polyfill-mark-as-uncloneable.cjs'],
   },
 });
