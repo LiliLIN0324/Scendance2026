@@ -255,3 +255,8 @@
     height: 28px;
   }
 }
+
+.sc-atmosphere-group button { flex-direction: column; gap: 1px; min-height: 34px; min-width: 34px; }
+.sc-atmosphere-group .sc-time-presets button { min-width: 26px; width: 26px; }
+.sc-canvas-rail .sc-rail-label { font-size: 9px; font-weight: 600; }
+.has-material-shelf .sc-atmosphere-group .sc-rail-label { display: none; }

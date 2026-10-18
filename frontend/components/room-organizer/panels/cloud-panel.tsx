@@ -263,7 +263,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       </div> : !cloud.user ? <div className="sc-cloud-form">
         <p>登录你的工作室，继续连接云项目。</p>
       </div> : <div className="sc-cloud-content">
-        <div className="sc-account-section-heading"><div><h3>{sceneConnection?'其他云项目':'我的项目'}</h3><p className="sc-cloud-muted">{sceneConnection?'当前活动的场景连接已显示在上方。':'在工作室之间切换，继续你的场地方案。'}</p></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
+        <div className="sc-account-section-heading"><div><h3>{sceneConnection?'其他云项目':'云项目快捷入口'}</h3><p className="sc-cloud-muted">{sceneConnection?'当前活动的场景连接已显示在上方。':'完整工作室与项目管理请优先使用 /projects；此处仅作编辑器快捷入口。'}</p></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
         <div className="sc-account-project-grid"><section aria-label="项目列表">
         <div className="sc-account-filters"><label className="sc-account-search"><Search size={16} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索项目名称" value={query} onChange={event => setQuery(event.target.value)} /></label><select aria-label="当前工作室" disabled={busy || loadingProjects} value={studioId} onChange={event => { setStudioId(event.target.value); if (userId) rememberStudio(userId, event.target.value); }}>{!studios.length && <option value="">尚未加入工作室</option>}{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></div>
         <div className="sc-account-list-caption"><span>项目 / 工作室</span><span>{loadingProjects ? '加载中…' : projectsLoaded ? `${filteredProjects.length} 个项目` : '尚未加载'}</span></div>

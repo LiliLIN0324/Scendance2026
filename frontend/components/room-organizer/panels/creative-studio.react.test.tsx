@@ -127,16 +127,16 @@ describe('docked workspace integration', () => {
     fireEvent.click(screen.getByRole('button',{name:'资料'}));
     expect(screen.getByRole('textbox',{name:'客户需求'})).toBe(demand);
     expect(demand.value).toBe('独立演练：尚未保存的活动说明');
-    expect((screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement).value).toBe('brief');
+    expect((screen.getByRole('combobox',{name:/布置工具|资料分类/}) as HTMLSelectElement).value).toBe('brief');
     expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();
   });
   it('[compact navigation] keeps every old destination in the business area and removes the chat button grid',async()=>{
     renderUI(<DockedTrial/>);await act(async()=>{});
     expect(document.querySelector('.cr-docked-tools')).toBeNull();
-    expect(screen.queryByRole('combobox',{name:'资料分类'})).toBeNull();
+    expect(screen.queryByRole('combobox',{name:/布置工具|资料分类/})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'完善活动需求'}));
-    const categories=screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement;
-    expect(Array.from(categories.options).map(option=>option.text)).toEqual(['活动需求','图纸与尺寸','执行资料','方案评审','场景模板','物料工具']);
+    const categories=screen.getByRole('combobox',{name:/布置工具|资料分类/}) as HTMLSelectElement;
+    expect(Array.from(categories.options).filter(option=>!option.hidden).map(option=>option.text)).toEqual(['活动需求','图纸与尺寸','场景模板','物料工具','更多…']);
     expect(screen.getByTestId('docked-business-host').contains(categories)).toBe(true);
     const input=screen.getByRole('textbox',{name:'客户需求'});input.focus();fireEvent.keyDown(input,{key:'Escape'});
     await waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('button',{name:'完善活动需求'})));
@@ -210,7 +210,7 @@ describe('docked workspace integration', () => {
     fireEvent.click(screen.getByRole('button',{name:'核对物料交接'}));
     expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
     view.rerender(<DockedTrial current={{...layout,id:'suggestion-activity-B',name:'假设演练B'}} operations/>);await act(async()=>{});
-    expect((screen.getByRole('combobox',{name:'资料分类'}) as HTMLSelectElement).value).toBe('brief');
+    expect((screen.getByRole('combobox',{name:/布置工具|资料分类/}) as HTMLSelectElement).value).toBe('brief');
     expect(screen.queryByRole('button',{name:'核对物料交接'})).toBeNull();
     const suggestions=screen.getByRole('region',{name:'成果建议'});
     expect(within(suggestions).getAllByRole('button')).toHaveLength(3);
@@ -593,8 +593,8 @@ describe('workspace navigation continuity', () => {
     renderUI(<DockedTrial commercialPanel={<CommercialNode/>}/>); await act(async () => {});
     expect(mounted).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '资料' }));
-    const categories = screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement;
-    expect(Array.from(categories.options).map(option => option.text)).toEqual(['活动需求', '图纸与尺寸', '执行资料', '方案评审', '场景模板', '物料工具', '合同与约定']);
+    const categories = screen.getByRole('combobox', { name: /布置工具|资料分类/ }) as HTMLSelectElement;
+    expect(Array.from(categories.options).filter(option => !option.hidden).map(option => option.text)).toEqual(['活动需求', '图纸与尺寸', '场景模板', '物料工具', '更多…']);
     expect(mounted).not.toHaveBeenCalled();
     selectBusiness('图纸与尺寸'); expect(mounted).not.toHaveBeenCalled();
     selectBusiness('合同与约定'); expect(mounted).toHaveBeenCalledOnce();
@@ -627,7 +627,7 @@ describe('workspace navigation continuity', () => {
     expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
     await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
     fireEvent.click(dataEntry);
-    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('commercial');
+    expect((screen.getByRole('combobox', { name: /布置工具|资料分类/ }) as HTMLSelectElement).value).toBe('more');
     await waitFor(() => expect(document.activeElement).toBe(target));
     act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry);
     expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
@@ -661,7 +661,7 @@ describe('workspace navigation continuity', () => {
     fireEvent.keyDown(target, { key: 'Escape', cancelable: true });
     await waitFor(() => expect(document.activeElement).toBe(dataEntry));
     fireEvent.click(dataEntry); await waitFor(() => expect(document.activeElement).toBe(target));
-    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('commercial');
+    expect((screen.getByRole('combobox', { name: /布置工具|资料分类/ }) as HTMLSelectElement).value).toBe('more');
     fireEvent.click(chatEntry);
     expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：未发送的物料草稿');
@@ -684,7 +684,7 @@ describe('workspace navigation continuity', () => {
     await waitFor(() => expect(document.activeElement).toBe(target));
     act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); expect(host.hidden).toBe(true);
     fireEvent.click(dataEntry);
-    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe(destination === '执行资料' ? 'delivery' : 'reference');
+    expect((screen.getByRole('combobox', { name: /布置工具|资料分类/ }) as HTMLSelectElement).value).toBe(destination === '执行资料' ? 'delivery' : 'reference');
     expect(host.contains(target)).toBe(true); await waitFor(() => expect(document.activeElement).toBe(target));
     selectBusiness('活动需求');
     expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand); expect(demand.value).toBe('演练：资料返回时保留原需求。');
@@ -730,7 +730,7 @@ describe('workspace navigation continuity', () => {
     act(() => { toolsEntry.focus(); }); fireEvent.click(toolsEntry); expect(screen.getByTestId('docked-business-host').hidden).toBe(true);
     await act(async () => { await expect(flushSourceScope(projectId)).rejects.toThrow('评审说明有未保存修改'); });
     fireEvent.click(dataEntry);
-    expect((screen.getByRole('combobox', { name: '资料分类' }) as HTMLSelectElement).value).toBe('review');
+    expect((screen.getByRole('combobox', { name: /布置工具|资料分类/ }) as HTMLSelectElement).value).toBe('review');
     expect(screen.getByLabelText('简短方案说明（选填）')).toBe(summary); expect(summary.value).toBe('演练：素材页往返仍未保存的方案说明。');
     await waitFor(() => expect(document.activeElement).toBe(review));
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
@@ -1013,6 +1013,7 @@ describe('direct local delivery shortcut', () => {
     const work = await screen.findByRole('group', { name: '执行工作单' });
     expect(document.activeElement).toBe(work);
     expect(screen.getByText('采购汇总 · 1 类')).toBeDefined();
+    fireEvent.click(screen.getByRole('tab', { name: '导出' }));
     expect(screen.getByRole('button', { name: '导出执行清单 CSV' })).toBeDefined();
     expect(prepare).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
@@ -1076,6 +1077,7 @@ function render(element: React.ReactElement) {
   if(!brief.open)fireEvent.click(screen.getByText('活动需求与场地资料'));
   fireEvent.click(screen.getByText('风格、配色与氛围（可选）'));
   fireEvent.click(screen.getByText('图纸、照片与现场条件（可选）'));
+  fireEvent.click(screen.getByText('更多：图纸重建与场地核对'));
   fireEvent.click(screen.getByText('图纸与照片重建'));
   fireEvent.click(screen.getByLabelText('助手设置'));
   fireEvent.click(screen.getByRole('checkbox', {name:'明确指令直接应用'}));
@@ -1086,8 +1088,8 @@ function selectMode(value:'plan'|'model'):void {
 }
 function selectBusiness(name:string):void {
   const destinations:Record<string,string>={'活动需求':'brief','图纸与尺寸':'reference','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
-  if(!screen.queryByRole('combobox',{name:'资料分类'}))fireEvent.click(screen.getByRole('button',{name:'外部图纸核对'}));
-  fireEvent.change(screen.getByRole('combobox',{name:'资料分类'}),{target:{value:destinations[name]}});
+  if(!screen.queryByRole('combobox',{name:/布置工具|资料分类/}))fireEvent.click(screen.getByRole('button',{name:'外部图纸核对'}));
+  fireEvent.change(screen.getByRole('combobox',{name:/布置工具|资料分类/}),{target:{value:destinations[name]}});
 }
 function openExecution():void {
   selectBusiness('执行资料');
@@ -1406,6 +1408,7 @@ describe('creative brief and assistant interaction', () => {
     expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();
     expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');
     openExecution();
+    fireEvent.click(screen.getByRole('tab',{name:'导出'}));
     expect(screen.getByRole('button',{name:'导出场景 GLB'})).toBeTruthy();
     selectMode('model');
     expect(screen.getByRole('button',{name:'材质调整'}).getAttribute('aria-pressed')).toBe('true');

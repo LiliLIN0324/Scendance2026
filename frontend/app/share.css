@@ -27,3 +27,15 @@
 .sc-share-state{max-width:460px;margin:16vh auto;padding:28px;background:white;border:1px solid #dcded7;border-radius:14px}.sc-share-state h1{font-size:24px;font-weight:600;margin:0 0 14px}.sc-share-state p{font-size:14px;line-height:1.8;margin-bottom:22px}
 .sc-share-sources{font-size:12px;line-height:1.8;margin:20px 0;color:#697164}.sc-share-sources summary{cursor:pointer}.sc-share-sources a{text-decoration:underline;text-underline-offset:3px}.sc-share-sources ul{list-style:none;margin:10px 0;padding:0}.sc-share-sources strong{font-weight:500;color:#343a32}
 @media(max-width:600px){.sc-share-page{padding:20px 16px 36px}.sc-share-title{display:block}.sc-share-title button{margin-top:14px}.sc-preview-tools{top:10px;left:10px}.sc-preview-tools button{padding:8px 10px}.sc-preview-help{font-size:10px;bottom:10px;right:10px}.sc-share-materials td,.sc-share-materials th{padding:12px 8px}.sc-share-heading{align-items:baseline}.sc-share-masthead>span:last-child{font-size:10px}}
+
+/* 客户只读 /view：深色渲染预览壳（布置编辑仍用浅色） */
+.sc-share-page{
+  --sc-share-bg:#121816; --sc-share-card:#1b2420; --sc-share-ink:#e7eee4; --sc-share-muted:#9aab9a; --sc-share-line:#2f3b34;
+  background:var(--sc-share-bg); color:var(--sc-share-ink);
+}
+.sc-share-page .sc-share-masthead,.sc-share-page .sc-share-title,.sc-share-page .sc-share-materials,.sc-share-page .sc-share-state{
+  background:var(--sc-share-card); border-color:var(--sc-share-line); color:var(--sc-share-ink);
+}
+.sc-share-page .sc-share-masthead span:last-child,.sc-share-page .sc-share-footnote,.sc-share-page .sc-share-muted{color:var(--sc-share-muted)}
+.sc-share-page .sc-preview-tools button{background:#243029f0;color:var(--sc-share-ink);border-color:var(--sc-share-line)}
+.sc-share-page .sc-preview-help{background:#1b2420d9;color:var(--sc-share-muted)}

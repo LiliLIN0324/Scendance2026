@@ -755,3 +755,85 @@
   .sc-workbench .sc-canvas-heading { top:12px; left:12px; gap:4px; max-width:calc(100% - 105px); }
   .sc-workbench .sc-scene-viewport .sc-reference-image-trigger { padding:5px 7px; font-size:var(--sc-type-meta); }
 }
+
+/* Phase 1 editor IA: left mode rail + floating layers */
+.sc-workbench .sc-mode-rail {
+  flex: 0 0 48px; width: 48px; min-width: 48px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 6px 4px; border-radius: 12px; background: var(--sc-surface);
+  border: 1px solid var(--sc-line); z-index: 45; position: relative;
+}
+.sc-workbench .sc-mode-rail.is-expanded { flex-basis: 88px; width: 88px; min-width: 88px; }
+.sc-workbench .sc-mode-rail-toggle {
+  width: 100%; min-height: 28px; border: 0; background: transparent; color: var(--sc-muted);
+  border-radius: 8px; font-size: 16px; line-height: 1;
+}
+.sc-workbench .sc-mode-rail > button[aria-label] {
+  width: 100%; min-height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--sc-muted); padding: 4px 2px;
+}
+.sc-workbench .sc-mode-rail > button.is-active {
+  color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #6f8f5233; font-weight: 600;
+}
+.sc-workbench .sc-mode-rail-label { font-size: 10px; line-height: 1.1; letter-spacing: 0; }
+.sc-workbench .sc-mode-rail:not(.is-expanded) .sc-mode-rail-label { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail {
+  display: flex; gap: 8px; position: relative;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
+  flex: 1; min-width: 0; position: relative;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer {
+  position: absolute; left: 56px; top: 0; bottom: 0; z-index: 50;
+  flex: none !important; width: min(400px, calc(100% - 64px)) !important;
+  max-width: 420px; box-sizing: border-box;
+  background: #fbfcfa; border: 1px solid #d9dfd4; border-radius: 14px;
+  box-shadow: 0 10px 28px #1f2a1814; display: flex; flex-direction: column;
+  pointer-events: auto;
+}
+.sc-workbench .is-docked-layout.is-mode-rail.is-rail-expanded .sc-left-drawer.sc-float-layer { left: 96px; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.is-collapsed {
+  display: none !important;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-material-shelf.sc-float-materials {
+  position: relative; inset: auto; flex: 1; min-height: 0; height: auto; width: 100%;
+  grid-area: unset; border: 0; box-shadow: none; background: transparent; border-radius: 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail.has-material-shelf .sc-canvas-stage {
+  grid-template-rows: minmax(0,1fr) 0 48px;
+}
+.sc-workbench .sc-tool-capsule.sc-canvas-rail {
+  position: absolute !important; left: 50%; bottom: 10px; transform: translateX(-50%);
+  grid-area: unset !important; width: auto !important; max-width: min(720px, calc(100% - 24px));
+  flex-direction: row !important; align-items: center; padding: 4px 8px; gap: 6px;
+  border-radius: 999px; z-index: 35; overflow: visible;
+}
+.sc-workbench .sc-tool-capsule .sc-tool-group { display: flex; flex-direction: row; gap: 2px; }
+.sc-workbench .sc-tool-capsule-bar.sc-material-entry-bar {
+  position: absolute; right: 12px; bottom: 10px; grid-area: unset; width: auto; min-height: 40px;
+  border-radius: 999px; z-index: 35; padding: 4px 8px;
+}
+/* Phase 1.5: atmosphere lives inline in the bottom capsule — no left float panel. */
+.sc-workbench .sc-atmosphere-group { align-items: center; }
+.sc-workbench .sc-atmosphere-group .sc-rail-label { font-size: 9px; line-height: 1; }
+.sc-workbench .sc-npc-hint {
+  font-size: 10px; line-height: 1.2; color: var(--sc-muted); white-space: nowrap; padding: 0 2px;
+}
+.sc-workbench .sc-weather-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
+.sc-workbench .sc-weather-pop {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 60;
+  display: flex; flex-direction: column; gap: 2px; min-width: 72px;
+  padding: 4px; border-radius: 8px; background: #fbfcfa; border: 1px solid #d9dfd4;
+  box-shadow: 0 6px 16px #1f2a1818;
+}
+.sc-workbench .sc-weather-pop button { border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; text-align: left; color: var(--sc-ink); font-size: 12px; width: 100%; }
+.sc-workbench .sc-weather-pop button.is-active { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
+.sc-workbench .sc-time-presets { display: flex; flex-direction: row; gap: 2px; align-items: center; }
+/* 布置编辑态默认浅色；发给客户 / 评审预览用深色壳 */
+.sc-workbench.is-client-preview {
+  --sc-surface: #1c2420; --sc-ink: #e8efe4; --sc-muted: #9aab9a; --sc-line: #2f3b34; --sc-accent-soft: #2a3a2e;
+}
+.sc-workbench.is-client-preview .sc-float-layer {
+  background: #243029; border-color: #3a4a40; color: #e8efe4;
+}
+.sc-workbench.is-client-preview .sc-header { background: #18201c; border-bottom-color: #2f3b34; }

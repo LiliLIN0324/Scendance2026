@@ -67,12 +67,19 @@ function deferred<T>() {
 }
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
+function openExportTab(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '导出' }));
+}
+function openBackupTab(): void {
+  const tab = screen.queryByRole('tab', { name: '本机备份' });
+  if (tab) fireEvent.click(tab);
+}
 describe('Binggo scene delivery panel',()=>{
   it('exports full saved activity records without requiring a production plan or generating models',async()=>{
     const f=completeActivity();
     render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
     expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
     expect(productionPlanHandoffHtml).toHaveBeenCalledWith(expect.objectContaining({id:checkinProject}),expect.anything(),undefined,{scope:'activity',brief:f.briefSnapshot.brief});
@@ -87,7 +94,7 @@ describe('Binggo scene delivery panel',()=>{
     else if(kind==='wrong-project')f.backupActions.prepareBackup.mockResolvedValue(f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
     else f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackup(f.current,f.briefSnapshot));
     render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
     await screen.findByText(kind==='error'?'活动资料读取失败':'活动资料未完整对应当前项目，请重新读取后导出。');
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
@@ -96,7 +103,7 @@ describe('Binggo scene delivery panel',()=>{
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
     const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true};
     const view=render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} briefState={briefState}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出完整活动交接 HTML'}));
     await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
     view.rerender(<SceneDeliveryPanel layout={field==='layout'?{...f.current,name:'后续编辑'}:f.current} controller={controller} backupActions={f.backupActions} briefState={field==='brief'?{...briefState,brief:{...f.brief,description:'后续需求'}}:briefState}/>);
     await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();
@@ -149,8 +156,8 @@ describe('Binggo scene delivery panel',()=>{
   it('does not export task status when the local checkin context is unavailable',()=>{
     const current={...workLayout(),id:checkinProject,eventOperations:eventOperationsSchema.parse({tasks:[createOperation('演练任务','setup')]})};
     render(<SceneDeliveryPanel layout={current} controller={controller} checkins={{...checkinState(),ready:false,error:'点验读取失败'}}/>);
-    expect((screen.getByRole('button',{name:'导出活动安排 CSV'}) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
+    openExportTab(); expect((screen.getByRole('button',{name:'导出活动安排 CSV'}) as HTMLButtonElement).disabled).toBe(true);
+    openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
   it('blocks production export while editing and exports applied records after cancellation independently of model delivery',async()=>{
@@ -183,7 +190,7 @@ describe('Binggo scene delivery panel',()=>{
     fireEvent.click(screen.getByRole('button',{name:'保存制作计划'}));
     await waitFor(()=>expect(update).toHaveBeenCalledOnce());expect(update.mock.calls[0][0].staffing[0]).toMatchObject({roleName:'演练布场',headcount:null});
     expect(screen.getByRole('form',{name:'制作计划记录'})).toBeDefined();
-    expect((screen.getByRole('button',{name:'导出场景 GLB'}) as HTMLButtonElement).disabled).toBe(true);expect(exportDeliveryGlb).not.toHaveBeenCalled();
+    openExportTab(); expect((screen.getByRole('button',{name:'导出场景 GLB'}) as HTMLButtonElement).disabled).toBe(true);expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
   it('keeps the production page read-only for a cloud-bound project or a missing parent callback',()=>{
     const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001'},update=vi.fn();window.history.replaceState({},'',`/?project=${current.id}`);
@@ -199,15 +206,15 @@ describe('Binggo scene delivery panel',()=>{
     const summary=screen.getByText('场景与活动备份');
     expect(summary.closest('details')!.open).toBe(false);
     fireEvent.click(summary);
-    expect((screen.getByRole('button',{name:'导出场景 GLB'}) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button',{name:'下载场景与活动备份'}) as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByRole('button',{name:'下载场景与活动备份'}));
+    openExportTab(); expect((screen.getByRole('button',{name:'导出场景 GLB'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(((openBackupTab(), screen.getByRole('button',{name:'下载场景与活动备份'})) as HTMLButtonElement).disabled).toBe(false);
+    openBackupTab(); fireEvent.click((openBackupTab(), screen.getByRole('button',{name:'下载场景与活动备份'})));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(prepareBackup).toHaveBeenCalledOnce();
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
     view.rerender(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     expect(screen.queryByText('场景与活动备份')).toBeNull();
-    expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(false);
+    openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(false);
   });
   it('preserves task and material drafts across explicit delivery navigation without reselecting a repeated request',async()=>{
     const f=completeActivity(),updateOperations=vi.fn(),updateItem=vi.fn();
@@ -237,16 +244,16 @@ describe('Binggo scene delivery panel',()=>{
   it('only prepares and downloads after an explicit click',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     expect(exportDeliveryGlb).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(exportDeliveryGlb).toHaveBeenCalledWith(layout,controller);
     expect(screen.getByRole('status').textContent).toContain('复检');
   });
   it('keeps JSON and CSV as separate explicit downloads',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
     await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledWith(layout,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),undefined));
-    fireEvent.click(screen.getByRole('button',{name:'导出物料清单 CSV'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出物料清单 CSV'}));
     await waitFor(()=>expect(sceneDeliveryCsv).toHaveBeenCalledWith(layout,vi.mocked(sceneDeliveryJson).mock.calls[0][1]));
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
@@ -254,7 +261,7 @@ describe('Binggo scene delivery panel',()=>{
     let done!:(value:{buffer:ArrayBuffer;objectCount:number})=>void;
     vi.mocked(exportDeliveryGlb).mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));
     const view=render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(exportDeliveryGlb).toHaveBeenCalledOnce());
     view.rerender(<SceneDeliveryPanel layout={{...layout,name:'Changed'}} controller={controller}/>);
     await act(async()=>{done({buffer:new ArrayBuffer(8),objectCount:2});});
@@ -264,7 +271,7 @@ describe('Binggo scene delivery panel',()=>{
   it('does not offer a file after geometry verification fails',async()=>{
     vi.mocked(exportDeliveryGlb).mockRejectedValueOnce(new Error('GLB 复检失败：物件数量不一致。'));
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('复检失败'));
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
@@ -319,12 +326,12 @@ describe('Binggo scene delivery panel',()=>{
   });
   it('uses the same snapshot across export files and replaces it after editing execution fields',async()=>{
     const current=workLayout(); const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
     const snapshot=vi.mocked(sceneDeliveryJson).mock.calls[0][1];
-    fireEvent.click(screen.getByRole('button',{name:'导出执行清单 CSV'})); await waitFor(()=>expect(sceneExecutionCsv).toHaveBeenCalledWith(current,snapshot));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出执行清单 CSV'})); await waitFor(()=>expect(sceneExecutionCsv).toHaveBeenCalledWith(current,snapshot));
     const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],handoff:{...blankHandoff(),ownerName:'执行乙'}}]}]};
     view.rerender(<SceneDeliveryPanel layout={changed} controller={controller}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledTimes(2));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledTimes(2));
     expect(vi.mocked(sceneDeliveryJson).mock.calls[1][1]!.id).not.toBe(snapshot!.id);
   });
   it('disables execution editing for cloud projects and all exports for complete templates',()=>{
@@ -336,7 +343,7 @@ describe('Binggo scene delivery panel',()=>{
     fireEvent.submit(screen.getByLabelText('负责人').closest('form')!); expect(update).not.toHaveBeenCalled();
     view.rerender(<SceneDeliveryPanel layout={{...current,scenePreset:'gym'}} controller={controller} onUpdateItem={update}/>);
     expect(screen.getByRole('alert').textContent).toContain('完整场景预设');
-    for(const name of ['导出场景 JSON','导出执行清单 CSV','导出物料清单 CSV','导出场景 GLB']) expect((screen.getByRole('button',{name}) as HTMLButtonElement).disabled).toBe(true);
+    openExportTab(); for(const name of ['导出场景 JSON','导出执行清单 CSV','导出物料清单 CSV','导出场景 GLB']) expect((screen.getByRole('button',{name}) as HTMLButtonElement).disabled).toBe(true);
   });
   it('reuses the same direct panel for activity tasks without requiring material and preserves the model export gate', async () => {
     const current={...layout,scenePreset:'gym' as const,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[createOperation('演练主持','event')]})};
@@ -344,28 +351,29 @@ describe('Binggo scene delivery panel',()=>{
     render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={update} onOpenBrief={openBrief}/>);
     expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('region',{name:'活动安排'})).toBeDefined();
-    expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
+    openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('tab',{name:'活动安排'}));
     fireEvent.click(screen.getByRole('button',{name:'打开活动需求表单'}));expect(openBrief).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));
     await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,expect.objectContaining({id:expect.any(String)}),undefined));
     expect(downloadSceneDelivery).toHaveBeenCalledOnce(); expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
   it('uses the same snapshot for activity and scene downloads, and discards in-flight activity output after editing', async () => {
     const current={...layout,eventOperations:eventOperationsSchema.parse({tasks:[createOperation('演练任务','preparation')]})};
     const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
-    fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
     const snapshot=vi.mocked(sceneDeliveryJson).mock.calls[0][1];
-    fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,snapshot,undefined));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,snapshot,undefined));
     let done!:(value:string)=>void;vi.mocked(eventOperationsCsv).mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));
     const before=vi.mocked(downloadSceneDelivery).mock.calls.length;
-    fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledTimes(2));
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledTimes(2));
     view.rerender(<SceneDeliveryPanel layout={{...current,eventOperations:{...current.eventOperations,tasks:[{...current.eventOperations.tasks[0],title:'新演练任务'}]}}} controller={controller}/>);
     await act(async()=>{done('old operations');});expect(downloadSceneDelivery).toHaveBeenCalledTimes(before);
   });
 });
 
 describe('saved execution timetable delivery',()=>{
-  const exportButton=()=>screen.getByRole('button',{name:'导出执行时间表 HTML'}) as HTMLButtonElement;
+  const exportButton=()=>{openExportTab(); return screen.getByRole('button',{name:'导出执行时间表 HTML'}) as HTMLButtonElement;};
   it('exports the actual saved V3 tasks, unknown dates, owner links and 20/18/18 ledger without model delivery',async()=>{
     const f=timetableActivity();
     const live={...f.current,name:'尚未保存的画面名称',eventOperations:eventOperationsSchema.parse({tasks:[{id:itemId,title:'画面中的其他任务',phase:'event'}]}),scenePreset:'gym' as const};
