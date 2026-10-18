@@ -74,7 +74,7 @@ function openBackupTab(): void {
   const tab = screen.queryByRole('tab', { name: '本机备份' });
   if (tab) fireEvent.click(tab);
 }
-describe('Binggo scene delivery panel',()=>{
+describe('晴光 scene delivery panel',()=>{
   it('exports full saved activity records without requiring a production plan or generating models',async()=>{
     const f=completeActivity();
     render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);

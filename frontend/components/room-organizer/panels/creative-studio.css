@@ -52,7 +52,7 @@
 .cr-chat header small { display:flex; align-items:center; gap:var(--sc-space-sm,8px); margin-top:3px; font-size:var(--sc-type-meta,12px); color:#929a83; }
 .cr-chat-feed { flex:1; min-height:0; overflow:auto; padding:var(--sc-space-md,16px); }
 .cr-message { display:flex; align-items:flex-start; gap:var(--sc-space-sm,8px); margin-bottom:var(--sc-space-md,16px); }
-.cr-message-avatar { display:block; flex:0 0 30px; width:30px; height:30px; }
+.cr-message-avatar { display:block; flex:0 0 24px; width:24px; height:24px; }
 .cr-message-body { flex:1; min-width:0; }
 .cr-message p { margin:0; white-space:pre-wrap; font-size:var(--sc-type-body,14px); line-height:1.8; color:#59634d; background:#f0f2e9; border-radius:0 10px 10px 10px; padding:var(--sc-space-sm,8px) var(--sc-space-md,16px); overflow-wrap:anywhere; }
 .cr-message.is-user { margin-left:calc(30px + var(--sc-space-sm,8px)); justify-content:flex-end; }
