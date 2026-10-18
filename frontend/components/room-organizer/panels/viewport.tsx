@@ -390,7 +390,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
             <StatusChip intent="accent">
               <Icon name="live" size={14} />
               {props.walkthroughLockRefused
-                ? 'Click again to look around'
+                ? '再点一下画面开始漫游'
                 : 'WASD 走动 · Shift 加速 · Esc 退出'}
             </StatusChip>
           </div>
