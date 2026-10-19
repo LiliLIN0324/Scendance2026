@@ -492,7 +492,7 @@
 }
 .sc-brand { display: flex; gap: 7px; align-items: center; flex-shrink: 0; }
 .sc-brand strong { font-size: 14px; letter-spacing: 1px; font-weight: 650; line-height: 1.2; color: var(--sc-accent-ink); }
-.sc-brand-mark { width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; border-radius: 8px; background: var(--sc-accent-soft); }
+.sc-brand-mark { width: 29px; height: 31px; display: grid; place-items: center; flex-shrink: 0; background: transparent; }
 .sc-project-heading { min-width: 0; flex: 1; }
 .sc-eyebrow { display: block; color: var(--sc-muted); font-size: 10px; font-weight: 500; letter-spacing: 1.3px; line-height: 1.8; }
 .sc-project-heading strong { font-size: var(--sc-type-body); font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -684,20 +684,14 @@
 .sc-workbench .is-docked-layout .sc-left-drawer.has-business { flex-basis:420px; width:420px; }
 .sc-workbench .is-docked-layout.has-conversation .sc-left-drawer.has-business { flex-basis:clamp(300px,28vw,360px); width:clamp(300px,28vw,360px); }
 .sc-workbench .is-docked-layout .cr-assistant.is-docked:not(.is-open) { display:none; }
-.sc-workbench .is-docked-layout .sc-canvas-stage { --sc-shelf-height:170px; --sc-rail-width:42px; position:relative; inset:auto; flex:1; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr) 0 42px; gap:6px; background:transparent; overflow:hidden; container:canvas-stage / size; }
-.sc-workbench .has-material-shelf .sc-canvas-stage { grid-template-rows:minmax(0,1fr) var(--sc-shelf-height) 42px; }
+.sc-workbench .is-docked-layout .sc-canvas-stage { --sc-shelf-height:196px; --sc-rail-width:40px; position:relative; inset:auto; flex:1; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) 0; gap:0; background:transparent; overflow:hidden; container:canvas-stage / size; }
+.sc-workbench .has-material-shelf .sc-canvas-stage { grid-template-rows:minmax(0,1fr) var(--sc-shelf-height); }
 .sc-workbench .sc-scene-viewport { position:relative; inset:auto; grid-area:1 / 1; min-width:0; min-height:0; overflow:hidden; border-radius:14px; container:scene-viewport / size; }
 .sc-workbench .sc-editor-dock { display:contents; pointer-events:auto; }
 .sc-workbench .sc-material-shelf { grid-area:2 / 1 / 3 / 3; box-sizing:border-box; width:100%; height:var(--sc-shelf-height); min-width:0; min-height:0; pointer-events:auto; }
 .sc-workbench .sc-material-shelf[hidden],.sc-workbench .sc-material-shelf [hidden] { display:none; }
-.sc-workbench .sc-canvas-rail.sc-view-tools { position:relative; inset:auto; left:auto; bottom:auto; transform:none; grid-area:1 / 2; align-self:stretch; min-height:0; max-width:100%; width:var(--sc-rail-width); box-sizing:border-box; display:flex; flex-direction:column; align-items:center; overflow-x:hidden; overflow-y:auto; padding:4px; gap:6px; border-radius:12px; background:var(--sc-surface); box-shadow:none; backdrop-filter:none; }
-.sc-workbench .has-material-shelf .sc-canvas-rail.sc-view-tools { width:74px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:30px; align-content:center; justify-items:center; gap:4px; overflow:hidden; }
-.sc-workbench .has-material-shelf .sc-canvas-rail .sc-tool-group { display:contents; }
-@container canvas-stage (max-height:480px) {
-  .sc-workbench .sc-canvas-rail.sc-view-tools { width:74px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:30px; align-content:center; justify-items:center; gap:4px; overflow:hidden; }
-  .sc-workbench .sc-canvas-rail .sc-tool-group { display:contents; }
-}
-.sc-workbench .sc-material-entry-bar { grid-area:3 / 1 / 4 / 3; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; min-width:0; min-height:0; gap:8px; padding:0 6px; border-radius:10px; background:var(--sc-surface); }
+.sc-workbench .sc-canvas-rail.sc-view-tools { /* superseded by .sc-tool-column absolute overlay */ }
+.sc-workbench .sc-material-entry-bar { display:none; }
 .sc-workbench .sc-assistant-entry-host { display:flex; align-items:center; margin-left:auto; min-width:0; }
 .sc-assistant-entry-host .cr-assistant-capsule { position:relative; inset:auto; width:auto; min-width:0; height:36px; min-height:36px; margin:0; padding:2px 10px 2px 4px; gap:6px; border-radius:20px; box-shadow:none; font-size:var(--sc-type-body); }
 .sc-assistant-entry-host .cr-assistant-capsule-avatar { width:30px; height:30px; flex:0 0 30px; }
@@ -756,79 +750,149 @@
   .sc-workbench .sc-scene-viewport .sc-reference-image-trigger { padding:5px 7px; font-size:var(--sc-type-meta); }
 }
 
-/* Phase 1 editor IA: left mode rail + floating layers */
-.sc-workbench .sc-mode-rail {
-  flex: 0 0 48px; width: 48px; min-width: 48px; box-sizing: border-box;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 6px 4px; border-radius: 12px; background: var(--sc-surface);
-  border: 1px solid var(--sc-line); z-index: 45; position: relative;
-}
-.sc-workbench .sc-mode-rail.is-expanded { flex-basis: 88px; width: 88px; min-width: 88px; }
-.sc-workbench .sc-mode-rail-toggle {
-  width: 100%; min-height: 28px; border: 0; background: transparent; color: var(--sc-muted);
-  border-radius: 8px; font-size: 16px; line-height: 1;
-}
-.sc-workbench .sc-mode-rail > button[aria-label] {
-  width: 100%; min-height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--sc-muted); padding: 4px 2px;
-}
-.sc-workbench .sc-mode-rail > button.is-active {
-  color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #6f8f5233; font-weight: 600;
-}
-.sc-workbench .sc-mode-rail-label { font-size: 10px; line-height: 1.1; letter-spacing: 0; }
-.sc-workbench .sc-mode-rail:not(.is-expanded) .sc-mode-rail-label { display: none; }
+/* v2.4 design-align: top stage tabs + right vertical tool column + bottom 物料库 drawer */
+.sc-workbench .sc-mode-rail { display: none !important; }
 .sc-workbench .is-docked-layout.is-mode-rail {
-  display: flex; gap: 8px; /* stays position:absolute (inset 64px 16px 12px) so the workbench fills the viewport */
+  display: flex; gap: 8px;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
   flex: 1; min-width: 0; position: relative;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer {
-  position: absolute; left: 56px; top: 0; bottom: 0; z-index: 50;
+  position: absolute; left: 8px; top: 0; bottom: 40px; z-index: 50;
   flex: none !important; width: min(400px, calc(100% - 64px)) !important;
   max-width: 420px; box-sizing: border-box;
-  background: #fbfcfa; border: 1px solid #d9dfd4; border-radius: 14px;
+  background: #fbfbf8; border: 1px solid #d9dfd4; border-radius: 14px;
   box-shadow: 0 10px 28px #1f2a1814; display: flex; flex-direction: column;
   pointer-events: auto;
 }
-.sc-workbench .is-docked-layout.is-mode-rail.is-rail-expanded .sc-left-drawer.sc-float-layer { left: 96px; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.is-collapsed {
   display: none !important;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-material-shelf.sc-float-materials {
-  position: relative; inset: auto; flex: 1; min-height: 0; height: auto; width: 100%;
-  grid-area: unset; border: 0; box-shadow: none; background: transparent; border-radius: 0;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-materials {
+  display: none !important; /* materials live in bottom canvas drawer */
 }
-.sc-workbench .is-docked-layout.is-mode-rail.has-material-shelf .sc-canvas-stage {
-  grid-template-rows: minmax(0,1fr) 0 48px;
+.sc-workbench .sc-stage-switch {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; gap: 2px; padding: 3px; height: 36px; align-items: center;
+  border-radius: 10px; background: #f3f4ee; border: 1px solid #e7e8e0; z-index: 1;
 }
-.sc-workbench .sc-tool-capsule.sc-canvas-rail {
-  position: absolute !important; left: 50%; bottom: 10px; transform: translateX(-50%);
-  grid-area: unset !important; width: auto !important; max-width: min(720px, calc(100% - 24px));
-  flex-direction: row !important; align-items: center; padding: 4px 8px; gap: 6px;
-  border-radius: 999px; z-index: 35; overflow: visible;
+.sc-workbench .sc-stage-switch .sc-stage {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-width: 92px; height: 28px; padding: 0 10px; border: 0; border-radius: 7px;
+  background: transparent; color: #6f6f6f; font-size: 13px; font-weight: 500;
 }
-.sc-workbench .sc-tool-capsule .sc-tool-group { display: flex; flex-direction: row; gap: 2px; }
-.sc-workbench .sc-tool-capsule-bar.sc-material-entry-bar {
-  position: absolute; right: 12px; bottom: 10px; grid-area: unset; width: auto; min-height: 40px;
-  border-radius: 999px; z-index: 35; padding: 4px 8px;
+.sc-workbench .sc-stage-switch .sc-stage.is-active {
+  background: #fff; color: #394a37; font-weight: 700;
+  box-shadow: 0 1px 2px rgba(57,74,55,.12);
 }
-/* Phase 1.5: atmosphere lives inline in the bottom capsule — no left float panel. */
-.sc-workbench .sc-atmosphere-group { align-items: center; }
-.sc-workbench .sc-atmosphere-group .sc-rail-label { font-size: 9px; line-height: 1; }
-.sc-workbench .sc-npc-hint {
-  font-size: 10px; line-height: 1.2; color: var(--sc-muted); white-space: nowrap; padding: 0 2px;
+.sc-workbench .sc-stage-switch .sc-stage-ic { display: block; flex: none; }
+.sc-workbench .sc-brand-en {
+  font-size: 13px; color: #6f6f6f; font-weight: 500; letter-spacing: 0.2px; margin-left: -2px;
 }
-.sc-workbench .sc-weather-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
-.sc-workbench .sc-weather-pop {
-  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 60;
+.sc-workbench .sc-brand-divider {
+  width: 1px; height: 20px; background: #e3e4dc; margin: 0 4px 0 8px; flex: none;
+}
+.sc-workbench .sc-project-heading {
+  display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
+}
+.sc-workbench .sc-project-heading strong { display: inline; max-width: 220px; }
+.sc-workbench .sc-tag-draft {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
+  border-radius: 6px; background: #f3f4ee; border: 1px solid #e7e8e0;
+  color: #8d8f85; font-size: 11px; white-space: nowrap;
+}
+.sc-workbench .sc-header-actions .sc-project-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px;
+  padding: 5px 10px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: #394a37; font-size: 13px;
+}
+.sc-workbench .sc-header-actions .sc-project-btn:hover {
+  background: var(--sc-accent-soft);
+}
+/* Right vertical 14-key circular tool column (design #tool-column) */
+.sc-workbench .sc-tool-column.sc-canvas-rail {
+  position: absolute !important; right: 9px; top: 16px; bottom: auto; left: auto;
+  transform: none; grid-area: unset !important;
+  width: 40px !important; max-width: 40px;
+  display: flex !important; flex-direction: column !important; align-items: center;
+  padding: 0; gap: 0; border-radius: 0; background: transparent !important;
+  box-shadow: none; border: 0; overflow: visible; z-index: 35;
+}
+.sc-workbench .sc-tool-column .sc-tool-group {
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  padding: 0; border: 0; border-bottom: 0;
+}
+.sc-workbench .sc-tool-column .sc-tool-sep {
+  display: block; width: 22px; height: 1px; background: #dcdfd4; margin: 10px 0;
+}
+.sc-workbench .sc-tool-column .sc-tool-group button,
+.sc-workbench .sc-tool-column .sc-tool-menu > button {
+  position: relative;
+  width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0;
+  border-radius: 50%; background: #fff; border: 1px solid #e7e8e0;
+  box-shadow: 0 1px 2px rgba(47,47,47,.05); color: #56794d;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sc-workbench .sc-tool-column .sc-tool-group button:disabled {
+  color: #c3c6bb; background: #fafaf7; box-shadow: none; opacity: 1;
+}
+.sc-workbench .sc-tool-column .sc-tool-group button.is-active,
+.sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
+  background: #dbe5cf; border-color: #b9c9a7; color: #394a37;
+}
+.sc-workbench .sc-tool-column .sc-rail-2d {
+  font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 11px;
+  letter-spacing: .2px; color: inherit;
+}
+.sc-workbench .sc-tool-caret {
+  position: absolute; right: 3px; top: 50%; margin-top: -4px; color: #66835d;
+}
+.sc-workbench .sc-tool-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
+.sc-workbench .sc-tool-pop {
+  position: absolute; right: calc(100% + 8px); top: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;
-  padding: 4px; border-radius: 8px; background: #fbfcfa; border: 1px solid #d9dfd4;
+  padding: 4px; border-radius: 8px; background: #fbfbf8; border: 1px solid #d9dfd4;
   box-shadow: 0 6px 16px #1f2a1818;
 }
-.sc-workbench .sc-weather-pop button { border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; text-align: left; color: var(--sc-ink); font-size: 12px; width: 100%; }
-.sc-workbench .sc-weather-pop button.is-active { background: var(--sc-accent-soft); color: var(--sc-accent-ink); }
-.sc-workbench .sc-time-presets { display: flex; flex-direction: row; gap: 2px; align-items: center; }
+.sc-workbench .sc-tool-pop button {
+  border: 0 !important; background: transparent !important; box-shadow: none !important;
+  width: 100% !important; height: auto !important; min-height: 0 !important;
+  border-radius: 6px !important; padding: 6px 8px !important; text-align: left;
+  color: var(--sc-ink); font-size: 12px;
+}
+.sc-workbench .sc-tool-pop button.is-active {
+  background: var(--sc-accent-soft) !important; color: var(--sc-accent-ink) !important;
+}
+.sc-workbench .sc-atmosphere-group { align-items: center; }
+/* Bottom-center 物料库 drawer */
+.sc-workbench .sc-material-drawer-bar {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  z-index: 34; display: flex; justify-content: center; pointer-events: none;
+}
+.sc-workbench .sc-material-drawer-bar.is-open { display: none; }
+.sc-workbench .sc-material-drawer-handle {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 12px;
+  border-radius: 12px; border: 1px solid #e7e8e0; background: #fbfbf8;
+  color: #6f6f6f; font-size: 12px; box-shadow: 0 1px 2px rgba(47,47,47,.04);
+}
+.sc-workbench .sc-material-drawer-handle.is-active {
+  background: #e7eddd; color: #394a37; border-color: #c5d3b6;
+}
+.sc-workbench .sc-canvas-stage.has-bottom-drawer {
+  grid-template-rows: minmax(0,1fr) auto !important;
+  grid-template-columns: minmax(0,1fr) !important;
+}
+.sc-workbench .sc-canvas-stage .sc-material-shelf.sc-bottom-drawer {
+  position: relative; grid-area: 2 / 1; inset: auto; width: 100%;
+  height: var(--sc-shelf-height, 196px); min-height: 0;
+  background: #fbfbf8; border: 1px solid #e7e8e0; border-radius: 14px 14px 0 0;
+  box-shadow: none; z-index: 33; overflow: hidden;
+}
+.sc-workbench .sc-canvas-stage .sc-material-shelf.sc-bottom-drawer[hidden] { display: none; }
+.sc-workbench .sc-material-entry-bar,
+.sc-workbench .sc-tool-capsule-bar { display: none !important; }
 /* v2.4：评审也沿用暖色浅色主题（不再切深色壳）。 */
 /* 漫游预览：抽屉与右栏收起，只留「退出漫游 · Esc」。 */
 .sc-workbench.is-walkthrough .sc-left-drawer,

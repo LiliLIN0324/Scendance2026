@@ -993,7 +993,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
 
 function AssistantMascot(): JSX.Element {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="cr-mascot" src="/assets/assistant/qingguang-24@2x.png" alt="晴光" draggable={false} width={24} height={24}/>;
+  return <img className="cr-mascot" src="/assets/assistant/qingguang-3d-24@2x.png" alt="晴光" draggable={false} width={24} height={24}/>;
 }
 
 export type GeneratedVariant = { sourceAssetId: string; variantAssetId: string; objectIds?: string[] };

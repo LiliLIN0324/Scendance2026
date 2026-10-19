@@ -92,3 +92,11 @@
 .ap-agent.is-amber { background:var(--ap-amber-bg); border:1px solid var(--ap-amber-line); color:var(--ap-amber); border-radius:8px; padding:6px 9px; }
 #walk-exit { background:#fff; border:1px solid #dfe2d7; color:#394a37; cursor:pointer; }
 .sc-workbench.is-walkthrough .sc-material-shelf { display:none !important; }
+
+.sc-agent-panel .btn-outline {
+  background: #fff;
+  border: 1px solid #dfe2d7;
+  color: #394a37;
+  border-radius: 999px;
+}
+.sc-agent-panel .chip.btn-outline { background:#fff; border-color:#dfe2d7; color:#394a37; }

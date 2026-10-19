@@ -23,7 +23,7 @@ import {
 import { useStudioAgent } from './creative-studio';
 import './agent-panel.css';
 
-const MASCOT_SRC = '/assets/assistant/qingguang-24@2x.png';
+const MASCOT_SRC = '/assets/assistant/qingguang-3d-24@2x.png';
 const STEP_DELAY_MS = 420;
 
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
@@ -375,7 +375,7 @@ export function AgentPanel(): JSX.Element {
               {agent.state === 'generatePaused' && <button type="button" className="chip is-on" onClick={() => agent.regenerate('接着摆')}>接着摆</button>}
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
-              <button type="button" className="chip" onClick={agent.walkthrough}>走一遍给客户看</button>
+              <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
               {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
             </div>
             <button id="step-cta" type="button" className="btn-primary" onClick={() => agent.callbacks.onSelectMode('review')}>下一步：给甲方看</button>
@@ -389,7 +389,7 @@ export function AgentPanel(): JSX.Element {
           <button id="step-cta" type="button" className="btn-primary" aria-disabled={signedIn ? 'false' : 'true'} onClick={() => { if (signedIn) agent.callbacks.onOpenReview(); }}>生成评审链接</button>
           {walkDone && <p className="ap-agent">走完了，要给甲方发链接吗？</p>}
           {!signedIn && <p id="cta-hint" className="ap-why">评审链接要存到云端：先点右上角头像登录并同步，就能生成。</p>}
-          <div className="ap-chips"><button type="button" className="chip" onClick={agent.walkthrough}>走一遍给客户看</button>{agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}</div>
+          <div className="ap-chips"><button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>{agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}</div>
         </div>
       </>}
       {mode === 'delivery' && <>
