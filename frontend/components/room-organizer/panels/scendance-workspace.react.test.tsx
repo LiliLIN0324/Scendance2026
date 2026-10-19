@@ -8,7 +8,7 @@ import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
-import { ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
+import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
 import type { OnlineModel } from '../lib/online-models';
 import type { ViewSettings } from '../lib/types';
 
@@ -152,7 +152,7 @@ describe('ScendanceLibrary shelf lifecycle', () => {
   it('closes only through its supplied close callback', async () => {
     const test = librarySetup();
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
-    fireEvent.click(screen.getByRole('button', { name: '关闭素材架' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭物料库' }));
     expect(test.onClose).toHaveBeenCalledTimes(1);
     expect(test.placeCatalogItem).not.toHaveBeenCalled();
     expect(test.actions.applyLayout).not.toHaveBeenCalled();
@@ -160,118 +160,87 @@ describe('ScendanceLibrary shelf lifecycle', () => {
   });
 });
 
-describe('ScendanceViewTools material toggle', () => {
-  it('keeps the shelf toggle independent from view, history and screenshot actions', () => {
-    const values = contexts(), onToggleMaterials = vi.fn();
-    const onApplyPreset = vi.fn(), onFit = vi.fn(), onZoom = vi.fn(), onScreenshot = vi.fn();
-    const materialsButtonRef = createRef<HTMLButtonElement>();
-    const assistantEntryHostRef = createRef<HTMLDivElement>();
-    const node = (materialsOpen: boolean) => <Providers values={values}><ScendanceViewTools {...{ onApplyPreset, onFit, onZoom, onScreenshot, onToggleMaterials, materialsButtonRef, assistantEntryHostRef, materialsOpen }}/></Providers>;
-    const { rerender, container } = render(node(false));
-    const button = screen.getByRole('button', { name: '打开素材架' });
-    expect(materialsButtonRef.current).toBe(button);
-    expect(button.textContent).toContain('素材');
-    expect(button.getAttribute('aria-controls')).toBe('workbench-material-shelf');
-    expect(button.getAttribute('aria-expanded')).toBe('false');
-    expect(assistantEntryHostRef.current?.parentElement).toBe(button.parentElement);
-    expect(screen.getByRole('navigation', { name: '视角与编辑工具' }).contains(button)).toBe(false);
-    fireEvent.click(button);
-    expect(onToggleMaterials).toHaveBeenCalledTimes(1);
-    expect(values.setView).not.toHaveBeenCalled();
-    expect(values.toggle).not.toHaveBeenCalled();
-    expect(onApplyPreset).not.toHaveBeenCalled();
-    expect(values.history.undo).not.toHaveBeenCalled();
-    rerender(node(true));
-    expect(screen.getByRole('button', { name: '收起素材架' }).getAttribute('aria-expanded')).toBe('true');
+
+describe('ScendanceViewTools design column', () => {
+  it('renders the vertical 14-key groups and keeps materials outside the rail', () => {
+    const values = contexts(), onApplyPreset = vi.fn(), onFit = vi.fn(), onZoom = vi.fn(), onScreenshot = vi.fn();
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onFit={onFit} onZoom={onZoom} onScreenshot={onScreenshot}/></Providers>);
+    const rail = screen.getByRole('navigation', { name: '视角与编辑工具' });
+    expect(rail.id).toBe('tool-column');
+    for (const name of ['撤销', '重做', '导出当前画面', '网格吸附', '显示尺寸', '全屏', '缩小', '放大', '足迹 / 漫游', '人群', '天气：晴 / 雨 / 雪', '时间']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+    expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     fireEvent.click(screen.getByRole('button', { name: '重做' }));
     fireEvent.click(screen.getByRole('button', { name: '导出当前画面' }));
-    fireEvent.click(screen.getByRole('button', { name: '俯视' }));
-    fireEvent.click(screen.getByRole('button', { name: '2D' }));
-    fireEvent.click(screen.getByRole('button', { name: '缩小' }));
-    fireEvent.click(screen.getByRole('button', { name: '适应场地' }));
-    fireEvent.click(screen.getByRole('button', { name: '放大' }));
-    fireEvent.click(screen.getByRole('button', { name: '网格吸附' }));
-    fireEvent.click(screen.getByRole('button', { name: '显示尺寸' }));
+    fireEvent.click(screen.getByRole('button', { name: '视角：整体 / 俯视 / 人视' }));
+    fireEvent.click(screen.getByRole('option', { name: '俯视' }));
     expect(values.history.undo).toHaveBeenCalledTimes(1);
     expect(values.history.redo).toHaveBeenCalledTimes(1);
     expect(onScreenshot).toHaveBeenCalledTimes(1);
     expect(onApplyPreset).toHaveBeenCalledWith('top');
-    expect(values.setView).toHaveBeenCalledTimes(1);
-    const update = values.setView.mock.calls[0]![0] as (view: ViewSettings) => ViewSettings;
-    expect(update(makeViewSettings({ view2D: true })).view2D).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '2D / 3D' }));
+    fireEvent.click(screen.getByRole('button', { name: '缩小' }));
+    fireEvent.click(screen.getByRole('button', { name: '全屏' }));
+    fireEvent.click(screen.getByRole('button', { name: '放大' }));
+    fireEvent.click(screen.getByRole('button', { name: '网格吸附' }));
+    fireEvent.click(screen.getByRole('button', { name: '显示尺寸' }));
     expect(values.toggle.mock.calls).toEqual([['view2D'], ['snapToGrid'], ['showMeasurements']]);
     expect(onZoom.mock.calls).toEqual([['-'], ['+']]);
     expect(onFit).toHaveBeenCalledTimes(1);
-    expect(onToggleMaterials).toHaveBeenCalledTimes(1);
-    expect(container.querySelectorAll('.sc-view-tools')).toHaveLength(1);
   });
 
-  it('preserves callers that provide no shelf control and disables zoom in 2D', () => {
+  it('disables zoom in 2D and hides atmosphere when requested', () => {
     const values = contexts(makeLayout(), makeViewSettings({ view2D: true }));
-    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    expect(screen.queryByRole('button', { name: /素材架/ })).toBeNull();
-    for (const name of ['缩小', '适应场地', '放大']) {
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    for (const name of ['缩小', '全屏', '放大']) {
       expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
-    expect(screen.getByRole('button', { name: '2D' }).className).toContain('is-active');
+    expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '足迹 / 漫游' })).toBeNull();
   });
 
   it('keeps rail wheel browsing from reaching the canvas zoom handler', () => {
     const values = contexts(), onCanvasWheel = vi.fn();
     render(<Providers values={values}><div onWheel={onCanvasWheel}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></div></Providers>);
-    const rail = screen.getByRole('navigation', { name: '视角与编辑工具' });
-    fireEvent.wheel(rail, { deltaY: 80 });
+    fireEvent.wheel(screen.getByRole('navigation', { name: '视角与编辑工具' }), { deltaY: 80 });
     expect(onCanvasWheel).not.toHaveBeenCalled();
-    const viewButton = screen.getByRole('button', { name: '俯视' });
-    viewButton.focus();
-    expect(document.activeElement).toBe(viewButton);
-    expect(viewButton.getAttribute('title')).toBe('俯视');
   });
 });
 
-describe('ScendanceViewTools inline atmosphere (Phase 1.5)', () => {
-  it('exposes 漫游｜人群｜天气▾｜时段 in the capsule and wires ViewSettings without a float panel', () => {
+describe('ScendanceViewTools atmosphere menus', () => {
+  it('wires 足迹 / 人群 / 天气 / 时间', () => {
     const values = contexts();
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    expect(screen.getByRole('group', { name: '氛围' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '氛围' })).toBeNull();
-    expect(screen.queryByLabelText('氛围')?.className ?? '').not.toContain('sc-atmosphere-panel');
-    expect(screen.queryByText('约 3 人')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: '漫游' }));
+    fireEvent.click(screen.getByRole('button', { name: '足迹 / 漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
-    expect(walk(makeViewSettings({ view2D: true })).view2D).toBe(false);
-
     fireEvent.click(screen.getByRole('button', { name: '人群' }));
     expect(values.toggle).toHaveBeenCalledWith('showNpcs');
-  });
-
-  it('shows 约 3 人 when crowds are on and keeps outdoor weather/time copy off lighting', () => {
-    const values = contexts(makeLayout(), makeViewSettings({ showNpcs: true }));
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    expect(screen.getByText('约 3 人')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '室外天气' })).toBeTruthy();
-    expect(screen.getByRole('group', { name: '室外时段' })).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: '现场灯光' })).toBeNull();
-    expect(screen.queryByText(/灯光/)).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: '室外天气' }));
+    fireEvent.click(screen.getByRole('button', { name: '天气：晴 / 雨 / 雪' }));
     fireEvent.click(screen.getByRole('option', { name: '降雨' }));
     const weather = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(weather(makeViewSettings()).weather).toBe('rain');
-
-    fireEvent.click(screen.getByRole('button', { name: '室外时段 黄昏' }));
+    fireEvent.click(screen.getByRole('button', { name: '时间' }));
+    fireEvent.click(screen.getByRole('option', { name: '室外时段 黄昏' }));
     const time = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(time(makeViewSettings()).timeOfDay).toBe(18);
-    expect(screen.queryByRole('group', { name: 'View options' })).toBeNull();
   });
+});
 
-  it('hides inline atmosphere when showAtmosphere is false', () => {
-    const values = contexts();
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
+describe('MaterialDrawerHandle', () => {
+  it('labels the bottom handle 物料库 and toggles independently', () => {
+    const onToggle = vi.fn();
+    const buttonRef = createRef<HTMLButtonElement>();
+    const { rerender } = render(<MaterialDrawerHandle open={false} onToggle={onToggle} buttonRef={buttonRef}/>);
+    const button = screen.getByRole('button', { name: '展开物料库' });
+    expect(buttonRef.current).toBe(button);
+    expect(button.textContent).toContain('物料库');
+    expect(button.getAttribute('aria-controls')).toBe('workbench-material-shelf');
+    fireEvent.click(button);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    rerender(<MaterialDrawerHandle open onToggle={onToggle} buttonRef={buttonRef}/>);
+    expect(screen.getByRole('button', { name: '收起物料库' }).getAttribute('aria-expanded')).toBe('true');
   });
 });

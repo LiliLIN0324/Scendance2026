@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, Camera, CloudRain, Eye, Footprints, Grid, Layers, Maximize2, Minus, MousePointer2, PanelTop, Plus, Redo2, Sun, Undo2, Users, X } from 'lucide-react';
+import { Boxes, Camera, ChevronDown, CloudRain, Footprints, Grid, Maximize2, Minus, Plus, Redo2, Ruler, Sun, Undo2, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -60,7 +60,7 @@ export function ScendanceLibrary({ placeCatalogItem, onLighting, controller, onL
         {([['materials', '物料库'], ['presets', '场景模板'], ['layers', '图层']] as const).map(([key, label]) =>
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
       </div>
-      {onClose && <button type="button" className="sc-icon-button" aria-label="关闭素材架" title="关闭素材架" onClick={onClose}><X size={17}/></button>}
+      {onClose && <button type="button" className="sc-icon-button" aria-label="关闭物料库" title="关闭物料库" onClick={onClose}><X size={17}/></button>}
     </div>
     <div className="sc-library-content">
       <div className="sc-library-materials" hidden={tab !== 'materials'}>
@@ -84,8 +84,7 @@ interface ViewToolsProps {
   materialsOpen?: boolean;
   onToggleMaterials?(): void;
   materialsButtonRef?: RefObject<HTMLButtonElement>;
-  assistantEntryHostRef?: RefObject<HTMLDivElement>;
-  /** Layout mode only: inline 漫游｜人群｜天气▾｜时段 in the bottom capsule (no left float). */
+  /** Layout mode only: 足迹 / 人群 / 天气 / 时间 (design group 4). */
   showAtmosphere?: boolean;
   onApplyPreset(preset: CameraPreset): void;
   onFit(): void;
@@ -98,22 +97,33 @@ const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
   { id: 'rain', label: '降雨' },
   { id: 'snow', label: '降雪' },
 ];
-/** view.timeOfDay presets — separate from layout.backendLighting (现场灯光). */
 const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }> = [
   { label: '日', hour: 12, title: '正午' },
   { label: '昏', hour: 18, title: '黄昏' },
   { label: '夜', hour: 21, title: '夜晚' },
 ];
+const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string }> = [
+  { id: 'iso', label: '整体' },
+  { id: 'top', label: '俯视' },
+  { id: 'front', label: '人视' },
+];
 
-const NPC_HINT = '约 3 人';
-
-/** Bottom capsule: undo / view / snap / inline atmosphere (Phase 1.5). No AtmospherePanel float. */
-export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onScreenshot, materialsOpen = false, onToggleMaterials, materialsButtonRef, assistantEntryHostRef, showAtmosphere = true }: ViewToolsProps): JSX.Element {
+/** Design: canvas-right vertical 14-key circular column (v2.4). */
+export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onScreenshot, showAtmosphere = true }: ViewToolsProps): JSX.Element {
   const { view, setView, toggle, history } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
+  const [angleOpen, setAngleOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
+  const angleMenuRef = useRef<HTMLDivElement>(null);
   const weatherMenuRef = useRef<HTMLDivElement>(null);
-  const choosePreset = (next: CameraPreset) => { setView(current => ({ ...current, view2D: false, walkthroughMode: false })); onApplyPreset(next); setPreset(next); };
+  const timeMenuRef = useRef<HTMLDivElement>(null);
+  const choosePreset = (next: CameraPreset) => {
+    setView(current => ({ ...current, view2D: false, walkthroughMode: false }));
+    onApplyPreset(next);
+    setPreset(next);
+    setAngleOpen(false);
+  };
   const setWalkthrough = (on: boolean) => {
     setView(current => ({
       ...current,
@@ -121,57 +131,101 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onScreenshot,
       ...(on ? { view2D: false, measurementMode: false, drawWallMode: false } : {}),
     }));
   };
-  const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6)?.label;
+  const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6);
   useEffect(() => {
-    if (!weatherOpen) return undefined;
+    if (!angleOpen && !weatherOpen && !timeOpen) return undefined;
     const onPointer = (event: MouseEvent) => {
-      if (weatherMenuRef.current && !weatherMenuRef.current.contains(event.target as Node)) setWeatherOpen(false);
+      const target = event.target as Node;
+      if (angleOpen && angleMenuRef.current && !angleMenuRef.current.contains(target)) setAngleOpen(false);
+      if (weatherOpen && weatherMenuRef.current && !weatherMenuRef.current.contains(target)) setWeatherOpen(false);
+      if (timeOpen && timeMenuRef.current && !timeMenuRef.current.contains(target)) setTimeOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setWeatherOpen(false); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setAngleOpen(false); setWeatherOpen(false); setTimeOpen(false); }
+    };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
-  }, [weatherOpen]);
-  return <>
-    <nav className="sc-view-tools sc-canvas-rail sc-tool-capsule" aria-label="视角与编辑工具" onWheel={event => event.stopPropagation()}>
+  }, [angleOpen, weatherOpen, timeOpen]);
+
+  return (
+    <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="视角与编辑工具" onWheel={event => event.stopPropagation()}>
       <div className="sc-tool-group" role="group" aria-label="编辑历史与画面">
-        <button type="button" title="撤销 Ctrl / ⌘ Z" aria-label="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={17}/></button>
-        <button type="button" title="重做 Ctrl / ⌘ Shift Z" aria-label="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={17}/></button>
-        {onScreenshot && <button type="button" title="导出当前画面" aria-label="导出当前画面" onClick={onScreenshot}><Camera size={16}/></button>}
+        <button type="button" id="tool-undo" title="撤销" aria-label="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={17}/></button>
+        <button type="button" id="tool-redo" title="重做" aria-label="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={17}/></button>
+        {onScreenshot && <button type="button" id="tool-export" title="导出当前画面" aria-label="导出当前画面" onClick={onScreenshot}><Camera size={16}/></button>}
       </div>
-      <div className="sc-tool-group sc-view-tabs" role="group" aria-label="场地视角">
-        <button type="button" title="整体" aria-label="整体" aria-pressed={!view.view2D && preset === 'iso'} className={!view.view2D && preset === 'iso' ? 'is-active' : ''} onClick={() => choosePreset('iso')}><Layers size={17}/></button>
-        <button type="button" title="俯视" aria-label="俯视" aria-pressed={!view.view2D && preset === 'top'} className={!view.view2D && preset === 'top' ? 'is-active' : ''} onClick={() => choosePreset('top')}><PanelTop size={17}/></button>
-        <button type="button" title="客户视角" aria-label="客户视角" aria-pressed={!view.view2D && preset === 'front'} className={!view.view2D && preset === 'front' ? 'is-active' : ''} onClick={() => choosePreset('front')}><Eye size={17}/></button>
-        <button type="button" title="2D" aria-label="2D" aria-pressed={view.view2D} className={view.view2D ? 'is-active' : ''} onClick={() => { if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}><span className="sc-rail-2d">2D</span></button>
-      </div>
-      <div className="sc-tool-group" role="group" aria-label="场地辅助">
-        <button type="button" title="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}><Grid size={16}/></button>
-        <button type="button" title="显示尺寸" aria-label="显示尺寸" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}><MousePointer2 size={16}/></button>
-        <button type="button" title="缩小" aria-label="缩小" onClick={() => onZoom('-')} disabled={view.view2D}><Minus size={16}/></button>
-        <button type="button" title="适应场地" aria-label="适应场地" onClick={onFit} disabled={view.view2D}><Maximize2 size={16}/></button>
-        <button type="button" title="放大" aria-label="放大" onClick={() => onZoom('+')} disabled={view.view2D}><Plus size={16}/></button>
-      </div>
-      {showAtmosphere && <div className="sc-tool-group sc-atmosphere-group" role="group" aria-label="氛围">
-        <button type="button" title="漫游" aria-label="漫游" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={15}/><span className="sc-rail-label">漫游</span></button>
-        <button type="button" title={view.showNpcs ? `人群 · ${NPC_HINT}` : '人群'} aria-label={view.showNpcs ? `人群，${NPC_HINT}` : '人群'} aria-pressed={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={15}/><span className="sc-rail-label">人群</span>{view.showNpcs ? <span className="sc-npc-hint" aria-hidden="true">{NPC_HINT}</span> : null}</button>
-        <div className="sc-weather-menu" ref={weatherMenuRef}>
-          <button type="button" title="室外天气" aria-label="室外天气" aria-haspopup="listbox" aria-expanded={weatherOpen} className={view.weather !== 'clear' || weatherOpen ? 'is-active' : ''} onClick={() => setWeatherOpen(open => !open)}>
-            {view.weather === 'clear' ? <Sun size={14} /> : <CloudRain size={14} />}
-            <span className="sc-rail-label">天气▾</span>
+      <span className="sc-tool-sep" aria-hidden="true"/>
+      <div className="sc-tool-group" role="group" aria-label="场地视角">
+        <div className="sc-tool-menu" ref={angleMenuRef}>
+          <button type="button" id="tool-angle" title="视角：整体 / 俯视 / 人视" aria-label="视角：整体 / 俯视 / 人视" aria-haspopup="listbox" aria-expanded={angleOpen} className={!view.view2D || angleOpen ? 'is-active' : ''} onClick={() => { setAngleOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+            <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
           </button>
-          {weatherOpen && <div className="sc-weather-pop" role="listbox" aria-label="室外天气选项">
-            {WEATHER_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={view.weather === option.id} className={view.weather === option.id ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, weather: option.id })); setWeatherOpen(false); }}>{option.label}</button>)}
+          {angleOpen && <div className="sc-tool-pop" role="listbox" aria-label="视角选项">
+            {ANGLE_PRESETS.map(entry => <button type="button" key={entry.id} role="option" aria-label={entry.label} aria-selected={!view.view2D && preset === entry.id} className={!view.view2D && preset === entry.id ? 'is-active' : ''} onClick={() => choosePreset(entry.id)}>{entry.label}</button>)}
           </div>}
         </div>
-        <div className="sc-time-presets" role="group" aria-label="室外时段">
-          {TIME_PRESETS.map(entry => <button type="button" key={entry.label} title={`室外时段 · ${entry.title}`} aria-label={`室外时段 ${entry.title}`} aria-pressed={activeTime === entry.label} className={activeTime === entry.label ? 'is-active' : ''} onClick={() => setView(current => ({ ...current, timeOfDay: entry.hour }))}><span className="sc-rail-label">{entry.label}</span></button>)}
+        <button type="button" id="tool-2d3d" title="2D / 3D" aria-label="2D / 3D" aria-pressed={view.view2D} className={view.view2D ? 'is-active' : ''} onClick={() => { if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
+          <span className="sc-rail-2d">{view.view2D ? '2D' : '3D'}</span>
+        </button>
+      </div>
+      <span className="sc-tool-sep" aria-hidden="true"/>
+      <div className="sc-tool-group" role="group" aria-label="场地辅助">
+        <button type="button" id="tool-grid" title="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}><Grid size={16}/></button>
+        <button type="button" id="tool-dims" title="显示尺寸" aria-label="显示尺寸" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}><Ruler size={16}/></button>
+        <button type="button" id="tool-fullscreen" title="全屏" aria-label="全屏" onClick={onFit} disabled={view.view2D}><Maximize2 size={16}/></button>
+        <button type="button" id="tool-zoom-out" title="缩小" aria-label="缩小" onClick={() => onZoom('-')} disabled={view.view2D}><Minus size={16}/></button>
+        <button type="button" id="tool-zoom-in" title="放大" aria-label="放大" onClick={() => onZoom('+')} disabled={view.view2D}><Plus size={16}/></button>
+      </div>
+      {showAtmosphere && <>
+        <span className="sc-tool-sep" aria-hidden="true"/>
+        <div className="sc-tool-group sc-atmosphere-group" role="group" aria-label="氛围">
+          <button type="button" id="tool-walk" title="足迹 / 漫游" aria-label="足迹 / 漫游" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={15}/></button>
+          <button type="button" id="tool-crowd" title="人群" aria-label="人群" aria-pressed={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={15}/></button>
+          <div className="sc-tool-menu" ref={weatherMenuRef}>
+            <button type="button" id="tool-weather" title="天气：晴 / 雨 / 雪" aria-label="天气：晴 / 雨 / 雪" aria-haspopup="listbox" aria-expanded={weatherOpen} className={view.weather !== 'clear' || weatherOpen ? 'is-active' : ''} onClick={() => { setWeatherOpen(open => !open); setAngleOpen(false); setTimeOpen(false); }}>
+              {view.weather === 'clear' ? <Sun size={14} /> : <CloudRain size={14} />}
+              <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
+            </button>
+            {weatherOpen && <div className="sc-tool-pop" role="listbox" aria-label="室外天气选项">
+              {WEATHER_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={view.weather === option.id} className={view.weather === option.id ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, weather: option.id })); setWeatherOpen(false); }}>{option.label}</button>)}
+            </div>}
+          </div>
+          <div className="sc-tool-menu" ref={timeMenuRef}>
+            <button type="button" id="tool-time" title="时间" aria-label="时间" aria-haspopup="listbox" aria-expanded={timeOpen} className={timeOpen ? 'is-active' : ''} onClick={() => { setTimeOpen(open => !open); setAngleOpen(false); setWeatherOpen(false); }}>
+              <Sun size={14}/>
+              <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
+            </button>
+            {timeOpen && <div className="sc-tool-pop" role="listbox" aria-label="室外时段选项">
+              {TIME_PRESETS.map(entry => <button type="button" key={entry.label} role="option" aria-label={`室外时段 ${entry.title}`} aria-selected={activeTime?.label === entry.label} className={activeTime?.label === entry.label ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, timeOfDay: entry.hour })); setTimeOpen(false); }}>{entry.title}</button>)}
+            </div>}
+          </div>
         </div>
-      </div>}
+      </>}
     </nav>
-    {(onToggleMaterials || assistantEntryHostRef) && <div className="sc-material-entry-bar sc-tool-capsule-bar">
-      {onToggleMaterials && <button type="button" ref={materialsButtonRef} title={materialsOpen ? '收起素材架' : '打开素材架'} aria-label={materialsOpen ? '收起素材架' : '打开素材架'} aria-expanded={materialsOpen} aria-controls="workbench-material-shelf" className={materialsOpen ? 'is-active' : ''} onClick={onToggleMaterials}><Boxes size={16}/><span>素材</span></button>}
-      <div ref={assistantEntryHostRef} className="sc-assistant-entry-host"/>
-    </div>}
-  </>;
+  );
+}
+
+/** Design: bottom-center 「物料库 ▴」 drawer handle. */
+export function MaterialDrawerHandle({ open, onToggle, buttonRef }: { open: boolean; onToggle(): void; buttonRef?: RefObject<HTMLButtonElement> }): JSX.Element {
+  return (
+    <div className={`sc-material-drawer-bar${open ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        ref={buttonRef}
+        id="material-drawer-handle"
+        className={`sc-material-drawer-handle${open ? ' is-active' : ''}`}
+        title={open ? '收起物料库' : '展开物料库'}
+        aria-label={open ? '收起物料库' : '展开物料库'}
+        aria-expanded={open}
+        aria-controls="workbench-material-shelf"
+        onClick={onToggle}
+      >
+        <Boxes size={14} aria-hidden="true"/>
+        <span>物料库</span>
+        <ChevronDown size={14} aria-hidden="true" style={{ transform: open ? 'rotate(0deg)' : 'rotate(180deg)' }}/>
+      </button>
+    </div>
+  );
 }
