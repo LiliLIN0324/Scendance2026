@@ -108,6 +108,18 @@ describe('deterministic structural geometry',()=>{
   expect(solveDimensions(s,[...d,{...d[0],id:crypto.randomUUID(),valueMeters:20}]).issues[0].code).toBe('DIMENSION_CONFLICT');
   expect(solveDimensions(s,[{id:crypto.randomUUID(),kind:'distance',valueMeters:5,status:'confirmed',sourceAssetId:crypto.randomUUID(),start:p(0.1,0.1),end:p(0.8,0.1),label:'标尺'}]).issues[0].code).toBe('DIMENSION_TARGET_REQUIRED');
  });
+ it('refuses a confirmed length that implies a unit mismatch instead of rescaling the whole plan',()=>{
+  const s=structuralScene(),d=dims();
+  // 12 000 m confirmed against a venue recognised as 12 m is a millimetre reading, not a 1000× correction.
+  d[0].valueMeters=12000;
+  const implausible=solveDimensions(s,d);
+  expect(implausible.issues).toContainEqual(expect.objectContaining({code:'SCALE_IMPLAUSIBLE'}));
+  expect(implausible.scene.venue.width).toBe(s.venue.width);
+  expect(implausible.scene.structure.walls[0].end.x).toBe(12);
+  // Genuine recognition drift inside the plausible band is still corrected.
+  const drift=solveDimensions(s,[{...d[0],valueMeters:18}]);
+  expect(drift.issues).toEqual([]);expect(drift.scene.venue.width).toBe(18);
+ });
 });
 
 describe('durable reconstruction + v2 persistence',()=>{

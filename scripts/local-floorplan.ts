@@ -40,8 +40,11 @@ if (!(await server.db.query('select id from scene_private.projects limit 1')).ro
   await server.rpc(owner, 'projects.create', { studioId: studio, name: '人工实测场地 · 本地验收', scene: demo });
 }
 
-const frontend = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['--prefix','frontend','run','dev','--','--hostname','127.0.0.1','--port',String(webPort)], {
-  cwd:root,stdio:'inherit',detached:process.platform!=='win32',env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1'},
+// Windows resolves npm through npm.cmd, and Node ≥18.20.2 / ≥20.12 / ≥24 refuse to spawn a .cmd
+// without a shell (EINVAL). The shell only wraps the one command below; every argument is plain.
+const windows = process.platform === 'win32';
+const frontend = spawn(windows ? 'npm.cmd' : 'npm', ['--prefix','frontend','run','dev','--','--hostname','127.0.0.1','--port',String(webPort)], {
+  cwd:root,stdio:'inherit',detached:!windows,shell:windows,env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:server.url,NEXT_PUBLIC_SUPABASE_ANON_KEY:testPublicKey,NEXT_PUBLIC_LOCAL_FIXTURE:'1'},
 });
 let stopping = false, working = false;
 const worker = setInterval(async () => {
@@ -60,7 +63,8 @@ console.log(`Real vision configured: ${!!server.env('DEEPSEEK_API_KEY')}; real H
 async function stop(code=0) {
   if (stopping) return; stopping=true; clearInterval(worker);
   try {
-    if (process.platform !== 'win32' && frontend.pid) process.kill(-frontend.pid,'SIGTERM');
+    if (windows && frontend.pid) spawn('taskkill',['/pid',String(frontend.pid),'/T','/F'],{stdio:'ignore'}).on('error',()=>frontend.kill('SIGTERM'));
+    else if (!windows && frontend.pid) process.kill(-frontend.pid,'SIGTERM');
     else frontend.kill('SIGTERM');
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
   await server.close();process.exit(code);

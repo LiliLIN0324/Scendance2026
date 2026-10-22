@@ -19,3 +19,4 @@ export function generationCapabilities(env:Env) {
   const supported=(mode==='tokenhub'||mode==='legacy')&&(model==='hy-3d-3.0'||(mode==='tokenhub'&&model==='hy-3d-3.1'));
   return {model,textToModel:configured&&supported,imageToModel:configured&&supported&&mode==='tokenhub',texture:configured&&mode==='tokenhub'&&env('HUNYUAN_TEXTURE_ENABLED')==='true',textureRequiresImage:true as const};
 }
+export type GenerationCapabilities=ReturnType<typeof generationCapabilities>;

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>单位闸门预览 · 图纸毫米/厘米/米 → 米</title>
+<style>
+  :root{--bg:#111413;--panel:#171b1a;--line:#2a302e;--ink:#e8ece9;--dim:#9aa5a0;--ok:#5fbf8a;--bad:#e0685f;--warn:#d8a549;--accent:#7fd1c0}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,"Segoe UI",system-ui,"Microsoft YaHei",sans-serif}
+  header{padding:22px 26px 14px;border-bottom:1px solid var(--line)}
+  h1{margin:0 0 6px;font-size:18px;font-weight:600;letter-spacing:.2px}
+  header p{margin:0;color:var(--dim);max-width:76ch}
+  header code{background:#1e2322;padding:1px 5px;border-radius:4px;color:var(--accent);font-size:12px}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;padding:14px 26px;border-bottom:1px solid var(--line)}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:7px 13px;border-radius:999px;cursor:pointer;font-size:13px}
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected=true]{background:#20302c;border-color:#37564e;color:var(--ink)}
+  main{padding:22px 26px 60px;display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .wide{grid-column:1/-1}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  h2{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--ink);letter-spacing:.4px}
+  .sub{margin:0 0 12px;color:var(--dim);font-size:12.5px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{text-align:right;padding:5px 7px;border-bottom:1px solid var(--line);font-size:12.5px}
+  th:first-child,td:first-child{text-align:left}
+  thead th{color:var(--dim);font-weight:500}
+  .yes{color:var(--ok)} .no{color:var(--bad)} .muted{color:var(--dim)}
+  .pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11.5px;border:1px solid var(--line);color:var(--dim)}
+  .verdict{display:flex;align-items:baseline;gap:10px;font-size:26px;font-weight:600}
+  .verdict small{font-size:12.5px;font-weight:400;color:var(--dim)}
+  dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:12.5px}
+  dt{color:var(--dim)} dd{margin:0;font-variant-numeric:tabular-nums}
+  .code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--warn)}
+  .none{color:var(--dim)}
+  canvas{width:100%;height:270px;display:block;background:#0d100f;border:1px solid var(--line);border-radius:8px}
+  .canvasHead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .canvasHead span{color:var(--dim);font-size:12.5px}
+  footer{padding:0 26px 40px;color:var(--dim);font-size:12px}
+  ul{margin:8px 0 0;padding-left:18px;color:var(--dim);font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>单位闸门预览：图纸标注（毫米 / 厘米 / 米）→ 米</h1>
+  <p>所有数字都由服务端调用真实的 <code>supabase/functions/_shared/units.ts</code> 算出：<code>collectRecognizedSamples</code> → <code>detectPlanUnit</code> → <code>normalizeRecognizedUnits</code>，没有在页面上复制一份逻辑。</p>
+</header>
+<div class="tabs" id="tabs" role="tablist"></div>
+<main>
+  <section class="wide">
+    <h2 id="caseTitle"></h2>
+    <p class="sub" id="caseNote"></p>
+  </section>
+
+  <section>
+    <h2>① 图纸标注 vs 三种单位解释</h2>
+    <p class="sub">绿色的解释才落进该类测量的现实米制区间。区间故意比契约上限窄，否则毫米和厘米会同时成立、判不出单位。</p>
+    <table id="fit"><thead><tr><th>图纸标注</th><th>按毫米</th><th>按厘米</th><th>按米</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section>
+    <h2>② 判定</h2>
+    <p class="sub">唯一才采用；多个候选报歧义；没有候选就不换算。</p>
+    <div class="verdict" id="verdict"></div>
+    <dl id="detail"></dl>
+    <h2 style="margin-top:16px">③ 会被加到核对清单的问题</h2>
+    <p class="sub" id="codes"></p>
+    <ul id="codeList"></ul>
+  </section>
+
+  <section>
+    <h2 id="beforeHeading"></h2>
+    <div class="canvasHead"><span id="beforeCaption"></span></div>
+    <canvas id="before"></canvas>
+  </section>
+
+  <section>
+    <h2 id="afterHeading"></h2>
+    <div class="canvasHead"><span id="afterCaption"></span></div>
+    <canvas id="after"></canvas>
+  </section>
+</main>
+<footer>
+  两侧画布使用<strong>同一</strong>米/像素比例。人形高 1.7 m 是尺度参照：在"未换算"一侧它会小到看不见，这正是把 12000 直接当成米的结果。<br>
+  issue 文案由 <code>reconstruction.ts</code> 生成，这里只显示字段与 code，不复制字符串，避免两处文案漂移。
+</footer>
+<script>
+const dataUrl = '/data.json';
+let data, current = 0;
+
+const fmt = value => (Math.abs(value) >= 1000 ? value.toLocaleString('zh-CN') : String(Math.round(value * 1000) / 1000));
+const unitLabel = { mm: '毫米', cm: '厘米', m: '米' };
+
+function renderTabs() {
+  const tabs = document.getElementById('tabs');
+  tabs.replaceChildren(...data.scenarios.map((scenario, index) => {
+    const button = document.createElement('button');
+    button.className = 'tab'; button.type = 'button'; button.role = 'tab';
+    button.textContent = scenario.title;
+    button.setAttribute('aria-selected', String(index === current));
+    button.onclick = () => { current = index; render(); };
+    return button;
+  }));
+}
+
+function renderFit(scenario) {
+  const body = document.querySelector('#fit tbody');
+  body.replaceChildren(...scenario.fit.map(row => {
+    const tr = document.createElement('tr');
+    const cells = [row.kind, ...data.planUnits.map(unit => {
+      const cell = row.byUnit[unit];
+      return `${fmt(cell.metres)} m` + (cell.fits ? ' ✓' : ' ✗');
+    })];
+    cells.forEach((text, index) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      const unit = data.planUnits[index - 1];
+      if (index > 0) td.className = row.byUnit[unit].fits ? 'yes' : 'no';
+      tr.append(td);
+    });
+    return tr;
+  }));
+}
+
+function renderDecision(scenario) {
+  const detection = scenario.detection, report = scenario.report;
+  const verdict = document.getElementById('verdict');
+  const label = detection.unit ? `采用「${unitLabel[detection.unit]}」` : (detection.confidence === 'ambiguous' ? '判定不了：报歧义' : '判定不了：不换算');
+  verdict.innerHTML = `${label}<small>${report.applied ? '已换算 ×' + report.factor : '未改动'}</small>`;
+
+  const rows = [
+    ['置信度', detection.confidence === 'unique' ? '唯一' : detection.confidence === 'ambiguous' ? '歧义（多个候选）' : '不一致'],
+    ['候选单位', detection.candidates.length ? detection.candidates.map(unit => unitLabel[unit]).join(' / ') : '无'],
+    ['参与判定的样本', detection.samples + ' 个结构长度'],
+    ['换算倍率', report.factor],
+    ['是否改动场景', report.applied ? '是' : '否'],
+    ['合理校正范围', `${data.plausible.min} – ${data.plausible.max} 倍`],
+  ];
+  document.getElementById('detail').replaceChildren(...rows.flatMap(([term, value]) => {
+    const dt = document.createElement('dt'); dt.textContent = term;
+    const dd = document.createElement('dd'); dd.textContent = String(value);
+    return [dt, dd];
+  }));
+
+  const codes = [];
+  if (scenario.guard) codes.push({ code: scenario.guard.code, text: `确认 ${fmt(scenario.guard.confirmed)} m 与识别 ${fmt(scenario.guard.recognised)} m 相差 ${fmt(scenario.guard.factor)} 倍，超出范围 → 拒绝缩放（isPlausiblePlanScale = ${scenario.guard.plausible}）` });
+  else if (report.applied) codes.push({ code: 'UNIT_CONVERTED', text: `按 ${unitLabel[report.unit]} → 米 换算，提醒人工核对场地与墙体尺寸` });
+  else if (report.confidence === 'ambiguous' && report.samples) codes.push({ code: 'UNIT_AMBIGUOUS', text: '毫米/厘米/米 均可能，要求提供一个已知长度后再识别' });
+  document.getElementById('codes').innerHTML = codes.length ? '' : '<span class="none">无：本来就正确，闸门什么都没做。</span>';
+  document.getElementById('codeList').replaceChildren(...codes.map(item => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="code">${item.code}</span> — ${item.text}`;
+    return li;
+  }));
+}
+
+/** Same metres-per-pixel on both sides so the mismatch is visible instead of auto-fitted away. */
+function draw() {
+  if (!data) return;                       // a resize can fire before /data.json lands
+  const scenario = data.scenarios[current];
+  const after = scenario.after, before = scenario.before, human = data.human;
+  const ratio = window.devicePixelRatio || 1;
+  const setup = canvasEl => {
+    const width = canvasEl.clientWidth, height = canvasEl.clientHeight;
+    canvasEl.width = width * ratio; canvasEl.height = height * ratio;
+    const context = canvasEl.getContext('2d');
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    return { context, width, height };
+  };
+
+  const afterCanvas = setup(document.getElementById('after'));
+  const beforeCanvas = setup(document.getElementById('before'));
+  // Fit the converted plan in both directions; the same scale then makes the raw reading overflow.
+  const metresPerPixel = Math.max(after.width / (afterCanvas.width * 0.84), after.depth / (afterCanvas.height * 0.84));
+  const S = value => value / metresPerPixel;
+
+  // --- after: a real room at a believable scale ---
+  {
+    const { context, width, height } = afterCanvas;
+    const originX = (width - S(after.width)) / 2, originY = (height - S(after.depth)) / 2;
+    context.strokeStyle = '#202524'; context.lineWidth = 1;
+    for (let metre = 1; metre <= Math.max(after.width, after.depth); metre += 1) {
+      context.beginPath(); context.moveTo(originX + S(metre), 0); context.lineTo(originX + S(metre), height); context.stroke();
+      context.beginPath(); context.moveTo(0, originY + S(metre)); context.lineTo(width, originY + S(metre)); context.stroke();
+    }
+    context.fillStyle = '#1d2a27';
+    context.fillRect(originX, originY, S(after.width), S(after.depth));
+    context.strokeStyle = '#7fd1c0'; context.lineWidth = 3;
+    context.globalAlpha = (document.getElementById('after').dataset.applied === 'true') ? 1 : 0.45;
+    context.strokeRect(originX, originY, S(after.width), S(after.depth));
+    // door gap on the north wall, sized from the real converted opening width
+    const door = scenario.openings[0];
+    if (door) {
+      context.strokeStyle = '#0d100f'; context.lineWidth = 5;
+      context.beginPath(); context.moveTo(originX + S(2), originY); context.lineTo(originX + S(2 + door), originY); context.stroke();
+      context.strokeStyle = '#d8a549'; context.lineWidth = 1.5;
+      context.beginPath(); context.moveTo(originX + S(2), originY); context.lineTo(originX + S(2 + door), originY); context.stroke();
+    }
+    // human figure: the scale anchor
+    context.fillStyle = '#e8ece9';
+    const humanHeight = Math.max(4, S(human)), humanWidth = humanHeight * 0.32;
+    const hx = originX + S(after.width) / 2, hy = originY + S(after.depth) / 2;
+    context.beginPath();
+    context.arc(hx, hy - humanHeight * 0.86, humanHeight * 0.14, 0, Math.PI * 2);
+    context.fill();
+    context.fillRect(hx - humanWidth / 2, hy - humanHeight * 0.7, humanWidth, humanHeight * 0.7);
+    context.fillStyle = '#9aa5a0'; context.font = '12px system-ui';
+    context.fillText(`${fmt(after.width)} m × ${fmt(after.depth)} m`, originX + 6, originY + S(after.depth) - 8);
+    context.fillText('人 1.7 m', hx + 14, hy);
+    const alreadyMetres = scenario.detection.unit === 'm';
+    document.getElementById('afterHeading').textContent = scenario.report.applied ? '经闸门换算后 → 真实尺度' : (alreadyMetres ? '闸门未改动 → 单位本来就正确' : '闸门未改动 → 保持原始数值（待确认）');
+    document.getElementById('afterCaption').textContent = scenario.report.applied
+      ? `${fmt(after.width)} m × ${fmt(after.depth)} m，层高 ${fmt(after.height)} m`
+      : (alreadyMetres ? `${fmt(after.width)} m × ${fmt(after.depth)} m，本来就正确，无需改动` : `仍是 ${fmt(after.width)} m × ${fmt(after.depth)} m：需要人先回答上面的问题`);
+    document.getElementById('beforeHeading').textContent = alreadyMetres ? '换算前：单位本来就正确' : '换算前：原始数值当成米 → 荒谬';
+  }
+
+  // --- before: the raw numbers, drawn at the same scale ---
+  {
+    const { context, width, height } = beforeCanvas;
+    const alreadyMetres = scenario.detection.unit === 'm';
+    context.fillStyle = alreadyMetres ? '#0d100f' : '#2b1d1b';
+    context.fillRect(0, 0, width, height);
+    if (!alreadyMetres) {
+      context.strokeStyle = '#e0685f'; context.lineWidth = 2; context.globalAlpha = 0.55;
+      for (let offset = -height; offset < width + height; offset += 14) {
+        context.beginPath(); context.moveTo(offset, 0); context.lineTo(offset + height, height); context.stroke();
+      }
+      context.globalAlpha = 1;
+    }
+    const originX = (width - S(before.width)) / 2, originY = (height - S(before.depth)) / 2;
+    if (alreadyMetres) {
+      context.fillStyle = '#1d2a27';
+      context.fillRect(originX, originY, S(before.width), S(before.depth));
+      context.strokeStyle = '#5fbf8a'; context.lineWidth = 3;
+      context.strokeRect(originX, originY, S(before.width), S(before.depth));
+      context.fillStyle = '#e8ece9';
+      const humanHeight = Math.max(4, S(data.human));
+      context.beginPath();
+      context.arc(originX + S(before.width) / 2, originY + S(before.depth) / 2 - humanHeight * 0.86, humanHeight * 0.14, 0, Math.PI * 2);
+      context.fill();
+      context.fillRect(originX + S(before.width) / 2 - humanHeight * 0.16, originY + S(before.depth) / 2 - humanHeight * 0.7, humanHeight * 0.32, humanHeight * 0.7);
+      context.fillStyle = '#9aa5a0'; context.font = '12px system-ui';
+      context.fillText(`${fmt(before.width)} m × ${fmt(before.depth)} m`, originX + 6, originY + S(before.depth) - 8);
+    } else {
+      context.fillStyle = '#e0685f'; context.font = '600 13px system-ui';
+      context.fillText(`${fmt(before.width)} m × ${fmt(before.depth)} m（超出画面）`, 12, 24);
+      context.fillStyle = '#e8ece9'; context.font = '12px system-ui';
+      context.fillText(`≈ ${(before.width / data.football).toFixed(0)} 个足球场长边`, 12, 44);
+      context.fillText('人 1.7 m 在此比例下不足 1 像素', 12, 62);
+    }
+    context.fillStyle = '#9aa5a0'; context.font = '12px system-ui';
+    context.fillText(`画布每像素 ${(metresPerPixel * 1000).toFixed(0)} mm`, 12, height - 14);
+    document.getElementById('beforeCaption').textContent = alreadyMetres
+      ? `原始数值 ${fmt(before.width)} × ${fmt(before.depth)}，单位本来就正确`
+      : `原始数值直接当米：${fmt(before.width)} m × ${fmt(before.depth)} m`;
+  }
+}
+
+function render() {
+  const scenario = data.scenarios[current];
+  document.getElementById('caseTitle').textContent = scenario.title;
+  document.getElementById('caseNote').innerHTML = scenario.note
+    + '　<span class="pill">图纸标注：' + scenario.labels.map(label => label.text).join('　') + '</span>';
+  document.getElementById('after').dataset.applied = String(scenario.report.applied);
+  renderTabs(); renderFit(scenario); renderDecision(scenario); draw();
+}
+
+addEventListener('resize', draw);
+fetch(dataUrl).then(response => response.json()).then(json => { data = json; render(); });
+</script>
+</body>
+</html>

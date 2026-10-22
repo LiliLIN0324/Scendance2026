@@ -30,7 +30,7 @@ const PRESETS = {
     accent: 0xffedd5, accentStrength: 0.5, environment: 0.7, exposure: 1.05,
   },
   warm: {
-    background: 0xe4d9cc, sky: 0xffdfb0, ground: 0xbfa383,
+    background: 0xf7f3e8, sky: 0xffdfb0, ground: 0xbfa383,
     key: 0xffd09a, keyIntensity: 1.55, hemisphere: 1.05, ambient: 0.22,
     spots: [0xffbc79, 0xffdfb5], spotStrength: 3.4,
     accent: 0xffa767, accentStrength: 1.8, environment: 0.52, exposure: 1.1,
