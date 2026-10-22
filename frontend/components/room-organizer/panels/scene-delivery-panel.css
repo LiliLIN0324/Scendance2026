@@ -1,9 +1,9 @@
-.sc-delivery-panel h3 { margin: 18px 0 0; font-size: 14px; font-weight: 600; }
+﻿.sc-delivery-panel h3 { margin: 18px 0 0; font-size: 14px; font-weight: 600; }
 .sc-handoff-list { display: grid; gap: 8px; margin: 12px 0; }
-.sc-handoff-item { border: 1px solid var(--sc-line, #d9dfd4); border-radius: 8px; padding: 10px; background: #ffffff80; }
+.sc-handoff-item { border: 1px solid var(--sc-line, #d6d6d2); border-radius: 8px; padding: 10px; background: #ffffff80; }
 .sc-handoff-item summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; font-size: 13px; }
-.sc-handoff-item summary small, .sc-procurement-summary li small { display: block; margin-top: 4px; color: var(--sc-muted, #626c64); font-size: 11px; }
-.sc-handoff-status { flex-shrink: 0; align-self: start; color: var(--sc-muted, #626c64); font-size: 11px; }
+.sc-handoff-item summary small, .sc-procurement-summary li small { display: block; margin-top: 4px; color: var(--sc-muted, #6f6f6f); font-size: 11px; }
+.sc-handoff-status { flex-shrink: 0; align-self: start; color: var(--sc-muted, #6f6f6f); font-size: 11px; }
 .sc-handoff-status.needs-review, .sc-handoff-review { color: #835a16; }
 .sc-handoff-item > button { margin: 10px 0 0; }
 .sc-handoff-form fieldset { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
@@ -18,5 +18,5 @@
 .sc-procurement-summary ul { padding-left: 18px; }
 .sc-procurement-summary li { margin: 10px 0; }
 .sc-execution-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
-.sc-execution-tabs button { flex: 1; padding: 9px 8px; border: 1px solid var(--sc-line, #d9dfd4); border-radius: 8px; font: inherit; font-size: 12px; color: var(--sc-muted, #626c64); background: #ffffff80; cursor: pointer; }
-.sc-execution-tabs button[aria-selected="true"] { color: #43583a; border-color: #b8c8a5; background: #edf2e5; }
+.sc-execution-tabs button { flex: 1; padding: 9px 8px; border: 1px solid var(--sc-line, #d6d6d2); border-radius: 8px; font: inherit; font-size: 12px; color: var(--sc-muted, #6f6f6f); background: #ffffff80; cursor: pointer; }
+.sc-execution-tabs button[aria-selected="true"] { color: #2f2f2f; border-color: rgba(31,35,45,.12); background: #efede6; }

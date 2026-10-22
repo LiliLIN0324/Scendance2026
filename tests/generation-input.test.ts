@@ -27,6 +27,8 @@ describe('generation inputs and provider isolation',()=>{
     expect(generationCapabilities(()=>undefined).textToModel).toBe(false);
     expect((await prepareGenerationRequest(f.backend,owner,input,env())).fingerprint).toBe(await sha256('vase'));
     await expect(prepareGenerationRequest(f.backend,owner,{...input,kind:'texture',sourceAssetId:crypto.randomUUID(),referenceImageAssetId:crypto.randomUUID()},env())).rejects.toThrow('SERVICE_NOT_CONFIGURED');
+    // The lane router owns the refusal reason: same code as before, but it must name the lane.
+    await expect(prepareGenerationRequest(f.backend,owner,{...input,kind:'texture',sourceAssetId:crypto.randomUUID(),referenceImageAssetId:crypto.randomUUID()},env())).rejects.toMatchObject({code:'SERVICE_NOT_CONFIGURED',status:503,details:{lane:'hy3d',setting:'HUNYUAN_TEXTURE_ENABLED'}});
   });
   it('validates owned reference images before reserving and never trusts a model URL',async()=>{
     const ref=await image(),other=await image(editor),input={requestId:crypto.randomUUID(),prompt:'参考图物体',kind:'image',referenceImageAssetId:ref.id};

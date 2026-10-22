@@ -2,13 +2,17 @@ import { ApiError, sha256 } from './domain.ts';
 import type { Backend } from './backend.ts';
 import { required, type Env } from './http.ts';
 import { generationCapabilities, generationRequestSchema, type GenerationProvider } from './generation-contract.ts';
+import { chooseLane } from './generation-lane.ts';
 import { requireTextureSource } from './generation-quality.ts';
 
 export async function prepareGenerationRequest(backend:Backend,actor:string,raw:unknown,env:Env) {
   if(env('HY3_RETIRED')==='true')throw new ApiError('HY3_RETIRED',410);
   const input=generationRequestSchema.parse(raw),capabilities=generationCapabilities(env);
   required(env,'HUNYUAN_API_KEY');required(env,'HUNYUAN_TERMS_REVIEWED_AT');required(env,'HUNYUAN_TERMS_URL');
-  if(!(input.kind==='text'?capabilities.textToModel:input.kind==='image'?capabilities.imageToModel:capabilities.texture))throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:input.kind==='texture'?'HUNYUAN_TEXTURE_ENABLED':'HUNYUAN_MODEL'});
+  // Single lane decision keeps the cheap-first rule in one place. The error code and status stay
+  // unchanged; `lane`/`reason` only add why no lane could serve the request.
+  const decision=chooseLane({kind:input.kind},capabilities);
+  if(!decision.available)throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:input.kind==='texture'?'HUNYUAN_TEXTURE_ENABLED':'HUNYUAN_MODEL',lane:decision.lane,reason:decision.reason});
   if(input.referenceImageAssetId){
     const image=await backend.scene(actor,'assets.get',{assetId:input.referenceImageAssetId});
     const min=input.kind==='texture'?129:128,max=input.kind==='texture'?4095:4096;
