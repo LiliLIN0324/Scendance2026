@@ -6,7 +6,7 @@
  * 出方案：已连接云项目时走现有 AI 生成；否则用现有本地物料组（furniture-sets / surprise）分 5 步真实摆放，
  * 不新增算法。底图只收图片（复用 layout.floorPlanImage），不识别、不显示任何米数。
  */
-import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw } from 'lucide-react';
+import { ArrowUp, Check, FileImage, Loader2, PanelRightClose, Paperclip, RotateCw } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRoomEditor } from '../contexts';
 import { EVENT_CATALOG } from '../lib/constants';
@@ -295,7 +295,7 @@ function SummaryCard({ agent }: { agent: AgentValue }): JSX.Element {
       </div>}
       {err && <p className="ap-dim-error" id={`${err.id}-err`} role="alert"><span aria-hidden="true">!</span>{err.message}</p>}
     </div>
-    <button id="step-cta" type="button" className="btn-primary" aria-disabled={agent.ctaEnabled ? 'false' : 'true'} onClick={() => { if (agent.ctaEnabled) agent.generate(); }}>就按这个出方案</button>
+    <button id="step-cta" type="button" className="btn-primary" aria-disabled={agent.ctaEnabled ? 'false' : 'true'} onClick={() => { if (agent.ctaEnabled) agent.generate(); }}>让 Agent 整理需求</button>
     {base && !err && <p id="cta-hint" className={agent.lengthCheck.ok && agent.widthCheck.ok ? 'is-ok' : ''}>{agent.lengthCheck.ok && agent.widthCheck.ok ? `✓ ${agent.lengthCheck.value} × ${agent.widthCheck.value} m · ${formatArea(agent.lengthCheck.value * agent.widthCheck.value)} ㎡` : '填好长宽就能出'}</p>}
   </div>;
 }
@@ -322,7 +322,7 @@ function GenProgress({ agent }: { agent: AgentValue }): JSX.Element {
   </div>;
 }
 
-export function AgentPanel(): JSX.Element {
+export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
   const agent = useAgent();
   const studio = useStudioAgent();
   const { layout, activeFloor, view } = useRoomEditor();
@@ -333,6 +333,7 @@ export function AgentPanel(): JSX.Element {
   useEffect(() => { if (wasWalking.current && !view.walkthroughMode && mode === 'review') setWalkDone(true); wasWalking.current = view.walkthroughMode; }, [view.walkthroughMode, mode]);
   const [draft, setDraft] = useState('');
   const feed = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const status = headerStatus(agent, mode);
   const stage = mode === 'review' ? 4 : mode === 'delivery' ? 5 : agent.state === 'generating' || agent.state === 'generateFailed' ? 2 : agent.state === 'planReady' || agent.state === 'planEdited' || agent.state === 'generatePaused' ? 3 : 1;
   const items = materialCount(activeFloor.items);
@@ -349,7 +350,12 @@ export function AgentPanel(): JSX.Element {
       <strong>Agent</strong>
       <span id="agent-state" className={`ap-status is-${status.tone}`}>{status.tone === 'busy' ? '⟳' : status.tone === 'ok' ? '✓' : status.tone === 'warn' ? '⚠' : '●'} {status.text}</span>
       <span className="ap-stage" aria-label={`第 ${stage} 步，共 5 步`}><small>{stage}/5</small> {STAGES[stage - 1]}<span className="ap-stage-bar" aria-hidden="true">{STAGES.map((label, index) => <i key={label} className={index < stage ? 'is-on' : ''}/>)}</span></span>
+      {onClose && <button type="button" className="ap-close" aria-label="收起 Agent" title="收起 Agent" onClick={onClose}><PanelRightClose size={16} aria-hidden="true"/></button>}
     </header>
+    <div className="ap-intro">
+      <div className="ap-intro-head"><strong>一句话开始策划</strong><span className={`ap-badge${studio?.hasSavedBrief ? ' is-done' : ''}`}>{studio?.hasSavedBrief ? '需求已填写' : '尚未填写'}</span></div>
+      <p className="ap-intro-hint">人数与现场条件待确认，示例布置仅供规划参考。</p>
+    </div>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {mode === 'layout' && <>
         <p className="ap-divider">新项目 · {layout.name || '未命名活动'}</p>
@@ -357,6 +363,14 @@ export function AgentPanel(): JSX.Element {
         {!preStates && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
         {preStates && <SummaryCard agent={agent}/>}
+        {preStates && <div className="ap-starts">
+          <p className="ap-starts-title">没有想法？从这里开始！</p>
+          <div className="ap-starts-grid">
+            <button type="button" onClick={() => inputRef.current?.focus()}><span>描述活动需求</span></button>
+            <button type="button" onClick={agent.pickFile}><span>上传现场资料</span></button>
+            <button type="button" onClick={agent.callbacks.onOpenDelivery}><span>整理物料交接</span></button>
+          </div>
+        </div>}
         {preStates && agent.baseName === null && agent.bubbles.length === 0 && <p className="ap-small">有图纸就拖进来，我铺成底图。</p>}
         {agent.venueIO === 'outdoor' && preStates && <div id="ambience-nudge" className="ap-nudge"><p>户外场地，可以先看看下雨天的样子。</p><button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} aria-pressed={agent.rainOn} onClick={agent.previewRain}>看看下雨天</button></div>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
@@ -403,7 +417,7 @@ export function AgentPanel(): JSX.Element {
     </div>
     <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); agent.send(draft); setDraft(''); }}>
       <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-      <textarea id="ap-input" rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : '说一句要改的，比如：舞台往左挪'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
+      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : '@活动需求 我需要组织一场xxx的活动'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
       <div className="ap-composer-bar">
         <button type="button" className="ap-attach" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={13} aria-hidden="true"/>附图纸 / 现场照片</button>
         <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={16}/></button>

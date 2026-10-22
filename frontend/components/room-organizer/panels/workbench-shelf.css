@@ -260,3 +260,71 @@
 .sc-atmosphere-group .sc-time-presets button { min-width: 26px; width: 26px; }
 .sc-canvas-rail .sc-rail-label { font-size: 9px; font-weight: 600; }
 .has-material-shelf .sc-atmosphere-group .sc-rail-label { display: none; }
+
+/* ── 底部物料库 · 图纸白 ──────────────────────────────────────────────
+   设计稿：白色抽屉、分类胶囊、细边卡片、绿色仅用于悬停与添加。 */
+.sc-workbench .sc-canvas-stage .sc-material-shelf.sc-bottom-drawer {
+  background:#fff; border:0; border-top:1px solid var(--wk-hair,#e7e7e7);
+  border-radius:0; box-shadow:0 -2px 10px rgba(47,47,47,.04);
+}
+.sc-compact-shelf .sc-library-heading {
+  flex:0 0 40px; height:40px; gap:14px; padding:0 16px;
+  border-bottom:1px solid var(--wk-hair,#e7e7e7);
+}
+.sc-compact-shelf .sc-library-heading .sc-library-tabs { gap:18px; height:40px; padding:0; }
+.sc-compact-shelf .sc-library-tabs button {
+  padding:0; border-radius:0; border-bottom:2px solid transparent;
+  background:transparent; color:var(--wk-ink-faint,#a8aba2);
+  font-size:12.5px; font-weight:500; line-height:38px;
+}
+.sc-compact-shelf .sc-library-tabs button:hover { color:var(--wk-ink,#2f2f2f); }
+.sc-compact-shelf .sc-library-tabs button.is-active {
+  color:var(--wk-ink,#2f2f2f); font-weight:600;
+  border-bottom-color:var(--wk-green,#56794d);
+}
+.sc-compact-shelf .sc-library-heading > .sc-icon-button { color:var(--wk-ink-faint,#a8aba2); }
+.sc-compact-shelf .sc-library-content { padding:10px 16px 12px; }
+.sc-compact-shelf .sc-material-toolbar { flex:0 0 34px; height:34px; gap:12px; margin-bottom:10px; }
+.sc-compact-shelf .sc-bucket-rail { gap:8px; }
+.sc-compact-shelf .sc-bucket-rail button {
+  min-height:26px; height:26px; padding:0 11px;
+  border:1px solid var(--wk-hair,#e7e7e7); border-radius:999px;
+  background:#fff; color:var(--wk-ink-soft,#767a70); font-size:11.5px;
+}
+.sc-compact-shelf .sc-bucket-rail button:hover { border-color:var(--wk-green,#56794d); color:var(--wk-green-deep,#394a37); }
+.sc-compact-shelf .sc-bucket-rail button.is-active,
+.sc-compact-shelf .sc-bucket-rail button[aria-pressed="true"] {
+  background:var(--wk-green-pale,#dbe5cf); border-color:var(--wk-green-pale,#dbe5cf);
+  color:var(--wk-green-deep,#394a37); font-weight:600;
+}
+.sc-compact-shelf .sc-bucket-rail button b { margin-left:4px; color:var(--wk-ink-faint,#a8aba2); font-weight:400; }
+.sc-compact-shelf .sc-bucket-rail button.is-active b { color:var(--wk-green-deep,#394a37); }
+.sc-compact-shelf .sc-search-mini {
+  flex:0 0 176px; height:28px; padding:4px 9px;
+  border:1px solid var(--wk-hair,#e7e7e7); border-radius:7px;
+  background:#fff; color:var(--wk-ink-faint,#a8aba2);
+}
+.sc-compact-shelf .sc-search-mini input { font-size:11.5px; color:var(--wk-ink,#2f2f2f); }
+.sc-compact-shelf .sc-material-card {
+  flex:0 0 124px; width:124px;
+  border:1px solid var(--wk-hair,#e7e7e7); border-radius:8px; background:#fff;
+  box-shadow:none;
+}
+.sc-compact-shelf .sc-material-card:hover { border-color:var(--wk-green,#56794d); box-shadow:none; }
+.sc-compact-shelf .sc-material-add {
+  border-radius:5px; background:var(--wk-green,#56794d); color:#fff;
+}
+.sc-compact-shelf .sc-material-name { color:var(--wk-ink,#2f2f2f); font-size:11.5px; }
+.sc-compact-shelf .sc-material-size { color:var(--wk-ink-faint,#a8aba2); font-size:10.5px; }
+.sc-compact-shelf .sc-material-preview { background:var(--wk-plane,#f3f4ee); border-radius:6px; }
+.sc-workbench .sc-material-drawer-handle {
+  height:26px; padding:0 12px; border-radius:999px;
+  border:1px solid var(--wk-hair,#e7e7e7); background:#fff;
+  color:var(--wk-ink-soft,#767a70); font-size:11.5px;
+  box-shadow:0 1px 3px rgba(47,47,47,.05);
+}
+.sc-workbench .sc-material-drawer-handle:hover { border-color:var(--wk-green,#56794d); color:var(--wk-green-deep,#394a37); }
+.sc-workbench .sc-material-drawer-handle.is-active { background:var(--wk-green-pale,#dbe5cf); border-color:var(--wk-green-pale,#dbe5cf); color:var(--wk-green-deep,#394a37); }
+/* 画布抬头信息层级 */
+.sc-workbench .sc-canvas-size { color:var(--wk-ink,#2f2f2f); font-weight:600; font-variant-numeric:tabular-nums; }
+.sc-workbench .sc-canvas-count { color:var(--wk-ink-faint,#a8aba2); }

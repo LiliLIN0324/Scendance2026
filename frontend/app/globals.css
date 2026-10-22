@@ -750,43 +750,112 @@
   .sc-workbench .sc-scene-viewport .sc-reference-image-trigger { padding:5px 7px; font-size:var(--sc-type-meta); }
 }
 
-/* v2.4 design-align: top stage tabs + right vertical tool column + bottom 物料库 drawer */
-.sc-workbench .sc-mode-rail { display: none !important; }
-.sc-workbench .is-docked-layout.is-mode-rail {
-  display: flex; gap: 8px;
+/* ── 工作台设计系统：图纸白（Drafting Paper）─────────────────────────────
+   来自设计稿实测取色：纸 #FFFFFF / 底 #F3F4EE / 画布 #F9F9F9 /
+   发丝线 #E7E7E7 / 墨 #2F2F2F / 强调绿 #56794D / 淡绿 #DBE5CF。
+   规则：界面是纸不是卡片墙；绿色只给主操作与选中态。 */
+.sc-workbench {
+  --wk-paper: #fff; --wk-plane: #f3f4ee; --wk-canvas: #f9f9f9;
+  --wk-hair: #e7e7e7; --wk-hair-soft: #f0f0eb;
+  --wk-ink: #2f2f2f; --wk-ink-soft: #767a70; --wk-ink-faint: #a8aba2;
+  --wk-green: #56794d; --wk-green-deep: #394a37; --wk-green-pale: #dbe5cf;
+  --sc-ink: var(--wk-ink);
+  --sc-muted: var(--wk-ink-soft);
+  --sc-line: var(--wk-hair);
+  --sc-paper: var(--wk-plane);
+  --sc-canvas: var(--wk-canvas);
+  --sc-surface: var(--wk-paper);
+  --sc-accent: var(--wk-green);
+  --sc-accent-ink: var(--wk-green-deep);
+  --sc-accent-soft: var(--wk-green-pale);
+  --sc-type-title: 15px; --sc-type-section: 13.5px;
+  --sc-type-body: 13px; --sc-type-meta: 11.5px;
+  background: var(--wk-canvas);
 }
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
+  display: flex; gap: 0; left: 0; right: 0; bottom: 0; top: 56px;
+  background: var(--wk-canvas);
+}
+/* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
+  display: flex; flex-direction: column; gap: 1px;
+  flex: 0 0 64px; width: 64px; padding: 10px 5px; box-sizing: border-box;
+  background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
+  overflow-y: auto; overflow-x: hidden;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  width: 100%; padding: 8px 1px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--wk-ink-soft);
+  font-size: 10.5px; line-height: 1.15; letter-spacing: .01em;
+  text-align: center; white-space: nowrap; cursor: pointer;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:hover { background: var(--wk-plane); color: var(--wk-ink); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active {
+  background: var(--wk-green-pale); color: var(--wk-green-deep); font-weight: 600;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-rail-divider {
+  display: block; height: 1px; margin: 7px 4px; background: var(--wk-hair); flex: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool { color: var(--wk-ink-faint); font-weight: 400; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:hover { color: var(--wk-ink); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
   flex: 1; min-width: 0; position: relative;
 }
+/* 左侧面板：与栏同高的白纸页，不再浮起 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer {
-  position: absolute; left: 8px; top: 0; bottom: 40px; z-index: 50;
-  flex: none !important; width: min(400px, calc(100% - 64px)) !important;
-  max-width: 420px; box-sizing: border-box;
-  background: #fbfbf8; border: 1px solid #d9dfd4; border-radius: 14px;
-  box-shadow: 0 10px 28px #1f2a1814; display: flex; flex-direction: column;
-  pointer-events: auto;
+  position: relative; inset: auto; z-index: 5;
+  flex: 0 0 380px !important; width: 380px !important; max-width: 380px;
+  min-height: 0; box-sizing: border-box;
+  background: var(--wk-paper); border: 0; border-right: 1px solid var(--wk-hair);
+  border-radius: 0; box-shadow: none;
+  display: flex; flex-direction: column; pointer-events: auto;
 }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-data-host {
+  border: 0; border-radius: 0; background: transparent;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .cr-workspace-content { background: var(--wk-paper); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.is-collapsed {
   display: none !important;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-materials {
   display: none !important; /* materials live in bottom canvas drawer */
 }
-.sc-workbench .sc-stage-switch {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  display: flex; gap: 2px; padding: 3px; height: 36px; align-items: center;
-  border-radius: 10px; background: #f3f4ee; border: 1px solid #e7e8e0; z-index: 1;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-agent-panel { border-radius: 0; }
+.sc-workbench .sc-agent-reopen {
+  flex: 0 0 34px; width: 34px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+  border: 0; border-left: 1px solid var(--wk-hair); background: var(--wk-canvas);
+  color: var(--wk-ink-faint); font-size: 11px; padding: 12px 0; cursor: pointer;
 }
-.sc-workbench .sc-stage-switch .sc-stage {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 92px; height: 28px; padding: 0 10px; border: 0; border-radius: 7px;
-  background: transparent; color: #6f6f6f; font-size: 13px; font-weight: 500;
+.sc-workbench .sc-agent-reopen:hover { background: var(--wk-plane); color: var(--wk-ink); }
+.sc-workbench .sc-agent-reopen span { writing-mode: vertical-rl; letter-spacing: 1px; }
+.sc-workbench .ap-close {
+  all: unset; cursor: pointer; flex: 0 0 26px; width: 26px; height: 26px;
+  display: inline-grid; place-items: center; border-radius: 6px; color: var(--wk-ink-faint);
 }
-.sc-workbench .sc-stage-switch .sc-stage.is-active {
-  background: #fff; color: #394a37; font-weight: 700;
-  box-shadow: 0 1px 2px rgba(57,74,55,.12);
+.sc-workbench .ap-close:hover { background: var(--wk-plane); color: var(--wk-ink); }
+/* 画布抬头：图纸式标注，不用「·」串信息 */
+.sc-workbench .sc-canvas-heading {
+  display: inline-flex; align-items: baseline; gap: 10px;
+  padding: 5px 10px; border: 1px solid var(--wk-hair); border-radius: 6px;
+  background: color-mix(in srgb, var(--wk-paper) 90%, transparent);
+  color: var(--wk-ink-soft); font-size: var(--sc-type-meta);
 }
-.sc-workbench .sc-stage-switch .sc-stage-ic { display: block; flex: none; }
+.sc-workbench .sc-canvas-heading > span { white-space: nowrap; }
+.sc-workbench .sc-canvas-kind {
+  color: var(--wk-ink-faint); font-size: 10.5px; letter-spacing: .06em;
+  padding-right: 9px; border-right: 1px solid var(--wk-hair);
+}
+.sc-workbench .sc-canvas-dot { display: none; }
+/* 设计稿：左栏面板内不再重复顶部分类签、流程提示卡与折叠标题 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-left-context { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-left-heading { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .awg-guide { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .cr-agent-brief {
+  margin: 0; padding: 0; border: 0; border-radius: 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .cr-agent-brief > summary { display: none; }
 .sc-workbench .sc-brand-en {
   font-size: 13px; color: #6f6f6f; font-weight: 500; letter-spacing: 0.2px; margin-left: -2px;
 }

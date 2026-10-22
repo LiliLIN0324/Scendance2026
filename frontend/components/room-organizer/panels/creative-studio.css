@@ -86,6 +86,16 @@
 @media (prefers-reduced-motion:reduce) { .cr-spin { animation:none; } }
 
 .cr-brief { margin-bottom: 26px; padding-bottom: 24px; border-bottom: 1px solid #dce3db; }
+/* 设计稿：01/02/03 分段 + 粘底操作条 */
+.cr-brief-sec { padding:0 0 18px; margin:0 0 18px; border-bottom:1px solid #eef0e7; }
+.cr-brief-sec:last-of-type { border-bottom:0; margin-bottom:8px; padding-bottom:4px; }
+.cr-sec-title { display:flex; align-items:baseline; gap:10px; margin:0 0 6px; color:#2f3a2c; font-size:15px; font-weight:600; line-height:1.4; }
+.cr-sec-no { color:#a8b0a0; font-size:12px; font-weight:600; letter-spacing:.08em; }
+.cr-sec-hint { margin:0 0 10px; color:#8a8f83; font-size:12px; line-height:1.6; }
+.cr-brief-footer { position:sticky; bottom:-16px; z-index:1; display:flex; align-items:center; gap:10px; margin:0 -16px -16px; padding:12px 16px; background:#fdfdfb; border-top:1px solid #eef0e7; }
+.cr-brief-footer .cr-generate { flex:1; }
+.cr-brief-skip { flex:none; padding:10px 14px; border:1px solid #dcdfd3; border-radius:8px; background:#fff; color:#6f7368; font-size:13px; cursor:pointer; }
+.cr-brief-skip:hover { background:#f4f5ef; color:#3a3d35; }
 .cr-ideas article { padding: var(--sc-space-md,16px); border: 1px solid #e7ece4; border-radius: 10px; background: #ffffffb8; }
 .cr-ideas article strong { display: block; font-size:var(--sc-type-section,16px); color: #4a6251; }
 .cr-ideas article p { margin: var(--sc-space-sm,8px) 0 0; font-size:var(--sc-type-body,14px); line-height: 1.7; color: #78817b; }
@@ -212,14 +222,20 @@
 .cr-result-suggestions button { display:flex; align-items:center; gap:var(--sc-space-sm,8px); min-width:0; padding:var(--sc-space-sm,8px) var(--sc-space-md,16px); border:1px solid #d4ddc7; border-radius:7px; background:#fcfcf7; color:#43583a; font:inherit; font-size:var(--sc-type-body,14px); text-align:left; cursor:pointer; }
 .cr-suggestion-letter { display:grid; place-items:center; flex:0 0 24px; width:24px; height:24px; border:1px solid #d4ddc7; border-radius:5px; color:#68785b; font-size:var(--sc-type-meta,12px); }
 .cr-suggestions-toggle { margin:0 0 var(--sc-space-md,16px); padding:0; border:0; background:transparent; color:#68785b; font:inherit; font-size:var(--sc-type-meta,12px); cursor:pointer; }
-.cr-business-content { box-sizing:border-box; height:100%; width:100%; overflow:auto; background:#fcfcf7; }
+.cr-business-content { box-sizing:border-box; height:100%; width:100%; overflow:auto; background:#fff; padding:0 20px 20px; }
 .cr-business-content[hidden],.cr-business-content [hidden] { display:none; }
-.cr-business-heading { position:sticky; top:-16px; z-index:2; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:var(--sc-space-sm,8px); margin:calc(-1 * var(--sc-space-md,16px)) calc(-1 * var(--sc-space-md,16px)) var(--sc-space-md,16px); padding:var(--sc-space-md,16px) var(--sc-space-md,16px); border-bottom:1px solid #dfe5d6; background:#f5f7ee; }
-.cr-business-heading strong { color:#344a35; font-size:var(--sc-type-title,18px); }
-.cr-business-category { display:flex; align-items:center; gap:var(--sc-space-sm,8px); min-width:0; color:#68785b; font-size:var(--sc-type-meta,12px); }
-.cr-business-category select { min-width:0; max-width:100%; padding:var(--sc-space-sm,8px) 26px var(--sc-space-sm,8px) var(--sc-space-sm,8px); border:1px solid #d4ddc7; border-radius:7px; background:#fcfcf7; color:#344a35; font:inherit; font-size:var(--sc-type-body,14px); }
+.cr-business-heading { position:sticky; top:0; z-index:2; display:flex; flex-wrap:nowrap; justify-content:space-between; align-items:center; gap:12px; margin:0 -20px 4px; padding:0 20px; height:52px; border-bottom:1px solid var(--wk-hair,#e7e7e7); background:#fff; }
+.cr-business-heading strong { color:var(--wk-ink,#2f2f2f); font-size:15px; }
+.cr-business-category { display:flex; align-items:center; gap:6px; min-width:0; }
+.cr-business-category select { min-width:0; max-width:170px; padding:0 18px 0 0; border:0; border-radius:0; background:transparent; color:var(--wk-ink,#2f2f2f); font:inherit; font-size:15px; font-weight:600; cursor:pointer; appearance:none; background-image:linear-gradient(45deg,transparent 50%,#a8aba2 50%),linear-gradient(135deg,#a8aba2 50%,transparent 50%); background-position:calc(100% - 7px) 52%,calc(100% - 3px) 52%; background-size:4px 4px,4px 4px; background-repeat:no-repeat; }
+.cr-business-links { display:flex; align-items:center; gap:16px; margin-left:auto; }
+.cr-business-links button { padding:0 0 2px; border:0; border-bottom:1.5px solid transparent; background:transparent; color:var(--wk-ink-faint,#a8aba2); font:inherit; font-size:12.5px; cursor:pointer; line-height:1.7; }
+.cr-business-links button:hover { color:var(--wk-ink,#2f2f2f); }
+.cr-business-links button.is-on { color:var(--wk-green-deep,#394a37); border-bottom-color:var(--wk-green,#56794d); font-weight:600; }
 .cr-business-heading>div { display:flex; flex-wrap:wrap; gap:var(--sc-space-sm,8px); }
 .cr-business-heading button { display:flex; align-items:center; gap:var(--sc-space-sm,8px); padding:var(--sc-space-sm,8px) var(--sc-space-sm,8px); border:1px solid #d4ddc7; border-radius:7px; background:#fcfcf7; color:#526348; font:inherit; font-size:var(--sc-type-body,14px); cursor:pointer; }
+.cr-business-links button, .cr-business-links button:hover { border:0; border-bottom:1.5px solid transparent; border-radius:0; background:transparent; padding:0 0 2px; }
+.cr-business-links button.is-on, .cr-business-links button.is-on:hover { border-bottom-color:var(--wk-green,#56794d); }
 .cr-business-content button:focus-visible,.cr-business-content summary:focus-visible,.cr-business-content select:focus-visible { outline:2px solid #6c8655; outline-offset:2px; }
 @media (max-width:1080px) {
   .cr-assistant.is-docked.is-open { position:static; inset:auto; width:100%; height:100%; min-width:0; min-height:0; }
@@ -248,3 +264,41 @@
 .cr-mode-banner { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .cr-mode-banner strong { color:#344a35; font-size:var(--sc-type-title,18px); }
 .cr-mode-banner span { color:#68785b; font-size:var(--sc-type-meta,12px); }
+
+/* ── 左栏 · 图纸白表单规范 ─────────────────────────────────────────────
+   设计稿：白纸、发丝线、小号灰标签；输入框白底细边；绿色只给主操作。 */
+.cr-business-content .cr-label { display:block; margin:0 0 12px; color:var(--wk-ink-soft,#767a70); font-size:11.5px; font-weight:500; }
+.cr-business-content .cr-label>span { margin-left:5px; color:var(--wk-ink-faint,#a8aba2); font-size:11px; font-weight:400; }
+.cr-business-content .cr-label :is(input,textarea,select) { display:block; box-sizing:border-box; width:100%; min-height:34px; margin-top:6px; padding:7px 10px; border:1px solid var(--wk-hair,#e7e7e7); border-radius:7px; background:#fff; color:var(--wk-ink,#2f2f2f); font:inherit; font-size:13px; font-weight:400; line-height:1.6; outline:none; }
+.cr-business-content .cr-label textarea { min-height:96px; resize:vertical; }
+.cr-business-content .cr-label :is(input,textarea,select):focus { border-color:var(--wk-green,#56794d); box-shadow:0 0 0 3px rgba(86,121,77,.12); }
+.cr-business-content .cr-label :is(input,textarea)::placeholder { color:var(--wk-ink-faint,#a8aba2); }
+.cr-business-content .cr-hint { margin:0 0 14px; color:var(--wk-ink-faint,#a8aba2); font-size:11.5px; line-height:1.65; }
+.cr-business-content .cr-notice { border-radius:7px; font-size:12px; }
+.cr-business-content .cr-brief { margin:0; padding:0; border:0; }
+.cr-business-content .cr-brief-basics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.cr-business-content .cr-optional { margin:0 0 12px; padding:0; border:0; }
+.cr-business-content .cr-optional>summary { color:var(--wk-ink-soft,#767a70); font-size:12px; }
+.cr-business-content .cr-ideas { display:none; }
+.cr-business-content .awg-template-button { margin:0 0 16px; padding:7px 12px; border:1px dashed var(--wk-hair,#e7e7e7); border-radius:7px; background:#fff; color:var(--wk-ink-soft,#767a70); font-size:12px; cursor:pointer; }
+.cr-business-content .awg-template-button:hover { border-color:var(--wk-green,#56794d); color:var(--wk-green-deep,#394a37); }
+.cr-business-content .cr-check { margin:0 0 16px; font-size:12px; }
+.cr-business-content .cr-check input { accent-color:var(--wk-green,#56794d); }
+.cr-business-content .cr-check strong { font-size:12.5px; font-weight:500; color:var(--wk-ink,#2f2f2f); }
+.cr-business-content .cr-check small { font-size:11px; color:var(--wk-ink-faint,#a8aba2); }
+/* 01/02/03 分段：仅因这三段确实是顺序流程才编号 */
+.cr-brief-sec { margin:0 0 20px; padding:0 0 18px; border-bottom:1px solid var(--wk-hair-soft,#f0f0eb); }
+.cr-brief-sec:last-of-type { margin-bottom:4px; padding-bottom:0; border-bottom:0; }
+.cr-sec-title { display:flex; align-items:baseline; gap:10px; margin:0 0 5px; color:var(--wk-ink,#2f2f2f); font-size:13px; font-weight:600; line-height:1.5; }
+.cr-sec-no { color:var(--wk-ink-faint,#a8aba2); font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.04em; }
+.cr-sec-hint { margin:0 0 12px; color:var(--wk-ink-faint,#a8aba2); font-size:11.5px; line-height:1.6; }
+/* 底部操作条：贴在面板底边 */
+.cr-brief-footer { position:sticky; bottom:-20px; z-index:1; display:flex; align-items:center; gap:10px; margin:0 -20px -20px; padding:12px 20px; background:#fff; border-top:1px solid var(--wk-hair,#e7e7e7); }
+.cr-brief-footer .cr-generate { flex:1; min-height:38px; padding:8px 14px; border-radius:7px; background:var(--wk-green,#56794d); box-shadow:none; color:#fff; font-size:13px; font-weight:600; }
+.cr-brief-footer .cr-generate:hover { background:var(--wk-green-deep,#394a37); }
+.cr-brief-footer .cr-generate:disabled { background:var(--wk-green,#56794d); opacity:.38; }
+.cr-brief-skip { flex:none; min-height:38px; padding:8px 14px; border:1px solid var(--wk-hair,#e7e7e7); border-radius:7px; background:#fff; color:var(--wk-ink-soft,#767a70); font-size:12.5px; cursor:pointer; }
+.cr-brief-skip:hover { background:var(--wk-plane,#f3f4ee); color:var(--wk-ink,#2f2f2f); }
+
+.cr-business-content .cr-brief-styles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+@media (max-width:520px) { .cr-business-content .cr-brief-styles { grid-template-columns:repeat(2,minmax(0,1fr)); } }

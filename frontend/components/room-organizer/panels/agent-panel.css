@@ -6,6 +6,17 @@
 .mascot-slot { display:inline-flex; width:24px; height:24px; border-radius:50%; overflow:hidden; flex:0 0 24px; background:#efe9dc; }
 .mascot-slot img { width:24px; height:24px; display:block; }
 .ap-head strong { font-size:14px; }
+.ap-intro { flex:0 0 auto; display:flex; flex-direction:column; gap:6px; padding:12px 14px 10px; border-bottom:1px solid #eeefe8; }
+.ap-intro-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.ap-intro-head strong { font-size:14px; color:#2f3a2c; }
+.ap-badge { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:6px; background:#f1f2ec; border:1px solid #e3e5dc; color:#8d8f85; font-size:11px; white-space:nowrap; }
+.ap-badge.is-done { background:#e7eddd; border-color:#cfdcc0; color:#46703b; }
+.ap-intro-hint { margin:0; font-size:11px; color:#8d8f85; line-height:1.5; }
+.ap-starts { display:flex; flex-direction:column; gap:7px; }
+.ap-starts-title { margin:0; font-size:11px; color:#8d8f85; }
+.ap-starts-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:7px; }
+.ap-starts-grid button { display:flex; align-items:center; justify-content:center; min-height:54px; padding:8px 6px; border:1px solid #e3e5dc; border-radius:9px; background:#fff; color:#3a3d35; font-size:12px; line-height:1.35; text-align:center; cursor:pointer; }
+.ap-starts-grid button:hover { border-color:#cfdcc0; background:#f6f8f1; }
 .ap-status { font-size:11px; color:var(--ap-grey); }
 .ap-status.is-busy,.ap-status.is-ok { color:var(--ap-green); }
 .ap-status.is-warn { color:var(--ap-amber); }
@@ -100,3 +111,42 @@
   border-radius: 999px;
 }
 .sc-agent-panel .chip.btn-outline { background:#fff; border-color:#dfe2d7; color:#394a37; }
+
+/* ── 右栏 · 图纸白 ─────────────────────────────────────────────────── */
+.sc-workbench .sc-agent-panel {
+  flex:0 0 336px; width:336px;
+  background:var(--wk-canvas,#f9f9f9);
+  border-left:1px solid var(--wk-hair,#e7e7e7);
+  color:var(--wk-ink,#2f2f2f);
+  font-size:12.5px;
+}
+.sc-workbench .sc-agent-panel .ap-head {
+  height:48px; padding:0 14px;
+  border-bottom:1px solid var(--wk-hair,#e7e7e7);
+  background:var(--wk-canvas,#f9f9f9);
+}
+.sc-workbench .sc-agent-panel .ap-head strong { font-size:13.5px; font-weight:600; color:var(--wk-ink,#2f2f2f); }
+.sc-workbench .sc-agent-panel .ap-status { font-size:11px; color:var(--wk-ink-faint,#a8aba2); }
+.sc-workbench .sc-agent-panel .ap-intro { border-bottom:1px solid var(--wk-hair,#e7e7e7); }
+.sc-workbench .sc-agent-panel .ap-intro-head strong { font-size:13.5px; color:var(--wk-ink,#2f2f2f); }
+.sc-workbench .sc-agent-panel .ap-badge { background:#fff; border-color:var(--wk-hair,#e7e7e7); color:var(--wk-ink-faint,#a8aba2); }
+.sc-workbench .sc-agent-panel .ap-badge.is-done { background:var(--wk-green-pale,#dbe5cf); border-color:#cfdcc0; color:var(--wk-green-deep,#394a37); }
+.sc-workbench .sc-agent-panel .ap-intro-hint,
+.sc-workbench .sc-agent-panel .ap-small,
+.sc-workbench .sc-agent-panel .ap-starts-title { color:var(--wk-ink-faint,#a8aba2); }
+.sc-workbench .sc-agent-panel .ap-feed { padding:12px 14px 14px; gap:11px; }
+.sc-workbench .sc-agent-panel .ap-divider { color:var(--wk-ink-faint,#a8aba2); }
+.sc-workbench .sc-agent-panel .ap-divider::before,
+.sc-workbench .sc-agent-panel .ap-divider::after { background:var(--wk-hair,#e7e7e7); }
+.sc-workbench .sc-agent-panel .ap-card { border:1px solid var(--wk-hair,#e7e7e7); border-radius:8px; background:#fff; padding:12px; gap:11px; }
+.sc-workbench .sc-agent-panel .ap-row { border-bottom-color:var(--wk-hair-soft,#f0f0eb); }
+.sc-workbench .sc-agent-panel .ap-field-label { color:var(--wk-ink-faint,#a8aba2); font-size:11px; }
+.sc-workbench .sc-agent-panel .ap-field-value { border-bottom-color:#d8d8d2; font-size:13px; color:var(--wk-ink,#2f2f2f); }
+.sc-workbench .sc-agent-panel .chip { border-color:var(--wk-hair,#e7e7e7); color:var(--wk-ink,#2f2f2f); font-size:11.5px; }
+.sc-workbench .sc-agent-panel .chip.is-on { border-color:var(--wk-green,#56794d); background:var(--wk-green-pale,#dbe5cf); color:var(--wk-green-deep,#394a37); }
+.sc-workbench .sc-agent-panel .btn-primary { border-radius:7px; height:38px; background:var(--wk-green,#56794d); font-size:13px; }
+.sc-workbench .sc-agent-panel .btn-primary:hover { background:var(--wk-green-deep,#394a37); }
+.sc-workbench .sc-agent-panel .ap-io { background:var(--wk-plane,#f3f4ee); }
+.sc-workbench .sc-agent-panel .ap-starts-grid button { border-color:var(--wk-hair,#e7e7e7); border-radius:8px; font-size:11.5px; }
+.sc-workbench .sc-agent-panel .ap-starts-grid button:hover { border-color:var(--wk-green,#56794d); background:#fff; }
+.sc-workbench .sc-agent-panel .ap-composer { border-top:1px solid var(--wk-hair,#e7e7e7); background:var(--wk-canvas,#f9f9f9); }
