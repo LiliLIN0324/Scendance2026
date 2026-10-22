@@ -1354,8 +1354,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         workbenchMode,
         onOpenMaterials: () => { setWorkbenchMode('layout'); setMaterialsOpen(true); setBusinessOpen(false); setSidebarCollapsed(true); },
         onSelectMode: selectWorkbenchMode,
-        onOpenReview: () => { setSidebarCollapsed(false); setLeftMode('business'); setBusinessOpen(true); setReviewOpenRequest(value => value + 1); },
-        onOpenDelivery: () => { setSidebarCollapsed(false); setLeftMode('business'); setBusinessOpen(true); setDeliveryOpenRequest(value => value + 1); },
+        onOpenReview: () => selectWorkbenchMode('review'),
+        onOpenDelivery: () => selectWorkbenchMode('delivery'),
         onFit: fitToRoom,
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}`}>
