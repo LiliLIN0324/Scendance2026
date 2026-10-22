@@ -959,8 +959,8 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     {!studio.briefReady&&!studio.briefError&&<p className="cr-hint" role="status">正在读取活动需求，当前输入会保留。</p>}
     {studio.briefReady&&!studio.hasSavedBrief&&!studio.briefError&&<p className="cr-hint">当前需求尚未保存；默认活动类型和人数仅供参考，请按实际情况填写。</p>}
     {showNotice&&studio.briefError&&<p className="cr-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-    <label className="cr-label">客户需求<textarea ref={descriptionRef} aria-label="客户需求" maxLength={1800} rows={5} placeholder="描述活动目标、分区与来宾体验……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/></label>
-    <button className="awg-template-button" type="button" disabled={!studio.briefReady||!!studio.briefError||studio.backupPending} onClick={addBriefTemplate}>添加活动简报提纲</button>
+    <div className="cr-field-head"><span>客户需求</span><button className="awg-template-button" type="button" disabled={!studio.briefReady||!!studio.briefError||studio.backupPending} onClick={addBriefTemplate}>添加活动简报提纲</button></div>
+    <textarea className="cr-field-input" ref={descriptionRef} aria-label="客户需求" maxLength={1800} rows={4} placeholder="描述活动目标、分区与来宾体验……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/>
     {templateNotice&&<p className={templateNotice.error?'cr-notice':'cr-hint'} role={templateNotice.error?'alert':'status'}>{templateNotice.text}</p>}
     {templateOnly&&<p className="cr-hint">先补充活动目标和参与观众，再生成整场布置方案。</p>}
     </section>
@@ -975,9 +975,9 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
       <h3 className="cr-sec-title"><span className="cr-sec-no" aria-hidden="true">03</span>布置要求与现场</h3>
     <label className="cr-label">必需项 <span>选填</span><input maxLength={350} placeholder="帐篷、签到区、无障碍通道……" value={studio.brief.mustHave} onChange={e=>update({mustHave:e.target.value})}/></label>
     <div className="cr-brief-styles">
-    <label className="cr-label">风格<input aria-label="风格要求" maxLength={120} placeholder="自然露营、简约现代" value={studio.brief.style??''} onChange={e=>update({style:e.target.value})}/></label>
-    <label className="cr-label">配色<input aria-label="配色要求" maxLength={120} placeholder="米白与橄榄绿" value={studio.brief.palette??''} onChange={e=>update({palette:e.target.value})}/></label>
-    <label className="cr-label">材质<input aria-label="氛围要求" maxLength={120} placeholder="原木、亚麻" value={studio.brief.atmosphere??''} onChange={e=>update({atmosphere:e.target.value})}/></label>
+    <label className="cr-label">风格<input aria-label="风格要求" maxLength={120} placeholder="自然露营" value={studio.brief.style??''} onChange={e=>update({style:e.target.value})}/></label>
+    <label className="cr-label">配色<input aria-label="配色要求" maxLength={120} placeholder="米白橄榄绿" value={studio.brief.palette??''} onChange={e=>update({palette:e.target.value})}/></label>
+    <label className="cr-label">材质<input aria-label="氛围要求" maxLength={120} placeholder="原木亚麻" value={studio.brief.atmosphere??''} onChange={e=>update({atmosphere:e.target.value})}/></label>
     </div>
     <details className="cr-optional cr-venue-details"><summary>图纸、照片与现场条件（可选）{studio.images.length>0&&<small> · 已添加 {studio.images.length} 张</small>}</summary>
     <fieldset className="cr-floorplan-choice"><legend>平面图</legend><div role="radiogroup" aria-label="是否有平面图">
