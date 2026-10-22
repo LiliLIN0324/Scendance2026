@@ -1075,7 +1075,6 @@ function render(element: React.ReactElement) {
   fireEvent.click(screen.getByRole('button', {name:'打开晴光 Agent'}));
   const brief=view.container.querySelector<HTMLDetailsElement>('.cr-agent-brief')!;
   if(!brief.open)fireEvent.click(screen.getByText('活动需求与场地资料'));
-  fireEvent.click(screen.getByText('风格、配色与氛围（可选）'));
   fireEvent.click(screen.getByText('图纸、照片与现场条件（可选）'));
   fireEvent.click(screen.getByText('更多：图纸重建与场地核对'));
   fireEvent.click(screen.getByText('图纸与照片重建'));
@@ -2698,7 +2697,7 @@ describe('unified Agent', () => {
   it('keeps a modeling request local to materials and requires confirmation even for a server direct response', async () => {
     connected();vi.mocked(controller.startAgentRun).mockResolvedValueOnce({...runFrom(proposal),executionMode:'direct'});
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));enterBrief();
-    fireEvent.change(screen.getByLabelText(/一定要有/),{target:{value:'保留无障碍通道'}});
+    fireEvent.change(screen.getByLabelText(/必需项/),{target:{value:'保留无障碍通道'}});
     selectMode('model');fireEvent.click(screen.getByRole('button',{name:'椅'}));
     const input=screen.getByRole('textbox',{name:'告诉助手你的想法'});
     expect(document.activeElement).toBe(input);

@@ -7,9 +7,9 @@ import {
 } from './workbench-mode';
 
 describe('workbench modes (Phase 1 IA)', () => {
-  it('exposes 布置 | 评审 | 执行 with default layout', () => {
+  it('exposes 空间布置 | 项目评审 | 方案执行 with default layout', () => {
     expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout', 'review', 'delivery']);
-    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置', '评审', '执行']);
+    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['空间布置', '项目评审', '方案执行']);
     expect(WORKBENCH_MODE_DEFAULT).toBe('layout');
   });
 

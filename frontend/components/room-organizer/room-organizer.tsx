@@ -1,6 +1,6 @@
 'use client';
 
-import { FolderOpen, PanelLeftClose } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, PanelRightOpen, Ruler, Send, SquareStack, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -58,8 +58,19 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CloudPanel } from './panels/cloud-panel';
 import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
+
+/** 左栏第二组工具轨（设计稿：活动需求 / 图纸尺寸 / 执行资料 / 方案评审 / 场景模板 / 物料工具 / 合同约定）。 */
+const RAIL_TOOLS = [
+  { id: 'brief', label: '活动需求', hint: '活动简报与场地资料', Icon: ClipboardList, open: 'openBrief' },
+  { id: 'reference', label: '图纸尺寸', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference' },
+  { id: 'delivery', label: '执行资料', hint: '活动安排、点验与导出', Icon: Truck, open: 'openDelivery' },
+  { id: 'review', label: '方案评审', hint: '客户评审包', Icon: Send, open: 'openReview' },
+  { id: 'templates', label: '场景模板', hint: '载入场景模板', Icon: SquareStack, open: 'openTemplates' },
+  { id: 'model', label: '物料工具', hint: '物料建模与材质调整', Icon: Boxes, open: 'openModelTools' },
+  { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial' },
+] as const satisfies ReadonlyArray<{ id: string; label: string; hint: string; Icon: typeof ClipboardList; open: keyof BusinessToolsApi }>;
 import { CommercialWorkspace } from './panels/commercial-workspace';
-import { CreativeStudioProvider, CreativeAssistant } from './panels/creative-studio';
+import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { PlacementHint } from './panels/placement-hint';
@@ -165,6 +176,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [agentCollapsed, setAgentCollapsed] = useState(false);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const conversationEntryRef = useRef<HTMLButtonElement>(null);
@@ -183,6 +195,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'|'layers'}>({serial:0,tab:'materials'});
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
   const businessHostRef = useRef<HTMLDivElement>(null);
+  const businessToolsRef = useRef<BusinessToolsApi | null>(null);
   const toolsEntryRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
@@ -217,7 +230,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (open) { setLeftMode('business'); setMaterialsOpen(false); setSidebarCollapsed(false); }
     else if (leftMode === 'business') setSidebarCollapsed(true);
   }, [leftMode]);
-  const [workspaceOpenRequest] = useState(0);
+  // 设计稿：左侧「活动需求」面板默认展开，首个请求在挂载时触发。
+  const [workspaceOpenRequest] = useState(1);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   const closeMaterialsShelf = useCallback(() => {
     setMaterialsOpen(false);
@@ -1349,17 +1363,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong>幕景</strong><span className="sc-brand-en">Scendance</span></a>
           <span className="sc-brand-divider" aria-hidden="true"/>
           <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
-          <nav id="stage-switch" className="sc-stage-switch" aria-label="阶段">
-            {WORKBENCH_MODES.map(mode => {
-              const active = workbenchMode === mode.id;
-              const icons = {
-                layout: <svg className="sc-stage-ic" width="16" height="16" viewBox="0 0 24 24" fill={active ? '#56794d' : '#bbc7bf'} aria-hidden="true"><rect x="3" y="4" width="18" height="7.6" rx="1.6"/><rect x="3" y="14" width="9.6" height="7.4" rx="1.6"/><rect x="15" y="14" width="6" height="7.4" rx="1.6"/></svg>,
-                review: <svg className="sc-stage-ic" width="16" height="16" viewBox="0 0 24 24" fill={active ? '#56794d' : '#bbc7bf'} aria-hidden="true"><path d="M21 3.5 3.4 10.2l7.3 3 3.3 7.3Z"/><path d="M21 3.5 10.7 13.2" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>,
-                delivery: <svg className="sc-stage-ic" width="16" height="16" viewBox="0 0 24 24" fill={active ? '#56794d' : '#bbc7bf'} aria-hidden="true"><rect x="9" y="4.5" width="12.5" height="10.5" rx="1.2"/><rect x="2.5" y="8.5" width="5.5" height="6.5" rx="1.2"/><circle cx="6.8" cy="17.6" r="2.6" stroke="#fff" strokeWidth="1.2"/><circle cx="16.8" cy="17.6" r="2.6" stroke="#fff" strokeWidth="1.2"/></svg>,
-              } as const;
-              return <button key={mode.id} type="button" id={`stage-${mode.id}`} className={`sc-stage${active ? ' is-active' : ''}`} aria-pressed={active} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}>{icons[mode.id]}<span>{mode.label}</span></button>;
-            })}
-          </nav>
           <div className="sc-header-actions">
             <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/><span>项目</span></button>
             <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '收起助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
@@ -1369,6 +1372,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         <main className={`sc-workspace is-docked-layout is-mode-rail${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
+          <nav className="sc-mode-rail" aria-label="工作流程">
+            {WORKBENCH_MODES.map(mode => {
+              const active = workbenchMode === mode.id;
+              const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
+              return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={20} aria-hidden="true"/><span>{mode.label}</span></button>;
+            })}
+            <span className="sc-rail-divider" aria-hidden="true"/>
+            {RAIL_TOOLS.map(tool => (
+              <button key={tool.id} type="button" className="sc-rail-tool" title={tool.hint} onClick={() => businessToolsRef.current?.[tool.open]()}><tool.Icon size={18} aria-hidden="true"/><span>{tool.label}</span></button>
+            ))}
+          </nav>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed || leftMode==='materials' ? 'is-collapsed' : ''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
@@ -1456,7 +1470,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         }}
       />
             <AgentCanvasOverlay/>
-            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span>{layout.scenePreset ? `${SCENE_PRESETS[layout.scenePreset].name} · 概念场景` : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-dot">·</span><span>{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span></div>
+            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span className="sc-canvas-size">{layout.scenePreset ? SCENE_PRESETS[layout.scenePreset].name : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-count">{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span></div>
             <ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice}
               onShow={value => setView(current => ({ ...current, showReferenceImage: value }))}
               onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))}
@@ -1483,8 +1497,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </div>
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
-          <AgentPanel/>
+          <CreativeAssistant docked autoOpen={false} toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+          {agentCollapsed
+            ? <button type="button" className="sc-agent-reopen" aria-label="打开 Agent" title="打开 Agent" onClick={()=>setAgentCollapsed(false)}><PanelRightOpen size={16} aria-hidden="true"/><span>Agent</span></button>
+            : <AgentPanel onClose={()=>setAgentCollapsed(true)}/>}
         </main>
       </div>
       </LayoutAgentProvider>
