@@ -1,0 +1,409 @@
+// Mock backend server for local testing of the reconstruction flow.
+// Run: node mock-server.js
+// Then set NEXT_PUBLIC_SUPABASE_URL=http://localhost:3099 and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=mock-key in frontend/.env.local
+
+const crypto = require('crypto');
+const http = require('http');
+
+const PORT = 3099;
+const MOCK_USER_ID = '11111111-1111-4111-8111-111111111111';
+const MOCK_ACCESS_TOKEN = 'mock-access-token';
+const MOCK_REFRESH_TOKEN = 'mock-refresh-token';
+const MOCK_STUDIO_ID = '22222222-2222-4222-8222-222222222222';
+const MOCK_PROJECT_ID = '33333333-3333-4333-8333-333333333333';
+const MOCK_SESSION_ID = '44444444-4444-4444-8444-444444444444';
+const MOCK_SOURCE_ID = '55555555-5555-4555-8555-555555555555';
+
+// Minimal valid V2 scene
+function makeScene() {
+  return {
+    schemaVersion: 2,
+    venue: { shape: 'rectangle', width: 10, depth: 8, height: 3.6, entrances: [] },
+    objects: [],
+    camera: 'overview',
+    lighting: 'neutral',
+    structure: { walls: [], openings: [], columns: [] },
+    sources: [],
+    dimensions: [],
+  };
+}
+
+// V2 scene with recognized (unconfirmed) structure for the needs_review stage:
+// 12x8 venue, 4 exterior walls, 1 door, detected dimensions awaiting confirmation.
+function makeReviewScene() {
+  const wallIds = [0, 1, 2, 3].map(() => uuid());
+  const points = [{ x: 0, z: 0 }, { x: 12, z: 0 }, { x: 12, z: 8 }, { x: 0, z: 8 }];
+  const scene = makeScene();
+  scene.venue = { shape: 'rectangle', width: 12, depth: 8, height: 3.6, entrances: [] };
+  scene.structure = {
+    walls: points.map((start, index) => ({
+      id: wallIds[index], start, end: points[(index + 1) % 4],
+      thickness: 0.16, height: 3.6, kind: 'exterior', status: 'detected',
+    })),
+    openings: [{ id: uuid(), wallId: wallIds[1], kind: 'door', offset: 2, width: 1.2, height: 2.1, sillHeight: 0, status: 'detected' }],
+    columns: [],
+  };
+  scene.dimensions = [
+    { id: uuid(), kind: 'width', valueMeters: 12, status: 'detected', label: '总宽' },
+    { id: uuid(), kind: 'depth', valueMeters: 8, status: 'detected', label: '总深' },
+    { id: uuid(), kind: 'height', valueMeters: 3.6, status: 'detected', label: '净高' },
+  ];
+  return scene;
+}
+
+function makeProposal(candidate) {
+  const baseScene = lastReconstructionScene || makeScene();
+  return {
+    id: '66666666-6666-4666-8666-666666666666',
+    project_id: MOCK_PROJECT_ID,
+    user_id: MOCK_USER_ID,
+    session_id: currentSessionId,
+    generation: currentGeneration,
+    base_revision: lastReconstructionRevision,
+    local_revision: lastReconstructionLocalRevision,
+    base_hash: sceneHash(baseScene),
+    base_scene: baseScene,
+    candidate: candidate || makeScene(),
+    explanation: '根据图纸识别到 10×8 米的矩形场地，已生成基础布置方案。',
+    warnings: [],
+    expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+    applied_at: null,
+  };
+}
+
+// Reconstruction job state machine
+const jobs = new Map();
+let jobCounter = 0;
+let currentSessionId = MOCK_SESSION_ID;
+let currentGeneration = 1;
+let currentRevision = 0;
+let lastReconstructionScene = null;
+let lastReconstructionRevision = 0;
+let lastReconstructionLocalRevision = 0;
+
+function sceneHash(scene) {
+  const canonical = (value) => {
+    if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+    if (value && typeof value === 'object') return '{' + Object.entries(value).filter(([,v]) => v !== undefined).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>JSON.stringify(k)+':'+canonical(v)).join(',') + '}';
+    return JSON.stringify(value);
+  };
+  return crypto.createHash('sha256').update(canonical(scene)).digest('hex');
+}
+
+function advanceJob(job) {
+  // review flow: first pass stops at needs_review with a recognized structure;
+  // continue flow (after the user confirms scale/structure): runs to ready.
+  const states = job.flow === 'continue'
+    ? ['planning', 'validating', 'ready']
+    : ['queued', 'recognizing', 'needs_review'];
+  const idx = states.indexOf(job.state);
+  if (idx < 0 || idx >= states.length - 1) return;
+  job.state = states[idx + 1];
+  if (job.state === 'needs_review') {
+    job.candidate = makeReviewScene();
+    job.issues = [];
+  }
+  if (job.state === 'ready') {
+    job.candidate = job.reviewedScene || makeScene();
+    job.proposal = makeProposal(job.candidate);
+  }
+}
+
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+let uploadedSources = [];
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const path = url.pathname;
+  const method = req.method;
+
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  if (method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  console.log(`[${new Date().toISOString()}] ${method} ${path}`);
+
+  // Parse body
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    let json = null;
+    if (body && !path.includes('/assets/sources')) {
+      try { json = JSON.parse(body); } catch { json = body; }
+    }
+
+    // --- Supabase Auth ---
+    if (path === '/auth/v1/signup' || path.endsWith('/auth/v1/signup')) {
+      const resp = {
+        access_token: MOCK_ACCESS_TOKEN,
+        refresh_token: MOCK_REFRESH_TOKEN,
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'bearer',
+        user: { id: MOCK_USER_ID, email: 'guest@mock.local', is_anonymous: true, role: 'authenticated', app_metadata: {}, user_metadata: { display_name: '访客' }, aud: 'authenticated', created_at: new Date().toISOString() },
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(resp));
+      return;
+    }
+
+    if (path === '/auth/v1/user' || path.endsWith('/auth/v1/user')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ user: { id: MOCK_USER_ID, email: 'guest@mock.local', is_anonymous: true, role: 'authenticated', aud: 'authenticated', created_at: new Date().toISOString() } }));
+      return;
+    }
+
+    if (path === '/auth/v1/logout' || path.endsWith('/auth/v1/logout')) {
+      res.writeHead(204); res.end(); return;
+    }
+
+    // --- Scene API ---
+    if (path.includes('/functions/v1/scene-api') || path.startsWith('/studios') || path.startsWith('/projects') || path.startsWith('/assets')) {
+      // Strip prefix if present
+      const apiPath = path.replace('/functions/v1/scene-api', '');
+
+      // Studios
+      if (apiPath === '/studios') {
+        if (method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify([{ id: MOCK_STUDIO_ID, name: '我的工作室', role: 'owner', displayName: '我的工作室' }]));
+          return;
+        }
+        if (method === 'POST') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id: MOCK_STUDIO_ID, name: json?.name || '我的工作室', role: 'owner', displayName: json?.name || '我的工作室' }));
+          return;
+        }
+      }
+
+      // Projects list
+      if (apiPath === '/projects' && method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify([]));
+        return;
+      }
+
+      // Create project
+      if (apiPath === '/projects' && method === 'POST') {
+        const project = {
+          id: MOCK_PROJECT_ID,
+          name: json?.name || '未命名项目',
+          studio_id: MOCK_STUDIO_ID,
+          revision: 0,
+          updated_at: new Date().toISOString(),
+          scene: json?.scene || makeScene(),
+          materials: [],
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(project));
+        return;
+      }
+
+      // Get project
+      const projectMatch = apiPath.match(/^\/projects\/([^/]+)$/);
+      if (projectMatch && method === 'GET') {
+        const project = {
+          id: projectMatch[1],
+          name: '未命名项目',
+          studio_id: MOCK_STUDIO_ID,
+          revision: 0,
+          updated_at: new Date().toISOString(),
+          scene: makeScene(),
+          materials: [],
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(project));
+        return;
+      }
+
+      // Update project (PATCH)
+      if (projectMatch && method === 'PATCH') {
+        const project = {
+          id: projectMatch[1],
+          name: json?.name || '未命名项目',
+          studio_id: MOCK_STUDIO_ID,
+          revision: json?.revision ?? 0,
+          updated_at: new Date().toISOString(),
+          scene: json?.scene || makeScene(),
+          materials: [],
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(project));
+        return;
+      }
+
+      // Lease acquire
+      const leaseAcquireMatch = apiPath.match(/^\/projects\/([^/]+)\/lease\/acquire$/);
+      if (leaseAcquireMatch && method === 'POST') {
+        const reqSessionId = json?.sessionId || MOCK_SESSION_ID;
+        currentSessionId = reqSessionId;
+        currentGeneration = 1;
+        currentRevision = 0;
+        const resp = {
+          sessionId: reqSessionId,
+          generation: currentGeneration,
+          expectedRevision: 0,
+          revision: currentRevision,
+          expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+          scene: makeScene(),
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(resp));
+        return;
+      }
+
+      // Lease renew
+      const leaseRenewMatch = apiPath.match(/^\/projects\/([^/]+)\/lease\/renew$/);
+      if (leaseRenewMatch && method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sessionId: json?.sessionId || MOCK_SESSION_ID, generation: json?.generation ?? 1, expectedRevision: 0, revision: 0, expiresAt: new Date(Date.now() + 60 * 1000).toISOString() }));
+        return;
+      }
+
+      // Lease release
+      const leaseReleaseMatch = apiPath.match(/^\/projects\/([^/]+)\/lease\/release$/);
+      if (leaseReleaseMatch && method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ released: true }));
+        return;
+      }
+
+      // Sources list
+      const sourcesMatch = apiPath.match(/^\/projects\/([^/]+)\/sources$/);
+      if (sourcesMatch && method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(uploadedSources));
+        return;
+      }
+
+      // Upload source (multipart)
+      if (apiPath === '/assets/sources' && method === 'POST') {
+        // Parse multipart to get kind
+        const boundary = req.headers['content-type']?.split('boundary=')[1];
+        const source = {
+          assetId: uuid(),
+          kind: 'floorplan',
+          name: 'uploaded-image.png',
+          width: 800,
+          height: 600,
+        };
+        uploadedSources.push(source);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(source));
+        return;
+      }
+
+      // Create reconstruction
+      const reconCreateMatch = apiPath.match(/^\/projects\/([^/]+)\/reconstructions$/);
+      if (reconCreateMatch && method === 'POST') {
+        const jobId = uuid();
+        lastReconstructionScene = json?.scene || makeScene();
+        lastReconstructionRevision = json?.expectedRevision ?? 0;
+        lastReconstructionLocalRevision = json?.localRevision ?? 0;
+        console.log('[RECON CREATE] scene schemaVersion:', lastReconstructionScene.schemaVersion, 'hash:', sceneHash(lastReconstructionScene).slice(0,16), 'localRevision:', lastReconstructionLocalRevision, 'continue:', !!json?.reviewedScene);
+        const continuing = !!json?.reviewedScene;
+        const job = {
+          id: jobId,
+          state: continuing ? 'planning' : 'queued',
+          flow: continuing ? 'continue' : 'review',
+          reviewedScene: json?.reviewedScene || null,
+          candidate: null,
+          proposal: null,
+          issues: [],
+          error_code: null,
+          created_at: new Date().toISOString(),
+        };
+        jobs.set(jobId, job);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(job));
+        return;
+      }
+
+      // Get reconstruction job
+      const reconGetMatch = apiPath.match(/^\/projects\/([^/]+)\/reconstructions\/([^/]+)$/);
+      if (reconGetMatch && method === 'GET') {
+        const job = jobs.get(reconGetMatch[2]);
+        if (job) {
+          advanceJob(job);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(job));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { code: 'NOT_FOUND' } }));
+        }
+        return;
+      }
+
+      // Apply proposal
+      const applyProposalMatch = apiPath.match(/^\/projects\/([^/]+)\/proposals\/apply$/);
+      if (applyProposalMatch && method === 'POST') {
+        const applyScene = json?.currentScene;
+        const applyHash = applyScene ? sceneHash(applyScene).slice(0, 16) : 'none';
+        const baseHash = lastReconstructionScene ? sceneHash(lastReconstructionScene).slice(0, 16) : 'none';
+        console.log('[APPLY] scene schemaVersion:', applyScene?.schemaVersion, 'hash:', applyHash, 'baseHash:', baseHash, 'match:', applyHash === baseHash);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          id: applyProposalMatch[1],
+          revision: currentRevision + 1,
+          scene: makeProposal().candidate,
+          updatedAt: new Date().toISOString(),
+          previousScene: lastReconstructionScene || makeScene(),
+          undoGroup: '66666666-6666-4666-8666-666666666666',
+        }));
+        return;
+      }
+
+      // Proposals create (for agent runs / other)
+      if (apiPath.match(/^\/projects\/[^/]+\/proposals$/) && method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(makeProposal()));
+        return;
+      }
+
+      // Asset URL
+      const assetUrlMatch = apiPath.match(/^\/assets\/([^/]+)\/url$/);
+      if (assetUrlMatch && method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: assetUrlMatch[1], format: 'glb', name: 'mock-asset', url: `https://mock.local/assets/${assetUrlMatch[1]}.glb`, expiresIn: 300 }));
+        return;
+      }
+
+      // History restore
+      const restoreMatch = apiPath.match(/^\/projects\/[^/]+\/history\/restore$/);
+      if (restoreMatch && method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: uuid(), revision: 1, scene: makeScene(), updatedAt: new Date().toISOString(), previousScene: makeScene(), undoGroup: uuid() }));
+        return;
+      }
+
+      // Scene save (PUT)
+      const sceneSaveMatch = apiPath.match(/^\/projects\/[^/]+\/scene$/);
+      if (sceneSaveMatch && method === 'PUT') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ revision: (json?.expectedRevision ?? 0) + 1, scene: json?.scene || makeScene() }));
+        return;
+      }
+
+      console.log(`UNHANDLED: ${method} ${apiPath}`);
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 'NOT_FOUND', message: `No handler for ${method} ${apiPath}` } }));
+      return;
+    }
+
+    console.log(`UNMATCHED: ${method} ${path}`);
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { code: 'NOT_FOUND' } }));
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Mock backend server running on http://localhost:${PORT}`);
+});
