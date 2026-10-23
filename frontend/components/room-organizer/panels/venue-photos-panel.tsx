@@ -29,7 +29,6 @@ export function VenuePhotosPanel({ images, addImages, removeImage, onKindChange 
   useDialogFocus(!!expanded, dialog, { initialFocusRef: close, trap: true, onEscape: () => setExpandedId(null) });
 
   return <section ref={panel} className="vp-photos" aria-label="图纸与现场照片">
-    <div className="cr-label">图纸与现场照片 <span>最多 12 张 · 每张 5 MB</span></div>
     <input type="file" ref={input} hidden accept="image/png,image/jpeg,image/webp" multiple onChange={event => { void addImages(event.target.files); event.target.value = ''; }}/>
     <button className="cr-upload" type="button" onClick={() => input.current?.click()} disabled={images.length >= 12}>
       <ImagePlus size={23}/><strong>{images.length >= 12 ? '已添加 12 张资料' : '上传图纸或现场照片'}</strong><span>PNG / JPG / WebP</span>
@@ -43,7 +42,6 @@ export function VenuePhotosPanel({ images, addImages, removeImage, onKindChange 
       <button className="vp-remove" type="button" aria-label={`移除 ${image.name}`} onClick={() => removeImage(image.id)}><X size={13}/></button>
       <figcaption title={image.name}>{image.name}</figcaption>{onKindChange&&<select aria-label={`${image.name} 的资料类型`} value={image.kind??'photo'} onChange={event=>onKindChange(image.id,event.target.value as SourceKind)}><option value="floorplan">平面图</option><option value="photo">现场照片</option></select>}
     </figure>)}</div>}
-    <p className="cr-hint">自动建议资料类型，可逐张纠正。图片保存在本机；连接项目并生成时会上传至私有存储，用于识别。每张最长边 4096 像素。</p>
     {expanded && portalRoot && createPortal(<div className="vp-lightbox" onPointerDown={event => { if (event.target === event.currentTarget) setExpandedId(null); }}>
       <div ref={dialog} className="vp-dialog" role="dialog" aria-modal="true" aria-label={`${expanded.kind==='floorplan'?'平面图':'现场照片'}预览：${expanded.name}`} tabIndex={-1}>
         <header><strong>{expanded.name}</strong><button ref={close} type="button" aria-label="关闭照片预览" onClick={() => setExpandedId(null)}><X size={20}/></button></header>

@@ -26,14 +26,14 @@ export async function readLayoutFromFile(file: File): Promise<RoomLayout> {
   if (file.size > MAX_LAYOUT_JSON_BYTES) {
     const limitMb = MAX_LAYOUT_JSON_BYTES / (1024 * 1024);
     throw new Error(
-      `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB, far larger than any house layout (the limit is ${limitMb} MB), so it was not opened.`
+      `这个文件 ${(file.size / (1024 * 1024)).toFixed(1)} MB，远超场地备份的上限 ${limitMb} MB，未打开。`
     );
   }
   const text = await file.text();
   const parsed: unknown = JSON.parse(text);
   const layout = parseStoredLayout(parsed);
   if (!layout) {
-    throw new Error('Invalid layout file: structure does not match the expected schema.');
+    throw new Error('备份文件结构不对，无法作为场地布置打开。');
   }
   return layout;
 }
@@ -79,7 +79,7 @@ function downscaleDataUrl(dataUrl: string): Promise<string> {
       try {
         const width = image.naturalWidth, height = image.naturalHeight;
         if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-          throw new Error('Invalid image dimensions.');
+          throw new Error('图片尺寸无效，请重新选择。');
         }
         const longEdge = Math.max(width, height);
         if (longEdge <= MAX_IMAGE_EDGE) {
@@ -91,13 +91,13 @@ function downscaleDataUrl(dataUrl: string): Promise<string> {
         canvas.width = Math.max(1, Math.round(width * scale));
         canvas.height = Math.max(1, Math.round(height * scale));
         const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Canvas unavailable.');
+        if (!ctx) throw new Error('当前浏览器无法读取这张图片。');
         // JPEG has no alpha; keep transparent floor plans on a white background.
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
         const result = canvas.toDataURL('image/jpeg', 0.85);
-        if (!result.startsWith('data:image/')) throw new Error('Image encoding failed.');
+        if (!result.startsWith('data:image/')) throw new Error('图片编码失败，请重新选择。');
         resolve(result);
       } catch (error) {
         reject(error);

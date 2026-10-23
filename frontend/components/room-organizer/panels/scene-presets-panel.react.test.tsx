@@ -14,7 +14,7 @@ import type { RoomLayout } from '../lib/types';
 
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 const next: RoomLayout = { ...INITIAL_LAYOUT, scenePreset: 'popup', name: '青序 · 香氛快闪' };
-beforeEach(() => { vi.mocked(loadScenePreset).mockReset(); vi.spyOn(window, 'confirm').mockReturnValue(true); });
+beforeEach(() => { vi.mocked(loadScenePreset).mockReset(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const load = () => fireEvent.click(screen.getByRole('button', { name: /青序 · 香氛快闪/ }));
 
@@ -25,7 +25,7 @@ it('offers a preview card for every packaged preset', () => {
   for (const key of keys) {
     const card = screen.getByRole('button', { name: new RegExp(SCENE_PRESETS[key].name) });
     expect(card.querySelector('img')?.getAttribute('src')).toBe(`/scene-presets/${key}/preview.jpg`);
-    expect(card.textContent).toContain(SCENE_PRESETS[key].description);
+    expect(card.getAttribute('title')).toBe(SCENE_PRESETS[key].description);
   }
 });
 
@@ -40,15 +40,18 @@ it('opens the selected preset once and permits loading it again', async () => {
   expect(apply).toHaveBeenCalledTimes(2);
 });
 
-it('preserves the draft when confirmation is declined or download fails', async () => {
+it('asks on the card before replacing a worked-on layout, and keeps the draft when declined', async () => {
   const apply = vi.fn();
   const populated = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0], items: [{ id: 'existing' }] }] } as RoomLayout;
   render(<ScenePresetsPanel layout={populated} onApply={apply}/>);
-  vi.mocked(window.confirm).mockReturnValue(false);
-  load(); expect(loadScenePreset).not.toHaveBeenCalled();
-  vi.mocked(window.confirm).mockReturnValue(true);
+  load();
+  expect(screen.getByRole('group', { name: '确认载入青序 · 香氛快闪' })).toBeTruthy();
+  expect(loadScenePreset).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  expect(screen.queryByRole('group', { name: '确认载入青序 · 香氛快闪' })).toBeNull();
+  load();
   vi.mocked(loadScenePreset).mockRejectedValue(new Error('模型下载失败'));
-  await act(async () => { load(); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认载入' })); });
   expect(screen.getByRole('status').textContent).toContain('模型下载失败');
   expect(apply).not.toHaveBeenCalled();
 });
@@ -89,7 +92,9 @@ it('keeps the activity identity and all task records when a template replaces it
   vi.mocked(loadScenePreset).mockResolvedValue(replacement);
   const apply = vi.fn();
   render(<ScenePresetsPanel layout={previous} onApply={apply}/>);
-  await act(async () => { load(); });
+  load();
+  expect(screen.getByRole('group', { name: '确认载入青序 · 香氛快闪' }).textContent).toContain('活动需求和任务会保留');
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认载入' })); });
   const restored = apply.mock.calls[0]![0] as RoomLayout;
   expect(restored.id).toBe(previous.id); expect(restored.name).toBe(previous.name);
   expect(restored.eventOperations).toBe(operations);
@@ -100,5 +105,4 @@ it('keeps the activity identity and all task records when a template replaces it
     status: 'needs_review', missingObjectIds: ['old-table'],
   });
   expect(previous.floors[0]!.items[0]!.handoff?.evidenceNote).toBe('原物件的演练说明');
-  expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('活动需求和任务会保留'));
 });

@@ -86,7 +86,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   const position = item.position ?? { x: 0, z: 0 };
   const rotation = ((item.rotation ?? 0) * 180 / Math.PI % 360 + 360) % 360;
   return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
-    <header><div><span className="sc-eyebrow">OBJECT PROPERTIES</span><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={17}/></button></header>
+    <header><div><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={17}/></button></header>
     <div className="sc-properties-content">
       <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span></div>
       <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={15}/> : <Unlock size={15}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>

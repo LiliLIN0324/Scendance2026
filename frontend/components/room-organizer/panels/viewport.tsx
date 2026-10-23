@@ -541,11 +541,11 @@ function SelectionChip(props: ViewportProps & { selectionCount: number }): JSX.E
         <Icon name="copy" size={14} />
         {namingSet && onSaveSet ? (
           <>
-            Save {props.selectionCount} items as a set
+            将 {props.selectionCount} 件存为组合
             <ChipNameField
-              label="Set name"
-              initialValue={`${props.selectedItem?.name ?? 'My'} set`}
-              submitLabel="Save"
+              label="组合名称"
+              initialValue={`${props.selectedItem?.name ?? '我的'}组合`}
+              submitLabel="保存"
               maxLength={MAX_CUSTOM_SET_NAME_LENGTH}
               onSubmit={(name) => {
                 // A failed save (storage full) keeps the field open; the
@@ -557,35 +557,35 @@ function SelectionChip(props: ViewportProps & { selectionCount: number }): JSX.E
           </>
         ) : (
           <>
-            {props.selectionCount} items
-            {props.selectionGrouped ? ' · grouped · click any to select all' : ' selected · drag to move together'}
+            {props.selectionCount} 件
+            {props.selectionGrouped ? ' · 已成组 · 点任意一件全选' : ' · 已选中 · 拖动即整体移动'}
             {props.onCopySelection && (
               <ChipButton
                 onClick={props.onCopySelection}
-                title="Copy the selection (Ctrl+C) — Ctrl+V pastes, here or on another floor"
+                title="复制所选（Ctrl+C），Ctrl+V 可贴到本层或其他层"
               >
-                Copy
+                复制
               </ChipButton>
             )}
             {props.onGroupSelection && (
               <ChipButton
                 onClick={props.onGroupSelection}
-                title="Group these items — clicking any one selects them all; Alt+click picks a single member"
+                title="把这些物料编成一组：点任意一件即全选，Alt+点击只选一件"
               >
-                Group
+                成组
               </ChipButton>
             )}
             {props.onUngroupSelection && (
-              <ChipButton onClick={props.onUngroupSelection} title="Ungroup the selected items">
-                Ungroup
+              <ChipButton onClick={props.onUngroupSelection} title="取消这一组">
+                解组
               </ChipButton>
             )}
             {onSaveSet && (
               <ChipButton
                 onClick={() => setNamingSet(true)}
-                title="Save this arrangement as a reusable set in the Furniture Sets panel"
+                title="把当前摆法存成一个组合"
               >
-                Save as set
+                存为组合
               </ChipButton>
             )}
           </>

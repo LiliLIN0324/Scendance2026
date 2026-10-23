@@ -99,8 +99,8 @@ function StatusToast({
         <span style={{ flex: 1, minWidth: 0 }}>{notice.message}</span>
         <button
           type="button"
-          aria-label="Dismiss"
-          title="Dismiss"
+          aria-label="关闭提示"
+          title="关闭提示"
           onClick={() => onDismiss(notice.id)}
           style={{
             display: 'inline-flex',
@@ -118,7 +118,7 @@ function StatusToast({
       {notice.copyText !== undefined && (
         <input
           readOnly
-          aria-label="Link to copy"
+          aria-label="待复制的链接"
           value={notice.copyText}
           onFocus={(event) => event.target.select()}
           style={{

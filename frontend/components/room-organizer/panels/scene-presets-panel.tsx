@@ -2,15 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { preserveCurrentActivity } from '../../../lib/production-plan';
+import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { isUntouched } from '../lib/restore-point';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { loadScenePreset } from '../three/scene-presets';
-import { VenueShapePresets } from './venue-shape-presets';
 import type { RoomLayout } from '../lib/types';
 
 interface Props {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
+}
+
+function keepsExecution(layout: RoomLayout): boolean {
+  return layout.productionPlan !== undefined || layout.eventOperations !== undefined
+    || layout.floors.some(floor => floor.items.some(item => item.handoff));
 }
 
 export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
@@ -20,16 +25,14 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [busy, setBusy] = useState<ScenePresetKey | null>(null);
+  const [pending, setPending] = useState<ScenePresetKey | null>(null);
   const [notice, setNotice] = useState('');
+  const rail = useHorizontalRail<HTMLDivElement>();
   async function load(key: ScenePresetKey): Promise<void> {
     if (loading.current) return;
     const before = current.current;
-    const hasExecution = before.productionPlan !== undefined || before.eventOperations !== undefined || before.floors.some(floor => floor.items.some(item => item.handoff));
-    if (!isUntouched(before) && !window.confirm(hasExecution
-      ? '载入模板将替换当前布置。活动需求和任务会保留，关联物料需重新核对；原布置与物料工作单可用撤销恢复。继续吗？'
-      : '载入模板将替换当前布置，可用撤销恢复。继续吗？')) return;
     loading.current = true;
-    setBusy(key); setNotice('');
+    setPending(null); setBusy(key); setNotice('');
     try {
       const next = await loadScenePreset(key);
       if (!mounted.current) return;
@@ -39,18 +42,29 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景载入失败，请重试。'); }
     finally { loading.current = false; setBusy(null); }
   }
-  return <section aria-label="场景预设">
-    <div className="sc-section-heading"><div><h2>场景预设</h2><p>从完整方案开始，继续布置</p></div></div>
-    <VenueShapePresets layout={layout} onApply={onApply}/>
-    <div className="sc-preset-list">
-      {(Object.keys(SCENE_PRESETS) as ScenePresetKey[]).map(key => <button className="sc-preset-card" key={key} type="button" disabled={busy !== null} onClick={() => { void load(key); }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/scene-presets/${key}/preview.jpg`} alt=""/>
-        <span><strong>{SCENE_PRESETS[key].name}</strong><small>{SCENE_PRESETS[key].description}</small><b>{busy === key ? '正在载入…' : '载入工作台 ↗'}</b></span>
-      </button>)}
+  // A fresh plan can be replaced in one click; anything already worked on asks
+  // on the card itself rather than through a browser dialog.
+  const press = (key: ScenePresetKey) => {
+    if (busy !== null) return;
+    if (isUntouched(current.current)) { void load(key); return; }
+    setPending(key);
+  };
+  return <section className="sc-preset-board" aria-label="场景预设">
+    <div ref={rail.setRef} onKeyDown={rail.onKeyDown} className="sc-preset-rail" role="group" aria-label="场景模板" tabIndex={0}>
+      {(Object.keys(SCENE_PRESETS) as ScenePresetKey[]).map(key => <div className="sc-preset-tile" key={key}>
+        <button className="sc-preset-card" type="button" disabled={busy !== null} onClick={() => press(key)}
+          aria-label={`载入模板 ${SCENE_PRESETS[key].name}`} title={SCENE_PRESETS[key].description}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/scene-presets/${key}/preview.jpg`} alt=""/>
+          <strong>{SCENE_PRESETS[key].name}</strong>
+        </button>
+        {pending === key && <div className="sc-preset-confirm" role="group" aria-label={`确认载入${SCENE_PRESETS[key].name}`}>
+          <p>{keepsExecution(current.current) ? '活动需求和任务会保留。' : '会替换当前布置。'}</p>
+          <div><button type="button" className="is-go" onClick={() => { void load(key); }}>确认载入</button>
+          <button type="button" onClick={() => setPending(null)}>取消</button></div>
+        </div>}
+      </div>)}
     </div>
-    <p className="sc-note">桌椅、展台和人物可移动、旋转、缩放、复制、删除。场馆结构固定，屋顶隐藏以便编辑。</p>
-    <p className="sc-note">预设改动自动保存在此浏览器；使用晴光 Agent 时会自动连接云项目，可继续 AI 修改和云保存。场地尺寸与人数为概念方案。</p>
-    {notice && <p className="sc-note" role="status">{notice}</p>}
+    {notice && <p className="sc-note sc-preset-notice" role="status">{notice}</p>}
   </section>;
 }

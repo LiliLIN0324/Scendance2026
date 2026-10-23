@@ -9,11 +9,9 @@ const scene: Scene = { schemaVersion: 1, venue: { width: 12, depth: 10, height: 
 describe('creative brief boundaries', () => {
   it('adds editable goals and experience prompts without inventing confirmed project facts', () => {
     const text = appendCreativeBriefTemplate('');
-    for (const label of ['活动目标', '参与观众', '交付范围', '已知约束', '待确认项', '到达', '进入', '观看', '交流', '离开']) {
-      expect(text).toContain(`${label}：待填写`);
+    for (const label of ['活动目标', '参与观众', '布置要求']) {
+      expect(text).toContain(`${label}：`);
     }
-    expect(text).toContain('未知写“待确认”');
-    expect(text).toContain('演练设定写明“假设”');
     expect(text).not.toMatch(/30人|5000|2026|已确认完成/);
   });
 

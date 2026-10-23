@@ -48,9 +48,9 @@ describe('WallPaintPanel — Apply-to truthfulness (#221)', () => {
   });
 
   it('checks the exterior wall chip for an exterior selection, and All with nothing selected', () => {
-    expect(setup(makeFloor(), { id: 'south', kind: 'exterior' }).checkedChips()).toEqual(['S']);
+    expect(setup(makeFloor(), { id: 'south', kind: 'exterior' }).checkedChips()).toEqual(['南']);
     cleanup();
-    expect(setup(makeFloor(), null).checkedChips()).toEqual(['All']);
+    expect(setup(makeFloor(), null).checkedChips()).toEqual(['全部']);
   });
 
   it('rings no swatch in the All state when the exterior walls differ', () => {

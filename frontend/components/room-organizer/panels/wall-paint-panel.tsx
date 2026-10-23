@@ -122,11 +122,11 @@ function sharedColor(colors: readonly string[]): string | undefined {
 }
 
 const APPLY_TARGETS: ReadonlyArray<{ id: WallId | 'all'; label: string }> = [
-  { id: 'all',   label: 'All' },
-  { id: 'north', label: 'N' },
-  { id: 'east',  label: 'E' },
-  { id: 'south', label: 'S' },
-  { id: 'west',  label: 'W' },
+  { id: 'all',   label: '全部' },
+  { id: 'north', label: '北' },
+  { id: 'east',  label: '东' },
+  { id: 'south', label: '南' },
+  { id: 'west',  label: '西' },
 ];
 
 type Surface = 'walls' | 'floor';
@@ -380,7 +380,7 @@ function ApplyToggle({ value, onChange }: ApplyToggleProps): JSX.Element {
   return (
     <div
       role="radiogroup"
-      aria-label="Apply paint to"
+      aria-label="墙面刷漆范围"
       className="pc-glass--inset"
       style={{
         display: 'flex',
@@ -433,7 +433,7 @@ function WallVisibilityToggle({ hiddenWalls, onToggle }: WallVisibilityTogglePro
   return (
     <div
       role="group"
-      aria-label="Wall visibility"
+      aria-label="墙体显示"
       className="pc-glass--inset"
       style={{
         display: 'flex',
@@ -726,7 +726,7 @@ function SwatchGrid({ swatches, value, onChange, onCustomChange }: SwatchGridPro
       })}
       {onCustomChange && (
         <label
-          title="Pick a custom colour"
+          title="自选颜色"
           style={{
             height: 22,
             borderRadius: 5,

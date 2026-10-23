@@ -17,20 +17,18 @@ import { useSelection } from '../contexts';
 import { useMaterialCheckins, type MaterialCheckinState } from '../hooks/use-material-checkins';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { STORAGE_KEY } from '../lib/constants';
-import { appendCreativeBriefTemplate, briefInstruction, IDEA_CARDS, INITIAL_BRIEF, MANUAL_BRIEF_TEMPLATE, mergeProposalPresentation, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
+import { appendCreativeBriefTemplate, briefInstruction, IDEA_CARDS, INITIAL_BRIEF, MANUAL_BRIEF_TEMPLATE, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
-import { ActivityWorkflowGuide } from './activity-workflow-guide';
-import { WORKFLOW_GUIDE_DISMISS_KEY, type WorkbenchMode } from '../lib/workbench-mode';
+import { type WorkbenchMode } from '../lib/workbench-mode';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ProjectReviewPanel } from './project-review-panel';
 import { ReconstructionPanel } from './reconstruction-panel';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
-import { VenueShapePresets } from './venue-shape-presets';
 import type { ActivityTaskPanelContext } from './activity-task-workspace';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -64,6 +62,7 @@ interface StudioValue extends LocalProjectBackupActions {
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   briefReady: boolean; briefError: string | null; hasSavedBrief: boolean; retryBrief(): void;
   images: ReferenceImage[]; addImages(files: FileList | null, kind?: ReferenceImage['kind']): Promise<void>; removeImage(id: string): void;
+  autoGenerateRequest: number;
   busy: boolean; preparing: boolean; notice: string; connection: string; generate(message?: string, options?: {intent:'model'}): Promise<void>;
   messages: Message[]; expanded: boolean; setExpanded(value: boolean): void; preview: Preview | null; stale: boolean; expired: boolean;
   jevEnabled: boolean; setJevEnabled(value:boolean):void; run: AgentRun | null; candidates: CandidatePreview[]; selectCandidate(label: 'A'|'B'|'C'):void; cancelRun():Promise<void>; recoverRun():Promise<void>; recoverable:boolean;
@@ -122,6 +121,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     briefValueRef.current=next;setBriefValue(next);setHasSavedBrief(false);
   },[]);
   const [images,setImages]=useState<ReferenceImage[]>([]);
+  const [autoGenerateRequest,setAutoGenerateRequest]=useState(0);
   const savedImages=useRef(new WeakSet<ReferenceImage>());
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState('');
@@ -195,7 +195,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     briefHydration.current=(editorLease.current?.lease.ready??Promise.resolve()).then(()=>readSourceForm<CreativeBrief>(`${scope}:brief`)).then(saved=>{
       if(cancelled)return;
       storage.ready=true;
-      const restored=saved?{...INITIAL_BRIEF,...saved}:INITIAL_BRIEF;
+      const restored=saved?{...INITIAL_BRIEF,...saved,description:migrateBriefDescription(saved.description??'')}:INITIAL_BRIEF;
       briefValueRef.current={...restored,...storage.edits};setBriefValue(briefValueRef.current);
       storage.edits={};setHasSavedBrief(saved!==undefined&&!storage.dirty);
       setBriefReady(true);
@@ -664,6 +664,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         // before React commits this state, and must still see the new count.
         imageRef.current=[...imageRef.current,...added];
         setImages(imageRef.current);
+        setAutoGenerateRequest(value=>value+1);
         try { await Promise.all(added.map(async image=>{const {url,...stored}=image;await storeSource({...stored,scope:imageScope,kind:image.kind??'photo',width:image.width!,height:image.height!});savedImages.current.add(image);})); } catch(error) { if(active()) setNotice(error instanceof Error?error.message:'本机保存失败，图片仍在本次会话中。'); }
       } catch(error) { for(const img of added) URL.revokeObjectURL(img.url); if(active()) setNotice(error instanceof Error?error.message:'图片无法读取，请更换文件。'); }
     });
@@ -931,11 +932,11 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     finally { if(epoch===runEpoch.current){requestPending.current=false;if(alive.current)setBusy(false);} }
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
-export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceOpenRequest=0, referencePanelRef, onSkip }: { showNotice?: boolean; descriptionRef?: RefObject<HTMLTextAreaElement>; referenceOpenRequest?: number; referencePanelRef?: RefObject<HTMLDivElement>; onSkip?:()=>void }):JSX.Element {
+export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceOpenRequest=0, referencePanelRef, referencePanel, view='brief', onSkip }: { showNotice?: boolean; descriptionRef?: RefObject<HTMLTextAreaElement>; referenceOpenRequest?: number; referencePanelRef?: RefObject<HTMLDivElement>; referencePanel?: ReactNode; view?: 'brief'|'reference'; onSkip?:()=>void }):JSX.Element {
   const studio=useStudio();
   const update=(patch:Partial<CreativeBrief>)=>studio.setBrief(current=>({...current,...patch}));
   const templateOnly=studio.brief.description.trim()===MANUAL_BRIEF_TEMPLATE.trim();
@@ -946,57 +947,43 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     try{
       const next=appendCreativeBriefTemplate(studio.brief.description);
       if(next===studio.brief.description){setTemplateNotice({text:'当前文字已含提纲，未重复添加。',error:false});return;}
-      update({description:next});setTemplateNotice({text:'提纲已加入当前输入，请逐项填写并核对。',error:false});
+      update({description:next});setTemplateNotice(null);
     }catch(error){setTemplateNotice({text:error instanceof Error?error.message:'提纲未能添加，原文字保持不变。',error:true});}
   }
   // One idea at a time, swapped on demand: three stacked articles were mostly noise.
   const [ideaIndex,setIdeaIndex]=useState(0);
   const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
+  if(view==='reference') return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
+    <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage} onKindChange={(id,kind)=>studio.updateImage(id,{kind})}/>
+    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对">{referencePanel}</div>
+    {studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} autoGenerateRequest={studio.autoGenerateRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/>}
+  </fieldset>;
   return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
     <section className="cr-brief-sec">
       <h3 className="cr-sec-title"><span className="cr-sec-no" aria-hidden="true">01</span>目标与来宾体验</h3>
-      <p className="cr-sec-hint">希望来宾感受到什么？活动要达成什么目标？</p>
     {!studio.briefReady&&!studio.briefError&&<p className="cr-hint" role="status">正在读取活动需求，当前输入会保留。</p>}
-    {studio.briefReady&&!studio.hasSavedBrief&&!studio.briefError&&<p className="cr-hint">当前需求尚未保存；默认活动类型和人数仅供参考，请按实际情况填写。</p>}
+    {studio.briefReady&&!studio.hasSavedBrief&&!studio.briefError&&<p className="cr-hint">尚未保存；默认类型和人数仅供参考。</p>}
     {showNotice&&studio.briefError&&<p className="cr-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-    <div className="cr-field-head"><span>客户需求</span><button className="awg-template-button" type="button" disabled={!studio.briefReady||!!studio.briefError||studio.backupPending} onClick={addBriefTemplate}>添加活动简报提纲</button></div>
-    <textarea className="cr-field-input" ref={descriptionRef} aria-label="客户需求" maxLength={1800} rows={4} placeholder="描述活动目标、分区与来宾体验……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/>
+    <div className="cr-field-head"><span>客户需求</span><button className="awg-template-button cr-template-icon" type="button" aria-label="生成活动简报提纲" title="生成活动简报提纲" disabled={!studio.briefReady||!!studio.briefError||studio.backupPending} onClick={addBriefTemplate}><span aria-hidden="true">✦</span></button></div>
+    <textarea className="cr-field-input" ref={descriptionRef} aria-label="客户需求" maxLength={1800} rows={8} placeholder="描述活动目标、分区与来宾体验……" value={studio.brief.description} onChange={e=>update({description:e.target.value})}/>
     {templateNotice&&<p className={templateNotice.error?'cr-notice':'cr-hint'} role={templateNotice.error?'alert':'status'}>{templateNotice.text}</p>}
-    {templateOnly&&<p className="cr-hint">先补充活动目标和参与观众，再生成整场布置方案。</p>}
     </section>
     <section className="cr-brief-sec">
       <h3 className="cr-sec-title"><span className="cr-sec-no" aria-hidden="true">02</span>活动类型与规模</h3>
-    <div className="cr-brief-basics">
-      <label className="cr-label">活动类型<select value={studio.brief.event} onChange={e=>update({event:e.target.value})}>{['品牌快闪','露营派对','工作坊','小型黑客松','展览市集','婚礼聚会','其他活动'].map(label=><option key={label}>{label}</option>)}</select></label>
-      <label className="cr-label">预计人数<input type="number" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/></label>
+    <div className="cr-brief-card">
+      <label className="cr-stat">活动类型<select value={studio.brief.event} onChange={e=>update({event:e.target.value})}>{['品牌快闪','露营派对','工作坊','小型黑客松','展览市集','婚礼聚会','其他活动'].map(label=><option key={label}>{label}</option>)}</select></label>
+      <label className="cr-stat">预计人数<span className="cr-stat-line"><input type="number" aria-label="预计人数" min={1} max={40} value={studio.brief.guests||''} onChange={e=>update({guests:e.target.valueAsNumber||0})}/><i>人</i></span></label>
     </div>
     </section>
     <section className="cr-brief-sec">
-      <h3 className="cr-sec-title"><span className="cr-sec-no" aria-hidden="true">03</span>布置要求与现场</h3>
-    <label className="cr-label">必需项 <span>选填</span><input maxLength={350} placeholder="帐篷、签到区、无障碍通道……" value={studio.brief.mustHave} onChange={e=>update({mustHave:e.target.value})}/></label>
-    <div className="cr-brief-styles">
-    <label className="cr-label">风格<input aria-label="风格要求" maxLength={120} placeholder="自然露营" value={studio.brief.style??''} onChange={e=>update({style:e.target.value})}/></label>
-    <label className="cr-label">配色<input aria-label="配色要求" maxLength={120} placeholder="米白橄榄绿" value={studio.brief.palette??''} onChange={e=>update({palette:e.target.value})}/></label>
-    <label className="cr-label">材质<input aria-label="氛围要求" maxLength={120} placeholder="原木亚麻" value={studio.brief.atmosphere??''} onChange={e=>update({atmosphere:e.target.value})}/></label>
-    </div>
-    <details className="cr-optional cr-venue-details"><summary>图纸、照片与现场条件（可选）{studio.images.length>0&&<small> · 已添加 {studio.images.length} 张</small>}</summary>
-    <fieldset className="cr-floorplan-choice"><legend>平面图</legend><div role="radiogroup" aria-label="是否有平面图">
-      <label><input type="radio" name="floorplan-choice" checked={studio.brief.hasFloorplan!==false} onChange={()=>update({hasFloorplan:true})}/>有平面图，上传资料</label>
-      <label><input type="radio" name="floorplan-choice" checked={studio.brief.hasFloorplan===false} onChange={()=>update({hasFloorplan:false})}/>没有平面图，选择场地形状</label>
-    </div></fieldset>
-    {studio.brief.hasFloorplan===false ? <VenueShapePresets layout={studio.layout} onApply={studio.onApply}/> : <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage} onKindChange={(id,kind)=>studio.updateImage(id,{kind})}/>}
-    {studio.brief.hasFloorplan===false && studio.images.length>0 && <p className="cr-hint">已上传的资料仍保留；生成时会使用这些资料。切回“有平面图”可查看或删除。</p>}
-    <label className="cr-label">已确认的现场条件 <span>选填</span><textarea aria-label="已确认的现场条件" maxLength={500} rows={3} placeholder="例如：北侧中间是入口，东侧有两根固定柱；入口前保留通道。请填写你确认的信息。" value={studio.brief.venueConditions??''} onChange={e=>update({venueConditions:e.target.value})}/></label>
-    <p className="cr-hint">要求会随方案请求提交。添加图纸或照片后，可结合实测尺寸重建空间；未确认的结构会先请你核对。</p>
-    </details>
-    <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对"><details className="cr-optional cr-more-tools"><summary>更多：图纸重建与场地核对</summary>{studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')}/>}</details></div>
+    <label className="cr-label">必需项<input maxLength={350} placeholder="帐篷、签到区、无障碍通道……" value={studio.brief.mustHave} onChange={e=>update({mustHave:e.target.value})}/></label>
     <label className="cr-check"><input type="checkbox" checked={studio.brief.allowIdeas} onChange={e=>update({allowIdeas:e.target.checked})}/><span><strong>也给我一些意料之外的灵感</strong><small>可以提出建议，由你确认是否采用</small></span></label>
     </section>
     <div className="cr-brief-footer">
     <button className="cr-generate" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||templateOnly||!!studio.briefError} onClick={()=>void studio.generate()}>{studio.busy?<Loader2 className="cr-spin" size={18}/>:<Sparkles size={18}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <button className="cr-brief-skip" type="button" onClick={()=>onSkip?.()}>暂不填写</button>
     </div>
-    <p className="cr-hint">根据当前场景与资源库生成布置方案。本轮策划不读取照片；图纸与照片重建需单独确认。</p>
+    <p className="cr-hint">按当前场景与资源库生成；照片需单独确认。</p>
 
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={13}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
@@ -1024,8 +1011,10 @@ export type BusinessToolsApi = {
   openCommercial():void;
 };
 
-export function CreativeAssistant({ generationPanel, commercialPanel, activityTaskPanel, onOpenTemplates, workspaceOpenRequest = 0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
+export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest = 0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
   onOpenTemplates?:()=>void;
+  /** 左栏工具轨已列出这些去处时，标题栏不再重复一个分类下拉。 */
+  hideCategorySelect?: boolean;
   localSaveError?: boolean|undefined;
   conversationOpenRequest?: number;
   conversationEntryRef?: RefObject<HTMLButtonElement>;
@@ -1035,6 +1024,8 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   captureReview?: (snapshot:ProjectReviewSnapshot, options:ProjectReviewCaptureOptions, getSource:()=>ProjectReviewSource)=>Promise<ProjectReviewCapture>;
   generationPanel?: ReactNode | ((context: GenerationContext) => ReactNode);
   commercialPanel?: ReactNode;
+  /** 参考底图开关：画布右上角不再浮，跟着「图纸尺寸」面板走。 */
+  referenceImagePanel?: ReactNode;
   activityTaskPanel?: (context: ActivityTaskPanelContext) => ReactNode;
   workspaceOpenRequest?: number;
   workspaceEntryRef?: RefObject<HTMLButtonElement>;
@@ -1092,7 +1083,12 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   useLayoutEffect(()=>{if(docked&&assistantEntryHostRef?.current)setAssistantEntryHost(assistantEntryHostRef.current);},[docked,assistantEntryHostRef]);
   useEffect(()=>{if(!docked||dockingInitialized.current)return;dockingInitialized.current=true;setOpened(true);setExpanded(autoOpen&&!mobile());},[docked,setExpanded,autoOpen]);
   useEffect(()=>{if(docked)onConversationVisibilityChange?.(studio.expanded);},[docked,studio.expanded,onConversationVisibilityChange]);
-  useEffect(()=>{if(docked)onWorkspaceVisibilityChange?.(workspaceExpanded);},[docked,workspaceExpanded,onWorkspaceVisibilityChange]);
+  // 左栏展开与否只在真的变化时回报。挂在依赖里会让父组件的回调换身份时重跑：
+  // 点选物料把 leftMode 一切，父回调重建，这条 effect 就把「工作区还开着」重新
+  // 报一遍，把用户刚关掉的左栏又掀起来。resizeWorkspace 里已有直接调用，不会漏报。
+  const reportWorkspaceVisibility=useRef(onWorkspaceVisibilityChange);
+  reportWorkspaceVisibility.current=onWorkspaceVisibilityChange;
+  useEffect(()=>{if(docked)reportWorkspaceVisibility.current?.(workspaceExpanded);},[docked,workspaceExpanded]);
   useEffect(()=>{if(conversationCloseRequest===handledConversationClose.current)return;handledConversationClose.current=conversationCloseRequest;closeChat();},[conversationCloseRequest,closeChat]);
   useEffect(()=>{
     if(studio.expanded||!returnConversationFocus.current||!conversationEntryRef?.current)return undefined;
@@ -1130,9 +1126,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   const reviewTarget=useRef<HTMLDivElement>(null),focusReview=useRef(false),handledReview=useRef(0);
   const [commercialOpened,setCommercialOpened]=useState(false);
   const commercialTarget=useRef<HTMLDivElement>(null),focusCommercial=useRef(false);
-  const [guideDismissed,setGuideDismissed]=useState(()=>{
-    try{return typeof localStorage!=='undefined'&&localStorage.getItem(WORKFLOW_GUIDE_DISMISS_KEY)==='1';}catch{return false;}
-  });
   const handledWorkbenchMode=useRef(0);
   const [modelTool,setModelTool]=useState<'generate'|'customize'>('generate');
   const [materialSeed,setMaterialSeed]=useState<MaterialCustomizationSeed>();
@@ -1360,10 +1353,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   // 左栏工具栏出口：room-organizer 直接调用这些入口，不必把 handler 提升到上层。
   if(toolsApiRef)toolsApiRef.current={openBrief,openReference,openDelivery,openReview,openTemplates,openModelTools,openCommercial};
   const businessCategory=templatesOpen?'templates':businessMode==='plan'?planCategory:businessMode;
-  function dismissWorkflowGuide():void {
-    setGuideDismissed(true);
-    try{localStorage.setItem(WORKFLOW_GUIDE_DISMISS_KEY,'1');}catch{/* ignore */}
-  }
   const primaryCategoryValue = businessCategory === 'commercial' ? 'more' : businessCategory;
   const hasConversation=studio.messages.some(message=>message.id!=='welcome');
   const assistantLauncher=!studio.expanded?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开晴光 Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>晴光</span></button>:null;
@@ -1380,14 +1369,13 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
       <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
         <header className="cr-business-heading">
           {workbenchMode==='review'?<div className="cr-mode-banner"><strong>发给客户</strong><span>核对方案后导出或发布客户查看链接</span></div>:workbenchMode==='delivery'?<div className="cr-mode-banner"><strong>执行</strong><span>活动安排、点验、导出与本机备份</span></div>:
-          <label className="cr-business-category"><span className="sr-only">布置工具</span><select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>}
+          (!hideCategorySelect&&<label className="cr-business-category"><span className="sr-only">布置工具</span><select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>)}
           {workbenchMode==='layout'&&<nav className="cr-business-links" aria-label="活动资料视图"><button type="button" aria-pressed={businessCategory==='brief'} className={businessCategory==='brief'?'is-on':''} onClick={()=>openBrief()}>活动简报</button><button type="button" aria-pressed={businessCategory==='reference'} className={businessCategory==='reference'?'is-on':''} onClick={()=>openReference()}>导入文件</button></nav>}
           {!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button>}</div>}
         </header>
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-        <div hidden={guideDismissed||templatesOpen||businessMode==='model'||businessMode==='review'||businessMode==='commercial'||workbenchMode!=='layout'}><ActivityWorkflowGuide layout={studio.layout} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onDismiss={dismissWorkflowGuide}/></div>
         {businessMode==='commercial'&&workbenchMode==='layout'&&<p className="cr-hint" role="status">合同与约定已放入「更多」。深度商业档案仍保留，不占主流程。</p>}
-        <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>活动需求与场地资料</summary><CreativeBriefPanel showNotice={false} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel} onSkip={()=>{dismissWorkflowGuide();resizeWorkspace(false);}}/></details></section>
+        <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>{planCategory==='reference'?'图纸与尺寸':'活动需求与场地资料'}</summary><CreativeBriefPanel view={planCategory} showNotice={false} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel} referencePanel={referenceImagePanel} onSkip={()=>{resizeWorkspace(false);}}/></details></section>
         <section id="agent-panel-model" aria-label="物料建模" hidden={businessMode!=='model'||templatesOpen}>
           <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
           <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>chooseModelExample(label!,prompt!)}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
@@ -1403,7 +1391,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, activityTa
   return <div className={`cr-assistant ${docked?'is-docked':''} ${studio.expanded?'is-open':''} ${!docked&&studio.expanded&&workspaceExpanded?'is-workspace-expanded':''} ${selectedItem?'has-properties':''}`}>
     {docked&&businessOpened&&businessHost&&createPortal(businessContent,businessHost,'creative-business')}
     {(docked||opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className={`cr-chat ${!docked&&workspaceExpanded?'is-expanded':''}`} aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();closeChat();}}}>
-      <header><div className="cr-header-brand"><div><strong>晴光</strong><small title={localSaveError?undefined:studio.layout.name} role={localSaveError?'alert':undefined}>{localSaveError?'本机保存失败，请导出备份':`${operationScope} · ${studio.layout.name}`}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'收起聊天':'收起 Agent'} onClick={closeChat}><X size={18}/></button></div></header>
+      <header><div className="cr-header-brand"><div><strong>晴光</strong><small title={localSaveError?undefined:studio.layout.name} role={localSaveError?'alert':undefined}>{localSaveError?'本机保存失败，请导出备份':`${operationScope} · ${studio.layout.name}`}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'关闭聊天':'关闭 Agent'} onClick={closeChat}><X size={18}/></button></div></header>
       {!docked&&<div className="cr-workspace-tools">{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}><ArrowLeft size={14}/>返回当前工作区</button>}<button className="cr-workspace-toggle" type="button" aria-pressed={workspaceExpanded} onMouseDown={event=>{if(event.button===0)event.preventDefault();}} onClick={()=>resizeWorkspace(!workspaceExpanded)}>{workspaceExpanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}<span>{workspaceExpanded?'恢复浮窗':'展开工作区'}</span></button><span>{studio.connection}</span><div className="cr-chat-toggle-wrap" hidden={!workspaceExpanded}><button ref={chatToggle} className="cr-chat-toggle" type="button" aria-label={chatHidden?'展开聊天':'收起聊天'} aria-controls="creative-conversation" aria-expanded={!chatHidden} aria-describedby={chatHidden&&chatPending?'creative-conversation-status':undefined} onClick={toggleChat}>{chatHidden?'展开聊天':'收起聊天'}</button>{chatHidden&&chatPending&&<span id="creative-conversation-status" className="cr-chat-pending" role="status" aria-live="polite">{chatPending} · 展开聊天查看</span>}</div></div>}
       <div className={`cr-plan-panel cr-workspace-body ${chatHidden?'is-chat-collapsed':''}`}>
       {!docked&&businessContent}

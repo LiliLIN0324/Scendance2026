@@ -73,6 +73,8 @@ export interface UseCanvas2DInteractionParams {
   allSelectedIds: ReadonlySet<string>;
   /** 'single' is Alt+click: one member of a group on its own (#154). */
   onItemSelect(id: string, mode: 'replace' | 'toggle' | 'single'): void;
+  /** 画布 `dblclick` 打在物料上时上报那一件。属性面板只由这一路打开，与 3D 视图同契约。 */
+  onItemDoubleClick?(id: string): void;
   /** Pointer went down on empty plan space — clear the selection (#219). */
   onDeselect(): void;
   /** The same snap pipeline the 3D drag applies per move (use-item-placement). */
@@ -440,11 +442,23 @@ export function useCanvas2DInteraction(
       if (zoneGesture && !zoneGesture.started) zoneGesture = null;
     };
 
+    // 属性面板只认「双击打到了哪一件」。Chrome 的 pointerdown.detail 恒为 0，
+    // 点击计数只在 dblclick 上，所以另起一条命中，而不是在按下时猜。
+    const onDoubleClick = (event: MouseEvent): void => {
+      const p = paramsRef.current;
+      if (!p.onItemDoubleClick || p.view.drawZoneMode) return;
+      const world = clientToWorld2D(event.clientX, event.clientY);
+      if (!world) return;
+      const hit = hitTest2DItems(p.activeFloor.items, world.x, world.z, hitSlopWorld());
+      if (hit) p.onItemDoubleClick(hit.id);
+    };
+
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', endGesture);
     canvas.addEventListener('pointercancel', onPointerCancel);
     canvas.addEventListener('pointerleave', onPointerLeave);
+    canvas.addEventListener('dblclick', onDoubleClick);
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown);
@@ -452,6 +466,7 @@ export function useCanvas2DInteraction(
       canvas.removeEventListener('pointerup', endGesture);
       canvas.removeEventListener('pointercancel', onPointerCancel);
       canvas.removeEventListener('pointerleave', onPointerLeave);
+      canvas.removeEventListener('dblclick', onDoubleClick);
       // Disabled (view switch) or unmounted mid-drag: discard the session so
       // nothing stale is committed on a later pointerup.
       abortGesture();

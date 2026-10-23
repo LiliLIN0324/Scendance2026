@@ -1,6 +1,6 @@
-import { reconstructionJobSchema, type ReconstructionRequest } from '../supabase/functions/_shared/reconstruction-contract.ts';
-import { canonical, sceneHash, sha256, uuid, type SourceImage, type Scene } from '../supabase/functions/_shared/domain.ts';
-import { activityTaskRunRequestSchema, activityTaskRunSchema, type ActivityTaskRunRequest, type ActivityTaskRun } from '../supabase/functions/_shared/activity-task-contract.ts';
+import { reconstructionJobSchema, type ReconstructionRequest } from '../supabase/functions/_shared/reconstruction-contract';
+import { canonical, sceneHash, sha256, uuid, type SourceImage, type Scene } from '../supabase/functions/_shared/domain';
+import { activityTaskRunRequestSchema, activityTaskRunSchema, type ActivityTaskRunRequest, type ActivityTaskRun } from '../supabase/functions/_shared/activity-task-contract';
 
 export class SceneApiError extends Error {
   constructor(public code:string,public status:number,public details:unknown) {super(code);}

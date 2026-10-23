@@ -1,8 +1,8 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, PanelRightOpen, Ruler, Send, SquareStack, Truck } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, SlidersHorizontal, SquareStack, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
@@ -75,7 +75,7 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { PlacementHint } from './panels/placement-hint';
 import { ReferenceImageControls } from './panels/reference-image-controls';
-import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider } from './panels/agent-panel';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
 import { Viewport } from './panels/viewport';
@@ -147,7 +147,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
-  const [movementPreview, setMovementPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
   const activeStoreyHeight = storeyHeight(activeFloor);
   const { recent: recentColors, pushColor } = useRecentColors();
@@ -181,6 +180,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const conversationEntryRef = useRef<HTMLButtonElement>(null);
   const [compactViewport, setCompactViewport] = useState(false);
+  const [railWidth, setRailWidth] = useState(64);
+  const railWidthRef = useRef(64);
+  useEffect(() => {
+    const saved = typeof window === 'undefined' ? NaN : Number(window.localStorage.getItem('sc-rail-width'));
+    if (Number.isFinite(saved) && saved >= 56) setRailWidth(Math.min(184, Math.max(56, saved)));
+  }, []);
+  function startRailResize(event: ReactPointerEvent<HTMLSpanElement>): void {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = railWidth;
+    const move = (ev: PointerEvent) => {
+      const next = Math.min(184, Math.max(56, startWidth + ev.clientX - startX));
+      railWidthRef.current = next;
+      setRailWidth(next);
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      try { window.localStorage.setItem('sc-rail-width', String(Math.round(railWidthRef.current))); } catch {}
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+  }
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'properties'|'business'|'materials'>('materials');
@@ -192,7 +214,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
-  const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'|'layers'}>({serial:0,tab:'materials'});
+  const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'}>({serial:0,tab:'materials'});
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
   const businessHostRef = useRef<HTMLDivElement>(null);
   const businessToolsRef = useRef<BusinessToolsApi | null>(null);
@@ -469,8 +491,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // Make `id` the sole selection (null clears). The one way panels set a
   // primary — pairing the two setters at every call site is how stale extras
   // leaked into later group operations (#117).
+  // 属性面板只由明确的动作打开：画布上双击物料、工具轨的「选中物料」、
+  // 图层里点物料行、「定位」这类「跳到这一件」的入口。普通单击选中与从物料库
+  // 放置都只改选中态，不掀左栏（左栏本身也只由按钮开合，见 closeLeftPanel）。
   const inspectSelection = useCallback(() => {
-    setLeftMode('properties'); setSidebarCollapsed(false);
+    setLeftMode('properties');
     if (window.innerWidth <= 1080) setConversationCloseRequest(value => value + 1);
   }, []);
   const selectOnly = useCallback<SelectionContextValue['selectOnly']>((id, options) => {
@@ -478,6 +503,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setExtraSelectedIds((extras) => (extras.size === 0 ? extras : new Set()));
     if (id && !options?.keepPanel) inspectSelection();
   }, [inspectSelection]);
+
+  // 双击画布里的物料才打开属性面板：先把这件设成唯一选中（双击落在多选里时，
+  // 面板要显示的是被点的那一件），再掀左栏。两个视图的命中都由拾取层报上来。
+  const openPropertiesForItem = useCallback((id: string) => {
+    selectOnly(id);
+    setMaterialsOpen(false);
+    setSidebarCollapsed(false);
+  }, [selectOnly]);
 
   // A whole-layout replacement (import, share/local hydration, adopting
   // another tab's save) invalidates every piece of transient selection state,
@@ -501,7 +534,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // (Alt+click) is the escape hatch that picks one member on its own.
   const handleSelect = useCallback(
     (id: string, mode: 'replace' | 'toggle' | 'single') => {
-      inspectSelection();
       const members = mode === 'single' ? new Set([id]) : expandSelection(activeFloor.items, id);
       if (mode !== 'toggle') {
         if (members.size === 1) {
@@ -548,7 +580,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       setExtraSelectedIds(next);
     },
-    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly, inspectSelection]
+    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly]
   );
 
   const allSelectedIds = useMemo(() => {
@@ -585,10 +617,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (items.length < 2 || !name.trim()) return false;
     const saved = saveCustomSet(items, name, { idTag: randomSuffix() });
     if (!saved) {
-      notify('Could not save the set — browser storage is full.', 'error');
+      notify('浏览器本机存储已满，组合没能保存。', 'error');
       return false;
     }
-    notify(`Saved “${saved.name}” to Furniture Sets.`, 'success');
+    notify(`已把「${saved.name}」存为组合。`, 'success');
     playCue('success');
     return true;
   }, [activeFloor.items, allSelectedIds, playCue]);
@@ -797,13 +829,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     [activeFloor.items, selectedItemId]
   );
   const selectedObjectId = selectedItem?.id;
+  // 选中变化只负责让开物料库抽屉，不再把左栏拧到「选中物料」——属性面板由双击、
+  // 工具轨那颗按钮或图层/定位入口打开，面板已经开着时它自然跟着当前选中项走。
+  // 以前这个 effect 也听 leftMode，于是点工具轨的「活动需求」刚把左栏切成活动资料，
+  // 它就又按着选中项拧回「选中物料」——那颗按钮等于没接上。
+  const lastSelectedObjectId = useRef<string | null | undefined>(null);
   useEffect(() => {
-    if (selectedObjectId) {
-      setLeftMode('properties');
-      setSidebarCollapsed(false);
-      setMaterialsOpen(false);
-      return;
-    }
+    if (lastSelectedObjectId.current === selectedObjectId) return;
+    lastSelectedObjectId.current = selectedObjectId;
+    if (selectedObjectId) { setMaterialsOpen(false); return; }
+    // 取消选中后属性面板没有内容可显示，退回当前模式该看的那一栏。
     if (leftMode === 'properties') {
       setLeftMode(workbenchMode === 'layout' ? 'materials' : 'business');
       if (workbenchMode === 'layout') setMaterialsOpen(true);
@@ -878,6 +913,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     extraSelectedIds,
     allSelectedIds,
     onItemSelect: handleSelect,
+    onItemDoubleClick: openPropertiesForItem,
     onDeselect: deselectAll,
     snapPosition,
     onItemDragStart: handleDragStart,
@@ -894,6 +930,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       // The distance tool measures across furniture, so its clicks go to the floor (#341).
       floorPickOnly: view.drawWallMode || view.measurementMode,
       onItemSelect: handleSelect,
+      onItemDoubleClick: openPropertiesForItem,
       selectedIds: allSelectedIds,
       onItemDragStart: handleDragStart,
       onItemDrag: handleDrag,
@@ -1024,7 +1061,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   });
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
-  const { handleScreenshot } = useImportExport({
+  const { handleScreenshot, exportRenderImage } = useImportExport({
     layout,
     actions,
     view2D: view.view2D,
@@ -1033,8 +1070,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     rendererRef,
     sceneRef,
     cameraRef,
+    controlsRef,
+    applyPreset,
     onImported: clearTransientSelection,
   });
+
+  // 效果图导出：3D 走高清重渲染；2D 平面按当前分辨率抓取。
+  const handleExportImage = useCallback(async (options: { view: 'current' | 'iso' | 'top' | 'front' | 'corner'; scale: number }) => {
+    const ok = view.view2D ? (handleScreenshot(), true) : await exportRenderImage(options);
+    notify(ok ? '效果图已开始下载。' : '效果图导出失败，请稍后重试。', ok ? 'success' : 'error');
+    return ok;
+  }, [view.view2D, handleScreenshot, exportRenderImage]);
 
   // Advance the time-of-day at roughly 1 in-game hour per second when on.
   useEffect(() => {
@@ -1323,12 +1369,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (candidate) { setView(current => ({ ...current, view2D: false })); }
   }, []);
   const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
-  const onPreviewMovement = useCallback((candidate: RoomLayout | null) => {
-    setMovementPreview(candidate ? { base: liveLayout.current, candidate } : null);
-    if (candidate) setView(current => ({ ...current, view2D: false }));
-  }, []);
-  const validMovementPreview = movementPreview?.base === layout ? movementPreview.candidate : null;
-  const previewCandidate = validMovementPreview ?? validAiPreview;
+  const previewCandidate = validAiPreview;
   useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
     candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
@@ -1365,23 +1406,25 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
           <div className="sc-header-actions">
             <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/><span>项目</span></button>
-            <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '收起助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
+            <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
             <CloudPanel controller={controller} layout={layout} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
         </header>
         <main className={`sc-workspace is-docked-layout is-mode-rail${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
-          <nav className="sc-mode-rail" aria-label="工作流程">
+          <nav className={`sc-mode-rail${railWidth >= 116 ? ' is-wide' : ''}`} aria-label="工作流程" style={{ width: railWidth, flexBasis: railWidth }}>
             {WORKBENCH_MODES.map(mode => {
               const active = workbenchMode === mode.id;
               const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
-              return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={20} aria-hidden="true"/><span>{mode.label}</span></button>;
+              return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={20} aria-hidden="true"/><span>{mode.label}</span></button>;
             })}
             <span className="sc-rail-divider" aria-hidden="true"/>
+            <button type="button" aria-label="选中物料" className={`sc-rail-tool${!sidebarCollapsed && leftMode === 'properties' ? ' is-active' : ''}`} disabled={!selectedItem} title={selectedItem ? `选中物料：${selectedItem.name}` : '先在画布上双击一件物料'} aria-pressed={!sidebarCollapsed && leftMode === 'properties'} onClick={() => { setLeftMode('properties'); setMaterialsOpen(false); setSidebarCollapsed(false); }}><SlidersHorizontal size={18} aria-hidden="true"/><span>选中物料</span></button>
             {RAIL_TOOLS.map(tool => (
-              <button key={tool.id} type="button" className="sc-rail-tool" title={tool.hint} onClick={() => businessToolsRef.current?.[tool.open]()}><tool.Icon size={18} aria-hidden="true"/><span>{tool.label}</span></button>
+              <button key={tool.id} type="button" aria-label={tool.label} className="sc-rail-tool" title={tool.hint} onClick={() => businessToolsRef.current?.[tool.open]()}><tool.Icon size={18} aria-hidden="true"/><span>{tool.label}</span></button>
             ))}
+            <span className="sc-rail-resizer" role="separator" aria-orientation="vertical" aria-label="调整工具轨宽度" onPointerDown={startRailResize}/>
           </nav>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed || leftMode==='materials' ? 'is-collapsed' : ''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -1399,7 +1442,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
             if (!point) return;
             const id = placeDiscrete(pendingCatalog,point);
-            if (id) selectOnly(id);
+            if (id) selectOnly(id, { keepPanel: true });
           }}>
       <div className="sc-scene-viewport"><Viewport
         isReady={isReady}
@@ -1464,26 +1507,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             if (layoutStore.getState() !== base) throw new Error('下载期间画布已有变化，请重新拖入物料。');
             placement.assertCurrent();
             const newId = placeDiscrete(item, world);
-            if (newId) selectOnly(newId);
+            if (newId) selectOnly(newId, { keepPanel: true });
           } catch (error) { notify(error instanceof Error ? error.message : '模型加载失败，请重试。', 'error'); }
           finally { placement.dispose(); }
         }}
       />
             <AgentCanvasOverlay/>
             <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span className="sc-canvas-size">{layout.scenePreset ? SCENE_PRESETS[layout.scenePreset].name : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-count">{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span></div>
-            <ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice}
-              onShow={value => setView(current => ({ ...current, showReferenceImage: value }))}
-              onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))}
-              onLegacyUpload={value => { commitHistoryNow(); actions.setFloorPlan(value); }}
-              onReview={() => { setSidebarCollapsed(false); setLeftMode('business'); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>
-            {previewCandidate && <div className="sc-preview-caption" role="status">{validMovementPreview ? '批量移动预览 · 尚未应用' : 'AI 修改预览 · 尚未加入场景'}{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools showAtmosphere={workbenchMode==='layout'} onScreenshot={handleScreenshot} onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
+            <ScendanceViewTools showAtmosphere={workbenchMode==='layout'} onExportImage={handleExportImage} onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
@@ -1493,13 +1531,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden/>
             <div id="workbench-material-shelf" className="sc-material-shelf sc-bottom-drawer" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
-              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} onPreviewMovement={onPreviewMovement} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog}/>}
+              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog}/>}
             </div>
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id);}}/>}/>
+          <CreativeAssistant docked autoOpen={false} hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setSidebarCollapsed(false); setLeftMode('business'); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
           {agentCollapsed
-            ? <button type="button" className="sc-agent-reopen" aria-label="打开 Agent" title="打开 Agent" onClick={()=>setAgentCollapsed(false)}><PanelRightOpen size={16} aria-hidden="true"/><span>Agent</span></button>
+            ? <AgentReopenCard onOpen={() => setAgentCollapsed(false)}/>
             : <AgentPanel onClose={()=>setAgentCollapsed(true)}/>}
         </main>
       </div>

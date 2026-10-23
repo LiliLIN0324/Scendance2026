@@ -71,7 +71,7 @@ describe('RecoveryEntry (#336)', () => {
     render(<RecoveryEntry currentLayout={busyHouse} onLoad={() => {}} />);
     expect(screen.queryByRole('button', { name: /Restore/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Delete the recovered copy/ }));
+    fireEvent.click(screen.getByRole('button', { name: /删除恢复出来的副本/ }));
     expect(window.localStorage.getItem(RECOVERY_STORAGE_KEY)).toBeNull();
     expect(screen.queryByText('Recovered copy')).toBeNull();
   });

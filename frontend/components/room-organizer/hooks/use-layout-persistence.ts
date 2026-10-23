@@ -143,7 +143,7 @@ export function useLayoutPersistence({
     const keepStoredHouseAside = (): void => {
       const outcome = keepStoredLayout();
       if (outcome === 'kept') {
-        notify('Your saved house couldn’t be opened, so a copy was kept in Manage → Saved Layouts → History.', 'info');
+        notify('本机保存的布置打不开，原件已另存一份，暂时不会覆盖。', 'info');
       }
       if (outcome === 'kept' || outcome === 'nothing') return;
       mainSaveHeldRef.current = true;
@@ -187,7 +187,7 @@ export function useLayoutPersistence({
       // this long is no house, and inflating it could take the tab down (#332).
       if (!isShareHashWithinBudget(hash)) {
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        notify('This shared link is far larger than any house, so it was not opened. Your own house is unchanged.', 'error');
+        notify('这个分享链接的数据量远超一份场地布置，未打开；你本机的布置没有变化。', 'error');
         hydrateFromLocalSave();
         return;
       }

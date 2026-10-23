@@ -110,8 +110,8 @@ export function ChipNameField({
       </ChipButton>
       <button
         type="button"
-        aria-label="Cancel"
-        title="Cancel"
+        aria-label="取消"
+        title="取消"
         onClick={onCancel}
         style={{
           display: 'inline-flex',

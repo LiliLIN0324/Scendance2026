@@ -517,14 +517,11 @@
 }
 .sc-library { display: flex; flex-direction: column; height: 100%; }
 .sc-library-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sc-space-sm); padding: var(--sc-space-sm); min-height: 54px; border-bottom: 1px solid var(--sc-line); }
-.sc-preset-list { display: grid; gap: 14px; margin-bottom: 18px; }
+.sc-preset-rail { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; margin-bottom: 18px; }
 .sc-preset-card { overflow: hidden; text-align: left; border: 1px solid var(--sc-line); border-radius: 12px; background: var(--sc-surface); color: var(--sc-ink); }
 .sc-preset-card:disabled { opacity: .6; cursor: wait; }
 .sc-preset-card img { width: 100%; aspect-ratio: 1.7; object-fit: cover; }
-.sc-preset-card > span { display: grid; gap: 7px; padding: 13px; }
-.sc-preset-card strong { font-size: 14px; }
-.sc-preset-card small { color: var(--sc-muted); }
-.sc-preset-card b { font-size: 12px; color: var(--sc-accent-ink); }
+.sc-preset-card strong { display: block; padding: 11px 13px; font-size: 13px; }
 .sc-library-tabs button { border: 1px solid transparent; border-radius: 8px; background: none; color: var(--sc-muted); font-size: var(--sc-type-meta); }
 .sc-library-tabs button.is-active { color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: #6f8f5233; font-weight: 600; }
 .sc-library-content { padding: var(--sc-space-md); flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #bac6ce transparent; }
@@ -666,7 +663,6 @@
   .sc-canvas-heading { top: var(--sc-space-md); left: var(--sc-space-md); gap: var(--sc-space-sm); }
   .sc-properties { top: auto; bottom: 66px; left: auto; right: 8px; width: min(300px, calc(100% - 16px)); max-height: 58%; border-radius: 14px; z-index: 40; }
   .sc-properties > header { min-height: 48px; padding: 10px 16px; }
-  .sc-properties .sc-eyebrow { display: none; }
   .sc-properties-content { padding: 12px 16px 20px; }
   .sc-selected-summary { display: none; }
   .sc-view-tools { bottom: 16px; }
@@ -684,7 +680,7 @@
 .sc-workbench .is-docked-layout .sc-left-drawer.has-business { flex-basis:420px; width:420px; }
 .sc-workbench .is-docked-layout.has-conversation .sc-left-drawer.has-business { flex-basis:clamp(300px,28vw,360px); width:clamp(300px,28vw,360px); }
 .sc-workbench .is-docked-layout .cr-assistant.is-docked:not(.is-open) { display:none; }
-.sc-workbench .is-docked-layout .sc-canvas-stage { --sc-shelf-height:196px; --sc-rail-width:40px; position:relative; inset:auto; flex:1; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) 0; gap:0; background:transparent; overflow:hidden; container:canvas-stage / size; }
+.sc-workbench .is-docked-layout .sc-canvas-stage { --sc-shelf-height:212px; --sc-rail-width:46px; position:relative; inset:auto; flex:1; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) 0; gap:0; background:transparent; overflow:hidden; container:canvas-stage / size; }
 .sc-workbench .has-material-shelf .sc-canvas-stage { grid-template-rows:minmax(0,1fr) var(--sc-shelf-height); }
 .sc-workbench .sc-scene-viewport { position:relative; inset:auto; grid-area:1 / 1; min-width:0; min-height:0; overflow:hidden; border-radius:14px; container:scene-viewport / size; }
 .sc-workbench .sc-editor-dock { display:contents; pointer-events:auto; }
@@ -706,11 +702,7 @@
 .sc-workbench .cr-business-content.cr-workspace-content .sc-section-heading p { font-size:var(--sc-type-meta); }
 .sc-workbench .cr-business-content.cr-workspace-content strong { font-size:inherit; }
 .sc-workbench .cr-business-content.cr-workspace-content :is(h1,h2,h3,h4,label,button,summary) :is(span,strong) { font-size:inherit; }
-.sc-workbench .cr-business-content.cr-workspace-content .awg-guide { margin-bottom:var(--sc-space-md); padding:var(--sc-space-md); }
-.sc-workbench .cr-business-content.cr-workspace-content .awg-start { gap:var(--sc-space-sm); }
-.sc-workbench .cr-business-content.cr-workspace-content .awg-start strong { font-size:var(--sc-type-section); }
-.sc-workbench .cr-business-content.cr-workspace-content .awg-route { font-size:var(--sc-type-meta); margin-top:var(--sc-space-sm); }
-.sc-workbench .cr-business-content.cr-workspace-content :is(.awg-next button,.awg-template-button) { padding:var(--sc-space-sm); }
+.sc-workbench .cr-business-content.cr-workspace-content .awg-template-button { padding:var(--sc-space-sm); }
 .sc-workbench .sc-left-context { display:flex; flex-wrap:wrap; gap:5px; flex-shrink:0; padding:7px 0; }
 .sc-workbench .sc-left-heading { display:flex; align-items:center; gap:var(--sc-space-sm); flex-shrink:0; min-height:40px; }
 .sc-workbench .sc-left-heading>strong { flex:1; padding-left:var(--sc-space-sm); font-size:var(--sc-type-section); }
@@ -719,11 +711,10 @@
 .sc-workbench .sc-left-context button { padding:var(--sc-space-sm); border:1px solid var(--sc-line); border-radius:7px; background:var(--sc-surface); color:var(--sc-muted); font-size:var(--sc-type-body); }
 .sc-workbench .sc-left-context button[aria-pressed=true] { background:var(--sc-accent-soft); color:var(--sc-accent-ink); }
 .sc-workbench .sc-properties.is-embedded { position:relative; inset:auto; width:100%; height:100%; max-height:none; box-sizing:border-box; }
-.sc-workbench .sc-canvas-heading { max-width:calc(100% - 145px); flex-wrap:wrap; gap:6px; }
-.sc-workbench .sc-scene-viewport .sc-reference-image { top:12px; right:12px; }
-.sc-workbench .sc-scene-viewport .sc-reference-image-body { width:min(330px,calc(100cqw - 24px)); max-height:calc(100cqh - 60px); }
+.sc-workbench .sc-canvas-heading { max-width:calc(100% - 78px); flex-wrap:nowrap; gap:6px; overflow:hidden; }
+.sc-workbench .sc-canvas-heading > span:last-child { overflow:hidden; text-overflow:ellipsis; }
 @media (max-height:600px) {
-  .sc-workbench .is-docked-layout .sc-canvas-stage { --sc-shelf-height:140px; }
+  .sc-workbench .is-docked-layout .sc-canvas-stage { --sc-shelf-height:152px; }
 }
 @media (max-width:1080px) {
   .sc-workbench .sc-workspace.is-docked-layout { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:8px; }
@@ -747,7 +738,6 @@
   .sc-workbench .sc-header-actions { gap:4px; }
   .sc-workbench .sc-brand strong { display:none; }
   .sc-workbench .sc-canvas-heading { top:12px; left:12px; gap:4px; max-width:calc(100% - 105px); }
-  .sc-workbench .sc-scene-viewport .sc-reference-image-trigger { padding:5px 7px; font-size:var(--sc-type-meta); }
 }
 
 /* ── 工作台设计系统：图纸白（Drafting Paper）─────────────────────────────
@@ -778,11 +768,21 @@
 }
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
-  display: flex; flex-direction: column; gap: 1px;
+  display: flex; flex-direction: column; gap: 1px; position: relative;
   flex: 0 0 64px; width: 64px; padding: 10px 5px; box-sizing: border-box;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
   overflow-y: auto; overflow-x: hidden;
 }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail.is-wide button {
+  flex-direction: row; justify-content: flex-start; gap: 9px; padding: 8px 10px; text-align: left;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail.is-wide button > span { display: inline; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-rail-resizer {
+  position: absolute; top: 0; right: 0; z-index: 3; width: 5px; height: 100%;
+  cursor: col-resize; flex: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-rail-resizer:hover { background: var(--wk-hair); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
   width: 100%; padding: 8px 1px; border: 0; border-radius: 7px;
@@ -799,6 +799,9 @@
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool { color: var(--wk-ink-faint); font-weight: 400; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:hover { color: var(--wk-ink); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.is-active { color: var(--wk-green-deep); font-weight: 600; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:disabled { opacity: .42; cursor: default; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
   flex: 1; min-width: 0; position: relative;
 }
@@ -822,25 +825,38 @@
   display: none !important; /* materials live in bottom canvas drawer */
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-agent-panel { border-radius: 0; }
+/* Agent 关掉后：画布右上角一张浮窗卡片，让开 46px 工具列。
+   原来是一条 34px 通高竖排把手，看不出能点、也看不出 Agent 在做什么。
+   让开的宽度按工具列那颗「撤销」悬停纸条算：纸条往左探出约 40px，
+   卡片右缘压在 1376 会把纸条切掉半截。 */
 .sc-workbench .sc-agent-reopen {
-  flex: 0 0 34px; width: 34px; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 8px;
-  border: 0; border-left: 1px solid var(--wk-hair); background: var(--wk-canvas);
-  color: var(--wk-ink-faint); font-size: 11px; padding: 12px 0; cursor: pointer;
+  position: absolute; top: 12px; right: calc(var(--sc-rail-width, 46px) + 62px); z-index: 34;
+  display: flex; align-items: center; gap: 9px; box-sizing: border-box;
+  padding: 6px 13px 6px 7px; border: 1px solid var(--wk-hair, #e7e7e7); border-radius: 10px;
+  background: color-mix(in srgb, var(--wk-paper, #fff) 94%, transparent);
+  box-shadow: 0 2px 10px rgba(47, 47, 47, .07);
+  color: var(--wk-ink, #2f2f2f); font-size: 12px; text-align: left; cursor: pointer;
 }
-.sc-workbench .sc-agent-reopen:hover { background: var(--wk-plane); color: var(--wk-ink); }
-.sc-workbench .sc-agent-reopen span { writing-mode: vertical-rl; letter-spacing: 1px; }
+.sc-workbench .sc-agent-reopen:hover { border-color: var(--wk-green-pale, #dbe5cf); background: var(--wk-paper, #fff); }
+.sc-workbench .sc-agent-reopen img { border-radius: 50%; }
+.sc-workbench .sc-agent-reopen-copy { display: flex; flex-direction: column; gap: 1px; line-height: 1.3; }
+.sc-workbench .sc-agent-reopen-copy small { color: var(--wk-ink-faint, #a8aba2); font-size: 10.5px; }
+.sc-workbench .sc-agent-reopen-top { display: flex; align-items: baseline; gap: 8px; }
+.sc-workbench .sc-agent-reopen .ap-status { font-style: normal; font-size: 11px; color: var(--wk-ink-faint, #a8aba2); }
+.sc-workbench .sc-agent-reopen .ap-status.is-busy,
+.sc-workbench .sc-agent-reopen .ap-status.is-ok { color: var(--wk-green, #56794d); }
+.sc-workbench .sc-agent-reopen .ap-status.is-warn { color: #a8742a; }
 .sc-workbench .ap-close {
   all: unset; cursor: pointer; flex: 0 0 26px; width: 26px; height: 26px;
   display: inline-grid; place-items: center; border-radius: 6px; color: var(--wk-ink-faint);
 }
 .sc-workbench .ap-close:hover { background: var(--wk-plane); color: var(--wk-ink); }
-/* 画布抬头：图纸式标注，不用「·」串信息 */
+/* 画布抬头：一行轻标注，不抢画布也不折成方块 */
 .sc-workbench .sc-canvas-heading {
-  display: inline-flex; align-items: baseline; gap: 10px;
-  padding: 5px 10px; border: 1px solid var(--wk-hair); border-radius: 6px;
-  background: color-mix(in srgb, var(--wk-paper) 90%, transparent);
-  color: var(--wk-ink-soft); font-size: var(--sc-type-meta);
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 2px 7px; border: 0; border-radius: 5px;
+  background: color-mix(in srgb, var(--wk-paper) 78%, transparent);
+  color: var(--wk-ink-soft); font-size: 11px; line-height: 17px;
 }
 .sc-workbench .sc-canvas-heading > span { white-space: nowrap; }
 .sc-workbench .sc-canvas-kind {
@@ -851,7 +867,6 @@
 /* 设计稿：左栏面板内不再重复顶部分类签、流程提示卡与折叠标题 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-left-context { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-left-heading { display: none; }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .awg-guide { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .cr-agent-brief {
   margin: 0; padding: 0; border: 0; border-radius: 0;
 }
@@ -879,28 +894,35 @@
 .sc-workbench .sc-header-actions .sc-project-btn:hover {
   background: var(--sc-accent-soft);
 }
-/* Right vertical 14-key circular tool column (design #tool-column) */
+/* Right tool column: one paper strip, never running under the drawer. */
 .sc-workbench .sc-tool-column.sc-canvas-rail {
-  position: absolute !important; right: 9px; top: 16px; bottom: auto; left: auto;
+  position: absolute !important; right: 9px; top: 12px; left: auto; bottom: auto;
   transform: none; grid-area: unset !important;
-  width: 40px !important; max-width: 40px;
+  width: 46px; max-width: 46px; box-sizing: border-box;
   display: flex !important; flex-direction: column !important; align-items: center;
-  padding: 0; gap: 0; border-radius: 0; background: transparent !important;
-  box-shadow: none; border: 0; overflow: visible; z-index: 35;
+  justify-content: flex-start; padding: 8px 0; gap: 0;
+  border: 1px solid var(--wk-hair, #e7e7e7); border-radius: 12px;
+  background: color-mix(in srgb, var(--wk-paper, #fff) 90%, transparent);
+  box-shadow: 0 1px 3px rgba(47, 47, 47, .05); z-index: 35; overflow: visible;
+  /* 按内容收高：拉满到底会让纸条下面拖出一截空白。 */
+  max-height: calc(100% - 24px);
+}
+.sc-workbench .has-material-shelf .sc-canvas-stage .sc-tool-column.sc-canvas-rail {
+  max-height: calc(100% - var(--sc-shelf-height, 196px) - 24px);
 }
 .sc-workbench .sc-tool-column .sc-tool-group {
-  display: flex; flex-direction: column; align-items: center; gap: 9px;
-  padding: 0; border: 0; border-bottom: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 0; border: 0;
 }
 .sc-workbench .sc-tool-column .sc-tool-sep {
-  display: block; width: 22px; height: 1px; background: #dcdfd4; margin: 10px 0;
+  display: block; width: 20px; height: 1px; background: var(--wk-hair, #e7e7e7); margin: 7px 0;
 }
 .sc-workbench .sc-tool-column .sc-tool-group button,
 .sc-workbench .sc-tool-column .sc-tool-menu > button {
   position: relative;
-  width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0;
-  border-radius: 50%; background: #fff; border: 1px solid #e7e8e0;
-  box-shadow: 0 1px 2px rgba(47,47,47,.05); color: #56794d;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0;
+  border-radius: 9px; background: #fff; border: 1px solid var(--wk-hair, #e7e7e7);
+  box-shadow: none; color: var(--wk-green, #56794d);
   display: inline-flex; align-items: center; justify-content: center;
 }
 .sc-workbench .sc-tool-column .sc-tool-group button:disabled {
@@ -908,8 +930,17 @@
 }
 .sc-workbench .sc-tool-column .sc-tool-group button.is-active,
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
-  background: #dbe5cf; border-color: #b9c9a7; color: #394a37;
+  background: var(--wk-green-pale, #dbe5cf); border-color: #b9c9a7; color: var(--wk-green-deep, #394a37);
 }
+/* 纯图标看不出作用：悬停/聚焦即在左侧浮出名字。 */
+.sc-workbench .sc-tool-column [data-tip]::after {
+  content: attr(data-tip); position: absolute; right: calc(100% + 7px); top: 50%;
+  transform: translateY(-50%); padding: 3px 7px; border-radius: 6px;
+  background: var(--wk-ink, #2f2f2f); color: #fff; font-size: 11px; line-height: 15px;
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease;
+}
+.sc-workbench .sc-tool-column [data-tip]:hover::after,
+.sc-workbench .sc-tool-column [data-tip]:focus-visible::after { opacity: 1; }
 .sc-workbench .sc-tool-column .sc-rail-2d {
   font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 11px;
   letter-spacing: .2px; color: inherit;
@@ -918,6 +949,12 @@
   position: absolute; right: 3px; top: 50%; margin-top: -4px; color: #66835d;
 }
 .sc-workbench .sc-tool-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
+@media (max-height: 640px) {
+  .sc-workbench .sc-tool-column .sc-tool-group { gap: 4px; }
+  .sc-workbench .sc-tool-column .sc-tool-group button,
+  .sc-workbench .sc-tool-column .sc-tool-menu > button { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
+  .sc-workbench .sc-tool-column .sc-tool-sep { margin: 4px 0; }
+}
 .sc-workbench .sc-tool-pop {
   position: absolute; right: calc(100% + 8px); top: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;
