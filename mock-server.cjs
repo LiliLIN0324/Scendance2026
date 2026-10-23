@@ -106,6 +106,7 @@ function advanceJob(job) {
   if (job.state === 'ready') {
     job.candidate = job.reviewedScene || makeScene();
     job.proposal = makeProposal(job.candidate);
+    latestProposal = job.proposal;
   }
 }
 
@@ -117,6 +118,7 @@ function uuid() {
 }
 
 let uploadedSources = [];
+let latestProposal = null;
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -349,14 +351,16 @@ const server = http.createServer((req, res) => {
         const applyHash = applyScene ? sceneHash(applyScene).slice(0, 16) : 'none';
         const baseHash = lastReconstructionScene ? sceneHash(lastReconstructionScene).slice(0, 16) : 'none';
         console.log('[APPLY] scene schemaVersion:', applyScene?.schemaVersion, 'hash:', applyHash, 'baseHash:', baseHash, 'match:', applyHash === baseHash);
+        const applied = latestProposal || makeProposal();
+        currentRevision += 1;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           id: applyProposalMatch[1],
-          revision: currentRevision + 1,
-          scene: makeProposal().candidate,
+          revision: currentRevision,
+          scene: applied.candidate,
           updatedAt: new Date().toISOString(),
-          previousScene: lastReconstructionScene || makeScene(),
-          undoGroup: '66666666-6666-4666-8666-666666666666',
+          previousScene: applied.base_scene,
+          undoGroup: applied.id,
         }));
         return;
       }
