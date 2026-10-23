@@ -74,7 +74,7 @@ export function ViewOptionsMenu({ id, anchorRef, onClose }: ViewOptionsMenuProps
       ref={menuRef}
       id={id}
       role="group"
-      aria-label="View options"
+      aria-label="视图选项"
       className="pc-glass pc-glass--dark pc-view-menu"
       style={{
         position: 'absolute',

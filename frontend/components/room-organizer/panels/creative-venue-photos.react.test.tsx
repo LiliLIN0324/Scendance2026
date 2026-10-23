@@ -21,15 +21,11 @@ const originalRevoke = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
 const file = (name: string) => new File(['image'], name, { type: 'image/png' });
 const bitmap = () => ({ width: 1024, height: 768, close: vi.fn() });
 
-function ui(id = layout.id!, hidden = false) {
-  return <div hidden={hidden}><CreativeStudioProvider controller={controller} layout={{ ...layout, id }} onApply={vi.fn()}><CreativeBriefPanel/></CreativeStudioProvider></div>;
+function ui(id = layout.id!, hidden = false, view: 'brief'|'reference' = 'reference') {
+  return <div hidden={hidden}><CreativeStudioProvider controller={controller} layout={{ ...layout, id }} onApply={vi.fn()}><CreativeBriefPanel view={view}/></CreativeStudioProvider></div>;
 }
 function renderUi() {
-  const rendered = render(ui());
-  fireEvent.click(screen.getByText('图纸、照片与现场条件（可选）'));
-  const reconstruction = rendered.container.querySelector<HTMLDetailsElement>('.rc-inputs');
-  if (reconstruction && !reconstruction.open) fireEvent.click(reconstruction.querySelector('summary')!);
-  return rendered;
+  return render(ui());
 }
 function upload(container: HTMLElement, files: File[]): void {
   fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files } });
@@ -59,10 +55,12 @@ describe('venue photo input lifecycle', () => {
   it('flushes dimensions, brief and a just-selected image before creating the project', async () => {
     let finish!: (value: ReturnType<typeof bitmap>) => void;
     decode.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const rendered = renderUi();
+    const rendered = render(ui(layout.id, false, 'brief'));
     await act(async()=>{await Promise.resolve();});
-    fireEvent.change(screen.getByLabelText('总宽（米）'),{target:{value:'18.25'}});
     fireEvent.change(screen.getByLabelText('客户需求'),{target:{value:'保留入口，安排签到区'}});
+    rendered.rerender(ui(layout.id, false, 'reference'));
+    await act(async()=>{await Promise.resolve();});
+    fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 18.25 米'}});
     const selected = file('just-selected.png');
     upload(rendered.container,[selected]);
     await waitFor(()=>expect(decode).toHaveBeenCalledOnce());
@@ -112,7 +110,9 @@ describe('venue photo input lifecycle', () => {
     const rendered = renderUi();
     upload(rendered.container, Array.from({length:11},(_,index)=>file(`photo-${index}.png`)));
     upload(rendered.container, [file('three.png'), file('four.png')]);
+    rendered.rerender(ui(layout.id, false, 'brief'));
     expect(await screen.findByText('最多添加 12 张图纸或现场照片。')).toBeTruthy();
+    rendered.rerender(ui(layout.id, false, 'reference'));
     expect(screen.getAllByRole('img')).toHaveLength(11);
     expect(decode).toHaveBeenCalledTimes(11);
     upload(rendered.container, [file('three.png')]);
@@ -123,7 +123,9 @@ describe('venue photo input lifecycle', () => {
   it('rolls back a partially decoded invalid batch and accepts the next queued valid selection', async () => {
     const rendered = renderUi();
     upload(rendered.container, [file('temporary.png'), new File(['svg'], 'invalid.svg', { type: 'image/svg+xml' })]);
+    rendered.rerender(ui(layout.id, false, 'brief'));
     await screen.findByText('请选择 PNG、JPEG 或 WebP 图片。');
+    rendered.rerender(ui(layout.id, false, 'reference'));
     expect(screen.queryByRole('img')).toBeNull();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:temporary.png');
     upload(rendered.container, [file('valid.png')]);

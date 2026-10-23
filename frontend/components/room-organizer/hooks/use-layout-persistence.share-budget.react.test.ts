@@ -33,7 +33,7 @@ describe('useLayoutPersistence — an oversized share link (#332)', () => {
     unsubscribe();
 
     expect(applied.map((layout) => layout.name)).toEqual(['Local house']);
-    expect(notices).toEqual([expect.objectContaining({ tone: 'error', message: expect.stringMatching(/far larger than any house/) })]);
+    expect(notices).toEqual([expect.objectContaining({ tone: 'error', message: expect.stringMatching(/远超一份场地布置/) })]);
     expect(window.location.hash).toBe('');
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify(local));
     expect(window.localStorage.getItem(VERSION_HISTORY_STORAGE_KEY)).toBe(ring);

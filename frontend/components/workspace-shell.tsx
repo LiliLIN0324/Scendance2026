@@ -66,7 +66,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
   }, [entered]);
 
   return <>
-    {process.env.NEXT_PUBLIC_LOCAL_FIXTURE === '1' && <aside role="status" style={{position:'fixed',bottom:4,left:'50%',transform:'translateX(-50%)',zIndex:10000,padding:'4px 10px',borderRadius:6,background:'#283f36',color:'#fff',fontSize:11,pointerEvents:'none'}}>独立本地预览 · 测试账号与本地数据库</aside>}
+    {/* 本机预览标记：贴在顶栏，浮在底部会压住物料抽屉。 */}
+    {process.env.NEXT_PUBLIC_LOCAL_FIXTURE === '1' && <aside role="status" style={{position:'fixed',top:17,left:'50%',transform:'translateX(-50%)',zIndex:10000,padding:'3px 9px',borderRadius:6,background:'#283f36',color:'#fff',fontSize:11,pointerEvents:'none'}}>独立本地预览 · 测试账号与本地数据库</aside>}
     {children}
     {/* Keep briefs, reference photos and proposals alive during login-page round trips. */}
     {editorStarted && <div hidden={!entered}>

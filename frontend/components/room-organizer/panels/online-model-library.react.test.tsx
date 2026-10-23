@@ -261,20 +261,35 @@ describe('OnlineModelLibrary', () => {
     expect(rail.scrollLeft).toBe(0);
   });
 
-  it('supports horizontal card browsing with a wheel and focused rail navigation, without adding', async () => {
+  it('scrolls the card rail sideways with the keyboard, without adding', async () => {
     const { onAdd } = setup();
     await screen.findByRole('button', { name: '添加Lounge Chaise' });
-    const rail = screen.getByRole('group', { name: '线上模型，横向浏览' });
-    Object.defineProperties(rail, { scrollWidth: { value: 900 }, clientWidth: { value: 240 } });
-    expect(fireEvent.wheel(rail, { deltaY: 100 })).toBe(false);
-    expect(rail.scrollLeft).toBe(100);
-    fireEvent.keyDown(rail, { key: 'ArrowRight' });
-    expect(rail.scrollLeft).toBe(280);
-    fireEvent.keyDown(rail, { key: 'Home' });
-    expect(rail.scrollLeft).toBe(0);
+    const grid = screen.getByRole('group', { name: '线上模型' });
+    Object.defineProperties(grid, { scrollWidth: { value: 900 }, clientWidth: { value: 240 } });
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    expect(grid.scrollLeft).toBe(120);
+    fireEvent.keyDown(grid, { key: 'PageDown' });
+    expect(grid.scrollLeft).toBe(312);
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    expect(grid.scrollLeft).toBe(192);
+    fireEvent.keyDown(grid, { key: 'Home' });
+    expect(grid.scrollLeft).toBe(0);
+    fireEvent.keyDown(grid, { key: 'End' });
+    expect(grid.scrollLeft).toBe(900);
     fireEvent.keyDown(screen.getByRole('button', { name: '添加Lounge Chaise' }), { key: 'ArrowRight' });
-    expect(rail.scrollLeft).toBe(0);
+    expect(grid.scrollLeft).toBe(900);
     expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('signals that more categories wait off-screen, then drops the hint at the end of the rail', async () => {
+    await act(async () => { setup(); });
+    const rail = screen.getByRole('group', { name: '线上模型分类' });
+    Object.defineProperties(rail, { scrollWidth: { value: 900 }, clientWidth: { value: 240 } });
+    fireEvent.scroll(rail);
+    await waitFor(() => expect(rail.getAttribute('data-overflow')).toBe('more'));
+    rail.scrollLeft = 660;
+    fireEvent.scroll(rail);
+    await waitFor(() => expect(rail.getAttribute('data-overflow')).toBeNull());
   });
 
   it('authorizes a registered model for a signed-in user and passes its real ID into the scene', async () => {
@@ -344,11 +359,8 @@ describe('OnlineModelLibrary', () => {
     vi.mocked(ensureGlbAsset).mockRejectedValue(new Error('网络不可达'));
     const { onAdd } = setup();
     const tile = await screen.findByRole('button', { name: '添加Lounge Chaise' });
-    const rail = screen.getByRole('group', { name: '线上模型，横向浏览' });
-    rail.scrollLeft = 420;
     fireEvent.click(tile);
     expect((await screen.findByRole('alert')).textContent).toContain('网络不可达');
-    expect(rail.scrollLeft).toBe(0);
     expect(onAdd).not.toHaveBeenCalled();
   });
 
@@ -376,7 +388,7 @@ describe('OnlineModelLibrary', () => {
     await waitFor(() => expect(tiles()).toHaveLength(1));
     expect(tiles()[0]!.getAttribute('aria-label')).toBe('添加Box Hedge');
     fireEvent.change(screen.getByLabelText('搜索全库线上模型'), { target: { value: 'zzz' } });
-    expect(await screen.findByText(/没有匹配的线上模型/)).toBeTruthy();
+    expect(await screen.findByText(/没有匹配的模型/)).toBeTruthy();
   });
 
   it('searches across a previously chosen family, then a category click clears the query', async () => {
@@ -414,5 +426,18 @@ describe('OnlineModelLibrary', () => {
     expect(tiles()).toHaveLength(24);
     fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
     await waitFor(() => expect(tiles()).toHaveLength(30));
+  });
+
+  it('puts the reveal control at the end of the rail and retires it once everything shows', async () => {
+    const many = Array.from({ length: 30 }, (_, index) => model(`bulk-${index}`, `Model ${index}`, 'seating'));
+    vi.mocked(loadOnlineModels).mockResolvedValue(buildOnlineModelIndex(many));
+    setup();
+    await screen.findByRole('button', { name: '添加Model 0' });
+    const grid = screen.getByRole('group', { name: '线上模型' });
+    const more = screen.getByRole('button', { name: /^再显示/ });
+    expect(grid.lastElementChild).toBe(more);
+    fireEvent.click(more);
+    await waitFor(() => expect(tiles()).toHaveLength(30));
+    expect(screen.queryByRole('button', { name: /^再显示/ })).toBeNull();
   });
 });

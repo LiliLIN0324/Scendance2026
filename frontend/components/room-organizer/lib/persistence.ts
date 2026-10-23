@@ -43,7 +43,7 @@ export function loadLayout(): RoomLayout | null {
       // holds autosave off and the original stays the only thing stored.
       if (!backupStoredLayout()) return null;
       notify(
-        'This house had more than the editor keeps on one floor, so some items were left out. The original is kept in Manage → Saved Layouts → History.',
+        '这份布置的物料数超出单层上限，只载入了一部分；原件已另存一份，不会被覆盖。',
         'info'
       );
     }

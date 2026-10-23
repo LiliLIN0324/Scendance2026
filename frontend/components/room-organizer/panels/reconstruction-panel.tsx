@@ -3,7 +3,7 @@
 /* Source previews use private blob/signed URLs and preserve original image coordinates. */
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, Loader2, Ruler, Sparkles, X } from 'lucide-react';
+import { Check, Loader2, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBackendSession, type BackendSession, type DimensionConstraint, type ReconstructionJob, type SceneProposal, type SceneV2, type SourceImage } from '@/lib/backend-session';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -13,7 +13,7 @@ import { containedImagePoint, parseDimensionText, readSourceForm, storeSourceFor
 import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
-import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { mergeProposalPresentation, type CreativeBrief } from '../lib/creative-brief';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -21,12 +21,29 @@ import type { VenuePhoto } from './venue-photos-panel';
 import type { RoomLayout } from '../lib/types';
 import './reconstruction-panel.css';
 
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; onAddReferenceImages?:(files:FileList|null)=>Promise<void> }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; autoGenerateRequest?:number; onAddReferenceImages?:(files:FileList|null)=>Promise<void> }
 interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; jobIdentity?:string; jobSession?:string; registration?:ReferenceRegistration; }
 const EMPTY:Form={width:'',depth:'',height:'',text:'',constraints:[],adjustment:''};
+/** 从一句自然语言里认出总宽、总深、层高；没提到就沿用已有值，整段清空才重置。 */
+function sizeFields(text:string,current:Pick<Form,'width'|'depth'|'height'>):Pick<Form,'width'|'depth'|'height'> {
+  if(!text.trim())return {width:'',depth:'',height:''};
+  const sizes={...current};
+  for(const item of parseDimensionText(text)){
+    const value=String(+item.valueMeters.toFixed(3));
+    if(item.kind==='width')sizes.width=value;
+    if(item.kind==='depth')sizes.depth=value;
+    if(item.kind==='height')sizes.height=value;
+  }
+  return sizes;
+}
 const LABELS:Record<ReconstructionJob['state'],string>={queued:'已排队',recognizing:'正在识别空间与尺寸',needs_review:'请核对结构与缺失信息',planning:'正在设计活动方案',validating:'正在校验结构与布置',ready:'候选方案已就绪',failed:'生成未完成'};
 const ACTIVE=new Set(['queued','recognizing','planning','validating']);
 const ERROR_MESSAGES:Record<string,string>={
+  CONFIGURATION_MISSING:'云端服务尚未配置。请在 frontend/.env.local 中设置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY 后重启。',
+  UNAUTHENTICATED:'请先登录账户，再生成方案。',
+  SESSION_CHANGED:'当前活动或账户已变化，请重新核对后生成。',
+  INVALID_RESPONSE:'云端返回的数据格式无效，请稍后重试。',
+  LOCAL_ACTIVITY_ID_REQUIRED:'当前活动资料不完整，请先检查本机备份。',
   SERVICE_NOT_CONFIGURED:'识别服务尚未配置，资料和当前场景已保留。',
   BILLING_NOT_CONFIGURED:'AI 费用限制尚未配置，请联系工作室管理员；资料和当前场景已保留。',
   DAILY_BUDGET_EXCEEDED:'今天的 AI 额度已用完，请明天再试；资料和当前场景已保留。',
@@ -174,7 +191,7 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
   </details>;
 }
 
-export function ReconstructionPanel({controller,layout,onApply,onPreview,images,updateImage,brief,openReferenceRequest=0,onAddReferenceImages}:Props):JSX.Element {
+export function ReconstructionPanel({controller,layout,onApply,onPreview,images,updateImage,brief,openReferenceRequest=0,autoGenerateRequest=0,onAddReferenceImages}:Props):JSX.Element {
   const cloud=useBackendSession(controller),selection=useSelection();
   const scope=layout.id??'local';
   const scopeEpoch=useRef({scope,epoch:0});if(scopeEpoch.current.scope!==scope)scopeEpoch.current={scope,epoch:scopeEpoch.current.epoch+1};
@@ -190,9 +207,8 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const [reidentify,setReidentify]=useState(false);
   const [job,setJob]=useState<ReconstructionJob|null>(null),[review,setReview]=useState<SceneV2|null>(null),[reviewConfirmed,setReviewConfirmed]=useState(false);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[pollingPaused,setPollingPaused]=useState(false);
-  const [selectedSource,setSelectedSource]=useState(''),[points,setPoints]=useState<ImagePoint[]>([]),[distance,setDistance]=useState('');
   const [selectedWall,setSelectedWall]=useState<string|null>(null);
-  const inputDetails=useRef<HTMLDetailsElement>(null),formSaveTimer=useRef<ReturnType<typeof setTimeout>>();
+  const inputDetails=useRef<HTMLDivElement>(null),formSaveTimer=useRef<ReturnType<typeof setTimeout>>();
   const formWrites=useRef<Promise<void>>(Promise.resolve()),referenceSaving=useRef(false);
   const [preview,setPreview]=useState<{proposal:SceneProposal;layout:RoomLayout;assets:{assetUrls:Record<string,string>;assetNames:Record<string,string>}}|null>(null);
   const [expired,setExpired]=useState(false);
@@ -200,12 +216,14 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const [venueLeaseExpired,setVenueLeaseExpired]=useState(false);
   const formHydration=useRef<Promise<void>>(Promise.resolve());
   const alive=useRef(true),scopeRef=useRef(scope),layoutRef=useRef(layout),formRef=useRef(form),pending=useRef(false);
+  const generateRef=useRef<(continueReview?:boolean)=>Promise<void>>(async()=>{});
   scopeRef.current=scope;layoutRef.current=layout;formRef.current=form;
   const hasPhotos=images.some(image=>image.kind!=='floorplan');
   const remoteProjectId=geometryProjectId(controller,scope),localActivity=isLocalActivityWorkspace(controller);
   const identityKey=geometryIdentity(controller,scope);
   const sessionKey=canonical({identity:identityKey,session:cloud.sessionId,lease:cloud.lease?{session:cloud.lease.sessionId,generation:cloud.lease.generation}:null,revision:cloud.revision});
   const connected=cloud.configured&&!!cloud.user&&!cloud.writeBlocked&&!!remoteProjectId&&cloud.lease?.projectId===remoteProjectId&&Date.parse(cloud.lease.expiresAt)>Date.now();
+  const connectionBlockedReason=connected?'':!cloud.configured?'云端服务尚未配置。请在 frontend/.env.local 中设置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY 后重启。':!cloud.user?'请先登录账户。':cloud.writeBlocked?'当前没有编辑权，请先在云端项目中获取编辑权。':!remoteProjectId?'请先在云端打开或创建项目，再生成方案。':cloud.lease?.projectId!==remoteProjectId?'当前项目的场景连接已失效，请重新准备场景连接。':Date.parse(cloud.lease.expiresAt)<=Date.now()?'场景连接已过期，请重新准备场景连接。':'';
   const inputKey=canonical({images:images.map(image=>({id:image.id,kind:image.kind??'photo',width:image.width,height:image.height})),width:form.width,depth:form.depth,height:form.height,constraints:form.constraints,text:form.text,adjustment:form.adjustment,brief,reidentify});
   const inputRef=useRef(inputKey);inputRef.current=inputKey;
   const baseKey=currentSceneKey(layout);
@@ -215,7 +233,6 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const jobContextStale=!!job&&(jobSourceVersion.current!==null&&jobSourceVersion.current!==sourceVersion.current||venueLeaseExpired||(!!form.jobIdentity&&form.jobIdentity!==identityKey)||(!!form.jobSession&&form.jobSession!==sessionKey)||!remoteProjectId);
   const reviewStale=!!job&&(jobContextStale||form.jobBase!==baseKey||form.jobSources!==canonical(images.map(image=>({id:image.id,kind:image.kind??'photo'}))));
   const stale=!!job&&(jobContextStale||form.jobBase!==baseKey||form.jobInput!==inputKey||!!mode&&form.jobMode!==mode||!!preview&&(preview.proposal.project_id!==remoteProjectId||preview.proposal.base_revision!==cloud.revision||preview.proposal.session_id!==cloud.lease?.sessionId||preview.proposal.generation!==cloud.lease?.generation||expired));
-  const source=images.find(image=>image.id===selectedSource&&image.kind==='floorplan')??images.find(image=>image.kind==='floorplan');
   const currentStructure=useMemo(()=>referenceStructure(layout),[layout]);
   const requestRunning=busy||!!form.jobId&&(!job||ACTIVE.has(job.state));
   const sourcesKey=venueSourceKey(images);
@@ -238,9 +255,22 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   })();
   const venueChanged=!!venueEdit&&!!venueCandidate.layout&&currentSceneKey(venueCandidate.layout)!==venueEdit.sceneKey;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
+  // 上传图纸后自动对齐尺寸并生成 3D 空间：由父组件在 addImages 完成后递增 autoGenerateRequest 触发。
+  const hasPlanarDimension=Number(form.width)>0||Number(form.depth)>0||form.constraints.some(d=>d.kind!=='height'&&d.valueMeters>0);
+  const autoGenDone=useRef(0);
+  useEffect(()=>{
+    if(autoGenerateRequest<=0||!formReady)return;
+    if(autoGenDone.current===autoGenerateRequest)return;
+    if(venueEdit||pending.current||requestRunning)return;
+    if(!connected){setNotice(connectionBlockedReason||'正在准备场景连接，完成后将自动生成 3D 空间…');if(cloud.configured)void prepareConnection();return;}
+    if(!layout.backendSceneV2&&!hasPlanarDimension){setNotice('已上传图纸，请至少填写一项平面尺寸（总宽/总深），填写后将自动生成 3D 空间。');return;}
+    if(hasPhotos&&!mode){setMode('redesign');return;}
+    autoGenDone.current=autoGenerateRequest;
+    void generateRef.current();
+  },[autoGenerateRequest,formReady,connected,venueEdit,requestRunning,layout.backendSceneV2,hasPlanarDimension,hasPhotos,mode]);
   useEffect(()=>{
     let cancelled=false;hydratedScope.current=null;setLoaded(false);setLoadError('');
-    formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');setPoints([]);setReviewConfirmed(false);
+    formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');setReviewConfirmed(false);
     formHydration.current=formWrites.current.catch(()=>{}).then(()=>readSourceForm<Form>(scope)).then(saved=>{
       if(cancelled)return;
       if(saved!==undefined){
@@ -270,8 +300,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     await saveForm(scope,formRef.current);
   }),[scope]);
   useEffect(()=>{if(!formReady||referenceSaving.current)return;formSaveTimer.current=setTimeout(()=>{if(referenceSaving.current||scopeRef.current!==scope||hydratedScope.current!==scope)return;void saveForm(scope,formRef.current).catch(error=>{if(scopeRef.current===scope)setNotice(errorText(error));});},250);return()=>clearTimeout(formSaveTimer.current);},[form,formReady,scope]);
-  useEffect(()=>{if(openReferenceRequest>0&&inputDetails.current)inputDetails.current.open=true;},[openReferenceRequest,formReady]);
-  useEffect(()=>{setPoints([]);},[source?.id]);
+  useEffect(()=>{if(openReferenceRequest>0)inputDetails.current?.scrollIntoView?.({block:'nearest'});},[openReferenceRequest,formReady]);
   useEffect(()=>{setReviewConfirmed(false);},[review]);
   useEffect(()=>{setExpired(false);if(!preview)return;const remaining=Date.parse(preview.proposal.expires_at)-Date.now();if(remaining<=0){setExpired(true);return;}const timer=setTimeout(()=>setExpired(true),Math.min(remaining,2_147_000_000));return()=>clearTimeout(timer);},[preview]);
   useEffect(()=>{onPreview?.(venueEdit?(!venueStale?venueCandidate.layout:null):preview&&!stale?preview.layout:null);},[venueEdit,venueStale,venueCandidate.layout,preview,stale,onPreview]);
@@ -378,14 +407,12 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     formWrites.current=write;
     try{await write;}finally{referenceSaving.current=false;if(alive.current&&scopeRef.current===expectedScope)setForm({...formRef.current});}
   }
-  function addConstraint(constraint:Omit<DimensionConstraint,'id'|'status'>){patch({constraints:[...form.constraints,{...constraint,id:crypto.randomUUID(),status:'confirmed'}]});}
-  function addCalibration(){if(!source||points.length!==2||!(Number(distance)>0))return;if(Math.hypot(points[0].x-points[1].x,points[0].z-points[1].z)<2){setNotice('请选取两个不同位置。');return;}addConstraint({kind:'distance',label:`${source.name} 两点标定`,valueMeters:Number(distance),sourceAssetId:source.id,start:{x:points[0].x/source.width!,z:points[0].z/source.height!},end:{x:points[1].x/source.width!,z:points[1].z/source.height!}});setPoints([]);setDistance('');}
   async function uploadSources(isCurrent:()=>boolean):Promise<SourceImage[]>{const sources:SourceImage[]=[];for(const image of images){if(!isCurrent())throw new Error('场景连接或图纸已变化，请重新核对。');const kind=image.kind??'photo';if(image.assetId){sources.push({assetId:image.assetId,kind,name:image.name,width:image.width!,height:image.height!});continue;}if(!image.blob)throw new Error(`缺少 ${image.name} 的原始图片，请重新选择。`);const uploaded=await controller.uploadSource(image.blob,image.name,kind);if(!isCurrent())throw new Error('场景连接或图纸已变化，请重新核对。');updateImage(image.id,{assetId:uploaded.assetId,uploadedKind:kind});sources.push(uploaded);}return sources;}
   async function generate(continueReview=false):Promise<void>{
     if(venueEdit){setNotice('请先确认或取消场地编辑，再生成方案。');return;}
     if(pending.current)return;if(referenceSaving.current){setNotice('正在保存原图对应，请完成后再生成。');return;}setNotice('');
-    if(!connected){setNotice(localActivity?'本机资料已保留。请先准备场景连接，再生成方案。':'本机资料已保留。请在云项目中登录、打开当前项目并获取编辑权，才能调用真实识别服务。');return;}
-    if(!images.length&&!layout.backendSceneV2){setNotice('请先添加平面图或现场照片。也可以下方按实测尺寸创建矩形场地。');return;}
+    if(!connected){setNotice(connectionBlockedReason||'本机资料已保留。请先准备场景连接，再生成方案。');return;}
+    if(!images.length&&!layout.backendSceneV2){setNotice('请先添加平面图或现场照片。');return;}
     const currentStructure=layout.backendSceneV2;
     const sourcesChanged=!!currentStructure&&images.length>0&&(images.length!==currentStructure.sources.length||images.some(image=>!image.assetId||!currentStructure.sources.some(source=>source.assetId===image.assetId&&source.kind===(image.kind??'photo'))));
     if(currentStructure&&sourcesChanged&&!reidentify&&!continueReview){setNotice('来源图片或资料类型发生了变化。请开启「重新识别结构」后生成，已有场景会保留至你确认候选。');return;}
@@ -423,9 +450,10 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     }catch(error){if(alive.current&&scopeRef.current===submittedScope)setNotice(errorText(error));}
     finally{pending.current=false;if(alive.current)setBusy(false);}
   }
+  generateRef.current=generate;
   async function prepareConnection():Promise<void>{
     if(pending.current||referenceSaving.current||!formReady)return;
-    pending.current=true;setBusy(true);setNotice('');
+    pending.current=true;setBusy(true);setNotice('正在准备场景连接，完成后将自动生成 3D 空间…');
     const base=layoutRef.current,epoch=scopeEpoch.current.epoch,identity=geometryIdentity(controller,scopeRef.current);
     try{
       await assertGeometryActionSource(base,controller);
@@ -454,7 +482,6 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');
     }catch(error){if(current())setNotice(errorText(error));}finally{pending.current=false;if(alive.current)setBusy(false);}
   }
-  const floorplan=useMemo(()=>source&&source.width&&source.height?source:null,[source]);
   const reviewedWall=review?.structure.walls.find(w=>w.id===selectedWall);
   function updateWall(patch:Partial<SceneV2['structure']['walls'][number]>){if(!reviewedWall||!review)return;setReview(updateReviewedWall(review,reviewedWall.id,patch));}
 
@@ -492,29 +519,19 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       {venueNotice&&(!venueNotice.sceneKey||venueNotice.sceneKey===baseKey)&&<p className="cr-notice" role="status">{venueNotice.text}</p>}
     </section>}
     <fieldset className="rc-existing-controls" disabled={!!venueEdit||!formReady}>
-    <details className="rc-inputs" ref={inputDetails}><summary><Ruler size={16}/><span>图纸与照片重建</span><small>米制 · 可核对</small></summary>
-    <p className="cr-hint">输入实测尺寸，图纸和照片共同补充空间信息。照片遮挡处与手绘不确定部分需要核对。</p>
+    <div className="rc-inputs" ref={inputDetails}>
     {localActivity&&!connected&&<button type="button" className="rc-secondary" disabled={busy||!formReady} onClick={()=>void prepareConnection()}>准备场景连接</button>}
-    {layout.backendSceneV2&&<><p className="cr-hint">下方是待提交的生成尺寸，填写不会修改当前场地。当前场地为 {layout.width} × {layout.height} 米。</p>{generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}</>}
-    <div className="rc-measures">{([['width','总宽'],['depth','总深'],['height','层高']] as const).map(([key,label])=><label key={key}>{label}（米）<input aria-label={`${label}（米）`} type="number" step="0.001" min="0.001" max={key==='height'?30:200} value={form[key]} onChange={e=>patch({[key]:e.target.value})} placeholder="实测值"/></label>)}</div>
-    <label className="cr-label">补充尺寸<textarea aria-label="补充尺寸" rows={2} value={form.text} onChange={e=>patch({text:e.target.value})} placeholder="北墙 8 米，入口宽 1.2 米，柱间距 450 厘米"/></label>
-    <button type="button" className="rc-secondary" onClick={()=>{const parsed=parseDimensionText(form.text);if(!parsed.length){setNotice('请描述长度及单位，例如「北墙 8 米」。');return;}patch({constraints:[...form.constraints,...parsed.map(item=>({...item,id:crypto.randomUUID(),status:'confirmed' as const}))]});setNotice('已提取数值，请核对下方尺寸并关联对象；文字会同时提交模型理解。');}}>将文字尺寸加入清单</button>
-    {floorplan&&<details className="rc-calibration"><summary>在图纸上标定一段实际距离</summary><select aria-label="标定图纸" value={floorplan.id} onChange={e=>setSelectedSource(e.target.value)}>{images.filter(image=>image.kind==='floorplan').map(image=><option key={image.id} value={image.id}>{image.name}</option>)}</select>
-      <div className="rc-image-map" role="button" tabIndex={0} aria-label="在图纸上点击两个测量点" onClick={event=>{const point=containedImagePoint(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect(),floorplan.width!,floorplan.height!);if(point)setPoints(current=>current.length===2?[point]:[...current,point]);}}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}<img src={floorplan.url} alt="待标定平面图"/>
-        <svg viewBox={`0 0 ${floorplan.width} ${floorplan.height}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">{points.length===2&&<line x1={points[0].x} y1={points[0].z} x2={points[1].x} y2={points[1].z} stroke="#e17637" strokeWidth={floorplan.width!/180}/ >}{points.map((point,i)=><circle key={i} cx={point.x} cy={point.z} r={floorplan.width!/65} fill="#e17637"/>)}</svg>
-      </div>
-      <p className="cr-hint">已选 {points.length}/2 个点。仅用于按比例图纸；照片请填写已知长度或补充多视角。</p><label className="cr-label">两点实际距离（米）<input aria-label="两点实际距离（米）" type="number" step="0.001" min="0.001" value={distance} onChange={e=>setDistance(e.target.value)}/></label><button type="button" className="rc-secondary" disabled={points.length!==2||!(Number(distance)>0)} onClick={addCalibration}>加入标定尺寸</button>
-    </details>}
+    {layout.backendSceneV2&&generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}
+    <label className="cr-label"><textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米；北墙 8 米，入口宽 1.2 米"/></label>
+    {(form.width||form.depth||form.height)&&<p className="cr-hint" role="status">已识别：{[form.width&&`总宽 ${form.width} 米`,form.depth&&`总深 ${form.depth} 米`,form.height&&`层高 ${form.height} 米`].filter(Boolean).join(' · ')}</p>}
     {form.constraints.length>0&&<div className="rc-constraints" aria-label="尺寸清单">{form.constraints.map(d=><div key={d.id}><input aria-label="尺寸说明" title={d.status==='confirmed'?'用户确认':'模型识别，待核对'} value={d.label} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,label:e.target.value}:v)})}/><input aria-label={`${d.label} 米数`} type="number" min="0.001" step="0.001" value={d.valueMeters} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,valueMeters:e.target.valueAsNumber,status:'confirmed'}:v)})}/><span>米</span><button type="button" aria-label={`删除尺寸 ${d.label}`} onClick={()=>patch({constraints:form.constraints.filter(v=>v.id!==d.id)})}><X size={12}/></button>{review&&(d.kind==='wall'||d.kind==='distance')&&<><select aria-label={`${d.label} 对应对象`} value={d.targetId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetId:e.target.value||undefined}:v)})}><option value="">关联墙、门窗或柱子</option>{review.structure.walls.map((w,index)=>({w,index})).filter(({w})=>!d.sourceAssetId||(w.evidence??[]).some(e=>e.sourceAssetId===(images.find(image=>image.id===d.sourceAssetId)?.assetId??d.sourceAssetId))).map(({w,index})=><option value={w.id} key={w.id}>墙 {index+1}</option>)}{review.structure.openings.map((o,index)=><option value={o.id} key={o.id}>{o.kind==='door'?'门':'窗'} {index+1}</option>)}{review.structure.columns.map((c,index)=><option value={c.id} key={c.id}>柱子 {index+1}</option>)}</select>{d.targetId&&<select aria-label={`${d.label} 测量方向`} value={d.measure??'length'} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,measure:e.target.value as 'width'|'depth'|'height'|'length'}:v)})}><option value="length">长度 / 两柱中心距</option><option value="width">宽度</option><option value="depth">深度</option><option value="height">高度</option></select>}{review.structure.columns.some(c=>c.id===d.targetId)&&<select aria-label={`${d.label} 另一根柱子`} value={d.targetEndId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetEndId:e.target.value||undefined}:v)})}><option value="">测量单柱尺寸</option>{review.structure.columns.filter(c=>c.id!==d.targetId).map((c,index)=><option value={c.id} key={c.id}>至柱子 {index+1}</option>)}</select>}</>}</div>)}</div>}
-    <details><summary>本地手动建模</summary><p className="cr-hint">按实测长宽高创建矩形空间，可离线使用。只转换人工输入，不进行图片识别；已有复杂结构需在场地中逐项编辑。</p><button className="rc-secondary" type="button" disabled={!form.width||!form.depth||!form.height||busy||!localActivity&&!!cloud.project&&cloud.writeBlocked} onClick={()=>{try{const next=createMeasuredRoomLayout(layout,{width:Number(form.width),depth:Number(form.depth),height:Number(form.height)});onApply(next);setNotice('已根据人工尺寸创建本地矩形空间；图片尚未识别。');}catch(error){setNotice(errorText(error));}}}>按实测尺寸创建矩形场地</button></details>
     {(images.length>0||!!layout.backendSceneV2)&&<>
       {layout.backendSceneV2&&images.length>0&&<label className="cr-check"><input type="checkbox" checked={reidentify} onChange={event=>setReidentify(event.target.checked)}/><span><strong>重新识别结构</strong><small>默认沿用已确认的墙、门窗与柱子，直接规划风格和布置。换图或需要重测时开启。</small></span></label>}
       {hasPhotos&&<fieldset className="rc-mode"><legend>本次照片生成模式 <small>每次请选择</small></legend>{([['restore','还原现场','保留已有家具与外观'],['redesign','重新布置','保留固定结构与锁定物件']] as const).map(([value,label,hint])=><label key={value}><input type="radio" name={`photo-mode-${scope}`} value={value} checked={mode===value} onChange={()=>setMode(value)}/><span><strong>{label}</strong><small>{hint}</small></span></label>)}</fieldset>}
-      <label className="cr-label">局部修改或保留要求<textarea aria-label="局部修改或保留要求" value={form.adjustment} maxLength={1000} rows={2} onChange={e=>patch({adjustment:e.target.value})} placeholder="保留座位和结构，只调整展示区。可在场景中锁定要保留的物件。"/></label>
+      <label className="cr-label"><textarea aria-label="局部修改或保留要求" value={form.adjustment} maxLength={1000} rows={2} onChange={e=>patch({adjustment:e.target.value})} placeholder="保留座位和结构，只调整展示区。可在场景中锁定要保留的物件。"/></label>
       <button type="button" className="cr-generate" disabled={requestRunning||!formReady} onClick={()=>void generate()}>{requestRunning?<Loader2 size={16} className="cr-spin"/>:<Sparkles size={16}/>} {requestRunning?(busy?'正在处理当前操作…':'重建任务进行中…'):'Generate 重建并设计方案'}</button>
     </>}
-    </details>
+    </div>
     {form.jobId&&!job&&<div className="rc-job" role="status"><strong>{form.jobIdentity&&form.jobIdentity!==identityKey?'原任务等待恢复场景连接':'正在恢复原重建任务'}</strong><small>任务 {form.jobId.slice(0,8)}</small>{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>setPollingPaused(false)}>继续查询原任务</button>}</div>}
     {job&&<div className="rc-job" role="status"><strong>{LABELS[job.state]}</strong><small>任务 {job.id.slice(0,8)}</small>{stale&&<p>场景、资料、要求或编辑会话已变化，旧结果仅供核对。请重新生成后应用。</p>}{job.issues.map((issue,index)=><p key={`${issue.code}-${index}`}>{issue.message}</p>)}{job.error_code&&<p>{errorCodeText(job.error_code)}</p>}{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>{setPollingPaused(false);setNotice('');}}>继续查询原任务</button>}</div>}
     {review&&job?.state==='needs_review'&&<div className="rc-review"><h4>核对识别结构</h4><p className="cr-hint">结构示意使用米制坐标。点击墙线编辑，核对门窗、柱子与看不到的区域；确认意味着你已根据现场或图纸核实。</p>

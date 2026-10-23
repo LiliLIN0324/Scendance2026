@@ -93,9 +93,8 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     test.props.openTabRequest = { serial: 1, tab: 'presets' };
     test.update();
     expect(screen.getByRole('tab', { name: '物料库' }).getAttribute('aria-selected')).toBe('true');
-    test.props.openTabRequest = { serial: 2, tab: 'layers' };
-    test.update();
-    expect(screen.getByRole('region', { name: '方案与图层' })).toBeTruthy();
+    // 图层不适合当前页面，抽屉里只剩「物料库 / 场景模板」两档。
+    expect(screen.queryByRole('tab', { name: '图层' })).toBeNull();
     expect(loadOnlineModels).toHaveBeenCalledTimes(1);
   });
 
@@ -103,18 +102,17 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     const test = librarySetup();
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
     fireEvent.click(screen.getByRole('button', { name: /^座椅/ }));
-    fireEvent.click(screen.getByRole('tab', { name: '图层' }));
     fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
     expect(screen.getByRole('button', { name: /^座椅/ }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.change(screen.getByRole('textbox', { name: /搜索/ }), { target: { value: 'Rehearsal Model' } });
     fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
     expect(tiles()).toHaveLength(30);
     const input = screen.getByRole('textbox', { name: /搜索/ }) as HTMLInputElement;
-    const row = test.container.querySelector('.sc-material-grid')!;
+    const row = test.container.querySelector('.sc-material-rail')!;
     row.scrollLeft = 175;
     fireEvent.click(screen.getByRole('tab', { name: '场景模板' }));
     test.update({ hidden: true, view: makeViewSettings({ view2D: true }) });
-    expect(test.container.querySelector('.sc-material-grid')).toBe(row);
+    expect(test.container.querySelector('.sc-material-rail')).toBe(row);
     test.update({ hidden: false, view: makeViewSettings({ view2D: true }) });
     fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
     expect(screen.getByRole('textbox', { name: /搜索/ })).toBe(input);
@@ -143,7 +141,8 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     expect(ensureGlbAsset).toHaveBeenCalledTimes(1);
     await act(async () => { finish(); });
     await waitFor(() => expect(test.placeCatalogItem).toHaveBeenCalledTimes(1));
-    expect(test.selectOnly).toHaveBeenCalledWith('placed-rehearsal-item');
+    // 放置只选中，不掀属性面板（keepPanel）。
+    expect(test.selectOnly).toHaveBeenCalledWith('placed-rehearsal-item', { keepPanel: true });
     expect(test.capturePlacement).toHaveBeenCalledTimes(1);
     expect(test.assertCurrent).toHaveBeenCalled();
     expect(test.dispose).toHaveBeenCalledTimes(1);
@@ -158,27 +157,42 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     expect(test.actions.applyLayout).not.toHaveBeenCalled();
     expect(test.onLoadPreset).not.toHaveBeenCalled();
   });
+
+  it('raises the drawer from the grip and remembers how tall the user made it', () => {
+    const test = librarySetup();
+    const grip = screen.getByRole('separator', { name: '调整物料库高度' });
+    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('212px');
+    fireEvent.keyDown(grip, { key: 'ArrowUp' });
+    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('236px');
+    expect(window.localStorage.getItem('scendance-shelf-height')).toBe('236');
+    fireEvent.keyDown(grip, { key: 'End' });
+    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('476px');
+    fireEvent.keyDown(grip, { key: 'Home' });
+    expect(window.localStorage.getItem('scendance-shelf-height')).toBe('176');
+    expect(test.placeCatalogItem).not.toHaveBeenCalled();
+    window.localStorage.clear();
+  });
 });
 
 
 describe('ScendanceViewTools design column', () => {
-  it('renders the vertical 14-key groups and keeps materials outside the rail', () => {
-    const values = contexts(), onApplyPreset = vi.fn(), onFit = vi.fn(), onZoom = vi.fn(), onScreenshot = vi.fn();
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onFit={onFit} onZoom={onZoom} onScreenshot={onScreenshot}/></Providers>);
+  it('renders the tool column plus the atmosphere strip and keeps materials outside both', () => {
+    const values = contexts(), onApplyPreset = vi.fn(), onFit = vi.fn(), onZoom = vi.fn(), onExportImage = vi.fn();
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onFit={onFit} onZoom={onZoom} onExportImage={onExportImage}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '视角与编辑工具' });
     expect(rail.id).toBe('tool-column');
-    for (const name of ['撤销', '重做', '导出当前画面', '网格吸附', '显示尺寸', '全屏', '缩小', '放大', '足迹 / 漫游', '人群', '天气：晴 / 雨 / 雪', '时间']) {
+    for (const name of ['撤销', '重做', '导出效果图', '网格吸附', '显示尺寸', '全屏', '缩小', '放大', '漫游', '人群', '晴朗', '正午']) {
       expect(screen.getByRole('button', { name })).toBeTruthy();
     }
+    // 氛围四条不在竖列里，否则工具列会一路压到抽屉上。
+    expect(rail.querySelector('.sc-atmosphere-group')).toBeNull();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     fireEvent.click(screen.getByRole('button', { name: '重做' }));
-    fireEvent.click(screen.getByRole('button', { name: '导出当前画面' }));
     fireEvent.click(screen.getByRole('button', { name: '视角：整体 / 俯视 / 人视' }));
     fireEvent.click(screen.getByRole('option', { name: '俯视' }));
     expect(values.history.undo).toHaveBeenCalledTimes(1);
     expect(values.history.redo).toHaveBeenCalledTimes(1);
-    expect(onScreenshot).toHaveBeenCalledTimes(1);
     expect(onApplyPreset).toHaveBeenCalledWith('top');
     fireEvent.click(screen.getByRole('button', { name: '2D / 3D' }));
     fireEvent.click(screen.getByRole('button', { name: '缩小' }));
@@ -189,6 +203,30 @@ describe('ScendanceViewTools design column', () => {
     expect(values.toggle.mock.calls).toEqual([['view2D'], ['snapToGrid'], ['showMeasurements']]);
     expect(onZoom.mock.calls).toEqual([['-'], ['+']]);
     expect(onFit).toHaveBeenCalledTimes(1);
+    expect(onExportImage).not.toHaveBeenCalled();
+  });
+
+  it('exports a render from the popover with the chosen frame and quality', async () => {
+    const values = contexts(), onExportImage = vi.fn().mockResolvedValue(true);
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()} onExportImage={onExportImage}/></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '导出效果图' }));
+    const dialog = screen.getByRole('dialog', { name: '导出效果图选项' });
+    expect(dialog.textContent).toContain('导出效果图');
+    fireEvent.click(screen.getByRole('button', { name: '整体' }));
+    fireEvent.click(screen.getByRole('button', { name: '超清 3×' }));
+    fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
+    await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'iso', scale: 3 }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '导出效果图选项' })).toBeNull());
+  });
+
+  it('defaults to the current view at 2× and marks the choices active', async () => {
+    const values = contexts(), onExportImage = vi.fn().mockResolvedValue(true);
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()} onExportImage={onExportImage}/></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '导出效果图' }));
+    expect((screen.getByRole('button', { name: '跟随当前' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByRole('button', { name: '高清 2×' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
+    await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'current', scale: 2 }));
   });
 
   it('disables zoom in 2D and hides atmosphere when requested', () => {
@@ -198,7 +236,7 @@ describe('ScendanceViewTools design column', () => {
       expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '足迹 / 漫游' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
   });
 
   it('keeps rail wheel browsing from reaching the canvas zoom handler', () => {
@@ -210,19 +248,19 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 足迹 / 人群 / 天气 / 时间', () => {
+  it('wires 漫游 / 人群 / 天气 / 时段', () => {
     const values = contexts();
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: '足迹 / 漫游' }));
+    fireEvent.click(screen.getByRole('button', { name: '漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '人群' }));
     expect(values.toggle).toHaveBeenCalledWith('showNpcs');
-    fireEvent.click(screen.getByRole('button', { name: '天气：晴 / 雨 / 雪' }));
+    fireEvent.click(screen.getByRole('button', { name: '晴朗' }));
     fireEvent.click(screen.getByRole('option', { name: '降雨' }));
     const weather = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(weather(makeViewSettings()).weather).toBe('rain');
-    fireEvent.click(screen.getByRole('button', { name: '时间' }));
+    fireEvent.click(screen.getByRole('button', { name: '正午' }));
     fireEvent.click(screen.getByRole('option', { name: '室外时段 黄昏' }));
     const time = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(time(makeViewSettings()).timeOfDay).toBe(18);

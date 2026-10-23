@@ -133,12 +133,12 @@ describe('readLayoutFromFile', () => {
   it('refuses a file over the size budget without reading it (#332)', async () => {
     const text = vi.fn(() => Promise.resolve('{}'));
     const huge = { size: MAX_LAYOUT_JSON_BYTES + 1, text } as unknown as File;
-    await expect(readLayoutFromFile(huge)).rejects.toThrow(/far larger than any house layout/);
+    await expect(readLayoutFromFile(huge)).rejects.toThrow(/远超场地备份的上限/);
     expect(text).not.toHaveBeenCalled();
   });
 
   it('still refuses a file that is not a layout', async () => {
     const file = new File(['{"name":"x"}'], 'x.json');
-    await expect(readLayoutFromFile(file)).rejects.toThrow(/does not match/);
+    await expect(readLayoutFromFile(file)).rejects.toThrow(/结构不对/);
   });
 });

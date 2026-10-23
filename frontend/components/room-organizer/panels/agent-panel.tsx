@@ -6,7 +6,7 @@
  * 出方案：已连接云项目时走现有 AI 生成；否则用现有本地物料组（furniture-sets / surprise）分 5 步真实摆放，
  * 不新增算法。底图只收图片（复用 layout.floorPlanImage），不识别、不显示任何米数。
  */
-import { ArrowUp, Check, FileImage, Loader2, PanelRightClose, Paperclip, RotateCw } from 'lucide-react';
+import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRoomEditor } from '../contexts';
 import { EVENT_CATALOG } from '../lib/constants';
@@ -17,8 +17,8 @@ import { surpriseLayout } from '../lib/surprise';
 import type { FurnitureItem } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import {
-  NON_IMAGE_MESSAGE, canGenerate, checkDim, classifyFile, DEFAULT_ANSWERS, EVENT_TYPES, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNTS,
-  isStopCommand, sanitizeDimInput, type AgentAnswers, type AgentState, type DimCheck, type VenueIO,
+  NON_IMAGE_MESSAGE, canGenerate, checkDim, classifyFile, fileSizeLabel, formatArea, GEN_STEPS,
+  isStopCommand, sanitizeDimInput, type AgentState, type DimCheck, type VenueIO,
 } from '../lib/workbench-agent';
 import { useStudioAgent } from './creative-studio';
 import './agent-panel.css';
@@ -41,7 +41,7 @@ export interface LayoutAgentCallbacks {
 interface AgentValue {
   callbacks: LayoutAgentCallbacks;
   state: AgentState; venueIO: VenueIO; setVenueIO(value: VenueIO): void;
-  answers: AgentAnswers; setAnswers(value: AgentAnswers): void;
+
   baseName: string | null; issue: FileIssue | null; dragging: boolean;
   lengthText: string; widthText: string; setLengthText(value: string): void; setWidthText(value: string): void;
   lengthCheck: DimCheck; widthCheck: DimCheck; showDimErrors: boolean; touchDims(): void;
@@ -62,7 +62,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
   const { layout, activeFloor, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   const [venueIO, setVenueIO] = useState<VenueIO>('indoor');
-  const [answers, setAnswers] = useState<AgentAnswers>(DEFAULT_ANSWERS);
+
   const [baseName, setBaseName] = useState<string | null>(null);
   const [issue, setIssue] = useState<FileIssue | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -193,7 +193,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
     const forceFail = process.env.NODE_ENV !== 'production' && typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('agentFail') === '1';
     const cloudReady = studio?.connection === '项目已连接';
     const run = forceFail ? wait(STEP_DELAY_MS).then(() => { throw new Error('forced'); })
-      : cloudReady && studio ? (setProgress(1), studio.generate(`${answers.event} · ${answers.headcount} 人 · ${venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(live.current.width * live.current.height)} ㎡，请出布置方案`).then(() => { if (token === runToken.current) { setProgress(5); setPhase('ready'); } }))
+      : cloudReady && studio ? (setProgress(1), studio.generate(`${studio.brief.event} · ${studio.brief.guests} 人 · ${venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(live.current.width * live.current.height)} ㎡，请出布置方案`).then(() => { if (token === runToken.current) { setProgress(5); setPhase('ready'); } }))
       : runLocal(token, seed.current);
     const timeout = window.setTimeout(() => { if (token === runToken.current && phaseRef.current === 'generating') { runToken.current++; setPhase('failed'); } }, 60_000);
     run.catch(() => { if (token === runToken.current) setPhase('failed'); }).finally(() => window.clearTimeout(timeout));
@@ -218,7 +218,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
   const overlapCount = phase === 'ready' || phase === 'edited' || phase === 'paused' ? activeFloor.items.filter(item => collidingIds.has(item.id)).length : 0;
 
   const value: AgentValue = {
-    callbacks, state, venueIO, answers, setAnswers, baseName, issue, dragging,
+    callbacks, state, venueIO, baseName, issue, dragging,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
     lengthText, widthText, setLengthText, setWidthText, lengthCheck, widthCheck,
     showDimErrors: dimsTouched, touchDims: () => setDimsTouched(true),
@@ -238,6 +238,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
 
 const STAGES = ['说清活动', '出方案', '调整', '给甲方看', '交给搭建'] as const;
 
+function stageOf(agent: AgentValue, mode: WorkbenchMode): number {
+  return mode === 'review' ? 4 : mode === 'delivery' ? 5
+    : agent.state === 'generating' || agent.state === 'generateFailed' ? 2
+    : agent.state === 'planReady' || agent.state === 'planEdited' || agent.state === 'generatePaused' ? 3 : 1;
+}
+
 function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ok' | 'warn' } {
   if (mode !== 'layout') return { text: '做好了', tone: 'ok' };
   if (agent.state === 'generating') return { text: `出方案中 ${Math.max(1, agent.progress)}/5`, tone: 'busy' };
@@ -245,15 +251,6 @@ function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; t
   if ((agent.state === 'planReady' || agent.state === 'planEdited') && agent.overlapCount > 0) return { text: '发现问题', tone: 'warn' };
   if (agent.state === 'planReady' || agent.state === 'planEdited') return { text: '做好了', tone: 'ok' };
   return { text: '等你确认', tone: 'idle' };
-}
-
-function Choice<T extends string | number>({ label, value, options, format, onChange }: { label: string; value: T; options: readonly T[]; format(value: T): string; onChange(value: T): void }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  return <div className="ap-field">
-    <span className="ap-field-label">{label}</span>
-    <button type="button" className="ap-field-value" aria-expanded={open} aria-label={`${label}：${format(value)}，点击修改`} onClick={() => setOpen(current => !current)}>{format(value)}<span aria-hidden="true" className="ap-pen">✎</span></button>
-    {open && <div className="ap-choices" role="group" aria-label={label}>{options.map(option => <button type="button" key={String(option)} className={`chip${option === value ? ' is-on' : ''}`} aria-pressed={option === value} onClick={() => { onChange(option); setOpen(false); }}>{format(option)}</button>)}</div>}
-  </div>;
 }
 
 function DimInput({ id, label, text, check, focused, show, onChange, onBlur }: { id: string; label: string; text: string; check: DimCheck; focused: boolean; show: boolean; onChange(value: string): void; onBlur(): void }): JSX.Element {
@@ -274,10 +271,6 @@ function SummaryCard({ agent }: { agent: AgentValue }): JSX.Element {
   })();
   const area = layout.width * layout.height;
   return <div className="ap-card" id="summary-card">
-    <div className="ap-row">
-      <Choice label="活动类型" value={agent.answers.event} options={EVENT_TYPES} format={value => value} onChange={value => agent.setAnswers({ ...agent.answers, event: value })}/>
-      <Choice label="人数" value={agent.answers.headcount} options={HEADCOUNTS} format={value => `${value} 人`} onChange={value => agent.setAnswers({ ...agent.answers, headcount: value })}/>
-    </div>
     <div className="ap-venue">
       <div className="ap-venue-head">
         <span className="ap-field-label">场地{base && <> · <span>按图纸填</span></>}</span>
@@ -335,13 +328,13 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const status = headerStatus(agent, mode);
-  const stage = mode === 'review' ? 4 : mode === 'delivery' ? 5 : agent.state === 'generating' || agent.state === 'generateFailed' ? 2 : agent.state === 'planReady' || agent.state === 'planEdited' || agent.state === 'generatePaused' ? 3 : 1;
+  const stage = stageOf(agent, mode);
   const items = materialCount(activeFloor.items);
   useEffect(() => { feed.current?.scrollTo?.({ top: feed.current.scrollHeight }); }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited' || agent.state === 'generatePaused';
   const signedIn = !!studio?.controller.getSnapshot().user;
-  const recap = `${agent.answers.event} · ${agent.answers.headcount} 人 · ${agent.venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(layout.width * layout.height)} ㎡`;
+  const recap = `${studio?.brief.event ?? '活动'} · ${studio?.brief.guests ?? 0} 人 · ${agent.venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(layout.width * layout.height)} ㎡`;
   const preStates = !generating && !planShown && agent.state !== 'generateFailed';
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
@@ -350,16 +343,14 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
       <strong>Agent</strong>
       <span id="agent-state" className={`ap-status is-${status.tone}`}>{status.tone === 'busy' ? '⟳' : status.tone === 'ok' ? '✓' : status.tone === 'warn' ? '⚠' : '●'} {status.text}</span>
       <span className="ap-stage" aria-label={`第 ${stage} 步，共 5 步`}><small>{stage}/5</small> {STAGES[stage - 1]}<span className="ap-stage-bar" aria-hidden="true">{STAGES.map((label, index) => <i key={label} className={index < stage ? 'is-on' : ''}/>)}</span></span>
-      {onClose && <button type="button" className="ap-close" aria-label="收起 Agent" title="收起 Agent" onClick={onClose}><PanelRightClose size={16} aria-hidden="true"/></button>}
+      {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
     </header>
     <div className="ap-intro">
       <div className="ap-intro-head"><strong>一句话开始策划</strong><span className={`ap-badge${studio?.hasSavedBrief ? ' is-done' : ''}`}>{studio?.hasSavedBrief ? '需求已填写' : '尚未填写'}</span></div>
-      <p className="ap-intro-hint">人数与现场条件待确认，示例布置仅供规划参考。</p>
     </div>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {mode === 'layout' && <>
         <p className="ap-divider">新项目 · {layout.name || '未命名活动'}</p>
-        {(agent.baseName === null || !preStates) && <p className="ap-agent">我先按常见情况填好了，不对直接点改。</p>}
         {!preStates && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
         {preStates && <SummaryCard agent={agent}/>}
@@ -428,6 +419,24 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
 
 /* ───────────────────────── 画布状态层 ───────────────────────── */
 
+/**
+ * Agent 栏关掉后留在画布右上角的浮窗卡片。原来是一条 34px 竖排把手，
+ * 看不出能点、也看不出 Agent 进行到哪一步。
+ */
+export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
+  const agent = useAgent();
+  const mode = agent.callbacks.workbenchMode;
+  const status = headerStatus(agent, mode);
+  const stage = stageOf(agent, mode);
+  return <button type="button" className="sc-agent-reopen" aria-label="打开 Agent" title="打开 Agent" onClick={onOpen}>
+    <img src={MASCOT_SRC} alt="" width={24} height={24} draggable={false}/>
+    <span className="sc-agent-reopen-copy">
+      <span className="sc-agent-reopen-top"><strong>晴光 Agent</strong><em className={`ap-status is-${status.tone}`}>{status.text}</em></span>
+      <small>第 {stage}/5 步 · {STAGES[stage - 1]}</small>
+    </span>
+  </button>;
+}
+
 export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
   const { activeFloor, collidingIds } = useRoomEditor();
@@ -440,7 +449,7 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   return <div className="ap-canvas-layer" aria-live="polite">
     {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={20} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {(s === 'empty' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => document.getElementById('step-cta')?.focus()}>Agent 已先填好，确认就出方案 →</button>}
+    {(s === 'empty' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => { const cta = document.getElementById('step-cta'); if (cta) { cta.focus(); return; } document.querySelector<HTMLElement>('.sc-agent-reopen')?.click(); }}>确认需求后出方案 →</button>}
     {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={12} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/5</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
     {(s === 'planReady' || s === 'planEdited' || s === 'generatePaused') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}

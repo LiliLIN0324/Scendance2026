@@ -199,7 +199,7 @@ describe('local activity operations lifecycle', () => {
     expect(layoutStore.getState()).toBe(storeState);
     expect(layoutReducer(before, { type: 'applyLayout', layout: { ...before.layout, eventOperations: value } })).toBe(before);
     expect(layoutReducer(before, { type: 'applyLayout', layout: nested })).toBe(before);
-    await expect(readLayoutFromFile(new File([JSON.stringify({ ...before.layout, eventOperations: value })], 'invalid.json'))).rejects.toThrow(/does not match/);
+    await expect(readLayoutFromFile(new File([JSON.stringify({ ...before.layout, eventOperations: value })], 'invalid.json'))).rejects.toThrow(/结构不对/);
     expect(before.layout.eventOperations).toEqual(operations());
   });
 

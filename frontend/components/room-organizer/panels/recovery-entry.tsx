@@ -143,7 +143,7 @@ function RecoveryCopyRow({ copy, onRestore, onDiscard }: RecoveryCopyRowProps): 
             variant="ghost"
             className="h-6 px-2"
             onClick={onDiscard}
-            aria-label="Delete the recovered copy"
+            aria-label="删除恢复出来的副本"
           >
             Delete
           </Button>

@@ -1,5 +1,81 @@
 # 更新记录
 
+## 属性面板改成双击才弹 — 2026-10-23
+
+- 从物料库把物料放到场地上，不再顺手掀开「物料属性」：四个放置入口（点物料卡、拖到画布、冲突后补点一次、生成模型库加入）一律只选中、不开面板。
+- 单击画布里的物料也只选中。要看尺寸/颜色/朝向，**双击那一件**，或者点工具轨的「选中物料」。面板已经开着时，单击别的物料仍然实时切换内容。
+- 双击由两个视图各自的拾取层上报「打到了哪一件」：3D 在 `dblclick` 上补一次射线，2D 补一次 `hitTest2DItems`。没有拿当前选中项代替 —— 试过，双击空地也会把上次选中那件的面板掀起来。另外 Chrome 的 `pointerdown.detail` 恒为 0（实测），点击计数只在 `dblclick` 上，所以只能挂 `dblclick`，不能在按下时猜。
+- 收起左栏时工具轨那颗按钮的悬停说明改成「先在画布上双击一件物料」，把新手势带出来。
+- 真机实测（1440×900，CDP 真实鼠标事件）：放置沙滩折叠椅 → 物料数 5→6、左栏保持收起；单击空间绿植 → 左栏仍收起；同点双击 → 左栏 `has-properties` 打开、属性面板可见；关掉后再双击打不到物料的位置 → 保持收起。
+- 涉及：`three/drag-handlers.ts`、`hooks/use-canvas-2d-interaction.ts`、`room-organizer.tsx`、`panels/scendance-workspace.tsx`，以及 `three/drag-handlers.test.ts`、`hooks/use-canvas-2d-interaction.react.test.ts`（各加 2 条双击用例）、`panels/scendance-workspace.react.test.tsx`（放置断言改 `keepPanel`）。
+
+## 左栏不再自己弹开 + Agent 关闭后的浮窗卡片 — 2026-10-23
+
+- 左栏改成只由按钮开合。原来在画布点一件物料，刚关掉的左栏会自己掀起来：`creative-studio` 把「工作区是否展开」回报给左栏的那条 effect 依赖了父组件回调，而回调按 `leftMode` 建，点选物料把 `leftMode` 一切 → 回调换身份 → effect 重跑 → 把还留着的 `workspaceExpanded=true` 重新报一遍，左栏就开了。回报回调改走 ref，effect 只在展开状态真的变化时跑（`resizeWorkspace` 里本来就有直接调用，不会漏报）。
+- 同一轮真机复查又抓到一颗接错的按钮：选中某件物料后点工具轨「活动需求」，左栏纹丝不动。原因是跟随选中项的那条 effect 也听 `leftMode`，刚切到活动资料就被按回「选中物料」。改成只在选中项真的变化时才跟着换内容，实测「选中物料 ⇄ 活动需求」来回切都生效。
+- 工具轨新增常驻的「选中物料」一颗（未选中时禁用并说明「先在场地里点选一件物料」）：左栏收起时面板内那颗切换按钮是 `display:none`，点不到，没有这颗就等于关上门再没有把手。
+- Agent 栏右上角那颗 × 关掉后，原来只剩一条 34px 通高竖排把手——看不出能点、也看不出 Agent 在做什么。换成画布右上角一张浮窗卡片：头像 + 「晴光 Agent · 状态」+「第 N/5 步 · 阶段名」，点一下恢复整栏。实测 1440×900 下卡片 168×44，命中测试落在卡片自身。
+- 卡片位置按工具列那颗「撤销」的悬停纸条定：一开始右缘压在 1376，正好把往左探出的纸条切掉半截（放大截图才看得出来）。改成让开 `--sc-rail-width + 62px`、层级降到工具列之下，实测纸条完整可读。
+- 画布上「Agent 已先填好，确认就出方案 →」那颗胶囊，在 Agent 栏关着时点下去只 `focus()` 一个不存在的 `#step-cta`，毫无反应；改成找不到就把浮窗卡片点开。
+- 物料属性面板顶上的英文眉标 `OBJECT PROPERTIES` 删掉（下面就是「物料属性」，窄屏那条规则本来就把它藏了），随之清掉两条已无人用的 `.sc-eyebrow` 规则。
+- 涉及：`panels/creative-studio.tsx`、`room-organizer.tsx`、`panels/agent-panel.tsx`、`panels/item-context-popover.tsx`、`app/globals.css`。
+
+## Agent 栏右上角：是关掉，不是收起 — 2026-10-23
+
+- 右栏 Agent 头部那颗按钮点下去整个面板消失、只剩右缘一条竖排「Agent」把手——这是关闭，但悬停写的是「收起 Agent」、图标还是 `》|`（收合符号）。改成「关闭 Agent」+ × 图标；把手仍写「打开 Agent」，关—开读起来对得上。
+- 顺带把「关闭 / 收起」分工定下来：真正只折叠、面板还在原地的才叫收起 —— 聊天区内的「收起聊天 / 展开聊天」（带 `aria-expanded`）、物料库的「收起物料库 / 展开物料库」保持不动；`creative-studio` 头部那颗 × 与隐藏的助手入口按钮一并改成「关闭聊天 / 关闭助手」。
+- 真机复查顺手抓到一处压住：氛围条（漫游/人群/晴朗/正午）底边 888，物料库把手顶边 866，1440×900 下把手被压掉左半截「物料库」三字。氛围条改 `bottom: 44px` 让出把手那一行，实测两档（1440×900、1280×700）各留 10px 间隙；抽屉展开时仍走原来的 `--sc-shelf-height` 抬升规则。
+- 涉及：`panels/agent-panel.tsx`、`panels/creative-studio.tsx`、`room-organizer.tsx`、`panels/workbench-shelf.css`、`panels/creative-studio.react.test.tsx`。
+
+## 中文界面里的英文残留 — 2026-10-23
+
+- 多选胶囊整条改中文：`N items selected · drag to move together` → 「N 件 · 已选中 · 拖动即整体移动」，`Copy / Group / Ungroup / Save as set` → 复制 / 成组 / 解组 / 存为组合，悬停说明与「组合名称」输入框一并跟上（原来写的是 `Set name`、`My set`）。
+- 提示文案改中文并去掉不存在的指引：分享链接复制成功/被拒、备份文件过大、存储已满、超上限只载入一部分、本机布置打不开 —— 原先指向的 `Manage → Saved Layouts → History` 在本产品里没有这个入口，改成只说「原件已另存一份，不会被覆盖」。
+- 读屏与悬停标签改中文：`Dismiss`→关闭提示、`Link to copy`→待复制的链接、`View options`→视图选项、`Wall visibility`→墙体显示、`Apply paint to`→墙面刷漆范围、`Pick a custom colour`→自选颜色、`Delete the recovered copy`→删除恢复出来的副本；墙面朝向 `All/N/E/S/W` → 全部/北/东/南/西。
+- 文件读取抛出的英文错误（`Invalid layout file`、`Invalid image dimensions`、`Canvas unavailable`、`Image encoding failed`、超体积提示）统一中文，同步 4 处测试断言。
+- 涉及：`panels/viewport.tsx`、`panels/chip-controls.tsx`、`panels/status-toast.tsx`、`panels/view-options.tsx`、`panels/wall-paint-panel.tsx`、`panels/recovery-entry.tsx`、`room-organizer.tsx`、`hooks/use-import-export.ts`、`hooks/use-layout-persistence.ts`、`lib/persistence.ts`、`lib/file-io.ts`。
+
+## 参考底图搬进「图纸尺寸」 — 2026-10-23
+
+- 「参考底图」不再浮在画布右上角：改由 `referenceImagePanel` 插槽渲染到左栏「图纸与尺寸」→「图纸与场地对应核对」区块，紧挨「更多：图纸重建与场地核对」，跟同区折叠行同样式（11px 灰字 + 原生展开三角、内容左侧细线缩进）。
+- 上一轮为让开工具列加的右上偏移随之删除（`globals.css` 里两条 `.sc-scene-viewport .sc-reference-image*` 规则与一条已失效的 `.sc-reference-image-trigger` 规则一并清掉）。实测画布右上角浮层数量归零。
+- 删掉重复说明：旧场景的「旧图按场地宽深示意放置，不代表已标定或实测准确。」与上方 notice 同义，移除；面板内控件块高度 320px → 254px。
+- 涉及：`panels/reference-image-controls.tsx`、`panels/reference-image-controls.css`、`panels/creative-studio.tsx`、`room-organizer.tsx`、`app/globals.css`。
+
+## 真机复查：压住与裁切 — 2026-10-23
+
+- 用无头 Chrome 在 1440×900、1280×700、1280×600 三档实测截图，专挑只有真机才看得出来的毛病。
+- 画布右上角「参考底图」和 Agent 胶囊被工具列压掉半截：两者右移让开 46px 纸条，实测重叠归零。
+- 工具列改为按内容收高（仍保证不越进抽屉），不再在按钮下面拖出一条约 180px 的空白纸条。
+- 场景模板卡两处硬伤：轨道继承了旧库的 18px 下边距、白留一截；名称行 18px 装不下 22px 的字，模板名被裁掉半行。现在轨道铺满、名称行 20px，缩略图 69px → 85px。
+- 「独立本地预览」标记从视口底部中央移到顶栏，不再盖住抽屉里的卡片和灯光选项。
+- 涉及：`app/globals.css`、`panels/workbench-shelf.css`、`panels/agent-panel.css`、`components/workspace-shell.tsx`。
+
+## 工作台尺寸与手感 — 2026-10-23
+
+- 抽屉默认加高到 212px（最低可拖到 176px）：缩略图从约 37px 高变成 60px 上下，模板图约 86px，看得出是什么再点。
+- 横向轨道不再画滚动条：改用两端渐隐提示还有内容（`data-overflow`），卡片文字不会被滚动条压住；悬停卡片取消上移，避免被轨道上边缘切掉。
+- 右侧工具列收进画布：14 个等大圆盘 → 10 个 32px 方按钮 + 白纸底板，高度限制在画布内，不再一路压到抽屉上；悬停/聚焦即在左侧浮出名称。
+- 氛围四项（漫游、人群、天气、时段）搬到画布左下角一条带文字的胶囊栏，天气与时段直接显示当前值；弹出菜单朝上开。
+- 空白场地卡改成绿描边白底，不再灰扑扑；画布抬头收成一行轻标注；右侧 Agent 栏宽度改为 `clamp(284px,27vw,336px)`，把宽度还给 3D 画布。
+- 涉及：`app/globals.css`、`hooks/use-horizontal-rail.ts`、`panels/workbench-shelf.css`、`panels/scendance-workspace.tsx`、`panels/creative-studio.css`、`panels/agent-panel.css`。
+
+## 物料抽屉改横排 — 2026-10-23
+
+- 抽屉保持一行高：物料卡与场景模板都横着走，滚轮/触控板直接变横向滚动，删掉卡片区域的纵向下拉。
+- 键盘：轨道聚焦后 ← → 走一张卡，PageUp/PageDown 翻页，Home/End 到两端；拖到末尾出现「再显示 24 个」，不再单独占一行计数。
+- 场景模板与「长方形/正方形/L 形」空白场地合进同一条轨道，缩略图在上、名称在下；替换已有布置时改成卡内确认，不再弹浏览器对话框。
+- 删掉重复文字：模板描述只在悬停与读屏名里出现；「桌椅、展台和人物都可移动…概念方案」「空白场地形状，尺寸可再改」「共 528 个 · 已显示 24 个」等说明行移除。
+- 抽屉顶边仍可拖动调高（本机记住高度），拖高只放大缩略图。
+- 涉及：`hooks/use-horizontal-rail.ts`（新增）、`panels/online-model-library.tsx`、`panels/scene-presets-panel.tsx`、`panels/venue-shape-presets.tsx`、`panels/scendance-workspace.tsx`、`panels/workbench-shelf.css`、`app/globals.css`。
+
+## 3D 效果图导出 — 2026-10-23
+
+- 右侧工具条「导出效果图」弹出面板：视角（跟随当前 / 整体 / 俯视 / 人视）× 画质（标清 1× / 高清 2× / 超清 3×），一键下载 PNG。
+- 高分辨率导出：渲染时按倍率提升 pixelRatio 并重绘，完成后恢复相机与渲染器原状，画布不闪动。
+- 2D 平面模式回退为现有截图路径（按当前分辨率导出）。
+- 涉及：`hooks/use-import-export.ts`（`exportRenderImage`）、`panels/scendance-workspace.tsx`（导出面板）、`room-organizer.tsx`、`panels/workbench-shelf.css`。
+
 ## 编辑器 IA Phase 1 — 2026-10-16
 
 - 顶层模式：`布置 | 评审 | 执行`（左窄流程轨 + 画布优先浮层）；策划 brief 嵌在布置，无独立策划模式。

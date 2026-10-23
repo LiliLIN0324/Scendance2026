@@ -980,13 +980,18 @@ export class BackendSession {
       expectedRevision: this.snapshot.revision, localRevision: this.snapshot.localRevision, scene: parsed };
   }
   private assertProposalContext(state: EditorState): void {
-    if (!this.isCurrentRequestScope({ projectId: state.projectId, lease: state })) throw new SceneApiError("STALE_PROPOSAL", 409, null);
     const lease = this.writableLease();
-    if (lease.projectId !== state.projectId || lease.sessionId !== state.sessionId || lease.generation !== state.generation ||
-        this.snapshot.project?.id !== state.projectId || this.snapshot.revision !== state.expectedRevision ||
-        this.snapshot.localRevision !== state.localRevision || canonical(this.snapshot.draft) !== canonical(state.scene)) {
-      throw new SceneApiError("STALE_PROPOSAL", 409, null);
-    }
+    const scopeOk = this.isCurrentRequestScope({ projectId: state.projectId, lease: state });
+    const checks = {
+      leaseProjectId: lease.projectId === state.projectId,
+      leaseSessionId: lease.sessionId === state.sessionId,
+      leaseGeneration: lease.generation === state.generation,
+      projectId: this.snapshot.project?.id === state.projectId,
+      revision: this.snapshot.revision === state.expectedRevision,
+      localRevision: this.snapshot.localRevision === state.localRevision,
+      draft: canonical(this.snapshot.draft) === canonical(state.scene),
+    };
+    if (!scopeOk || Object.values(checks).some(v => !v)) throw new SceneApiError("STALE_PROPOSAL", 409, null);
   }
   /** Generate a preview only. Requests never change or save the scene. */
   async requestProposal(input: SceneProposalInput): Promise<SceneProposal> {

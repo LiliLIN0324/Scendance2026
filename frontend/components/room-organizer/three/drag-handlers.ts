@@ -34,6 +34,12 @@ export interface SceneEventHandlers {
   floorPickOnly?: boolean;
   onItemSelect: (id: string, mode: SelectionMode) => void;
   /**
+   * 画布收到 `dblclick` 且射线打在家具上时上报那一件。属性面板只由这一路打开，
+   * 普通单击仅选中 —— 所以必须报「双击打到了哪一件」，不能拿当前选中项代替，
+   * 否则双击空地也会把上次选中那件的面板掀起来。
+   */
+  onItemDoubleClick?: (id: string) => void;
+  /**
    * The current selection. A plain press on a member of a multi-selection
    * keeps it so the drag moves the whole set; a release without a drag then
    * narrows to the pressed item, as file managers do (#291).
@@ -429,11 +435,23 @@ export function attachDragHandlers({
     }
   };
 
+  // 属性面板只认「双击打到了哪一件」。Chrome 的 pointerdown.detail 恒为 0，点击
+  // 计数只在 dblclick 上，所以另做一次射线，而不是在按下时拿当前选中项猜。
+  const onDoubleClick = (event: MouseEvent): void => {
+    const report = handlersRef.current.onItemDoubleClick;
+    if (!report || handlersRef.current.walkthroughActive || handlersRef.current.floorPickOnly) return;
+    setPointerFromEvent(event);
+    raycaster.setFromCamera(pointer, camera);
+    const target = ascendToFurniture(raycaster.intersectObjects(furnitureList(), true)[0]?.object);
+    if (target) report(target.userData.id as string);
+  };
+
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerCancel);
   canvas.addEventListener('pointerleave', onPointerLeave);
+  canvas.addEventListener('dblclick', onDoubleClick);
 
   return () => {
     canvas.removeEventListener('pointerdown', onPointerDown);
@@ -441,6 +459,7 @@ export function attachDragHandlers({
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerCancel);
     canvas.removeEventListener('pointerleave', onPointerLeave);
+    canvas.removeEventListener('dblclick', onDoubleClick);
   };
 }
 

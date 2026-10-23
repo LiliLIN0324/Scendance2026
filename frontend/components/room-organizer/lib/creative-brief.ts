@@ -21,6 +21,14 @@ export const CREATIVE_BRIEF_DESCRIPTION_LIMIT = 1800;
 const MANUAL_BRIEF_HEADING = '【创意简报与观众体验】';
 export const MANUAL_BRIEF_TEMPLATE = [
   MANUAL_BRIEF_HEADING,
+  '活动目标：',
+  '参与观众：',
+  '布置要求：',
+].join('\n');
+
+/** 旧版冗长提纲的逐行内容，用于迁移清理已保存的描述。 */
+const LEGACY_BRIEF_TEMPLATE_LINES = [
+  MANUAL_BRIEF_HEADING,
   '请按实际情况填写；未知写“待确认”，演练设定写明“假设”。',
   '活动目标：待填写希望表达什么、解决什么问题。',
   '参与观众：待填写谁会来，希望他们理解或做什么。',
@@ -32,7 +40,17 @@ export const MANUAL_BRIEF_TEMPLATE = [
   '观看：待填写内容、顺序、关键视角及对应物件。',
   '交流：待填写停留位置、互动方式和负责引导的人。',
   '离开：待填写带走什么、如何反馈或继续参与。',
-].join('\n');
+];
+
+/** 把已保存描述中的旧版冗长提纲替换为精简版，只清理纯模板、不动用户文字。 */
+export function migrateBriefDescription(description: string): string {
+  if (!description.includes(MANUAL_BRIEF_HEADING)) return description;
+  const lines = description.split('\n');
+  const kept = lines.filter(line => !LEGACY_BRIEF_TEMPLATE_LINES.includes(line.trim()));
+  const cleaned = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (cleaned.includes(MANUAL_BRIEF_HEADING)) return cleaned;
+  return cleaned ? cleaned : '';
+}
 
 /** A manual scaffold in the existing description; never overwrite or truncate user text. */
 export function appendCreativeBriefTemplate(description: string): string {

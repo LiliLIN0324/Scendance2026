@@ -35,6 +35,7 @@ function setup(selected: string[]) {
   const handlers: SceneEventHandlers = {
     selectedIds: new Set(selected),
     onItemSelect: vi.fn(),
+    onItemDoubleClick: vi.fn(),
     onItemDragStart: vi.fn(),
     onItemDrag: vi.fn(),
     onItemDragEnd: vi.fn(),
@@ -105,6 +106,22 @@ describe('drag-handlers selection on press (#291)', () => {
     expect(t.handlers.onItemSelect).toHaveBeenCalledWith('a', 'replace');
     t.canvas.dispatchEvent(pointer('pointerup', 100, 100));
     expect(t.handlers.onItemSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a double click as the item under the pointer, not the current selection', () => {
+    const t = setup(['a']);
+    detach = t.detach;
+    t.canvas.dispatchEvent(new MouseEvent('dblclick', { clientX: 140, clientY: 100, bubbles: true }));
+    expect(t.handlers.onItemDoubleClick).toHaveBeenCalledWith('b');
+    t.canvas.dispatchEvent(new MouseEvent('dblclick', { clientX: 100, clientY: 100, bubbles: true }));
+    expect(t.handlers.onItemDoubleClick).toHaveBeenLastCalledWith('a');
+  });
+
+  it('a double click on empty floor reports nothing', () => {
+    const t = setup(['a']);
+    detach = t.detach;
+    t.canvas.dispatchEvent(new MouseEvent('dblclick', { clientX: 190, clientY: 190, bubbles: true }));
+    expect(t.handlers.onItemDoubleClick).not.toHaveBeenCalled();
   });
 });
 

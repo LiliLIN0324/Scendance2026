@@ -46,6 +46,7 @@ function setup(selected: string[]) {
     extraSelectedIds: new Set(selected.slice(1)),
     allSelectedIds: new Set(selected),
     onItemSelect: vi.fn(),
+    onItemDoubleClick: vi.fn(),
     onDeselect: vi.fn(),
     snapPosition: (_id, x, z) => ({ x, z }),
     onItemDragStart: vi.fn(),
@@ -96,6 +97,20 @@ describe('useCanvas2DInteraction gestures (#291, #292)', () => {
     const { params, fire } = setup(['b']);
     fire('pointerdown', 0, 0);
     expect(params.onItemSelect).toHaveBeenCalledWith('a', 'replace');
+  });
+
+  it('reports a double click as the item under the pointer, not the current selection', () => {
+    const { params, fire } = setup(['a']);
+    fire('dblclick', 0, 0);
+    expect(params.onItemDoubleClick).toHaveBeenCalledWith('a');
+    fire('dblclick', 2.5, 0);
+    expect(params.onItemDoubleClick).toHaveBeenLastCalledWith('b');
+  });
+
+  it('a double click on empty plan space reports nothing', () => {
+    const { params, fire } = setup(['a']);
+    fire('dblclick', 0, 3);
+    expect(params.onItemDoubleClick).not.toHaveBeenCalled();
   });
 
   it('pointercancel aborts with restore and repaints instead of committing', () => {
