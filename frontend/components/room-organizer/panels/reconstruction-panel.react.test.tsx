@@ -397,6 +397,51 @@ describe('reconstruction entry',()=>{
   expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
   fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));expect(create.mock.calls[1]![0].reviewedScene?.structure.walls.every(w=>w.status==='confirmed')).toBe(true);
  });
+ it('gates structure confirmation behind scale confirmation using the longest exterior wall',async()=>{
+  const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  if(measured.schemaVersion!==2)throw new Error('expected v2');
+  measured.dimensions=measured.dimensions.map(d=>({...d,status:'detected' as const}));
+  const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[]};
+  const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  await screen.findByText('核对识别结构');
+  // 清空文字尺寸，回到「识别完成但比例未确认」的状态
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:''}});
+  await screen.findByText('认出 4 面墙 · 0 扇门 · 0 根柱');
+  expect(screen.getByText('最长外墙 · 待确认真实长度')).toBeDefined();
+  fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));
+  expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(true);
+  expect(create).toHaveBeenCalledTimes(1);
+  // 确认最长外墙（墙 1，识别为 12 米）的真实长度后锁定比例
+  fireEvent.change(screen.getByLabelText('墙 1 真实长度（米）'),{target:{value:'12'}});
+  fireEvent.click(screen.getByRole('button',{name:'确认长度并锁定比例'}));
+  await screen.findByText(/比例已锁定。可再点选图中另一面墙/);
+  expect(screen.queryByText(/请先确认比例/)).toBeNull();
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));
+  expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
+  fireEvent.click(screen.getByRole('button',{name:'确认结构并继续设计'}));
+  await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));
+  expect(create.mock.calls[1]![0].dimensions).toContainEqual(expect.objectContaining({kind:'wall',valueMeters:12,status:'confirmed',targetId:measured.structure.walls[0]!.id,measure:'length'}));
+ });
+ it('offers a second wall length as a cross-check after the scale is locked',async()=>{
+  const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
+  if(measured.schemaVersion!==2)throw new Error('expected v2');
+  measured.dimensions=measured.dimensions.map(d=>({...d,status:'detected' as const}));
+  const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[]};
+  vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  await screen.findByText('核对识别结构');
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:''}});
+  await screen.findByText('认出 4 面墙 · 0 扇门 · 0 根柱');
+  fireEvent.change(screen.getByLabelText('墙 1 真实长度（米）'),{target:{value:'12'}});
+  fireEvent.click(screen.getByRole('button',{name:'确认长度并锁定比例'}));
+  await screen.findByText(/比例已锁定/);
+  // 点选另一面墙（墙 2），用复核入口输入真实长度
+  fireEvent.click(screen.getByRole('button',{name:'编辑墙 2'}));
+  fireEvent.change(screen.getByLabelText('复核墙 2 长度（米）'),{target:{value:'8'}});
+  fireEvent.click(screen.getByRole('button',{name:'确认复核长度'}));
+  await waitFor(()=>expect(screen.queryByText(/比例已锁定/)).toBeNull());
+ });
 
  it('auto-starts reconstruction when images are uploaded and dimensions are ready',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
