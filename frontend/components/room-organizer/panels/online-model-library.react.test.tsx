@@ -212,10 +212,12 @@ describe('OnlineModelLibrary', () => {
   it('starts a catalogue drag using a known model identity without placing it', async () => {
     const { onAdd } = setup();
     const tile = await screen.findByRole('button', { name: '添加Lounge Chaise' });
-    const dataTransfer = { setData: vi.fn(), effectAllowed: '' };
+    const dataTransfer = { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: '' };
     expect(tile.draggable).toBe(true);
     fireEvent.dragStart(tile, { dataTransfer });
     expect(dataTransfer.setData).toHaveBeenCalledWith(CATALOG_DRAG_MIME, 'online:seating-chaise');
+    // 拖拽跟随图像是物料缩略图本身，而不是整张卡片。
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(tile.querySelector('img'), expect.any(Number), expect.any(Number));
     expect(onAdd).not.toHaveBeenCalled();
   });
   it('scrolls categories horizontally with a mouse wheel without changing the filter', async () => {
@@ -314,12 +316,12 @@ describe('OnlineModelLibrary', () => {
     expect(tiles()).toHaveLength(3);
   });
 
-  it('quotes each tile’s real footprint and keeps file size and the full name on hover', async () => {
+  it('shows only the model name on the tile, with the full name on hover', async () => {
     setup();
     const tile = await screen.findByRole('button', { name: '添加Lounge Chaise' });
-    expect(tile.textContent).toContain('0.5 × 0.6 × 0.9 m');
+    expect(tile.textContent).not.toContain('0.5 × 0.6 × 0.9 m');
     expect(tile.textContent).not.toContain('2 KB');
-    expect(tile.getAttribute('title')).toContain('Lounge Chaise (Airport Lounge) · 2 KB');
+    expect(tile.getAttribute('title')).toContain('Lounge Chaise (Airport Lounge)');
   });
 
   it('reports a failed preview while keeping the original model available to place', async () => {

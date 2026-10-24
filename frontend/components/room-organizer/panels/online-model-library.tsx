@@ -1,12 +1,12 @@
 'use client';
 
-import { Loader2, Plus, Search } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { captureCatalogPlacement, type CatalogPlacementGuard } from '../lib/catalog-placement-guard';
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
-import { filterOnlineModels, formatModelBytes, loadOnlineModels } from '../lib/online-models';
+import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
@@ -166,18 +166,20 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
           if (disabled || busy !== null) { event.preventDefault(); return; }
           event.dataTransfer.setData(CATALOG_DRAG_MIME, `online:${model.slug}`);
           event.dataTransfer.effectAllowed = 'copy';
+          // 拖拽时跟随鼠标的是物料缩略图，而不是整张卡片。
+          const thumb = event.currentTarget.querySelector('img');
+          if (thumb) event.dataTransfer.setDragImage(thumb, thumb.clientWidth / 2, thumb.clientHeight / 2);
         }}
-        onClick={() => void addOnline(model)} aria-label={`添加${onlineModelDisplayName(model)}`} title={`${model.name}${model.bytes > 0 ? ` · ${formatModelBytes(model.bytes)}` : ''}\n${Number(model.width.toFixed(2))} × ${Number(model.depth.toFixed(2))} × ${Number(model.height.toFixed(2))} m\n拖到场地或直接点击添加`}>
+        onClick={() => void addOnline(model)} aria-label={`添加${onlineModelDisplayName(model)}`} title={`${model.name}\n拖到场地或直接点击添加`}>
         <span className="sc-material-preview">
           {model.thumb && !failedThumbnails.has(model.slug)
             // A catalogue thumbnail straight from the CDN; next/image cannot optimise a remote URL here.
             // eslint-disable-next-line @next/next/no-img-element
             ? <img className="sc-material-thumb" src={model.thumb} alt="" draggable={false} loading="lazy" decoding="async" onError={() => setFailedThumbnails(current => new Set(current).add(model.slug))}/>
             : <span className="sc-material-thumb-empty">{model.thumb ? '预览未载入' : '暂无预览'}</span>}
-          <span className="sc-material-add">{busy === model.slug ? <Loader2 className="cr-spin" size={12}/> : <Plus size={12}/>}</span>
+          {busy === model.slug && <span className="sc-material-add"><Loader2 className="cr-spin" size={12}/></span>}
         </span>
         <span className="sc-material-name">{onlineModelDisplayName(model)}</span>
-        <span className="sc-material-size">{Number(model.width.toFixed(2))} × {Number(model.depth.toFixed(2))} × {Number(model.height.toFixed(2))} m</span>
       </button>)}
       {filtered.length > shown.length && <button type="button" className="sc-material-more" onClick={() => setVisible(current => current + PAGE_SIZE)}>
         再显示 {Math.min(PAGE_SIZE, filtered.length - shown.length)} 个
