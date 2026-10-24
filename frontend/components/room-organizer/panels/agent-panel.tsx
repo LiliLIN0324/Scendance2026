@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * v2.4 布置第 1–3 步 · 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
- * 全部是页面本地状态：室内/户外开关、底图状态、长宽输入都不进 schema。
+ * 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
+ * 一句话开场：没有表单、没有起步卡——用户敲一句话，客户端解析（人数/场地/面积/类型/时段），
+ * 自动铺到场地上再出方案；氛围（雨天/漫游）也能用一句话切换。
  * 出方案：已连接云项目时走现有 AI 生成；否则用现有本地物料组（furniture-sets / surprise）分 5 步真实摆放，
- * 不新增算法。底图只收图片（复用 layout.floorPlanImage），不识别、不显示任何米数。
+ * 不新增算法。底图只收图片（复用 layout.floorPlanImage），长宽按图纸比例自动估。
  */
 import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -17,8 +18,9 @@ import { surpriseLayout } from '../lib/surprise';
 import type { FurnitureItem } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import {
-  NON_IMAGE_MESSAGE, canGenerate, checkDim, classifyFile, fileSizeLabel, formatArea, GEN_STEPS,
-  isStopCommand, sanitizeDimInput, type AgentState, type DimCheck, type VenueIO,
+  describeExtraction, canGenerate, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, NON_IMAGE_MESSAGE,
+  checkDim, isStopCommand, parseBriefSentence, sanitizeDimInput, suggestDimsFromArea, suggestDimsFromImageRatio,
+  type AgentState, type DimCheck, type VenueIO,
 } from '../lib/workbench-agent';
 import { useStudioAgent } from './creative-studio';
 import './agent-panel.css';
@@ -111,7 +113,23 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
     : issue ? (issue.kind === 'nonImage' ? 'nonImageRejected' : issue.kind === 'tooLarge' ? 'fileTooLarge' : issue.kind === 'readFailed' ? 'fileReadFailed' : 'fileUnsupported')
     : hasBase ? (lengthCheck.ok && widthCheck.ok ? 'baseReady' : 'baseNoDims') : 'empty';
 
-  const ctaEnabled = canGenerate(state, hasBase, lengthCheck, widthCheck) && !(phase === 'generating');
+  /** 把一句话解析出的要素铺到画布：场地类型、时段、长宽（面积按 4:3 折算）。 */
+  const applyExtraction = useCallback((extraction: { venueIO: VenueIO | null; timeOfDay: number | null; lengthM: number | null; widthM: number | null; areaM2: number | null }) => {
+    if (extraction.venueIO) {
+      setVenueIO(extraction.venueIO);
+      onVenueIOChange?.(extraction.venueIO);
+      if (extraction.venueIO === 'indoor') setView(current => (current.weather === 'rain' ? { ...current, weather: 'clear' } : current));
+    }
+    if (extraction.timeOfDay !== null) setView(current => ({ ...current, timeOfDay: extraction.timeOfDay! }));
+    if (extraction.lengthM !== null && extraction.widthM !== null) {
+      setLengthRaw(String(extraction.lengthM)); setWidthRaw(String(extraction.widthM)); setDimsTouched(true);
+    } else if (extraction.areaM2 !== null) {
+      const dims = suggestDimsFromArea(extraction.areaM2);
+      setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
+    }
+  }, [onVenueIOChange, setView]);
+
+  const ctaEnabled = canGenerate(state, hasBase, lengthCheck, widthCheck) && phase !== 'generating';
 
   async function acceptFile(file: File): Promise<void> {
     lastFile.current = file;
@@ -124,13 +142,19 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
     }
     try {
       const url = await readImageAsDataUrl(file);
-      await new Promise<void>((resolve, reject) => { const image = new Image(); image.onload = () => image.naturalWidth > 0 ? resolve() : reject(new Error('empty')); image.onerror = () => reject(new Error('decode')); image.src = url; });
+      let pixels = { width: 0, height: 0 };
+      await new Promise<void>((resolve, reject) => { const image = new Image(); image.onload = () => { pixels = { width: image.naturalWidth, height: image.naturalHeight }; image.naturalWidth > 0 ? resolve() : reject(new Error('empty')); }; image.onerror = () => reject(new Error('decode')); image.src = url; });
       actions.setFloorPlan(url);
       setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: 0.6 }));
       setIssue(null); setBaseName(file.name);
+      // 按图纸比例自动估长宽：面积沿用当前画布，画布还是默认小场地时按 120 ㎡ 起步。
+      const current = live.current;
+      const area = current.width * current.height >= 4 ? current.width * current.height : 120;
+      const dims = suggestDimsFromImageRatio(pixels.width, pixels.height, area);
+      setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
       say({ role: 'user', text: file.name, meta: '图片 · 1 页' });
-      say({ role: 'agent', text: '图纸已铺成底图，照着填一下长宽就行。' });
-      queueMicrotask(() => document.getElementById('in-length')?.focus());
+      say({ role: 'agent', text: `底图铺好了，按图纸比例先按 ${formatArea(dims.length)} × ${formatArea(dims.width)} m。再说一句话（人数＋活动），我就开摆。` });
+      queueMicrotask(() => document.getElementById('ap-input')?.focus());
     } catch {
       setIssue({ kind: 'readFailed', name: file.name, size: file.size });
       say({ role: 'user', text: file.name, warn: '没读出来' });
@@ -212,7 +236,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
     if (phase === 'generating' && isStopCommand(trimmed)) { say({ role: 'user', text: trimmed }); stop(); return; }
     say({ role: 'user', text: trimmed });
     if (studio?.connection === '项目已连接' && !studio.busy) { void studio.generate(trimmed).then(() => setPhase(current => current === 'ready' ? 'edited' : current)); return; }
-    say({ role: 'agent', text: '一句话改要先登录并连上云项目；现在可以点「我来调」直接拖。' });
+    // 本地：先把这句话里的人数/场地/长宽解析出来铺到画布，再引导点按钮出方案。
+    const extraction = parseBriefSentence(trimmed);
+    applyExtraction(extraction);
+    const summary = describeExtraction(extraction, { length: lengthCheck.ok ? lengthCheck.value : live.current.width, width: widthCheck.ok ? widthCheck.value : live.current.height });
+    say({ role: 'agent', text: `记下了：${summary}。点上面按钮我就按这个出方案。` });
   }
 
   const overlapCount = phase === 'ready' || phase === 'edited' || phase === 'paused' ? activeFloor.items.filter(item => collidingIds.has(item.id)).length : 0;

@@ -167,6 +167,16 @@ function makeCubeGlb() {
   return cachedGlb;
 }
 
+// Public-library assets ship with the frontend as static GLBs; map assetId → dev-server path so
+// placed materials render the real model locally instead of the placeholder cube.
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+const assetIds = require('./assets/library/asset-ids.json');
+const localModelByAssetId = new Map(
+  Object.entries(assetIds)
+    .filter(([url]) => url.startsWith('/showcase/assets/library/model/'))
+    .map(([url, id]) => [id, url])
+);
+
 let uploadedSources = [];
 let latestProposal = null;
 
@@ -471,8 +481,10 @@ const server = http.createServer((req, res) => {
       // Asset URL
       const assetUrlMatch = apiPath.match(/^\/assets\/([^/]+)\/url$/);
       if (assetUrlMatch && method === 'POST') {
+        const localPath = localModelByAssetId.get(assetUrlMatch[1].toLowerCase());
+        const url = localPath ? `${FRONTEND_ORIGIN}${localPath}` : `http://localhost:${PORT}/mock-assets/${assetUrlMatch[1]}.glb`;
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id: assetUrlMatch[1], format: 'glb', name: 'mock-asset', url: `http://localhost:${PORT}/mock-assets/${assetUrlMatch[1]}.glb`, expiresIn: 300 }));
+        res.end(JSON.stringify({ id: assetUrlMatch[1], format: 'glb', name: 'mock-asset', url, expiresIn: 300 }));
         return;
       }
 
