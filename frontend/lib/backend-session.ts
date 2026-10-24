@@ -508,6 +508,14 @@ export class BackendSession {
       const { data, error } = await this.supabase.auth.getSession();
       if (error) throw error;
       if (!data.session) {
+        if (!recovery && this.config.url.includes("localhost:3099")) {
+          // Local mock backend: auto sign-in so local development never requires manual login.
+          const result = await this.authRequest("password", { email: "dev@mock.local", password: "mock" });
+          if (epoch !== this.epoch) return;
+          this.acceptAuth(result);
+          this.update({ status: "ready", error: null });
+          return;
+        }
         this.tokens = null;
         this.update({ user: null, recoveryReady: false, status: "signed_out", writeBlocked: true, error: null });
         return;
