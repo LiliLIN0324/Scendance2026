@@ -20,6 +20,10 @@ import type { RoomLayout } from '../lib/types';
 
 interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void }
 
+function isLocalMockBackend(): boolean {
+  return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes('localhost:3099');
+}
+
 export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
@@ -262,6 +266,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         <button type="button" onClick={downloadContract} disabled={!!conversionError}>导出场景数据</button>
       </div> : !cloud.user ? <div className="sc-cloud-form">
         <p>登录你的工作室，继续连接云项目。</p>
+        {isLocalMockBackend() && <button type="button" className="sc-cloud-primary" disabled={busy} onClick={() => void run(async () => { await controller.signIn('dev@mock.local', 'mock'); setNotice('已用本地测试账户登录。'); })}>本地测试一键登录</button>}
       </div> : <div className="sc-cloud-content">
         <div className="sc-account-section-heading"><div><h3>{sceneConnection?'其他云项目':'云项目快捷入口'}</h3><p className="sc-cloud-muted">{sceneConnection?'当前活动的场景连接已显示在上方。':'完整工作室与项目管理请优先使用 /projects；此处仅作编辑器快捷入口。'}</p></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
         <div className="sc-account-project-grid"><section aria-label="项目列表">
