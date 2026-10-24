@@ -117,6 +117,56 @@ function uuid() {
   });
 }
 
+// Minimal valid GLB containing a unit cube, so asset-backed materials render as a placeholder box.
+let cachedGlb = null;
+function makeCubeGlb() {
+  if (cachedGlb) return cachedGlb;
+  const v = 0.5;
+  const positions = new Float32Array([
+    -v, -v, -v, v, -v, -v, v, v, -v, -v, v, -v,
+    -v, -v, v, v, -v, v, v, v, v, -v, v, v,
+  ]);
+  const indices = new Uint16Array([
+    0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 4, 5, 1, 4, 1, 0,
+    7, 3, 2, 7, 2, 6, 5, 6, 2, 5, 2, 1, 7, 4, 0, 7, 0, 3,
+  ]);
+  const posBuf = Buffer.from(positions.buffer, positions.byteOffset, positions.byteLength);
+  const idxBuf = Buffer.from(indices.buffer, indices.byteOffset, indices.byteLength);
+  const gltf = {
+    asset: { version: '2.0' },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: 8, type: 'VEC3', min: [-v, -v, -v], max: [v, v, v] },
+      { bufferView: 1, componentType: 5123, count: 36, type: 'SCALAR' },
+    ],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: 96 },
+      { buffer: 0, byteOffset: 96, byteLength: 72 },
+    ],
+    buffers: [{ byteLength: 168 }],
+  };
+  const json = Buffer.from(JSON.stringify(gltf));
+  const jsonPad = Buffer.concat([json, Buffer.alloc((4 - (json.length % 4)) % 4, 0x20)]);
+  const bin = Buffer.concat([posBuf, idxBuf]);
+  const binPad = Buffer.concat([bin, Buffer.alloc((4 - (bin.length % 4)) % 4)]);
+  const total = 12 + 8 + jsonPad.length + 8 + binPad.length;
+  const header = Buffer.alloc(12);
+  header.writeUInt32LE(0x46546c67, 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(total, 8);
+  const jsonHeader = Buffer.alloc(8);
+  jsonHeader.writeUInt32LE(jsonPad.length, 0);
+  jsonHeader.writeUInt32LE(0x4e4f534a, 4);
+  const binHeader = Buffer.alloc(8);
+  binHeader.writeUInt32LE(binPad.length, 0);
+  binHeader.writeUInt32LE(0x004e4942, 4);
+  cachedGlb = Buffer.concat([header, jsonHeader, jsonPad, binHeader, binPad]);
+  return cachedGlb;
+}
+
 let uploadedSources = [];
 let latestProposal = null;
 
@@ -132,6 +182,13 @@ const server = http.createServer((req, res) => {
   if (method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   console.log(`[${new Date().toISOString()}] ${method} ${path}`);
+
+  // Placeholder GLB for asset-backed materials.
+  if (path.startsWith('/mock-assets/')) {
+    res.writeHead(200, { 'Content-Type': 'model/gltf-binary' });
+    res.end(makeCubeGlb());
+    return;
+  }
 
   // Parse body
   let body = '';
@@ -415,7 +472,7 @@ const server = http.createServer((req, res) => {
       const assetUrlMatch = apiPath.match(/^\/assets\/([^/]+)\/url$/);
       if (assetUrlMatch && method === 'POST') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id: assetUrlMatch[1], format: 'glb', name: 'mock-asset', url: `https://mock.local/assets/${assetUrlMatch[1]}.glb`, expiresIn: 300 }));
+        res.end(JSON.stringify({ id: assetUrlMatch[1], format: 'glb', name: 'mock-asset', url: `http://localhost:${PORT}/mock-assets/${assetUrlMatch[1]}.glb`, expiresIn: 300 }));
         return;
       }
 
