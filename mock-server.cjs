@@ -157,6 +157,45 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    if (path === '/auth/v1/token' || path.endsWith('/auth/v1/token')) {
+      const grant = url.searchParams.get('grant_type');
+      if (grant === 'password') {
+        const cred = json || {};
+        if (!cred.email || !cred.password) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid login credentials' }));
+          return;
+        }
+        const resp = {
+          access_token: MOCK_ACCESS_TOKEN,
+          refresh_token: MOCK_REFRESH_TOKEN,
+          expires_in: 3600,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'bearer',
+          user: { id: MOCK_USER_ID, email: cred.email, is_anonymous: false, role: 'authenticated', app_metadata: {}, user_metadata: { display_name: cred.email.split('@')[0] }, aud: 'authenticated', created_at: new Date().toISOString() },
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(resp));
+        return;
+      }
+      if (grant === 'refresh_token') {
+        const resp = {
+          access_token: MOCK_ACCESS_TOKEN,
+          refresh_token: MOCK_REFRESH_TOKEN,
+          expires_in: 3600,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'bearer',
+          user: { id: MOCK_USER_ID, email: 'guest@mock.local', is_anonymous: true, role: 'authenticated', aud: 'authenticated', created_at: new Date().toISOString() },
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(resp));
+        return;
+      }
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unsupported_grant_type', error_description: `grant_type ${grant} not supported by mock` }));
+      return;
+    }
+
     if (path === '/auth/v1/user' || path.endsWith('/auth/v1/user')) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ user: { id: MOCK_USER_ID, email: 'guest@mock.local', is_anonymous: true, role: 'authenticated', aud: 'authenticated', created_at: new Date().toISOString() } }));
