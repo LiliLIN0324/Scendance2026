@@ -135,3 +135,46 @@
 .sc-workbench .sc-agent-panel .btn-primary:hover { background:var(--wk-green-deep,#394a37); }
 .sc-workbench .sc-agent-panel .ap-io { background:var(--wk-plane,#f3f4ee); }
 .sc-workbench .sc-agent-panel .ap-composer { border-top:1px solid var(--wk-hair,#e7e7e7); background:var(--wk-canvas,#f9f9f9); }
+
+/* ── 左栏 · 活动简报（T-UI §4-1：左栏只跟对话，不摆表单） ───────────── */
+.sc-brief {
+  display:flex; flex-direction:column; gap:12px; height:100%; min-height:0;
+  box-sizing:border-box; overflow-y:auto; padding:14px 16px 18px;
+  color:var(--wk-ink,#2f2f2f);
+}
+.sc-brief-head { display:flex; align-items:center; gap:8px; }
+.sc-brief-eyebrow { font-size:11px; font-weight:600; letter-spacing:.08em; color:var(--wk-ink-soft,#5c5f56); }
+.sc-brief-source { margin-left:auto; font-size:11px; color:var(--wk-ink-faint,#a8aba2); }
+.sc-brief-close { all:unset; display:inline-grid; place-items:center; width:24px; height:24px; border-radius:6px; color:var(--wk-ink-faint,#a8aba2); cursor:pointer; }
+.sc-brief-close:hover { background:var(--wk-plane,#f3f4ee); color:var(--wk-ink,#2f2f2f); }
+.sc-brief-close:focus-visible { outline:2px solid var(--wk-green,#56794d); outline-offset:1px; }
+.sc-brief-title { font-size:15px; line-height:1.35; font-weight:600; }
+.sc-brief-rows { margin:0; display:flex; flex-direction:column; }
+.sc-brief-rows > div { display:grid; grid-template-columns:44px minmax(0,1fr); gap:10px; padding:8px 0; border-bottom:1px solid var(--wk-hair-soft,#f0f0eb); font-size:12.5px; }
+.sc-brief-rows > div:last-child { border-bottom:0; }
+.sc-brief-rows dt { color:var(--wk-ink-faint,#a8aba2); }
+.sc-brief-rows dd { margin:0; color:var(--wk-ink,#2f2f2f); line-height:1.45; word-break:break-word; }
+.sc-brief-rows dd em { font-style:normal; color:var(--wk-ink-faint,#a8aba2); }
+.sc-brief-note { margin:0; font-size:11.5px; line-height:1.5; color:var(--wk-ink-faint,#a8aba2); }
+.sc-brief-status { margin:0; display:flex; align-items:flex-start; gap:7px; padding:9px 10px; border-radius:8px; background:var(--wk-plane,#f3f4ee); font-size:12px; line-height:1.5; color:var(--wk-ink-soft,#5c5f56); }
+.sc-brief-status > span { width:6px; height:6px; margin-top:5px; border-radius:50%; background:var(--wk-green,#56794d); flex:0 0 6px; }
+.sc-brief-tools { margin-top:auto; border-top:1px solid var(--wk-hair,#e7e7e7); padding-top:10px; }
+.sc-brief-tools > summary { cursor:pointer; font-size:12px; color:var(--wk-ink-soft,#5c5f56); border-radius:5px; }
+.sc-brief-tools > summary:hover { color:var(--wk-ink,#2f2f2f); }
+.sc-brief-tools > summary:focus-visible { outline:2px solid var(--wk-green,#56794d); outline-offset:2px; }
+.sc-brief-tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px; margin-top:8px; }
+.sc-brief-tool-grid button { display:flex; align-items:center; gap:6px; width:100%; border:0; border-radius:6px; padding:7px 8px; background:transparent; color:var(--wk-ink-soft,#5c5f56); font-size:11.5px; text-align:left; cursor:pointer; }
+.sc-brief-tool-grid button:hover { background:var(--wk-plane,#f3f4ee); color:var(--wk-ink,#2f2f2f); }
+.sc-brief-tool-grid button:focus-visible { outline:2px solid var(--wk-green,#56794d); outline-offset:-2px; }
+/* 简报比深工具窄：桌面端把 380px 的固定页收回来。 */
+@media (min-width:1081px) {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.has-brief {
+    flex-basis:292px !important; width:292px !important; max-width:292px;
+  }
+}
+/* 深工具仍留在左栏时，恢复「活动简报 / 执行资料」与收起钮，给人一条明确的回路。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-business .sc-left-heading,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-business .sc-left-context { display:flex; }
+/* 深工具打开时把焦点交给面板容器用于朗读；容器不是控件，不该画一圈浏览器默认黑框。 */
+.sc-data-host [role="group"]:focus { outline:none; }
+

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio } from './workbench-agent';
+import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio } from './workbench-agent';
 
 describe('workbench agent v2.4', () => {
   it('validates length/width 1–500 m with handoff copy', () => {
@@ -168,5 +168,14 @@ describe('对话改左栏那几件事（第 4 节：不再开第二套表单页�
     expect(isReviewCommand('换一版')).toBe(false);
     expect(isReviewCommand('再加两把椅子')).toBe(false);
     expect(isReviewCommand('出物料清单')).toBe(false);
+  });
+
+  it('opens the customer review workspace only for explicit review intent', () => {
+    expect(isClientReviewCommand('准备客户评审')).toBe(true);
+    expect(isClientReviewCommand('给甲方看方案')).toBe(true);
+    expect(isClientReviewCommand('发一版评审包')).toBe(true);
+    expect(isClientReviewCommand('走一遍给客户看')).toBe(false);
+    expect(isClientReviewCommand('客户评审做完了吗')).toBe(true);
+    expect(isClientReviewCommand('加两把椅子')).toBe(false);
   });
 });

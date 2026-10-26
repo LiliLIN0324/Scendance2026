@@ -29,7 +29,7 @@ import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ProjectReviewPanel } from './project-review-panel';
 import { ReconstructionPanel } from './reconstruction-panel';
-import { SceneDeliveryPanel } from './scene-delivery-panel';
+import { SceneDeliveryPanel, exportActivityHandoff } from './scene-delivery-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import type { ActivityTaskPanelContext } from './activity-task-workspace';
@@ -61,6 +61,8 @@ interface StudioValue extends LocalProjectBackupActions {
   reviewSource: ProjectReviewSource;
   getReviewSource(): ProjectReviewSource;
   prepareReview(): Promise<ProjectReviewBase>;
+  /** T-UI §4-5：对话里「确认导出」直接在本机生成完整活动交接，不跳执行页。 */
+  exportActivity(): Promise<void>;
   scope: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onPreview?: ((layout: RoomLayout | null) => void) | undefined; updateImage(id: string, patch: Partial<VenuePhoto>): void;
   brief: CreativeBrief; setBrief: React.Dispatch<React.SetStateAction<CreativeBrief>>;
   briefReady: boolean; briefError: string | null; hasSavedBrief: boolean; retryBrief(): void;
@@ -82,7 +84,7 @@ export function useCreativeBriefState(): CreativeBriefState | null {
 /** v2.4 AgentPanel：只取出方案需要的那几项（复用现有 AI 生成，不新增算法）。
  *  云端提案现在也要在晴光栏里「确认布置 / 撤回」，所以把预览与确认这几项一起放出来。 */
 export function useStudioAgent(): Pick<StudioValue, 'generate'|'busy'|'run'|'connection'|'notice'|'controller'|'brief'|'setBrief'|'hasSavedBrief'
-  |'preview'|'stale'|'expired'|'applyPreview'|'discardPreview'|'cancelRun'>|null { return useContext(StudioContext); }
+  |'preview'|'stale'|'expired'|'applyPreview'|'discardPreview'|'cancelRun'|'exportActivity'>|null { return useContext(StudioContext); }
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 export function useMaterialCheckinState(): MaterialCheckinState { return useStudio().checkins; }
 const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。' }];
@@ -939,8 +941,15 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     catch(error) { if(alive.current && agentScopeRef.current===selected.scope)setNotice(error instanceof Error?error.message:'应用失败，原方案已保留。'); }
     finally { if(epoch===runEpoch.current){requestPending.current=false;if(alive.current)setBusy(false);} }
   }
+  // T-UI §4-5：对话里确认后直接生成同一份「完整活动交接」，不打开执行页。
+  async function exportActivity():Promise<void> {
+    const base=layoutRef.current,scope=scopeRef.current,owner=controllerRef.current;
+    if(!isLocalActivityWorkspace(owner))throw new Error('云项目暂不支持完整活动交接，请切换到本地活动后导出。');
+    const stillCurrent=()=>alive.current&&layoutRef.current===base&&scopeRef.current===scope&&controllerRef.current===owner;
+    await exportActivityHandoff({layout:base,prepareBackup,stillCurrent});
+  }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -1022,7 +1031,7 @@ export type BusinessToolsApi = {
   openCommercial():void;
 };
 
-export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest = 0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, onOpenPublication, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef, exportHandoffRequest = 0 }: {
+export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest=0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, onOpenPublication, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
   onOpenTemplates?:()=>void;
   /** 左栏工具轨已列出这些去处时，标题栏不再重复一个分类下拉。 */
   hideCategorySelect?: boolean;
@@ -1040,6 +1049,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   /** 参考底图开关：画布右上角不再浮，跟着「图纸尺寸」面板走。 */
   referenceImagePanel?: ReactNode;
   activityTaskPanel?: (context: ActivityTaskPanelContext) => ReactNode;
+  /** 左栏「活动资料」只在人点击时自增，打开工作区并回到上次的资料分类（挂载时不自开）。 */
   workspaceOpenRequest?: number;
   workspaceEntryRef?: RefObject<HTMLButtonElement>;
   toolsOpenRequest?: number;
@@ -1058,8 +1068,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   workbenchModeSerial?: number;
   /** v2.4：右栏由 AgentPanel 接管时，旧聊天默认不自动展开。 */
   autoOpen?: boolean;
-  /** T-UI §4-5：对话里点「确认导出」后自增，交付工作区打开并自动跑一次既有交接导出。 */
-  exportHandoffRequest?: number;
   /** 左栏工具轨需要的入口；由 room-organizer 读取后渲染「活动需求 / 图纸尺寸 / …」按钮。 */
   toolsApiRef?: MutableRefObject<BusinessToolsApi | null>;
 }):JSX.Element {
@@ -1139,9 +1147,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const [deliveryOpened,setDeliveryOpened]=useState(false);
   const [deliveryViewRequest,setDeliveryViewRequest]=useState<{serial:number;view:'operations'|'materials'}>();
   const deliveryViewSerial=useRef(0);
-  // T-UI §4-5：对话确认导出后自增，SceneDeliveryPanel 收到就跑一次既有交接导出。
-  const [autoExportRequest,setAutoExportRequest]=useState(0);
-  const handledExportHandoff=useRef(0);
   const [reviewOpened,setReviewOpened]=useState(false);
   const reviewTarget=useRef<HTMLDivElement>(null),focusReview=useRef(false),handledReview=useRef(0);
   const [commercialOpened,setCommercialOpened]=useState(false);
@@ -1177,8 +1182,8 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const focusWorkspace=useRef(false);
   const returnToDeliveryEntry=useRef(false);
   const returnToWorkspaceEntry=useRef(false);
-  const handledWorkspaceRequest=useRef(0);
   const handledToolsRequest=useRef(0);
+  const handledWorkspaceRequest=useRef(0);
   const handledDeliveryRequest=useRef(0);
   const wasExpanded=useRef(false);
   const preparingScope=useRef(studio.preparing);preparingScope.current=studio.preparing;
@@ -1224,13 +1229,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     focusDelivery.current=true;
     setDeliveryOpened(true);setBusinessMode('delivery');setTemplatesOpen(false);if(docked)resizeWorkspace(true);else setExpanded(true);
   },[deliveryOpenRequest,setExpanded]);
-  useEffect(()=>{
-    if(!exportHandoffRequest||exportHandoffRequest===handledExportHandoff.current)return;
-    handledExportHandoff.current=exportHandoffRequest;
-    // T-UI §4-5：人在对话里点过「确认导出」——打开执行工作区，并让交付面板自动触发既有交接导出。
-    openDelivery();
-    setAutoExportRequest(value=>value+1);
-  },[exportHandoffRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{
     if(workbenchModeSerial===handledWorkbenchMode.current)return;
     handledWorkbenchMode.current=workbenchModeSerial;
@@ -1352,12 +1350,16 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   function openBrief(event?:React.MouseEvent<HTMLButtonElement>):void {
     if(event)businessEntry.current=event.currentTarget;
     setPlanCategory('brief');focusReference.current=false;focusDelivery.current=false;focusReview.current=false;
-    if(docked){focusBrief.current=true;returnToWorkspaceEntry.current=true;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setTemplatesOpen(false);resizeWorkspace(true);queueMicrotask(()=>briefDescription.current?.focus());return;}
+    if(docked){if(!event){returnToWorkspaceEntry.current=true;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;}
+      focusBrief.current=true;setBusinessMode('plan');setTemplatesOpen(false);resizeWorkspace(true);queueMicrotask(()=>briefDescription.current?.focus());return;}
+    if(!event){returnToWorkspaceEntry.current=true;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;}
     if(studio.expanded&&businessMode==='plan'&&!templatesOpen){
       if(briefDetails.current)briefDetails.current.open=true;
+      if(!docked)resizeWorkspace(true);
       briefDescription.current?.focus();
     }else{
       focusBrief.current=true;setBusinessMode('plan');setTemplatesOpen(false);setExpanded(true);
+      if(!docked)resizeWorkspace(true);
     }
   }
   function openReference(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusReference.current=true;focusBrief.current=false;focusDelivery.current=false;returnToReferenceEntry.current=true;returnToWorkspaceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setPlanCategory('reference');setTemplatesOpen(false);setLocalReferenceRequest(value=>value+1);resizeWorkspace(true);if(!docked)setExpanded(true);}
@@ -1415,7 +1417,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>chooseModelExample(label!,prompt!)}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
           {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={(docked?workspaceExpanded:studio.expanded)&&!templatesOpen&&businessMode==='model'&&modelTool==='customize'}/></div>}
         </section>
-        <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} autoExportRequest={autoExportRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
+        <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
         <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel storageIdentity={JSON.stringify([studio.controller.config.apiUrl,studio.controller.getSnapshot().user?.id??null,studio.reviewSource.scope])} source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,prefill:prefillReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} {...(onOpenPublication?{onOpenCloudShare:onOpenPublication}:{})} inputLocked={studio.backupPending} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
         {commercialPanel!=null&&<section id="agent-panel-commercial" aria-label="合同与约定" hidden={businessMode!=='commercial'||templatesOpen}>{commercialOpened&&<div ref={commercialTarget} tabIndex={-1} role="group" aria-label="合同与约定资料">{commercialPanel}</div>}</section>}
         {!onOpenTemplates&&<section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>}

@@ -18,7 +18,7 @@ import { buildBriefReference, INITIAL_BRIEF } from '../lib/creative-brief';
 import { LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
-import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider, useCreativeBrief, useCreativeBriefState, useLocalProjectBackup, type LocalProjectBackupActions } from './creative-studio';
+import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider, useCreativeBrief, useCreativeBriefState, useLocalProjectBackup, type BusinessToolsApi, type LocalProjectBackupActions } from './creative-studio';
 import { GeneratedModelLibrary } from './generated-model-library';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { MaterialCustomizationSeed } from './material-customization';
@@ -88,7 +88,8 @@ function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace
   const host = useRef<HTMLDivElement>(null), referenceEntry = useRef<HTMLButtonElement>(null), conversationEntry = useRef<HTMLButtonElement>(null);
   const workspaceEntry = useRef<HTMLButtonElement>(null), toolsEntry = useRef<HTMLButtonElement>(null);
   const [workspaceVisible, setWorkspaceVisible] = useState(false), [referenceRequest, setReferenceRequest] = useState(0);
-  const [workspaceRequest, setWorkspaceRequest] = useState(0), [toolsRequest, setToolsRequest] = useState(0);
+  const [toolsRequest, setToolsRequest] = useState(0), [workspaceRequest, setWorkspaceRequest] = useState(0);
+  const briefApi = useRef<BusinessToolsApi | null>(null);
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0), [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const workspaceChanged = useCallback((visible: boolean) => { setWorkspaceVisible(visible); onWorkspace?.(visible); }, [onWorkspace]);
   const conversationChanged = useCallback((visible: boolean) => { onConversation?.(visible); }, [onConversation]);
@@ -99,13 +100,14 @@ function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace
     <button ref={referenceEntry} onClick={() => setReferenceRequest(value => value + 1)}>外部图纸核对</button>
     <button onClick={() => setConversationCloseRequest(value => value + 1)}>外部收起聊天</button>
     <div data-testid="docked-business-host" ref={host} hidden={!workspaceVisible}/>
-    <CreativeAssistant docked businessHostRef={host} generationPanel={generator} commercialPanel={commercialPanel}
+    <CreativeAssistant docked businessHostRef={host} generationPanel={generator} commercialPanel={commercialPanel} toolsApiRef={briefApi}
       {...(onTemplates?{onOpenTemplates:onTemplates}:{})}
       {...(workbenchMode?{workbenchMode,workbenchModeSerial:1}:{workbenchModeSerial:0})}
       {...(onOpenPublication?{onOpenPublication}:{})}
       {...(reviewOpenRequest?{reviewOpenRequest}:{})}
       {...(deliveryOpenRequest?{deliveryOpenRequest}:{})}
-      workspaceOpenRequest={workspaceRequest} workspaceEntryRef={workspaceEntry}
+      workspaceEntryRef={workspaceEntry}
+      workspaceOpenRequest={workspaceRequest}
       toolsOpenRequest={toolsRequest} toolsEntryRef={toolsEntry}
       referenceOpenRequest={referenceRequest} referenceEntryRef={referenceEntry}
       conversationCloseRequest={conversationCloseRequest}
@@ -992,8 +994,8 @@ describe('direct local delivery shortcut', () => {
 
   it('opens the generic workspace at planning first and retains drafts and the selected tool when reopened', async () => {
     function Trial(){
-      const [request,setRequest]=useState(0);const entry=useRef<HTMLButtonElement>(null);
-      return <CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><button ref={entry} onClick={()=>setRequest(value=>value+1)}>打开活动工作区</button><CreativeAssistant workspaceOpenRequest={request} workspaceEntryRef={entry}/></CreativeStudioProvider>;
+      const entry=useRef<HTMLButtonElement>(null);const api=useRef<BusinessToolsApi|null>(null);
+      return <CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><button ref={entry} onClick={()=>api.current?.openBrief()}>打开活动工作区</button><CreativeAssistant toolsApiRef={api} workspaceEntryRef={entry}/></CreativeStudioProvider>;
     }
     renderUI(<Trial/>);await act(async()=>{});const entry=screen.getByRole('button',{name:'打开活动工作区'});fireEvent.click(entry);
     const mode=screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement;
