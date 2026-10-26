@@ -67,8 +67,10 @@ interface ProposalView extends PendingPlan {
   dropped: number;
   /** 这一版按多少人摆的；加物料这类提案没有人数，就不写。 */
   guests?: number | null;
-  /** 实际摆出的座位数（餐桌一组 4 座）。 */
+  /** 实际摆出的座位数（餐桌一组 4 座 + 散椅）。 */
   seats?: number;
+  /** 这版已经按「加座」重排过：仍不够就直接报场地最多能坐多少。 */
+  seatPriority?: boolean;
   /** 确认按钮点不动的原因；null = 可以确认。 */
   blocked: string | null;
   /** 这版是体检改法：只挪位置，不新增不删除，卡片和气泡都换一套说法。 */
@@ -83,7 +85,7 @@ function viewOfLocalPlan(plan: PlanProposal): ProposalView {
     added: plan.added, removing: plan.removing, changed: plan.moved ?? 0, lockedTouched: 0,
     overlapCount: plan.overlapCount, overlapNames: plan.overlapNames,
     source: 'local', keptLocked: plan.keptLocked, dropped: plan.dropped, blocked: plan.blocked,
-    guests: plan.guests ?? null, seats: plan.seats ?? 0,
+    guests: plan.guests ?? null, seats: plan.seats ?? 0, seatPriority: !!plan.seatPriority,
     review: plan.kind === 'review', skipped: plan.skipped ?? [],
   };
 }
@@ -102,10 +104,14 @@ function planLines(view: ProposalView): string[] {
   if (view.dropped) lines.push(`${view.dropped} 件放不下，没采纳`);
   if (view.skipped?.length) lines.push(`${view.skipped.length} 件没动：${view.skipped.slice(0, 4).join('、')}${view.skipped.length > 4 ? ' 等' : ''}`);
   // 人数是这一版的条件：摆得下就说摆了几座，摆不下就直说多少人得站着，不拿「已按 80 人布置」糊过去。
+  // 已经按「加座」重排过还差人，就报场地最多能坐多少，不再暗示再点一次就能补齐。
   if (view.guests && view.guests > 0) {
-    lines.push((view.seats ?? 0) >= view.guests
-      ? `按 ${view.guests} 人摆了 ${view.seats} 座`
-      : `只摆得下 ${view.seats ?? 0} 座，其余 ${view.guests - (view.seats ?? 0)} 位按站立留空`);
+    const seats = view.seats ?? 0;
+    lines.push(seats >= view.guests
+      ? `按 ${view.guests} 人摆了 ${seats} 座`
+      : view.seatPriority
+        ? `这版最多摆 ${seats} 座，还差 ${view.guests - seats} 位；可以换更大的场地，或按站立留空`
+        : `只摆得下 ${seats} 座，其余 ${view.guests - seats} 位按站立留空`);
   }
   return lines;
 }
@@ -141,8 +147,12 @@ interface AgentValue {
   progress: number; failed: boolean; overlapCount: number; bubbles: Bubble[];
   /** 只给「这次没出成」那张卡用：重跑上一句，不另开一个生成入口。 */
   retry(): void; stop(): void; resume(): void; regenerate(label?: string): void;
-  /** 还没确认的那版布置；null = 没有待确认的提案。 */
+  /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
+  /** 云端还在写这一版：忙的时候不亮确认。 */
+  cloudBusy: boolean;
+  /** 座位不够时的一点击改法：按同一份需求补座重排，仍然只出预览。 */
+  addSeats(): void;
   /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
   exportPreview: boolean; previewExport(): void; confirmExport(): void; dismissExport(): void;
   acceptFile(file: File): void; retryFile(): void; pickFile(): void;
@@ -650,7 +660,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   /** 出方案 = 先立 T-01 的场地真相，再在立好的壳体上算一份候选。确认前 objects 不落盘。 */
-  async function runLocal(token: number, variant: number, scale: Scale): Promise<void> {
+  async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false): Promise<void> {
     const input = { base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
     let venue: VenuePlan | null;
     try { venue = raiseVenue(input); }
@@ -673,7 +683,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       }
     }
     let plan: PlanProposal;
-    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests }); }
+    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
@@ -775,7 +785,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   /** 出方案：连着云项目就让云端真 AI 算这一版，否则本地算候选。两条都停在「这版还在预览」。 */
-  async function startGeneration(token: number, variant: number, note: string, scale: Scale): Promise<void> {
+  async function startGeneration(token: number, variant: number, note: string, scale: Scale, seatPriority = false): Promise<void> {
     const timeout = window.setTimeout(() => { if (token === runToken.current && phaseRef.current === 'generating') { runToken.current++; setPhase('failed'); } }, 60_000);
     try {
       if (forceFail()) throw new Error('forced');
@@ -786,18 +796,18 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
         return;
       }
       lastSource.current = 'local';
-      await runLocal(token, variant, scale);
+      await runLocal(token, variant, scale, seatPriority);
     }
     catch { if (token === runToken.current) setPhase('failed'); }
     finally { window.clearTimeout(timeout); }
   }
 
   /** 生成只有一次触发：对话。这里是被认可后真正跑那一趟的唯一入口，画布上只出预览。 */
-  function runGeneration(label: string | null, variant: number, note: string, scale: Scale): void {
+  function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
     const token = ++runToken.current;
     if (label) say({ role: 'user', text: label });
     setIssue(null); dropProposal(); discardCloudPreview(); setPhase('generating'); setProgress(0);
-    void startGeneration(token, variant, note, scale);
+    void startGeneration(token, variant, note, scale, seatPriority);
   }
 
   /** 「这次没出成」那张卡上的重试：拿现在的读数再跑一遍，不另算一个入口。 */
@@ -826,6 +836,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   function regenerate(label = '换一版'): void {
     seed.current += 1;
     runGeneration(label, seed.current, label === '换一版' ? '换一版不同的布局' : '', readScale());
+  }
+  /** 座位不够时的一点击改法：同一份需求按座位优先重排，仍然只出预览，确认前不落盘。 */
+  function addSeats(): void {
+    runGeneration('加座，再排一版', seed.current, '', readScale(), true);
   }
 
   /** T-UI §4-5：导出/交接意图先落预览卡，确认后才在本机直接生成；不跳执行页。 */
@@ -952,8 +966,9 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
-    proposal: phase === 'proposed' || phase === 'paused' ? activeProposal : null,
-    confirmProposal, withdrawProposal,
+    // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
+    proposal: phase === 'proposed' ? activeProposal : null,
+    confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, addSeats,
     exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
@@ -1094,17 +1109,29 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   if (!plan) return null;
   const names = plan.overlapNames.slice(0, 3).join('、');
   const review = !!plan.review;
+  const guests = plan.guests && plan.guests > 0 ? plan.guests : 0;
+  const seats = plan.seats ?? 0;
+  const short = guests > 0 && seats < guests;
+  // 云端还在写这一版时不亮确认：只留一句安静的进度，免得点了一个等不到的钮。
+  const busy = plan.source === 'cloud' && agent.cloudBusy;
   return <div className="ap-card ap-plan" id="plan-proposal">
     <strong>{review ? '改法预览' : '这版还在预览'}</strong>
     <p>{formatArea(venueArea(layout))} ㎡ · {review
       ? `只挪位置，其他没动 · 挪了 ${plan.changed} 件`
       : <>新摆 {plan.added} 件{plan.changed ? ` · 挪动 ${plan.changed} 件` : ''}{plan.removing ? ` · 要撤 ${plan.removing} 件旧的` : ''}</>}</p>
+    {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `按 ${guests} 人摆了 ${seats} 座`}</p>}
+    {short && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
+    {short && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">场地最多摆得下 {seats} 座；要再多人，得换更大的场地或按站立留空。</p>}
     {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
     {plan.keptLocked > 0 && <p className="ap-small">锁定 {plan.keptLocked} 件我没动。</p>}
     {review && !!plan.skipped?.length && <p className="ap-small">没动 {plan.skipped.length} 件：{plan.skipped.slice(0, 3).join('、')}{plan.skipped.length > 3 ? ' 等' : ''}（锁着或没找到稳妥落点）。</p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
-    <button id="step-cta" type="button" className={agent.exportPreview ? 'chip btn-outline' : 'btn-primary'} aria-disabled={plan.blocked ? 'true' : 'false'} onClick={() => { if (!plan.blocked) agent.confirmProposal(); }}>确认布置</button>
-    <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
+    {busy
+      ? <p className="ap-small" id="plan-busy" role="status">正在整理这一版…</p>
+      : <>
+          {!plan.blocked && <button id="step-cta" type="button" className={agent.exportPreview ? 'chip btn-outline' : 'btn-primary'} onClick={agent.confirmProposal}>确认布置</button>}
+          <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
+        </>}
   </div>;
 }
 

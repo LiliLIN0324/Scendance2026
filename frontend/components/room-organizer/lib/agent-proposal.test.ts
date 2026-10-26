@@ -115,6 +115,58 @@ describe('proposePlan — 布置候选只预览，确认前不写画布（T-02 �
   });
 });
 
+describe('proposePlan — 座位优先（T-05：人还站着就补座，但只出候选）', () => {
+  it('30 人 12×9：普通版如实报缺口，座位优先版补到够坐', () => {
+    const staged = build().staged;
+    const plain = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 30 });
+    const seated = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 30, seatPriority: true });
+    expect(plain.seatPriority).toBe(false);
+    expect(plain.seats!).toBeLessThan(30);
+    expect(seated.seatPriority).toBe(true);
+    expect(seated.seats).toBeGreaterThan(plain.seats!);
+    expect(seated.seats).toBeGreaterThanOrEqual(30);
+    expect(seated.blocked).toBeNull();
+    expect(seated.overlapCount).toBe(0);
+    expect(seated.overlapNames).toEqual([]);
+    expect(seated.dropped).toBe(0);
+  });
+
+  it('座位优先也受同一个几何闸约束：不会为了凑人数穿墙或叠在一起', () => {
+    const staged = build().staged;
+    const plan = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 1, guests: 30, seatPriority: true });
+    expect(plan.overlapCount).toBe(0);
+    expect(plan.blocked).toBeNull();
+    expect(plan.layouts.at(-1)!.floors[0]!.items
+      .filter(item => !isStructuralMarker(item) && (item.type === 'chair' || item.type === 'dining-chair'))
+      .every(item => Math.abs(item.position!.x) < 12 / 2 && Math.abs(item.position!.z) < 9 / 2)).toBe(true);
+  });
+
+  it('补不齐的小场地如实返回 seats < guests，不虚报', () => {
+    const small = raiseVenue({
+      base: makeLayout({ width: 5, height: 4, floors: [makeFloor()] }),
+      floorIndex: 0, widthM: 5, depthM: 4, indoorOutdoor: 'indoor', scaleOrigin: 'stated',
+    })!.layout;
+    const plain = proposePlan({ base: small, floorIndex: 0, widthM: 5, depthM: 4, variant: 0, guests: 30 });
+    const plan = proposePlan({ base: small, floorIndex: 0, widthM: 5, depthM: 4, variant: 0, guests: 30, seatPriority: true });
+    expect(plan.seatPriority).toBe(true);
+    expect(plan.seats!).toBeLessThan(30);
+    expect(plan.seats).toBeGreaterThan(0);
+    expect(plan.blocked).toBeNull();
+    // 小场地原有的挤碰（绿植/背景板/桌组）不该被补座放大；新加的椅子不许再添挤碰。
+    const chairHits = (proposal: typeof plan) => proposal.overlapNames.filter(name => name === 'Dining Chair' || name === '椅子').length;
+    expect(plan.overlapCount).toBeLessThanOrEqual(plain.overlapCount);
+    expect(chairHits(plan)).toBeLessThanOrEqual(chairHits(plain));
+  });
+
+  it('没有说人数时不补座，也不多长一帧', () => {
+    const staged = build().staged;
+    const plan = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, seatPriority: true });
+    expect(plan.seatPriority).toBe(true);
+    expect(plan.guests).toBeNull();
+    expect(plan.layouts).toHaveLength(5);
+  });
+});
+
 describe('proposeAddition — 对话加物料也只出候选', () => {
   const staged = (): RoomLayout => {
     const base = makeLayout({ width: 12, height: 9, floors: [makeFloor()] });

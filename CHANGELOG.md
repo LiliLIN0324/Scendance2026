@@ -1,5 +1,16 @@
 # 更新记录
 
+## 生成完再亮确认 + 座位不够给改方案 — 2026-10-27（T-05）
+
+- **确认只在最后一帧落稳后出现**：右栏提案只在 `proposed` 暴露；生成中、暂停（逐帧未完）、云端忙都不给可点的绿色「确认布置」；blocked / stale / expired 时不出绿钮，只留原因。
+- **云端忙同一规则**：深工具候选卡在 `studio.busy` 时收起「确认布置 / 放弃」，只显示「正在整理这一版…」；忙完且未 stale 才恢复。
+- **座位行与一点击改法**：有 `guests` 时提案卡显示 `座位 X / N · 还差 M`（够坐写「按 N 人摆了 X 座」）；不足时给文字链「加座，再排一版」，点击后旧确认立即消失、重新走预览，确认前不写画布。
+- **座位优先生成器**：只给这一版新摆的桌子先补桌边角位、再按 1 米网格找空位；每次落座过碰撞与几何闸，并拒绝把椅子叠到桌面上充数；`seats` 按实际椅子件数如实计数。
+- **补不齐的诚实**：加座后仍不足时改为「这版最多摆 X 座，还差 N 位；可以换更大的场地，或按站立留空」，同时撤掉改法链，不暗示再点一次就能补齐。
+- 验证：卡 §7 三套件 **3 files / 249 tests passed**；`npx tsc --noEmit` 退出码 0；eslint 本卡文件 0 error（18 条既有 warning）。真机（`127.0.0.1:3026/editor`，headless Chrome/CDP）：12×9 / 30 人 16→30 座补齐并确认、撤销回 5 件；5×4 / 30 人 4→7 座，如实报「最多 7 座」；全流程绿钮最多一颗。证据见 `docs/T-05-SELF-CHECK.md`。
+- 涉及：`room-organizer/lib/agent-proposal.ts` + `.test.ts`、`panels/agent-panel.tsx` + `.css` + `.react.test.tsx`、`panels/creative-studio.tsx` + `.react.test.tsx`、`docs/T-05-SELF-CHECK.md`。
+- 待核（未扩 scope）：① 座位优先只在本地规则生成器生效，云端提案不计算 `seats`；② 暂停（逐帧未完）时不显示提案卡，若需「暂停到哪帧确认哪帧」另开卡；③ 已随 v1.3.2 提交并推送（2026-10-27），未部署、未开 PR。
+
 ## 活动组织流程 AI-Native 框架钉版（docs only）— 2026-10-27
 
 - 新增 docs/ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md：本阶段真相源——先升级活动布置/组织主流程（chat-first、安静 UI、左轨三图标、空闲零绿钮），3D 后谈；明确 Out（3DGS/mood/按钮旁说明书/四段左轨）；给 Qoder 3–5 张卡序，首卡「可见交互收口」。docs/AI-NATIVE-FOR-EXECUTORS.md 顶部加指针。未改产品代码、未 commit/push。
