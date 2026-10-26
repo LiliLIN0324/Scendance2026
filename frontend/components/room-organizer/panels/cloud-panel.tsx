@@ -18,13 +18,13 @@ import { useLocalProjectBackup } from './creative-studio';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; publicationRequest?: number }
 
 function isLocalMockBackend(): boolean {
   return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes('localhost:3099');
 }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, publicationRequest = 0 }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
@@ -100,6 +100,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     }).catch(() => { if (!cancelled) setNotice('项目加载失败，请点击刷新列表重试。'); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
+  const openedPublicationRequest = useRef(0);
+  useEffect(() => {
+    if (publicationRequest <= 0 || openedPublicationRequest.current === publicationRequest) return;
+    openedPublicationRequest.current = publicationRequest;
+    setSection('publication');
+    if (!dialog.current?.open) dialog.current?.showModal();
+  }, [publicationRequest]);
   useEffect(() => {
     if (!localHandoff && fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
@@ -364,7 +371,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       </section>
       <div hidden={section !== 'team' && section !== 'permissions'}><AccountTeamDemo key={userId ?? 'local'} view={section === 'permissions' ? 'permissions' : 'team'} /></div>
       <section hidden={section !== 'assets'} aria-label="账户素材库"><div className="sc-account-section-heading"><div><h3>素材库</h3><p className="sc-cloud-muted">管理可复用的场景物料。</p></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录账户后查看云端素材。</p>}</section>
-      <section hidden={section !== 'publication'} aria-label="发布管理"><div className="sc-account-section-heading"><div><h3>发布管理</h3><p className="sc-cloud-muted">为当前项目管理客户查看链接。</p></div></div>{sceneConnection ? <p className="sc-account-empty">当前连接用于场景处理。需要交给客户的资料，请从“方案评审”核对并导出。</p> : cloud.user && cloud.project && cloud.revision !== null ? <PublicationPanel controller={controller} projectId={cloud.project.id} revision={cloud.revision} dirty={dirty || !bound || busy || !!conversionError} /> : <p className="sc-account-empty">在「我的项目」中打开一个云项目后，即可管理发布。</p>}</section>
+      <section hidden={section !== 'publication'} aria-label="发布管理"><div className="sc-account-section-heading"><div><h3>发布管理</h3><p className="sc-cloud-muted">发布后由你复制链接发送；系统不会自动通知客户。</p></div></div>{sceneConnection ? <p className="sc-account-empty">当前连接用于场景处理。需要交给客户的资料，请从“方案评审”核对并导出。</p> : cloud.user && cloud.project && cloud.revision !== null ? <PublicationPanel controller={controller} projectId={cloud.project.id} revision={cloud.revision} dirty={dirty || !bound || busy || !!conversionError} /> : !cloud.user ? <div className="sc-account-empty"><p>发布云端只读链接要先登录，再把方案保存为云项目。</p><p>离线评审 HTML 不需要登录，可在「方案评审」里生成并下载。</p><button type="button" disabled={busy} onClick={() => void navigateFromWorkspace('/auth')}>去登录</button></div> : <div className="sc-account-empty"><p>先在「我的项目」里打开并保存一个云项目，才能发布云端只读链接。</p><button type="button" disabled={busy} onClick={() => setSection('projects')}>去我的项目</button></div>}</section>
       {conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
       {localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
       {(notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}

@@ -99,8 +99,12 @@ export function venueArea(layout: RoomLayout): number {
   if (!points) return layout.width * layout.height;
   return Math.abs(points.reduce((sum,p,i)=>{ const q=points[(i+1)%points.length]!;return sum+p.x*q.z-q.x*p.z; },0))/2;
 }
+/** 门、柱、出入口的现场标记：它们是场地真相的一部分，不算物料。 */
+export function isStructuralMarker(item: Pick<FurnitureItem, 'structuralOpeningId' | 'structuralColumnId' | 'venueEntranceId'>): boolean {
+  return !!(item.structuralOpeningId || item.structuralColumnId || item.venueEntranceId);
+}
 export function materialCount(items: readonly FurnitureItem[]): number {
-  return items.filter(item=>!item.structuralOpeningId && !item.structuralColumnId && !item.venueEntranceId).length;
+  return items.filter(item=>!isStructuralMarker(item)).length;
 }
 
 /** Seat measured openings only on actual walls; polygon bounds are not walls. */

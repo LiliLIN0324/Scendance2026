@@ -31,6 +31,8 @@ interface Props {
   backupActions?: LocalProjectBackupActions | null | undefined;
   onBackupRestored?: (() => void) | undefined;
   deliveryViewRequest?: { serial: number; view: 'operations' | 'materials' } | undefined;
+  /** T-UI §4-5：对话里确认导出后自增一次，这里自动触发既有交接导出（不新增导出路径）。 */
+  autoExportRequest?: number | undefined;
 }
 
 function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
@@ -103,7 +105,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing 晴光 Agent entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, autoExportRequest, activityTaskPanel }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
@@ -201,16 +203,27 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     } catch (error) { if (mounted.current && latest.current.userId === before.userId && latest.current.projectId === before.projectId && (kind !== 'timetable' || stillCurrent())) setNotice(error instanceof Error ? error.message : '导出失败，请重试。'); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
+  // T-UI §4-5：对话里点过「确认导出」才到这里——复用上面的 download，不新增第二条导出路径。
+  const handledAutoExport = useRef(0);
+  useEffect(() => {
+    if (!autoExportRequest || autoExportRequest === handledAutoExport.current) return;
+    handledAutoExport.current = autoExportRequest;
+    void download(backupActions ? 'activity' : 'csv');
+  }, [autoExportRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
-    <div className="sc-section-heading"><div><h2>执行与交付</h2><p>安排活动任务，核对物料并导出交接内容。</p></div></div>
-    <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
+    <div className="sc-section-heading"><div><h2>执行与交付</h2><p>本机内部资料：安排活动任务，核对物料并导出交接内容。</p></div></div>
+    {/* T-UI §4-2：六颗 Tab 不再是默认门面，收进「执行工具」里；能力原样保留，要用再展开。 */}
+    <details className="dl-tools">
+      <summary>执行工具<small>活动安排 · 工作单 · 制作计划 · 点验 · 导出 · 备份</small></summary>
+      <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
       <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => setView('operations')}>活动安排</button>
       <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => setView('materials')}>物料工作单</button>
       <button type="button" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => setView('production')}>制作计划</button>
       <button type="button" role="tab" id="delivery-checkins-tab" aria-controls="delivery-checkins" aria-selected={view === 'checkins'} onClick={() => setView('checkins')}>数量点验</button>
       <button type="button" role="tab" id="delivery-export-tab" aria-controls="delivery-export" aria-selected={view === 'export'} onClick={() => setView('export')}>导出</button>
       {backupActions && <button type="button" role="tab" id="delivery-backup-tab" aria-controls="delivery-backup" aria-selected={view === 'backup'} onClick={() => setView('backup')}>本机备份</button>}
-    </div>
+      </div>
+    </details>
     <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
       <p className="sc-note">{cloudBound ? '云项目可查看活动安排。本地执行资料尚未接入云端保存。' : '活动安排随当前场景保存在此浏览器。'}</p>
       <EventOperationsPanel suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins}/>

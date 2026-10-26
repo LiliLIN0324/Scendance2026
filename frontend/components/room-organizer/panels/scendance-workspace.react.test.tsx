@@ -181,6 +181,11 @@ describe('ScendanceViewTools design column', () => {
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onFit={onFit} onZoom={onZoom} onExportImage={onExportImage}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '视角与编辑工具' });
     expect(rail.id).toBe('tool-column');
+    // 中间那条次要工具条能藏则藏：默认只剩一颗「氛围」，点开才铺出四条。
+    expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
+    expect(screen.getByRole('button', { name: '氛围' }).getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: '氛围' }));
+    expect(screen.getByRole('button', { name: '氛围' }).getAttribute('aria-expanded')).toBe('true');
     for (const name of ['撤销', '重做', '导出效果图', '网格吸附', '显示尺寸', '全屏', '缩小', '放大', '漫游', '人群', '晴朗', '正午']) {
       expect(screen.getByRole('button', { name })).toBeTruthy();
     }
@@ -239,6 +244,14 @@ describe('ScendanceViewTools design column', () => {
     expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
   });
 
+  it('keeps the atmosphere controls in view once something is actually changed', () => {
+    // 收起只收「没在用的」：开了雨就不许藏，否则找不到地方关掉。
+    const values = contexts(makeLayout(), makeViewSettings({ weather: 'rain' }));
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    expect(screen.getByRole('button', { name: '氛围' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: '降雨' })).toBeTruthy();
+  });
+
   it('keeps rail wheel browsing from reaching the canvas zoom handler', () => {
     const values = contexts(), onCanvasWheel = vi.fn();
     render(<Providers values={values}><div onWheel={onCanvasWheel}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></div></Providers>);
@@ -251,6 +264,7 @@ describe('ScendanceViewTools atmosphere menus', () => {
   it('wires 漫游 / 人群 / 天气 / 时段', () => {
     const values = contexts();
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: '氛围' }));
     fireEvent.click(screen.getByRole('button', { name: '漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);

@@ -214,6 +214,9 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
   const [exportScale, setExportScale] = useState(2);
   const [exporting, setExporting] = useState(false);
+  const [atmosphereOpen, setAtmosphereOpen] = useState(false);
+  // 氛围条默认收起成一颗「氛围」：真开了漫游/人群/雨雪/非正午就展开，别让人找不到关掉它的地方。
+  const atmosphereShown = atmosphereOpen || view.walkthroughMode || view.showNpcs || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
   const angleMenuRef = useRef<HTMLDivElement>(null);
   const weatherMenuRef = useRef<HTMLDivElement>(null);
   const timeMenuRef = useRef<HTMLDivElement>(null);
@@ -313,8 +316,12 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
         <button type="button" id="tool-zoom-in" data-tip="拉近看细节" aria-label="放大" onClick={() => onZoom('+')} disabled={view.view2D}><Plus size={16}/></button>
       </div>
     </nav>
-    {showAtmosphere && <div className="sc-atmosphere-strip">
-        <div className="sc-tool-group sc-atmosphere-group" role="group" aria-label="氛围">
+    {showAtmosphere && <div className={`sc-atmosphere-strip${atmosphereShown ? ' is-open' : ''}`}>
+        <button type="button" id="tool-atmosphere" className="sc-atmosphere-toggle" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" title="漫游、人群、天气与时段" onClick={() => setAtmosphereOpen(open => !open)}>
+          <Sun size={14}/><span>氛围</span>
+          <ChevronDown className="sc-tool-caret" size={9} aria-hidden="true"/>
+        </button>
+        {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-group sc-atmosphere-group" role="group" aria-label="氛围">
           <button type="button" id="tool-walk" title="按走动的足迹漫游场地" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={14}/><span>漫游</span></button>
           <button type="button" id="tool-crowd" title="场地里的人数示意" aria-pressed={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={14}/><span>人群</span></button>
           <div className="sc-tool-menu" ref={weatherMenuRef}>
@@ -337,7 +344,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
               {TIME_PRESETS.map(entry => <button type="button" key={entry.label} role="option" aria-label={`室外时段 ${entry.title}`} aria-selected={activeTime?.label === entry.label} className={activeTime?.label === entry.label ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, timeOfDay: entry.hour })); setTimeOpen(false); }}>{entry.title}</button>)}
             </div>}
           </div>
-        </div>
+        </div>}
       </div>}
     </>
   );

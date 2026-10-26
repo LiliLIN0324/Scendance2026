@@ -38,13 +38,13 @@ function deferred<T>() {
   const promise = new Promise<T>((ok, no) => { resolve = ok; reject = no; });
   return { promise, resolve, reject };
 }
-function setup(overrides: Partial<ProjectReviewPanelActions> = {}, storageIdentity?: string) {
+function setup(overrides: Partial<ProjectReviewPanelActions> = {}, storageIdentity?: string, extra: Partial<ProjectReviewPanelProps> = {}) {
   let live: ProjectReviewSource = { ...initialSource };
   const actions: ProjectReviewPanelActions = {
     getSource: vi.fn(() => live), prepare: vi.fn(async () => base(live)),
     capture: vi.fn(async snapshot => picture(snapshot)), ...overrides,
   };
-  let props: ProjectReviewPanelProps = { source: live, actions, ...(storageIdentity?{storageIdentity}:{}) };
+  let props: ProjectReviewPanelProps = { source: live, actions, ...(storageIdentity?{storageIdentity}:{}), ...extra };
   const view = render(<ProjectReviewPanel {...props}/>);
   return { actions, view,
     setLive(next: ProjectReviewSource, rerender = true) {
@@ -327,5 +327,51 @@ describe('independent customer review panel', () => {
     expect(screen.getByRole('alert').textContent).toBe('下载未能发起，请重试。');
     expect(document.body.textContent).not.toContain('PRIVATE_DOWNLOAD_ERROR');
     expect(actions.prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows both customer exits and never claims the system sends the link', () => {
+    const openPublication = vi.fn();
+    setup({}, undefined, { onOpenCloudShare: openPublication });
+    expect(screen.getByText('离线评审 HTML')).toBeDefined();
+    expect(screen.getByText('云端只读链接')).toBeDefined();
+    expect(screen.getByText(/由你发给客户/)).toBeDefined();
+    expect(screen.getByText(/系统不会自动发给客户/)).toBeDefined();
+    expect(screen.getByText(/撤销后链接失效/)).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '打开发布管理' }));
+    expect(openPublication).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toMatch(/已发送给客户|已通知甲方/);
+  });
+
+  it('hides the cloud exit when no publication route is wired', () => {
+    setup();
+    expect(screen.queryByText('云端只读链接')).toBeNull();
+    expect(screen.queryByRole('button', { name: '打开发布管理' })).toBeNull();
+  });
+
+  it('fills an empty field with a local reference and leaves it editable', async () => {
+    const prefill = vi.fn(() => ({ summary: '参考说明：入口留缓冲，主通道不压线。', pending: '参考待办：用电与进场时间。' }));
+    setup({ prefill });
+    expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: '生成说明参考' }));
+    const summary = screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
+    expect(summary.value).toBe('参考说明：入口留缓冲，主通道不压线。');
+    expect(screen.queryByRole('button', { name: '生成说明参考' })).toBeNull();
+    expect(prefill).toHaveBeenCalledOnce();
+    fireEvent.change(summary, { target: { value: '参考说明：入口留缓冲，主通道不压线。手改一句。' } });
+    generate(); await screen.findByTitle('客户评审预览');
+    expect(previewDocument().body.textContent).toContain('手改一句');
+    expect(document.body.textContent).not.toMatch(/已发送给客户|已通知甲方/);
+  });
+
+  it('does not overwrite hand-written text with a reference', () => {
+    const prefill = vi.fn(() => ({ summary: '参考说明', pending: '参考待办' }));
+    setup({ prefill });
+    fireEvent.change(screen.getByLabelText('简短方案说明（选填）'), { target: { value: '手写说明，不能被覆盖。' } });
+    fireEvent.change(screen.getByLabelText('待确认项（选填）'), { target: { value: '手写待办，不能被覆盖。' } });
+    expect(screen.queryByRole('button', { name: '生成说明参考' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '生成待确认参考' })).toBeNull();
+    expect(screen.getByText('已有手写内容；参考不会覆盖，需要时先清空对应栏再生成。')).toBeDefined();
+    expect(prefill).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe('手写说明，不能被覆盖。');
   });
 });

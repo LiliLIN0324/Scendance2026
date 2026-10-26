@@ -18,6 +18,9 @@
 .cr-generate { width:100%; min-height:47px; display:flex; gap:var(--sc-space-sm,8px); justify-content:center; align-items:center; padding:var(--sc-space-md,16px); border:0; border-radius:8px; color:#f3f7e5; background:linear-gradient(100deg,#304e3b,#52694b); font-size:var(--sc-type-body,14px); cursor:pointer; box-shadow:0 5px 13px #304e3b1b; }
 .cr-generate:hover { background:#324e3a; }
 .cr-generate:disabled { opacity:.45; cursor:not-allowed; }
+/* 左栏那张「生成布置方案」降级成手动细填的次要入口：主入口只剩右栏对话（截图钉 2026-10-26 夜）。 */
+.cr-generate.is-manual { min-height:38px; border:1px solid #b8c1aa; background:#fcfcf8; color:#6a7a63; box-shadow:none; }
+.cr-generate.is-manual:hover { background:#f1f4e9; color:#5c6f50; }
 .cr-notice { margin:var(--sc-space-md,16px) 0; padding:var(--sc-space-sm,8px); border-radius:7px; font-size:var(--sc-type-body,14px); line-height:1.7; background:#f3efe2; color:#7b6846; }
 .cr-ideas { padding-top:var(--sc-space-lg,24px); margin-top:var(--sc-space-lg,24px); border-top:1px solid #e4e6dd; }
 .cr-ideas>div { display:flex; justify-content:space-between; align-items:center; gap:var(--sc-space-sm,8px); margin-bottom:var(--sc-space-sm,8px); }
@@ -293,6 +296,9 @@
 .cr-brief-footer .cr-generate { flex:1; min-height:38px; padding:8px 14px; border-radius:7px; background:var(--wk-green,#56794d); box-shadow:none; color:#fff; font-size:13px; font-weight:600; }
 .cr-brief-footer .cr-generate:hover { background:var(--wk-green-deep,#394a37); }
 .cr-brief-footer .cr-generate:disabled { background:var(--wk-green,#56794d); opacity:.38; }
+.cr-brief-footer .cr-generate.is-manual { border:1px solid var(--wk-hair,#e7e7e7); background:#fff; color:var(--wk-ink-soft,#767a70); font-weight:500; }
+.cr-brief-footer .cr-generate.is-manual:hover { background:var(--wk-plane,#f3f4ee); color:var(--wk-ink,#2f2f2f); }
+.cr-brief-footer .cr-generate.is-manual:disabled { background:#fff; opacity:.55; }
 .cr-brief-skip { flex:none; min-height:38px; padding:8px 14px; border:1px solid var(--wk-hair,#e7e7e7); border-radius:7px; background:#fff; color:var(--wk-ink-soft,#767a70); font-size:12.5px; cursor:pointer; }
 .cr-brief-skip:hover { background:var(--wk-plane,#f3f4ee); color:var(--wk-ink,#2f2f2f); }
 

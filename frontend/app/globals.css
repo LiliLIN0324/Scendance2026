@@ -802,6 +802,7 @@
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.is-active { color: var(--wk-green-deep); font-weight: 600; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:disabled { opacity: .42; cursor: default; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
   flex: 1; min-width: 0; position: relative;
 }

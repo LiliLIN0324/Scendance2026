@@ -35,6 +35,19 @@ describe('anonymous publication view', () => {
     expect(screen.queryByText('只读三维预览')).toBeNull();
   });
 
+  it('offers no edit, Agent, library, lease or internal-note controls', async () => {
+    window.history.replaceState(null, '', `/view/#${token}`);
+    vi.mocked(readShare).mockResolvedValue(snapshot);
+    render(<SharedViewPage />);
+    await screen.findByText('已发布客户方案');
+    expect(document.querySelector('input,textarea,select,[contenteditable="true"]')).toBeNull();
+    for (const selector of ['#agent-panel', '.sc-agent-panel', '.cr-assistant', '#workbench-material-shelf', '.sc-cloud-trigger']) {
+      expect(document.querySelector(selector)).toBeNull();
+    }
+    expect(screen.queryByRole('button', { name: /删除|编辑|保存|撤销|发布|登录/ })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/素材库|租约|编辑权|内部备注|PRIVATE_/);
+  });
+
   it('announces authorization expiry without claiming the snapshot is current', async () => {
     vi.useFakeTimers();
     window.history.replaceState(null, '', `/view/#${token}`);

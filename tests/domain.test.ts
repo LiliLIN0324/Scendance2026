@@ -39,3 +39,39 @@ describe('scene and controlled AI operations',()=>{
     b.lighting='warm';expect(await sceneHash(a)).not.toBe(await sceneHash(b));expect(canonical({b:1,a:2})).toBe(canonical({a:2,b:1}));
   });
 });
+
+describe('T-01 venue site contract',()=>{
+  function v2(site?:object,heightSource?:string){
+    const wall={id:crypto.randomUUID(),start:{x:0,z:0},end:{x:12,z:0},thickness:0.16,height:4,kind:'exterior' as const,status:'confirmed' as const};
+    const opening={id:crypto.randomUUID(),wallId:wall.id,kind:'door' as const,offset:5,width:2,height:2.4,sillHeight:0,status:'inferred' as const};
+    return sceneSchema.safeParse({schemaVersion:2,venue:{shape:'rectangle',width:12,depth:10,height:4,entrances:[],
+      ...(heightSource?{heightSource}:{}),...(site?{site}:{})},
+      structure:{walls:[wall],openings:[opening],columns:[]},sources:[],dimensions:[],objects:[],camera:'overview',lighting:'neutral'});
+  }
+  it('accepts heightSource and a site block whose mainEntrance points at a real opening',()=>{
+    const openingId=v2().data&&(null);
+    const wall={id:crypto.randomUUID(),start:{x:0,z:0},end:{x:12,z:0},thickness:0.16,height:4,kind:'exterior' as const,status:'confirmed' as const};
+    const opening={id:crypto.randomUUID(),wallId:wall.id,kind:'door' as const,offset:5,width:2,height:2.4,sillHeight:0,status:'inferred' as const};
+    const ok=sceneSchema.safeParse({schemaVersion:2,venue:{shape:'rectangle',width:12,depth:10,height:4,entrances:[],heightSource:'confirmed',
+      site:{mainEntrance:{openingId:opening.id},scale:{confidence:'high'},indoorOutdoor:'indoor'}},
+      structure:{walls:[wall],openings:[opening],columns:[]},sources:[],dimensions:[],objects:[],camera:'overview',lighting:'neutral'});
+    expect(ok.success).toBe(true);
+  });
+  it('rejects a dangling mainEntrance openingId',()=>{
+    const wall={id:crypto.randomUUID(),start:{x:0,z:0},end:{x:12,z:0},thickness:0.16,height:4,kind:'exterior' as const,status:'confirmed' as const};
+    const opening={id:crypto.randomUUID(),wallId:wall.id,kind:'door' as const,offset:5,width:2,height:2.4,sillHeight:0,status:'inferred' as const};
+    const bad=sceneSchema.safeParse({schemaVersion:2,venue:{shape:'rectangle',width:12,depth:10,height:4,entrances:[],
+      site:{mainEntrance:{openingId:crypto.randomUUID()}}},
+      structure:{walls:[wall],openings:[opening],columns:[]},sources:[],dimensions:[],objects:[],camera:'overview',lighting:'neutral'});
+    expect(bad.success).toBe(false);
+  });
+  it('rejects site on V1 scenes and unknown heightSource values',()=>{
+    const v1=sceneSchema.safeParse({...scene(),venue:{...scene().venue,site:{indoorOutdoor:'indoor'}}});
+    expect(v1.success).toBe(false);
+    expect(v2(undefined,'guessed').success).toBe(false);
+  });
+  it('keeps parsing legacy scenes that carry neither site nor heightSource',()=>{
+    expect(sceneSchema.safeParse(scene()).success).toBe(true);
+    expect(v2().success).toBe(true);
+  });
+});

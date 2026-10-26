@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FURNITURE_CATALOG } from './constants';
-import { FURNITURE_SETS, buildFurnitureSet, setFitsRoom, type FurnitureSet, type SetItemSnapshot } from './furniture-sets';
+import { FURNITURE_SETS, buildFurnitureSet, setFitsRoom, setPlacementSlots, type FurnitureSet, type SetItemSnapshot } from './furniture-sets';
 import { itemInBounds, itemsOverlap, rotatedHalfExtents } from './geometry';
 
 const setByKey = (key: string) => FURNITURE_SETS.find((s) => s.key === key)!;
@@ -125,5 +125,67 @@ describe('buildFurnitureSet — placement rules of a saved set (#384)', () => {
         expect(itemInBounds(item, size, size)).toBe(true);
       }
     }
+  });
+});
+
+describe('setPlacementSlots — repeating a set without losing the batch (T-01)', () => {
+  const dining = () => setByKey('dining');
+  // Exterior walls are 0.16 m thick and sit on the venue edge, so a piece
+  // that crosses the line by even a centimetre collides with the wall body —
+  // and addItems vetoes the whole batch, which is how 换一版 lost every table.
+  const WALL_HALF = 0.08;
+
+  const inBoundsClearOfWalls = (items: ReturnType<typeof buildFurnitureSet>, w: number, d: number) => {
+    for (const item of items) {
+      const { halfW, halfD } = rotatedHalfExtents(item);
+      expect(itemInBounds(item, w - 2 * WALL_HALF, d - 2 * WALL_HALF)).toBe(true);
+      expect(Math.abs(item.position!.x) + halfW).toBeLessThanOrEqual(w / 2 - WALL_HALF + 1e-9);
+      expect(Math.abs(item.position!.z) + halfD).toBeLessThanOrEqual(d / 2 - WALL_HALF + 1e-9);
+    }
+  };
+
+  for (const room of [{ w: 12, d: 9 }, { w: 8, d: 6 }, { w: 5, d: 4 }]) {
+    it(`keeps every ${room.w}×${room.d} variant slot inside the walls`, () => {
+      for (let variant = 0; variant < 6; variant++) {
+        const slots = setPlacementSlots(dining(), room.w, room.d, variant);
+        expect(slots.length, `variant ${variant}`).toBeGreaterThan(0);
+        for (const center of slots) {
+          inBoundsClearOfWalls(buildFurnitureSet(dining(), { center, roomWidth: room.w, roomDepth: room.d }), room.w, room.d);
+        }
+      }
+    });
+  }
+
+  it('never returns two slots whose groups overlap each other', () => {
+    for (const room of [{ w: 12, d: 9 }, { w: 8, d: 6 }, { w: 6, d: 6 }]) {
+      const slots = setPlacementSlots(dining(), room.w, room.d, 0);
+      const groups = slots.map((center) => buildFurnitureSet(dining(), { center, roomWidth: room.w, roomDepth: room.d }));
+      for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          expect(groups[i].some((a) => groups[j].some((b) => itemsOverlap(a, b))), `${room.w}×${room.d} slots ${i}/${j}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('stays south of the stage when the plan asks for clearance', () => {
+    const clearNorthOfZ = -9 / 2 + 0.15 + 0.4;
+    for (const center of setPlacementSlots(dining(), 12, 9, 0, { clearNorthOfZ })) {
+      for (const item of buildFurnitureSet(dining(), { center, roomWidth: 12, roomDepth: 9 })) {
+        expect(item.position!.z - rotatedHalfExtents(item).halfD).toBeGreaterThanOrEqual(clearNorthOfZ - 1e-9);
+      }
+    }
+  });
+
+  it('shifts which slots come first when the variant changes, without changing the fit', () => {
+    const a = setPlacementSlots(dining(), 12, 9, 0);
+    const b = setPlacementSlots(dining(), 12, 9, 1);
+    expect(a).toHaveLength(b.length);
+    expect(a[0]).not.toEqual(b[0]);
+    expect(b[0]).toEqual(a[1]);
+  });
+
+  it('offers nothing for a room the set cannot be placed in at all', () => {
+    expect(setPlacementSlots(dining(), 3, 3, 0)).toEqual([]);
   });
 });

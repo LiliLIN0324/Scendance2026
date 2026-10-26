@@ -616,6 +616,43 @@ it('keeps account-panel keys away from canvas shortcuts while preserving native 
   offline.dispose();
 });
 
+it('opens publication management on request and still starts from projects for the account trigger', async () => {
+  const initial = backendSceneToLayout(scene, { projectId, name: original.name });
+  queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+  render(<CloudPanel controller={controller} layout={initial} onLoadLayout={vi.fn()} publicationRequest={1} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: '发布管理' }).getAttribute('aria-pressed')).toBe('true'));
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  expect(vi.mocked(PublicationPanel).mock.calls.at(-1)?.[0]).toMatchObject({ projectId, revision: 2 });
+  fireEvent.click(screen.getByRole('button', { name: '关闭账户面板' }));
+  fireEvent.click(screen.getByRole('button', { name: '账户与项目' }));
+  expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('true');
+});
+
+it('gives a sign-in next step when publication is requested without an account', async () => {
+  const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+  render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} publicationRequest={1} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: '发布管理' }).getAttribute('aria-pressed')).toBe('true'));
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  expect(screen.getByText('发布云端只读链接要先登录，再把方案保存为云项目。')).toBeTruthy();
+  expect(screen.getByText(/离线评审 HTML 不需要登录/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '去登录' }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/auth'));
+  anonymous.dispose();
+});
+
+it('tells a signed-in account to open and save a cloud project before publishing', async () => {
+  const fresh = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+  queue({ access_token: 'fresh-access', refresh_token: 'fresh-refresh', expires_in: 3600, user: { id: 'user-b', email: 'fresh@example.com' } });
+  await fresh.signIn('fresh@example.com', 'password');
+  queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'B' }]);
+  render(<CloudPanel controller={fresh} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} publicationRequest={1} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: '发布管理' }).getAttribute('aria-pressed')).toBe('true'));
+  expect(screen.getByText('先在「我的项目」里打开并保存一个云项目，才能发布云端只读链接。')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '去我的项目' }));
+  expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('true');
+  fresh.dispose();
+});
+
 it('keeps local activity controls available for a scene connection and does not offer whole-project publishing',async()=>{
   const localId='house-scene-connection',local=backendSceneToLayout(scene,{projectId:localId,name:'本机活动'});
   const state={...controller.getSnapshot(),geometryBinding:{version:1 as const,localActivityId:localId,cloudProjectId:projectId,userId:'user-a',apiUrl:controller.config.apiUrl}};

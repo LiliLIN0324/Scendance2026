@@ -53,12 +53,26 @@ export const objectSchema = z.strictObject({
   if (references !== (o.materialId === 'asset' ? 1 : 0)) ctx.addIssue({ code: 'custom', message: '资产物料必须且只能携带一个 assetId 或已知预设节点' });
   if ((o.elevation ?? 0) < 0 && o.presetNode === undefined) ctx.addIssue({ code: 'custom', message: '普通物件高度不能低于地面' });
 });
+/** How venue.height came to be: 'default' fallback, 'inferred' from a plan, or 'confirmed' by a human. */
+export const heightSourceSchema = z.enum(['default', 'inferred', 'confirmed']);
+/**
+ * T-01 venue site truth: the ONE main entrance (an opening id in structure), the
+ * human-confirmed scale confidence, and indoor/outdoor. Parallel truths
+ * (ceilingHeightM, a second entrance list) are forbidden by the upgrade spec.
+ */
+export const venueSiteSchema = z.strictObject({
+  mainEntrance: z.strictObject({ openingId: uuid }).optional(),
+  scale: z.strictObject({ confidence: z.enum(['low', 'medium', 'high']) }).optional(),
+  indoorOutdoor: z.enum(['indoor', 'outdoor']).optional(),
+});
 export const venueSchema = z.strictObject({
   ...sizeSchema.shape,
   shape: z.enum(['rectangle', 'polygon']),
   polygon: z.array(pointSchema).min(3).max(32).optional(),
   entrances: z.array(z.strictObject({ id: uuid, position: pointSchema, width: z.number().positive().max(10) })).max(12),
   floorplanAssetId: uuid.optional(),
+  heightSource: heightSourceSchema.optional(),
+  site: venueSiteSchema.optional(),
 }).superRefine((v, ctx) => {
   if(duplicateUuidIds(v.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'出入口 ID 不能重复'});
   if (v.shape === 'polygon' && !v.polygon) ctx.addIssue({ code: 'custom', message: '多边形场地缺少顶点' });
@@ -114,6 +128,9 @@ const sceneObjectsSchema=z.array(objectSchema).max(500).superRefine((objects,ctx
 const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
 export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon}).superRefine((s,ctx)=>{
   if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
+  // V1 has no structure layer, so a site block here could only dangle; keep the
+  // entrance list as the v1 truth and forbid the v2-only site on it.
+  if(s.venue.site)ctx.addIssue({code:'custom',message:'V1 场景不支持 site 信息'});
 });
 export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCommon,structure:structureSchema,sources:z.array(sourceSchema).max(12).default([]),dimensions:z.array(dimensionSchema).max(128).default([]),design:designSchema.optional(),finishes:z.strictObject({floorColor:colorSchema.optional(),floorPattern:z.enum(['solid','wood','tile','carpet','concrete']).optional(),wallColors:z.record(uuid,colorSchema).optional()}).optional()}).superRefine((s,ctx)=>{
   // Cached V2 entrances may reference openings; only ordinary objects collide.
@@ -122,6 +139,9 @@ export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCo
   if(duplicateUuidIds(entityIds))ctx.addIssue({code:'custom',message:'物件、墙体、门窗和柱子的 ID 不能互相重复'});
   if(duplicateUuidIds(s.sources.map(x=>x.assetId)))ctx.addIssue({code:'custom',message:'来源图片不能重复'});
   if(duplicateUuidIds(s.dimensions.map(x=>x.id)))ctx.addIssue({code:'custom',message:'尺寸 ID 不能重复'});
+  // Main entrance is a single truth pointing at one opening; a dangling id
+  // would fork the entrance story between venue and structure.
+  if(s.venue.site?.mainEntrance&&!s.structure.openings.some(opening=>opening.id===s.venue.site?.mainEntrance?.openingId))ctx.addIssue({code:'custom',message:'主入口必须指向结构中的门窗'});
 });
 export const sceneSchema=z.discriminatedUnion('schemaVersion',[sceneV1Schema,sceneV2Schema]).superRefine((s,ctx)=>{
   if (!s.scenePreset && s.objects.length > 50) ctx.addIssue({code:'custom',message:'普通场景最多50件物件'});
@@ -141,6 +161,8 @@ export type SceneV2 = z.infer<typeof sceneV2Schema>;
 export type SourceImage = z.infer<typeof sourceSchema>;
 export type DimensionConstraint = z.infer<typeof dimensionSchema>;
 export type SceneObject = z.infer<typeof objectSchema>;
+export type VenueSite = z.infer<typeof venueSiteSchema>;
+export type HeightSource = z.infer<typeof heightSourceSchema>;
 export type Point = z.infer<typeof pointSchema>;
 
 function cross(a: Point, b: Point, c: Point) { return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x); }
