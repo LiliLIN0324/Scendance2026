@@ -29,6 +29,40 @@ it('offers a preview card for every packaged preset', () => {
   }
 });
 
+it('puts the blank venue first and loads a 12 × 8 m editable shell without a preset', () => {
+  const apply = vi.fn();
+  render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={apply}/>);
+  const first = document.querySelector('.sc-preset-rail .sc-preset-tile');
+  expect(first?.textContent).toContain('空白场地');
+
+  fireEvent.click(screen.getByRole('button', { name: '载入空白场地 12 × 8 米' }));
+  expect(loadScenePreset).not.toHaveBeenCalled();
+  const next = apply.mock.calls[0]![0] as RoomLayout;
+  expect(next.width).toBe(12);
+  expect(next.height).toBe(8);
+  expect(next.scenePreset).toBeUndefined();
+  expect(next.backendSceneV2?.structure.walls).toHaveLength(4);
+  expect(next.name).toBe(INITIAL_LAYOUT.name);
+  expect(next.floors[0]?.items.filter(item => !item.structuralOpeningId && !item.structuralColumnId && !item.venueEntranceId)).toHaveLength(0);
+  expect(screen.getByRole('status').textContent).toContain('可改尺寸的空白场地');
+});
+
+it('asks on the blank card before clearing a worked-on layout', () => {
+  const apply = vi.fn();
+  const populated = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0], items: [{ id: 'existing' }] }] } as RoomLayout;
+  render(<ScenePresetsPanel layout={populated} onApply={apply}/>);
+  fireEvent.click(screen.getByRole('button', { name: '载入空白场地 12 × 8 米' }));
+  expect(screen.getByRole('group', { name: '确认换成空白场地' })).toBeTruthy();
+  expect(apply).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  expect(screen.queryByRole('group', { name: '确认换成空白场地' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '载入空白场地 12 × 8 米' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认换成' }));
+  const next = apply.mock.calls[0]![0] as RoomLayout;
+  expect(next.floors[0]?.items.some(item => item.id === 'existing')).toBe(false);
+  expect(next.width).toBe(12);
+});
+
 it('opens the selected preset once and permits loading it again', async () => {
   vi.mocked(loadScenePreset).mockResolvedValue(next);
   const apply = vi.fn();

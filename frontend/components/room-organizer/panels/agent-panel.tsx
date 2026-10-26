@@ -16,7 +16,8 @@
 import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRoomEditor } from '../contexts';
-import { proposeAddition, proposePlan, raiseVenue, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
+import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
+import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { sameLayoutContent } from '../lib/persistence';
@@ -24,7 +25,7 @@ import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
   scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
 } from '../lib/workbench-agent';
@@ -149,6 +150,8 @@ interface AgentValue {
   retry(): void; stop(): void; resume(): void; regenerate(label?: string): void;
   /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
+  /** 左栏简报的空地文字链：不用先开物料库，一键立 12×8 空壳。 */
+  startBlankVenue(): void;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
   /** 座位不够时的一点击改法：按同一份需求补座重排，仍然只出预览。 */
@@ -499,7 +502,24 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   // 画布上有墙体/场地真相 = 第 ① 步已经过了；撤回或作废不会把它拆掉，进度和尺寸读数都靠它。
-  const venueUp = layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || (activeFloor.interiorWalls?.length ?? 0) > 0;
+  // 模板场馆也是立起来的场地：角标和简报要能报出它的米数。
+  const venueUp = layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || layout.scenePreset !== undefined || (activeFloor.interiorWalls?.length ?? 0) > 0;
+
+  // 模板/空壳自带固定长宽：载入或被尺寸改写后，把读数同步成场地的真实米数，
+  // 否则角标报了米数、卡片还空着，人一说话又按旧读数算。
+  const venueDimsStamp = useRef('');
+  const lengthValue = lengthCheck.ok ? lengthCheck.value : null;
+  const widthValue = widthCheck.ok ? widthCheck.value : null;
+  useEffect(() => {
+    const stamp = layout.scenePreset ? `preset:${layout.scenePreset}:${layout.width}x${layout.height}`
+      : layout.backendSceneV2 ? `shell:${layout.width}x${layout.height}` : '';
+    if (!stamp || stamp === venueDimsStamp.current) return;
+    venueDimsStamp.current = stamp;
+    const matches = lengthValue !== null && widthValue !== null
+      && Math.abs(lengthValue - layout.width) < 1e-6 && Math.abs(widthValue - layout.height) < 1e-6;
+    if (!matches) { setLengthRaw(String(layout.width)); setWidthRaw(String(layout.height)); setScaleOrigin('typed'); }
+    setDimsTouched(true);
+  }, [layout.scenePreset, layout.backendSceneV2, layout.width, layout.height, lengthValue, widthValue]);
 
   /**
    * 云端 AI 返回的那一版，折成右栏同一套读数：服务端只说「哪些物件变了」和场地检查警告，
@@ -620,6 +640,21 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     return `场地立起来了：${notes.join('，')}。`;
   }
 
+  /** 模板是固定 GLB 外壳：改尺寸时明说已经离开模板，别让人以为只是把体育馆拉长了。 */
+  function presetShellNote(venue: VenuePlan): string {
+    const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
+    const dropped = venue.cleared ? `，另有 ${venue.cleared} 件自有物料放不下先撤了` : '';
+    return `已离开模板：模板物件已撤，自有物料能留的都留了，按新尺寸 ${size} 立了矩形壳${dropped}。`;
+  }
+
+  /** 纯改尺寸只动壳：一句短的，不拉着人再确认一遍布置。 */
+  function sizeOnlyNote(venue: VenuePlan, leavingPreset: boolean): string {
+    if (leavingPreset) return presetShellNote(venue);
+    const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
+    const dropped = venue.cleared ? `，${venue.cleared} 件物料放不下先撤了` : '';
+    return `场地改成 ${size}${dropped}。`;
+  }
+
   /** 预览收回：画布退回确认前的样子，提案本身留着，还能接着摆。 */
   function hidePreview(): void { onPreview(null); }
 
@@ -659,11 +694,72 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       : `${intro}${notes.join('，')}。${tail}` });
   }
 
+  /**
+   * 纯改尺寸：只落壳，不开进度、预览卡或绿钮。场地一变，旧提案就不再代表画布，
+   * 这里静默收回（不另发「预览作废」的恐吓条），由用户自己的改尺寸动作说了算。
+   */
+  function resizeVenueOnly(scale: Scale, indoorOutdoor: VenueIO = venueIO): void {
+    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再改场地尺寸。' }); return; }
+    const before = live.current;
+    const size = `${formatArea(scale.length)} × ${formatArea(scale.width)} m`;
+    if (Math.abs(before.width - scale.length) < 1e-6 && Math.abs(before.height - scale.width) < 1e-6) {
+      say({ role: 'agent', text: `场地已经是 ${size}，没动。` });
+      return;
+    }
+    runToken.current++;
+    // 没有挂着的提案就不必回调 onPreview(null)：空改尺寸不该惊动画布。
+    if (proposal.current) dropProposal();
+    discardCloudPreview();
+    setPhase('idle'); setProgress(0);
+    const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor, scaleOrigin: scale.origin };
+    let venue: VenuePlan | null = null;
+    try {
+      venue = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
+    } catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
+      return;
+    }
+    if (!venue) {
+      say({ role: 'agent', amber: true, text: '这个场地是导入或生成的复杂结构，不能只改外框；要换尺寸得先重新立一块矩形空地。' });
+      return;
+    }
+    // 落盘走同一个确认回调（撤销/存快照都在里面），但只改外框不该把人从 2D 拽回 3D。
+    const was2D = view.view2D;
+    try { onApply(venue.layout); }
+    catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
+      return;
+    }
+    if (was2D) setView(current => ({ ...current, view2D: true }));
+    say({ role: 'agent', text: sizeOnlyNote(venue, !!before.scenePreset) });
+  }
+
+  /** 左栏简报的「空白场地」文字链：和模板轨首卡同一块 12×8 空壳，不用先开物料库。 */
+  function startBlankVenue(): void {
+    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再换空地。' }); return; }
+    runToken.current++;
+    if (proposal.current) dropProposal();
+    discardCloudPreview();
+    setPhase('idle'); setProgress(0);
+    const was2D = view.view2D;
+    try {
+      onApply(createBlankVenue(live.current));
+      if (was2D) setView(current => ({ ...current, view2D: true }));
+      say({ role: 'agent', text: `空白场地立好了：${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m，要调尺寸就说「改成 15×10」。` });
+    } catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '空白场地没立起来，再试一次。' });
+    }
+  }
+
   /** 出方案 = 先立 T-01 的场地真相，再在立好的壳体上算一份候选。确认前 objects 不落盘。 */
   async function runLocal(token: number, variant: number, scale: Scale, seatPriority = false): Promise<void> {
-    const input = { base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
+    const before = live.current;
+    const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
+    // 模板是固定 GLB 外壳，拉伸它只会看起来「什么都没变」：尺寸一变就卸模板、按新尺寸立矩形空壳。
+    const resized = Math.abs(before.width - scale.length) > 1e-6 || Math.abs(before.height - scale.width) > 1e-6;
+    const leavingPreset = resized && !!before.scenePreset;
     let venue: VenuePlan | null;
-    try { venue = raiseVenue(input); }
+    try { venue = (resized ? replaceVenueWithShell(input) : null) ?? raiseVenue(input); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
@@ -671,7 +767,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (venue) {
       // 场地是 T-01 已经确认过的真相：改的是墙体尺寸，不是物料，所以先落它，预览才对得上墙。
       actions.applyLayout(venue.layout);
-      say({ role: 'agent', text: shellNote(venue.scene, venue.cleared) });
+      say({ role: 'agent', text: leavingPreset ? presetShellNote(venue) : shellNote(venue.scene, venue.cleared) });
       await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
     } else {
       // 预设/云端场景不重搭壳体，但这次的尺度就是布置边界：先把长宽对齐再算候选，
@@ -898,8 +994,16 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const command = isGenerateCommand(trimmed);
     // 话锋一变，上一版预览就不再代表这次的要求：先收掉，别让两张卡同屏打架。
     if (phase === 'proposed' || phase === 'paused') { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
+    const extraction = parseBriefSentence(trimmed);
+    // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
+    if (!command && isVenueSizeOnly(extraction)) {
+      applyExtraction(extraction);
+      noteBrief(extraction);
+      syncStudioBrief(extraction);
+      resizeVenueOnly(scaleFrom(extraction), extraction.venueIO ?? venueIO);
+      return;
+    }
     if (studio?.connection === '项目已连接' && !studio.busy) {
-      const extraction = parseBriefSentence(trimmed);
       noteBrief(extraction);
       const briefNote = syncStudioBrief(extraction);
       if (briefNote) say({ role: 'agent', text: briefNote });
@@ -913,7 +1017,6 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     // 本地：先把这句话里的人数/场地/长宽解析出来，既当回显也当这一版的条件。
-    const extraction = parseBriefSentence(trimmed);
     applyExtraction(extraction);
     noteBrief(extraction);
     const briefNote = syncStudioBrief(extraction);
@@ -949,7 +1052,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const overlapCount = phase === 'proposed' ? activeProposal?.overlapCount ?? 0
     : phase === 'ready' || phase === 'edited' || phase === 'paused' ? activeFloor.items.filter(item => collidingIds.has(item.id)).length : 0;
 
-  // 回显只读：填过/说过用说的，场地已立起来用场地的，两者都没才说「还没定」。
+  // 回显只读：填过/说过用说的；没说过就报画布当前的米数——角标一直报真实尺寸，
+  // 简报不能还写「尺寸还没定」，两处对不上会让人以为场地没立起来。
   // 面积折算与图纸估算是推出来的，后缀必须跟着走，不能静态数字装成场地真相。
   const stated = lengthCheck.ok && widthCheck.ok ? `${formatArea(lengthCheck.value)} × ${formatArea(widthCheck.value)} m` : null;
   const guests = brief.guests ?? studio?.brief.guests ?? null;
@@ -958,7 +1062,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     guests: guests ? `${guests} 人` : null,
     dims: `${venueIO === 'indoor' ? '室内' : '户外'} · ${stated
       ? `${stated}${scaleOrigin === 'area' ? ' 折算' : scaleOrigin === 'plan' ? ' 估的' : ''}`
-      : venueUp ? `${formatArea(layout.width)} × ${formatArea(layout.height)} m` : '尺寸还没定'}`,
+      : `${formatArea(layout.width)} × ${formatArea(layout.height)} m`}`,
     note: hasBase && scaleOrigin === 'plan' ? '图纸只当参照，这个数是我估的' : null,
   };
 
@@ -968,7 +1072,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
     proposal: phase === 'proposed' ? activeProposal : null,
-    confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, addSeats,
+    confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, addSeats, startBlankVenue,
     exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
@@ -1048,11 +1152,9 @@ export function ActivityBrief({ tools, onClose }: { tools: readonly BriefTool[];
     ? '导出预览还没确认'
     : agent.proposal
       ? '右栏这版还没确认'
-      : dims.includes('还没定')
-        ? '说一句场地多大，我就先出一版'
-        : items
-          ? '要改哪里，直接说一句'
-          : '说「出方案」，我先摆一版预览';
+      : items
+        ? '要改哪里，直接说一句'
+        : '说「出方案」，我先摆一版预览';
   return <section className="sc-brief" aria-label="活动简报">
     <header className="sc-brief-head">
       <span className="sc-brief-eyebrow">活动简报</span>
@@ -1069,6 +1171,10 @@ export function ActivityBrief({ tools, onClose }: { tools: readonly BriefTool[];
     {agent.baseName && <p className="sc-brief-note">底图 · {agent.baseName} · 仅作参照</p>}
     {note && <p className="sc-brief-note">{note}</p>}
     <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>
+    {!known && <p className="sc-brief-blank">
+      <button type="button" className="sc-brief-blank-link" onClick={agent.startBlankVenue}>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</button>
+      <span>清空示例桌椅，从空地开始</span>
+    </p>}
     {tools.length > 0 && <details className="sc-brief-tools">
       <summary>资料与工具</summary>
       <div className="sc-brief-tool-grid">
@@ -1260,7 +1366,6 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   return <div className="ap-canvas-layer" aria-live="polite">
     {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={20} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {(s === 'empty' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => { const input = document.getElementById('ap-input'); if (input) { input.focus(); return; } document.querySelector<HTMLElement>('.sc-agent-reopen')?.click(); }}>说一句需求就能出方案 →</button>}
     {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={12} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/{GEN_STEPS.length}</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
     {s === 'planProposed' && agent.proposal && agent.proposal.overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 这版里 {agent.proposal.overlapCount} 件挤了或压墙：{agent.proposal.overlapNames.slice(0, 4).join('、')}{agent.proposal.overlapNames.length > 4 ? ' 等' : ''}</div>}

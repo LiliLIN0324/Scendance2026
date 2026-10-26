@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { preserveCurrentActivity } from '../../../lib/production-plan';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
+import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { isUntouched } from '../lib/restore-point';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { loadScenePreset } from '../three/scene-presets';
@@ -12,6 +13,8 @@ interface Props {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
 }
+
+type RailChoice = ScenePresetKey | 'blank';
 
 function keepsExecution(layout: RoomLayout): boolean {
   return layout.productionPlan !== undefined || layout.eventOperations !== undefined
@@ -24,9 +27,18 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
   const loading = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const [busy, setBusy] = useState<ScenePresetKey | null>(null);
-  const [pending, setPending] = useState<ScenePresetKey | null>(null);
+  const [busy, setBusy] = useState<RailChoice | null>(null);
+  const [pending, setPending] = useState<RailChoice | null>(null);
   const [notice, setNotice] = useState('');
+  // 模板被改尺寸卸掉（或撤销回模板）后，卡上的「已载入」要跟着场地走；
+  // 离开模板这件事由 Agent 播报一句，这里不再重复一遍吓人。
+  const lastScene = useRef(layout.scenePreset);
+  useEffect(() => {
+    const before = lastScene.current;
+    lastScene.current = layout.scenePreset;
+    if (before === layout.scenePreset) return;
+    setNotice(layout.scenePreset ? `已载入${SCENE_PRESETS[layout.scenePreset].name}，可选择物件继续编辑。` : '');
+  }, [layout.scenePreset]);
   const rail = useHorizontalRail<HTMLDivElement>();
   async function load(key: ScenePresetKey): Promise<void> {
     if (loading.current) return;
@@ -42,15 +54,45 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景载入失败，请重试。'); }
     finally { loading.current = false; setBusy(null); }
   }
+  /** 空地不下载模型：直接换上可改尺寸的矩形壳，和说「12×9」立壳是同一种场地真相。 */
+  function loadBlank(): void {
+    if (loading.current) return;
+    const before = current.current;
+    loading.current = true;
+    setPending(null); setBusy('blank'); setNotice('');
+    try {
+      onApply(createBlankVenue(before));
+      setNotice('已换成可改尺寸的空白场地，在对话里说「改成 15×10」调整尺寸。');
+    } catch (error) { setNotice(error instanceof Error ? error.message : '空白场地没立起来，请重试。'); }
+    finally { loading.current = false; setBusy(null); }
+  }
+  const choose = (choice: RailChoice): void => {
+    if (choice === 'blank') loadBlank(); else void load(choice);
+  };
   // A fresh plan can be replaced in one click; anything already worked on asks
   // on the card itself rather than through a browser dialog.
-  const press = (key: ScenePresetKey) => {
+  const press = (choice: RailChoice) => {
     if (busy !== null) return;
-    if (isUntouched(current.current)) { void load(key); return; }
-    setPending(key);
+    if (isUntouched(current.current)) { choose(choice); return; }
+    setPending(choice);
   };
+  const confirmCopy = (choice: RailChoice): string => choice === 'blank'
+    ? `会清空当前布置换成空地${keepsExecution(current.current) ? '；活动需求和任务保留' : ''}。`
+    : keepsExecution(current.current) ? '活动需求和任务会保留。' : '会替换当前布置。';
   return <section className="sc-preset-board" aria-label="场景预设">
     <div ref={rail.setRef} onKeyDown={rail.onKeyDown} className="sc-preset-rail" role="group" aria-label="场景模板" tabIndex={0}>
+      <div className="sc-preset-tile" key="blank">
+        <button className="sc-preset-card" type="button" disabled={busy !== null} onClick={() => press('blank')}
+          aria-label={`载入空白场地 ${BLANK_VENUE.width} × ${BLANK_VENUE.depth} 米`} title="从一块能改尺寸的空地开始，不带模板场馆">
+          <span className="sc-preset-blank" aria-hidden="true"><small>{BLANK_VENUE.width} × {BLANK_VENUE.depth} m · 可改尺寸</small></span>
+          <strong>空白场地</strong>
+        </button>
+        {pending === 'blank' && <div className="sc-preset-confirm" role="group" aria-label="确认换成空白场地">
+          <p>{confirmCopy('blank')}</p>
+          <div><button type="button" className="is-go" onClick={choose.bind(null, 'blank')}>确认换成</button>
+          <button type="button" onClick={() => setPending(null)}>取消</button></div>
+        </div>}
+      </div>
       {(Object.keys(SCENE_PRESETS) as ScenePresetKey[]).map(key => <div className="sc-preset-tile" key={key}>
         <button className="sc-preset-card" type="button" disabled={busy !== null} onClick={() => press(key)}
           aria-label={`载入模板 ${SCENE_PRESETS[key].name}`} title={SCENE_PRESETS[key].description}>
@@ -59,7 +101,7 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
           <strong>{SCENE_PRESETS[key].name}</strong>
         </button>
         {pending === key && <div className="sc-preset-confirm" role="group" aria-label={`确认载入${SCENE_PRESETS[key].name}`}>
-          <p>{keepsExecution(current.current) ? '活动需求和任务会保留。' : '会替换当前布置。'}</p>
+          <p>{confirmCopy(key)}</p>
           <div><button type="button" className="is-go" onClick={() => { void load(key); }}>确认载入</button>
           <button type="button" onClick={() => setPending(null)}>取消</button></div>
         </div>}
