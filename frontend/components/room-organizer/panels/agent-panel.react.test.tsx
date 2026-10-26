@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
-import { AgentPanel, LayoutAgentProvider } from './agent-panel';
+import { ActivityBrief, AgentPanel, LayoutAgentProvider } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 
@@ -11,6 +11,19 @@ const state = vi.hoisted(() => ({
   apply: vi.fn(),
   view: null as unknown,
   setView: vi.fn(),
+}));
+
+const studioMock = vi.hoisted(() => ({
+  exportActivity: vi.fn(async () => {}),
+  generate: vi.fn(async () => {}),
+  discardPreview: vi.fn(),
+  setBrief: vi.fn(),
+  brief: { event: null as string | null, guests: null as number | null },
+  preview: null as unknown,
+  stale: false,
+  expired: false,
+  busy: false,
+  connection: '离线引导',
 }));
 
 vi.mock('../contexts', () => ({
@@ -24,12 +37,12 @@ vi.mock('../contexts', () => ({
     collidingIds: new Set<string>(),
   }),
 }));
-vi.mock('./creative-studio', () => ({ useStudioAgent: () => null }));
+vi.mock('./creative-studio', () => ({ useStudioAgent: () => studioMock }));
 
 const callbacks = {
   workbenchMode: 'layout' as WorkbenchMode,
   onOpenMaterials: vi.fn(), onSelectMode: vi.fn(), onOpenReview: vi.fn(),
-  onOpenDelivery: vi.fn(), onExportHandoff: vi.fn(), onFit: vi.fn(),
+  onOpenDelivery: vi.fn(), onFit: vi.fn(),
 };
 
 function seatLayout(overrides: { locked?: boolean } = {}): RoomLayout {
@@ -63,33 +76,45 @@ beforeEach(() => {
   state.setView = vi.fn();
   callbacks.workbenchMode = 'layout';
   for (const callback of Object.values(callbacks)) if (typeof callback === 'function') callback.mockClear();
+  studioMock.exportActivity.mockReset(); studioMock.exportActivity.mockResolvedValue(undefined);
+  studioMock.generate.mockReset(); studioMock.generate.mockResolvedValue(undefined);
+  studioMock.discardPreview.mockClear(); studioMock.setBrief.mockClear();
+  studioMock.brief = { event: null, guests: null };
+  studioMock.preview = null; studioMock.stale = false; studioMock.expired = false; studioMock.busy = false;
   localStorage.clear();
 });
 
 afterEach(cleanup);
 
 describe('T-04 delivery narrative in the Agent panel', () => {
-  it('opens customer review without login and names both exits without claiming a sent link', () => {
+  it('opens customer review from the panel without claiming a sent link', () => {
     callbacks.workbenchMode = 'review';
     render(ui(state.layout));
-    const cta = screen.getByRole('button', { name: '准备客户评审' });
+    expect(screen.getByText(/评审 · /)).toBeTruthy();
+    const cta = screen.getByRole('button', { name: '打开客户评审' });
     expect(cta.getAttribute('aria-disabled')).not.toBe('true');
     fireEvent.click(cta);
     expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
-    expect(screen.getByText(/离线 HTML 不用登录/)).toBeTruthy();
-    expect(screen.getByText(/在评审页里发布、复制/)).toBeTruthy();
-    expect(screen.getByText(/系统不会自动发给客户/)).toBeTruthy();
     expect(document.body.textContent).not.toContain('生成评审链接');
     expect(document.body.textContent).not.toContain('已发送');
     expect(document.body.textContent).not.toContain('已通知');
+  });
+
+  it('opens customer review from an explicit chat sentence', async () => {
+    render(ui(state.layout));
+    send('准备客户评审');
+    await waitFor(() => expect(callbacks.onOpenReview).toHaveBeenCalledOnce());
   });
 
   it('labels execution exports as local internal material and never claims cloud collaboration', () => {
     callbacks.workbenchMode = 'delivery';
     render(ui(state.layout));
     expect(screen.getByText(/执行 · 本机内部资料/)).toBeTruthy();
-    expect(screen.getByText(/导出文件留在本机，由你交给搭建方/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '导出给搭建方' }));
+    fireEvent.click(screen.getByRole('button', { name: '导出交接' }));
+    expect(screen.getByText('导出完整活动交接')).toBeTruthy();
+    expect(studioMock.exportActivity).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '先不了' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开执行资料' }));
     expect(callbacks.onOpenDelivery).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toContain('云端协作');
     expect(document.body.textContent).not.toContain('现场履约');
@@ -180,29 +205,54 @@ describe('T-UI visible interaction', () => {
   it('keeps the left rail at exactly the three workbench modes', async () => {
     const { WORKBENCH_MODES } = await import('../lib/workbench-mode');
     expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout', 'review', 'delivery']);
+    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置', '评审', '执行']);
+  });
+
+  it('renders the activity brief as read-only facts from the conversation', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    const brief = screen.getByLabelText('活动简报');
+    expect(within(brief).getByText('来自对话')).toBeTruthy();
+    expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
+    expect(within(brief).queryByRole('textbox')).toBeNull();
+    expect(within(brief).queryByRole('button')).toBeNull();
   });
 
   it('routes export intent to a preview card and only the confirm button triggers the handoff', async () => {
     render(ui(state.layout));
     send('导出给搭建方');
-    const card = (await screen.findByText('导出预览')).closest('.ap-card') as HTMLElement;
-    expect(within(card).getByText(/只在这台机器上生成/)).toBeTruthy();
-    expect(callbacks.onExportHandoff).not.toHaveBeenCalled();
+    const card = (await screen.findByText('导出完整活动交接')).closest('.ap-card') as HTMLElement;
+    expect(within(card).getByText(/本机生成/)).toBeTruthy();
+    expect(studioMock.exportActivity).not.toHaveBeenCalled();
     fireEvent.click(within(card).getByRole('button', { name: '确认导出' }));
-    expect(callbacks.onExportHandoff).toHaveBeenCalledOnce();
-    expect(screen.queryByText('导出预览')).toBeNull();
+    await waitFor(() => expect(studioMock.exportActivity).toHaveBeenCalledOnce());
+    expect(screen.queryByText('导出完整活动交接')).toBeNull();
+  });
+
+  it('keeps one green primary when export preview opens over a pending fix', async () => {
+    render(ui(state.layout));
+    await reviewAndFix();
+    expect(await screen.findByText('改法预览')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+
+    send('导出给搭建方');
+    expect(await screen.findByText('导出完整活动交接')).toBeTruthy();
+    const primaries = [...document.querySelectorAll('.sc-agent-panel .btn-primary')].map(button => button.textContent?.trim());
+    expect(primaries).toEqual(['确认导出']);
+
+    fireEvent.click(screen.getByRole('button', { name: '先不了' }));
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
   });
 
   it('treats 出交接 as export but keeps 出物料清单 as an in-chat list', async () => {
     render(ui(state.layout));
     send('出交接');
-    expect(await screen.findByText('导出预览')).toBeTruthy();
+    expect(await screen.findByText('导出完整活动交接')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '先不了' }));
-    expect(screen.queryByText('导出预览')).toBeNull();
+    expect(screen.queryByText('导出完整活动交接')).toBeNull();
     send('出物料清单');
     // 清单仍在对话里回（同步），不应当落到导出预览卡。
-    expect(screen.queryByText('导出预览')).toBeNull();
-    expect(callbacks.onExportHandoff).not.toHaveBeenCalled();
+    expect(screen.queryByText('导出完整活动交接')).toBeNull();
+    expect(studioMock.exportActivity).not.toHaveBeenCalled();
   });
 
   it('retracts the confirmed card when the canvas changes underneath it (undo or manual edit)', async () => {

@@ -31,8 +31,33 @@ interface Props {
   backupActions?: LocalProjectBackupActions | null | undefined;
   onBackupRestored?: (() => void) | undefined;
   deliveryViewRequest?: { serial: number; view: 'operations' | 'materials' } | undefined;
-  /** T-UI §4-5：对话里确认导出后自增一次，这里自动触发既有交接导出（不新增导出路径）。 */
-  autoExportRequest?: number | undefined;
+}
+
+/**
+ * T-UI §4-5：完整活动交接只有一条实现——右栏「确认导出」与执行页共用。
+ * 调用方负责给出「还是不是当前活动」的判断，导出前后各核对一次。
+ */
+export async function exportActivityHandoff({ layout, prepareBackup, stillCurrent = () => true }: {
+  layout: RoomLayout;
+  prepareBackup(): Promise<string>;
+  stillCurrent?: () => boolean;
+}): Promise<string> {
+  const metadata = { id: crypto.randomUUID(), generatedAt: new Date().toISOString() };
+  const { parseLocalProjectBackupJson } = await import('@/lib/local-project-backup');
+  if (!stillCurrent()) throw new Error('活动或资料已变化，未生成交接文件。');
+  const saved = parseLocalProjectBackupJson(await prepareBackup());
+  if (!stillCurrent()) throw new Error('活动或资料已变化，未生成交接文件。');
+  if (saved.layout.id !== layout.id || saved.brief.status === 'not-in-file' || saved.materialCheckins.status === 'not-in-file') {
+    throw new Error('活动资料未完整对应当前项目，请重新读取后导出。');
+  }
+  const ledger = saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined;
+  const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
+  if (!stillCurrent()) throw new Error('活动或资料已变化，未生成交接文件。');
+  const html = await productionPlanHandoffHtml(saved.layout, metadata, ledger, { scope: 'activity', brief: saved.brief });
+  if (!stillCurrent()) throw new Error('活动或资料已变化，未生成交接文件。');
+  const { downloadSceneDelivery } = await import('../lib/scene-delivery');
+  downloadSceneDelivery(html, 'text/html;charset=utf-8', `${saved.layout.name}_内部活动交接_${metadata.id}`, 'html');
+  return '完整活动交接文件已导出，可离线打开与打印。文件包含内部执行资料，请核对后交给执行团队。';
 }
 
 function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
@@ -105,7 +130,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing 晴光 Agent entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, autoExportRequest, activityTaskPanel }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
@@ -158,28 +183,23 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
       if (!stillCurrent()) return;
       if (kind === 'activity' || kind === 'timetable') {
         if (!backupActions) throw new Error('当前工作台尚未准备完整活动资料，未生成交接文件。');
-        const { parseLocalProjectBackupJson } = await import('@/lib/local-project-backup');
-        if (!stillCurrent()) return;
-        const saved = parseLocalProjectBackupJson(await backupActions.prepareBackup());
-        if (!stillCurrent()) return;
-        if (saved.layout.id !== before.layout.id || saved.brief.status === 'not-in-file' || saved.materialCheckins.status === 'not-in-file') {
-          throw new Error('活动资料未完整对应当前项目，请重新读取后导出。');
-        }
-        const ledger = saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined;
-        if (kind === 'timetable') {
+        if (kind === 'activity') {
+          setNotice(await exportActivityHandoff({ layout: before.layout, prepareBackup: () => backupActions.prepareBackup(), stillCurrent }));
+        } else {
+          const { parseLocalProjectBackupJson } = await import('@/lib/local-project-backup');
+          if (!stillCurrent()) return;
+          const saved = parseLocalProjectBackupJson(await backupActions.prepareBackup());
+          if (!stillCurrent()) return;
+          if (saved.layout.id !== before.layout.id || saved.brief.status === 'not-in-file' || saved.materialCheckins.status === 'not-in-file') {
+            throw new Error('活动资料未完整对应当前项目，请重新读取后导出。');
+          }
+          const ledger = saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined;
           const { executionTimetableHtml } = await import('@/lib/execution-timetable-export');
           if (!stillCurrent()) return;
           const html = await executionTimetableHtml(saved.layout, metadata, ledger);
           if (!stillCurrent()) return;
           downloadSceneDelivery(html, 'text/html;charset=utf-8', `${saved.layout.name}_执行时间表_${metadata.id}`, 'html');
           setNotice('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。');
-        } else {
-          const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
-          if (!stillCurrent()) return;
-          const html = await productionPlanHandoffHtml(saved.layout, metadata, ledger, { scope: 'activity', brief: saved.brief });
-          if (!stillCurrent()) return;
-          downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部活动交接_${metadata.id}`, 'html');
-          setNotice('完整活动交接文件已导出，可离线打开与打印。文件包含内部执行资料，请核对后交给执行团队。');
         }
       } else if (kind === 'production') {
         const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
@@ -203,13 +223,6 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     } catch (error) { if (mounted.current && latest.current.userId === before.userId && latest.current.projectId === before.projectId && (kind !== 'timetable' || stillCurrent())) setNotice(error instanceof Error ? error.message : '导出失败，请重试。'); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
-  // T-UI §4-5：对话里点过「确认导出」才到这里——复用上面的 download，不新增第二条导出路径。
-  const handledAutoExport = useRef(0);
-  useEffect(() => {
-    if (!autoExportRequest || autoExportRequest === handledAutoExport.current) return;
-    handledAutoExport.current = autoExportRequest;
-    void download(backupActions ? 'activity' : 'csv');
-  }, [autoExportRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
     <div className="sc-section-heading"><div><h2>执行与交付</h2><p>本机内部资料：安排活动任务，核对物料并导出交接内容。</p></div></div>
     {/* T-UI §4-2：六颗 Tab 不再是默认门面，收进「执行工具」里；能力原样保留，要用再展开。 */}

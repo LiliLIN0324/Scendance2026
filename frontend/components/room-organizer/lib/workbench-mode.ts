@@ -2,9 +2,9 @@
 export type WorkbenchMode = 'layout' | 'review' | 'delivery';
 
 export const WORKBENCH_MODES: ReadonlyArray<{ id: WorkbenchMode; label: string; hint: string }> = [
-  { id: 'layout', label: '空间布置', hint: '画布、素材架与活动需求' },
-  { id: 'review', label: '项目评审', hint: '客户方案评审与发给客户' },
-  { id: 'delivery', label: '方案执行', hint: '执行交付、点验与导出' },
+  { id: 'layout', label: '布置', hint: '场地、物料与方案预览' },
+  { id: 'review', label: '评审', hint: '给客户看的方案' },
+  { id: 'delivery', label: '执行', hint: '交接、点验与导出' },
 ];
 
 export const WORKBENCH_MODE_DEFAULT: WorkbenchMode = 'layout';

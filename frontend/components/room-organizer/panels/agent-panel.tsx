@@ -23,7 +23,7 @@ import { sameLayoutContent } from '../lib/persistence';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
-  checkDim, hasBriefSignals, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
+  checkDim, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
   isMaterialListCommand, isReviewCommand, isStopCommand, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
   scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
@@ -126,8 +126,6 @@ export interface LayoutAgentCallbacks {
   onSelectMode(mode: WorkbenchMode): void;
   onOpenReview(): void;
   onOpenDelivery(): void;
-  /** T-UI §4-5：对话里确认导出后，打开「执行」工作区并触发既有交接导出。 */
-  onExportHandoff(): void;
   onFit(): void;
 }
 
@@ -146,7 +144,7 @@ interface AgentValue {
   /** 还没确认的那版布置；null = 没有待确认的提案。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
-  exportPreview: boolean; confirmExport(): void; dismissExport(): void;
+  exportPreview: boolean; previewExport(): void; confirmExport(): void; dismissExport(): void;
   acceptFile(file: File): void; retryFile(): void; pickFile(): void;
   send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
 }
@@ -830,16 +828,25 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     runGeneration(label, seed.current, label === '换一版' ? '换一版不同的布局' : '', readScale());
   }
 
-  /** T-UI §4-5：导出/交接意图先落预览卡（说清导什么、只在本机生成），确认才触发既有导出。 */
+  /** T-UI §4-5：导出/交接意图先落预览卡，确认后才在本机直接生成；不跳执行页。 */
   function proposeExport(): void {
     setExportPreview(true);
-    say({ role: 'agent', text: '导出前对一下：要导的是「完整活动交接」HTML——活动需求、物料工作单、制作计划、数量点验都在里面，只在这台机器上生成。看下面这张卡，点「确认导出」我才开始下载。' });
+    say({ role: 'agent', text: '完整活动交接包含需求、物料、制作和点验，只在这台机器上生成。' });
   }
 
   function confirmExport(): void {
     setExportPreview(false);
-    say({ role: 'agent', text: '好，交接文件开始生成了，下好后「执行」页会给你一句回话。' });
-    callbacks.onExportHandoff();
+    const studio = studioRef.current;
+    if (!studio?.exportActivity) {
+      say({ role: 'agent', amber: true, text: '导出入口还没就绪，稍后再试。' });
+      return;
+    }
+    say({ role: 'agent', text: '好，我在本机生成完整活动交接。' });
+    void studio.exportActivity().then(() => {
+      say({ role: 'agent', text: '交接文件已下载，可离线打开与打印；只在这台机器上生成，由你交给搭建方。' });
+    }).catch(error => {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '导出没成，资料都还在，再试一次。' });
+    });
   }
 
   function dismissExport(): void {
@@ -866,6 +873,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (isCopyDraftCommand(trimmed)) { replyDraft(); return; }
     if (isZoneCommand(trimmed)) { replyZone(); return; }
     if (isReviewCommand(trimmed)) { reviewNow(); return; }
+    // 客户评审是深工具，但入口仍是一句话：打开评审页，不在左栏另起表单。
+    if (isClientReviewCommand(trimmed)) {
+      callbacks.onOpenReview();
+      say({ role: 'agent', text: '评审页在左边开了：离线 HTML 或云端只读链接，都由你发。' });
+      return;
+    }
     // 导出/交接：先出预览卡，不直接下载（T-UI §4-5）。
     if (isExportCommand(trimmed)) { proposeExport(); return; }
     const command = isGenerateCommand(trimmed);
@@ -941,7 +954,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
     proposal: phase === 'proposed' || phase === 'paused' ? activeProposal : null,
     confirmProposal, withdrawProposal,
-    exportPreview, confirmExport, dismissExport,
+    exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
@@ -1000,27 +1013,54 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
   return `${MASCOT_DIR}-40.png`;
 }
 
+export type BriefTool = { id: string; label: string; hint: string; icon: ReactNode; onOpen(): void };
+
 /**
- * 对话已收集字段的回显：只读。生成方案这件事只有右栏那一句话能做
- * （docs 截图钉 2026-10-26 夜：尺寸表单 + 大绿钮那个第二入口砍掉了），
- * 所以这里不再摆输入框，也不放生成按钮，免得它变成第二套入口。
+ * 左栏活动简报：只读，数字全部来自对话与当前画布；七件深工具收在底部折叠区。
+ * 这里不放输入框、不放生成按钮，也不摆说明书——要改就回右栏说一句。
  */
-function RecapCard({ agent }: { agent: AgentValue }): JSX.Element {
+export function ActivityBrief({ tools, onClose }: { tools: readonly BriefTool[]; onClose?: () => void }): JSX.Element {
+  const agent = useAgent();
+  const { layout, activeFloor } = useRoomEditor();
   const { event, guests, dims, note } = agent.recap;
-  return <div className="ap-card" id="summary-card">
-    <div className="ap-venue">
-      <div className="ap-venue-head">
-        <span className="ap-field-label">场地{agent.baseName && <> · <span>图纸只当参照</span></>}</span>
-        <div id="pf-io" className="ap-io" role="radiogroup" aria-label="室内或户外">
-          {(['indoor', 'outdoor'] as const).map(io => <button key={io} type="button" role="radio" aria-checked={agent.venueIO === io} className={agent.venueIO === io ? 'is-on' : ''} onClick={() => agent.setVenueIO(io)}>{io === 'indoor' ? '室内' : '户外'}</button>)}
-        </div>
+  const items = materialCount(activeFloor.items);
+  const known = agent.venueUp;
+  const noteLines = [
+    dims,
+    known ? `${formatArea(venueArea(layout))} m²` : null,
+  ].filter(Boolean).join(' · ');
+  const status = agent.exportPreview
+    ? '导出预览还没确认'
+    : agent.proposal
+      ? '右栏这版还没确认'
+      : dims.includes('还没定')
+        ? '说一句场地多大，我就先出一版'
+        : items
+          ? '要改哪里，直接说一句'
+          : '说「出方案」，我先摆一版预览';
+  return <section className="sc-brief" aria-label="活动简报">
+    <header className="sc-brief-head">
+      <span className="sc-brief-eyebrow">活动简报</span>
+      <span className="sc-brief-source">来自对话</span>
+      {onClose && <button type="button" className="sc-brief-close" aria-label="收起活动简报" title="收起活动简报" onClick={onClose}><X size={14} aria-hidden="true"/></button>}
+    </header>
+    <strong className="sc-brief-title">{layout.name || event || '未命名活动'}</strong>
+    <dl className="sc-brief-rows">
+      <div><dt>活动</dt><dd>{event || <em>还没说</em>}</dd></div>
+      <div><dt>人数</dt><dd>{guests || <em>还没说</em>}</dd></div>
+      <div><dt>场地</dt><dd>{noteLines}</dd></div>
+      <div><dt>物料</dt><dd>{items ? `${items} 件` : <em>还没排</em>}</dd></div>
+    </dl>
+    {agent.baseName && <p className="sc-brief-note">底图 · {agent.baseName} · 仅作参照</p>}
+    {note && <p className="sc-brief-note">{note}</p>}
+    <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>
+    {tools.length > 0 && <details className="sc-brief-tools">
+      <summary>资料与工具</summary>
+      <div className="sc-brief-tool-grid">
+        {tools.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
       </div>
-      <div className="ap-area-row"><span className="ap-field-value is-static">{dims}</span></div>
-      {(event || guests) && <p className="ap-small">{[event, guests].filter(Boolean).join(' · ')}</p>}
-      {note && <p className="ap-small">{note}</p>}
-    </div>
-    <p className="ap-small">要改就说一句：「12×9」「80 人发布会」「按图纸估」。也能说「加两把椅子」「出物料清单」「写段文案」「看看哪里有问题」。说「出方案」我就先摆一版预览，确认前不写进画布。</p>
-  </div>;
+    </details>}
+  </section>;
 }
 
 function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
@@ -1042,8 +1082,8 @@ function GenProgress({ agent, paused }: { agent: AgentValue; paused?: boolean })
       return <li key={step} className={done ? 'is-done' : current ? 'is-current' : ''}>{done ? <Check size={12} aria-hidden="true"/> : current ? <Loader2 size={12} className="cr-spin" aria-hidden="true"/> : <span className="ap-dot" aria-hidden="true"/>}<span>{step}</span>{index === 0 && done && <small>{formatArea(layout.width)} × {formatArea(layout.height)} m</small>}</li>;
     })}</ol>
     <p id="cta-hint">{paused
-      ? <>停在第 {n} 步，画布还没动 · <button type="button" className="ap-link" onClick={agent.resume}>接着摆</button> · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>不要了</button></>
-      : <>正在{GEN_STEPS[n - 1]}，先在画布上给你看 · <button type="button" className="ap-link" onClick={agent.stop}>停一下</button></>}</p>
+      ? <>停在第 {n} 步 · <button type="button" className="ap-link" onClick={agent.resume}>接着摆</button> · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>不要了</button></>
+      : <>正在{GEN_STEPS[n - 1]} · <button type="button" className="ap-link" onClick={agent.stop}>停一下</button></>}</p>
   </div>;
 }
 
@@ -1063,19 +1103,15 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     {plan.keptLocked > 0 && <p className="ap-small">锁定 {plan.keptLocked} 件我没动。</p>}
     {review && !!plan.skipped?.length && <p className="ap-small">没动 {plan.skipped.length} 件：{plan.skipped.slice(0, 3).join('、')}{plan.skipped.length > 3 ? ' 等' : ''}（锁着或没找到稳妥落点）。</p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
-    <button id="step-cta" type="button" className="btn-primary" aria-disabled={plan.blocked ? 'true' : 'false'} onClick={() => { if (!plan.blocked) agent.confirmProposal(); }}>确认布置</button>
-    <p id="cta-hint">确认前不会写进画布 · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
+    <button id="step-cta" type="button" className={agent.exportPreview ? 'chip btn-outline' : 'btn-primary'} aria-disabled={plan.blocked ? 'true' : 'false'} onClick={() => { if (!plan.blocked) agent.confirmProposal(); }}>确认布置</button>
+    <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
   </div>;
 }
 
 export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
   const agent = useAgent();
-  const { layout, activeFloor, view } = useRoomEditor();
+  const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
-  // S12：漫游退出后补一句（评审步）。
-  const [walkDone, setWalkDone] = useState(false);
-  const wasWalking = useRef(false);
-  useEffect(() => { if (wasWalking.current && !view.walkthroughMode && mode === 'review') setWalkDone(true); wasWalking.current = view.walkthroughMode; }, [view.walkthroughMode, mode]);
   const [draft, setDraft] = useState('');
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1105,8 +1141,7 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
         <p className="ap-divider">新项目 · {layout.name || '未命名活动'}</p>
         {planShown && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
-        {preStates && (agent.bubbles.length > 0 || agent.baseName !== null) && <RecapCard agent={agent}/>}
-        {preStates && agent.baseName === null && agent.bubbles.length === 0 && <p className="ap-small">有图纸就拖进来，我铺成底图；或者直接说一句话，比如「80 人发布会，室内 12×9」，我就先出一版预览。</p>}
+        {preStates && agent.baseName === null && agent.bubbles.length === 0 && <p className="ap-small">拖张图纸进来，或说一句「80 人发布会，室内 12×9」。</p>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
@@ -1123,41 +1158,41 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
               <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
-              <button type="button" className="chip" onClick={() => agent.callbacks.onSelectMode('review')}>给甲方看</button>
             </div>
           </div>
         </>}
       </>}
       {mode === 'review' && <>
         <p className="ap-divider">评审 · {layout.name || '未命名活动'}</p>
-        <p className="ap-agent">方案 {formatArea(venueArea(layout))} ㎡ · {items} 件物料。客户只看不改，怎么给由你选。</p>
+        <p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
         <div className="ap-card">
-          <div className="ap-chips"><button type="button" className="chip is-on" onClick={agent.callbacks.onOpenReview}>准备客户评审</button></div>
-          {walkDone && <p className="ap-agent">走完了。要给甲方看，就先生成评审包。</p>}
-          <p id="cta-hint" className="ap-why">离线 HTML 不用登录，下载后你自己发；云端只读链接要登录并保存到云端，在评审页里发布、复制。系统不会自动发给客户。</p>
-          <div className="ap-chips"><button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>{agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}</div>
+          <div className="ap-chips">
+            <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>打开客户评审</button>
+            <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
+            {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
+          </div>
         </div>
       </>}
       {mode === 'delivery' && <>
         <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>
-        <p className="ap-agent">物料清单只看不改；要改回「布置」里调。导出文件留在本机，由你交给搭建方。</p>
         <div className="ap-card">
           <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
-          <div className="ap-chips"><button type="button" className="chip is-on" onClick={agent.callbacks.onOpenDelivery}>导出给搭建方</button></div>
+          <div className="ap-chips">
+            <button type="button" className="chip btn-outline" onClick={agent.previewExport}>导出交接</button>
+            <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>打开执行资料</button>
+          </div>
         </div>
       </>}
       {agent.exportPreview && <div className="ap-card" id="export-preview">
-        <strong>导出预览</strong>
-        <p>导一份「完整活动交接」HTML：活动需求、物料工作单、制作计划和数量点验都在里面。文件只在这台机器上生成，下载后由你发给搭建方。</p>
-        <div className="ap-chips">
-          <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>
-          <button type="button" className="chip" onClick={agent.dismissExport}>先不了</button>
-        </div>
+        <strong>导出完整活动交接</strong>
+        <p className="ap-small">活动需求、物料工作单、制作计划、数量点验 · 本机生成</p>
+        <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>
+        <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>
     <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); agent.send(draft); setDraft(''); }}>
       <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : '说一句话，或「看看哪里有问题」「加两把椅子」「出物料清单」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
+      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句要改的，比如「12×9」「加两把椅子」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
       <div className="ap-composer-bar">
         <button type="button" className="ap-attach" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={13} aria-hidden="true"/>附图纸 / 现场照片</button>
         <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={16}/></button>

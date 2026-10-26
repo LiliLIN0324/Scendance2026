@@ -102,6 +102,13 @@ export function isReviewCommand(text: string): boolean {
   return /(哪里有问题|有什么问题|有没有问题|检查一下|检查下|体检|挑毛病|挑挑毛病|优化一下|优化下|改一版|太挤|挤不挤|动线|碰撞|冲突|拉开|留够|走不走得通|顺不顺)/.test(compact);
 }
 
+/** 「准备客户评审 / 评审包」：深工具入口仍是一句话，不把六 Tab 表单掀成主舞台。 */
+export function isClientReviewCommand(text: string): boolean {
+  const compact = normalizeDimInput(text).replace(/\s+/g, '');
+  if (!compact || /走一遍|漫游/.test(compact)) return false;
+  return /(客户评审|评审包|发给客户|准备评审|给客户看|给甲方看)/.test(compact);
+}
+
 /** 「出物料清单」：直接把画布上的物料按名字汇总，不去开第二套表单。 */
 export function isMaterialListCommand(text: string): boolean {
   return /清单|物料表|材料表|多少件物料|有哪些物料|用了哪些物料/.test(normalizeDimInput(text).replace(/\s+/g, ''));
