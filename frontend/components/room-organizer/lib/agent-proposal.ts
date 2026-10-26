@@ -5,6 +5,7 @@ import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furnitur
 import { hasCollisions, itemsOverlap } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
+import { presetModelUrl } from './scene-presets';
 import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides } from './structural-layout';
 import { surpriseLayout } from './surprise';
 import type { FurnitureItem, RoomLayout, Vec2 } from './types';
@@ -126,6 +127,59 @@ export function raiseVenue(input: VenueInput): VenuePlan | null {
       : '这个尺度立不起来，先改一下长宽。');
   }
   return { layout: clearedLayout, scene, cleared: current.filter(item => !item.locked && !isStructuralMarker(item)).length };
+}
+
+/** 编辑器自己立起来的矩形壳：没有内墙、柱子、多门窗或图纸证据，整壳按新尺寸重立不会毁掉真实结构。 */
+function rebuildableShell(layout: RoomLayout): boolean {
+  const scene = layout.backendSceneV2;
+  if (!scene || layout.floors.length !== 1 || (layout.roof?.style && layout.roof.style !== 'none')) return false;
+  if (scene.venue.shape !== 'rectangle' || scene.sources.length > 0 || scene.design) return false;
+  const { walls, openings, columns } = scene.structure;
+  return columns.length === 0 && openings.length <= 1 && walls.length <= 4
+    && walls.every(wall => wall.kind === 'exterior')
+    && !layout.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind === 'interior'));
+}
+
+/**
+ * 尺寸不跟改的正解：GLB 模板是固定概念外壳，改边界米数就卸模板、按新尺寸重立矩形壳。
+ * 模板自带的夹具跟着模板一起卸（留着会浮在空壳上，也会挡住云端保存）；人自己加的物料
+ * 放得下就留下，放不下才撤，报数规则和 raiseVenue 同一条。
+ */
+export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
+  const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin } = input;
+  if (base.floors.length !== 1) return null;
+  if (!base.scenePreset && !rebuildableShell(base)) return null;
+  const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin });
+  const shellLayout = backendSceneToLayout(scene, { name: base.name, ...(base.id ? { projectId: base.id } : {}) });
+  const {
+    scenePreset: _preset, backendSceneV2: _structure, backendVenue: _venue,
+    backendCamera: _camera, backendLighting: _lighting, floors: _floors, roof: _roof, ...rest
+  } = base;
+  const oldFloor = base.floors[floorIndex];
+  const shell: RoomLayout = {
+    ...rest, ...shellLayout,
+    floors: shellLayout.floors.map(floor => ({
+      ...floor,
+      ...(oldFloor?.floorColor ? { floorColor: oldFloor.floorColor } : {}),
+      ...(oldFloor?.floorPattern ? { floorPattern: oldFloor.floorPattern } : {}),
+    })),
+  };
+  const index = Math.min(floorIndex, shell.floors.length - 1);
+  const markers = structuralOnly(shell.floors[index]?.items ?? []);
+  const presetUrl = base.scenePreset ? presetModelUrl(base.scenePreset) : null;
+  const current = oldFloor?.items ?? [];
+  const kept = current.filter(item => !isStructuralMarker(item) && !(presetUrl && item.glbUrl === presetUrl));
+  const withOld = withItems(shell, index, [...markers, ...kept]);
+  if (canApplyLayoutGeometry(base, withOld)) return { layout: withOld, scene, cleared: 0 };
+  const locked = kept.filter(item => item.locked);
+  const clearedLayout = withItems(shell, index, [...markers, ...locked]);
+  if (!canApplyLayoutGeometry(base, clearedLayout)) {
+    const stuck = locked.filter(item => structuralItemCollides(item, clearedLayout, index)).map(item => item.name);
+    throw new Error(stuck.length
+      ? `这个尺度立不起来：锁着的 ${stuck.slice(0, 3).join('、')}${stuck.length > 3 ? ' 等' : ''} 压在新墙体或边界上，先解锁挪开它们。`
+      : '这个尺度立不起来，先改一下长宽。');
+  }
+  return { layout: clearedLayout, scene, cleared: kept.filter(item => !item.locked).length };
 }
 
 /**

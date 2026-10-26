@@ -301,6 +301,15 @@ export function hasBriefSignals(extraction: BriefExtraction): boolean {
     || extraction.areaM2 !== null || (extraction.lengthM !== null && extraction.widthM !== null) || extraction.timeOfDay !== null;
 }
 
+/**
+ * 「改成 15×10」这类只动场地边界的句子：只立壳/换壳，不是新开一轮布置提案。
+ * 带了人数、活动或时段就是在要一版布置；室内外跟着场地走，不算额外意图。
+ */
+export function isVenueSizeOnly(extraction: BriefExtraction): boolean {
+  const hasSize = extraction.areaM2 !== null || (extraction.lengthM !== null && extraction.widthM !== null);
+  return hasSize && extraction.headcount === null && extraction.event === null && extraction.timeOfDay === null;
+}
+
 /** 尺度是从哪儿来的：只有人说过或填过的才算确认。 */
 export function scaleOriginOf(extraction: BriefExtraction, previous: ScaleOrigin): ScaleOrigin {
   if (extraction.lengthM !== null && extraction.widthM !== null) return 'stated';

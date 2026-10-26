@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { presetModelUrl } from '../lib/scene-presets';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
@@ -64,11 +65,11 @@ function ui(layout: RoomLayout, onApply = vi.fn(), onPreview = vi.fn()) {
  * 本地生成会先 applyLayout 立壳体，再在立好的场地上算候选。
  * 这份夹具让画布跟着 applyLayout 变，生成器读到的才是刚立起来的 12×9，而不是测试初始的空地。
  */
-function LocalHarness({ initial, onApply, onPreview = vi.fn() }: { initial: RoomLayout; onApply(next: RoomLayout): void; onPreview?(next: RoomLayout | null): void }) {
+function LocalHarness({ initial, onApply, onPreview = vi.fn(), brief = false }: { initial: RoomLayout; onApply(next: RoomLayout): void; onPreview?(next: RoomLayout | null): void; brief?: boolean }) {
   const [current, setCurrent] = useState(initial);
   state.layout = current;
   state.apply = vi.fn((next: RoomLayout) => setCurrent(next));
-  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/></LayoutAgentProvider>;
+  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/>{brief && <ActivityBrief tools={[]}/>}</LayoutAgentProvider>;
 }
 
 /** 云端预览只要这几栏：右栏的差分、提案卡与 stale 判断读的就是它们。 */
@@ -104,6 +105,7 @@ beforeEach(() => {
   studioMock.discardPreview.mockClear(); studioMock.setBrief.mockClear();
   studioMock.brief = { event: null, guests: null };
   studioMock.preview = null; studioMock.stale = false; studioMock.expired = false; studioMock.busy = false;
+  studioMock.connection = '离线引导';
   localStorage.clear();
 });
 
@@ -237,7 +239,10 @@ describe('T-UI visible interaction', () => {
     expect(within(brief).getByText('来自对话')).toBeTruthy();
     expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
     expect(within(brief).queryByRole('textbox')).toBeNull();
-    expect(within(brief).queryByRole('button')).toBeNull();
+    // 唯一的按钮是空地文字链：简报仍然是只读事实，不在左栏摆表单。
+    const actions = within(brief).getAllByRole('button');
+    expect(actions).toHaveLength(1);
+    expect(actions[0]!.textContent).toContain('空白场地');
   });
 
   it('routes export intent to a preview card and only the confirm button triggers the handoff', async () => {
@@ -383,4 +388,87 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
     expect(screen.getByRole('button', { name: '撤回' })).toBeTruthy();
   });
+});
+
+describe('T-VENUE 模板场馆改尺寸', () => {
+  function templateLayout(): RoomLayout {
+    return makeLayout({
+      name: '青序 · 香氛快闪', scenePreset: 'popup', width: 12, height: 8, roof: { style: 'none' },
+      floors: [makeFloor({ items: [
+        makeItem({ id: 'popup-seat', type: 'glb-asset', name: '模板座椅', glbUrl: presetModelUrl('popup'), glbNode: 'Seat' }),
+      ] })],
+    });
+  }
+
+  it('reports template meters in the brief, then unloads the template for the new size without a proposal', async () => {
+    const onApply = vi.fn(), onPreview = vi.fn();
+    render(<LocalHarness initial={templateLayout()} onApply={onApply} onPreview={onPreview} brief/>);
+
+    const brief = screen.getByLabelText('活动简报');
+    expect(within(brief).getByText(/12 × 8 m/)).toBeTruthy();
+    expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
+
+    send('改成 20×12');
+    expect(await screen.findByText(/已离开模板：模板物件已撤/)).toBeTruthy();
+    await waitFor(() => expect(within(brief).getByText(/20 × 12 m/)).toBeTruthy());
+
+    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    const applied = onApply.mock.calls[0]![0] as RoomLayout;
+    expect(applied.width).toBe(20);
+    expect(applied.height).toBe(12);
+    expect(applied.scenePreset).toBeUndefined();
+    expect(applied.backendSceneV2?.structure.walls).toHaveLength(4);
+    expect(applied.floors[0]!.items.some(item => item.id === 'popup-seat')).toBe(false);
+    expect(onPreview).not.toHaveBeenCalled();
+    expect(document.getElementById('gen-progress')).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(document.body.textContent).not.toContain('预览先作废');
+  });
+});
+
+describe('T-VENUE-FEEL 只改尺寸的手感', () => {
+  it('changes only the venue shell when the sentence is just a new size', async () => {
+    const onApply = vi.fn(), onPreview = vi.fn();
+    render(<LocalHarness initial={seatLayout()} onApply={onApply} onPreview={onPreview} brief/>);
+
+    send('改成 15×10');
+    expect(await screen.findByText(/场地改成 15 × 10 m/)).toBeTruthy();
+    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    const applied = onApply.mock.calls[0]![0] as RoomLayout;
+    expect(applied.width).toBe(15);
+    expect(applied.height).toBe(10);
+    expect(applied.backendSceneV2?.structure.walls).toHaveLength(4);
+    expect(onPreview).not.toHaveBeenCalled();
+    expect(document.getElementById('gen-progress')).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(document.body.textContent).not.toContain('预览先作废');
+    expect(within(screen.getByLabelText('活动简报')).getByText(/15 × 10 m/)).toBeTruthy();
+  });
+
+  it('starts a blank 12 × 8 venue from the brief link in one click', async () => {
+    const onApply = vi.fn();
+    render(<LocalHarness initial={seatLayout()} onApply={onApply} brief/>);
+    const brief = screen.getByLabelText('活动简报');
+    expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
+
+    fireEvent.click(within(brief).getByRole('button', { name: /空白场地 · 12 × 8 m/ }));
+    expect(await screen.findByText(/空白场地立好了：12 × 8 m/)).toBeTruthy();
+    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    const applied = onApply.mock.calls[0]![0] as RoomLayout;
+    expect(applied.width).toBe(12);
+    expect(applied.height).toBe(8);
+    expect(applied.scenePreset).toBeUndefined();
+    expect(applied.backendSceneV2?.structure.walls).toHaveLength(4);
+    expect(within(brief).getByText(/12 × 8 m/)).toBeTruthy();
+    expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
+  });
+
+  it('still previews and asks for confirmation when the sentence also names people', async () => {
+    const onApply = vi.fn(), onPreview = vi.fn();
+    render(<LocalHarness initial={seatLayout()} onApply={onApply} onPreview={onPreview}/>);
+    send('40 人，室内 12×9');
+    expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
+    expect(onPreview).toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+  }, 25000);
 });

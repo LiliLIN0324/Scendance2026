@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
@@ -176,45 +176,68 @@ describe('ScendanceLibrary shelf lifecycle', () => {
 
 
 describe('ScendanceViewTools design column', () => {
-  it('renders the tool column plus the atmosphere strip and keeps materials outside both', () => {
-    const values = contexts(), onApplyPreset = vi.fn(), onFit = vi.fn(), onZoom = vi.fn(), onExportImage = vi.fn();
+  function renderTools(view = makeViewSettings(), onExportImage = vi.fn()) {
+    const values = contexts(makeLayout(), view), onApplyPreset = vi.fn(), onFit = vi.fn(), onZoom = vi.fn();
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onFit={onFit} onZoom={onZoom} onExportImage={onExportImage}/></Providers>);
-    const rail = screen.getByRole('navigation', { name: '视角与编辑工具' });
+    return { values, onApplyPreset, onFit, onZoom, onExportImage, rail: screen.getByRole('navigation', { name: '视角与编辑工具' }) };
+  }
+
+  it('keeps the rail to four controls at rest and folds the rest into 更多', () => {
+    const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 中间那条次要工具条能藏则藏：默认只剩一颗「氛围」，点开才铺出四条。
+    // 空闲只露四颗：撤销 / 2D·3D / 视角 / 更多；其余都在「更多」里，默认折叠。
+    expect(within(rail).getAllByRole('button')).toHaveLength(4);
+    for (const name of ['撤销', '2D / 3D', '视角：整体 / 俯视 / 人视', '更多工具']) {
+      expect(within(rail).getByRole('button', { name })).toBeTruthy();
+    }
+    expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('false');
+    for (const id of ['tool-redo', 'tool-grid', 'tool-dims', 'tool-fullscreen', 'tool-zoom-out', 'tool-zoom-in', 'tool-export']) {
+      expect(rail.querySelector(`#${id}`)).toBeNull();
+    }
+    // 氛围条仍是收起的一颗，点开才铺出四条。
     expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: '氛围' }).getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: '氛围' }));
     expect(screen.getByRole('button', { name: '氛围' }).getAttribute('aria-expanded')).toBe('true');
-    for (const name of ['撤销', '重做', '导出效果图', '网格吸附', '显示尺寸', '全屏', '缩小', '放大', '漫游', '人群', '晴朗', '正午']) {
-      expect(screen.getByRole('button', { name })).toBeTruthy();
-    }
     // 氛围四条不在竖列里，否则工具列会一路压到抽屉上。
     expect(rail.querySelector('.sc-atmosphere-group')).toBeNull();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
-    fireEvent.click(screen.getByRole('button', { name: '重做' }));
-    fireEvent.click(screen.getByRole('button', { name: '视角：整体 / 俯视 / 人视' }));
-    fireEvent.click(screen.getByRole('option', { name: '俯视' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '撤销' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '2D / 3D' }));
     expect(values.history.undo).toHaveBeenCalledTimes(1);
-    expect(values.history.redo).toHaveBeenCalledTimes(1);
+    expect(values.toggle).toHaveBeenCalledWith('view2D');
+  });
+
+  it('still reaches every tucked tool through 更多 and closes it on Escape', () => {
+    const { values, rail, onApplyPreset, onFit, onZoom, onExportImage } = renderTools();
+    fireEvent.click(within(rail).getByRole('button', { name: '视角：整体 / 俯视 / 人视' }));
+    fireEvent.click(screen.getByRole('option', { name: '俯视' }));
     expect(onApplyPreset).toHaveBeenCalledWith('top');
-    fireEvent.click(screen.getByRole('button', { name: '2D / 3D' }));
-    fireEvent.click(screen.getByRole('button', { name: '缩小' }));
-    fireEvent.click(screen.getByRole('button', { name: '全屏' }));
-    fireEvent.click(screen.getByRole('button', { name: '放大' }));
-    fireEvent.click(screen.getByRole('button', { name: '网格吸附' }));
-    fireEvent.click(screen.getByRole('button', { name: '显示尺寸' }));
-    expect(values.toggle.mock.calls).toEqual([['view2D'], ['snapToGrid'], ['showMeasurements']]);
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
+    expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('true');
+    for (const name of ['重做', '网格吸附', '标注尺寸', '看全场', '缩小', '放大', '导出效果图']) {
+      expect(within(rail).getByRole('button', { name })).toBeTruthy();
+    }
+    fireEvent.click(within(rail).getByRole('button', { name: '重做' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '网格吸附' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '标注尺寸' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '缩小' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '放大' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '看全场' }));
+    expect(values.history.redo).toHaveBeenCalledTimes(1);
+    expect(values.toggle.mock.calls).toEqual([['snapToGrid'], ['showMeasurements']]);
     expect(onZoom.mock.calls).toEqual([['-'], ['+']]);
     expect(onFit).toHaveBeenCalledTimes(1);
     expect(onExportImage).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(within(rail).queryByRole('button', { name: '重做' })).toBeNull();
   });
 
-  it('exports a render from the popover with the chosen frame and quality', async () => {
-    const values = contexts(), onExportImage = vi.fn().mockResolvedValue(true);
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()} onExportImage={onExportImage}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: '导出效果图' }));
+  it('exports a render from the 更多 popover with the chosen frame and quality', async () => {
+    const onExportImage = vi.fn().mockResolvedValue(true);
+    const { rail } = renderTools(makeViewSettings(), onExportImage);
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
     const dialog = screen.getByRole('dialog', { name: '导出效果图选项' });
     expect(dialog.textContent).toContain('导出效果图');
     fireEvent.click(screen.getByRole('button', { name: '整体' }));
@@ -225,9 +248,10 @@ describe('ScendanceViewTools design column', () => {
   });
 
   it('defaults to the current view at 2× and marks the choices active', async () => {
-    const values = contexts(), onExportImage = vi.fn().mockResolvedValue(true);
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()} onExportImage={onExportImage}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: '导出效果图' }));
+    const onExportImage = vi.fn().mockResolvedValue(true);
+    const { rail } = renderTools(makeViewSettings(), onExportImage);
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
     expect((screen.getByRole('button', { name: '跟随当前' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByRole('button', { name: '高清 2×' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
@@ -237,8 +261,10 @@ describe('ScendanceViewTools design column', () => {
   it('disables zoom in 2D and hides atmosphere when requested', () => {
     const values = contexts(makeLayout(), makeViewSettings({ view2D: true }));
     render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    for (const name of ['缩小', '全屏', '放大']) {
-      expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+    const rail = screen.getByRole('navigation', { name: '视角与编辑工具' });
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
+    for (const name of ['缩小', '看全场', '放大']) {
+      expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
     expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();

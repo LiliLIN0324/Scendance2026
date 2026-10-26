@@ -147,6 +147,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
+  const [canvasDetailOpen, setCanvasDetailOpen] = useState(false);
+  const [captionEpoch, setCaptionEpoch] = useState(0);
+  const [previewCaptionVisible, setPreviewCaptionVisible] = useState(false);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
   const activeStoreyHeight = storeyHeight(activeFloor);
   const { recent: recentColors, pushColor } = useRecentColors();
@@ -1348,6 +1351,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, []);
   const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
   const previewCandidate = validAiPreview;
+  // 预览说明只闪一下：候选出现时提示约 2 秒，之后淡出；重新回到画布才再闪一次。
+  useEffect(() => {
+    if (!previewCandidate) { setPreviewCaptionVisible(false); return undefined; }
+    setPreviewCaptionVisible(true);
+    const timer = window.setTimeout(() => setPreviewCaptionVisible(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [previewCandidate, captionEpoch]);
   useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
     candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
@@ -1410,7 +1420,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
           </div>
-          <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}`} onPointerDownCapture={event => {
+          <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
             if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
             const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
@@ -1487,8 +1497,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         }}
       />
             <AgentCanvasOverlay/>
-            <div className="sc-canvas-heading"><span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span><span className="sc-canvas-size">{layout.scenePreset ? SCENE_PRESETS[layout.scenePreset].name : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}</span><span className="sc-canvas-count">{materialCount(activeFloor.items)} 件物料 · {layout.scenePreset ? '概念场馆' : `${venueArea(layout).toFixed(1)} m²`}</span></div>
-            {previewCandidate && <div className="sc-preview-caption" role="status">AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            <div className={`sc-canvas-heading${canvasDetailOpen ? ' has-detail' : ''}`}>
+              <span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span>
+              <button type="button" className="sc-canvas-size" aria-expanded={canvasDetailOpen} aria-controls="canvas-detail" title={canvasDetailOpen ? '收起物料数与面积' : '查看物料数与面积'} onClick={() => setCanvasDetailOpen(open => !open)}>
+                {layout.scenePreset
+                  ? `${SCENE_PRESETS[layout.scenePreset].name} · ${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`
+                  : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}
+              </button>
+              {canvasDetailOpen && <span className="sc-canvas-count" id="canvas-detail">{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span>}
+            </div>
+            {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>

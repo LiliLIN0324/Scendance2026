@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio } from './workbench-agent';
+import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio } from './workbench-agent';
 
 describe('workbench agent v2.4', () => {
   it('validates length/width 1–500 m with handoff copy', () => {
@@ -96,6 +96,16 @@ describe('一句话开场解析', () => {
     expect(scaleOriginOf(parseBriefSentence('场地12x16米，80人发布会'), 'canvas')).toBe('stated');
     expect(scaleOriginOf(parseBriefSentence('300平米户外市集'), 'canvas')).toBe('area');
     expect(scaleOriginOf(parseBriefSentence('再换个思路'), 'typed')).toBe('typed');
+  });
+  it('treats a bare size sentence as shell-only, anything else as a layout ask', () => {
+    expect(isVenueSizeOnly(parseBriefSentence('改成 15×10'))).toBe(true);
+    expect(isVenueSizeOnly(parseBriefSentence('改成 100 平米'))).toBe(true);
+    expect(isVenueSizeOnly(parseBriefSentence('40 人，室内 12×9'))).toBe(false);
+    // 室内外只说明场地本身，跟着壳走，不算「要一版布置」。
+    expect(isVenueSizeOnly(parseBriefSentence('12×9 的户外草坪'))).toBe(true);
+    expect(isVenueSizeOnly(parseBriefSentence('12×9 的户外市集'))).toBe(false);
+    expect(isVenueSizeOnly(parseBriefSentence('晚上 12×9 的场地'))).toBe(false);
+    expect(isVenueSizeOnly(parseBriefSentence('出方案'))).toBe(false);
   });
   it('reads a cloud proposal the same way as a local one', () => {
     const names: Record<string, string> = { a: '长条桌', b: '背景板', c: '落地花艺' };
