@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider } from './agent-panel';
@@ -57,6 +58,28 @@ function seatLayout(overrides: { locked?: boolean } = {}): RoomLayout {
 function ui(layout: RoomLayout, onApply = vi.fn(), onPreview = vi.fn()) {
   state.layout = layout;
   return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>;
+}
+
+/**
+ * 本地生成会先 applyLayout 立壳体，再在立好的场地上算候选。
+ * 这份夹具让画布跟着 applyLayout 变，生成器读到的才是刚立起来的 12×9，而不是测试初始的空地。
+ */
+function LocalHarness({ initial, onApply, onPreview = vi.fn() }: { initial: RoomLayout; onApply(next: RoomLayout): void; onPreview?(next: RoomLayout | null): void }) {
+  const [current, setCurrent] = useState(initial);
+  state.layout = current;
+  state.apply = vi.fn((next: RoomLayout) => setCurrent(next));
+  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/></LayoutAgentProvider>;
+}
+
+/** 云端预览只要这几栏：右栏的差分、提案卡与 stale 判断读的就是它们。 */
+function cloudPreview(): unknown {
+  return {
+    assets: { assetUrls: {}, assetNames: {} },
+    proposal: { explanation: '云端加了一把椅子', warnings: [] },
+    base: makeLayout(),
+    layout: makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'cloud-seat', type: 'chair', name: '椅子', position: { x: 1, z: 1 } })] })] }),
+    briefKey: '', scope: 'local',
+  };
 }
 
 function send(text: string): void {
@@ -266,5 +289,98 @@ describe('T-UI visible interaction', () => {
     rerender(ui(moved, onApply));
     await waitFor(() => expect(screen.queryByText('这一版布置')).toBeNull());
     expect(await screen.findByText(/画布改过了（撤销或手动调整）/)).toBeTruthy();
+  });
+});
+
+describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
+  it('shows only progress while generating, then one green confirm with a seat fix link', async () => {
+    const onApply = vi.fn();
+    render(<LocalHarness initial={makeLayout()} onApply={onApply}/>);
+    send('30 人，室内 12×9');
+
+    // 逐帧预览期间：只有进度，没有可点的确认。
+    expect(await screen.findByText('读场地')).toBeTruthy();
+    expect(document.getElementById('gen-progress')).toBeTruthy();
+    expect(document.getElementById('step-cta')).toBeNull();
+    expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
+
+    // 最后一帧落稳后才亮：一屏恰一颗绿钮，座位缺口如实写出来，改法是文字链。
+    expect(await screen.findByText(/^座位 \d+ \/ 30 · 还差 \d+$/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(document.querySelectorAll('.sc-agent-panel .btn-primary')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+    const fix = screen.getByRole('button', { name: '加座，再排一版' });
+    expect(fix.className).toContain('ap-link');
+    expect(fix.className).not.toContain('btn-primary');
+    expect(onApply).not.toHaveBeenCalled();
+
+    // 点改法：旧确认立刻消失、回到进度；新预览出来前不写画布、不自动应用。
+    fireEvent.click(fix);
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(document.getElementById('gen-progress')).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+
+    expect(await screen.findByText('按 30 人摆了 30 座', undefined, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+
+    fireEvent.click(screen.getByRole('button', { name: '确认布置' }));
+    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    const applied = onApply.mock.calls[0]![0] as RoomLayout;
+    const seats = applied.floors[0]!.items.filter(item => item.type === 'chair' || item.type === 'dining-chair');
+    expect(seats.length).toBeGreaterThanOrEqual(30);
+  }, 20000);
+
+  it('keeps the confirm hidden while a version is paused mid-generation', async () => {
+    const onPreview = vi.fn();
+    render(<LocalHarness initial={makeLayout()} onApply={vi.fn()} onPreview={onPreview}/>);
+    send('30 人，室内 12×9');
+    expect(await screen.findByText('读场地')).toBeTruthy();
+    await waitFor(() => expect(onPreview).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: '停一下' }));
+    expect(screen.getByRole('button', { name: '接着摆' })).toBeTruthy();
+    expect(document.getElementById('step-cta')).toBeNull();
+    expect(document.getElementById('plan-proposal')).toBeNull();
+    expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '接着摆' }));
+    expect(await screen.findByText(/^座位 \d+ \/ 30 · 还差 \d+$/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+  }, 20000);
+
+  it('never shows a green confirm while the cloud is still writing this version', async () => {
+    studioMock.connection = '项目已连接';
+    studioMock.generate.mockImplementation(async () => { studioMock.preview = cloudPreview(); });
+    const { rerender } = render(ui(state.layout));
+    send('30 人，室内 12×9');
+    expect(await screen.findByText('这版还在预览')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+
+    studioMock.busy = true;
+    rerender(ui(state.layout));
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.getByText('正在整理这一版…')).toBeTruthy();
+    expect(document.getElementById('step-cta')).toBeNull();
+
+    studioMock.busy = false;
+    rerender(ui(state.layout));
+    expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
+  });
+
+  it('drops the green confirm when the cloud preview has gone stale', async () => {
+    studioMock.connection = '项目已连接';
+    studioMock.generate.mockImplementation(async () => { studioMock.preview = cloudPreview(); studioMock.stale = true; });
+    render(ui(state.layout));
+    send('30 人，室内 12×9');
+
+    const card = await waitFor(() => {
+      const element = document.getElementById('plan-proposal');
+      expect(element).toBeTruthy();
+      return element as HTMLElement;
+    });
+    expect(within(card).getByText(/场地、需求或编辑权在这期间变了/)).toBeTruthy();
+    expect(document.getElementById('step-cta')).toBeNull();
+    expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
+    expect(screen.getByRole('button', { name: '撤回' })).toBeTruthy();
   });
 });

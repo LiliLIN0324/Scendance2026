@@ -1,8 +1,8 @@
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
-import { EVENT_CATALOG } from './constants';
+import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { backendSceneToLayout } from './backend-adapter';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
-import { hasCollisions } from './geometry';
+import { hasCollisions, itemsOverlap } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
 import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides } from './structural-layout';
@@ -52,6 +52,8 @@ export interface PlanInput {
   variant: number;
   /** 人说过的人数：只影响桌椅组数，不影响壳体真相。 */
   guests?: number | null;
+  /** 座位优先：人还站着就继续往桌边、空位补座；仍然只出候选，不写画布。 */
+  seatPriority?: boolean;
 }
 
 export interface PlanProposal {
@@ -72,8 +74,10 @@ export interface PlanProposal {
   blocked: string | null;
   /** 这一版按多少人摆的；没说过人数就是 null。 */
   guests?: number | null;
-  /** 实际摆出了多少个座位（餐桌一组 4 座），只对完整方案有意义。 */
+  /** 实际摆出了多少个座位（餐桌一组 4 座 + 散椅），只对完整方案有意义。 */
   seats?: number;
+  /** 这版已经按「加座」重排过：仍不够时直接报场地最多能坐多少，不再暗示再点一次就行。 */
+  seatPriority?: boolean;
   /** 体检改法真正挪了多少件（只挪位置，不新增不删除）。 */
   moved?: number;
   /** 这版来自「看看哪里有问题」的体检，不是重新生成。 */
@@ -91,6 +95,10 @@ function withItems(layout: RoomLayout, floorIndex: number, items: FurnitureItem[
 }
 
 const structuralOnly = (items: FurnitureItem[]): FurnitureItem[] => items.filter(item => isStructuralMarker(item));
+
+const isSeat = (item: FurnitureItem): boolean => item.type === 'chair' || item.type === 'dining-chair';
+/** 座位按物料件数如实数：桌边椅和散椅都算，锁定件也算，但不把站立人数凑进来。 */
+const seatCountIn = (items: readonly FurnitureItem[]): number => items.filter(item => !isStructuralMarker(item) && isSeat(item)).length;
 
 /**
  * 第 1 步的场地：把确认过的尺度立成可布置壳体。已有结构（云端场景、重建场景、预设建筑）
@@ -153,15 +161,67 @@ function countOverlaps(layout: RoomLayout, floorIndex: number): { count: number;
   return { count: names.length, names };
 }
 
+/**
+ * 座位优先的补座：先贴着桌子的四角加座（一组餐桌从 4 座加到 8 座），
+ * 再退到空位里放散椅。每一件都过同一套墙/边界/重叠校验，放不下就停，不硬塞。
+ */
+function addExtraSeats(input: {
+  base: RoomLayout;
+  floorIndex: number;
+  layout: RoomLayout;
+  tables: readonly FurnitureItem[];
+  target: number;
+}): { layout: RoomLayout; added: number } {
+  const { base, floorIndex, target } = input;
+  let current = input.layout;
+  let added = 0;
+  const chairBase = FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
+  if (!chairBase) return { layout: current, added };
+  const keepOut = floorKeepOut(base, floorIndex);
+  const interiorWalls = base.backendSceneV2 ? [] : (base.floors[floorIndex]?.interiorWalls ?? []);
+  const options = { keepOut, structureValidated: !!base.backendSceneV2, interiorWalls };
+  const currentItems = (): FurnitureItem[] => current.floors[floorIndex]?.items ?? [];
+  const enough = (): boolean => seatCountIn(currentItems()) >= target;
+  const tryPlace = (position: Vec2, rotation: number): boolean => {
+    const chair = { ...chairBase, id: uid(), position, rotation } as FurnitureItem;
+    const items = currentItems();
+    // 碰撞层把「椅子放在桌面上」当有意的叠放，补座时不能借这条规则把椅子塞到桌面上。
+    if (items.some(item => item.type === 'dining-table' && itemsOverlap(chair, item))) return false;
+    if (hasCollisions(chair, items, base.width, base.height, options)) return false;
+    const next = withItems(current, floorIndex, [...items, chair]);
+    if (!canApplyLayoutGeometry(base, next)) return false;
+    current = next;
+    added += 1;
+    return true;
+  };
+
+  const corners = [
+    { x: -1.2, z: -0.85 }, { x: 1.2, z: -0.85 },
+    { x: -1.2, z: 0.85 }, { x: 1.2, z: 0.85 },
+  ];
+  for (const table of input.tables) {
+    const center = table.position ?? { x: 0, z: 0 };
+    for (const corner of corners) {
+      if (enough()) return { layout: current, added };
+      tryPlace({ x: center.x + corner.x, z: center.z + corner.z }, Math.atan2(-corner.x, -corner.z));
+    }
+  }
+  while (!enough()) {
+    const spot = findAdditionSpot(base, floorIndex, { ...chairBase, id: uid(), rotation: 0 } as FurnitureItem, currentItems());
+    if (!spot || !tryPlace(spot, 0)) break;
+  }
+  return { layout: current, added };
+}
+
 /** 布置提案：读场地（撤掉旧物料）→ 定舞台 → 摆桌椅 → 放绿植 → 检查重叠，全程只算不写。 */
 export function proposePlan(input: PlanInput): PlanProposal {
   const { widthM, depthM, variant } = input;
   const base = input.base;
   const floorIndex = Math.min(input.floorIndex, base.floors.length - 1);
   const layouts: RoomLayout[] = [];
+  const seatPriority = !!input.seatPriority;
   let added = 0;
   let dropped = 0;
-  let seats = 0;
 
   const current0 = base.floors[floorIndex]?.items ?? [];
   const markers = structuralOnly(current0);
@@ -188,13 +248,17 @@ export function proposePlan(input: PlanInput): PlanProposal {
     const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
     const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / 4) : areaSets;
     const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
-    const chairCount = (layout: RoomLayout) => layout.floors[floorIndex]?.items.filter(item => item.type === 'dining-chair').length ?? 0;
+    const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
     for (const center of slots.slice(0, count)) {
       const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-      const before = chairCount(current);
       const result = tryAdd(base, current, floorIndex, items);
       current = result.layout; added += result.accepted; dropped += result.dropped;
-      seats += Math.max(0, chairCount(current) - before);
+    }
+    // 座位优先：只给这一版新摆的桌子补座，锁着的老桌子不碰。
+    if (seatPriority && (input.guests ?? 0) > 0) {
+      const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
+      const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
+      if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
     }
   }
   layouts.push(current);
@@ -216,11 +280,12 @@ export function proposePlan(input: PlanInput): PlanProposal {
   const blocked = canApplyLayoutGeometry(base, current)
     ? null
     : '这版提案里有跟墙体或边界冲突的物料，先挪开或解锁再重新出一版。';
+  const seats = seatCountIn(current.floors[floorIndex]?.items ?? []);
 
   return {
     layouts, added, removing, keptLocked: locked.length, dropped,
     overlapCount: overlaps.count, overlapNames: overlaps.names, blocked,
-    guests: input.guests ?? null, seats,
+    guests: input.guests ?? null, seats, seatPriority,
   };
 }
 

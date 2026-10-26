@@ -1600,6 +1600,24 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
   });
 
+  it('hides the confirm while the cloud is still writing this version', async () => {
+    connected();
+    let finish!: (value: { id: string; revision: number; scene: Scene; previousScene: Scene; updatedAt: string; undoGroup: string; acceptedLocally: boolean }) => void;
+    vi.mocked(controller.applySceneProposal).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(ui());
+    await generatePreview();
+    fireEvent.click(screen.getByRole('button', { name: '确认布置' }));
+
+    // 应用还在路上：确认与放弃都收起来，只留一句安静的进度。
+    expect(await screen.findByText('正在整理这一版…')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '放弃' })).toBeNull();
+
+    await act(async () => { finish({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: true }); });
+    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
+    expect(screen.queryByText('正在整理这一版…')).toBeNull();
+  });
+
   it.each(['scene', 'brief', 'lease'] as const)('removes the apply action when the %s changes after a preview', async change => {
     connected();
     const rendered = render(ui());

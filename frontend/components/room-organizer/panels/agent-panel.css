@@ -69,6 +69,9 @@
 .ap-inline-error p { margin:0; color:var(--ap-amber); display:flex; gap:6px; align-items:flex-start; line-height:1.5; }
 .ap-plan strong { font-size:13px; }
 .ap-plan p { margin:0; }
+/* 座位这件事要能一眼对上人数：单独一行，不混在件数里。 */
+.ap-plan .ap-seats { font-size:12px; font-weight:600; color:#3a3d35; }
+.ap-plan .ap-seat-fix { margin:-4px 0 0; }
 .ap-ok-line { color:var(--ap-green); font-size:12px; }
 .ap-warn-line { font-size:12px; }
 .ap-composer { margin:0 12px 12px; border:1px solid #e1e3d9; border-radius:12px; background:#fff; padding:8px 10px; display:flex; flex-direction:column; gap:6px; flex:0 0 auto; }
