@@ -39,6 +39,7 @@ export function PublicationPanel({ controller, projectId, revision, dirty }: {
   return <section className="sc-publication" aria-labelledby="sc-publication-title">
     <div className="sc-share-heading"><h3 id="sc-publication-title">客户分享</h3><span>云端版本 {revision}</span></div>
     <p>发布后生成独立的只读方案。后续编辑不会改变已发布版本，内部备注不会展示。</p>
+    <p>发布不会自动通知客户；链接由你复制后发送。</p>
     {dirty && <p className="sc-share-notice">当前有未保存修改，请先保存再发布。</p>}
     <div className="sc-share-actions">
       <button type="button" disabled={busy || dirty} onClick={() => void run(async current => {

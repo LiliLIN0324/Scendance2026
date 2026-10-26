@@ -2,34 +2,123 @@
 
 /**
  * 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
- * 一句话开场：没有表单、没有起步卡——用户敲一句话，客户端解析（人数/场地/面积/类型/时段），
- * 自动铺到场地上再出方案；氛围（雨天/漫游）也能用一句话切换。
- * 出方案：已连接云项目时走现有 AI 生成；否则用现有本地物料组（furniture-sets / surprise）分 5 步真实摆放，
- * 不新增算法。底图只收图片（复用 layout.floorPlanImage），长宽按图纸比例自动估。
+ * 一句话开场：没有表单、没有起步卡——用户敲一句话，客户端解析（人数/场地/面积/类型/时段）铺进预填卡。
+ * 出方案：已连接云项目时走现有 AI 生成；否则由 lib/agent-proposal 用现有本地物料组
+ * （furniture-sets / surprise）在内存里算一份候选，再按步推给画布做预览。
+ * 硬钉（对话四步 ②）：建议 → 画布预览（绿框 = 新位，虚线 = 原位）→「确认布置」/「撤回」。
+ * 确认前一个字节都不写场景，所以自动存档与撤销栈看不到提案；确认才一次 applyLayout，撤销一步能整体退回。
+ * 第 1 步「读场地」先把确认过的尺度立成可布置壳体（四面外墙 + 主入口 + 层高，见 lib/venue-shell）。
+ * 底图只收图片（复用 layout.floorPlanImage）：图纸只当参照，长宽要么说一句「12×9」、要么说「按图纸估」，
+ * 未确认前不把米数说成事实（docs/AI-NATIVE-FOR-EXECUTORS.md 对话四步 ①）。
+ * 生成入口只有一个：对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
+ * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  */
 import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRoomEditor } from '../contexts';
-import { EVENT_CATALOG } from '../lib/constants';
+import { proposeAddition, proposePlan, raiseVenue, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { readImageAsDataUrl } from '../lib/file-io';
-import { buildFurnitureSet, FURNITURE_SETS, setFitsRoom } from '../lib/furniture-sets';
-import { materialCount, venueArea } from '../lib/structural-layout';
-import { surpriseLayout } from '../lib/surprise';
-import type { FurnitureItem } from '../lib/types';
-import type { WorkbenchMode } from '../lib/workbench-mode';
+import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
+import { sameLayoutContent } from '../lib/persistence';
+import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import {
-  describeExtraction, canGenerate, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, NON_IMAGE_MESSAGE,
-  checkDim, isStopCommand, parseBriefSentence, sanitizeDimInput, suggestDimsFromArea, suggestDimsFromImageRatio,
-  type AgentState, type DimCheck, type VenueIO,
+  describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
+  checkDim, hasBriefSignals, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
+  scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
+  type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
 } from '../lib/workbench-agent';
+import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
+import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
+import type { RoomLayout } from '../lib/types';
+import type { ScaleOrigin } from '../lib/venue-shell';
+import type { WorkbenchMode } from '../lib/workbench-mode';
 import './agent-panel.css';
 
-const MASCOT_SRC = '/assets/assistant/qingguang-3d-24@2x.png';
+const MASCOT_DIR = '/assets/assistant/qingguang-3d';
 const STEP_DELAY_MS = 420;
+/** 云提案有自己的失效条件（基线/需求/编辑权/租约）。确认按钮按住时说的那句，卡片和按钮共用一条。 */
+const CLOUD_STALE = '场地、需求或编辑权在这期间变了，这版先别确认，重新出一版。';
+/** 本地验收开关：`?agentFail=1` 让出方案这一步故意失败一次，好核对「发现问题」那一态。 */
+const forceFail = () => process.env.NODE_ENV !== 'production' && typeof window !== 'undefined'
+  && new URL(window.location.href).searchParams.get('agentFail') === '1';
 
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
-type Bubble = { id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean };
+type Bubble = {
+  id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
+  /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
+  long?: boolean;
+  /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
+  action?: { label: string; run(): void };
+};
+/** 这一版要按哪组尺度摆：origin 记下米数是谁定的，只有人说过的才敢当事实念出来。 */
+type Scale = { length: number; width: number; origin: ScaleOrigin };
+
+/**
+ * 待确认的那一版布置。本地候选和云端 AI 提案在右栏共用同一张卡、同一颗绿钮：
+ * 卡片只认这几个数，谁来提案都得先预览、由人点「确认布置」才落盘。
+ */
+interface ProposalView extends PendingPlan {
+  source: 'local' | 'cloud';
+  /** 本地提案里 Agent 没动的锁定件数。 */
+  keptLocked: number;
+  /** 放不进新场地、没被采纳的件数。 */
+  dropped: number;
+  /** 这一版按多少人摆的；加物料这类提案没有人数，就不写。 */
+  guests?: number | null;
+  /** 实际摆出的座位数（餐桌一组 4 座）。 */
+  seats?: number;
+  /** 确认按钮点不动的原因；null = 可以确认。 */
+  blocked: string | null;
+  /** 这版是体检改法：只挪位置，不新增不删除，卡片和气泡都换一套说法。 */
+  review?: boolean;
+  /** 体检里锁着或找不到落点、没动的物料名。 */
+  skipped?: string[];
+}
+
+/** 本地候选那份读数直接搬到卡片上（生成器已经算好了件数与重叠）。 */
+function viewOfLocalPlan(plan: PlanProposal): ProposalView {
+  return {
+    added: plan.added, removing: plan.removing, changed: plan.moved ?? 0, lockedTouched: 0,
+    overlapCount: plan.overlapCount, overlapNames: plan.overlapNames,
+    source: 'local', keptLocked: plan.keptLocked, dropped: plan.dropped, blocked: plan.blocked,
+    guests: plan.guests ?? null, seats: plan.seats ?? 0,
+    review: plan.kind === 'review', skipped: plan.skipped ?? [],
+  };
+}
+
+/** 卡片与气泡共用的那句话：新摆几件、动了几件已有的、要撤几件旧的。 */
+function planLines(view: ProposalView): string[] {
+  const lines: string[] = [];
+  if (view.review) {
+    if (view.changed) lines.push(`蓝框是挪到的新位置 ${view.changed} 件（琥珀线框是原位）`);
+  } else {
+    if (view.added) lines.push(`绿框是新摆的 ${view.added} 件`);
+    if (view.changed) lines.push(`蓝框是挪动过的 ${view.changed} 件`);
+  }
+  if (view.removing) lines.push(`红框是要撤掉的 ${view.removing} 件`);
+  if (view.keptLocked) lines.push(`锁定 ${view.keptLocked} 件我没动`);
+  if (view.dropped) lines.push(`${view.dropped} 件放不下，没采纳`);
+  if (view.skipped?.length) lines.push(`${view.skipped.length} 件没动：${view.skipped.slice(0, 4).join('、')}${view.skipped.length > 4 ? ' 等' : ''}`);
+  // 人数是这一版的条件：摆得下就说摆了几座，摆不下就直说多少人得站着，不拿「已按 80 人布置」糊过去。
+  if (view.guests && view.guests > 0) {
+    lines.push((view.seats ?? 0) >= view.guests
+      ? `按 ${view.guests} 人摆了 ${view.seats} 座`
+      : `只摆得下 ${view.seats ?? 0} 座，其余 ${view.guests - (view.seats ?? 0)} 位按站立留空`);
+  }
+  return lines;
+}
+
+/** 体检改法没动成时，按原因点名：锁着是规矩，找不到落点是能力边界，不能混成一句。 */
+function skipCopy(skips: readonly ReviewSkip[]): string {
+  const names = (reason: ReviewSkip['reason']): string[] => [...new Set(skips.filter(skip => skip.reason === reason).map(skip => skip.name))];
+  const locked = names('locked'), stuck = names('no-spot');
+  return [
+    locked.length ? `锁着没动：${locked.join('、')}` : '',
+    stuck.length ? `附近找不到稳妥落点：${stuck.join('、')}` : '',
+  ].filter(Boolean).join('；');
+}
 
 export interface LayoutAgentCallbacks {
   workbenchMode: WorkbenchMode;
@@ -37,6 +126,8 @@ export interface LayoutAgentCallbacks {
   onSelectMode(mode: WorkbenchMode): void;
   onOpenReview(): void;
   onOpenDelivery(): void;
+  /** T-UI §4-5：对话里确认导出后，打开「执行」工作区并触发既有交接导出。 */
+  onExportHandoff(): void;
   onFit(): void;
 }
 
@@ -45,10 +136,17 @@ interface AgentValue {
   state: AgentState; venueIO: VenueIO; setVenueIO(value: VenueIO): void;
 
   baseName: string | null; issue: FileIssue | null; dragging: boolean;
-  lengthText: string; widthText: string; setLengthText(value: string): void; setWidthText(value: string): void;
-  lengthCheck: DimCheck; widthCheck: DimCheck; showDimErrors: boolean; touchDims(): void;
+  /** 对话已收集字段的只读回显（截图钉 2026-10-26 夜：表单不再当第二套生成入口）。 */
+  recap: { event: string | null; guests: string | null; dims: string; note: string | null };
+  /** 画布上已经有一个立起来的场地（墙/门/尺寸都是场地真相）：第 ① 步就算过了。 */
+  venueUp: boolean;
   progress: number; failed: boolean; overlapCount: number; bubbles: Bubble[];
-  ctaEnabled: boolean; generate(): void; stop(): void; regenerate(label?: string): void; editSettings(): void;
+  /** 只给「这次没出成」那张卡用：重跑上一句，不另开一个生成入口。 */
+  retry(): void; stop(): void; resume(): void; regenerate(label?: string): void;
+  /** 还没确认的那版布置；null = 没有待确认的提案。 */
+  proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
+  /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
+  exportPreview: boolean; confirmExport(): void; dismissExport(): void;
   acceptFile(file: File): void; retryFile(): void; pickFile(): void;
   send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
 }
@@ -58,11 +156,16 @@ function useAgent(): AgentValue { const value = useContext(AgentContext); if (!v
 
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
-const withId = (item: FurnitureItem): FurnitureItem => ({ ...item, id: uid() });
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; children: ReactNode }): JSX.Element {
-  const { layout, activeFloor, actions, view, setView, collidingIds } = useRoomEditor();
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; children: ReactNode }): JSX.Element {
+  const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
+  // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
+  const studioRef = useRef(studio); studioRef.current = studio;
+  /** 这一次出方案是谁算的：撤回、停一下、换一版都按它分流。 */
+  const lastSource = useRef<'local' | 'cloud'>('local');
+  /** 云端确认是异步的：`applyPreview` 里清预览的时机不在我们 await 的那一帧，所以等预览变化再播报。 */
+  const confirmPending = useRef(false);
   const [venueIO, setVenueIO] = useState<VenueIO>('indoor');
 
   const [baseName, setBaseName] = useState<string | null>(null);
@@ -71,8 +174,22 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
   const [lengthText, setLengthRaw] = useState('');
   const [widthText, setWidthRaw] = useState('');
   const [dimsTouched, setDimsTouched] = useState(false);
-  const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'ready' | 'edited'>('idle');
+  // 尺度从哪儿来（画布默认 / 人说过 / 人填的 / 面积折算 / 图纸估算）——决定壳体的置信度，
+  // 也决定 Agent 能不能把米数当成事实说出来。
+  const [scaleOrigin, setScaleOrigin] = useState<ScaleOrigin>('canvas');
+  const planPixels = useRef<{ width: number; height: number } | null>(null);
+  // 人嘴里说过的人数与活动名，本地模式下就是回放的唯一真相（云端仍走 studio.brief）。
+  const [brief, setBrief] = useState<{ event: string | null; guests: number | null }>({ event: null, guests: null });
+  // 异步播报里要读最新那句的人数/活动名，不能读 setBrief 之前那一帧的闭包。
+  const briefRef = useRef(brief); briefRef.current = brief;
+  const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [progress, setProgress] = useState(0);
+  // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
+  const [exportPreview, setExportPreview] = useState(false);
+  // 提案只活在这里：layout 一个字节都不动，所以自动存档、撤销栈、别人的选中态都不受影响。
+  const proposal = useRef<PlanProposal | null>(null);
+  const proposalBase = useRef<RoomLayout | null>(null);
+  const shownSteps = useRef(0);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const lastFile = useRef<File | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -80,8 +197,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
   const seed = useRef(1);
   const colliding = useRef(collidingIds); colliding.current = collidingIds;
   const live = useRef(layout); live.current = layout;
+  const floorIndexRef = useRef(activeFloorIndex); floorIndexRef.current = activeFloorIndex;
   const dragDepth = useRef(0);
-  const touchTimer = useRef<number | null>(null);
 
   const lengthCheck = checkDim(lengthText, '长度');
   const widthCheck = checkDim(widthText, '宽度');
@@ -90,25 +207,232 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
 
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => setBubbles(items => [...items.slice(-30), { id: uid(), ...bubble }]), []);
 
-  // 长宽合法后同步到场地尺寸（layout.width / height 是已有字段）。
-  useEffect(() => {
-    if (!lengthCheck.ok || !widthCheck.ok) return;
-    const current = live.current;
-    if (Math.abs(current.width - lengthCheck.value) < 1e-6 && Math.abs(current.height - widthCheck.value) < 1e-6) return;
-    actions.applyLayout({ ...current, width: lengthCheck.value, height: widthCheck.value });
-  }, [lengthCheck.ok, widthCheck.ok, lengthCheck.ok ? lengthCheck.value : 0, widthCheck.ok ? widthCheck.value : 0, actions]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const setLengthText = (value: string) => { setLengthRaw(sanitizeDimInput(value)); scheduleTouch(); };
-  const setWidthText = (value: string) => { setWidthRaw(sanitizeDimInput(value)); scheduleTouch(); };
-  function scheduleTouch(): void {
-    if (touchTimer.current) window.clearTimeout(touchTimer.current);
-    touchTimer.current = window.setTimeout(() => setDimsTouched(true), 400);
+  /** 这一句说过的人数/活动名先写进 ref，再 setState：出方案那一步是异步的，不能等下一帧才读到。 */
+  function noteBrief(extraction: BriefExtraction): void {
+    const next = { event: extraction.event ?? briefRef.current.event, guests: extraction.headcount ?? briefRef.current.guests };
+    briefRef.current = next;
+    setBrief(next);
   }
-  useEffect(() => () => { if (touchTimer.current) window.clearTimeout(touchTimer.current); runToken.current++; }, []);
+
+  /**
+   * 对话里说的人数/活动名也写进左栏「活动需求」：那边不再是生成入口，但还得能回看、保存。
+   * 左右两边共用 HEADCOUNT_MAX；超出解析上限的数不会走到这里。
+   */
+  function syncStudioBrief(extraction: BriefExtraction): string | null {
+    const apply = studioRef.current?.setBrief;
+    if (!apply) return null;
+    const guests = extraction.headcount;
+    if (!extraction.event && guests === null) return null;
+    const inRange = guests !== null && guests >= 1 && guests <= HEADCOUNT_MAX;
+    apply(current => ({
+      ...current,
+      ...(extraction.event ? { event: extraction.event } : {}),
+      ...(inRange && guests !== null ? { guests } : {}),
+    }));
+    return guests !== null && !inRange ? `人数超出左栏范围（1–${HEADCOUNT_MAX}），这个数先留在右栏，左边没改。` : null;
+  }
+
+  /** 画布当前这一层的物料，按名字汇总：清单、文案都读这一份，不另存一份物料表。 */
+  function floorRows(from: RoomLayout = live.current): { rows: Array<{ name: string; count: number }>; total: number; locked: number } {
+    const index = Math.min(activeFloorIndex, Math.max(0, from.floors.length - 1));
+    const items = from.floors[index]?.items ?? [];
+    const map = new Map<string, number>();
+    let locked = 0;
+    for (const item of items) {
+      if (isStructuralMarker(item)) continue;
+      // 现有家具库的默认名是英文：对话里只换掉这两个默认名，人改过的名字原样念。
+      const name = item.name === 'Dining Chair' ? '椅子' : item.name === 'Dining Table' ? '桌子' : item.name;
+      map.set(name, (map.get(name) ?? 0) + 1);
+      if (item.locked) locked += 1;
+    }
+    const rows = [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
+    return { rows, total: rows.reduce((sum, row) => sum + row.count, 0), locked };
+  }
+
+  function copyText(text: string, done: string): void {
+    const legacyCopy = (): boolean => {
+      try {
+        const area = document.createElement('textarea');
+        area.value = text; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+        document.body.appendChild(area); area.select();
+        const ok = document.execCommand('copy');
+        area.remove();
+        return ok;
+      } catch { return false; }
+    };
+    const succeed = () => say({ role: 'agent', text: done });
+    const fail = () => say({ role: 'agent', amber: true, text: '剪贴板没写成，选中这段自己复制一下。' });
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!clipboard) { if (legacyCopy()) succeed(); else fail(); return; }
+    void clipboard.writeText(text).then(succeed).catch(() => { if (legacyCopy()) succeed(); else fail(); });
+  }
+
+  /** 清单和文案里的米数跟复盘卡同一条规矩：人给过尺度、或壳体立起来了才算数。 */
+  function confirmedArea(): number | null {
+    return venueUp || scaleOrigin === 'stated' || scaleOrigin === 'typed' ? venueArea(live.current) : null;
+  }
+
+  /** 「出物料清单」：直接读物料汇总，不另开一套表单；有一版本地预览时按预览版算。 */
+  function replyMaterialList(): void {
+    const pendingPlan = proposal.current;
+    const cloudPending = !pendingPlan && !!studioRef.current?.preview;
+    const source = pendingPlan ? pendingPlan.layouts[pendingPlan.layouts.length - 1]! : live.current;
+    const { rows, total, locked } = floorRows(source);
+    if (!total) {
+      say({ role: 'agent', long: true, text: '画布上还没有物料，清单是空的。\n说一句「出方案」我先摆一版，或者说「加两把椅子」直接往上加。' });
+      return;
+    }
+    const area = confirmedArea();
+    const text = [
+      `物料清单 · ${area === null ? '' : `${formatArea(area)} ㎡ · `}${pendingPlan ? '预览版 · ' : ''}${total} 件`,
+      ...rows.map(row => `· ${row.name} ×${row.count}`),
+      ...(locked ? [`锁定的 ${locked} 件也在上面。`] : []),
+      ...(pendingPlan ? ['这版还在预览，清单按预览版算；点「确认布置」才写进画布。'] : []),
+      ...(cloudPending ? ['云端这一版还没确认，这份清单只算画布上已有的物料。'] : []),
+      '要 CSV 去左栏「执行资料」导出。',
+    ].filter(Boolean).join('\n');
+    say({ role: 'agent', long: true, text, action: { label: '复制清单', run: () => copyText(text, '清单复制好了。') } });
+  }
+
+  /** 「写段文案」：用已收集的活动名/人数/场地/物料起一份草稿，只在对话里，不写进任何资料。 */
+  function replyDraft(): void {
+    const event = briefRef.current.event ?? studioRef.current?.brief.event ?? '这场活动';
+    const guests = briefRef.current.guests ?? studioRef.current?.brief.guests ?? null;
+    const pendingPlan = proposal.current;
+    const source = pendingPlan ? pendingPlan.layouts[pendingPlan.layouts.length - 1]! : live.current;
+    const { rows, total } = floorRows(source);
+    const io = venueIO === 'indoor' ? '室内' : '户外';
+    const area = confirmedArea();
+    const materials = total
+      ? `现场已经排了 ${total} 件物料：${rows.slice(0, 4).map(row => `${row.name} ×${row.count}`).join('、')}${rows.length > 4 ? ' 等' : ''}。`
+      : '现场物料还在排，这一版先把场地留出来。';
+    const text = [
+      `【${event}】`,
+      `${io}${area === null ? '，场地尺寸还没定' : ` ${formatArea(area)} ㎡`}${guests ? `，${guests} 人` : ''}。`,
+      materials,
+      '细节还在调，先把这一版发你看看。',
+      '',
+      `（草稿只在对话里${pendingPlan ? '，按预览版物料写' : ''}；没写进活动资料；要改哪句直接说。）`,
+    ].join('\n');
+    say({ role: 'agent', long: true, text, action: { label: '复制草稿', run: () => copyText(text, '草稿复制好了。') } });
+  }
+
+  /** 「换区」：画布没有分区这一层，也没有可点的换区入口；先说清楚，再给现在做得到的下一步。 */
+  function replyZone(): void {
+    say({ role: 'agent', long: true, text: '换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。\n要换布局就说「换一版」；单件位置在画布上直接拖。这条先记进暂留清单。' });
+  }
+
+  /**
+   * 「看看哪里有问题」：只读画布几何，报挤/压墙柱/出界/挡门前留空/拉不开。
+   * 这不是合规审查——没有消防、疏散、无障碍这些依据，也不下那种结论。
+   */
+  function reviewNow(): void {
+    if (phaseRef.current === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再体检。' }); return; }
+    if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再按落盘后的画布体检。' }); return; }
+    const report = reviewLayout(live.current, floorIndexRef.current);
+    if (report.checked === 0) {
+      say({ role: 'agent', long: true, text: '这一层还没有物料可看。先说一句「出方案」摆一版，或者说「加两把椅子」，我再体检。' });
+      return;
+    }
+    const notes = report.notes.length ? `\n${report.notes.join('\n')}` : '';
+    if (report.clean) {
+      say({ role: 'agent', long: true, text: `看完了 ${report.checked} 件：没有互相挤、压墙柱、出界或拉不开的地方。这是几何体检，不是合规审查。${notes}` });
+      return;
+    }
+    say({ role: 'agent', long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
+    const actionable = report.issues.filter(issue => !!issue.fix);
+    for (const issue of actionable.slice(0, 3)) {
+      say({ role: 'agent', text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
+    }
+    const rest = actionable.length - Math.min(3, actionable.length);
+    if (rest > 0) say({ role: 'agent', amber: true, text: `还有 ${rest} 条没展开：先把上面这几条改了，再说一句「看看哪里有问题」，我接着看。` });
+  }
+
+  /**
+   * 点一条改法：按现在这一帧重新体检，仍然成立才算候选；只铺预览，不写画布。
+   * 算不出来、或者锁着没动，都如实说，不硬挪。
+   */
+  function applyReviewFix(issue: ReviewIssue): void {
+    if (phaseRef.current === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再改。' }); return; }
+    if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再试下一条。' }); return; }
+    const base = live.current;
+    const index = floorIndexRef.current;
+    const freshReport = reviewLayout(base, index);
+    const fresh = freshReport.issues.find(candidate => candidate.id === issue.id)
+      ?? freshReport.issues.find(candidate => candidate.kind === issue.kind && candidate.itemIds.some(id => issue.itemIds.includes(id)));
+    if (!fresh || !fresh.fix) { say({ role: 'agent', amber: true, text: '画布刚变过，这条现在不成立了。再说一句「看看哪里有问题」，我重新体检。' }); return; }
+    const result = proposeReviewFix(base, index, fresh);
+    if (!result) { say({ role: 'agent', amber: true, text: '这条我算不出稳妥改法，先不硬挪。自己拖一下，或把周围腾一点空间再试。' }); return; }
+    if (result.moved === 0) {
+      const why = skipCopy(result.skipped);
+      const locked = result.skipped.some(skip => skip.reason === 'locked');
+      say({ role: 'agent', amber: true, long: true, text: `这条没改成：${why || '附近找不到不压墙、不碰别的物料的落点'}。${locked ? '锁着的先解锁再试，或自己拖一下。' : '先自己拖一下，或把周围腾一点空间。'}` });
+      return;
+    }
+    const floor = result.layout.floors[Math.min(index, result.layout.floors.length - 1)];
+    const byId = new Map((floor?.items ?? []).map(item => [item.id, item] as const));
+    const remainingOverlapIds = new Set(result.remaining.filter(item => item.kind === 'overlap').flatMap(item => item.itemIds));
+    const plan: PlanProposal = {
+      layouts: [base, result.layout],
+      added: 0, removing: 0, keptLocked: 0, dropped: 0,
+      overlapCount: remainingOverlapIds.size,
+      overlapNames: [...remainingOverlapIds].map(id => byId.get(id)?.name).filter((name): name is string => !!name),
+      blocked: null,
+      guests: null, seats: 0,
+      moved: result.moved,
+      kind: 'review',
+      skipped: [...new Set(result.skipped.map(skip => skip.name))],
+    };
+    proposal.current = plan; proposalBase.current = base;
+    // 画布本来就是改之前的样子，省掉基线那一帧，直接看挪完的结果。
+    shownSteps.current = 1;
+    lastSource.current = 'local';
+    const rest = result.remaining.length ? `（改完还剩 ${result.remaining.length} 条要处理）` : '';
+    void presentProposal(++runToken.current, `按这条改：${fresh.fix.label}${rest}。`);
+  }
+
+  /**
+   * 「加两把椅子」：只把点名的那几件放进空位，仍然只出候选、不写画布。
+   * 已经有一版本地预览时，就接在这一版上继续加，不再让人先确认一遍。
+   */
+  function addMaterials(request: MaterialRequest): void {
+    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再加物料。' }); return; }
+    if (proposal.current === null && studioRef.current?.preview) {
+      say({ role: 'agent', amber: true, text: '云端这一版还没确认：先点「确认布置」或「撤回」，我再往上加。' });
+      return;
+    }
+    const pending = proposal.current;
+    const base = pending ? pending.layouts[pending.layouts.length - 1]! : live.current;
+    let plan: AdditionProposal;
+    try { plan = proposeAddition({ base, floorIndex: activeFloorIndex, requests: [request] }); }
+    catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版加不进去，先挪一下物料再试。' });
+      return;
+    }
+    const placed = plan.accepted[0]?.placed ?? 0;
+    if (!placed) {
+      say({ role: 'agent', amber: true, text: `画布上没有能放下${request.name}的空位（${request.count} 件都没放下）。先收几件，或者说「换一版」留出空地，我再加。` });
+      return;
+    }
+    if (!pending) proposalBase.current = live.current;
+    proposal.current = plan;
+    // 画布本来就是「加之前」的样子：省掉基线那一帧，直接看加上之后的结果。
+    shownSteps.current = 1;
+    const lead = placed < request.count
+      ? `按你说的加 ${request.count} 件${request.name}，只放得下 ${placed} 件：`
+      : pending ? `在这版上又加了${request.name}：` : `按你说的加了${request.name}：`;
+    void presentProposal(++runToken.current, lead);
+  }
+
+  // 长宽只在生成时由壳体那一步写进场地。以前这里还会跟着输入框把 layout 改一遍，
+  // 表单砍掉后没人再改它，留着只会在出方案途中再动一次画布，把刚出的预览判成「被改过」作废。
+
+  useEffect(() => () => { runToken.current++; }, []);
 
   const state: AgentState = dragging ? 'dragHover'
     : phase === 'generating' ? 'generating' : phase === 'paused' ? 'generatePaused' : phase === 'failed' ? 'generateFailed'
     : phase === 'edited' ? 'planEdited' : phase === 'ready' ? 'planReady'
+    : phase === 'proposed' ? 'planProposed'
     : hasBase && dimsTouched && dimsInvalid ? 'dimsInvalid'
     : issue ? (issue.kind === 'nonImage' ? 'nonImageRejected' : issue.kind === 'tooLarge' ? 'fileTooLarge' : issue.kind === 'readFailed' ? 'fileReadFailed' : 'fileUnsupported')
     : hasBase ? (lengthCheck.ok && widthCheck.ok ? 'baseReady' : 'baseNoDims') : 'empty';
@@ -123,13 +447,79 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
     if (extraction.timeOfDay !== null) setView(current => ({ ...current, timeOfDay: extraction.timeOfDay! }));
     if (extraction.lengthM !== null && extraction.widthM !== null) {
       setLengthRaw(String(extraction.lengthM)); setWidthRaw(String(extraction.widthM)); setDimsTouched(true);
+      setScaleOrigin('stated');
     } else if (extraction.areaM2 !== null) {
       const dims = suggestDimsFromArea(extraction.areaM2);
       setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
+      setScaleOrigin('area');
     }
   }, [onVenueIOChange, setView]);
 
-  const ctaEnabled = canGenerate(state, hasBase, lengthCheck, widthCheck) && phase !== 'generating';
+  /** 说过/填过的数字合法才算确认过尺度；否则退回画布当前大小，别把空地当成场地真相。 */
+  function readScale(): Scale {
+    if (lengthCheck.ok && widthCheck.ok) return { length: lengthCheck.value, width: widthCheck.value, origin: scaleOrigin };
+    return { length: live.current.width, width: live.current.height, origin: 'canvas' };
+  }
+
+  /**
+   * 一句话里刚说的尺度要当场用上：setState 还没渲染，读 lengthCheck 会拿到旧值，
+   * 所以「一句话 → 方案预览」这条路把解析结果直接算成尺度传给生成器。
+   */
+  function scaleFrom(extraction: BriefExtraction): Scale {
+    const origin = scaleOriginOf(extraction, scaleOrigin);
+    if (origin === 'stated' && extraction.lengthM !== null && extraction.widthM !== null) return { length: extraction.lengthM, width: extraction.widthM, origin };
+    if (origin === 'area' && extraction.areaM2 !== null) return { ...suggestDimsFromArea(extraction.areaM2), origin };
+    return readScale();
+  }
+
+  /** 「按图纸估」：底图只当参照，折出来的长宽是估的，说完就按它出预览，说错了再讲一句新的。 */
+  function estimateFromPlan(): Scale | null {
+    const pixels = planPixels.current;
+    if (!pixels) { say({ role: 'agent', amber: true, text: '还没拖图纸，我按不出比例。说一句「12×9」或「300 平米」，我就按它立场地。' }); return null; }
+    const area = Math.max(4, live.current.width * live.current.height);
+    const dims = suggestDimsFromImageRatio(pixels.width, pixels.height, area);
+    setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
+    setScaleOrigin('plan');
+    say({ role: 'agent', text: `按图纸比例估的 ${formatArea(dims.length)} × ${formatArea(dims.width)} m，先按它出一版。这是估的：不对就再说一句长宽。` });
+    return { length: dims.length, width: dims.width, origin: 'plan' };
+  }
+
+  /** 拖完图纸只想点一下就往下走：估尺寸和出预览是一件事，别再让人补一句话。 */
+  function estimateAndGenerate(): void {
+    const scale = estimateFromPlan();
+    if (scale) runGeneration(null, seed.current, '图纸比例估的尺寸', scale);
+  }
+
+  // 画布上有墙体/场地真相 = 第 ① 步已经过了；撤回或作废不会把它拆掉，进度和尺寸读数都靠它。
+  const venueUp = layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || (activeFloor.interiorWalls?.length ?? 0) > 0;
+
+  /**
+   * 云端 AI 返回的那一版，折成右栏同一套读数：服务端只说「哪些物件变了」和场地检查警告，
+   * 件数与重叠名在这里算。基线（场景 / 需求 / 编辑权）变了或过期就不许确认；
+   * 动了锁着的物料同样按住确认——Agent 不该改锁着的东西（卡 §4.4）。
+   */
+  const cloudViewOf = useCallback((preview: NonNullable<typeof studio>['preview']): ProposalView | null => {
+    if (!preview) return null;
+    const byId = new Map(preview.layout.floors.flatMap(floor => floor.items.map(item => [item.id, item] as const)));
+    const plan = pendingPlanOf(
+      proposalDifferences(preview.base, preview.layout).map(change => ({
+        kind: change.kind,
+        locked: change.after?.item.locked ?? change.before?.item.locked ?? false,
+      })),
+      preview.proposal.warnings,
+      id => byId.get(id)?.name ?? '物件',
+    );
+    const current = studioRef.current;
+    return {
+      ...plan, source: 'cloud', keptLocked: 0, dropped: 0,
+      blocked: current?.expired ? '这版已经过期了，重新出一版再看。'
+        : current?.stale ? CLOUD_STALE
+        : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料：我不改锁着的东西，先解锁或换一版。`
+        : null,
+    };
+  }, []);
+  const cloudProposal = useMemo(() => cloudViewOf(studio?.preview ?? null), [cloudViewOf, studio?.preview, studio?.stale, studio?.expired]);
+  const activeProposal: ProposalView | null = proposal.current ? viewOfLocalPlan(proposal.current) : cloudProposal;
 
   async function acceptFile(file: File): Promise<void> {
     lastFile.current = file;
@@ -147,14 +537,19 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
       actions.setFloorPlan(url);
       setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: 0.6 }));
       setIssue(null); setBaseName(file.name);
-      // 按图纸比例自动估长宽：面积沿用当前画布，画布还是默认小场地时按 120 ㎡ 起步。
-      const current = live.current;
-      const area = current.width * current.height >= 4 ? current.width * current.height : 120;
-      const dims = suggestDimsFromImageRatio(pixels.width, pixels.height, area);
-      setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
+      // 图纸只当参照：不把按比例折出来的数字悄悄填进卡片，也不说成「读到的尺寸」。
+      planPixels.current = { width: pixels.width, height: pixels.height };
       say({ role: 'user', text: file.name, meta: '图片 · 1 页' });
-      say({ role: 'agent', text: `底图铺好了，按图纸比例先按 ${formatArea(dims.length)} × ${formatArea(dims.width)} m。再说一句话（人数＋活动），我就开摆。` });
-      queueMicrotask(() => document.getElementById('ap-input')?.focus());
+      // 拖图也算主入口：说过尺度就照它出一版；没说过就只差一步，给一个当场能点的「按图纸估一版」。
+      if (lengthCheck.ok && widthCheck.ok) {
+        const scale: Scale = { length: lengthCheck.value, width: widthCheck.value, origin: scaleOrigin };
+        say({ role: 'agent', text: `底图铺好了，只当参照。按你说的 ${formatArea(scale.length)} × ${formatArea(scale.width)} m 先出一版，画布上是预览。` });
+        runGeneration(null, seed.current, '', scale);
+      } else {
+        say({ role: 'agent', text: '底图铺好了，它只当参照，我读不出真实米数。要么说一句「12×9」，要么让我按图纸比例估一版。',
+          action: { label: '按图纸估一版', run: estimateAndGenerate } });
+        queueMicrotask(() => document.getElementById('ap-input')?.focus());
+      }
     } catch {
       setIssue({ kind: 'readFailed', name: file.name, size: file.size });
       say({ role: 'user', text: file.name, warn: '没读出来' });
@@ -181,76 +576,372 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
   }, [callbacks.workbenchMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const phaseRef = useRef(phase); phaseRef.current = phase;
 
-  async function runLocal(token: number, variant: number): Promise<void> {
-    const alive = () => token === runToken.current;
-    const width = live.current.width, depth = live.current.height;
-    // 1 读场地：清空现有物料，按当前长宽出空房间
-    actions.clearItems(); setProgress(1); await wait(STEP_DELAY_MS); if (!alive()) return;
-    // 2 定舞台位置：背景板贴后墙居中（现有物料库条目）
-    const backdrop = EVENT_CATALOG.find(entry => entry.materialId === 'backdrop');
-    if (backdrop) actions.addItems([{ ...backdrop, id: uid(), position: { x: 0, z: -depth / 2 + backdrop.depth / 2 + 0.4 }, rotation: 0 } as FurnitureItem]);
-    setProgress(2); await wait(STEP_DELAY_MS); if (!alive()) return;
-    // 3 摆桌椅：现有 dining 物料组，按面积放 1–4 组（固定槽位）
-    const dining = FURNITURE_SETS.find(set => set.key === 'dining');
-    if (dining && setFitsRoom(dining, width, depth)) {
-      const slots = [{ x: -width / 4, z: depth / 8 }, { x: width / 4, z: depth / 8 }, { x: -width / 4, z: depth / 8 + 2.6 }, { x: width / 4, z: depth / 8 + 2.6 }];
-      const count = Math.max(1, Math.min(4, Math.floor((width * depth) / 30)));
-      const shift = (variant % 2 === 0 ? 0 : 0.6);
-      const sets = slots.slice(0, count).flatMap(center => buildFurnitureSet(dining, { center: { x: center.x, z: center.z - shift }, roomWidth: width, roomDepth: depth }).map(withId));
-      actions.addItems(sets);
+  // 提案算的是「从这一帧场景出发」的候选：人手动改过物料或场地，旧候选就不再代表现状，作废。
+  const pendingPhase = phase === 'proposed' || phase === 'paused';
+  useEffect(() => {
+    if (!pendingPhase) return;
+    if (!proposal.current || !proposalBase.current || live.current === proposalBase.current) return;
+    invalidateProposal('画布在这期间被改过了');
+  }, [layout, pendingPhase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // T-UI：确认后的「这一版布置」卡只代表确认那一帧的画布。人点撤销或手动拖改后，
+  // 画布已经变了，右栏不能还停在 planReady——卡片收回、阶段归零（修 T-03 §6.1 的同步洞）。
+  const planShownLayout = useRef<RoomLayout | null>(null);
+  const planShownPhase = phase === 'ready' || phase === 'edited';
+  useEffect(() => {
+    if (!planShownPhase) { planShownLayout.current = null; return; }
+    if (!planShownLayout.current) { planShownLayout.current = layout; return; }
+    // 用内容比较而不是对象 identity：reducer 可能包一层新对象，撤销/手动拖改才是真变了。
+    if (!sameLayoutContent(layout, planShownLayout.current)) {
+      planShownLayout.current = null;
+      setPhase('idle'); setProgress(0);
+      say({ role: 'agent', text: '画布改过了（撤销或手动调整），「这一版布置」的卡我收了；要再出一版随时说。' });
     }
-    setProgress(3); await wait(STEP_DELAY_MS); if (!alive()) return;
-    // 4 放绿植：现有 surprise 生成器里的装饰，只取植物
-    const plants = surpriseLayout({ roomWidth: width, roomDepth: depth, seed: 1000 + variant }).filter(item => item.id.includes('decor') && (item.type === 'plant' || item.type === 'flowerpot')).map(withId);
-    if (plants.length) actions.addItems(plants);
-    setProgress(4); await wait(STEP_DELAY_MS); if (!alive()) return;
-    // 5 检查重叠：读编辑器现有的碰撞结果
-    setProgress(5); await wait(80); if (!alive()) return;
-    setPhase('ready'); callbacks.onFit();
+  }, [layout, planShownPhase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** 第 1 步的壳体播报：尺寸、墙与门、层高来源，一句一句照实说。 */
+  function shellNote(scene: SceneV2, cleared: number): string {
+    const venue = scene.venue;
+    const notes = [`${formatArea(venue.width)} × ${formatArea(venue.depth)} m`];
+    notes.push(venue.site?.indoorOutdoor === 'outdoor'
+      ? '户外场地，这一版先不砌墙也不开门'
+      : '室内壳子，四面外墙、正面留了一个主入口，门位标的是待确认');
+    notes.push(venue.heightSource === 'default' ? `层高没听你说，先按默认 ${formatArea(venue.height)} m` : `层高 ${formatArea(venue.height)} m`);
+    if (venue.site?.scale?.confidence === 'low') notes.push('尺寸是我沿用画布当前的空地，不对就说一句「12×9」这样告诉我');
+    if (cleared) notes.push(`画布上原来 ${cleared} 件物料放不下这个新壳体，我先撤了`);
+    return `场地立起来了：${notes.join('，')}。`;
   }
 
-  function generate(): void {
-    if (!ctaEnabled) return;
-    const token = ++runToken.current;
-    say({ role: 'user', text: phase === 'failed' ? '重试' : '就按这个出方案' });
-    setIssue(null); setPhase('generating'); setProgress(0);
-    const forceFail = process.env.NODE_ENV !== 'production' && typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('agentFail') === '1';
-    const cloudReady = studio?.connection === '项目已连接';
-    const run = forceFail ? wait(STEP_DELAY_MS).then(() => { throw new Error('forced'); })
-      : cloudReady && studio ? (setProgress(1), studio.generate(`${studio.brief.event} · ${studio.brief.guests} 人 · ${venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(live.current.width * live.current.height)} ㎡，请出布置方案`).then(() => { if (token === runToken.current) { setProgress(5); setPhase('ready'); } }))
-      : runLocal(token, seed.current);
-    const timeout = window.setTimeout(() => { if (token === runToken.current && phaseRef.current === 'generating') { runToken.current++; setPhase('failed'); } }, 60_000);
-    run.catch(() => { if (token === runToken.current) setPhase('failed'); }).finally(() => window.clearTimeout(timeout));
+  /** 预览收回：画布退回确认前的样子，提案本身留着，还能接着摆。 */
+  function hidePreview(): void { onPreview(null); }
+
+  function dropProposal(): void {
+    hidePreview();
+    proposal.current = null; proposalBase.current = null; shownSteps.current = 0;
   }
-  function stop(): void { if (phase !== 'generating') return; runToken.current++; setPhase('paused'); say({ role: 'agent', text: '先停在这儿了，已摆好的留着。' }); }
+
+  /** 云端那一版也不要留：撤回/改需求之后，画布上不该还挂着上一版的绿框。 */
+  function discardCloudPreview(): void {
+    confirmPending.current = false;
+    if (studioRef.current?.preview) studioRef.current.discardPreview();
+  }
+
+  /**
+   * 把候选一帧一帧推到画布上当预览：绿框 = 新摆的，红框 = 要撤掉的，虚线 = 原位。
+   * 全程只调 onPreview，不 dispatch —— 自动存档与撤销栈都看不到它。
+   */
+  async function presentProposal(token: number, lead?: string): Promise<void> {
+    const plan = proposal.current;
+    if (!plan) return;
+    const intro = lead ?? (plan.kind === 'review' ? '这版改法：' : '先出一版可拖的初稿：');
+    setPhase('generating');
+    for (let step = shownSteps.current; step < plan.layouts.length; step++) {
+      onPreview(plan.layouts[step]!);
+      setProgress(step + 1);
+      shownSteps.current = step + 1;
+      await wait(step === plan.layouts.length - 1 ? 120 : STEP_DELAY_MS);
+      if (token !== runToken.current) return;
+    }
+    setPhase('proposed');
+    const planView = viewOfLocalPlan(plan);
+    const notes = planLines(planView);
+    const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
+    say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
+      ? `${planView.blocked}先出一版给你看着改：${notes.join('，')}。确认按钮暂时点不动，改好场地或解锁再出一版。`
+      : `${intro}${notes.join('，')}。${tail}` });
+  }
+
+  /** 出方案 = 先立 T-01 的场地真相，再在立好的壳体上算一份候选。确认前 objects 不落盘。 */
+  async function runLocal(token: number, variant: number, scale: Scale): Promise<void> {
+    const input = { base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
+    let venue: VenuePlan | null;
+    try { venue = raiseVenue(input); }
+    catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
+      setPhase('failed'); return;
+    }
+    if (venue) {
+      // 场地是 T-01 已经确认过的真相：改的是墙体尺寸，不是物料，所以先落它，预览才对得上墙。
+      actions.applyLayout(venue.layout);
+      say({ role: 'agent', text: shellNote(venue.scene, venue.cleared) });
+      await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
+    } else {
+      // 预设/云端场景不重搭壳体，但这次的尺度就是布置边界：先把长宽对齐再算候选，
+      // 否则按新尺度摆的桌椅会被旧边界判成放不下。等一帧再读 live，基线才包含这次的对齐。
+      const current = live.current;
+      if (Math.abs(current.width - scale.length) > 1e-6 || Math.abs(current.height - scale.width) > 1e-6) {
+        actions.applyLayout({ ...current, width: scale.length, height: scale.width });
+        await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
+      }
+    }
+    let plan: PlanProposal;
+    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests }); }
+    catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
+      setPhase('failed'); return;
+    }
+    proposal.current = plan; proposalBase.current = live.current; shownSteps.current = 0;
+    await presentProposal(token);
+  }
+
+  /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
+  function confirmProposal(): void {
+    const plan = proposal.current;
+    if (!plan) { confirmCloud(); return; }
+    if (plan.blocked) { say({ role: 'agent', amber: true, text: plan.blocked }); return; }
+    if (proposalBase.current && live.current !== proposalBase.current) { invalidateProposal('场景在这期间改过了'); return; }
+    try { onApply(plan.layouts[plan.layouts.length - 1]!); }
+    catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。' });
+      return;
+    }
+    const added = plan.added;
+    const final = plan.layouts[plan.layouts.length - 1];
+    const finalFloor = final?.floors[Math.min(activeFloorIndex, final.floors.length - 1)];
+    const total = finalFloor ? finalFloor.items.filter(item => !isStructuralMarker(item)).length : added;
+    const review = plan.kind === 'review';
+    const moved = plan.moved ?? 0;
+    const skipped = plan.skipped?.length ?? 0;
+    dropProposal();
+    setPhase('ready'); setProgress(GEN_STEPS.length);
+    say({ role: 'agent', text: review
+      ? `确认了：${moved} 件换了位置，其他没动${skipped ? `；还有 ${skipped} 件没动（锁着或没找到落点）` : ''}。不想要就撤销一步，整体退回原位。`
+      : `写进画布了：这一版一共 ${total} 件物料，都能直接拖；不想要就撤销一步，整体退回来。` });
+    callbacks.onFit();
+  }
+
+  /**
+   * 云端那一版的确认也只走这颗绿钮。`applyPreview` 成功会把预览清空、失败留下预览和一句原因，
+   * 两者都要等它自己那一帧渲染完才读得到，所以这里只按下开关，结果交给下面的 effect 照实播报。
+   */
+  function confirmCloud(): void {
+    const current = studioRef.current;
+    if (!current?.preview) { say({ role: 'agent', amber: true, text: '这版已经不在预览里了，重新出一版再确认。' }); return; }
+    if (current.stale) { say({ role: 'agent', amber: true, text: CLOUD_STALE }); return; }
+    // 云端还在写这一版：按下确认不会有回音，所以别留一个等不到的开关。
+    if (current.busy) { say({ role: 'agent', text: '云端还在处理这一版，等它回来再点确认。' }); return; }
+    confirmPending.current = true;
+    void current.applyPreview();
+  }
+
+  useEffect(() => {
+    if (!confirmPending.current) return;
+    const current = studioRef.current;
+    if (!current || current.busy) return;
+    confirmPending.current = false;
+    if (current.preview) {
+      say({ role: 'agent', amber: true, text: current.notice ? `没写进画布：${current.notice}` : '这版没写进画布，画布还是你确认前的样子。改一下场地或重新出一版。' });
+      return;
+    }
+    setPhase('ready'); setProgress(GEN_STEPS.length);
+    say({ role: 'agent', amber: !!current.notice, text: `写进画布了，物料都能直接拖；不想要就撤销一步，整体退回来。${current.notice ? ` ${current.notice}。` : ''}` });
+    callbacks.onFit();
+  }, [studio?.preview, studio?.busy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function withdrawProposal(): void {
+    const cloud = proposal.current === null && !!studioRef.current?.preview;
+    const review = proposal.current?.kind === 'review';
+    dropProposal(); discardCloudPreview();
+    setPhase('idle'); setProgress(0);
+    say({ role: 'agent', text: review
+      ? '撤了：预览收回，物件都还在原位。想再体检就说一句「看看哪里有问题」。'
+      : `撤了，物料没动${cloud ? '，云端那一版也作废了' : ''}。想再看一版就说「换一版」。` });
+  }
+
+  /** 人工改过场景 → 旧提案失效（对齐现有 propose/apply 契约）。 */
+  function invalidateProposal(reason: string): void {
+    dropProposal(); setPhase('idle'); setProgress(0);
+    say({ role: 'agent', amber: true, text: `${reason}，这版预览先作废。说一句「看看哪里有问题」或「换一版」，我按现在的场地重新来。` });
+  }
+
+  /** 云端算完这一趟，把它的预览接到右栏这张卡上；没有可确认的一版就返回 false。 */
+  function adoptCloudProposal(): boolean {
+    const view = cloudViewOf(studioRef.current?.preview ?? null);
+    if (!view) return false;
+    lastSource.current = 'cloud';
+    setProgress(GEN_STEPS.length); setPhase('proposed');
+    say({ role: 'agent', amber: !!view.blocked, text: view.blocked
+      ? `云端给了一版：${planLines(view).join('，')}。${view.blocked}`
+      : `云端给了一版：${planLines(view).join('，')}。画布上是预览，还没落盘，点「确认布置」才写进画布。` });
+    return true;
+  }
+
+  /** 把需求原话说给云端，并要它只回一份待确认的提案（requirePreview：确认前 objects 不落盘）。 */
+  async function cloudRun(note: string, scale: Scale): Promise<void> {
+    const current = studioRef.current;
+    if (!current) return;
+    const event = briefRef.current.event ?? current.brief.event ?? '这场活动';
+    const guests = briefRef.current.guests ?? current.brief.guests;
+    const size = `${venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(scale.length * scale.width)} ㎡`;
+    await current.generate(`${note ? `${note}：` : ''}${event}${guests ? ` · ${guests} 人` : ''} · ${size}，请出布置方案`, { requirePreview: true });
+  }
+
+  /** 出方案：连着云项目就让云端真 AI 算这一版，否则本地算候选。两条都停在「这版还在预览」。 */
+  async function startGeneration(token: number, variant: number, note: string, scale: Scale): Promise<void> {
+    const timeout = window.setTimeout(() => { if (token === runToken.current && phaseRef.current === 'generating') { runToken.current++; setPhase('failed'); } }, 60_000);
+    try {
+      if (forceFail()) throw new Error('forced');
+      if (studioRef.current?.connection === '项目已连接') {
+        lastSource.current = 'cloud'; setProgress(1);
+        await cloudRun(note, scale);
+        if (token === runToken.current && !adoptCloudProposal()) setPhase('failed');
+        return;
+      }
+      lastSource.current = 'local';
+      await runLocal(token, variant, scale);
+    }
+    catch { if (token === runToken.current) setPhase('failed'); }
+    finally { window.clearTimeout(timeout); }
+  }
+
+  /** 生成只有一次触发：对话。这里是被认可后真正跑那一趟的唯一入口，画布上只出预览。 */
+  function runGeneration(label: string | null, variant: number, note: string, scale: Scale): void {
+    const token = ++runToken.current;
+    if (label) say({ role: 'user', text: label });
+    setIssue(null); dropProposal(); discardCloudPreview(); setPhase('generating'); setProgress(0);
+    void startGeneration(token, variant, note, scale);
+  }
+
+  /** 「这次没出成」那张卡上的重试：拿现在的读数再跑一遍，不另算一个入口。 */
+  function retry(): void { runGeneration('重试', seed.current, '', readScale()); }
+  /** 停一下：只收预览，画布退回确认前状态；提案留着，「接着摆」能续上。 */
+  function stop(): void {
+    if (phase !== 'generating') return;
+    runToken.current++;
+    const current = studioRef.current;
+    if (lastSource.current === 'cloud' && current?.busy) {
+      void current.cancelRun();
+      setPhase('idle'); setProgress(0);
+      say({ role: 'agent', text: '停了，云端任务取消，画布没动。要再出一版就说一句。' });
+      return;
+    }
+    const local = proposal.current !== null;
+    if (local) hidePreview();
+    setPhase('paused');
+    say({ role: 'agent', text: local ? '先停在这儿了，预览收回、画布没动。要接着看就点「接着摆」。' : '先停在这儿了，画布没动。' });
+  }
+  function resume(): void {
+    if (phase !== 'paused') return;
+    if (proposal.current) { void presentProposal(++runToken.current).catch(() => setPhase('failed')); return; }
+    regenerate('接着摆');
+  }
   function regenerate(label = '换一版'): void {
     seed.current += 1;
-    const token = ++runToken.current;
-    setPhase('generating'); setProgress(0); say({ role: 'user', text: label });
-    runLocal(token, seed.current).catch(() => { if (token === runToken.current) setPhase('failed'); });
+    runGeneration(label, seed.current, label === '换一版' ? '换一版不同的布局' : '', readScale());
   }
-  function editSettings(): void { runToken.current++; setPhase('idle'); setProgress(0); }
+
+  /** T-UI §4-5：导出/交接意图先落预览卡（说清导什么、只在本机生成），确认才触发既有导出。 */
+  function proposeExport(): void {
+    setExportPreview(true);
+    say({ role: 'agent', text: '导出前对一下：要导的是「完整活动交接」HTML——活动需求、物料工作单、制作计划、数量点验都在里面，只在这台机器上生成。看下面这张卡，点「确认导出」我才开始下载。' });
+  }
+
+  function confirmExport(): void {
+    setExportPreview(false);
+    say({ role: 'agent', text: '好，交接文件开始生成了，下好后「执行」页会给你一句回话。' });
+    callbacks.onExportHandoff();
+  }
+
+  function dismissExport(): void {
+    setExportPreview(false);
+    say({ role: 'agent', text: '好，先不导出。要导的时候说一声就行。' });
+  }
 
   function send(text: string): void {
     const trimmed = text.trim(); if (!trimmed) return;
-    if (phase === 'generating' && isStopCommand(trimmed)) { say({ role: 'user', text: trimmed }); stop(); return; }
+    // 「停一下」是命令，不是需求：正在摆就停手，摆好了还没确认就撤回，别把它当成一句话记进简报。
+    if (isStopCommand(trimmed) && (phase === 'generating' || phase === 'proposed' || phase === 'paused')) {
+      say({ role: 'user', text: trimmed });
+      if (phase === 'generating') stop(); else withdrawProposal();
+      return;
+    }
     say({ role: 'user', text: trimmed });
-    if (studio?.connection === '项目已连接' && !studio.busy) { void studio.generate(trimmed).then(() => setPhase(current => current === 'ready' ? 'edited' : current)); return; }
-    // 本地：先把这句话里的人数/场地/长宽解析出来铺到画布，再引导点按钮出方案。
+    // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
+    if (isEstimateCommand(trimmed)) { estimateAndGenerate(); return; }
+    // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
+    const request = parseMaterialRequest(trimmed);
+    if (request) { addMaterials(request); return; }
+    if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
+    if (isGenericMaterialRequest(trimmed)) { say({ role: 'agent', text: MATERIAL_REQUEST_HINT }); return; }
+    if (isCopyDraftCommand(trimmed)) { replyDraft(); return; }
+    if (isZoneCommand(trimmed)) { replyZone(); return; }
+    if (isReviewCommand(trimmed)) { reviewNow(); return; }
+    // 导出/交接：先出预览卡，不直接下载（T-UI §4-5）。
+    if (isExportCommand(trimmed)) { proposeExport(); return; }
+    const command = isGenerateCommand(trimmed);
+    // 话锋一变，上一版预览就不再代表这次的要求：先收掉，别让两张卡同屏打架。
+    if (phase === 'proposed' || phase === 'paused') { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
+    if (studio?.connection === '项目已连接' && !studio.busy) {
+      const extraction = parseBriefSentence(trimmed);
+      noteBrief(extraction);
+      const briefNote = syncStudioBrief(extraction);
+      if (briefNote) say({ role: 'agent', text: briefNote });
+      const token = ++runToken.current;
+      // 对话是唯一的生成入口，所以云端这一趟也必须停在待确认的预览上。
+      void studio.generate(command === 'again' ? '换一版不同的布局' : trimmed, { requirePreview: true }).then(() => {
+        if (token !== runToken.current) return;
+        // 云端在聊天里顺手回了提案，也照样停在右栏这张卡上等人点「确认布置」。
+        if (!adoptCloudProposal()) setPhase(current => (current === 'ready' ? 'edited' : current));
+      });
+      return;
+    }
+    // 本地：先把这句话里的人数/场地/长宽解析出来，既当回显也当这一版的条件。
     const extraction = parseBriefSentence(trimmed);
     applyExtraction(extraction);
-    const summary = describeExtraction(extraction, { length: lengthCheck.ok ? lengthCheck.value : live.current.width, width: widthCheck.ok ? widthCheck.value : live.current.height });
-    say({ role: 'agent', text: `记下了：${summary}。点上面按钮我就按这个出方案。` });
+    noteBrief(extraction);
+    const briefNote = syncStudioBrief(extraction);
+    const suffix = briefNote ? ` ${briefNote}` : '';
+    const scale = scaleFrom(extraction);
+    const summary = describeExtraction(extraction, scale);
+    // 这一句只改了活动类型/场地时，人数沿用上一句：要说出来，别让预览里的座位数像凭空来的。
+    const carried = extraction.headcount === null && briefRef.current.guests ? ` · 沿用 ${briefRef.current.guests} 人` : '';
+    // 最少必要信息：场地还没有确认尺度时先问，不拿画布那块空地替人决定；
+    // 只报了活动类型/时段也走这里，不按默认人数和样例场直接空跑一版。
+    if (!command && scale.origin === 'canvas' && !venueUp) {
+      const hasPeople = extraction.headcount !== null || briefRef.current.guests !== null;
+      say({ role: 'agent', text: hasPeople
+        ? `记下了：${summary}${carried}。还差场地多大：说一句「12×9」或「108 平米」${hasBase ? '，或者说「按图纸估」' : ''}。${suffix}`
+        : `这场大概多少人、场地多大（室内还是户外）？说一句「40 人，室内 12×9」，我就先出一版预览。${suffix}` });
+      return;
+    }
+    // 图纸只当参照：要方案却没给过尺度时先把米数问出来，不拿画布那块空地冒充图纸尺寸（确认前不报假米数）。
+    if ((command || hasBriefSignals(extraction)) && hasBase && scale.origin === 'canvas') {
+      say({ role: 'agent', text: `记下了：${summary}${carried}。图纸只当参照，我读不出真实米数：说一句「12×9」或「300 平米」，或者说「按图纸估」，我按图纸比例先出一版。${suffix}` });
+      return;
+    }
+    if (command || hasBriefSignals(extraction)) {
+      say({ role: 'agent', text: `按这些先出一版：${summary}${carried}。画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
+      runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
+      return;
+    }
+    say({ role: 'agent', text: '这场大概多少人、室内还是户外？说一句就行，比如「80 人发布会，室内 12×9」。我先出一版预览给你改，确认前不写进画布。' });
   }
 
-  const overlapCount = phase === 'ready' || phase === 'edited' || phase === 'paused' ? activeFloor.items.filter(item => collidingIds.has(item.id)).length : 0;
+  // 提案态的重叠算在候选上；落盘之后才算画布上的（编辑器那份 collidingIds 这时候还是旧的）。
+  const overlapCount = phase === 'proposed' ? activeProposal?.overlapCount ?? 0
+    : phase === 'ready' || phase === 'edited' || phase === 'paused' ? activeFloor.items.filter(item => collidingIds.has(item.id)).length : 0;
+
+  // 回显只读：填过/说过用说的，场地已立起来用场地的，两者都没才说「还没定」。
+  // 面积折算与图纸估算是推出来的，后缀必须跟着走，不能静态数字装成场地真相。
+  const stated = lengthCheck.ok && widthCheck.ok ? `${formatArea(lengthCheck.value)} × ${formatArea(widthCheck.value)} m` : null;
+  const guests = brief.guests ?? studio?.brief.guests ?? null;
+  const recap = {
+    event: brief.event ?? studio?.brief.event ?? null,
+    guests: guests ? `${guests} 人` : null,
+    dims: `${venueIO === 'indoor' ? '室内' : '户外'} · ${stated
+      ? `${stated}${scaleOrigin === 'area' ? ' 折算' : scaleOrigin === 'plan' ? ' 估的' : ''}`
+      : venueUp ? `${formatArea(layout.width)} × ${formatArea(layout.height)} m` : '尺寸还没定'}`,
+    note: hasBase && scaleOrigin === 'plan' ? '图纸只当参照，这个数是我估的' : null,
+  };
 
   const value: AgentValue = {
-    callbacks, state, venueIO, baseName, issue, dragging,
+    callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
-    lengthText, widthText, setLengthText, setWidthText, lengthCheck, widthCheck,
-    showDimErrors: dimsTouched, touchDims: () => setDimsTouched(true),
-    progress, failed: phase === 'failed', overlapCount, bubbles, ctaEnabled, generate, stop, regenerate, editSettings,
+    progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
+    proposal: phase === 'proposed' || phase === 'paused' ? activeProposal : null,
+    confirmProposal, withdrawProposal,
+    exportPreview, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
@@ -264,88 +955,121 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, children }: { 
 
 /* ───────────────────────── 右栏 ───────────────────────── */
 
-const STAGES = ['说清活动', '出方案', '调整', '给甲方看', '交给搭建'] as const;
+/** 对话四步（docs/AI-NATIVE-FOR-EXECUTORS.md 文首硬钉）：这是右栏的对话进度，不是左轨的第四个图标。 */
+const STAGES = ['3D 场地', '空间布置', '优化', '交付'] as const;
 
+/** 左轨的「布置」扛①②③：尺度没确认前算 ①，出方案与预览是 ②，体检预览与落盘后进 ③；评审与执行都属 ④ 交付。 */
 function stageOf(agent: AgentValue, mode: WorkbenchMode): number {
-  return mode === 'review' ? 4 : mode === 'delivery' ? 5
-    : agent.state === 'generating' || agent.state === 'generateFailed' ? 2
-    : agent.state === 'planReady' || agent.state === 'planEdited' || agent.state === 'generatePaused' ? 3 : 1;
+  if (mode !== 'layout') return 4;
+  const s = agent.state;
+  const beforeVenue = s === 'empty' || s === 'dragHover' || s === 'baseNoDims' || s === 'baseReady' || s === 'dimsInvalid'
+    || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed';
+  // 撤回或作废只收回预览：场地已经立在那儿了，第 ① 步不该再亮一遍。
+  if (beforeVenue && !agent.venueUp) return 1;
+  if (s === 'planProposed') return agent.proposal?.review ? 3 : 2;
+  return s === 'planReady' || s === 'planEdited' ? 3 : 2;
 }
 
-function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ok' | 'warn' } {
+/** 抬头状态点只许两种说法：做好了 / 发现问题。等你确认、正在出方案由头像与卡片自己说话，不重复一遍。 */
+function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: '做好了' | '发现问题'; tone: 'ok' | 'warn' } | null {
   if (mode !== 'layout') return { text: '做好了', tone: 'ok' };
-  if (agent.state === 'generating') return { text: `出方案中 ${Math.max(1, agent.progress)}/5`, tone: 'busy' };
-  if (agent.state === 'generateFailed') return { text: '没出成', tone: 'warn' };
-  if ((agent.state === 'planReady' || agent.state === 'planEdited') && agent.overlapCount > 0) return { text: '发现问题', tone: 'warn' };
-  if (agent.state === 'planReady' || agent.state === 'planEdited') return { text: '做好了', tone: 'ok' };
-  return { text: '等你确认', tone: 'idle' };
+  const s = agent.state;
+  if (s === 'generateFailed') return { text: '发现问题', tone: 'warn' };
+  if (s === 'planProposed') return agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0)
+    ? { text: '发现问题', tone: 'warn' } : null;
+  if (s === 'planReady' || s === 'planEdited') {
+    return agent.overlapCount > 0 ? { text: '发现问题', tone: 'warn' } : { text: '做好了', tone: 'ok' };
+  }
+  return null;
 }
 
-function DimInput({ id, label, text, check, focused, show, onChange, onBlur }: { id: string; label: string; text: string; check: DimCheck; focused: boolean; show: boolean; onChange(value: string): void; onBlur(): void }): JSX.Element {
-  const invalid = show && !check.ok && !check.empty;
-  return <label className="ap-dim">{label}<input id={id} inputMode="decimal" autoComplete="off" value={text} aria-invalid={invalid ? 'true' : 'false'} aria-describedby={invalid && focused ? `${id}-err` : undefined} className={invalid ? 'is-invalid' : ''} onChange={event => onChange(event.target.value)} onBlur={onBlur}/>m</label>;
+/**
+ * 晴光头像按状态切独立切图（`qingguang-3d-40-{ask|done|issue}`）：
+ * 禁把角标叠画在头像上，所以状态靠换图，不用徽标。
+ */
+function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
+  if (mode !== 'layout') return `${MASCOT_DIR}-40-done.png`;
+  const s = agent.state;
+  if (s === 'planReady' || s === 'planEdited') return `${MASCOT_DIR}-40-${agent.overlapCount > 0 ? 'issue' : 'done'}.png`;
+  if (s === 'planProposed') {
+    const issue = agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0);
+    return `${MASCOT_DIR}-40-${issue ? 'issue' : 'ask'}.png`;
+  }
+  if (s === 'generatePaused') return `${MASCOT_DIR}-40-ask.png`;
+  if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') return `${MASCOT_DIR}-40-issue.png`;
+  return `${MASCOT_DIR}-40.png`;
 }
 
-function SummaryCard({ agent }: { agent: AgentValue }): JSX.Element {
-  const { layout } = useRoomEditor();
-  const [focus, setFocus] = useState<'length' | 'width'>('length');
-  const base = agent.baseName !== null;
-  const err = (() => {
-    if (!base || !agent.showDimErrors) return null;
-    const order = focus === 'length' ? [agent.lengthCheck, agent.widthCheck] : [agent.widthCheck, agent.lengthCheck];
-    const ids = focus === 'length' ? ['in-length', 'in-width'] : ['in-width', 'in-length'];
-    for (let index = 0; index < order.length; index++) { const check = order[index]!; if (!check.ok && !check.empty) return { message: check.message, id: ids[index]! }; }
-    return null;
-  })();
-  const area = layout.width * layout.height;
+/**
+ * 对话已收集字段的回显：只读。生成方案这件事只有右栏那一句话能做
+ * （docs 截图钉 2026-10-26 夜：尺寸表单 + 大绿钮那个第二入口砍掉了），
+ * 所以这里不再摆输入框，也不放生成按钮，免得它变成第二套入口。
+ */
+function RecapCard({ agent }: { agent: AgentValue }): JSX.Element {
+  const { event, guests, dims, note } = agent.recap;
   return <div className="ap-card" id="summary-card">
     <div className="ap-venue">
       <div className="ap-venue-head">
-        <span className="ap-field-label">场地{base && <> · <span>按图纸填</span></>}</span>
+        <span className="ap-field-label">场地{agent.baseName && <> · <span>图纸只当参照</span></>}</span>
         <div id="pf-io" className="ap-io" role="radiogroup" aria-label="室内或户外">
           {(['indoor', 'outdoor'] as const).map(io => <button key={io} type="button" role="radio" aria-checked={agent.venueIO === io} className={agent.venueIO === io ? 'is-on' : ''} onClick={() => agent.setVenueIO(io)}>{io === 'indoor' ? '室内' : '户外'}</button>)}
         </div>
       </div>
-      {base ? <div className="ap-dims">
-        <span onFocus={() => setFocus('length')}><DimInput id="in-length" label="长" text={agent.lengthText} check={agent.lengthCheck} focused={err?.id === 'in-length'} show={agent.showDimErrors} onChange={agent.setLengthText} onBlur={agent.touchDims}/></span>
-        <span className="ap-times" aria-hidden="true">×</span>
-        <span onFocus={() => setFocus('width')}><DimInput id="in-width" label="宽" text={agent.widthText} check={agent.widthCheck} focused={err?.id === 'in-width'} show={agent.showDimErrors} onChange={agent.setWidthText} onBlur={agent.touchDims}/></span>
-      </div> : <div className="ap-area-row">
-        <span className="ap-field-value is-static">{formatArea(area)} ㎡</span>
-        <button type="button" className="ap-link" onClick={agent.pickFile}>按图纸填长宽</button>
-      </div>}
-      {err && <p className="ap-dim-error" id={`${err.id}-err`} role="alert"><span aria-hidden="true">!</span>{err.message}</p>}
+      <div className="ap-area-row"><span className="ap-field-value is-static">{dims}</span></div>
+      {(event || guests) && <p className="ap-small">{[event, guests].filter(Boolean).join(' · ')}</p>}
+      {note && <p className="ap-small">{note}</p>}
     </div>
-    <button id="step-cta" type="button" className="btn-primary" aria-disabled={agent.ctaEnabled ? 'false' : 'true'} onClick={() => { if (agent.ctaEnabled) agent.generate(); }}>让 Agent 整理需求</button>
-    {base && !err && <p id="cta-hint" className={agent.lengthCheck.ok && agent.widthCheck.ok ? 'is-ok' : ''}>{agent.lengthCheck.ok && agent.widthCheck.ok ? `✓ ${agent.lengthCheck.value} × ${agent.widthCheck.value} m · ${formatArea(agent.lengthCheck.value * agent.widthCheck.value)} ㎡` : '填好长宽就能出'}</p>}
+    <p className="ap-small">要改就说一句：「12×9」「80 人发布会」「按图纸估」。也能说「加两把椅子」「出物料清单」「写段文案」「看看哪里有问题」。说「出方案」我就先摆一版预览，确认前不写进画布。</p>
   </div>;
 }
 
 function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
   return <>{agent.bubbles.map(bubble => bubble.role === 'user'
     ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={15} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
-    : <p key={bubble.id} className={`ap-agent${bubble.amber ? ' is-amber' : ''}`}>{bubble.text}</p>)}</>;
+    : <div key={bubble.id} className="ap-turn">
+      <p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
+      {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
+    </div>)}</>;
 }
 
-function GenProgress({ agent }: { agent: AgentValue }): JSX.Element {
+function GenProgress({ agent, paused }: { agent: AgentValue; paused?: boolean }): JSX.Element {
   const { layout } = useRoomEditor();
   const n = Math.max(1, agent.progress);
   return <div className="ap-card" id="gen-progress">
     <ol className="ap-steps">{GEN_STEPS.map((step, index) => {
-      const done = agent.progress > index + 1 || (agent.progress === 5 && index === 4 && agent.state !== 'generating');
-      const current = agent.state === 'generating' && index + 1 === n;
+      const done = agent.progress > index + 1;
+      const current = !paused && index + 1 === n;
       return <li key={step} className={done ? 'is-done' : current ? 'is-current' : ''}>{done ? <Check size={12} aria-hidden="true"/> : current ? <Loader2 size={12} className="cr-spin" aria-hidden="true"/> : <span className="ap-dot" aria-hidden="true"/>}<span>{step}</span>{index === 0 && done && <small>{formatArea(layout.width)} × {formatArea(layout.height)} m</small>}</li>;
     })}</ol>
-    {agent.state === 'generating' && <>
-      <button id="step-cta" type="button" className="btn-primary" aria-disabled="true"><Loader2 size={14} className="cr-spin" aria-hidden="true"/> 正在出方案 {n}/5</button>
-      <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.stop}>停一下</button> · 已摆好的会留着</p>
-    </>}
+    <p id="cta-hint">{paused
+      ? <>停在第 {n} 步，画布还没动 · <button type="button" className="ap-link" onClick={agent.resume}>接着摆</button> · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>不要了</button></>
+      : <>正在{GEN_STEPS[n - 1]}，先在画布上给你看 · <button type="button" className="ap-link" onClick={agent.stop}>停一下</button></>}</p>
+  </div>;
+}
+
+/** 预览态：主钮「确认布置」，撤回与换一版走文字链，一屏只留一个绿钮。 */
+function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
+  const { layout } = useRoomEditor();
+  const plan = agent.proposal;
+  if (!plan) return null;
+  const names = plan.overlapNames.slice(0, 3).join('、');
+  const review = !!plan.review;
+  return <div className="ap-card ap-plan" id="plan-proposal">
+    <strong>{review ? '改法预览' : '这版还在预览'}</strong>
+    <p>{formatArea(venueArea(layout))} ㎡ · {review
+      ? `只挪位置，其他没动 · 挪了 ${plan.changed} 件`
+      : <>新摆 {plan.added} 件{plan.changed ? ` · 挪动 ${plan.changed} 件` : ''}{plan.removing ? ` · 要撤 ${plan.removing} 件旧的` : ''}</>}</p>
+    {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
+    {plan.keptLocked > 0 && <p className="ap-small">锁定 {plan.keptLocked} 件我没动。</p>}
+    {review && !!plan.skipped?.length && <p className="ap-small">没动 {plan.skipped.length} 件：{plan.skipped.slice(0, 3).join('、')}{plan.skipped.length > 3 ? ' 等' : ''}（锁着或没找到稳妥落点）。</p>}
+    {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
+    <button id="step-cta" type="button" className="btn-primary" aria-disabled={plan.blocked ? 'true' : 'false'} onClick={() => { if (!plan.blocked) agent.confirmProposal(); }}>确认布置</button>
+    <p id="cta-hint">确认前不会写进画布 · <button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
   </div>;
 }
 
 export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
   const agent = useAgent();
-  const studio = useStudioAgent();
   const { layout, activeFloor, view } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   // S12：漫游退出后补一句（评审步）。
@@ -356,87 +1080,84 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const status = headerStatus(agent, mode);
-  const stage = stageOf(agent, mode);
+  const demo = isDemoBackend();
   const items = materialCount(activeFloor.items);
   useEffect(() => { feed.current?.scrollTo?.({ top: feed.current.scrollHeight }); }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
-  const planShown = agent.state === 'planReady' || agent.state === 'planEdited' || agent.state === 'generatePaused';
-  const signedIn = !!studio?.controller.getSnapshot().user;
-  const recap = `${studio?.brief.event ?? '活动'} · ${studio?.brief.guests ?? 0} 人 · ${agent.venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(layout.width * layout.height)} ㎡`;
-  const preStates = !generating && !planShown && agent.state !== 'generateFailed';
+  const proposed = agent.state === 'planProposed';
+  const paused = agent.state === 'generatePaused';
+  const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
+  const preStates = !generating && !proposed && !paused && !planShown && agent.state !== 'generateFailed';
+  // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
+  const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
     <header className="ap-head">
-      <span className="mascot-slot"><img src={MASCOT_SRC} alt="晴光" width={24} height={24} draggable={false}/></span>
+      <span className="mascot-slot"><img src={mascotOf(agent, mode)} alt="晴光" width={28} height={28} draggable={false}/></span>
       <strong>Agent</strong>
-      <span id="agent-state" className={`ap-status is-${status.tone}`}>{status.tone === 'busy' ? '⟳' : status.tone === 'ok' ? '✓' : status.tone === 'warn' ? '⚠' : '●'} {status.text}</span>
-      <span className="ap-stage" aria-label={`第 ${stage} 步，共 5 步`}><small>{stage}/5</small> {STAGES[stage - 1]}<span className="ap-stage-bar" aria-hidden="true">{STAGES.map((label, index) => <i key={label} className={index < stage ? 'is-on' : ''}/>)}</span></span>
+      {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
+      {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
       {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
     </header>
-    <div className="ap-intro">
-      <div className="ap-intro-head"><strong>一句话开始策划</strong><span className={`ap-badge${studio?.hasSavedBrief ? ' is-done' : ''}`}>{studio?.hasSavedBrief ? '需求已填写' : '尚未填写'}</span></div>
-    </div>
+    {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
     <div className="ap-feed" ref={feed} aria-live="polite">
       {mode === 'layout' && <>
         <p className="ap-divider">新项目 · {layout.name || '未命名活动'}</p>
-        {!preStates && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
+        {planShown && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
-        {preStates && <SummaryCard agent={agent}/>}
-        {preStates && <div className="ap-starts">
-          <p className="ap-starts-title">没有想法？从这里开始！</p>
-          <div className="ap-starts-grid">
-            <button type="button" onClick={() => inputRef.current?.focus()}><span>描述活动需求</span></button>
-            <button type="button" onClick={agent.pickFile}><span>上传现场资料</span></button>
-            <button type="button" onClick={agent.callbacks.onOpenDelivery}><span>整理物料交接</span></button>
-          </div>
-        </div>}
-        {preStates && agent.baseName === null && agent.bubbles.length === 0 && <p className="ap-small">有图纸就拖进来，我铺成底图。</p>}
-        {agent.venueIO === 'outdoor' && preStates && <div id="ambience-nudge" className="ap-nudge"><p>户外场地，可以先看看下雨天的样子。</p><button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} aria-pressed={agent.rainOn} onClick={agent.previewRain}>看看下雨天</button></div>}
+        {preStates && (agent.bubbles.length > 0 || agent.baseName !== null) && <RecapCard agent={agent}/>}
+        {preStates && agent.baseName === null && agent.bubbles.length === 0 && <p className="ap-small">有图纸就拖进来，我铺成底图；或者直接说一句话，比如「80 人发布会，室内 12×9」，我就先出一版预览。</p>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
-        {generating && <><p className="ap-agent">正在{GEN_STEPS[Math.max(0, agent.progress - 1)]}，摆好一件画布上出一件。</p><GenProgress agent={agent}/></>}
+        {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
-          <p><span aria-hidden="true">!</span>这次没摆出来，可能是网络断了。设置都还在，重试就好。</p>
-          <button id="step-cta" type="button" className="btn-primary" onClick={agent.generate}><RotateCw size={14} aria-hidden="true"/> 重试</button>
-          <button type="button" className="ap-link" onClick={agent.editSettings}>改一下设置再出</button>
+          <p><span aria-hidden="true">!</span>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</p>
+          <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={12} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>
         </div>}
+        {proposed && <ProposalCard agent={agent}/>}
         {planShown && <>
           <div className="ap-card ap-plan" id="plan-summary">
-            <strong>方案摆好了</strong>
+            <strong>这一版布置</strong>
             <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
             {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">没有重叠，也没超出场地。</p>}
             <div className="ap-chips">
-              {agent.state === 'generatePaused' && <button type="button" className="chip is-on" onClick={() => agent.regenerate('接着摆')}>接着摆</button>}
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
               <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
-              {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
+              <button type="button" className="chip" onClick={() => agent.callbacks.onSelectMode('review')}>给甲方看</button>
             </div>
-            <button id="step-cta" type="button" className="btn-primary" onClick={() => agent.callbacks.onSelectMode('review')}>下一步：给甲方看</button>
           </div>
         </>}
       </>}
       {mode === 'review' && <>
         <p className="ap-divider">评审 · {layout.name || '未命名活动'}</p>
-        <p className="ap-agent">方案 {formatArea(venueArea(layout))} ㎡ · {items} 件物料。发个链接给甲方看。</p>
+        <p className="ap-agent">方案 {formatArea(venueArea(layout))} ㎡ · {items} 件物料。客户只看不改，怎么给由你选。</p>
         <div className="ap-card">
-          <button id="step-cta" type="button" className="btn-primary" aria-disabled={signedIn ? 'false' : 'true'} onClick={() => { if (signedIn) agent.callbacks.onOpenReview(); }}>生成评审链接</button>
-          {walkDone && <p className="ap-agent">走完了，要给甲方发链接吗？</p>}
-          {!signedIn && <p id="cta-hint" className="ap-why">评审链接要存到云端：先点右上角头像登录并同步，就能生成。</p>}
+          <div className="ap-chips"><button type="button" className="chip is-on" onClick={agent.callbacks.onOpenReview}>准备客户评审</button></div>
+          {walkDone && <p className="ap-agent">走完了。要给甲方看，就先生成评审包。</p>}
+          <p id="cta-hint" className="ap-why">离线 HTML 不用登录，下载后你自己发；云端只读链接要登录并保存到云端，在评审页里发布、复制。系统不会自动发给客户。</p>
           <div className="ap-chips"><button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>{agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}</div>
         </div>
       </>}
       {mode === 'delivery' && <>
-        <p className="ap-divider">执行 · {layout.name || '未命名活动'}</p>
-        <p className="ap-agent">物料清单只看不改；要改回「布置」里调。导出都合在一个按钮里。</p>
+        <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>
+        <p className="ap-agent">物料清单只看不改；要改回「布置」里调。导出文件留在本机，由你交给搭建方。</p>
         <div className="ap-card">
           <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
-          <button id="step-cta" type="button" className="btn-primary" onClick={agent.callbacks.onOpenDelivery}>导出给搭建方</button>
+          <div className="ap-chips"><button type="button" className="chip is-on" onClick={agent.callbacks.onOpenDelivery}>导出给搭建方</button></div>
         </div>
       </>}
+      {agent.exportPreview && <div className="ap-card" id="export-preview">
+        <strong>导出预览</strong>
+        <p>导一份「完整活动交接」HTML：活动需求、物料工作单、制作计划和数量点验都在里面。文件只在这台机器上生成，下载后由你发给搭建方。</p>
+        <div className="ap-chips">
+          <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>
+          <button type="button" className="chip" onClick={agent.dismissExport}>先不了</button>
+        </div>
+      </div>}
     </div>
     <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); agent.send(draft); setDraft(''); }}>
       <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : '@活动需求 我需要组织一场xxx的活动'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
+      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : '说一句话，或「看看哪里有问题」「加两把椅子」「出物料清单」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
       <div className="ap-composer-bar">
         <button type="button" className="ap-attach" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={13} aria-hidden="true"/>附图纸 / 现场照片</button>
         <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={16}/></button>
@@ -457,10 +1178,10 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const status = headerStatus(agent, mode);
   const stage = stageOf(agent, mode);
   return <button type="button" className="sc-agent-reopen" aria-label="打开 Agent" title="打开 Agent" onClick={onOpen}>
-    <img src={MASCOT_SRC} alt="" width={24} height={24} draggable={false}/>
+    <img src={mascotOf(agent, mode)} alt="" width={28} height={28} draggable={false}/>
     <span className="sc-agent-reopen-copy">
-      <span className="sc-agent-reopen-top"><strong>晴光 Agent</strong><em className={`ap-status is-${status.tone}`}>{status.text}</em></span>
-      <small>第 {stage}/5 步 · {STAGES[stage - 1]}</small>
+      <span className="sc-agent-reopen-top"><strong>晴光 Agent</strong>{status && <em className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</em>}</span>
+      <small>{STAGES[stage - 1]}{isDemoBackend() ? ' · 本地演示' : ''}</small>
     </span>
   </button>;
 }
@@ -477,9 +1198,10 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   return <div className="ap-canvas-layer" aria-live="polite">
     {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={20} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {(s === 'empty' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => { const cta = document.getElementById('step-cta'); if (cta) { cta.focus(); return; } document.querySelector<HTMLElement>('.sc-agent-reopen')?.click(); }}>确认需求后出方案 →</button>}
-    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={12} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/5</div>}
+    {(s === 'empty' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') && !agent.baseName && <button id="empty-state" type="button" className="ap-canvas-pill" onClick={() => { const input = document.getElementById('ap-input'); if (input) { input.focus(); return; } document.querySelector<HTMLElement>('.sc-agent-reopen')?.click(); }}>说一句需求就能出方案 →</button>}
+    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={12} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/{GEN_STEPS.length}</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
-    {(s === 'planReady' || s === 'planEdited' || s === 'generatePaused') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}
+    {s === 'planProposed' && agent.proposal && agent.proposal.overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 这版里 {agent.proposal.overlapCount} 件挤了或压墙：{agent.proposal.overlapNames.slice(0, 4).join('、')}{agent.proposal.overlapNames.length > 4 ? ' 等' : ''}</div>}
+    {(s === 'planReady' || s === 'planEdited') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}
   </div>;
 }

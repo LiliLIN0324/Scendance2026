@@ -2,7 +2,8 @@
 
 ## people.glb
 
-Rigged, animated mannequin used for placed people and the walking NPCs.
+Rigged, animated mannequin used for placed people. Wandering NPCs stay on the
+brightly coloured procedural figures and never load this asset.
 
 - **Source:** Quaternius, *Universal Animation Library* (Standard/free edition),
   <https://quaternius.itch.io/universal-animation-library>, taken from the
@@ -13,6 +14,6 @@ Rigged, animated mannequin used for placed people and the walking NPCs.
 - **Processing:** keyframes resampled, vertex attributes quantized
   (`KHR_mesh_quantization`, decoded natively by `GLTFLoader` — no decoder
   to ship), unused data pruned. About 420 KB, fetched only once a layout
-  contains a person or the walkers are switched on.
+  contains a person.
 
 Rebuild with `scripts/build-people-glb.mjs` (instructions in its header).

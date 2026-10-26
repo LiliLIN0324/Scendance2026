@@ -20,3 +20,11 @@
 .sc-execution-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .sc-execution-tabs button { flex: 1; padding: 9px 8px; border: 1px solid var(--sc-line, #d6d6d2); border-radius: 8px; font: inherit; font-size: 12px; color: var(--sc-muted, #6f6f6f); background: #ffffff80; cursor: pointer; }
 .sc-execution-tabs button[aria-selected="true"] { color: #2f2f2f; border-color: rgba(31,35,45,.12); background: #efede6; }
+
+/* T-UI §4-2：六 Tab 收进「执行工具」，默认只露一行摘要。 */
+.dl-tools { margin: 4px 0 12px; }
+.dl-tools > summary { display: flex; align-items: baseline; gap: 8px; cursor: pointer; font-size: 12px; color: var(--sc-muted, #6f6f6f); list-style: none; }
+.dl-tools > summary::before { content: '▸'; font-size: 10px; }
+.dl-tools[open] > summary::before { content: '▾'; }
+.dl-tools > summary small { font-size: 11px; opacity: .8; }
+.dl-tools .sc-execution-tabs { margin-top: 10px; }

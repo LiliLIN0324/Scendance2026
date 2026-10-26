@@ -14,7 +14,7 @@ import { eventOperationsSchema } from '../../../../supabase/functions/_shared/ev
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene } from '../lib/backend-adapter';
-import { INITIAL_BRIEF } from '../lib/creative-brief';
+import { buildBriefReference, INITIAL_BRIEF } from '../lib/creative-brief';
 import { LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
@@ -23,6 +23,7 @@ import { GeneratedModelLibrary } from './generated-model-library';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
+import type { WorkbenchMode } from '../lib/workbench-mode';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
@@ -81,8 +82,8 @@ function DeliveryShortcutTrial({ current = layout, operations = false }: { curre
   </CreativeStudioProvider>;
 }
 
-function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace, onConversation, onTemplates, operations = false, localSaveError = false }: {
-  current?: RoomLayout; generator?: ReactNode; commercialPanel?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; onTemplates?:()=>void; operations?: boolean; localSaveError?: boolean;
+function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace, onConversation, onTemplates, operations = false, localSaveError = false, workbenchMode, onOpenPublication, reviewOpenRequest, deliveryOpenRequest }: {
+  current?: RoomLayout; generator?: ReactNode; commercialPanel?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; onTemplates?:()=>void; operations?: boolean; localSaveError?: boolean; workbenchMode?: WorkbenchMode; onOpenPublication?:()=>void; reviewOpenRequest?: number; deliveryOpenRequest?: number;
 }) {
   const host = useRef<HTMLDivElement>(null), referenceEntry = useRef<HTMLButtonElement>(null), conversationEntry = useRef<HTMLButtonElement>(null);
   const workspaceEntry = useRef<HTMLButtonElement>(null), toolsEntry = useRef<HTMLButtonElement>(null);
@@ -100,6 +101,10 @@ function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace
     <div data-testid="docked-business-host" ref={host} hidden={!workspaceVisible}/>
     <CreativeAssistant docked businessHostRef={host} generationPanel={generator} commercialPanel={commercialPanel}
       {...(onTemplates?{onOpenTemplates:onTemplates}:{})}
+      {...(workbenchMode?{workbenchMode,workbenchModeSerial:1}:{workbenchModeSerial:0})}
+      {...(onOpenPublication?{onOpenPublication}:{})}
+      {...(reviewOpenRequest?{reviewOpenRequest}:{})}
+      {...(deliveryOpenRequest?{deliveryOpenRequest}:{})}
       workspaceOpenRequest={workspaceRequest} workspaceEntryRef={workspaceEntry}
       toolsOpenRequest={toolsRequest} toolsEntryRef={toolsEntry}
       referenceOpenRequest={referenceRequest} referenceEntryRef={referenceEntry}
@@ -194,12 +199,12 @@ describe('docked workspace integration', () => {
     fireEvent.change(composer,{target:{value:'先预览椅子布置'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
     await screen.findByText('方案提案 · 尚未应用');
     expect(screen.queryByRole('region',{name:'成果建议'})).toBeNull();
-    const confirm=screen.getByRole('button',{name:'确认应用'});
+    const confirm=screen.getByRole('button',{name:'确认布置'});
     fireEvent.change(composer,{target:{value:'下一条未发送输入'}});
     fireEvent.click(screen.getByRole('button',{name:'查看建议'}));
     expect(within(screen.getByRole('region',{name:'成果建议'})).getAllByRole('button').length).toBeLessThanOrEqual(4);
     fireEvent.click(screen.getByRole('button',{name:'准备场地图纸'}));
-    expect(composer.value).toBe('下一条未发送输入');expect(screen.getByRole('button',{name:'确认应用'})).toBe(confirm);
+    expect(composer.value).toBe('下一条未发送输入');expect(screen.getByRole('button',{name:'确认布置'})).toBe(confirm);
     expect(controller.startAgentRun).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button',{name:'关闭成果建议'}));expect(screen.queryByRole('region',{name:'成果建议'})).toBeNull();
   });
@@ -263,9 +268,10 @@ describe('docked workspace integration', () => {
     const direct = screen.getByRole('checkbox', { name: '明确指令直接应用' }) as HTMLInputElement;
     const jev = screen.getByRole('checkbox', { name: 'JEV 决策模式' }) as HTMLInputElement;
     expect(direct.form).toBe(composer.form); expect(jev.form).toBe(composer.form);
-    expect(direct.checked).toBe(true); expect(jev.checked).toBe(false);
+    expect(direct.checked).toBe(false); expect(jev.checked).toBe(false);
     fireEvent.click(jev); expect(jev.checked).toBe(true); expect(direct.disabled).toBe(true);
     fireEvent.click(jev); expect(jev.checked).toBe(false); expect(direct.disabled).toBe(false);
+    fireEvent.click(direct); expect(direct.checked).toBe(true);
     fireEvent.click(direct); expect(direct.checked).toBe(false);
     fireEvent.change(composer, { target: { value: '仍在输入法组合中' } });
     fireEvent.keyDown(composer, { key: 'Enter', isComposing: true });
@@ -525,15 +531,15 @@ describe('docked workspace integration', () => {
     renderUI(<DockedTrial/>); await act(async () => {});
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '先给候选，再确认应用' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' })); await screen.findByText('方案提案 · 尚未应用');
-    const confirm = screen.getByRole('button', { name: '确认应用' });
+    const confirm = screen.getByRole('button', { name: '确认布置' });
     fireEvent.click(screen.getByRole('button', { name: '外部收起聊天' }));
-    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     const launch = screen.getByRole('button', { name: '助手' });
     expect(screen.getByRole('status').textContent).toBe('有方案待确认');
     expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite');
     expect(document.querySelector('.cr-docked-pending')).toBeNull();
     fireEvent.click(launch);
-    expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
+    expect(screen.getByRole('button', { name: '确认布置' })).toBe(confirm);
     expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(onApply).not.toHaveBeenCalled();
   });
 
@@ -700,7 +706,7 @@ describe('workspace navigation continuity', () => {
     if (!screen.queryByRole('textbox', { name: '告诉助手你的想法' })) fireEvent.click(chatEntry);
     const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
     fireEvent.change(composer, { target: { value: '演练：先预览一个椅子方案' } }); fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
-    await screen.findByText('方案提案 · 尚未应用'); const confirm = screen.getByRole('button', { name: '确认应用' });
+    await screen.findByText('方案提案 · 尚未应用'); const confirm = screen.getByRole('button', { name: '确认布置' });
     fireEvent.change(composer, { target: { value: '演练：素材切换前的策划草稿' } }); selectMode('model');
     fireEvent.change(composer, { target: { value: '演练：素材切换前的物料草稿' } });
     const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
@@ -714,7 +720,7 @@ describe('workspace navigation continuity', () => {
     fireEvent.click(dataEntry); fireEvent.click(chatEntry);
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer); expect(composer.value).toBe('演练：素材切换前的物料草稿');
     expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
-    expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
+    expect(screen.getByRole('button', { name: '确认布置' })).toBe(confirm);
     selectMode('plan'); expect(composer.value).toBe('演练：素材切换前的策划草稿');
     expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
@@ -878,13 +884,13 @@ describe('top assistant entry', () => {
     expect(status.classList.contains('sr-only')).toBe(true); expect(document.querySelector('.cr-docked-pending')).toBeNull();
     await act(async () => { finish(runFrom(proposal)); });
     expect(within(assistant).getByRole('status')).toBe(status); expect(status.textContent).toBe('有方案待确认');
-    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     fireEvent.click(entry);
-    const confirm = screen.getByRole('button', { name: '确认应用' });
+    const confirm = screen.getByRole('button', { name: '确认布置' });
     expect(within(assistant).queryByRole('status')).toBeNull(); expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
     fireEvent.click(screen.getByRole('button', { name: '关闭聊天' }));
     expect(within(assistant).getByRole('status').textContent).toBe('有方案待确认'); fireEvent.click(entry);
-    expect(within(assistant).queryByRole('status')).toBeNull(); expect(screen.getByRole('button', { name: '确认应用' })).toBe(confirm);
+    expect(within(assistant).queryByRole('status')).toBeNull(); expect(screen.getByRole('button', { name: '确认布置' })).toBe(confirm);
     expect(controller.startAgentRun).toHaveBeenCalledOnce(); expect(onApply).not.toHaveBeenCalled();
   });
 
@@ -1079,11 +1085,15 @@ function render(element: React.ReactElement) {
   const brief=view.container.querySelector<HTMLDetailsElement>('.cr-agent-brief')!;
   if(!brief.open)fireEvent.click(screen.getByText('活动需求与场地资料'));
   fireEvent.click(screen.getByLabelText('助手设置'));
-  fireEvent.click(screen.getByRole('checkbox', {name:'明确指令直接应用'}));
   return view;
 }
 function selectMode(value:'plan'|'model'):void {
   fireEvent.change(screen.getByRole('combobox',{name:'工作模式'}),{target:{value}});
+}
+/** 直接应用默认关闭；需要验证 direct 老路径的用例显式打开它。 */
+function enableDirectApply():void {
+  fireEvent.click(screen.getByLabelText('助手设置'));
+  fireEvent.click(screen.getByRole('checkbox',{name:'明确指令直接应用'}));
 }
 function selectBusiness(name:string):void {
   const destinations:Record<string,string>={'活动需求':'brief','图纸与尺寸':'reference','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
@@ -1165,58 +1175,64 @@ afterEach(() => {
 });
 
 describe('creative brief and assistant interaction', () => {
-  it('blocks whole-scene generation for an untouched manual scaffold while preserving actual text and modeling',async()=>{
+  it('fills a readable reference from the current type and headcount without generating a scene',async()=>{
     connected();renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
-    const add=screen.getByRole('button',{name:'生成活动简报提纲'});await waitFor(()=>expect(add.hasAttribute('disabled')).toBe(false));fireEvent.click(add);
-    const generate=screen.getByRole('button',{name:'生成布置方案'});expect(generate.hasAttribute('disabled')).toBe(true);
-    fireEvent.click(generate);expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    const add=screen.getByRole('button',{name:'生成需求参考'});await waitFor(()=>expect(add.hasAttribute('disabled')).toBe(false));fireEvent.click(add);
     const demand=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;
-    const scaffold=demand.value;fireEvent.change(demand,{target:{value:`客户原话，保留入口。\n\n${scaffold}`}});
-    expect(generate.hasAttribute('disabled')).toBe(false);
-    fireEvent.change(demand,{target:{value:scaffold}});selectMode('model');fireEvent.click(screen.getByRole('button',{name:'椅'}));
-    const send=screen.getByRole('button',{name:'发送消息'});expect(send.hasAttribute('disabled')).toBe(false);
-    fireEvent.click(send);await screen.findByText('方案提案 · 尚未应用');
-    expect(controller.startAgentRun).toHaveBeenCalledOnce();expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].executionMode).toBe('preview');expect(onApply).not.toHaveBeenCalled();
+    expect(demand.value).toBe(buildBriefReference({...INITIAL_BRIEF,event:'品牌快闪',guests:24}));
+    expect(demand.value).toContain('目标：入口第一眼认出主题');
+    expect(demand.value).not.toMatch(/活动目标：\s*$/m);
+    const generate=screen.getByRole('button',{name:'生成布置预览'});expect(generate.hasAttribute('disabled')).toBe(false);
+    expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('appends the manual brief scaffold to the original text and does not dirty it again',async()=>{
-    const {MANUAL_BRIEF_TEMPLATE}=await import('../lib/creative-brief');
+  it('keeps the original text and refreshes the reference instead of stacking copies',async()=>{
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
-    const button=screen.getByRole('button',{name:'生成活动简报提纲'});
+    const button=screen.getByRole('button',{name:'生成需求参考'});
     await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
     const input=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;
     fireEvent.change(input,{target:{value:'客户原话，请保留入口。'}});fireEvent.click(button);
-    expect(input.value).toBe(`客户原话，请保留入口。\n\n${MANUAL_BRIEF_TEMPLATE}`);
-    expect(screen.queryByText('当前文字已含提纲，未重复添加。')).toBeNull();
-    await act(async()=>{await flushSourceScope(projectId);});vi.mocked(storeSourceForm).mockClear();
-    fireEvent.click(button);await act(async()=>{await flushSourceScope(projectId);});
-    expect(input.value).toBe(`客户原话，请保留入口。\n\n${MANUAL_BRIEF_TEMPLATE}`);
-    expect(vi.mocked(storeSourceForm).mock.calls.filter(([key])=>key.endsWith(':brief'))).toHaveLength(0);
-    expect(screen.getByText('当前文字已含提纲，未重复添加。')).toBeTruthy();
+    const reference=buildBriefReference({...INITIAL_BRIEF,event:'品牌快闪',guests:24});
+    expect(input.value).toBe(`客户原话，请保留入口。\n\n${reference}`);
+    fireEvent.click(button);
+    expect(input.value).toBe(`客户原话，请保留入口。\n\n${reference}`);
+    expect(screen.getByText('参考已是最新，未重复添加。')).toBeTruthy();
+  });
+
+  it('replaces a legacy blank scaffold on load instead of letting it block generation',async()=>{
+    vi.mocked(readSourceForm).mockImplementation(async key=>key.endsWith(':brief')?{event:'工作坊',guests:16,description:'【创意简报与观众体验】\n活动目标：\n参与观众：\n布置要求：',mustHave:'',allowIdeas:true}:undefined);
+    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
+    const input=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;
+    await waitFor(()=>expect(input.value).toBe(''));
+    expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(true);
+    const button=screen.getByRole('button',{name:'生成需求参考'});await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));fireEvent.click(button);
+    expect(input.value).toBe(buildBriefReference({...INITIAL_BRIEF,event:'工作坊',guests:16}));
+    expect(input.value).not.toContain('活动目标：');
+    expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false);
   });
 
   it('leaves an oversized manual brief unchanged and reports the limit without truncating',async()=>{
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
-    const button=screen.getByRole('button',{name:'生成活动简报提纲'});await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
+    const button=screen.getByRole('button',{name:'生成需求参考'});await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
     const input=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;const original='原'.repeat(1800);
     fireEvent.change(input,{target:{value:original}});fireEvent.click(button);
     expect(input.value).toBe(original);expect(screen.getByRole('alert').textContent).toContain('原文字保持不变');
   });
 
-  it.each(['pending','failed'] as const)('does not append a template before the brief is safely readable (%s)',async state=>{
+  it.each(['pending','failed'] as const)('does not generate a reference before the brief is safely readable (%s)',async state=>{
     vi.mocked(readSourceForm).mockImplementation(key=>key.endsWith(':brief')?state==='pending'?new Promise(()=>{}):Promise.reject(new Error('简报读取拒绝')):Promise.resolve(undefined));
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
     const input=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;fireEvent.change(input,{target:{value:'读取期间保留的原输入'}});
     if(state==='failed')await screen.findByRole('alert');
-    const button=screen.getByRole('button',{name:'生成活动简报提纲'});expect(button.hasAttribute('disabled')).toBe(true);fireEvent.click(button);
+    const button=screen.getByRole('button',{name:'生成需求参考'});expect(button.hasAttribute('disabled')).toBe(true);fireEvent.click(button);
     expect(input.value).toBe('读取期间保留的原输入');expect(vi.mocked(storeSourceForm).mock.calls.filter(([key])=>key.endsWith(':brief'))).toHaveLength(0);
   });
 
-  it('keeps manual template edits disabled while a backup operation is pending',async()=>{
+  it('keeps the reference button disabled while a backup operation is pending',async()=>{
     let actions!:LocalProjectBackupActions;
     function Probe(){actions=useLocalProjectBackup()!;return null;}
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeBriefPanel/><Probe/></CreativeStudioProvider>);
-    const button=screen.getByRole('button',{name:'生成活动简报提纲'});await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
+    const button=screen.getByRole('button',{name:'生成需求参考'});await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
     let finish!:(value:undefined)=>void;vi.mocked(readSourceForm).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     let preparation!:Promise<string>;act(()=>{preparation=actions.prepareBackup();});
     await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(true));fireEvent.click(button);
@@ -1370,7 +1386,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(prepareProposal).mockResolvedValueOnce(assetProposal);
     vi.mocked(controller.authorizeAssets).mockResolvedValueOnce({assetUrls:{[assetId]:'https://storage.example/tent.glb'},assetNames:{[assetId]:'资源库帐篷'}});
     vi.mocked(controller.applySceneProposal).mockResolvedValueOnce({id:projectId,revision:2,scene:assetCandidate,previousScene:scene,updatedAt:'2026-10-03T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});
-    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
+    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));enableDirectApply();
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'从资源库加入一顶帐篷'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
     await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
@@ -1464,7 +1480,7 @@ describe('creative brief and assistant interaction', () => {
     expect(await screen.findByRole('region', { name: 'Agent' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('当前尚未连接 AI 服务');
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
-    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(prepareProposal).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
   });
@@ -1573,7 +1589,7 @@ describe('creative brief and assistant interaction', () => {
     expect(prepareProposal).toHaveBeenCalledWith(expect.objectContaining({ scene: layoutToBackendScene(layout), context: expect.objectContaining({brief:expect.stringContaining('给 24 位来宾')}) }));
     expect(onApply).not.toHaveBeenCalled();
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '确认应用' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认布置' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     expect(onApply.mock.calls[0]![0].designBook?.variants.map(v => v.name)).toEqual(['原始方案', 'AI 方案 A']);
     expect(controller.applySceneProposal).toHaveBeenCalledWith(proposal, layoutToBackendScene(layout));
@@ -1593,7 +1609,7 @@ describe('creative brief and assistant interaction', () => {
       rendered.rerender(ui());
     }
     expect(await screen.findByText('场景、需求或编辑权已变化，请重新生成。')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(onPreview).toHaveBeenLastCalledWith(null);
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
@@ -1604,7 +1620,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(controller.applySceneProposal).mockResolvedValueOnce({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: false });
     render(ui());
     await generatePreview();
-    fireEvent.click(screen.getByRole('button', { name: '确认应用' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认布置' }));
     expect(await screen.findByText(/应用期间本地有新修改，已保留本地草稿/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
     expect(screen.queryByText('提案已应用。你可以继续调整，或用撤销返回应用前的本地方案。')).toBeNull();
@@ -1633,11 +1649,11 @@ describe('creative brief and assistant interaction', () => {
     render(ui());
     enterBrief();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '生成布置预览' })); });
-    expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '确认布置' })).toBeTruthy();
     expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(screen.getByText('提案已过期，请重新生成。')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(onPreview).toHaveBeenLastCalledWith(null);
     expect(controller.applySceneProposal).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
@@ -2523,7 +2539,7 @@ describe('context continuity and project isolation', () => {
     const send=async(text:string)=>{
       fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:text}});
       fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-      await waitFor(()=>expect(screen.getByRole('button',{name:'确认应用'})).toBeTruthy());
+      await waitFor(()=>expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy());
     };
     await send('把交流区靠近入口');
     fireEvent.click(screen.getByRole('button',{name:'放弃'}));
@@ -2587,6 +2603,27 @@ describe('review workspace integration',()=>{
     expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
     fireEvent.click(screen.getByRole('button',{name:'返回素材'}));
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('一把椅子的未发送需求');
+  });
+  it('wires local review prefill and the cloud publication entry without sending anything',async()=>{
+    const onOpenPublication=vi.fn();
+    const view=renderUI(<DockedTrial workbenchMode="review" onOpenPublication={onOpenPublication}/>);await act(async()=>{});
+    view.rerender(<DockedTrial workbenchMode="review" reviewOpenRequest={1} onOpenPublication={onOpenPublication}/>);await act(async()=>{});
+    expect(screen.getByText('核对后导出离线 HTML，或发布云端只读链接；都由你发送')).toBeTruthy();
+    const summary=screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
+    expect(summary.value).toBe('');
+    fireEvent.click(screen.getByRole('button',{name:'生成说明参考'}));
+    expect(summary.value).toContain('【方案简述参考');
+    fireEvent.change(summary,{target:{value:'演练：人改过的说明'}});
+    expect(summary.value).toBe('演练：人改过的说明');
+    fireEvent.click(screen.getByRole('button',{name:'打开发布管理'}));
+    expect(onOpenPublication).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain('已发送');
+  });
+  it('labels the execution workspace as local internal material',async()=>{
+    renderUI(<DockedTrial workbenchMode="delivery" deliveryOpenRequest={1}/>);await act(async()=>{});
+    expect(screen.getByText('执行 · 本机内部资料')).toBeTruthy();
+    expect(screen.getByText('活动安排、点验、导出与本机备份')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('云端协作');
   });
 });
 
@@ -2680,19 +2717,19 @@ describe('unified Agent', () => {
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'请先给出布置预览'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await screen.findByText('方案提案 · 尚未应用');
-    const confirm=screen.getByRole('button',{name:'确认应用'});
+    const confirm=screen.getByRole('button',{name:'确认布置'});
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     fireEvent.click(screen.getByRole('button',{name:'收起聊天'}));openExecution();
     selectBusiness('场景模板');
     const reopen=screen.getByRole('button',{name:'展开聊天'});
     expect(reopen.getAttribute('aria-describedby')).toBe('creative-conversation-status');
     expect(document.getElementById('creative-conversation-status')?.textContent).toContain('有方案待确认');
-    expect(screen.queryByRole('button',{name:'确认应用'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'关闭 Agent'}));
     fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
     expect(document.activeElement).toBe(reopen);
     const previewCalls=onPreview.mock.calls.length;fireEvent.click(reopen);
-    expect(screen.getByRole('button',{name:'确认应用'})).toBe(confirm);
+    expect(screen.getByRole('button',{name:'确认布置'})).toBe(confirm);
     expect(screen.getByText('方案提案 · 尚未应用')).toBeTruthy();
     expect(screen.getByRole('textbox',{name:'告诉助手你的想法'})).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole('region',{name:'晴光 聊天'}));
@@ -2718,16 +2755,16 @@ describe('unified Agent', () => {
     expect(request.context.brief).not.toContain('请为客户设计一套完整的');expect(request.context.brief).not.toContain('主动布置适合主题的亮点');
     expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
     expect(onApply).not.toHaveBeenCalled();expect(controller.applySceneProposal).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('button',{name:'确认应用'})).toHaveLength(1);
+    expect(screen.getAllByRole('button',{name:'确认布置'})).toHaveLength(1);
     fireEvent.click(screen.getByRole('button',{name:'展开工作区'}));
     const previewCalls=onPreview.mock.calls.length;
     fireEvent.click(screen.getByRole('button',{name:'回到画布预览'}));
     expect(screen.getByRole('region',{name:'Agent'}).classList.contains('is-expanded')).toBe(false);
     expect(screen.getByText('方案提案 · 尚未应用')).toBeTruthy();expect(onPreview.mock.calls).toHaveLength(previewCalls);
     expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button',{name:'确认应用'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button',{name:'确认布置'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByLabelText('助手设置'));
-    expect((screen.getByRole('checkbox',{name:'明确指令直接应用'}) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox',{name:'明确指令直接应用'}) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByRole('checkbox',{name:'明确指令直接应用'}).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('仅用于场景策划；物料建模始终先预览')).toBeTruthy();
   });
@@ -2736,6 +2773,8 @@ describe('unified Agent', () => {
     connected();
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button', { name: '打开晴光 Agent' }));
+    fireEvent.click(screen.getByLabelText('助手设置'));
+    fireEvent.click(screen.getByRole('checkbox', { name: '明确指令直接应用' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一把椅子' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
@@ -2755,6 +2794,7 @@ describe('unified Agent', () => {
     vi.mocked(controller.applySceneProposal).mockResolvedValueOnce({id:projectId,revision:2,scene:structuredCandidate,previousScene:baseScene,updatedAt:'2026-10-03T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});
     renderUI(<CreativeStudioProvider controller={controller} layout={structured} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button', { name: '打开晴光 Agent' }));
+    enableDirectApply();
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一把椅子' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     await waitFor(() => expect(prepareProposal).toHaveBeenCalledOnce());
@@ -2815,6 +2855,7 @@ describe('unified Agent', () => {
     const full={...layout,designBook:{activeId:'design-0',variants:Array.from({length:20},(_,index)=>({id:`design-${index}`,name:`方案 ${index}`,layout}))}};
     renderUI(<CreativeStudioProvider controller={controller} layout={full} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
+    enableDirectApply();
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
     await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('请先在图层面板移除'));
@@ -2827,6 +2868,7 @@ describe('unified Agent', () => {
     vi.mocked(prepareProposal).mockResolvedValueOnce({...proposal,warnings:[{code:'OVERLAP',ids:[candidate.objects[0].id]}]});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button',{name:'打开晴光 Agent'}));
+    enableDirectApply();
     fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
     await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
@@ -2875,10 +2917,11 @@ describe('retained Agent partial results', () => {
       return <CreativeStudioProvider controller={controller} layout={current} onApply={next => { onApply(next); setCurrent(next); }} onPreview={onPreview}><CreativeAssistant/></CreativeStudioProvider>;
     }
     const view = renderUI(mode === 'direct' ? <AppliedWorkspace/> : ui()); fireEvent.click(screen.getByRole('button', { name: '打开晴光 Agent' }));
+    if (mode === 'direct') enableDirectApply();
     send();
     if (mode === 'preview') {
       await screen.findByText('方案提案 · 尚未应用');
-      expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '确认布置' })).toBeTruthy();
       expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
       expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
     } else if (mode === 'unchanged') {
@@ -2890,7 +2933,7 @@ describe('retained Agent partial results', () => {
       expect(controller.applySceneProposal).toHaveBeenCalledOnce();
       expect(controller.applySceneProposal).toHaveBeenCalledWith(value, layoutToBackendScene(layout));
       expect(layoutToBackendScene(onApply.mock.calls[0]![0])).toEqual(candidate);
-      expect(screen.getByText(/提案已应用/)).toBeTruthy(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+      expect(screen.getByText(/提案已应用/)).toBeTruthy(); expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     }
     expect((await screen.findByText(partialNotice)).getAttribute('role')).toBe('status');
     expect(controller.startAgentRun).toHaveBeenCalledOnce(); expectSafeText(view.container);
@@ -2918,7 +2961,7 @@ describe('retained Agent partial results', () => {
       fireEvent.click(screen.getByRole('button', { name: '助手' }));
     }
     await screen.findByText('方案提案 · 尚未应用'); expect((await screen.findByText(partialNotice)).getAttribute('role')).toBe('status');
-    expect(screen.getByRole('button', { name: '确认应用' })).toBeTruthy(); expect(onApply).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '确认布置' })).toBeTruthy(); expect(onApply).not.toHaveBeenCalled();
     expect(controller.applySceneProposal).not.toHaveBeenCalled(); expect(controller.startAgentRun).toHaveBeenCalledTimes(route === 'requestId' ? 1 : 0);
     if (route === 'requestId') {
       expect(controller.getAgentRunByRequest).toHaveBeenCalledOnce(); expect(controller.getAgentRunByRequest).toHaveBeenCalledWith(requestId);
@@ -2949,7 +2992,7 @@ describe('retained Agent partial results', () => {
     if (change === 'brief') fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '演练：改为新的参与目标。' } });
     const value = change === 'expired' ? { ...proposal, expires_at: '2000-01-01T00:00:00Z' } : proposal;
     await act(async () => { finish(partialRun(value, original)); });
-    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(onApply).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expectSafeText(view.container);
   });
 
@@ -2963,7 +3006,7 @@ describe('retained Agent partial results', () => {
     expect(screen.queryByText(partialNotice)).toBeNull();
     fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '演练：等待资源核对期间修改需求。' } });
     await act(async () => { finishAssets({ assetUrls: {}, assetNames: {} }); });
-    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认应用' })).toBeNull();
+    expect(screen.queryByText(partialNotice)).toBeNull(); expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(onApply).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled(); expectSafeText(view.container);
   });
 });
@@ -2995,7 +3038,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     expect(controller.startAgentRun).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button',{name:/方案 C.*布局3.*20\.0/}));
     expect(screen.getByRole('button',{name:/方案 C.*布局3.*20\.0/}).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button',{name:'确认应用'}));
+    fireEvent.click(screen.getByRole('button',{name:'确认布置'}));
     await waitFor(()=>expect(controller.applySceneProposal).toHaveBeenCalledWith(comparison().candidates[2]!.proposal,layoutToBackendScene(layout)));
   });
   it('invalidates every candidate after any local edit',async()=>{
@@ -3003,7 +3046,7 @@ describe('bounded Agent runs and JEV decisions',()=>{
     await screen.findByRole('button',{name:/方案 A ·/});
     view.rerender(ui({...layout,width:14}));
     expect(screen.getAllByRole('button',{name:/方案 [ABC] ·/}).every(button=>button.hasAttribute('disabled'))).toBe(true);
-    expect(screen.queryByRole('button',{name:'确认应用'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
     expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();
   });
   it('retains partial candidates when evaluation is unavailable without inventing probabilities',async()=>{
@@ -3151,7 +3194,7 @@ describe('same local activity with a remote scene connection',()=>{
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await screen.findByText('方案提案 · 尚未应用');
     const request=vi.mocked(controller.startAgentRun).mock.calls[0]![0];
     expect(request.scene).toEqual(candidate);expect(JSON.stringify(request)).not.toContain('内部');
-    fireEvent.click(screen.getByRole('button',{name:'确认应用'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button',{name:'确认布置'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
     const next=onApply.mock.calls[0]![0];expect(next.id).toBe(localId);
     expect(next.eventOperations).toEqual(local.eventOperations);expect(next.productionPlan).toEqual(local.productionPlan);
     expect(next.floors[0]!.items[0]!.handoff).toEqual(local.floors[0]!.items[0]!.handoff);
@@ -3193,5 +3236,17 @@ describe('same local activity with a remote scene connection',()=>{
     if(changed)expect(ensureGlbAsset).not.toHaveBeenCalled();else await waitFor(()=>expect(ensureGlbAsset).toHaveBeenCalledWith(assetId,'https://storage.example/fresh.glb'));
     expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();expect(copySourceScope).not.toHaveBeenCalled();
     expect(local.id).toBe(localId);
+  });
+});
+
+describe('T-UI visible interaction',()=>{
+  it('hides the direct-apply switch on the demo backend; preview-then-confirm is the only path',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','http://localhost:3099');
+    try{
+      renderUI(<DockedTrial/>);await act(async()=>{});
+      fireEvent.click(screen.getByLabelText('助手设置'));
+      expect(screen.queryByRole('checkbox',{name:'明确指令直接应用'})).toBeNull();
+      expect(screen.getByText(/演示后端/)).toBeTruthy();
+    }finally{vi.unstubAllEnvs();}
   });
 });

@@ -14,9 +14,6 @@ export const PEOPLE_CLIPS = {
   walk: 'Walk_Loop',
 } as const;
 
-/** Ground speed (m/s) at which Walk_Loop's feet don't slide at timeScale 1. */
-export const WALK_CLIP_SPEED = 1.1;
-
 export interface PeopleModel {
   scene: ThreeNS.Group;
   animations: ThreeNS.AnimationClip[];

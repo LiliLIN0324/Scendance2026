@@ -8,6 +8,7 @@ import { mergeProposalPresentation } from './creative-brief';
 import { presetModelUrl } from './scene-presets';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import { layoutGeometryScene, canApplyLayoutGeometry, stableMeasurement } from './structural-layout';
+import { pruneVenueSite } from './venue-shell';
 import type { FurnitureItem, RoomLayout } from './types';
 
 const publicLibraryIds = new Set(Object.values(libraryAssetIds));
@@ -185,6 +186,9 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
     };
   });
   const geometric = layout.backendSceneV2 ? layoutGeometryScene(layout) : null;
+  // 主入口只能指着结构里真实存在的门窗。门洞被删或换过墙之后剪掉这条引用（室内外、尺度
+  // 置信度这些其它真相留着），否则域校验会把用户锁在「无法保存」上。
+  const site = pruneVenueSite(layout.backendVenue?.site, geometric?.structure.openings.map(opening => opening.id) ?? []);
   const originalFinishes = layout.backendSceneV2?.finishes;
   const wallColors = Object.fromEntries((floor.interiorWalls ?? []).filter(w=>w.color).map(w=>[w.id,w.color]));
   const finishes = {
@@ -197,7 +201,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
     ...(layout.backendSceneV2 ?? {}),
     schemaVersion: layout.backendSceneV2 ? 2 : 1,
     ...(layout.scenePreset ? { scenePreset: layout.scenePreset } : {}),
-    venue: { ...(layout.backendVenue ?? {}), width: layout.width, depth: layout.height, height: floor.height ?? 3, shape: layout.backendVenue?.shape ?? 'rectangle', entrances },
+    venue: { ...(layout.backendVenue ? { ...layout.backendVenue, ...(site ? { site } : { site: undefined }) } : {}), width: layout.width, depth: layout.height, height: floor.height ?? 3, shape: layout.backendVenue?.shape ?? 'rectangle', entrances },
     ...(geometric ? { structure: geometric.structure,
       ...(originalFinishes || Object.keys(finishes).length ? { finishes } : {}),
       ...(layout.backendSceneV2?.design ? { design: { ...layout.backendSceneV2.design,

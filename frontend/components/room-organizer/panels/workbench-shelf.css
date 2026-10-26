@@ -285,6 +285,12 @@
 }
 .has-material-shelf .sc-atmosphere-strip { bottom: calc(var(--sc-shelf-height, 196px) + 12px); }
 .sc-atmosphere-strip .sc-tool-group { flex-direction: row; gap: 6px; padding: 0; border: 0; }
+/* 默认只留这一颗「氛围」；点开才是漫游/人群/天气/时段（2026-10-26 第 2 节：中间次要工具条能藏则藏）。 */
+.sc-atmosphere-strip .sc-atmosphere-toggle { gap: 6px; }
+.sc-atmosphere-strip.is-open .sc-atmosphere-toggle {
+  border-color: var(--wk-green-pale, #dbe5cf); background: var(--wk-green-pale, #dbe5cf);
+  color: var(--wk-green-deep, #394a37); font-weight: 600;
+}
 .sc-atmosphere-strip button {
   display: inline-flex; align-items: center; gap: 5px;
   min-height: 28px; padding: 0 9px; border: 1px solid var(--wk-hair, #e7e7e7);

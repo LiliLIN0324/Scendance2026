@@ -1,0 +1,61 @@
+换一版不再清空桌椅：壳体门洞是场地真相，不是物料 — 2026-10-25（T-01 ①）
+
+- 「换一版」点下去，16 件物料只剩 2 件：桌子全没了。根因不在生成器，在 reducer —— `hooks/layout-reducer.ts:200` 对 `addItems` 这类结构动作做**整批**几何否决（`canApplyLayoutGeometry` → `canApplyStructuralChange`），一批里只要有一件越界或撞墙，整批静默丢弃。原来第 3 步把 1–4 组餐桌当一批提交，槽位又按 `depth/8 + 2.6` 这种拍出来的数算，`shift=0` 的那一版正好穿进前墙，于是四组一起消失。
+- 槽位算法收进纯函数 `lib/furniture-sets.ts` 的 `setPlacementSlots(set, w, d, variant, { clearNorthOfZ })`：先按物料组自身的外扩半尺寸（旋转后的包围盒，不是半间房）算出可用带，四角槽位全部落在墙内；彼此footprint会重叠的槽位直接丢（窄房自然退化成 1 组）；`clearNorthOfZ` 让桌椅待在背景板南边。`variant` **只轮换顺序**，不改可行域 —— 换一版换的是用哪几个槽，不是能不能放。
+- 摆放改成逐组 `addItems`：一组放不下只少一组，不再带走其它桌。
+- 清场改成只清物料：`replaceItems(items.filter(isStructuralMarker))`。T-01 的壳体把主入口落成带 `structuralOpeningId` 的门洞标记，跟着清场一起删等于悄悄把主入口抹了。`lib/structural-layout.ts` 新增 `isStructuralMarker()`（门洞 / 柱 / 出入口标记），`materialCount()` 复用它。
+- 左栏「当前场景：17 件物料」和 Agent 说的「16 件物料」对不上，也是同一件事：那颗门洞被当成物料数了。`panels/creative-studio.tsx` 改口 `materialCount(sceneItems)`。
+- 播报口径跟着修：本地模式下人在聊天里说过的人数与活动名存进 provider 的 `brief`（`parseBriefSentence` 喂），收尾胶囊优先读它 —— 原来读的是 `studio.brief`，聊天说 60 人沙龙、胶囊写「品牌快闪 · 24 人」，属于当面撒谎。
+- 真机实测（1440×900，CDP 真实鼠标 + 自动存档回读）：12×9 室内连点三次「换一版」，每次都是 `桌 3 / 椅 12 / 门洞标记 1`，桌心在 (±4.23, −2.87) 与 (±4.23, 3.08) 之间轮换，第 5 步仍报「没有重叠，也没超出场地」，左栏「当前场景：16 件物料」。壳体播报原文：「场地立起来了：12 × 9 m，室内壳子，四面外墙、正面留了一个主入口，门位标的是待确认，层高没听你说，先按默认 4 m。」未给尺度时依旧只说「尺寸还没定」，不报假米数。
+- 测试：`lib/furniture-sets.test.ts` 加 6 条 `setPlacementSlots` 用例（12×9 / 8×6 / 5×4 三档 × variant 0–5 全部在墙内、槽位互不重叠、避开舞台、换一版只换顺序、3×3 不给槽位），`lib/venue-shell.test.ts` 加 1 条「清场后门洞标记仍在且不算物料」。`npx tsc --noEmit` 干净；`npx vitest run`（venue-shell / workbench-agent / backend-adap
+====HITS====
+tests\domain.test.ts:44:function v2(site?:object,heightSource?:string){
+tests\domain.test.ts:48:...(heightSource?{heightSource}:{}),...(site?{site}:{})},
+tests\domain.test.ts:51:it('accepts heightSource and a site block whose mainEntrance points at a real opening',()=>{
+tests\domain.test.ts:55:const ok=sceneSchema.safeParse({schemaVersion:2,venue:{shape:'rectangle',width:12,depth:10,height:4,entrances:[],heightSource:'confirmed',
+tests\domain.test.ts:56:site:{mainEntrance:{openingId:opening.id},scale:{confidence:'high'},indoorOutdoor:'indoor'}},
+tests\domain.test.ts:60:it('rejects a dangling mainEntrance openingId',()=>{
+tests\domain.test.ts:64:site:{mainEntrance:{openingId:crypto.randomUUID()}}},
+tests\domain.test.ts:68:it('rejects site on V1 scenes and unknown heightSource values',()=>{
+tests\domain.test.ts:73:it('keeps parsing legacy scenes that carry neither site nor heightSource',()=>{
+frontend\lib\project-review.ts:153:role: item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId
+frontend\lib\reference-image.ts:26:item.structuralOpeningId||item.structuralColumnId||item.venueEntranceId||item.type==='door'||item.type==='window')}))};
+frontend\lib\venue-edit.ts:4:import { MAX_ROOM_DIMENSION } from '../components/room-organizer/lib/constants';
+frontend\lib\venue-edit.ts:46:if (![width, depth].every(value => Number.isFinite(value) && value >= 0.02 && value <= MAX_ROOM_DIMENSION)) {
+frontend\lib\venue-edit.ts:47:throw new Error(`请填写 0.02–${MAX_ROOM_DIMENSION} 米之间的总宽和总深。`);
+frontend\lib\venue-edit.ts:75:if (item.structuralOpeningId || item.structuralColumnId) return false;
+frontend\components\room-organizer\room-organizer.tsx:1121:const pasted = built.map(item => { const id = crypto.randomUUID(); return { ...item, id, ...(item.structuralOpeningId ? {structuralOpeningId
+frontend\components\room-organizer\hooks\layout-reducer.test.ts:3:import { MAX_FLOORS, MAX_ROOM_DIMENSION } from '../lib/constants';
+frontend\components\room-organizer\hooks\layout-reducer.test.ts:32:state = layoutReducer(state, { type: 'setWidth', width: MAX_ROOM_DIMENSION + 100 });
+frontend\components\room-organizer\hooks\layout-reducer.test.ts:33:expect(state.layout.width).toBe(MAX_ROOM_DIMENSION);
+frontend\components\room-organizer\hooks\layout-reducer.test.ts:37:expect(state.layout.height).toBeLessThanOrEqual(MAX_ROOM_DIMENSION);
+frontend\components\room-organizer\hooks\layout-reducer.test.ts:869:it('clamps non-positive width/height to 1 and huge dims to MAX_ROOM_DIMENSION', () => {
+frontend\components\room-organizer\hooks\layout-reducer.test.ts:876:expect(applied.layout.height).toBe(MAX_ROOM_DIMENSION);
+frontend\components\room-organizer\hooks\layout-reducer.ts:3:import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '..
+frontend\components\room-organizer\hooks\layout-reducer.ts:431:hasRoomFor(floor.items, newItem.structuralOpeningId ? 0 : 1, MAX_ITEMS_PER_FLOOR, ENTRANCE_DOOR_ID)
+frontend\components\room-organizer\hooks\layout-reducer.ts:480:if (copy.structuralOpeningId) copy.structuralOpeningId = copy.id;
+frontend\components\room-organizer\hooks\layout-reducer.ts:565:return { sillHeight: Math.min(item.structuralOpeningId ? 30 : MAX_SILL_HEIGHT, Math.max(item.structuralOpeningId ? 0 : MIN_SILL_HEIGHT, acti
+frontend\components\room-organizer\hooks\layout-reducer.ts:1127:function hasRoomFor(list: readonly { id: string; structuralOpeningId?: string; structuralColumnId?: string; venueEntranceId?:string }[] | un
+frontend\components\room-organizer\hooks\layout-reducer.ts:1128:const own = (list ?? []).filter((entry) => entry.id !== porchId && !entry.structuralOpeningId && !entry.structuralColumnId && !entry.venueEn
+frontend\components\room-organizer\hooks\layout-reducer.ts:1238:return Math.min(value, MAX_ROOM_DIMENSION);
+frontend\components\room-organizer\hooks\use-scene-effects.ts:465:const group = createFurnitureModel(THREE, item.structuralOpeningId ? item : itemForStorey(item, floor), collision);
+frontend\components\room-organizer\hooks\use-scene-effects.ts:545:const band = mountBand(item.structuralOpeningId ? item : itemForStorey(item, activeFloor));
+frontend\components\room-organizer\lib\backend-adapter.test.ts:186:expect(entrance).toMatchObject({ structuralOpeningId: entranceId, wallId: expect.any(String), depth: 0.16 });
+frontend\components\room-organizer\lib\backend-adapter.ts:6:import { MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
+frontend\components\room-organizer\lib\backend-adapter.ts:47:if (venue.width > MAX_ROOM_DIMENSION || venue.depth > MAX_ROOM_DIMENSION ||
+frontend\components\room-organizer\lib\backend-adapter.ts:109:items.push({ id: opening.id, type: opening.kind, structuralOpeningId: opening.id,
+frontend\components\room-organizer\lib\backend-adapter.ts:162:const objects = floor.items.filter(i => !i.venueEntranceId && !i.structuralOpeningId && !i.structuralColumnId).map(item => {
+frontend\components\room-organizer\lib\backend-adapter.ts:215:if (geometric && geometric.structure.openings.length !== floor.items.filter(i=>i.structuralOpeningId).length) {
+frontend\components\room-organizer\lib\constants.ts:34:export const MAX_ROOM_DIMENSION = 100;
+frontend\components\room-organizer\lib\event-operations.ts:78:fixtures: floor.items.filter(item => item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId).map(itemBasis) })) },
+frontend\components\room-organizer\lib\persistence.test.ts:4:import { MAX_ROOM_DIMENSION, STORAGE_KEY } from './constants';
+frontend\components\room-organizer\lib\persistence.test.ts:105:const corrupt = JSON.stringify(makeLayout({ width: MAX_ROOM_DIMENSION + 100 }));
+frontend\components\room-organizer\lib\persistence.test.ts:284:window.localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(makeLayout({ width: MAX_ROOM_DIMENSION + 1 })));
+frontend\components\room-organizer\lib\scene-delivery.ts:28:const materialItems = (layout: RoomLayout) => layout.floors.flatMap(floor => floor.items.filter(item => !item.venueEntranceId && !item.struc
+frontend\components\room-organizer\lib\scene-layers.ts:35:if (item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId) continue;
+frontend\components\room-organizer\lib\scene-layers.ts:46:if (!ids.has(item.id) || item.locked || item.venueEntranceId || item.structuralOpeningId || item.structuralColumnId) return item;
+frontend\components\room-organizer\lib\schema.test.ts:3:import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
+frontend\components\room-organizer\lib\schema.test.ts:177:['over-max dimension', makeLayout({ width: MAX_ROOM_DIMENSION + 1 })],
+frontend\components\room-organizer\lib\schema.test.ts:210:it('accepts exactly MAX_ROOM_DIMENSION and exactly MAX_FLOORS', () => {
+frontend\components\room-organizer\lib\schema.test.ts:212:width: MAX_ROOM_DIMENSION,
+frontend\components\room-organizer\lib\schema.test.ts:658:structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall',

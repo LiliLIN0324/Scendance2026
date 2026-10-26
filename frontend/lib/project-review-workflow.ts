@@ -17,6 +17,8 @@ export interface ProjectReviewPanelActions {
   getSource(): ProjectReviewSource;
   prepare(): Promise<ProjectReviewBase>;
   capture?(snapshot: ProjectReviewSnapshot, options: ProjectReviewCaptureOptions): Promise<ProjectReviewCapture>;
+  /** Local-rule copy only; the panel fills empty fields and leaves them editable. */
+  prefill?(): { summary: string; pending: string };
 }
 export interface ProjectReviewCaptureOptions { includeReference: boolean }
 export interface ProjectReviewSettings {

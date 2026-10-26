@@ -190,6 +190,64 @@ export function setFitsRoom(set: FurnitureSet, roomWidth: number, roomDepth: num
   return true;
 }
 
+/**
+ * Up to four centres for repeating a set across a room, every one of them far
+ * enough inside the walls that the whole group stays in-bounds. A set's
+ * outermost piece reaches `half` beyond its centre, so the usable band is the
+ * room minus that reach — not half the room, which is what put tables through
+ * the front wall.
+ *
+ * `clearNorthOfZ` (world z, the stage's south edge) keeps whole groups out of
+ * the stage area. Slots whose footprints would overlap are dropped — two
+ * groups on top of each other read as one smashed table.
+ *
+ * `variant` only rotates the order of the slots: 换一版 changes which slots
+ * get used, never the fit. Order matters because callers take a prefix.
+ */
+export function setPlacementSlots(
+  set: FurnitureSet,
+  roomWidth: number,
+  roomDepth: number,
+  variant: number,
+  options: { clearNorthOfZ?: number } = {}
+): Vec2[] {
+  const placed = buildFurnitureSet(set, { roomWidth, roomDepth });
+  if (!placed.length) return [];
+
+  // Outdoor pieces are moved past the south wall as a group; they live in the
+  // garden, not the room, so they must not widen the band.
+  let halfX = 0;
+  let halfZ = 0;
+  for (const item of placed) {
+    const { halfW, halfD } = rotatedHalfExtents({ width: item.width, depth: item.depth, rotation: item.rotation ?? 0 });
+    const x = item.position?.x ?? 0;
+    const z = item.position?.z ?? 0;
+    if (Math.abs(x) >= roomWidth / 2 || Math.abs(z) >= roomDepth / 2) continue;
+    halfX = Math.max(halfX, Math.abs(x) + halfW);
+    halfZ = Math.max(halfZ, Math.abs(z) + halfD);
+  }
+
+  const bandX = Math.max(0, roomWidth / 2 - WALL_INSET - halfX);
+  const zMin = Math.max(-roomDepth / 2 + WALL_INSET + halfZ, (options.clearNorthOfZ ?? -roomDepth / 2) + halfZ);
+  const zMax = roomDepth / 2 - WALL_INSET - halfZ;
+  if (zMin > zMax) return [];
+  const midZ = (zMin + zMax) / 2;
+  const halfBandZ = Math.max(0, (zMax - zMin) / 2);
+
+  const grid = [
+    { x: -bandX, z: midZ - halfBandZ },
+    { x: bandX, z: midZ - halfBandZ },
+    { x: -bandX, z: midZ + halfBandZ },
+    { x: bandX, z: midZ + halfBandZ },
+  ];
+  const slots = grid.filter((slot, index, all) => {
+    if (all.findIndex((other) => other.x === slot.x && other.z === slot.z) !== index) return false;
+    return !all.slice(0, index).some((earlier) => Math.abs(earlier.x - slot.x) < 2 * halfX && Math.abs(earlier.z - slot.z) < 2 * halfZ);
+  });
+  const start = ((variant % slots.length) + slots.length) % slots.length;
+  return [...slots.slice(start), ...slots.slice(0, start)];
+}
+
 export function buildFurnitureSet(set: FurnitureSet, options: BuildSetOptions = {}): FurnitureItem[] {
   // The default id prefix includes a random suffix so two sets stamped in the
   // same millisecond don't produce colliding item ids (the per-index suffix

@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { usePathname } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout } from '@/components/room-organizer/lib/backend-adapter';
@@ -21,6 +21,7 @@ const localInputs = vi.hoisted(() => ({ forms: new Map<string, unknown>(), sourc
 vi.mock('@/lib/source-storage', async importOriginal => ({
   ...await importOriginal<object>(),
   readSourceForm: async (key: string) => localInputs.forms.get(key),
+  readSourceRecord: async (key: string | [string, string]) => localInputs.forms.get(typeof key === 'string' ? key : key.join(':')),
   storeSourceForm: async (key: string, value: unknown) => { localInputs.forms.set(key, value); },
   listStoredSources: async (scope: string) => localInputs.sources.filter(source => source.scope === scope),
   storeSource: async (source: Record<string, unknown>) => { localInputs.sources.push(source); },
@@ -124,8 +125,9 @@ afterEach(() => {
 
 async function openAgent(): Promise<void> {
   fireEvent.click(await screen.findByRole('button', { name:'打开晴光 Agent' }, { timeout:5000 }));
-  for (const label of ['活动需求与场地资料', '图纸、照片与现场条件（可选）', '助手设置']) {
-    const summary = screen.getByText(label);
+  for (const label of ['活动需求与场地资料', '图纸与尺寸', '助手设置']) {
+    const summary = screen.queryByText(label);
+    if (!summary) continue;
     if (!summary.closest('details')?.open) fireEvent.click(summary);
   }
 }
@@ -140,6 +142,7 @@ describe('introduction round trips', () => {
     // is not enough once the mock's own factory has a cold module graph to resolve.
     await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }), { target: { value: '举办一场 24 人自然风聚会。' } });
+    fireEvent.click(screen.getByRole('button', { name: '导入文件' }));
     fireEvent.change(rendered.container.querySelector('input[type="file"]')!, { target: { files: [new File(['image'], 'venue.png', { type: 'image/png' })] } });
     await screen.findByRole('img', { name: '现场照片：venue.png' });
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '为活动保留合影区。' } });
@@ -152,8 +155,10 @@ describe('introduction round trips', () => {
     expect(screen.queryByRole('region', { name: 'Agent' })).toBeNull();
     expect(revokeObjectURL).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
+    fireEvent.click(await screen.findByRole('button', { name: '活动简报' }));
 
     expect((await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
+    fireEvent.click(screen.getByRole('button', { name: '导入文件' }));
     expect(screen.getByRole('img', { name: '现场照片：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
     expect(screen.getByText('为活动保留合影区。')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement).value).toBe('这条还没有发送。');
@@ -172,14 +177,14 @@ describe('introduction round trips', () => {
     fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
     await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
-    fireEvent.click(screen.getByRole('checkbox', { name:'明确指令直接应用' }));
+    await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
     await screen.findByText('方案提案 · 尚未应用');
     fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
     expect(screen.getByText('editor@example.com')).toBeTruthy();
     expect(apply).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
-    fireEvent.click(await screen.findByRole('button', { name: '确认应用' }));
+    fireEvent.click(await screen.findByRole('button', { name: '确认布置' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     expect(generate).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledWith(proposal, scene);

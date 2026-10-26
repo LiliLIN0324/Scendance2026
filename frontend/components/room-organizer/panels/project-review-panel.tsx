@@ -19,6 +19,8 @@ export interface ProjectReviewPanelProps {
   actions: ProjectReviewPanelActions;
   disabled?: boolean;
   inputLocked?: boolean;
+  /** Opens the account dialog on its publication section; never generates or sends a link by itself. */
+  onOpenCloudShare?: () => void;
 }
 
 const initialSettings = (): ProjectReviewSettings => ({
@@ -30,7 +32,7 @@ type ReviewFile = { snapshot: ProjectReviewSnapshot; html: string };
 type Work = 'prepare' | 'capture' | null;
 
 /** One review draft only. The editor owns source reads and canvas capture. */
-export function ProjectReviewPanel({ source, actions, disabled = false, inputLocked = false, storageIdentity }: ProjectReviewPanelProps): JSX.Element {
+export function ProjectReviewPanel({ source, actions, disabled = false, inputLocked = false, storageIdentity, onOpenCloudShare }: ProjectReviewPanelProps): JSX.Element {
   const [settings, setSettings] = useState(initialSettings);
   const [prepared, setPrepared] = useState<PreparedProjectReview | null>(null);
   const [captures, setCaptures] = useState<CheckedCapture[]>([]);
@@ -95,6 +97,18 @@ export function ProjectReviewPanel({ source, actions, disabled = false, inputLoc
       previousIdentity.current === baseline.current.storageIdentity;
   }
   function change(next: ProjectReviewSettings): void { if (!canChange()) return; invalidate(); setSettings(next); }
+  function fillReference(kind: 'summary' | 'pending'): void {
+    if (!canChange() || operation.current.kind) return;
+    const current = kind === 'summary' ? settings.summary : settings.pending;
+    if (current.trim()) { setNotice('已有手写内容，参考没有覆盖；要先清空这段再生成。'); return; }
+    try {
+      const reference = latestActions.current.prefill?.();
+      const text = reference?.[kind]?.trim();
+      if (!text) { setError('参考暂未生成，请稍后重试或直接手写。'); return; }
+      change({ ...settings, [kind]: text });
+      setNotice('已填入参考（本机规则），可直接改；改完请重新生成评审包。');
+    } catch { setError('参考暂未生成，请稍后重试或直接手写。'); }
+  }
   function expire(): void {
     invalidate(); setStale(true);
     setError(readSource() ? '当前内容已变化，请重新生成评审包。' : '暂时无法读取当前内容，请稍后重试。');
@@ -221,6 +235,17 @@ export function ProjectReviewPanel({ source, actions, disabled = false, inputLoc
   return <section className="sc-project-review" aria-label="客户评审包">
     <h3>客户评审包</h3>
     <p className="sc-note">准备一份可预览、下载和打印的方案文件。选择本次允许公开的内容。</p>
+    <section className="sc-review-exits" aria-label="客户交付方式">
+      <div className="sc-review-exit">
+        <strong>离线评审 HTML</strong>
+        <p>不依赖登录；生成并下载后由你发给客户，文件冻结在生成时。</p>
+      </div>
+      {onOpenCloudShare && <div className="sc-review-exit">
+        <strong>云端只读链接</strong>
+        <p>需要登录并保存到云端；发布后由你复制链接，系统不会自动发给客户。撤销后链接失效，已下载的文件收不回。</p>
+        <button type="button" className="sc-button btn-outline" disabled={disabled || inputLocked || !identityMatches} onClick={onOpenCloudShare}>打开发布管理</button>
+      </div>}
+    </section>
     {storageIdentity && <details className="sc-review-library-entry"><summary>本机草稿与文件</summary>
       <ProjectReviewLibraryPanel key={storageIdentity} identityKey={storageIdentity} scope={source.scope}
         draft={identityMatches?{summary:settings.summary,pending:settings.pending}:{summary:'',pending:''}} onLoadDraft={draft=>change({...initialSettings(),...draft})}
@@ -232,10 +257,22 @@ export function ProjectReviewPanel({ source, actions, disabled = false, inputLoc
         onChange={event => change({ ...settings, disclosure: { ...settings.disclosure, brief: event.target.checked } })}/>包含当前活动需求</label>
       <label className="sc-project-review-option"><input type="checkbox" checked={settings.disclosure.design}
         onChange={event => change({ ...settings, disclosure: { ...settings.disclosure, design: event.target.checked } })}/>包含当前设计说明</label>
-      <label className="sc-field">简短方案说明（选填）<textarea maxLength={1000} rows={3} value={settings.summary}
-        onChange={event => change({ ...settings, summary: event.target.value.slice(0, 1000) })}/></label>
-      <label className="sc-field">待确认项（选填）<textarea maxLength={1000} rows={3} value={settings.pending}
-        onChange={event => change({ ...settings, pending: event.target.value.slice(0, 1000) })}/></label>
+      <div className="sc-field">
+        <label htmlFor="sc-review-summary">简短方案说明（选填）</label>
+        <textarea id="sc-review-summary" maxLength={1000} rows={3} value={settings.summary}
+          onChange={event => change({ ...settings, summary: event.target.value.slice(0, 1000) })}/>
+        {!settings.summary.trim() && actions.prefill && <button type="button" className="sc-review-prefill" disabled={working !== null}
+          onClick={() => fillReference('summary')}>生成说明参考</button>}
+      </div>
+      <div className="sc-field">
+        <label htmlFor="sc-review-pending">待确认项（选填）</label>
+        <textarea id="sc-review-pending" maxLength={1000} rows={3} value={settings.pending}
+          onChange={event => change({ ...settings, pending: event.target.value.slice(0, 1000) })}/>
+        {!settings.pending.trim() && actions.prefill && <button type="button" className="sc-review-prefill" disabled={working !== null}
+          onClick={() => fillReference('pending')}>生成待确认参考</button>}
+      </div>
+      {actions.prefill && (!!settings.summary.trim() || !!settings.pending.trim()) &&
+        <p className="sc-note">已有手写内容；参考不会覆盖，需要时先清空对应栏再生成。</p>}
       <p className="sc-note">以上手写内容仅用于本次评审，请使用客户能直接阅读的文字。</p>
       <label className="sc-project-review-option"><input type="checkbox" checked={settings.includeImage}
         onChange={event => change({ ...settings, includeImage: event.target.checked })}/>包含当前画面</label>

@@ -15,6 +15,7 @@ describe('publication panel', () => {
     const controller = { businessRequest: request } as unknown as BackendSession;
     const view = render(<PublicationPanel controller={controller} projectId={projectId} revision={7} dirty />);
     await screen.findByText('还没有发布过此项目。');
+    expect(screen.getByText('发布不会自动通知客户；链接由你复制后发送。')).toBeTruthy();
     expect((screen.getByRole('button', { name: '发布版本 7' }) as HTMLButtonElement).disabled).toBe(true);
     view.rerender(<PublicationPanel controller={controller} projectId={projectId} revision={7} dirty={false} />);
     fireEvent.click(screen.getByRole('button', { name: '发布版本 7' }));
