@@ -48,7 +48,8 @@
 - 迁移 `20261028120000_aholo_lux3d.sql`:generation_jobs 的 provider 约束扩到 `aholo`/`lux3d`(aholo↔lux3d 强绑定,texture 拒绝),assets.source 增 `aholo`;job_rpc 校验包装器重建,直调原始 RPC。
 - worker:按 job 上固化的 `provider_mode` 选厂商(任务创建时锁定,配置漂移不影响旧任务);下载域白名单 aholo 任务加 `.kujiale.com`;license/source 记 Aholo 侧条款;资产 metadata.generation 带 `providerMode:'aholo'` 保证参赛可追溯。
 - 验收已达成:`npx vitest run` 680/680 全绿(含新增 `tests/aholo-lux3d.test.ts` 7 条:capabilities 门控、lane 显式声明、job 固化、submit/query 形状、状态映射、壳错误、端到端归档),`npm run typecheck` 通过。前端入口(M2 前置)与 mock(3099)接入待做。
-- M1 尾款(下一卡):`.env.example` 占位已加;mock(3099)与 dev 双环境各出一张生成资产、资产卡片显示通道与模型;`3D-GENERATION-UPGRADE-PLAN.md` 现状表补 `aholo` 通道。
+- M1 尾款 **已有(2026-10-28)**:前端 lib 层贯通——`createGenerationJob` 接受 `provider` 选项并进请求体(legacy 文本请求体保持不变),`generationCapabilitiesSchema` 消费 `aholoTextToModel/aholoImageToModel`(旧后端缺字段时按 false),job 响应枚举放行 `aholo/lux3d`;`3D-GENERATION-UPGRADE-PLAN.md` 现状表补 `aholo` 通道。`.env.example` 占位已加。mock(3099)不加生成端点——生成是 supabase 后端特性,等 UI 卡一起在 dev 链路验证。
+- **T-AHOLO-UI(待用户点卡)**:生成入口 UI/agent 工具的产品卡,两个候选形态(可并存):①GeneratedModelLibrary 面板加"Lux3D 生成"表单(prompt + provider 声明,能力位亮起才显示);②agent 工具链加 `create_lux3d_model`(异步任务,轮询交付)。涉及右栏交互与可见交互收口硬钉,须用户裁决后动工。
 
 ### M2 — 图片转模型入口(需求 1 完整形态)
 
