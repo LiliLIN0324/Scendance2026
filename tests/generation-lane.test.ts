@@ -2,7 +2,7 @@ import { describe,it,expect } from 'vitest';
 import { chooseLane,generationLanes,laneCost } from '../supabase/functions/_shared/generation-lane.ts';
 import type { GenerationCapabilities } from '../supabase/functions/_shared/generation-contract.ts';
 
-const capabilities=(over:Partial<GenerationCapabilities>={}):GenerationCapabilities=>({model:'hy-3d-3.0',textToModel:true,imageToModel:true,texture:false,textureRequiresImage:true,...over});
+const capabilities=(over:Partial<GenerationCapabilities>={}):GenerationCapabilities=>({model:'hy-3d-3.0',textToModel:true,imageToModel:true,texture:false,textureRequiresImage:true,aholoTextToModel:false,aholoImageToModel:false,...over});
 const table={family:'table',width:1.2,depth:0.6,height:0.75};
 
 describe('generation lane routing',()=>{
@@ -42,8 +42,16 @@ describe('generation lane routing',()=>{
     for(const kind of ['image','texture'] as const)
       expect(chooseLane({kind,parameters:table,libraryAssetId:'asset-1',offlineFingerprint:'abc'},capabilities({texture:true})).lane).toBe('hy3d');
   });
-  it('exposes exactly four lanes with their costs',()=>{
-    expect(generationLanes).toEqual(['offline','library','parametric','hy3d']);
-    expect(laneCost).toEqual({offline:'free',library:'free',parametric:'free',hy3d:'metered'});
+  it('enters the aholo lane only on explicit declaration and refuses it honestly when unconfigured',()=>{
+    expect(chooseLane({kind:'text'},capabilities())).toMatchObject({lane:'hy3d'});
+    expect(chooseLane({kind:'text',provider:'aholo'},capabilities())).toMatchObject({lane:'aholo',cost:'metered',available:false});
+    expect(chooseLane({kind:'text',provider:'aholo'},capabilities({aholoTextToModel:true}))).toMatchObject({lane:'aholo',available:true});
+    expect(chooseLane({kind:'image',provider:'aholo'},capabilities({aholoImageToModel:true}))).toMatchObject({lane:'aholo',available:true});
+    // Texture has no Lux3D equivalent: the declaration is ignored and the HY-3D lane owns it.
+    expect(chooseLane({kind:'texture',provider:'aholo'},capabilities({texture:true,aholoTextToModel:true}))).toMatchObject({lane:'hy3d'});
+  });
+  it('exposes exactly five lanes with their costs',()=>{
+    expect(generationLanes).toEqual(['offline','library','parametric','hy3d','aholo']);
+    expect(laneCost).toEqual({offline:'free',library:'free',parametric:'free',hy3d:'metered',aholo:'metered'});
   });
 });

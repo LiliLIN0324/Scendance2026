@@ -2,15 +2,20 @@ import { compareTextureGeometry, requireTextureSource } from './generation-quali
 import { ApiError } from './domain.ts';
 import { assetRecord } from './assets.ts';
 import { download, required, type Env, type Fetcher } from './http.ts';
-import { hunyuan } from './providers.ts';
+import { aholoLux3d, hunyuan } from './providers.ts';
 import { MAX_GLB_BYTES, validateModel } from './models.ts';
 import type { Backend } from './backend.ts';
 
 export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
-  required(env,'HUNYUAN_API_KEY');
+  // Pre-claim guard: without any vendor credential there is no work we could do. The exact
+  // vendor key is re-checked after the claim, once the pinned provider is known.
+  if(!env('HUNYUAN_API_KEY')&&!env('LUX3D_API_KEY')) required(env,'HUNYUAN_API_KEY');
   const job=await backend.jobs(null,'jobs.claim');
   if(!job) return {processed:0};
-  const provider=hunyuan(env,fetcher,{providerMode:job.provider_mode,providerModel:job.provider_model});
+  // Provider identity is pinned on the job row at creation time; the worker never re-reads config
+  // to pick the vendor, only the vendor's own credentials.
+  const aholo=job.provider_mode==='aholo';
+  const provider=aholo?aholoLux3d(env,fetcher):hunyuan(env,fetcher,{providerMode:job.provider_mode,providerModel:job.provider_model});
   const update=(state:string,extra:Record<string,unknown>={})=>backend.jobs(null,'jobs.update',{id:job.id,workerToken:job.worker_token,state,...extra});
   if(Date.now()-Date.parse(job.created_at)>23*60*60*1000) {
     await update('failed',{errorCode:'PROVIDER_TASK_EXPIRED'});
@@ -51,8 +56,9 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
       archiving=true;
       const file=result.ResultFile3Ds?.find(f=>f.Type.toUpperCase()==='GLB');
       if(!file) throw new ApiError('PROVIDER_NO_GLB',422);
-      // Accept only Tencent object-storage domains; never proxy arbitrary URLs or redirects.
-      const bytes=await download(file.Url,['.myqcloud.com','.tencentcos.cn','.tencentcos.com'],MAX_GLB_BYTES,fetcher);
+      // Accept only known object-storage domains; never proxy arbitrary URLs or redirects.
+      // Lux3D serves its direct GLB from kujiale.com; HY-3D from Tencent COS.
+      const bytes=await download(file.Url,aholo?['.kujiale.com','.myqcloud.com','.tencentcos.cn','.tencentcos.com']:['.myqcloud.com','.tencentcos.cn','.tencentcos.com'],MAX_GLB_BYTES,fetcher);
       const metadata:Record<string,unknown>=await validateModel(bytes);
       metadata.generation={kind:job.kind??'text',providerMode:job.provider_mode,providerModel:job.provider_model,referenceImageAssetId:job.reference_image_asset_id??undefined};
       if(job.kind==='texture'){
@@ -64,9 +70,11 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
         metadata.textureVariant={validation:quality,procurementStatus:'needs_confirmation'};
       }
       const asset=await assetRecord(job.owner_id,bytes,{
-        name:job.prompt.slice(0,120),source:'hunyuan',sourceId:job.provider_job_id,
-        sourceUrl:'https://cloud.tencent.com/product/ai3d',metadata,
-        license:{type:'provider-terms',reviewedAt:required(env,'HUNYUAN_TERMS_REVIEWED_AT'),url:required(env,'HUNYUAN_TERMS_URL')},
+        name:job.prompt.slice(0,120),source:aholo?'aholo':'hunyuan',sourceId:job.provider_job_id,
+        sourceUrl:aholo?'https://labs.aholo.ai':'https://cloud.tencent.com/product/ai3d',metadata,
+        license:aholo
+          ?{type:'provider-terms',reviewedAt:required(env,'LUX3D_TERMS_REVIEWED_AT'),url:required(env,'LUX3D_TERMS_URL')}
+          :{type:'provider-terms',reviewedAt:required(env,'HUNYUAN_TERMS_REVIEWED_AT'),url:required(env,'HUNYUAN_TERMS_URL')},
       },job.id);
       await backend.upload(asset.storagePath,bytes,'model/gltf-binary');
       await backend.jobs(null,'jobs.complete',{id:job.id,workerToken:job.worker_token,asset,usage});

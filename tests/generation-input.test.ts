@@ -23,7 +23,7 @@ describe('generation inputs and provider isolation',()=>{
   it('keeps text requests backward compatible and advertises only configured capabilities',async()=>{
     const input={requestId:crypto.randomUUID(),prompt:'vase'};
     expect(generationRequestSchema.parse(input).kind).toBe('text');
-    expect(generationCapabilities(env())).toEqual({model:'hy-3d-3.0',textToModel:true,imageToModel:true,texture:false,textureRequiresImage:true});
+    expect(generationCapabilities(env())).toEqual({model:'hy-3d-3.0',textToModel:true,imageToModel:true,texture:false,textureRequiresImage:true,aholoTextToModel:false,aholoImageToModel:false});
     expect(generationCapabilities(()=>undefined).textToModel).toBe(false);
     expect((await prepareGenerationRequest(f.backend,owner,input,env())).fingerprint).toBe(await sha256('vase'));
     await expect(prepareGenerationRequest(f.backend,owner,{...input,kind:'texture',sourceAssetId:crypto.randomUUID(),referenceImageAssetId:crypto.randomUUID()},env())).rejects.toThrow('SERVICE_NOT_CONFIGURED');

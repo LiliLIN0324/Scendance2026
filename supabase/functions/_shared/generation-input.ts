@@ -8,10 +8,16 @@ import { requireTextureSource } from './generation-quality.ts';
 export async function prepareGenerationRequest(backend:Backend,actor:string,raw:unknown,env:Env) {
   if(env('HY3_RETIRED')==='true')throw new ApiError('HY3_RETIRED',410);
   const input=generationRequestSchema.parse(raw),capabilities=generationCapabilities(env);
-  required(env,'HUNYUAN_API_KEY');required(env,'HUNYUAN_TERMS_REVIEWED_AT');required(env,'HUNYUAN_TERMS_URL');
   // Single lane decision keeps the cheap-first rule in one place. The error code and status stay
   // unchanged; `lane`/`reason` only add why no lane could serve the request.
-  const decision=chooseLane({kind:input.kind},capabilities);
+  const decision=chooseLane({kind:input.kind,provider:input.provider},capabilities);
+  if(decision.lane==='aholo'){
+    if(!decision.available)throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:'LUX3D_API_KEY',lane:decision.lane,reason:decision.reason});
+    required(env,'LUX3D_API_KEY');required(env,'LUX3D_TERMS_REVIEWED_AT');required(env,'LUX3D_TERMS_URL');
+    const {requestId,...identity}=input;
+    return {...input,fingerprint:await sha256(input.kind==='text'?input.prompt:JSON.stringify(identity)),providerMode:'aholo' as const,providerModel:'lux3d' as const};
+  }
+  required(env,'HUNYUAN_API_KEY');required(env,'HUNYUAN_TERMS_REVIEWED_AT');required(env,'HUNYUAN_TERMS_URL');
   if(!decision.available)throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:input.kind==='texture'?'HUNYUAN_TEXTURE_ENABLED':'HUNYUAN_MODEL',lane:decision.lane,reason:decision.reason});
   if(input.referenceImageAssetId){
     const image=await backend.scene(actor,'assets.get',{assetId:input.referenceImageAssetId});
