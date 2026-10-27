@@ -23,8 +23,8 @@ export function layoutFromPreset(key: ScenePresetKey, source: THREE.Object3D): R
   });
   const layout: RoomLayout = {
     name: preset.name, scenePreset: key, width: preset.width, height: preset.depth,
-    floors: [{ id: 'event-floor', name: '活动场地', height: preset.height, floorColor: '#e9e5db', items }],
-    roof: { style: 'none' }, backendLighting: 'warm',
+    floors: [{ id: 'event-floor', name: '活动场地', height: preset.height, floorColor: '#f5f6f7', items }],
+    roof: { style: 'none' }, backendLighting: 'neutral',
   };
   if (!parseStoredLayout(layout)) throw new Error('场景尺寸或物件格式无法完整载入，当前草稿未替换。');
   return layout;

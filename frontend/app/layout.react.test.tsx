@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import RootLayout from './layout';
 import type { ReactNode } from 'react';
 
-vi.mock('@/components/workspace-shell', () => ({ WorkspaceShell: ({ children }: { children: ReactNode }) => children }));
+vi.mock('@/components/workspace-shell', () => ({ BootSkeleton: () => null, WorkspaceShell: ({ children }: { children: ReactNode }) => children }));
 vi.mock('@/lib/auth-provider', () => ({ AuthProvider: ({ children }: { children: ReactNode }) => children }));
 
 let root: Root | undefined;

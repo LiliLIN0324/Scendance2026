@@ -9,12 +9,13 @@ import { reconstructionRequestSchema } from './reconstruction-contract.ts';
 import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
 import { assetRecord, importPublicModel, recommendations } from './assets.ts';
-import { CHAT_API_KEY_ENV, generateProposal } from './providers.ts';
+import { CHAT_API_KEY_ENV, chatRequest, generateProposal } from './providers.ts';
+import { briefExtractRequestSchema, briefSlotSchema, BRIEF_EXTRACT_PROMPT } from './brief-extract-contract.ts';
 import { readSceneResources } from './scene-resources.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
 import { generationCapabilities } from './generation-contract.ts';
 import { createMaterialVariant, prepareMaterialVariant, readAssetMaterials } from './material-variants.ts';
-import { readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
+import { fetchJson, readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
 import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
@@ -58,6 +59,24 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       const token=request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1];
       if(!token) throw new ApiError('UNAUTHENTICATED',401);
       const actor=await backend.user(token);
+      if(path==='/brief/extract' && method==='POST') {
+        const input=briefExtractRequestSchema.parse(await json());
+        // 与 agent-runner 共用 chatRequest（自定义 OpenAI 兼容供应商 → Tokendance 网关 → DeepSeek 官方）；三路都缺才如实说未启用。
+        if(!env(CHAT_API_KEY_ENV) && !env('DEEPSEEK_API_KEY') && !env('AGENT_CHAT_KEY')) return respond({enabled:false,extraction:null});
+        const { url, init } = chatRequest(env, { messages: [
+          { role:'system', content: BRIEF_EXTRACT_PROMPT },
+          { role:'user', content: input.message },
+        ], temperature: 0, max_tokens: 2048, response_format: { type: 'json_object' } });
+        try {
+          // 推理模型可能长思考，超时 110s；仍超时说明该供应商当前不可用，reason 会透出。
+          const reply=z.object({choices:z.array(z.object({message:z.object({content:z.string()})})).min(1)}).parse(await fetchJson(url,init,fetcher,100_000,110_000));
+          return respond({enabled:true,extraction:briefSlotSchema.parse(JSON.parse(reply.choices[0].message.content))});
+        } catch (error) {
+          // 模型失败不阻塞对话，但根因要可见（欠费 402/限流/网关错误），否则只能瞎猜。
+          const reason = error instanceof ApiError ? `${error.code}${error.details ? `:${JSON.stringify(error.details)}` : ''}` : error instanceof Error ? error.message : 'model call failed';
+          return respond({enabled:true,extraction:null,reason});
+        }
+      }
       if(['/assets/import','/assets/floorplan','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
       if(path==='/studios' && method==='POST') {

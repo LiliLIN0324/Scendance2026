@@ -1,29 +1,37 @@
 /**
- * The product mark: three parallelogram bars from the v2.4 design mock (幕景 logo).
- * Geometry matches scendance-figma upgrade states `#logo-mark` (fill #4a7c59).
+ * The product mark 「门厅」: a solid ink block (the venue) with an arched doorway
+ * cut into its bottom edge, and a sage-green circle (the arriving guest) standing
+ * in the opening. 方为空间、圆为人——Scendance = scene + attendance.
+ *
+ * Geometry lives on a 48 grid with a 40-unit live area (4-unit optical padding):
+ * outer radius 10, doorway 20 wide with an r10 arch, guest d10 at (24, 35) —
+ * 5 units clear of the arch, 4 units clear of the sill, so the circle never
+ * touches a line (v1 failed by letting the two tangent at zero clearance).
+ * Path is always ink (#141416); accent circle is always brand green (#4A7C59).
  */
 export interface BrandMarkProps {
-  /** Height of the mark in px; width follows the design viewBox ratio. */
+  /** Height of the mark in px; the mark is square, so width equals height. */
   size?: number;
   className?: string;
 }
 
-export function BrandMark({ size = 31, className }: BrandMarkProps): JSX.Element {
-  const height = size;
-  const width = (size * 29) / 31;
+export function BrandMark({ size = 28, className }: BrandMarkProps): JSX.Element {
   return (
     <svg
       className={className}
-      viewBox="23.5 16.5 29 31"
-      width={width}
-      height={height}
+      viewBox="0 0 48 48"
+      width={size}
+      height={size}
       fill="none"
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M24 22.95 31 20.1V44.1L24 46.95Z" fill="#4a7c59" />
-      <path d="M34.5 19.75 41.5 17.2V40.9L34.5 43.6Z" fill="#4a7c59" />
-      <path d="M45 17.05 52 20V38.05L45 40.95Z" fill="#4a7c59" />
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"
+      />
+      <circle cx="24" cy="35" r="5" fill="#4A7C59" />
     </svg>
   );
 }

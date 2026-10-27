@@ -22,26 +22,67 @@ export const EVENT_ATMOSPHERE_TAG = 'event-atmosphere';
 
 // Wire values are the backend's existing neutral / warm / cool enum. These
 // presets change actual scene illumination; no CSS filter or external HDR.
+// `background` is the horizon tone, `skyZenith` the top of the backdrop
+// gradient — a zenith deeper than the horizon is what makes the backdrop
+// read as projected 3D space instead of a flat wall of colour.
 const PRESETS = {
   neutral: {
-    background: 0xe9edf0, sky: 0xe7f1ff, ground: 0xd8c5ac,
+    background: 0xe9edf0, skyZenith: 0xb9d2ea, sky: 0xe7f1ff, ground: 0xd8d7d2,
     key: 0xfff4de, keyIntensity: 2.1, hemisphere: 1.35, ambient: 0.18,
     spots: [0xffedda, 0xe2efff], spotStrength: 1.8,
     accent: 0xffedd5, accentStrength: 0.5, environment: 0.7, exposure: 1.05,
   },
   warm: {
-    background: 0xf7f3e8, sky: 0xffdfb0, ground: 0xbfa383,
+    background: 0xf7f3e8, skyZenith: 0xc9dcf2, sky: 0xffdfb0, ground: 0xbfa383,
     key: 0xffd09a, keyIntensity: 1.55, hemisphere: 1.05, ambient: 0.22,
     spots: [0xffbc79, 0xffdfb5], spotStrength: 3.4,
     accent: 0xffa767, accentStrength: 1.8, environment: 0.52, exposure: 1.1,
   },
   cool: {
-    background: 0x171b30, sky: 0xa3bfff, ground: 0x947eac,
+    background: 0x1d2440, skyZenith: 0x0e1226, sky: 0xa3bfff, ground: 0x947eac,
     key: 0xd1ddff, keyIntensity: 0.72, hemisphere: 0.72, ambient: 0.28,
     spots: [0x8496ff, 0xe894ff], spotStrength: 5.4,
     accent: 0xffc38a, accentStrength: 2.6, environment: 0.35, exposure: 1.18,
   },
 } as const satisfies Record<EventLighting, unknown>;
+
+/**
+ * 1×256 vertical zenith→horizon gradient as a DataTexture — pure bytes, so it
+ * builds identically in the browser and in node-run tests (no canvas/DOM).
+ * Screen-space like the legacy sky backdrop. WebGL textures start at the
+ * bottom (and flipY is ignored for buffer uploads), so byte row 0 is the
+ * horizon and the zenith lands at the top of the screen.
+ */
+function makeBackdropTexture(THREE: ThreeModule, zenith: number, horizon: number): ThreeNS.DataTexture {
+  const size = 256;
+  const data = new Uint8Array(size * 4);
+  for (let y = 0; y < size; y++) {
+    // Row 0 renders at the bottom of the screen: horizon there, zenith up top.
+    const t = 1 - y / (size - 1);
+    // Bias toward the horizon in its lower third so the glow sits at the
+    // ground line where depth is actually read.
+    const blend = t < 0.65 ? (t / 0.65) * 0.7 : 0.7 + ((t - 0.65) / 0.35) * 0.3;
+    const mixed = mixPresetHex(zenith, horizon, blend);
+    data[y * 4] = (mixed >> 16) & 0xff;
+    data[y * 4 + 1] = (mixed >> 8) & 0xff;
+    data[y * 4 + 2] = mixed & 0xff;
+    data[y * 4 + 3] = 255;
+  }
+  const texture = new THREE.DataTexture(data, 1, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function mixPresetHex(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const ch = (x: number, y: number) => Math.round(x + (y - x) * t);
+  return (ch(ar, br) << 16) | (ch(ag, bg) << 8) | ch(ab, bb);
+}
 
 function dimension(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.min(value, 100) : fallback;
@@ -82,7 +123,9 @@ export function createEventAtmosphere(
   rig.traverse(object => { object.raycast = () => {}; });
   scene.add(rig);
 
-  const background = new THREE.Color();
+  // The rig's own backdrop texture; rebuilt when the preset changes and
+  // disposed with the rig. A gradient keeps the depth a flat colour loses.
+  let backgroundTexture: ThreeNS.DataTexture | null = null;
   const inheritedBackground = scene.background;
   // Legacy sky textures are replaced, not kept as an invisible GPU resource.
   // A neutral color is sufficient when this editor-owned rig is unmounted.
@@ -109,9 +152,13 @@ export function createEventAtmosphere(
     // The old lighting effect may install a new sky texture or lamp after
     // loading a project. Release that texture immediately and reassert this
     // rig without recreating its lights, targets or shadow resources.
-    if (scene.background !== background) {
+    if (!backgroundTexture || previousPreset !== preset) {
+      if (backgroundTexture) backgroundTexture.dispose();
+      backgroundTexture = makeBackdropTexture(THREE, preset.skyZenith, preset.background);
+    }
+    if (scene.background !== backgroundTexture) {
       if (scene.background && 'isTexture' in scene.background) scene.background.dispose();
-      scene.background = background;
+      scene.background = backgroundTexture;
       changed = true;
     }
     for (const object of scene.children) {
@@ -130,7 +177,6 @@ export function createEventAtmosphere(
     renderer.toneMappingExposure = preset.exposure;
 
     if (signature !== previousSignature) {
-      background.setHex(preset.background);
       hemisphere.color.setHex(preset.sky);
       hemisphere.groundColor.setHex(preset.ground);
       hemisphere.intensity = preset.hemisphere;
@@ -173,7 +219,8 @@ export function createEventAtmosphere(
     for (const light of [key, ...spots, accent]) light.dispose();
     // Do not overwrite a replacement scene presentation installed by someone
     // else between this rig's final apply and cleanup.
-    if (scene.background === background) scene.background = restoreBackground;
+    if (scene.background === backgroundTexture) scene.background = restoreBackground;
+    if (backgroundTexture) { backgroundTexture.dispose(); backgroundTexture = null; }
     if (previousPreset && renderer.toneMappingExposure === previousPreset.exposure) renderer.toneMappingExposure = priorExposure;
     if (previousPreset && scene.environmentIntensity === previousPreset.environment) scene.environmentIntensity = priorEnvironment;
     renderer.shadowMap.needsUpdate = true;

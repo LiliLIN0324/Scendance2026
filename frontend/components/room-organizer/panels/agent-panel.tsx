@@ -15,17 +15,19 @@
  */
 import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { useRoomEditor } from '../contexts';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
+import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { sameLayoutContent } from '../lib/persistence';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
-  checkDim, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
+  checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseMaterialRequest, pendingPlanOf,
   scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
 } from '../lib/workbench-agent';
@@ -134,6 +136,10 @@ export interface LayoutAgentCallbacks {
   onOpenReview(): void;
   onOpenDelivery(): void;
   onFit(): void;
+  /** 活动简报（完善需求） */
+  onOpenBrief?(): void;
+  /** 图纸尺寸面板 */
+  onOpenReference?(): void;
 }
 
 interface AgentValue {
@@ -189,10 +195,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   // 也决定 Agent 能不能把米数当成事实说出来。
   const [scaleOrigin, setScaleOrigin] = useState<ScaleOrigin>('canvas');
   const planPixels = useRef<{ width: number; height: number } | null>(null);
-  // 人嘴里说过的人数与活动名，本地模式下就是回放的唯一真相（云端仍走 studio.brief）。
-  const [brief, setBrief] = useState<{ event: string | null; guests: number | null }>({ event: null, guests: null });
+  // 人嘴里说过的要素（人数/活动名/布置形态），本地模式下就是回放的唯一真相（云端仍走 studio.brief）。
+  const [brief, setBrief] = useState<{ event: string | null; guests: number | null; layoutMode: LayoutMode }>({ event: null, guests: null, layoutMode: 'dining' });
   // 异步播报里要读最新那句的人数/活动名，不能读 setBrief 之前那一帧的闭包。
   const briefRef = useRef(brief); briefRef.current = brief;
+  // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
+  const memoryRef = useRef<BriefMemory>(initialBriefMemory());
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [progress, setProgress] = useState(0);
   // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
@@ -218,9 +226,9 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => setBubbles(items => [...items.slice(-30), { id: uid(), ...bubble }]), []);
 
-  /** 这一句说过的人数/活动名先写进 ref，再 setState：出方案那一步是异步的，不能等下一帧才读到。 */
-  function noteBrief(extraction: BriefExtraction): void {
-    const next = { event: extraction.event ?? briefRef.current.event, guests: extraction.headcount ?? briefRef.current.guests };
+  /** 对话记忆 → 右栏回放与生成条件共用的那份真相（人数/活动名/布置形态）。 */
+  function syncMemory(memory: BriefMemory): void {
+    const next = { event: memory.event, guests: memory.headcount, layoutMode: memory.layoutMode };
     briefRef.current = next;
     setBrief(next);
   }
@@ -788,7 +796,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       }
     }
     let plan: PlanProposal;
-    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority }); }
+    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
@@ -886,7 +894,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const event = briefRef.current.event ?? current.brief.event ?? '这场活动';
     const guests = briefRef.current.guests ?? current.brief.guests;
     const size = `${venueIO === 'indoor' ? '室内' : '户外'} ${formatArea(scale.length * scale.width)} ㎡`;
-    await current.generate(`${note ? `${note}：` : ''}${event}${guests ? ` · ${guests} 人` : ''} · ${size}，请出布置方案`, { requirePreview: true });
+    const mode = briefRef.current.layoutMode === 'desk-chair' ? ' · 一人一套课桌椅' : '';
+    await current.generate(`${note ? `${note}：` : ''}${event}${guests ? ` · ${guests} 人` : ''} · ${size}${mode}，请出布置方案`, { requirePreview: true });
   }
 
   /** 出方案：连着云项目就让云端真 AI 算这一版，否则本地算候选。两条都停在「这版还在预览」。 */
@@ -973,7 +982,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     say({ role: 'agent', text: '好，先不导出。要导的时候说一声就行。' });
   }
 
-  function send(text: string): void {
+  async function send(text: string): Promise<void> {
     const trimmed = text.trim(); if (!trimmed) return;
     // 「停一下」是命令，不是需求：正在摆就停手，摆好了还没确认就撤回，别把它当成一句话记进简报。
     if (isStopCommand(trimmed) && (phase === 'generating' || phase === 'proposed' || phase === 'paused')) {
@@ -1003,18 +1012,26 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const command = isGenerateCommand(trimmed);
     // 话锋一变，上一版预览就不再代表这次的要求：先收掉，别让两张卡同屏打架。
     if (phase === 'proposed' || phase === 'paused') { dropProposal(); discardCloudPreview(); setPhase('idle'); setProgress(0); }
-    const extraction = parseBriefSentence(trimmed);
+    // 对话核心：真模型（scene-api /brief/extract，key 在 Supabase secrets）优先提槽位，
+    // 失败/未配置自动回退规则版；记忆合并、防复读、出方案闸门都在 brief-agent 状态机里。
+    const turn = await resolveBriefTurn(trimmed, memoryRef.current, {
+      venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
+    }, studioRef.current?.controller ?? null);
+    memoryRef.current = turn.memory;
+    const extraction = turn.extraction;
+    const merged = memoryExtraction(turn.memory);
     // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
-    if (!command && isVenueSizeOnly(extraction)) {
+    // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
+    if (!command && !turn.filledScaleAsk && isVenueSizeOnly(extraction)) {
+      syncMemory(turn.memory);
       applyExtraction(extraction);
-      noteBrief(extraction);
-      syncStudioBrief(extraction);
+      syncStudioBrief(merged);
       resizeVenueOnly(scaleFrom(extraction), extraction.venueIO ?? venueIO);
       return;
     }
     if (studio?.connection === '项目已连接' && !studio.busy) {
-      noteBrief(extraction);
-      const briefNote = syncStudioBrief(extraction);
+      syncMemory(turn.memory);
+      const briefNote = syncStudioBrief(merged);
       if (briefNote) say({ role: 'agent', text: briefNote });
       const token = ++runToken.current;
       // 对话是唯一的生成入口，所以云端这一趟也必须停在待确认的预览上。
@@ -1025,36 +1042,24 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       });
       return;
     }
-    // 本地：先把这句话里的人数/场地/长宽解析出来，既当回显也当这一版的条件。
+    // 本地：先把记忆里的要素铺到画布与左栏，再按这一轮的走向回话。
     applyExtraction(extraction);
-    noteBrief(extraction);
-    const briefNote = syncStudioBrief(extraction);
+    syncMemory(turn.memory);
+    const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
-    const scale = scaleFrom(extraction);
-    const summary = describeExtraction(extraction, scale);
-    // 这一句只改了活动类型/场地时，人数沿用上一句：要说出来，别让预览里的座位数像凭空来的。
-    const carried = extraction.headcount === null && briefRef.current.guests ? ` · 沿用 ${briefRef.current.guests} 人` : '';
-    // 最少必要信息：场地还没有确认尺度时先问，不拿画布那块空地替人决定；
-    // 只报了活动类型/时段也走这里，不按默认人数和样例场直接空跑一版。
-    if (!command && scale.origin === 'canvas' && !venueUp) {
-      const hasPeople = extraction.headcount !== null || briefRef.current.guests !== null;
-      say({ role: 'agent', text: hasPeople
-        ? `记下了：${summary}${carried}。还差场地多大：说一句「12×9」或「108 平米」${hasBase ? '，或者说「按图纸估」' : ''}。${suffix}`
-        : `这场大概多少人、场地多大（室内还是户外）？说一句「40 人，室内 12×9」，我就先出一版预览。${suffix}` });
+    const scale = scaleFrom(merged);
+    const summary = describeExtraction(merged, scale);
+    // 这一句只改了活动类型/场地时，人数沿用记忆里的：要说出来，别让预览里的座位数像凭空来的。
+    const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
+    if (turn.kind !== 'generate') {
+      say({ role: 'agent', text: turn.text });
       return;
     }
-    // 图纸只当参照：要方案却没给过尺度时先把米数问出来，不拿画布那块空地冒充图纸尺寸（确认前不报假米数）。
-    if ((command || hasBriefSignals(extraction)) && hasBase && scale.origin === 'canvas') {
-      say({ role: 'agent', text: `记下了：${summary}${carried}。图纸只当参照，我读不出真实米数：说一句「12×9」或「300 平米」，或者说「按图纸估」，我按图纸比例先出一版。${suffix}` });
-      return;
-    }
-    if (command || hasBriefSignals(extraction)) {
-      say({ role: 'agent', text: `按这些先出一版：${summary}${carried}。画布上是预览，点「确认布置」才写进画布。${suffix}` });
-      const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
-      runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
-      return;
-    }
-    say({ role: 'agent', text: '这场大概多少人、室内还是户外？说一句就行，比如「80 人发布会，室内 12×9」。我先出一版预览给你改，确认前不写进画布。' });
+    say({ role: 'agent', text: turn.filledScaleAsk
+      ? `记下了：${summary}${carried}。先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
+      : `按这些先出一版：${summary}${carried}。画布上是预览，点「确认布置」才写进画布。${suffix}` });
+    const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
+    runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }
 
   // 提案态的重叠算在候选上；落盘之后才算画布上的（编辑器那份 collidingIds 这时候还是旧的）。
@@ -1144,10 +1149,10 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
 export type BriefTool = { id: string; label: string; hint: string; icon: ReactNode; onOpen(): void };
 
 /**
- * 左栏活动简报：只读，数字全部来自对话与当前画布；七件深工具收在底部折叠区。
+ * 左栏活动简报：只读，数字全部来自对话与当前画布；四件深资料收在底部折叠区。
  * 这里不放输入框、不放生成按钮，也不摆说明书——要改就回右栏说一句。
  */
-export function ActivityBrief({ tools, onClose }: { tools: readonly BriefTool[]; onClose?: () => void }): JSX.Element {
+export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.Element {
   const agent = useAgent();
   const { layout, activeFloor } = useRoomEditor();
   const { event, guests, dims, note } = agent.recap;
@@ -1165,11 +1170,6 @@ export function ActivityBrief({ tools, onClose }: { tools: readonly BriefTool[];
         ? '要改哪里，直接说一句'
         : '说「出方案」，我先摆一版预览';
   return <section className="sc-brief" aria-label="活动简报">
-    <header className="sc-brief-head">
-      <span className="sc-brief-eyebrow">活动简报</span>
-      <span className="sc-brief-source">来自对话</span>
-      {onClose && <button type="button" className="sc-brief-close" aria-label="收起活动简报" title="收起活动简报" onClick={onClose}><X size={14} aria-hidden="true"/></button>}
-    </header>
     <strong className="sc-brief-title">{layout.name || event || '未命名活动'}</strong>
     <dl className="sc-brief-rows">
       <div><dt>活动</dt><dd>{event || <em>还没说</em>}</dd></div>
@@ -1186,7 +1186,7 @@ export function ActivityBrief({ tools, onClose }: { tools: readonly BriefTool[];
     </p>}
     {tools.length > 0 && <details className="sc-brief-tools">
       <summary>资料与工具</summary>
-      <div className="sc-brief-tool-grid">
+      <div className="sc-brief-tool-list">
         {tools.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
       </div>
     </details>}
@@ -1250,6 +1250,32 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
+/** dock 模式下 Agent 面板的引导建议卡：替代 creative-studio 胶囊里那套智能建议。 */
+function GuideSuggestions({ agent }: { agent: AgentValue; layout: RoomLayout }): JSX.Element {
+  const cbs = agent.callbacks;
+  const quickOpens: Array<{ label: string; hint: string; open(): void }> = [];
+  if (cbs.onOpenBrief) quickOpens.push({ label: '完善活动需求', hint: '人数、类型、场地', open: cbs.onOpenBrief });
+  quickOpens.push({ label: '拖张图纸进来', hint: '或直接说一句需求', open: agent.pickFile });
+  if (cbs.onOpenDelivery) quickOpens.push({ label: '打开执行资料', hint: '物料清单、时间表', open: cbs.onOpenDelivery });
+  return (
+    <div className="ap-guide">
+      <p className="ap-guide-tag">想先处理哪一项？</p>
+      <div className="ap-guide-list">
+        {quickOpens.map((s, i) => (
+          <button key={s.label} type="button" className="ap-guide-chip" onClick={s.open}>
+            <span className="ap-guide-letter" aria-hidden="true">{['A','B','C'][i]}</span>
+            <span>
+              <strong>{s.label}</strong>
+              <small>{s.hint}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="ap-guide-or">或者直接说一句，比如「80 人发布会，室内 12×9」。</p>
+    </div>
+  );
+}
+
 export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
   const agent = useAgent();
   const { layout, activeFloor } = useRoomEditor();
@@ -1271,19 +1297,19 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
     <header className="ap-head">
-      <span className="mascot-slot"><img src={mascotOf(agent, mode)} alt="晴光" width={28} height={28} draggable={false}/></span>
+      <span className="mascot-slot"><img src={mascotOf(agent, mode)} alt="晴光" width={64} height={64} draggable={false}/></span>
       <strong>Agent</strong>
       {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
       {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
+      {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}
       {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
     </header>
-    {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
     <div className="ap-feed" ref={feed} aria-live="polite">
+      {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {mode === 'layout' && <>
-        <p className="ap-divider">新项目 · {layout.name || '未命名活动'}</p>
         {planShown && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
-        {preStates && agent.baseName === null && agent.bubbles.length === 0 && <p className="ap-small">拖张图纸进来，或说一句「80 人发布会，室内 12×9」。</p>}
+        {preStates && agent.baseName === null && agent.bubbles.length === 0 && <GuideSuggestions agent={agent} layout={layout}/>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
@@ -1331,12 +1357,15 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
         <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
+      {/* 环境感知行：Agent 始终在读画布——AI-native 的"活着"信号（过程即界面）。 */}
+      <p className="ap-ambient" role="status"><span className="ap-ambient-dot" aria-hidden="true"/>晴光在线 · 画布 {items} 件物料 · {layout.width.toFixed(0)}×{layout.height.toFixed(0)} m · 已自动保存</p>
     </div>
-    <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); agent.send(draft); setDraft(''); }}>
+    <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
       <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句要改的，比如「12×9」「加两把椅子」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); agent.send(draft); setDraft(''); } }}/>
+      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句要改的，比如「12×9」「加两把椅子」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
       <div className="ap-composer-bar">
-        <button type="button" className="ap-attach" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={13} aria-hidden="true"/>附图纸 / 现场照片</button>
+        <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={14} aria-hidden="true"/></button>
+        <span className="ap-composer-hint" aria-hidden="true">回车发送 · Shift+换行</span>
         <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={16}/></button>
       </div>
     </form>
@@ -1346,21 +1375,85 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
 /* ───────────────────────── 画布状态层 ───────────────────────── */
 
 /**
- * Agent 栏关掉后留在画布右上角的浮窗卡片。原来是一条 34px 竖排把手，
- * 看不出能点、也看不出 Agent 进行到哪一步。
+ * Agent 栏关掉后留在画布右上角的浮窗卡片。
+ * 支持全窗口任意拖动——mousedown 在卡片 body 上按住即可拖，释放后停在原位。
+ * 拖动距离 < 5px 视为点击，触发 onOpen 打开面板。
  */
 export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const agent = useAgent();
   const mode = agent.callbacks.workbenchMode;
   const status = headerStatus(agent, mode);
   const stage = stageOf(agent, mode);
-  return <button type="button" className="sc-agent-reopen" aria-label="打开 Agent" title="打开 Agent" onClick={onOpen}>
-    <img src={mascotOf(agent, mode)} alt="" width={28} height={28} draggable={false}/>
-    <span className="sc-agent-reopen-copy">
-      <span className="sc-agent-reopen-top"><strong>晴光 Agent</strong>{status && <em className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</em>}</span>
-      <small>{STAGES[stage - 1]}{isDemoBackend() ? ' · 本地演示' : ''}</small>
-    </span>
-  </button>;
+  const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault();
+    const card = e.currentTarget as HTMLElement;
+    card.setPointerCapture(e.pointerId);
+    const rect = card.getBoundingClientRect();
+    dragState.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: offset?.x ?? rect.left,
+      baseY: offset?.y ?? rect.top,
+      moved: false,
+    };
+    setIsDragging(true);
+  }, [offset]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const s = dragState.current;
+    if (!s) return;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+    if (!s.moved && Math.hypot(dx, dy) > 4) s.moved = true;
+    if (s.moved) {
+      setOffset({ x: s.baseX + dx, y: s.baseY + dy });
+    }
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    const s = dragState.current;
+    if (!s) { setIsDragging(false); return; }
+    const card = e.currentTarget as HTMLElement;
+    try { card.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    const moved = s.moved;
+    dragState.current = null;
+    setIsDragging(false);
+    if (!moved) {
+      setOffset(null);
+      onOpen();
+    }
+  }, [onOpen]);
+
+  const style: React.CSSProperties = {
+    ...(offset ? { position: 'fixed' as const, left: offset.x, top: offset.y, right: 'auto', bottom: 'auto' } : {}),
+    cursor: isDragging ? 'grabbing' : 'pointer',
+    userSelect: 'none',
+  };
+
+  return (
+    <button
+      type="button"
+      className="sc-agent-reopen"
+      aria-label="打开 Agent（按住可拖动）"
+      title="打开 Agent · 按住可拖动"
+      style={style}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => { dragState.current = null; }}
+    >
+      <img src={mascotOf(agent, mode)} alt="" width={28} height={28} draggable={false}/>
+      <span className="sc-agent-reopen-copy">
+        <span className="sc-agent-reopen-top"><strong>晴光 Agent</strong>{status && <em className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</em>}</span>
+        <small>{STAGES[stage - 1]}{isDemoBackend() ? ' · 本地演示' : ''}</small>
+      </span>
+    </button>
+  );
 }
 
 export function AgentCanvasOverlay(): JSX.Element | null {

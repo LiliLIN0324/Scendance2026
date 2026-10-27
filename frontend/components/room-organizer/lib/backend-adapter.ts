@@ -124,7 +124,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
     ...(scene.scenePreset ? { scenePreset: scene.scenePreset } : {}),
     name: options.name ?? '活动场景', width: scene.venue.width, height: scene.venue.depth,
     floors: [{ id: 'event-floor', name: '活动场地', height: scene.venue.height,
-      floorColor: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? scene.design?.palette[0] ?? '#e9e5db' : '#e9e5db',
+      floorColor: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? scene.design?.palette[0] ?? '#f5f6f7' : '#f5f6f7',
       ...(scene.schemaVersion === 2 && scene.finishes?.floorPattern ? { floorPattern: scene.finishes.floorPattern } : {}), items,
       interiorWalls: scene.schemaVersion === 2 ? scene.structure.walls.map(w => ({ id: w.id,
         x1: w.start.x - scene.venue.width / 2, z1: w.start.z - scene.venue.depth / 2,
@@ -193,7 +193,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
   const wallColors = Object.fromEntries((floor.interiorWalls ?? []).filter(w=>w.color).map(w=>[w.id,w.color]));
   const finishes = {
     ...originalFinishes,
-    ...(originalFinishes?.floorColor !== undefined || floor.floorColor !== (layout.backendSceneV2?.design?.palette[0] ?? '#e9e5db') ? { floorColor: floor.floorColor } : {}),
+    ...(originalFinishes?.floorColor !== undefined || floor.floorColor !== (layout.backendSceneV2?.design?.palette[0] ?? '#f5f6f7') ? { floorColor: floor.floorColor } : {}),
     ...(floor.floorPattern ? { floorPattern: floor.floorPattern } : {}),
     ...(originalFinishes?.wallColors !== undefined || Object.keys(wallColors).length ? { wallColors } : {}),
   };
@@ -210,7 +210,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
           ? {...r,status:'unmet',reason:'关联物件已被编辑或删除，请重新核对要求。',objectIds:r.objectIds.filter(id=>objects.some(o=>o.id===id))} : r),
       } } : {}),
     } : {}),
-    objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'warm',
+    objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
   };
   if (geometric && geometric.structure.openings.length !== floor.items.filter(i=>i.structuralOpeningId).length) {
     throw new SceneAdapterError('OPENING_MISSING_WALL', '门窗未关联有效墙段，请修正位置或删除该门窗后保存。');

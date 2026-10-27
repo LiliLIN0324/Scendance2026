@@ -9,7 +9,7 @@
 .sc-handoff-form fieldset { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
 .sc-handoff-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .sc-handoff-form .sc-field { margin-bottom: 12px; }
-.sc-handoff-form fieldset:disabled { opacity: .65; }
+.sc-handoff-form fieldset:disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; }
 .sc-handoff-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sc-handoff-error { color: #973e30; font-size: 12px; line-height: 1.6; }
 .sc-handoff-review { font-size: 12px; line-height: 1.6; }

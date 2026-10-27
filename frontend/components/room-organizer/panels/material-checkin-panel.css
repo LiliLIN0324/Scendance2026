@@ -14,4 +14,4 @@
 .sc-checkin-record dd,.sc-checkin-summary dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .sc-checkin-original { white-space:pre-wrap; overflow-wrap:anywhere; }
 .sc-material-checkin article { padding:10px 0; border-bottom:1px solid var(--sc-line,#d6d6d2); }
-.sc-material-checkin fieldset:disabled { opacity:.75; }
+.sc-material-checkin fieldset:disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; }

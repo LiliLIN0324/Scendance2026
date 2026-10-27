@@ -55,6 +55,8 @@ export interface PlanInput {
   guests?: number | null;
   /** 座位优先：人还站着就继续往桌边、空位补座；仍然只出候选，不写画布。 */
   seatPriority?: boolean;
+  /** desk-chair = 一人一套课桌椅（「课桌配椅子」「80 套」）；缺省按餐桌组摆。 */
+  layoutMode?: 'dining' | 'desk-chair';
 }
 
 export interface PlanProposal {
@@ -267,6 +269,31 @@ function addExtraSeats(input: {
   return { layout: current, added };
 }
 
+/**
+ * 一人一套课桌椅的课室行列：按场地铺「desk + 桌后一把 chair」的格子，
+ * 前排贴北（讲台位），放多少套由人数定、场地容量封顶。墙内缩与壳体同款 0.35 m。
+ */
+function classroomPairSlots(widthM: number, depthM: number, wanted: number): { slots: Vec2[]; cols: number } {
+  const wall = 0.35;
+  const chairGap = 0.7;
+  const colGap = 1.7;
+  const rowGap = 2.1;
+  const cols = Math.max(1, Math.floor((widthM - 2 * wall - 1.2) / colGap) + 1);
+  const rows = Math.max(1, Math.floor((depthM - 2 * wall - 0.6 - chairGap) / rowGap) + 1);
+  const total = Math.max(0, Math.min(wanted, cols * rows));
+  const gridW = (cols - 1) * colGap;
+  const gridD = (rows - 1) * rowGap;
+  const startX = -gridW / 2;
+  const startZ = -gridD / 2 - 0.3;
+  const slots: Vec2[] = [];
+  for (let index = 0; index < total; index++) {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    slots.push({ x: Math.round((startX + col * colGap) * 100) / 100, z: Math.round((startZ + row * rowGap) * 100) / 100 });
+  }
+  return { slots, cols };
+}
+
 /** 布置提案：读场地（撤掉旧物料）→ 定舞台 → 摆桌椅 → 放绿植 → 检查重叠，全程只算不写。 */
 export function proposePlan(input: PlanInput): PlanProposal {
   const { widthM, depthM, variant } = input;
@@ -274,6 +301,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
   const floorIndex = Math.min(input.floorIndex, base.floors.length - 1);
   const layouts: RoomLayout[] = [];
   const seatPriority = !!input.seatPriority;
+  const deskChair = input.layoutMode === 'desk-chair';
   let added = 0;
   let dropped = 0;
 
@@ -284,35 +312,54 @@ export function proposePlan(input: PlanInput): PlanProposal {
   const removing = current0.length - markers.length - locked.length;
   layouts.push(current);
 
-  // 1 定舞台位置：背景板贴后墙居中（现有物料库条目）
+  // 1 定舞台位置：背景板贴后墙居中（现有物料条目）。课室没有舞台，跳过。
   const backdrop = EVENT_CATALOG.find(entry => entry.materialId === 'backdrop');
-  if (backdrop) {
+  if (backdrop && !deskChair) {
     const item = { ...backdrop, id: uid(), position: { x: 0, z: -depthM / 2 + backdrop.depth / 2 + 0.4 }, rotation: 0 } as FurnitureItem;
     const result = tryAdd(base, current, floorIndex, [item]);
     current = result.layout; added += result.accepted; dropped += result.dropped;
   }
   layouts.push(current);
 
-  // 2 摆桌椅：现有 dining 物料组，按面积放 1–4 组，槽位收在墙内也收在舞台前面
-  const dining = FURNITURE_SETS.find(set => set.key === 'dining');
-  if (dining) {
-    const stageSouth = backdrop ? -depthM / 2 + backdrop.depth + 0.4 : -depthM / 2;
-    const slots = setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
-    // 一组餐椅坐 4 人：说了人数就按人数定组数，但别把场地塞爆（面积给的是上限）。
-    const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
-    const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / 4) : areaSets;
-    const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
-    const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
-    for (const center of slots.slice(0, count)) {
-      const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-      const result = tryAdd(base, current, floorIndex, items);
-      current = result.layout; added += result.accepted; dropped += result.dropped;
+  // 2 摆桌椅：课室按一人一套铺行列，其余按 dining 物料组放 1–4 组（槽位收在墙内也收在舞台前面）
+  if (deskChair) {
+    const deskEntry = FURNITURE_CATALOG.find(entry => entry.type === 'desk');
+    const chairEntry = FURNITURE_CATALOG.find(entry => entry.type === 'chair');
+    if (deskEntry && chairEntry) {
+      // 一套 = 一个座位：说了人数就按套数摆，没说就按 1.8 ㎡/人 估。
+      const wanted = input.guests && input.guests > 0 ? input.guests : Math.max(1, Math.floor((widthM * depthM) / 1.8));
+      const { slots, cols } = classroomPairSlots(widthM, depthM, wanted);
+      for (let index = 0; index < slots.length; index++) {
+        const slot = slots[index]!;
+        const desk = { ...deskEntry, id: uid(), position: slot, rotation: 0 } as FurnitureItem;
+        const chair = { ...chairEntry, id: uid(), position: { x: slot.x, z: slot.z + 0.7 }, rotation: Math.PI } as FurnitureItem;
+        const result = tryAdd(base, current, floorIndex, [desk, chair]);
+        current = result.layout; added += result.accepted; dropped += result.dropped;
+        // 一排长一帧：80 套别播成 160 帧把预览拖穿。
+        if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
+      }
     }
-    // 座位优先：只给这一版新摆的桌子补座，锁着的老桌子不碰。
-    if (seatPriority && (input.guests ?? 0) > 0) {
-      const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
-      const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
-      if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
+  } else {
+    const dining = FURNITURE_SETS.find(set => set.key === 'dining');
+    if (dining) {
+      const stageSouth = backdrop ? -depthM / 2 + backdrop.depth + 0.4 : -depthM / 2;
+      const slots = setPlacementSlots(dining, widthM, depthM, variant, { clearNorthOfZ: stageSouth });
+      // 一组餐椅坐 4 人：说了人数就按人数定组数，但别把场地塞爆（面积给的是上限）。
+      const areaSets = Math.max(1, Math.floor((widthM * depthM) / 30));
+      const wantedSets = input.guests && input.guests > 0 ? Math.ceil(input.guests / 4) : areaSets;
+      const count = Math.max(1, Math.min(slots.length, wantedSets, areaSets * 2));
+      const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
+      for (const center of slots.slice(0, count)) {
+        const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
+        const result = tryAdd(base, current, floorIndex, items);
+        current = result.layout; added += result.accepted; dropped += result.dropped;
+      }
+      // 座位优先：只给这一版新摆的桌子补座，锁着的老桌子不碰。
+      if (seatPriority && (input.guests ?? 0) > 0) {
+        const tables = (current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table' && !tableIdsBefore.has(item.id));
+        const extra = addExtraSeats({ base, floorIndex, layout: current, tables, target: input.guests! });
+        if (extra.added) { current = extra.layout; added += extra.added; layouts.push(current); }
+      }
     }
   }
   layouts.push(current);

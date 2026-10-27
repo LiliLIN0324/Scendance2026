@@ -37,16 +37,18 @@ describe('event atmosphere lifecycle', () => {
     atmosphere.apply(settings);
     const rig = scene.getObjectByName(EVENT_ATMOSPHERE_TAG)!;
     const initialObjects = [...rig.children];
-    const initialBackground = scene.background;
     for (let i = 0; i < 20; i++) {
       atmosphere.apply({ ...settings, lighting: i % 2 === 0 ? 'cool' : 'neutral' });
     }
     expect(rig.children).toEqual(initialObjects);
     expect(scene.children.filter(object => object.name === EVENT_ATMOSPHERE_TAG)).toHaveLength(1);
-    expect(scene.background).toBe(initialBackground);
-    expect((scene.background as THREE.Color).getHex()).toBe(0xe9edf0);
+    // Each preset owns a gradient backdrop texture; a preset switch rebuilds
+    // it, an unchanged preset reuses the same instance.
+    const stableBackground = scene.background;
+    expect((scene.background as THREE.Texture).isTexture).toBe(true);
     renderer.shadowMap.needsUpdate = false;
     expect(atmosphere.apply({ ...settings, lighting: 'neutral' })).toBe(false);
+    expect(scene.background).toBe(stableBackground);
     expect(renderer.shadowMap.needsUpdate).toBe(false);
     atmosphere.dispose();
   });
@@ -65,7 +67,7 @@ describe('event atmosphere lifecycle', () => {
     atmosphere.apply(settings);
     expect(disposeSky).toHaveBeenCalledOnce();
     expect(lamp.visible).toBe(false);
-    expect(scene.background).toBeInstanceOf(THREE.Color);
+    expect((scene.background as THREE.Texture).isTexture).toBe(true);
     expect(scene.environmentIntensity).toBe(0.52);
     expect(renderer.toneMappingExposure).toBe(1.1);
     atmosphere.dispose();

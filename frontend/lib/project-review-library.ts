@@ -19,9 +19,9 @@ export type ProjectReviewLibrary = z.infer<typeof librarySchema>;
 
 const byteLength = (value: string) => new TextEncoder().encode(value).byteLength;
 const key = (identityKey: string): [string, string] => ['project-review-library', text.parse(identityKey)];
-const htmlTags = new Set('html head body meta title style main header footer section article h1 h2 h3 h4 p span div dl dt dd table thead tbody tr th td figure figcaption details summary img br strong em'.split(' '));
+const htmlTags = new Set('html head body meta title style main header footer section article h1 h2 h3 h4 p span div dl dt dd table thead tbody tr th td figure figcaption details summary img br strong em small input label'.split(' '));
 const svgTags = new Set('svg title g rect path line polygon polyline circle ellipse text tspan'.split(' '));
-const htmlAttributes = new Set('lang charset name content http-equiv class id open alt width height colspan rowspan role aria-label'.split(' '));
+const htmlAttributes = new Set('lang charset name content http-equiv class id open alt width height colspan rowspan role aria-label aria-hidden type for'.split(' '));
 const svgAttributes = new Set('xmlns viewbox width height class id x y x1 y1 x2 y2 cx cy r rx ry d points transform fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-dasharray font-family font-size font-weight text-anchor dy dx opacity role aria-label'.split(' '));
 const policy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'";
 
@@ -82,6 +82,8 @@ export function validateProjectReviewFileHtml(html: string, expected?: Pick<Save
         continue;
       }
       if (!(svg ? svgAttributes : htmlAttributes).has(name)) throw new Error('评审文件包含活动属性或外部资源，未保存或打开。');
+      // Inline style is only allowed as a static color swatch (materials table), never a resource or layout channel.
+      if (name === 'style' && !(tag === 'span' && /^background:#[0-9a-fA-F]{6}$/.test(attribute.value.trim()))) throw new Error('评审文件包含活动属性或外部资源，未保存或打开。');
       if (svg && ['fill', 'stroke', 'font-family'].includes(name)) checkCss(attribute.value);
     }
     if (tag === 'style') checkCss(element.textContent ?? '');
@@ -91,7 +93,7 @@ export function validateProjectReviewFileHtml(html: string, expected?: Pick<Save
       if (directive === null && !(element.getAttribute('charset')?.toLowerCase() === 'utf-8' || element.getAttribute('name') === 'viewport')) throw new Error('评审文件包含不支持的页面声明。');
     }
   }
-  if (root.querySelector('header .eyebrow')?.textContent !== '幕景 · 客户方案评审文件' ||
+  if (!['幕景 · 客户方案评审文件', '幕景 Scendance · 客户方案评审文件'].includes(root.querySelector('header .eyebrow')?.textContent ?? '') ||
       !root.querySelector('footer .review-id')?.textContent?.startsWith('评审编号：') ||
       root.querySelectorAll('meta[http-equiv]').length !== 1 || root.querySelector('meta[http-equiv]')?.getAttribute('content') !== policy) {
     throw new Error('仅可保存工作台生成的静态客户评审 HTML。');

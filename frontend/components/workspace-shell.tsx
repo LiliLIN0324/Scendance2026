@@ -32,20 +32,49 @@ const RoomOrganizer = dynamic(
         }
         throw err; // persistent failure → error boundary (offers a reset)
       }),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="pc-world sc-loading-screen">
-        <div className="pc-glass sc-loading-card" role="status">
-          <p>
-            正在打开幕景工作台…
-          </p>
-          <span className="sc-loading-line" aria-hidden="true" />
+  { ssr: false, loading: () => <BootSkeleton /> }
+);
+
+/**
+ * 打开工作台时的骨架屏（T-VISUAL-2026）。
+ * 不再用绿色进度条：进度条既说不出走到了哪，又给「快好了」的假承诺。
+ * 这里只是把工作台外壳（顶栏 / 模式轨 / 画布 / 右栏 / 素材架）的形状先摆出来，
+ * 用 --plane 块 1.2s 呼吸等插件下载完；文案在角落安静说明状态。
+ */
+export function BootSkeleton(): JSX.Element {
+  return (
+    <div className="sc-boot" role="status" aria-live="polite">
+      <div className="sc-boot-top" aria-hidden="true">
+        <span className="sc-boot-mark" />
+        <span className="sc-boot-line" style={{ width: 96 }} />
+        <span className="sc-boot-line sc-boot-line--soft" style={{ width: 52 }} />
+        <span className="sc-boot-dot" />
+      </div>
+      <div className="sc-boot-main" aria-hidden="true">
+        <div className="sc-boot-rail">
+          <span className="sc-boot-tile" />
+          <span className="sc-boot-tile" />
+          <span className="sc-boot-tile" />
+          <span className="sc-boot-tile" />
+        </div>
+        <div className="sc-boot-canvas" />
+        <div className="sc-boot-aside">
+          <span className="sc-boot-line" style={{ width: '56%' }} />
+          <span className="sc-boot-card" />
+          <span className="sc-boot-card" />
+          <span className="sc-boot-card sc-boot-card--tall" />
         </div>
       </div>
-    ),
-  }
-);
+      <div className="sc-boot-foot">
+        <span className="sc-boot-thumb" aria-hidden="true" />
+        <span className="sc-boot-thumb" aria-hidden="true" />
+        <span className="sc-boot-thumb" aria-hidden="true" />
+        <span className="sc-boot-thumb" aria-hidden="true" />
+        <p className="sc-boot-note">正在打开幕景工作台</p>
+      </div>
+    </div>
+  );
+}
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX.Element {
   const { controller, ready } = useAuth()!;

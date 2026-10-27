@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import {
   clearChunkReloadGuard,
   isChunkLoadError,
@@ -88,25 +89,28 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
   }
 
   return (
-    <div className="pc-world sc-recovery">
-      <div className="pc-glass sc-recovery-card">
-        <p className="sc-recovery-title">
+    <div className="sc-page-error">
+      <div className="sc-page-error-card">
+        <span className="sc-page-error-icon" aria-hidden>
+          <TriangleAlert size={24} strokeWidth={1.75} />
+        </span>
+        <h1 className="sc-page-error-title">
           {chunkFailure ? '页面加载失败' : '工作台暂时遇到问题'}
-        </p>
-        <p className="sc-recovery-copy">{message}</p>
+        </h1>
+        <p className="sc-page-error-copy">{message}</p>
         {resetFailure && (
-          <p role="alert" className="sc-recovery-copy sc-recovery-alert">
+          <p role="alert" className="sc-page-error-alert">
             {resetFailure === 'refused'
               ? '浏览器无法保存备份，原草稿未删除。请先下载草稿。'
               : '浏览器存储失败，请在离开此页前下载当前草稿。'}
           </p>
         )}
-        <div className="sc-recovery-actions">
-          <button type="button" onClick={chunkFailure ? retryChunkLoad : reload} className="sc-recovery-button sc-recovery-button--primary">
+        <div className="sc-page-error-acts">
+          <button type="button" onClick={chunkFailure ? retryChunkLoad : reload} className="sc-page-error-primary">
             重新加载
           </button>
           {offerReset && !resetFailure && (
-            <button type="button" onClick={startFresh} className="sc-recovery-button">
+            <button type="button" onClick={startFresh} className="sc-page-error-ghost">
               保留备份，开始新方案
             </button>
           )}
@@ -114,12 +118,21 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
             <button
               type="button"
               onClick={downloadHouse}
-              className="sc-recovery-button"
+              className="sc-page-error-ghost"
             >
               下载本地草稿
             </button>
           )}
         </div>
+        {!chunkFailure && error.message && (
+          <details className="sc-page-error-detail">
+            <summary>技术细节</summary>
+            <p>
+              {error.message}
+              {error.digest ? ` · digest ${error.digest}` : ''}
+            </p>
+          </details>
+        )}
       </div>
     </div>
   );

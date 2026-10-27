@@ -173,6 +173,31 @@ describe('proposePlan — 布置候选只预览，确认前不写画布（T-02 �
   });
 });
 
+describe('proposePlan — 一人一套课桌椅（desk-chair，2026-10-27 课室场景）', () => {
+  it('按人数铺课室行列：一套 = 一张课桌 + 一把椅子，座位数如实报', () => {
+    const base = makeLayout({ width: 12, height: 9, floors: [makeFloor({ items: [] })] });
+    const staged = raiseVenue({ base, floorIndex: 0, widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })!.layout;
+    const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 12, layoutMode: 'desk-chair' });
+    const items = itemsOf(last(proposal));
+    expect(items.filter(item => item.type === 'desk')).toHaveLength(12);
+    expect(items.filter(item => item.type === 'chair')).toHaveLength(12);
+    expect(proposal.seats).toBe(12);
+    expect(proposal.guests).toBe(12);
+    expect(proposal.blocked).toBeNull();
+    expect(proposal.overlapCount).toBe(0);
+  });
+
+  it('课室不摆舞台背景板；人数超过容量就按场地封顶，不硬塞', () => {
+    const base = makeLayout({ width: 12, height: 9, floors: [makeFloor({ items: [] })] });
+    const staged = raiseVenue({ base, floorIndex: 0, widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })!.layout;
+    const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 80, layoutMode: 'desk-chair' });
+    const items = itemsOf(last(proposal));
+    expect(items.some(item => item.type === 'backdrop')).toBe(false);
+    expect(items.filter(item => item.type === 'desk').length).toBeLessThan(80);
+    expect(items.filter(item => item.type === 'desk').length).toBe(items.filter(item => item.type === 'chair').length);
+  });
+});
+
 describe('proposePlan — 座位优先（T-05：人还站着就补座，但只出候选）', () => {
   it('30 人 12×9：普通版如实报缺口，座位优先版补到够坐', () => {
     const staged = build().staged;

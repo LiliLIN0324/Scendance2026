@@ -161,7 +161,7 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
   return (
     <main className="sc-intro">
       <header className="sc-intro-header">
-        <a className="sc-intro-brand" href="/introduction" aria-label="打开幕景官网"><span className="sc-intro-brand-icon" aria-hidden="true"><BrandMark size={23} /></span><span>幕景<span className="sc-intro-wordmark">SCENDANCE</span></span></a>
+        <a className="sc-intro-brand" href="/introduction" aria-label="打开幕景官网"><span className="sc-intro-brand-icon" aria-hidden="true"><BrandMark size={28} /></span><strong className="sc-intro-brand-cn">幕景</strong><span className="sc-intro-brand-dot" aria-hidden="true"/><span className="sc-intro-brand-en"><i aria-hidden="true">S</i>CENDANCE</span></a>
         <span className="sc-intro-version">活动空间工作台 <span>v1.0.0 · 图纸重建预览</span></span>
       </header>
 

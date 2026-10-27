@@ -16,4 +16,4 @@
 .sc-local-activities-list strong { overflow-wrap:anywhere; }
 .sc-local-activities-list span { color:var(--sc-muted,#6f6f6f); font-size:11px; }
 .sc-local-activities-list button { flex-shrink:0; }
-.sc-local-activities fieldset:disabled { opacity:.75; }
+.sc-local-activities fieldset:disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; }

@@ -130,9 +130,9 @@ export function applyWallDisplay(
   return changed;
 }
 
-// Warm off-white from the Figma spec (#eae7de 场地墙面): walls read as the
-// design's soft greige, not tan and not the old neutral mid-grey.
-const DEFAULT_WALL_COLOR = 0xeae7de;
+// Paper white from the 2026 chrome spec (#f5f4f1): walls read as gallery white,
+// not tan and not the old warm greige.
+const DEFAULT_WALL_COLOR = 0xf6f7f8;
 
 export function removeTagged(scene: ThreeNS.Scene, ...tags: RoomObjectTag[]): void {
   const tagSet = new Set<string>(tags);
@@ -248,7 +248,7 @@ export function buildRoom(THREE: ThreeModule, options: RoomBuilderOptions): void
 /** How far the plinth ring reaches past the wall plane; the porch steps start beyond it (#276). */
 export const FOUNDATION_OVERHANG = 0.35;
 const FOUNDATION_HEIGHT = 0.25;
-const FOUNDATION_COLOR = 0xdfd9ca;
+const FOUNDATION_COLOR = 0xe9eaec;
 
 function addFoundation(
   THREE: ThreeModule,
@@ -527,8 +527,8 @@ function buildWalls(
     const span = Math.max(width, depth) * 1.5;
     const divisions = Math.max(2, Math.ceil(span / GRID_SIZE_METERS));
     const size = divisions * GRID_SIZE_METERS;
-    // Figma grid tones: #dbdccf strokes on the cream canvas, slightly darker centre line.
-    const grid = new THREE.GridHelper(size, divisions, 0xcfc9b8, 0xdbdccf);
+    // 2026 grid tones: hairline greys on the paper-white canvas, slightly darker centre line.
+    const grid = new THREE.GridHelper(size, divisions, 0xdcdedf, 0xe6e7e8);
     grid.userData.type = ROOM_OBJECT_TAGS.Wall;
     makeStatic(grid);
     scene.add(grid);

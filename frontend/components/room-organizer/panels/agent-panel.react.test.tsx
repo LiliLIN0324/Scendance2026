@@ -236,7 +236,8 @@ describe('T-UI visible interaction', () => {
   it('renders the activity brief as read-only facts from the conversation', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
-    expect(within(brief).getByText('来自对话')).toBeTruthy();
+    // 无眉题头：左栏 Tab 已标明位置，卡片直接以活动名开场。
+    expect(within(brief).queryByText('来自对话')).toBeNull();
     expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
     expect(within(brief).queryByRole('textbox')).toBeNull();
     // 唯一的按钮是空地文字链：简报仍然是只读事实，不在左栏摆表单。
