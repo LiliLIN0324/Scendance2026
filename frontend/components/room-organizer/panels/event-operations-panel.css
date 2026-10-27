@@ -47,5 +47,5 @@
 .sc-operation-object input { flex-shrink: 0; }
 .sc-operation-object small { color: var(--sc-muted, #6f6f6f); font-size: 10px; }
 .sc-operation-object.missing { color: #835a16; }
-.sc-operation-add fieldset:disabled { opacity: .65; }
+.sc-operation-add fieldset:disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; }
 @media (max-width: 390px) { .sc-operation-form .sc-handoff-pair { grid-template-columns: 1fr; } }

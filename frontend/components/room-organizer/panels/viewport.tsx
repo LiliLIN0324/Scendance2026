@@ -138,134 +138,77 @@ export function Viewport(props: ViewportProps): JSX.Element {
 function LoadingOverlay(): JSX.Element {
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center pc-world"
-      style={{ background: 'var(--pc-grass)' }}
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: 'var(--sc-canvas)' }}
+      role="status"
+      aria-live="polite"
     >
-      <div
-        className="pc-glass pc-glass--dark"
-        style={{ padding: '18px 24px', textAlign: 'center' }}
-      >
-        <p
-          className="pc-hud-header"
-          style={{ fontSize: 13, marginBottom: 4 }}
-        >
-          正在准备活动场地…
-        </p>
-        <p className="pc-blurb" style={{ fontSize: 11, margin: 0 }}>
-          载入三维编辑器，请稍候。
-        </p>
+      <div className="sc-canvas-loading">
+        <span className="sc-canvas-loading-cap">正在准备活动场地</span>
+        <p className="sc-canvas-loading-copy">载入三维编辑器，请稍候。</p>
       </div>
     </div>
   );
 }
 
 function ErrorOverlay({ message }: { message: string }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  async function copyDiagnostics() {
+    try {
+      await navigator.clipboard.writeText(
+        message || '三维画布未能初始化，未捕获到具体错误信息。',
+      );
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <div
       className="absolute inset-0 flex items-center justify-center"
-      style={{ background: 'rgba(20, 30, 40, 0.6)' }}
+      style={{ background: 'var(--sc-canvas)' }}
+      role="alert"
     >
-      <div
-        className="pc-glass pc-glass--dark"
-        style={{
-          maxWidth: 480,
-          padding: 24,
-          textAlign: 'center',
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            margin: '0 auto 12px',
-            height: 48,
-            width: 48,
-            borderRadius: 14,
-            background: 'rgba(228,82,72,0.18)',
-            border: '1px solid var(--pc-demolish)',
-            color: 'var(--pc-demolish)',
-            display: 'grid',
-            placeItems: 'center',
-          }}
-        >
+      <div className="sc-canvas-error">
+        <span className="sc-canvas-error-icon" aria-hidden>
           <Icon name="demolish" size={24} />
+        </span>
+        <h3 className="sc-canvas-error-title">三维画布没能启动</h3>
+        <p className="sc-canvas-error-copy">
+          通常是浏览器关闭了硬件加速。动作不会丢，打开加速再重新加载就能继续。
+        </p>
+        <div className="sc-canvas-error-acts">
+          <button
+            type="button"
+            className="sc-canvas-error-primary"
+            onClick={() => window.location.reload()}
+          >
+            重新加载
+          </button>
+          <button
+            type="button"
+            className="sc-canvas-error-ghost"
+            onClick={copyDiagnostics}
+          >
+            {copied ? '已复制诊断信息' : '复制诊断信息'}
+          </button>
         </div>
-        <p
-          className="pc-hud-header"
-          style={{ fontSize: 16, marginBottom: 8 }}
-        >
-          三维画布暂不可用
-        </p>
-        <p
-          className="pc-blurb"
-          style={{ fontSize: 12, marginBottom: 16 }}
-        >
-          {message}
-        </p>
-        <ul
-          style={{
-            textAlign: 'left',
-            padding: 12,
-            margin: 0,
-            listStyle: 'none',
-            background: 'rgba(0,0,0,0.18)',
-            borderRadius: 10,
-            border: '1px solid var(--pc-glass-inner)',
-          }}
-        >
-          {[
-            'Enable hardware acceleration in your browser settings.',
-            'Update your graphics drivers.',
-            'Try Chrome, Firefox, or Edge.',
-          ].map((tip) => (
-            <li
-              key={tip}
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                fontFamily: 'var(--pc-font-body)',
-                fontSize: 12,
-                color: 'var(--pc-paper-soft)',
-                padding: '4px 0',
-              }}
-            >
-              <span
-                aria-hidden
-                style={{
-                  marginTop: 6,
-                  height: 6,
-                  width: 6,
-                  borderRadius: 999,
-                  background: 'var(--pc-cyan-glow)',
-                  flexShrink: 0,
-                }}
-              />
-              {tip}
-            </li>
-          ))}
-        </ul>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="pc-tile"
-          style={{
-            marginTop: 16,
-            padding: '8px 16px',
-            borderRadius: 10,
-            fontFamily: 'var(--pc-font-display)',
-            fontWeight: 700,
-            fontSize: 12,
-            letterSpacing: 'var(--pc-tr-caps)',
-            textTransform: 'uppercase',
-          }}
-        >
-          Reload Page
-        </button>
+        <details className="sc-canvas-error-detail">
+          <summary>技术细节</summary>
+          <p>{message || '未捕获到具体错误信息。'}</p>
+          <ul>
+            <li>在浏览器设置里打开「使用硬件加速」</li>
+            <li>更新显卡驱动后重开浏览器</li>
+            <li>换用 Chrome / Edge / Firefox 的最新版</li>
+          </ul>
+        </details>
       </div>
     </div>
   );
 }
-
 interface HoverTooltipProps {
   hover: HoverState;
   containerRef: React.RefObject<HTMLCanvasElement>;

@@ -12,4 +12,4 @@
 .sc-production-refs>button { margin-right:6px; }
 .sc-production-summary { margin-top:14px; padding:10px; background:#f2f1ec; border-radius:8px; color:var(--sc-muted,#6f6f6f); line-height:1.6; }
 .sc-production-summary p { margin:5px 0; }
-.sc-production-plan fieldset:disabled { opacity:.75; }
+.sc-production-plan fieldset:disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; }

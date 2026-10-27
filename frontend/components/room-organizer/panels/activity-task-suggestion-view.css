@@ -40,7 +40,7 @@
 .ats-approval { display: flex; gap: var(--sc-space-sm, 8px); align-items: flex-start; min-width: 0; }
 .ats-view button.sc-button { white-space: normal; text-align: center; }
 .ats-view button.ats-primary { border-color: var(--sc-accent, #6f6f6f); background: var(--sc-accent-soft, #efede6); color: var(--sc-accent-ink, #2f2f2f); }
-.ats-view :is(button, input, textarea):disabled { opacity: .55; cursor: not-allowed; }
+.ats-view :is(button, input, textarea):disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; cursor: not-allowed; }
 .ats-view :is(summary, button, input, textarea):focus-visible { outline: 2px solid var(--sc-accent-ink, #2f2f2f); outline-offset: 3px; }
 .ats-result-actions:empty { display: none; }
 @media (max-width: 420px) {

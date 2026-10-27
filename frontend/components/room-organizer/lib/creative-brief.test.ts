@@ -112,10 +112,10 @@ describe('creative brief boundaries', () => {
     for(const text of ['北侧入口不得遮挡','自然露营','米白橄榄绿','温暖夜场','文字输入，非图片识别']) expect(instruction).toContain(text);
   });
 
-  it('persists the default warm atmosphere of a local draft', () => {
+  it('persists the default neutral atmosphere of a local draft', () => {
     const local = backendSceneToLayout(scene);
     delete local.backendLighting;
-    expect(layoutToBackendScene(local).lighting).toBe('warm');
+    expect(layoutToBackendScene(local).lighting).toBe('neutral');
   });
 
   it('keeps local presentation while applying only server-authorized scene changes', () => {

@@ -1,8 +1,9 @@
 ﻿.sc-commercial {
-  --sc-type-body: 16px;
-  --sc-type-meta: 14px;
+  /* 同区三档（§一.2）：清除私有字号系统，回到全局七档——16 标题 / 14 正文 / 12 元信息。 */
+  --sc-type-body: var(--fs-p1);
+  --sc-type-meta: var(--fs-p2);
   min-width: 0;
-  color: var(--sc-ink, #26392f);
+  color: var(--sc-ink);
   font-size: var(--sc-type-body);
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -14,12 +15,12 @@
 
 .sc-commercial :is(h2, h3, h4) {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: var(--fs-h3);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: var(--lh-h3);
 }
 
-.sc-commercial h4 { font-size: 16px; }
+.sc-commercial h4 { font-size: var(--fs-p1); }
 .sc-commercial p { margin: 8px 0; }
 .sc-commercial :is(form, fieldset, details, article, li, dl, dd) { min-width: 0; }
 .sc-commercial fieldset { margin: 0; padding: 0; border: 0; }
@@ -124,7 +125,7 @@
   outline-offset: 3px;
 }
 
-.sc-commercial :is(input, select, textarea, button):disabled { cursor: not-allowed; opacity: .65; }
+.sc-commercial :is(input, select, textarea, button):disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; cursor: not-allowed; }
 .sc-commercial .sc-commercial-files,
 .sc-commercial .sc-commercial-reference-list { display: grid; gap: 8px; margin: 12px 0; padding: 0; list-style: none; }
 .sc-commercial .sc-commercial-file {

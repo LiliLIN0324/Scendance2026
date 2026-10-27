@@ -11,6 +11,25 @@ import { downloadRawLayout, readStoredLayoutRaw, resetStoredLayout } from '../co
 // Global error boundary — catches errors thrown in the root layout itself (and
 // in app/error.tsx), so it must render its own <html>/<body>. Starting fresh
 // keeps a copy of the saved house first, like app/error.tsx (#336).
+//
+// The styles live inline on purpose: this boundary can render when the app's
+// stylesheet never loaded, so it carries its own flat tokens (#2026 redesign).
+
+const pageStyles = `
+  .sc-global-error{box-sizing:border-box;margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f4f5f7;color:#141416;font-family:'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif}
+  .sc-global-error-card{display:grid;justify-items:center;gap:8px;max-width:440px;box-sizing:border-box;text-align:center}
+  .sc-global-error-icon{display:grid;place-items:center;height:32px;color:#b4443c}
+  .sc-global-error-title{margin:0;font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}
+  .sc-global-error-copy{margin:0;max-width:400px;color:#71767e;font-size:13px;line-height:22px}
+  .sc-global-error-acts{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .sc-global-error button{appearance:none;cursor:pointer;height:34px;padding:0 16px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500}
+  .sc-global-error-primary{border:1px solid #141416;background:#141416;color:#fff}
+  .sc-global-error-primary:hover{background:#2a2c31}
+  .sc-global-error-ghost{border:0;background:transparent;color:#71767e;padding:0 12px}
+  .sc-global-error-ghost:hover{background:#eceef0;color:#55585f}
+  .sc-global-error button:focus-visible{outline:2px solid #55585f;outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){.sc-global-error button{transition:none}}
+`;
 
 export default function GlobalError({ error }: { error: Error & { digest?: string }; reset: () => void }): JSX.Element {
   useEffect(() => {
@@ -57,26 +76,21 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
   return (
     <html lang="zh-CN">
       <head>
-        <style>{`
-          .sc-global-recovery{box-sizing:border-box;margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 24% 18%,#fff9,transparent 60%),#f1f3f6;color:#2b2b2b;font-family:'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif}
-          .sc-global-recovery-card{max-width:440px;box-sizing:border-box;padding:32px;border-radius:20px;border:1px solid #ffffffc4;background:linear-gradient(145deg,#ffffff70,transparent 45%),#ffffffc2;box-shadow:0 12px 36px #24313e10,inset 0 1px 0 #fff,inset 0 0 0 1px #ffffff52;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
-          .sc-global-recovery-title{margin:0 0 12px;font-size:22px;font-weight:600;line-height:1.4;letter-spacing:-.045em}
-          .sc-global-recovery-copy{margin:0 0 20px;color:#59636d;font-size:13px;line-height:1.8}
-          .sc-global-recovery button{appearance:none;cursor:pointer;border:1px solid #2b2b2b;border-radius:8px;padding:10px 16px;background:#2b2b2b;color:#fff;font-family:inherit;font-size:12px;font-weight:500;transition:background 160ms cubic-bezier(.22,1,.36,1),transform 160ms cubic-bezier(.22,1,.36,1)}
-          .sc-global-recovery button:focus-visible{outline:2px solid #0a5f5c;outline-offset:3px}
-          .sc-global-recovery button:active{transform:translateY(1px)}
-          @media(hover:hover) and (pointer:fine){.sc-global-recovery button:hover{background:#414141}}
-          @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.sc-global-recovery-card{background:#f8f9fb}}
-          @media(prefers-reduced-motion:reduce){.sc-global-recovery button{transition:none}.sc-global-recovery button:active{transform:none}}
-          @media(max-width:600px){.sc-global-recovery-card{padding:24px}}
-        `}</style>
+        <style>{pageStyles}</style>
       </head>
-      <body className="sc-global-recovery">
-        <div className="sc-global-recovery-card">
-          <p className="sc-global-recovery-title">
+      <body className="sc-global-error">
+        <div className="sc-global-error-card">
+          <span className="sc-global-error-icon" aria-hidden>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+          </span>
+          <h1 className="sc-global-error-title">
             {chunkFailure ? '页面加载失败' : '工作台暂时遇到问题'}
-          </p>
-          <p className="sc-global-recovery-copy">
+          </h1>
+          <p className="sc-global-error-copy">
             {chunkFailure
               ? '部分页面文件未能加载，请重新加载。已保存的本地草稿不会被删除。'
               : resetProblem ??
@@ -84,22 +98,26 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
           </p>
           {/* After a failed move this page holds the only copy: no button that
               would reload it away until the user has downloaded it. */}
-          {!lostRaw && (
-          <button
-            type="button"
-            onClick={chunkFailure ? retryChunkLoad : resetSavedLayout}
-          >
-            {chunkFailure ? '重新加载' : '保留备份，开始新方案'}
-          </button>
-          )}
-          {lostRaw && (
-            <button
-              type="button"
-              onClick={() => downloadRawLayout(lostRaw, 'scendance-layout.json')}
-            >
-              下载本地草稿
-            </button>
-          )}
+          <div className="sc-global-error-acts">
+            {!lostRaw && (
+              <button
+                type="button"
+                className="sc-global-error-primary"
+                onClick={chunkFailure ? retryChunkLoad : resetSavedLayout}
+              >
+                {chunkFailure ? '重新加载' : '保留备份，开始新方案'}
+              </button>
+            )}
+            {lostRaw && (
+              <button
+                type="button"
+                className="sc-global-error-primary"
+                onClick={() => downloadRawLayout(lostRaw, 'scendance-layout.json')}
+              >
+                下载本地草稿
+              </button>
+            )}
+          </div>
         </div>
       </body>
     </html>

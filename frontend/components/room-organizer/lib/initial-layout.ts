@@ -11,7 +11,7 @@ export const INITIAL_GROUND_FLOOR: FloorLayout = {
   id: 'ground',
   name: '活动场地',
   height: 3,
-  floorColor: '#ece8de',
+  floorColor: '#f5f6f7',
   floorPattern: 'solid',
   items: [
     { id: 'a0100000-0000-4000-8000-000000000001', type: 'table', name: '共创桌', width: 1.2, depth: .6, height: .75, color: '#c6a580', icon: '▱', position: { x: -1.4, z: 0 }, rotation: 0 },

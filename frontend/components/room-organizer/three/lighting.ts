@@ -19,9 +19,9 @@ export const LIGHTING_TAGS = {
  * them — this module owns both ends of the `light:*` tag protocol.
  */
 export function addLights(THREE: ThreeModule, scene: ThreeNS.Scene): void {
-  // Hemisphere fill gives the bright sky / warm ground bounce a suburban lot
-  // reads with — without it everything in shadow goes flat-grey.
-  const hemi = new THREE.HemisphereLight(0xbfe5ff, 0xa07a48, 0.55);
+  // Hemisphere fill lifts shadows with a sky/ground bounce; the ground tone
+  // stays paper-neutral so white walls don't read cream (2026 gallery look).
+  const hemi = new THREE.HemisphereLight(0xbfe5ff, 0xd9dadc, 0.55);
   hemi.userData.type = LIGHTING_TAGS.Hemisphere;
   scene.add(hemi);
 
@@ -29,7 +29,7 @@ export function addLights(THREE: ThreeModule, scene: ThreeNS.Scene): void {
   ambient.userData.type = LIGHTING_TAGS.Ambient;
   scene.add(ambient);
 
-  const directional = new THREE.DirectionalLight(0xfff4d1, 1.05);
+  const directional = new THREE.DirectionalLight(0xffffff, 1.05);
   directional.position.set(7, 14, 6);
   directional.castShadow = true;
   // Frustum large enough to cover the lot + the outdoor perimeter so trees

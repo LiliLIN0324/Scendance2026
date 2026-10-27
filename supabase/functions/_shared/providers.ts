@@ -57,7 +57,7 @@ export function hunyuan(env: Env, fetcher: Fetcher = fetch, pinned?:GenerationPr
  * re-texture lane in scope. Result URLs expire in ~2h, so the worker must archive immediately.
  */
 const lux3dShell=z.object({c:z.string().nullable(),d:z.unknown(),m:z.string().nullable().optional(),f:z.unknown().optional()});
-const lux3dQuerySchema=z.object({status:z.number(),outputs:z.array(z.object({content:z.string().nullable()})).optional()});
+const lux3dQuerySchema=z.object({status:z.number(),outputs:z.array(z.object({content:z.string().nullable()}).nullable()).optional()});
 export function aholoLux3d(env: Env, fetcher: Fetcher = fetch) {
   const base=(env('LUX3D_BASE_URL')??'https://api.aholo.ai/global').replace(/\/+$/,'');
   const call = (path: string, init: RequestInit) => fetchJson(`${base}${path}`, {
@@ -82,7 +82,7 @@ export function aholoLux3d(env: Env, fetcher: Fetcher = fetch) {
       return {
         Status,ErrorCode:d.status===6?'PROVIDER_TASK_CANCELLED':d.status===4?'PROVIDER_FAILED':undefined,
         ResultFile3Ds:(d.outputs??[]).flatMap(o=>{
-          if(!o.content||!o.content.startsWith('https://'))return [];
+          if(!o?.content||!o.content.startsWith('https://'))return [];
           const type=o.content.split('?')[0].split('.').pop()?.toLowerCase()??'';
           return ['glb','zip','ply'].includes(type)?[{Type:type,Url:o.content}]:[];
         }),

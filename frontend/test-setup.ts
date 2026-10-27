@@ -1,5 +1,11 @@
-import { beforeEach } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import { clearSupabaseBrowserCookies } from './lib/supabase/client';
+
+// layout.tsx 用 next/font/google 接 Inter 与思源黑体；jsdom 里没有字体管线，mock 成空壳。
+vi.mock('next/font/google', () => ({
+  Inter: () => ({ variable: '--font-inter', style: { fontFamily: 'var(--font-inter)' } }),
+  Noto_Sans_SC: () => ({ variable: '--font-noto-sc', style: { fontFamily: 'var(--font-noto-sc)' } }),
+}));
 
 beforeEach(() => {
   clearSupabaseBrowserCookies();

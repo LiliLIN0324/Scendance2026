@@ -36,4 +36,4 @@ export type { ScenePresetKey };
 export const SCENE_PRESET_KEYS = Object.keys(SCENE_PRESETS) as ScenePresetKey[];
 
 export function presetModelUrl(key: ScenePresetKey): string { return `/scene-presets/${key}/${key}.glb`; }
-export function editorItemLimit(layout: RoomLayout): number { return layout.scenePreset ? 500 : 50; }
+export function editorItemLimit(layout: RoomLayout): number { return layout.scenePreset ? 500 : 200; }
