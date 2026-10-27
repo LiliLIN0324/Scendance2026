@@ -95,6 +95,16 @@ describe("AI proposal contract and paid request protection", () => {
     await expect(controller.createGenerationJob('A chair',requestId,{kind:'image',referenceImageAssetId:otherProjectId})).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT'});
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+  it('forwards an explicit aholo declaration and keeps legacy text bodies unchanged without it', async () => {
+    await login();
+    queue(job({provider_mode:'aholo',provider_model:'lux3d'}));
+    await controller.createGenerationJob('白色圆桌',requestId,{kind:'text',provider:'aholo'});
+    expect(body()).toEqual({prompt:'白色圆桌',requestId,provider:'aholo'});
+    queue(job());
+    const second=crypto.randomUUID();
+    await controller.createGenerationJob('A chair',second);
+    expect(body()).toEqual({prompt:'A chair',requestId:second});
+  });
   it.each([[429, "DAILY_BUDGET_EXCEEDED"], [429, "BUDGET_EXCEEDED"], [503, "SERVICE_NOT_CONFIGURED"], [422, "AI_INVALID_PROPOSAL"], [409, "AI_IN_PROGRESS"], [409, "AI_PREVIOUS_REQUEST_FAILED"]])("keeps editing available after AI-only %s %s", async (status, code) => {
     await editing(); queue({ error: { code } }, status as number);
     await expect(controller.requestProposal({ mode: "layout", prompt: "安排沙龙", scene })).rejects.toMatchObject({ code });

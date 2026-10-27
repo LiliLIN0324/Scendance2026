@@ -7,12 +7,13 @@ import { activityTaskRunRequestSchema, type ActivityTaskRun, type ActivityTaskRu
 import { agentRunRequestSchema, agentRunSchema, type AgentRun, type AgentRunRequest } from "../../supabase/functions/_shared/agent-contract";
 import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
+import { briefExtractRequestSchema, briefExtractResponseSchema, type BriefExtractResponse } from "../../supabase/functions/_shared/brief-extract-contract";
 import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
+import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 import { createSupabaseBrowserClient } from "./supabase/client";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
-import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 export { SceneApiError };
 export type { AgentRun };
 export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
@@ -159,14 +160,14 @@ const generationJobSchema = z.object({
   id: uuid, owner_id: z.string().min(1), prompt: z.string(),
   kind: z.enum(['text','image','texture']).optional(), source_asset_id: uuid.nullable().optional(),
   reference_image_asset_id: uuid.nullable().optional(), provider_model: z.string().nullable().optional(),
-  provider_mode: z.enum(['tokenhub','legacy']).nullable().optional(),
+  provider_mode: z.enum(['tokenhub','legacy','aholo']).nullable().optional(),
   state: z.enum(["queued", "submitting", "submitted", "processing", "archiving", "ready", "added", "failed", "rejected", "submit_unknown"]),
   provider_job_id: z.string().nullable(), asset_id: uuid.nullable(),
   next_poll_at: dateString, attempts: z.number().int().nonnegative(), error_code: z.string().nullable(),
   provider_usage: z.unknown(), created_at: dateString, updated_at: dateString, reused: z.boolean().optional(),
 }).refine(job => !["ready", "added"].includes(job.state) || job.asset_id !== null);
 export type GenerationJob = z.infer<typeof generationJobSchema>;
-const generationCapabilitiesSchema = z.object({ model: z.string(), textToModel: z.boolean(), imageToModel: z.boolean(), texture: z.boolean(), textureRequiresImage: z.literal(true) });
+const generationCapabilitiesSchema = z.object({ model: z.string(), textToModel: z.boolean(), imageToModel: z.boolean(), texture: z.boolean(), textureRequiresImage: z.literal(true), aholoTextToModel: z.boolean().default(false), aholoImageToModel: z.boolean().default(false) });
 export type GenerationCapabilities = z.infer<typeof generationCapabilitiesSchema>;
 interface PaidRequest<T> { fingerprint: string; promise?: Promise<T>; result?: T }
 interface RequestScope {
@@ -988,7 +989,16 @@ export class BackendSession {
       expectedRevision: this.snapshot.revision, localRevision: this.snapshot.localRevision, scene: parsed };
   }
   private assertProposalContext(state: EditorState): void {
-    const lease = this.writableLease();
+    // 校验的是「这个迟到的提案还属于当前编辑上下文吗」。租约已释放或被写锁时
+    // writableLease 的 CLOUD_WRITE_BLOCKED（提示去拿编辑权）会误导——提案本就不该
+    // 再应用，报 STALE_PROPOSAL；过期租约的 LEASE_LOST 保持透传。
+    let lease: Lease;
+    try {
+      lease = this.writableLease();
+    } catch (error) {
+      if (error instanceof SceneApiError && error.code === "CLOUD_WRITE_BLOCKED") throw new SceneApiError("STALE_PROPOSAL", 409, null);
+      throw error;
+    }
     const scopeOk = this.isCurrentRequestScope({ projectId: state.projectId, lease: state });
     const checks = {
       leaseProjectId: lease.projectId === state.projectId,
@@ -1119,6 +1129,11 @@ export class BackendSession {
     const body = activityTaskRunRequestSchema.parse({ ...input, kind: 'activity_tasks', sessionId: lease.sessionId,
       generation: lease.generation, expectedRevision: this.snapshot.revision });
     return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', () => this.client.startActivityTaskRun(projectId, body));
+  }
+  /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
+  async briefExtract(message: string): Promise<BriefExtractResponse> {
+    const input = briefExtractRequestSchema.parse({ message });
+    return briefExtractResponseSchema.parse(await this.client.request('/brief/extract', 'POST', input));
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;
@@ -1259,10 +1274,13 @@ export class BackendSession {
       throw error;
     }
   }
-  async createGenerationJob(prompt: string, requestId: string, options?: Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId'>): Promise<GenerationJob> {
+  async createGenerationJob(prompt: string, requestId: string, options?: Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId' | 'provider'>): Promise<GenerationJob> {
     const parsed = generationRequestSchema.parse({ prompt: prompt.trim(), requestId, ...options });
-    // Preserve the existing text request body and identity across reloads and upgrades.
-    const body = parsed.kind === 'text' ? { prompt: parsed.prompt, requestId: parsed.requestId } : parsed;
+    // Preserve the existing text request body and identity across reloads and upgrades; the
+    // explicit vendor declaration joins the body only when present.
+    const body = parsed.kind === 'text'
+      ? { prompt: parsed.prompt, requestId: parsed.requestId, ...(parsed.provider ? { provider: parsed.provider } : {}) }
+      : parsed;
     const fingerprint = canonical(body);
     const key = `${this.epoch}:${body.requestId}`;
     const existing = this.generationRequests.get(key);

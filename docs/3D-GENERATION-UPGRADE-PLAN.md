@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 参数化 | `_shared/parametric.ts` | **已有**：6 个 family（`table/chair/counter/platform/backdrop/cabinet`），13.9 ms，指纹去重，包围盒容差 `1e-5` | 只能表达盒子/圆柱族；无 LOD、无倒角、无 UV 变化 |
 | 云生成 HY-3D | `_shared/providers.ts`、`generation-worker/` | **已有**：`text`/`image`/`texture` 三 kind；tokenhub / legacy；`hy-3d-3.0` / `hy-3d-3.1` / `hy-3d-texture`；按任务固定 provider | 真实账号权限、结果质量、账单**未验证**；入口只有云，没有"先试便宜通道"的路由 |
+| 云生成 Aholo Lux3D | `_shared/providers.ts`（`aholoLux3d`）、`generation-lane.ts`（`aholo` lane） | **已有（2026-10-28）**：`text`/`image` 两 kind；显式 `provider:'aholo'` 声明进 lane；输出 GLB+PBR，2h URL 即时归档；M0 实测通过（task 4423551，~3 min，0.9MB GLB） | UI/agent 入口待卡 T-AHOLO-UI；额度与条款 URL 待用户提供 |
 | 精选模型库 | `assets/library/catalogue.json`、`tools/catalog/` | **已有**：30 个手挑 CC0 模型，`verify` 检查直链/许可证/无 Draco/sha256 | 补库靠人工；没有与生成通道共用资产语义 |
 | Blender 离线 | `tools/blender/` | **已有探索**：几何与 TS 等价、11/11 通过；但 ~2.7 s、913 MB | 接入形态未定（未做）；`assets/` 共用性未评估 |
 

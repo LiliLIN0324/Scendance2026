@@ -16,7 +16,7 @@ export const laneCost:Record<GenerationLane,'free'|'metered'>={offline:'free',li
 export interface LaneRequest {
   kind:'text'|'image'|'texture';
   /** Explicit vendor declaration from the request. Only 'aholo' is accepted. */
-  provider?:'aholo';
+  provider?:'aholo'|undefined;
   /**
    * An already-decided deterministic build, declared by the caller (the planning agent's
    * `create_parametric_model` tool, the `/assets/parametric` route or an offline bake request).
