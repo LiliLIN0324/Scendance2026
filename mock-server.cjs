@@ -180,6 +180,39 @@ const localModelByAssetId = new Map(
 let uploadedSources = [];
 let latestProposal = null;
 
+// --- Generation (Lux3D/HY3) mock state ---
+const genJobs = new Map();
+function makeGenJob(body) {
+  return {
+    id: uuid(),
+    owner_id: MOCK_USER_ID,
+    prompt: body?.prompt || 'mock 物件',
+    kind: body?.kind ?? 'text',
+    state: 'queued',
+    asset_id: null,
+    source_asset_id: null,
+    reference_image_asset_id: null,
+    provider_job_id: `mock-${Date.now()}`,
+    provider_mode: body?.provider === 'aholo' ? 'aholo' : 'tokenhub',
+    provider_model: body?.provider === 'aholo' ? 'lux3d' : 'hy-3d-3.0',
+    next_poll_at: new Date().toISOString(),
+    attempts: 0,
+    error_code: null,
+    provider_usage: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    reused: false,
+  };
+}
+function advanceGenJob(job) {
+  const states = ['queued', 'submitting', 'submitted', 'processing', 'ready'];
+  const idx = states.indexOf(job.state);
+  if (idx < 0 || idx >= states.length - 1) return;
+  job.state = states[idx + 1];
+  if (job.state === 'ready') job.asset_id = uuid();
+  job.updated_at = new Date().toISOString();
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
@@ -485,6 +518,42 @@ const server = http.createServer((req, res) => {
         const url = localPath ? `${FRONTEND_ORIGIN}${localPath}` : `http://localhost:${PORT}/mock-assets/${assetUrlMatch[1]}.glb`;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ id: assetUrlMatch[1], format: 'glb', name: 'mock-asset', url, expiresIn: 300 }));
+        return;
+      }
+
+      // Generation capabilities (Aholo Lux3D advertised so the UI entry is exercisable in dev)
+      if (apiPath === '/generation/capabilities' && method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ model: 'hy-3d-3.0', textToModel: true, imageToModel: true, texture: false, textureRequiresImage: true, aholoTextToModel: true, aholoImageToModel: true }));
+        return;
+      }
+
+      // Generation jobs lifecycle: one step per poll so the UI shows intermediate states.
+      if (apiPath === '/jobs' && method === 'POST') {
+        console.log('[GEN CREATE] provider:', json?.provider ?? 'default', 'kind:', json?.kind ?? 'text', 'prompt:', json?.prompt);
+        const job = makeGenJob(json);
+        genJobs.set(job.id, job);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(job));
+        return;
+      }
+      if (apiPath === '/jobs' && method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify([...genJobs.values()]));
+        return;
+      }
+      const genJobMatch = apiPath.match(/^\/jobs\/([^/]+)(\/added)?$/);
+      if (genJobMatch) {
+        const job = genJobs.get(genJobMatch[1]);
+        if (!job) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { code: 'NOT_FOUND' } }));
+          return;
+        }
+        if (genJobMatch[2]) { job.state = 'added'; job.updated_at = new Date().toISOString(); }
+        else advanceGenJob(job);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(job));
         return;
       }
 
