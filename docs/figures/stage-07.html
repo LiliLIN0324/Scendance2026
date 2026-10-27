@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Scendance 07</title>
+<style>
+  @font-face {
+    font-family: 'NotoSC';
+    src: url('file:///C:/Windows/Fonts/NotoSansSC-VF.ttf') format('truetype');
+    font-weight: 100 900;
+    font-display: block;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1672px; height: 941px; overflow: hidden; }
+  body { font-family: 'NotoSC', 'Microsoft YaHei', sans-serif; }
+  #root {
+    position: relative; width: 1672px; height: 941px; overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 88% 12%, #E4EBDD 0%, rgba(228,235,221,0) 55%),
+      linear-gradient(158deg, #F9F6EF 0%, #F2EFE5 58%, #EDEADF 100%);
+  }
+  #root::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: url('paper.png');
+    background-size: 288px 288px;
+    opacity: .16; mix-blend-mode: multiply;
+  }
+
+  .brand { position: absolute; left: 96px; top: 66px; display: flex; align-items: center; gap: 14px; z-index: 3; }
+  .mark { display: flex; align-items: flex-end; gap: 5px; height: 30px; }
+  .mark i { display: block; width: 8px; border-radius: 4px; background: #2C4A34; }
+  .mark i:nth-child(1) { height: 17px; opacity: .55; }
+  .mark i:nth-child(2) { height: 25px; }
+  .mark i:nth-child(3) { height: 30px; background: #6C9A63; }
+  .brand b { font-size: 26px; font-weight: 800; letter-spacing: 1px; color: #1B2A1F; }
+  .brand span { font-size: 13px; font-weight: 600; letter-spacing: 4.5px; color: #6E7A66; margin-left: 2px; }
+
+  .eyebrow { position: absolute; left: 98px; top: 196px; z-index: 3;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: 3.4px; color: #7C8874; }
+  .eyebrow em { font-style: normal; color: #3F6B45; }
+  .eyebrow .rule { width: 46px; height: 1px; background: #C3CBB8; }
+
+  h1 { position: absolute; left: 94px; top: 236px; z-index: 3;
+    font-size: 88px; line-height: 1.1; font-weight: 900; letter-spacing: -1px; color: #14251A; }
+  h1 .accent { color: #3E6B45; }
+  h1 .dot { color: #3E6B45; }
+
+  .lede { position: absolute; left: 98px; top: 494px; width: 404px; z-index: 3;
+    font-size: 17px; line-height: 1.95; font-weight: 400; color: #58624F; letter-spacing: .2px; }
+  .lede b { font-weight: 700; color: #2B3B2C; }
+
+  .facts { position: absolute; left: 98px; top: 636px; z-index: 3; width: 404px; }
+  .fact { display: flex; align-items: baseline; justify-content: space-between;
+    padding: 15px 0 14px; border-top: 1px solid #DADCCE; }
+  .fact:last-child { border-bottom: 1px solid #DADCCE; }
+  .fact .k { font-size: 12px; letter-spacing: 2.2px; color: #8A9480; font-weight: 600; }
+  .fact .v { font-size: 21px; font-weight: 700; color: #24352A; letter-spacing: .4px; }
+  .fact .v small { font-size: 13px; font-weight: 500; color: #6F7B67; margin-left: 6px; letter-spacing: 0; }
+
+  .foot { position: absolute; left: 98px; bottom: 46px; z-index: 3;
+    font-size: 11.5px; letter-spacing: 2.4px; color: #98A18F; font-weight: 500; }
+  .foot i { font-style: normal; color: #C0C7B6; margin: 0 10px; }
+
+  .window { position: absolute; left: 548px; top: 130px; width: 1080px; height: 675px; z-index: 2;
+    border-radius: 18px; overflow: hidden; background: #F4F1E8;
+    border: 1px solid rgba(30,48,36,.14);
+    box-shadow: 0 46px 90px -34px rgba(26,42,30,.42), 0 14px 34px -16px rgba(26,42,30,.24); }
+  .window img { display: block; width: 1686px; height: 1054px; max-width: none; object-fit: fill;
+    margin-left: -593px; margin-top: -158px; }
+  .window::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.5); border-radius: 18px; }
+
+  .caption { position: absolute; right: 60px; bottom: 52px; z-index: 4;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; letter-spacing: 1.4px; color: #6E7A66; font-weight: 500; }
+  .caption i { display: block; width: 26px; height: 1px; background: #B9C2AF; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="brand">
+    <div class="mark"><i></i><i></i><i></i></div>
+    <b>幕景</b><span>SCENDANCE</span>
+  </div>
+
+  <div class="eyebrow"><em>07</em><span class="rule"></span>持续修改 / ITERATE</div>
+
+  <h1>改布置，<br><span class="accent">说一句话</span><span class="dot">。</span></h1>
+
+  <p class="lede">不满意就对着 Agent 说一句；改完<b>先出预览，</b>确认之后才写进画布，随时一步撤销。</p>
+
+  <div class="facts">
+    <div class="fact"><span class="k">修 改</span><span class="v">说一句话<small>对着 Agent</small></span></div>
+    <div class="fact"><span class="k">生 效</span><span class="v">先出预览<small>确认后写进画布</small></span></div>
+    <div class="fact"><span class="k">后 悔</span><span class="v">一步撤销<small>历史可回</small></span></div>
+  </div>
+
+  <div class="foot">幕景 SCENDANCE<i>/</i>三维活动布置工作台</div>
+
+  <div class="window"><img src="_shot-editor.png" alt=""></div>
+
+  <div class="caption"><i></i>对话即修改 · 每次改动先出预览</div>
+</div>
+</body>
+</html>
