@@ -60,7 +60,7 @@
 ### M3 — Aholo World 场景生成(需求 2,加分项)
 
 - 独立"氛围全景"视图:文字描述 → Aholo World → 3DGS 场景,用 three.js 3DGS loader 以背景层呈现,不参与碰撞/布局。
-- 前置评估(卡内第一步):3DGS loader 体积与性能实测,不达标则降级为"离线预生成 + 静态查看器"。
+- 前置评估(卡内第一步):**初步兼容性已确认(2026-10-28,只读调研)**——前端 three 0.186.0,社区 loader `@mkkellogg/gaussian-splats-3d` 0.4.7 peer 要求 three>=0.160,兼容;卡内仍需实测体积与性能(Aholo World 输出为 3DGS/.sog,若用 .sog 则需官方 Aholo Viewer 方案),不达标降级"离线预生成 + 静态查看器"。
 - 验收:一段场景文案生成 3DGS 背景并在画布上可见;有开关可关闭。
 
 ### M4 — 收尾(参赛交付)
