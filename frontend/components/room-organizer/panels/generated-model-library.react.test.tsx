@@ -159,6 +159,19 @@ describe('Lux3D (Aholo) generation entry', () => {
     expect(screen.queryByLabelText('物料描述')).toBeNull();
     expect(screen.queryByLabelText('生成方式')).toBeNull();
   });
+  it('routes an uploaded reference image to the image-to-3D identity and clears it after submit', async () => {
+    Object.assign(controller, { getGenerationCapabilities: capabilityMock(), uploadGenerationReference: vi.fn().mockResolvedValue({ id: assetId }) });
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    const input = await screen.findByLabelText('Lux3D 参考图（可选，照片转模型）');
+    fireEvent.change(input, { target: { files: [new File(['png'], 'venue.png', { type: 'image/png' })] } });
+    await waitFor(() => expect(controller.uploadGenerationReference).toHaveBeenCalledOnce());
+    expect(screen.getByText(/已选参考图：venue.png/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Lux3D 物料描述'), { target: { value: '现场照片里的讲台' } });
+    fireEvent.click(screen.getByRole('button', { name: '用 Lux3D 生成' }));
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0]![2]).toEqual({ kind: 'image', referenceImageAssetId: assetId, provider: 'aholo' });
+    await waitFor(() => expect(screen.queryByText(/已选参考图/)).toBeNull());
+  });
   it('submits an explicit aholo declaration and refreshes the task list', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
