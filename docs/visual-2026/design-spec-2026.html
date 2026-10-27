@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幕景 Scendance · 2026 设计规范 · v2.5</title>
+<title>幕景 Scendance · 2026 设计规范 · v2.6</title>
 <link rel="preconnect" href="https://fonts.loli.net" crossorigin>
 <link href="https://fonts.loli.net/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -269,48 +269,129 @@ section>.note{margin-top:4px;max-width:640px}
 .ctrow .chip{width:96px;height:32px;border-radius:var(--r-sm);border:1px solid var(--hair-soft);display:flex;align-items:center;justify-content:center;font-size:14px}
 .ctrow .r{font-family:var(--mono);font-size:12px;color:var(--muted)}
 footer{border-top:1px solid var(--hair);padding-top:24px}
+
+/* ── v2.6 封面 / 形态谱系 / 导航全景 ─────────────────────── */
+.cover{padding:64px 0 0;border-bottom:1px solid var(--hair);margin-bottom:40px}
+.cover-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap}
+.cover-meta{display:flex;flex-direction:column;gap:8px;align-items:flex-end;text-align:right}
+.cover-chips{display:flex;gap:6px}
+.cover-chips span{font-family:var(--mono);font-size:11px;line-height:22px;padding:0 8px;border:1px solid var(--hair);border-radius:999px;color:var(--muted)}
+.cover-line{font-size:12px;line-height:20px;color:var(--muted)}
+.cover-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:40px 0 0}
+.tile{border:1px solid var(--hair);border-radius:var(--r-md);padding:18px;background:var(--paper);display:flex;flex-direction:column;gap:8px;min-height:158px}
+.tile .t-cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.tile b{font-size:15px;font-weight:600;line-height:22px}
+.tile em{font-size:12px;line-height:20px;color:var(--muted);font-style:normal}
+.tile .t-vis{margin-top:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:8px}
+.idx{display:flex;flex-wrap:wrap;gap:2px 16px;padding:18px 0 26px;margin-top:26px;border-top:1px solid var(--hair-soft)}
+.idx a{font-size:11.5px;line-height:24px;color:var(--muted);text-decoration:none}
+.idx a:hover{color:var(--ink);text-decoration:underline}
+.lockrow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.lockcell{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:20px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:132px}
+.lockcell .lc{font-size:11px;line-height:16px;color:var(--muted);text-align:center}
+.misuse{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:18px 10px 14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;position:relative;min-height:112px}
+.misuse::after{content:"✕";position:absolute;top:6px;right:8px;font-size:11px;color:var(--err);font-weight:600}
+.ia{display:grid;grid-template-columns:64px 1fr 300px;grid-template-rows:48px minmax(300px,1fr) 56px;border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;background:var(--plane)}
+.ia-top{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--paper);border-bottom:1px solid var(--hair);min-width:0}
+.ia-rail{grid-row:2;display:flex;flex-direction:column;align-items:center;padding:8px 0;background:var(--paper);border-right:1px solid var(--hair)}
+.ia-stage{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;width:100%;border:none;background:none;font-family:inherit;color:var(--ink-soft)}
+.ia-stage.on{background:var(--green-pale);box-shadow:inset 2px 0 0 var(--green);color:var(--green)}
+.ia-stage span:last-child{font-size:11px;line-height:16px}
+.ia-canvas{grid-row:2;position:relative;display:grid;place-items:center;background:linear-gradient(160deg,#F7F8F9,#EEF0F2)}
+.ia-slab{width:62%;aspect-ratio:3/2;border-radius:6px;background:var(--paper);border:1px solid var(--hair);box-shadow:0 18px 40px rgba(20,20,22,.08);position:relative;display:grid;place-items:center;color:var(--faint);font-family:var(--mono);font-size:11px}
+.ia-agent{grid-row:2;background:var(--paper);border-left:1px solid var(--hair);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ia-agent .ia-line{height:8px;border-radius:4px;background:var(--plane)}
+.ia-foot{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--paper);border-top:1px solid var(--hair)}
+.ia-foot .ia-thumb{width:52px;height:32px;border-radius:6px;border:1px solid var(--hair-soft);background:var(--plane)}
+.pin{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:10px;font-weight:600;flex:none;line-height:1}
+.pin.ghost{background:var(--paper);color:var(--ink-soft);border:1px solid var(--hair)}
+.entry{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:14px 16px;border:1px solid var(--hair);border-radius:var(--r-md);background:var(--paper);align-content:start}
+.entry b{font-size:13px;line-height:20px}
+.entry .dest{display:block;font-family:var(--mono);font-size:11px;line-height:18px;color:var(--green-deep);margin-top:2px}
+.entry p{margin:0;font-size:12px;line-height:19px;color:var(--muted)}
+.entrygrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.cover-tiles,.lockrow,.entrygrid{grid-template-columns:repeat(2,1fr)}.ia{grid-template-columns:56px 1fr;grid-template-rows:48px minmax(260px,1fr) 48px}.ia-agent{display:none}}
+@media(max-width:640px){.cover-tiles,.lockrow,.entrygrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-<header class="hd" style="padding:72px 0 40px;border-bottom:1px solid var(--hair);margin-bottom:40px">
-  <div style="display:flex;align-items:center;color:var(--ink)">
-    <span style="font-family:'PingFang SC','Noto Sans SC',sans-serif;font-size:40px;font-weight:600;letter-spacing:0;line-height:1.15;white-space:nowrap">幕景</span>
-    <span style="display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;margin:0 10px;transform:translateY(4px);flex-shrink:0"></span>
-    <span style="font-family:'Playfair Display',Georgia,serif;font-size:31px;font-style:italic;font-weight:500;letter-spacing:.01em;white-space:nowrap">S</span>
-    <span style="font-family:'Playfair Display',Georgia,serif;font-size:31px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap">CENDANCE</span>
+<header class="cover">
+  <div class="cover-hero">
+    <div>
+      <div style="display:flex;align-items:center;color:var(--ink)">
+        <svg style="margin-right:14px" width="64" height="64" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+        <span style="font-family:'PingFang SC','Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;font-size:36px;font-weight:600;line-height:1.15;white-space:nowrap">幕景</span>
+        <span style="display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;margin:0 10px;transform:translateY(4px);flex-shrink:0"></span>
+        <span style="font-family:'Playfair Display',Georgia,serif;font-size:27px;font-style:italic;font-weight:500;letter-spacing:.01em;white-space:nowrap">S</span><span style="font-family:'Playfair Display',Georgia,serif;font-size:27px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap">CENDANCE</span>
+      </div>
+      <p class="cover-line" style="margin-top:16px;font-size:13px">2026 设计规范 · 品牌、界面、AI-native 一本读完</p>
+    </div>
+    <div class="cover-meta">
+      <div class="cover-chips"><span>v2.6</span><span>2026-10-28</span><span>18 节</span></div>
+      <p class="cover-line">纯白纸面 · 发丝线分区 · 近黑墨字 · 鼠尾草绿点睛</p>
+    </div>
   </div>
-  <p class="note" style="margin-top:20px;font-size:13px;line-height:22px">2026 设计规范 · v2.5 · 2026-10-28　——　冷石画廊白：纯白纸面、发丝线分区、近黑墨字、鼠尾草绿点睛</p>
-  <p class="note" style="margin-top:4px">配套文档 design-spec-2026.md（v2.5）· 品牌字标定版：Playfair 衬线英文 + PingFang SC · 图标 lucide 1.48 · 规格裁决见十四~十八节</p>
+
+  <div class="cover-tiles">
+    <div class="tile">
+      <span class="t-cap">00 · Brand</span>
+      <b>字标只有一种排法</b>
+      <em>图标 → 幕景 → 绿点 → SCENDANCE，换尺寸不换几何</em>
+      <div class="t-vis">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600"><svg width="16" height="16" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>幕景</span>
+        <i style="width:16px;height:16px;border-radius:4px;background:var(--green)"></i>
+        <i style="width:16px;height:16px;border-radius:4px;background:var(--ink)"></i>
+        <i style="width:16px;height:16px;border-radius:4px;background:var(--paper);border:1px solid var(--hair)"></i>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="t-cap">01–12 · Interface</span>
+      <b>一屏一绿钮，其余靠线</b>
+      <em>顶栏 / 左轨 / 画布 / Agent / 物料条，五块拼成工作台</em>
+      <div class="t-vis" aria-hidden="true">
+        <span style="width:10px;height:34px;border:1px solid var(--hair);border-radius:3px;display:inline-block"></span>
+        <span style="width:56px;height:34px;border:1px solid var(--hair);border-radius:3px;display:inline-block"></span>
+        <span style="width:26px;height:34px;border:1px solid var(--hair);border-radius:3px;display:inline-block"></span>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="t-cap">13–18 · AI-native</span>
+      <b>先说人话，再做决定</b>
+      <em>生成态、状态机、案例图谱与 Agent IP「晴光」</em>
+      <div class="t-vis" aria-hidden="true">
+        <span class="pin ghost">1</span><span class="pin ghost">2</span><span class="pin ghost">3</span>
+        <span style="color:var(--faint);font-size:11px">→</span>
+        <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--green);color:var(--paper);font-size:10px">确认布置</span>
+      </div>
+    </div>
+  </div>
+
+  <nav class="idx" aria-label="目录">
+    <a href="#sec-wordmark">00 品牌字标</a>
+    <a href="#sec-01">01 色彩</a>
+    <a href="#sec-02">02 字体</a>
+    <a href="#sec-03">03 间距栅格</a>
+    <a href="#sec-04">04 图标与阴影</a>
+    <a href="#sec-05">05 图标索引</a>
+    <a href="#sec-06">06 按钮与输入</a>
+    <a href="#sec-07">07 导航</a>
+    <a href="#sec-08">08 数据与反馈</a>
+    <a href="#sec-09">09 动效</a>
+    <a href="#sec-10">10 缺省图</a>
+    <a href="#sec-11">11 错误</a>
+    <a href="#sec-12">12 无障碍</a>
+    <a href="#sec-13">13 Token</a>
+    <a href="#sec-14">14 生成态</a>
+    <a href="#sec-15">15 状态机</a>
+    <a href="#sec-16">16 案例图谱</a>
+    <a href="#sec-17">17 图解</a>
+    <a href="#sec-18">18 晴光</a>
+  </nav>
 </header>
 
-<!-- ═══ Brand Wordmark · 色彩系统前置 ═══ -->
-
-<nav aria-label="目录" style="padding:0 0 36px;border-bottom:1px solid var(--hair-soft);margin-bottom:40px">
-  <div style="font-size:11px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:14px">目录 · Index</div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px 28px">
-    <a href="#sec-wordmark" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">00 · Brand Wordmark 品牌字标</a>
-    <a href="#sec-01" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">01 · 色彩系统</a>
-    <a href="#sec-02" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">02 · 字体排版</a>
-    <a href="#sec-03" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">03 · 间距与栅格</a>
-    <a href="#sec-04" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">04 · 图标与阴影</a>
-    <a href="#sec-05" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">05 · 图标索引</a>
-    <a href="#sec-06" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">06 · 按钮与输入</a>
-    <a href="#sec-07" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">07 · 导航架构</a>
-    <a href="#sec-08" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">08 · 数据展示与反馈</a>
-    <a href="#sec-09" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">09 · 动效与极端情况</a>
-    <a href="#sec-10" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">10 · 缺省图</a>
-    <a href="#sec-11" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">11 · 错误与异常</a>
-    <a href="#sec-12" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">12 · 无障碍</a>
-    <a href="#sec-13" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">13 · Token 三层架构</a>
-    <a href="#sec-14" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">14 · AI 生成态设计</a>
-    <a href="#sec-15" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">15 · AI 交互状态机</a>
-    <a href="#sec-16" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">16 · AI-native 案例图谱</a>
-    <a href="#sec-17" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">17 · AI-native 图解</a>
-    <a href="#sec-18" style="font-size:12px;line-height:26px;color:var(--muted);text-decoration:none">18 · Agent IP「晴光」</a>
-  </div>
-</nav><section id="sec-wordmark" style="border-top:none;padding-top:16px">
+<section id="sec-wordmark" style="border-top:none;padding-top:16px">
   <h2 style="font-size:18px;line-height:26px;font-weight:600">Brand Wordmark · 幕景 Scendance</h2>
   <p class="note">定版构造：图标（门厅）28 → 中文「幕景」PingFang SC 600 → 品牌绿点 → 英文 SCENDANCE Playfair 500（首字母 S 用 Italic 500 做锚点，.01em 全大写）。三页统一几何，只换颜色控明暗。</p>
 
@@ -347,9 +428,76 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
     </div>
   </div>
 
-  <!-- ── Wordmark · 衬线英文 三选一 ── -->
-  
-  <p class="note">个性逻辑：Playfair Display 的 Didone 高对比衬线（细弯细、粗竖粗）是高端感的核心来源；首字母 S 用 Italic 500 做锚点——斜体有手写灵动，正体保持庄重；中间品牌绿圆点 = logo 绿点呼应。</p>
+  <!-- ── 形态谱系 · 标志的八种在场 ── -->
+  <div class="block"><span class="cap">形态谱系 · 一个标志，八种在场</span>
+    <p class="note" style="margin:0 0 16px;max-width:720px">同一套几何，只换载体与明暗。门厅图标：方为空间、下方开口为门、绿点为光；英文用 Playfair Didone 高对比衬线，首字母 S 走斜体做锚点。</p>
+    <div class="lockrow">
+      <div class="lockcell">
+        <span style="display:inline-flex;align-items:center;color:var(--ink)">
+          <svg style="margin-right:5px" width="22" height="22" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+          <span style="font-family:'PingFang SC','Noto Sans SC',sans-serif;font-size:12px;font-weight:600">幕景</span>
+          <span style="width:4px;height:4px;background:var(--green);border-radius:50%;margin:0 4px"></span>
+          <span style="font-family:'Playfair Display',Georgia,serif;font-size:9px;font-weight:500;letter-spacing:.01em;text-transform:uppercase"><i>S</i>CENDANCE</span>
+        </span>
+        <span class="lc">完整锁标 · 纸面<br>工作台 / 登录页 / 官网页头</span>
+      </div>
+      <div class="lockcell" style="background:#141416;border-color:#141416">
+        <span style="display:inline-flex;align-items:center;color:#fff">
+          <svg style="margin-right:5px" width="22" height="22" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+          <span style="font-family:'PingFang SC','Noto Sans SC',sans-serif;font-size:12px;font-weight:600">幕景</span>
+          <span style="width:4px;height:4px;background:var(--green);border-radius:50%;margin:0 4px"></span>
+          <span style="font-family:'Playfair Display',Georgia,serif;font-size:9px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;color:rgba(255,255,255,.62)"><i>S</i>CENDANCE</span>
+        </span>
+        <span class="lc" style="color:rgba(255,255,255,.55)">完整锁标 · 墨底<br>深色页头 / 视频角标</span>
+      </div>
+      <div class="lockcell">
+        <span style="display:inline-flex;align-items:center;color:var(--ink-soft)">
+          <svg style="margin-right:4px" width="18" height="18" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+          <span style="font-family:'PingFang SC','Noto Sans SC',sans-serif;font-size:11px;font-weight:500">幕景</span>
+        </span>
+        <span class="lc">次栏紧凑 · Icon 18 / 中文 11<br>面板头 / 弹窗 / 邮件签名</span>
+      </div>
+      <div class="lockcell">
+        <svg width="40" height="40" viewBox="0 0 48 48" fill="none" style="color:var(--ink)"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+        <span class="lc">图标 · 圆角方 40<br>应用图标 / 分享卡片</span>
+      </div>
+      <div class="lockcell">
+        <span style="display:grid;place-items:center;width:40px;height:40px;border-radius:50%;border:1px solid var(--hair)">
+          <svg width="24" height="24" viewBox="0 0 48 48" fill="none" style="color:var(--ink)"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+        </span>
+        <span class="lc">图标 · 圆形<br>载入 / 头像位 / 状态徽标</span>
+      </div>
+      <div class="lockcell">
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ink-soft)">
+          <svg width="16" height="16" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+          场地规划
+        </span>
+        <span class="lc">图标 · 行内 16<br>正文、列表、面包屑</span>
+      </div>
+      <div class="lockcell">
+        <svg width="16" height="16" viewBox="0 0 48 48" fill="none" style="color:var(--ink);margin:12px 0"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+        <span class="lc">Favicon · 16<br>浏览器标签 / 收藏夹</span>
+      </div>
+      <div class="lockcell">
+        <span style="display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--green)">
+          <svg width="24" height="24" viewBox="0 0 48 48" fill="none" style="color:#fff"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#DCE8DF"/></svg>
+        </span>
+        <span class="lc">应用图标 · 绿底<br>桌面 / 移动端主屏</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">禁用 · 六种改法都不许</span>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px">
+      <div class="misuse"><svg width="34" height="22" viewBox="0 0 48 48" preserveAspectRatio="none" fill="none" style="color:var(--ink)"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg><span class="lc">拉伸变形</span></div>
+      <div class="misuse"><svg width="32" height="32" viewBox="0 0 48 48" fill="none" style="color:var(--ink)"><path fill="none" stroke="currentColor" stroke-width="2" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/></svg><span class="lc">描边空心</span></div>
+      <div class="misuse"><svg width="32" height="32" viewBox="0 0 48 48" fill="none" style="color:#4F6FBF"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg><span class="lc">换品牌色</span></div>
+      <div class="misuse"><svg width="32" height="32" viewBox="0 0 48 48" fill="none" style="color:var(--ink);filter:drop-shadow(0 3px 4px rgba(20,20,22,.35))"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg><span class="lc">加投影</span></div>
+      <div class="misuse"><svg width="32" height="32" viewBox="0 0 48 48" fill="none" style="color:var(--ink);transform:rotate(15deg)"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg><span class="lc">旋转倾斜</span></div>
+      <div class="misuse"><span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600"><svg width="20" height="20" viewBox="0 0 48 48" fill="none" style="color:var(--ink)"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>设计</span><span class="lc">图标旁加字</span></div>
+    </div>
+  </div>
+
   <!-- ── 尺寸阶梯 ── -->
   <div class="block"><span class="cap">尺寸阶梯 · Scale Stops</span>
     <table class="bptable">
@@ -795,55 +943,89 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
   </div>
 </section>
 
-<!-- ═══ 八、导航架构 ═══ -->
+<!-- ═══ 七、导航架构 ═══ -->
 <section id="sec-07">
   <h2>七、导航架构</h2>
-  <p class="note">顶栏 48px 吸顶；左轨 64px，激活 = 左缘 2px 绿条 + 极淡绿底；标签页用下划线式，激活 600 字重。</p>
+  <p class="note">五块拼成一个工作台：顶栏 48 · 左轨 64 · 画布 · 右 Agent 320 · 底部物料薄条。阶段切换只在左轨，其余入口各管一件事。</p>
 
-  <div class="block"><span class="cap">顶栏 · 48px 吸顶（真实结构）</span>
-  <div style="border:1px solid var(--hair);border-radius:var(--r-sm);background:var(--paper);display:flex;align-items:center;height:48px;padding:0 16px;gap:8px;max-width:640px">
-    <a class="sc-brand" style="display:flex;gap:6px;align-items:center;color:var(--ink);text-decoration:none">
-      <span style="width:29px;height:31px;display:grid;place-items:center"><svg width="28" height="28" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></span>
-      <strong style="font-family:'PingFang SC','Noto Sans SC',sans-serif;font-size:15px;font-weight:600;color:var(--ink)">幕景</strong>
-      <span style="width:4px;height:4px;background:var(--green);border-radius:50%;flex:none"></span>
-      <span style="font-family:'Playfair Display',Georgia,serif;font-size:11px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;color:var(--ink-soft)"><i style="font-style:italic">S</i>CENDANCE</span>
-    </a>
-    <span style="width:1px;height:20px;background:var(--hair);margin:0 8px;flex:none"></span>
-    <strong style="font-size:14px;font-weight:600;color:var(--ink)">春季发布会 · 场地规划</strong>
-    <span style="font-size:12px;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:2px 10px">已保存到本机</span>
-    <span style="margin-left:auto"></span>
-    <button class="btn btn-secondary" style="height:32px;display:inline-flex;align-items:center;gap:6px">▤ 项目</button>
-    <span style="width:28px;height:28px;border-radius:50%;background:var(--plane);display:inline-grid;place-items:center;font-size:11px;color:var(--ink-soft)">映</span>
-  </div>
-  <p class="note">左起:品牌字标(定版排法)→ 竖分隔线 → 项目名(600)→ 保存状态胶囊(与 toast 同名:「已保存到本机」)→ 右端 项目 / 头像。中部不放 tab——阶段切换在左轨。</p>
-</div>
-
-  <div class="block"><span class="cap">左轨 · 64px · 三阶段 + 底部设置(真实结构)</span>
-    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
-      <div style="width:64px;border:1px solid var(--hair);border-right:1px solid var(--hair);border-radius:0;background:var(--paper);display:flex;flex-direction:column;align-items:stretch;padding:8px 0;min-height:300px">
-        <button style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0;background:#E8F0EA;border-left:2px solid var(--green);border:none;font-family:inherit;cursor:pointer"><span style="color:#4A7C59;display:flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span style="font-size:11px;font-weight:500;color:#4A7C59">布置</span></button>
-        <button style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0;border:none;background:none;font-family:inherit;cursor:pointer"><span style="color:var(--ink-soft);display:flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span><span style="font-size:11px;color:var(--ink-soft)">评审</span></button>
-        <button style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0;border:none;background:none;font-family:inherit;cursor:pointer"><span style="color:var(--ink-soft);display:flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></span><span style="font-size:11px;color:var(--ink-soft)">执行</span></button>
+  <div class="block"><span class="cap">工作台全景 · 与代码同构</span>
+    <div class="ia">
+      <div class="ia-top">
+        <span style="display:inline-flex;align-items:center;gap:6px;color:var(--ink)">
+          <svg width="24" height="24" viewBox="0 0 48 48" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+          <strong style="font-family:'PingFang SC','Noto Sans SC',sans-serif;font-size:15px;font-weight:600">幕景</strong>
+          <span style="width:4px;height:4px;background:var(--green);border-radius:50%"></span>
+          <span style="font-family:'Playfair Display',Georgia,serif;font-size:11px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;color:var(--ink-soft)"><i>S</i>CENDANCE</span>
+        </span>
+        <span style="width:1px;height:20px;background:var(--hair);margin:0 8px"></span>
+        <strong style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">春季发布会 · 场地规划</strong>
+        <span style="font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:1px 8px;white-space:nowrap">已保存到本机</span>
+        <span style="margin-left:auto"></span>
+        <span class="pin" title="入口 1">1</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid var(--hair);border-radius:8px;font-size:12px;white-space:nowrap">▤ 项目</span>
+        <span class="pin" title="入口 2">2</span>
+        <span style="width:28px;height:28px;border-radius:50%;background:var(--plane);display:inline-grid;place-items:center;font-size:11px;color:var(--ink-soft)">映</span>
+      </div>
+      <div class="ia-rail">
+        <button type="button" class="ia-stage on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>布置</span></button>
+        <button type="button" class="ia-stage"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>评审</span></button>
+        <button type="button" class="ia-stage"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg><span>执行</span></button>
         <span style="flex:1"></span>
-        <button style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0;border:none;background:none;font-family:inherit;cursor:pointer"><span style="color:var(--ink-soft);display:flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></span><span style="font-size:11px;color:var(--ink-soft)">设置</span></button>
+        <span class="pin ghost" style="margin-bottom:2px" title="入口 3">3</span>
+        <button type="button" class="ia-stage"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg><span>设置</span></button>
       </div>
-      <div style="flex:1;min-width:260px">
-        <table class="tbl">
-          <tbody>
-            <tr><td>阶段</td><td><b>布置 → 评审 → 执行</b>(workbench-mode 三态,单选)</td></tr>
-            <tr><td>激活态</td><td>左缘 2px 绿条 + <code>#E8F0EA</code> 底 + 图标与文字转 <code>#4A7C59</code>;无阴影</td></tr>
-            <tr><td>条目构造</td><td>图标 20 + 汉字标注(CAP 级 11px)垂直排,整钮 64 宽 × ≥56 高</td></tr>
-            <tr><td>底部固定</td><td><b>设置</b>常驻左下(入口与账户弹窗同源),分担右上压力</td></tr>
-            <tr><td>其余 chrome</td><td>底部「物料」全宽薄条常驻(见 03 节布局);Agent 区在右(样机见 14 节)</td></tr>
-          </tbody>
-        </table>
+      <div class="ia-canvas">
+        <div class="ia-slab"><span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--muted);letter-spacing:.04em">12 × 8 m · 布置</span>画布</div>
+        <span class="pin ghost" style="position:absolute;left:12px;bottom:12px" title="入口 4">4</span>
       </div>
+      <div class="ia-agent" style="position:relative">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pin ghost" title="入口 5">5</span>
+          <strong style="font-size:13px">布置 · 青序香氛快闪</strong>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">12 × 8 m</span>
+        </div>
+        <div style="align-self:flex-end;max-width:86%;background:var(--plane);border-radius:8px;padding:7px 10px;font-size:12px;line-height:18px">40 人，室内 12×9</div>
+        <div style="font-size:12px;line-height:18px">座位 16 / 40 · 过道 900mm</div>
+        <div class="ia-line" style="width:78%"></div>
+        <div class="ia-line" style="width:56%"></div>
+        <span style="flex:1"></span>
+        <div style="display:flex;align-items:center;gap:6px;border:1px solid var(--hair);border-radius:8px;padding:5px 6px 5px 10px">
+          <span style="flex:1;font-size:12px;color:var(--faint)">说一句要改什么…</span>
+          <span style="width:24px;height:24px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-size:12px">↑</span>
+        </div>
+      </div>
+      <div class="ia-foot">
+        <span class="pin ghost" title="入口 6">6</span>
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap">物料</span>
+        <span class="ia-thumb"></span><span class="ia-thumb"></span><span class="ia-thumb"></span><span class="ia-thumb"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:11px;color:var(--muted)">12 件</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">入口 → 打开什么</span>
+    <div class="entrygrid">
+      <div class="entry"><span class="pin">1</span><div><b>顶栏 · 项目</b><span class="dest">projects</span><p>我的项目：新建、打开、另存为云项目</p></div></div>
+      <div class="entry"><span class="pin">2</span><div><b>顶栏 · 头像</b><span class="dest">assets</span><p>素材库：可复用的场景物料，登录后使用</p></div></div>
+      <div class="entry"><span class="pin">3</span><div><b>左轨底 · 设置</b><span class="dest">team · publication</span><p>团队与权限演示、发布管理；治理类收在这里</p></div></div>
+      <div class="entry"><span class="pin">4</span><div><b>左轨 · 布置 / 评审 / 执行</b><span class="dest">workbench-mode</span><p>只换上下文，不弹抽屉；三态单选</p></div></div>
+      <div class="entry"><span class="pin">5</span><div><b>右栏 · Agent</b><span class="dest">conversation</span><p>唯一的生成入口：出方案、改尺寸、导出都从一句话开始</p></div></div>
+      <div class="entry"><span class="pin">6</span><div><b>底部 · 物料薄条</b><span class="dest">materials</span><p>拖入画布即成物件；不打断对话</p></div></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">三条规矩</span>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;line-height:20px;padding:8px 12px;border:1px solid var(--hair);border-radius:999px">一个动作只留一个入口</span>
+      <span style="font-size:12px;line-height:20px;padding:8px 12px;border:1px solid var(--hair);border-radius:999px">一屏只有一颗绿钮</span>
+      <span style="font-size:12px;line-height:20px;padding:8px 12px;border:1px solid var(--hair);border-radius:999px">阶段切换不弹窗，入口才弹面板</span>
     </div>
   </div>
 </section>
 
 <!-- ═══ 八、数据展示与反馈 ═══ -->
-<section id="sec-07">
+<section id="sec-08">
   <h2>八、数据展示与反馈</h2>
   <p class="note">表格、弹窗、警告、加载——展示与反馈的四个面,全部沿用 E 层级与发丝线规矩。</p>
 
@@ -885,7 +1067,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十、动效与极端情况 ═══ -->
-<section id="sec-8">
+<section id="sec-09">
   <h2>九、动效与极端情况</h2>
   <p class="note">微交互 120ms、弹层 200ms、模态 300ms，统一缓动 cubic-bezier(.2, 0, 0, 1)；系统尊重「减弱动态效果」设置。</p>
 
@@ -928,7 +1110,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十一、缺省图 · 占位与缺省态 ═══ -->
-<section id="sec-8">
+<section id="sec-10">
   <h2>十、缺省图 · 占位与缺省态</h2>
   <p class="note">内容没到位时出现的「图」只有一种画法：浮台底 + 单色线稿图标 + 一行 CAP 说明。不画插画、不放截图、不加投影；加载中 / 内容缺省 / 加载失败三态各自成规，不互相顶班。</p>
 
@@ -1070,7 +1252,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十二、错误与异常 ═══ -->
-<section id="sec-8">
+<section id="sec-11">
   <h2>十一、错误与异常</h2>
   <p class="note">错误只说三件事：发生了什么、你的东西还在不在、下一步点哪。语义色只做描边、图标与状态点，不做整屏红；一次只报一处，同一件事不在 toast 和弹窗里各说一遍。</p>
 
@@ -1147,7 +1329,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十三、无障碍 ═══ -->
-<section id="sec-8">
+<section id="sec-12">
   <h2>十二、无障碍</h2>
   <p class="note">文本对纸面 ≥ 4.5:1（WCAG 2.1 AA）；键盘 Tab 顺序 = 视觉顺序；可交互元素触达区 ≥ 32px。</p>
 
@@ -1168,7 +1350,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十四、Token 三层架构 ═══ -->
-<section id="sec-8">
+<section id="sec-13">
   <h2>十三、Token 三层架构与治理</h2>
   <p class="note">组件 CSS 禁止 hex 字面量，一切颜色经 L1；现有 token 命名（--green、--ink…）已是语义命名，全部归 L1，不重命名。</p>
 
@@ -1209,7 +1391,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十五、AI 生成态 ═══ -->
-<section id="sec-8">
+<section id="sec-14">
   <h2>十四、AI 生成态设计</h2>
   <p class="note">「AI 在干活」不是加载态，是第一公民的界面形态：过程即界面 · 克制的机器感 · 不确定性诚实 · 速度是美学 · 语言即 UI。</p>
 
@@ -1380,7 +1562,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十六、AI 交互状态机 ═══ -->
-<section id="sec-8">
+<section id="sec-15">
   <h2>十五、AI 交互状态机</h2>
   <p class="note">五个状态，两条铁律：确认钮只在「提案待确认」出现一次；停止/撤销永远同位可达，不并列第二套控件。</p>
 
@@ -1428,7 +1610,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 
 
 <!-- ═══ 十七、AI-native 案例图谱 ═══ -->
-<section id="sec-8">
+<section id="sec-16">
   <h2>十六、AI-native 案例图谱</h2>
   <p class="note">以下案例图为手绘线稿示意（非截图），参照一线 AI 产品的交互模式自绘，离线可用。每例两行：<b>借鉴</b>收进本规范，<b>弃用</b>标明为什么不。顺序对应十五节五原则。</p>
 
@@ -1553,7 +1735,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十八、AI-native 图解 ═══ -->
-<section id="sec-8">
+<section id="sec-17">
   <h2>十七、AI-native 图解</h2>
   <p class="note">思维导图、系统架构、请求流程、渲染管线、Token 分层——五张图把十四~十六节的文字规则钉成一张可指着的图。均按本规范色板自绘。</p>
 
@@ -1727,7 +1909,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 </section>
 
 <!-- ═══ 十九、Agent IP「晴光」 ═══ -->
-<section id="sec-8">
+<section id="sec-18">
   <h2>十八、Agent IP「晴光」</h2>
   <p class="note">产品内助手统一叫「Agent」,「晴光」是品牌形象名（英文名候选 Sola / Beamlet,需商标检索后定稿）。造型:短圆柱木色灯筒当头,正面嵌奶油圆脸,顶部发光镜头;鼠尾草绿 U 形灯架当身体。指路部件 = 整只灯筒转向、打出一束暖光——把光打到下一步该看的地方,自己不抢戏。性格:专注、靠谱、温和。</p>
 
@@ -1803,7 +1985,8 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
     </div>
   </div>
 </section><footer>
-  <p class="note">幕景 Scendance · 2026 设计规范 v2.5 · 2026-10-28 · 与 design-spec-2026.md（v2.5）同步</p>
+  <p class="note">幕景 Scendance · 2026 设计规范 v2.6 · 2026-10-28 · 条款与 design-spec-2026.md（v2.5）一致</p>
+  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。</p>
 </footer>
 
 </div>

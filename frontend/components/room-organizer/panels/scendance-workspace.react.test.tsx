@@ -83,7 +83,7 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     test.props.openTabRequest = { serial: 1, tab: 'presets' };
     test.update();
     expect(screen.getByRole('tab', { name: '场景模板' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('combobox', { name: '现场灯光' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: '现场灯光' })).toBeNull();
     expect(test.placeCatalogItem).not.toHaveBeenCalled();
     expect(test.onLoadPreset).not.toHaveBeenCalled();
     expect(loadScenePreset).not.toHaveBeenCalled();

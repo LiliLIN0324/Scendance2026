@@ -44,7 +44,7 @@ it('puts the blank venue first and loads a 12 × 8 m editable shell without a pr
   expect(next.backendSceneV2?.structure.walls).toHaveLength(4);
   expect(next.name).toBe(INITIAL_LAYOUT.name);
   expect(next.floors[0]?.items.filter(item => !item.structuralOpeningId && !item.structuralColumnId && !item.venueEntranceId)).toHaveLength(0);
-  expect(screen.getByRole('status').textContent).toContain('可改尺寸的空白场地');
+  expect(screen.queryByRole('status')).toBeNull();
 });
 
 it('asks on the blank card before clearing a worked-on layout', () => {

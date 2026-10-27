@@ -3,7 +3,7 @@
 import { ArrowUpRight, FolderOpen, Search, UserRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { PublicationPanel } from '@/components/business/publication-panel';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -18,13 +18,13 @@ import { useLocalProjectBackup } from './creative-studio';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; publicationRequest?: number; openRequest?: { serial: number; section: string } }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; publicationRequest?: number; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement> }
 
 function isLocalMockBackend(): boolean {
   return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes('localhost:3099');
 }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, publicationRequest = 0 }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, publicationRequest = 0, openRequest, triggerRef }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
@@ -107,6 +107,14 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     setSection('publication');
     if (!dialog.current?.open) dialog.current?.showModal();
   }, [publicationRequest]);
+  // 多入口分区直达（IA 拆分）：右上「项目」→ projects、左下「设置」→ team、头像 → assets。
+  const openedOpenRequest = useRef(0);
+  useEffect(() => {
+    if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
+    openedOpenRequest.current = openRequest.serial;
+    setSection(openRequest.section);
+    if (!dialog.current?.open) dialog.current?.showModal();
+  }, [openRequest]);
   useEffect(() => {
     if (!localHandoff && fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
@@ -246,7 +254,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const accountName = cloud.user?.is_anonymous ? '访客' : cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : '本地体验');
 
   return <>
-    <button className="sc-cloud-trigger" type="button" aria-label="账户与项目" title="账户与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); dialog.current?.showModal(); }}>
+    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户与素材库" title="账户与素材库 · 素材、权限与发布管理" aria-haspopup="dialog" onClick={() => { setSection('assets'); dialog.current?.showModal(); }}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={17}/></span>
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={onClose} onKeyDown={event => event.stopPropagation()}>
