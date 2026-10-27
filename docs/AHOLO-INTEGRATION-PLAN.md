@@ -51,6 +51,7 @@
 - M1 尾款 **已有(2026-10-28)**:前端 lib 层贯通——`createGenerationJob` 接受 `provider` 选项并进请求体(legacy 文本请求体保持不变),`generationCapabilitiesSchema` 消费 `aholoTextToModel/aholoImageToModel`(旧后端缺字段时按 false),job 响应枚举放行 `aholo/lux3d`;`3D-GENERATION-UPGRADE-PLAN.md` 现状表补 `aholo` 通道。`.env.example` 占位已加。mock(3099)不加生成端点——生成是 supabase 后端特性,等 UI 卡一起在 dev 链路验证。
 - **T-AHOLO-UI 形态①已有(2026-10-28,用户授权自治执行)**:GeneratedModelLibrary 面板新增独立"Lux3D 生成(Aholo)"区块——仅当 capabilities.aholoTextToModel 亮起时渲染;标签为 `Lux3D 物料描述`/`用 Lux3D 生成`,与已退役的 HY3 控件标签(`生成方式`/`物料描述`/`生成 3D 模型`)刻意区分,原退役裁决测试保持通过;提交走 `createGenerationJob(prompt, requestId, {provider:'aholo'})`,空 prompt 本地拦截,失败不清空草稿、错误上屏。新增 4 条组件测试(13/13 绿);`createGenerationJob` options 放宽为 Partial。
 - **T-AHOLO-UI 形态②已有(2026-10-28,用户授权自治执行)**:agent 工具链新增 `start_lux3d_model`——**动态注册**,仅当 capabilities.aholoTextToModel 亮起才进入工具列表,模型永远不会向不可用的厂商许诺;执行走与 `/jobs` 路由完全相同的付费路径(prepareGenerationRequest + jobs.create + GENERATION_MAX_TASK_CENTS 预算预留);系统提示与工具描述钉死诚实性:候选方案不得包含刚提交的物件、不得声称已布置,任务完成后由用户在历史模型面板手动加入。新增 2 条测试(工具可见性门控 + 付费路径落库 aholo/lux3d/queued);全套 682/682 绿。
+- **Dev 实测已有(2026-10-28,commit 66d5990)**:mock(3099) 补齐生成端点(GET /generation/capabilities、POST/GET /jobs 生命周期、POST /jobs/:id/added);浏览器真实 UI 验证:任务卡渲染(zod 契约解析通过)、状态机 queued→…→ready→added 流转、无云项目时 writeBlocked 正确隐藏 Lux3D 表单并禁用"加入场地预览"——门控符合设计;HTTP 探针 `tools/aholo/mock-e2e.mjs` 可随时复验。注意 `frontend/.env.local` 现指向远程 Supabase,本地 mock 联调需以进程变量覆盖 `NEXT_PUBLIC_SUPABASE_URL` 启动 dev。
 
 ### M2 — 图片转模型入口(需求 1 完整形态)
 
