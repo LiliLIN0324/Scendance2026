@@ -278,7 +278,7 @@
   /* 底部留出「物料库」把手那一行（24px + 8px 边距），否则抽屉收起时把手被压掉半截。 */
   position: absolute; left: 12px; bottom: 44px; z-index: 35;
   display: flex; align-items: center; gap: 6px;
-  padding: 4px; border: 1px solid var(--wk-hair, #e7e7e7); border-radius: 10px;
+  padding: 4px; border: 1px solid var(--wk-hair, #e4e4e7); border-radius: 10px;
   background: color-mix(in srgb, var(--wk-paper, #fff) 92%, transparent);
   box-shadow: 0 1px 3px rgba(47, 47, 47, .05);
   max-width: calc(100% - 78px); overflow-x: auto; scrollbar-width: none;
@@ -288,19 +288,19 @@
 /* 默认只留这一颗「氛围」；点开才是漫游/人群/天气/时段（2026-10-26 第 2 节：中间次要工具条能藏则藏）。 */
 .sc-atmosphere-strip .sc-atmosphere-toggle { gap: 6px; }
 .sc-atmosphere-strip.is-open .sc-atmosphere-toggle {
-  border-color: var(--wk-green-pale, #dbe5cf); background: var(--wk-green-pale, #dbe5cf);
-  color: var(--wk-green-deep, #394a37); font-weight: 600;
+  border-color: var(--wk-green-pale, #e8f0ea); background: var(--wk-green-pale, #e8f0ea);
+  color: var(--wk-green-deep, #3a6247); font-weight: 600;
 }
 .sc-atmosphere-strip button {
   display: inline-flex; align-items: center; gap: 5px;
-  min-height: 28px; padding: 0 9px; border: 1px solid var(--wk-hair, #e7e7e7);
+  min-height: 28px; padding: 0 9px; border: 1px solid var(--wk-hair, #e4e4e7);
   border-radius: 999px; background: #fff; color: var(--wk-ink-soft, #767a70);
   font-size: 11.5px; white-space: nowrap; cursor: pointer;
 }
-.sc-atmosphere-strip button:hover:not(:disabled) { border-color: var(--wk-green, #56794d); color: var(--wk-green-deep, #394a37); }
+.sc-atmosphere-strip button:hover:not(:disabled) { border-color: var(--wk-green, #4a7c59); color: var(--wk-green-deep, #3a6247); }
 .sc-atmosphere-strip button.is-active {
-  border-color: var(--wk-green-pale, #dbe5cf); background: var(--wk-green-pale, #dbe5cf);
-  color: var(--wk-green-deep, #394a37); font-weight: 600;
+  border-color: var(--wk-green-pale, #e8f0ea); background: var(--wk-green-pale, #e8f0ea);
+  color: var(--wk-green-deep, #3a6247); font-weight: 600;
 }
 .sc-atmosphere-strip button:disabled { opacity: .45; cursor: default; }
 .sc-atmosphere-strip .sc-tool-menu { position: relative; display: flex; }
@@ -313,12 +313,12 @@
 /* ── 底部物料库 · 图纸白 ──────────────────────────────────────────────
    设计稿：白色抽屉、分类胶囊、细边卡片、绿色仅用于悬停与添加。 */
 .sc-workbench .sc-canvas-stage .sc-material-shelf.sc-bottom-drawer {
-  background:#fff; border:0; border-top:1px solid var(--wk-hair,#e7e7e7);
+  background:#fff; border:0; border-top:1px solid var(--wk-hair,#e4e4e7);
   border-radius:0; box-shadow:0 -2px 10px rgba(47,47,47,.04);
 }
 .sc-compact-shelf .sc-library-heading {
   flex:0 0 34px; height:34px; gap:14px; padding:0 14px;
-  border-bottom:1px solid var(--wk-hair,#e7e7e7);
+  border-bottom:1px solid var(--wk-hair,#e4e4e7);
 }
 .sc-compact-shelf .sc-library-heading .sc-library-tabs { gap:18px; height:34px; padding:0; }
 .sc-compact-shelf .sc-library-tabs button {
@@ -329,7 +329,7 @@
 .sc-compact-shelf .sc-library-tabs button:hover { color:var(--wk-ink,#2f2f2f); }
 .sc-compact-shelf .sc-library-tabs button.is-active {
   color:var(--wk-ink,#2f2f2f); font-weight:600;
-  border-bottom-color:var(--wk-green,#56794d);
+  border-bottom-color:var(--wk-green,#4a7c59);
 }
 .sc-compact-shelf .sc-library-heading > .sc-icon-button { color:var(--wk-ink-faint,#a8aba2); }
 .sc-compact-shelf .sc-library-content { padding:8px 14px; }
@@ -341,47 +341,47 @@
 }
 .sc-compact-shelf .sc-bucket-rail button {
   min-height:26px; height:26px; padding:0 11px;
-  border:1px solid var(--wk-hair,#e7e7e7); border-radius:999px;
+  border:1px solid var(--wk-hair,#e4e4e7); border-radius:999px;
   background:#fff; color:var(--wk-ink-soft,#767a70); font-size:11.5px;
 }
-.sc-compact-shelf .sc-bucket-rail button:hover { border-color:var(--wk-green,#56794d); color:var(--wk-green-deep,#394a37); }
+.sc-compact-shelf .sc-bucket-rail button:hover { border-color:var(--wk-green,#4a7c59); color:var(--wk-green-deep,#3a6247); }
 .sc-compact-shelf .sc-bucket-rail button.is-active,
 .sc-compact-shelf .sc-bucket-rail button[aria-pressed="true"] {
-  background:var(--wk-green-pale,#dbe5cf); border-color:var(--wk-green-pale,#dbe5cf);
-  color:var(--wk-green-deep,#394a37); font-weight:600;
+  background:var(--wk-green-pale,#e8f0ea); border-color:var(--wk-green-pale,#e8f0ea);
+  color:var(--wk-green-deep,#3a6247); font-weight:600;
 }
 .sc-compact-shelf .sc-bucket-rail button b { margin-left:4px; color:var(--wk-ink-faint,#a8aba2); font-weight:400; }
-.sc-compact-shelf .sc-bucket-rail button.is-active b { color:var(--wk-green-deep,#394a37); }
+.sc-compact-shelf .sc-bucket-rail button.is-active b { color:var(--wk-green-deep,#3a6247); }
 .sc-compact-shelf .sc-search-mini {
   flex:0 0 176px; height:28px; padding:4px 9px;
-  border:1px solid var(--wk-hair,#e7e7e7); border-radius:7px;
+  border:1px solid var(--wk-hair,#e4e4e7); border-radius:7px;
   background:#fff; color:var(--wk-ink-faint,#a8aba2);
 }
 .sc-compact-shelf .sc-search-mini input { font-size:11.5px; color:var(--wk-ink,#2f2f2f); }
 .sc-compact-shelf .sc-material-card {
-  border:1px solid var(--wk-hair,#e7e7e7); border-radius:8px; background:#fff;
+  border:1px solid var(--wk-hair,#e4e4e7); border-radius:8px; background:#fff;
   box-shadow:none;
 }
-.sc-compact-shelf .sc-material-card:hover { border-color:var(--wk-green,#56794d); box-shadow:none; }
+.sc-compact-shelf .sc-material-card:hover { border-color:var(--wk-green,#4a7c59); box-shadow:none; }
 .sc-compact-shelf .sc-preset-notice { color:var(--wk-ink-faint,#a8aba2); }
 .sc-compact-shelf .sc-material-more {
-  border:1px solid var(--wk-hair,#e7e7e7); border-radius:999px;
-  background:#fff; color:var(--wk-green-deep,#394a37);
+  border:1px solid var(--wk-hair,#e4e4e7); border-radius:999px;
+  background:#fff; color:var(--wk-green-deep,#3a6247);
 }
-.sc-compact-shelf .sc-material-more:hover { border-color:var(--wk-green,#56794d); background:var(--wk-green-pale,#dbe5cf); }
+.sc-compact-shelf .sc-material-more:hover { border-color:var(--wk-green,#4a7c59); background:var(--wk-green-pale,#e8f0ea); }
 .sc-compact-shelf .sc-material-add {
-  border-radius:5px; background:var(--wk-green,#56794d); color:#fff;
+  border-radius:5px; background:var(--wk-green,#4a7c59); color:#fff;
 }
 .sc-compact-shelf .sc-material-name { color:var(--wk-ink,#2f2f2f); font-size:11.5px; }
-.sc-compact-shelf .sc-material-preview { background:var(--wk-plane,#f3f4ee); border-radius:6px; }
+.sc-compact-shelf .sc-material-preview { background:var(--wk-plane,#f4f5f7); border-radius:6px; }
 .sc-workbench .sc-material-drawer-handle {
   height:26px; padding:0 12px; border-radius:999px;
-  border:1px solid var(--wk-hair,#e7e7e7); background:#fff;
+  border:1px solid var(--wk-hair,#e4e4e7); background:#fff;
   color:var(--wk-ink-soft,#767a70); font-size:11.5px;
   box-shadow:0 1px 3px rgba(47,47,47,.05);
 }
-.sc-workbench .sc-material-drawer-handle:hover { border-color:var(--wk-green,#56794d); color:var(--wk-green-deep,#394a37); }
-.sc-workbench .sc-material-drawer-handle.is-active { background:var(--wk-green-pale,#dbe5cf); border-color:var(--wk-green-pale,#dbe5cf); color:var(--wk-green-deep,#394a37); }
+.sc-workbench .sc-material-drawer-handle:hover { border-color:var(--wk-green,#4a7c59); color:var(--wk-green-deep,#3a6247); }
+.sc-workbench .sc-material-drawer-handle.is-active { background:var(--wk-green-pale,#e8f0ea); border-color:var(--wk-green-pale,#e8f0ea); color:var(--wk-green-deep,#3a6247); }
 /* 画布抬头信息层级 */
 .sc-workbench .sc-canvas-size { color:var(--wk-ink,#2f2f2f); font-weight:600; font-variant-numeric:tabular-nums; }
 .sc-workbench .sc-canvas-count { color:var(--wk-ink-faint,#a8aba2); }
@@ -396,8 +396,8 @@
   width:42px; height:4px; border-radius:999px; background:#dfe3da;
   transition:background .15s ease, transform .15s ease;
 }
-.sc-compact-shelf .sc-shelf-grip:hover > span { background:var(--wk-green,#56794d); }
-.sc-compact-shelf .sc-shelf-grip:active > span { background:var(--wk-green-deep,#394a37); transform:scaleX(1.2); }
+.sc-compact-shelf .sc-shelf-grip:hover > span { background:var(--wk-green,#4a7c59); }
+.sc-compact-shelf .sc-shelf-grip:active > span { background:var(--wk-green-deep,#3a6247); transform:scaleX(1.2); }
 .sc-compact-shelf .sc-shelf-grip:focus-visible { outline:2px solid var(--sc-accent-ink); outline-offset:-2px; }
 
 /* ── 场景模板 · 抽屉内横着一排 ────────────────────────────────────
@@ -414,10 +414,10 @@
   display:grid; grid-template-rows:minmax(0,1fr) 20px; align-items:stretch; gap:2px;
   /* 卡片是 <button>，不写 width 会按文字宽度 fit-content，卡与卡之间空隙一宽一窄。 */
   width:100%; min-width:0; height:100%;
-  padding:3px; border:1px solid var(--wk-hair,#e7e7e7);
+  padding:3px; border:1px solid var(--wk-hair,#e4e4e7);
   border-radius:9px; background:#fff; box-shadow:none;
 }
-.sc-compact-shelf .sc-preset-card:hover { border-color:var(--wk-green,#56794d); }
+.sc-compact-shelf .sc-preset-card:hover { border-color:var(--wk-green,#4a7c59); }
 .sc-compact-shelf .sc-preset-card img { width:100%; height:100%; min-height:0; aspect-ratio:auto; object-fit:cover; border-radius:6px; }
 /* 空白场地卡：没有缩略图，用一张虚线空地告诉人「这里可以从零开始」。 */
 .sc-compact-shelf .sc-preset-blank {
@@ -427,7 +427,7 @@
   color:var(--wk-ink-soft,#767a70); text-align:center;
 }
 .sc-compact-shelf .sc-preset-blank::before {
-  content:''; width:46px; height:32px; border:1px dashed var(--wk-green,#56794d);
+  content:''; width:46px; height:32px; border:1px dashed var(--wk-green,#4a7c59);
   border-radius:4px; background:#fff;
 }
 .sc-compact-shelf .sc-preset-blank small { font-size:10px; line-height:13px; white-space:nowrap; }
@@ -439,16 +439,16 @@
 /* 载入模板的确认块：直接盖在这张卡上，不弹窗。 */
 .sc-compact-shelf .sc-preset-confirm {
   position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; gap:4px;
-  padding:5px 6px; border:1px solid var(--wk-green,#56794d); border-radius:9px; background:#fff;
+  padding:5px 6px; border:1px solid var(--wk-green,#4a7c59); border-radius:9px; background:#fff;
 }
 .sc-compact-shelf .sc-preset-confirm p { margin:0; font-size:10.5px; line-height:13px; color:var(--wk-ink-soft,#767a70); }
 .sc-compact-shelf .sc-preset-confirm > div { display:flex; gap:5px; }
 .sc-compact-shelf .sc-preset-confirm button {
-  flex:1; min-height:20px; padding:0 5px; border:1px solid var(--wk-hair,#e7e7e7);
+  flex:1; min-height:20px; padding:0 5px; border:1px solid var(--wk-hair,#e4e4e7);
   border-radius:6px; background:#fff; color:var(--wk-ink-soft,#767a70); font-size:11px;
 }
 .sc-compact-shelf .sc-preset-confirm button.is-go {
-  border-color:var(--wk-green,#56794d); background:var(--wk-green,#56794d); color:#fff; font-weight:600;
+  border-color:var(--wk-green,#4a7c59); background:var(--wk-green,#4a7c59); color:#fff; font-weight:600;
 }
 .sc-compact-shelf .sc-preset-notice { margin:0; flex:0 0 auto; font-size:10.5px; line-height:15px; }
 .sc-compact-shelf .sc-preset-utilities {
@@ -463,20 +463,20 @@
 .sc-compact-shelf .sc-preset-utilities details { flex:0 0 auto; font-size:11.5px; white-space:nowrap; }
 
 /* 悬停只做描边与底色：轨道 overflow-y:hidden，抬起 2px 会被上边缘切掉。 */
-.sc-compact-shelf .sc-material-card:hover:not(:disabled) { transform:none; border-color:var(--wk-green,#56794d); }
-.sc-compact-shelf .sc-material-card:hover:not(:disabled) .sc-material-preview { background:var(--wk-green-pale,#dbe5cf); }
+.sc-compact-shelf .sc-material-card:hover:not(:disabled) { transform:none; border-color:var(--wk-green,#4a7c59); }
+.sc-compact-shelf .sc-material-card:hover:not(:disabled) .sc-material-preview { background:var(--wk-green-pale,#e8f0ea); }
 .sc-compact-shelf .sc-material-card:active:not(:disabled) { transform:none; }
 /* 模板页脚那行控件：跟抽屉一样轻，不再套一层灰底。 */
 .sc-compact-shelf .sc-preset-utilities select {
-  height:24px; padding:0 6px; border:1px solid var(--wk-hair,#e7e7e7); border-radius:6px;
+  height:24px; padding:0 6px; border:1px solid var(--wk-hair,#e4e4e7); border-radius:6px;
   background:#fff; color:var(--wk-ink,#2f2f2f);
 }
-.sc-compact-shelf .sc-preset-utilities select:hover { border-color:var(--wk-green,#56794d); }
+.sc-compact-shelf .sc-preset-utilities select:hover { border-color:var(--wk-green,#4a7c59); }
 .sc-compact-shelf .sc-preset-utilities summary { cursor:pointer; color:var(--wk-ink-soft,#767a70); }
-.sc-compact-shelf .sc-preset-utilities summary:hover { color:var(--wk-green-deep,#394a37); }
+.sc-compact-shelf .sc-preset-utilities summary:hover { color:var(--wk-green-deep,#3a6247); }
 .sc-compact-shelf .sc-preset-utilities details[open] {
   position:absolute; left:14px; bottom:34px; z-index:40; width:min(320px,calc(100% - 28px));
-  max-height:60vh; overflow:auto; padding:10px; border:1px solid var(--wk-hair,#e7e7e7);
+  max-height:60vh; overflow:auto; padding:10px; border:1px solid var(--wk-hair,#e4e4e7);
   border-radius:10px; background:#fff; box-shadow:0 8px 22px rgba(47,47,47,.10);
 }
 .sc-compact-shelf .sc-preset-utilities details:not([open]) { position:relative; }
@@ -485,7 +485,7 @@
    设计稿：白纸浮层、胶囊选项、绿色只给主操作与选中态。 */
 .sc-workbench .sc-tool-pop.sc-export-pop {
   min-width: 216px; gap: 12px; padding: 14px;
-  background:#fff; border:1px solid var(--wk-hair,#e7e7e7); border-radius:12px;
+  background:#fff; border:1px solid var(--wk-hair,#e4e4e7); border-radius:12px;
   box-shadow:0 10px 28px rgba(47,47,47,.10);
 }
 .sc-workbench .sc-export-pop .sc-export-title {
@@ -498,26 +498,26 @@
 .sc-workbench .sc-export-pop .sc-export-options { display:flex; gap:6px; }
 .sc-workbench .sc-export-pop .sc-export-options button {
   flex:1; padding:6px 0 !important; text-align:center;
-  border:1px solid var(--wk-hair,#e7e7e7) !important; border-radius:999px !important;
+  border:1px solid var(--wk-hair,#e4e4e7) !important; border-radius:999px !important;
   background:#fff !important; color:var(--wk-ink-soft,#767a70) !important;
   font-size:11.5px !important; white-space:nowrap;
 }
 .sc-workbench .sc-export-pop .sc-export-options button:hover:not(:disabled) {
-  border-color:var(--wk-green,#56794d) !important; color:var(--wk-green-deep,#394a37) !important;
+  border-color:var(--wk-green,#4a7c59) !important; color:var(--wk-green-deep,#3a6247) !important;
 }
 .sc-workbench .sc-export-pop .sc-export-options button.is-active {
-  background:var(--wk-green-pale,#dbe5cf) !important; border-color:var(--wk-green-pale,#dbe5cf) !important;
-  color:var(--wk-green-deep,#394a37) !important; font-weight:600;
+  background:var(--wk-green-pale,#e8f0ea) !important; border-color:var(--wk-green-pale,#e8f0ea) !important;
+  color:var(--wk-green-deep,#3a6247) !important; font-weight:600;
 }
 .sc-workbench .sc-export-pop .sc-export-options button:disabled {
   opacity:.45; cursor:default;
 }
 .sc-workbench .sc-export-pop .sc-export-cta {
   width:100%; height:auto !important; min-height:0 !important; padding:9px 0 !important;
-  border:0 !important; border-radius:8px !important; background:var(--wk-green,#56794d) !important;
+  border:0 !important; border-radius:8px !important; background:var(--wk-green,#4a7c59) !important;
   color:#fff !important; font-size:12.5px !important; font-weight:600; text-align:center;
 }
-.sc-workbench .sc-export-pop .sc-export-cta:hover:not(:disabled) { background:var(--wk-green-deep,#394a37) !important; }
+.sc-workbench .sc-export-pop .sc-export-cta:hover:not(:disabled) { background:var(--wk-green-deep,#3a6247) !important; }
 .sc-workbench .sc-export-pop .sc-export-cta:disabled { opacity:.6; cursor:default; }
 .sc-workbench .sc-export-pop .sc-export-note {
   font-size:10.5px; line-height:1.5; color:var(--wk-ink-faint,#a8aba2);
