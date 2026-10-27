@@ -45,7 +45,7 @@ describe('HTTP request -> validation -> PostgreSQL -> response',()=>{
     expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(0);
   });
   it('advertises only configured generation capabilities without reserving a request',async()=>{
-    expect(await (await req('/generation/capabilities')).json()).toEqual({model:'hy-3d-3.0',textToModel:false,imageToModel:false,texture:false,textureRequiresImage:true});
+    expect(await (await req('/generation/capabilities')).json()).toEqual({model:'hy-3d-3.0',textToModel:false,imageToModel:false,texture:false,textureRequiresImage:true,aholoTextToModel:false,aholoImageToModel:false});
     expect((await req('/generation/capabilities','GET',undefined,null)).status).toBe(401);
     expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(0);
   });

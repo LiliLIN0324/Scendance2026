@@ -51,19 +51,74 @@ export function hunyuan(env: Env, fetcher: Fetcher = fetch, pinned?:GenerationPr
     },
   };
 }
+/**
+ * Aholo Lux3D (docs/AHOLO-INTEGRATION-PLAN.md M1). Same submit/query shape as `hunyuan` so the
+ * worker can consume either through the pinned job fields. Text/image only — Lux3D has no
+ * re-texture lane in scope. Result URLs expire in ~2h, so the worker must archive immediately.
+ */
+const lux3dShell=z.object({c:z.string().nullable(),d:z.unknown(),m:z.string().nullable().optional(),f:z.unknown().optional()});
+const lux3dQuerySchema=z.object({status:z.number(),outputs:z.array(z.object({content:z.string().nullable()})).optional()});
+export function aholoLux3d(env: Env, fetcher: Fetcher = fetch) {
+  const base=(env('LUX3D_BASE_URL')??'https://api.aholo.ai/global').replace(/\/+$/,'');
+  const call = (path: string, init: RequestInit) => fetchJson(`${base}${path}`, {
+    ...init, headers: { Authorization: `${required(env, 'LUX3D_API_KEY')}`, 'Content-Type': 'application/json' },
+  }, fetcher).then(value=>{
+    const body=lux3dShell.parse(value);
+    if(body.c!=='0') throw new ApiError('PROVIDER_REJECTED',502,{code:body.c,message:body.m});
+    return body.d;
+  });
+  return {
+    async submit(prompt: string, assets?:{imageUrl?:string;sourceUrl?:string}) {
+      if(assets?.imageUrl){
+        const d=await call('/lux3d/v1/generate/img-to-3d/task/create',{method:'POST',body:JSON.stringify({img:assets.imageUrl,version:'G1',faceCount:30000,outputFormat:['zip','glb']})});
+        return {JobId:String(z.number().parse(d)),RequestId:undefined};
+      }
+      const d=await call('/lux3d/v1/generate/text-to-3d/task/create',{method:'POST',body:JSON.stringify({prompt,version:'G1',faceCount:30000,outputFormat:['zip','glb']})});
+      return {JobId:String(z.number().parse(d)),RequestId:undefined};
+    },
+    async query(id: string):Promise<z.infer<typeof querySchema>> {
+      const d=lux3dQuerySchema.parse(await call(`/lux3d/v1/generate/task/get?taskid=${encodeURIComponent(id)}`,{method:'GET'}));
+      const Status=({0:'WAIT',1:'RUN',3:'DONE',4:'FAIL',6:'FAIL'} as const)[d.status]??'FAIL';
+      return {
+        Status,ErrorCode:d.status===6?'PROVIDER_TASK_CANCELLED':d.status===4?'PROVIDER_FAILED':undefined,
+        ResultFile3Ds:(d.outputs??[]).flatMap(o=>{
+          if(!o.content||!o.content.startsWith('https://'))return [];
+          const type=o.content.split('?')[0].split('.').pop()?.toLowerCase()??'';
+          return ['glb','zip','ply'].includes(type)?[{Type:type,Url:o.content}]:[];
+        }),
+      };
+    },
+  };
+}
 /** Shared chat provider for the Binggo tool loop and single-shot proposals. */
 export const CHAT_API_KEY_ENV = 'TOKENDANCE_API_KEY';
 const CHAT_URL = 'https://tokendance.space/gateway/v1/chat/completions';
 const CHAT_MODEL = 'deepseek-v4.1-flash';
+/** Gateway not configured: fall back to the DeepSeek official endpoint, shared with reconstruction. */
+const OFFICIAL_CHAT_URL = 'https://api.deepseek.com/chat/completions';
+const OFFICIAL_CHAT_MODEL = 'deepseek-flash';
 /**
- * OpenAI-compatible chat request against the Tokendance gateway. Keeping the endpoint, model and
- * key in one place stops the two call sites from drifting; `thinking` is always disabled because
- * this is a reasoning model and each caller bounds its own output tokens.
+ * OpenAI-compatible chat request. Priority: any OpenAI-compatible provider
+ * (`AGENT_CHAT_BASE_URL` + `AGENT_CHAT_KEY` + `AGENT_CHAT_MODEL`) → Tokendance gateway →
+ * DeepSeek official endpoint (`DEEPSEEK_API_KEY`, same key as reconstruction). Keeping endpoints,
+ * models and keys in one place stops the call sites from drifting; `thinking` is always disabled
+ * because this is a reasoning model and each caller bounds its own output tokens. Switching
+ * providers is a `supabase secrets set` away and takes effect immediately, no redeploy.
  */
 export function chatRequest(env: Env, body: Record<string, unknown>): { url: string; init: RequestInit } {
-  return { url: CHAT_URL, init: {
-    method: 'POST', headers: { Authorization: `Bearer ${required(env, CHAT_API_KEY_ENV)}`, 'Content-Type': 'application/json' },
+  const customBase = env('AGENT_CHAT_BASE_URL'), customKey = env('AGENT_CHAT_KEY'), customModel = env('AGENT_CHAT_MODEL');
+  if (customBase && customKey && customModel) return { url: `${customBase.replace(/\/+$/, '')}/chat/completions`, init: {
+    method: 'POST', headers: { Authorization: `Bearer ${customKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: customModel, thinking: { type: 'disabled' }, ...body }),
+  } };
+  const gatewayKey = env(CHAT_API_KEY_ENV);
+  if (gatewayKey) return { url: CHAT_URL, init: {
+    method: 'POST', headers: { Authorization: `Bearer ${gatewayKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
+  } };
+  return { url: OFFICIAL_CHAT_URL, init: {
+    method: 'POST', headers: { Authorization: `Bearer ${required(env, 'DEEPSEEK_API_KEY')}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: OFFICIAL_CHAT_MODEL, thinking: { type: 'disabled' }, ...body }),
   } };
 }
 export async function generateProposal(input: ProposalRequest, env: Env, reserveCall: (attempt:number)=>Promise<unknown>, fetcher: Fetcher = fetch, resources: readonly SceneResource[] = []) {

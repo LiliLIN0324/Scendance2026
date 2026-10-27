@@ -1,0 +1,81 @@
+# Aholo 集成宏观规划(v1,2026-10-28)
+
+本文是 **Aholo(群核科技)Lux3D / World API 接入幕景 Scendance2026** 的总入口规划,遵循仓库规格纪律:`docs/` 是规格真相,一张卡一次做完,分支开发、合入由人。
+
+## 0. 背景与目标
+
+参赛要求使用群核科技 **Aholo Lux3D**(必选),可选 **Aholo API**(3D 物体生成 / 世界生成 / 云渲染 / 重建)与 **LuxReal**(视频 Agent)。
+
+我们的两个真实需求:
+
+| # | 需求 | 对应 Aholo 能力 | 输出格式 |
+|---|---|---|---|
+| 1 | 图片场景转模型 + 单物体 3D 资产生成 | **Lux3D**:image-to-3D / text-to-3D | GLB + PBR 贴图(ZIP 下载,URL 有效期 ~2h) |
+| 2 | 场景/氛围级生成(一段话生成整个场地) | **Aholo World**:3DGS 世界重建与生成 | 3DGS(高斯泼溅,非 GLB) |
+
+判定:**Lux3D 是主链路**(必选指标 + GLB 直进现有管线);**Aholo World 是加分项**(演示"文字生成整个场地氛围",独立视图呈现,不混入布局编辑场景);LuxReal 暂不接入,留到最终展示视频阶段再评估。
+
+## 1. 现状盘点(接入点)
+
+仓库已有一条云生成链路(见 `docs/3D-GENERATION-UPGRADE-PLAN.md`):
+
+- `supabase/functions/_shared/providers.ts`:HY-3D provider(tokenhub/legacy 双模式),`GenerationProvider` 抽象(submit → query → download)。
+- `supabase/functions/_shared/generation-lane.ts`:生成路由 `parametric → offline → library → hy3d(metered)`,免费通道优先。
+- 资产语义:`_shared/models.ts` validateModel + 指纹去重 + 质量 门禁。
+- 前端:`frontend/components/room-organizer/`,GLB 资产经 backend-adapter 进入画布;`frontend/.env.local` 指向本地 mock(3099)。
+
+**Aholo 的接入形态 = 新增一个 provider(`aholo-lux3d`),挂进现有 lane 路由与资产语义**,不新开平行链路。这是规划的第一原则。
+
+## 2. 关键事实(已核实的官方口径)
+
+- Lux3D API 文档:<https://labs.aholo.ai/api-docs/en/skills/lux3d>;认证 `Authorization: <LUX3D_API_KEY>`(labs.aholo.ai/api-keys 申请)。
+- 流程:创建任务(image/text 两个创建端点)→ 轮询 `query_task_status` → 下载 ZIP(GLB + PBR 贴图)。
+- text-to-3D 可带 style、参考图(data URL)。
+- Aholo World:输出 3DGS,走国际网关 `api.aholo.ai`;前端渲染需 3DGS 查看器(官方 Aholo Viewer / .sog 格式,或社区 three.js 3DGS loader)。
+- 定价/额度未公开,需邮件 lux3d@qunhemail.com 咨询 → MVP 阶段顺带验证配额。
+
+## 3. 阶段规划
+
+### M0 — MVP:API 通不通(本卡先做)
+
+- **产物**:`tools/aholo/lux3d-mvp.mjs`——零依赖 Node 脚本,走完 text-to-3D 全链路:创建任务 → 轮询 → 下载 ZIP → 解包 GLB → 打印报告(模型面数/体积/耗时)。
+- **验收**:拿到 API key 后一条命令跑通,产出 1 个真实 GLB 存入 `docs/evidence/aholo/`;记录真实耗时、额度、GLB 是否可直接被 three.js 加载。
+- **不做**:不改任何产品代码,不接 provider。
+
+### M1 — Lux3D 进 provider 层(需求 1 主链路)**已有(2026-10-28,分支 `feat/aholo-lux3d`)**
+
+- `_shared/providers.ts` 新增 `aholoLux3d(env, fetcher)`,submit/query 与 HY-3D 同形(worker 可互换消费);`generation-lane.ts` 新增 `aholo` metered 通道,**仅当请求显式声明 `provider:'aholo'` 时进入**,默认云通道仍是 HY-3D;`generation-contract.ts` capabilities 新增 `aholoTextToModel/aholoImageToModel`(由 `LUX3D_API_KEY`+terms 配置门控)。
+- 迁移 `20261028120000_aholo_lux3d.sql`:generation_jobs 的 provider 约束扩到 `aholo`/`lux3d`(aholo↔lux3d 强绑定,texture 拒绝),assets.source 增 `aholo`;job_rpc 校验包装器重建,直调原始 RPC。
+- worker:按 job 上固化的 `provider_mode` 选厂商(任务创建时锁定,配置漂移不影响旧任务);下载域白名单 aholo 任务加 `.kujiale.com`;license/source 记 Aholo 侧条款;资产 metadata.generation 带 `providerMode:'aholo'` 保证参赛可追溯。
+- 验收已达成:`npx vitest run` 680/680 全绿(含新增 `tests/aholo-lux3d.test.ts` 7 条:capabilities 门控、lane 显式声明、job 固化、submit/query 形状、状态映射、壳错误、端到端归档),`npm run typecheck` 通过。前端入口(M2 前置)与 mock(3099)接入待做。
+- M1 尾款(下一卡):`.env.example` 占位已加;mock(3099)与 dev 双环境各出一张生成资产、资产卡片显示通道与模型;`3D-GENERATION-UPGRADE-PLAN.md` 现状表补 `aholo` 通道。
+
+### M2 — 图片转模型入口(需求 1 完整形态)
+
+- 用户上传场地/物件照片 → Lux3D image-to-3D → GLB 入资产库,与现有"上传即放置"流程打通。
+- 验收:一张真实场地照片端到端生成、进入画布、可布置可导出。
+
+### M3 — Aholo World 场景生成(需求 2,加分项)
+
+- 独立"氛围全景"视图:文字描述 → Aholo World → 3DGS 场景,用 three.js 3DGS loader 以背景层呈现,不参与碰撞/布局。
+- 前置评估(卡内第一步):3DGS loader 体积与性能实测,不达标则降级为"离线预生成 + 静态查看器"。
+- 验收:一段场景文案生成 3DGS 背景并在画布上可见;有开关可关闭。
+
+### M4 — 收尾(参赛交付)
+
+- 演示链路串词:①文字生成物件(Lux3D text-to-3D)→ ②照片转模型(image-to-3D)→ ③文字生成场地氛围(Aholo World)→ ④布置/评审/交付。
+- 视频需求出现时再评估 LuxReal。
+
+## 4. 硬钉(沿用并新增)
+
+- 沿用:规格真相在本地 docs;一次一张卡;分支开发合入由人;不伪造成功(失败返回真实错误码);provider key 只在服务端。
+- 新增:参赛指标要求"用了 Lux3D"必须**可追溯**——生成资产元数据必须带 `lane: 'aholo'` + `providerModel`;Aholo World 的 3DGS 永远是背景/展示层,禁止参与布局几何与碰撞;M0 未验证通过前,M1 不动 providers.ts。
+
+## 5. 风险与预案
+
+| 风险 | 预案 |
+|---|---|
+| LUX3D_API_KEY 拿不到 / 无额度 | 邮件申请尽早发;M1 的 provider 代码可先行 + 单测 mock,真实调用延后 |
+| Lux3D 生成质量不达"布置级" | MVP 阶段多测 3 类物件(桌/椅/装饰),不行就只用于氛围装饰件 |
+| 3DGS 渲染成本高 | M3 首日先做 loader 技术验证,不达标降级静态查看器 |
+| 结果 URL 2h 过期 | provider 下载后立即转存自有存储(现有落库路径),不存外链 |
