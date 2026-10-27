@@ -29,16 +29,8 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [busy, setBusy] = useState<RailChoice | null>(null);
   const [pending, setPending] = useState<RailChoice | null>(null);
+  // 成功载入不在模板条底下占一行「已载入…」；失败才用 status 说原因。
   const [notice, setNotice] = useState('');
-  // 模板被改尺寸卸掉（或撤销回模板）后，卡上的「已载入」要跟着场地走；
-  // 离开模板这件事由 Agent 播报一句，这里不再重复一遍吓人。
-  const lastScene = useRef(layout.scenePreset);
-  useEffect(() => {
-    const before = lastScene.current;
-    lastScene.current = layout.scenePreset;
-    if (before === layout.scenePreset) return;
-    setNotice(layout.scenePreset ? `已载入${SCENE_PRESETS[layout.scenePreset].name}，可选择物件继续编辑。` : '');
-  }, [layout.scenePreset]);
   const rail = useHorizontalRail<HTMLDivElement>();
   async function load(key: ScenePresetKey): Promise<void> {
     if (loading.current) return;
@@ -50,7 +42,7 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
       if (!mounted.current) return;
       if (current.current !== before) throw new Error('载入期间画布已有改动，已保留当前草稿。请重新载入预设。');
       onApply(preserveCurrentActivity(before,{ ...next, ...(before.id ? { id: before.id, name: before.name } : {}) }));
-      setNotice(`已载入${SCENE_PRESETS[key].name}，可选择物件继续编辑。`);
+      setNotice('');
     } catch (error) { setNotice(error instanceof Error ? error.message : '场景载入失败，请重试。'); }
     finally { loading.current = false; setBusy(null); }
   }
@@ -62,7 +54,7 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
     setPending(null); setBusy('blank'); setNotice('');
     try {
       onApply(createBlankVenue(before));
-      setNotice('已换成可改尺寸的空白场地，在对话里说「改成 15×10」调整尺寸。');
+      setNotice('');
     } catch (error) { setNotice(error instanceof Error ? error.message : '空白场地没立起来，请重试。'); }
     finally { loading.current = false; setBusy(null); }
   }

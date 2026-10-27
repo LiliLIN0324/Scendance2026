@@ -1301,7 +1301,7 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByText(instruction)).toBeTruthy();
     expect((screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement).value).toContain('24 位来宾');
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('下一条还没发送的需求');
-    expect(screen.queryByText(/请在“账户与项目”中打开/)).toBeNull();
+    expect(screen.queryByText(/请在右上「项目」的「我的项目」中核对/)).toBeNull();
     expect(onApply).not.toHaveBeenCalled();
   });
 

@@ -22,8 +22,9 @@
 
 /* ── 头部 ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
-.mascot-slot { display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; background: transparent; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
-.mascot-slot img { width: 48px; height: 48px; display: block; object-fit: cover; }
+.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; background: transparent; border-radius: 50%; flex-shrink: 0; }
+.mascot-slot img { width: 48px; height: 48px; display: block; object-fit: cover; border-radius: 50%; }
+.ap-online-dot { position: absolute; right: 1px; bottom: 1px; z-index: 1; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; background: var(--ap-green, #4A7C59); border: 2px solid var(--wk-paper, #fff); box-shadow: 0 0 0 1px rgba(20, 20, 22, .06); }
 .ap-head strong { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink); }
 /* 收起面板一步直达：头部 ✕（无二级菜单）。 */
 .ap-close { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--wk-ink-soft); cursor: pointer; }
@@ -67,7 +68,6 @@
 .ap-guide-letter { flex: 0 0 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-p2); font-weight: 500; color: var(--faint); background: var(--plane-deep); border-radius: 4px; }
 .ap-guide-chip strong { display: block; font-size: var(--fs-p1); font-weight: 500; color: var(--ink); }
 .ap-guide-chip small { display: block; font-size: var(--fs-cap); color: var(--ap-grey); }
-.ap-guide-or { margin: 2px 0 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 /* 用户行 = 墨色气泡（右上收口）：与 AI 浅灰气泡拉开身份差，聊天气泡感的核心。 */
 .ap-user { align-self: flex-end; max-width: 82%; background: var(--wk-ink); color: #fff; border-radius: 16px 4px 16px 16px; padding: 10px 14px; display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-p1); }
 .ap-user strong { font-weight: 500; display: block; word-break: break-all; }
@@ -130,7 +130,6 @@
 .ap-composer textarea { border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; }
 .ap-composer textarea:focus, .ap-composer textarea:focus-visible { outline: none; box-shadow: none; }
 .ap-composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.ap-composer-hint { margin-left: auto; font-size: var(--fs-cap); color: var(--wk-ink-faint); letter-spacing: .02em; }
 .ap-attach { border: 0; background: transparent; border-radius: var(--r-sm); padding: 3px; display: flex; align-items: center; color: var(--wk-ink-faint); }
 .ap-attach:hover:not(:disabled) { color: var(--wk-ink-soft); background: var(--wk-plane); }
 /* 发送键：全产品唯一的绿色圆形（32px，v2.2 §按钮）。 */
@@ -139,10 +138,7 @@
 .ap-send:disabled { color: var(--wk-ink-faint); background: var(--wk-plane); cursor: default; }
 
 /* ── 环境感知行：AI 活着的最低调信号 ── */
-.ap-ambient { margin: 2px 4px 0; display: flex; align-items: center; gap: 7px; font-size: var(--fs-cap); color: var(--wk-ink-faint); }
-.ap-ambient-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ap-green); animation: ap-breathe 2.4s ease-in-out infinite; }
 @keyframes ap-breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .ap-ambient-dot { animation: none; } }
 /* 生成中：头部状态点同节奏呼吸——过程可见而不喧哗。 */
 .sc-agent-panel[data-state='generating'] .ap-status-dot { animation: ap-breathe 1.2s ease-in-out infinite; }
 
@@ -159,7 +155,7 @@
 .ap-canvas-pill.is-top { top: 12px; left: 50%; right: auto; transform: translateX(-50%); padding: 4px 12px; cursor: default; }
 .ap-canvas-pill.is-warn { background: var(--wk-paper); border-color: var(--warn); color: var(--warn); }
 /* 头像只出现在 Agent 头部：旧的底栏助手胶囊收起（右栏已常驻）。 */
-.sc-workbench.is-docked-layout .sc-assistant-entry-host { display: none !important; }
+.sc-workbench .is-docked-layout .sc-assistant-entry-host { display: none !important; }
 /* 琥珀警示回话：与新过程块同构（左竖线转警示色，不加底）。 */
 .ap-agent.is-amber { border-left: 2px solid var(--warn); color: var(--wk-ink); padding: 2px 0 2px 12px; border-radius: 0; background: transparent; border-top: 0; border-right: 0; border-bottom: 0; }
 #walk-exit { background: var(--wk-paper); border: 1px solid var(--wk-hair); color: var(--wk-ink); cursor: pointer; }
@@ -200,6 +196,9 @@
 .sc-brief-tools > summary { cursor: pointer; font-size: var(--fs-p2); color: var(--wk-ink-soft); border-radius: var(--r-sm); }
 .sc-brief-tools > summary:hover { color: var(--wk-ink); }
 .sc-brief-tools > summary:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; }
+.sc-brief-tool-groups { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.sc-brief-tool-group-label { margin: 0 0 4px; font-size: var(--fs-p3, 11px); letter-spacing: 0.04em; color: var(--wk-ink-soft); }
+
 .sc-brief-tool-list { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; }
 .sc-brief-tool-list button { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; border-radius: var(--r-sm); padding: 7px 8px; background: transparent; color: var(--wk-ink-soft); font-size: var(--fs-c1); font-weight: 500; text-align: left; cursor: pointer; }
 .sc-brief-tool-list button svg { flex: 0 0 16px; }

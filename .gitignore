@@ -41,3 +41,14 @@ output/model-library/
 frontend/.preview/
 _refs/
 docs/evidence/aholo/
+
+# ZCode scratch dumps
+.temp-*.txt
+
+
+# Qoder/ZCode local scratch at repo root (never commit)
+_*.py
+_*.txt
+_shot*.cjs
+_shot*.mjs
+_patch*.py

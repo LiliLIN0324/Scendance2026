@@ -862,7 +862,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
             const preparedCloud=controller.getSnapshot();
             if(preparedCloud.project?.id===project.id&&preparedCloud.lease?.projectId===project.id&&!preparedCloud.writeBlocked){
               try{await controller.releaseLease();}
-              catch{releaseNotice=' 新项目的编辑权未能释放，请在账户与项目中核对。';}
+              catch{releaseNotice=' 新项目的编辑权未能释放，请在右上「项目」的「我的项目」中核对。';}
             }
             throw new Error(`云项目已准备好，但活动需求和场地资料未能迁移。原本地草稿与当前输入已保留，请重试后再发送。${releaseNotice}`);
           }
@@ -1031,7 +1031,7 @@ export type BusinessToolsApi = {
   openCommercial():void;
 };
 
-export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest=0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, onOpenPublication, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
+export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest=0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, suppressAgentLauncher=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, onOpenPublication, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
   onOpenTemplates?:()=>void;
   /** 左栏工具轨已列出这些去处时，标题栏不再重复一个分类下拉。 */
   hideCategorySelect?: boolean;
@@ -1059,6 +1059,8 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   referenceOpenRequest?: number;
   referenceEntryRef?: RefObject<HTMLButtonElement>;
   docked?: boolean;
+  /** 工作台已挂 AgentPanel 时为 true：禁止再露旧晴光胶囊。 */
+  suppressAgentLauncher?: boolean;
   businessHostRef?: RefObject<HTMLDivElement>;
   onConversationVisibilityChange?: (open:boolean)=>void;
   onWorkspaceVisibilityChange?: (open:boolean)=>void;
@@ -1391,7 +1393,8 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const businessCategory=templatesOpen?'templates':businessMode==='plan'?planCategory:businessMode;
   const primaryCategoryValue = businessCategory === 'commercial' ? 'more' : businessCategory;
   const hasConversation=studio.messages.some(message=>message.id!=='welcome');
-  const assistantLauncher=!studio.expanded?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开晴光 Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>晴光</span></button>:null;
+  // docked workbench: AgentPanel owns Agent entry; hide legacy capsule.
+  const assistantLauncher=(!suppressAgentLauncher&&!studio.expanded)?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开晴光 Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>晴光</span></button>:null
   const suggestionsVisible=!suggestionsDismissed&&(!hasConversation||suggestionsOpen);
   const hasBrief=studio.briefReady&&!studio.briefError&&studio.hasSavedBrief&&!!studio.brief.description.trim();
   const resultSuggestions:Array<{label:string;open:(event:React.MouseEvent<HTMLButtonElement>)=>void}>=[];
@@ -1406,7 +1409,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
         <header className="cr-business-heading">
           {workbenchMode==='review'?<div className="cr-mode-banner"><strong>发给客户</strong><span>核对后导出离线 HTML，或发布云端只读链接；都由你发送</span></div>:workbenchMode==='delivery'?<div className="cr-mode-banner"><strong>执行 · 本机内部资料</strong><span>活动安排、点验、导出与本机备份</span></div>:
           (!hideCategorySelect&&<label className="cr-business-category"><span className="sr-only">布置工具</span><select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>)}
-          {workbenchMode==='layout'&&<nav className="cr-business-links" aria-label="活动资料视图"><button type="button" aria-pressed={businessCategory==='brief'} className={businessCategory==='brief'?'is-on':''} onClick={()=>openBrief()}>活动简报</button><button type="button" aria-pressed={businessCategory==='reference'} className={businessCategory==='reference'?'is-on':''} onClick={()=>openReference()}>导入文件</button></nav>}
+          {workbenchMode==='layout'&&<nav className="cr-business-links" aria-label="活动资料视图"><button type="button" aria-pressed={businessCategory==='brief'} className={businessCategory==='brief'?'is-on':''} onClick={()=>openBrief()}>客户需求</button><button type="button" aria-pressed={businessCategory==='reference'} className={businessCategory==='reference'?'is-on':''} onClick={()=>openReference()}>图纸与照片</button></nav>}
           {!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={14}/>返回素材</button>}</div>}
         </header>
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}

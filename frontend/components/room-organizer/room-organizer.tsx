@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Settings, SquareStack, Truck } from 'lucide-react';
+import { ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Settings, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -72,16 +72,12 @@ import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 
-/** 左栏第二组工具轨（设计稿：活动需求 / 图纸尺寸 / 执行资料 / 方案评审 / 场景模板 / 物料工具 / 合同约定）。 */
+/** 简报底折叠：只放别处没有主入口的深资料。评审/执行走左轨，模板/物料走底栏。 */
 const RAIL_TOOLS = [
-  { id: 'brief', label: '活动需求', hint: '活动简报与场地资料', Icon: ClipboardList, open: 'openBrief' },
-  { id: 'reference', label: '图纸尺寸', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference' },
-  { id: 'delivery', label: '执行资料', hint: '活动安排、点验与导出', Icon: Truck, open: 'openDelivery' },
-  { id: 'review', label: '方案评审', hint: '客户评审包', Icon: Send, open: 'openReview' },
-  { id: 'templates', label: '场景模板', hint: '载入场景模板', Icon: SquareStack, open: 'openTemplates' },
-  { id: 'model', label: '物料工具', hint: '物料建模与材质调整', Icon: Boxes, open: 'openModelTools' },
-  { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial' },
-] as const satisfies ReadonlyArray<{ id: string; label: string; hint: string; Icon: typeof ClipboardList; open: keyof BusinessToolsApi }>;
+  { id: 'reference', label: '图纸尺寸', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference', group: 'venue' as const },
+  { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', Icon: ClipboardList, open: 'openBrief', group: 'docs' as const },
+  { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial', group: 'docs' as const },
+] as const satisfies ReadonlyArray<{ id: string; label: string; hint: string; Icon: typeof ClipboardList; open: keyof BusinessToolsApi; group: 'venue' | 'docs' }>;
 
 function zoomCamera(
   camera: import('three').PerspectiveCamera,
@@ -1398,7 +1394,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
         </header>
-        <main className={`sc-workspace is-docked-layout is-mode-rail${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
+        <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <nav className="sc-mode-rail" aria-label="工作流程">
@@ -1420,7 +1416,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
               {(businessOpen||leftMode==='business')&&<button type="button" aria-pressed={leftMode==='business'} onClick={()=>{setLeftMode('business');setMaterialsOpen(false);setBusinessOpen(true);setSidebarCollapsed(false);setWorkspaceOpenRequest(value => value + 1);}}>{workbenchMode==='review'?'评审资料':workbenchMode==='delivery'?'执行资料':'活动资料'}</button>}
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
-            <div className="sc-left-content sc-brief-pane" hidden={leftMode!=='brief'}><ActivityBrief tools={RAIL_TOOLS.map(tool => ({ id: tool.id, label: tool.label, hint: tool.hint, icon: <tool.Icon size={16} aria-hidden="true"/>, onOpen: () => businessToolsRef.current?.[tool.open]() }))}/></div>
+            <div className="sc-left-content sc-brief-pane" hidden={leftMode!=='brief'}><ActivityBrief tools={RAIL_TOOLS.map(tool => ({ id: tool.id, label: tool.label, hint: tool.hint, group: tool.group, icon: <tool.Icon size={16} aria-hidden="true"/>, onOpen: () => businessToolsRef.current?.[tool.open]() }))}/></div>
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
@@ -1526,21 +1522,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               zoomCamera(camera, controls, direction);
               invalidate();
             }}/>
-            <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden/>
+            <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             <div id="workbench-material-shelf" className="sc-material-shelf sc-bottom-drawer" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
               {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog}/>}
             </div>
+            {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}
+            <div className="sc-bottom-bar">
+              <div className="sc-bottom-bar-center">
+                <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
+              </div>
+            </div>
+            {agentCollapsed && <AgentReopenCard onOpen={() => setAgentCollapsed(false)}/>}
             </div>
           </div>
-          <div className="sc-bottom-bar">
-            <div className="sc-bottom-bar-center">
-              <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
-            </div>
-          </div>
-          <CreativeAssistant docked autoOpen={false} hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setSidebarCollapsed(false); setLeftMode('business'); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
-          {agentCollapsed
-            ? <AgentReopenCard onOpen={() => setAgentCollapsed(false)}/>
-            : <AgentPanel onClose={()=>setAgentCollapsed(true)}/>}
+          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setSidebarCollapsed(false); setLeftMode('business'); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
+          {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)}/>}
         </main>
       </div>
       </LayoutAgentProvider>

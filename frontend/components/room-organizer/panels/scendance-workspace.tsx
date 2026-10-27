@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, ChevronDown, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, MousePointer2, Ruler, Sun, Users, X } from 'lucide-react';
+import { Camera, ChevronDown, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Sun, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -135,24 +135,24 @@ export function ScendanceLibrary({ placeCatalogItem, onLighting, controller, onL
 
   return <aside ref={hostRef} className="sc-library sc-compact-shelf" aria-label="场地工具">
     <ShelfGrip shelfRef={hostRef}/>
-    <div className="sc-library-heading">
-      <div className="sc-library-tabs" role="tablist" aria-label="工作台面板">
-        {([['materials', '物料库'], ['presets', '场景模板']] as const).map(([key, label]) =>
-          <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
-      </div>
-      {onClose && <button type="button" className="sc-icon-button" aria-label="关闭物料库" title="关闭物料库" onClick={onClose}><X size={17}/></button>}
-    </div>
-    <div className="sc-library-content">
-      <div className="sc-library-materials" hidden={tab !== 'materials'}>
-        <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial}/>
-      </div>
-      {tab === 'presets' && <div className="sc-library-presets">
-        <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>
-        <div className="sc-preset-utilities">
-          <label className="sc-field">现场灯光<select aria-label="现场灯光" value={layout.backendLighting??'neutral'} onChange={event=>onLighting?.(event.target.value as NonNullable<RoomLayout['backendLighting']>)}><option value="neutral">明亮自然</option><option value="warm">温暖聚会</option><option value="cool">冷调展览</option></select></label>
-          {layout.backendSceneV2 && <details><summary>已建空间的结构微调</summary><StructuralPropertiesPanel/></details>}
+    <div className="sc-library-body">
+      <nav className="sc-library-rail" role="tablist" aria-label="物料面板">
+        <button type="button" role="tab" aria-selected={tab === 'materials'} className={tab === 'materials' ? 'is-active' : ''} aria-label="物料库" title="物料库" onClick={() => setTab('materials')}><Package size={18} aria-hidden="true"/></button>
+        <button type="button" role="tab" aria-selected={tab === 'presets'} className={tab === 'presets' ? 'is-active' : ''} aria-label="场景模板" title="场景模板" onClick={() => setTab('presets')}><LayoutTemplate size={18} aria-hidden="true"/></button>
+        <span className="sc-library-rail-spacer" aria-hidden="true"/>
+        {onClose && <button type="button" className="sc-library-rail-close" aria-label="关闭物料库" title="关闭" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
+      </nav>
+      <div className="sc-library-content">
+        <div className="sc-library-materials" hidden={tab !== 'materials'}>
+          <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial}/>
         </div>
-      </div>}
+        {tab === 'presets' && <div className="sc-library-presets">
+          <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>
+          {layout.backendSceneV2 && <div className="sc-preset-utilities">
+            <details><summary>已建空间的结构微调</summary><StructuralPropertiesPanel/></details>
+          </div>}
+        </div>}
+      </div>
     </div>
   </aside>;
 }
@@ -165,8 +165,9 @@ interface ViewToolsProps {
   materialsOpen?: boolean;
   onToggleMaterials?(): void;
   materialsButtonRef?: RefObject<HTMLButtonElement>;
-  /** Layout mode only: 足迹 / 人群 / 天气 / 时间 (design group 4). */
+  /** Layout mode only: 足迹 / 人群 / 天气 / 时间 / 现场灯光 (design group 4). */
   showAtmosphere?: boolean;
+  onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   onApplyPreset(preset: CameraPreset): void;
   onFit(): void;
   onZoom(direction: '+' | '-'): void;
@@ -182,6 +183,12 @@ const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
   { id: 'clear', label: '晴朗' },
   { id: 'rain', label: '降雨' },
   { id: 'snow', label: '降雪' },
+];
+
+const LIGHTING_OPTIONS = [
+  { id: 'neutral' as const, label: '明亮自然' },
+  { id: 'warm' as const, label: '温暖聚会' },
+  { id: 'cool' as const, label: '冷调展览' },
 ];
 const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }> = [
   { label: '日', hour: 12, title: '正午' },
@@ -204,12 +211,13 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true }: ViewToolsProps): JSX.Element {
-  const { view, setView, toggle, history } = useRoomEditor();
+export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true, onLighting }: ViewToolsProps): JSX.Element {
+  const { view, setView, toggle, history, layout } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [viewOpen, setViewOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
+  const [lightingOpen, setLightingOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
   const [exportScale, setExportScale] = useState(2);
@@ -249,26 +257,27 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
     }
   };
   useEffect(() => {
-    if (!viewOpen && !atmosphereShown && !weatherOpen && !timeOpen) return undefined;
+    if (!viewOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen) return undefined;
     const onPointer = (event: MouseEvent) => {
       const target = event.target as Node;
       const el = event.target as HTMLElement | null;
       if (viewOpen && viewMenuRef.current && !viewMenuRef.current.contains(target)) { setViewOpen(false); setExportOpen(false); }
       if (atmosphereMenuRef.current && !atmosphereMenuRef.current.contains(target)) {
-        setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false);
+        setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false);
       } else if (atmosphereMenuRef.current) {
         const inAtmo = atmosphereMenuRef.current.contains(target);
         if (weatherOpen && inAtmo && el && !(el.closest('#tool-weather') || el.closest('[aria-label="室外天气选项"]'))) setWeatherOpen(false);
         if (timeOpen && inAtmo && el && !(el.closest('#tool-time') || el.closest('[aria-label="室外时段选项"]'))) setTimeOpen(false);
+        if (lightingOpen && inAtmo && el && !(el.closest('#tool-lighting') || el.closest('[aria-label="现场灯光选项"]'))) setLightingOpen(false);
       }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setViewOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setExportOpen(false); }
+      if (event.key === 'Escape') { setViewOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); }
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
-  }, [viewOpen, weatherOpen, timeOpen]);
+  }, [viewOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown]);
 
   return (
     /* T-VISUAL-CHROME-2：右缘竖排圆钮列（参考图 04-final-flat），次要功能收进弹出菜单。 */
@@ -288,7 +297,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
-        <button type="button" id="tool-view" data-tip="视图" aria-label="视图与更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-view-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); }}>
+        <button type="button" id="tool-view" data-tip="视图" aria-label="视图与更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-view-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <Eye size={17}/>
           <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
         </button>
@@ -328,7 +337,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       </div>
       {showAtmosphere && <span className="sc-tool-sep" aria-hidden="true"/>}
       {showAtmosphere && <div className="sc-tool-menu" ref={atmosphereMenuRef}>
-        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：漫游、人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { setAtmosphereOpen(open => !open); setViewOpen(false); setWeatherOpen(false); setTimeOpen(false); }}>
+        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：漫游、人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { setAtmosphereOpen(open => !open); setViewOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <Sun size={17}/>
           <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
         </button>
@@ -352,6 +361,16 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
           </button>
           {timeOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外时段选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
             {TIME_PRESETS.map(entry => <button type="button" key={entry.label} role="option" aria-label={`室外时段 ${entry.title}`} aria-selected={activeTime?.label === entry.label} className={activeTime?.label === entry.label ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, timeOfDay: entry.hour })); setTimeOpen(false); }}>{entry.title}</button>)}
+          </div>}
+
+          <span className="sc-more-sep" aria-hidden="true"/>
+          <button type="button" id="tool-lighting" role="menuitem" aria-haspopup="listbox" aria-expanded={lightingOpen} onClick={() => { setLightingOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); }}>
+            <Sun size={14}/>
+            <span>{LIGHTING_OPTIONS.find(option => option.id === (layout.backendLighting ?? 'neutral'))?.label ?? '现场灯光'}</span>
+            <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
+          </button>
+          {lightingOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="现场灯光选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
+            {LIGHTING_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={(layout.backendLighting ?? 'neutral') === option.id} className={(layout.backendLighting ?? 'neutral') === option.id ? 'is-active' : ''} onClick={() => { onLighting?.(option.id); setLightingOpen(false); }}>{option.label}</button>)}
           </div>}
         </div>}
       </div>}
