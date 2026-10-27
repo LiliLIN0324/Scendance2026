@@ -37,6 +37,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
   const [capabilities, setCapabilities] = useState<GenerationCapabilities | null>(null);
   const [luxPrompt, setLuxPrompt] = useState('');
   const [luxPending, setLuxPending] = useState(false);
+  const [luxReference, setLuxReference] = useState<{ id: string; name: string } | null>(null);
   const lock = useRef(false);
   const latest = useRef({ userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd });
   latest.current = { userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd };
@@ -104,22 +105,38 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     if (!userId || disabled || cloud.writeBlocked || luxPending || !prompt || lock.current) return;
     lock.current = true; setLuxPending(true); setError('');
     try {
-      await controller.createGenerationJob(prompt, crypto.randomUUID(), { provider: 'aholo' });
-      setLuxPrompt(''); setRefresh(value => value + 1);
+      const reference = luxReference;
+      await controller.createGenerationJob(prompt, crypto.randomUUID(), reference
+        ? { kind: 'image', referenceImageAssetId: reference.id, provider: 'aholo' }
+        : { provider: 'aholo' });
+      setLuxPrompt(''); setLuxReference(null); setRefresh(value => value + 1);
     } catch (failure) { if (mounted.current) setError(message(failure)); }
     finally { lock.current = false; if (mounted.current) setLuxPending(false); }
+  }
+
+  async function pickLuxReference(file: File | undefined) {
+    if (!file) return;
+    setError('');
+    try {
+      const uploaded = await controller.uploadGenerationReference(file);
+      setLuxReference({ id: uploaded.id, name: file.name });
+    } catch (failure) { if (mounted.current) setError(message(failure instanceof Error && /5 MB/.test(failure.message) ? failure.message : failure)); }
   }
 
   const validSize = Object.values(dimensions).every(value => Number.isFinite(value) && value >= 0.1 && value <= 50);
   const luxReady = Boolean(capabilities?.aholoTextToModel) && !disabled && !cloud.writeBlocked;
   return <section className="sc-generated-models" aria-label="历史 3D 模型">
     {luxReady && <div className="sc-section-heading" aria-label="Lux3D 生成">
-      <div><h2>Lux3D 生成（Aholo）</h2><p>一句话生成全新 3D 物件，完成后出现在下方任务列表；生成约需数分钟。</p></div>
+      <div><h2>Lux3D 生成（Aholo）</h2><p>一句话或一张照片生成全新 3D 物件，完成后出现在下方任务列表；生成约需数分钟。</p></div>
       <div>
         <label className="sc-field" htmlFor="lux3d-prompt">Lux3D 物料描述</label>
         <input id="lux3d-prompt" type="text" maxLength={200} value={luxPrompt} disabled={luxPending}
           placeholder="例：一张白色圆桌，极简风格"
           onChange={event => setLuxPrompt(event.target.value)} />
+        <label className="sc-field" htmlFor="lux3d-reference">Lux3D 参考图（可选，照片转模型）</label>
+        <input id="lux3d-reference" type="file" accept="image/png,image/jpeg" disabled={luxPending}
+          onChange={event => { void pickLuxReference(event.target.files?.[0]); event.target.value = ''; }} />
+        {luxReference && <p className="sc-note">已选参考图：{luxReference.name}（提交后按照片建模，描述作为补充说明）</p>}
         <button type="button" className="sc-button" disabled={luxPending || !luxPrompt.trim()}
           onClick={() => void submitLux3d()}>{luxPending ? '已提交，生成中…' : '用 Lux3D 生成'}</button>
       </div>

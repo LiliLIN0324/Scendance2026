@@ -56,7 +56,7 @@
 ### M2 — 图片转模型入口(需求 1 完整形态)
 
 - **API 前置验证已通过(2026-10-28,task 4424015)**:`img-to-3d` 接受 data URL 直传本地图片(无需先走 Asset 上传接口),~5 分钟出 MODEL.glb(1.2MB)+ 6 张 PBR;证据 `docs/evidence/aholo/4424015/`。后端 provider 的 image 路径与 lane 路由已在 M1 就绪。
-- 待做:用户上传场地/物件照片 → Lux3D image-to-3D → GLB 入资产库,与现有"上传即放置"流程打通(UI 归 T-AHOLO-UI 卡)。
+- **UI 已有(2026-10-28)**:T-AHOLO-UI 形态①区块加"Lux3D 参考图(可选)"上传入口(PNG/JPEG ≤5MB,走既有 `uploadGenerationReference`),选中后提交即以 `kind:'image' + referenceImageAssetId + provider:'aholo'` 进入图生通道,提交后清空参考图;组件测试覆盖(14/14 绿)。用户上传场地/物件照片 → Lux3D image-to-3D → GLB 入资产库 → "加入场地预览"全链路代码闭环,待云项目环境(条款+额度)做端到端真机验收。
 - 验收:一张真实场地照片端到端生成、进入画布、可布置可导出。
 
 ### M3 — Aholo World 场景生成(需求 2,加分项)
