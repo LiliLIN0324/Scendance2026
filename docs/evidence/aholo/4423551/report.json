@@ -1,0 +1,11 @@
+{
+  "mode": "query",
+  "taskid": "4423551",
+  "elapsedMs": 34065,
+  "outputUrls": [
+    "https://tx-qhfpm-1258830046.cos.ap-shanghai.myqcloud.com/lux3d/652324108/result.zip?sign=q-sign-algorithm%3Dsha1%26q-ak%3DAKIDTmpb6KIzPZS5RWKr76oGRKwHL8etrYw4%26q-sign-time%3D1793122528%3B1793129728%26q-key-time%3D1793122528%3B1793129728%26q-header-list%3D%26q-url-param-list%3D%26q-signature%3Da7af35b1c866a12c74943ddab9af1f683be494ca",
+    "https://qhsmodel.kujiale.com/lux3dPbrEmbedResult/97f9508092cd46efb9faae2fb2cf86aa/textured.glb"
+  ],
+  "files": "docs\\evidence\\aholo\\4423551\\unpacked\\MODEL.glb 947152\r\ndocs\\evidence\\aholo\\4423551\\unpacked\\RawDiffuseFilter.png 1384833\r\ndocs\\evidence\\aholo\\4423551\\unpacked\\RawFresnelIorFilter.png 318008\r\ndocs\\evidence\\aholo\\4423551\\unpacked\\RawReflectFilter.png 1465573\r\ndocs\\evidence\\aholo\\4423551\\unpacked\\RawReflectGlossFilter.png 107591\r\ndocs\\evidence\\aholo\\4423551\\unpacked\\RawRefractFilter.png 114572\r\ndocs\\evidence\\aholo\\4423551\\unpacked\\RawRefractGlossFilter.png 885318",
+  "note": "resumed by taskid; creation time not included"
+}

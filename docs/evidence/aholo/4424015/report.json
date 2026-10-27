@@ -1,0 +1,16 @@
+{
+  "mode": "image",
+  "taskid": 4424015,
+  "promptOrImage": "docs/figures/_shot-popup-canvas.jpg",
+  "version": "G1",
+  "elapsedMs": 301073,
+  "outputUrls": [
+    "https://tx-qhfpm-1258830046.cos.ap-shanghai.myqcloud.com/lux3d/652329002/result.zip?sign=q-sign-algorithm%3Dsha1%26q-ak%3DAKIDTmpb6KIzPZS5RWKr76oGRKwHL8etrYw4%26q-sign-time%3D1793124230%3B1793131430%26q-key-time%3D1793124230%3B1793131430%26q-header-list%3D%26q-url-param-list%3D%26q-signature%3D3fcd19fae9e33745e762d752255ee3c5c06d779d",
+    "https://qhsmodel.kujiale.com/lux3dPbrEmbedResult/f55ce5702d7d4495a7fde01a4622e3aa/textured.glb"
+  ],
+  "files": "docs\\evidence\\aholo\\4424015\\unpacked\\MODEL.glb 1215476\r\ndocs\\evidence\\aholo\\4424015\\unpacked\\RawDiffuseFilter.png 3027564\r\ndocs\\evidence\\aholo\\4424015\\unpacked\\RawFresnelIorFilter.png 544291\r\ndocs\\evidence\\aholo\\4424015\\unpacked\\RawReflectFilter.png 2017094\r\ndocs\\evidence\\aholo\\4424015\\unpacked\\RawReflectGlossFilter.png 589507\r\ndocs\\evidence\\aholo\\4424015\\unpacked\\RawRefractFilter.png 942141\r\ndocs\\evidence\\aholo\\4424015\\unpacked\\RawRefractGlossFilter.png 775273",
+  "verdict": {
+    "glbDirect": true,
+    "zipUrlExpiresHours": 2
+  }
+}
