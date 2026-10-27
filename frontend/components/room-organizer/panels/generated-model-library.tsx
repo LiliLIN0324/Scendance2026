@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { assetError } from '@/lib/assets-api';
-import { useBackendSession, type BackendSession, type GenerationJob } from '@/lib/backend-session';
+import { useBackendSession, type BackendSession, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
 import type { CatalogItem } from '../lib/types';
 
@@ -34,11 +34,20 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
   const [adding, setAdding] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 1, depth: 1, height: 1 });
   const [refresh, setRefresh] = useState(0);
+  const [capabilities, setCapabilities] = useState<GenerationCapabilities | null>(null);
+  const [luxPrompt, setLuxPrompt] = useState('');
+  const [luxPending, setLuxPending] = useState(false);
   const lock = useRef(false);
   const latest = useRef({ userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd });
   latest.current = { userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd };
   const mounted = useRef(true), marked = useRef(new Set<string>());
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    if (!userId) { setCapabilities(null); return; }
+    let alive = true;
+    controller.getGenerationCapabilities().then(value => { if (alive) setCapabilities(value); }).catch(() => { if (alive) setCapabilities(null); });
+    return () => { alive = false; };
+  }, [controller, userId]);
   useEffect(() => {
     if (!userId) return;
     let alive = true;
@@ -90,8 +99,31 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     finally { lock.current = false; if (mounted.current) setAdding(null); }
   }
 
+  async function submitLux3d() {
+    const prompt = luxPrompt.trim();
+    if (!userId || disabled || cloud.writeBlocked || luxPending || !prompt || lock.current) return;
+    lock.current = true; setLuxPending(true); setError('');
+    try {
+      await controller.createGenerationJob(prompt, crypto.randomUUID(), { provider: 'aholo' });
+      setLuxPrompt(''); setRefresh(value => value + 1);
+    } catch (failure) { if (mounted.current) setError(message(failure)); }
+    finally { lock.current = false; if (mounted.current) setLuxPending(false); }
+  }
+
   const validSize = Object.values(dimensions).every(value => Number.isFinite(value) && value >= 0.1 && value <= 50);
+  const luxReady = Boolean(capabilities?.aholoTextToModel) && !disabled && !cloud.writeBlocked;
   return <section className="sc-generated-models" aria-label="历史 3D 模型">
+    {luxReady && <div className="sc-section-heading" aria-label="Lux3D 生成">
+      <div><h2>Lux3D 生成（Aholo）</h2><p>一句话生成全新 3D 物件，完成后出现在下方任务列表；生成约需数分钟。</p></div>
+      <div>
+        <label className="sc-field" htmlFor="lux3d-prompt">Lux3D 物料描述</label>
+        <input id="lux3d-prompt" type="text" maxLength={200} value={luxPrompt} disabled={luxPending}
+          placeholder="例：一张白色圆桌，极简风格"
+          onChange={event => setLuxPrompt(event.target.value)} />
+        <button type="button" className="sc-button" disabled={luxPending || !luxPrompt.trim()}
+          onClick={() => void submitLux3d()}>{luxPending ? '已提交，生成中…' : '用 Lux3D 生成'}</button>
+      </div>
+    </div>}
     <div className="sc-section-heading"><div><h2>历史模型</h2><p>已有模型、材质版本仍可使用。新物料请通过 DeepSeek 选择资源库或参数化建模。</p></div></div>
     {!userId ? <p className="sc-note">请先登录云项目。</p> : <>
       <button type="button" className="sc-button sc-full" onClick={() => { setError(''); setRefresh(value => value + 1); }}>刷新任务状态</button>

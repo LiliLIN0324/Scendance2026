@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { intentStorageKey } from '@/lib/assets-api';
-import { BackendSession, getBackendConfig, type GenerationJob } from '@/lib/backend-session';
+import { BackendSession, getBackendConfig, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { GeneratedModelLibrary } from './generated-model-library';
 
@@ -138,5 +138,51 @@ describe('single object generation UI', () => {
     view.rerender(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     await waitFor(() => expect(mark).toHaveBeenCalledWith(id, 'project'));
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('已保存到场地'));
+  });
+});
+
+describe('Lux3D (Aholo) generation entry', () => {
+  const luxCapabilities = { model: 'hy-3d-3.0', textToModel: true, imageToModel: true, texture: false, textureRequiresImage: true, aholoTextToModel: true, aholoImageToModel: true } as const;
+  function capabilityMock(over: Partial<GenerationCapabilities> = luxCapabilities) {
+    return vi.fn().mockResolvedValue({ ...luxCapabilities, ...over });
+  }
+  it('shows the entry only when the aholo capability is advertised', async () => {
+    Object.assign(controller, { getGenerationCapabilities: capabilityMock({ aholoTextToModel: false }) });
+    const off = render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    await screen.findByRole('heading', { name: '历史模型' });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('button', { name: '用 Lux3D 生成' })).toBeNull();
+    off.unmount();
+    Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    expect(await screen.findByRole('button', { name: '用 Lux3D 生成' })).toBeTruthy();
+    expect(screen.queryByLabelText('物料描述')).toBeNull();
+    expect(screen.queryByLabelText('生成方式')).toBeNull();
+  });
+  it('submits an explicit aholo declaration and refreshes the task list', async () => {
+    Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(await screen.findByLabelText('Lux3D 物料描述'), { target: { value: '  一张白色圆桌  ' } });
+    fireEvent.click(screen.getByRole('button', { name: '用 Lux3D 生成' }));
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0]![2]).toEqual({ provider: 'aholo' });
+    expect(create.mock.calls[0]![0]).toBe('一张白色圆桌');
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+  it('rejects an empty prompt locally without calling the paid endpoint', async () => {
+    Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    await screen.findByRole('button', { name: '用 Lux3D 生成' });
+    expect((screen.getByRole('button', { name: '用 Lux3D 生成' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+  });
+  it('surfaces a provider rejection without clearing the draft prompt', async () => {
+    Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
+    create.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'SERVICE_NOT_CONFIGURED', status: 503 }));
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    fireEvent.change(await screen.findByLabelText('Lux3D 物料描述'), { target: { value: '一张白色圆桌' } });
+    fireEvent.click(screen.getByRole('button', { name: '用 Lux3D 生成' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect((screen.getByLabelText('Lux3D 物料描述') as HTMLInputElement).value).toBe('一张白色圆桌');
   });
 });

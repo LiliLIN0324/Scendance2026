@@ -1274,7 +1274,7 @@ export class BackendSession {
       throw error;
     }
   }
-  async createGenerationJob(prompt: string, requestId: string, options?: Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId' | 'provider'>): Promise<GenerationJob> {
+  async createGenerationJob(prompt: string, requestId: string, options?: Partial<Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId' | 'provider'>>): Promise<GenerationJob> {
     const parsed = generationRequestSchema.parse({ prompt: prompt.trim(), requestId, ...options });
     // Preserve the existing text request body and identity across reloads and upgrades; the
     // explicit vendor declaration joins the body only when present.
