@@ -316,21 +316,22 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const fix = screen.getByRole('button', { name: '加座，再排一版' });
     expect(fix.className).toContain('ap-link');
     expect(fix.className).not.toContain('btn-primary');
-    expect(onApply).not.toHaveBeenCalled();
+    // 壳体（场地真相）在生成开始时经 onApply 落盘、进了撤销历史；物料仍一笔未写。
+    expect(onApply).toHaveBeenCalledTimes(1);
 
-    // 点改法：旧确认立刻消失、回到进度；新预览出来前不写画布、不自动应用。
+    // 点改法：旧确认立刻消失、回到进度；同尺寸重排不再重复立壳，物料仍要等确认才落盘。
     fireEvent.click(fix);
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(document.getElementById('gen-progress')).toBeTruthy();
-    expect(onApply).not.toHaveBeenCalled();
+    expect(onApply).toHaveBeenCalledTimes(1);
 
     expect(await screen.findByText('按 30 人摆了 30 座', undefined, { timeout: 15000 })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
     expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
 
     fireEvent.click(screen.getByRole('button', { name: '确认布置' }));
-    await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
-    const applied = onApply.mock.calls[0]![0] as RoomLayout;
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(2));
+    const applied = onApply.mock.calls[1]![0] as RoomLayout;
     const seats = applied.floors[0]!.items.filter(item => item.type === 'chair' || item.type === 'dining-chair');
     expect(seats.length).toBeGreaterThanOrEqual(30);
   }, 20000);
@@ -469,6 +470,7 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
     send('40 人，室内 12×9');
     expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
     expect(onPreview).toHaveBeenCalled();
-    expect(onApply).not.toHaveBeenCalled();
+    // 壳体落盘走 onApply（进撤销历史）；带人数所以仍出提案，物料等确认。
+    expect(onApply).toHaveBeenCalledTimes(1);
   }, 25000);
 });

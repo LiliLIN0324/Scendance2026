@@ -766,7 +766,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     if (venue) {
       // 场地是 T-01 已经确认过的真相：改的是墙体尺寸，不是物料，所以先落它，预览才对得上墙。
-      actions.applyLayout(venue.layout);
+      // 落盘走 provider 的 onApply：提交撤销历史、存快照都在里面，直接 applyLayout 会绕过撤销。
+      try { onApply(venue.layout); }
+      catch (error) {
+        say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
+        setPhase('failed'); return;
+      }
       say({ role: 'agent', text: leavingPreset ? presetShellNote(venue) : shellNote(venue.scene, venue.cleared) });
       await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
     } else {
@@ -774,7 +779,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       // 否则按新尺度摆的桌椅会被旧边界判成放不下。等一帧再读 live，基线才包含这次的对齐。
       const current = live.current;
       if (Math.abs(current.width - scale.length) > 1e-6 || Math.abs(current.height - scale.width) > 1e-6) {
-        actions.applyLayout({ ...current, width: scale.length, height: scale.width });
+        try { onApply({ ...current, width: scale.length, height: scale.width }); }
+        catch (error) {
+          say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
+          setPhase('failed'); return;
+        }
         await wait(STEP_DELAY_MS); if (token !== runToken.current) return;
       }
     }
