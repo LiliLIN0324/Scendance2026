@@ -740,15 +740,15 @@
   .sc-workbench .sc-canvas-heading { top:12px; left:12px; gap:4px; max-width:calc(100% - 105px); }
 }
 
-/* ── 工作台设计系统：图纸白（Drafting Paper）─────────────────────────────
-   来自设计稿实测取色：纸 #FFFFFF / 底 #F3F4EE / 画布 #F9F9F9 /
-   发丝线 #E7E7E7 / 墨 #2F2F2F / 强调绿 #56794D / 淡绿 #DBE5CF。
-   规则：界面是纸不是卡片墙；绿色只给主操作与选中态。 */
+/* ── 工作台设计系统：2026 冷石扁平（T-VISUAL-2026）─────────────────────
+   纸 #FFFFFF / 底·画布 #F4F5F7 / 发丝 #E4E4E7 / 墨 #141416 /
+   品牌绿 #4A7C59（仅选中+主操作）/ soft #E8F0EA。
+   禁旧奶油 #F4F5F7、#4A7C59、#A58B69、靛蓝主色、毛玻璃。图标沿用现产品。 */
 .sc-workbench {
-  --wk-paper: #fff; --wk-plane: #f3f4ee; --wk-canvas: #f9f9f9;
-  --wk-hair: #e7e7e7; --wk-hair-soft: #f0f0eb;
-  --wk-ink: #2f2f2f; --wk-ink-soft: #767a70; --wk-ink-faint: #a8aba2;
-  --wk-green: #56794d; --wk-green-deep: #394a37; --wk-green-pale: #dbe5cf;
+  --wk-paper: #fff; --wk-plane: #f4f5f7; --wk-canvas: #f4f5f7;
+  --wk-hair: #e4e4e7; --wk-hair-soft: #f4f4f5;
+  --wk-ink: #141416; --wk-ink-soft: #71717a; --wk-ink-faint: #a1a1aa;
+  --wk-green: #4a7c59; --wk-green-deep: #3a6247; --wk-green-pale: #e8f0ea;
   --sc-ink: var(--wk-ink);
   --sc-muted: var(--wk-ink-soft);
   --sc-line: var(--wk-hair);
@@ -833,19 +833,19 @@
 .sc-workbench .sc-agent-reopen {
   position: absolute; top: 12px; right: calc(var(--sc-rail-width, 46px) + 62px); z-index: 34;
   display: flex; align-items: center; gap: 9px; box-sizing: border-box;
-  padding: 6px 13px 6px 7px; border: 1px solid var(--wk-hair, #e7e7e7); border-radius: 10px;
+  padding: 6px 13px 6px 7px; border: 1px solid var(--wk-hair, #e4e4e7); border-radius: 10px;
   background: color-mix(in srgb, var(--wk-paper, #fff) 94%, transparent);
   box-shadow: 0 2px 10px rgba(47, 47, 47, .07);
   color: var(--wk-ink, #2f2f2f); font-size: 12px; text-align: left; cursor: pointer;
 }
-.sc-workbench .sc-agent-reopen:hover { border-color: var(--wk-green-pale, #dbe5cf); background: var(--wk-paper, #fff); }
+.sc-workbench .sc-agent-reopen:hover { border-color: var(--wk-green-pale, #e8f0ea); background: var(--wk-paper, #fff); }
 .sc-workbench .sc-agent-reopen img { border-radius: 50%; }
 .sc-workbench .sc-agent-reopen-copy { display: flex; flex-direction: column; gap: 1px; line-height: 1.3; }
 .sc-workbench .sc-agent-reopen-copy small { color: var(--wk-ink-faint, #a8aba2); font-size: 10.5px; }
 .sc-workbench .sc-agent-reopen-top { display: flex; align-items: baseline; gap: 8px; }
 .sc-workbench .sc-agent-reopen .ap-status { font-style: normal; font-size: 11px; color: var(--wk-ink-faint, #a8aba2); }
 .sc-workbench .sc-agent-reopen .ap-status.is-busy,
-.sc-workbench .sc-agent-reopen .ap-status.is-ok { color: var(--wk-green, #56794d); }
+.sc-workbench .sc-agent-reopen .ap-status.is-ok { color: var(--wk-green, #4a7c59); }
 .sc-workbench .sc-agent-reopen .ap-status.is-warn { color: #a8742a; }
 .sc-workbench .ap-close {
   all: unset; cursor: pointer; flex: 0 0 26px; width: 26px; height: 26px;
@@ -871,7 +871,7 @@
   pointer-events: auto; padding: 0; border: 0; background: none;
   font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
 }
-.sc-workbench .sc-canvas-size:hover { color: var(--wk-green-deep, #394a37); }
+.sc-workbench .sc-canvas-size:hover { color: var(--wk-green-deep, #3a6247); }
 .sc-workbench .sc-canvas-size:focus-visible { outline: 2px solid var(--sc-accent-ink); outline-offset: 2px; border-radius: 3px; }
 .sc-workbench .sc-canvas-heading .sc-canvas-count { flex: 0 0 100%; color: var(--wk-ink-faint, #a8aba2); white-space: nowrap; }
 /* 设计稿：左栏面板内不再重复顶部分类签、流程提示卡与折叠标题 */
@@ -893,13 +893,13 @@
 .sc-workbench .sc-project-heading strong { display: inline; max-width: 220px; }
 .sc-workbench .sc-tag-draft {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
-  border-radius: 6px; background: #f3f4ee; border: 1px solid #e7e8e0;
+  border-radius: 6px; background: #f4f5f7; border: 1px solid #e4e4e7;
   color: #8d8f85; font-size: 11px; white-space: nowrap;
 }
 .sc-workbench .sc-header-actions .sc-project-btn {
   display: inline-flex; align-items: center; gap: 6px; min-height: 32px;
   padding: 5px 10px; border: 1px solid transparent; border-radius: 8px;
-  background: transparent; color: #394a37; font-size: 13px;
+  background: transparent; color: #3a6247; font-size: 13px;
 }
 .sc-workbench .sc-header-actions .sc-project-btn:hover {
   background: var(--sc-accent-soft);
@@ -911,7 +911,7 @@
   width: 46px; max-width: 46px; box-sizing: border-box;
   display: flex !important; flex-direction: column !important; align-items: center;
   justify-content: flex-start; padding: 8px 0; gap: 0;
-  border: 1px solid var(--wk-hair, #e7e7e7); border-radius: 12px;
+  border: 1px solid var(--wk-hair, #e4e4e7); border-radius: 12px;
   background: color-mix(in srgb, var(--wk-paper, #fff) 90%, transparent);
   box-shadow: 0 1px 3px rgba(47, 47, 47, .05); z-index: 35; overflow: visible;
   /* 按内容收高：拉满到底会让纸条下面拖出一截空白。 */
@@ -925,14 +925,14 @@
   padding: 0; border: 0;
 }
 .sc-workbench .sc-tool-column .sc-tool-sep {
-  display: block; width: 20px; height: 1px; background: var(--wk-hair, #e7e7e7); margin: 7px 0;
+  display: block; width: 20px; height: 1px; background: var(--wk-hair, #e4e4e7); margin: 7px 0;
 }
 .sc-workbench .sc-tool-column .sc-tool-group button,
 .sc-workbench .sc-tool-column .sc-tool-menu > button {
   position: relative;
   width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0;
-  border-radius: 9px; background: #fff; border: 1px solid var(--wk-hair, #e7e7e7);
-  box-shadow: none; color: var(--wk-green, #56794d);
+  border-radius: 9px; background: #fff; border: 1px solid var(--wk-hair, #e4e4e7);
+  box-shadow: none; color: var(--wk-green, #4a7c59);
   display: inline-flex; align-items: center; justify-content: center;
 }
 .sc-workbench .sc-tool-column .sc-tool-group button:disabled {
@@ -940,7 +940,7 @@
 }
 .sc-workbench .sc-tool-column .sc-tool-group button.is-active,
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
-  background: var(--wk-green-pale, #dbe5cf); border-color: #b9c9a7; color: var(--wk-green-deep, #394a37);
+  background: var(--wk-green-pale, #e8f0ea); border-color: #c5d4c9; color: var(--wk-green-deep, #3a6247);
 }
 /* 纯图标看不出作用：悬停/聚焦即在左侧浮出名字。 */
 .sc-workbench .sc-tool-column [data-tip]::after {
@@ -956,7 +956,7 @@
   letter-spacing: .2px; color: inherit;
 }
 .sc-workbench .sc-tool-caret {
-  position: absolute; right: 3px; top: 50%; margin-top: -4px; color: #66835d;
+  position: absolute; right: 3px; top: 50%; margin-top: -4px; color: #4a7c59;
 }
 .sc-workbench .sc-tool-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
 @media (max-height: 640px) {
@@ -984,11 +984,11 @@
 .sc-workbench .sc-more-pop { min-width: 170px; padding: 6px; gap: 1px; max-height: min(70vh, 420px); overflow-y: auto; }
 .sc-workbench .sc-tool-column .sc-more-pop > button { display: flex; align-items: center; justify-content: flex-start; gap: 8px; white-space: nowrap; }
 .sc-workbench .sc-tool-column .sc-more-pop > button span { flex: 1; text-align: left; }
-.sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair, #e7e7e7); }
+.sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair, #e4e4e7); }
 .sc-workbench .sc-more-export { display: flex; flex-direction: column; gap: 12px; min-width: 208px; padding: 4px; }
 .sc-workbench .sc-more-export .sc-more-back {
   display: block; padding: 0 2px 2px !important; border: 0 !important; background: transparent !important;
-  color: var(--wk-green-deep, #394a37) !important; font-size: 11.5px !important; text-align: left !important;
+  color: var(--wk-green-deep, #3a6247) !important; font-size: 11.5px !important; text-align: left !important;
 }
 .sc-workbench .sc-atmosphere-group { align-items: center; }
 /* Bottom-center 物料库 drawer */
@@ -1005,10 +1005,10 @@
   color: var(--wk-ink-faint, #a8aba2); font-size: 11px; box-shadow: none;
 }
 .sc-workbench .sc-material-drawer-handle:hover {
-  color: var(--wk-green-deep, #394a37); border-color: var(--wk-hair, #e7e7e7); background: var(--wk-paper, #fff);
+  color: var(--wk-green-deep, #3a6247); border-color: var(--wk-hair, #e4e4e7); background: var(--wk-paper, #fff);
 }
 .sc-workbench .sc-material-drawer-handle.is-active {
-  background: #e7eddd; color: #394a37; border-color: #c5d3b6;
+  background: #e8f0ea; color: #3a6247; border-color: #c5d4c9;
 }
 .sc-workbench .sc-canvas-stage.has-bottom-drawer {
   grid-template-rows: minmax(0,1fr) auto !important;
@@ -1017,7 +1017,7 @@
 .sc-workbench .sc-canvas-stage .sc-material-shelf.sc-bottom-drawer {
   position: relative; grid-area: 2 / 1; inset: auto; width: 100%;
   height: var(--sc-shelf-height, 196px); min-height: 0;
-  background: #fbfbf8; border: 1px solid #e7e8e0; border-radius: 14px 14px 0 0;
+  background: #fbfbf8; border: 1px solid #e4e4e7; border-radius: 14px 14px 0 0;
   box-shadow: none; z-index: 33; overflow: hidden;
 }
 .sc-workbench .sc-canvas-stage .sc-material-shelf.sc-bottom-drawer[hidden] { display: none; }
