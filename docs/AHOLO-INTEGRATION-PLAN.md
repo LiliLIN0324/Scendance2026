@@ -69,6 +69,12 @@
 
 - 演示链路串词:①文字生成物件(Lux3D text-to-3D)→ ②照片转模型(image-to-3D)→ ③文字生成场地氛围(Aholo World)→ ④布置/评审/交付。
 - 视频需求出现时再评估 LuxReal。
+- **演示脚本(2026-10-28 起草,待 M3 后补第③段)**:
+  1. **一句话生成物件**(形态①/②):晴光对话说"给我生成一个雕花木质讲台"→ agent 调 `start_lux3d_model`(或物料工具面板直接填"Lux3D 物料描述")→ 数分钟后历史模型面板出现任务 → 设尺寸 → "加入场地预览"。话术点:展示了 Lux3D 深度集成进产品决策流(agent 只在能力位亮起时才承诺该能力)。
+  2. **照片转模型**(M2):物料工具 → Lux3D 区块 → 传一张现场桌椅照片 + 一句补充描述 → 提交 → 同链路加入场地。话术点:image-to-3D 真链路已验证(task 4424015,~5 分钟)。
+  3. **参赛可追溯性**:资产元数据带 `providerMode:'aholo'`/`providerModel:'lux3d'`、`source:'aholo'`——评审可查证"确实用了 Lux3D",不是贴牌。
+  4. (M3 后)文字生成场地氛围 3DGS 背景层。
+- **条款 URL 已核实**:<https://www.aholo.ai/agreement/termsofuse>(隐私政策:https://www.aholo.ai/agreement/privacypolicy)。用户审阅后将其填入 `LUX3D_TERMS_URL`、审阅日期填入 `LUX3D_TERMS_REVIEWED_AT` 即可点亮全部产品入口。
 
 ## 4. 硬钉(沿用并新增)
 
