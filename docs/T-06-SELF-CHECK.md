@@ -2,6 +2,8 @@
 
 > 2026-10-27 · 卡：`docs/T-06-CANVAS-QUIET.md` · 环境：`http://127.0.0.1:3026/editor`（headless Chrome 155 + CDP，1440×900，未登录本地工作台，演示规则生成）
 > 结论：§6 十条验收 **PASS**（其中两条附「待核」说明，见 §5）。未 commit / push / 部署 / 开 PR，停等验收。
+>
+> **追加（2026-10-27 下午，用户点名「只留图标、禁旁注说明书」）**：顶左删「3D 场景/2D 平面」kind 旁注（尺寸钮 title 保留说明）、底中把手删「物料库」文字（aria-label 不变）、氛围 toggle 删「氛围」文字（补 aria-label="氛围"）。真机复验五项静默项 + 抽屉开合 + 更多菜单全部 PASS，截图 `.scratch/t06-idle.png / t06-drawer-open.png / t06-more-open.png`；单测契约同步（把手 `textContent` 不含「物料库」），vitest 2 套件全绿、tsc 0、eslint 0 error。原十条验收中「顶左只剩一行 3D 场景 · 尺寸」的描述自本追加起以「只留尺寸」为准。
 
 ## 1. §6 验收 checkbox
 

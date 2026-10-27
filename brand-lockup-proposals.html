@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Scendance 品牌字标 · 定版（方向 A + PingFang SC）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --hair:rgba(20,20,22,.08);
+    --green:#4A7C59; --green-deep:#3A6247;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"PingFang SC","Noto Sans SC","Inter",-apple-system,"Microsoft YaHei",sans-serif;background:var(--plane);color:var(--ink);padding:48px 40px;line-height:1.6}
+  h1{font-size:14px;font-weight:600;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:4px}
+  .sub{font-size:12px;color:var(--faint);margin-bottom:40px}
+  .card{background:var(--paper);border:1px solid var(--hair);border-radius:18px;padding:36px;display:flex;flex-direction:column;gap:28px;max-width:560px}
+  .card-label{font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;display:flex;align-items:center;gap:8px}
+  .card-label::before{content:"";width:22px;height:1px;background:var(--hair)}
+  .scene{display:flex;flex-direction:column;gap:12px}
+  .scene-tag{font-size:10px;color:var(--faint);font-weight:500;letter-spacing:.06em}
+  .bg-white{background:var(--paper)}
+  .bg-hero{background:linear-gradient(135deg,#2a2d24 0%,#444a38 100%)}
+
+  /* ── BrandMark SVG（定版共用） ── */
+  .bm svg{display:block}
+
+  /* =======================================================
+     定版 · 方向 A 紧排基线对齐
+     图标 + 中文粗体（PingFang SC）+ 英文全大写小字 baseline 对齐
+  ======================================================= */
+  .A .bm{display:flex;align-items:center;gap:6px}
+  .A .bm-cn{font-family:"PingFang SC","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;font-size:15px;font-weight:600;color:var(--ink);letter-spacing:.02em}
+  .A .bm-en i{font-style:italic;font-weight:500}
+  .A .bm-en{font-family:"Playfair Display",Georgia,serif;font-size:11px;font-weight:500;color:var(--ink-soft);letter-spacing:.01em;text-transform:uppercase;margin-left:2px}
+  .A.dark .bm-cn{color:#fff}
+  .A.dark .bm-en{color:rgba(255,255,255,.55)}
+
+  footer{margin-top:44px;font-size:11px;color:var(--faint);line-height:1.8;max-width:900px}
+  footer code{background:var(--hair);padding:1px 5px;border-radius:3px;font-family:"SF Mono",Consolas,monospace;font-size:10.5px}
+</style>
+</head>
+<body>
+
+<h1>Scendance · 品牌字标（定版）</h1>
+<p class="sub">2026-10-28 定版：方向 A · 紧排基线对齐 + 中文 PingFang SC · 尺寸以 workbench 28px 图标为基准</p>
+
+<div class="card">
+  <div class="card-label">方向 A · 紧排基线对齐（定版）</div>
+  <div class="scene">
+    <div class="scene-tag">白底卡片（工作台 / intro 登录）</div>
+    <div class="bg-white" style="padding:24px 28px;border-radius:12px;border:1px solid var(--hair)">
+      <div class="bm A">
+        <svg viewBox="0 0 48 48" width="28" height="28" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+        <span class="bm-cn">幕景</span><span class="bm-en"><i aria-hidden="true">S</i>CENDANCE</span>
+      </div>
+    </div>
+  </div>
+  <div class="scene">
+    <div class="scene-tag">深底 hero（官网 introduction）</div>
+    <div class="bg-hero" style="padding:24px 28px;border-radius:12px">
+      <div class="bm A dark" style="color:#fff">
+        <svg viewBox="0 0 48 48" width="28" height="28" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg>
+        <span class="bm-cn">幕景</span><span class="bm-en"><i aria-hidden="true">S</i>CENDANCE</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <b>定版规则（与 design-spec-2026.md v2.4 品牌字标一节同步）：</b><br>
+  · BrandMark 统一 28px / 容器 29×31 / gap 10px / path <code>fill=currentColor</code> / circle 固定 <code>#4A7C59</code><br>
+  · 中文「幕景」15px / 600 / letter-spacing 0，字体栈 <code>"PingFang SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei"</code><br>
+  · 英文固定全大写 <code>SCENDANCE</code>（首字母 S 用 Italic 500 做锚点）Playfair Display 衬线 500 / <code>.01em</code>，颜色比中文浅一档（白底 <code>#55585F</code>，深底 <code>rgba(255,255,255,.55)</code>）<br>
+  · 颜色由父级 color 控明暗，path 不硬编码；三页（workbench header / intro 登录页 / 官网 introduction）同一套排法<br>
+  · 已删：方向 B（上下堆叠）、C（只留英文）、D（字重对比）及备选中文字体对比
+</footer>
+
+</body>
+</html>
