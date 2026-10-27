@@ -34,3 +34,10 @@ output/model-library/
 
 # Local production artifact backup delivered with WEBSITE-LATEST
 /production-snapshot/
+
+# Scratch / heavy local assets (2026-10-28)
+.temp/
+.temp-cloud.txt
+frontend/.preview/
+_refs/
+docs/evidence/aholo/
