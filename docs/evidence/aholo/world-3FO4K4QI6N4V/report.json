@@ -1,0 +1,35 @@
+{
+  "worldId": "3FO4K4QI6N4V",
+  "prompt": "",
+  "elapsedMs": 10144,
+  "urls": {
+    "plyPath": null,
+    "spzPath": null,
+    "lodMetaPath": null
+  },
+  "detail": {
+    "worldId": "3FO4K4QI6N4V",
+    "name": "Scendance-M3-MVP",
+    "cover": null,
+    "scene": "indoor",
+    "createTime": 1793127708000,
+    "updateTime": 1793128545000,
+    "status": "SUCCEEDED",
+    "progress": 1,
+    "assets": {
+      "splats": {
+        "urls": {
+          "plyPath": "https://holo-cos.aholo3d.cn/spatial-gen-3dgs/3FO4FMTUKCW4/aholo/output/04c96860ce7d46138fc437aa46a89ed2-030845-0f7d_MaaSReportFile-10503b7be227e532a6e8002d8980fcac.ply",
+          "spzPath": "https://holo-cos.aholo3d.cn/splat-transform/3FO4FMTUKCW4/format/8b2cd07c006148efbbedf0122dd845a1.spz",
+          "lodMetaPath": "https://holo-cos.aholo3d.cn/splat-transform/3FO4FMTUKCW4/1793128534/lod-meta.json"
+        }
+      },
+      "imagery": {
+        "panoUrl": "https://holo-cos.aholo3d.cn/spatial-gen-3dgs/3FO4FMTUKCW4/aholo/output/04c96860ce7d46138fc437aa46a89ed2-030845-0f7d_MaaSReportFile-0fe4854c70981e1788095e0339c502f9.jpg"
+      },
+      "semanticsMetadata": {
+        "upAxis": "Z"
+      }
+    }
+  }
+}

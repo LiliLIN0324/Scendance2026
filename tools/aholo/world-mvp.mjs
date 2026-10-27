@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Aholo World(3DGS 世界生成)MVP — docs/AHOLO-INTEGRATION-PLAN.md M3 验证脚本。
 // 用法: node tools/aholo/world-mvp.mjs "<室内场景描述>"  (key 自动读仓库根 .env.local 的 LUX3D_API_KEY)
+// 注意:world 服务走国内网关 api.aholo3d.cn(国际网关对该 key 返回 BIZ_14001 user not exists)。
 // 产物: docs/evidence/aholo/world-<worldId>/ 下存 PLY/SPZ 与 report.json
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-const BASE = (process.env.LUX3D_BASE_URL ?? 'https://api.aholo.ai/global').replace(/\/+$/, '');
+const BASE = (process.env.LUX3D_BASE_URL ?? 'https://api.aholo3d.cn').replace(/\/+$/, '');
 let KEY = process.env.LUX3D_API_KEY;
 if (!KEY) {
   try {
@@ -17,8 +18,11 @@ const OUT_DIR = 'docs/evidence/aholo';
 function die(msg) { console.error('[WORLD-FAIL]', msg); process.exit(1); }
 const log = (...a) => console.log('[WORLD]', ...a);
 if (!KEY) die('缺少 LUX3D_API_KEY(.env.local 或环境变量)。');
-const prompt = process.argv.slice(2).join(' ');
-if (!prompt) die('用法: node tools/aholo/world-mvp.mjs "<室内场景描述>"');
+const args = process.argv.slice(2);
+const resume = args[0] === 'query';
+const prompt = resume ? '' : args.join(' ');
+if (resume && !args[1]) die('用法: node tools/aholo/world-mvp.mjs query <worldId>');
+if (!resume && !prompt) die('用法: node tools/aholo/world-mvp.mjs "<室内场景描述>" 或 query <worldId>');
 
 async function api(url, init) {
   const res = await fetch(url, { ...init, headers: { Authorization: KEY, 'Content-Type': 'application/json', ...init?.headers } });
@@ -29,11 +33,17 @@ async function api(url, init) {
 }
 
 const t0 = Date.now();
-log('创建世界生成任务:', prompt);
-const created = await api(`${BASE}/world/v1/generations`, { method: 'POST', body: JSON.stringify({ name: 'Scendance-M3-MVP', prompt }) });
-log('create 响应:', JSON.stringify(created).slice(0, 400));
-const worldId = created.worldId ?? created.d?.worldId ?? created.data?.worldId;
-if (!worldId) die('响应中找不到 worldId,原始响应见上一行。');
+let worldId;
+if (resume) {
+  worldId = args[1];
+  log('续查已存在任务:', worldId);
+} else {
+  log('创建世界生成任务:', prompt);
+  const created = await api(`${BASE}/world/v1/generations`, { method: 'POST', body: JSON.stringify({ name: 'Scendance-M3-MVP', prompt }) });
+  log('create 响应:', JSON.stringify(created).slice(0, 400));
+  worldId = created.worldId ?? created.d?.worldId ?? created.data?.worldId;
+  if (!worldId) die('响应中找不到 worldId,原始响应见上一行。');
+}
 
 let detail;
 const maxMinutes = 30;
@@ -43,8 +53,8 @@ for (;;) {
   const d = detail.d ?? detail.data ?? detail;
   const status = d.status ?? d.state;
   log(`status=${JSON.stringify(status)} elapsed=${Math.round((Date.now() - t0) / 1000)}s`);
-  const done = status === 3 || status === 'DONE' || status === 'succeed' || status === 'success' || status === 'completed';
-  const failed = status === 4 || status === 'FAIL' || status === 'failed' || status === 'canceled' || status === 6;
+  const done = status === 3 || status === 'DONE' || ['succeed', 'succeeded', 'success', 'completed'].includes(String(status).toLowerCase());
+  const failed = status === 4 || status === 'FAIL' || ['failed', 'canceled', 6].includes(typeof status === 'string' ? status.toLowerCase() : status);
   if (done || failed) { log('终态详情:', JSON.stringify(detail).slice(0, 900)); if (failed) die('任务失败'); break; }
   if (Date.now() - t0 > maxMinutes * 60_000) die(`超过 ${maxMinutes} 分钟未完成`);
 }
