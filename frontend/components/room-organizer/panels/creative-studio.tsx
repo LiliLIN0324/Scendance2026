@@ -1003,8 +1003,6 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     <button className="cr-generate is-manual" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||blankScaffold||!!studio.briefError} onClick={()=>void studio.generate(undefined, forcePreview?{requirePreview:true}:undefined)}>{studio.busy?<Loader2 className="cr-spin" size={16}/>:<Sparkles size={16}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':!forcePreview&&studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
     <button className="cr-brief-skip" type="button" onClick={()=>onSkip?.()}>暂不填写</button>
     </div>
-    <p className="cr-hint">想快就在右栏跟晴光说一句；这里是逐项细填后再生成，照片需单独确认。</p>
-
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={20}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>
   </fieldset>;
@@ -1075,7 +1073,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
 }):JSX.Element {
   const studio=useStudio(); const {setExpanded}=studio; const {selectedItem,allSelectedIds,selectOnly}=useSelection();
   const demoBackend=isDemoBackend();
-  const demoHint=demoBackend?'演示后端：方案由本机 mock 服务生成，未连接真实模型。':studio.connection==='离线引导'?'尚未连接 AI 服务，方案不会生成。':'场景策划与物料建模使用 DeepSeek。';
+  const demoHint=demoBackend?'演示后端：方案由本机 mock 服务生成，未连接真实模型。':studio.connection==='离线引导'?'尚未连接 AI 服务，方案不会生成。':'确认后才写入场地。';
   const [drafts,setDrafts]=useState({plan:'',model:''}); const feed=useRef<HTMLDivElement>(null);
   const content=useRef<HTMLDivElement>(null);
   const businessEntry=useRef<HTMLButtonElement|null>(null);
@@ -1406,7 +1404,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   if(studio.layout.eventOperations?.tasks.length)resultSuggestions.push({label:'整理执行时间表',open:event=>openDeliveryView('operations',event)});
   if(sceneItems.length)resultSuggestions.push({label:'核对物料交接',open:event=>openDeliveryView('materials',event)});
   if(hasBrief)resultSuggestions.push({label:'准备客户方案',open:openReview});
-  function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'晴光':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸，让 DeepSeek 查找资源或使用参数化建模；不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
+  function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'晴光':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸。不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
   const businessContent=(
       <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
         <header className="cr-business-heading">
@@ -1465,11 +1463,11 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
       {/* T-UI：演示路径下不暴露「直接应用」开关，统一先预览再确认。 */}
       {!demoBackend&&<div className="cr-agent-mode"><label><input type="checkbox" checked={studio.directApply} disabled={studio.busy||studio.jevEnabled||mode==='model'} onChange={event=>studio.setDirectApply(event.target.checked)}/>明确指令直接应用</label><span>{mode==='model'?'仅用于场景策划；物料建模始终先预览':studio.directApply?'明确调整通过校验后应用，可撤销':'先预览，再确认布置'}</span></div>}
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.jevEnabled} disabled={studio.busy} onChange={event=>studio.setJevEnabled(event.target.checked)}/>JEV 决策模式</label><span>生成 3 个方案，由你最终选择</span></div>
-      <p className="cr-hint">{demoHint}{studio.jevEnabled?'比较方案后由你确认布置。':'模糊需求先预览；已应用的调整可撤销。'}</p>
+      <p className="cr-hint">{demoHint}</p>
             </div></details><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy||studio.recoverable}><ArrowUp size={20}/></button>
         </div>
       </form>
-      <footer><span>{studio.jevEnabled?'比较方案后由你确认布置':mode==='model'?'核对物料候选后确认布置':studio.directApply?'明确调整通过校验后应用，模糊需求先预览':'确认提案后修改当前场景'}</span></footer>
+      <footer/>
       </section>
       </div>
     </section>}

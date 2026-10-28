@@ -173,7 +173,7 @@ interface AgentValue {
 }
 
 const AgentContext = createContext<AgentValue | null>(null);
-function useAgent(): AgentValue { const value = useContext(AgentContext); if (!value) throw new Error('Agent panel unavailable'); return value; }
+export function useAgent(): AgentValue { const value = useContext(AgentContext); if (!value) throw new Error('Agent panel unavailable'); return value; }
 
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
@@ -1182,10 +1182,8 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
   const status = agent.exportPreview
     ? '导出预览还没确认'
     : agent.proposal
-      ? '右栏这版还没确认'
-      : items
-        ? '要改哪里，直接说一句'
-        : '说「出方案」，我先摆一版预览';
+      ? '这版还没确认'
+      : '';
   return <section className="sc-brief" aria-label="活动简报">
     <strong className="sc-brief-title">{layout.name || event || '未命名活动'}</strong>
     <dl className="sc-brief-rows">
@@ -1196,10 +1194,9 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
     </dl>
     {agent.baseName && <p className="sc-brief-note">底图 · {agent.baseName} · 仅作参照</p>}
     {note && <p className="sc-brief-note">{note}</p>}
-    <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>
+    {status && <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>}
     {!known && <p className="sc-brief-blank">
       <button type="button" className="sc-brief-blank-link" onClick={agent.startBlankVenue}>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</button>
-      <span>清空示例桌椅，从空地开始</span>
     </p>}
     {tools.length > 0 && <details className="sc-brief-tools">
       <summary>更多资料</summary>
@@ -1270,52 +1267,10 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
       : <>
-          {!plan.blocked && <button id="step-cta" type="button" className={agent.exportPreview ? 'chip btn-outline' : 'btn-primary'} onClick={agent.confirmProposal}>确认布置</button>}
+          {!plan.blocked && !agent.exportPreview && <button id="step-cta" type="button" className="btn-primary" onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
         </>}
   </div>;
-}
-
-/** dock 模式下 Agent 面板的引导建议卡：替代 creative-studio 胶囊里那套智能建议。 */
-function GuideSuggestions({ agent, phase }: { agent: AgentValue; layout: RoomLayout; phase: "start" | "next" }): JSX.Element {
-  const cbs = agent.callbacks;
-  const quickOpens: Array<{ label: string; hint: string; open(): void }> = [];
-  if (phase === "start") {
-    if (cbs.onOpenBrief) quickOpens.push({ label: "完善活动需求", hint: "人数、类型、场地", open: cbs.onOpenBrief });
-    quickOpens.push({ label: "拖张图纸进来", hint: "或直接说一句需求", open: agent.pickFile });
-    const TYPICAL_CASE = "80 人发布会，室内 12×9，主席台加观众区，过道留宽一点，先出一版预览";
-    quickOpens.push({ label: "试一个典型案例", hint: "80 人发布会 · 12×9 室内", open: () => { void agent.send(TYPICAL_CASE); } });
-    quickOpens.push({ label: "空白场地起步", hint: "12×8 m 空壳，可改尺寸", open: agent.startBlankVenue });
-  } else {
-    // 空地已立、还没物料：继续给下一步，别让人盯着空白画布发呆。
-    const TYPICAL_CASE = "80 人发布会，室内 12×9，主席台加观众区，过道留宽一点，先出一版预览";
-    quickOpens.push({ label: "出一版布置预览", hint: "按当前场地先摆一版", open: () => { void agent.send("出方案"); } });
-    quickOpens.push({ label: "试一个典型案例", hint: "80 人发布会 · 补全需求再出预览", open: () => { void agent.send(TYPICAL_CASE); } });
-    quickOpens.push({ label: "拖张图纸进来", hint: "按图纸对一下尺寸", open: agent.pickFile });
-    if (cbs.onOpenBrief) quickOpens.push({ label: "完善活动需求", hint: "人数、类型再补全", open: cbs.onOpenBrief });
-  }
-  const letters = ["A", "B", "C", "D"];
-  return (
-    <>
-      {phase === "start" && <div className="ap-turn">
-        <p className="ap-agent is-long">你好，我是晴光。{'\n'}可以说人数、活动类型和场地尺寸，或拖一张图纸进来——我先摆一版布置预览，你点「确认布置」才写进画布。改物料、换布局、出执行资料，也直接跟我说。</p>
-      </div>}
-      <div className="ap-guide">
-        <p className="ap-guide-tag">{phase === "start" ? "想先处理哪一项？" : "接下来想先做哪一步？"}</p>
-        <div className="ap-guide-list">
-          {quickOpens.slice(0, 4).map((s, i) => (
-            <button key={s.label} type="button" className="ap-guide-chip" onClick={s.open}>
-              <span className="ap-guide-letter" aria-hidden="true">{letters[i]}</span>
-              <span>
-                <strong>{s.label}</strong>
-                <small>{s.hint}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </>
-  );
 }
 
 export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
@@ -1354,7 +1309,6 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
       {mode === 'layout' && <>
         {planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
-        {preStates && agent.baseName === null && (agent.bubbles.length === 0 || items === 0) && <GuideSuggestions agent={agent} layout={layout} phase={agent.bubbles.length === 0 ? "start" : "next"}/>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
@@ -1506,7 +1460,7 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   return <div className="ap-canvas-layer" aria-live="polite">
     {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={24} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={16} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/{GEN_STEPS.length}</div>}
+    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={16} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]}</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
     {s === 'planProposed' && agent.proposal && agent.proposal.overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 这版里 {agent.proposal.overlapCount} 件挤了或压墙：{agent.proposal.overlapNames.slice(0, 4).join('、')}{agent.proposal.overlapNames.length > 4 ? ' 等' : ''}</div>}
     {(s === 'planReady' || s === 'planEdited') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}

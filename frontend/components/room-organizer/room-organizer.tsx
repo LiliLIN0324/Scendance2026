@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Settings, SquareStack } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -64,6 +64,7 @@ import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from
 import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { PlacementHint } from './panels/placement-hint';
+import { PlanFlow } from './panels/plan-flow';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
@@ -76,7 +77,7 @@ import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types'
 const RAIL_TOOLS = [
   { id: 'reference', label: '图纸尺寸', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference', group: 'venue' as const },
   { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', Icon: ClipboardList, open: 'openBrief', group: 'docs' as const },
-  { id: 'model', label: '物料建模', hint: '生成新物料与调整材质，含 Lux3D', Icon: Boxes, open: 'openModelTools', group: 'docs' as const },
+  { id: 'model', label: '物料建模', hint: '生成新物料与调整材质', Icon: Boxes, open: 'openModelTools', group: 'docs' as const },
   { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial', group: 'docs' as const },
 ] as const satisfies ReadonlyArray<{ id: string; label: string; hint: string; Icon: typeof ClipboardList; open: keyof BusinessToolsApi; group: 'venue' | 'docs' }>;
 
@@ -174,8 +175,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [extraSelectedIds, setExtraSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [agentCollapsed, setAgentCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [agentCollapsed, setAgentCollapsed] = useState(true);
+  const [planHome, setPlanHome] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const conversationEntryRef = useRef<HTMLButtonElement>(null);
@@ -226,11 +228,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setConversationOpen(open);
     if (open && window.innerWidth <= 1080) { setSidebarCollapsed(true); setMaterialsOpen(false); }
   }, []);
-  // T-UI：左栏默认就是活简报；深工具关掉后回到简报，不再把左栏整个收起。
+  // 深工具打开时左栏让出来；关掉不把简报重新撑开，首屏把宽度留给画布。
   const handleWorkspaceVisibility = useCallback((open: boolean) => {
     setBusinessOpen(open);
     if (open) { setLeftMode('business'); setMaterialsOpen(false); setSidebarCollapsed(false); }
-    else { setLeftMode('brief'); setSidebarCollapsed(false); }
+    else setLeftMode('brief');
   }, []);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   const closeMaterialsShelf = useCallback(() => {
@@ -1406,10 +1408,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
               })}
             </nav>
-            <div className="sc-mode-rail-foot">
-              {/* 设置不是第四阶段：账户弹窗仍走原入口，只是从流程轨里拿出去。 */}
-              <button type="button" className="sc-rail-tool" aria-label="设置" title="账户、项目与演示设置" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><Settings size={24} aria-hidden="true"/><span>设置</span></button>
-            </div>
           </div>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -1423,7 +1421,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
           </div>
-          <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
+          <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
             if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
             const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
@@ -1500,6 +1498,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         }}
       />
             <AgentCanvasOverlay/>
+            <PlanFlow onOpenAgent={() => setAgentCollapsed(false)} onHomeChange={setPlanHome}/>
             <div className={`sc-canvas-heading${canvasDetailOpen ? ' has-detail' : ''}`}>
               <span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span>
               <button type="button" className="sc-canvas-size" aria-expanded={canvasDetailOpen} aria-controls="canvas-detail" title={canvasDetailOpen ? '收起物料数与面积' : '查看物料数与面积'} onClick={() => setCanvasDetailOpen(open => !open)}>
@@ -1516,23 +1515,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools showAtmosphere={workbenchMode==='layout'} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
+            {!planHome && <ScendanceViewTools showAtmosphere={false} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
               zoomCamera(camera, controls, direction);
               invalidate();
-            }}/>
+            }}/>}
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             <div id="workbench-material-shelf" className="sc-material-shelf sc-bottom-drawer" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
               {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}/>}
             </div>
             {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}
-            <div className="sc-bottom-bar">
+            {!planHome && <div className="sc-bottom-bar">
               <div className="sc-bottom-bar-center">
                 <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
               </div>
-            </div>
+            </div>}
             {agentCollapsed && <AgentReopenCard onOpen={() => setAgentCollapsed(false)}/>}
             </div>
           </div>
