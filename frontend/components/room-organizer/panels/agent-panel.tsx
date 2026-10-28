@@ -160,6 +160,10 @@ interface AgentValue {
   startBlankVenue(): void;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
+  /** 上一版云任务还在恢复：最后一帧没稳，不亮确认。 */
+  recovering: boolean;
+  /** 云端预览已过期或基线变了：不亮确认。 */
+  cloudStale: boolean;
   /** 座位不够时的一点击改法：按同一份需求补座重排，仍然只出预览。 */
   addSeats(): void;
   /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
@@ -183,6 +187,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const lastSource = useRef<'local' | 'cloud'>('local');
   /** 云端确认是异步的：`applyPreview` 里清预览的时机不在我们 await 的那一帧，所以等预览变化再播报。 */
   const confirmPending = useRef(false);
+  /** 同一份云预览只播报一次，避免表单生成和对话生成各说一遍。 */
+  const announcedPreview = useRef<unknown>(null);
   const [venueIO, setVenueIO] = useState<VenueIO>('indoor');
 
   const [baseName, setBaseName] = useState<string | null>(null);
@@ -838,9 +844,9 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   function confirmCloud(): void {
     const current = studioRef.current;
     if (!current?.preview) { say({ role: 'agent', amber: true, text: '这版已经不在预览里了，重新出一版再确认。' }); return; }
-    if (current.stale) { say({ role: 'agent', amber: true, text: CLOUD_STALE }); return; }
-    // 云端还在写这一版：按下确认不会有回音，所以别留一个等不到的开关。
-    if (current.busy) { say({ role: 'agent', text: '云端还在处理这一版，等它回来再点确认。' }); return; }
+    if (current.stale || current.expired) { say({ role: 'agent', amber: true, text: CLOUD_STALE }); return; }
+    // 云端还在写、或上一版还在恢复：最后一帧没稳，按下确认不会有回音。
+    if (current.busy || current.recoverable) { say({ role: 'agent', text: '这一版还没稳，等它停住再点确认。' }); return; }
     confirmPending.current = true;
     void current.applyPreview();
   }
@@ -858,6 +864,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     say({ role: 'agent', amber: !!current.notice, text: `写进画布了，物料都能直接拖；不想要就撤销一步，整体退回来。${current.notice ? ` ${current.notice}。` : ''}` });
     callbacks.onFit();
   }, [studio?.preview, studio?.busy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 深工具（活动需求表）走出的云预览也要落到这张卡上，否则画布有预览、右栏没有唯一的确认。
+  useEffect(() => {
+    const preview = studio?.preview ?? null;
+    if (!preview) { announcedPreview.current = null; return; }
+    if (phase === 'generating' || phase === 'paused') return;
+    if (proposal.current) return;
+    adoptCloudProposal();
+  }, [studio?.preview, studio?.stale, studio?.expired, studio?.busy, studio?.recoverable, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function withdrawProposal(): void {
     const cloud = proposal.current === null && !!studioRef.current?.preview;
@@ -877,8 +892,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
   /** 云端算完这一趟，把它的预览接到右栏这张卡上；没有可确认的一版就返回 false。 */
   function adoptCloudProposal(): boolean {
-    const view = cloudViewOf(studioRef.current?.preview ?? null);
+    const preview = studioRef.current?.preview ?? null;
+    const view = cloudViewOf(preview);
     if (!view) return false;
+    if (announcedPreview.current === preview && phaseRef.current === 'proposed') return true;
+    announcedPreview.current = preview;
     lastSource.current = 'cloud';
     setProgress(GEN_STEPS.length); setPhase('proposed');
     say({ role: 'agent', amber: !!view.blocked, text: view.blocked
@@ -920,7 +938,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   function runGeneration(label: string | null, variant: number, note: string, scale: Scale, seatPriority = false): void {
     const token = ++runToken.current;
     if (label) say({ role: 'user', text: label });
-    setIssue(null); dropProposal(); discardCloudPreview(); setPhase('generating'); setProgress(0);
+    setIssue(null); dropProposal(); discardCloudPreview(); setExportPreview(false); setPhase('generating'); setProgress(0);
     void startGeneration(token, variant, note, scale, seatPriority);
   }
 
@@ -957,7 +975,19 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   /** T-UI §4-5：导出/交接意图先落预览卡，确认后才在本机直接生成；不跳执行页。 */
+  /** 生成中、云端忙、恢复中、预览过期或基线变了：最后一帧没稳，不亮任何确认。 */
+  function previewUnsettled(): boolean {
+    const current = studioRef.current;
+    if (phaseRef.current === 'generating' || phaseRef.current === 'paused') return true;
+    if (current?.busy || current?.recoverable) return true;
+    return !!(current?.preview && (current.stale || current.expired));
+  }
+
   function proposeExport(): void {
+    if (previewUnsettled()) {
+      say({ role: 'agent', amber: true, text: '这一版还没稳，确认先不亮。等预览停住再说导出。' });
+      return;
+    }
     setExportPreview(true);
     say({ role: 'agent', text: '完整活动交接包含需求、物料、制作和点验，只在这台机器上生成。' });
   }
@@ -1020,39 +1050,38 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     memoryRef.current = turn.memory;
     const extraction = turn.extraction;
     const merged = memoryExtraction(turn.memory);
-    // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
-    // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
-    if (!command && !turn.filledScaleAsk && isVenueSizeOnly(extraction)) {
-      syncMemory(turn.memory);
-      applyExtraction(extraction);
-      syncStudioBrief(merged);
-      resizeVenueOnly(scaleFrom(extraction), extraction.venueIO ?? venueIO);
-      return;
-    }
-    if (studio?.connection === '项目已连接' && !studio.busy) {
-      syncMemory(turn.memory);
-      const briefNote = syncStudioBrief(merged);
-      if (briefNote) say({ role: 'agent', text: briefNote });
-      const token = ++runToken.current;
-      // 对话是唯一的生成入口，所以云端这一趟也必须停在待确认的预览上。
-      void studio.generate(command === 'again' ? '换一版不同的布局' : trimmed, { requirePreview: true }).then(() => {
-        if (token !== runToken.current) return;
-        // 云端在聊天里顺手回了提案，也照样停在右栏这张卡上等人点「确认布置」。
-        if (!adoptCloudProposal()) setPhase(current => (current === 'ready' ? 'edited' : current));
-      });
-      return;
-    }
-    // 本地：先把记忆里的要素铺到画布与左栏，再按这一轮的走向回话。
+    // 人数 / 类型 / 室内外 / 长宽先写进左栏简报，再决定出不出预览。云端忙也不能把这句漏掉。
     applyExtraction(extraction);
     syncMemory(turn.memory);
     const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
     const scale = scaleFrom(merged);
     const summary = describeExtraction(merged, scale);
-    // 这一句只改了活动类型/场地时，人数沿用记忆里的：要说出来，别让预览里的座位数像凭空来的。
     const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
+    // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
+    // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
+    if (!command && !turn.filledScaleAsk && isVenueSizeOnly(extraction)) {
+      resizeVenueOnly(scaleFrom(extraction), extraction.venueIO ?? turn.memory.venueIO ?? venueIO);
+      return;
+    }
     if (turn.kind !== 'generate') {
       say({ role: 'agent', text: turn.text });
+      return;
+    }
+    const cloud = studioRef.current;
+    if (cloud?.connection === '项目已连接') {
+      // 连着云就只走云预览。忙或恢复中若退回本地生成，会在云端还没稳时亮一颗确认。
+      if (cloud.busy || cloud.recoverable) {
+        say({ role: 'agent', amber: true, text: `记下了：${summary}${carried}。云端还在处理上一版，确认先不亮。${suffix}` });
+        return;
+      }
+      if (briefNote) say({ role: 'agent', text: briefNote });
+      const token = ++runToken.current;
+      setExportPreview(false);
+      void cloud.generate(command === 'again' ? '换一版不同的布局' : trimmed, { requirePreview: true }).then(() => {
+        if (token !== runToken.current) return;
+        if (!adoptCloudProposal()) setPhase(current => (current === 'ready' ? 'edited' : current));
+      });
       return;
     }
     say({ role: 'agent', text: turn.filledScaleAsk
@@ -1070,9 +1099,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   // 简报不能还写「尺寸还没定」，两处对不上会让人以为场地没立起来。
   // 面积折算与图纸估算是推出来的，后缀必须跟着走，不能静态数字装成场地真相。
   const stated = lengthCheck.ok && widthCheck.ok ? `${formatArea(lengthCheck.value)} × ${formatArea(widthCheck.value)} m` : null;
-  const guests = brief.guests ?? studio?.brief.guests ?? null;
+  // 没保存过的表单默认值（品牌快闪 / 24 人）不是对话意图，不能冒充简报。
+  const savedBrief = studio?.hasSavedBrief ? studio.brief : null;
+  const guests = brief.guests ?? savedBrief?.guests ?? null;
   const recap = {
-    event: brief.event ?? studio?.brief.event ?? null,
+    event: brief.event ?? savedBrief?.event ?? null,
     guests: guests ? `${guests} 人` : null,
     dims: `${venueIO === 'indoor' ? '室内' : '户外'} · ${stated
       ? `${stated}${scaleOrigin === 'area' ? ' 折算' : scaleOrigin === 'plan' ? ' 估的' : ''}`
@@ -1086,7 +1117,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     progress, failed: phase === 'failed', overlapCount, bubbles, retry, stop, resume, regenerate,
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
     proposal: phase === 'proposed' ? activeProposal : null,
-    confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, addSeats, startBlankVenue,
+    confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
+    cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
     exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
@@ -1221,8 +1253,8 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   const guests = plan.guests && plan.guests > 0 ? plan.guests : 0;
   const seats = plan.seats ?? 0;
   const short = guests > 0 && seats < guests;
-  // 云端还在写这一版时不亮确认：只留一句安静的进度，免得点了一个等不到的钮。
-  const busy = plan.source === 'cloud' && agent.cloudBusy;
+    // 云端还在写、或上一版还在恢复：最后一帧没稳，不亮确认。blocked / stale 同样不亮。
+    const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
     <strong>{review ? '改法预览' : '这版还在预览'}</strong>
     <p>{formatArea(venueArea(layout))} ㎡ · {review
@@ -1235,8 +1267,8 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     {plan.keptLocked > 0 && <p className="ap-small">锁定 {plan.keptLocked} 件我没动。</p>}
     {review && !!plan.skipped?.length && <p className="ap-small">没动 {plan.skipped.length} 件：{plan.skipped.slice(0, 3).join('、')}{plan.skipped.length > 3 ? ' 等' : ''}（锁着或没找到稳妥落点）。</p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
-    {busy
-      ? <p className="ap-small" id="plan-busy" role="status">正在整理这一版…</p>
+    {hold
+      ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
       : <>
           {!plan.blocked && <button id="step-cta" type="button" className={agent.exportPreview ? 'chip btn-outline' : 'btn-primary'} onClick={agent.confirmProposal}>确认布置</button>}
           <p id="cta-hint"><button type="button" className="ap-link" onClick={agent.withdrawProposal}>撤回</button>{!review && <> · <button type="button" className="ap-link" onClick={() => agent.regenerate()}>换一版</button></>}</p>
@@ -1367,7 +1399,9 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
       {agent.exportPreview && <div className="ap-card" id="export-preview">
         <strong>导出完整活动交接</strong>
         <p className="ap-small">活动需求、物料工作单、制作计划、数量点验 · 本机生成</p>
-        <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>
+        {generating || paused || agent.cloudBusy || agent.recovering || agent.cloudStale
+          ? <p className="ap-small" role="status">这一版还没稳，确认先不亮。</p>
+          : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>

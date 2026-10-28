@@ -57,6 +57,10 @@ describe('一句话开场解析', () => {
   it('normalises full-width digits and × separators', () => {
     expect(parseBriefSentence('１２×１６米，５０人工作坊')).toMatchObject({ lengthM: 12, widthM: 16, headcount: 50, event: '工作坊' });
   });
+  it('reads 酒会 as the event and leaves 宴会厅 as the room', () => {
+    expect(parseBriefSentence('80 人室内酒会')).toMatchObject({ headcount: 80, venueIO: 'indoor', event: '酒会' });
+    expect(parseBriefSentence('宴会厅 12×9')).toMatchObject({ event: null, venueIO: 'indoor', lengthM: 12, widthM: 9 });
+  });
   it('returns all-null for sentences without any signal', () => {
     const empty = parseBriefSentence('帮我布置一下');
     expect(empty.event).toBeNull();

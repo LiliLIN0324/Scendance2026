@@ -25,6 +25,7 @@ const studioMock = vi.hoisted(() => ({
   stale: false,
   expired: false,
   busy: false,
+  recoverable: false,
   connection: '离线引导',
 }));
 
@@ -105,6 +106,7 @@ beforeEach(() => {
   studioMock.discardPreview.mockClear(); studioMock.setBrief.mockClear();
   studioMock.brief = { event: null, guests: null };
   studioMock.preview = null; studioMock.stale = false; studioMock.expired = false; studioMock.busy = false;
+  studioMock.recoverable = false;
   studioMock.connection = '离线引导';
   localStorage.clear();
 });
@@ -301,7 +303,7 @@ describe('T-UI visible interaction', () => {
 describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   it('shows only progress while generating, then one green confirm with a seat fix link', async () => {
     const onApply = vi.fn();
-    render(<LocalHarness initial={makeLayout()} onApply={onApply}/>);
+    render(<LocalHarness initial={makeLayout()} onApply={onApply} brief/>);
     send('30 人，室内 12×9');
 
     // 逐帧预览期间：只有进度，没有可点的确认。
@@ -312,6 +314,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
 
     // 最后一帧落稳后才亮：一屏恰一颗绿钮，座位缺口如实写出来，改法是文字链。
     expect(await screen.findByText(/^座位 \d+ \/ 30 · 还差 \d+$/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(within(screen.getByLabelText('活动简报')).getByText('30 人')).toBeTruthy();
     expect(document.querySelectorAll('.sc-agent-panel .btn-primary')).toHaveLength(1);
     expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
     const fix = screen.getByRole('button', { name: '加座，再排一版' });
@@ -389,6 +392,67 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(document.getElementById('step-cta')).toBeNull();
     expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
     expect(screen.getByRole('button', { name: '撤回' })).toBeTruthy();
+  });
+
+  it('keeps confirm off while a cloud run is still recovering', async () => {
+    studioMock.connection = '项目已连接';
+    studioMock.generate.mockImplementation(async () => { studioMock.preview = cloudPreview(); });
+    const { rerender } = render(ui(state.layout));
+    send('30 人，室内 12×9');
+    expect(await screen.findByRole('button', { name: '确认布置' })).toBeTruthy();
+
+    studioMock.recoverable = true;
+    rerender(ui(state.layout));
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(screen.getByText('上一版还在恢复，确认先不亮。')).toBeTruthy();
+    expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
+  });
+});
+
+describe('brief stays in step with the sentence', () => {
+  it('writes headcount, event and venue onto the brief before any confirm', async () => {
+    const onApply = vi.fn();
+    render(<LocalHarness initial={makeLayout()} onApply={onApply} brief/>);
+    send('改成 80 人酒会');
+
+    const brief = screen.getByLabelText('活动简报');
+    await waitFor(() => expect(within(brief).getByText('80 人')).toBeTruthy());
+    expect(within(brief).getByText('酒会')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
+    expect(onApply).not.toHaveBeenCalled();
+
+    send('改成户外');
+    await waitFor(() => expect(within(brief).getByText(/户外/)).toBeTruthy());
+    expect(within(brief).getByText('80 人')).toBeTruthy();
+    expect(within(brief).getByText('酒会')).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('updates the brief while the cloud is busy and does not start a second preview', async () => {
+    studioMock.connection = '项目已连接';
+    studioMock.busy = true;
+    const onApply = vi.fn();
+    render(<LocalHarness initial={makeLayout()} onApply={onApply} brief/>);
+    send('80 人酒会，户外 12×9');
+
+    const brief = screen.getByLabelText('活动简报');
+    await waitFor(() => expect(within(brief).getByText('80 人')).toBeTruthy());
+    expect(within(brief).getByText('酒会')).toBeTruthy();
+    expect(within(brief).getByText(/户外/)).toBeTruthy();
+    expect(within(brief).getByText(/12 × 9 m/)).toBeTruthy();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
+  });
+
+  it('does not light export confirm while a layout preview is still being drawn', async () => {
+    render(<LocalHarness initial={makeLayout()} onApply={vi.fn()} brief/>);
+    send('30 人，室内 12×9');
+    expect(await screen.findByText('读场地')).toBeTruthy();
+    send('导出给搭建方');
+    expect(await screen.findByText(/确认先不亮/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '确认导出' })).toBeNull();
+    expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
   });
 });
 
