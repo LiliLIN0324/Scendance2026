@@ -1221,7 +1221,7 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
 
 function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
   return <>{agent.bubbles.map(bubble => bubble.role === 'user'
-    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={15} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
+    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
     : <div key={bubble.id} className="ap-turn">
       <p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
       {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
@@ -1298,7 +1298,7 @@ function GuideSuggestions({ agent, phase }: { agent: AgentValue; layout: RoomLay
   return (
     <>
       {phase === "start" && <div className="ap-turn">
-        <p className="ap-agent is-long">你好，我是晴光。\n可以说人数、活动类型和场地尺寸，或拖一张图纸进来——我先摆一版布置预览，你点「确认布置」才写进画布。改物料、换布局、出执行资料，也直接跟我说。</p>
+        <p className="ap-agent is-long">你好，我是晴光。{'\n'}可以说人数、活动类型和场地尺寸，或拖一张图纸进来——我先摆一版布置预览，你点「确认布置」才写进画布。改物料、换布局、出执行资料，也直接跟我说。</p>
       </div>}
       <div className="ap-guide">
         <p className="ap-guide-tag">{phase === "start" ? "想先处理哪一项？" : "接下来想先做哪一步？"}</p>
@@ -1347,19 +1347,19 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
       {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
       {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
       {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}
-      {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
+      {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
     </header>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {mode === 'layout' && <>
-        {planShown && <p className="ap-recap recap-done"><Check size={12} aria-hidden="true"/>{recap}</p>}
+        {planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
         <Bubbles agent={agent}/>
         {preStates && agent.baseName === null && (agent.bubbles.length === 0 || items === 0) && <GuideSuggestions agent={agent} layout={layout} phase={agent.bubbles.length === 0 ? "start" : "next"}/>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
           <p><span aria-hidden="true">!</span>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</p>
-          <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={12} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>
+          <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={16} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>
         </div>}
         {proposed && <ProposalCard agent={agent}/>}
         {planShown && <>
@@ -1409,8 +1409,8 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
       <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
       <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
       <div className="ap-composer-bar">
-        <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={14} aria-hidden="true"/></button>
-        <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={16}/></button>
+        <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={20} aria-hidden="true"/></button>
+        <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
       </div>
     </form>
   </aside>;
@@ -1504,9 +1504,9 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;
   return <div className="ap-canvas-layer" aria-live="polite">
-    {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={20} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
+    {s === 'dragHover' && <div id="drop-zone"><div className="ap-drop-card"><FileImage size={24} aria-hidden="true"/><strong>松手铺成底图</strong><small>图片 · 20 MB 以内</small></div></div>}
     {agent.baseName && s !== 'dragHover' && <div id="base-chip" className="ap-canvas-chip">底图 · {agent.baseName} · 仅作参照</div>}
-    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={12} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/{GEN_STEPS.length}</div>}
+    {s === 'generating' && <div id="gen-note" className="ap-canvas-pill is-top"><Loader2 size={16} className="cr-spin" aria-hidden="true"/> 正在{GEN_STEPS[Math.max(0, agent.progress - 1)]} · {Math.max(1, agent.progress)}/{GEN_STEPS.length}</div>}
     {s === 'generateFailed' && <div id="gen-note" className="ap-canvas-pill is-top is-warn">! 这次没出成，场地和设置都还在</div>}
     {s === 'planProposed' && agent.proposal && agent.proposal.overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 这版里 {agent.proposal.overlapCount} 件挤了或压墙：{agent.proposal.overlapNames.slice(0, 4).join('、')}{agent.proposal.overlapNames.length > 4 ? ' 等' : ''}</div>}
     {(s === 'planReady' || s === 'planEdited') && overlapNames.length > 0 && <div id="overlap-note" className="ap-canvas-pill is-top is-warn" role="status">⚠ 重叠或超出场地：{overlapNames.slice(0, 4).join('、')}{overlapNames.length > 4 ? ' 等' : ''}</div>}

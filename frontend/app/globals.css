@@ -105,6 +105,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 图标描边统一 1.75（docs/design-spec-2026.md §4）。CSS 覆盖 lucide 默认的 2；
+   圆头圆角沿用库默认，领域符号（plotcraft / MaterialGlyph）不带 .lucide，不受影响。 */
+.lucide {
+  stroke-width: 1.75;
+}
+
 /* ================================================================
    Dark overrides inside frosted-glass sidebar
    ================================================================ */
@@ -1134,9 +1140,6 @@ body {
 .sc-workbench .sc-tool-column .sc-rail-2d {
   font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 11px;
   letter-spacing: .2px; color: inherit;
-}
-.sc-workbench .sc-tool-caret {
-  position: absolute; right: 3px; top: 50%; margin-top: -4px; color: var(--wk-ink-faint, #a1a1aa);
 }
 .sc-workbench .sc-tool-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
 @media (max-height: 640px) {
