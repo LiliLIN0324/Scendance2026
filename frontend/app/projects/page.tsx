@@ -108,8 +108,8 @@ export default function ProjectsPage(): JSX.Element {
         {selected && <p className="sc-studio-manager-role">你是此工作室的{roleLabel(selected.role)}</p>}
         <nav aria-label="工作室管理">{([
           ['projects', '项目', FolderOpen], ['members', '成员', Users], ['settings', '设置', Settings2],
-        ] as const).map(([id, label, Icon]) => <button key={id} disabled={busy || !selected} aria-current={panel === id && !creatingStudio ? 'page' : undefined} onClick={() => openPanel(id)}><Icon size={17} />{label}{id !== 'settings' && loaded && <span>{id === 'projects' ? projects.length : members.length}</span>}</button>)}</nav>
-        <button className="sc-studio-manager-new" disabled={busy} onClick={() => { setCreatingStudio(true); setNotice(''); }}><Plus size={17} /> 创建工作室</button>
+        ] as const).map(([id, label, Icon]) => <button key={id} disabled={busy || !selected} aria-current={panel === id && !creatingStudio ? 'page' : undefined} onClick={() => openPanel(id)}><Icon size={16} />{label}{id !== 'settings' && loaded && <span>{id === 'projects' ? projects.length : members.length}</span>}</button>)}</nav>
+        <button className="sc-studio-manager-new" disabled={busy} onClick={() => { setCreatingStudio(true); setNotice(''); }}><Plus size={16} /> 创建工作室</button>
         <p className="sc-studio-manager-sidebar-note">每个工作室独立管理项目与成员。切换工作室，继续对应团队的工作。</p>
       </aside>
       <section className="sc-studio-manager-content" aria-label="工作室内容">
@@ -123,7 +123,7 @@ export default function ProjectsPage(): JSX.Element {
           setStudios(await controller.listStudios()); selectStudio(created.id); setPanel('projects'); setStudioName('');
           studioRequest.current = { requestId: crypto.randomUUID(), name: '' }; setNotice('新工作室已创建。');
         }); }}><h1>创建工作室</h1><p>为一个团队建立独立的项目空间，你将成为负责人。</p><label>工作室名称<input required maxLength={120} value={studioName} onChange={event => setStudioName(event.target.value)} placeholder="例如：拾光活动工作室" /></label><button className="sc-studio-manager-primary" disabled={busy || !studioName.trim()}>创建并进入</button></form>
-        : !selected ? <div className="sc-studio-manager-empty"><Building2 size={30} /><h1>{loadingStudios ? '正在加载工作室…' : '从一个工作室开始'}</h1><p>创建工作室，或将你的账号 ID 提供给负责人以加入团队。</p><label>我的账号 ID<input readOnly value={cloud.user.id} onFocus={event => event.target.select()} /></label></div>
+        : !selected ? <div className="sc-studio-manager-empty"><Building2 size={24} /><h1>{loadingStudios ? '正在加载工作室…' : '从一个工作室开始'}</h1><p>创建工作室，或将你的账号 ID 提供给负责人以加入团队。</p><label>我的账号 ID<input readOnly value={cloud.user.id} onFocus={event => event.target.select()} /></label></div>
         : <>
           {loadError && <p className="sc-studio-manager-notice" role="alert">{loadError}</p>}
           {!loaded && !loadError && <p role="status">正在加载「{selected.name}」的项目与成员…</p>}
@@ -141,7 +141,7 @@ export default function ProjectsPage(): JSX.Element {
                 setProjectId(''); setNotice(`已删除「${project.name}」，客户分享已撤销。`);
               });
             }}>删除方案</button>}</section>
-            : loaded && (projects.length ? <div className="sc-studio-manager-project-list">{projects.map(item => <article key={item.id}><span className="sc-studio-manager-project-icon"><FolderOpen size={22} /></span><div><button className="sc-studio-manager-project-name" onClick={() => setProjectId(item.id)}>{item.name}</button><p>{selected.name} · V{item.revision} · {members.length} 位参与人员</p><small>{item.lease_expires && Date.parse(item.lease_expires) > Date.now() ? `${item.current_editor || '有成员'}正在编辑` : '可接手编辑'}</small></div><button onClick={() => setProjectId(item.id)}>人员与详情</button>{cloud.writeBlocked || cloud.project?.id === item.id ? <Link href={`/editor/?project=${encodeURIComponent(item.id)}`}>打开方案 ↗</Link> : <span className="sc-studio-manager-muted">请先释放当前项目的编辑权</span>}</article>)}</div> : <div className="sc-studio-manager-empty"><FolderOpen size={30} /><h2>这个工作室还没有项目</h2><p>新建的项目将保存在「{selected.name}」，供工作室成员共同参与。</p></div>)}
+            : loaded && (projects.length ? <div className="sc-studio-manager-project-list">{projects.map(item => <article key={item.id}><span className="sc-studio-manager-project-icon"><FolderOpen size={20} /></span><div><button className="sc-studio-manager-project-name" onClick={() => setProjectId(item.id)}>{item.name}</button><p>{selected.name} · V{item.revision} · {members.length} 位参与人员</p><small>{item.lease_expires && Date.parse(item.lease_expires) > Date.now() ? `${item.current_editor || '有成员'}正在编辑` : '可接手编辑'}</small></div><button onClick={() => setProjectId(item.id)}>人员与详情</button>{cloud.writeBlocked || cloud.project?.id === item.id ? <Link href={`/editor/?project=${encodeURIComponent(item.id)}`}>打开方案 ↗</Link> : <span className="sc-studio-manager-muted">请先释放当前项目的编辑权</span>}</article>)}</div> : <div className="sc-studio-manager-empty"><FolderOpen size={24} /><h2>这个工作室还没有项目</h2><p>新建的项目将保存在「{selected.name}」，供工作室成员共同参与。</p></div>)}
           </>}
           {panel === 'members' && <>
             <div className="sc-studio-manager-heading"><div><p className="sc-studio-manager-eyebrow">{selected.name}</p><h1>成员</h1><p>这些成员可访问工作室内的全部项目。负责人管理工作室，编辑成员参与方案编辑。</p></div></div>

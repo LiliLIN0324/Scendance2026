@@ -176,9 +176,9 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
             <figcaption>活动空间概念示意 · 实际方案由你来布置</figcaption>
           </figure>
           <ol className="sc-intro-steps" aria-label="幕景使用流程">
-            <li><ImagePlus size={18} aria-hidden="true" /><div><span>01 / 提供资料</span><p>上传图纸或照片，填写尺寸与需求</p></div></li>
-            <li><Box size={18} aria-hidden="true" /><div><span>02 / 布置空间</span><p>在三维画布里调整物料</p></div></li>
-            <li><Layers3 size={18} aria-hidden="true" /><div><span>03 / 保存方案</span><p>保存草稿，继续完善细节</p></div></li>
+            <li><ImagePlus size={20} aria-hidden="true" /><div><span>01 / 提供资料</span><p>上传图纸或照片，填写尺寸与需求</p></div></li>
+            <li><Box size={20} aria-hidden="true" /><div><span>02 / 布置空间</span><p>在三维画布里调整物料</p></div></li>
+            <li><Layers3 size={20} aria-hidden="true" /><div><span>03 / 保存方案</span><p>保存草稿，继续完善细节</p></div></li>
           </ol>
         </section>
 
@@ -193,7 +193,7 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
             <div className="sc-intro-signed-in">
               <p className="sc-intro-account-caption">当前已登录</p>
               <p className="sc-intro-account">{cloud.user.is_anonymous ? '访客' : cloud.user.email ?? '工作室账号'}</p>
-              <button className="sc-intro-primary" type="button" onClick={onAuthenticated}>进入工作台<ArrowRight size={18} aria-hidden="true" /></button>
+              <button className="sc-intro-primary" type="button" onClick={onAuthenticated}>进入工作台<ArrowRight size={16} aria-hidden="true" /></button>
             </div>
           ) : (
             <>
@@ -212,7 +212,7 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
                   <input id="sc-intro-password" name="password" type="password" autoComplete={signUp ? 'new-password' : 'current-password'} minLength={signUp ? 12 : undefined} placeholder={signUp ? '至少 12 位' : '输入你的密码'} value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} required />
                 </>}
                 {(error || authError) && <p className="sc-intro-error" role="alert">{error || authError}</p>}
-                <button className="sc-intro-primary" type="submit" disabled={!ready || !cloud.configured || busy}>{busy ? (signUp ? '正在处理…' : '正在登录…') : !ready ? '正在恢复会话…' : verificationEmail ? '验证并进入工作室' : signUp ? '创建账号' : '登录并进入工作台'}<ArrowRight size={18} aria-hidden="true" /></button>
+                <button className="sc-intro-primary" type="submit" disabled={!ready || !cloud.configured || busy}>{busy ? (signUp ? '正在处理…' : '正在登录…') : !ready ? '正在恢复会话…' : verificationEmail ? '验证并进入工作室' : signUp ? '创建账号' : '登录并进入工作台'}<ArrowRight size={16} aria-hidden="true" /></button>
               </form>
               <div className="sc-intro-auth-links">
                 {verificationEmail ? <>
@@ -228,12 +228,12 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
               {notice && <p className="sc-intro-notice" role="status">{notice}</p>}
               {!cloud.configured && <p className="sc-intro-offline" role="status">登录服务尚未配置，暂时只能本地体验。</p>}
               <div className="sc-intro-separator"><span>或</span></div>
-              <button className="sc-intro-secondary" type="button" onClick={() => { void enterAsGuest(); }} disabled={busy || !ready || !cloud.configured}>{guestBusy ? '正在进入…' : '访客进入'}<ArrowRight size={17} aria-hidden="true" /></button>
+              <button className="sc-intro-secondary" type="button" onClick={() => { void enterAsGuest(); }} disabled={busy || !ready || !cloud.configured}>{guestBusy ? '正在进入…' : '访客进入'}<ArrowRight size={16} aria-hidden="true" /></button>
               <p className="sc-intro-local-note">无需注册，享有普通用户功能。访客身份保留在此浏览器，退出或清除浏览器数据后失效。</p>
               <div className="sc-intro-auth-links"><button type="button" onClick={onEnter} disabled={busy}>先体验本地工作台</button></div>
             </>
           )}
-          <div className="sc-intro-login-footer"><LockKeyhole size={14} aria-hidden="true" /><span>每位用户拥有独立身份与私有项目</span></div>
+          <div className="sc-intro-login-footer"><LockKeyhole size={16} aria-hidden="true" /><span>每位用户拥有独立身份与私有项目</span></div>
         </section>
       </div>
 
