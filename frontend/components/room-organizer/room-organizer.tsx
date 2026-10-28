@@ -228,11 +228,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setConversationOpen(open);
     if (open && window.innerWidth <= 1080) { setSidebarCollapsed(true); setMaterialsOpen(false); }
   }, []);
-  // T-UI：左栏默认就是活简报；深工具关掉后回到简报，不再把左栏整个收起。
+  // 深工具打开时左栏让出来；关掉不把简报重新撑开，首屏把宽度留给画布。
   const handleWorkspaceVisibility = useCallback((open: boolean) => {
     setBusinessOpen(open);
     if (open) { setLeftMode('business'); setMaterialsOpen(false); setSidebarCollapsed(false); }
-    else { setLeftMode('brief'); setSidebarCollapsed(false); }
+    else setLeftMode('brief');
   }, []);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   const closeMaterialsShelf = useCallback(() => {

@@ -124,6 +124,7 @@ export function PlanFlow({ onOpenAgent, onHomeChange }: { onOpenAgent(): void; o
   const { layout, activeFloor } = useRoomEditor();
   const home = isPlanHome(agent.state, layout, agent.proposal !== null);
   useEffect(() => { onHomeChange(home); }, [home, onHomeChange]);
+  useEffect(() => { if (agent.proposal) onOpenAgent(); }, [agent.proposal, onOpenAgent]);
   if (home) return <PlanHome onGenerate={sentence => { void agent.send(sentence); }} />;
   return <PlanPlates
     items={activeFloor.items}
