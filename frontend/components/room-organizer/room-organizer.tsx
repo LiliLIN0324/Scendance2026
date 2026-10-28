@@ -1398,19 +1398,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
-          <nav className="sc-mode-rail" aria-label="工作流程">
-            <div className="sc-mode-rail-top">
+          <div className="sc-mode-rail">
+            <nav className="sc-mode-rail-top" aria-label="工作流程">
               {WORKBENCH_MODES.map(mode => {
                 const active = workbenchMode === mode.id;
                 const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
                 return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
               })}
-            </div>
+            </nav>
             <div className="sc-mode-rail-foot">
-              {/* 左下设置：分担右上（项目/头像）的压力，入口与账户弹窗同源。 */}
-              <button type="button" aria-label="设置" title="账户、项目与演示设置" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><Settings size={24} aria-hidden="true"/><span>设置</span></button>
+              {/* 设置不是第四阶段：账户弹窗仍走原入口，只是从流程轨里拿出去。 */}
+              <button type="button" className="sc-rail-tool" aria-label="设置" title="账户、项目与演示设置" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><Settings size={24} aria-hidden="true"/><span>设置</span></button>
             </div>
-          </nav>
+          </div>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               <button type="button" aria-pressed={leftMode==='brief'} onClick={()=>{setLeftMode('brief');setMaterialsOpen(false);setSidebarCollapsed(false);}}>活动简报</button>
