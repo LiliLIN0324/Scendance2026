@@ -329,7 +329,6 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
             <button type="button" className="sc-export-cta" disabled={exporting} onClick={() => { void runExport(); }}>
               {exporting ? '正在导出…' : '导出 PNG'}
             </button>
-            {view.view2D && <small className="sc-export-note">2D 平面按当前分辨率导出</small>}
           </div>}
         </div>}
       </div>

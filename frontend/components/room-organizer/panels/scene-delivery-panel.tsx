@@ -224,10 +224,10 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
-    <div className="sc-section-heading"><div><h2>执行与交付</h2><p>本机内部资料：安排活动任务，核对物料并导出交接内容。</p></div></div>
-    {/* T-UI §4-2：六颗 Tab 不再是默认门面，收进「执行工具」里；能力原样保留，要用再展开。 */}
+    <div className="sc-section-heading"><div><h2>执行资料</h2></div></div>
+    {/* 六页执行台留在折叠里，不当默认门面。 */}
     <details className="dl-tools">
-      <summary>执行工具<small>活动安排 · 工作单 · 制作计划 · 点验 · 导出 · 备份</small></summary>
+      <summary>内部资料</summary>
       <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
       <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => setView('operations')}>活动安排</button>
       <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => setView('materials')}>物料工作单</button>

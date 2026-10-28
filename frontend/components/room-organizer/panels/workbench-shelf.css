@@ -470,10 +470,10 @@
 }
 .sc-workbench .sc-export-pop .sc-export-cta {
   width:100%; height:auto !important; min-height:0 !important; padding:9px 0 !important;
-  border:0 !important; border-radius:var(--r-sm) !important; background:var(--wk-green,#4a7c59) !important;
+  border:0 !important; border-radius:var(--r-sm) !important; background:var(--wk-ink,#141416) !important;
   color:#fff !important; font-size:var(--fs-c1) !important; font-weight:500; text-align:center;
 }
-.sc-workbench .sc-export-pop .sc-export-cta:hover:not(:disabled) { background:var(--wk-green-deep) !important; }
+.sc-workbench .sc-export-pop .sc-export-cta:hover:not(:disabled) { background:#2A2C31 !important; }
 .sc-workbench .sc-export-pop .sc-export-cta:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); opacity: 1; cursor: not-allowed; }
 .sc-workbench .sc-export-pop .sc-export-note {
   font-size:var(--fs-cap); line-height:1.5; color:var(--wk-muted);
