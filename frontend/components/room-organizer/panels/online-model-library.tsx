@@ -153,7 +153,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
         {index.buckets.map(entry => <button key={entry.key} type="button" aria-pressed={!query.trim() && bucket === entry.key} className={!query.trim() && bucket === entry.key ? 'is-active' : ''} onClick={() => { setQuery(''); setBucket(entry.key); }}>{entry.label} <b>{entry.count}</b></button>)}
       </div>
       <label className="sc-search-mini">
-        <Search size={15}/>
+        <Search size={20}/>
         <input aria-label="搜索全库线上模型" placeholder="搜索全库模型" value={query} onChange={event => setQuery(event.target.value)}/>
       </label>
     </div>

@@ -31,7 +31,7 @@ export function VenuePhotosPanel({ images, addImages, removeImage, onKindChange 
   return <section ref={panel} className="vp-photos" aria-label="图纸与现场照片">
     <input type="file" ref={input} hidden accept="image/png,image/jpeg,image/webp" multiple onChange={event => { void addImages(event.target.files); event.target.value = ''; }}/>
     <button className="cr-upload" type="button" onClick={() => input.current?.click()} disabled={images.length >= 12}>
-      <ImagePlus size={23}/><strong>{images.length >= 12 ? '已添加 12 张资料' : '上传图纸或现场照片'}</strong><span>PNG / JPG / WebP</span>
+      <ImagePlus size={24}/><strong>{images.length >= 12 ? '已添加 12 张资料' : '上传图纸或现场照片'}</strong><span>PNG / JPG / WebP</span>
     </button>
     {images.length > 0 && <div className="vp-thumbnails">{images.map(image => <figure key={image.id}>
       <button type="button" className="vp-thumbnail" aria-label={`放大 ${image.name}`} onClick={() => setExpandedId(image.id)}>
@@ -39,7 +39,7 @@ export function VenuePhotosPanel({ images, addImages, removeImage, onKindChange 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={image.url} alt={`${image.kind==='floorplan'?'平面图':'现场照片'}：${image.name}`}/>
       </button>
-      <button className="vp-remove" type="button" aria-label={`移除 ${image.name}`} onClick={() => removeImage(image.id)}><X size={13}/></button>
+      <button className="vp-remove" type="button" aria-label={`移除 ${image.name}`} onClick={() => removeImage(image.id)}><X size={16}/></button>
       <figcaption title={image.name}>{image.name}</figcaption>{onKindChange&&<select aria-label={`${image.name} 的资料类型`} value={image.kind??'photo'} onChange={event=>onKindChange(image.id,event.target.value as SourceKind)}><option value="floorplan">平面图</option><option value="photo">现场照片</option></select>}
     </figure>)}</div>}
     {expanded && portalRoot && createPortal(<div className="vp-lightbox" onPointerDown={event => { if (event.target === event.currentTarget) setExpandedId(null); }}>

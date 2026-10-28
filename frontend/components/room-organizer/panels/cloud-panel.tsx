@@ -255,18 +255,18 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
 
   return <>
     <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户与素材库" title="账户与素材库 · 素材、权限与发布管理" aria-haspopup="dialog" onClick={() => { setSection('assets'); dialog.current?.showModal(); }}>
-      <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={17}/></span>
+      <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={20}/></span>
     </button>
     <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={onClose} onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">
-      <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={21}/></button></div>
+      <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={20}/></button></div>
       <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>前往登录</Link>}</div>
       <nav className="sc-account-nav" aria-label="账户导航">{[
         ['projects', '我的项目'], ['team', '团队演示'], ['permissions', '权限演示'], ['assets', '素材库'], ['publication', '发布管理'],
       ].map(([id, label]) => <button type="button" key={id} aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}</nav>
       <div className="sc-account-body">
       <section hidden={section !== 'projects'} aria-label="我的项目">
-      <div className="sc-account-canvas"><span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={21}/></span><div><small>当前画布</small><strong>{layout.name || '未命名活动'}</strong></div><span className="sc-cloud-badge">{saveStatus}</span></div>
+      <div className="sc-account-canvas"><span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={20}/></span><div><small>当前画布</small><strong>{layout.name || '未命名活动'}</strong></div><span className="sc-cloud-badge">{saveStatus}</span></div>
       {localActivities && localWorkspace && <LocalActivitiesPanel layout={layout} actions={localActivities} disabled={busy} onComplete={() => dialog.current?.close()}/>}
       {sceneConnection && <section className="sc-cloud-current" aria-label="当前活动的场景连接">
         <h3>当前只连接场景服务</h3>
@@ -285,11 +285,11 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       </div> : <div className="sc-cloud-content">
         <div className="sc-account-section-heading"><div><h3>{sceneConnection?'其他云项目':'云项目快捷入口'}</h3><p className="sc-cloud-muted">{sceneConnection?'当前活动的场景连接已显示在上方。':'完整工作室与项目管理请优先使用 /projects；此处仅作编辑器快捷入口。'}</p></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
         <div className="sc-account-project-grid"><section aria-label="项目列表">
-        <div className="sc-account-filters"><label className="sc-account-search"><Search size={16} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索项目名称" value={query} onChange={event => setQuery(event.target.value)} /></label><select aria-label="当前工作室" disabled={busy || loadingProjects} value={studioId} onChange={event => { setStudioId(event.target.value); if (userId) rememberStudio(userId, event.target.value); }}>{!studios.length && <option value="">尚未加入工作室</option>}{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></div>
+        <div className="sc-account-filters"><label className="sc-account-search"><Search size={20} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索项目名称" value={query} onChange={event => setQuery(event.target.value)} /></label><select aria-label="当前工作室" disabled={busy || loadingProjects} value={studioId} onChange={event => { setStudioId(event.target.value); if (userId) rememberStudio(userId, event.target.value); }}>{!studios.length && <option value="">尚未加入工作室</option>}{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></div>
         <div className="sc-account-list-caption"><span>项目 / 工作室</span><span>{loadingProjects ? '加载中…' : projectsLoaded ? `${filteredProjects.length} 个项目` : '尚未加载'}</span></div>
         {loadingProjects && <p className="sc-account-empty" role="status">正在加载你的项目…</p>}
         <ul className="sc-cloud-projects">{filteredProjects.map(project => <li key={project.id}>
-          <span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={21}/></span>
+          <span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={20}/></span>
           <div className="sc-account-project-info"><strong>{project.name}</strong><small>{studios.find(studio => studio.id === project.studio_id)?.name ?? '工作室'} · 版本 {project.revision}</small><small>{project.id === cloud.project?.id ? '当前项目' : project.current_editor && project.lease_expires && Date.parse(project.lease_expires) > Date.now() ? '有成员正在编辑' : '可打开查看'}</small></div><button type="button" disabled={busy || !cloud.writeBlocked} onClick={() => {
           if (!confirmReplace()) return;
           void run(async () => {
@@ -302,7 +302,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
             setNotice('已打开云端方案；获取编辑权后可以保存修改。');
           });
         }}>打开</button></li>)}</ul>
-        {!loadingProjects && projectsLoaded && !filteredProjects.length && <div className="sc-account-empty"><FolderOpen size={28} aria-hidden="true"/><h3>{studioProjects.length ? '没有匹配的项目' : sceneConnection?'暂无其他云项目':'这个工作室还没有项目'}</h3><p>{studioProjects.length ? '试试其他名称。' : sceneConnection?'当前活动的完整资料仍保存在本机。':'把当前画布存为新项目，或切换工作室。'}</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
+        {!loadingProjects && projectsLoaded && !filteredProjects.length && <div className="sc-account-empty"><FolderOpen size={24} aria-hidden="true"/><h3>{studioProjects.length ? '没有匹配的项目' : sceneConnection?'暂无其他云项目':'这个工作室还没有项目'}</h3><p>{studioProjects.length ? '试试其他名称。' : sceneConnection?'当前活动的完整资料仍保存在本机。':'把当前画布存为新项目，或切换工作室。'}</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
         {!cloud.writeBlocked && <p className="sc-cloud-muted">{sceneConnection?'打开其他云项目前，请先断开场景服务并保留本机备份。':'切换项目或新建前，请先保存修改并释放当前项目的编辑权。'}</p>}
         <div className="sc-cloud-new">
           <p className="sc-cloud-muted">{selectedStudio ? `新项目将归属「${selectedStudio.name}」` : '请先创建或加入工作室。'}</p>
@@ -373,7 +373,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           </div>
           {!bound && <p className="sc-cloud-muted">画布已切换到另一份本地草稿。请重新获取编辑权，或将当前草稿创建为新项目。</p>}
         </section>}
-        <Link className="sc-account-manage-link" href="/projects/" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/projects/'); }}>管理工作室、项目与成员 <ArrowUpRight size={14} aria-hidden="true"/></Link>
+        <Link className="sc-account-manage-link" href="/projects/" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/projects/'); }}>管理工作室、项目与成员 <ArrowUpRight size={16} aria-hidden="true"/></Link>
         </aside></div>
       </div>}
       </section>

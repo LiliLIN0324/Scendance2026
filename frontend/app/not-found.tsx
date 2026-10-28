@@ -9,7 +9,7 @@ export default function NotFound(): JSX.Element {
     <div className="sc-page-error">
       <div className="sc-page-error-card">
         <span className="sc-page-error-icon" style={{ color: 'var(--faint, #a6aab2)' }} aria-hidden>
-          <Compass size={24} strokeWidth={1.75} />
+          <Compass size={32} strokeWidth={1.75} />
         </span>
         <h1 className="sc-page-error-title">页面走丢了</h1>
         <p className="sc-page-error-copy">

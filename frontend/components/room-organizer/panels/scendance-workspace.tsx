@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, ChevronDown, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Sun, Users, X } from 'lucide-react';
+import { Camera, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Sun, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -18,7 +18,6 @@ interface LibraryProps {
   openTabRequest?: { serial: number; tab: 'materials' | 'presets' };
   onClose?(): void;
   capturePlacement?(): CatalogPlacementGuard;
-  onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   onLoadPreset(layout: RoomLayout): void;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
 }
@@ -112,7 +111,7 @@ export function ShelfGrip({ shelfRef }: { shelfRef: RefObject<HTMLElement | null
   ><span aria-hidden="true"/></div>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, onLighting, controller, onLoadPreset, openTabRequest, onClose, capturePlacement }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, controller, onLoadPreset, openTabRequest, onClose, capturePlacement }: LibraryProps): JSX.Element {
   const { layout, activeFloor } = useRoomEditor();
   const { selectOnly } = useSelection();
   const [tab, setTab] = useState<'materials' | 'presets'>('materials');
@@ -137,10 +136,10 @@ export function ScendanceLibrary({ placeCatalogItem, onLighting, controller, onL
     <ShelfGrip shelfRef={hostRef}/>
     <div className="sc-library-body">
       <nav className="sc-library-rail" role="tablist" aria-label="物料面板">
-        <button type="button" role="tab" aria-selected={tab === 'materials'} className={tab === 'materials' ? 'is-active' : ''} aria-label="物料库" title="物料库" onClick={() => setTab('materials')}><Package size={18} aria-hidden="true"/></button>
-        <button type="button" role="tab" aria-selected={tab === 'presets'} className={tab === 'presets' ? 'is-active' : ''} aria-label="场景模板" title="场景模板" onClick={() => setTab('presets')}><LayoutTemplate size={18} aria-hidden="true"/></button>
+        <button type="button" role="tab" aria-selected={tab === 'materials'} className={tab === 'materials' ? 'is-active' : ''} aria-label="物料库" title="物料库" onClick={() => setTab('materials')}><Package size={24} aria-hidden="true"/></button>
+        <button type="button" role="tab" aria-selected={tab === 'presets'} className={tab === 'presets' ? 'is-active' : ''} aria-label="场景模板" title="场景模板" onClick={() => setTab('presets')}><LayoutTemplate size={24} aria-hidden="true"/></button>
         <span className="sc-library-rail-spacer" aria-hidden="true"/>
-        {onClose && <button type="button" className="sc-library-rail-close" aria-label="关闭物料库" title="关闭" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
+        {onClose && <button type="button" className="sc-library-rail-close" aria-label="关闭物料库" title="关闭" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
       </nav>
       <div className="sc-library-content">
         <div className="sc-library-materials" hidden={tab !== 'materials'}>
@@ -283,23 +282,22 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
     /* T-VISUAL-CHROME-2：右缘竖排圆钮列（参考图 04-final-flat），次要功能收进弹出菜单。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
       <button type="button" id="tool-select" data-tip="选择" aria-label="选择：点击物料并框选" aria-pressed={selectActive} className={selectActive ? 'is-active' : ''} onClick={chooseSelect}>
-        <MousePointer2 size={17}/>
+        <MousePointer2 size={24}/>
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
       <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
         <span className="sc-rail-2d">{view.view2D ? '2D' : '3D'}</span>
       </button>
       <button type="button" id="tool-fit" data-tip="看全场" aria-label="看全场" disabled={view.view2D} onClick={onFit}>
-        <Crosshair size={17}/>
+        <Crosshair size={24}/>
       </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
-        <Ruler size={17}/>
+        <Ruler size={24}/>
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
         <button type="button" id="tool-view" data-tip="视图" aria-label="视图与更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-view-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <Eye size={17}/>
-          <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
+          <Eye size={24}/>
         </button>
         {viewOpen && <div id="tool-view-menu" className="sc-tool-pop sc-more-pop" role="menu" aria-label="视图与更多工具">
           {!exportOpen ? <>
@@ -311,9 +309,9 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
             <button type="button" id="tool-zoom-out" role="menuitem" disabled={view.view2D} onClick={() => onZoom('-')}>缩小</button>
             <button type="button" id="tool-zoom-in" role="menuitem" disabled={view.view2D} onClick={() => onZoom('+')}>放大</button>
             <span className="sc-more-sep" aria-hidden="true"/>
-            <button type="button" id="tool-grid" role="menuitemcheckbox" aria-checked={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}><Grid size={14}/><span>网格吸附</span></button>
+            <button type="button" id="tool-grid" role="menuitemcheckbox" aria-checked={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}><Grid size={16}/><span>网格吸附</span></button>
             <span className="sc-more-sep" aria-hidden="true"/>
-            {onExportImage && <button type="button" id="tool-export" role="menuitem" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={14}/><span>导出效果图</span></button>}
+            {onExportImage && <button type="button" id="tool-export" role="menuitem" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={16}/><span>导出效果图</span></button>}
           </> : <div className="sc-more-export sc-export-pop" role="dialog" aria-label="导出效果图选项">
             <button type="button" className="sc-more-back" onClick={() => setExportOpen(false)}>← 导出效果图</button>
             <div className="sc-export-group" role="group" aria-label="导出视角">
@@ -338,26 +336,23 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       {showAtmosphere && <span className="sc-tool-sep" aria-hidden="true"/>}
       {showAtmosphere && <div className="sc-tool-menu" ref={atmosphereMenuRef}>
         <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：漫游、人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { setAtmosphereOpen(open => !open); setViewOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <Sun size={17}/>
-          <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
+          <Sun size={24}/>
         </button>
         {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">
           <span className="sc-tool-menu-label" role="presentation">氛围</span>
-          <button type="button" id="tool-walk" role="menuitemcheckbox" aria-checked={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={14}/><span>漫游</span></button>
-          <button type="button" id="tool-crowd" role="menuitemcheckbox" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={14}/><span>人群</span></button>
+          <button type="button" id="tool-walk" role="menuitemcheckbox" aria-checked={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={16}/><span>漫游</span></button>
+          <button type="button" id="tool-crowd" role="menuitemcheckbox" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={16}/><span>人群</span></button>
           <span className="sc-more-sep" aria-hidden="true"/>
           <button type="button" id="tool-weather" role="menuitem" aria-haspopup="listbox" aria-expanded={weatherOpen} onClick={() => { setWeatherOpen(open => !open); setTimeOpen(false); }}>
-            {view.weather === 'clear' ? <Sun size={14}/> : <CloudRain size={14}/>}
+            {view.weather === 'clear' ? <Sun size={16}/> : <CloudRain size={16}/>}
             <span>{WEATHER_OPTIONS.find(option => option.id === view.weather)?.label ?? '天气'}</span>
-            <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
           </button>
           {weatherOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外天气选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
             {WEATHER_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={view.weather === option.id} className={view.weather === option.id ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, weather: option.id })); setWeatherOpen(false); }}>{option.label}</button>)}
           </div>}
           <button type="button" id="tool-time" role="menuitem" aria-haspopup="listbox" aria-expanded={timeOpen} onClick={() => { setTimeOpen(open => !open); setWeatherOpen(false); }}>
-            <Sun size={14}/>
+            <Sun size={16}/>
             <span>{activeTime?.title ?? '时段'}</span>
-            <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
           </button>
           {timeOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外时段选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
             {TIME_PRESETS.map(entry => <button type="button" key={entry.label} role="option" aria-label={`室外时段 ${entry.title}`} aria-selected={activeTime?.label === entry.label} className={activeTime?.label === entry.label ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, timeOfDay: entry.hour })); setTimeOpen(false); }}>{entry.title}</button>)}
@@ -365,9 +360,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
 
           <span className="sc-more-sep" aria-hidden="true"/>
           <button type="button" id="tool-lighting" role="menuitem" aria-haspopup="listbox" aria-expanded={lightingOpen} onClick={() => { setLightingOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); }}>
-            <Sun size={14}/>
+            <Sun size={16}/>
             <span>{LIGHTING_OPTIONS.find(option => option.id === (layout.backendLighting ?? 'neutral'))?.label ?? '现场灯光'}</span>
-            <ChevronDown className="sc-tool-caret" size={8} aria-hidden="true"/>
           </button>
           {lightingOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="现场灯光选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
             {LIGHTING_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={(layout.backendLighting ?? 'neutral') === option.id} className={(layout.backendLighting ?? 'neutral') === option.id ? 'is-active' : ''} onClick={() => { onLighting?.(option.id); setLightingOpen(false); }}>{option.label}</button>)}
@@ -394,7 +388,7 @@ export function MaterialDrawerHandle({ open, onToggle, buttonRef }: { open: bool
         onClick={onToggle}
       >
         <span className="sc-materials-label">物料</span>
-        <ChevronUp className="sc-materials-chevron" size={13} aria-hidden="true"/>
+        <ChevronUp className="sc-materials-chevron" size={16} aria-hidden="true"/>
       </button>
     </div>
   );

@@ -86,10 +86,10 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   const position = item.position ?? { x: 0, z: 0 };
   const rotation = ((item.rotation ?? 0) * 180 / Math.PI % 360 + 360) % 360;
   return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
-    <header><div><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={17}/></button></header>
+    <header><div><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={20}/></button></header>
     <div className="sc-properties-content">
       <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span></div>
-      <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={15}/> : <Unlock size={15}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
+      <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={16}/> : <Unlock size={16}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
       {props.hasCollision && <p className="sc-warning">物料可能重叠或超出场地，请检查位置。</p>}
       <section><h3>物料尺寸</h3><div className="sc-dimension-grid">
         {DIMENSIONS.map(dimension => <DimensionInput key={`${layout.id ?? 'local'}:${activeFloor.id}:${item.id}:${dimension.key}:${locked}`}
@@ -113,14 +113,14 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         <NumberField label="Z / m" value={item.elevation ?? 0} min={item.glbNode ? -100 : 0} max={item.glbNode ? 100 : 30} disabled={locked || !!item.venueEntranceId || !!item.structuralOpeningId || !!item.structuralColumnId} onChange={value => actions.updateItem(item.id, { elevation: value })}/>
       </div><div className="sc-property-actions">
         <NumberField label="旋转 / °" value={rotation} min={0} max={360} step={15} disabled={locked} onChange={value => actions.setRotation(item.id, value * Math.PI / 180)}/>
-        <button type="button" className="sc-button" disabled={locked} onClick={() => props.onRotate(item.id)}><RotateCcw size={15}/>旋转 90°</button>
+        <button type="button" className="sc-button" disabled={locked} onClick={() => props.onRotate(item.id)}><RotateCcw size={16}/>旋转 90°</button>
       </div></section>
       {item.glbUrl || item.assetId
         ? <p className="sc-note">{item.assetId?'该模型保留原材质。需要调整时，请到“资料 → 物料工具 → 材质调整”核对材质槽并预览新版本。':'该模型保留自身材质，暂不支持改色。'}</p>
         : <section><h3>物料颜色 <input type="color" aria-label="物料颜色" value={item.color} disabled={locked} onChange={event => { actions.setColor(item.id, event.target.value); pushColor(event.target.value); }}/></h3><div className="sc-color-swatches">{COLORS.map(color => <button type="button" key={color} style={{ background: color }} aria-label={`颜色 ${color}`} aria-pressed={item.color.toUpperCase() === color} disabled={locked} onClick={() => { actions.setColor(item.id, color); pushColor(color); }}/>)}</div></section>}
       <section><h3>物料备注</h3><textarea className="sc-notes" aria-label="物料备注" placeholder="例如：预留电源 / 实物待确认" maxLength={500} disabled={locked} value={item.notes ?? ''} onChange={event => actions.updateItem(item.id, { notes: event.target.value })}/></section>
-      <div className="sc-property-actions"><button type="button" className="sc-button" disabled={activeFloor.items.length >= editorItemLimit(layout)} onClick={() => props.onDuplicate(item.id)}><Copy size={15}/>复制</button></div>
-      <button type="button" className="sc-delete-button" disabled={locked} onClick={() => props.onRemove(item.id)}><Trash2 size={15}/>删除物料</button>
+      <div className="sc-property-actions"><button type="button" className="sc-button" disabled={activeFloor.items.length >= editorItemLimit(layout)} onClick={() => props.onDuplicate(item.id)}><Copy size={16}/>复制</button></div>
+      <button type="button" className="sc-delete-button" disabled={locked} onClick={() => props.onRemove(item.id)}><Trash2 size={16}/>删除物料</button>
     </div>
   </aside>;
 }

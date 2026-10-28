@@ -41,7 +41,7 @@ export function AccountTeamDemo({ view }: { view: 'team' | 'permissions' }): JSX
   }
 
   return <section className="sc-account-demo" aria-label={view === 'team' ? '团队演示空间' : '权限演示空间'}>
-    <div className="sc-account-demo-note"><FlaskConical size={18} aria-hidden="true"/><div><strong>功能默认开放 · 权限仅作演示</strong><p>成员均为虚构，此处设置只改变演示效果，不限制场景编辑、Agent 或交付功能；不会发送邀请或改变真实云端权限。</p></div><button type="button" onClick={reset}>重置演示</button></div>
+    <div className="sc-account-demo-note"><FlaskConical size={20} aria-hidden="true"/><div><strong>功能默认开放 · 权限仅作演示</strong><p>成员均为虚构，此处设置只改变演示效果，不限制场景编辑、Agent 或交付功能；不会发送邀请或改变真实云端权限。</p></div><button type="button" onClick={reset}>重置演示</button></div>
     {view === 'team' ? <>
       <div className="sc-account-section-heading"><div><h3>一起，把方案做好。</h3><p className="sc-cloud-muted">模拟一个小型活动团队，分配各自的角色。</p></div><span className="sc-cloud-badge">{members.length} 位演示成员</span></div>
       <div className="sc-account-team-grid"><section>
@@ -62,7 +62,7 @@ export function AccountTeamDemo({ view }: { view: 'team' | 'permissions' }): JSX
         if (members.some(member => member.name === trimmed)) { setNotice('已有同名演示成员，请换一个姓名。'); return; }
         setMembers(current => [...current, { id: crypto.randomUUID(), name: trimmed, role }]);
         setName(''); setNotice(`已添加演示成员「${trimmed}」，未发送邀请。`);
-      }}><UsersRound size={25} aria-hidden="true"/><h3>试着添加一位队友</h3><p className="sc-cloud-muted">用虚构姓名体验团队管理。</p><label>演示成员姓名<input required maxLength={40} placeholder="例如：陈知远" value={name} onChange={event => setName(event.target.value)} /></label><label>加入角色<select value={role} onChange={event => setRole(event.target.value as Role)}><option value="editor">编辑成员</option><option value="viewer">查看成员</option></select></label><button className="sc-cloud-primary" type="submit"><Plus size={14} aria-hidden="true"/>添加演示成员</button></form></div>
+      }}><UsersRound size={24} aria-hidden="true"/><h3>试着添加一位队友</h3><p className="sc-cloud-muted">用虚构姓名体验团队管理。</p><label>演示成员姓名<input required maxLength={40} placeholder="例如：陈知远" value={name} onChange={event => setName(event.target.value)} /></label><label>加入角色<select value={role} onChange={event => setRole(event.target.value as Role)}><option value="editor">编辑成员</option><option value="viewer">查看成员</option></select></label><button className="sc-cloud-primary" type="submit"><Plus size={16} aria-hidden="true"/>添加演示成员</button></form></div>
     </> : <>
       <div className="sc-account-section-heading"><div><h3>让每个人，各司其职。</h3><p className="sc-cloud-muted">勾选角色可以执行的操作，即时查看演示结果。</p></div></div>
       <div className="sc-account-permission-grid"><div className="sc-account-permission-table"><table><caption>演示角色权限矩阵</caption><thead><tr><th scope="col">操作权限</th>{roles.map(item => <th scope="col" key={item.id}>{item.name}</th>)}</tr></thead><tbody>{permissions.map(permission => <tr key={permission.id}><th scope="row">{permission.name}</th>{roles.map(item => <td key={item.id}><input type="checkbox" aria-label={`${item.name}：${permission.name}`} checked={grants[item.id].includes(permission.id)} disabled={item.id === 'owner' || permission.id === 'view'} onChange={event => {
@@ -70,7 +70,7 @@ export function AccountTeamDemo({ view }: { view: 'team' | 'permissions' }): JSX
         setGrants(current => ({ ...current, [item.id]: checked ? [...current[item.id], permission.id] : current[item.id].filter(id => id !== permission.id) }));
         setNotice(`演示权限已更新：${item.name}${checked ? '可以' : '不可'}${permission.name}。`);
       }} /></td>)}</tr>)}</tbody></table><p className="sc-cloud-muted">演示角色默认全部开放；取消勾选只改变此处预览，不影响实际功能。</p></div>
-      <aside className="sc-account-role-preview"><span className="sc-cloud-eyebrow">角色预览 · 仅演示</span><label>预览角色<select value={previewRole} onChange={event => setPreviewRole(event.target.value as Role)}>{roles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><p>{roles.find(item => item.id === previewRole)?.description}</p><ul>{permissions.map(permission => <li key={permission.id} data-allowed={grants[previewRole].includes(permission.id)}><span>{permission.name}</span>{grants[previewRole].includes(permission.id) ? <span><Check size={13} aria-hidden="true"/>允许</span> : <span>未开放</span>}</li>)}</ul><small>适用于 {members.filter(member => member.role === previewRole).length} 位演示成员</small></aside></div>
+      <aside className="sc-account-role-preview"><span className="sc-cloud-eyebrow">角色预览 · 仅演示</span><label>预览角色<select value={previewRole} onChange={event => setPreviewRole(event.target.value as Role)}>{roles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><p>{roles.find(item => item.id === previewRole)?.description}</p><ul>{permissions.map(permission => <li key={permission.id} data-allowed={grants[previewRole].includes(permission.id)}><span>{permission.name}</span>{grants[previewRole].includes(permission.id) ? <span><Check size={16} aria-hidden="true"/>允许</span> : <span>未开放</span>}</li>)}</ul><small>适用于 {members.filter(member => member.role === previewRole).length} 位演示成员</small></aside></div>
     </>}
     {notice && <p className="sc-cloud-message" role="status">{notice}</p>}
   </section>;

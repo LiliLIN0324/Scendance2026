@@ -1,6 +1,6 @@
 'use client';
 
-import { ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Settings, SquareStack } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Settings, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -76,6 +76,7 @@ import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types'
 const RAIL_TOOLS = [
   { id: 'reference', label: '图纸尺寸', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference', group: 'venue' as const },
   { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', Icon: ClipboardList, open: 'openBrief', group: 'docs' as const },
+  { id: 'model', label: '物料建模', hint: '生成新物料与调整材质，含 Lux3D', Icon: Boxes, open: 'openModelTools', group: 'docs' as const },
   { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial', group: 'docs' as const },
 ] as const satisfies ReadonlyArray<{ id: string; label: string; hint: string; Icon: typeof ClipboardList; open: keyof BusinessToolsApi; group: 'venue' | 'docs' }>;
 
@@ -1402,12 +1403,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {WORKBENCH_MODES.map(mode => {
                 const active = workbenchMode === mode.id;
                 const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
-                return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={20} aria-hidden="true"/><span>{mode.label}</span></button>;
+                return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
               })}
             </div>
             <div className="sc-mode-rail-foot">
               {/* 左下设置：分担右上（项目/头像）的压力，入口与账户弹窗同源。 */}
-              <button type="button" aria-label="设置" title="账户、项目与演示设置" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><Settings size={20} aria-hidden="true"/><span>设置</span></button>
+              <button type="button" aria-label="设置" title="账户、项目与演示设置" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><Settings size={24} aria-hidden="true"/><span>设置</span></button>
             </div>
           </nav>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
@@ -1415,7 +1416,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <button type="button" aria-pressed={leftMode==='brief'} onClick={()=>{setLeftMode('brief');setMaterialsOpen(false);setSidebarCollapsed(false);}}>活动简报</button>
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
               {(businessOpen||leftMode==='business')&&<button type="button" aria-pressed={leftMode==='business'} onClick={()=>{setLeftMode('business');setMaterialsOpen(false);setBusinessOpen(true);setSidebarCollapsed(false);setWorkspaceOpenRequest(value => value + 1);}}>{workbenchMode==='review'?'评审资料':workbenchMode==='delivery'?'执行资料':'活动资料'}</button>}
-            </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
+            </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-brief-pane" hidden={leftMode!=='brief'}><ActivityBrief tools={RAIL_TOOLS.map(tool => ({ id: tool.id, label: tool.label, hint: tool.hint, group: tool.group, icon: <tool.Icon size={16} aria-hidden="true"/>, onOpen: () => businessToolsRef.current?.[tool.open]() }))}/></div>
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
@@ -1515,7 +1516,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools showAtmosphere={workbenchMode==='layout'} onExportImage={handleExportImage} onApplyPreset={applyPreset} onFit={fitToRoom} onZoom={direction => {
+            <ScendanceViewTools showAtmosphere={workbenchMode==='layout'} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
@@ -1524,7 +1525,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             }}/>
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             <div id="workbench-material-shelf" className="sc-material-shelf sc-bottom-drawer" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
-              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} placeCatalogItem={placeFromCatalog}/>}
+              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}/>}
             </div>
             {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}
             <div className="sc-bottom-bar">

@@ -92,7 +92,7 @@ export default function Error({ error }: { error: Error & { digest?: string }; r
     <div className="sc-page-error">
       <div className="sc-page-error-card">
         <span className="sc-page-error-icon" aria-hidden>
-          <TriangleAlert size={24} strokeWidth={1.75} />
+          <TriangleAlert size={32} strokeWidth={1.75} />
         </span>
         <h1 className="sc-page-error-title">
           {chunkFailure ? '页面加载失败' : '工作台暂时遇到问题'}
