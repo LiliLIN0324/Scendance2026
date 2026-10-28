@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幕景 Scendance · 2026 设计规范 · v2.6</title>
+<title>幕景 Scendance · 2026 设计规范 · v2.6.2</title>
 <link rel="preconnect" href="https://fonts.loli.net" crossorigin>
 <link href="https://fonts.loli.net/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -329,7 +329,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       <p class="cover-line" style="margin-top:16px;font-size:13px">2026 设计规范 · 品牌、界面、AI-native 一本读完</p>
     </div>
     <div class="cover-meta">
-      <div class="cover-chips"><span>v2.6</span><span>2026-10-28</span><span>18 节</span></div>
+      <div class="cover-chips"><span>v2.6.2</span><span>2026-10-29</span><span>18 节</span></div>
       <p class="cover-line">纯白纸面 · 发丝线分区 · 近黑墨字 · 鼠尾草绿点睛</p>
     </div>
   </div>
@@ -511,6 +511,20 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       </tbody>
     </table>
   </div>
+
+  <!-- ── 品牌文案 ── -->
+  <div class="block"><span class="cap">品牌文案 · Slogan · 2026-10-29 钉死</span>
+    <table class="bptable">
+      <thead><tr><th>位</th><th>文案</th><th>用在哪</th></tr></thead>
+      <tbody>
+        <tr><td>主 slogan</td><td><b>为相聚，留一方空间。</b></td><td>官网 hero、宣传册封面与收尾、一切对外物料；一字不改</td></tr>
+        <tr><td>固定断行</td><td>为相聚，<br>留一方空间。</td><td>官网 hero 照此断行</td></tr>
+        <tr><td>副标</td><td>从一个想法，到一场真实活动。</td><td>主 slogan 下方一行</td></tr>
+        <tr><td>眉标</td><td>三维场景协作 · AI 驱动的活动空间设计</td><td>hero eyebrow，不单独当 slogan 用</td></tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:12px">只此一句，不自造第二句口号；「用一句话，布置一整场活动」「说清楚，就排得出来」是能力描述与说话风格，不进封面、收尾，也不与主 slogan 并列。主 slogan 不拆词当小标题（「留一方空间」不单独拎出来做标题）。</p>
+  </div>
 </section>
 
 <!-- ═══ 一、色彩系统 ═══ -->
@@ -667,26 +681,18 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
   <h2>四、图标与阴影</h2>
   <p class="note">lucide 线性图标，统一描边 1.75，单色继承文字色；尺寸 16 / 20 / 24（32 仅整页空态主图标），52 枚在用清单与一义一标见第五节。E0 为默认——一切元素无阴影，分区靠 1px 发丝线；阴影只给浮层。</p>
 
-  <div class="block"><span class="cap">品牌标志 · 门厅 · 方为空间、圆为人（六变体体系）</span>
-  <p class="note" style="margin-bottom:16px">实心墨色圆角方为场馆，下缘居中开圆拱门洞，品牌绿圆点立在门洞内。几何统一 48 网格（外圆角 10、门洞 20 宽 r10 拱、绿点 d10 位 (24,35)），六变体只换填充，不改形。</p>
+  <div class="block"><span class="cap">品牌标志 · 门厅 · 方为空间、圆为人</span>
+  <p class="note" style="margin-bottom:16px">实心墨色圆角方为场馆，下缘居中开圆拱门洞，品牌绿圆点立在门洞内。几何统一 48 网格（外圆角 10、门洞 20 宽 r10 拱、绿点 d10 位 (24,35)），变体只换填充，不改形。UI 只用两档：标准 color 与反白 reverse。</p>
   <div style="display:flex;gap:16px;flex-wrap:wrap">
     <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><path fill-rule="evenodd" fill="#141416" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">标准 color</div><div class="note" style="margin-top:2px">白底 UI 默认</div></div>
-    <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="12" fill="#141416"/><path fill-rule="evenodd" fill="#FFFFFF" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">App icon</div><div class="note" style="margin-top:2px">favicon / 头像</div></div>
-    <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><path fill-rule="evenodd" fill="#FFFFFF" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">反白 reverse</div><div class="note" style="margin-top:2px">深底 hero</div></div>
-    <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><path fill-rule="evenodd" fill="#141416" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#141416"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">单色 mono</div><div class="note" style="margin-top:2px">印刷 / 水印</div></div>
-    <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><path fill-rule="evenodd" fill="#141416" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#141416"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">单色 mono</div><div class="note" style="margin-top:2px">印刷 / 水印</div></div>R
-    <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="12" fill="#141416"/><path fill-rule="evenodd" fill="#FFFFFF" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">App icon</div><div class="note" style="margin-top:2px">favicon / 头像</div></div>M
+    <div style="width:128px;text-align:center"><div style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--ink);padding:16px;display:grid;place-items:center;min-height:96px"><svg width="56" height="56" viewBox="0 0 48 48" fill="none"><path fill-rule="evenodd" fill="#FFFFFF" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></div><div style="font-size:12px;font-weight:500;color:var(--ink);margin-top:8px">反白 reverse</div><div class="note" style="margin-top:2px">深底 hero</div></div>
   </div>
   <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--hair-soft)">
     <table class="tbl">
       <thead><tr><th>变体</th><th>用在</th><th>资产文件（assets/brand/logo-2026/）</th></tr></thead>
       <tbody>
         <tr><td><b>标准 color</b></td><td>白底 UI:工作台 / intro 头部、空态引导</td><td style="font-family:var(--mono);font-size:11px">svg/threshold-color.svg + png 16–512</td></tr>
-        <tr><td><b>方形 App icon</b></td><td>favicon 16、桌面图标、社交头像（自带圆角方底,不再外加容器）</td><td style="font-family:var(--mono);font-size:11px">svg/threshold-icon.svg + png 16–512</td></tr>
         <tr><td><b>反白 reverse</b></td><td>深底:官网 hero、黑底卡片（绿点保持品牌绿不反白）</td><td style="font-family:var(--mono);font-size:11px">svg/threshold-reverse.svg</td></tr>
-        <tr><td><b>单色 mono</b></td><td>单色印刷、雕刻、水印、协议页</td><td style="font-family:var(--mono);font-size:11px">svg/threshold-mono.svg</td></tr>
-        <tr><td><b>单色反白 mono-reverse</b></td><td>深底单色（印章 / 隐性水印）</td><td style="font-family:var(--mono);font-size:11px">svg/threshold-mono-reverse.svg</td></tr>
-        <tr><td><b>极小 icon-mono</b></td><td>16px favicon 在低分屏的单色保真档</td><td style="font-family:var(--mono);font-size:11px">svg/threshold-icon-mono.svg</td></tr>
       </tbody>
     </table>
   </div>
@@ -703,7 +709,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
     </div>
     <div style="flex:1;min-width:260px">
       <div style="font-size:11px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:10px">使用规矩</div>
-      <p class="note" style="margin-top:0">安全区 = 四周留白 ≥ 字标高 × 1(48 网格外不贴任何元素);底色只允许 paper / plane / 深底三档;path 永远 <code>currentColor</code> 由父级控色,绿点永远 <code>#4A7C59</code>;禁拉伸、禁加投影、禁换圆角、禁把绿点挪位;UI 内用标准 color,深底切 reverse,印刷切 mono——<b>选错变体比不放更伤品牌</b>。</p>
+      <p class="note" style="margin-top:0">安全区 = 四周留白 ≥ 字标高 × 1(48 网格外不贴任何元素);底色只允许 paper / plane / 深底三档;path 永远 <code>currentColor</code> 由父级控色,绿点永远 <code>#4A7C59</code>;禁拉伸、禁加投影、禁换圆角、禁把绿点挪位;UI 内用标准 color,深底切 reverse,二维码中心用反白垫深底——<b>选错变体比不放更伤品牌</b>。</p>
     </div>
   </div><div class="block"><span class="cap">品牌字标 · Brand Lockup</span>
   <p class="note">图标 + 中文「幕景」+ 绿点 + 英文 SCENDANCE 的联合排印（含白底 / 深底样张、禁则、响应式）统一定版在 <b>00 · Brand Wordmark</b> 一节,本节不重复。三页共用同一套排法,只换父级颜色控明暗。</p>
@@ -1985,8 +1991,8 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
     </div>
   </div>
 </section><footer>
-  <p class="note">幕景 Scendance · 2026 设计规范 v2.6 · 2026-10-28 · 条款与 design-spec-2026.md（v2.5）一致</p>
-  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。</p>
+  <p class="note">幕景 Scendance · 2026 设计规范 v2.6.2 · 2026-10-29 · 条款与 design-spec-2026.md（v2.5.1）一致</p>
+  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。v2.6.1 补品牌文案表：主 slogan 钉死「为相聚，留一方空间。」。v2.6.2 品牌标志收档：删去 App icon / mono / mono-reverse / icon-mono 各档，只留标准 color 与反白 reverse（反白样张补深底）；二维码中心用反白垫深底。</p>
 </footer>
 
 </div>
