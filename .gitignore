@@ -52,3 +52,7 @@ _*.txt
 _shot*.cjs
 _shot*.mjs
 _patch*.py
+
+# local scratch (screenshots/decks; do not ship)
+_work/
+
