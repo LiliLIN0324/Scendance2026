@@ -3,7 +3,7 @@ import { ApiError } from './domain.ts';
 import { assetRecord } from './assets.ts';
 import { download, required, type Env, type Fetcher } from './http.ts';
 import { aholoLux3d, hunyuan } from './providers.ts';
-import { MAX_GLB_BYTES, validateModel } from './models.ts';
+import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import type { Backend } from './backend.ts';
 
 export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
@@ -58,7 +58,9 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
       if(!file) throw new ApiError('PROVIDER_NO_GLB',422);
       // Accept only known object-storage domains; never proxy arbitrary URLs or redirects.
       // Lux3D serves its direct GLB from kujiale.com; HY-3D from Tencent COS.
-      const bytes=await download(file.Url,aholo?['.kujiale.com','.myqcloud.com','.tencentcos.cn','.tencentcos.com']:['.myqcloud.com','.tencentcos.cn','.tencentcos.com'],MAX_GLB_BYTES,fetcher);
+      const raw=await download(file.Url,aholo?['.kujiale.com','.myqcloud.com','.tencentcos.cn','.tencentcos.com']:['.myqcloud.com','.tencentcos.cn','.tencentcos.com'],MAX_GLB_BYTES,fetcher);
+      // Lux3D 产物带 bufferView 缺 target 与零法线两类瑕疵，先修复再过质量门（几何与 UV 不动）。
+      const bytes=aholo?repairGlb(raw):raw;
       const metadata:Record<string,unknown>=await validateModel(bytes);
       metadata.generation={kind:job.kind??'text',providerMode:job.provider_mode,providerModel:job.provider_model,referenceImageAssetId:job.reference_image_asset_id??undefined};
       if(job.kind==='texture'){

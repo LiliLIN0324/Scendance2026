@@ -1,0 +1,14 @@
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..', '..');
+const KEY = (await readFile(path.join(root, '.env.local'), 'utf8')).split('\n').find(l => l.startsWith('LUX3D_API_KEY=')).split('=').slice(1).join('=').trim();
+const BASE = 'https://api.aholo3d.cn';
+const q = await (await fetch(`${BASE}/lux3d/v1/generate/task/get?taskid=4425274`, { headers: { Authorization: KEY } })).json();
+const glbUrl = (q.d?.outputs ?? []).map(o => o?.content).filter(u => typeof u === 'string').find(u => u.toLowerCase().endsWith('.glb'));
+const bytes = new Uint8Array(await (await fetch(glbUrl)).arrayBuffer());
+const { validateBytes } = await import(pathToFileURL(path.join(root, 'node_modules', 'gltf-validator', 'module.mjs')));
+const report = await validateBytes(bytes, { maxIssues: 25 });
+console.log('numErrors:', report.issues.numErrors, 'numWarnings:', report.issues.numWarnings);
+for (const m of report.issues.messages ?? []) console.log(' -', m.severity, m.code, m.pointer ?? '', m.string ?? '', m.message ?? '');
