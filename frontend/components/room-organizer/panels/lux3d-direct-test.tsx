@@ -70,11 +70,16 @@ function glbOutputOf(outputs: string[]): string | undefined {
   return outputs.filter(safeResultUrl).find(url => new URL(url).pathname.toLowerCase().endsWith('.glb'));
 }
 
-/** 环境预览优先单包 SPZ；没有才退回 PLY。LOD 元数据不是场景本体，不参与。 */
+/** 环境预览优先单包 SPZ；没有才退回 PLY。LOD 元数据不是场景本体，但它是唯一带真实尺度的文件。 */
 function splatOutputOf(outputs: string[]): string | undefined {
   const safe = outputs.filter(safeResultUrl);
   return safe.find(url => new URL(url).pathname.toLowerCase().endsWith('.spz')) ??
     safe.find(url => new URL(url).pathname.toLowerCase().endsWith('.ply'));
+}
+
+/** lod-meta（json）只用来读 forwardBox 真实尺度，高斯优先时场地跟它对齐。 */
+function metaOutputOf(outputs: string[]): string | undefined {
+  return outputs.filter(safeResultUrl).find(url => new URL(url).pathname.toLowerCase().endsWith('.json'));
 }
 
 const HISTORY_KEY = 'scendance:aholo-history';
@@ -124,7 +129,7 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
       <a href={url} target="_blank" rel="noreferrer">{label(url)}</a>
     </li>)}</ul>}
     {!outputs.length && !panorama && <p className="sc-warning">Aholo 返回成功，但没有提供下载链接。</p>}
-    {world && <p className="sc-note">3DGS 场景取回后按场地尺寸铺成 3D 背景，只作环境预览，不参与碰撞。</p>}
+    {world && <p className="sc-note">3DGS 场景取回后按真实尺度铺成 3D 背景（场地跟高斯对齐），只作环境预览，不参与碰撞。</p>}
   </>;
 }
 
@@ -314,14 +319,15 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
     }
   }
 
-  /** 场景包先落盘再预览：那条签名链接不进渲染管线，重启后还能从「环境预览」再打开。 */
+  /** 场景包先落盘再预览：那条签名链接不进渲染管线，重启后还能从「环境预览」再打开。lod-meta 一并带去换真实尺度。 */
   async function previewScene(url: string) {
     if (!onPreviewScene || !taskid || previewLock.current) return;
     previewLock.current = true;
     setPreviewing(true); setPreviewNote(''); setPreviewError('');
     try {
-      await onPreviewScene({ url, name: (world ? name : prompt).trim() || prompt.trim(), taskid });
-      if (mounted.current) setPreviewNote('已按场地尺寸铺成 3D 背景，画布上可随时退出。');
+      const metaUrl = world ? metaOutputOf(detail?.outputs ?? []) : undefined;
+      await onPreviewScene({ url, name: (world ? name : prompt).trim() || prompt.trim(), taskid, ...(metaUrl ? { metaUrl } : {}) });
+      if (mounted.current) setPreviewNote('已铺成 3D 背景，画布上可随时退出。');
     } catch (failure) {
       if (mounted.current) setPreviewError(failure instanceof Error ? failure.message : String(failure));
     } finally {
@@ -345,6 +351,17 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
 
   return <div className="sc-aholo-task">
     <p className="sc-note">{world ? 'World · 文字生成 3DGS 场景' : kind === 'image' ? 'Lux3D · 图片生成带材质物件' : 'Lux3D · 文字生成带材质物件'}</p>
+    <details className="sc-note" aria-label="生成教程">
+      <summary>怎么用？</summary>
+      {world ? <>
+        <p>① 填场景名称与描述（室内场景效果最佳），提交后由 Aholo World 生成 3DGS 场景，通常约 10-20 分钟，可先去布置。</p>
+        <p>② 完成后取回产物，作为 3D 背景铺在场地里；仅用于环境氛围展示，不参与布置与碰撞计算。</p>
+      </> : <>
+        <p>① 文字建模：一句话描述物件；图片建模：传一张照片按图建模，描述作为补充。</p>
+        <p>② 点「直连生成」提交给 Aholo Lux3D，通常约 3-5 分钟，期间可点「查看最新」跟踪进度。</p>
+        <p>③ 完成后取回产物放入场地。描述越具体（材质、颜色、风格）效果越好；每次生成消耗云额度。</p>
+      </>}
+    </details>
     {world && <>
       <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
       <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || online !== true} onChange={event => setName(event.target.value)} />
@@ -398,7 +415,7 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
 
 export function Lux3dDirectTest({ onPlace, onPreviewScene }: {
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
-  onPreviewScene?: ((source: { url: string; name?: string; taskid?: string }) => Promise<void>) | undefined;
+  onPreviewScene?: ((source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => Promise<void>) | undefined;
 }) {
   const [kind, setKind] = useState<Kind>('text');
   const [visited, setVisited] = useState<Kind[]>(['text']);

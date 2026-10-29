@@ -272,6 +272,22 @@ describe('Lux3D 本机直连面板', () => {
     expect(proxy.task).not.toHaveBeenCalled();
   });
 
+  it('文字与场景 tab 各自带三步教程提示，等待预期与诚实说明可见', async () => {
+    await renderPanel();
+    const textGuide = within(activePanel()).getByText('怎么用？').closest('details');
+    expect(textGuide?.textContent).toContain('直连生成');
+    expect(textGuide?.textContent).toContain('3-5 分钟');
+    expect(textGuide?.textContent).toContain('消耗云额度');
+    // 场景生成 tab 有自己的教程：室内最佳 + 3DGS 只作背景不参与碰撞
+    fireEvent.click(screen.getByRole('tab', { name: '场景生成' }));
+    const worldGuide = within(activePanel()).getByText('怎么用？').closest('details');
+    expect(worldGuide?.textContent).toContain('室内场景效果最佳');
+    expect(worldGuide?.textContent).toContain('不参与布置与碰撞');
+    // 切回文字 tab 并清掉本测试可能写入的会话状态，不污染后续用例
+    fireEvent.click(screen.getByRole('tab', { name: '文字建模' }));
+    sessionStorage.clear();
+  });
+
   it.each(['', '   '])('描述为 %j 时不提交', async prompt => {
     await renderPanel();
     enterPrompt(prompt);
@@ -920,7 +936,7 @@ describe('Aholo World 场景生成', () => {
     expect(JSON.parse(sessionStorage.getItem('scendance:aholo-world-task')!)).toEqual({ taskid: WORLD_ID, prompt: WORLD_PROMPT, startedAt: NOW });
   });
 
-  it('场景预览优先取 SPZ、按描述与任务号交给预览，失败就说失败', async () => {
+  it('场景预览优先取 SPZ、带上 lod-meta 换真实尺度、按描述与任务号交给预览，失败就说失败', async () => {
     proxy.world.mockImplementation(async () => jsonResponse({
       status: 3, statusLabel: '成功', outputs: [PLY_URL, SPZ_URL, LOD_URL], progress: 1, panoUrl: PANO_URL,
     }));
@@ -931,18 +947,18 @@ describe('Aholo World 场景生成', () => {
     const button = within(activePanel()).getByRole('button', { name: '在 3D 场景预览' }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     await act(async () => { fireEvent.click(button); });
-    expect(onPreviewScene).toHaveBeenCalledWith({ url: SPZ_URL, name: WORLD_NAME, taskid: WORLD_ID });
-    expect(within(activePanel()).getByText(/已按场地尺寸铺成 3D 背景/)).toBeTruthy();
+    expect(onPreviewScene).toHaveBeenCalledWith({ url: SPZ_URL, name: WORLD_NAME, taskid: WORLD_ID, metaUrl: LOD_URL });
+    expect(within(activePanel()).getByText(/已铺成 3D 背景/)).toBeTruthy();
     // 预览只走本机落盘那条路，绝不替她再点一次生成。
     expect(proxy.worldCreate).toHaveBeenCalledTimes(1);
 
     await act(async () => { onPreviewScene.mockRejectedValueOnce(new Error('无法解码这个 3DGS 场景')); });
     await act(async () => { fireEvent.click(within(activePanel()).getByRole('button', { name: '在 3D 场景预览' })); });
     expect(within(activePanel()).getByRole('alert').textContent).toContain('无法解码');
-    expect(within(activePanel()).queryByText(/已按场地尺寸铺成 3D 背景/)).toBeNull();
+    expect(within(activePanel()).queryByText(/已铺成 3D 背景/)).toBeNull();
   });
 
-  it('只有 PLY 时也拿它预览；LOD 元数据不是场景本体', async () => {
+  it('只有 PLY 时也拿它预览，并带上 LOD 元数据换真实尺度', async () => {
     proxy.world.mockImplementation(async () => jsonResponse({
       status: 3, statusLabel: '成功', outputs: [PLY_URL, LOD_URL], progress: 1,
     }));
@@ -950,7 +966,7 @@ describe('Aholo World 场景生成', () => {
     await renderPanel(false, undefined, onPreviewScene);
     await submitWorld();
     await act(async () => { fireEvent.click(within(activePanel()).getByRole('button', { name: '在 3D 场景预览' })); });
-    expect(onPreviewScene).toHaveBeenCalledWith({ url: PLY_URL, name: WORLD_NAME, taskid: WORLD_ID });
+    expect(onPreviewScene).toHaveBeenCalledWith({ url: PLY_URL, name: WORLD_NAME, taskid: WORLD_ID, metaUrl: LOD_URL });
   });
 
   it.each([
