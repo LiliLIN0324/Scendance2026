@@ -995,6 +995,39 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:disabled { background: var(--plane); color: var(--faint); opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
+.sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.sc-lux-direct .sc-field { margin-bottom: 0; }
+.sc-lux-direct input[type='text'], .sc-lux-direct textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--paper); color: inherit; font: inherit; }
+.sc-lux-direct textarea { resize: vertical; }
+.sc-lux-direct input[type='file'] { width: 100%; min-width: 0; font: inherit; font-size: var(--sc-type-meta); }
+.sc-lux-direct-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); color: var(--sc-ink); overflow-wrap: anywhere; }
+.sc-aholo-tabs { display: flex; border-bottom: 1px solid var(--sc-line); }
+.sc-aholo-tabs button { flex: 1; padding: 10px 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--sc-type-meta); cursor: pointer; }
+.sc-aholo-tabs button[aria-selected='true'] { border-bottom-color: var(--wk-green); color: var(--sc-ink); font-weight: 600; }
+.sc-aholo-task { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.sc-aholo-task .sc-note { overflow-wrap: anywhere; }
+.sc-aholo-task details { font-size: var(--sc-type-meta); }
+.sc-aholo-task summary { cursor: pointer; margin-bottom: 8px; }
+.sc-aholo-task details .sc-button { margin-top: 8px; }
+.sc-aholo-image { width: 100%; max-height: 180px; object-fit: contain; background: var(--paper); border-radius: var(--r-sm); }
+.sc-aholo-panorama { display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); }
+.sc-aholo-panorama img { width: 100%; height: auto; border-radius: var(--r-sm); }
+.sc-aholo-progress { display: flex; align-items: center; gap: 8px; font-size: var(--sc-type-meta); }
+.sc-aholo-progress progress { flex: 1; min-width: 0; height: 4px; appearance: none; border: 0; background: var(--sc-line); border-radius: 2px; }
+.sc-aholo-progress progress::-webkit-progress-bar { background: var(--sc-line); border-radius: 2px; }
+.sc-aholo-progress progress::-webkit-progress-value { background: var(--wk-green); border-radius: 2px; }
+.sc-aholo-progress span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-aholo-history { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); max-height: 45vh; overflow: auto; }
+.sc-aholo-history-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--sc-type-meta); }
+.sc-aholo-history ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sc-aholo-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; border-bottom: 1px solid var(--wk-hair); padding-bottom: 8px; font-size: var(--sc-type-meta); overflow-wrap: anywhere; }
+.sc-aholo-history li > div { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sc-aholo-history li strong { color: var(--sc-muted); font-weight: 600; }
+.sc-aholo-history li .sc-note { display: block; margin-top: 0; }
+.sc-aholo-history .sc-button { border: 0; background: transparent; padding: 4px 6px; margin: -4px -6px; color: var(--sc-muted); font-size: var(--sc-type-meta); }
+.sc-aholo-history .sc-button:hover { color: var(--sc-ink); text-decoration: underline; }
+.sc-aholo-history li:last-child { border-bottom: 0; padding-bottom: 0; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
   flex: 1; min-width: 0; position: relative;
 }

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "note": "Aholo 直连生成后留在本机的产物，按内容去重存档。原始落盘位置 .cache/aholo/ 不进 Git，此目录才是长期保存的那一份。",
+  "assets": [
+    {
+      "slug": "chinese-wood-armchair",
+      "name": "中式木扶手椅",
+      "kind": "model",
+      "file": "model/chinese-wood-armchair.glb",
+      "thumb": "thumb/chinese-wood-armchair.png",
+      "bytes": 6433368,
+      "sha256": "ae806b323dff9658ddb20adaf4bad86880a5b7c452b3eb3d7b1cd5163f5013e2",
+      "sizeMeters": { "width": 0.704, "depth": 0.553, "height": 1.02 },
+      "savedAt": "2026-10-29 21:17",
+      "source": "Lux3D 生成物件。任务号未随文件保存，无法回查。"
+    },
+    {
+      "slug": "white-round-table",
+      "name": "白色圆桌",
+      "kind": "model",
+      "file": "model/white-round-table.glb",
+      "thumb": "thumb/white-round-table.png",
+      "bytes": 2784124,
+      "sha256": "743fe596519528b14060ee2e9ba7996c8b642a16896aab0c31b3aff22af2e09d",
+      "sizeMeters": { "width": 0.8, "depth": 0.8, "height": 0.594 },
+      "savedAt": "2026-10-30 00:46",
+      "source": "Lux3D 生成物件。任务号未随文件保存，无法回查。"
+    },
+    {
+      "slug": "scendance-m3-mvp",
+      "name": "Scendance-M3-MVP",
+      "kind": "scene",
+      "file": "scene/scendance-m3-mvp.spz",
+      "preview": "scene/scendance-m3-mvp.panorama.jpg",
+      "bytes": 4388248,
+      "sha256": "1f737bb827f7b36658d39ffee02f81e821bb6bc033cf65fdfa9d7c1c4bed87b8",
+      "upAxis": "Z",
+      "worldId": "3FO4K4QI6N4V",
+      "source": "Aholo World 场景生成，工作台「环境预览」实测通过。"
+    },
+    {
+      "slug": "small-launch-hall",
+      "name": "小型发布会场地",
+      "kind": "scene",
+      "file": "scene/small-launch-hall.spz",
+      "preview": "scene/small-launch-hall.panorama.jpg",
+      "bytes": 4837840,
+      "sha256": "80fa79cb12712826edf2d55301a7914fb8044f66578b2a2b660e9a205241a63a",
+      "upAxis": "Z",
+      "worldId": "3FO4K4RHLLV9",
+      "prompt": "小型发布会场地，中央舞台，观众座椅环形排布，暖色灯光，木质地板",
+      "generatedAt": "2026-10-29 20:06 → 20:23",
+      "source": "Aholo World 场景生成。"
+    }
+  ]
+}

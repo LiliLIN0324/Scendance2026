@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { MAX_ROOM_DIMENSION, STORAGE_KEY } from './constants';
 import { randomId } from './ids';
 import { INITIAL_LAYOUT } from './initial-layout';
@@ -25,6 +25,7 @@ import {
   resetStoredLayout,
   sameLayoutContent,
   saveLayout,
+  withoutExpiringAssetUrls,
 } from './persistence';
 import { VERSION_HISTORY_STORAGE_KEY } from './version-history';
 import type { RawStore } from './persistence';
@@ -206,6 +207,49 @@ describe('persistence — save failure reasons (#472)', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+const CLOUD_ID = '4165e104-e2c1-4f5e-b2a4-46602bf9f932';
+const signedItem = makeItem({
+  type: 'glb-asset', name: '木椅', assetId: CLOUD_ID, materialId: 'asset', source: 'generated',
+  glbUrl: 'https://tx-cos.example.test/lux3d/4475964/MODEL.glb?sign=q-signature%3Dabc',
+});
+
+describe('persistence — 图纸只留资产号，不留会过期的链接 (#66)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('写盘剪掉签名链接，随包相对路径与无资产号的本地引用照旧', () => {
+    const packaged = makeItem({
+      id: 'item-2', type: 'glb-asset', name: '库椅', assetId: CLOUD_ID, materialId: 'asset',
+      source: 'public_library', glbUrl: '/showcase/assets/library/model/chair.glb',
+    });
+    const offline = makeItem({
+      id: 'item-3', type: 'glb-asset', name: '离线样例', materialId: 'asset',
+      glbUrl: 'https://other-cdn.example.test/model.glb',
+    });
+    const layout = makeLayout({ floors: [makeFloor({ items: [signedItem, packaged, offline] })] });
+    expect(saveLayout(layout).ok).toBe(true);
+    const written = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') as {
+      floors: { items: Record<string, unknown>[] }[];
+    };
+    expect(written.floors[0]?.items[0]).not.toHaveProperty('glbUrl');
+    expect(written.floors[0]?.items[0]).toMatchObject({ assetId: CLOUD_ID, source: 'generated' });
+    expect(written.floors[0]?.items[1]).toHaveProperty('glbUrl', '/showcase/assets/library/model/chair.glb');
+    expect(written.floors[0]?.items[2]).toHaveProperty('glbUrl', 'https://other-cdn.example.test/model.glb');
+    expect(window.localStorage.getItem(STORAGE_KEY)).not.toMatch(/example\.test\/lux3d|q-signature/);
+    // 剪链接只影响写出去的那份，内存里的图纸仍能立刻重画。
+    expect(layout.floors[0]?.items[0]?.glbUrl).toContain('MODEL.glb');
+  });
+
+  it('备选方案的快照同样只留资产号', () => {
+    const stripped = withoutExpiringAssetUrls(makeLayout({
+      designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '甲', layout: makeLayout({ floors: [makeFloor({ items: [signedItem] })] }) }] },
+    }));
+    expect(stripped.designBook?.variants[0]?.layout.floors[0]?.items[0]).not.toHaveProperty('glbUrl');
+    expect(withoutExpiringAssetUrls(makeLayout()).floors[0]?.items).toEqual([]);
   });
 });
 

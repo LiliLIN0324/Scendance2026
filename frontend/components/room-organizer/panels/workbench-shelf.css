@@ -54,7 +54,8 @@
   overflow: hidden;
   animation: none;
 }
-.sc-compact-shelf .sc-library-materials {
+.sc-compact-shelf .sc-library-materials,
+.sc-compact-shelf .sc-library-generated {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -256,7 +257,8 @@
   }
   .sc-compact-shelf .sc-library-tabs button { padding: 0 7px; }
   .sc-compact-shelf .sc-library-content { padding: 2px 4px; }
-  .sc-compact-shelf .sc-library-materials { gap: 2px; }
+  .sc-compact-shelf .sc-library-materials,
+  .sc-compact-shelf .sc-library-generated { gap: 2px; }
   .sc-compact-shelf .sc-search-mini { flex-basis: 118px; }
   .sc-compact-shelf .sc-material-card {
     grid-template-rows: minmax(0, 1fr) 18px;
