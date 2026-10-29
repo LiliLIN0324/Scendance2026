@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, SquareStack } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -32,9 +32,11 @@ import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
+import { useSplatPreview } from './hooks/use-splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
+import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -63,6 +65,7 @@ import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
+import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { ReferenceImageControls } from './panels/reference-image-controls';
@@ -72,6 +75,7 @@ import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import type { SplatPaint } from './three/splat-preview';
 
 /** 简报底折叠：只放别处没有主入口的深资料。评审/执行走左轨，模板/物料走底栏。 */
 const RAIL_TOOLS = [
@@ -184,7 +188,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [compactViewport, setCompactViewport] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
-  const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'>('brief');
+  const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
+  // 本机直连 Aholo 的测试入口：只在 next dev 出现，构建产物里这颗按钮不存在。
+  const luxDirectVisible = process.env.NODE_ENV === 'development';
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
   const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
@@ -902,9 +908,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     onItemDragCancel: handleDragCancel,
   });
 
+  // 3DGS 环境预览的渲染入口；useThreeScene 每帧走它，预览关闭时它是空的。
+  const splatPaintRef = useRef<SplatPaint | null>(null);
+
   const { isReady, error, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef, worldPositionFromClient } =
     useThreeScene({
       canvasRef,
+      // 环境预览开着时，这一帧由点云那条渲染栈先画背景再画本场景；关掉时它自己退回默认渲染。
+      renderFrame: (renderer, scene, camera) => {
+        const paint = splatPaintRef.current;
+        if (paint) paint(renderer, scene, camera);
+        else renderer.render(scene, camera);
+      },
       onViewportResize: () => frameViewportRef.current(),
       walkthroughActive,
       // The distance tool measures across furniture, so its clicks go to the floor (#341).
@@ -929,6 +944,31 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       snapPosition,
       getDragPlaneY,
     });
+
+  const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat } = useSplatPreview({
+    isReady,
+    rendererRef,
+    cameraRef,
+    controlsRef,
+    invalidate,
+    requestShadowUpdate,
+    // 点云按场地的最长水平边等比缩放：10 m 的扫描摆进 12 m 的场地就放大到 12 m。
+    sizeMeters: Math.max(layout.width, layout.height),
+  });
+  splatPaintRef.current = paintSplatFrame;
+  const startStoredScene = useCallback((assetId: string) => {
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+    try {
+      void startSplat(storedAholoSceneSource(assetId));
+    } catch (failure) {
+      notify(failure instanceof Error ? failure.message : String(failure), 'error');
+    }
+  }, [setView, startSplat]);
+  /** 场景生成里的「取回并预览」：先落盘再切到 3D，失败由面板自己说明。 */
+  const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string }) => {
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+    await startSplat(await loadAholoSceneSource(source));
+  }, [setView, startSplat]);
 
   useEffect(() => {
     const focusObject = (event: Event) => {
@@ -1401,13 +1441,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
-            <nav className="sc-mode-rail-top" aria-label="工作流程">
-              {WORKBENCH_MODES.map(mode => {
-                const active = workbenchMode === mode.id;
-                const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
-                return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
-              })}
-            </nav>
+            <div className="sc-rail-head">
+              <nav className="sc-mode-rail-top" aria-label="工作流程">
+                {WORKBENCH_MODES.map(mode => {
+                  const active = workbenchMode === mode.id;
+                  const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
+                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
+                })}
+              </nav>
+              {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="接口测试">
+                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="Aholo 接口测试" title="本机直连 Aholo 接口（仅本地开发可见）"
+                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>Aholo</span></button>
+              </nav></>}
+            </div>
           </div>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -1419,6 +1465,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
+            {luxDirectVisible && <div className="sc-left-content" hidden={leftMode!=='lux3d'}><Lux3dDirectTest onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/></div>}
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
           </div>
           <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
@@ -1509,6 +1556,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {canvasDetailOpen && <span className="sc-canvas-count" id="canvas-detail">{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span>}
             </div>
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
+            {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · 场地壳体已让位，物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>
@@ -1524,7 +1572,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             }}/>}
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             <div id="workbench-material-shelf" className="sc-material-shelf sc-bottom-drawer" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
-              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}/>}
+              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}
+                environment={{ preview: splatState, onStart: startStoredScene, onStop: stopSplat }}/>}
             </div>
             {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}
             {!planHome && <div className="sc-bottom-bar">

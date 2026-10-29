@@ -1,0 +1,464 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { DIRECT_BASE } from '../lib/aholo-assets';
+import { loadAholoCatalogItem } from '../lib/aholo-model-placement';
+import type { CatalogItem } from '../lib/types';
+
+const POLL_MS = 5000;
+const CAPABILITIES = {
+  text: { label: '文字建模', path: '/text-to-3d', storage: 'scendance:lux3d-direct', id: /^\d+$/ },
+  image: { label: '图片建模', path: '/image-to-3d', storage: 'scendance:aholo-image', id: /^\d+$/ },
+  world: { label: '场景生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
+};
+type Kind = keyof typeof CAPABILITIES;
+type TaskDetail = { status: number; statusLabel: string; outputs: string[]; progress?: number; panoUrl?: string };
+type SavedTask = { taskid?: string; prompt: string; startedAt: number };
+const TERMINAL = [3, 4, 6];
+const STAGES: Record<number, { title: string; text: string }> = {
+  0: { title: '排队中', text: 'Aholo 已接收任务，正在初始化或等待执行。' },
+  1: { title: '生成中', text: 'Aholo 正在生成，完成后会显示产物。' },
+  3: { title: '生成完成', text: '生成已完成，可查看下方结果。' },
+  4: { title: '生成失败', text: 'Aholo 返回任务失败，已停止查询。' },
+  6: { title: '已取消', text: 'Aholo 返回任务已取消，已停止查询。' },
+};
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  init?.signal?.addEventListener('abort', abort, { once: true });
+  if (init?.signal?.aborted) controller.abort();
+  const timeout = setTimeout(abort, 35000);
+  try {
+    const response = await fetch(`${DIRECT_BASE}${path}`, { ...init, signal: controller.signal });
+    const body = await response.json() as T & { error?: string };
+    if (!response.ok || !body || body.error) throw new Error(body?.error ?? `HTTP ${response.status}`);
+    return body;
+  } catch (failure) {
+    if (controller.signal.aborted) throw new Error('请求超时或已中断，尚未确认最新状态。');
+    if (failure instanceof TypeError) throw new Error('连不上本机代理，先运行：node tools/aholo/lux3d-dev-proxy.mjs');
+    throw failure;
+  } finally {
+    clearTimeout(timeout);
+    init?.signal?.removeEventListener('abort', abort);
+  }
+}
+
+function readSaved(key: string, kind: Kind, pending = false): SavedTask | null {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null') as SavedTask | null;
+    return saved && typeof saved.prompt === 'string' && Number.isFinite(saved.startedAt) && saved.startedAt > 0
+      && (pending || (typeof saved.taskid === 'string' && CAPABILITIES[kind].id.test(saved.taskid))) ? saved : null;
+  } catch { return null; }
+}
+
+function remember(key: string, value: SavedTask | null) {
+  try {
+    if (value) sessionStorage.setItem(key, JSON.stringify(value));
+    else sessionStorage.removeItem(key);
+  } catch { /* 浏览器禁用存储时仍保留内存中的任务号。 */ }
+}
+
+function safeResultUrl(value: string | undefined) {
+  if (!value) return false;
+  try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; }
+  catch { return false; }
+}
+
+/** 带材质的 GLB 才是能摆进布置场景的物件；签名链接先过安全校验。 */
+function glbOutputOf(outputs: string[]): string | undefined {
+  return outputs.filter(safeResultUrl).find(url => new URL(url).pathname.toLowerCase().endsWith('.glb'));
+}
+
+/** 环境预览优先单包 SPZ；没有才退回 PLY。LOD 元数据不是场景本体，不参与。 */
+function splatOutputOf(outputs: string[]): string | undefined {
+  const safe = outputs.filter(safeResultUrl);
+  return safe.find(url => new URL(url).pathname.toLowerCase().endsWith('.spz')) ??
+    safe.find(url => new URL(url).pathname.toLowerCase().endsWith('.ply'));
+}
+
+const HISTORY_KEY = 'scendance:aholo-history';
+const HISTORY_MAX = 30;
+type HistoryEntry = { kind: Kind; taskid: string; prompt: string; startedAt: number; status: number; label: string; at: number };
+
+function isHistoryEntry(value: unknown): value is HistoryEntry {
+  const entry = value as HistoryEntry;
+  return Boolean(entry) && CAPABILITIES[entry.kind] && typeof entry.taskid === 'string'
+    && CAPABILITIES[entry.kind].id.test(entry.taskid) && typeof entry.prompt === 'string'
+    && Number.isFinite(entry.startedAt) && Number.isFinite(entry.status) && Number.isFinite(entry.at);
+}
+
+function readHistory(): HistoryEntry[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter(isHistoryEntry).slice(0, HISTORY_MAX) : [];
+  } catch { return []; }
+}
+
+// 只存元数据：签名链接会过期、图片体积大，都不进本地存储，要看产物就回查原任务。
+function appendHistory(entry: HistoryEntry) {
+  try {
+    const items = readHistory();
+    const previous = items.find(item => item.kind === entry.kind && item.taskid === entry.taskid);
+    // 任务号是列表里唯一的凭据已被去掉，描述就是这一行的名字，轮询不能把它刷成空的。
+    const next = previous?.prompt && !entry.prompt ? { ...entry, prompt: previous.prompt } : entry;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(
+      [next, ...items.filter(item => !(item.kind === entry.kind && item.taskid === entry.taskid))].slice(0, HISTORY_MAX)));
+  } catch { /* 浏览器禁用存储时只丢历史，不影响当前任务。 */ }
+}
+
+function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) {
+  const outputs = detail.outputs.filter(safeResultUrl);
+  const panorama = world && safeResultUrl(detail.panoUrl) ? detail.panoUrl : undefined;
+  function label(url: string) {
+    const extension = new URL(url).pathname.split('.').pop()?.toLowerCase();
+    return ({ glb: 'GLB 模型', zip: 'ZIP（含 PBR，签名 2 小时过期）', ply: 'PLY 场景', spz: 'SPZ 场景', json: 'LOD 元数据' })[extension ?? ''] ?? '结果文件';
+  }
+  return <>
+    {panorama && <a className="sc-aholo-panorama" href={panorama} target="_blank" rel="noreferrer">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={panorama} alt="World 场景全景图" referrerPolicy="no-referrer" />
+      <span>打开全景原图</span>
+    </a>}
+    {outputs.length > 0 && <ul className="sc-lux-direct-results">{outputs.map(url => <li key={url}>
+      <a href={url} target="_blank" rel="noreferrer">{label(url)}</a>
+    </li>)}</ul>}
+    {!outputs.length && !panorama && <p className="sc-warning">Aholo 返回成功，但没有提供下载链接。</p>}
+    {world && <p className="sc-note">3DGS 场景取回后按场地尺寸铺成 3D 背景，只作环境预览，不参与碰撞。</p>}
+  </>;
+}
+
+function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace, onPreviewScene }: {
+  kind: Kind; online: boolean | null; onHistory: () => void;
+  resume: { kind: Kind; taskid: string; prompt: string; startedAt: number } | null;
+  unresolved: HistoryEntry | undefined;
+  onPlace?: ((item: CatalogItem) => boolean) | undefined;
+  onPreviewScene?: ((source: { url: string; name?: string; taskid?: string }) => Promise<void>) | undefined;
+}) {
+  const config = CAPABILITIES[kind];
+  const taskKey = `${config.storage}-task`;
+  const pendingKey = `${config.storage}-pending`;
+  const world = kind === 'world';
+  const [prompt, setPrompt] = useState('');
+  const [name, setName] = useState('Scendance 场景测试');
+  const [image, setImage] = useState('');
+  const [readingImage, setReadingImage] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const [taskid, setTaskid] = useState('');
+  const [detail, setDetail] = useState<TaskDetail | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState(0);
+  const [error, setError] = useState('');
+  const [placing, setPlacing] = useState(false);
+  const [placeNote, setPlaceNote] = useState('');
+  const [placeError, setPlaceError] = useState('');
+  const [previewing, setPreviewing] = useState(false);
+  const [previewNote, setPreviewNote] = useState('');
+  const [previewError, setPreviewError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const mounted = useRef(false);
+  const submitLock = useRef(false);
+  const placeLock = useRef(false);
+  const previewLock = useRef(false);
+  // 重新提交会让在途的摆放结果作废，否则会把它放进下一个任务。
+  const placeGeneration = useRef(0);
+  const imageReader = useRef<FileReader | null>(null);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const live = useRef({ prompt, startedAt });
+  useEffect(() => { live.current = { prompt, startedAt }; });
+  const record = useCallback((entry: { taskid: string; status: number; label: string }) => {
+    appendHistory({ kind, at: Date.now(), prompt: live.current.prompt.trim(), startedAt: live.current.startedAt, ...entry });
+    onHistory();
+  }, [kind, onHistory]);
+
+  useEffect(() => {
+    mounted.current = true;
+    const saved = readSaved(pendingKey, kind, true) ?? readSaved(taskKey, kind);
+    if (saved) {
+      setPrompt(saved.prompt); setStartedAt(saved.startedAt);
+      setTaskid(saved.taskid ?? ''); setUncertain(!saved.taskid);
+    }
+    return () => { mounted.current = false; imageReader.current?.abort(); };
+  }, [kind, pendingKey, taskKey]);
+
+  const resumed = useRef<typeof resume>(null);
+  useEffect(() => {
+    if (!resume || resume.kind !== kind || resumed.current === resume) return;
+    resumed.current = resume;
+    remember(taskKey, { taskid: resume.taskid, prompt: resume.prompt, startedAt: resume.startedAt });
+    remember(pendingKey, null);
+    placeGeneration.current += 1;
+    setPrompt(resume.prompt); setDetail(null); setError(''); setUncertain(false);
+    setPlacing(false); setPlaceNote(''); setPlaceError('');
+    setPreviewing(false); setPreviewNote(''); setPreviewError('');
+    setStartedAt(resume.startedAt); setTaskid(resume.taskid); setRetry(value => value + 1);
+  }, [resume, kind, taskKey, pendingKey]);
+
+  const terminal = detail !== null && TERMINAL.includes(detail.status);
+  const busy = submitting || uncertain || Boolean(taskid && !terminal);
+  const validInput = kind === 'image' ? Boolean(image) && !readingImage : Boolean(prompt.trim()) && (!world || Boolean(name.trim()));
+  useEffect(() => {
+    if (!startedAt || terminal) return;
+    const update = () => setElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt, terminal]);
+
+  useEffect(() => {
+    if (!taskid) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    const pollingStartedAt = Date.now();
+    setError('');
+    async function poll() {
+      setChecking(true);
+      try {
+        const query = world ? `/world?worldId=${encodeURIComponent(taskid)}` : `/task?taskid=${encodeURIComponent(taskid)}`;
+        const body = await request<TaskDetail>(query, { signal: controller.signal });
+        if (cancelled) return;
+        setDetail(body); setLastCheckedAt(Date.now());
+        record({ taskid, status: body.status, label: body.statusLabel });
+        if (!TERMINAL.includes(body.status)) {
+          if (Date.now() - pollingStartedAt >= 20 * 60 * 1000) setError('自动查询已满 20 分钟，已暂停；任务可能仍在运行。');
+          else timer = setTimeout(() => void poll(), POLL_MS);
+        }
+      } catch (failure) {
+        if (!cancelled) setError(failure instanceof Error ? failure.message : String(failure));
+      } finally { if (!cancelled) setChecking(false); }
+    }
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+  }, [taskid, retry, world, record]);
+
+  function selectImage(file: File | undefined) {
+    imageReader.current?.abort();
+    setImage(''); setImageError(''); setPrompt(''); setReadingImage(false);
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) {
+      setImageError('请选择不超过 5 MB 的 PNG 或 JPEG 图片。');
+      return;
+    }
+    const reader = new FileReader();
+    imageReader.current = reader;
+    setReadingImage(true);
+    reader.onload = () => {
+      if (!mounted.current || imageReader.current !== reader) return;
+      setImage(String(reader.result)); setPrompt(file.name); setReadingImage(false);
+    };
+    reader.onerror = () => {
+      if (!mounted.current || imageReader.current !== reader) return;
+      setImageError('图片读取失败，请重新选择。'); setReadingImage(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function submit() {
+    const text = prompt.trim();
+    if (!validInput || submitLock.current || busy || online !== true) return;
+    submitLock.current = true;
+    placeGeneration.current += 1;
+    const start = Date.now();
+    setError(''); setDetail(null); setTaskid(''); setLastCheckedAt(0);
+    setPlacing(false); setPlaceNote(''); setPlaceError('');
+    setPreviewing(false); setPreviewNote(''); setPreviewError('');
+    setStartedAt(start); setElapsedSec(0); setSubmitting(true);
+    remember(pendingKey, { prompt: text, startedAt: start });
+    remember(taskKey, null);
+    try {
+      const payload = kind === 'image' ? { img: image } : world ? { name: name.trim(), prompt: text } : { prompt: text };
+      const { taskid: id } = await request<{ taskid: string | number }>(config.path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if ((typeof id !== 'string' && typeof id !== 'number') || !config.id.test(String(id))) throw new Error('接口未返回有效任务号。');
+      // 先保存迟到的任务号，重开页面只查询、不重复付费。
+      remember(taskKey, { taskid: String(id), prompt: text, startedAt: start });
+      remember(pendingKey, null);
+      appendHistory({ kind, taskid: String(id), prompt: text, startedAt: start, status: 0, label: '已提交', at: start });
+      onHistory();
+      if (mounted.current) { setUncertain(false); setTaskid(String(id)); }
+    } catch (failure) {
+      if (mounted.current) {
+        setUncertain(true);
+        setError(failure instanceof Error ? failure.message : String(failure));
+      }
+    } finally {
+      submitLock.current = false;
+      if (mounted.current) setSubmitting(false);
+    }
+  }
+
+  /** 落盘 → 实测尺寸 → 交给布置场景摆放；同一任务号重复点只复用已存的本机文件。 */
+  async function place(url: string) {
+    if (!onPlace || !taskid || placeLock.current) return;
+    placeLock.current = true;
+    const generation = placeGeneration.current;
+    const description = prompt.trim();
+    setPlacing(true); setPlaceNote(''); setPlaceError('');
+    try {
+      const item = await loadAholoCatalogItem({ url, name: description, taskid });
+      if (!mounted.current || placeGeneration.current !== generation) return;
+      setPlaceNote(onPlace(item) ? '已放进场景，可直接拖动。' : '请点击场地中的其他位置放下它。');
+    } catch (failure) {
+      if (mounted.current && placeGeneration.current === generation) {
+        setPlaceError(failure instanceof Error ? failure.message : String(failure));
+      }
+    } finally {
+      placeLock.current = false;
+      if (mounted.current) setPlacing(false);
+    }
+  }
+
+  /** 场景包先落盘再预览：那条签名链接不进渲染管线，重启后还能从「环境预览」再打开。 */
+  async function previewScene(url: string) {
+    if (!onPreviewScene || !taskid || previewLock.current) return;
+    previewLock.current = true;
+    setPreviewing(true); setPreviewNote(''); setPreviewError('');
+    try {
+      await onPreviewScene({ url, name: (world ? name : prompt).trim() || prompt.trim(), taskid });
+      if (mounted.current) setPreviewNote('已按场地尺寸铺成 3D 背景，画布上可随时退出。');
+    } catch (failure) {
+      if (mounted.current) setPreviewError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      previewLock.current = false;
+      if (mounted.current) setPreviewing(false);
+    }
+  }
+
+  const glbOutput = onPlace && !world && detail?.status === 3 ? glbOutputOf(detail.outputs) : undefined;
+  const splatOutput = onPreviewScene && world && detail?.status === 3 ? splatOutputOf(detail.outputs) : undefined;
+  const stage = submitting
+    ? { title: '正在提交', text: '正在向 Aholo 申请任务号，请勿重复提交。' }
+    : uncertain
+      ? { title: '提交结果待确认', text: '这次没有取回任务号，无法确认这一条；请求可能已受理，请勿重复生成。Aholo 侧不列任务号，稍后可在用量页核对额度。' }
+      : error && taskid
+        ? { title: '查询已暂停', text: `查询中断不代表生成失败。${detail ? `上次确认：${STAGES[detail.status]?.title ?? detail.statusLabel}。` : ''}继续查询只查看原任务，不会再次扣生成额度。` }
+        : detail ? STAGES[detail.status] ?? { title: '状态待确认', text: `Aholo 返回状态 ${detail.statusLabel}，正在继续查询。` }
+          : { title: '已提交', text: '已取得任务号，正在查询 Aholo 当前状态。' };
+  const progress = world && typeof detail?.progress === 'number' && Number.isFinite(detail.progress) && detail.progress >= 0 && detail.progress <= 1 ? detail.progress : undefined;
+  const prefix = `aholo-${kind}`;
+
+  return <div className="sc-aholo-task">
+    <p className="sc-note">{world ? 'World · 文字生成 3DGS 场景' : kind === 'image' ? 'Lux3D · 图片生成带材质物件' : 'Lux3D · 文字生成带材质物件'}</p>
+    {world && <>
+      <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
+      <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || online !== true} onChange={event => setName(event.target.value)} />
+    </>}
+    {kind === 'image' ? <>
+      <label className="sc-field" htmlFor={`${prefix}-image`}>参考图片</label>
+      <input ref={imageInput} id={`${prefix}-image`} type="file" accept="image/png,image/jpeg" disabled={busy || online !== true}
+        onChange={event => selectImage(event.target.files?.[0])} />
+      <p className="sc-note">PNG / JPEG，最大 5 MB。提交后图片会发送给 Aholo。</p>
+      {readingImage && <p className="sc-note">正在读取图片…</p>}
+      {image && <>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="sc-aholo-image" src={image} alt="建模参考图片预览" />
+        <button type="button" className="sc-button" disabled={busy} onClick={() => { selectImage(undefined); if (imageInput.current) imageInput.current.value = ''; }}>移除图片</button>
+      </>}
+      {prompt && <p className="sc-note">图片：{prompt}</p>}
+      {imageError && <p className="sc-warning" role="alert">{imageError}</p>}
+    </> : <>
+      <label className="sc-field" htmlFor={`${prefix}-prompt`}>{world ? '场景描述' : '物件描述'}</label>
+      <textarea id={`${prefix}-prompt`} maxLength={world ? 2000 : 200} rows={3} value={prompt} disabled={busy || online !== true}
+        placeholder={world ? '例：温暖的木质咖啡馆，大窗户，午后阳光' : '例：一张白色圆桌，极简风格'} onChange={event => setPrompt(event.target.value)} />
+    </>}
+    <button type="button" className="sc-button sc-full" disabled={busy || online !== true || !validInput} onClick={() => void submit()}>
+      {submitting ? '提交中…' : uncertain ? '等待确认原任务' : taskid && !terminal ? '正在跟踪任务…' : '直连生成（消耗额度）'}
+    </button>
+    {unresolved && !taskid && !uncertain && <p className="sc-warning">本机还有一个未确认完成的{config.label}（{new Date(unresolved.at).toLocaleString('zh-CN', { hour12: false })}），再点生成会另起一个任务、再扣一次额度；先在历史记录里查看它的结果。</p>}
+    {(submitting || taskid || uncertain) && <>
+      <div role="status" aria-live="polite" aria-atomic="true"><strong>{stage.title}</strong><p className="sc-note">{stage.text}</p></div>
+      {!terminal && <p className="sc-note">已等 {elapsedSec}s</p>}
+      {progress !== undefined && <div className="sc-aholo-progress"><progress aria-label="Aholo 场景进度" max={1} value={progress} /><span>{Math.round(progress * 100)}%</span></div>}
+      {taskid && !terminal && !error && <p className="sc-note">
+        {checking ? '正在查询最新状态…' : '每 5 秒自动查询一次。'}
+        {lastCheckedAt > 0 && ` 最近更新 ${new Date(lastCheckedAt).toLocaleTimeString('zh-CN', { hour12: false })}。`}
+        {progress === undefined && 'Aholo 未提供百分比进度。'}
+      </p>}
+    </>}
+    {error && <p className="sc-warning" role="alert">{error}</p>}
+    {taskid && error && <button type="button" className="sc-button sc-full" disabled={checking}
+      onClick={() => setRetry(value => value + 1)}>继续查询（不重复生成）</button>}
+    {detail?.status === 3 && <ResultLinks detail={detail} world={world} />}
+    {glbOutput && <button type="button" className="sc-button sc-full" disabled={placing}
+      onClick={() => void place(glbOutput)}>{placing ? '正在取回模型…' : '放进 3D 场景'}</button>}
+    {placeNote && <p className="sc-note">{placeNote}</p>}
+    {placeError && <p className="sc-warning" role="alert">{placeError}</p>}
+    {splatOutput && <button type="button" className="sc-button sc-full" disabled={previewing}
+      onClick={() => void previewScene(splatOutput)}>{previewing ? '正在取回场景…' : '在 3D 场景预览'}</button>}
+    {previewNote && <p className="sc-note">{previewNote}</p>}
+    {previewError && <p className="sc-warning" role="alert">{previewError}</p>}
+  </div>;
+}
+
+export function Lux3dDirectTest({ onPlace, onPreviewScene }: {
+  onPlace?: ((item: CatalogItem) => boolean) | undefined;
+  onPreviewScene?: ((source: { url: string; name?: string; taskid?: string }) => Promise<void>) | undefined;
+}) {
+  const [kind, setKind] = useState<Kind>('text');
+  const [visited, setVisited] = useState<Kind[]>(['text']);
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [connectionError, setConnectionError] = useState('');
+  const [history, setHistory] = useState(readHistory);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [resume, setResume] = useState<{ kind: Kind; taskid: string; prompt: string; startedAt: number } | null>(null);
+  const onHistory = useCallback(() => setHistory(readHistory()), []);
+  useEffect(() => {
+    const controller = new AbortController();
+    void request<{ keyConfigured: boolean }>('/health', { signal: controller.signal }).then(body => {
+      if (controller.signal.aborted) return;
+      setOnline(body.keyConfigured);
+      setConnectionError(body.keyConfigured ? '' : '本机代理未配置 LUX3D_API_KEY，暂时不能生成。');
+    }).catch(failure => {
+      if (!controller.signal.aborted) { setOnline(false); setConnectionError(String(failure.message)); }
+    });
+    return () => controller.abort();
+  }, []);
+  function select(next: Kind) {
+    setKind(next); setVisited(previous => previous.includes(next) ? previous : [...previous, next]);
+  }
+  function openHistoryTask(item: HistoryEntry) {
+    select(item.kind);
+    setResume({ kind: item.kind, taskid: item.taskid, prompt: item.prompt, startedAt: item.startedAt });
+  }
+  function clearHistory() {
+    try { localStorage.removeItem(HISTORY_KEY); } catch { /* 存储被禁用时列表保持原样。 */ }
+    onHistory();
+  }
+  const kinds = Object.keys(CAPABILITIES) as Kind[];
+  return <div className="sc-lux-direct">
+    <div className="sc-section-heading"><div><h2>Aholo 接口测试</h2><p>本机直连，查看真实生成状态与产物。</p></div>
+      <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
+        onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
+    </div>
+    {connectionError && <p className="sc-warning" role="alert">{connectionError}</p>}
+    <div className="sc-aholo-history" id="aholo-history" hidden={!historyOpen}>
+      {history.length === 0 ? <p className="sc-note">本机还没有生成记录。发起一次生成后会出现在这里。</p> : <>
+        <div className="sc-aholo-history-head"><strong>本机记录 {history.length} 条</strong>
+          <button type="button" className="sc-button" onClick={clearHistory}>清空</button>
+        </div>
+        <ul>{history.map(item => <li key={`${item.kind}-${item.taskid}`}>
+          <div><strong>{CAPABILITIES[item.kind].label}</strong><span>{item.prompt || '（无描述）'}</span>
+            <span className="sc-note">{STAGES[item.status]?.title ?? item.label} · {new Date(item.at).toLocaleString('zh-CN', { hour12: false })}</span></div>
+          <button type="button" className="sc-button" onClick={() => openHistoryTask(item)}>查看</button>
+        </li>)}</ul>
+      </>}
+    </div>
+    {historyOpen && history.length > 0 && <p className="sc-note">记录只存描述与状态；产物链接会过期，点「查看」回 Aholo 取最新结果。</p>}
+    <div className="sc-aholo-tabs" role="tablist" aria-label="Aholo 生成方式">{kinds.map((key, index) => <button
+      key={key} id={`aholo-tab-${key}`} type="button" role="tab" aria-selected={kind === key} aria-controls={`aholo-panel-${key}`}
+      tabIndex={kind === key ? 0 : -1} onClick={() => select(key)} onKeyDown={event => {
+        const next = event.key === 'ArrowRight' ? kinds[(index + 1) % kinds.length] : event.key === 'ArrowLeft' ? kinds[(index + kinds.length - 1) % kinds.length] : event.key === 'Home' ? kinds[0] : event.key === 'End' ? kinds[kinds.length - 1] : undefined;
+        if (next) { event.preventDefault(); select(next); document.getElementById(`aholo-tab-${next}`)?.focus(); }
+      }}>{CAPABILITIES[key].label}</button>)}</div>
+    {kinds.map(key => <section key={key} id={`aholo-panel-${key}`} role="tabpanel" aria-labelledby={`aholo-tab-${key}`} hidden={kind !== key}>
+      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} onHistory={onHistory} onPlace={onPlace} onPreviewScene={onPreviewScene}
+        unresolved={history.find(item => item.kind === key && !TERMINAL.includes(item.status))} />}
+    </section>)}
+  </div>;
+}

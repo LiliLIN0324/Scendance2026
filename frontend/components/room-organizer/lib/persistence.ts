@@ -1,10 +1,11 @@
 import { STORAGE_KEY } from './constants';
 import { notify } from './editor-notices';
+import { isPackagedGlbUrl } from './glb-url';
 import { isUntouched } from './restore-point';
 import { parseLayoutEventOperations, parseStoredLayout, storedEntryCount } from './schema';
 import { classifyStorageError, type StorageErrorKind } from './storage-errors';
 import { setItemEvictingSnapshots } from './version-history';
-import type { RoomLayout } from './types';
+import type { FurnitureItem, RoomLayout } from './types';
 import type { VersionHistoryStore } from './version-history';
 
 /**
@@ -258,6 +259,31 @@ export { classifyStorageError };
 /** On success, `json` is exactly what was written — the cross-tab guard compares against it (#334). */
 export type SaveResult = { ok: true; json: string } | { ok: false; reason: SaveFailureReason };
 
+/**
+ * A cloud artifact's loading URL expires and a loopback cache is another
+ * machine's business, so the plan keeps only the assetId — the reopen path
+ * trades it back for a current address. Packaged `/showcase/...` paths are
+ * the asset, so they stay.
+ */
+export function withoutExpiringAssetUrls(layout: RoomLayout): RoomLayout {
+  const strip = (item: FurnitureItem): FurnitureItem => {
+    if (!item.assetId || !item.glbUrl || isPackagedGlbUrl(item.glbUrl)) return item;
+    const copy = { ...item };
+    delete copy.glbUrl;
+    return copy;
+  };
+  return {
+    ...layout,
+    floors: layout.floors.map(floor => ({ ...floor, items: floor.items.map(strip) })),
+    ...(layout.designBook ? {
+      designBook: {
+        ...layout.designBook,
+        variants: layout.designBook.variants.map(variant => ({ ...variant, layout: withoutExpiringAssetUrls(variant.layout) })),
+      },
+    } : {}),
+  };
+}
+
 
 /**
  * Persist the layout, or say why it couldn't be (#472). Restore points are
@@ -270,7 +296,7 @@ export function saveLayout(layout: RoomLayout, storage?: VersionHistoryStore): S
   try {
     const target = storage ?? localStorageOrNull();
     if (!target) return { ok: false, reason: 'blocked' };
-    const checked = parseLayoutEventOperations(layout);
+    const checked = parseLayoutEventOperations(withoutExpiringAssetUrls(layout));
     if (!checked) return { ok: false, reason: 'unknown' };
     const json = JSON.stringify(checked);
     setItemEvictingSnapshots(target, STORAGE_KEY, json);

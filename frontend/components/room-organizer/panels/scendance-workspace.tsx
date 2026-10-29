@@ -1,13 +1,16 @@
 'use client';
 
-import { Camera, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Sun, Users, X } from 'lucide-react';
+import { Camera, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Sparkles, Sun, Trees, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
+import { EnvironmentPreview } from './environment-preview';
+import { GeneratedItemLibrary } from './generated-item-library';
 import { OnlineModelLibrary } from './online-model-library';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { StructuralPropertiesPanel } from './structural-properties-panel';
+import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
 import type { CameraPreset, CatalogItem, RoomLayout, Weather } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
@@ -15,11 +18,13 @@ import './workbench-shelf.css';
 
 interface LibraryProps {
   controller?: BackendSession;
-  openTabRequest?: { serial: number; tab: 'materials' | 'presets' };
+  openTabRequest?: { serial: number; tab: 'materials' | 'presets' | 'environment' };
   onClose?(): void;
   capturePlacement?(): CatalogPlacementGuard;
   onLoadPreset(layout: RoomLayout): void;
   placeCatalogItem(item: CatalogItem, position?: { x: number; z: number }): string;
+  /** 「环境预览」这一档的内容：3DGS 场景由画布那条独立渲染栈负责画。 */
+  environment?: { preview: SplatPreviewState; onStart(assetId: string): void; onStop(): void };
 }
 
 export function MaterialGlyph({ materialId, color = 'currentColor' }: { materialId?: string | undefined; color?: string }): JSX.Element {
@@ -111,10 +116,10 @@ export function ShelfGrip({ shelfRef }: { shelfRef: RefObject<HTMLElement | null
   ><span aria-hidden="true"/></div>;
 }
 
-export function ScendanceLibrary({ placeCatalogItem, controller, onLoadPreset, openTabRequest, onClose, capturePlacement }: LibraryProps): JSX.Element {
+export function ScendanceLibrary({ placeCatalogItem, controller, onLoadPreset, openTabRequest, onClose, capturePlacement, environment }: LibraryProps): JSX.Element {
   const { layout, activeFloor } = useRoomEditor();
   const { selectOnly } = useSelection();
-  const [tab, setTab] = useState<'materials' | 'presets'>('materials');
+  const [tab, setTab] = useState<'materials' | 'generated' | 'environment' | 'presets'>('materials');
   const hostRef = useRef<HTMLElement>(null);
   const handledOpenRequest = useRef<number | null>(null);
   const atLimit = materialCount(activeFloor.items) >= editorItemLimit(layout);
@@ -137,6 +142,8 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onLoadPreset, o
     <div className="sc-library-body">
       <nav className="sc-library-rail" role="tablist" aria-label="物料面板">
         <button type="button" role="tab" aria-selected={tab === 'materials'} className={tab === 'materials' ? 'is-active' : ''} aria-label="物料库" title="物料库" onClick={() => setTab('materials')}><Package size={24} aria-hidden="true"/></button>
+        <button type="button" role="tab" aria-selected={tab === 'generated'} className={tab === 'generated' ? 'is-active' : ''} aria-label="生成物件" title="生成物件" onClick={() => setTab('generated')}><Sparkles size={24} aria-hidden="true"/></button>
+        {environment && <button type="button" role="tab" aria-selected={tab === 'environment'} className={tab === 'environment' ? 'is-active' : ''} aria-label="环境预览" title="环境预览" onClick={() => setTab('environment')}><Trees size={24} aria-hidden="true"/></button>}
         <button type="button" role="tab" aria-selected={tab === 'presets'} className={tab === 'presets' ? 'is-active' : ''} aria-label="场景模板" title="场景模板" onClick={() => setTab('presets')}><LayoutTemplate size={24} aria-hidden="true"/></button>
         <span className="sc-library-rail-spacer" aria-hidden="true"/>
         {onClose && <button type="button" className="sc-library-rail-close" aria-label="关闭物料库" title="关闭" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
@@ -145,6 +152,12 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onLoadPreset, o
         <div className="sc-library-materials" hidden={tab !== 'materials'}>
           <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial}/>
         </div>
+        {tab === 'generated' && <div className="sc-library-generated">
+          <GeneratedItemLibrary disabled={atLimit} onAdd={addMaterial}/>
+        </div>}
+        {tab === 'environment' && environment && <div className="sc-library-generated">
+          <EnvironmentPreview preview={environment.preview} onStart={environment.onStart} onStop={environment.onStop}/>
+        </div>}
         {tab === 'presets' && <div className="sc-library-presets">
           <ScenePresetsPanel layout={layout} onApply={onLoadPreset}/>
           {layout.backendSceneV2 && <div className="sc-preset-utilities">

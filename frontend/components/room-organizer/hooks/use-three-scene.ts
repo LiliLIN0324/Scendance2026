@@ -14,6 +14,12 @@ export type { HoverInfo, SelectionMode } from '../three/drag-handlers';
 export interface UseThreeSceneOptions extends SceneEventHandlers {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   onViewportResize?: () => void;
+  /**
+   * Replaces `renderer.render(scene, camera)` for every painted frame. The 3DGS
+   * 环境预览 uses it to paint the splat scan as a back layer without ever
+   * touching the editor's own scene graph.
+   */
+  renderFrame?: (renderer: ThreeNS.WebGLRenderer, scene: ThreeNS.Scene, camera: ThreeNS.PerspectiveCamera) => void;
 }
 
 export interface UseThreeSceneResult {
@@ -72,6 +78,8 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
   handlersRef.current = options;
   const viewportResizeRef = useRef(options.onViewportResize);
   viewportResizeRef.current = options.onViewportResize;
+  const renderFrameRef = useRef(options.renderFrame);
+  renderFrameRef.current = options.renderFrame;
 
   // Load Three.js + OrbitControls once.
   const [isModuleLoaded, setModuleLoaded] = useState(false);
@@ -226,7 +234,9 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         if (contextLost) return;
         if (!controlsMoved && !dirtyRef.current) return;
         dirtyRef.current = false;
-        renderer.render(scene, camera);
+        const paint = renderFrameRef.current;
+        if (paint) paint(renderer, scene, camera);
+        else renderer.render(scene, camera);
       };
       rafId = requestAnimationFrame(tick);
       cleanup.push(() => cancelAnimationFrame(rafId));
