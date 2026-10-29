@@ -1007,9 +1007,19 @@ body {
 .sc-aholo-tabs button[aria-selected='true'] { border-bottom-color: var(--wk-green); color: var(--sc-ink); font-weight: 600; }
 .sc-aholo-task { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
 .sc-aholo-task .sc-note { overflow-wrap: anywhere; }
-.sc-aholo-task details { font-size: var(--sc-type-meta); }
-.sc-aholo-task summary { cursor: pointer; margin-bottom: 8px; }
-.sc-aholo-task details .sc-button { margin-top: 8px; }
+.sc-aholo-guide { position: relative; }
+.sc-aholo-guide-trigger { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; border: 1px solid var(--sc-line); background: var(--paper); border-radius: 999px; padding: 3px 10px; color: var(--sc-muted); font: 500 var(--sc-type-meta) var(--sc-font); cursor: pointer; }
+.sc-aholo-guide-trigger[aria-expanded='true'] { color: var(--sc-ink); border-color: var(--wk-ink-soft, var(--sc-line)); }
+.sc-aholo-guide-card { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 26; background: var(--paper); border: 1px solid var(--sc-line); border-radius: var(--r-md); box-shadow: 0 14px 36px rgba(20, 20, 22, 0.16); padding: 12px; }
+.sc-aholo-guide-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: var(--fs-p1); }
+.sc-aholo-guide-close { border: 0; background: transparent; color: var(--sc-muted); display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--r-sm); cursor: pointer; }
+.sc-aholo-guide-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; font-size: var(--sc-type-meta); color: var(--sc-ink); }
+.sc-aholo-guide-step + .sc-aholo-guide-step { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--wk-hair, var(--sc-line)); }
+.sc-aholo-guide-step strong { display: block; margin-bottom: 2px; }
+.sc-aholo-guide-text { display: block; color: var(--sc-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.sc-aholo-guide-icon { width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--wk-plane); display: grid; place-items: center; color: var(--sc-ink); }
+.sc-aholo-guide-foot { margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--wk-hair, var(--sc-line)); color: var(--sc-muted); font-size: var(--sc-type-meta); line-height: 1.6; }
+.sc-aholo-image { width: 100%; max-height: 180px; object-fit: contain; background: var(--paper); border-radius: var(--r-sm); }
 .sc-aholo-image { width: 100%; max-height: 180px; object-fit: contain; background: var(--paper); border-radius: var(--r-sm); }
 .sc-aholo-panorama { display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); }
 .sc-aholo-panorama img { width: 100%; height: auto; border-radius: var(--r-sm); }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DIRECT_BASE } from '../lib/aholo-assets';
+import { AholoGuideCard } from './aholo-guide-card';
 import { loadAholoCatalogItem } from '../lib/aholo-model-placement';
 import type { CatalogItem } from '../lib/types';
 
@@ -351,17 +352,7 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
 
   return <div className="sc-aholo-task">
     <p className="sc-note">{world ? 'World · 文字生成 3DGS 场景' : kind === 'image' ? 'Lux3D · 图片生成带材质物件' : 'Lux3D · 文字生成带材质物件'}</p>
-    <details className="sc-note" aria-label="生成教程">
-      <summary>怎么用？</summary>
-      {world ? <>
-        <p>① 填场景名称与描述（室内场景效果最佳），提交后由 Aholo World 生成 3DGS 场景，通常约 10-20 分钟，可先去布置。</p>
-        <p>② 完成后取回产物，作为 3D 背景铺在场地里；仅用于环境氛围展示，不参与布置与碰撞计算。</p>
-      </> : <>
-        <p>① 文字建模：一句话描述物件；图片建模：传一张照片按图建模，描述作为补充。</p>
-        <p>② 点「直连生成」提交给 Aholo Lux3D，通常约 3-5 分钟，期间可点「查看最新」跟踪进度。</p>
-        <p>③ 完成后取回产物放入场地。描述越具体（材质、颜色、风格）效果越好；每次生成消耗云额度。</p>
-      </>}
-    </details>
+    <AholoGuideCard world={world} />
     {world && <>
       <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
       <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || online !== true} onChange={event => setName(event.target.value)} />

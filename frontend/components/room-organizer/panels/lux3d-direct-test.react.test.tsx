@@ -272,20 +272,22 @@ describe('Lux3D 本机直连面板', () => {
     expect(proxy.task).not.toHaveBeenCalled();
   });
 
-  it('文字与场景 tab 各自带三步教程提示，等待预期与诚实说明可见', async () => {
+  it('文字与场景 tab 各自带图文浮窗教程，等待预期与诚实说明可见', async () => {
     await renderPanel();
-    const textGuide = within(activePanel()).getByText('怎么用？').closest('details');
-    expect(textGuide?.textContent).toContain('直连生成');
-    expect(textGuide?.textContent).toContain('3-5 分钟');
-    expect(textGuide?.textContent).toContain('消耗云额度');
+    fireEvent.click(within(activePanel()).getByLabelText('生成教程'));
+    const textGuide = within(activePanel()).getByRole('dialog', { name: '生成教程' });
+    expect(textGuide.textContent).toContain('云端生成');
+    expect(textGuide.textContent).toContain('3-5 分钟');
+    expect(textGuide.textContent).toContain('消耗云额度');
     // 场景生成 tab 有自己的教程：室内最佳 + 3DGS 只作背景不参与碰撞
     fireEvent.click(screen.getByRole('tab', { name: '场景生成' }));
-    const worldGuide = within(activePanel()).getByText('怎么用？').closest('details');
-    expect(worldGuide?.textContent).toContain('室内场景效果最佳');
-    expect(worldGuide?.textContent).toContain('不参与布置与碰撞');
-    // 切回文字 tab 并清掉本测试可能写入的会话状态，不污染后续用例
-    fireEvent.click(screen.getByRole('tab', { name: '文字建模' }));
-    sessionStorage.clear();
+    fireEvent.click(within(activePanel()).getByLabelText('生成教程'));
+    const worldGuide = within(activePanel()).getByRole('dialog', { name: '生成教程' });
+    expect(worldGuide.textContent).toContain('室内场景效果最佳');
+    expect(worldGuide.textContent).toContain('不参与布置与碰撞');
+    // Esc 关闭浮窗
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(within(activePanel()).queryByRole('dialog', { name: '生成教程' })).toBeNull();
   });
 
   it.each(['', '   '])('描述为 %j 时不提交', async prompt => {

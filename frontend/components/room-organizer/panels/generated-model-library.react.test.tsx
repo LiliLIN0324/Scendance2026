@@ -159,10 +159,11 @@ describe('Lux3D (Aholo) generation entry', () => {
     expect(screen.queryByLabelText('物料描述')).toBeNull();
     expect(screen.queryByLabelText('生成方式')).toBeNull();
   });
-  it('teaches the three-step flow and waiting expectation next to the entry', async () => {
+  it('teaches the three-step flow via the floating guide card next to the entry', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
-    const guide = await screen.findByLabelText('生成教程');
+    fireEvent.click(await screen.findByLabelText('生成教程'));
+    const guide = await screen.findByRole('dialog', { name: '生成教程' });
     expect(guide.textContent).toContain('加入场地预览');
     expect(guide.textContent).toContain('3-5 分钟');
     expect(guide.textContent).toContain('Aholo Lux3D');
