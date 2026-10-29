@@ -1,0 +1,12 @@
+const path = require('path');
+const m = require(path.join(__dirname, '..', '..', 'docs', 'evidence', 'aholo', 'world-3FO4K4QI6N4V', 'lod-meta.json'));
+const size = b => ({ x: b.max[0] - b.min[0], y: b.max[1] - b.min[1], z: b.max[2] - b.min[2] });
+const f = size(m.forwardBox);
+console.log('forwardBox:', f.x.toFixed(2), f.y.toFixed(2), f.z.toFixed(2));
+const root = m.tree[0].bound;
+const r = size(root);
+console.log('tree root:', r.x.toFixed(2), r.y.toFixed(2), r.z.toFixed(2));
+console.log('ratio x', (f.x / r.x).toFixed(4), 'y', (f.y / r.y).toFixed(4), 'z', (f.z / r.z).toFixed(4));
+console.log('levels:', m.levels, 'counts:', m.counts, 'files:', m.files.length);
+console.log('tree entries:', m.tree.length);
+console.log(m.tree.map((t, i) => i + ':' + size(t.bound).x.toFixed(0) + 'x' + size(t.bound).y.toFixed(0) + 'x' + size(t.bound).z.toFixed(0)).join(' | '));

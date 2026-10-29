@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aholo 集成报告 · 幕景 Scendance2026</title>
+<style>
+  :root { --ink:#141416; --muted:#71767e; --line:#e4e6ea; --paper:#fff; --plane:#f6f7f8; --green:#2e7d32; --warn:#b26a00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 20px 80px; background: var(--plane); color: var(--ink);
+         font: 15px/1.75 "Inter", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; padding-top: 24px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 20px 0 8px; }
+  p.meta { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+  th { background: var(--plane); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .ok { color: var(--green); font-weight: 600; white-space: nowrap; }
+  .pending { color: var(--warn); font-weight: 600; white-space: nowrap; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin: 16px 0; }
+  .card h3 { margin-top: 0; }
+  code { background: var(--plane); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 13px; }
+  pre { background: var(--ink); color: #e8eaed; border-radius: 10px; padding: 14px 16px; overflow: auto; font-size: 13px; line-height: 1.6; }
+  .figure { margin: 16px 0; }
+  .figure img { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; }
+  .figure figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Aholo 集成报告</h1>
+  <p class="meta">幕景 Scendance2026 · 2026-10-30 · 分支已合入 main · 配套规划：<code>docs/AHOLO-INTEGRATION-PLAN.md</code></p>
+
+  <h2>一、结论速览</h2>
+  <div class="card">
+    <p><strong>Aholo 开放平台 5 大服务 16 项能力，已真调验证 3 项、深度集成 2 条链路，全部走通：</strong>
+    文字生成物件（约 3 分钟）→ 照片转模型（约 5 分钟）→ 文字生成 3DGS 场景（约 15 分钟）→
+    环境预览铺进场地、物料照常摆放。<strong>比例校准已解决（见第四节）。</strong></p>
+  </div>
+
+  <h2>二、能力矩阵（幕景视角）</h2>
+  <table>
+    <thead><tr><th>服务 / 能力</th><th>输入 → 输出</th><th>状态</th><th>幕景用途</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Lux3D text-to-3D</strong></td><td>文字（+style/参考图）→ GLB+PBR</td><td class="ok">已验证 · 已集成</td><td>一句话生成桌椅道具；面板 + Agent 双入口</td></tr>
+      <tr><td><strong>Lux3D img-to-3D</strong></td><td>1-32 张图 → GLB+PBR</td><td class="ok">已验证 · 已集成</td><td>照片转模型，面板支持参考图上传</td></tr>
+      <tr><td><strong>World 世界生成</strong></td><td>文字/单图 → PLY+SPZ+全景图</td><td class="ok">已验证 · 预览已接</td><td>文字生成场地氛围，3DGS 铺满场地做背景</td></tr>
+      <tr><td>World 世界重建</td><td>≥20 张多图 / 视频 / .insv 全景 → 3DGS</td><td class="pending">未验证</td><td><strong>高潜力</strong>：真实场地扫描 → 3D 复刻</td></tr>
+      <tr><td>Lux3D material-transfer</td><td>模型 → 材质重绘</td><td class="pending">未验证</td><td>纹理通道的替代/升级候选</td></tr>
+      <tr><td>Lux3D part-split / multi-format-export</td><td>模型 → 拆件 / 多格式</td><td class="pending">未验证</td><td>物料清单与交付环节</td></tr>
+      <tr><td>Lux3D multimodal-to-image / four-view</td><td>→ 单图 / 四视图</td><td class="pending">未验证</td><td>为图生 3D 制造参考图</td></tr>
+      <tr><td>RenderCloud 离线渲染 / 实时渲染</td><td>OpenUSD → 效果图 / WebSocket 实时</td><td class="pending">未验证</td><td>交付端高保真出图</td></tr>
+      <tr><td>Asset 上传（OUS 分片）</td><td>GET /asset/v1/token → COS 直传</td><td class="ok">token 已实测</td><td>world 图生输入的上传通道</td></tr>
+      <tr><td>空间理解 Spatial Understanding</td><td>任务族</td><td class="pending">未验证</td><td>场地照片 → 结构化空间语义</td></tr>
+      <tr><td>Lux3D 绑骨 / 动画重定向</td><td>模型 → 关节化/动画</td><td>不适用</td><td>数字人向，当前无需求</td></tr>
+    </tbody>
+  </table>
+
+  <h2>三、关键接口事实（踩坑换来的）</h2>
+  <div class="card">
+    <h3>1. 网关与账号体系</h3>
+    <p>key 在国内平台申请，<strong>World 服务只在国内网关 <code>https://api.aholo3d.cn</code> 有账号画像</strong>；
+    国际网关 <code>api.aholo.ai/global</code> 对同一把 key 调 world 会报 <code>BIZ_14001 user not exists</code>。
+    认证一律 <code>Authorization: &lt;key&gt;</code>（无 Bearer）。</p>
+    <h3>2. Lux3D 响应壳与占位</h3>
+    <p>统一响应壳 <code>{c,d,m,f}</code>，<code>c:"0"</code> 为成功；查询接口在任务运行中 <code>outputs</code> 是
+    <code>[null,null]</code> 占位——解析必须容忍 null 项，否则 Zod 校验直接炸（已修）。</p>
+    <h3>3. 时效与计费</h3>
+    <p>结果签名 URL <strong>2 小时过期</strong>，必须即时落盘自有存储；lux3d 每次生成 20 credits；
+    world 计费未出账，建议邮件 lux3d@qunhemail.com 确认。</p>
+  </div>
+
+  <h2>四、3DGS 场景比例校准（本次结论）</h2>
+  <div class="card">
+    <h3>问题：物料桌椅巨大、高斯场景像玩具</h3>
+    <p>lod-meta 的 <code>forwardBox</code> 只有 6.3×5.9×3.5，最初按它缩放，把整座点云压成了玩具盒；
+    改按场地缩放仍是错误方向——缩放本身就不该发生。</p>
+    <h3>证据链</h3>
+    <pre>lod-meta 分析（tools/aholo/lod-analysis.cjs）：
+forwardBox : 6.32 × 5.91 × 3.45
+tree root  : 39.61 × 25.59 × 9.92
+三轴比值   : 0.16 / 0.23 / 0.35 —— 不一致
+
+→ forwardBox 不是单位换算系数，只是局部子盒；
+→ 根包围盒 39.6 × 25.6 m 正是一座宴会厅的合理尺寸；
+→ <strong>World 生成产物本身就是米制，任何缩放都是错的。</strong></pre>
+    <h3>最终方案</h3>
+    <p><strong>1:1 摆放，零缩放</strong>：底面贴 y=0、水平中心对到场地中心。点云里自带的桌子约 1.8 米，
+    与物料桌椅天然同尺度；用户的 10×8 场地是这座大厅里的一块布置区，物料照常摆、照常碰撞。</p>
+    <h3>验证效果</h3>
+    <div class="figure">
+      <img src="../evidence/aholo/world-3FO4K4QI6N4V/panorama.jpg" alt="World 生成的宴会厅全景（提示词直出）">
+      <figcaption>生成产物全景图：室内宴会厅，约 15 分钟直出（worldId 3FO4K4QI6N4V）。</figcaption>
+    </div>
+    <p class="meta">已知余项：点云地面估计存在厘米级固有误差，物件贴地以布置时贴地为准；
+    「按高斯实测桌距做绝对校准」列为后续可选项。</p>
+  </div>
+
+  <h2>五、待办</h2>
+  <table>
+    <tbody>
+      <tr><td>GLB 门禁</td><td>真实 Lux3D 产物的 GLB 未过 <code>validateModel</code>（GLTF_VALIDATION_FAILED），拒因定位中（探针 <code>tools/aholo/validate-probe.mjs</code>）——归档链路最后一道坎</td></tr>
+      <tr><td>World 费用与额度</td><td>邮件 lux3d@qunhemail.com 确认（已消耗 3 次真调）</td></tr>
+      <tr><td>条款备案</td><td><code>LUX3D_TERMS_URL</code>（aholo.ai/agreement/termsofuse）+ <code>LUX3D_TERMS_REVIEWED_AT</code> 已配置于本地 .env.local；生产部署需在 Supabase secrets 同步</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
