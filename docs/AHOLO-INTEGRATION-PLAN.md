@@ -62,6 +62,7 @@
 ### M3 — Aholo World 场景生成(需求 2,加分项)
 
 - **真调已通过(2026-10-28,worldId 3FO4K4QI6N4V)**:world 服务**走国内网关 `api.aholo3d.cn`**(国际网关对该 key 返回 BIZ_14001——key 本是国内平台账号,重要环境事实)。室内宴会厅提示词 → 约 15 分钟 SUCCEEDED → 产物 PLY 17MB / **SPZ 4.3MB(web 友好)** / LOD 元数据 / **全景图 panoUrl** / upAxis=Z,全景图质量佳(证据 `docs/evidence/aholo/world-3FO4K4QI6N4V/`,含 panorama.jpg)。续查:`node tools/aholo/world-mvp.mjs query <worldId>`。**M3 剩余工作仅剩前端接入**(3DGS loader 背景层 + 开关),API 侧无任何阻碍。
+- **比例校准结论(2026-10-30,用户验收通过)**:World 产物**本身是米制,禁止任何缩放**——1:1 摆放(底面贴 y=0、水平中心对场地中心),物料与点云自带桌椅天然同尺度。证据:lod-meta 的 `forwardBox`(6.3×5.9×3.5)与树根盒(39.6×25.6×9.9)三轴比值不一致(0.16/0.23/0.35),证明 forwardBox 只是局部子盒而非换算系数;树根盒尺寸正是一座宴会厅。曾按 forwardBox 缩放导致"场景做小"的失真,已废弃该路径。完整报告见 `docs/AHOLO-INTEGRATION-REPORT.html`,分析脚本 `tools/aholo/lod-analysis.cjs`。
 - 前置评估(卡内第一步):**已确认两项(2026-10-28)**——①loader 兼容:前端 three 0.186.0,`@mkkellogg/gaussian-splats-3d` 0.4.7(peer three>=0.160)兼容,且 World 输出是 **PLY/SPZ**(非 sog),该 loader 原生都吃;②**真调被账号挡住**:key 认证通过、资产服务正常签发 ousToken,但 `POST /world/v/generations` 返回 `BIZ_14001 user not exists`——World/SpatialGen 后端没有该账号的用户记录,**需开通**(诊断脚本 `tools/aholo/world-probe.mjs`,生成脚本 `tools/aholo/world-mvp.mjs` 已就绪,开通后一条命令复验)。另:官方明确室内场景成熟、非室内为 Beta,与我方场景吻合。
 - **给用户/官方的行动项**:用同一账号登录 www.aholo.ai 消费端一次(可能补建用户画像)或邮件 lux3d@qunhemail.com 申请开通 world 生成权限;开通后跑 `node tools/aholo/world-mvp.mjs "<室内场景描述>"` 完成验证。
 - 验收:一段场景文案生成 3DGS 背景并在画布上可见;有开关可关闭。
