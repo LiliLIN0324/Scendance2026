@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { assetError } from '@/lib/assets-api';
 import { useBackendSession, type BackendSession, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
+import { AholoGuideCard } from './aholo-guide-card';
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
 import type { CatalogItem } from '../lib/types';
 
@@ -129,13 +130,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     {luxReady && <div className="sc-section-heading" aria-label="生成物件">
       <div><h2>生成物件</h2><p>一句话或一张照片生成全新物件，完成后出现在下方任务列表。</p></div>
       <div>
-        <details className="sc-note" aria-label="生成教程">
-          <summary>怎么用？三步搞定</summary>
-          <p>① 在下方输入一句话描述物件，或附一张参考图（现场照片、示意图均可，按图建模更还原）。</p>
-          <p>② 点「生成物件」提交，由 Aholo Lux3D 云端生成，通常约 3-5 分钟，可先继续布置其他内容。</p>
-          <p>③ 生成完成后在下方「历史模型」里点「加入场地预览」，设定摆放尺寸即可上场地。</p>
-          <p>提示：描述越具体（材质、颜色、风格）效果越好；每次生成消耗云额度，失败不会重复扣。</p>
-        </details>
+        <AholoGuideCard surface="library" />
         <label className="sc-field" htmlFor="lux3d-prompt">物件描述</label>
         <input id="lux3d-prompt" type="text" maxLength={200} value={luxPrompt} disabled={luxPending}
           placeholder="例：一张白色圆桌，极简风格"
