@@ -11,6 +11,80 @@ function glbJson(bytes: Uint8Array) {
   try { return JSON.parse(new TextDecoder().decode(bytes.slice(20,20+view.getUint32(12,true)))) as GLTF.IGLTF; }
   catch { throw new ApiError('INVALID_GLB',422); }
 }
+/** 修复 Aholo Lux3D 产物的两类瑕疵：bufferView 缺 target、法线含零向量（Khronos 校验按 Error 计）。
+ *  字节层操作：法线归一化等长写回 BIN chunk，target 写进 JSON chunk 后重打包容器；几何与 UV 不动。 */
+export function repairGlb(bytes: Uint8Array): Uint8Array {
+  const json = glbJson(bytes);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const jsonLength = view.getUint32(12, true);
+  const binOffset = 20 + jsonLength + 8;
+  const accessorView = (index: number) => json.accessors?.[index]?.bufferView;
+  const seen = new Set<number>();
+  for (const mesh of json.meshes ?? []) {
+    for (const primitive of mesh.primitives ?? []) {
+      for (const accessorIndex of Object.values(primitive.attributes ?? {})) {
+        const bufferView = accessorView(accessorIndex as number);
+        if (bufferView !== undefined) seen.add(bufferView);
+      }
+      if (primitive.indices !== undefined) {
+        const bufferView = accessorView(primitive.indices);
+        if (bufferView !== undefined) seen.add(bufferView);
+      }
+    }
+  }
+  json.bufferViews = (json.bufferViews ?? []).map((bufferView, index) => seen.has(index) ? { ...bufferView, target: 34962 } : bufferView);
+  for (const mesh of json.meshes ?? []) {
+    for (const primitive of mesh.primitives ?? []) {
+      if (primitive.indices === undefined) continue;
+      const bufferView = accessorView(primitive.indices);
+      if (bufferView !== undefined) json.bufferViews![bufferView].target = 34963;
+    }
+  }
+  // 法线归一化：等长写回，零向量置 (0,1,0)。只碰语义为 NORMAL 的 accessor（POSITION 也是 VEC3，绝不能动）。
+  const accessorList = json.accessors ?? [];
+  const normalAccessors = new Set<number>();
+  for (const mesh of json.meshes ?? []) {
+    for (const primitive of mesh.primitives ?? []) {
+      for (const [semantic, accessorIndex] of Object.entries(primitive.attributes ?? {})) {
+        if (semantic === 'NORMAL') normalAccessors.add(accessorIndex as number);
+      }
+    }
+  }
+  for (const accessorIndex of normalAccessors) {
+    const accessor = accessorList[accessorIndex];
+    if (accessor.type !== 'VEC3' || accessor.componentType !== 5126) continue;
+    const bufferView = json.bufferViews![accessor.bufferView!];
+    const start = binOffset + (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    const stride = bufferView.byteStride ?? 12;
+    for (let i = 0; i < accessor.count; i++) {
+      const base = start + i * stride;
+      const x = view.getFloat32(base, true), y = view.getFloat32(base + 4, true), z = view.getFloat32(base + 8, true);
+      const length = Math.hypot(x, y, z);
+      if (length >= 0.999 && length <= 1.001) continue;
+      const nx = length < 1e-6 ? 0 : x / length, ny = length < 1e-6 ? 1 : y / length, nz = length < 1e-6 ? 0 : z / length;
+      view.setFloat32(base, nx, true); view.setFloat32(base + 4, ny, true); view.setFloat32(base + 8, nz, true);
+    }
+  }
+  // 重打包：JSON chunk 变了，BIN 原样搬。
+  const jsonRaw = new TextEncoder().encode(JSON.stringify(json));
+  const jsonPad = (4 - (jsonRaw.length % 4)) % 4;
+  // GLB 规范：JSON chunk 用空格 (0x20) 补齐，NUL 会让部分解析器拒绝。
+  const jsonBytes = new Uint8Array(jsonRaw.length + jsonPad);
+  jsonBytes.set(jsonRaw);
+  if (jsonPad) jsonBytes.fill(0x20, jsonRaw.length);
+  const binLength = bytes.byteLength - binOffset;
+  const binPad = (4 - (binLength % 4)) % 4;
+  const total = 12 + 8 + jsonBytes.length + 8 + binLength + binPad;
+  const out = new Uint8Array(total);
+  const outView = new DataView(out.buffer);
+  outView.setUint32(0, 0x46546c67, true); outView.setUint32(4, 2, true); outView.setUint32(8, total, true);
+  outView.setUint32(12, jsonBytes.length, true); outView.setUint32(16, 0x4e4f534a, true);
+  out.set(jsonBytes, 20);
+  outView.setUint32(20 + jsonBytes.length, binLength, true); outView.setUint32(24 + jsonBytes.length, 0x004e4942, true);
+  out.set(bytes.subarray(binOffset, bytes.byteLength), 28 + jsonBytes.length);
+  return out;
+}
+
 export async function validateModel(bytes: Uint8Array) {
   const json = glbJson(bytes);
   if (json.buffers?.some(b => b.uri) || json.images?.some(i => i.uri)) throw new ApiError('EXTERNAL_MODEL_RESOURCES',422);
