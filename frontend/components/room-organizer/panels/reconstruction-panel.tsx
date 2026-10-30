@@ -466,6 +466,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   }
   async function apply():Promise<void>{
     if(!preview||pending.current||stale)return;
+    if(venueEdit){setNotice('请先确认或取消场地编辑，再应用候选。');return;}
     pending.current=true;setBusy(true);
     const selected=preview,base=layoutRef.current,submittedScope=scopeRef.current,epoch=scopeEpoch.current.epoch;
     const identity=geometryIdentity(controller,submittedScope),session=sessionKey,submittedInput=inputRef.current,submittedImages=[...sourceImages.current];
@@ -510,43 +511,22 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   return <section className="rc-panel" aria-label="图纸与照片重建">
     {!formReady&&<p className="cr-hint" role={loadError?'alert':'status'}>{loadError||'正在读取本机图纸资料…'}</p>}
     {loadError&&<button type="button" className="rc-secondary" onClick={()=>setLoadAttempt(value=>value+1)}>重试读取图纸资料</button>}
-    {layout.backendSceneV2&&<section className="rc-manual-venue" aria-label="人工编辑当前场地">
-      <h4>当前场地 · {layout.width} × {layout.height} 米</h4>
-      {!venueEdit?<><p className="cr-hint">可人工修改矩形场地的总宽、总深及现有门窗，先预览，核对后应用。</p><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
-        <p className="cr-hint">固定图中参考角 (0,0)，调整对边。物料、内墙和柱子的实际位置、尺寸保持；门窗距离从所属墙的起点计算。</p>
-        <fieldset disabled={!!venueStale||venueBlocked} className="rc-venue-fields"><legend>场地编辑草稿 · 尚未应用</legend>
-          <div className="rc-measures rc-venue-measures">{([['width','总宽'],['depth','总深']] as const).map(([key,label])=><label key={key}>{label}（米）<input type="number" step="0.001" min="0.02" max="200" aria-label={`编辑${label}（米）`} value={venueEdit[key]} onChange={event=>{const value=event.target.value;setVenueEdit(current=>current?{...current,[key]:value,confirmed:false}:null);notifyVenue('');}}/></label>)}</div>
-          {venueEdit.openings.map((opening,index)=><details key={opening.id}><summary>{opening.kind==='door'?'门洞':'窗户'} {index+1} · 墙 {venueEdit.scene.structure.walls.findIndex(wall=>wall.id===opening.wallId)+1}</summary><div className="rc-measures rc-venue-measures">
-            {(['offset','width','height','sillHeight'] as const).map(key=><NumberField key={key} label={`${opening.kind==='door'?'门洞':'窗户'} ${index+1} · ${{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'离地高度'}[key]}（米）`} value={opening[key]} onChange={value=>{setVenueEdit(current=>current?{...current,confirmed:false,openings:current.openings.map(item=>item.id===opening.id?{...item,[key]:value}:item)}:null);notifyVenue('');}}/>)}
-          </div></details>)}
-          {venueCandidate.layout?.backendSceneV2&&<><VenueEditDrawing before={venueEdit.scene} after={venueCandidate.layout.backendSceneV2}/><p className="cr-hint">灰色虚线为原场地，绿色为草稿，橙色为门窗。所属外墙移动时，门窗位置也会变化，请对照核实。</p><p>总宽 {venueEdit.scene.venue.width} → {venueCandidate.layout.width} 米；总深 {venueEdit.scene.venue.depth} → {venueCandidate.layout.height} 米。</p>{venueCandidate.layout.backendSceneV2.structure.openings.map((opening,index)=>{
-            const before=venueEdit.scene.structure.openings.find(item=>item.id===opening.id)!;
-            const oldLine=openingLine(venueEdit.scene,before),newLine=openingLine(venueCandidate.layout!.backendSceneV2!,opening);
-            const changed=canonical(before)!==canonical(opening)||canonical(oldLine)!==canonical(newLine);
-            return changed?<p key={opening.id}>{opening.kind==='door'?'门洞':'窗户'} {index+1} 的位置或尺寸有变化，请核对图中橙色标记。</p>:null;
-          })}</>}
-          {venueCandidate.error&&<p role="alert" className="cr-notice">{venueCandidate.error} 草稿尚未应用，原场地保持。</p>}
-          <label className="cr-check"><input type="checkbox" disabled={!venueCandidate.layout||!venueChanged} checked={venueEdit.confirmed} onChange={event=>{const confirmed=event.target.checked;setVenueEdit(current=>current?{...current,confirmed}:null);}}/><span>我已核对修改后的尺寸、门窗位置和现场条件</span></label>
-        </fieldset>
-        {venueStale&&<p role="alert" className="cr-notice">{venueStale}</p>}
-        <div className="rc-actions"><button type="button" className="rc-secondary" onClick={()=>{setVenueEdit(null);notifyVenue('已取消编辑，原场地保持。');}}>取消场地编辑</button><button type="button" className="rc-secondary" disabled={!venueCandidate.layout||!venueEdit.confirmed||!venueChanged||!!venueStale||venueBlocked} onClick={confirmVenueEdit}>确认应用场地修改</button></div>
-      </>}
-      {venueNotice&&(!venueNotice.sceneKey||venueNotice.sceneKey===baseKey)&&<p className="cr-notice" role="status">{venueNotice.text}</p>}
-    </section>}
-    <fieldset className="rc-existing-controls" disabled={!!venueEdit||!formReady}>
+    <fieldset className="rc-existing-controls" aria-label="生成输入" disabled={!!venueEdit||!formReady}>
     <div className="rc-inputs" ref={inputDetails}>
-    {localActivity&&!connected&&<button type="button" className="rc-secondary" disabled={busy||!formReady} onClick={()=>void prepareConnection()}>准备场景连接</button>}
+    {localActivity&&!connected&&<div className="rc-connect" role="group" aria-label="连接场景服务"><p><strong>生成前需要连接场景服务</strong><small>上传的图纸与本机资料会保留；连接只建立安全通道，不改动场景。</small></p><button type="button" className="rc-secondary" disabled={busy||!formReady} onClick={()=>void prepareConnection()}>{busy?'正在连接…':'连接场景服务'}</button></div>}
     {layout.backendSceneV2&&generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}
-    <label className="cr-label"><textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米；北墙 8 米，入口宽 1.2 米"/></label>
+    <label className="cr-label">已知尺寸（米）<textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米；北墙 8 米，入口宽 1.2 米"/></label>
     {(form.width||form.depth||form.height)&&<p className="cr-hint" role="status">已识别：{[form.width&&`总宽 ${form.width} 米`,form.depth&&`总深 ${form.depth} 米`,form.height&&`层高 ${form.height} 米`].filter(Boolean).join(' · ')}</p>}
     {form.constraints.length>0&&<div className="rc-constraints" aria-label="尺寸清单">{form.constraints.map(d=><div key={d.id}><input aria-label="尺寸说明" title={d.status==='confirmed'?'用户确认':'模型识别，待核对'} value={d.label} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,label:e.target.value}:v)})}/><input aria-label={`${d.label} 米数`} type="number" min="0.001" step="0.001" value={d.valueMeters} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,valueMeters:e.target.valueAsNumber,status:'confirmed'}:v)})}/><span>米</span><button type="button" aria-label={`删除尺寸 ${d.label}`} onClick={()=>patch({constraints:form.constraints.filter(v=>v.id!==d.id)})}><X size={16}/></button>{review&&(d.kind==='wall'||d.kind==='distance')&&<><select aria-label={`${d.label} 对应对象`} value={d.targetId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetId:e.target.value||undefined}:v)})}><option value="">关联墙、门窗或柱子</option>{review.structure.walls.map((w,index)=>({w,index})).filter(({w})=>!d.sourceAssetId||(w.evidence??[]).some(e=>e.sourceAssetId===(images.find(image=>image.id===d.sourceAssetId)?.assetId??d.sourceAssetId))).map(({w,index})=><option value={w.id} key={w.id}>墙 {index+1}</option>)}{review.structure.openings.map((o,index)=><option value={o.id} key={o.id}>{o.kind==='door'?'门':'窗'} {index+1}</option>)}{review.structure.columns.map((c,index)=><option value={c.id} key={c.id}>柱子 {index+1}</option>)}</select>{d.targetId&&<select aria-label={`${d.label} 测量方向`} value={d.measure??'length'} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,measure:e.target.value as 'width'|'depth'|'height'|'length'}:v)})}><option value="length">长度 / 两柱中心距</option><option value="width">宽度</option><option value="depth">深度</option><option value="height">高度</option></select>}{review.structure.columns.some(c=>c.id===d.targetId)&&<select aria-label={`${d.label} 另一根柱子`} value={d.targetEndId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetEndId:e.target.value||undefined}:v)})}><option value="">测量单柱尺寸</option>{review.structure.columns.filter(c=>c.id!==d.targetId).map((c,index)=><option value={c.id} key={c.id}>至柱子 {index+1}</option>)}</select>}</>}</div>)}</div>}
     {(images.length>0||!!layout.backendSceneV2)&&<>
       {layout.backendSceneV2&&images.length>0&&<label className="cr-check"><input type="checkbox" checked={reidentify} onChange={event=>setReidentify(event.target.checked)}/><span><strong>重新识别结构</strong><small>默认沿用已确认的墙、门窗与柱子，直接规划风格和布置。换图或需要重测时开启。</small></span></label>}
       {hasPhotos&&<fieldset className="rc-mode"><legend>本次照片生成模式 <small>每次请选择</small></legend>{([['restore','还原现场','保留已有家具与外观'],['redesign','重新布置','保留固定结构与锁定物件']] as const).map(([value,label,hint])=><label key={value}><input type="radio" name={`photo-mode-${scope}`} value={value} checked={mode===value} onChange={()=>setMode(value)}/><span><strong>{label}</strong><small>{hint}</small></span></label>)}</fieldset>}
       <label className="cr-label"><textarea aria-label="局部修改或保留要求" value={form.adjustment} maxLength={1000} rows={2} onChange={e=>patch({adjustment:e.target.value})} placeholder="保留座位和结构，只调整展示区。可在场景中锁定要保留的物件。"/></label>
-      <button type="button" className="cr-generate" disabled={requestRunning||!formReady} onClick={()=>void generate()}>{requestRunning?<Loader2 size={16} className="cr-spin"/>:<Sparkles size={16}/>} {requestRunning?(busy?'正在处理当前操作…':'重建任务进行中…'):'Generate 重建并设计方案'}</button>
+      <button type="button" className="cr-generate" disabled={requestRunning||!formReady} onClick={()=>void generate()}>{requestRunning?<Loader2 size={16} className="cr-spin"/>:<Sparkles size={16}/>} {requestRunning?(busy?'正在处理当前操作…':'重建任务进行中…'):'生成布置预览'}</button>
     </>}
     </div>
+    </fieldset>
+    <section className="rc-block" aria-label="进度与核对">
     {form.jobId&&!job&&<div className="rc-job" role="status"><strong>{form.jobIdentity&&form.jobIdentity!==identityKey?'原任务等待恢复场景连接':'正在恢复原重建任务'}</strong><small>任务 {form.jobId.slice(0,8)}</small>{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>setPollingPaused(false)}>继续查询原任务</button>}</div>}
     {job&&<div className="rc-job" role="status"><strong>{LABELS[job.state]}</strong><small>任务 {job.id.slice(0,8)}</small>{stale&&<p>场景、资料、要求或编辑会话已变化，旧结果仅供核对。请重新生成后应用。</p>}{job.issues.map((issue,index)=><p key={`${issue.code}-${index}`}>{issue.message}</p>)}{job.error_code&&<p>{errorCodeText(job.error_code)}</p>}{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>{setPollingPaused(false);setNotice('');}}>继续查询原任务</button>}</div>}
     {review&&job?.state==='needs_review'&&<div className="rc-review"><h4>核对识别结构</h4><p className="cr-hint">结构示意使用米制坐标。点击墙线编辑，核对门窗、柱子与看不到的区域；确认意味着你已根据现场或图纸核实。</p>
@@ -567,11 +547,36 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       <label className="cr-check"><input type="checkbox" checked={reviewConfirmed} onChange={e=>setReviewConfirmed(e.target.checked)}/><span>我已核对所有墙段、门窗、柱子和不可见区域，确认上述结构与尺寸。</span></label><button className="rc-secondary" type="button" disabled={busy||!reviewConfirmed||reviewStale||!confirmedPlanarDimension} onClick={()=>void generate(true)}>确认结构并继续设计</button>
     </div>}
     {formReady&&currentStructure&&!(review&&job?.state==='needs_review')&&<ReferenceImageReview scene={currentStructure} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={onAddReferenceImages} applied openRequest={openReferenceRequest}/>}
+    </section>
+    <section className="rc-block" aria-label="结果与确认">
     {preview&&<div className="rc-candidate"><h4>三维候选方案</h4><p>{preview.proposal.explanation}</p>{preview.proposal.candidate.schemaVersion===2&&preview.proposal.candidate.design&&<><strong>{preview.proposal.candidate.design.concept}</strong>{preview.proposal.candidate.design.highlights.map((h,index)=><button key={index} type="button" className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{preview.proposal.candidate.design.requirements.map((r,index)=><div className={`rc-requirement is-${r.status}`} key={index}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</>}
       <div className="rc-actions"><button type="button" className="cr-generate" disabled={busy||stale||!connected} onClick={()=>void apply()}><Check size={16}/>确认应用并保存</button><button className="rc-secondary" type="button" disabled={busy} onClick={()=>{setPreview(null);setJob(null);patch({jobId:undefined,requestId:undefined});}}>放弃候选</button></div>
     </div>}
     {!preview&&currentDesign&&<details className="rc-candidate"><summary>当前方案的创意与要求核对</summary><p>{currentDesign.concept}</p>{currentDesign.highlights.map((h,index)=><button type="button" key={index} className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{currentDesign.requirements.map((r,index)=><div key={index} className={`rc-requirement is-${r.status}`}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</details>}
-    </fieldset>
+    </section>
+    {layout.backendSceneV2&&<section className="rc-manual-venue" aria-label="人工编辑当前场地">
+      <h4>进阶 · 当前场地 · {layout.width} × {layout.height} 米</h4>
+      {!venueEdit?<><p className="cr-hint">主流程之外的人工微调：修改矩形场地的总宽、总深及现有门窗，先预览，核对后应用。</p><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
+        <p className="cr-hint">固定图中参考角 (0,0)，调整对边。物料、内墙和柱子的实际位置、尺寸保持；门窗距离从所属墙的起点计算。</p>
+        <fieldset disabled={!!venueStale||venueBlocked} className="rc-venue-fields"><legend>场地编辑草稿 · 尚未应用</legend>
+          <div className="rc-measures rc-venue-measures">{([['width','总宽'],['depth','总深']] as const).map(([key,label])=><label key={key}>{label}（米）<input type="number" step="0.001" min="0.02" max="200" aria-label={`编辑${label}（米）`} value={venueEdit[key]} onChange={event=>{const value=event.target.value;setVenueEdit(current=>current?{...current,[key]:value,confirmed:false}:null);notifyVenue('');}}/></label>)}</div>
+          {venueEdit.openings.map((opening,index)=><details key={opening.id}><summary>{opening.kind==='door'?'门洞':'窗户'} {index+1} · 墙 {venueEdit.scene.structure.walls.findIndex(wall=>wall.id===opening.wallId)+1}</summary><div className="rc-measures rc-venue-measures">
+            {(['offset','width','height','sillHeight'] as const).map(key=><NumberField key={key} label={`${opening.kind==='door'?'门洞':'窗户'} ${index+1} · ${{offset:'距墙起点',width:'宽度',height:'高度',sillHeight:'离地高度'}[key]}（米）`} value={opening[key]} onChange={value=>{setVenueEdit(current=>current?{...current,confirmed:false,openings:current.openings.map(item=>item.id===opening.id?{...item,[key]:value}:item)}:null);notifyVenue('');}}/>)}
+          </div></details>)}
+          {venueCandidate.layout?.backendSceneV2&&<><VenueEditDrawing before={venueEdit.scene} after={venueCandidate.layout.backendSceneV2}/><p className="cr-hint">灰色虚线为原场地，绿色为草稿，橙色为门窗。所属外墙移动时，门窗位置也会变化，请对照核实。</p><p>总宽 {venueEdit.scene.venue.width} → {venueCandidate.layout.width} 米；总深 {venueEdit.scene.venue.depth} → {venueCandidate.layout.height} 米。</p>{venueCandidate.layout.backendSceneV2.structure.openings.map((opening,index)=>{
+            const before=venueEdit.scene.structure.openings.find(item=>item.id===opening.id)!;
+            const oldLine=openingLine(venueEdit.scene,before),newLine=openingLine(venueCandidate.layout!.backendSceneV2!,opening);
+            const changed=canonical(before)!==canonical(opening)||canonical(oldLine)!==canonical(newLine);
+            return changed?<p key={opening.id}>{opening.kind==='door'?'门洞':'窗户'} {index+1} 的位置或尺寸有变化，请核对图中橙色标记。</p>:null;
+          })}</>}
+          {venueCandidate.error&&<p role="alert" className="cr-notice">{venueCandidate.error} 草稿尚未应用，原场地保持。</p>}
+          <label className="cr-check"><input type="checkbox" disabled={!venueCandidate.layout||!venueChanged} checked={venueEdit.confirmed} onChange={event=>{const confirmed=event.target.checked;setVenueEdit(current=>current?{...current,confirmed}:null);}}/><span>我已核对修改后的尺寸、门窗位置和现场条件</span></label>
+        </fieldset>
+        {venueStale&&<p role="alert" className="cr-notice">{venueStale}</p>}
+        <div className="rc-actions"><button type="button" className="rc-secondary" onClick={()=>{setVenueEdit(null);notifyVenue('已取消编辑，原场地保持。');}}>取消场地编辑</button><button type="button" className="rc-secondary" disabled={!venueCandidate.layout||!venueEdit.confirmed||!venueChanged||!!venueStale||venueBlocked} onClick={confirmVenueEdit}>确认应用场地修改</button></div>
+      </>}
+      {venueNotice&&(!venueNotice.sceneKey||venueNotice.sceneKey===baseKey)&&<p className="cr-notice" role="status">{venueNotice.text}</p>}
+    </section>}
     {notice&&<p className="cr-notice" role="alert">{notice}</p>}
   </section>;
 }

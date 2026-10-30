@@ -1368,7 +1368,7 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByRole('button',{name:'生成布置预览'})).toBeTruthy();
     expect(screen.getByText('生成布置预览')).toBeTruthy();
     selectBusiness('图纸与尺寸');
-    await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   });
 
   it('sends full resource requirements to the Agent without a built-in catalogue rejection', async () => {

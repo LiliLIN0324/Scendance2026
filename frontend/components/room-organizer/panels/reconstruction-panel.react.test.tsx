@@ -115,7 +115,7 @@ describe('manual editing of an applied venue',()=>{
   const applied=trial.apply.mock.calls[0]![0] as RoomLayout;
   trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
   expect(await screen.findByText(/场地修改已应用，可撤销/)).toBeDefined();
-  expect(screen.getByText('当前场地 · 14 × 8 米')).toBeDefined();
+  expect(screen.getByText('进阶 · 当前场地 · 14 × 8 米')).toBeDefined();
   expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
   trial.view.rerender(<ReconstructionPanel {...trial.props} layout={trial.base}/>);
   await waitFor(()=>expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull());
@@ -352,11 +352,11 @@ describe('reconstruction entry',()=>{
   else create.mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'SERVICE_NOT_CONFIGURED'});
   const onApply=vi.fn();
   render(<ReconstructionPanel controller={controller} layout={layout} onApply={onApply} images={[image]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();
-  fireEvent.click(screen.getByRole('radio',{name:/重新布置/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('radio',{name:/重新布置/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   const error=await screen.findByText('识别服务尚未配置，资料和当前场景已保留。');
   expect(error.closest('details')).toBeNull();
-  expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).closest('details')).toBeNull();
+  expect(screen.getByRole('button',{name:'生成布置预览'}).closest('details')).toBeNull();
   expect(screen.queryByText(/SERVICE_NOT_CONFIGURED/)).toBeNull();expect(onApply).not.toHaveBeenCalled();
   expect((screen.getByLabelText('场地尺寸') as HTMLTextAreaElement).value).toBe('总宽 12 米，总深 8 米，层高 3 米');
  });
@@ -365,33 +365,33 @@ describe('reconstruction entry',()=>{
    const measured=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});
    const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
    render(<ReconstructionPanel controller={controller} layout={measured} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'只改成森林主题'}}/>);
-   await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
-   fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));await waitFor(()=>expect(create).toHaveBeenCalledOnce());
+   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
+   fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledOnce());
    expect(create.mock.calls[0]![0]).toMatchObject({sources:[],mode:'redesign',reviewedScene:{schemaVersion:2}});expect(create.mock.calls[0]![0].reviewedScene).toEqual(create.mock.calls[0]![0].scene);
  });
 
  it('requires an explicit photo mode before submitting and resets it for the next run',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'MODEL_UNAVAILABLE'});
-  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();
-  fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   expect(await screen.findByText(/本次包含现场照片，请先选择/)).toBeTruthy();expect(create).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('radio',{name:/重新布置/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  fireEvent.click(screen.getByRole('radio',{name:/重新布置/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]![0]).toMatchObject({mode:'redesign',sources:[{assetId,kind:'photo'}],dimensions:[{kind:'width',valueMeters:12},{kind:'depth',valueMeters:8},{kind:'height',valueMeters:3}]});
   await waitFor(()=>expect((screen.getByRole('radio',{name:/重新布置/}) as HTMLInputElement).checked).toBe(false));
  });
  it('retries uncertain failure with the same paid request and dimension identities',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockRejectedValue(new Error('network interrupted'));
-  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();
-  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));await screen.findByText('network interrupted');
-  fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));expect(create.mock.calls[1]![0]).toEqual(create.mock.calls[0]![0]);
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
+  fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await screen.findByText('network interrupted');
+  fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledTimes(2));expect(create.mock.calls[1]![0]).toEqual(create.mock.calls[0]![0]);
  });
  it('allows correcting review dimensions then continuing without requiring a fresh recognition',async()=>{
   const measured=layoutToBackendScene(createMeasuredRoomLayout(layout,{width:12,depth:8,height:3}));
   if(measured.schemaVersion!==2)throw new Error('expected v2');
   const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[{code:'UNSEEN',message:'核对不可见结构'}]};
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
-  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   await screen.findByText('核对不可见结构');fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3.2 米'}});
   fireEvent.click(screen.getByRole('checkbox',{name:/我已核对所有墙段/}));fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));
   expect(screen.getByRole('button',{name:'确认结构并继续设计'}).hasAttribute('disabled')).toBe(false);
@@ -403,7 +403,7 @@ describe('reconstruction entry',()=>{
   measured.dimensions=measured.dimensions.map(d=>({...d,status:'detected' as const}));
   const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[]};
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
-  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   await screen.findByText('核对识别结构');
   // 清空文字尺寸，回到「识别完成但比例未确认」的状态
   fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:''}});
@@ -429,7 +429,7 @@ describe('reconstruction entry',()=>{
   measured.dimensions=measured.dimensions.map(d=>({...d,status:'detected' as const}));
   const job:ReconstructionJob={id:jobId,state:'needs_review',candidate:measured,issues:[]};
   vi.spyOn(controller,'createReconstruction').mockResolvedValue(job);
-  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));
+  ui();await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();fireEvent.click(screen.getByRole('radio',{name:/还原现场/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   await screen.findByText('核对识别结构');
   fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:''}});
   await screen.findByText('认出 4 面墙 · 0 扇门 · 0 根柱');
@@ -448,7 +448,7 @@ describe('reconstruction entry',()=>{
   const floorplan={...image,kind:'floorplan' as const,name:'平面图.png'};
   const props={controller,layout,onApply:vi.fn(),images:[floorplan],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
   const view=render(<ReconstructionPanel {...props}/>);
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   measures();
   view.rerender(<ReconstructionPanel {...props} autoGenerateRequest={1}/>);
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
@@ -458,7 +458,7 @@ describe('reconstruction entry',()=>{
   const photo={...image,kind:'photo' as const,name:'现场.png'};
   const props={controller,layout,onApply:vi.fn(),images:[photo],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
   const view=render(<ReconstructionPanel {...props}/>);
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   measures();
   view.rerender(<ReconstructionPanel {...props} autoGenerateRequest={1}/>);
   await waitFor(()=>expect((screen.getByRole('radio',{name:/重新布置/}) as HTMLInputElement).checked).toBe(true));
@@ -469,7 +469,7 @@ describe('reconstruction entry',()=>{
   const floorplan={...image,kind:'floorplan' as const,name:'平面图.png'};
   const props={controller,layout,onApply:vi.fn(),images:[floorplan],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
   const view=render(<ReconstructionPanel {...props}/>);
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Generate 重建并设计方案'}).hasAttribute('disabled')).toBe(false));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   view.rerender(<ReconstructionPanel {...props} autoGenerateRequest={1}/>);
   await waitFor(()=>expect(screen.getByText(/请至少填写一项平面尺寸/)).toBeTruthy());
   expect(create).not.toHaveBeenCalled();
@@ -491,7 +491,7 @@ describe('local activity with an independent scene connection',()=>{
  function session(){const state=controller.getSnapshot();return canonical({identity:identity(),session:state.sessionId,lease:{session:state.lease!.sessionId,generation:state.lease!.generation},revision:state.revision});}
  function proposal(remote=projectId):SceneProposal {return {id:'60000000-0000-4000-8000-000000000001',project_id:remote,session_id:controller.getSnapshot().lease!.sessionId,generation:1,base_revision:1,local_revision:0,base_hash:'test',base_scene:layoutToBackendScene(local),candidate:layoutToBackendScene(local),expires_at:new Date(Date.now()+100000).toISOString(),applied_at:null,explanation:'场景候选'} as SceneProposal;}
  function mount(extra:Partial<React.ComponentProps<typeof ReconstructionPanel>>={}){const apply=vi.fn(),preview=vi.fn();const props={controller,layout:local,onApply:apply,onPreview:preview,images:[],updateImage:vi.fn(),brief:INITIAL_BRIEF,...extra};const view=render(<ReconstructionPanel {...props}/>);return {view,apply,preview,props};}
- async function generate(){await waitFor(()=>expect((screen.getByRole('button',{name:'Generate 重建并设计方案'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'Generate 重建并设计方案'}));}
+ async function generate(){await waitFor(()=>expect((screen.getByRole('button',{name:'生成布置预览'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));}
  it('uses local source forms, preserves records on apply, and sends scene-only input to the remote connection',async()=>{
   bind();vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',text:'原尺寸资料'});
   vi.mocked(readMaterialCheckins).mockResolvedValue({schemaVersion:1,projectId:localId,dataKind:'rehearsal',sheets:[]});
@@ -511,8 +511,8 @@ describe('local activity with an independent scene connection',()=>{
   const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,project:null,lease:null,revision:null,writeBlocked:true});
   const ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady').mockResolvedValue(old.project!);
   const create=vi.spyOn(controller,'createReconstruction');const trial=mount();
-  await waitFor(()=>expect((screen.getByRole('button',{name:'准备场景连接'}) as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(screen.getByRole('button',{name:'准备场景连接'}));await waitFor(()=>expect(ensure).toHaveBeenCalledOnce());
+  await waitFor(()=>expect((screen.getByRole('button',{name:'连接场景服务'}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button',{name:'连接场景服务'}));await waitFor(()=>expect(ensure).toHaveBeenCalledOnce());
   expect(ensure.mock.calls[0]).toEqual([layoutToBackendScene(local),local.name,localId]);expect(create).not.toHaveBeenCalled();expect(trial.apply).not.toHaveBeenCalled();
  });
  it('refuses unreadable facts before generation or uploads',async()=>{
