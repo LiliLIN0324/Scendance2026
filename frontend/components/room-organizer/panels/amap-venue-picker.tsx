@@ -45,6 +45,7 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
   const [query, setQuery] = useState('盐官潮乐之城');
   const [results, setResults] = useState<{ id: string; name: string; address: string; location: { lng: number; lat: number } }[]>([]);
   const [pickName, setPickName] = useState('盐官潮乐之城');
+  const [pickLocation, setPickLocation] = useState('');
   const [bbox, setBbox] = useState<{ width: number; depth: number } | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<unknown>(null);
@@ -91,6 +92,7 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
 
   function focusResult(result: { name: string; address: string; location: { lng: number; lat: number } }) {
     setPickName(result.name);
+    setPickLocation(result.address);
     setStatus(`已定位：${result.name}。在卫星图上圈出活动场地，完成后点「生成户外场地」。`);
     const map = mapRef.current as { setZoomAndCenter?(zoom: number, center: [number, number]): void } | null;
     map?.setZoomAndCenter?.(16, [result.location.lng, result.location.lat]);
@@ -103,8 +105,7 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
 
   function generate() {
     if (drawRef.current.length < 3) { setStatus('先在卫星图上圈出场地。'); return; }
-    const location = results[0]?.address ?? '';
-    onPick({ name: pickName.trim() || '户外场地', location, polygon: drawRef.current });
+    onPick({ name: pickName.trim() || '户外场地', location: pickLocation, polygon: drawRef.current });
   }
 
   if (!key || !security) {

@@ -19,21 +19,3 @@ export function createBlankVenue(before: RoomLayout): RoomLayout {
     name: before.name, ...(before.id ? { projectId: before.id } : {}),
   }));
 }
-
-export type MapVenuePick = { name: string; location: string; width: number; depth: number };
-
-/**
- * 高德圈画的户外场地：外接矩形定宽深，outdoor 壳没有墙体，边界就是圈画的形状语义。
- * 地址与名称写进场地名，简报里能追溯「这块地是哪儿」。
- */
-export function createMapVenue(before: RoomLayout, pick: MapVenuePick): RoomLayout {
-  const width = Math.min(500, Math.max(2, Math.round(pick.width * 10) / 10));
-  const depth = Math.min(500, Math.max(2, Math.round(pick.depth * 10) / 10));
-  const scene = buildVenueShell({
-    widthM: width, depthM: depth,
-    indoorOutdoor: 'outdoor', scaleOrigin: 'typed',
-  });
-  return preserveCurrentActivity(before, backendSceneToLayout(scene, {
-    name: pick.name || before.name, ...(before.id ? { projectId: before.id } : {}),
-  }));
-}
