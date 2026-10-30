@@ -15,8 +15,10 @@ const KEY_STORAGE = 'scendance:amap-key';
 const SECURITY_STORAGE = 'scendance:amap-security';
 const SCRIPT_ID = 'scendance-amap-script';
 
-function envOrStorage(key: 'NEXT_PUBLIC_AMAP_KEY' | 'NEXT_PUBLIC_AMAP_SECURITY_CODE', storageKey: string): string {
-  return (process.env as Record<string, string | undefined>)[key] ?? (() => { try { return localStorage.getItem(storageKey) ?? ''; } catch { return ''; } })();
+// Next 只静态内联 process.env.NEXT_PUBLIC_* 的字面量访问，用变量取 key 在浏览器里恒为空。
+function envOrStorage(envValue: string | undefined, storageKey: string): string {
+  if (envValue) return envValue;
+  try { return localStorage.getItem(storageKey) ?? ''; } catch { return ''; }
 }
 
 let loaderPromise: Promise<void> | null = null;
@@ -39,8 +41,8 @@ export interface VenuePickResult { name: string; location: string; polygon: { ln
 
 /** 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 外接矩形生成场地。key 只留在本机。 */
 export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickResult): void; onClose(): void }) {
-  const [key, setKey] = useState(() => envOrStorage('NEXT_PUBLIC_AMAP_KEY', KEY_STORAGE));
-  const [security, setSecurity] = useState(() => envOrStorage('NEXT_PUBLIC_AMAP_SECURITY_CODE', SECURITY_STORAGE));
+  const [key, setKey] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_KEY, KEY_STORAGE));
+  const [security, setSecurity] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE, SECURITY_STORAGE));
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('盐官潮乐之城');
   const [results, setResults] = useState<{ id: string; name: string; address: string; location: { lng: number; lat: number } }[]>([]);
@@ -69,7 +71,8 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
       mouseTool.on('draw', (data: any) => {
         const path = data?.overlay?.getPath?.() ?? [];
         drawRef.current = path.map((p: any) => ({ lng: Number(p.lng), lat: Number(p.lat) }));
-        setBbox(polygonBboxMeters(drawRef.current));
+        // 少于 3 点等于没圈成面，别把 0 × 0 m 当成结果摆给用户。
+        setBbox(drawRef.current.length < 3 ? null : polygonBboxMeters(drawRef.current));
         try { mouseTool.close(false); } catch { /* 已闭合 */ }
       });
       toolRef.current = mouseTool;

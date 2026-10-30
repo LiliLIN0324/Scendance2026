@@ -1221,13 +1221,13 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
     {agent.baseName && <p className="sc-brief-note">底图 · {agent.baseName} · 仅作参照</p>}
     {note && <p className="sc-brief-note">{note}</p>}
     {status && <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>}
-    {!known && <p className="sc-brief-blank">
+    {!known && <div className="sc-brief-blank">
       <button type="button" className="sc-brief-blank-link" onClick={agent.startBlankVenue}>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</button>
       <button type="button" className="sc-brief-blank-link" onClick={agent.startMapVenuePicker}>{agent.mapPickerOpen ? '收起地图选址' : '从地图圈画户外场地'}</button>
       {agent.mapPickerOpen && <AmapVenuePicker onClose={() => agent.closeMapVenuePicker()} onPick={pick => {
         agent.applyMapVenuePick(pick);
       }} />}
-    </p>}
+    </div>}
     {tools.length > 0 && <details className="sc-brief-tools">
       <summary>更多资料</summary>
       <div className="sc-brief-tool-groups">
