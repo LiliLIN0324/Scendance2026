@@ -242,10 +242,11 @@ describe('T-UI visible interaction', () => {
     expect(within(brief).queryByText('来自对话')).toBeNull();
     expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
     expect(within(brief).queryByRole('textbox')).toBeNull();
-    // 唯一的按钮是空地文字链：简报仍然是只读事实，不在左栏摆表单。
+    // 只有两条空地文字链：简报仍然是只读事实，不在左栏摆表单。
     const actions = within(brief).getAllByRole('button');
-    expect(actions).toHaveLength(1);
+    expect(actions).toHaveLength(2);
     expect(actions[0]!.textContent).toContain('空白场地');
+    expect(actions[1]!.textContent).toContain('从地图圈画户外场地');
   });
 
   it('routes export intent to a preview card and only the confirm button triggers the handoff', async () => {
@@ -438,8 +439,7 @@ describe('brief stays in step with the sentence', () => {
     const brief = screen.getByLabelText('活动简报');
     await waitFor(() => expect(within(brief).getByText('80 人')).toBeTruthy());
     expect(within(brief).getByText('酒会')).toBeTruthy();
-    expect(within(brief).getByText(/户外/)).toBeTruthy();
-    expect(within(brief).getByText(/12 × 9 m/)).toBeTruthy();
+    expect(within(brief).getByText(/^户外 · 12 × 9 m$/)).toBeTruthy();
     expect(studioMock.generate).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
     expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
