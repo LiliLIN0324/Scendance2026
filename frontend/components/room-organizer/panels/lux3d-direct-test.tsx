@@ -11,6 +11,7 @@ const CAPABILITIES = {
   text: { label: '文字建模', path: '/text-to-3d', storage: 'scendance:lux3d-direct', id: /^\d+$/ },
   image: { label: '图片建模', path: '/image-to-3d', storage: 'scendance:aholo-image', id: /^\d+$/ },
   world: { label: '场景生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
+  recon: { label: '场地重建', path: '/world-recon', storage: 'scendance:aholo-recon', id: /^[a-zA-Z0-9_-]{1,128}$/ },
 };
 type Kind = keyof typeof CAPABILITIES;
 type TaskDetail = { status: number; statusLabel: string; outputs: string[]; progress?: number; panoUrl?: string };
@@ -144,7 +145,11 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
   const config = CAPABILITIES[kind];
   const taskKey = `${config.storage}-task`;
   const pendingKey = `${config.storage}-pending`;
-  const world = kind === 'world';
+  const world = kind === 'world' || kind === 'recon';
+  const [reconFiles, setReconFiles] = useState<File[]>([]);
+  const [reconQuality, setReconQuality] = useState('normal');
+  const isVideoClip = (file: File) => /\.(mp4|mov|insv)$/i.test(file.name);
+  const reconValid = reconFiles.length > 0 && (reconFiles.some(isVideoClip) || reconFiles.length >= 20);
   const [prompt, setPrompt] = useState('');
   const [name, setName] = useState('Scendance 场景测试');
   const [image, setImage] = useState('');
@@ -206,7 +211,9 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
 
   const terminal = detail !== null && TERMINAL.includes(detail.status);
   const busy = submitting || uncertain || Boolean(taskid && !terminal);
-  const validInput = kind === 'image' ? Boolean(image) && !readingImage : Boolean(prompt.trim()) && (!world || Boolean(name.trim()));
+  const validInput = kind === 'image' ? Boolean(image) && !readingImage
+    : kind === 'recon' ? Boolean(name.trim()) && reconValid
+    : Boolean(prompt.trim()) && (!world || Boolean(name.trim()));
   useEffect(() => {
     if (!startedAt || terminal) return;
     const update = () => setElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
@@ -277,10 +284,25 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
     remember(pendingKey, { prompt: text, startedAt: start });
     remember(taskKey, null);
     try {
-      const payload = kind === 'image' ? { img: image } : world ? { name: name.trim(), prompt: text } : { prompt: text };
-      const { taskid: id } = await request<{ taskid: string | number }>(config.path, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-      });
+      let taskidResponse: { taskid: string | number };
+      if (kind === 'recon') {
+        // 素材经本机代理上传 OUS 换公网地址，再创建重建任务；返回的 worldId 走同一套轮询与预览。
+        const resources = [];
+        for (const file of reconFiles) {
+          const uploaded = await request<{ url: string }>(`/recon-upload?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+          resources.push({ url: uploaded.url, type: isVideoClip(file) ? (/\.insv$/i.test(file.name) ? 'insv' : 'video') : 'image' });
+        }
+        taskidResponse = await request<{ taskid: string | number }>('/world-recon', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim() || '场地重建', resources, scene: 'space', taskQuality: reconQuality }),
+        });
+      } else {
+        const payload = kind === 'image' ? { img: image } : world ? { name: name.trim(), prompt: text } : { prompt: text };
+        taskidResponse = await request<{ taskid: string | number }>(config.path, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+      }
+      const { taskid: id } = taskidResponse;
       if ((typeof id !== 'string' && typeof id !== 'number') || !config.id.test(String(id))) throw new Error('接口未返回有效任务号。');
       // 先保存迟到的任务号，重开页面只查询、不重复付费。
       remember(taskKey, { taskid: String(id), prompt: text, startedAt: start });
@@ -351,11 +373,25 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
   const prefix = `aholo-${kind}`;
 
   return <div className="sc-aholo-task">
-    <p className="sc-note">{world ? 'World · 文字生成 3DGS 场景' : kind === 'image' ? 'Lux3D · 图片生成带材质物件' : 'Lux3D · 文字生成带材质物件'}</p>
-    <AholoGuideCard world={world} />
+    <p className="sc-note">{kind === 'recon' ? 'World · 视频/照片重建真实场地 3DGS' : world ? 'World · 文字生成 3DGS 场景' : kind === 'image' ? 'Lux3D · 图片生成带材质物件' : 'Lux3D · 文字生成带材质物件'}</p>
+    <AholoGuideCard world={world} recon={kind === 'recon'} />
     {world && <>
       <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
       <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || online !== true} onChange={event => setName(event.target.value)} />
+    </>}
+    {kind === 'recon' && <>
+      <label className="sc-field" htmlFor={`${prefix}-recon-files`}>场地素材</label>
+      <input id={`${prefix}-recon-files`} type="file" multiple
+        accept="video/mp4,video/quicktime,.insv,image/jpeg,image/png,image/webp" disabled={busy || online !== true}
+        onChange={event => { setReconFiles([...event.target.files ?? []]); event.target.value = ''; }} />
+      <p className="sc-note">Insta360 全景或普通视频一段即可；用照片则至少 20 张、绕场地一圈多角度。素材经本机代理上传至 Aholo。</p>
+      {reconFiles.length > 0 && <p className="sc-note">已选 {reconFiles.length} 个文件{reconFiles.some(file => file.size > 5 * 1024 * 1024) ? '（含较大文件，上传可能需要几分钟）' : ''}</p>}
+      <label className="sc-field" htmlFor={`${prefix}-quality`}>重建质量</label>
+      <select id={`${prefix}-quality`} value={reconQuality} disabled={busy || online !== true} onChange={event => setReconQuality(event.target.value)}>
+        <option value="normal">标准（推荐）</option>
+        <option value="high">专业（更慢更精细）</option>
+        <option value="low">极速预览</option>
+      </select>
     </>}
     {kind === 'image' ? <>
       <label className="sc-field" htmlFor={`${prefix}-image`}>参考图片</label>
@@ -370,13 +406,13 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
       </>}
       {prompt && <p className="sc-note">图片：{prompt}</p>}
       {imageError && <p className="sc-warning" role="alert">{imageError}</p>}
-    </> : <>
+    </> : kind !== 'recon' && <>
       <label className="sc-field" htmlFor={`${prefix}-prompt`}>{world ? '场景描述' : '物件描述'}</label>
       <textarea id={`${prefix}-prompt`} maxLength={world ? 2000 : 200} rows={3} value={prompt} disabled={busy || online !== true}
         placeholder={world ? '例：温暖的木质咖啡馆，大窗户，午后阳光' : '例：一张白色圆桌，极简风格'} onChange={event => setPrompt(event.target.value)} />
     </>}
     <button type="button" className="sc-button sc-full" disabled={busy || online !== true || !validInput} onClick={() => void submit()}>
-      {submitting ? '提交中…' : uncertain ? '等待确认原任务' : taskid && !terminal ? '正在跟踪任务…' : '直连生成（消耗额度）'}
+      {submitting ? '提交中…' : uncertain ? '等待确认原任务' : taskid && !terminal ? '正在跟踪任务…' : kind === 'recon' ? '上传并开始重建（消耗额度）' : '直连生成（消耗额度）'}
     </button>
     {unresolved && !taskid && !uncertain && <p className="sc-warning">本机还有一个未确认完成的{config.label}（{new Date(unresolved.at).toLocaleString('zh-CN', { hour12: false })}），再点生成会另起一个任务、再扣一次额度；先在历史记录里查看它的结果。</p>}
     {(submitting || taskid || uncertain) && <>

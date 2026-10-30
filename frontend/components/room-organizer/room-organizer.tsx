@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
+import { Boxes, ChevronDown, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -189,6 +189,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
+  // 本机直连 Aholo 的测试入口藏得更深：默认折叠成一个箭头，点开才露出。
+  const [luxRailOpen, setLuxRailOpen] = useState(false);
   // 本机直连 Aholo 的测试入口：只在 next dev 出现，构建产物里这颗按钮不存在。
   const luxDirectVisible = process.env.NODE_ENV === 'development';
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
@@ -952,7 +954,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     controlsRef,
     invalidate,
     requestShadowUpdate,
-    // 点云按场地的最长水平边等比缩放：10 m 的扫描摆进 12 m 的场地就放大到 12 m。
+    // 兜底缩放：场景没带真实尺度（lod-meta forwardBox）时，才按场地最长水平边等比塞。
     sizeMeters: Math.max(layout.width, layout.height),
   });
   splatPaintRef.current = paintSplatFrame;
@@ -963,11 +965,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     } catch (failure) {
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
-  }, [setView, startSplat]);
-  /** 场景生成里的「取回并预览」：先落盘再切到 3D，失败由面板自己说明。 */
-  const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string }) => {
-    setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    await startSplat(await loadAholoSceneSource(source));
   }, [setView, startSplat]);
 
   useEffect(() => {
@@ -1380,6 +1377,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setView(current => ({ ...current, view2D: false }));
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
+  /** 场景生成里的「取回并预览」：先落盘再切到 3D，失败由面板自己说明。场地保持用户设定，高斯房间铺满场地。 */
+  const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+    const asset = await loadAholoSceneSource(source);
+    await startSplat(asset);
+  }, [setView, startSplat]);
+
   const onBindProject = useCallback((projectId: string) => {
     actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
   }, [actions]);
@@ -1450,8 +1454,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 })}
               </nav>
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="接口测试">
-                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="Aholo 接口测试" title="本机直连 Aholo 接口（仅本地开发可见）"
-                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>Aholo</span></button>
+                <button type="button" className="sc-rail-tool" aria-expanded={luxRailOpen} aria-label={luxRailOpen ? '收起 Aholo 接口测试入口' : '展开 Aholo 接口测试入口'} title="Aholo 接口测试（仅本地开发可见）"
+                  onClick={()=>setLuxRailOpen(value=>!value)}><ChevronDown size={16} aria-hidden="true"/></button>
+                {luxRailOpen && <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="Aholo 接口测试" title="本机直连 Aholo 接口（仅本地开发可见）"
+                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>Aholo</span></button>}
               </nav></>}
             </div>
           </div>
@@ -1556,7 +1562,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {canvasDetailOpen && <span className="sc-canvas-count" id="canvas-detail">{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span>}
             </div>
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
-            {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · 场地壳体已让位，物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
+            {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · 高斯房间铺满场地，物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>
