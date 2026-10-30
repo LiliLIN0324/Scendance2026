@@ -19,6 +19,8 @@ import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { useRoomEditor } from '../contexts';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
+import { createVenueFromPick, polygonBboxMeters } from '../lib/amap-venue';
+import { AmapVenuePicker } from './amap-venue-picker';
 import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
@@ -158,6 +160,10 @@ interface AgentValue {
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   /** 左栏简报的空地文字链：不用先开物料库，一键立 12×8 空壳。 */
   startBlankVenue(): void;
+  mapPickerOpen: boolean;
+  startMapVenuePicker(): void;
+  closeMapVenuePicker(): void;
+  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[] }): void;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
   /** 上一版云任务还在恢复：最后一帧没稳，不亮确认。 */
@@ -208,6 +214,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
   const memoryRef = useRef<BriefMemory>(initialBriefMemory());
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
   const [exportPreview, setExportPreview] = useState(false);
@@ -1119,6 +1126,24 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     proposal: phase === 'proposed' ? activeProposal : null,
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
     cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
+    mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
+    applyMapVenuePick: pick => {
+      if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再圈场地。' }); return; }
+      runToken.current++;
+      if (proposal.current) dropProposal();
+      discardCloudPreview();
+      setPhase('idle'); setProgress(0);
+      const was2D = view.view2D;
+      try {
+        onApply(createVenueFromPick(live.current, pick));
+        if (was2D) setView(current => ({ ...current, view2D: true }));
+        const dims = polygonBboxMeters(pick.polygon);
+        say({ role: 'agent', text: `户外场地立好了：${pick.name} · ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形），物料照常摆。` });
+        setMapPickerOpen(false);
+      } catch (error) {
+        say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '地图场地没立起来，再试一次。' });
+      }
+    },
     exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
@@ -1197,6 +1222,10 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
     {status && <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>}
     {!known && <p className="sc-brief-blank">
       <button type="button" className="sc-brief-blank-link" onClick={agent.startBlankVenue}>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</button>
+      <button type="button" className="sc-brief-blank-link" onClick={agent.startMapVenuePicker}>{agent.mapPickerOpen ? '收起地图选址' : '从地图圈画户外场地'}</button>
+      {agent.mapPickerOpen && <AmapVenuePicker onClose={() => agent.closeMapVenuePicker()} onPick={pick => {
+        agent.applyMapVenuePick(pick);
+      }} />}
     </p>}
     {tools.length > 0 && <details className="sc-brief-tools">
       <summary>更多资料</summary>
