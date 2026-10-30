@@ -1,7 +1,5 @@
 import type { RoomLayout } from './types';
-import { preserveCurrentActivity } from '../../../lib/production-plan';
-import { backendSceneToLayout } from './backend-adapter';
-import { buildVenueShell } from './venue-shell';
+import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 
 export type AmapPoint = { lng: number; lat: number };
 
@@ -23,16 +21,26 @@ export function toPoints(path: { lng: number; lat: number }[] | AmapPoint[]): Am
   return path.map(p => ({ lng: Number(p.lng), lat: Number(p.lat) }));
 }
 
-/** 布置壳上限 100 米（MAX_ROOM_DIMENSION）；更大的真实场地圈画取其中一块规划区，真实尺寸写进名称。 */
-export function createVenueFromPick(before: RoomLayout, pick: { name: string; location: string; polygon: AmapPoint[] }): RoomLayout {
+/**
+ * 布置壳上限 100 米（MAX_ROOM_DIMENSION）：更大的真实场地圈画取其中一块规划区，真实尺寸写进名称。
+ * 立壳走 raiseVenue/replaceVenueWithShell，和「改成 15×10」同一条路径——旧物料放得下就留在原地，
+ * 放不下才撤掉，并回报撤了几件（不能悄悄把布置清零）。
+ */
+export function createVenueFromPick(
+  before: RoomLayout,
+  pick: { name: string; location: string; polygon: AmapPoint[] },
+): { layout: RoomLayout; cleared: number } {
   const { width, depth } = polygonBboxMeters(pick.polygon);
   const safeWidth = Math.min(100, Math.max(2, Math.round(width * 10) / 10));
   const safeDepth = Math.min(100, Math.max(2, Math.round(depth * 10) / 10));
   const oversized = width > 100 || depth > 100;
   const scaleNote = oversized ? ` · 规划区 ${safeWidth}×${safeDepth}m（真实范围 ${Math.round(width)}×${Math.round(depth)}m）` : '';
-  const scene = buildVenueShell({ widthM: safeWidth, depthM: safeDepth, indoorOutdoor: 'outdoor', scaleOrigin: 'typed' });
+  const input = {
+    base: before, floorIndex: 0, widthM: safeWidth, depthM: safeDepth,
+    indoorOutdoor: 'outdoor' as const, scaleOrigin: 'typed' as const,
+  };
+  const plan = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
+  if (!plan) throw new Error('这块场地是有内墙或图纸证据的真实结构，先在结构里清出一块矩形空地，再来圈画。');
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
-  return preserveCurrentActivity(before, backendSceneToLayout(scene, {
-    name, ...(before.id ? { projectId: before.id } : {}),
-  }));
+  return { layout: { ...plan.layout, name }, cleared: plan.cleared };
 }
