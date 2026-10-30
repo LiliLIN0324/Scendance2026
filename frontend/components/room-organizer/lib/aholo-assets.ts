@@ -20,7 +20,15 @@ export type AholoAsset = {
   bytes: number;
   savedAt: number;
   taskid?: string;
+  /** 场景资产的真实尺度（米，来自 lod-meta forwardBox）；物件模型没有。 */
+  meters?: { width: number; depth: number; height: number };
 };
+
+function validMeters(value: unknown): value is { width: number; depth: number; height: number } {
+  if (!value || typeof value !== 'object') return false;
+  const box = value as { width?: unknown; depth?: unknown; height?: unknown };
+  return [box.width, box.depth, box.height].every(number => typeof number === 'number' && Number.isFinite(number) && number > 0);
+}
 
 function isValidAsset(value: unknown): value is AholoAsset {
   const asset = value as AholoAsset;
@@ -28,6 +36,7 @@ function isValidAsset(value: unknown): value is AholoAsset {
     typeof asset.name === 'string' && Number.isFinite(asset.bytes) && asset.bytes > 0 &&
     Number.isFinite(asset.savedAt) &&
     (asset.taskid === undefined || (typeof asset.taskid === 'string' && taskidPattern.test(asset.taskid))) &&
+    (asset.meters === undefined || validMeters(asset.meters)) &&
     Boolean(aholoAssetUrl(asset));
 }
 
@@ -95,6 +104,7 @@ export function rememberAholoAsset(asset: AholoAsset): AholoAsset | undefined {
     bytes: asset.bytes,
     savedAt: Number.isFinite(asset.savedAt) && asset.savedAt > 0 ? asset.savedAt : Date.now(),
     ...(typeof asset.taskid === 'string' && taskidPattern.test(asset.taskid) ? { taskid: asset.taskid } : {}),
+    ...(validMeters(asset.meters) ? { meters: asset.meters } : {}),
   };
   if (!isValidAsset(record)) return undefined;
   const storage = currentStorage();
@@ -146,8 +156,15 @@ export async function importAholoAsset(source: {
   url: string;
   name?: string;
   taskid?: string;
+  meters?: { width: number; depth: number; height: number };
 }): Promise<AholoAsset & { url: string }> {
-  const asset = findAholoAssetByTask(source.taskid) ?? await postAsset({ ...source, name: source.name ?? '' });
+  // 同一任务号复用本机文件；这次若带来了真实尺度而旧记录没有，就补写进注册表，历史场景也能按真实尺寸回放。
+  const cached = findAholoAssetByTask(source.taskid);
+  let asset = cached ?? await postAsset({ ...source, name: source.name ?? '' });
+  const incoming = source.meters;
+  if (!validMeters(asset.meters) && validMeters(incoming)) {
+    asset = await rememberAholoAsset({ ...asset, meters: incoming }) ?? asset;
+  }
   const url = aholoAssetUrl(asset);
   if (!url) throw new Error('落盘后仍无法生成本机地址。');
   return { ...asset, url };

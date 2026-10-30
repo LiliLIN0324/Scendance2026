@@ -5,9 +5,10 @@ import type { SplatMesh, SparkRenderer } from '@sparkjsdev/spark';
 /** Aholo World 的 3DGS 竖直轴；上游不给时按它给的 Z-up 立起来。 */
 export type SplatUpAxis = 'X' | 'Y' | 'Z';
 /** 本机稳定地址（`/asset/<uuid>.spz`）：Spark 按后缀认格式，所以不用再传类型。 */
-export type SplatSource = Readonly<{ assetId: string; url: string; name: string }>;
+export type SplatMeters = Readonly<{ width: number; depth: number; height: number }>;
+export type SplatSource = Readonly<{ assetId: string; url: string; name: string; meters?: SplatMeters }>;
 export type SplatLoadOptions = Readonly<{
-  /** 场地最长水平边（米）：点云按它等比缩放，摆进去的椅子才是真实大小。 */
+  /** 场地最长水平边（米）：无真实尺度时的兜底——点云按它等比缩放。 */
   sizeMeters: number;
   upAxis?: SplatUpAxis;
   onProgress?(ratio: number | undefined): void;
@@ -161,7 +162,7 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     mesh = null;
   }
 
-  async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number }>> {
+  async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number; meters: SplatMeters }>> {
     if (disposed) throw new Error('环境预览已关闭。');
     const sparkModule = await sparkPromise;
     if (disposed) throw new Error('环境预览已关闭。');
@@ -199,7 +200,11 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     next.quaternion.copy(upAxisQuaternion(options.upAxis ?? 'Z'));
     // 缩放和落位挂在包装层上，点云本身只管朝向，换场地不必重算旋转。
     const rotated = rotatedBox(local, next.quaternion);
-    const fit = fitSplatBox(rotated, options.sizeMeters);
+    // 米制假设：World 生成产物就是真实米制（forwardBox 只是局部子盒，tree 根盒 ~40×26m 对得上一座宴会厅），
+    // 不做任何缩放：底面贴 y=0、水平中心对到场地中心，场地只是大厅里的一块布置区。
+    // 点云里自带桌椅（真实米数），缩放反而会破坏与物料的比例。
+    const center = rotated.getCenter(new THREE.Vector3());
+    const fit = { scale: 1, position: new THREE.Vector3(-center.x, -rotated.min.y, -center.z) };
     const group = new THREE.Group();
     group.scale.setScalar(fit.scale);
     group.position.copy(fit.position);
@@ -212,7 +217,16 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     );
     mesh = next;
     holder = group;
-    return Object.freeze({ splats: next.numSplats ?? 0 });
+    // scale 1 下 bounds 就是真实米制：把实测宽深高带回去，场地校准与横幅都以它为准。
+    const placed = bounds.getSize(new THREE.Vector3());
+    return Object.freeze({
+      splats: next.numSplats ?? 0,
+      meters: {
+        width: Math.round(placed.x * 10) / 10,
+        depth: Math.round(placed.z * 10) / 10,
+        height: Math.round(placed.y * 10) / 10,
+      },
+    });
   }
 
   const renderFrame: SplatPaint = (renderer, scene, camera) => {

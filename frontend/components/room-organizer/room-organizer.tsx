@@ -1377,12 +1377,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setView(current => ({ ...current, view2D: false }));
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
-  /** 场景生成里的「取回并预览」：先落盘再切到 3D，失败由面板自己说明。场地保持用户设定，高斯房间铺满场地。 */
+  /** 场景生成里的「取回并预览」：先落盘再切到 3D，失败由面板自己说明。点云按真实米制铺（scale 1），不缩放。 */
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    const asset = await loadAholoSceneSource(source);
-    await startSplat(asset);
+    await startSplat(await loadAholoSceneSource(source));
   }, [setView, startSplat]);
+  // 高斯优先（用户裁决）：预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）；场地跟高斯走，不反过来。
+  const calibratedSceneRef = useRef('');
+  useEffect(() => {
+    if (splatState.status !== 'ready' || !splatState.meters) return;
+    if (calibratedSceneRef.current === splatState.assetId) return;
+    calibratedSceneRef.current = splatState.assetId;
+    const width = Math.round(splatState.meters.width * 10) / 10;
+    const height = Math.round(splatState.meters.depth * 10) / 10;
+    const current = layoutStore.getState().layout;
+    if (Math.abs(width - current.width) <= 0.05 && Math.abs(height - current.height) <= 0.05) return;
+    onApplyCreative({ ...current, width, height });
+  }, [splatState, onApplyCreative]);
 
   const onBindProject = useCallback((projectId: string) => {
     actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
@@ -1562,7 +1573,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {canvasDetailOpen && <span className="sc-canvas-count" id="canvas-detail">{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span>}
             </div>
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
-            {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · 高斯房间铺满场地，物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
+            {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · {splatState.meters ? `已按高斯实测 ${splatState.meters.width} × ${splatState.meters.depth} m 校准场地，` : '场地壳体已让位，'}物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>
