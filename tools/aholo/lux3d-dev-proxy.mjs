@@ -6,7 +6,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { isIP } from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
@@ -123,6 +123,18 @@ async function readJson(req) {
   }
   if (!isRecord(body)) throw new HttpError(400, '请求体必须是合法 JSON 对象');
   return body;
+}
+
+/** 二进制请求体（场地重建素材上传），超限即断。 */
+async function readRaw(req, max) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    size += chunk.length;
+    if (size > max) throw new HttpError(413, `素材超过 ${Math.round(max / 1024 / 1024)} MiB，未上传`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, size);
 }
 
 function text(value, field, maxLength) {
@@ -285,6 +297,86 @@ export function createServer({
     return { assetId, kind, bytes: bytes.length, url: `/asset/${assetId}.${kind}` };
   }
 
+  // lod-meta 是 World 产物里唯一带真实尺度（米制 forwardBox）的文件；只放行 Aholo 自家域名，浏览器侧 CORS 过不来。
+  async function fetchMeta(remoteUrl) {
+    let parsed = null;
+    try { parsed = new URL(remoteUrl ?? ''); } catch { parsed = null; }
+    const hostOk = Boolean(parsed) && (/(?:^|\.)aholo3d\.cn$/.test(parsed.hostname) || /(?:^|\.)aholo\.ai$/.test(parsed.hostname));
+    if (!parsed || !safeHttps(remoteUrl) || !hostOk) throw new HttpError(400, 'meta 只接受 Aholo 域名的 lod-meta 链接');
+    let response;
+    try {
+      response = await fetchImpl(parsed.href, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30000) });
+    } catch (failure) {
+      const timeout = failure?.name === 'TimeoutError' || failure?.name === 'AbortError';
+      throw new HttpError(timeout ? 504 : 502, timeout ? 'lod-meta 拉取超时' : 'lod-meta 拉取失败');
+    }
+    if (!response.ok) {
+      await response.body?.cancel?.();
+      throw new HttpError(502, `lod-meta 拉取失败：上游 HTTP ${response.status}`);
+    }
+    const text = await response.text();
+    if (text.length > 2 * 1024 * 1024) throw new HttpError(413, 'lod-meta 超过 2 MiB');
+    try { return JSON.parse(text); } catch { throw new HttpError(502, 'lod-meta 不是合法 JSON'); }
+  }
+
+  // —— World 重建：素材先经 OUS 上传成公网 URL，再创建重建任务（docs/AHOLO-INTEGRATION-PLAN.md 二梯队）——
+  let ousCredentials;
+  async function ous() {
+    if (ousCredentials) return ousCredentials;
+    const d = await aholo(`${base}/asset/v1/token`);
+    if (!isRecord(d) || typeof d.ousToken !== 'string' || typeof d.globalDomain !== 'string') throw new HttpError(502, 'OUS 凭证无效');
+    ousCredentials = { token: d.ousToken, domain: d.globalDomain.replace(/\/+$/, ''), blockSize: Number(d.blockSize) || 5 * 1024 * 1024 };
+    return ousCredentials;
+  }
+  function pickUrl(value) {
+    if (typeof value === 'string') return value.startsWith('https://') ? value : undefined;
+    if (Array.isArray(value)) { for (const item of value) { const found = pickUrl(item); if (found) return found; } return undefined; }
+    if (isRecord(value)) { for (const item of Object.values(value)) { const found = pickUrl(item); if (found) return found; } }
+    return undefined;
+  }
+  async function postOus(url, token, form) {
+    try {
+      const response = await fetchImpl(url, {
+        method: 'POST', headers: { 'ous-token-v2': token }, body: form,
+        signal: AbortSignal.timeout(600000),
+      });
+      if (!response.ok) { await response.body?.cancel?.(); throw new HttpError(502, `OUS 上传失败：上游 HTTP ${response.status}`); }
+      const body = await response.json();
+      if (!isRecord(body)) throw new HttpError(502, 'OUS 响应无效');
+      if (Object.hasOwn(body, 'c') && body.c !== '0' && body.c !== 0) throw new HttpError(502, `OUS 拒绝：${body.m ?? body.c}`);
+      return body.d ?? body.data ?? body;
+    } catch (failure) {
+      if (failure instanceof HttpError) throw failure;
+      throw new HttpError(502, 'OUS 上传请求失败');
+    }
+  }
+  async function ousUpload(bytes, name) {
+    const { token, domain, blockSize } = await ous();
+    const md5 = createHash('md5').update(bytes).digest('hex');
+    let payload;
+    if (bytes.length <= Math.max(blockSize - 256 * 1024, 1024)) {
+      const form = new FormData();
+      form.append('md5', md5);
+      form.append('file', new Blob([bytes]), name);
+      payload = await postOus(`${domain}/ous/api/v2/single/upload`, token, form);
+    } else {
+      const blocks = Math.ceil(bytes.length / blockSize);
+      await postOus(`${domain}/ous/api/v2/block/upload/init?md5=${md5}&blocks=${blocks}&size=${bytes.length}&name=${encodeURIComponent(name)}`, token);
+      for (let index = 1; index <= blocks; index++) {
+        const form = new FormData();
+        form.append('block', String(index));
+        form.append('file', new Blob([bytes.subarray((index - 1) * blockSize, index * blockSize)]), name);
+        payload = await postOus(`${domain}/ous/api/v2/block/upload/part`, token, form);
+      }
+      const status = await fetchImpl(`${domain}/ous/api/v2/upload/status?md5=${md5}`, { headers: { 'ous-token-v2': token }, signal: AbortSignal.timeout(30000) });
+      if (!status.ok) { await status.body?.cancel?.(); throw new HttpError(502, `OUS 状态查询失败：上游 HTTP ${status.status}`); }
+      payload = await status.json();
+    }
+    const url = pickUrl(payload);
+    if (!url) throw new HttpError(502, 'OUS 上传完成但未返回文件地址');
+    return url;
+  }
+
   return createHttpServer({ requestTimeout: 360000, headersTimeout: 10000 }, async (req, res) => {
     let origin = '';
     try {
@@ -319,8 +411,33 @@ export function createServer({
       let result;
       if (req.method === 'GET' && url.pathname === '/health') {
         result = { ok: true, keyConfigured: Boolean(key), base, worldBase };
+      } else if (req.method === 'GET' && url.pathname === '/meta') {
+        result = await fetchMeta(url.searchParams.get('url'));
       } else if (req.method === 'POST' && url.pathname === '/asset') {
         result = await stashAsset((await readJson(req)).url);
+      } else if (req.method === 'POST' && url.pathname === '/recon-upload') {
+        const name = text(url.searchParams.get('name') ?? '', 'name', 200);
+        const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+        if (!['.mp4', '.mov', '.insv', '.jpg', '.jpeg', '.png', '.webp'].includes(ext)) throw new HttpError(400, '仅支持 mp4/mov/insv/jpg/jpeg/png/webp 素材');
+        const bytes = await readRaw(req, 512 * 1024 * 1024);
+        if (!bytes.length) throw new HttpError(400, '空文件');
+        result = { url: await ousUpload(bytes, name) };
+      } else if (req.method === 'POST' && url.pathname === '/world-recon') {
+        const body = await readJson(req);
+        const resources = Array.isArray(body.resources)
+          ? body.resources.map(item => ({ url: safeHttps(text(item?.url ?? '', 'url', 600)), ...(typeof item?.type === 'string' && ['image', 'video', 'insv'].includes(item.type) ? { type: item.type } : {}) }))
+          : [];
+        if (!resources.length || resources.some(item => !item.url)) throw new HttpError(400, 'resources 需为至少一条带公网 HTTPS 地址的资源');
+        const payload = {
+          name: text(body.name, 'name', 128),
+          resources,
+          scene: body.scene === 'model' ? 'model' : 'space',
+          taskQuality: ['low', 'normal', 'high'].includes(body.taskQuality) ? body.taskQuality : 'normal',
+        };
+        const created = await aholo(`${worldBase}/world/v1/reconstructions`, { world: true, method: 'POST', body: JSON.stringify(payload) });
+        const taskid = created?.worldId;
+        if (!validId(taskid)) throw new HttpError(502, 'Aholo 返回的任务号无效');
+        result = { taskid };
       } else if (req.method === 'POST' && ['/text-to-3d', '/image-to-3d', '/world'].includes(url.pathname)) {
         const body = await readJson(req);
         let taskid;

@@ -611,7 +611,7 @@ describe('Aholo 三 tab 契约、隔离与恢复', () => {
 
   it('文字默认选中，其他 tab 首次访问才挂载，之后 hidden 保留同一表单和图片', async () => {
     await renderPanel();
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['文字建模', '图片建模', '场景生成']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['文字建模', '图片建模', '场景生成', '场地重建']);
     expect(screen.getByRole('tab', { name: '文字建模' }).getAttribute('aria-selected')).toBe('true');
     const textPanel = activePanel();
     const emptyPanels = screen.getAllByRole('tabpanel', { hidden: true }).filter(panel => panel !== textPanel);
@@ -648,8 +648,8 @@ describe('Aholo 三 tab 契约、隔离与恢复', () => {
     const tabs = screen.getAllByRole('tab');
     tabs[0].focus();
     for (const [key, expected] of [
-      ['ArrowRight', 1], ['ArrowRight', 2], ['ArrowRight', 0], ['ArrowLeft', 2],
-      ['Home', 0], ['End', 2], ['ArrowLeft', 1], ['Escape', 1],
+      ['ArrowRight', 1], ['ArrowRight', 2], ['ArrowRight', 3], ['ArrowRight', 0], ['ArrowLeft', 3],
+      ['Home', 0], ['End', 3], ['ArrowLeft', 2], ['Escape', 2],
     ] as const) {
       await act(async () => { fireEvent.keyDown(document.activeElement!, { key }); });
       expect(document.activeElement).toBe(tabs[expected]);
