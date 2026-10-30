@@ -323,7 +323,10 @@ export function createServer({
   let ousCredentials;
   async function ous() {
     if (ousCredentials) return ousCredentials;
-    const d = await aholo(`${base}/asset/v1/token`);
+    // token 接口返回裸 JSON（无 c/d 壳），不走 aholo() 包装器。
+    const tokenResponse = await fetchImpl(`${base}/asset/v1/token`, { headers: { Authorization: key }, signal: AbortSignal.timeout(30000) });
+    if (!tokenResponse.ok) { await tokenResponse.body?.cancel?.(); throw new HttpError(502, `OUS 凭证获取失败：上游 HTTP ${tokenResponse.status}`); }
+    const d = await tokenResponse.json();
     if (!isRecord(d) || typeof d.ousToken !== 'string' || typeof d.globalDomain !== 'string') throw new HttpError(502, 'OUS 凭证无效');
     ousCredentials = { token: d.ousToken, domain: d.globalDomain.replace(/\/+$/, ''), blockSize: Number(d.blockSize) || 5 * 1024 * 1024 };
     return ousCredentials;
@@ -372,9 +375,17 @@ export function createServer({
       if (!status.ok) { await status.body?.cancel?.(); throw new HttpError(502, `OUS 状态查询失败：上游 HTTP ${status.status}`); }
       payload = await status.json();
     }
-    const url = pickUrl(payload);
-    if (!url) throw new HttpError(502, 'OUS 上传完成但未返回文件地址');
-    return url;
+    // 上传只回 obsTaskId；公网地址要拿【同一个】ousToken 轮询状态接口换出来（换 token 会报 Token未绑定任务）。
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const statusResponse = await fetchImpl(`${domain}/ous/api/v2/upload/status?md5=${md5}`, { headers: { 'ous-token-v2': token }, signal: AbortSignal.timeout(30000) });
+      if (statusResponse.ok) {
+        const statusBody = await statusResponse.json();
+        const url = pickUrl(statusBody);
+        if (url) return url;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    throw new HttpError(502, 'OUS 上传后未在时限内拿到文件地址');
   }
 
   return createHttpServer({ requestTimeout: 360000, headersTimeout: 10000 }, async (req, res) => {
