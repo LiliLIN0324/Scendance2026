@@ -23,10 +23,13 @@ describe('amap venue pick', () => {
   });
   it('builds an outdoor shell named after the place, clamping oversized sites into a planning zone', () => {
     const before = INITIAL_LAYOUT as RoomLayout;
-    const layout = createVenueFromPick(before, { name: '盐官潮乐之城', location: '海宁盐官', polygon: [
+    const { layout, cleared } = createVenueFromPick(before, { name: '盐官潮乐之城', location: '海宁盐官', polygon: [
       { lng: 120.53, lat: 30.40 }, { lng: 120.548, lat: 30.40 }, { lng: 120.548, lat: 30.409 }, { lng: 120.53, lat: 30.409 },
     ] });
     expect(layout.name).toContain('盐官潮乐之城');
+    // 换成更大的户外壳时旧布置留在原地，不能悄悄清零。
+    expect(layout.floors[0]!.items.length).toBe(before.floors[0]!.items.length);
+    expect(cleared).toBe(0);
     expect(layout.width).toBeLessThanOrEqual(100);
     expect(layout.height).toBeLessThanOrEqual(100);
     // 大场地：真实范围进名称，不丢地理实据

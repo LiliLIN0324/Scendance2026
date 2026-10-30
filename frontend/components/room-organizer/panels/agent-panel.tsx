@@ -1135,11 +1135,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       setPhase('idle'); setProgress(0);
       const was2D = view.view2D;
       try {
-        onApply(createVenueFromPick(live.current, pick));
+        const { layout, cleared } = createVenueFromPick(live.current, pick);
+        onApply(layout);
+        setVenueIO('outdoor');
+        onVenueIOChange?.('outdoor');
         if (was2D) setView(current => ({ ...current, view2D: true }));
         const dims = polygonBboxMeters(pick.polygon);
         const clamped = dims.width > 100 || dims.depth > 100;
-        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形）${clamped ? '，布置壳取其中一块 100 × 100 m 规划区' : ''}，物料照常摆。` });
+        const dropped = cleared ? `${cleared} 件物料放不下先撤了` : '物料照常摆';
+        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形）${clamped ? '，布置壳取其中一块 100 × 100 m 规划区' : ''}，${dropped}。` });
         setMapPickerOpen(false);
       } catch (error) {
         say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '地图场地没立起来，再试一次。' });

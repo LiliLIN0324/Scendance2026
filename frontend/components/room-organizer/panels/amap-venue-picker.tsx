@@ -69,7 +69,9 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
       satellite.show();
       const mouseTool = new AMap.MouseTool(map);
       mouseTool.on('draw', (data: any) => {
-        const path = data?.overlay?.getPath?.() ?? [];
+        // 2.0 的 payload 各版本在 overlay / obj 上放过图形本身，也直接回传 polygon 实例。
+        const overlay = data?.overlay ?? data?.obj ?? data;
+        const path = overlay?.getPath?.() ?? [];
         drawRef.current = path.map((p: any) => ({ lng: Number(p.lng), lat: Number(p.lat) }));
         // 少于 3 点等于没圈成面，别把 0 × 0 m 当成结果摆给用户。
         setBbox(drawRef.current.length < 3 ? null : polygonBboxMeters(drawRef.current));
