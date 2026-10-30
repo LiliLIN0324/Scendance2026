@@ -381,9 +381,9 @@ const server = http.createServer((req, res) => {
       if (projectMatch && method === 'GET') {
         const project = {
           id: projectMatch[1],
-          name: '未命名项目',
+          name: mockProjects.find((p) => p.id === projectMatch[1])?.name || '未命名项目',
           studio_id: MOCK_STUDIO_ID,
-          revision: 0,
+          revision: mockProjects.find((p) => p.id === projectMatch[1])?.revision ?? 0,
           updated_at: new Date().toISOString(),
           scene: makeScene(),
           materials: [],
