@@ -1,10 +1,11 @@
 import { preserveCurrentActivity } from '../../../lib/production-plan';
+import { BLANK_VENUE_SIZE } from '../../../lib/workspace-api';
 import { backendSceneToLayout } from './backend-adapter';
 import { buildVenueShell } from './venue-shell';
 import type { RoomLayout } from './types';
 
 /** 空地卡与左栏文字链共用同一块空地：12 × 8 m，立完就能说「改成 15×10」调。 */
-export const BLANK_VENUE = { width: 12, depth: 8 } as const;
+export const BLANK_VENUE = BLANK_VENUE_SIZE;
 
 /**
  * 空白场地不是一张新图纸，而是编辑器自己立得起来的矩形壳：四面外墙 + 正面主入口。

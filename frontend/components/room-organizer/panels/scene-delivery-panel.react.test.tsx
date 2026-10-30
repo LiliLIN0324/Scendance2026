@@ -241,6 +241,13 @@ describe('晴光 scene delivery panel',()=>{
     expect(within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByLabelText('验收条件')).toBe(acceptance);expect(acceptance.value).toBe('未保存的演练摆放要求');
     expect(updateOperations).not.toHaveBeenCalled();expect(updateItem).not.toHaveBeenCalled();expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
+  // F-05：项目页把落点直接递到「本机备份」，折叠壳得替她掀开，否则落点在一扇关着的门后面。
+  it('unfolds the internal tools straight onto the local backup tab',()=>{
+    const f=completeActivity();
+    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} deliveryViewRequest={{serial:1,view:'backup'}}/>);
+    expect(screen.getByRole('tab',{name:'本机备份'}).getAttribute('aria-selected')).toBe('true');
+    expect((screen.getByText('内部资料').closest('details') as HTMLDetailsElement).open).toBe(true);
+  });
   it('only prepares and downloads after an explicit click',async()=>{
     render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
     expect(exportDeliveryGlb).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
