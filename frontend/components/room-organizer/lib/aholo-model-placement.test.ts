@@ -4,7 +4,7 @@ import { packGltf } from '../../../../supabase/functions/_shared/models';
 import { tetrahedron } from '../../../../tests/model-fixture';
 import { clearGlbAssetCache, getGlbAssetState } from '../three/glb-assets';
 import { DIRECT_BASE, listAholoAssets, rememberAholoAsset } from './aholo-assets';
-import { loadAholoCatalogItem, loadAholoSceneSource, loadStoredAholoCatalogItem, storedAholoSceneSource } from './aholo-model-placement';
+import { loadAholoCatalogItem, loadAholoSceneSource, loadStoredAholoCatalogItem, metersFromForwardBox, storedAholoSceneSource } from './aholo-model-placement';
 import { isPackagedGlbUrl } from './glb-url';
 
 const TASK_ID = '4475964';
@@ -178,5 +178,26 @@ describe('Aholo 产物摆进布置场景 (#66)', () => {
       assetId: 'shipped-small-launch-hall', name: '小型发布会场地',
       url: '/showcase/assets/generated/scene/small-launch-hall.spz',
     });
+  });
+});
+
+describe('lod-meta forwardBox 换算真实尺度（高斯优先）', () => {
+  it('按实测证据（6.32 × 5.91 × 3.45 m）换算宽深高，保留一位小数', () => {
+    expect(metersFromForwardBox({
+      min: [-2.9712802322485494, -2.880020668781839, -1.367995017790145],
+      max: [3.3480754337585843, 3.0265181297767363, 2.0854901090206344],
+    })).toEqual({ width: 6.3, depth: 5.9, height: 3.5 });
+  });
+
+  it('轴序不串：Z-up 的 forwardBox 里 z 是高度，x/y 是宽深', () => {
+    expect(metersFromForwardBox({ min: [0, 0, 0], max: [4, 3, 6] })).toEqual({ width: 4, depth: 3, height: 6 });
+  });
+
+  it('坏档拒绝：缺轴、非数字、以及 0.5–120 m 之外的离谱值', () => {
+    expect(metersFromForwardBox(null)).toBeNull();
+    expect(metersFromForwardBox({ min: [0, 0], max: [1, 1, 1] })).toBeNull();
+    expect(metersFromForwardBox({ min: [0, 0, 'x'], max: [1, 1, 1] })).toBeNull();
+    expect(metersFromForwardBox({ min: [0, 0, 0], max: [0.1, 0.1, 0.1] })).toBeNull();
+    expect(metersFromForwardBox({ min: [0, 0, 0], max: [500, 5, 3] })).toBeNull();
   });
 });

@@ -739,3 +739,34 @@ for (const mode of ['env', 'empty', 'missing']) {
     assert.ok(!JSON.stringify(state).includes('fixture-env-key'));
   });
 }
+
+const LOD_META = { magicCode: 2500660, type: 'lod-splat', forwardBox: { min: [-2.97, -2.88, -1.37], max: [3.35, 3.03, 2.09] } };
+const META_URL = 'https://holo-cos.aholo3d.cn/splat-transform/3FO4/lod-meta.json';
+
+test('/meta 透传 Aholo 域名的 lod-meta JSON', async t => {
+  const { request, calls } = await fixture(t, async () => new Response(JSON.stringify(LOD_META), { headers: { 'Content-Type': 'application/json' } }));
+  const res = await request(`/meta?url=${encodeURIComponent(META_URL)}`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, LOD_META);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, META_URL);
+  assert.equal(calls[0].init.method, 'GET');
+  assert.ok(!(calls[0].init.headers ?? {}).Authorization); // 元数据是公开 CDN 文件，不带密钥。
+});
+
+test('/meta 拒绝非 Aholo 域名与非 HTTPS 地址', async t => {
+  for (const bad of ['https://evil.example.test/lod-meta.json', 'http://holo-cos.aholo3d.cn/lod-meta.json', 'file:///etc/passwd', '']) {
+    const { request, calls } = await fixture(t);
+    const res = await request(`/meta?url=${encodeURIComponent(bad)}`);
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /只接受 Aholo 域名/);
+    assert.equal(calls.length, 0);
+  }
+});
+
+test('/meta 上游失败转 502 且带原因', async t => {
+  const { request } = await fixture(t, async () => new Response('nope', { status: 404 }));
+  const res = await request(`/meta?url=${encodeURIComponent(META_URL)}`);
+  assert.equal(res.status, 502);
+  assert.match(res.body.error, /上游 HTTP 404/);
+});
