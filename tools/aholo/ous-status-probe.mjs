@@ -1,0 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+const KEY = readFileSync('.env.local', 'utf8').split('\n').find(l => l.startsWith('LUX3D_API_KEY=')).split('=').slice(1).join('=').trim();
+const bytes = readFileSync('docs/evidence/aholo/world-3FO4K4QI6N4V/panorama.jpg');
+const md5 = createHash('md5').update(bytes).digest('hex');
+const t = await (await fetch('https://api.aholo3d.cn/asset/v1/token', { headers: { Authorization: KEY } })).json();
+const form = new FormData();
+form.append('md5', md5);
+form.append('file', new Blob([bytes]), 'panorama.jpg');
+const up = await (await fetch(t.globalDomain + '/ous/api/v2/single/upload', { method: 'POST', headers: { 'ous-token-v2': t.ousToken }, body: form })).json();
+console.log('upload:', JSON.stringify(up));
+const st = await (await fetch(`${t.globalDomain}/ous/api/v2/upload/status?md5=${md5}`, { headers: { 'ous-token-v2': t.ousToken } })).json();
+console.log('status:', JSON.stringify(st).slice(0, 600));
