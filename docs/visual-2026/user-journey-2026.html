@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>周末共创工作台 · 布置 — 用户旅程重塑报告</title>
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+    --hair-soft:#EFEFF1; --hair:#E4E4E7;
+    --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF;
+    --warn:#96651F; --err:#B4443C;
+    --r-lg:16px; --r-sm:8px;
+    --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","Source Han Sans CN","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--plane);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+  /* ── 头部 ── */
+  header.hero{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:36px 36px 32px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.08em;font-size:13px;color:rgba(255,255,255,.85)}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  header.hero h1{font-size:30px;font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+  header.hero p.sub{color:rgba(255,255,255,.55);font-size:14px;max-width:640px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .meta span{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+  /* ── 章节 ── */
+  section{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:32px 36px;margin-bottom:24px}
+  h2{font-size:20px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  h2 .no{color:var(--green);font-family:var(--font);margin-right:8px;font-variant-numeric:tabular-nums}
+  p.lead{color:var(--ink-soft);font-size:14px;margin-bottom:22px}
+  /* ── 旅程五段 ── */
+  .stages{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .stage{background:var(--plane);border-radius:var(--r-sm);padding:16px 14px;position:relative}
+  .stage .k{font-size:12px;font-weight:600;color:var(--green);letter-spacing:.06em}
+  .stage h3{font-size:16px;font-weight:700;margin:4px 0 6px}
+  .stage p{font-size:12.5px;color:var(--ink-soft);line-height:1.6}
+  .stage .btn-chip{display:inline-block;margin-top:10px;font-size:11.5px;background:var(--ink);color:#fff;border-radius:6px;padding:3px 9px}
+  .stage .btn-chip.ghost{background:var(--paper);color:var(--ink-soft);border:1px solid var(--hair)}
+  .curve{margin:22px 0 4px}
+  .curve svg{width:100%;height:96px;display:block}
+  /* ── 阶段明细 ── */
+  .detail{border-top:1px solid var(--hair-soft);padding-top:22px;margin-top:22px}
+  .detail:first-of-type{border-top:0;margin-top:8px;padding-top:8px}
+  .detail .head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+  .detail .head h3{font-size:17px;font-weight:700}
+  .detail .head small{color:var(--muted);font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .cell{background:var(--plane);border-radius:var(--r-sm);padding:14px 16px;font-size:13px;color:var(--ink-soft)}
+  .cell b{display:block;color:var(--ink);font-size:12px;letter-spacing:.05em;margin-bottom:6px;font-weight:600}
+  .cell ul{list-style:none}
+  .cell li{padding-left:14px;position:relative;margin:3px 0}
+  .cell li::before{content:"";position:absolute;left:2px;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--green)}
+  .cell.pain li::before{background:var(--warn)}
+  .cell.fix li::before{background:var(--green)}
+  /* ── 按钮对照 ── */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:12px;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--hair)}
+  td{padding:12px;border-bottom:1px solid var(--hair-soft);vertical-align:top}
+  td .old{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+  td .new{font-weight:600}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:1px}
+  .tag.primary{background:var(--ink);color:#fff}
+  .tag.pre{background:#FBF3E9;color:var(--warn)}
+  .tag.adv{background:var(--plane-deep);color:var(--ink-soft)}
+  .tag.exit{background:var(--plane);color:var(--ink-soft);border:1px solid var(--hair)}
+  /* ── IA 树 ── */
+  pre.tree{background:var(--plane);border-radius:var(--r-sm);padding:20px 24px;font-size:12.5px;line-height:1.9;color:var(--ink-soft);overflow-x:auto;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+  pre.tree b{color:var(--ink)}
+  pre.tree i{color:var(--green);font-style:normal}
+  pre.tree em{color:var(--warn);font-style:normal}
+  /* ── 原则卡 ── */
+  .principles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .p-card{background:var(--plane);border-radius:var(--r-sm);padding:16px}
+  .p-card b{display:block;font-size:13.5px;margin-bottom:6px}
+  .p-card span{font-size:12px;color:var(--ink-soft);line-height:1.6;display:block}
+  footer{color:var(--faint);font-size:12px;text-align:center;margin-top:36px}
+  @media(max-width:860px){.stages,.principles{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}header.hero h1{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+    <h1>周末共创工作台 · 布置 — 用户旅程重塑报告</h1>
+    <p class="sub">把左栏「客户需求 / 图纸与照片」两条支路里的四个按钮，按旅程顺序重新编排：一步一主钮、前置条件成卡、维护动作降级、去向透明。</p>
+    <div class="meta"><span>2026-10-30</span><span>v1 · 依据 design-spec-2026 视觉令牌</span><span>范围：布置页签左栏</span><span>3835 项测试通过</span></div>
+  </header>
+
+  <section>
+    <h2><span class="no">01</span>旅程总览</h2>
+    <p class="lead">主办人的完整旅程是五段直线。重塑前，四个按钮散落在两条支路上、动词不统一、主次颠倒；重塑后，每一阶段只有一个需要点的主按钮。</p>
+    <div class="stages">
+      <div class="stage"><div class="k">STAGE 1</div><h3>接需求</h3><p>写目标、定类型与人数；可点 ✦ 生成需求参考。</p><span class="btn-chip">按这份细表生成预览</span></div>
+      <div class="stage"><div class="k">STAGE 2</div><h3>备资料</h3><p>上传平面图或现场照片；未连接时出现前置卡。</p><span class="btn-chip ghost">连接场景服务</span></div>
+      <div class="stage"><div class="k">STAGE 3</div><h3>出预览</h3><p>填已知尺寸 → 识别结构 → 核对比例与墙线。</p><span class="btn-chip">生成布置预览</span></div>
+      <div class="stage"><div class="k">STAGE 4</div><h3>定方案</h3><p>画布上核对候选，确认才写入场地；可撤销。</p><span class="btn-chip">确认应用并保存</span></div>
+      <div class="stage"><div class="k">STAGE 5</div><h3>交执行</h3><p>活动安排、物料点验与本机备份，导出交接。</p><span class="btn-chip ghost">执行资料</span></div>
+    </div>
+    <div class="curve" aria-hidden="true">
+      <svg viewBox="0 0 1000 96" preserveAspectRatio="none">
+        <path d="M20,70 C140,64 180,52 300,50 C420,48 470,66 590,58 C710,50 760,26 880,22" fill="none" stroke="#4A7C59" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="20" cy="70" r="6" fill="#EEF3EF" stroke="#4A7C59" stroke-width="2.5"/>
+        <circle cx="300" cy="50" r="6" fill="#EEF3EF" stroke="#4A7C59" stroke-width="2.5"/>
+        <circle cx="590" cy="58" r="6" fill="#EEF3EF" stroke="#4A7C59" stroke-width="2.5"/>
+        <circle cx="880" cy="22" r="6" fill="#4A7C59"/>
+        <text x="20" y="90" font-size="11" fill="#71767E" text-anchor="middle">接需求</text>
+        <text x="300" y="90" font-size="11" fill="#71767E" text-anchor="middle">出预览</text>
+        <text x="590" y="90" font-size="11" fill="#71767E" text-anchor="middle">定方案</text>
+        <text x="880" y="90" font-size="11" fill="#71767E" text-anchor="middle">交执行</text>
+      </svg>
+      <p style="font-size:12px;color:#71767E;margin-top:2px">情绪曲线：上传后等待识别是唯一低谷（②→③），已用前置卡说明等待预期；确认应用与导出是两个高点。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>四阶段明细：痛点 → 解法</h2>
+
+    <div class="detail">
+      <div class="head"><h3>① 接需求</h3><small>客户需求页签</small></div>
+      <div class="grid2">
+        <div class="cell pain"><b>重塑前</b><ul><li>底部并排「生成布置预览」与「暂不填写」，主次尚清但去向不明。</li><li>不知道「暂不填写」点了会发生什么。</li></ul></div>
+        <div class="cell fix"><b>重塑后</b><ul><li>主钮改叫「按这份细表生成预览」，把「这是按你填的细表算的」写进按钮；is-manual 次要样式保留，生成主入口仍在右栏对话。</li><li>次钮改为「暂不填写 · 先回画布」，把去向写进按钮。</li><li>左栏改过一项（活动类型／人数），右栏简报与对话回显立刻跟上；没保存过的表单默认值不算你填的，不冒充简报。</li></ul></div>
+      </div>
+    </div>
+
+    <div class="detail">
+      <div class="head"><h3>② 备资料</h3><small>图纸与照片页签 · 上半</small></div>
+      <div class="grid2">
+        <div class="cell pain"><b>重塑前</b><ul><li>「准备场景连接」裸露为一个常驻按钮，不知道何时该点、点了干什么。</li><li>「编辑当前场地」卡片占据面板顶部主视觉，像是流程第一步，实为维护动作。</li></ul></div>
+        <div class="cell fix"><b>重塑后</b><ul><li>连接改为前置卡：只在未连接时出现，说明「资料会保留、连接不改场景」，按钮「连接场景服务」；连上即消失。</li><li>场地编辑降级为底部「进阶」块，标题带当前尺寸。</li></ul></div>
+      </div>
+    </div>
+
+    <div class="detail">
+      <div class="head"><h3>③ 出预览</h3><small>图纸与照片页签 · 输入与核对</small></div>
+      <div class="grid2">
+        <div class="cell pain"><b>重塑前</b><ul><li>「Generate 重建并设计方案」中英混用，与另一支路的「生成布置预览」指同一类动作。</li><li>尺寸输入无标题，只靠占位文字。</li></ul></div>
+        <div class="cell fix"><b>重塑后</b><ul><li>中英混用的「Generate 重建并设计方案」改成「生成布置预览」，动词统一为中文。</li><li>输入区补标签「已知尺寸（米）」。</li><li>客户需求支路那颗同日已降为「按这份细表生成预览」——两条支路不再共用一个词，是因为右栏对话才是生成主入口。</li></ul></div>
+      </div>
+    </div>
+
+    <div class="detail">
+      <div class="head"><h3>④ 定方案 → ⑤ 交执行</h3><small>画布与执行页签</small></div>
+      <div class="grid2">
+        <div class="cell pain"><b>重塑前</b><ul><li>候选确认按钮嵌在巨大表单 fieldset 里，与「我在填的输入」混在同一个禁用域。</li></ul></div>
+        <div class="cell fix"><b>重塑后</b><ul><li>结果区独立成「结果与确认」分区，与输入分区平级；场地编辑期间由函数守卫互斥，不再靠嵌套连坐禁用。</li><li>候选应用并保存后，结果区出现「回对话继续布置」，一点把光标交回右栏对话；这条支路干完活不再断头。</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>按钮对照</h2>
+    <table>
+      <tr><th style="width:32%">重塑前</th><th style="width:38%">重塑后</th><th>角色</th></tr>
+      <tr><td><span class="old">生成布置预览</span>（客户需求页签）</td><td><span class="new">按这份细表生成预览</span></td><td><span class="tag adv">次要</span>逐项细填的入口，标明按你填的细表算；生成主入口在右栏对话</td></tr>
+      <tr><td><span class="old">Generate 重建并设计方案</span></td><td><span class="new">生成布置预览</span></td><td><span class="tag primary">主钮</span>图纸支路最后一步，消灭中英混用</td></tr>
+      <tr><td><span class="old">准备场景连接</span>（常驻按钮）</td><td><span class="new">连接场景服务</span>（未连接时才出现的前置卡）</td><td><span class="tag pre">前置</span>条件渲染，连上即消失</td></tr>
+      <tr><td><span class="old">编辑当前场地</span>（面板顶部）</td><td><span class="new">编辑当前场地</span>（底部「进阶」块）</td><td><span class="tag adv">进阶</span>维护动作，不与主流程争位</td></tr>
+      <tr><td><span class="old">暂不填写</span></td><td><span class="new">暂不填写 · 先回画布</span></td><td><span class="tag exit">出口</span>去向写进按钮</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>信息架构：嵌套分区</h2>
+    <p class="lead">fieldset 收缩回「只锁输入表单」的本职；任务状态、结构核对、候选结果升为平级分区，各分区自管互斥。</p>
+    <pre class="tree"><b>图纸与照片</b>
+├─ ① <i>资料</i>           上传卡 + 图纸列表 ＋ 参考底图（折叠）
+├─ ② <i>输入</i>           fieldset「生成输入」（唯一禁用域：场地编辑 / 表单未就绪）
+│      连接前置卡（条件渲染）→ 已知尺寸 → 尺寸清单 → 模式与要求 → [生成布置预览]
+├─ ③ <i>进度与核对</i>     任务状态 / 结构核对（比例闸 + 平面图 + 墙线）/ 原图对应
+├─ ④ <i>结果与确认</i>     三维候选 → 确认应用并保存 / 放弃；当前方案创意（折叠）
+└─ <em>进阶</em>            编辑当前场地（草稿 → 对比图 → 勾选确认）</pre>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>五条设计原则</h2>
+    <div class="principles">
+      <div class="p-card"><b>一步一主钮</b><span>每个旅程阶段只允许一个墨底主按钮，其余全部降级为次级或前置。</span></div>
+      <div class="p-card"><b>前置成卡</b><span>先决条件不用裸按钮，用会消失的说明卡，把「为什么」讲完再给动作。</span></div>
+      <div class="p-card"><b>维护降级</b><span>编辑、微调类动作沉到底部进阶区，标题即状态（当前尺寸）。</span></div>
+      <div class="p-card"><b>动词统一</b><span>同一类动作跨页签同名；中文界面不出英文按钮。</span></div>
+      <div class="p-card"><b>去向透明</b><span>出口类按钮把目的地写进文案，用户点了就知道发生什么。</span></div>
+    </div>
+  </section>
+
+  <footer>依据 docs/design-spec-2026.md 视觉令牌生成 · Inter / Noto Sans SC · 墨底主钮 #2A2C31 · 品牌绿 #4A7C59 · 灰阶 plane/hair · 幕景 SCENDANCE © 2026</footer>
+</div>
+</body>
+</html>

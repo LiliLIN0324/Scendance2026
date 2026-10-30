@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>用户旅程图 · 按流程逐步画 — 幕景 Scendance</title>
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+    --hair-soft:#EFEFF1; --hair:#E4E4E7;
+    --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF;
+    --warn:#96651F; --warn-bg:#FBF3E9;
+    --r-lg:16px; --r-sm:8px;
+    --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","Source Han Sans CN","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--plane);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:1180px;margin:0 auto;padding:48px 28px 80px}
+  header.hero{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:36px 36px 32px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.08em;font-size:13px;color:rgba(255,255,255,.85)}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  header.hero h1{font-size:29px;font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+  header.hero p.sub{color:rgba(255,255,255,.55);font-size:14px;max-width:720px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .meta span{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+  section{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:28px 32px;margin-bottom:24px}
+  h2{font-size:19px;font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
+  h2 .no{color:var(--green);margin-right:8px;font-variant-numeric:tabular-nums}
+  p.lead{color:var(--ink-soft);font-size:13.5px;margin-bottom:18px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;font-size:12.5px;color:var(--ink-soft)}
+  .st{display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600}
+  .st.ok{background:var(--green-pale);color:var(--green-deep)}
+  .st.gap{background:var(--warn-bg);color:var(--warn)}
+  .st.ask{background:var(--plane-deep);color:var(--ink-soft);border:1px solid var(--hair)}
+  .anchor{scroll-margin-top:24px}
+  /* ── 旅程图 ── */
+  .jflow-wrap{overflow-x:auto;padding-bottom:6px}
+  .jflow{display:flex;align-items:stretch;min-width:max-content}
+  .jlanes{display:flex;flex-direction:column;gap:10px}
+  .jlane{display:flex;align-items:stretch}
+  .lane-tag{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--green-deep);background:var(--green-pale);border-radius:6px;padding:8px 3px;margin-right:8px;align-self:stretch;text-align:center}
+  .jnode{width:196px;flex-shrink:0;background:var(--paper);border:1px solid var(--hair);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+  .jnode img{display:block;width:100%;height:110px;object-fit:cover;object-position:top}
+  .jcap{padding:7px 9px;font-size:11.5px;line-height:1.5}
+  .jcap b{display:block;color:var(--ink);font-size:11.5px}
+  .jcap span{color:var(--ink-soft);font-size:10.5px}
+  .jcap .pg{display:inline-block;font-size:9.5px;font-weight:700;color:var(--muted);background:var(--plane);border-radius:4px;padding:0 5px;margin-bottom:2px;letter-spacing:.03em}
+  .jwf{height:110px;background:var(--plane);border-bottom:1px solid var(--hair-soft);display:flex;flex-direction:column;justify-content:center;gap:4px;padding:10px}
+  .jwf i{font-style:normal;font-size:10.5px;color:var(--muted)}
+  .chip{display:inline-block;font-size:10px;background:var(--paper);border:1px solid var(--hair);border-radius:4px;padding:0 6px;color:var(--ink-soft);margin:1px 2px 1px 0;white-space:nowrap}
+  .chip.hot{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.done{background:var(--green-pale);border-color:var(--green-pale);color:var(--green-deep)}
+  .jarrow{flex-shrink:0;width:118px;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 6px;gap:3px}
+  .a-label{font-size:10.5px;font-weight:600;color:var(--green-deep);text-align:center;line-height:1.35}
+  .a-label small{display:block;font-weight:400;color:var(--faint);font-size:9.5px}
+  .a-line{width:100%;height:10px}
+  .jarrow.dashed .a-label{color:var(--warn)}
+  .jback{font-size:10.5px;color:var(--muted);margin-top:8px}
+  .jback b{color:var(--ink-soft)}
+  .fmeta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .fmeta .sid{font-size:12px;font-weight:700;color:#fff;background:var(--ink);border-radius:6px;padding:2px 9px}
+  .fmeta h3{font-size:16.5px;font-weight:700}
+  .fmeta small{color:var(--muted);font-size:12px}
+  .flow{border-top:1px solid var(--hair-soft);padding-top:20px;margin-top:20px}
+  .flow:first-of-type{border-top:0;margin-top:4px;padding-top:4px}
+  footer{color:var(--faint);font-size:12px;text-align:center;margin-top:36px}
+  /* ── 看大图 ── */
+  .jnode img,.wall img{cursor:zoom-in}
+  .jnode img:hover,.wall img:hover{filter:brightness(1.03)}
+  .lb{position:fixed;inset:0;background:rgba(20,20,22,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out;padding:20px}
+  .lb.on{display:flex}
+  .lb img{max-width:94vw;max-height:92vh;border-radius:10px;box-shadow:0 24px 80px rgba(0,0,0,.55)}
+  .lb .hint{position:fixed;bottom:18px;left:0;right:0;text-align:center;color:rgba(255,255,255,.6);font-size:12px}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+    <h1>用户旅程图 · 一条流程一条链</h1>
+    <p class="sub">每个流程从入口画面开始：点哪个按钮、箭头导向哪个页面或功能，一路画到终点。实拍全部来自<b>你正在使用的实例</b>（进行中状态：左栏「活动简报｜活动资料」页签、右栏 Agent 常驻）；暂无实拍的用虚线框（框内就是真实控件名）。虚线箭头＝提案中的跳转（F 卡）。</p>
+    <div class="meta"><span>2026-10-30 · v3</span><span>实拍来源：本地实例 playwright</span><span>提案 · 未点卡零改码</span></div>
+  </header>
+
+  <section>
+    <h2><span class="no">00</span>怎么读</h2>
+    <div class="legend">
+      <span><span class="st ok">实拍画面</span>&nbsp;来自你的实例，<b>点击可看大图</b></span>
+      <span><span class="st ask">虚线框</span>&nbsp;需运行时数据才能到达的态（提案卡/核对/客户页等），控件名与代码一致</span>
+      <span><span class="st ok">虚线箭头</span>&nbsp;本批补上的跳转（F-01～F-05，已落地）</span>
+      <span>&nbsp;<b style="font-size:11px;background:var(--ink);color:#fff;border-radius:4px;padding:0 6px">黑chip</b>＝触发跳转的按钮</span>
+    </div>
+    <p class="lead">每条链从左往右读；「分支」用上下两条泳道表示（A=对话支路，B=图纸支路）；链下注明回环（放弃/撤销回到哪）。<b>同一页面的两种状态</b>：空白新草稿时首屏是底部快捷生成条、左栏是「简报卡＋更多资料」折叠层；一旦有资料（填过需求/打开过深工具），左栏常驻「活动简报｜活动资料」页签——你在用的就是后者，本图按后者画。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">01</span>十条旅程链</h2>
+
+    <div class="flow anchor" id="s0">
+      <div class="fmeta"><span class="sid">S0</span><h3>开机进入</h3><small><span class="st ok">已对齐</span></small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><img src="shots3000/60-auth-login.png" alt="登录页（intro 产品页）"/><div class="jcap"><span class="pg">/auth/</span><b>产品页 · 登录/注册</b><span>未登录时右卡是登录/注册表单；「进入工作台 →」</span></div></div>
+        <div class="jarrow"><span class="a-label">进入工作台 →<small>登录成功带 next 跳转</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><img src="shots3000/00-first.png" alt="工作台首屏"/><div class="jcap"><span class="pg">/editor/</span><b>工作台首屏 · 本地草稿</b><span>顶栏「已保存到本机」</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="flow anchor" id="s1">
+      <div class="fmeta"><span class="sid">S1</span><h3>新建活动</h3><small><span class="st ok">已对齐 · F-01 落地</span></small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><img src="shots3000/70-projects.png" alt="管理页"/><div class="jcap"><span class="pg">/projects/</span><b>管理页 · 项目</b><span>列表 / 成员 / 设置 · 最近动过的排最前</span></div></div>
+        <div class="jarrow"><span class="a-label">＋ 新建项目</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><img src="shots3000/71-projects-new.png" alt="新建活动方案表单"/><div class="jcap"><span class="pg">/projects/</span><b>新建表单</b><span>只起名字，不必现在量房 · 尺寸留给对话①</span></div></div>
+        <div class="jarrow"><span class="a-label">创建并打开<small>?project=…</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><img src="shots3000/00-first.png" alt="工作台首屏"/><div class="jcap"><span class="pg">/editor/</span><b>工作台首屏</b><span>进入 S2 接需求</span></div></div>
+      </div></div>
+      <p class="jback">回环：顶栏「<b>项目</b>」随时回管理页；管理页「<b>回到画布 ↗</b>」回工作台。项目列表按最近动过的排最前，列表上方一条本机草稿横幅：<b>继续上次活动</b> · <b>从本机备份恢复</b>（F-05）。</p>
+    </div>
+
+    <div class="flow anchor" id="s2">
+      <div class="fmeta"><span class="sid">S2</span><h3>接需求</h3><small><span class="st ok">已对齐 · F-02 落地（左栏改动即时回显，钮降为次要）</span></small></div>
+      <div class="jflow-wrap"><div class="jlanes">
+        <div class="jlane"><span class="lane-tag">主路</span><div class="jflow">
+          <div class="jnode"><img src="shots3000/00-first.png" alt="首屏快捷条"/><div class="jcap"><span class="pg">首屏</span><b>快捷生成条</b><span><span class="chip">品牌快闪…婚礼聚会</span><span class="chip">室内 12×9</span><span class="chip">120 人</span></span></div></div>
+          <div class="jarrow"><span class="a-label">生成方案 / 发送</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><img src="shots3000/10-agent.png" alt="Agent 对话"/><div class="jcap"><span class="pg">右栏</span><b>晴光 Agent 对话</b><span>「说一句，比如『80 人发布会…』」</span></div></div>
+          <div class="jarrow"><span class="a-label">补一句需求</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>方案提案 · 尚未应用</i><div><span class="chip">座位 n/40</span></div><div><span class="chip hot">确认布置</span><span class="chip">放弃</span></div></div><div class="jcap"><span class="pg">画布+右栏</span><b>提案预览</b><span>半透明候选落画布</span></div></div>
+        </div></div>
+        <div class="jlane"><span class="lane-tag">次路</span><div class="jflow">
+          <div class="jnode"><img src="shots3000/30-requirements.png" alt="活动资料·客户需求"/><div class="jcap"><span class="pg">左栏</span><b>活动资料 · 客户需求</b><span>01 目标与来宾体验 · 02 活动类型与规模 · 必需项 · 改过一项右栏即回显</span></div></div>
+          <div class="jarrow"><span class="a-label">按这份细表生成预览<small>is-manual 次要入口</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>同上：提案预览</i><div><span class="chip hot">确认布置</span><span class="chip">放弃</span></div></div><div class="jcap"><span class="pg">画布+右栏</span><b>提案预览</b><span>与主路汇合</span></div></div>
+        </div></div>
+      </div></div>
+      <p class="jback">回环：「<b>放弃</b>」清空候选回画布；「<b>暂不填写 · 先回画布</b>」收起左栏。</p>
+    </div>
+
+    <div class="flow anchor" id="s3">
+      <div class="fmeta"><span class="sid">S3</span><h3>建场地（①）</h3><small><span class="st ok">已对齐 · F-03 落地（B 支路回对话引导）</span></small></div>
+      <div class="jflow-wrap"><div class="jlanes">
+        <div class="jlane"><span class="lane-tag">A 对话</span><div class="jflow">
+          <div class="jnode"><img src="shots3000/10-agent.png" alt="Agent"/><div class="jcap"><span class="pg">右栏</span><b>晴光对话①</b><span>「室内 12×9，层高 4」</span></div></div>
+          <div class="jarrow"><span class="a-label">聊清尺度</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>场地预填卡（确认前不报假米数）</i><div><span class="chip">室内 · 12 × 9</span><span class="chip">主入口</span><span class="chip">层高 4.0</span></div><div><span class="chip hot">确认生成 3D</span></div></div><div class="jcap"><span class="pg">右栏</span><b>预填卡</b><span>人点改再生成</span></div></div>
+          <div class="jarrow"><span class="a-label">确认生成 3D</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>3D 壳体：地面+墙+主入口+层高</i><div><span class="chip done">可布置场地</span></div></div><div class="jcap"><span class="pg">画布</span><b>壳体落画布</b><span>进 S4 布置</span></div></div>
+        </div></div>
+        <div class="jlane"><span class="lane-tag">B 图纸</span><div class="jflow">
+          <div class="jnode"><img src="shots3000/30-requirements.png" alt="活动资料"/><div class="jcap"><span class="pg">左栏</span><b>活动资料 · 客户需求</b><span>页签：客户需求｜图纸与照片｜物料工具</span></div></div>
+          <div class="jarrow"><span class="a-label">「图纸与照片」页签</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><img src="shots3000/40-blueprint.png" alt="图纸与照片"/><div class="jcap"><span class="pg">左栏</span><b>图纸与照片</b><span>上传卡 · 参考底图 · 前置卡 · 已知尺寸</span></div></div>
+          <div class="jarrow"><span class="a-label">连接场景服务<small>未连接时的前置卡</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>识别 → 人工核对（红线：不代确认墙）</i><div><span class="chip">确认长度并锁定比例</span><span class="chip">核对识别结构</span></div><div><span class="chip hot">确认结构并继续设计</span></div></div><div class="jcap"><span class="pg">同页核对区</span><b>结构核对</b><span>比例闸→墙线→原图对应</span></div></div>
+          <div class="jarrow"><span class="a-label">生成布置预览</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>三维候选方案</i><div><span class="chip hot">确认应用并保存</span><span class="chip">放弃候选</span></div><i>应用后结果区出现：</i><div><span class="chip">回对话继续布置</span></div></div><div class="jcap"><span class="pg">同页结果区</span><b>候选确认</b><span>应用后可撤销 · 引导回右栏对话</span></div></div>
+        </div></div>
+      </div></div>
+      <p class="jback">F-03 已落：B 支路应用候选后，结果区出现「<b>回对话继续布置</b>」，一点即回到右栏对话并把光标放进输入框。维护项「<b>编辑当前场地</b>」在图纸与照片页底部（进阶块），不占主链。</p>
+    </div>
+
+    <div class="flow anchor" id="s4">
+      <div class="fmeta"><span class="sid">S4</span><h3>出布置（②）</h3><small><span class="st ok">已对齐</span></small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><img src="shots3000/10-agent.png" alt="Agent"/><div class="jcap"><span class="pg">右栏</span><b>晴光对话②</b><span>或快捷条「生成方案」</span></div></div>
+        <div class="jarrow"><span class="a-label">生成布置预览</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>画布：半透明候选＋绿/蓝/橙/红差异框</i><div><span class="chip">方案提案 · 尚未应用</span></div><div><span class="chip hot">确认布置</span><span class="chip">放弃</span></div></div><div class="jcap"><span class="pg">画布+右栏</span><b>提案预览</b><span>确认前不落盘</span></div></div>
+        <div class="jarrow"><span class="a-label">确认布置</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>方案落画布 · 自动保存</i><div><span class="chip done">可撤销（一次）</span></div></div><div class="jcap"><span class="pg">画布</span><b>布置生效</b><span>进 S5 优化</span></div></div>
+      </div></div>
+      <p class="jback">回环：「<b>放弃</b>」→ 回画布原状，可重新生成。</p>
+    </div>
+
+    <div class="flow anchor" id="s5">
+      <div class="fmeta"><span class="sid">S5</span><h3>优化（③）</h3><small><span class="st ok">已对齐</span></small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><div class="jwf"><i>已布置的画布</i><div><span class="chip">选中物件 / 拖改</span></div></div><div class="jcap"><span class="pg">画布</span><b>当前方案</b><span>可手动微调</span></div></div>
+        <div class="jarrow"><span class="a-label">对话「改一版…」</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>只报冲突/动线＋可一点的改法</i><div><span class="chip hot">确认布置</span><span class="chip">放弃</span></div></div><div class="jcap"><span class="pg">画布+右栏</span><b>优化预览</b><span>同 S4 预览通道</span></div></div>
+        <div class="jarrow"><span class="a-label">确认布置</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>优化落画布</i><div><span class="chip done">可撤销</span></div></div><div class="jcap"><span class="pg">画布</span><b>新版生效</b><span>氛围等 T-03 未开</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="flow anchor" id="s6">
+      <div class="fmeta"><span class="sid">S6</span><h3>物料与生成物件</h3><small><span class="st ok">已对齐</span> · 卡点在外部服务（M1 待审合）</small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><img src="shots/rail-aholo.png" alt="Aholo"/><div class="jcap"><span class="pg">左轨 Aholo</span><b>生成物件</b><span>三步教程：用法/等待预期/额度</span></div></div>
+        <div class="jarrow"><span class="a-label">提交生成任务</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>任务卡：排队→生成→候选预览</i><div><span class="chip">预览</span><span class="chip">设定尺寸</span><span class="chip hot">加入场景</span></div></div><div class="jcap"><span class="pg">画布</span><b>物件入场景</b><span>概念道具，物料表如实标注</span></div></div>
+        <div class="jarrow"><span class="a-label">「物料工具」页签</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><img src="shots3000/50-materials.png" alt="物料工具页签"/><div class="jcap"><span class="pg">左栏</span><b>物料建模 / 材质调整</b><span>活动资料 ·「物料工具」页签 · 原版本保留</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="flow anchor" id="s7">
+      <div class="fmeta"><span class="sid">S7</span><h3>评审与客户交付（④）</h3><small><span class="st ok">已对齐</span> · 禁代发客户链 · 右栏 Agent 对话与记录在此模式可见</small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><div class="jwf"><i>左轨「评审」→ 发给客户</i><div><span class="chip">捕获快照</span><span class="chip">预填字段人改</span></div></div><div class="jcap"><span class="pg">左轨评审</span><b>评审面板</b><span>需真实数据实拍</span></div></div>
+        <div class="jarrow"><span class="a-label">发布云端链接 / 导出离线 HTML</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>只读场景 + 物料清单 · 无编辑控件</i><div><span class="chip">旋转 / 缩放 / 视角</span></div></div><div class="jcap"><span class="pg">/view/</span><b>客户只读页</b><span>你把链接发给客户</span></div></div>
+        <div class="jarrow dashed"><span class="a-label">撤销链接<small>立即失效</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#96651F" stroke-width="2" stroke-dasharray="6 5"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#96651F"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>后续访问被拒绝</i></div><div class="jcap"><span class="pg">/view/</span><b>链接失效态</b><span>删除项目同样生效</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="flow anchor" id="s8">
+      <div class="fmeta"><span class="sid">S8</span><h3>执行交接（④）</h3><small><span class="st ok">已对齐</span> · 右栏 Agent 对话与记录在此模式可见</small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><div class="jwf"><i>左轨「执行」→ 执行工作单</i><div><span class="chip">活动安排</span><span class="chip">点验</span><span class="chip">物料表</span></div></div><div class="jcap"><span class="pg">左轨执行</span><b>执行 · 本机内部资料</b><span>与客户页隔离</span></div></div>
+        <div class="jarrow"><span class="a-label">导出交接 / 导出本机备份</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>本机文件（离开页面）</i><div><span class="chip done">完整活动交接</span><span class="chip done">V3/V4 备份</span></div></div><div class="jcap"><span class="pg">本机</span><b>导出物</b><span>进 S10 恢复链</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="flow anchor" id="s9">
+      <div class="fmeta"><span class="sid">S9</span><h3>协作与编辑权</h3><small><span class="st ok">已对齐 · F-04 落地</span></small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><img src="shots3000/70-projects.png" alt="项目列表"/><div class="jcap"><span class="pg">/projects/</span><b>项目列表</b><span>「设计师 A 正在编辑 / 可接手编辑」</span></div></div>
+        <div class="jarrow"><span class="a-label">打开方案<small>需先释放当前编辑权</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><img src="shots3000/00-first.png" alt="工作台"/><div class="jcap"><span class="pg">/editor/</span><b>接手编辑</b><span>lease 续期；被接手后工作区提示「由别人编辑，改动只在本机」</span></div></div>
+        <div class="jarrow dashed"><span class="a-label">去项目页接手编辑<small>F-04 已落：先把本机图纸落盘再跳</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#96651F" stroke-width="2" stroke-dasharray="6 5"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#96651F"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>你仍持有「周末共创工作坊」的编辑权</i><div><span class="chip hot">释放编辑权</span></div></div><div class="jcap"><span class="pg">/projects/</span><b>释放编辑权横幅</b><span>释放前先把本机图纸落盘</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="flow anchor" id="s10">
+      <div class="fmeta"><span class="sid">S10</span><h3>备份与恢复 / 换机</h3><small><span class="st ok">已对齐 · F-05 落地</span></small></div>
+      <div class="jflow-wrap"><div class="jflow">
+        <div class="jnode"><div class="jwf"><i>左轨「执行」→ 导出本机备份</i><div><span class="chip hot">导出本机备份</span></div></div><div class="jcap"><span class="pg">左轨执行</span><b>备份导出</b><span>场景+需求+图纸+点验</span></div></div>
+        <div class="jarrow"><span class="a-label">得到备份文件</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+        <div class="jnode"><img src="shots3000/72-projects-draft.png" alt="本机草稿横幅"/><div class="jcap"><span class="pg">/projects/</span><b>本机草稿横幅</b><span>换机冷启动没有草稿，也给出「从本机备份恢复」</span></div></div>
+        <div class="jarrow dashed"><span class="a-label">从本机备份恢复<small>F-05 已落：/editor/?restore=backup</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#96651F" stroke-width="2" stroke-dasharray="6 5"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#96651F"/></svg></div>
+        <div class="jnode"><div class="jwf"><i>校验 → 恢复 → 可撤销</i><div><span class="chip done">场景+需求+图纸+点验完整回来</span></div></div><div class="jcap"><span class="pg">/editor/</span><b>恢复成功</b><span>自动打开执行工作区的恢复面板 · 事务护栏原样</span></div></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>旅程图暴露的三个断点（本批已补）</h2>
+    <p class="lead">把链画出来之后，断点自己浮出来了：</p>
+    <div class="legend" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <span><b>S1</b> · 新建表单逼用户先量房，把人从「对话聊出场地」的主路径上拽下来 → <span class="st ok">F-01 已落</span></span>
+      <span><b>S10</b> · 备份文件在手里，恢复却要先钻进工作台——冷启动用户在最需要它的页面找不到入口 → <span class="st ok">F-05 已落</span></span>
+      <span><b>S3/S9</b> · B 支路干完活没有「回对话」的桥；被抢权后没有「去接手」的桥——两条断头路 → <span class="st ok">F-03 / F-04 已落</span></span>
+    </div>
+  </section>
+
+  <section class="anchor" id="cards">
+    <h2><span class="no">03</span>差距卡表（五张全部落地）</h2>
+    <table class="cards" style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr><th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--muted)">卡</th><th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--muted)">流程</th><th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--muted)">in</th><th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--muted)">out</th><th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--muted)">验收（各 3）</th></tr>
+      <tr><td class="cid" style="padding:11px 10px;border-bottom:1px solid var(--hair-soft);font-weight:700;color:var(--green)">F-01</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">S1</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">/projects/ 新建免尺寸、只留名称；最近活动置顶</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">不动对话①；不动壳体契约</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">新建后对话可聊出场地；旧路径不回归</td></tr>
+      <tr><td class="cid" style="padding:11px 10px;border-bottom:1px solid var(--hair-soft);font-weight:700;color:var(--green)">F-02</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">S2</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">活动需求表回显联动与文案</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">不删次要入口；不改右栏主路径</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">左栏改动右栏可见；主入口唯一</td></tr>
+      <tr><td class="cid" style="padding:11px 10px;border-bottom:1px solid var(--hair-soft);font-weight:700;color:var(--green)">F-03</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">S3</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">图纸支路完成后的「回对话继续布置」引导</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">不改重建流程；不代确认墙</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">应用候选后出引导；点击聚焦右栏对话</td></tr>
+      <tr><td class="cid" style="padding:11px 10px;border-bottom:1px solid var(--hair-soft);font-weight:700;color:var(--green)">F-04</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">S9</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">被抢权提示加去向链接</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">不改 lease 机制</td><td style="padding:11px 10px;border-bottom:1px solid var(--hair-soft)">被抢权→一键到项目页</td></tr>
+      <tr><td class="cid" style="padding:11px 10px;font-weight:700;color:var(--green)">F-05</td><td style="padding:11px 10px">S10</td><td style="padding:11px 10px">/projects/ 加「从本机备份恢复」入口</td><td style="padding:11px 10px">不动恢复事务逻辑（V3/V4/撤销恢复）</td><td style="padding:11px 10px">项目页恢复含图纸备份成功；失败回滚原样</td></tr>
+    </table>
+    <p class="lead" style="margin-top:16px">落地顺序：<b>F-01 → F-05 → F-03 → F-04 → F-02</b>，一次只开一张卡；F-02 的回显按「改过一项才算她填的」判定，未保存的表单默认值仍不冒充简报。核对「Agent 贯穿」时发现评审/执行模式只留着输入框、对话记录却不显示——已把记录改成三种模式共用。验证：typecheck 干净；全量 3835／3837 项用例通过，余下 2 项是本批之前就存在的旧断言与样例漂移，与本次改动无关。分支开发，合入只由人。</p>
+  </section>
+
+  <footer>实拍来自你正在使用的本地实例（3000 端口 · 进行中状态，playwright + Chrome 1440×900 @1.5x）· 管理页三张与 Aholo 一张同取自这个 3000 实例，其业务接口走仓库自带的本地 mock 后端（mock-server.cjs:3099），项目与成员名是示例数据 · 截图存 docs/visual-2026/shots3000/ 与 shots/ · 虚线框控件名与 frontend 实现一字不差 · <b>点任意截图可看大图</b> · 幕景 SCENDANCE © 2026</footer>
+</div>
+<script>
+  (function(){
+    var lb=document.createElement('div');
+    lb.className='lb';
+    lb.innerHTML='<img alt="大图"/><span class="hint">点击任意处或按 Esc 关闭 · 原图 '+''+'@1.5x</span>';
+    document.body.appendChild(lb);
+    var big=lb.querySelector('img');
+    function open(src){big.src=src;lb.classList.add('on');}
+    function close(){lb.classList.remove('on');big.src='';}
+    document.querySelectorAll('.jnode img,.wall img').forEach(function(im){
+      im.setAttribute('title','点击查看大图');
+      im.addEventListener('click',function(e){e.stopPropagation();open(im.src);});
+    });
+    lb.addEventListener('click',close);
+    document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+  })();
+</script>
+</body>
+</html>

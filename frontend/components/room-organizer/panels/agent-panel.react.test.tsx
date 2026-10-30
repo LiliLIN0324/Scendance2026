@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { presetModelUrl } from '../lib/scene-presets';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
@@ -21,6 +22,7 @@ const studioMock = vi.hoisted(() => ({
   discardPreview: vi.fn(),
   setBrief: vi.fn(),
   brief: { event: null as string | null, guests: null as number | null },
+  hasSavedBrief: false,
   preview: null as unknown,
   stale: false,
   expired: false,
@@ -105,6 +107,7 @@ beforeEach(() => {
   studioMock.generate.mockReset(); studioMock.generate.mockResolvedValue(undefined);
   studioMock.discardPreview.mockClear(); studioMock.setBrief.mockClear();
   studioMock.brief = { event: null, guests: null };
+  studioMock.hasSavedBrief = false;
   studioMock.preview = null; studioMock.stale = false; studioMock.expired = false; studioMock.busy = false;
   studioMock.recoverable = false;
   studioMock.connection = '离线引导';
@@ -131,6 +134,17 @@ describe('T-04 delivery narrative in the Agent panel', () => {
     render(ui(state.layout));
     send('准备客户评审');
     await waitFor(() => expect(callbacks.onOpenReview).toHaveBeenCalledOnce());
+  });
+
+  // Agent 贯穿：评审/执行模式也留着输入框，说过的话必须回显在同一份记录里。
+  it('keeps the conversation visible in review mode', async () => {
+    callbacks.workbenchMode = 'review';
+    render(ui(state.layout));
+    send('准备客户评审');
+    await waitFor(() => expect(callbacks.onOpenReview).toHaveBeenCalledOnce());
+    const userTurn = document.querySelector('.ap-user');
+    expect(userTurn?.textContent).toContain('准备客户评审');
+    expect(document.querySelector('.ap-turn')?.textContent).toBeTruthy();
   });
 
   it('labels execution exports as local internal material and never claims cloud collaboration', () => {
@@ -247,6 +261,25 @@ describe('T-UI visible interaction', () => {
     expect(actions).toHaveLength(2);
     expect(actions[0]!.textContent).toContain('空白场地');
     expect(actions[1]!.textContent).toContain('从地图圈画户外场地');
+  });
+
+  // F-02：左栏表单是次要轨，但改过的值必须看得见——简报和对话回显读的是同一个 recap。
+  it('echoes a left-rail form change into the brief', () => {
+    studioMock.brief = { event: '工作坊', guests: 40 };
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    const brief = screen.getByLabelText('活动简报');
+    expect(within(brief).getByText('工作坊')).toBeTruthy();
+    expect(within(brief).getByText('40 人')).toBeTruthy();
+    expect(within(brief).queryByText('还没说')).toBeNull();
+  });
+
+  it('keeps untouched form defaults out of the brief', () => {
+    studioMock.brief = { event: INITIAL_BRIEF.event, guests: INITIAL_BRIEF.guests };
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    const brief = screen.getByLabelText('活动简报');
+    expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
+    expect(within(brief).queryByText('品牌快闪')).toBeNull();
+    expect(within(brief).queryByText('24 人')).toBeNull();
   });
 
   it('routes export intent to a preview card and only the confirm button triggers the handoff', async () => {

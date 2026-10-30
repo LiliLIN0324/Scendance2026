@@ -180,6 +180,19 @@ const localModelByAssetId = new Map(
 let uploadedSources = [];
 let latestProposal = null;
 
+// --- 工作室与项目（管理页读的是 /studios/:id/projects 与 /members，字段按前端的小驼峰）---
+const mockMembers = [
+  { userId: MOCK_USER_ID, role: 'owner', displayName: '负责人 A' },
+  { userId: 'aaaaaaaa-0000-4000-8000-000000000001', role: 'editor', displayName: '设计师 A' },
+];
+const mockProjects = [
+  { id: MOCK_PROJECT_ID, studio_id: MOCK_STUDIO_ID, name: '周末共创工作坊', revision: 3, updated_at: new Date(Date.now() - 864e5).toISOString() },
+  {
+    id: '33333333-3333-4333-8333-333333333334', studio_id: MOCK_STUDIO_ID, name: '秋季新品发布会', revision: 7,
+    updated_at: new Date().toISOString(), current_editor: '设计师 A', lease_expires: new Date(Date.now() + 3e5).toISOString(),
+  },
+];
+
 // --- Generation (Lux3D/HY3) mock state ---
 const genJobs = new Map();
 function makeGenJob(body) {
@@ -328,7 +341,21 @@ const server = http.createServer((req, res) => {
       // Projects list
       if (apiPath === '/projects' && method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify([]));
+        res.end(JSON.stringify(mockProjects));
+        return;
+      }
+
+      // 工作室维度的列表与成员（管理页进的就是这两条）
+      const studioProjectsMatch = apiPath.match(/^\/studios\/([^/]+)\/projects$/);
+      if (studioProjectsMatch && method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(mockProjects.filter(project => project.studio_id === studioProjectsMatch[1])));
+        return;
+      }
+      const studioMembersMatch = apiPath.match(/^\/studios\/([^/]+)\/members$/);
+      if (studioMembersMatch && method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(mockMembers));
         return;
       }
 
@@ -343,6 +370,7 @@ const server = http.createServer((req, res) => {
           scene: json?.scene || makeScene(),
           materials: [],
         };
+        mockProjects.push({ id: project.id, studio_id: MOCK_STUDIO_ID, name: project.name, revision: project.revision, updated_at: project.updated_at });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(project));
         return;

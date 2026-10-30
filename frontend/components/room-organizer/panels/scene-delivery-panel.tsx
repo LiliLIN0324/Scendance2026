@@ -30,7 +30,7 @@ interface Props {
   onOpenBrief?: (() => void) | undefined;
   backupActions?: LocalProjectBackupActions | null | undefined;
   onBackupRestored?: (() => void) | undefined;
-  deliveryViewRequest?: { serial: number; view: 'operations' | 'materials' } | undefined;
+  deliveryViewRequest?: { serial: number; view: 'operations' | 'materials' | 'backup' } | undefined;
 }
 
 /**
@@ -136,6 +136,9 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
   const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
   useEffect(() => { setView(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials')); }, [deliveryViewRequest, layout.id, operationsAvailable]);
+  // 「从本机备份恢复」是外部递进来的目标页，折叠壳得替她掀开，否则落点在一扇关着的门后面。
+  const [toolsOpen, setToolsOpen] = useState(deliveryViewRequest?.view === 'backup');
+  useEffect(() => { if (deliveryViewRequest?.view === 'backup') setToolsOpen(true); }, [deliveryViewRequest]);
   const checkinLocal=isLocalActivityWorkspace(controller);
   const localCheckins=checkinLocal?checkins:undefined;
   const checkinsUnavailable=!!localCheckins&&!localCheckins.ready;
@@ -226,7 +229,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
     <div className="sc-section-heading"><div><h2>执行资料</h2></div></div>
     {/* 六页执行台留在折叠里，不当默认门面。 */}
-    <details className="dl-tools">
+    <details className="dl-tools" open={toolsOpen} onToggle={event => setToolsOpen(event.currentTarget.open)}>
       <summary>内部资料</summary>
       <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
       <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => setView('operations')}>活动安排</button>

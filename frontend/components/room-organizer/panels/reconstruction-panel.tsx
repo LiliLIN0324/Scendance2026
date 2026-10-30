@@ -21,7 +21,7 @@ import type { VenuePhoto } from './venue-photos-panel';
 import type { RoomLayout } from '../lib/types';
 import './reconstruction-panel.css';
 
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; autoGenerateRequest?:number; onAddReferenceImages?:(files:FileList|null)=>Promise<void> }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; autoGenerateRequest?:number; onAddReferenceImages?:(files:FileList|null)=>Promise<void>; onBackToChat?:(() => void)|undefined }
 interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; jobIdentity?:string; jobSession?:string; registration?:ReferenceRegistration; }
 const EMPTY:Form={width:'',depth:'',height:'',text:'',constraints:[],adjustment:''};
 /** 从一句自然语言里认出总宽、总深、层高；没提到就沿用已有值，整段清空才重置。 */
@@ -191,7 +191,7 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
   </details>;
 }
 
-export function ReconstructionPanel({controller,layout,onApply,onPreview,images,updateImage,brief,openReferenceRequest=0,autoGenerateRequest=0,onAddReferenceImages}:Props):JSX.Element {
+export function ReconstructionPanel({controller,layout,onApply,onPreview,images,updateImage,brief,openReferenceRequest=0,autoGenerateRequest=0,onAddReferenceImages,onBackToChat}:Props):JSX.Element {
   const cloud=useBackendSession(controller),selection=useSelection();
   const scope=layout.id??'local';
   const scopeEpoch=useRef({scope,epoch:0});if(scopeEpoch.current.scope!==scope)scopeEpoch.current={scope,epoch:scopeEpoch.current.epoch+1};
@@ -208,6 +208,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
   const [job,setJob]=useState<ReconstructionJob|null>(null),[review,setReview]=useState<SceneV2|null>(null),[reviewConfirmed,setReviewConfirmed]=useState(false);
   const [scaleLength,setScaleLength]=useState('');
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[pollingPaused,setPollingPaused]=useState(false);
+  const [appliedGuide,setAppliedGuide]=useState(false);
   const [selectedWall,setSelectedWall]=useState<string|null>(null);
   const inputDetails=useRef<HTMLDivElement>(null),formSaveTimer=useRef<ReturnType<typeof setTimeout>>();
   const formWrites=useRef<Promise<void>>(Promise.resolve()),referenceSaving=useRef(false);
@@ -426,7 +427,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
     const expectedIdentity=geometryIdentity(controller,submittedScope),expectedSession=sessionKey;
     const submittedImages=[...sourceImages.current];
     const current=()=>alive.current&&scopeEpoch.current.epoch===epoch&&sourceImages.current.every((image,index)=>image.blob===submittedImages[index]?.blob)&&inputRef.current===submittedInput&&layoutRef.current===base&&geometryIdentity(controller,submittedScope)===expectedIdentity&&venueSessionKey(controller,submittedScope)===expectedSession;
-    pending.current=true;setBusy(true);setPreview(null);setPollingPaused(false);
+    pending.current=true;setBusy(true);setPreview(null);setPollingPaused(false);setAppliedGuide(false);
     try{
       await assertGeometryActionSource(base,controller);
       if(!current())throw new Error('当前活动或场景连接已变化，请重新核对。');
@@ -481,7 +482,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       const after=controller.getSnapshot();
       if(!result.acceptedLocally||after.lease?.sessionId!==lease?.sessionId||after.lease?.generation!==lease?.generation)throw new Error('应用期间本地有新修改，已保留草稿；请核对云端新版本。');
       onApply(addDesign(base,mergeProposalPresentation(base,backendSceneToLayout(result.scene,{projectId:base.id!,name:base.name,...selected.assets}))));
-      setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');
+      setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');setAppliedGuide(true);
     }catch(error){if(current())setNotice(errorText(error));}finally{pending.current=false;if(alive.current)setBusy(false);}
   }
   const reviewedWall=review?.structure.walls.find(w=>w.id===selectedWall);
@@ -553,6 +554,7 @@ export function ReconstructionPanel({controller,layout,onApply,onPreview,images,
       <div className="rc-actions"><button type="button" className="cr-generate" disabled={busy||stale||!connected} onClick={()=>void apply()}><Check size={16}/>确认应用并保存</button><button className="rc-secondary" type="button" disabled={busy} onClick={()=>{setPreview(null);setJob(null);patch({jobId:undefined,requestId:undefined});}}>放弃候选</button></div>
     </div>}
     {!preview&&currentDesign&&<details className="rc-candidate"><summary>当前方案的创意与要求核对</summary><p>{currentDesign.concept}</p>{currentDesign.highlights.map((h,index)=><button type="button" key={index} className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{currentDesign.requirements.map((r,index)=><div key={index} className={`rc-requirement is-${r.status}`}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</details>}
+    {appliedGuide&&onBackToChat&&<p className="cr-hint" role="status">要继续改布置或加物料，回对话说一声。<button type="button" className="rc-secondary" onClick={()=>{setAppliedGuide(false);onBackToChat();}}>回对话继续布置</button></p>}
     </section>
     {layout.backendSceneV2&&<section className="rc-manual-venue" aria-label="人工编辑当前场地">
       <h4>进阶 · 当前场地 · {layout.width} × {layout.height} 米</h4>

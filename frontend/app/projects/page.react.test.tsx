@@ -10,7 +10,7 @@ vi.mock('@/lib/auth-provider', () => ({ useAuth: () => ({ ready: true, controlle
 vi.mock('@/lib/backend-session', () => ({ useBackendSession: () => snapshot }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: mocks.replace }) }));
 const studios = [{ id: 'studio-a', name: '工作室 A', role: 'owner' }, { id: 'studio-b', name: '工作室 B', role: 'owner' }];
-let projects: { id: string; studio_id: string; name: string; revision: number }[];
+let projects: { id: string; studio_id: string; name: string; revision: number; updated_at?: string }[];
 const members = [{ userId: 'my-account', displayName: '负责人 A', role: 'owner' }, { userId: 'teammate', displayName: '设计师 A', role: 'editor' }];
 function read(path: string) {
   return path.endsWith('/projects') ? projects.filter(project => path.includes(project.studio_id)) : path.includes('studio-a') ? members : [];
@@ -71,15 +71,30 @@ describe('workspace management', () => {
     await ready();
     expect(mocks.businessRequest.mock.calls.every(([path]) => !String(path).includes('studio-a'))).toBe(true);
   });
-  it('creates a metre-based scene in the selected studio and opens the returned project ID', async () => {
+  it('creates an editable blank shell from a name alone and offers the local backup route', async () => {
     mocks.createProject.mockResolvedValue({ id: 'new-project' });
     render(<ProjectsPage />); await ready(); changeStudio('studio-b'); await ready();
     fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
+    // F-01：冷启动不该先逼人量房，米数留给对话①。
+    expect(screen.queryByLabelText('宽 / 米')).toBeNull();
+    expect(screen.getByText('先起个名字就好。场地尺寸到画布里说一声就有，不必现在量。')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '创建并打开' }));
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/editor/?project=new-project'));
     expect(mocks.createProject).toHaveBeenCalledWith('studio-b', '我的活动方案', expect.objectContaining({
-      venue: { shape: 'rectangle', width: 12, depth: 10, height: 3, entrances: [] }, objects: [], schemaVersion: 1,
+      venue: { shape: 'rectangle', width: 12, depth: 8, height: 3, entrances: [] }, objects: [], schemaVersion: 1,
     }));
+    // F-05：换机后停在项目页也能恢复，不必先进工作台。
+    expect(screen.getByRole('link', { name: '从本机备份恢复' }).getAttribute('href')).toMatch(/^\/editor\/?\?restore=backup$/);
+  });
+  it('puts the most recently touched project on top', async () => {
+    projects = [
+      { id: 'project-old', studio_id: 'studio-a', name: '上月方案', revision: 1, updated_at: '2026-09-01T00:00:00.000Z' },
+      { id: 'project-new', studio_id: 'studio-a', name: '昨天方案', revision: 2, updated_at: '2026-10-29T00:00:00.000Z' },
+    ];
+    render(<ProjectsPage />);
+    await screen.findByText('昨天方案');
+    const rows = [...document.querySelectorAll('.sc-studio-manager-project-list article')].map(row => row.textContent);
+    expect(rows[0]).toContain('昨天方案');
   });
   it('renames a studio while preserving its selection and project IDs', async () => {
     render(<ProjectsPage />); await ready(); openPanel('设置');

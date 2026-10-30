@@ -22,6 +22,7 @@ import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters } from '../lib/amap-venue';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
+import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { sameLayoutContent } from '../lib/persistence';
@@ -1106,11 +1107,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   // 简报不能还写「尺寸还没定」，两处对不上会让人以为场地没立起来。
   // 面积折算与图纸估算是推出来的，后缀必须跟着走，不能静态数字装成场地真相。
   const stated = lengthCheck.ok && widthCheck.ok ? `${formatArea(lengthCheck.value)} × ${formatArea(widthCheck.value)} m` : null;
-  // 没保存过的表单默认值（品牌快闪 / 24 人）不是对话意图，不能冒充简报。
-  const savedBrief = studio?.hasSavedBrief ? studio.brief : null;
-  const guests = brief.guests ?? savedBrief?.guests ?? null;
+  // 没保存过的表单默认值（品牌快闪 / 24 人）不是对话意图，不能冒充简报；改过一项就是她填的，左栏动、右栏跟着回显。
+  const formBrief = studio && (studio.hasSavedBrief || studio.brief.event !== INITIAL_BRIEF.event || studio.brief.guests !== INITIAL_BRIEF.guests) ? studio.brief : null;
+  const guests = brief.guests ?? formBrief?.guests ?? null;
   const recap = {
-    event: brief.event ?? savedBrief?.event ?? null,
+    event: brief.event ?? formBrief?.event ?? null,
     guests: guests ? `${guests} 人` : null,
     dims: `${venueIO === 'indoor' ? '室内' : '户外'} · ${stated
       ? `${stated}${scaleOrigin === 'area' ? ' 折算' : scaleOrigin === 'plan' ? ' 估的' : ''}`
@@ -1340,9 +1341,12 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
     </header>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
+      {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
+      {mode === 'review' && <><p className="ap-divider">评审 · {layout.name || '未命名活动'}</p><p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p></>}
+      {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}
+      {/* 对话记录三种模式共用：评审/执行里说过的话也得看得见，不然输入框就成了摆设。 */}
+      <Bubbles agent={agent}/>
       {mode === 'layout' && <>
-        {planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
-        <Bubbles agent={agent}/>
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
@@ -1363,27 +1367,20 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
           </div>
         </>}
       </>}
-      {mode === 'review' && <>
-        <p className="ap-divider">评审 · {layout.name || '未命名活动'}</p>
-        <p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
-        <div className="ap-card">
-          <div className="ap-chips">
-            <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>打开客户评审</button>
-            <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
-            {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
-          </div>
+      {mode === 'review' && <div className="ap-card">
+        <div className="ap-chips">
+          <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>打开客户评审</button>
+          <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
+          {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
         </div>
-      </>}
-      {mode === 'delivery' && <>
-        <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>
-        <div className="ap-card">
-          <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
-          <div className="ap-chips">
-            <button type="button" className="chip btn-outline" onClick={agent.previewExport}>导出交接</button>
-            <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>打开执行资料</button>
-          </div>
+      </div>}
+      {mode === 'delivery' && <div className="ap-card">
+        <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
+        <div className="ap-chips">
+          <button type="button" className="chip btn-outline" onClick={agent.previewExport}>导出交接</button>
+          <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>打开执行资料</button>
         </div>
-      </>}
+      </div>}
       {agent.exportPreview && <div className="ap-card" id="export-preview">
         <strong>导出完整活动交接</strong>
         <p className="ap-small">活动需求、物料工作单、制作计划、数量点验 · 本机生成</p>

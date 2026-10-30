@@ -507,6 +507,18 @@ describe('local activity with an independent scene connection',()=>{
   expect(apply.mock.calls[0]![0].project_id).toBe(projectId);expect(trial.apply.mock.calls[0]![0]).toMatchObject({id:localId,eventOperations:local.eventOperations});
   expect((screen.getByLabelText('场地尺寸') as HTMLTextAreaElement).value).toBe('原尺寸资料');
  });
+ it('offers the way back to the chat only after a candidate is applied',async()=>{
+  bind();vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',text:'原尺寸资料'});
+  vi.mocked(readMaterialCheckins).mockResolvedValue({schemaVersion:1,projectId:localId,dataKind:'rehearsal',sheets:[]});
+  const result=proposal();vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:result});
+  vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{},assetNames:{}});
+  vi.spyOn(controller,'applySceneProposal').mockResolvedValue({scene:result.candidate,acceptedLocally:true} as never);
+  const back=vi.fn();const trial=mount({onBackToChat:back});await generate();await screen.findByText('三维候选方案');
+  expect(screen.queryByRole('button',{name:'回对话继续布置'})).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'确认应用并保存'}));await waitFor(()=>expect(trial.apply).toHaveBeenCalledOnce());
+  fireEvent.click(await screen.findByRole('button',{name:'回对话继续布置'}));
+  expect(back).toHaveBeenCalledOnce();expect(screen.queryByRole('button',{name:'回对话继续布置'})).toBeNull();
+ });
  it('prepares only the scene connection explicitly without generating or changing the local activity',async()=>{
   const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,project:null,lease:null,revision:null,writeBlocked:true});
   const ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady').mockResolvedValue(old.project!);

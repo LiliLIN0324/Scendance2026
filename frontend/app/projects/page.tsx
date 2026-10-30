@@ -6,11 +6,19 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-provider';
 import { useBackendSession, type Studio, type ProjectSummary } from '@/lib/backend-session';
+import { loadLayout } from '@/components/room-organizer/lib/persistence';
+import type { RoomLayout } from '@/components/room-organizer/lib/types';
 import { emptyProjectScene, listMembers, listStudioProjects, preferredStudio, rememberStudio, type StudioMember } from '@/lib/workspace-api';
 import '../workspace.css';
 
 type Panel = 'projects' | 'members' | 'settings';
 interface StudioData { scope: string; projects: ProjectSummary[]; members: StudioMember[] }
+
+/** 最近动过的排最前；没有 updated_at 的落在后面，不打乱原序。 */
+function byRecent(a: ProjectSummary, b: ProjectSummary): number {
+  const stamp = (iso?: string) => { const ms = iso ? Date.parse(iso) : 0; return Number.isFinite(ms) ? ms : 0; };
+  return stamp(b.updated_at) - stamp(a.updated_at);
+}
 
 export default function ProjectsPage(): JSX.Element {
   const auth = useAuth()!;
@@ -25,7 +33,6 @@ export default function ProjectsPage(): JSX.Element {
   const [creatingStudio, setCreatingStudio] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [name, setName] = useState('我的活动方案');
-  const [size, setSize] = useState({ width: 12, depth: 10, height: 3 });
   const [studioName, setStudioName] = useState('');
   const [rename, setRename] = useState('');
   const [deleteName, setDeleteName] = useState('');
@@ -36,6 +43,7 @@ export default function ProjectsPage(): JSX.Element {
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
   const [loadingStudios, setLoadingStudios] = useState(true);
+  const [draft, setDraft] = useState<RoomLayout | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
@@ -44,10 +52,11 @@ export default function ProjectsPage(): JSX.Element {
   const selected = studios.find(studio => studio.id === studioId);
   const scope = `${userId}:${studioId}`;
   const loaded = data?.scope === scope;
-  const projects = loaded ? data.projects : [];
+  const projects = loaded ? [...data.projects].sort(byRecent) : [];
   const members = loaded ? data.members : [];
   const project = projects.find(item => item.id === projectId);
   const isOwner = selected?.role === 'owner';
+  const draftItems = draft?.floors[0]?.items.length ?? 0;
 
   useEffect(() => {
     if (auth.ready && !userId) router.replace('/auth?next=%2Fprojects%2F');
@@ -74,6 +83,7 @@ export default function ProjectsPage(): JSX.Element {
     return () => { active = false; };
   }, [controller, studioId, userId, refreshKey]);
   useEffect(() => { setRename(selected?.name ?? ''); }, [selected?.name]);
+  useEffect(() => { setDraft(loadLayout()); }, []);
 
   function selectStudio(id: string): void {
     setStudioId(id); setProjectId(''); setCreatingStudio(false); setCreatingProject(false);
@@ -129,10 +139,11 @@ export default function ProjectsPage(): JSX.Element {
           {!loaded && !loadError && <p role="status">正在加载「{selected.name}」的项目与成员…</p>}
           {panel === 'projects' && <>
             <div className="sc-studio-manager-heading"><div><p className="sc-studio-manager-eyebrow">{selected.name}</p><h1>{project ? project.name : '项目'}</h1><p>项目归属当前工作室，工作室成员共享访问与编辑权限。</p></div><button className="sc-studio-manager-primary" disabled={busy || !loaded} onClick={() => { setCreatingProject(value => !value); setProjectId(''); }}><Plus size={16} /> 新建项目</button></div>
+            <aside className="sc-studio-manager-notice">{draft && draftItems > 0 ? <>本机画布上还留着「{draft.name}」，{draftItems} 件物料。<Link className="sc-studio-manager-open" href="/editor/">继续上次活动</Link></> : '本机画布还没有草稿。'}<Link className="sc-studio-manager-open" href="/editor/?restore=backup">从本机备份恢复</Link></aside>
             {creatingProject && <form className="sc-studio-manager-form sc-studio-manager-inset" onSubmit={event => { event.preventDefault(); if (!name.trim() || !loaded) return; void run(async () => {
-              const created = await controller.createProject(studioId, name.trim(), emptyProjectScene(size.width, size.depth, size.height));
+              const created = await controller.createProject(studioId, name.trim(), emptyProjectScene());
               router.push(`/editor/?project=${encodeURIComponent(created.id)}`);
-            }); }}><h2>新建活动方案</h2><p>归属工作室：<strong>{selected.name}</strong></p><label>方案名称<input maxLength={120} required value={name} onChange={event => setName(event.target.value)} /></label><div className="sc-studio-manager-dimensions">{(['width', 'depth', 'height'] as const).map((axis, index) => <label key={axis}>{['宽', '深', '高'][index]} / 米<input required type="number" min={axis === 'height' ? 1 : 2} max={axis === 'height' ? 6 : 100} step="0.1" value={size[axis]} onChange={event => setSize({ ...size, [axis]: event.target.valueAsNumber })} /></label>)}</div><button className="sc-studio-manager-primary" disabled={busy || !cloud.writeBlocked || !name.trim()}>创建并打开</button></form>}
+            }); }}><h2>新建活动方案</h2><p>归属工作室：<strong>{selected.name}</strong></p><p>先起个名字就好。场地尺寸到画布里说一声就有，不必现在量。</p><label>方案名称<input maxLength={120} required value={name} onChange={event => setName(event.target.value)} /></label><button className="sc-studio-manager-primary" disabled={busy || !cloud.writeBlocked || !name.trim()}>创建并打开</button></form>}
             {project ? <section className="sc-studio-manager-project-detail"><button onClick={() => setProjectId('')}>← 返回项目列表</button><dl><div><dt>所属工作室</dt><dd>{selected.name}</dd></div><div><dt>云端版本</dt><dd>V{project.revision}</dd></div></dl><h2>参与人员 <span>{members.length}</span></h2><p>继承「{selected.name}」的全部成员，无需为项目单独分配。</p><ul className="sc-studio-manager-members">{members.map(member => <li key={member.userId}><span className="sc-studio-manager-avatar">{member.displayName.slice(0, 1)}</span><strong>{member.displayName}</strong><span>{roleLabel(member.role)}</span></li>)}</ul><button onClick={() => openPanel('members')}>管理工作室成员</button>{cloud.writeBlocked || cloud.project?.id === project.id ? <Link className="sc-studio-manager-open" href={`/editor/?project=${encodeURIComponent(project.id)}`}>打开方案 <ArrowUpRight size={16} /></Link> : <p>请先释放当前项目的编辑权</p>}{isOwner && <button className="sc-studio-manager-delete-project" disabled={busy || !cloud.writeBlocked} onClick={() => {
               if (!window.confirm(`删除「${project.name}」？项目将从工作室移除，客户分享链接立即失效。本机草稿和个人素材仍保留。`)) return;
               void run(async () => {

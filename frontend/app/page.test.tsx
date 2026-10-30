@@ -182,7 +182,7 @@ describe('introduction round trips', () => {
     await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
     await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: '生成布置预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
     await screen.findByText('方案提案 · 尚未应用');
     fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
     expect(screen.getByText('editor@example.com')).toBeTruthy();
