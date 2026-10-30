@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ChevronDown, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -189,8 +189,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
-  // 本机直连 Aholo 的测试入口藏得更深：默认折叠成一个箭头，点开才露出。
-  const [luxRailOpen, setLuxRailOpen] = useState(false);
   // 本机直连 Aholo 的测试入口：只在 next dev 出现，构建产物里这颗按钮不存在。
   const luxDirectVisible = process.env.NODE_ENV === 'development';
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
@@ -1474,10 +1472,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 })}
               </nav>
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="接口测试">
-                <button type="button" className="sc-rail-tool" aria-expanded={luxRailOpen} aria-label={luxRailOpen ? '收起 Aholo 接口测试入口' : '展开 Aholo 接口测试入口'} title="Aholo 接口测试（仅本地开发可见）"
-                  onClick={()=>setLuxRailOpen(value=>!value)}><ChevronDown size={16} aria-hidden="true"/></button>
-                {luxRailOpen && <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="Aholo 接口测试" title="本机直连 Aholo 接口（仅本地开发可见）"
-                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>Aholo</span></button>}
+                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="Aholo 接口测试" title="本机直连 Aholo 接口（仅本地开发可见）"
+                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>Aholo</span></button>
               </nav></>}
             </div>
           </div>
