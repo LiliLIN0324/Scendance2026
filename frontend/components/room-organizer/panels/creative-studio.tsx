@@ -1001,7 +1001,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
     </section>
     <div className="cr-brief-footer">
     <button className="cr-generate is-manual" type="button" disabled={studio.busy||studio.recoverable||!studio.brief.description.trim()||blankScaffold||!!studio.briefError} onClick={()=>void studio.generate(undefined, forcePreview?{requirePreview:true}:undefined)}>{studio.busy?<Loader2 className="cr-spin" size={16}/>:<Sparkles size={16}/>}<span>{studio.busy?'正在整理方案…':studio.jevEnabled?'生成三个方案':!forcePreview&&studio.directApply?'生成布置方案':'生成布置预览'}</span></button>
-    <button className="cr-brief-skip" type="button" onClick={()=>onSkip?.()}>暂不填写</button>
+    <button className="cr-brief-skip" type="button" onClick={()=>onSkip?.()}>暂不填写 · 先回画布</button>
     </div>
     {showNotice&&studio.notice&&<p className="cr-notice" role="status">{studio.notice}</p>}
     <div className="cr-ideas"><div><h3>布置思路</h3><button type="button" aria-label="换一条布置思路" onClick={()=>setIdeaIndex(current=>(current+1)%IDEA_CARDS.length)}><RefreshCw size={20}/></button></div><article><strong>{idea.title}</strong><p>{idea.text}</p></article></div>

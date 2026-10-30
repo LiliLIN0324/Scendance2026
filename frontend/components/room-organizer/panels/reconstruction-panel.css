@@ -3,3 +3,10 @@
 @media(max-width:680px) { .rc-calibration.is-applied-reference .rc-image-map { height:280px; } }
 .rc-existing-controls,.rc-venue-fields{border:0;padding:0;margin:0;min-width:0}.rc-manual-venue{padding:12px;background:var(--paper);border:1px solid var(--wk-hair);border-radius:var(--r-sm);margin-bottom:16px;font-size:var(--fs-p2);line-height:1.65}.rc-venue-fields legend{font-size:var(--fs-p2);font-weight:650;color:var(--ink)}.rc-venue-measures{grid-template-columns:repeat(2,minmax(0,1fr))}.rc-venue-plan{height:260px}.rc-manual-venue .rc-actions{flex-wrap:wrap;margin-top:10px}.rc-manual-venue .rc-actions button{flex:1;min-width:120px}.rc-existing-controls:disabled{background:var(--plane);color:var(--faint);opacity:1;cursor:not-allowed}.rc-existing-controls:disabled .rc-image-map{pointer-events:none}.rc-manual-venue input[type=checkbox]{flex-shrink:0}
 .rc-scale-gate{padding:10px;background:var(--plane);border:1px solid var(--warn);border-radius:var(--r-sm);margin:8px 0}.rc-scale-gate p{margin:4px 0}.rc-scale-gate .rc-measures{grid-template-columns:1fr auto;align-items:end}
+
+/* 用户旅程重排：步骤提示 / 连接前置卡 / 进阶场地调整 */
+.rc-connect{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;margin:0 0 12px;background:var(--paper);border:1px solid var(--warn);border-radius:var(--r-sm)}.rc-connect p{margin:0;font-size:var(--fs-p2)}.rc-connect strong{display:block;font-size:var(--fs-p2);color:var(--ink)}.rc-connect small{display:block;margin-top:2px;font-size:var(--fs-cap);color:var(--ink-soft)}.rc-connect button{flex-shrink:0}
+.rc-manual-venue{margin-top:16px;margin-bottom:0}
+
+/* 旅程分区：输入 fieldset 只锁表单；进度核对与结果独立成区 */
+.rc-block{margin-top:14px}
