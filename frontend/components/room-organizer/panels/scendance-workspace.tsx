@@ -14,6 +14,7 @@ import {
   isSatelliteGroundImage,
   readAmapKeys,
   satelliteGroundWanted,
+  satelliteMissReason,
 } from '../lib/amap-venue';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
@@ -266,12 +267,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       if (mine !== satelliteRequest.current) return;
       const current = layoutRef.current;
       if ((current.id ?? '') !== startedId || current.name !== startedName || current.satelliteGroundRef === false) return;
-      if (!patch) {
-        const keys = readAmapKeys();
-        const needsGeocode = (current.mapGroundPolygon?.length ?? 0) < 3;
-        setSatelliteMiss(!keys.staticKey || (needsGeocode && !keys.key) ? 'key' : 'place');
-        return;
-      }
+      setSatelliteMiss(satelliteMissReason(current, patch, readAmapKeys()));
+      if (!patch) return;
       actions.applyLayout(applySatelliteGroundPatch(current, patch));
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
     }).finally(() => { if (mine === satelliteRequest.current) setSatelliteBusy(false); });

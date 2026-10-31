@@ -431,10 +431,13 @@ describe('ScendanceViewTools satellite ground', () => {
   it('defaults the satellite toggle on for a map shell and fills a missing image', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
+    const bytes = new Uint8Array(120);
+    bytes[0] = 0xff;
+    bytes[1] = 0xd8;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       headers: { get: () => 'image/jpeg' },
-      body: { cancel: vi.fn() },
+      arrayBuffer: async () => bytes.buffer,
     }));
     const previousAmap = window.AMap;
     window.AMap = {
