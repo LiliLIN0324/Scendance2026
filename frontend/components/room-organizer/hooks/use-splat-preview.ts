@@ -23,6 +23,12 @@ export function useSplatPreview(deps: {
   /** 场地最长水平边（米）。 */
   sizeMeters: number;
   upAxis?: SplatUpAxis;
+  /**
+   * When the current value is true, leave the camera where first-person walk
+   * put it. Framing or restoring the orbit pose calls `controls.update()`,
+   * which re-aims the camera and yanks the walker out of eye level.
+   */
+  preserveCameraRef?: React.RefObject<boolean>;
 }): Readonly<{
   state: SplatPreviewState;
   renderFrame: SplatPaint;
@@ -39,6 +45,9 @@ export function useSplatPreview(deps: {
   const upAxisRef = useRef(deps.upAxis);
   upAxisRef.current = deps.upAxis;
   const pending = useRef<SplatSource | null>(null);
+  const preserveCameraRef = useRef(deps.preserveCameraRef);
+  preserveCameraRef.current = deps.preserveCameraRef;
+  const preserveCamera = () => preserveCameraRef.current?.current === true;
 
   const start = useCallback(async (source: SplatSource) => {
     const controller = controllerRef.current;
@@ -63,9 +72,10 @@ export function useSplatPreview(deps: {
       });
       if (attempt.current !== current) return;
       // 站进场内再看：从场外看只会是一块悬空的地板。
+      // 第一人称已经抓住相机时不能再 frame——OrbitControls.update 会把机位拽回环绕目标。
       const camera = cameraRef.current;
       const controls = controlsRef.current;
-      if (camera && controls) controller.frame(camera, controls);
+      if (camera && controls && !preserveCamera()) controller.frame(camera, controls);
       // 壳体在预览里不投影，阴影图是静态的，进出都要补一次。
       requestShadowUpdate();
       setState({ status: 'ready', assetId: source.assetId, name: source.name, splats: result.splats,
@@ -104,8 +114,9 @@ export function useSplatPreview(deps: {
     const controller = controllerRef.current;
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    // 机位是预览借走的，退出要先还给她，再停显示。
-    if (controller && camera && controls) controller.restoreView(camera, controls);
+    // 机位是预览借走的，退出要先还给她，再停显示。走动中相机归漫游，不能还回环绕机位。
+    if (preserveCamera()) controller?.discardSavedView();
+    else if (controller && camera && controls) controller.restoreView(camera, controls);
     controller?.stop();
     requestShadowUpdate();
     setState(IDLE);

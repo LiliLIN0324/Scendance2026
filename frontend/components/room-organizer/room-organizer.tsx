@@ -61,6 +61,7 @@ import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
 import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { playSound, type SoundCue } from './lib/sounds';
+import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
@@ -1114,6 +1115,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       getDragPlaneY,
     });
 
+  const preserveSplatCameraRef = useRef(false);
+  preserveSplatCameraRef.current = walkthroughActive;
   const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat } = useSplatPreview({
     isReady,
     rendererRef,
@@ -1123,6 +1126,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     requestShadowUpdate,
     // 兜底缩放：场景没带真实尺度（lod-meta forwardBox）时，才按场地最长水平边等比塞。
     sizeMeters: Math.max(layout.width, layout.height),
+    preserveCameraRef: preserveSplatCameraRef,
   });
   splatPaintRef.current = paintSplatFrame;
   const startStoredScene = useCallback((assetId: string) => {
@@ -1163,7 +1167,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   sceneBoxRef.current = sceneRef;
   invalidateBoxRef.current = invalidate;
 
-  const { lockRefused: walkthroughLockRefused } = useWalkthrough({
+  const { phase: walkthroughPhase } = useWalkthrough({
     enabled: isReady && walkthroughActive,
     invalidate,
     canvasRef,
@@ -1655,18 +1659,33 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setSpaceOpen(true);
     await startSplat(await loadAholoSceneSource(source));
   }, [setView, startSplat]);
-  // 高斯优先（用户裁决）：预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）；场地跟高斯走，不反过来。
+  // 高斯优先（用户裁决）：室内预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）。
+  // 地图户外（盐官一类）和过不了几何闸的壳不改尺寸——以前直接 throw，整页工作台会塌。
   const calibratedSceneRef = useRef('');
+  const [splatShellKeptFor, setSplatShellKeptFor] = useState('');
   useEffect(() => {
-    if (splatState.status !== 'ready' || !splatState.meters) return;
+    if (splatState.status !== 'ready') {
+      if (splatState.status === 'idle' || splatState.status === 'error') setSplatShellKeptFor('');
+      return;
+    }
     if (calibratedSceneRef.current === splatState.assetId) return;
     calibratedSceneRef.current = splatState.assetId;
-    const width = Math.round(splatState.meters.width * 10) / 10;
-    const height = Math.round(splatState.meters.depth * 10) / 10;
     const current = layoutStore.getState().layout;
-    if (Math.abs(width - current.width) <= 0.05 && Math.abs(height - current.height) <= 0.05) return;
-    onApplyCreative({ ...current, width, height });
+    const placement = placeSplatPreview(current, splatState.name, splatState.meters ?? null);
+    if (!placement.resize) return;
+    try {
+      onApplyCreative({ ...current, width: placement.resize.width, height: placement.resize.height });
+    } catch (error) {
+      console.error('环境预览没有改场地尺寸', error);
+      setSplatShellKeptFor(splatState.assetId);
+    }
   }, [splatState, onApplyCreative]);
+  const splatPlacement = splatState.status === 'ready'
+    ? placeSplatPreview(layout, splatState.name, splatState.meters ?? null)
+    : null;
+  const splatBanner = splatPlacement
+    ? (splatShellKeptFor === splatState.assetId && splatPlacement.resize ? splatShellKeptNote(splatState.name) : splatPlacement.note)
+    : null;
 
   const onBindProject = useCallback((projectId: string) => {
     actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
@@ -1862,7 +1881,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         showMeasurements={view.showMeasurements}
         showMinimap={view.showMinimap}
         walkthroughActive={walkthroughActive}
-        walkthroughLockRefused={walkthroughLockRefused}
+        walkthroughPhase={walkthroughPhase}
+        walkthroughInEnvironment={splatState.status === 'ready'}
         measurementDistance={measurementDistance(measurementPoints)}
         {...(view.measurementMode ? { measurementPointsPlaced: measurementPoints.length } : {})}
         wallDrawStatus={
@@ -1951,7 +1971,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <PlanFlow onOpenAgent={() => { setSidePanel(null); setAgentCollapsed(false); }} onHomeChange={setPlanHome}/>
             <CanvasHeading view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
-            {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · {splatState.meters ? `已按高斯实测 ${splatState.meters.width} × ${splatState.meters.depth} m 校准场地，` : '场地壳体已让位，'}物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
+            {splatBanner && <div className="sc-local-conflict" role="status"><span>{splatBanner}</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>

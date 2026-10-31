@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Axis3d, Boxes, Camera, ChevronUp, CloudRain, Crosshair, Cuboid, Footprints, Grid, MoreHorizontal, MousePointer2, PersonStanding, Redo2, Ruler, Satellite, Square, Sun, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Axis3d, Boxes, Camera, ChevronUp, CloudRain, Crosshair, Cuboid, Focus, Footprints, Grid, MoreHorizontal, MousePointer2, Redo2, Ruler, Satellite, Square, Sun, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
@@ -17,6 +17,7 @@ import {
 } from '../lib/amap-venue';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
+import { requestWalkPointerLock } from '../lib/walk-engage';
 import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
 import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
@@ -195,7 +196,8 @@ const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }
 const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string; Icon: LucideIcon }> = [
   { id: 'iso', label: '整体', Icon: Cuboid },
   { id: 'top', label: '俯视', Icon: Square },
-  { id: 'front', label: '人视', Icon: PersonStanding },
+  // 正面机位是环绕预设，不是走进去。人视这个名字会让人以为已经是第一人称。
+  { id: 'front', label: '正面机位', Icon: Focus },
 ];
 const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string }> = [
   { id: 'current', label: '跟随当前' },
@@ -222,7 +224,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   const [shareClose, setShareClose] = useState(0);
   const quietShare = () => setShareClose(value => value + 1);
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
-  // 氛围条默认收起成一颗「氛围」：真开了人群/雨雪/非正午就展开，别让人找不到关掉它的地方（漫游在右轨一级钮）。
+  // 氛围条默认收起成一颗「氛围」：真开了人群/雨雪/非正午就展开，别让人找不到关掉它的地方。
+  // 第一人称走进场是右轨一级圆钮，不收进氛围，也不收进省略号。
   const atmosphereShown = atmosphereOpen || view.showNpcs || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
   const satelliteVenue = isMapOutdoorLayout(layout) || layout.satelliteGroundRef !== undefined || isSatelliteGroundImage(layout.floorPlanImage);
   const satelliteOn = satelliteGroundWanted(layout);
@@ -312,6 +315,9 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       walkthroughMode: on,
       ...(on ? { view2D: false, measurementMode: false, drawWallMode: false } : {}),
     }));
+    // Same click as the button: the browser only grants pointer lock during
+    // this gesture. Waiting for the walk hook's effect drops the gesture.
+    if (on) requestWalkPointerLock();
   };
   const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6);
   const runExport = async () => {
@@ -363,14 +369,15 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       <button type="button" id="tool-fit" data-tip="看全场" aria-label="看全场" disabled={view.view2D} onClick={onFit}>
         <Crosshair size={24}/>
       </button>
+      <button type="button" id="tool-walk" aria-label="第一人称走进场" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => setWalkthrough(!view.walkthroughMode)}>
+        <Footprints size={24} aria-hidden="true"/>
+        <span className="sc-walk-label" aria-hidden="true">第一人称走进场</span>
+      </button>
       <button type="button" id="tool-top" data-tip="俯视" aria-label="俯视" aria-pressed={!view.view2D && preset === 'top'} className={!view.view2D && preset === 'top' ? 'is-active' : ''} onClick={() => choosePreset('top')}>
         <Square size={24} aria-hidden="true"/>
       </button>
-      <button type="button" id="tool-front" data-tip="人视" aria-label="人视" aria-pressed={!view.view2D && preset === 'front' && !view.walkthroughMode} className={!view.view2D && preset === 'front' && !view.walkthroughMode ? 'is-active' : ''} onClick={() => choosePreset('front')}>
-        <PersonStanding size={24} aria-hidden="true"/>
-      </button>
-      <button type="button" id="tool-walk" data-tip="漫游" aria-label="漫游" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}>
-        <Footprints size={24} aria-hidden="true"/>
+      <button type="button" id="tool-front" data-tip="正面机位（环绕，不是走动）" aria-label="正面机位" aria-pressed={!view.view2D && preset === 'front' && !view.walkthroughMode} className={!view.view2D && preset === 'front' && !view.walkthroughMode ? 'is-active' : ''} onClick={() => choosePreset('front')}>
+        <Focus size={24} aria-hidden="true"/>
       </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
         <Ruler size={24}/>

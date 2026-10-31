@@ -32,6 +32,7 @@ import { sameLayoutContent } from '../lib/persistence';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import { venueBriefLine } from '../lib/venue-brief-line';
+import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
@@ -1250,7 +1251,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
-    walkthrough: () => setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false })),
+    walkthrough: () => {
+      setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false }));
+      requestWalkPointerLock();
+    },
   };
   return <AgentContext.Provider value={value}>
     {children}
@@ -1805,7 +1809,7 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   const { view, setView } = useRoomEditor();
   const overlapNames = useMemo(() => Array.from(new Set(activeFloor.items.filter(item => collidingIds.has(item.id)).map(item => item.name))), [activeFloor.items, collidingIds]);
   // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
-  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><button id="walk-exit" type="button" className="ap-canvas-pill is-top" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>退出漫游 · Esc</button></div>;
+  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><button id="walk-exit" type="button" className="ap-canvas-pill is-top" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>退出第一人称 · Esc</button></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;
   return <div className="ap-canvas-layer" aria-live="polite">

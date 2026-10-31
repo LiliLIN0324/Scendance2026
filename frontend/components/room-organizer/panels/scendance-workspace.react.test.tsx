@@ -205,15 +205,15 @@ describe('ScendanceViewTools design column', () => {
   it('renders one right-edge island of five round tools and tucks the rest into 视图', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 人视 / 漫游 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
+    // 室内常驻：分享 / 选择 / 2D·3D / 看全场 / 第一人称走进场 / 俯视 / 正面机位 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
     expect(within(rail).getAllByRole('button')).toHaveLength(11);
     expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
-    for (const name of ['分享', '选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '人视', '漫游', '尺寸标注', '网格吸附', '更多工具']) {
+    for (const name of ['分享', '选择：点击物料并框选', '2D / 3D', '看全场', '第一人称走进场', '俯视', '正面机位', '尺寸标注', '网格吸附', '更多工具']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     expect(rail.querySelector('#tool-satellite')).toBeNull();
     expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('false');
-    // 撤销/重做/缩放/导出和整体在省略号里；俯视、人视、网格在右轨。
+    // 撤销/重做/缩放/导出和整体在省略号里；俯视、正面机位、网格在右轨。
     for (const id of ['tool-undo', 'tool-zoom-out', 'tool-export']) {
       expect(rail.querySelector(`#${id}`)).toBeNull();
     }
@@ -222,7 +222,12 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.querySelector('#tool-front')).toBeTruthy();
     expect(rail.querySelector('#tool-walk')).toBeTruthy();
     expect(rail.querySelector('#tool-more')).toBeTruthy();
-    // 漫游在右轨一级；氛围菜单里不再重复。
+    // 第一人称在右轨一级，并且排在正面机位前面；氛围菜单和省略号里都不再重复。
+    const order = [...rail.querySelectorAll('button')].map(button => button.id);
+    expect(order.indexOf('tool-walk')).toBeGreaterThan(-1);
+    expect(order.indexOf('tool-walk')).toBeLessThan(order.indexOf('tool-front'));
+    expect(rail.querySelector('#tool-walk .sc-walk-label')?.textContent).toBe('第一人称走进场');
+    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称走进场' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
@@ -246,13 +251,15 @@ describe('ScendanceViewTools design column', () => {
     expect(values.toggle).toHaveBeenCalledWith('showMeasurements');
     fireEvent.click(within(rail).getByRole('button', { name: '俯视' }));
     expect(onApplyPreset).toHaveBeenCalledWith('top');
-    fireEvent.click(within(rail).getByRole('button', { name: '人视' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '正面机位' }));
     expect(onApplyPreset).toHaveBeenCalledWith('front');
+    expect(onApplyPreset).not.toHaveBeenCalledWith('walk');
     fireEvent.click(within(rail).getByRole('button', { name: '网格吸附' }));
     expect(values.toggle).toHaveBeenCalledWith('snapToGrid');
     fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
     expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('true');
     expect(within(rail).getByRole('menuitemradio', { name: '整体' })).toBeTruthy();
+    expect(within(rail).queryByRole('menuitemradio', { name: '正面机位' })).toBeNull();
     expect(within(rail).queryByRole('menuitemradio', { name: '人视' })).toBeNull();
     for (const name of ['撤销', '重做', '缩小', '放大', '导出效果图']) {
       expect(within(rail).getByRole('menuitem', { name })).toBeTruthy();
@@ -308,7 +315,7 @@ describe('ScendanceViewTools design column', () => {
       expect((within(rail).getByRole('menuitem', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(within(rail).getByRole('button', { name: '漫游' })).toBeTruthy();
+    expect(within(rail).getByRole('button', { name: '第一人称走进场' })).toBeTruthy();
   });
 
   it('keeps the atmosphere controls in view once something is actually changed', () => {
@@ -329,15 +336,28 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
+  it('wires 第一人称走进场 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
     const values = contexts();
+    const canvas = document.createElement('canvas');
+    canvas.id = 'sc-viewport-3d';
+    const requestPointerLock = vi.fn(() => Promise.resolve());
+    canvas.requestPointerLock = requestPointerLock as HTMLCanvasElement['requestPointerLock'];
+    document.body.appendChild(canvas);
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
-    fireEvent.click(within(rail).getByRole('button', { name: '漫游' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '第一人称走进场' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
+    expect(walk(makeViewSettings()).view2D).toBe(false);
+    expect(requestPointerLock).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(rail).getByRole('button', { name: '正面机位' }));
+    const front = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
+    expect(front(makeViewSettings({ walkthroughMode: true })).walkthroughMode).toBe(false);
+    expect(requestPointerLock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
+    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称走进场' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
+    canvas.remove();
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '人群' }));
     expect(values.toggle).toHaveBeenCalledWith('showNpcs');
     // 天气弹层嵌在氛围弹层里：先点天气按钮展开子弹层（默认显示「晴朗」）
