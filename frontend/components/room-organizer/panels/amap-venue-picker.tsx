@@ -211,7 +211,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
         polygon: drawRef.current,
         flow,
         satelliteGround,
-        satelliteGroundImage,
+        ...(satelliteGroundImage ? { satelliteGroundImage } : {}),
       });
     } finally {
       setBusy(false);
@@ -243,7 +243,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
         polygon,
         flow: defaultGuestFlow(polygon),
         satelliteGround,
-        satelliteGroundImage,
+        ...(satelliteGroundImage ? { satelliteGroundImage } : {}),
       });
     } finally {
       setBusy(false);

@@ -323,7 +323,7 @@ function buildFloorPlanMaterial(
   THREE: ThreeModule,
   options: RoomBuilderOptions,
   imageUrl: string
-): ThreeNS.MeshStandardMaterial {
+): ThreeNS.MeshStandardMaterial | ThreeNS.MeshBasicMaterial {
   // With the 3D effect on we build two textures (map + displacement) from the
   // same URL. On a cache miss we must not kick off two independent decodes of a
   // multi-MB data URL — share a single in-flight decode. The first cache-miss
