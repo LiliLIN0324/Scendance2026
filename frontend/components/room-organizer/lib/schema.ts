@@ -477,6 +477,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   floorPlanImage: true,
   floorPlanOpacity: true,
   floorPlanFitMode: true,
+  satelliteGroundRef: true,
   terrain: true,
   neighbours: true,
   entrance: true,
