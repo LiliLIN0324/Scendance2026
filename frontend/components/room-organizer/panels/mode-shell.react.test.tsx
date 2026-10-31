@@ -2,7 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DeliveryChecklistShell, LayoutVenueCard, ReviewAnnotationShell, dossierStatus, reviewStatusLabel } from './mode-shell';
+import { DeliveryChecklistShell, LayoutVenueCard, ReviewIssuesCard, dossierStatus } from './mode-shell';
+import type { ReviewPin } from '../lib/review-pins';
 
 afterEach(cleanup);
 
@@ -19,28 +20,50 @@ describe('layout venue card', () => {
   });
 });
 
-describe('review annotation shell', () => {
-  it('lists item names and status, and focuses the 3D item without a venue-origin card', () => {
+const pin = (id: string, text: string, status: ReviewPin['status'] = 'open'): ReviewPin => ({
+  id, text, itemId: id === 'ground' ? null : 'desk', status,
+  x: 0, y: 0, z: 0, offset: null,
+  camera: { position: [1, 2, 3], target: [0, 0, 0] },
+});
+
+describe('review issues card', () => {
+  it('lists unresolved pins, flies to one, and has no pass or reject wall', () => {
     const onFocus = vi.fn();
-    render(<ReviewAnnotationShell items={[{ id: 'desk', name: '签到桌' }, { id: 'chair', name: '活动座椅' }]} onFocus={onFocus} />);
-    const shell = screen.getByRole('region', { name: '评审批注' });
+    const onResolve = vi.fn();
+    const onReturn = vi.fn();
+    const onConfirm = vi.fn();
+    const onFilter = vi.fn();
+    render(<ReviewIssuesCard
+      pins={[pin('a', '桌子挡了通道'), pin('ground', '这里空')]}
+      items={[{ id: 'desk', name: '签到桌' }]}
+      filter="open"
+      activeId={null}
+      onFilter={onFilter}
+      onFocus={onFocus}
+      onResolve={onResolve}
+      onReturn={onReturn}
+      onConfirm={onConfirm}
+    />);
+    const shell = screen.getByRole('region', { name: '议题' });
+    expect(shell.textContent).toContain('议题');
+    expect(shell.textContent).toContain('桌子挡了通道');
     expect(shell.textContent).toContain('签到桌');
-    expect(shell.textContent).toContain('待确认');
-    expect(shell.textContent).not.toContain('这块场地从哪来');
-    expect(screen.queryByLabelText('场地简报')).toBeNull();
+    expect(shell.textContent).toContain('地面');
+    expect(shell.textContent).not.toMatch(/通过|驳回|待确认/);
+    expect(screen.queryByRole('button', { name: '通过' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '驳回' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /签到桌/ }));
-    expect(onFocus).toHaveBeenCalledWith('desk');
-    expect(reviewStatusLabel(undefined)).toBe('待确认');
-
-    const desk = screen.getByRole('button', { name: /签到桌/ }).closest('li') as HTMLElement;
-    fireEvent.click(within(desk).getByRole('button', { name: '通过' }));
-    expect(within(desk).getByRole('button', { name: /签到桌/ }).textContent).toContain('通过');
-    const chair = screen.getByRole('button', { name: /活动座椅/ }).closest('li') as HTMLElement;
-    fireEvent.click(within(chair).getByRole('button', { name: '驳回' }));
-    expect(within(chair).getByRole('button', { name: /活动座椅/ }).textContent).toContain('驳回');
-    expect(reviewStatusLabel('passed')).toBe('通过');
-    expect(reviewStatusLabel('rejected')).toBe('驳回');
+    fireEvent.click(screen.getByRole('button', { name: /桌子挡了通道/ }));
+    expect(onFocus).toHaveBeenCalledWith('a');
+    const row = screen.getByRole('button', { name: /桌子挡了通道/ }).closest('li') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: '标记已解决' }));
+    expect(onResolve).toHaveBeenCalledWith('a');
+    fireEvent.click(within(row).getByRole('button', { name: '退回布置' }));
+    expect(onReturn).toHaveBeenCalledWith('a');
+    fireEvent.click(screen.getByRole('button', { name: '确认可进执行' }));
+    expect(onConfirm).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: '已解决' }));
+    expect(onFilter).toHaveBeenCalledWith('resolved');
   });
 });
 

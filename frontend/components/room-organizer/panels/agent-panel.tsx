@@ -842,6 +842,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
   /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
   function confirmProposal(): void {
+    if (callbacks.workbenchMode !== 'layout') {
+      say({ role: 'agent', text: '现在不改布置。回左轨「布置」再确认这一版。' });
+      return;
+    }
     const plan = proposal.current;
     if (!plan) { confirmCloud(); return; }
     if (plan.blocked) { say({ role: 'agent', amber: true, text: plan.blocked }); return; }
@@ -1050,6 +1054,17 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     say({ role: 'user', text: trimmed });
+    if (callbacks.workbenchMode !== 'layout') {
+      if (isClientReviewCommand(trimmed)) {
+        callbacks.onOpenReview();
+        say({ role: 'agent', text: '评审页在左边开了：离线 HTML 或云端只读链接，都由你发。' });
+        return;
+      }
+      if (isExportCommand(trimmed)) { proposeExport(); return; }
+      if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
+      say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回左轨「布置」。' });
+      return;
+    }
     // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
     if (isEstimateCommand(trimmed)) {
       // 「300 平米，按图纸估」是一句话里的两件事：这句的面积要先记进记忆，估算才不会退回画布上的旧尺寸。

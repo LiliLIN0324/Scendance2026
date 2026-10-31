@@ -130,6 +130,27 @@ describe('drag-handlers selection on press (#291)', () => {
     expect(t.handlers.onItemDoubleClick).not.toHaveBeenCalled();
   });
 
+  it('a review click pins the furniture or the floor and a drag does not', () => {
+    const t = setup(['b']);
+    detach = t.detach;
+    t.handlers.editingLocked = true;
+    t.handlers.onReviewAnchor = vi.fn();
+    t.canvas.dispatchEvent(pointer('pointerdown', 100, 100));
+    t.canvas.dispatchEvent(pointer('pointerup', 100, 100));
+    expect(t.handlers.onReviewAnchor).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'a' }));
+    expect(t.handlers.onItemSelect).not.toHaveBeenCalled();
+    expect(t.handlers.onItemDragStart).not.toHaveBeenCalled();
+
+    t.canvas.dispatchEvent(pointer('pointerdown', 190, 190));
+    t.canvas.dispatchEvent(pointer('pointerup', 190, 190));
+    expect(t.handlers.onReviewAnchor).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: null }));
+
+    t.canvas.dispatchEvent(pointer('pointerdown', 100, 100));
+    t.canvas.dispatchEvent(pointer('pointermove', 130, 100));
+    t.canvas.dispatchEvent(pointer('pointerup', 130, 100));
+    expect(t.handlers.onReviewAnchor).toHaveBeenCalledTimes(2);
+  });
+
   it('a double click on empty floor reports nothing', () => {
     const t = setup(['a']);
     detach = t.detach;

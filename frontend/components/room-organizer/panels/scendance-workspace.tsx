@@ -201,6 +201,8 @@ interface ViewToolsProps {
    * exported at its current resolution.
    */
   onExportImage?(options: { view: 'current' | CameraPreset; scale: number }): Promise<boolean> | void;
+  /** 评审 / 执行不撤销、不重做布置。 */
+  layoutLocked?: boolean;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -235,7 +237,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true, onLighting }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true, onLighting, layoutLocked = false }: ViewToolsProps): JSX.Element {
   const { view, setView, toggle, history, layout, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [viewOpen, setViewOpen] = useState(false);
@@ -414,8 +416,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
           {!exportOpen ? <>
             {ANGLE_PRESETS.filter(entry => entry.id === 'iso').map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-label={entry.label} data-tip={entry.label} aria-checked={!view.view2D && preset === entry.id} className={`sc-tool-icon${!view.view2D && preset === entry.id ? ' is-active' : ''}`} onClick={() => choosePreset(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
             <span className="sc-more-sep" aria-hidden="true"/>
-            <button type="button" id="tool-undo" className="sc-tool-icon" role="menuitem" aria-label="撤销" data-tip="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={20} aria-hidden="true"/></button>
-            <button type="button" id="tool-redo" className="sc-tool-icon" role="menuitem" aria-label="重做" data-tip="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={20} aria-hidden="true"/></button>
+            <button type="button" id="tool-undo" className="sc-tool-icon" role="menuitem" aria-label="撤销" data-tip="撤销" disabled={layoutLocked || !history.canUndo} onClick={history.undo}><Undo2 size={20} aria-hidden="true"/></button>
+            <button type="button" id="tool-redo" className="sc-tool-icon" role="menuitem" aria-label="重做" data-tip="重做" disabled={layoutLocked || !history.canRedo} onClick={history.redo}><Redo2 size={20} aria-hidden="true"/></button>
             <button type="button" id="tool-zoom-out" className="sc-tool-icon" role="menuitem" aria-label="缩小" data-tip="缩小" disabled={view.view2D} onClick={() => onZoom('-')}><ZoomOut size={20} aria-hidden="true"/></button>
             <button type="button" id="tool-zoom-in" className="sc-tool-icon" role="menuitem" aria-label="放大" data-tip="放大" disabled={view.view2D} onClick={() => onZoom('+')}><ZoomIn size={20} aria-hidden="true"/></button>
             {onExportImage && <><span className="sc-more-sep" aria-hidden="true"/><button type="button" id="tool-export" className="sc-tool-icon" role="menuitem" aria-label="导出效果图" data-tip="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={20} aria-hidden="true"/></button></>}

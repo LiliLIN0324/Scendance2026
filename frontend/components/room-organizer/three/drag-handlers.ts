@@ -59,10 +59,16 @@ export interface SceneEventHandlers {
   onItemHover?: (info: HoverInfo | null) => void;
   onEmptyClick?: (x: number, z: number) => void;
   /**
-   * Review / delivery shells keep the camera, but a press must not select,
-   * drag, draw or open the property panel.
+   * Review / delivery keep the camera, but a press must not select, drag,
+   * draw or open the property panel. Review still reports a click via
+   * `onReviewAnchor`.
    */
   editingLocked?: boolean;
+  /**
+   * Review: a click (not an orbit drag) on furniture or the floor. Never
+   * selects or moves the scene.
+   */
+  onReviewAnchor?: (anchor: { itemId: string | null; x: number; y: number; z: number }) => void;
   onWallSelect?: (info: { wallId: string; kind: 'exterior' | 'interior' }) => void;
   onFloorPointerMove?: (x: number, z: number) => void;
   onFloorPointerLeave?: () => void;
@@ -206,7 +212,15 @@ export function attachDragHandlers({
   const onPointerDown = (event: PointerEvent): void => {
     // In walkthrough mode the canvas click only engages pointer lock — it must
     // not select furniture, open a popover or start a drag (see #67).
-    if (handlersRef.current.walkthroughActive || handlersRef.current.editingLocked) return;
+    if (handlersRef.current.walkthroughActive) return;
+    if (handlersRef.current.editingLocked) {
+      if (event.button !== 0) return;
+      const anchor = pickReviewAnchor(event);
+      reviewPress = anchor
+        ? { pointerId: event.pointerId, downX: event.clientX, downY: event.clientY, threshold: dragThresholdPx(event.pointerType), anchor }
+        : null;
+      return;
+    }
     // Only track a single primary pointer at a time. A second finger arriving
     // mid-gesture is ignored here so it can drive OrbitControls' pinch.
     if (activePointerId !== null) return;
@@ -282,6 +296,33 @@ export function attachDragHandlers({
     }
   };
 
+  interface ReviewPress {
+    pointerId: number;
+    downX: number;
+    downY: number;
+    threshold: number;
+    anchor: { itemId: string | null; x: number; y: number; z: number };
+  }
+  let reviewPress: ReviewPress | null = null;
+
+  const pickReviewAnchor = (event: PointerEvent): ReviewPress['anchor'] | null => {
+    const report = handlersRef.current.onReviewAnchor;
+    if (!report) return null;
+    setPointerFromEvent(event);
+    raycaster.setFromCamera(pointer, camera);
+    if (!handlersRef.current.floorPickOnly) {
+      const hits = raycaster.intersectObjects(furnitureList(), true);
+      const target = ascendToFurniture(hits[0]?.object);
+      const point = hits[0]?.point;
+      if (target && point) {
+        return { itemId: target.userData.id as string, x: point.x, y: point.y, z: point.z };
+      }
+    }
+    dragPlane.constant = -(handlersRef.current.getDragPlaneY?.() ?? 0);
+    if (!raycaster.ray.intersectPlane(dragPlane, intersection)) return null;
+    return { itemId: null, x: intersection.x, y: intersection.y, z: intersection.z };
+  };
+
   let lastHoverId: string | null = null;
   const updateHover = (event: PointerEvent): void => {
     // No hover affordance while walkthrough owns the camera (see #67).
@@ -305,6 +346,11 @@ export function attachDragHandlers({
   };
 
   const onPointerMove = (event: PointerEvent): void => {
+    if (reviewPress && event.pointerId === reviewPress.pointerId) {
+      const dx = event.clientX - reviewPress.downX;
+      const dy = event.clientY - reviewPress.downY;
+      if (dx * dx + dy * dy >= reviewPress.threshold * reviewPress.threshold) reviewPress = null;
+    }
     if (handlersRef.current.editingLocked) {
       if (dragTarget) abortGesture(true);
       return;
@@ -417,18 +463,28 @@ export function attachDragHandlers({
     handlersRef.current.onItemDragEnd?.(target.userData.id as string);
   };
 
+  const finishReviewPress = (event: PointerEvent, commit: boolean): void => {
+    if (!reviewPress || event.pointerId !== reviewPress.pointerId) return;
+    const press = reviewPress;
+    reviewPress = null;
+    if (commit) handlersRef.current.onReviewAnchor?.(press.anchor);
+  };
+
   const onPointerUp = (event: PointerEvent): void => {
+    finishReviewPress(event, true);
     endGesture(event);
   };
 
   // The browser took the pointer (OS gesture, palm rejection, a system
   // dialog): undo the drag rather than commit and lock it (#292).
   const onPointerCancel = (event: PointerEvent): void => {
+    finishReviewPress(event, false);
     if (activePointerId === null || event.pointerId !== activePointerId) return;
     abortGesture(true);
   };
 
   const onPointerLeave = (event: PointerEvent): void => {
+    reviewPress = null;
     // Hover teardown is a mouse affordance; touch never sets hover state.
     if (event.pointerType !== 'touch') {
       handlersRef.current.onItemHover?.(null);

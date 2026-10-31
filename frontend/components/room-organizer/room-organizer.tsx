@@ -8,9 +8,11 @@ import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
 import { flushSourceScope } from '@/lib/source-storage';
 import { BrandMark } from '../brand-mark';
+import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
+import { useCameraFly } from './hooks/use-camera-fly';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
@@ -37,7 +39,6 @@ import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
-import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -47,14 +48,16 @@ import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
-import { randomSuffix } from './lib/ids';
+import { randomId, randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
-import { editorItemLimit, SCENE_PRESETS } from './lib/scene-presets';
+import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
+import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
+import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
@@ -75,6 +78,7 @@ import { WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { ReferenceImageControls } from './panels/reference-image-controls';
+import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
 import { Viewport } from './panels/viewport';
@@ -200,6 +204,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
   const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
+  const [reviewPins, setReviewPins] = useState<ReviewPin[]>([]);
+  const [pinFilter, setPinFilter] = useState<ReviewPinFilter>('open');
+  const [activePinId, setActivePinId] = useState<string | null>(null);
+  const [pinDraft, setPinDraft] = useState<ReviewPinDraft | null>(null);
+  const [reviewCleared, setReviewCleared] = useState(false);
+  const reviewPinsRef = useRef(reviewPins);
+  reviewPinsRef.current = reviewPins;
+  const openPinDraftRef = useRef<(pick: { itemId: string | null; x: number; y: number; z: number }) => void>(() => {});
   const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
   const [materialsOpen, setMaterialsOpen] = useState(false);
@@ -914,6 +926,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     selectedItemId,
     extraSelectedIds,
     allSelectedIds,
+    editingLocked: workbenchMode !== 'layout',
+    ...(workbenchMode === 'review' ? { onReviewAnchor: ({ itemId, x, z }: { itemId: string | null; x: number; z: number }) => openPinDraftRef.current({ itemId, x, y: activeFloorY, z }) } : {}),
     onItemSelect: handleSelect,
     onItemDoubleClick: openPropertiesForItem,
     onDeselect: deselectAll,
@@ -949,6 +963,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       onItemDragCancel: handleDragCancel,
       onItemHover: setHover,
       onEmptyClick: handleEmptyClick,
+      editingLocked: workbenchMode !== 'layout',
+      ...(workbenchMode === 'review' ? { onReviewAnchor: (anchor: { itemId: string | null; x: number; y: number; z: number }) => openPinDraftRef.current(anchor) } : {}),
       onWallSelect: ({ wallId, kind }) => {
         setSelectedWall({ id: wallId, kind });
       },
@@ -1095,6 +1111,75 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     threeModuleRef,
     sceneRef,
   });
+
+  const exitPlanView = useCallback(() => {
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+  }, []);
+  const flyToPin = useCameraFly({ cameraRef, controlsRef, invalidate, onExit2D: exitPlanView });
+  const itemOrigin = useCallback((itemId: string | null) => {
+    if (!itemId) return null;
+    const item = activeFloor.items.find(entry => entry.id === itemId);
+    return item?.position ? { x: item.position.x, y: activeFloorY, z: item.position.z } : null;
+  }, [activeFloor.items, activeFloorY]);
+  openPinDraftRef.current = (pick) => {
+    if (workbenchMode !== 'review') return;
+    const camera = cameraRef.current;
+    if (!camera) return;
+    const origin = itemOrigin(pick.itemId);
+    const offset = origin ? [pick.x - origin.x, pick.y - origin.y, pick.z - origin.z] as const : null;
+    const cameraShot = view.view2D
+      ? { position: [pick.x + 2.4, pick.y + 2.8, pick.z + 2.4] as const, target: [pick.x, pick.y, pick.z] as const }
+      : { position: [camera.position.x, camera.position.y, camera.position.z] as const, target: [pick.x, pick.y, pick.z] as const };
+    setPinDraft({ itemId: pick.itemId, x: pick.x, y: pick.y, z: pick.z, offset, camera: cameraShot });
+    setLeftMode('brief');
+    setSidebarCollapsed(false);
+  };
+  const focusReviewPin = useCallback((id: string) => {
+    const pin = reviewPinsRef.current.find(entry => entry.id === id);
+    if (!pin) return;
+    setActivePinId(id);
+    flyToPin(flyDestination(pin, itemOrigin(pin.itemId)));
+  }, [flyToPin, itemOrigin]);
+  const commitReviewPin = useCallback((text: string) => {
+    const current = pinDraft;
+    if (!current) return;
+    const pin = createReviewPin({ id: randomId('pin'), text, draft: current });
+    if (!pin) return;
+    setReviewPins(pins => [...pins, pin]);
+    setActivePinId(pin.id);
+    setPinFilter('open');
+    setPinDraft(null);
+  }, [pinDraft]);
+  const returnReviewPin = useCallback((id: string) => {
+    focusReviewPin(id);
+    selectWorkbenchMode('layout');
+    notify('回到布置。改完再进评审，标已解决。');
+  }, [focusReviewPin, selectWorkbenchMode]);
+  const confirmReview = useCallback(() => {
+    setReviewCleared(true);
+    selectWorkbenchMode('delivery');
+  }, [selectWorkbenchMode]);
+  const reviewMarks = useMemo<ReviewPinMark[]>(() => reviewPins.map((pin, index) => {
+    const point = pinAnchor(pin, itemOrigin(pin.itemId));
+    return { id: pin.id, n: index + 1, status: pin.status, x: point.x, y: point.y, z: point.z };
+  }), [reviewPins, itemOrigin]);
+  const toScreen = useCallback((point: { x: number; y: number; z: number }) => {
+    if (view.view2D) {
+      const canvas = canvas2DRef.current;
+      if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
+      return planPointToCanvas(point, layout, get2DViewTransform(canvas.clientWidth, canvas.clientHeight, layout));
+    }
+    const THREE = threeModuleRef.current;
+    const camera = cameraRef.current;
+    const canvas = canvasRef.current;
+    if (!THREE || !camera || !canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
+    const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
+    if (projected.z > 1) return null;
+    return {
+      x: (projected.x * 0.5 + 0.5) * canvas.clientWidth,
+      y: (-projected.y * 0.5 + 0.5) * canvas.clientHeight,
+    };
+  }, [view.view2D, layout, cameraRef, canvasRef, canvas2DRef, threeModuleRef]);
 
   const { applyPreset, focusOn, fitToRoom, ensureRoomInView } = useCameraPresets({
     cameraRef,
@@ -1309,9 +1394,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     selectedWall,
     hasSignalItems,
     walkthroughActive,
+    layoutLocked: workbenchMode !== 'layout',
     isDragActive,
     handlers: shortcutHandlers,
   });
+
+  useEffect(() => {
+    if (workbenchMode === 'layout') return;
+    selectOnly(null);
+    setSelectedWall(null);
+    setPendingCatalog(null);
+    cancelPlacement();
+    setView(current => (current.drawWallMode || current.drawZoneMode || current.measurementMode)
+      ? { ...current, drawWallMode: false, drawZoneMode: false, measurementMode: false }
+      : current);
+  }, [workbenchMode, selectOnly, cancelPlacement, setView]);
+  useEffect(() => {
+    if (workbenchMode !== 'review') setPinDraft(null);
+  }, [workbenchMode]);
+  useEffect(() => {
+    setReviewPins([]);
+    setPinDraft(null);
+    setActivePinId(null);
+    setReviewCleared(false);
+  }, [layout.id]);
 
 
 
@@ -1513,11 +1619,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
               {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
-            <div className="sc-left-content sc-mode-card-host" hidden={leftMode!=='brief'}><WorkbenchModeCard onFocusItem={id => {
-              const item = activeFloor.items.find(entry => entry.id === id);
-              selectOnly(id, { keepPanel: true });
-              if (item?.position) focusOn(item.position, undefined, activeFloorY);
-            }} onExport={() => { setAgentCollapsed(false); }} /></div>
+            <div className="sc-left-content sc-mode-card-host" hidden={leftMode!=='brief'}><WorkbenchModeCard
+              pins={reviewPins}
+              pinFilter={pinFilter}
+              activePinId={activePinId}
+              reviewCleared={reviewCleared}
+              onPinFilter={setPinFilter}
+              onFocusPin={focusReviewPin}
+              onResolvePin={id => setReviewPins(pins => markPinResolved(pins, id))}
+              onReturnPin={returnReviewPin}
+              onConfirmDelivery={confirmReview}
+              onExport={() => { setAgentCollapsed(false); }}
+            /></div>
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
@@ -1525,8 +1638,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
             {!sidebarCollapsed && leftMode==='brief' && <LeftCardResizer width={leftCardWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />}
           </div>
-          <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
-            if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
+          <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
+            if (workbenchMode !== 'layout' || !pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
             const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
             if (!point) return;
@@ -1577,7 +1690,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           })()
         }
         onCatalogDrop={async (clientX, clientY, key) => {
-          if (!dropActive.current) return;
+          if (workbenchMode !== 'layout' || !dropActive.current) return;
           const base = layoutStore.getState();
           const world = view.view2D
             ? clientToWorld2D(clientX, clientY)
@@ -1602,6 +1715,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         }}
       />
             <AgentCanvasOverlay/>
+            <ReviewPinLayer
+              pins={reviewMarks}
+              activeId={activePinId}
+              draft={pinDraft}
+              draftLabel={pinDraft ? (pinDraft.itemId ? `钉在「${pinSubject(pinDraft.itemId, activeFloor.items)}」` : '钉在地面') : ''}
+              toScreen={toScreen}
+              controlsRef={controlsRef}
+              cameraReady={isReady}
+              onFocus={focusReviewPin}
+              onCommit={commitReviewPin}
+              onCancel={() => setPinDraft(null)}
+            />
             <MapVenueOverlay onHangDemoEnvironment={hangDemoEnvironment} onReconUpload={luxDirectVisible ? preset => {
               setAholoReconPreset(preset);
               setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(false);
@@ -1616,7 +1741,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            {!planHome && <ScendanceViewTools showAtmosphere={false} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
+            {!planHome && <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

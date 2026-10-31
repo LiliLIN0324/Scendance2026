@@ -83,6 +83,10 @@ export interface UseCanvas2DInteractionParams {
   onItemDrag(id: string, x: number, z: number): void;
   onItemDragEnd(id: string): void;
   onItemDragCancel(id: string, options?: DragCancelOptions): void;
+  /** Review / delivery: no select, drag, or zone draw. */
+  editingLocked?: boolean;
+  /** Review click on an item or the plan. A drag past the threshold does not pin. */
+  onReviewAnchor?: (anchor: { itemId: string | null; x: number; z: number }) => void;
 }
 
 export interface UseCanvas2DInteractionResult {
@@ -163,6 +167,7 @@ export function useCanvas2DInteraction(
     }
     let gesture: Gesture | null = null;
     let rafId: number | null = null;
+    let reviewPress: { pointerId: number; downClientX: number; downClientY: number; threshold: number; itemId: string | null; x: number; z: number } | null = null;
 
     /** A zone rectangle being dragged out (#155); world corners, room-centred. */
     interface ZoneGesture {
@@ -292,6 +297,20 @@ export function useCanvas2DInteraction(
       const p = paramsRef.current;
       const world = clientToWorld2D(event.clientX, event.clientY);
       if (!world) return;
+      if (p.editingLocked) {
+        if (!p.onReviewAnchor || p.view.drawZoneMode) return;
+        const hit = hitTest2DItems(p.activeFloor.items, world.x, world.z, hitSlopWorld());
+        reviewPress = {
+          pointerId: event.pointerId,
+          downClientX: event.clientX,
+          downClientY: event.clientY,
+          threshold: dragThresholdPx(event.pointerType),
+          itemId: hit?.id ?? null,
+          x: world.x,
+          z: world.z,
+        };
+        return;
+      }
       // Zone-draw mode (#155) claims the press: the rectangle starts here
       // and no item is selected or moved underneath it.
       if (p.view.drawZoneMode) {
@@ -336,6 +355,12 @@ export function useCanvas2DInteraction(
     };
 
     const onPointerMove = (event: PointerEvent): void => {
+      if (reviewPress && event.pointerId === reviewPress.pointerId) {
+        const dx = event.clientX - reviewPress.downClientX;
+        const dy = event.clientY - reviewPress.downClientY;
+        if (dx * dx + dy * dy >= reviewPress.threshold * reviewPress.threshold) reviewPress = null;
+        return;
+      }
       const zone = zoneGesture;
       if (zone && event.pointerId === zone.pointerId) {
         if (!zone.started) {
@@ -394,6 +419,12 @@ export function useCanvas2DInteraction(
     };
 
     const endGesture = (event: PointerEvent): void => {
+      if (reviewPress && event.pointerId === reviewPress.pointerId) {
+        const press = reviewPress;
+        reviewPress = null;
+        if (event.type === 'pointerup') paramsRef.current.onReviewAnchor?.({ itemId: press.itemId, x: press.x, z: press.z });
+        return;
+      }
       const zone = zoneGesture;
       if (zone && event.pointerId === zone.pointerId) {
         if (rafId !== null) {
@@ -436,6 +467,7 @@ export function useCanvas2DInteraction(
     };
 
     const onPointerLeave = (): void => {
+      reviewPress = null;
       // A started drag holds pointer capture and stays alive off-canvas;
       // only an armed-but-unstarted gesture is abandoned here.
       if (gesture && !gesture.started) gesture = null;
@@ -446,7 +478,7 @@ export function useCanvas2DInteraction(
     // 点击计数只在 dblclick 上，所以另起一条命中，而不是在按下时猜。
     const onDoubleClick = (event: MouseEvent): void => {
       const p = paramsRef.current;
-      if (!p.onItemDoubleClick || p.view.drawZoneMode) return;
+      if (p.editingLocked || !p.onItemDoubleClick || p.view.drawZoneMode) return;
       const world = clientToWorld2D(event.clientX, event.clientY);
       if (!world) return;
       const hit = hitTest2DItems(p.activeFloor.items, world.x, world.z, hitSlopWorld());
@@ -471,7 +503,7 @@ export function useCanvas2DInteraction(
       // nothing stale is committed on a later pointerup.
       abortGesture();
     };
-  }, [params.enabled, params.canvasRef, clientToWorld2D, hitSlopWorld, layoutActions]);
+  }, [params.enabled, params.editingLocked, params.canvasRef, clientToWorld2D, hitSlopWorld, layoutActions]);
 
   return { clientToWorld2D };
 }

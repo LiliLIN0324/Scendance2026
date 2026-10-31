@@ -202,6 +202,31 @@ describe('useKeyboardShortcuts — walkthrough gate (#339)', () => {
 });
 
 
+describe('useKeyboardShortcuts — review lock', () => {
+  afterEach(cleanup);
+
+  it('blocks layout edits and keeps a view shortcut', () => {
+    const handlers = makeHandlers();
+    renderHook(() => useKeyboardShortcuts({
+      layoutLocked: true,
+      selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
+      selectedWall: null,
+      hasSignalItems: false,
+      handlers: handlers as unknown as KeyboardShortcutHandlers,
+    }));
+    press('Delete');
+    press('z', { ctrlKey: true });
+    press('ArrowUp');
+    press('r');
+    press('m');
+    expect(handlers.removeItem).not.toHaveBeenCalled();
+    expect(handlers.undo).not.toHaveBeenCalled();
+    expect(handlers.moveItem).not.toHaveBeenCalled();
+    expect(handlers.rotateItem).not.toHaveBeenCalled();
+    expect(handlers.toggleMeasurements).toHaveBeenCalledOnce();
+  });
+});
+
 describe('hidden editor keyboard isolation', () => {
   afterEach(cleanup);
   it('ignores delete and undo while hidden and resumes on re-entry', () => {

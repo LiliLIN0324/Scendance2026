@@ -2,76 +2,82 @@
 
 /**
  * 左轨三态只换左栏这张卡。主区 3D 和右轨不换皮。
- * 评审 / 执行的完整批注流和真交付物下一刀；这里先把卡片内容分开。
+ * 布置改场景，评审只读并钉意见，执行导出清单。
  */
-import { useState } from 'react';
 import { useRoomEditor } from '../contexts';
+import { countOpenPins, pinSubject, pinsForFilter, type ReviewPin, type ReviewPinFilter } from '../lib/review-pins';
 import { useAgent } from './agent-panel';
 import { materialRows } from './plan-flow';
 import './mode-shell.css';
-
-export type ReviewMark = 'pending' | 'passed' | 'rejected';
-
-export function reviewStatusLabel(mark: ReviewMark | undefined): '待确认' | '通过' | '驳回' {
-  if (mark === 'passed') return '通过';
-  if (mark === 'rejected') return '驳回';
-  return '待确认';
-}
 
 /** 有到场物料算齐，一场空的算缺。真点验下一刀再接。 */
 export function dossierStatus(itemCount: number): '齐' | '缺' {
   return itemCount > 0 ? '齐' : '缺';
 }
 
-export function ReviewAnnotationShell({ items, onFocus }: {
+/** 左栏瘦成未解决钉的滤镜。钉本身在画布上。 */
+export function ReviewIssuesCard({
+  pins,
+  items,
+  filter,
+  activeId,
+  onFilter,
+  onFocus,
+  onResolve,
+  onReturn,
+  onConfirm,
+}: {
+  pins: readonly ReviewPin[];
   items: readonly { id: string; name: string }[];
+  filter: ReviewPinFilter;
+  activeId: string | null;
+  onFilter(filter: ReviewPinFilter): void;
   onFocus(id: string): void;
+  onResolve(id: string): void;
+  onReturn(id: string): void;
+  onConfirm(): void;
 }): JSX.Element {
-  const [marks, setMarks] = useState<Record<string, ReviewMark>>({});
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const focus = (id: string) => {
-    setFocusedId(id);
-    onFocus(id);
-  };
-  const mark = (id: string, next: ReviewMark) => {
-    setMarks(current => ({ ...current, [id]: next }));
-    focus(id);
-  };
-  return <section className="sc-mode-card" role="region" aria-label="评审批注">
+  const openCount = countOpenPins(pins);
+  const visible = pinsForFilter(pins, filter);
+  const numbers = new Map(pins.map((pin, index) => [pin.id, index + 1]));
+  return <section className="sc-mode-card" role="region" aria-label="议题">
     <header>
-      <strong>待确认</strong>
-      <span>点一项，对照这场</span>
+      <strong>议题</strong>
+      <span>{openCount === 0 ? '没有未解决的' : `${openCount} 条未解决`}</span>
     </header>
-    {items.length === 0
-      ? <div className="sc-mode-shell-empty">
-          <p>这一版还没有待确认的物料</p>
-          <div className="sc-mode-shell-acts">
-            <button type="button" disabled>通过</button>
-            <button type="button" disabled>驳回</button>
-          </div>
-        </div>
-      : <ul>
-          {items.map(item => {
-            const status = reviewStatusLabel(marks[item.id]);
-            const on = focusedId === item.id;
-            return <li key={item.id} className={on ? 'is-on' : ''}>
-              <button type="button" className="sc-mode-shell-item" aria-pressed={on} onClick={() => focus(item.id)}>
-                <span>{item.name}</span>
-                <b>{status}</b>
+    <div className="sc-issue-filters" role="group" aria-label="议题筛选">
+      <button type="button" aria-pressed={filter === 'open'} onClick={() => onFilter('open')}>未解决</button>
+      <button type="button" aria-pressed={filter === 'resolved'} onClick={() => onFilter('resolved')}>已解决</button>
+    </div>
+    {visible.length === 0
+      ? <p className="sc-mode-shell-empty">{filter === 'open' ? '点物件或地面，钉一条意见' : '还没有标成已解决的'}</p>
+      : <ul className="sc-issue-list">
+          {visible.map(pin => {
+            const on = activeId === pin.id;
+            return <li key={pin.id} className={on ? 'is-on' : ''}>
+              <button type="button" className="sc-issue-go" aria-pressed={on} onClick={() => onFocus(pin.id)}>
+                <b aria-hidden="true">{numbers.get(pin.id)}</b>
+                <span>
+                  <strong>{pin.text}</strong>
+                  <small>{pinSubject(pin.itemId, items)}</small>
+                </span>
               </button>
-              <div className="sc-mode-shell-acts">
-                <button type="button" aria-pressed={status === '通过'} onClick={() => mark(item.id, 'passed')}>通过</button>
-                <button type="button" aria-pressed={status === '驳回'} onClick={() => mark(item.id, 'rejected')}>驳回</button>
-              </div>
+              {pin.status === 'open' && <div className="sc-issue-acts">
+                <button type="button" onClick={() => onResolve(pin.id)}>标记已解决</button>
+                <button type="button" onClick={() => onReturn(pin.id)}>退回布置</button>
+              </div>}
             </li>;
           })}
         </ul>}
+    <button type="button" className="sc-issue-confirm" onClick={onConfirm}>确认可进执行</button>
+    {openCount > 0 && <p className="sc-issue-note">还有未解决的钉。确认后它们还留在议题里。</p>}
   </section>;
 }
 
-export function DeliveryChecklistShell({ items, onExport }: {
+export function DeliveryChecklistShell({ items, onExport, reviewCleared = false }: {
   items: readonly { name: string }[];
   onExport(): void;
+  reviewCleared?: boolean;
 }): JSX.Element {
   const rows = materialRows(items);
   const status = dossierStatus(rows.length);
@@ -81,6 +87,7 @@ export function DeliveryChecklistShell({ items, onExport }: {
       <span role="status">资料状态 · {status}</span>
       <button type="button" onClick={onExport}>导出</button>
     </header>
+    {reviewCleared && <p className="sc-issue-note">评审已确认，可以导出。</p>}
     <ul>
       {rows.length === 0
         ? <li><span>还没有到场物料</span><b data-status="缺">缺</b></li>
@@ -109,13 +116,44 @@ export function LayoutVenueCard({ event, guests, dims }: {
 }
 
 /** 挂在左栏：同一张卡位，三态只换里面的字。 */
-export function WorkbenchModeCard({ onFocusItem, onExport }: {
-  onFocusItem(id: string): void;
+export function WorkbenchModeCard({
+  pins,
+  pinFilter,
+  activePinId,
+  reviewCleared,
+  onPinFilter,
+  onFocusPin,
+  onResolvePin,
+  onReturnPin,
+  onConfirmDelivery,
+  onExport,
+}: {
+  pins: readonly ReviewPin[];
+  pinFilter: ReviewPinFilter;
+  activePinId: string | null;
+  reviewCleared: boolean;
+  onPinFilter(filter: ReviewPinFilter): void;
+  onFocusPin(id: string): void;
+  onResolvePin(id: string): void;
+  onReturnPin(id: string): void;
+  onConfirmDelivery(): void;
   onExport(): void;
 }): JSX.Element {
   const agent = useAgent();
   const { activeFloor } = useRoomEditor();
-  if (agent.callbacks.workbenchMode === 'review') return <ReviewAnnotationShell items={activeFloor.items} onFocus={onFocusItem} />;
-  if (agent.callbacks.workbenchMode === 'delivery') return <DeliveryChecklistShell items={activeFloor.items} onExport={() => { agent.previewExport(); onExport(); }} />;
+  if (agent.callbacks.workbenchMode === 'review') {
+    return <ReviewIssuesCard
+      pins={pins}
+      items={activeFloor.items}
+      filter={pinFilter}
+      activeId={activePinId}
+      onFilter={onPinFilter}
+      onFocus={onFocusPin}
+      onResolve={onResolvePin}
+      onReturn={onReturnPin}
+      onConfirm={onConfirmDelivery}
+    />;
+  }
+  if (agent.callbacks.workbenchMode === 'delivery') return <DeliveryChecklistShell items={activeFloor.items} reviewCleared={reviewCleared} onExport={() => { agent.previewExport(); onExport(); }} />;
   return <LayoutVenueCard event={agent.recap.event} guests={agent.recap.guests} dims={agent.recap.dims} />;
 }

@@ -45,6 +45,11 @@ export interface UseKeyboardShortcutsOptions {
    * Escape still fire; duplicate/copy/paste do not (#339).
    */
   walkthroughActive?: boolean;
+  /**
+   * Review and delivery look at the scene. Undo, delete, nudge, rotate and
+   * paste must not change the layout. View shortcuts stay.
+   */
+  layoutLocked?: boolean;
   /** Whether an item drag is in progress; read at keypress time. */
   isDragActive?: () => boolean;
   handlers: KeyboardShortcutHandlers;
@@ -79,12 +84,24 @@ function interruptsDrag(event: KeyboardEvent): boolean {
   return DRAG_INTERRUPTING_KEYS.has(event.key);
 }
 
+/** Keys that write the layout. View toggles (2 / m / g / time) are not in here. */
+function editsLayout(event: KeyboardEvent, placing: boolean): boolean {
+  const key = event.key.toLowerCase();
+  const chord = event.ctrlKey || event.metaKey;
+  if (chord && (key === 'z' || key === 'y' || key === 'd' || key === 'v')) return true;
+  if (event.key === 'Delete' || event.key === 'Backspace') return true;
+  if (!chord && (key === 'r' || event.key in ARROW_DELTAS)) return true;
+  if (!chord && event.key === 'Enter' && placing) return true;
+  return false;
+}
+
 export function useKeyboardShortcuts({
   enabled = true,
   selectedItem,
   selectedWall,
   hasSignalItems,
   walkthroughActive = false,
+  layoutLocked = false,
   isDragActive,
   handlers,
 }: UseKeyboardShortcutsOptions): void {
@@ -92,6 +109,11 @@ export function useKeyboardShortcuts({
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
+
+      if (layoutLocked && editsLayout(event, Boolean(handlers.confirmPlacement))) {
+        event.preventDefault();
+        return;
+      }
 
       // Held until the drop; view-only keys (snap, measurements, time) still work.
       if (isDragActive?.() && interruptsDrag(event)) {
@@ -145,8 +167,9 @@ export function useKeyboardShortcuts({
 
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (handlers.cancelPlacement) handlers.cancelPlacement();
-        else handlers.deselect();
+        // 评审里取消放置会把刚摆上的物件撤掉，那也是在改布置。
+        if (layoutLocked || !handlers.cancelPlacement) handlers.deselect();
+        else handlers.cancelPlacement();
         return;
       }
 
@@ -269,7 +292,7 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, isDragActive, handlers]);
+  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, handlers]);
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

@@ -1,0 +1,60 @@
+.sc-review-pins { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.sc-review-pins > button {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--wk-green, #4a7c59);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.28);
+}
+.sc-review-pins > button[data-status="resolved"] {
+  background: var(--paper, #fff);
+  color: var(--wk-muted, #71767e);
+  border-color: var(--wk-hair, #e4e4e7);
+}
+.sc-review-pins > button.is-on { outline: 2px solid var(--wk-green, #4a7c59); outline-offset: 2px; }
+.sc-review-composer {
+  position: absolute;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 10px;
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+  box-shadow: 0 8px 24px rgba(20, 20, 22, 0.08);
+  pointer-events: auto;
+}
+.sc-review-composer p { margin: 0; color: var(--wk-muted, #71767e); font-size: 12px; }
+.sc-review-composer input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 8px;
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+}
+.sc-review-composer div { display: flex; gap: 8px; }
+.sc-review-composer button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wk-ink, #141416);
+  cursor: pointer;
+}
+.sc-review-composer button[type="submit"] { background: var(--wk-green, #4a7c59); color: #fff; }
+.sc-review-composer button:disabled { cursor: not-allowed; opacity: 0.45; }
+.sc-canvas-stage.is-review canvas { cursor: crosshair; }
