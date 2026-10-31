@@ -1,6 +1,6 @@
 'use client';
 
-import { ListChecks, PanelLeftClose, Ruler, Scan, Send, Settings, Shapes, Sparkles, SquareStack } from 'lucide-react';
+import { PanelLeftClose, Ruler, Scan, Settings, Shapes, Sparkles, SquareStack } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -61,7 +61,8 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
-import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
+import { issueReviewShare } from './lib/review-share';
+import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
 import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
@@ -73,7 +74,7 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
-import { ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
+import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { ReferenceImageControls } from './panels/reference-image-controls';
@@ -213,6 +214,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
   const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [handoffExportRequest, setHandoffExportRequest] = useState(0);
+  const [shareOpenRequest, setShareOpenRequest] = useState(0);
   const [reviewPins, setReviewPins] = useState<ReviewPin[]>([]);
   const [pinFilter, setPinFilter] = useState<ReviewPinFilter>('open');
   const [activePinId, setActivePinId] = useState<string | null>(null);
@@ -305,9 +309,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setSidebarCollapsed(true);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.sc-mode-rail button[aria-pressed="true"]')?.focus());
   }, []);
-  // 左轨换的是画布在干什么，不把晴光整列换掉。评审钉在场内，图纸和执行资料浮在画布上。
+  // 左轨只留布置。旧的评审/执行不切模式：评审打开分享，执行打开到场清单。
   const selectWorkbenchMode = useCallback((mode: WorkbenchMode) => {
-    setWorkbenchMode(mode);
+    const next = demoteLegacyMode(mode);
+    if (next === 'open-checklist') { setChecklistOpen(true); return; }
+    if (next === 'open-share') { setShareOpenRequest(value => value + 1); return; }
+    setWorkbenchMode('layout');
     setWorkbenchModeSerial(value => value + 1);
     setMaterialsOpen(false);
     setBusinessOpen(false);
@@ -315,9 +322,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setSidebarCollapsed(true);
     setAgentCollapsed(false);
   }, []);
+  const issueReviewLink = useCallback(async () => {
+    const issued = issueReviewShare(layoutStore.getState().layout, window.location.origin);
+    return { url: issued.url };
+  }, []);
+  const exportHandoff = useCallback(() => {
+    setAgentCollapsed(false);
+    setHandoffExportRequest(value => value + 1);
+  }, []);
+  const openMaterialsFromShare = useCallback(() => {
+    document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
+  }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
-    setWorkbenchMode(mode);
-    setWorkbenchModeSerial(value => value + 1);
+    // 表单仍浮在画布上。不把晴光切成评审或执行。
     setMaterialsOpen(false);
     setLeftMode('business');
     setBusinessOpen(true);
@@ -1578,7 +1595,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider onVenueIOChange={io => setOutdoorVenue(io === 'outdoor')} onPreview={onPreviewAi} onApply={onApplyCreative} callbacks={{
+      <LayoutAgentProvider handoffExportRequest={handoffExportRequest} onVenueIOChange={io => setOutdoorVenue(io === 'outdoor')} onPreview={onPreviewAi} onApply={onApplyCreative} callbacks={{
         workbenchMode,
         onOpenMaterials: () => { setWorkbenchMode('layout'); setMaterialsOpen(true); setBusinessOpen(false); setSidebarCollapsed(true); },
         onSelectMode: selectWorkbenchMode,
@@ -1599,8 +1616,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <nav className="sc-mode-rail-top" aria-label="工作流程">
                 {WORKBENCH_MODES.map(mode => {
                   const active = workbenchMode === mode.id;
-                  const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
-                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} data-tip={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/></button>;
+                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} data-tip={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><SquareStack size={24} aria-hidden="true"/></button>;
                 })}
               </nav>
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
@@ -1749,6 +1765,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               setAholoReconPreset(preset);
               setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false);
             } : undefined}/>
+            {checklistOpen && <aside className="sc-checklist-drawer" role="dialog" aria-label="到场清单">
+              <button type="button" className="sc-checklist-dismiss" onClick={() => setChecklistOpen(false)}>关闭</button>
+              <DeliveryChecklistShell items={activeFloor.items} onExport={exportHandoff}/>
+            </aside>}
             {workbenchMode === 'review' && !pinDraft && <p className="sc-review-hint" role="status">点物件或地面，钉一条意见</p>}
             <div ref={businessHostRef} className="sc-canvas-share sc-data-host" hidden={!businessOpen || leftMode !== 'business'}/>
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
@@ -1770,7 +1790,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
+            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

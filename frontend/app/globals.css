@@ -1317,6 +1317,33 @@ body {
 .sc-workbench .sc-tool-column .sc-more-pop > button { display: flex; align-items: center; justify-content: flex-start; gap: 8px; white-space: nowrap; }
 .sc-workbench .sc-tool-column .sc-more-pop > button span { flex: 1; text-align: left; }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
+.sc-workbench .sc-share-menu {
+  width: 280px; min-width: 280px; max-height: min(70vh, 480px);
+  padding: 10px; gap: 6px; align-items: stretch;
+}
+.sc-workbench .sc-share-menu p,
+.sc-workbench .sc-share-menu label {
+  margin: 0; font-size: 12px; line-height: 1.5; color: var(--wk-muted);
+}
+.sc-workbench .sc-share-menu .sc-share-kicker { color: var(--wk-ink); font-weight: 600; }
+.sc-workbench .sc-share-menu label { display: grid; gap: 4px; }
+.sc-workbench .sc-share-menu input {
+  width: 100%; box-sizing: border-box; padding: 6px 8px;
+  border: 1px solid var(--wk-hair); border-radius: 6px;
+  background: var(--wk-paper); color: var(--wk-ink); font-size: 12px;
+}
+.sc-workbench .sc-share-menu a { font-size: 12px; color: var(--wk-green-deep, #3a6247); }
+.sc-workbench .sc-checklist-drawer {
+  position: absolute; z-index: 34; top: 12px; left: 12px;
+  width: min(340px, calc(100% - 76px)); max-height: min(520px, calc(100% - 24px));
+  overflow: auto; border: 1px solid var(--wk-hair); border-radius: 12px;
+  background: var(--wk-paper); box-shadow: var(--e1);
+}
+.sc-workbench .sc-checklist-drawer .sc-mode-card { height: auto; }
+.sc-workbench .sc-checklist-dismiss {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  border: 0; background: transparent; color: var(--wk-ink); font-size: 12px; cursor: pointer;
+}
 .sc-workbench .sc-more-export { display: flex; flex-direction: column; gap: 12px; min-width: 208px; padding: 4px; }
 .sc-workbench .sc-more-export .sc-more-back {
   display: block; padding: 0 2px 2px !important; border: 0 !important; background: transparent !important;
