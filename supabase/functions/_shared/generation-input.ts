@@ -5,26 +5,30 @@ import { generationCapabilities, generationRequestSchema, type GenerationProvide
 import { chooseLane } from './generation-lane.ts';
 import { requireTextureSource } from './generation-quality.ts';
 
+async function validateReferenceImage(backend:Backend,actor:string,input:{kind:'text'|'image'|'texture';referenceImageAssetId?:string|undefined}) {
+  if(!input.referenceImageAssetId)return;
+  const image=await backend.scene(actor,'assets.get',{assetId:input.referenceImageAssetId});
+  const min=input.kind==='texture'?129:128,max=input.kind==='texture'?4095:4096;
+  if(image.owner_id!==actor||!['png','jpeg'].includes(image.format))throw new ApiError('REFERENCE_IMAGE_FORBIDDEN',403);
+  if(image.byte_size>5*1024*1024||!Number.isInteger(image.metadata?.width)||!Number.isInteger(image.metadata?.height)||[image.metadata.width,image.metadata.height].some(n=>n<min||n>max))throw new ApiError('INVALID_REFERENCE_IMAGE',422);
+}
+
 export async function prepareGenerationRequest(backend:Backend,actor:string,raw:unknown,env:Env) {
-  if(env('HY3_RETIRED')==='true')throw new ApiError('HY3_RETIRED',410);
   const input=generationRequestSchema.parse(raw),capabilities=generationCapabilities(env);
   // Single lane decision keeps the cheap-first rule in one place. The error code and status stay
   // unchanged; `lane`/`reason` only add why no lane could serve the request.
   const decision=chooseLane({kind:input.kind,provider:input.provider},capabilities);
+  if(decision.lane==='hy3d'&&env('HY3_RETIRED')==='true')throw new ApiError('HY3_RETIRED',410,{lane:decision.lane,reason:decision.reason});
   if(decision.lane==='aholo'){
     if(!decision.available)throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:'LUX3D_API_KEY',lane:decision.lane,reason:decision.reason});
     required(env,'LUX3D_API_KEY');required(env,'LUX3D_TERMS_REVIEWED_AT');required(env,'LUX3D_TERMS_URL');
+    await validateReferenceImage(backend,actor,input);
     const {requestId,...identity}=input;
     return {...input,fingerprint:await sha256(input.kind==='text'?input.prompt:JSON.stringify(identity)),providerMode:'aholo' as const,providerModel:'lux3d' as const};
   }
   required(env,'HUNYUAN_API_KEY');required(env,'HUNYUAN_TERMS_REVIEWED_AT');required(env,'HUNYUAN_TERMS_URL');
   if(!decision.available)throw new ApiError('SERVICE_NOT_CONFIGURED',503,{setting:input.kind==='texture'?'HUNYUAN_TEXTURE_ENABLED':'HUNYUAN_MODEL',lane:decision.lane,reason:decision.reason});
-  if(input.referenceImageAssetId){
-    const image=await backend.scene(actor,'assets.get',{assetId:input.referenceImageAssetId});
-    const min=input.kind==='texture'?129:128,max=input.kind==='texture'?4095:4096;
-    if(image.owner_id!==actor||!['png','jpeg'].includes(image.format))throw new ApiError('REFERENCE_IMAGE_FORBIDDEN',403);
-    if(image.byte_size>5*1024*1024||!Number.isInteger(image.metadata?.width)||!Number.isInteger(image.metadata?.height)||[image.metadata.width,image.metadata.height].some(n=>n<min||n>max))throw new ApiError('INVALID_REFERENCE_IMAGE',422);
-  }
+  await validateReferenceImage(backend,actor,input);
   if(input.sourceAssetId){
     const source=await backend.scene(actor,'assets.get',{assetId:input.sourceAssetId});
     if(source.format!=='glb')throw new ApiError('INVALID_SOURCE_MODEL',422);

@@ -292,9 +292,12 @@ describe('durable bounded DeepSeek Agent',()=>{
  it('unknown expired run becomes terminal and cannot be restarted',async()=>{
   const i=await input();const r=await f.backend.agent!(owner,'create',{projectId:i.projectId,input:i,fingerprint:await sha256(canonical(i)),baseHash:await sceneHash(i.scene),executionMode:'preview'});await f.db.query("update scene_private.agent_runs set deadline=clock_timestamp()-interval '1 second' where id=$1",[r.id]);expect((await f.backend.agent!(owner,'get',{projectId:i.projectId,id:r.id})).state).toBe('failed');expect(await f.backend.agent!(owner,'start',{projectId:i.projectId,id:r.id})).toEqual({claimed:false});
  });
- it('retirement rejects every new HY3 input before assets or provider calls',async()=>{
+ it('retirement rejects HY3 text/texture inputs but still accepts aholo when Lux3D is configured',async()=>{
   expect(generationCapabilities(env)).toMatchObject({textToModel:false,imageToModel:false,texture:false});
-  for(const kind of ['text','image','texture'])await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'x',kind},env)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
+  await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'x'},env)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
+  const luxEnv=(key:string)=>({HY3_RETIRED:'true',LUX3D_API_KEY:'lux-key',LUX3D_TERMS_URL:'https://example.test/aholo-terms',LUX3D_TERMS_REVIEWED_AT:'2026-10-28'}[key]);
+  await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'圆桌',provider:'aholo'},luxEnv)).resolves.toMatchObject({providerMode:'aholo'});
+  await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'圆桌'},luxEnv)).resolves.toMatchObject({providerMode:'aholo'});
  });
  it('groups one asset UUID casing alias once, keeps real names, and separates color, size and different assets',async()=>{
   const assetA='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',assetB='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

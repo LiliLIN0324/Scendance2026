@@ -17,7 +17,7 @@ function dock(forceProxy = false) {
 describe('物件生成条', () => {
   it('空着时按钮是半禁用，Tab 填入建议后才可点', () => {
     dock();
-    const button = screen.getByRole('button', { name: '生成物件' }) as HTMLButtonElement;
+    const button = screen.getByRole('button', { name: 'Aholo 生成物件' }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(screen.getByText('按 Tab 填入')).toBeTruthy();
     const input = screen.getByLabelText('物件描述') as HTMLTextAreaElement;
@@ -36,7 +36,7 @@ describe('物件生成条', () => {
     dock(true);
     await waitFor(() => expect(document.querySelector('[data-lane="generate"]')?.getAttribute('data-online')).toBe('yes'));
     fireEvent.keyDown(screen.getByLabelText('物件描述'), { key: 'Tab' });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aholo 生成物件' }));
     expect(screen.getByText('先勾选确认扣额度，才会提交。')).toBeTruthy();
     expect(fetchMock.mock.calls.some(call => call[1]?.method === 'POST')).toBe(false);
   });
@@ -59,8 +59,8 @@ describe('物件生成条', () => {
     await waitFor(() => expect(document.querySelector('[data-lane="generate"]')?.getAttribute('data-online')).toBe('yes'));
     fireEvent.keyDown(screen.getByLabelText('物件描述'), { key: 'Tab' });
     fireEvent.click(screen.getByRole('checkbox', { name: CREDIT_CONFIRM_LABEL }));
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
-    fireEvent.click(await screen.findByRole('button', { name: '停止生成' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aholo 生成物件' }));
+    fireEvent.click(await screen.findByRole('button', { name: '停止 Aholo 生成' }));
     expect(await screen.findByText(/已停下/)).toBeTruthy();
     expect(posts).toBe(1);
   });
@@ -69,7 +69,7 @@ describe('物件生成条', () => {
     dock();
     fireEvent.change(screen.getByLabelText('物件描述'), { target: { value: '一张白桌' } });
     fireEvent.click(screen.getByRole('checkbox', { name: CREDIT_CONFIRM_LABEL }));
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aholo 生成物件' }));
     expect(screen.getByText(/不会提交，也不会扣额度/)).toBeTruthy();
   });
 });

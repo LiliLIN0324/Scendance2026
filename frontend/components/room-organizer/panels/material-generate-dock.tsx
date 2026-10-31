@@ -202,10 +202,11 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
           setResult(url ? { url, taskid, name } : null);
           setPrompt('');
           setNote(kind === 'world'
-            ? '场景好了。到左轨「观感」取回，这里不再提交。'
-            : url ? '生成好了，可以放进场景。' : '生成完成，但没有模型文件。');
+            ? '场景好了。到左轨「备用 · 观感」取回，这里不再提交。'
+            : url ? 'Aholo 生成好了，可以放进场景。' : 'Aholo 任务完成，但没有模型文件。');
         } else {
-          setNote(body.status === 4 ? '生成失败。再点会再扣一次。' : '生成已取消，没有再提交。');
+          const failHint = onOpenFallback ? ' 可点下方「备用入口」改走图片/观感。' : '';
+          setNote((body.status === 4 ? `Aholo 生成失败，再点会再扣一次。${failHint}` : '生成已取消，没有再提交。') + (onOpenCloud ? ' 云端 Lux3D 可走「云端 Aholo」。' : ''));
         }
         return;
       }
@@ -253,7 +254,9 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
         if (!accepted) setCreditConfirmed(false);
       } else {
         if (!accepted) setCreditConfirmed(false);
-        setNote(failure instanceof Error ? failure.message : '提交没成功，没有确认扣费。');
+        const message = failure instanceof Error ? failure.message : '提交没成功，没有确认扣费。';
+        const hint = onOpenFallback ? ' 可改用下方「备用入口」。' : onOpenCloud ? ' 或试「云端 Aholo」。' : '';
+        setNote(`${message}${hint}`);
       }
     } finally {
       if (run.current === runId) {
@@ -271,10 +274,10 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     if (!creditConfirmed) { setNeedCredit(true); return; }
     if (online !== true) {
       setNote(online === null
-        ? '正在确认本机代理，还没提交。'
+        ? '正在确认本机 Aholo 代理，还没提交。'
         : localProxy
-          ? '本机代理还不能生成，不会提交，也不会扣额度。'
-          : '本机代理没开，不会提交，也不会扣额度。');
+          ? '本机 Aholo 代理还不能生成（检查 LUX3D_API_KEY），不会提交，也不会扣额度。'
+          : '本机 Aholo 代理没开：先运行 node tools/aholo/lux3d-dev-proxy.mjs。不会提交，也不会扣额度。');
       return;
     }
     setNeedCredit(false);
@@ -319,11 +322,11 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
 
   const held = Boolean(openTask) && !running;
   const disabled = running ? false : !prompt.trim() || held;
-  const label = running ? '停止生成' : held ? '生成进行中' : '生成物件';
+  const label = running ? '停止 Aholo 生成' : held ? 'Aholo 生成进行中' : 'Aholo 生成物件';
 
   return <div className="sc-gen-dock" data-lane="generate" data-online={online === true ? 'yes' : online === false ? 'no' : 'wait'}>
-    <div className="sc-gen-thread" role="log" aria-label="生成记录">
-      {!echo && !note && <p className="sc-gen-empty">{mode === 'world' ? '说一个场景，生成 3D。' : '说一件物件，生成 3D。'}</p>}
+    <div className="sc-gen-thread" role="log" aria-label="Aholo 生成记录">
+      {!echo && !note && <p className="sc-gen-empty">{mode === 'world' ? '说一个场景，用 Aholo 生成 3D 观感。' : '说一件物件，用 Aholo Lux3D 文生 3D。'}</p>}
       {echo && <div className="ap-user"><strong>{echo}</strong></div>}
       {note && <p className="ap-agent">{note}</p>}
       {result && onPlace && <button type="button" className="ap-bubble-action" disabled={placing} onClick={() => void place()}>{placing ? '正在取回…' : '放进场景'}</button>}
@@ -364,8 +367,8 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
       </div>
       {needCredit && !creditConfirmed && <p className="sc-gen-warn" role="status">先勾选确认扣额度，才会提交。</p>}
       <p className="sc-gen-foot">
-        {!localProxy && onOpenCloud && <button type="button" className="sc-gen-resume" onClick={onOpenCloud}>云端备用</button>}
-        {onOpenFallback && <button type="button" className="sc-gen-resume" title="图片和重建在观感里。重建默认干跑，这里不提交。" onClick={onOpenFallback}>图片和重建</button>}
+        {!localProxy && onOpenCloud && <button type="button" className="sc-gen-resume" onClick={onOpenCloud}>云端 Aholo（活动资料）</button>}
+        {onOpenFallback && <button type="button" className="sc-gen-resume" title="图片建模、场景观感、场地重建；文生请留在本栏。" onClick={onOpenFallback}>备用入口（观感 / 图片）</button>}
       </p>
     </form>
   </div>;

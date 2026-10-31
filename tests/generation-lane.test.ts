@@ -27,8 +27,9 @@ describe('generation lane routing',()=>{
     expect(chooseLane({kind:'text',libraryAssetId:'asset-1'},capabilities())).toMatchObject({lane:'library',cost:'free',available:true});
     expect(chooseLane({kind:'text',parameters:table,libraryAssetId:'asset-1'},capabilities()).lane).toBe('parametric');
   });
-  it('falls back to the metered cloud lane for free text',()=>{
+  it('prefers Aholo Lux3D for free text when configured, otherwise HY-3D',()=>{
     expect(chooseLane({kind:'text'},capabilities())).toMatchObject({lane:'hy3d',cost:'metered',available:true});
+    expect(chooseLane({kind:'text'},capabilities({aholoTextToModel:true}))).toMatchObject({lane:'aholo',cost:'metered',available:true});
   });
   it('reports an unavailable cloud lane honestly instead of substituting another lane',()=>{
     const retired=capabilities({textToModel:false,imageToModel:false,texture:false});
@@ -42,11 +43,13 @@ describe('generation lane routing',()=>{
     for(const kind of ['image','texture'] as const)
       expect(chooseLane({kind,parameters:table,libraryAssetId:'asset-1',offlineFingerprint:'abc'},capabilities({texture:true})).lane).toBe('hy3d');
   });
-  it('enters the aholo lane only on explicit declaration and refuses it honestly when unconfigured',()=>{
+  it('enters the aholo lane on explicit declaration or when Lux3D is configured',()=>{
     expect(chooseLane({kind:'text'},capabilities())).toMatchObject({lane:'hy3d'});
     expect(chooseLane({kind:'text',provider:'aholo'},capabilities())).toMatchObject({lane:'aholo',cost:'metered',available:false});
     expect(chooseLane({kind:'text',provider:'aholo'},capabilities({aholoTextToModel:true}))).toMatchObject({lane:'aholo',available:true});
+    expect(chooseLane({kind:'text'},capabilities({aholoTextToModel:true}))).toMatchObject({lane:'aholo',available:true});
     expect(chooseLane({kind:'image',provider:'aholo'},capabilities({aholoImageToModel:true}))).toMatchObject({lane:'aholo',available:true});
+    expect(chooseLane({kind:'image'},capabilities({aholoImageToModel:true}))).toMatchObject({lane:'aholo',available:true});
     // Texture has no Lux3D equivalent: the declaration is ignored and the HY-3D lane owns it.
     expect(chooseLane({kind:'texture',provider:'aholo'},capabilities({texture:true,aholoTextToModel:true}))).toMatchObject({lane:'hy3d'});
   });
