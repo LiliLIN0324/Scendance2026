@@ -1240,17 +1240,41 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
 /* ───────────────────────── 右栏 ───────────────────────── */
 
-/** 抬头状态点只许两种说法：做好了 / 发现问题。等你确认、正在出方案由头像与卡片自己说话，不重复一遍。 */
-function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: '做好了' | '发现问题'; tone: 'ok' | 'warn' } | null {
-  if (mode !== 'layout') return { text: '做好了', tone: 'ok' };
+/** 晴光形象对应的状态。点头像或这行字，回到这一态该做的事。 */
+function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
+  if (mode !== 'layout') return { text: '空闲', tone: 'idle', hint: '回到输入' };
   const s = agent.state;
-  if (s === 'generateFailed') return { text: '发现问题', tone: 'warn' };
-  if (s === 'planProposed') return agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0)
-    ? { text: '发现问题', tone: 'warn' } : null;
-  if (s === 'planReady' || s === 'planEdited') {
-    return agent.overlapCount > 0 ? { text: '发现问题', tone: 'warn' } : { text: '做好了', tone: 'ok' };
+  if (s === 'generating') return { text: '生成中', tone: 'busy', hint: '看进度' };
+  if (s === 'generatePaused') return { text: '先停着', tone: 'ask', hint: '接着摆或撤回' };
+  if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') {
+    return { text: '没出成', tone: 'warn', hint: '看原因' };
   }
-  return null;
+  if (s === 'planProposed') {
+    const issue = agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0);
+    return issue ? { text: '发现问题', tone: 'warn', hint: '看这版' } : { text: '等你确认', tone: 'ask', hint: '去确认布置' };
+  }
+  if (s === 'planReady' || s === 'planEdited') {
+    return agent.overlapCount > 0 ? { text: '发现问题', tone: 'warn', hint: '看这一版' } : { text: '已出方案', tone: 'ok', hint: '看这一版' };
+  }
+  return { text: '空闲', tone: 'idle', hint: '回到输入' };
+}
+
+function jumpToQingguang(agent: AgentValue): void {
+  const s = agent.state;
+  const show = (id: string) => document.getElementById(id)?.scrollIntoView({ block: 'nearest' });
+  if (s === 'generating' || s === 'generatePaused') { show('gen-progress'); return; }
+  if (s === 'planProposed') {
+    show('plan-proposal');
+    document.getElementById('step-cta')?.focus();
+    return;
+  }
+  if (s === 'planReady' || s === 'planEdited') { show('plan-summary'); return; }
+  if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') {
+    show('inline-error');
+    return;
+  }
+  const input = document.getElementById('prop-input') ?? document.getElementById('ap-input');
+  input?.focus();
 }
 
 /**
@@ -1265,7 +1289,7 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
     const issue = agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0);
     return `${MASCOT_DIR}-40-${issue ? 'issue' : 'ask'}.png`;
   }
-  if (s === 'generatePaused') return `${MASCOT_DIR}-40-ask.png`;
+  if (s === 'generating' || s === 'generatePaused') return `${MASCOT_DIR}-40-ask.png`;
   if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') return `${MASCOT_DIR}-40-issue.png`;
   return `${MASCOT_DIR}-40.png`;
 }
@@ -1506,15 +1530,13 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
     <header className="ap-head">
-      <span className="mascot-slot" title="晴光在线">
-        <img src={mascotOf(agent, mode)} alt="晴光" width={64} height={64} draggable={false}/>
-        <span className="ap-online-dot" aria-label="在线" role="status"/>
-      </span>
+      <button type="button" className="mascot-slot" data-tone={status.tone} aria-label={`晴光，${status.text}。${status.hint}`} onClick={() => jumpToQingguang(agent)}>
+        <img src={mascotOf(agent, mode)} alt="" width={64} height={64} draggable={false}/>
+        <span className={`ap-online-dot is-${status.tone}`} aria-hidden="true"/>
+      </button>
       <strong>晴光</strong>
-      {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
-      {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
-      {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}
-      {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
+      <button type="button" id="agent-state" className={`ap-status is-${status.tone}`} onClick={() => jumpToQingguang(agent)}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</button>
+      {onClose && <button type="button" className="ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
     </header>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}

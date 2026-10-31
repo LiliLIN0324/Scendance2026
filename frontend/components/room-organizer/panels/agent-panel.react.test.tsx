@@ -642,6 +642,18 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
   }, 25000);
 });
 
+describe('晴光在左侧工作台', () => {
+  it('空闲时点晴光形象回到输入，不另开一栏', () => {
+    render(ui(makeLayout()));
+    const face = screen.getByRole('button', { name: '晴光，空闲。回到输入' });
+    expect(face.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/qingguang-3d-40.png');
+    fireEvent.click(face);
+    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+    fireEvent.click(screen.getByRole('button', { name: '空闲' }));
+    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+  });
+});
+
 describe('右栏生成物件', () => {
   it('生成和布置分开，切过去不再留着晴光的发送', () => {
     render(ui(makeLayout()));

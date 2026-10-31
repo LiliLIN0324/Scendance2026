@@ -603,7 +603,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   }
   const kinds = Object.keys(CAPABILITIES) as Kind[];
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>场地观感与物料</h2><p>文字生成在右栏底部「生成」，确认扣额度后才提交。这里留图片、场景和场地重建。观感层不进碰撞、不进落盘几何。</p></div>
+    <div className="sc-section-heading"><div><h2>场地观感与物料</h2><p>文字生成在左侧晴光「生成」，确认扣额度后才提交。这里留图片、场景和场地重建。观感层不进碰撞、不进落盘几何。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>

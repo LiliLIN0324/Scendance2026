@@ -886,6 +886,25 @@ body {
   .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-canvas-heading { display:flex; }
   .sc-workbench .is-docked-layout .sc-left-drawer { bottom:48px; }
 }
+@media (max-width:1080px) {
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(220px, 42%);
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage,
+  .sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed > .sc-canvas-stage,
+  .sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-canvas-stage { grid-column: 1; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--wk-hair); }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-drawer,
+  .sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-left-drawer {
+    position: absolute; inset: 0 auto 48px 0; width: min(420px, 100%) !important; max-width: 100%; z-index: 55; grid-column: auto; grid-row: auto;
+  }
+}
 @media (max-width:420px) {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
   .sc-workbench .is-docked-layout.has-conversation .sc-canvas-stage { display:none; }
@@ -919,28 +938,35 @@ body {
   background: var(--wk-canvas);
 }
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed {
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer {
+  grid-template-columns: 64px minmax(320px, 400px) minmax(0, 1fr);
 }
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
   display: grid; gap: 0; left: 0; right: 0; bottom: 0; top: 48px;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
+  /* 窄图标轨 · 左侧晴光栏 · 画布占满其余。工具抽屉叠在晴光栏上，不再另占一列。 */
+  grid-template-columns: 64px minmax(320px, 400px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   background: var(--wk-canvas);
 }
 /* T-VISUAL-CHROME-2：底素材条为应用级全宽收起条（对照 04-final-flat.jpg），跨全部列。 */
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-bottom-bar { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-drawer { grid-column: 2; grid-row: 1; }
-/* 白纸面板浮在画布灰底之上——左面板、右 Agent、底条、左轨四张白纸并列 */
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel { grid-column: 2; grid-row: 1; }
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-drawer { grid-column: 2; grid-row: 1; z-index: 6; }
+.sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed > .sc-canvas-stage { grid-column: 2; }
+.sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-canvas-stage { grid-column: 3; }
+.sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-left-drawer { grid-column: 2; }
+/* 白纸：图标轨、晴光栏、画布。工具抽屉盖住晴光栏，不把画布挤成一条。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer {
   background: var(--paper);
   border-right: 1px solid var(--wk-hair);
   overflow-y: auto; overflow-x: hidden;
 }
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel,
-.sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { grid-column: 4; grid-row: 1; }
+.sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { grid-column: 2; grid-row: 1; z-index: 7; }
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
   display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 8;
@@ -1060,9 +1086,9 @@ body {
 }
 /* 左侧面板：与栏同高的白纸页，不再浮起 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer {
-  position: relative; inset: auto; z-index: 5;
-  flex: 0 0 380px !important; width: 380px !important; max-width: 380px;
-  min-height: 0; box-sizing: border-box;
+  position: relative; inset: auto; z-index: 6;
+  flex: none !important; width: 100% !important; max-width: none;
+  min-height: 0; min-width: 0; box-sizing: border-box;
   background: var(--wk-paper); border: 0; border-right: 1px solid var(--wk-hair);
   border-radius: 0; box-shadow: none;
   display: flex; flex-direction: column; pointer-events: auto;
@@ -1077,14 +1103,17 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-materials {
   display: none !important; /* materials live in bottom canvas drawer */
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-agent-panel { border-radius: 0; }
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel {
+  width: auto; max-width: none; min-width: 0; flex: none;
+  border-radius: 0; border-left: 0; border-right: 1px solid var(--wk-hair);
+}
 /* Agent 关掉后：画布右上角一张浮窗卡片，让开 46px 工具列。
    原来是一条 34px 通高竖排把手，看不出能点、也看不出 Agent 在做什么。
    让开的宽度按工具列那颗「撤销」悬停纸条算：纸条往左探出约 40px，
    卡片右缘压在 1376 会把纸条切掉半截。 */
 /* 收起态：画布场边活物球（禁矩形信息卡）。不占右栏 grid 列。 */
 .sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb {
-  position: absolute; top: 14px; right: calc(var(--sc-rail-width, 46px) + 10px); z-index: 34;
+  position: absolute; top: 14px; left: 14px; right: auto; z-index: 34;
   width: 48px; height: 48px; padding: 0; border: 0; border-radius: 999px;
   display: grid; place-items: center; box-sizing: border-box;
   background: transparent; box-shadow: none; cursor: pointer;

@@ -181,8 +181,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [agentCollapsed, setAgentCollapsed] = useState(true);
-  /** 右栏底部切到物件生成。关面板后再从晴光浮标打开，回到布置对话。 */
+  const [agentCollapsed, setAgentCollapsed] = useState(false);
+  /** 晴光栏在左侧。关掉后再从画布上的晴光浮标打开，回到布置对话。 */
   const [composerGenerate, setComposerGenerate] = useState(false);
   const [planHome, setPlanHome] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
@@ -1592,7 +1592,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
         </header>
-        <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
+        <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed?' is-agent-collapsed':''}${sidebarCollapsed?'':' has-left-drawer'}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
@@ -1613,7 +1613,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="生成与场地观感">
                 <button type="button" className="sc-rail-tool sc-rail-generate" aria-label="生成物件" data-tip="生成" title="一句话生成 3D 物件。先确认扣额度才会提交。"
                   onClick={() => { setComposerGenerate(true); setAgentCollapsed(false); }}><Sparkles size={22} aria-hidden="true"/><span className="sc-rail-word">生成</span></button>
-                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="图片、场景观感、场地重建。文字生成在右栏「生成」。"
+                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="图片、场景观感、场地重建。文字生成在左侧晴光「生成」。"
                   onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
               </nav></>}
             </div>

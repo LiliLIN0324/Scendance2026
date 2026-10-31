@@ -109,7 +109,7 @@ export function LaneSwitch({ prop, onChange }: { prop: boolean; onChange(next: b
 }
 
 /**
- * 右栏底部的物件生成条，贴着晴光对话，不进布置提案。
+ * 晴光栏底部的物件生成条，贴着对话，不进布置提案。
  * 思考强度不放：文生没有质量档，扣额度确认已经挡住误点。
  */
 export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, onOpenCloud, forceProxy, seed }: {

@@ -22,7 +22,8 @@
 
 /* ── 头部 ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
-.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; background: transparent; border-radius: 50%; flex-shrink: 0; }
+button.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; padding: 0; border: 0; background: transparent; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
+.ap-status { border: 0; background: transparent; padding: 0; cursor: pointer; }
 .mascot-slot img { width: 48px; height: 48px; display: block; object-fit: cover; border-radius: 50%; }
 .ap-online-dot { position: absolute; right: 1px; bottom: 1px; z-index: 1; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; background: var(--wk-ink-soft, #71767e); border: 2px solid var(--wk-paper, #fff); box-shadow: 0 0 0 1px rgba(20, 20, 22, .06); }
 .ap-head strong { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink); }
@@ -35,6 +36,10 @@
 .ap-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
 .ap-status.is-ok { color: var(--ap-green); }
 .ap-status.is-warn { color: var(--warn); }
+.ap-status.is-busy, .ap-status.is-ask { color: var(--wk-ink); }
+.ap-online-dot.is-ok { background: var(--ap-green, #4A7C59); }
+.ap-online-dot.is-warn { background: var(--warn, #96651F); }
+.ap-online-dot.is-busy, .ap-online-dot.is-ask { background: #0668e5; }
 .ap-stage { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; font-size: var(--fs-cap); font-weight: 500; color: var(--wk-ink-soft); gap: 3px; }
 .ap-stage small { font-weight: 400; color: var(--ap-grey); }
 .ap-stage-bar { display: flex; gap: 3px; }
