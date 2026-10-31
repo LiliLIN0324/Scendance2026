@@ -190,8 +190,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
-  // 本机直连 Aholo 的测试入口：只在 next dev 出现，构建产物里这颗按钮不存在。
-  const luxDirectVisible = process.env.NODE_ENV === 'development';
+  // 左轨「观感」默认生产也显示；设 NEXT_PUBLIC_LUX3D_RAIL=0 可关掉。面板内生产走 shipped/云路径，不打 127.0.0.1。
+  const luxDirectVisible = process.env.NEXT_PUBLIC_LUX3D_RAIL !== '0';
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
   const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
@@ -1493,7 +1493,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   onClick={() => businessToolsRef.current?.openRebuild()}><Layers size={20} aria-hidden="true"/><span>重建</span></button>
               </nav></>
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="场地观感与物料">
-                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" title="采集单上传 · World 观感 · Lux3D 物件（本机开发可见）"
+                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" title="采集单上传 · World 观感 · Lux3D 物件"
                   onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>观感</span></button>
               </nav></>}
             </div>
@@ -1507,7 +1507,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
-            {luxDirectVisible && <div className="sc-left-content" hidden={leftMode!=='lux3d'}><Lux3dDirectTest reconPreset={aholoReconPreset} onHangMockScene={hangDemoEnvironment} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/></div>}
+            {luxDirectVisible && <div className="sc-left-content" hidden={leftMode!=='lux3d'}><Lux3dDirectTest reconPreset={aholoReconPreset} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onOpenCloudModels={() => businessToolsRef.current?.openModelTools()} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/></div>}
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
           </div>
           <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
