@@ -14,7 +14,7 @@
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
-import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
+import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, Ruler, Scan, Shapes, Sparkles, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
@@ -157,6 +157,14 @@ export interface LayoutAgentCallbacks {
   onOpenBrief?(): void;
   /** 图纸尺寸面板 */
   onOpenReference?(): void;
+  /** 现场照片重建 3D 场地 */
+  onOpenRebuild?(): void;
+  /** 左栏 / 画布上的场地观感（Lux3D） */
+  onOpenLux3d?(): void;
+  /** 晴光栏底切到「生成物件」 */
+  onOpenGenerate?(): void;
+  /** 生成轨、观感、重建等 Aholo 能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
+  luxToolsVisible?: boolean;
 }
 
 interface AgentValue {
@@ -1389,6 +1397,39 @@ export function MapRailButton(): JSX.Element {
   </nav>;
 }
 
+type CapabilityChip = {
+  id: string;
+  label: string;
+  title: string;
+  icon: ReactNode;
+  run(): void;
+  active?: boolean;
+};
+
+function AgentCapabilityPrompts(): JSX.Element | null {
+  const agent = useAgent();
+  const lux = agent.callbacks.luxToolsVisible !== false;
+  if (agent.callbacks.workbenchMode !== 'layout') return null;
+
+  const chips: CapabilityChip[] = [
+    { id: 'map', label: '地图选址', title: '搜地点 → 在卫星图上圈出边界', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen },
+    { id: 'reference', label: '图纸与照片', title: '图纸、照片与实测尺寸', icon: <Ruler size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenReference?.() },
+    { id: 'blank', label: '空白场地', title: `先给一块 ${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m 空地，尺寸回头在对话里说`, icon: <SquareDashed size={14} aria-hidden="true"/>, run: agent.startBlankVenue },
+    { id: 'generate', label: '生成物件', title: '一句话生成 3D 物件，确认扣额度才提交', icon: <Sparkles size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenGenerate?.() },
+    { id: 'lux3d', label: '场地观感', title: '图片、场景观感与物料', icon: <Shapes size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenLux3d?.() },
+    { id: 'rebuild', label: '场地重建', title: '现场照片重建 3D 场地', icon: <Scan size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenRebuild?.() },
+  ].filter(chip => lux || !['generate', 'lux3d', 'rebuild'].includes(chip.id));
+
+  return <div id="ap-capabilities" className="ap-capabilities">
+    <p className="ap-capability-label">你可以做什么</p>
+    <div className="ap-capability-chips" role="group" aria-label="你可以做什么">
+      {chips.map(chip => <button key={chip.id} type="button" className={`chip ap-capability-chip${chip.active ? ' is-on' : ''}`} title={chip.title} onClick={chip.run}>
+        {chip.icon}<span>{chip.label}</span>
+      </button>)}
+    </div>
+  </div>;
+}
+
 /**
  * 盖住画布的地图浮层：圈边界要看得清地块，左栏那条窄缝里一个像素就是一米多。
  * 场地已经立起来时同样进这里重圈——替换走 raiseVenue 那条老规矩，放得下的物料留着，放不下才撤并报数。
@@ -1649,7 +1690,9 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     </div>
     {propLane
       ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
-      : <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
+      : <>
+        {mode === 'layout' && <AgentCapabilityPrompts/>}
+        <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
         <div className="ap-composer-bar">
@@ -1657,7 +1700,8 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           <LaneSwitch prop={false} onChange={next => { if (next) setPropLane(true); }}/>
           <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
         </div>
-      </form>}
+      </form>
+      </>}
   </aside>;
 }
 

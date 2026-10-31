@@ -252,6 +252,24 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
+  it('shows venue capability chips under the composer', () => {
+    const onOpenReference = vi.fn();
+    const onOpenGenerate = vi.fn();
+    render(<LayoutAgentProvider callbacks={{ ...callbacks, onOpenReference, onOpenGenerate, luxToolsVisible: true }} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><MapVenueOverlay/></LayoutAgentProvider>);
+    const group = screen.getByRole('group', { name: '你可以做什么' });
+    expect(screen.getByText('你可以做什么')).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /图纸与照片/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /空白场地/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /生成物件/ })).toBeTruthy();
+    fireEvent.click(within(group).getByRole('button', { name: /图纸与照片/ }));
+    expect(onOpenReference).toHaveBeenCalled();
+    fireEvent.click(within(group).getByRole('button', { name: /地图选址/ }));
+    expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
+    fireEvent.click(within(group).getByRole('button', { name: /生成物件/ }));
+    expect(onOpenGenerate).toHaveBeenCalled();
+  });
+
   it('keeps the left rail on 布置 and sends review or delivery elsewhere', async () => {
     const { WORKBENCH_MODES, demoteLegacyMode } = await import('../lib/workbench-mode');
     expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout']);
@@ -645,14 +663,12 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
 });
 
 describe('晴光在左侧工作台', () => {
-  it('空闲时点晴光形象回到输入，不另开一栏', () => {
+  it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
-    const face = screen.getByRole('button', { name: '晴光，空闲。回到输入' });
-    expect(face.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/qingguang-3d-40.png');
-    fireEvent.click(face);
-    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
-    fireEvent.click(screen.getByRole('button', { name: '空闲' }));
-    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+    expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
+    const input = screen.getByLabelText('告诉 Agent 要改的');
+    input.focus();
+    expect(document.activeElement).toBe(input);
   });
 });
 
