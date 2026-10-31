@@ -1,0 +1,86 @@
+/* 左栏三态卡片。同一张白纸，只换标题和清单。不盖住主区 3D。 */
+.sc-mode-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 18px;
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+  font-size: var(--fs-p2, 13px);
+  line-height: 1.45;
+}
+.sc-mode-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.sc-mode-card header strong { font-size: var(--fs-p1, 14px); font-weight: 600; }
+.sc-mode-card header span { color: var(--wk-muted, #71767e); }
+.sc-mode-card header button {
+  margin-left: auto;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink, #141416);
+  color: #fff;
+  cursor: pointer;
+}
+.sc-mode-card dl { margin: 0; }
+.sc-mode-card dl > div {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--wk-hair-soft, #efeff1);
+}
+.sc-mode-card dt { color: var(--wk-muted, #71767e); }
+.sc-mode-card dd { margin: 0; }
+.sc-mode-card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sc-mode-card li { display: flex; flex-direction: column; gap: 4px; }
+.sc-mode-shell-item,
+.sc-mode-shell-acts button {
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sc-mode-shell-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+}
+.sc-mode-shell-item b { font-weight: 600; color: var(--wk-muted, #71767e); }
+.sc-mode-card li.is-on .sc-mode-shell-item {
+  background: var(--wk-green-pale, #e8f0ea);
+  box-shadow: inset 0 0 0 1px var(--wk-green, #4a7c59);
+}
+.sc-mode-shell-acts { display: flex; gap: 6px; }
+.sc-mode-shell-acts button { padding: 4px 10px; font-size: 12px; }
+.sc-mode-shell-acts button[aria-pressed="true"] {
+  background: var(--wk-green-pale, #e8f0ea);
+  color: var(--wk-green-deep, #3a6247);
+  box-shadow: inset 0 0 0 1px var(--wk-green, #4a7c59);
+}
+.sc-mode-shell-acts button:disabled { cursor: not-allowed; color: var(--faint, #a6aab2); background: var(--plane, #f4f5f7); }
+.sc-mode-card[aria-label="执行清单"] li {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--wk-hair-soft, #efeff1);
+}
+.sc-mode-card[aria-label="执行清单"] li:last-child { border-bottom: 0; }
+.sc-mode-card b[data-status="齐"] { color: var(--wk-green-deep, #3a6247); }
+.sc-mode-card b[data-status="缺"] { color: var(--wk-ink, #141416); }
+.sc-mode-shell-empty p { margin: 0 0 8px; color: var(--wk-muted, #71767e); }

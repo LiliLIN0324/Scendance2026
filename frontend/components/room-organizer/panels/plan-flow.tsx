@@ -46,6 +46,13 @@ export function planGenerateSentence(activityPhrase: string, venuePhrase: string
   return `${headcount} 人${activityPhrase}，${venuePhrase}，出方案`;
 }
 
+/** 执行清单按物件名归并件数。画布顶不再为此单开分段。 */
+export function materialRows(items: readonly { name: string }[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(item.name, (counts.get(item.name) ?? 0) + 1);
+  return [...counts.entries()].map(([name, count]) => ({ name, count }));
+}
+
 export function PlanHome({ onGenerate }: { onGenerate(sentence: string): void }): JSX.Element {
   const [activityId, setActivityId] = useState<string | null>(null);
   const [venueId, setVenueId] = useState<string | null>(null);
@@ -80,13 +87,13 @@ export function PlanHome({ onGenerate }: { onGenerate(sentence: string): void })
   </form>;
 }
 
-/** 挂在画布上的只有首屏。出方案后不再往画布顶加分段，工具坞是否让开由 onHomeChange 告诉工作台。 */
+/** 挂在画布下缘的首屏。三态不拆这块画布。工具坞是否让开由 onHomeChange 告诉工作台。 */
 export function PlanFlow({ onOpenAgent, onHomeChange }: { onOpenAgent(): void; onHomeChange(home: boolean): void }): JSX.Element | null {
   const agent = useAgent();
   const { layout } = useRoomEditor();
   const home = isPlanHome(agent.state, layout, agent.proposal !== null);
   useEffect(() => { onHomeChange(home); }, [home, onHomeChange]);
   useEffect(() => { if (agent.proposal) onOpenAgent(); }, [agent.proposal, onOpenAgent]);
-  if (home) return <PlanHome onGenerate={sentence => { void agent.send(sentence); }} />;
-  return null;
+  if (!home) return null;
+  return <PlanHome onGenerate={sentence => { void agent.send(sentence); }} />;
 }

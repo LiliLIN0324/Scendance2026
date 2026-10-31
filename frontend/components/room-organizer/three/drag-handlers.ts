@@ -58,6 +58,11 @@ export interface SceneEventHandlers {
   onItemDragCancel?: (id: string, options?: { restore?: boolean }) => void;
   onItemHover?: (info: HoverInfo | null) => void;
   onEmptyClick?: (x: number, z: number) => void;
+  /**
+   * Review / delivery shells keep the camera, but a press must not select,
+   * drag, draw or open the property panel.
+   */
+  editingLocked?: boolean;
   onWallSelect?: (info: { wallId: string; kind: 'exterior' | 'interior' }) => void;
   onFloorPointerMove?: (x: number, z: number) => void;
   onFloorPointerLeave?: () => void;
@@ -201,7 +206,7 @@ export function attachDragHandlers({
   const onPointerDown = (event: PointerEvent): void => {
     // In walkthrough mode the canvas click only engages pointer lock — it must
     // not select furniture, open a popover or start a drag (see #67).
-    if (handlersRef.current.walkthroughActive) return;
+    if (handlersRef.current.walkthroughActive || handlersRef.current.editingLocked) return;
     // Only track a single primary pointer at a time. A second finger arriving
     // mid-gesture is ignored here so it can drive OrbitControls' pinch.
     if (activePointerId !== null) return;
@@ -280,7 +285,7 @@ export function attachDragHandlers({
   let lastHoverId: string | null = null;
   const updateHover = (event: PointerEvent): void => {
     // No hover affordance while walkthrough owns the camera (see #67).
-    if (handlersRef.current.walkthroughActive) return;
+    if (handlersRef.current.walkthroughActive || handlersRef.current.editingLocked) return;
     const hoverCallback = handlersRef.current.onItemHover;
     if (!hoverCallback) return;
     setPointerFromEvent(event);
@@ -300,6 +305,10 @@ export function attachDragHandlers({
   };
 
   const onPointerMove = (event: PointerEvent): void => {
+    if (handlersRef.current.editingLocked) {
+      if (dragTarget) abortGesture(true);
+      return;
+    }
     if (!dragTarget) {
       // Hover + tooltip is a mouse/pen affordance only. Skipping it for touch
       // avoids per-frame React re-renders while a finger drags.
@@ -439,7 +448,7 @@ export function attachDragHandlers({
   // 计数只在 dblclick 上，所以另做一次射线，而不是在按下时拿当前选中项猜。
   const onDoubleClick = (event: MouseEvent): void => {
     const report = handlersRef.current.onItemDoubleClick;
-    if (!report || handlersRef.current.walkthroughActive || handlersRef.current.floorPickOnly) return;
+    if (!report || handlersRef.current.walkthroughActive || handlersRef.current.floorPickOnly || handlersRef.current.editingLocked) return;
     setPointerFromEvent(event);
     raycaster.setFromCamera(pointer, camera);
     const target = ascendToFurniture(raycaster.intersectObjects(furnitureList(), true)[0]?.object);
