@@ -73,7 +73,7 @@ export function ShareMenu({ actions, openRequest = 0, closeSignal = 0 }: {
       const result = await actions.onIssueReviewLink();
       setUrl(result.url);
       const copied = await copyText(result.url);
-      setNotice(copied ? '链接已复制。对方打开即可看平面并评论。' : '链接已生成。请从框里手动复制。');
+      setNotice(copied ? '链接已复制。对方打开后在平面上落钉。' : '链接已生成。请从框里手动复制。');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
@@ -94,7 +94,7 @@ export function ShareMenu({ actions, openRequest = 0, closeSignal = 0 }: {
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-share-menu" role="dialog" aria-label="分享">
       <p className="sc-share-kicker">给对方看</p>
       <button type="button" disabled={busy} onClick={() => { void issue(); }}>{busy ? '正在生成链接…' : '发评审链接'}</button>
-      <p>对方打开只读方案页后留言。收藏和状态球以后再标出要审的项目，这一步先把链接发出去。</p>
+      <p>对方打开后在平面上点位置落钉。收藏、待评和回执在左侧 Bingo。</p>
       {url && <>
         <label>评审链接
           <input readOnly value={url} aria-label="评审链接" onFocus={event => event.currentTarget.select()}/>

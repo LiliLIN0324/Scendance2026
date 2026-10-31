@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
-import { reviewShareHref } from '../review-share-page/load-plan';
+import { localPlanKey, reviewShareHref } from '../review-share-page/load-plan';
 import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
@@ -37,6 +37,7 @@ import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
+import { rememberBingoReview } from './lib/bingo-desk';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -53,6 +54,7 @@ import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
+import { mergeFloorPins, readPlanPins, replaceFloorPins } from './lib/review-pin-store';
 import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
 import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
@@ -65,9 +67,9 @@ import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from '.
 import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
-import { CanvasHeading } from './panels/canvas-heading';
 import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
-import { AssistantSessionDock } from './panels/session-history-panel';
+import { BingoDesk } from './panels/bingo-desk';
+import { CanvasHeading } from './panels/canvas-heading';
 import { CloudPanel } from './panels/cloud-panel';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
@@ -75,14 +77,17 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
-import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
+import { DeliveryChecklistShell, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { QingguangRailButton } from './panels/qingguang-rail-button';
+import { BingoRailButton, VenueRailButton } from './panels/rail-desk-buttons';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
+import { AssistantSessionDock } from './panels/session-history-panel';
 import { StatusToastHost } from './panels/status-toast';
+import { VenueDesk } from './panels/venue-desk';
 import { Viewport } from './panels/viewport';
 import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import type { HoverInfo } from './hooks/use-three-scene';
@@ -184,6 +189,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 工具抽屉和晴光列同时关着，左侧导航才算收起。logo 只写这两扇门。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
+  /** 左轨三入口各开自己的栏：晴光对话、Bingo 评审、场地库。同时只亮一个。 */
+  const [railDesk, setRailDesk] = useState<'qingguang' | 'bingo' | 'venue'>('qingguang');
   const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed });
   const toggleNav = useCallback(() => {
     const next = toggleNavColumns({ agentCollapsed, sidebarCollapsed });
@@ -325,19 +332,34 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setAgentCollapsed(false);
   }, []);
   const issueReviewLink = useCallback(async () => {
-    const encoded = await encodeShareUrl(layoutStore.getState().layout, window.location.origin);
+    const current = layoutStore.getState().layout;
+    const encoded = await encodeShareUrl(current, window.location.origin);
     const url = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
     if (!url) throw new Error('评审链接没有生成。');
+    try {
+      rememberBingoReview(window.localStorage, {
+        title: current.name || '未命名活动',
+        href: `${new URL(url).pathname}${new URL(url).search}${new URL(url).hash}`,
+        planKey: localPlanKey(current),
+      });
+    } catch { /* 待评列表写不进时，链接本身仍然可用 */ }
     return { url };
   }, []);
   const exportHandoff = useCallback(() => {
+    setRailDesk('qingguang');
     setAgentCollapsed(false);
     setHandoffExportRequest(value => value + 1);
   }, []);
   const openMaterialsFromShare = useCallback(() => {
     document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
   }, []);
+  const leavePinReview = useCallback(() => {
+    setWorkbenchMode('layout');
+    setPinDraft(null);
+  }, []);
   const openQingguang = useCallback(() => {
+    leavePinReview();
+    setRailDesk('qingguang');
     setAgentCollapsed(false);
     setSidebarCollapsed(true);
     requestAnimationFrame(() => {
@@ -345,17 +367,35 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
       (input ?? panel)?.focus();
     });
-  }, []);
+  }, [leavePinReview]);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单仍浮在画布上。不把晴光切成评审或执行。
     setMaterialsOpen(false);
     setLeftMode('business');
     setBusinessOpen(true);
     setSidebarCollapsed(true);
+    setRailDesk('qingguang');
     setAgentCollapsed(false);
     if (mode === 'review') setReviewOpenRequest(value => value + 1);
     else setDeliveryOpenRequest(value => value + 1);
   }, []);
+  const openRailDesk = useCallback((desk: 'qingguang' | 'bingo' | 'venue') => {
+    if (!agentCollapsed && railDesk === desk) {
+      setAgentCollapsed(true);
+      if (desk === 'bingo') leavePinReview();
+      return;
+    }
+    if (desk === 'qingguang') {
+      openQingguang();
+      return;
+    }
+    leavePinReview();
+    setRailDesk(desk);
+    setAgentCollapsed(false);
+    setSidebarCollapsed(true);
+    setMaterialsOpen(false);
+    setBusinessOpen(false);
+  }, [agentCollapsed, railDesk, leavePinReview, openQingguang]);
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get('restore') !== 'backup') return;
@@ -1174,16 +1214,46 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setActivePinId(id);
     flyToPin(flyDestination(pin, itemOrigin(pin.itemId)));
   }, [flyToPin, itemOrigin]);
+  const persistReviewPins = useCallback((pins: ReviewPin[]) => {
+    const current = layoutStore.getState().layout;
+    const floorId = current.floors[activeFloorIndex]?.id ?? current.floors[0]?.id ?? 'ground';
+    try { replaceFloorPins(window.localStorage, localPlanKey(current), floorId, pins); } catch { /* 隐私模式写不进就只留在这一页 */ }
+  }, [activeFloorIndex]);
   const commitReviewPin = useCallback((text: string) => {
     const current = pinDraft;
     if (!current) return;
     const pin = createReviewPin({ id: randomId('pin'), text, draft: current });
     if (!pin) return;
-    setReviewPins(pins => [...pins, pin]);
+    setReviewPins(pins => {
+      const next = [...pins, pin];
+      persistReviewPins(next);
+      return next;
+    });
     setActivePinId(pin.id);
     setPinFilter('open');
     setPinDraft(null);
-  }, [pinDraft]);
+  }, [pinDraft, persistReviewPins]);
+  const resolveReviewPin = useCallback((id: string) => {
+    setReviewPins(pins => {
+      const next = markPinResolved(pins, id);
+      persistReviewPins(next);
+      return next;
+    });
+  }, [persistReviewPins]);
+  const enterPinReview = useCallback(() => {
+    const current = layoutStore.getState().layout;
+    const floorId = current.floors[activeFloorIndex]?.id ?? current.floors[0]?.id ?? 'ground';
+    let stored: ReturnType<typeof readPlanPins> = [];
+    try { stored = readPlanPins(localPlanKey(current), window.localStorage); } catch { stored = []; }
+    setReviewPins(existing => mergeFloorPins(existing, stored, floorId));
+    setRailDesk('bingo');
+    setAgentCollapsed(false);
+    setSidebarCollapsed(true);
+    setMaterialsOpen(false);
+    setBusinessOpen(false);
+    setPlanHome(false);
+    setWorkbenchMode('review');
+  }, [activeFloorIndex]);
   const returnReviewPin = useCallback((id: string) => {
     focusReviewPin(id);
     selectWorkbenchMode('layout');
@@ -1626,8 +1696,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
               {!navExpanded && <WorkbenchBrandToggle expanded={false} onToggle={toggleNav} />}
-              <nav className="sc-mode-rail-top" aria-label="晴光">
-                <QingguangRailButton open={!agentCollapsed} onOpen={openQingguang} />
+              <nav className="sc-mode-rail-top" aria-label="工作台">
+                <QingguangRailButton open={!agentCollapsed && railDesk === 'qingguang'} onOpen={() => openRailDesk('qingguang')} />
+                <BingoRailButton open={!agentCollapsed && railDesk === 'bingo'} onOpen={() => openRailDesk('bingo')} />
+                <VenueRailButton open={!agentCollapsed && railDesk === 'venue'} onOpen={() => openRailDesk('venue')} />
               </nav>
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
                 <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
@@ -1637,9 +1709,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               </nav></>
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="生成与场地观感">
                 <button type="button" className="sc-rail-tool sc-rail-generate" aria-label="生成物件" data-tip="生成" title="一句话生成 3D 物件。先确认扣额度才会提交。"
-                  onClick={() => { setComposerGenerate(true); setWorkbenchMode('layout'); setLeftMode('brief'); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }}><Sparkles size={22} aria-hidden="true"/><span className="sc-rail-word">生成</span></button>
+                  onClick={() => { setComposerGenerate(true); setWorkbenchMode('layout'); setLeftMode('brief'); setBusinessOpen(false); setSidebarCollapsed(true); setRailDesk('qingguang'); setAgentCollapsed(false); }}><Sparkles size={22} aria-hidden="true"/><span className="sc-rail-word">生成</span></button>
                 <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="图片、场景观感、场地重建。文字生成在左侧晴光「生成」。"
-                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(true);setAgentCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
+                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(true);setRailDesk('qingguang');setAgentCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
               </nav></>}
             </div>
             <div className="sc-mode-rail-foot">
@@ -1657,29 +1729,36 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {!agentCollapsed && <AssistantSessionDock />}
-          {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
-              pins={reviewPins}
-              items={activeFloor.items}
-              filter={pinFilter}
-              activeId={activePinId}
-              onFilter={setPinFilter}
-              onFocus={focusReviewPin}
-              onResolve={id => setReviewPins(pins => markPinResolved(pins, id))}
-              onReturn={returnReviewPin}
-              onConfirm={confirmReview}
-            /> : undefined} deliverySlot={workbenchMode === 'delivery' ? <WorkbenchModeCard
+          {!agentCollapsed && railDesk === 'qingguang' && <AssistantSessionDock />}
+          {!agentCollapsed && railDesk === 'qingguang' && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setRailDesk('qingguang'); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} deliverySlot={workbenchMode === 'delivery' ? <WorkbenchModeCard
               pins={reviewPins}
               pinFilter={pinFilter}
               activePinId={activePinId}
               reviewCleared={reviewCleared}
               onPinFilter={setPinFilter}
               onFocusPin={focusReviewPin}
-              onResolvePin={id => setReviewPins(pins => markPinResolved(pins, id))}
+              onResolvePin={resolveReviewPin}
               onReturnPin={returnReviewPin}
               onConfirmDelivery={confirmReview}
-              onExport={() => { setAgentCollapsed(false); }}
+              onExport={() => { setRailDesk('qingguang'); setAgentCollapsed(false); }}
             /> : undefined}/>}
+          {!agentCollapsed && railDesk === 'bingo' && <BingoDesk
+            planKey={localPlanKey(layout)}
+            layoutName={layout.name}
+            pins={reviewPins}
+            items={activeFloor.items}
+            pinFilter={pinFilter}
+            activePinId={activePinId}
+            reviewing={workbenchMode === 'review'}
+            onEnterReview={enterPinReview}
+            onClose={() => { leavePinReview(); setAgentCollapsed(true); }}
+            onFilter={setPinFilter}
+            onFocus={focusReviewPin}
+            onResolve={resolveReviewPin}
+            onReturn={returnReviewPin}
+            onConfirm={confirmReview}
+          />}
+          {!agentCollapsed && railDesk === 'venue' && <VenueDesk layout={layout} onApply={onApplyCreative} onClose={() => setAgentCollapsed(true)} />}
           <LeftCardResizer width={leftCardWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
           <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
@@ -1790,7 +1869,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
               <Lux3dDirectTest reconPreset={aholoReconPreset} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onOpenCloudModels={() => businessToolsRef.current?.openModelTools()} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
-            <PlanFlow onOpenAgent={() => setAgentCollapsed(false)} onHomeChange={setPlanHome}/>
+            {workbenchMode !== 'review' && <PlanFlow onOpenAgent={openQingguang} onHomeChange={setPlanHome}/>}
             <CanvasHeading view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · {splatState.meters ? `已按高斯实测 ${splatState.meters.width} × ${splatState.meters.depth} m 校准场地，` : '场地壳体已让位，'}物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}

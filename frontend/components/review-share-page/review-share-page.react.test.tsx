@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { STORAGE_KEY } from '../room-organizer/lib/constants';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
-import { REVIEW_COMMENT_STORAGE_KEY } from './comments';
+import { PLAN_PIN_STORAGE_KEY } from '../room-organizer/lib/review-pin-store';
 import { REVIEW_RETURN_STORAGE_KEY } from './review-return';
 import { ReviewSharePage } from './review-share-page';
 import type { RoomLayout } from '../room-organizer/lib/types';
@@ -32,32 +32,32 @@ async function openSample(): Promise<void> {
 }
 
 describe('review share page', () => {
-  it('shows the sample plan, posts a comment, and keeps a reply after remount', async () => {
+  it('shows the sample plan, drops a pin on the sheet, and keeps it after remount', async () => {
     await openSample();
     expect(screen.getByText(/示例场地/)).toBeTruthy();
     expect(screen.getByText(/共创桌/)).toBeTruthy();
-    expect(document.querySelector('img[alt*="平面预览"]')).toBeTruthy();
+    expect(document.querySelector('img[alt*="平面"]')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/晴光|模式轨|执行页|到场清单/);
     expect(document.querySelector('.sc-mode-rail, .sc-agent-panel, #agent-panel, .sc-workbench')).toBeNull();
+    expect(screen.queryByLabelText('称呼')).toBeNull();
+    expect(screen.queryByRole('button', { name: '发表评论' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
-    expect(screen.getByRole('alert').textContent).toMatch(/称呼/);
-
-    fireEvent.change(screen.getByLabelText('称呼'), { target: { value: '甲方' } });
-    fireEvent.change(screen.getByLabelText('意见'), { target: { value: '主舞台偏左' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
+    const stage = screen.getByRole('group', { name: '活动平面' });
+    stage.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 520, bottom: 520, width: 520, height: 520, toJSON() { return {}; } });
+    fireEvent.click(stage, { clientX: 260, clientY: 260 });
+    fireEvent.change(screen.getByLabelText('议题'), { target: { value: '主舞台偏左' } });
+    fireEvent.click(screen.getByRole('button', { name: '钉上' }));
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '议题 1' })).toBeTruthy();
+    expect(localStorage.getItem(PLAN_PIN_STORAGE_KEY)).toContain('主舞台偏左');
 
-    fireEvent.click(screen.getByRole('button', { name: '回复 甲方' }));
-    fireEvent.change(screen.getByLabelText('意见'), { target: { value: '舞台保持居中' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表回复' }));
-    expect(await screen.findByText('舞台保持居中')).toBeTruthy();
-    expect(localStorage.getItem(REVIEW_COMMENT_STORAGE_KEY)).toContain('主舞台偏左');
+    fireEvent.click(screen.getByRole('button', { name: /主舞台偏左/ }));
+    expect(screen.getByRole('button', { name: '议题 1' }).className).toContain('is-on');
 
     cleanup();
     render(<ReviewSharePage />);
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();
-    expect(screen.getByText('舞台保持居中')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '议题 1' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '完成评审' }));
     expect(await screen.findByRole('button', { name: '已完成评审' })).toBeTruthy();

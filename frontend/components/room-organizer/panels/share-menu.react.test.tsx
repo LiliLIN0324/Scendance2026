@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { issueReviewShare } from '../lib/review-share';
 import type { RoomLayout } from '../lib/types';
@@ -80,15 +80,13 @@ describe('review share page', () => {
     expect(screen.queryByRole('navigation', { name: '工作流程' })).toBeNull();
     expect(document.querySelector('[data-storage="local-demo"]')).toBeTruthy();
 
-    fireEvent.change(screen.getByRole('textbox', { name: '名字' }), { target: { value: '甲方' } });
-    fireEvent.change(screen.getByRole('textbox', { name: '评论内容' }), { target: { value: '入口再宽一点' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
+    const plan = screen.getByRole('img', { name: '发布会 的只读平面' });
+    plan.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 640, bottom: 400, width: 640, height: 400, toJSON() { return {}; } });
+    fireEvent.click(plan, { clientX: 320, clientY: 200 });
+    fireEvent.change(screen.getByLabelText('议题'), { target: { value: '入口再宽一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '钉上' }));
     expect(await screen.findByText('入口再宽一点')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '回复' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '回复内容' }), { target: { value: '下版改通道' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表回复' }));
-    await waitFor(() => expect(screen.getByText('下版改通道')).toBeTruthy());
-    expect(screen.getByText('入口再宽一点')).toBeTruthy();
+    expect(screen.getAllByText('签到桌').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '议题 1' })).toBeTruthy();
   });
 });
