@@ -75,7 +75,11 @@ describe('nav chrome state', () => {
     expect(chat).toContain('<SessionHistoryPanel');
     expect(chat).toContain('embedded');
     expect(chat).not.toContain('mascot-slot');
+    expect(chat).toContain('ap-session-mascot');
+    expect(chat).not.toMatch(/BrandMark|sc-nav-brand|幕景/);
     expect(chatCss).toMatch(/\.ap-history-overlay\s*\{[^}]*max-height:\s*33\.333%/);
+    expect(css).toMatch(/:not\(\.is-agent-collapsed\)[^{]*sc-rail-qingguang img[^}]*visibility:\s*hidden/);
+    expect(css).toMatch(/\.sc-left-column \.sc-agent-panel \.sc-nav-brand[^}]*display:\s*none/);
     const bingo = readFileSync(join(here, '../panels/bingo-review-panel.tsx'), 'utf8');
     expect(bingo).toContain('data-bingo-side="developer"');
     expect(bingo).not.toMatch(/href=\{?plan\.href/);

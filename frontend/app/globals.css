@@ -1122,6 +1122,21 @@ body {
   background: #fff; border: 1.5px solid var(--wk-ink, #141416); box-sizing: border-box; pointer-events: none;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:hover { background: transparent; }
+/* 晴光展开：头像只在对话顶栏左上角，轨上同槽留空；禁止与幕景锁标做渐变/变形互变。 */
+.sc-workbench .is-docked-layout.is-mode-rail:not(.is-agent-collapsed) .sc-mode-rail button.sc-rail-qingguang img,
+.sc-workbench .is-docked-layout.is-mode-rail:not(.is-agent-collapsed) .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot {
+  visibility: hidden;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand .sc-brand-mark,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang img,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-agent-panel .ap-session-mascot img {
+  transition: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-agent-panel .sc-nav-brand,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-agent-panel .sc-brand-mark,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-agent-panel .sc-rail-word {
+  display: none !important;
+}
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
 .sc-lux-direct input[type='text'], .sc-lux-direct textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--paper); color: inherit; font: inherit; }

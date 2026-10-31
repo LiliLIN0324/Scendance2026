@@ -20,9 +20,14 @@
 }
 .sc-workbench .is-docked-layout.has-conversation .sc-agent-panel { display: none; }
 
-/* ── 头部：会话标题 + 历史 / 新会话。窄轨已有晴光头像，这里不再放第二颗。 ── */
+/* ── 头部：展开时晴光头像在对话左上角；窄轨同位留空槽，不收进幕景锁标。 ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
-.ap-head.ap-session-head { height: 48px; padding: 0 8px 0 12px; gap: 8px; }
+.ap-head.ap-session-head { height: 48px; padding: 0 8px 0 10px; gap: 8px; }
+.ap-session-mascot {
+  position: relative; display: inline-flex; flex: 0 0 28px; width: 28px; height: 28px; align-items: center; justify-content: center;
+}
+.ap-session-mascot img { width: 28px; height: 28px; border-radius: 999px; object-fit: cover; display: block; }
+.ap-session-mascot .ap-online-dot { right: -1px; bottom: -1px; width: 8px; height: 8px; border-width: 1.5px; }
 .ap-session-title { margin: 0; flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; font: inherit; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ap-session-tools { display: flex; align-items: center; gap: 2px; flex: none; }
 .ap-session-tool { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--wk-ink-soft); cursor: pointer; }

@@ -49,6 +49,7 @@ import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
+import { QINGGUANG_RAIL_MASCOT } from './qingguang-rail-button';
 import './agent-panel.css';
 
 type GenerateFill = { kind: 'text' | 'world'; prompt: string; nonce: number };
@@ -1551,6 +1552,10 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
     <header className="ap-head ap-session-head">
+      <span className="ap-session-mascot" aria-hidden="true">
+        <img src={QINGGUANG_RAIL_MASCOT} alt="" width={28} height={28} draggable={false} />
+        <span className="ap-online-dot is-ok" aria-hidden="true" />
+      </span>
       <button type="button" className="ap-session-title" onClick={() => jumpToQingguang(agent)}>{sessions.activeTitle}</button>
       <div className="ap-session-tools">
         <button type="button" className={`ap-session-tool${historyOpen ? ' is-on' : ''}`} aria-pressed={historyOpen} aria-label="会话历史" title="会话历史" onClick={() => setHistoryOpen(open => !open)}><History size={16} aria-hidden="true"/></button>
