@@ -8,6 +8,8 @@ import { layoutStore, useActiveFloor, useActiveFloorIndex, useLayout } from '../
 import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
+import { MATERIAL_LIBRARY_META_KEY } from '../lib/material-library-meta';
+import { listShippedAssets } from '../lib/shipped-assets';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
 import type { OnlineModel } from '../lib/online-models';
@@ -229,7 +231,7 @@ describe('OnlineModelLibrary', () => {
     expect(fireEvent.wheel(rail, { deltaY: -40 })).toBe(false);
     expect(rail.scrollLeft).toBe(60);
     expect(screen.getByRole('button', { name: /^全部/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(tiles()).toHaveLength(3);
+    expect(tiles()).toHaveLength(5);
   });
 
   it('leaves horizontal trackpad scrolling and browser zoom to the browser', async () => {
@@ -313,7 +315,7 @@ describe('OnlineModelLibrary', () => {
     setup();
     expect(screen.getByRole('status').textContent).toContain('正在载入');
     expect(await screen.findByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
-    expect(tiles()).toHaveLength(3);
+    expect(tiles()).toHaveLength(5);
   });
 
   it('shows only the model name on the tile, with the full name on hover', async () => {
@@ -408,7 +410,7 @@ describe('OnlineModelLibrary', () => {
     fireEvent.change(screen.getByLabelText('搜索全库线上模型'), { target: { value: 'tower' } });
     fireEvent.click(screen.getByRole('button', { name: /^全部/ }));
     expect((screen.getByLabelText('搜索全库线上模型') as HTMLInputElement).value).toBe('');
-    expect(tiles()).toHaveLength(3);
+    expect(tiles()).toHaveLength(5);
   });
 
   it('refuses to place anything while the active floor is full', async () => {
@@ -425,9 +427,10 @@ describe('OnlineModelLibrary', () => {
     vi.mocked(loadOnlineModels).mockResolvedValue(buildOnlineModelIndex(many));
     setup();
     await screen.findByRole('button', { name: '添加Model 0' });
-    expect(tiles()).toHaveLength(24);
+    const shipped = listShippedAssets('glb').length;
+    expect(tiles()).toHaveLength(24 + shipped);
     fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
-    await waitFor(() => expect(tiles()).toHaveLength(30));
+    await waitFor(() => expect(tiles()).toHaveLength(30 + shipped));
   });
 
   it('puts the reveal control at the end of the rail and retires it once everything shows', async () => {
@@ -439,7 +442,27 @@ describe('OnlineModelLibrary', () => {
     const more = screen.getByRole('button', { name: /^再显示/ });
     expect(grid.lastElementChild).toBe(more);
     fireEvent.click(more);
-    await waitFor(() => expect(tiles()).toHaveLength(30));
+    await waitFor(() => expect(tiles()).toHaveLength(30 + listShippedAssets('glb').length));
     expect(screen.queryByRole('button', { name: /^再显示/ })).toBeNull();
+  });
+
+  it('opens a two-item generate menu from the leading plus, then stars and a custom tag', async () => {
+    localStorage.removeItem(MATERIAL_LIBRARY_META_KEY);
+    setup();
+    await screen.findByRole('button', { name: '添加Lounge Chaise' });
+    const rail = screen.getByRole('group', { name: '线上模型' });
+    expect(rail.firstElementChild?.querySelector('[aria-label="生成物料"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '生成物料' }));
+    const items = screen.getAllByRole('menuitem').map(item => item.textContent);
+    expect(items).toEqual(['通过描述生成物料', '拍照/图片生成物料']);
+    fireEvent.click(screen.getByRole('button', { name: '收藏物料 Lounge Chaise' }));
+    expect(screen.getByRole('button', { name: '取消收藏物料 Lounge Chaise' }).getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem(MATERIAL_LIBRARY_META_KEY) ?? '{}').favorites).toContain('seating-chaise');
+    fireEvent.click(screen.getByRole('button', { name: '新建标签' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '新标签名称' }), { target: { value: '沙滩' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认新标签' }));
+    expect(screen.getByRole('button', { name: /^沙滩/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '把Lounge Chaise挂上沙滩' }));
+    expect(screen.getByRole('button', { name: '从沙滩卸下Lounge Chaise' }).getAttribute('aria-pressed')).toBe('true');
   });
 });

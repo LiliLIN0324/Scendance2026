@@ -202,7 +202,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
           setResult(url ? { url, taskid, name } : null);
           setPrompt('');
           setNote(kind === 'world'
-            ? '场景好了。到左轨「观感」取回，这里不再提交。'
+            ? '场景好了。到「空间 · 环境预览」取回，这里不再提交。'
             : url ? '生成好了，可以放进场景。' : '生成完成，但没有模型文件。');
         } else {
           setNote(body.status === 4 ? '生成失败。再点会再扣一次。' : '生成已取消，没有再提交。');

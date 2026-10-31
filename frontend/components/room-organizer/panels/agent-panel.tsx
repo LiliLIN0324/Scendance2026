@@ -807,9 +807,9 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     try {
       onApply(createBlankVenue(live.current));
       if (was2D) setView(current => ({ ...current, view2D: true }));
-      say({ role: 'agent', text: `空白场地立好了：${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m，要调尺寸就说「改成 15×10」。` });
+      say({ role: 'agent', text: `空白空间立好了：${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m，要调尺寸就说「改成 15×10」。` });
     } catch (error) {
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '空白场地没立起来，再试一次。' });
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '空白空间没立起来，再试一次。' });
     }
   }
 
@@ -1368,7 +1368,7 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
       <div className="sc-brief-tool-list">
         {venueRows.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
         <button type="button" title={known ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={16} aria-hidden="true"/><span>地图圈画</span></button>
-        {!known && <button type="button" title="先给一块空地，尺寸回头在对话里说" onClick={agent.startBlankVenue}><SquareDashed size={16} aria-hidden="true"/><span>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</span></button>}
+        {!known && <button type="button" title="先给一块空地，尺寸回头在对话里说" onClick={agent.startBlankVenue}><SquareDashed size={16} aria-hidden="true"/><span>空白空间 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</span></button>}
       </div>
     </div>
     {docsRows.length > 0 && <details className="sc-brief-tools">

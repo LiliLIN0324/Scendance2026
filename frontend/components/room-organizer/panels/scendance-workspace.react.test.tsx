@@ -12,7 +12,6 @@ import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
 import { createVenueFromPick } from '../lib/amap-venue';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
-import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { OnlineModel } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
 import type { ViewSettings } from '../lib/types';
@@ -40,7 +39,6 @@ const MODELS: OnlineModel[] = Array.from({ length: 30 }, (_, index) => ({
 }));
 
 const GENERATED_ID = '4165e104-e2c1-4f5e-b2a4-46602bf9f932';
-const SCENE_ID = '00000000-0000-4000-8000-000000000000';
 const GENERATED: CatalogItem = {
   type: 'glb-asset', name: '一张白色圆桌', width: 1.2, depth: 1.2, height: 0.75,
   color: '#ffffff', icon: '◇', price: 0, category: 'decor', source: 'generated',
@@ -75,14 +73,13 @@ function librarySetup() {
   const placeCatalogItem = vi.fn(() => 'placed-rehearsal-item'), onLoadPreset = vi.fn(), onClose = vi.fn();
   const assertCurrent = vi.fn(), dispose = vi.fn();
   const capturePlacement = vi.fn(() => ({ assertCurrent, dispose }));
-  const environment = { preview: { status: 'idle', assetId: '', name: '' } as SplatPreviewState, onStart: vi.fn(), onStop: vi.fn() };
-  const props: ComponentProps<typeof ScendanceLibrary> = { placeCatalogItem, onLoadPreset, onClose, capturePlacement, environment };
+  const props: ComponentProps<typeof ScendanceLibrary> = { placeCatalogItem, onClose, capturePlacement };
   let open = true;
   const node = (view: ViewSettings) => <Providers values={{ ...values, editor: { ...values.editor, view } }}>
     <div id="workbench-material-shelf" hidden={!open}><ScendanceLibrary {...props}/></div>
   </Providers>;
   const rendered = render(node(values.editor.view));
-  return { ...values, props, layout, environment, placeCatalogItem, onLoadPreset, onClose, capturePlacement, assertCurrent, dispose,
+  return { ...values, props, layout, placeCatalogItem, onLoadPreset, onClose, capturePlacement, assertCurrent, dispose,
     update: ({ hidden = !open, view = values.editor.view }: { hidden?: boolean; view?: ViewSettings } = {}) => {
       open = !hidden; rendered.rerender(node(view));
     }, container: rendered.container };
@@ -91,76 +88,45 @@ function librarySetup() {
 const tiles = () => screen.getAllByRole('button', { name: /^添加Rehearsal Model/ });
 
 describe('ScendanceLibrary shelf lifecycle', () => {
-  it('opens the requested template tab without applying a template or changing the activity', async () => {
+  it('stays on materials and leaves templates, environment and the icon strip off this shelf', async () => {
     const test = librarySetup(), before = JSON.stringify(test.layout);
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
-    test.props.openTabRequest = { serial: 1, tab: 'presets' };
-    test.update();
-    expect(screen.getByRole('tab', { name: '场景模板' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('button', { name: '生成物料' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: '场景模板' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: '环境预览' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: '生成物件' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: '物料库' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: '图层' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: '现场灯光' })).toBeNull();
     expect(test.placeCatalogItem).not.toHaveBeenCalled();
     expect(test.onLoadPreset).not.toHaveBeenCalled();
     expect(loadScenePreset).not.toHaveBeenCalled();
     expect(test.actions.applyLayout).not.toHaveBeenCalled();
     expect(JSON.stringify(test.layout)).toBe(before);
-    fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
-    test.props.openTabRequest = { serial: 1, tab: 'presets' };
-    test.update();
-    expect(screen.getByRole('tab', { name: '物料库' }).getAttribute('aria-selected')).toBe('true');
-    // 图层不适合当前页面，抽屉里只有「物料库 / 生成物件 / 环境预览 / 场景模板」四档。
-    expect(screen.queryByRole('tab', { name: '图层' })).toBeNull();
     expect(loadOnlineModels).toHaveBeenCalledTimes(1);
   });
 
-  it('生成物件图标只列本机模型，点击后与线上物料走同一条摆放', async () => {
+  it('把本机生成的物件留在同一条物料里，点「生成」后仍走原来的摆放', async () => {
     localStorage.clear();
     rememberAholoAsset({ assetId: GENERATED_ID, kind: 'glb', name: '一张白色圆桌', bytes: 6_433_368, savedAt: 1, taskid: '4475964' });
     rememberAholoAsset({ assetId: '00000000-0000-4000-8000-000000000000', kind: 'spz', name: '场地扫描', bytes: 20_000_000, savedAt: 2 });
     vi.mocked(loadStoredAholoCatalogItem).mockResolvedValue(GENERATED);
     const test = librarySetup();
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
-    fireEvent.click(screen.getByRole('tab', { name: '生成物件' }));
-    expect(screen.getByRole('tab', { name: '生成物件' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: /^生成 / }));
     fireEvent.click(await screen.findByRole('button', { name: '添加一张白色圆桌' }));
     await waitFor(() => expect(test.placeCatalogItem).toHaveBeenCalledWith(GENERATED));
     expect(loadStoredAholoCatalogItem).toHaveBeenCalledWith(GENERATED_ID);
     expect(test.selectOnly).toHaveBeenCalledWith('placed-rehearsal-item', { keepPanel: true });
     // 场景点云是环境，不是能摆的物料。
     expect(screen.queryByRole('button', { name: '添加场地扫描' })).toBeNull();
-  });
-
-  it('环境预览图标只列本机 3DGS 场景，点击交给预览并把正在预览的那条标出来', async () => {
-    localStorage.clear();
-    rememberAholoAsset({ assetId: SCENE_ID, kind: 'spz', name: '午后咖啡馆', bytes: 20_000_000, savedAt: 1 });
-    rememberAholoAsset({ assetId: GENERATED_ID, kind: 'glb', name: '一张白色圆桌', bytes: 6_433_368, savedAt: 2 });
-    const test = librarySetup();
-    await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
-    fireEvent.click(screen.getByRole('tab', { name: '环境预览' }));
-    const card = await screen.findByRole('button', { name: '预览午后咖啡馆' });
-    // 物件模型有自己的入口，不该混进环境列表。
-    expect(screen.queryByRole('button', { name: '预览一张白色圆桌' })).toBeNull();
-    // 仓库留档的那几段场景不读浏览器记录，换一台机器也还在这一格里。
-    expect(screen.getByRole('button', { name: '预览小型发布会场地（样例·非本场）' })).not.toBeNull();
-    // 还没预览就不许出现「退出预览」，也不许有一条假装成功的状态行。
-    expect(screen.queryByRole('button', { name: '退出预览' })).toBeNull();
-    expect(card.getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(card);
-    expect(test.environment.onStart).toHaveBeenCalledWith(SCENE_ID);
-
-    test.environment.preview = { status: 'ready', assetId: SCENE_ID, name: '午后咖啡馆', splats: 1_234_567 };
-    test.update();
-    expect(screen.getByRole('button', { name: '预览午后咖啡馆' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('status').textContent).toContain('1,234,567 个高斯点');
-    fireEvent.click(screen.getByRole('button', { name: '退出预览' }));
-    expect(test.environment.onStop).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '添加Rehearsal Model 0' })).toBeNull();
   });
 
   it('keeps category, search, pagination and the scrolling row through tabs, collapse and 2D', async () => {
     const test = librarySetup();
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
     fireEvent.click(screen.getByRole('button', { name: /^座席/ }));
-    fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
     expect(screen.getByRole('button', { name: /^座席/ }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.change(screen.getByRole('textbox', { name: /搜索/ }), { target: { value: 'Rehearsal Model' } });
     fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
@@ -168,11 +134,9 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     const input = screen.getByRole('textbox', { name: /搜索/ }) as HTMLInputElement;
     const row = test.container.querySelector('.sc-material-rail')!;
     row.scrollLeft = 175;
-    fireEvent.click(screen.getByRole('tab', { name: '场景模板' }));
     test.update({ hidden: true, view: makeViewSettings({ view2D: true }) });
     expect(test.container.querySelector('.sc-material-rail')).toBe(row);
     test.update({ hidden: false, view: makeViewSettings({ view2D: true }) });
-    fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
     expect(screen.getByRole('textbox', { name: /搜索/ })).toBe(input);
     expect(input.value).toBe('Rehearsal Model');
     expect(row.scrollLeft).toBe(175);
@@ -189,10 +153,8 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     const tile = await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
     fireEvent.click(tile);
     expect((tile as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('tab', { name: '场景模板' }));
     test.update({ hidden: true });
     test.update({ hidden: false });
-    fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
     expect(screen.getByRole('button', { name: '添加Rehearsal Model 0' })).toBe(tile);
     expect((tile as HTMLButtonElement).disabled).toBe(true);
     expect(loadOnlineModels).toHaveBeenCalledTimes(1);

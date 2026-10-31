@@ -634,12 +634,12 @@ body {
 }
 .sc-library { display: flex; flex-direction: column; height: 100%; }
 
-/* 物料架：第一层分类收成左侧两图标，第二层 bucket/搜索仍在内容区顶 */
+/* 物料架：分类在内容区顶上的标签条，不再占左侧图标列。 */
 .sc-workbench .sc-library.sc-compact-shelf {
   display: flex; flex-direction: column; height: 100%; min-height: 0;
 }
 .sc-workbench .sc-library.sc-compact-shelf .sc-library-body {
-  display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 0;
   flex: 1; min-height: 0; min-width: 0;
 }
 .sc-workbench .sc-library.sc-compact-shelf .sc-library-rail {
@@ -1011,9 +1011,17 @@ body {
 }
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:hover::after,
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:focus-visible::after { opacity: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate:hover {
-  color: #0668e5;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo img {
+  width: 28px; height: 28px; border-radius: 999px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo.is-review-returned {
+  box-shadow: inset 0 0 0 2px #d4534a;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-space .sc-space-chevron {
+  transition: transform .16s ease;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-space.is-active .sc-space-chevron {
+  transform: rotate(180deg);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
@@ -1490,6 +1498,15 @@ body {
   height: var(--sc-shelf-height, 196px); min-height: 0;
   background: var(--wk-paper); border: 0; border-top: 1px solid var(--wk-hair); border-radius: 0;
   box-shadow: none; z-index: 35; overflow: hidden; pointer-events: auto;
+}
+/* 物料入口从底条挪到左轨「空间」之下。抽屉贴底，并向上补上原来底条和旧入口那一截，让面板和更低的图标仍连成一块。 */
+.sc-workbench .sc-canvas-stage.has-material-shelf .sc-material-shelf.sc-bottom-drawer.is-raised,
+.sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-raised {
+  bottom: 0;
+  height: calc(var(--sc-shelf-height, 212px) + 88px);
+}
+.sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-space {
+  height: min(70vh, 520px);
 }
 .sc-workbench .sc-canvas-column .sc-material-shelf.sc-bottom-drawer[hidden] { display: none; }
 .sc-workbench .sc-material-entry-bar,
