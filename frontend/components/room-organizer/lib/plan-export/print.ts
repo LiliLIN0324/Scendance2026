@@ -157,17 +157,21 @@ function renderPrintHtml(input: PrintHtmlInput): string {
     <style>
       :root { color-scheme: light; }
       @page { size: A4 ${input.orientation}; margin: 12mm; }
-      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; }
+      body { margin: 0; color: #141416; background: #fff; font-family: Inter, Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
       .plan { width: ${input.sheetWidthCss}; }
       .plan svg { display: block; width: 100%; height: auto; }
-      table.titleblock { margin-top: 6mm; border-collapse: collapse; font-size: 9pt; width: 100%; }
-      table.titleblock td { border: 0.3mm solid #444; padding: 1.5mm 3mm; }
-      table.titleblock td.k { color: #666; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.05em; }
+      .sheet-brand { margin: 4mm 0 2mm; font-size: 8pt; letter-spacing: 0.12em; color: #71767E; }
+      .sheet-brand i { display: inline-block; width: 2mm; height: 2mm; margin-right: 1.6mm; border-radius: 50%; background: #4A7C59; vertical-align: -0.2mm; }
+      table.titleblock { margin: 0; border-collapse: collapse; font-size: 10pt; width: 100%; }
+      table.titleblock td { border: none; border-top: 0.25mm solid #E4E4E7; padding: 1.6mm 4mm 1.6mm 0; vertical-align: baseline; }
+      table.titleblock tr:first-child td { border-top: 0.4mm solid #141416; }
+      table.titleblock td.k { color: #71767E; font-size: 8pt; letter-spacing: 0.04em; width: 22mm; }
       @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style>
   </head>
   <body onload="setTimeout(function(){ window.print(); }, 200)">
     <div class="plan">${input.svg}</div>
+    <p class="sheet-brand"><i></i>幕景 · 平面示意</p>
     <table class="titleblock">
       <tr>
         <td class="k">Project</td><td>${escapeHtml(input.layoutName)}</td>
@@ -180,7 +184,7 @@ function renderPrintHtml(input: PrintHtmlInput): string {
       ${input.dims ? `<tr><td class="k">Footprint</td><td colspan="3">${escapeHtml(input.dims)}</td></tr>` : ''}
       <tr>
         <td class="k">Date</td><td>${escapeHtml(input.date)}</td>
-        <td class="k">Drawn by</td><td>Standalone Room Organizer</td>
+        <td class="k">Drawn by</td><td>幕景</td>
       </tr>
       <tr>
         <td class="k">Contents</td><td colspan="3">${escapeHtml(input.summary)}</td>
