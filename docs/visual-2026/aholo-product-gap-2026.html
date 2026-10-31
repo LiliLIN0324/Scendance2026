@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>幕景 · 工作台缺口与 Aholo 产品化 · 2026-10-30</title>
+<style>
+  :root{--ink:#141416;--muted:#71717A;--hair:#E4E4E7;--paper:#fff;--plane:#F4F5F7;--green:#4A7C59;--soft:#E8F0EA;--warn:#B45309;--p0:#9F1239;--p1:#C2410C;--p2:#0F766E}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--plane)}
+  .page{max-width:980px;margin:0 auto;padding:28px 22px 64px}
+  .brand{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  h1{font-size:26px;line-height:1.25;margin:10px 0 8px;font-weight:650}
+  .sub{color:var(--muted);margin:0 0 14px;max-width:70ch}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}
+  .meta span{font-size:12px;color:var(--muted);background:var(--paper);border:1px solid var(--hair);border-radius:999px;padding:4px 10px}
+  h2{font-size:18px;margin:28px 0 10px;font-weight:650}
+  h2 .no{display:inline-block;min-width:28px;color:var(--green);font-variant-numeric:tabular-nums}
+  .lead{color:var(--muted);margin:0 0 14px;max-width:72ch}
+  .card{background:var(--paper);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;margin:0 0 12px}
+  .grid{display:grid;gap:10px}
+  @media(min-width:760px){.grid.cols2{grid-template-columns:1fr 1fr}}
+  table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top;font-size:13px}
+  th{background:var(--plane);font-weight:600;font-size:12px;color:var(--muted)}
+  tr:last-child td{border-bottom:0}
+  .pri{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:1px 6px;color:#fff}
+  .pri.p0{background:var(--p0)}.pri.p1{background:var(--p1)}.pri.p2{background:var(--p2)}
+  .ok{color:var(--green);font-weight:600}
+  .warn{color:var(--warn);font-weight:600}
+  .chip{display:inline-block;font-size:11px;border:1px solid var(--hair);border-radius:999px;padding:1px 8px;margin:1px 2px;background:var(--plane)}
+  .chip.hot{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.done{background:var(--soft);color:var(--green);border-color:#c9dbcfl}
+  .path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}
+  .path .arrow{color:var(--green);font-weight:700}
+  a{color:var(--green)}
+  ul.tight{margin:6px 0 0;padding-left:18px}
+  ul.tight li{margin:4px 0}
+  footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--hair);color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+  <h1>工作台缺口清单 · Aholo 场地观感产品化</h1>
+  <p class="sub">对照真源旅程 / 流程图 / 设计令牌 / 晴光 Agent 规范与现网工作台；给人打开看的短清单。<strong>地图支路 D0–D3 本机已 PASS</strong>（圈画立壳 / 采集单流线 / 重建干跑与额度闸 / 多边形真轮廓与可选卫星贴地）。<strong>Aholo M3 前端本机已齐</strong>（3DGS 背景层 +「退出预览」开关 + 环境预览挂 shipped 样例可干跑）；主人授权「扣！」后<strong>云 E2E · 文生已扣费通</strong>（worldId <code>3FO4K4RI3SQE</code>，挂「云E2E·宴会厅文生」观感层）。现场重建素材仍缺，未跑真场重建。本页记录<strong>还差什么</strong>与<strong>已收口什么</strong>。</p>
+  <div class="meta">
+    <span>2026-10-30 · Asia/Shanghai</span>
+    <span>本机未 commit / 未 push</span>
+    <span>地图 D0–D3 PASS</span>
+    <span>M3 前端本机已齐</span>
+    <span>云 E2E · 文生已扣费通</span>
+    <span>真源：AHOLO-INTEGRATION-PLAN · user-flow-map · design-spec</span>
+  </div>
+
+  <h2><span class="no">01</span>主路径（已钉）</h2>
+  <div class="card">
+    <div class="path">
+      <span class="chip hot">左轨地图</span><span class="arrow">→</span>
+      <span class="chip hot">高德定场圈画</span><span class="arrow">→</span>
+      <span class="chip hot">主客流线加密站位</span><span class="arrow">→</span>
+      <span class="chip hot">采集单</span><span class="arrow">→</span>
+      <span class="chip hot">左轨观感 · 场地重建</span><span class="arrow">→</span>
+      <span class="chip hot">挂环境预览</span><span class="arrow">→</span>
+      <span class="chip done">壳体 + glTF 布置</span>
+    </div>
+    <ul class="tight">
+      <li><strong>高德</strong>只定场 + 出采集单；<strong>卫星不可作重建素材</strong>。</li>
+      <li><strong>观感层</strong>（.spz / 3DGS）只铺背景：不进碰撞、不进落盘几何。</li>
+      <li><strong>不另开第二工作台</strong>；物料布置仍走现有壳体 + glTF。</li>
+      <li>默认<strong>干跑</strong>；真调须关干跑并有本机代理 + Key（会扣额度）。</li>
+    </ul>
+  </div>
+
+  <h2><span class="no">02</span>缺口与优先级</h2>
+  <p class="lead">相对真源与现网对照。P0 影响主路径可懂可点；P1 体验连贯；P2 可后置。</p>
+  <table>
+    <thead><tr><th>优先级</th><th>缺口</th><th>对照真源</th><th>本轮</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pri p0">P0</span></td>
+        <td>左栏 Aholo 仍叫「接口测试」，像工程探针不像产品入口</td>
+        <td>flow-map 左轨 Aholo / Taste：卖方案不卖重建文案冲突——现以主人点名产品化优先</td>
+        <td class="ok">已改：标题「场地观感与物料」、左轨「观感」、主路径条与禁令</td>
+      </tr>
+      <tr>
+        <td><span class="pri p0">P0</span></td>
+        <td>流程图 C 地图泳道停在立壳，缺采集单→上传→观感</td>
+        <td>user-flow-map §01 C 泳道；D0/D1 已落地</td>
+        <td class="ok">已补节点到环境预览</td>
+      </tr>
+      <tr>
+        <td><span class="pri p0">P0</span></td>
+        <td>采集单与重建入口文案/禁令不一致风险</td>
+        <td>硬钉：卫星不可重建素材</td>
+        <td class="ok">采集单 / 重建页 / 教程 / 面板顶条统一 RECON_MATERIAL_BAN</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>底栏「环境预览 / 生成物件」空态仍指向「接口测试」</td>
+        <td>IA：底栏与左轨同一入口语义</td>
+        <td class="ok">空态改指「观感」页签</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>左栏页头在 lux 模式无「场地观感」页签，切走后难回来</td>
+        <td>journey：页头切换链</td>
+        <td class="ok">打开观感或带采集单预设时出现「场地观感」</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>晴光规范未写清「地图→采集→重建」口头边界</td>
+        <td>qingguang-agent-spec 硬钉与现状边界</td>
+        <td class="ok">附录补一条地图支路硬钉</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>圈内主客流线加密站位（规划 Page「D1 流线」）</td>
+        <td>地图上画出主客流线并生成站位清单/采集单；禁止只有边界站位却声称流线</td>
+        <td class="ok">已做：画主客流线 + 默认长轴流线；站位沿流线加密；导出/浮层同步；见 D1-FLOW 验收卡</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>真重建进画布：现场素材→World 重建→本场 .spz 替换宴会厅样例</td>
+        <td>规划 Page D2；失败即停：宴会厅包冒充本场</td>
+        <td class="ok">管线已做：默认干跑；关干跑须「我确认本次提交将消耗 Aholo 额度」；真成功「挂本场环境预览（替换样例）」；干跑/样例屏上标明「仍缺本场包」。真场扣费跑须主人确认后另开。</td>
+      </tr>
+      <tr>
+        <td><span class="pri p2">P2</span></td>
+        <td>多边形真轮廓壳体 / 卫星贴地底图（可选参考，不可作素材）</td>
+        <td>D3 / 产品钉</td>
+        <td class="ok">已做：圈画点列→本地米制真轮廓壳体（演示 L 轮廓非矩形）；可选「卫星贴地参考底图」默认关，屏上「参考底图·不可作重建素材」；与 RECON_MATERIAL_BAN 一致，不进采集上传。见 D3 验收卡。</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>M3 前端：文字生成场地氛围 3DGS 背景层 + 可关</td>
+        <td>AHOLO-INTEGRATION-PLAN §M3；验收：文生 3DGS 可见 + 开关可关</td>
+        <td class="ok">本机已齐：Spark 单包 .spz 背景层；底栏「环境预览」挂 shipped-scendance-m3-mvp（= World 3FO4K4QI6N4V）干跑演示；预览中「退出预览」即关背景层；观感「场景生成」页签为真文生入口。LOD 截断刻意未做。见 AHOLO-ASSET-AND-SPLAT-PREVIEW。</td>
+      </tr>
+      <tr>
+        <td><span class="pri p1">P1</span></td>
+        <td>云 E2E：场景生成真文生 World / 真扣额度重建全链路</td>
+        <td>PLAN M3/M2 真调；地图 D2 真场包</td>
+        <td class="ok">云 E2E · 文生已扣费通：worldId 3FO4K4RI3SQE → shipped 云E2E·宴会厅文生（非样例）；证据 docs/evidence/aholo/world-3FO4K4RI3SQE/。现场重建素材缺失，真场重建未跑。默认干跑逻辑保留。</td>
+      </tr>
+      <tr>
+        <td><span class="pri p2">P2</span></td>
+        <td>视觉令牌全站收口（VISUAL-GAP 旧波次）与 Taste 表面禁词全面对齐</td>
+        <td>design-spec / Taste Memo</td>
+        <td class="warn">另波；本轮只收 Aholo 主路径可点</td>
+      </tr>
+      <tr>
+        <td><span class="pri p2">P2</span></td>
+        <td>生产构建仍隐藏观感左轨（仅 next dev）</td>
+        <td>参赛演示需可见入口</td>
+        <td class="warn">刻意保留；要上线需另开能力位门控卡</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2><span class="no">03</span>地图 D0–D3 + M3 收口（本机）</h2>
+  <div class="grid cols2">
+    <div class="card">
+      <strong>已可点（不扣费）</strong>
+      <ul class="tight">
+        <li>左轨「观感」→ 四页签：文字建模 / 图片建模 / <strong>场景生成</strong> / 场地重建</li>
+        <li>地图 D0–D3：演示圈画 L 轮廓 → 采集单流线 → 干跑重建 / 挂样例 → 多边形壳 + 可选卫星贴地</li>
+        <li>底栏「环境预览」点 <strong>云E2E·宴会厅文生</strong>（本次扣费文生，非样例）或样例 Scendance-M3-MVP → 画布 3DGS 观感层</li>
+        <li>预览中点「退出预览」→ 关掉背景层（M3 开关）</li>
+      </ul>
+    </div>
+    <div class="card">
+      <strong>禁令与仍欠</strong>
+      <ul class="tight">
+        <li>高德只定场；<strong>卫星不可作重建素材</strong>；splat=观感（不进碰撞/落盘）</li>
+        <li>场地重建默认干跑；关干跑须额度确认闸</li>
+        <li><strong>云 E2E · 文生已扣费通</strong>（worldId 3FO4K4RI3SQE）；<strong>现场重建素材仍缺</strong>，真场重建未跑</li>
+        <li>壳体 + glTF 布置链路不变；LOD 截断刻意未做</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2><span class="no">04</span>怎么验收（给人）</h2>
+  <div class="card">
+    <ol>
+      <li>开 <code>/editor</code>，左轨见「观感」（非「接口测试」）。</li>
+      <li><strong>M3 干跑</strong>：底栏「环境预览」→ 点 Scendance-M3-MVP（样例·非本场）→ 画布见 3DGS 背景；「退出预览」关掉。不扣额度。</li>
+      <li>观感「场景生成」页签：文生入口在；真提交会耗额度，本机演示用上一步样例即可。</li>
+      <li>地图 D0–D3：演示圈画 · L 轮廓 → 采集单流线 → 干跑重建挂样例 → 可选卫星贴地（默认关）。</li>
+      <li><strong>云 E2E 点验</strong>：底栏「环境预览」→ 点「云E2E·宴会厅文生」→ 画布见 3DGS 观感层（已扣费产物，勿再提交新建）。验收卡 <code>docs/AHOLO-CLOUD-E2E-2026-10-30.md</code>。</li>
+      <li>AI 复跑卡：<code>docs/D0-…</code> · <code>D1-…</code> · <code>D1-FLOW-…</code> · <code>D2-…</code> · <code>D3-POLYGON-SAT-2026-10-30.md</code> · <code>AHOLO-ASSET-AND-SPLAT-PREVIEW-2026-10-30.md</code>。</li>
+    </ol>
+  </div>
+
+  <h2><span class="no">05</span>相关真源</h2>
+  <div class="card">
+    <ul class="tight">
+      <li><a href="./product-one-pager-2026.html">product-one-pager-2026.html</a> · 产品一页纸</li>
+      <li><a href="./workbench-ia-2026.html">workbench-ia-2026.html</a> · 左轨与观感挂载</li>
+      <li><a href="./confirm-export-2026.html">confirm-export-2026.html</a> · 确认闸与导出</li>
+      <li><a href="./keep-kill-2026.html">keep-kill-2026.html</a> · KEEP / KILL</li>
+      <li><a href="./user-flow-map-2026.html">user-flow-map-2026.html</a> · C 地图泳道已延长</li>
+      <li><a href="./user-journey-2026.html">user-journey-2026.html</a> · 布置左栏页签重塑</li>
+      <li><a href="./design-spec-2026.html">design-spec-2026.html</a> · 视觉令牌</li>
+      <li><a href="./qingguang-agent-spec-2026.html">qingguang-agent-spec-2026.html</a> · 晴光硬钉 + 地图支路</li>
+      <li><a href="./index-product-2026.html">index-product-2026.html</a> · 产品规划索引</li>
+      <li>规划：仓内 <code>docs/AHOLO-INTEGRATION-PLAN.md</code> §M3；资产预览 <code>docs/AHOLO-ASSET-AND-SPLAT-PREVIEW-2026-10-30.md</code></li>
+      <li>云 E2E 验收：<code>docs/AHOLO-CLOUD-E2E-2026-10-30.md</code> · 证据 <code>docs/evidence/aholo/world-3FO4K4RI3SQE/</code></li>
+      <li>过程归档：<code>docs/archive/process-2026-10/</code> · D0/D1/D1-FLOW/D2/D3 验收卡在 <code>docs/</code></li>
+    </ul>
+  </div>
+
+  <footer>本页给人打开；短验收 md 仅给 AI / 本机复跑。未 commit / push。授权本机改仓。云 E2E 文生已扣费通；未 commit / push。</footer>
+</div>
+</body>
+</html>

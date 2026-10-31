@@ -10,7 +10,10 @@ import { MAX_ROOM_DIMENSION } from './constants';
 /** 卡片钉死的层高兜底：用户没说层高就取这个数，并把 heightSource 标成 default。 */
 export const VENUE_DEFAULT_HEIGHT_M = 4;
 export const VENUE_MIN_DIMENSION_M = 1;
-/** 待核：升级卡写 1–500 米，本版编辑器的场地上限是 `MAX_ROOM_DIMENSION`，这里按编辑器为准。 */
+/**
+ * 立墙的上界跟着编辑器（`MAX_ROOM_DIMENSION`），比 `workbench-agent` 的输入口径 500 米更严：
+ * 说了 200×150 会在这里被挡下，所以错误文案要报出上界，并给一句能直接说出口的下一步。
+ */
 export const VENUE_MAX_DIMENSION_M = MAX_ROOM_DIMENSION;
 export const VENUE_WALL_THICKNESS_M = 0.16;
 export const VENUE_MAIN_ENTRANCE_WIDTH_M = 1.8;
@@ -43,6 +46,11 @@ export interface VenueShellInput {
   /** 人确认过的净高（米）；不给就是默认 4.0。 */
   heightM?: number | null;
   entranceWidthM?: number;
+  /**
+   * 地图圈画的本地米制轮廓（≥3 点）。有点列则立真轮廓多边形壳；
+   * 无点列才退化为轴对齐矩形。点须落在 [0,width]×[0,depth]。
+   */
+  polygonMeters?: ReadonlyArray<{ x: number; z: number }>;
 }
 
 /**
@@ -52,9 +60,11 @@ export interface VenueShellInput {
 export function buildVenueShell(input: VenueShellInput): SceneV2 {
   const width = round1(input.widthM);
   const depth = round1(input.depthM);
-  const inRange = (value: number): boolean => value >= VENUE_MIN_DIMENSION_M && value <= VENUE_MAX_DIMENSION_M;
-  if (!inRange(width) || !inRange(depth)) {
-    throw new Error(`场地长宽要在 ${VENUE_MIN_DIMENSION_M}–${VENUE_MAX_DIMENSION_M} 米之间，先改一下卡片里的数字。`);
+  if (width < VENUE_MIN_DIMENSION_M || depth < VENUE_MIN_DIMENSION_M) {
+    throw new Error(`场地长宽至少 ${VENUE_MIN_DIMENSION_M} 米。说一句新的长宽，比如「12×9」，我按它出一版。`);
+  }
+  if (width > VENUE_MAX_DIMENSION_M || depth > VENUE_MAX_DIMENSION_M) {
+    throw new Error(`这块场地最多立到 ${VENUE_MAX_DIMENSION_M} 米——再大画布撑不住。先说一句 ${VENUE_MAX_DIMENSION_M} 米以内的长宽，比如「80×60」，我按它出一版。`);
   }
   const { heightM, heightSource } = resolveVenueHeight(input.heightM);
   const confidence = SCALE_CONFIDENCE[input.scaleOrigin];
@@ -62,21 +72,40 @@ export function buildVenueShell(input: VenueShellInput): SceneV2 {
   const wallStatus = confidence === 'high' ? 'confirmed' : 'inferred';
   const indoor = input.indoorOutdoor === 'indoor';
 
-  const corners = [{ x: 0, z: 0 }, { x: width, z: 0 }, { x: width, z: depth }, { x: 0, z: depth }];
+  const rawPoly = (input.polygonMeters ?? []).filter(p => Number.isFinite(p.x) && Number.isFinite(p.z));
+  const unique = rawPoly.filter((p, i, arr) => arr.findIndex(q => q.x === p.x && q.z === p.z) === i);
+  const usePolygon = unique.length >= 3;
+  const polygon = usePolygon
+    ? unique.map(p => ({
+        x: Math.min(width, Math.max(0, round1(p.x))),
+        z: Math.min(depth, Math.max(0, round1(p.z))),
+      }))
+    : undefined;
+  // 无点列才用轴对齐矩形四角；有点列走真轮廓（即使碰巧是矩形也保留 polygon shape）。
+  const corners = polygon ?? [{ x: 0, z: 0 }, { x: width, z: 0 }, { x: width, z: depth }, { x: 0, z: depth }];
   const walls = indoor
     ? corners.map((start, index) => ({
-        id: newId(), start, end: corners[(index + 1) % 4]!,
+        id: newId(), start, end: corners[(index + 1) % corners.length]!,
         thickness: VENUE_WALL_THICKNESS_M, height: heightM, kind: 'exterior' as const, status: wallStatus,
       }))
     : [];
 
   const entranceWidth = Math.min(input.entranceWidthM ?? VENUE_MAIN_ENTRANCE_WIDTH_M, Math.max(0.6, width - 0.4));
-  // 主入口开在正面那堵墙（z = depth）正中，位置标 inferred：人要挪就在结构里挪。
-  const frontWall = walls[2];
-  const openings = frontWall
+  // 主入口：矩形壳开在正面（z = depth）；多边形壳开在最长边正中。
+  let frontWall = walls[2];
+  if (usePolygon && walls.length) {
+    frontWall = walls.reduce((best, wall) => {
+      const len = Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
+      const bestLen = Math.hypot(best.end.x - best.start.x, best.end.z - best.start.z);
+      return len > bestLen ? wall : best;
+    });
+  }
+  const frontLen = frontWall ? Math.hypot(frontWall.end.x - frontWall.start.x, frontWall.end.z - frontWall.start.z) : 0;
+  const openings = frontWall && frontLen > 0.6
     ? [{
         id: newId(), wallId: frontWall.id, kind: 'door' as const,
-        offset: Math.max(0, round1((width - entranceWidth) / 2)), width: entranceWidth,
+        offset: Math.max(0, round1((frontLen - Math.min(entranceWidth, frontLen - 0.2)) / 2)),
+        width: Math.min(entranceWidth, Math.max(0.6, frontLen - 0.2)),
         height: Math.min(VENUE_MAIN_ENTRANCE_HEIGHT_M, heightM), sillHeight: 0, status: 'inferred' as const,
       }]
     : [];
@@ -89,7 +118,11 @@ export function buildVenueShell(input: VenueShellInput): SceneV2 {
 
   return sceneV2Schema.parse({
     schemaVersion: 2,
-    venue: { shape: 'rectangle', width, depth, height: heightM, entrances: [], heightSource, site },
+    venue: {
+      shape: usePolygon ? 'polygon' : 'rectangle',
+      width, depth, height: heightM, entrances: [], heightSource, site,
+      ...(usePolygon && polygon ? { polygon } : {}),
+    },
     objects: [],
     camera: 'overview',
     lighting: 'neutral',

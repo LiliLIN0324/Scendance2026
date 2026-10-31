@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>幕景 · 确认闸与导出 · 2026</title>
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+    --hair-soft:#EFEFF1; --hair:#E4E4E7;
+    --green:#4A7C59; --green-deep:#3A6247; --green-pale:#E8F0EA;
+    --warn:#96651F; --warn-bg:#FBF3E9; --err:#B4443C; --err-bg:#FAEFED;
+    --r-lg:16px; --r-sm:8px;
+    --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--plane);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+  header.hero{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:36px 36px 32px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.08em;font-size:13px;color:rgba(255,255,255,.85)}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  header.hero h1{font-size:28px;font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+  header.hero p.sub{color:rgba(255,255,255,.55);font-size:14px;max-width:720px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .meta span{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+  .navlinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .navlinks a{font-size:12px;color:rgba(255,255,255,.85);text-decoration:none;border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:4px 12px}
+  .navlinks a:hover{background:rgba(255,255,255,.10)}
+  section{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:28px 32px;margin-bottom:24px}
+  h2{font-size:19px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  h2 .no{color:var(--green);margin-right:8px;font-variant-numeric:tabular-nums}
+  p.lead{color:var(--ink-soft);font-size:13.5px;margin-bottom:18px;max-width:72ch}
+  .path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px}
+  .path .arrow{color:var(--green);font-weight:700}
+  .chip{display:inline-block;font-size:11.5px;border:1px solid var(--hair);border-radius:999px;padding:3px 10px;background:var(--plane);color:var(--ink-soft)}
+  .chip.hot{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.ok{background:var(--green-pale);color:var(--green-deep);border-color:#c9dbcf}
+  .chip.kill{background:var(--err-bg);color:var(--err);border-color:#f0c9c5}
+  .grid{display:grid;gap:12px}
+  @media(min-width:760px){.grid.cols2{grid-template-columns:1fr 1fr}.grid.cols3{grid-template-columns:1fr 1fr 1fr}.grid.cols5{grid-template-columns:repeat(5,1fr)}}
+  .card{background:var(--plane);border-radius:var(--r-sm);padding:16px 18px}
+  .card b{display:block;font-size:14px;margin-bottom:6px}
+  .card p,.card li{font-size:13px;color:var(--ink-soft);line-height:1.6}
+  ul.tight{margin:6px 0 0;padding-left:18px}
+  ul.tight li{margin:4px 0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:12px;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--hair)}
+  td{padding:12px;border-bottom:1px solid var(--hair-soft);vertical-align:top;color:var(--ink-soft)}
+  td strong{color:var(--ink)}
+  .keep{color:var(--green-deep);font-weight:700}
+  .kill{color:var(--err);font-weight:700}
+  a{color:var(--green)}
+  footer{color:var(--faint);font-size:12px;text-align:center;margin-top:36px}
+  pre.tree{background:var(--plane);border-radius:var(--r-sm);padding:18px 22px;font-size:12.5px;line-height:1.9;color:var(--ink-soft);overflow-x:auto;font-family:ui-monospace,Consolas,monospace}
+  pre.tree b{color:var(--ink)}
+  pre.tree i{color:var(--green);font-style:normal}
+  pre.tree em{color:var(--warn);font-style:normal}
+  .stage{background:var(--plane);border-radius:var(--r-sm);padding:14px}
+  .stage .k{font-size:11px;font-weight:600;color:var(--green);letter-spacing:.06em}
+  .stage h3{font-size:15px;font-weight:700;margin:4px 0 6px}
+  .stage p{font-size:12.5px;color:var(--ink-soft)}
+  @media(max-width:860px){header.hero h1{font-size:22px}.grid.cols5{grid-template-columns:1fr 1fr}}
+
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+    <h1>确认闸 · 预览 → 确认 · 导出交付物</h1>
+    <p class="sub">未确认不改仓、不落盘。生成只出提案；人点确认才写入画布。导出前再预览一次，确认后才在本机生成文件。</p>
+    <div class="meta"><span>2026-10-30 · Asia/Shanghai</span><span>铁律：确认前零写入</span><span>对齐晴光 / design-spec 状态机</span></div>
+    
+    <div class="navlinks">
+      <a href="./product-one-pager-2026.html">产品一页纸</a>
+      <a href="./workbench-ia-2026.html">工作台 IA</a>
+      <a href="./confirm-export-2026.html">确认与导出</a>
+      <a href="./keep-kill-2026.html">KEEP / KILL</a>
+      <a href="./user-journey-2026.html">旅程</a>
+      <a href="./user-flow-map-2026.html">流程图</a>
+      <a href="./aholo-product-gap-2026.html">Aholo 缺口</a>
+      <a href="./design-spec-2026.html">设计规范</a>
+      <a href="./qingguang-agent-spec-2026.html">晴光规范</a>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="no">01</span>确认闸（铁律）</h2>
+    <div class="grid cols2">
+      <div class="card"><b>确认之前</b><ul class="tight"><li>画布一个字节都不改</li><li>候选半透明 + 差异框；状态行写清「提案 ≠ 结果」</li><li>确认钮只在「提案待确认」出现一次</li><li>墙 / 米数未确认前不当事实念</li></ul></div>
+      <div class="card"><b>确认之后</b><ul class="tight"><li>一次 <code>applyLayout</code> / 写入场地</li><li>自动保存；顶部 toast 3.2s 内可撤销</li><li>AI 产物与人工产物同一条撤销历史</li><li>未确认 = 不改仓、不落盘、不导出当真</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>预览 → 确认（主路径）</h2>
+    <div class="path">
+      <span class="chip">生成方案</span><span class="arrow">→</span>
+      <span class="chip hot">提案预览</span><span class="arrow">→</span>
+      <span class="chip hot">确认布置</span><span class="arrow">→</span>
+      <span class="chip ok">落盘 · 可撤销</span>
+    </div>
+    <table>
+      <tr><th>态</th><th>画布</th><th>人可点</th></tr>
+      <tr><td><strong>生成中</strong></td><td>静默（T-06）；确认钮未出现</td><td>停止（发送键同位）</td></tr>
+      <tr><td><strong>提案待确认</strong></td><td>预览浮层 / 半透明候选</td><td>恰一颗「确认布置」· 放弃 · 改一版</td></tr>
+      <tr><td><strong>已确认</strong></td><td>方案生效</td><td>撤销一次 · 继续对话优化</td></tr>
+    </table>
+    <p class="lead" style="margin-top:14px;margin-bottom:0">图纸支路同理：「确认应用并保存」才写场地；放弃回原状。详见 <a href="./qingguang-agent-spec-2026.html">晴光规范</a> · <a href="./user-journey-2026.html">旅程</a>。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>导出交付物</h2>
+    <div class="grid cols2">
+      <div class="card"><b>从哪出</b><p>左轨「执行」→ 执行资料。再预览一次；人确认后才在<strong>本机</strong>生成文件。</p></div>
+      <div class="card"><b>交付物（面向交接）</b><ul class="tight"><li>布置示意 / 方案快照</li><li>物料清单（件数、标注概念道具如实）</li><li>场地尺寸与入口等执行要点</li><li>可选：采集单纸单（地图支路）</li></ul></div>
+    </div>
+    <p class="lead" style="margin-top:14px;margin-bottom:0">导出不跳过确认闸：未确认的提案不得当作交付物写出。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>验收口诀</h2>
+    <div class="card">
+      <ul class="tight">
+        <li>生成中点不到确认。</li>
+        <li>放弃后画布与落盘一致于确认前。</li>
+        <li>确认后 toast 能撤销；撤销后回到确认前。</li>
+        <li>导出流程有独立预览步；取消不写文件。</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>给人打开的产品真源 · 视觉令牌对齐 design-spec-2026 · 幕景 SCENDANCE © 2026 · 本机未 commit</footer>
+</div>
+</body>
+</html>

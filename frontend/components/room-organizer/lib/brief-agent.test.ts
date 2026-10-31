@@ -55,6 +55,8 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
     expect(turn.kind).toBe('ack');
     expect(turn.text).toContain('已记下');
     expect(turn.text).toContain('80 人');
+    // 尺度也是人给过的事实：复述里吞掉它，下一句就得重新报一遍尺寸。
+    expect(turn.text).toContain('39 × 20 m');
     expect(turn.text).not.toContain('这场大概多少人');
   });
 
@@ -89,9 +91,12 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
 });
 
 describe('summarizeMemory / memoryExtraction', () => {
-  it('记忆复述按 人数 · 室内外 · 形态 · 类型 拼', () => {
+  it('记忆复述按 人数 · 室内外 · 尺度 · 形态 · 类型 拼', () => {
     const memory = { ...initialBriefMemory(), headcount: 80, venueIO: 'indoor' as const, layoutMode: 'desk-chair' as const, event: '教学' };
     expect(summarizeMemory(memory)).toBe('80 人 · 室内 · 一人一套课桌椅 · 教学');
+    expect(summarizeMemory({ ...memory, lengthM: 12, widthM: 9 })).toBe('80 人 · 室内 · 12 × 9 m · 一人一套课桌椅 · 教学');
+    // 只报过面积：复述就报面积，不替人编一个长宽。
+    expect(summarizeMemory({ ...memory, areaM2: 300 })).toBe('80 人 · 室内 · 300 ㎡ · 一人一套课桌椅 · 教学');
   });
 
   it('记忆折回 extraction：scaleFrom 与左栏同步还吃老形状', () => {

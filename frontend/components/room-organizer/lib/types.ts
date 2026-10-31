@@ -364,6 +364,11 @@ export interface RoomLayout {
   floorPlanImage?: string;
   floorPlanOpacity?: number;
   floorPlanFitMode?: FloorPlanFitMode;
+  /**
+   * 卫星/高德贴地参考底图开关标记：仅观感辅助，与 RECON_MATERIAL_BAN 一致，
+   * 不得进入 Aholo 上传/重建素材列表。
+   */
+  satelliteGroundRef?: boolean;
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
   neighbours?: NeighbourSpec;

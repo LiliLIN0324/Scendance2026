@@ -39,6 +39,7 @@ describe('物料库的生成物件', () => {
   it('本机没落过盘时，仓库留档的那几件照样能摆', () => {
     render(<GeneratedItemLibrary onAdd={vi.fn()}/>);
     // 空提示只在两边都没有时才该出现，否则用户以为生成历史全丢了。
+    expect(screen.queryByText(/本机还没有生成好的物件/)).toBeNull();
     expect(screen.queryByText(/Aholo 接口测试/)).toBeNull();
     expect(screen.getByRole('button', { name: '添加中式木扶手椅' })).not.toBeNull();
   });

@@ -124,7 +124,7 @@ afterEach(() => {
 });
 
 function expandBriefSections(): void {
-  for (const label of ['活动需求与场地资料', '图纸与尺寸', '助手设置']) {
+  for (const label of ['活动需求与场地资料', '图纸与照片', '场地重建', '助手设置']) {
     const summary = screen.queryAllByText(label).find(node => node.closest('details'));
     if (summary && !summary.closest('details')?.open) fireEvent.click(summary);
   }
@@ -133,6 +133,11 @@ function expandBriefSections(): void {
 async function openAgent(): Promise<void> {
   fireEvent.click(await screen.findByRole('button', { name:'打开晴光 Agent' }, { timeout:5000 }));
   expandBriefSections();
+}
+
+/** 测试替身没有左轨，也没有抽屉页签；分类只剩标题栏那个下拉（真机上工作台是 hideCategorySelect）。 */
+function pickCategory(value: 'brief' | 'reference' | 'rebuild'): void {
+  fireEvent.change(screen.getByRole('combobox', { name: '布置工具' }), { target: { value } });
 }
 
 describe('introduction round trips', () => {
@@ -145,7 +150,7 @@ describe('introduction round trips', () => {
     // is not enough once the mock's own factory has a cold module graph to resolve.
     await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }), { target: { value: '举办一场 24 人自然风聚会。' } });
-    fireEvent.click(screen.getByRole('button', { name: '图纸与照片' }));
+    pickCategory('reference');
     fireEvent.change(rendered.container.querySelector('input[type="file"]')!, { target: { files: [new File(['image'], 'venue.png', { type: 'image/png' })] } });
     await screen.findByRole('img', { name: '现场照片：venue.png' });
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '为活动保留合影区。' } });
@@ -159,10 +164,10 @@ describe('introduction round trips', () => {
     expect(revokeObjectURL).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
     // 测试替身没有左栏：返回时右侧还停在图纸面板，切回「客户需求」核对恢复。
-    fireEvent.click(screen.getByRole('button', { name: '客户需求' }));
+    pickCategory('brief');
 
     expect((await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
-    fireEvent.click(screen.getByRole('button', { name: '图纸与照片' }));
+    pickCategory('reference');
     expect(screen.getByRole('img', { name: '现场照片：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
     expect(screen.getByText('为活动保留合影区。')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement).value).toBe('这条还没有发送。');

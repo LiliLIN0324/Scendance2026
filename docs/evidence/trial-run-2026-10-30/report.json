@@ -1,0 +1,24 @@
+{
+  "url": "http://127.0.0.1:3000/editor",
+  "steps": {
+    "mapDialogOpen": true,
+    "satelliteDefaultOff": true,
+    "demoLContourText": true,
+    "envTabOpen": true,
+    "banquetClick": true,
+    "splatPreviewOn": true,
+    "demoLBodyCue": false,
+    "splatPreviewOff": true,
+    "dryRunDefaultOn": true
+  },
+  "hardNails": {
+    "noNewAholoTask": true,
+    "noCommitPush": true,
+    "satelliteNotReconMaterial": true,
+    "splatIsLookOnly": true,
+    "dryRunDefaultOn": true
+  },
+  "errors": [
+    "locator.isVisible: Error: strict mode violation: getByRole('button', { name: '退出预览' }) resolved to 2 elements:\n    1) <button type=\"button\">退出预览</button> aka getByRole('button', { name: '退出预览' }).first()\n    2) <button type=\"button\" class=\"sc-button\">退出预览</button> aka getByLabel('场地工具').getByRole('button', { name: '退出预览' })\n\nCall log:\n    - checking visibility of getByRole('button', { name: '退出预览' })\n\n    at C:\\Users\\13266\\.dsh\\bot\\workspace\\Scendance2026\\docs\\evidence\\trial-run-2026-10-30\\trial.cjs:128:50"
+  ]
+}

@@ -8,11 +8,14 @@ import { flushSourceScope,readSourceForm,storeSourceForm } from '@/lib/source-st
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { backendSceneToLayout,createMeasuredRoomLayout,layoutToBackendScene } from '../lib/backend-adapter';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
-import { ReconstructionPanel } from './reconstruction-panel';
+import { useReconstructionPanel } from './reconstruction-panel';
 import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/source-storage',async importOriginal=>({...await importOriginal<object>(),readSourceForm:vi.fn().mockResolvedValue(undefined),storeSourceForm:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('@/lib/material-checkin-storage',()=>({readMaterialCheckins:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:new Set<string>(),selectOnly:vi.fn()})}));
+/** 分区后「图纸与照片」和「场地重建」各放一块；测试里两块同时挂载，覆盖跨区交互（改尺寸后直接生成、场地编辑时看差异提示）。 */
+type PanelProps = Parameters<typeof useReconstructionPanel>[0];
+function Panel(props:PanelProps):JSX.Element{const zones=useReconstructionPanel(props);return <>{zones.site}{zones.rebuild}{zones.notice}</>;}
 const projectId='10000000-0000-4000-8000-000000000001',assetId='20000000-0000-4000-8000-000000000001',jobId='30000000-0000-4000-8000-000000000001';
 const scene={schemaVersion:1 as const,venue:{width:12,depth:8,height:3,shape:'rectangle' as const,entrances:[]},objects:[],camera:'overview' as const,lighting:'neutral' as const};
 const layout=backendSceneToLayout(scene,{projectId});
@@ -34,7 +37,7 @@ describe('reconstruction form read protection',()=>{
   let stored:unknown=structuredClone(original);
   vi.mocked(readSourceForm).mockRejectedValueOnce(new Error('Transient read failure')).mockImplementation(async()=>stored as never);
   vi.mocked(storeSourceForm).mockImplementation(async(_scope,value)=>{stored=structuredClone(value);});
-  render(<ReconstructionPanel controller={controller} layout={measured} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  render(<Panel controller={controller} layout={measured} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
   await waitFor(()=>expect(readSourceForm).toHaveBeenCalledOnce());
   await act(async()=>{await new Promise(resolve=>setTimeout(resolve,300));});
   expect(storeSourceForm).not.toHaveBeenCalled();expect(stored).toEqual(original);
@@ -51,7 +54,7 @@ describe('reconstruction form read protection',()=>{
  it('blocks a flush already waiting for a read that later fails',async()=>{
   let fail!:(error:Error)=>void;
   vi.mocked(readSourceForm).mockImplementation(()=>new Promise((_resolve,reject)=>{fail=reject;}));
-  render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
   await waitFor(()=>expect(readSourceForm).toHaveBeenCalledOnce());
   const flushed=flushSourceScope(projectId).catch(error=>error as Error);
   await act(async()=>fail(new Error('Read interrupted')));
@@ -60,13 +63,13 @@ describe('reconstruction form read protection',()=>{
  });
  it.each([null,[],{width:12},{constraints:{}}])('does not replace an unreadable saved form %j with defaults',async invalid=>{
   vi.mocked(readSourceForm).mockResolvedValue(invalid as never);
-  render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
   await screen.findByRole('alert');
   await expect(flushSourceScope(projectId)).rejects.toThrow('读取');
   expect(storeSourceForm).not.toHaveBeenCalled();
  });
  it('permits a genuinely absent record to be edited and saved',async()=>{
-  render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
   await waitFor(()=>expect(screen.getByLabelText('场地尺寸').matches(':disabled')).toBe(false));
   fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 15 米'}});
   await act(async()=>{await flushSourceScope(projectId);});
@@ -80,10 +83,10 @@ describe('manual editing of an applied venue',()=>{
   current.structure.openings=[{id:'50000000-0000-4000-8000-000000000001',wallId:current.structure.walls[1]!.id,kind:'door',offset:2,width:1.2,height:2.1,sillHeight:0,status:'confirmed'}];
   return backendSceneToLayout(current,{projectId});
  }
- function mount(base=measured(),extra:Partial<React.ComponentProps<typeof ReconstructionPanel>>={}){
+ function mount(base=measured(),extra:Partial<PanelProps>={}){
   const apply=vi.fn(),preview=vi.fn(),create=vi.spyOn(controller,'createReconstruction'),upload=vi.spyOn(controller,'uploadSource');
   const props={controller,layout:base,onApply:apply,onPreview:preview,images:[],updateImage:vi.fn(),brief:INITIAL_BRIEF,...extra};
-  return {view:render(<ReconstructionPanel {...props}/>),apply,preview,create,upload,props,base};
+  return {view:render(<Panel {...props}/>),apply,preview,create,upload,props,base};
  }
  async function start(){await waitFor(()=>expect((screen.getByRole('button',{name:'编辑当前场地'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'编辑当前场地'}));}
  function width(value='14'){fireEvent.change(screen.getByLabelText('编辑总宽（米）'),{target:{value}});}
@@ -104,7 +107,7 @@ describe('manual editing of an applied venue',()=>{
   fireEvent.change(screen.getByLabelText('门洞 1 · 宽度（米）'),{target:{value:'1.4'}});confirm();
   expect(apply).toHaveBeenCalledOnce();const next=apply.mock.calls[0]![0] as RoomLayout;
   expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={next}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={next}/>);
   const saved=layoutToBackendScene(next);
   expect(saved.venue.width).toBe(15);if(saved.schemaVersion!==2)throw new Error('v2');expect(saved.structure.openings[0]!.width).toBe(1.4);
   expect(screen.getByText(/场地修改已应用，可撤销/)).toBeDefined();expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
@@ -113,15 +116,15 @@ describe('manual editing of an applied venue',()=>{
  it('clears an applied-scene success on Undo and never revives it on Redo',async()=>{
   const trial=mount();await start();width('14');confirm();
   const applied=trial.apply.mock.calls[0]![0] as RoomLayout;
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={applied}/>);
   expect(await screen.findByText(/场地修改已应用，可撤销/)).toBeDefined();
   expect(screen.getByText('进阶 · 当前场地 · 14 × 8 米')).toBeDefined();
   expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={trial.base}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={trial.base}/>);
   await waitFor(()=>expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull());
   expect(screen.getByText(/已识别：.*总宽 14 米/)).toBeDefined();
   expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总宽输入 14 米，当前 12 米');
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={applied}/>);
   expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
   expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
   expect(trial.apply).toHaveBeenCalledOnce();expect(trial.create).not.toHaveBeenCalled();expect(trial.upload).not.toHaveBeenCalled();
@@ -129,18 +132,18 @@ describe('manual editing of an applied venue',()=>{
  it('keeps later generation inputs through Undo and same-scope layout changes while showing the current difference',async()=>{
   const trial=mount();await start();width('14');confirm();
   const applied=trial.apply.mock.calls[0]![0] as RoomLayout;
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={applied}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={applied}/>);
   expect(await screen.findByText(/场地修改已应用，可撤销/)).toBeDefined();
   const submitted=screen.getByLabelText('场地尺寸') as HTMLTextAreaElement;
   fireEvent.change(submitted,{target:{value:'总宽 17.5 米，总深 9.25 米'}});
   expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总宽输入 17.5 米，当前 14 米');
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={trial.base}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={trial.base}/>);
   expect(submitted.value).toBe('总宽 17.5 米，总深 9.25 米');
   expect(screen.getByText(/已识别：.*总宽 17.5 米/).textContent).toContain('总深 9.25 米');
   expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
   expect(screen.getByText(/待提交生成尺寸与当前场地不同/).textContent).toContain('总深输入 9.25 米，当前 8 米');
   const later=createMeasuredRoomLayout(layout,{width:16,depth:10,height:3});
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={later}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={later}/>);
   expect(screen.getByLabelText('场地尺寸')).toBe(submitted);
   expect(submitted.value).toBe('总宽 17.5 米，总深 9.25 米');
   expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull();
@@ -157,20 +160,20 @@ describe('manual editing of an applied venue',()=>{
  });
  it('invalidates the draft on a same-project scene change without overwriting the newer scene',async()=>{
   const trial=mount();await start();width();const changed={...trial.base,backendLighting:'cool' as const};
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={changed}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={changed}/>);
   expect(screen.getByRole('alert').textContent).toContain('场景、项目或图纸资料已变化');
   await waitFor(()=>expect(trial.preview.mock.calls.at(-1)?.[0]).toBeNull());expect(trial.apply).not.toHaveBeenCalled();
  });
  it('cancels the draft on A→B→A project navigation',async()=>{
   const trial=mount();await start();width();
-  trial.view.rerender(<ReconstructionPanel {...trial.props} layout={{...trial.base,id:'other-local-project'}}/>);
-  trial.view.rerender(<ReconstructionPanel {...trial.props}/>);
+  trial.view.rerender(<Panel {...trial.props} layout={{...trial.base,id:'other-local-project'}}/>);
+  trial.view.rerender(<Panel {...trial.props}/>);
   expect(screen.queryByLabelText('编辑总宽（米）')).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
  });
  it('invalidates a changed source identity even when the scene stays the same',async()=>{
   const photo={id:'local-plan',kind:'floorplan' as const,name:'演练图.png',width:100,height:100,url:'blob:plan',blob:new Blob(['a'])};
   const trial=mount(measured(),{images:[photo]});await start();width();
-  trial.view.rerender(<ReconstructionPanel {...trial.props} images={[{...photo,blob:new Blob(['b'])}]}/>);
+  trial.view.rerender(<Panel {...trial.props} images={[{...photo,blob:new Blob(['b'])}]}/>);
   expect(screen.getByRole('alert').textContent).toContain('图纸资料已变化');expect(trial.apply).not.toHaveBeenCalled();
  });
  it('rechecks the live lease at confirmation even before a snapshot rerender',async()=>{
@@ -188,7 +191,7 @@ describe('manual editing of an applied venue',()=>{
  it('stops preview and confirmation when the captured edit lease expires',async()=>{
   const trial=mount();await start();width();fireEvent.click(screen.getByLabelText('我已核对修改后的尺寸、门窗位置和现场条件'));
   const old=controller.getSnapshot();vi.mocked(controller.getSnapshot).mockReturnValue({...old,lease:{...old.lease!,expiresAt:new Date(Date.now()+40).toISOString()}});
-  trial.view.rerender(<ReconstructionPanel {...trial.props}/>);
+  trial.view.rerender(<Panel {...trial.props}/>);
   await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain('编辑权已过期'));
   expect((screen.getByRole('button',{name:'确认应用场地修改'}) as HTMLButtonElement).disabled).toBe(true);
   expect(trial.preview.mock.calls.at(-1)?.[0]).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
@@ -206,8 +209,8 @@ describe('local applied reference mapping',()=>{
  const sourceA={id:'local-reference-a',name:'A-原图.png',kind:'floorplan' as const,width:1000,height:600,url:'blob:reference-a',blob:new Blob(['A'])};
  const sourceB={...sourceA,id:'local-reference-b',name:'B-原图.png',url:'blob:reference-b',blob:new Blob(['B'])};
  function memory(initial:unknown=undefined){const forms=new Map<string,unknown>([[projectId,initial]]);vi.mocked(readSourceForm).mockImplementation(async scope=>forms.get(scope) as never);vi.mocked(storeSourceForm).mockImplementation(async(scope,value)=>{forms.set(scope,value);});return(scope=projectId)=>(forms.get(scope)??{}) as {registration?:import('@/lib/reference-image').ReferenceRegistration};}
- function open(current:RoomLayout=measured,images=[sourceA],extra:Partial<React.ComponentProps<typeof ReconstructionPanel>>={}){
-  return render(<ReconstructionPanel controller={controller} layout={current} onApply={vi.fn()} images={images} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1} {...extra}/>);
+ function open(current:RoomLayout=measured,images=[sourceA],extra:Partial<PanelProps>={}){
+  return render(<Panel controller={controller} layout={current} onApply={vi.fn()} images={images} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1} {...extra}/>);
  }
  function point(x:number,z:number){const map=screen.getByRole('button',{name:'标记图纸与场地的三个对应点'});vi.spyOn(map,'getBoundingClientRect').mockReturnValue({left:0,top:0,width:1000,height:600,right:1000,bottom:600,x:0,y:0,toJSON:()=>({})});fireEvent.click(map,{clientX:x,clientY:z});}
  function mark(){fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));point(10,20);point(610,20);point(10,420);}
@@ -232,7 +235,7 @@ describe('local applied reference mapping',()=>{
   expect(saved().registration?.appliedBasis).toBeUndefined();
   expect((screen.getByLabelText('对应点纵向像素') as HTMLInputElement).readOnly).toBe(true);
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
+  await screen.findByText('已用于当前设计：A-原图.png · 3 个对应点 · 仅保存在本机',{selector:'p[role="status"]'});
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('ready');
   expect(create).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();
  });
@@ -246,7 +249,7 @@ describe('local applied reference mapping',()=>{
   const saved=memory();open(measured,[sourceA,sourceB]);await screen.findByRole('button',{name:'重新标记三个对应点'});
   fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));typePoint('10','20');
   fireEvent.change(screen.getByLabelText('对应点横向像素'),{target:{value:'610'}});
-  fireEvent.change(screen.getByLabelText('核对平面图'),{target:{value:sourceB.id}});
+  fireEvent.change(screen.getByLabelText('平面图'),{target:{value:sourceB.id}});
   expect((screen.getByLabelText('对应点横向像素') as HTMLInputElement).value).toBe('');
   fireEvent.keyDown(screen.getByLabelText('对应点纵向像素'),{key:'Enter'});
   await act(async()=>{await flushSourceScope(projectId);});
@@ -260,7 +263,7 @@ describe('local applied reference mapping',()=>{
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('needs-review');
   mark();expect(saved().registration?.appliedBasis).toBeUndefined();
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
+  await screen.findByText('已用于当前设计：A-原图.png · 3 个对应点 · 仅保存在本机',{selector:'p[role="status"]'});
   expect(saved().registration).toMatchObject({sourceId:sourceA.id,worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(measured),confirmationId:expect.any(String)});
   expect(saved().registration!.sourceAssetId).toBeUndefined();expect(measured.backendSceneV2!.sources).toEqual([]);
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('ready');expect(readSourceForm).toHaveBeenCalledWith(projectId);
@@ -270,12 +273,12 @@ describe('local applied reference mapping',()=>{
   const saved=memory();open(measured,[sourceA,sourceB]);await waitFor(()=>expect(readSourceForm).toHaveBeenCalledWith(projectId));
   fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));point(10,20);point(610,20);
   await waitFor(()=>expect(saved().registration?.points).toHaveLength(2));
-  fireEvent.change(screen.getByLabelText('核对平面图'),{target:{value:sourceB.id}});point(10,420);
+  fireEvent.change(screen.getByLabelText('平面图'),{target:{value:sourceB.id}});point(10,420);
   expect(screen.getByText(/已标记 0\/3 个点/)).toBeDefined();
   expect((screen.getByRole('button',{name:'在当前设计中使用此对应'}) as HTMLButtonElement).disabled).toBe(true);
   expect(saved().registration?.sourceId).toBe(sourceA.id);expect(saved().registration?.points).toHaveLength(2);
   mark();fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
+  await screen.findByText('已用于当前设计：B-原图.png · 3 个对应点 · 仅保存在本机',{selector:'p[role="status"]'});
   expect(saved().registration?.sourceId).toBe(sourceB.id);expect(saved().registration?.points).toHaveLength(3);
  });
  it('uses the existing upload action and explicitly selected photo record as a floorplan, with no recognition call',async()=>{
@@ -283,14 +286,29 @@ describe('local applied reference mapping',()=>{
   const view=open(measured,[],{onAddReferenceImages:add,updateImage:update});await waitFor(()=>expect(readSourceForm).toHaveBeenCalledWith(projectId));
   const file=new File(['local'],'plan.png',{type:'image/png'});fireEvent.change(screen.getByLabelText('上传核对平面图'),{target:{files:[file]}});
   expect(add).toHaveBeenCalledWith([file]);
-  view.rerender(<ReconstructionPanel controller={controller} layout={measured} onApply={vi.fn()} images={[{...sourceA,kind:'photo'}]} updateImage={update} brief={INITIAL_BRIEF} openReferenceRequest={1} onAddReferenceImages={add}/>);
-  fireEvent.change(screen.getByLabelText('核对平面图'),{target:{value:sourceA.id}});expect(update).toHaveBeenCalledWith(sourceA.id,{kind:'floorplan'});expect(create).not.toHaveBeenCalled();
+  view.rerender(<Panel controller={controller} layout={measured} onApply={vi.fn()} images={[{...sourceA,kind:'photo'}]} updateImage={update} brief={INITIAL_BRIEF} openReferenceRequest={1} onAddReferenceImages={add}/>);
+  fireEvent.change(screen.getByLabelText('平面图'),{target:{value:sourceA.id}});expect(update).toHaveBeenCalledWith(sourceA.id,{kind:'floorplan'});expect(create).not.toHaveBeenCalled();
+ });
+ it('offers upload as the last option of the same plan picker instead of a second door',async()=>{
+  memory();const add=vi.fn().mockResolvedValue(undefined);open(measured,[],{onAddReferenceImages:add});
+  await screen.findByLabelText('上传核对平面图');
+  expect(screen.getByRole('option',{name:'上传新平面图…'})).toBeDefined();
+  expect(screen.queryByText('上传平面图')).toBeNull();
+ });
+ it('shows only the overlay in structure review, with no marking controls that cannot be confirmed there',async()=>{
+  memory({jobId,jobBase:JSON.stringify(layoutToBackendScene(measured))});
+  vi.spyOn(controller,'getReconstruction').mockResolvedValue({id:jobId,state:'needs_review',candidate:layoutToBackendScene(measured) as never,issues:[]});
+  open();await screen.findByText('核对识别结构');
+  expect(screen.getByText('将识别墙线叠加到原图核对')).toBeDefined();
+  expect(screen.getByText(/橙色为识别出的墙线/)).toBeDefined();
+  expect(screen.queryByRole('button',{name:'重新标记三个对应点'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'在当前设计中使用此对应'})).toBeNull();
  });
  it('keeps the applied mapping while walls are edited against the same fixed coordinate frame',async()=>{
   const saved=memory({registration:{sourceId:sourceA.id,points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}],worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(measured),confirmationId:'before'}});
-  const view=open();await waitFor(()=>expect(screen.getByText('本机原图对应已核对，尚未同步到云端。')).toBeDefined());
+  const view=open();await waitFor(()=>expect(screen.getByText('已用于当前设计：A-原图.png · 3 个对应点 · 仅保存在本机')).toBeDefined());
   const changed={...measured,floors:[{...measured.floors[0]!,interiorWalls:measured.floors[0]!.interiorWalls!.map((wall,index)=>index===0?{...wall,thickness:wall.thickness!+.02}:wall)}]};
-  view.rerender(<ReconstructionPanel controller={controller} layout={changed} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
+  view.rerender(<Panel controller={controller} layout={changed} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
   expect(screen.queryByText('项目或场地坐标范围已变化，原图对应已停用，请重新核对。')).toBeNull();
   expect(resolveReferenceImage(changed,[{...sourceA,scope:projectId}],saved()).status).toBe('ready');
  });
@@ -298,11 +316,11 @@ describe('local applied reference mapping',()=>{
   const saved=memory();const view=open();await waitFor(()=>expect(readSourceForm).toHaveBeenCalledWith(projectId));
   fireEvent.click(screen.getByRole('button',{name:'重新标记三个对应点'}));point(10,20);point(610,20);
   const resized=createMeasuredRoomLayout(layout,{width:16,depth:8,height:3});
-  view.rerender(<ReconstructionPanel controller={controller} layout={resized} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
+  view.rerender(<Panel controller={controller} layout={resized} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
   point(10,420);expect(screen.getByText('原对应未绑定当前场地尺寸，已停用，请重新标记。')).toBeDefined();
   expect((screen.getByRole('button',{name:'在当前设计中使用此对应'}) as HTMLButtonElement).disabled).toBe(true);
   mark();fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));
-  await screen.findByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'});
+  await screen.findByText('已用于当前设计：A-原图.png · 3 个对应点 · 仅保存在本机',{selector:'p[role="status"]'});
   expect(saved().registration?.worldWidth).toBe(16);const result=resolveReferenceImage(resized,[{...sourceA,scope:projectId}],saved());
   expect(result.status).toBe('ready');const [a,,c,,e]=result.imageToWorld!;expect(a*610+c*20+e).toBeCloseTo(16);
  });
@@ -311,7 +329,7 @@ describe('local applied reference mapping',()=>{
   vi.mocked(storeSourceForm).mockRejectedValueOnce(new Error('本机对应保存失败'));
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));await screen.findByText('本机对应保存失败');
   expect(saved().registration?.appliedBasis).toBeUndefined();
-  expect(screen.queryByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'})).toBeNull();
+  expect(screen.queryByText('已用于当前设计：A-原图.png · 3 个对应点 · 仅保存在本机',{selector:'p[role="status"]'})).toBeNull();
  });
  it('serializes an already-started old form write before manual confirmation and scope flush, preserving newer body input',async()=>{
   const saved=memory();open();await waitFor(()=>expect(readSourceForm).toHaveBeenCalledWith(projectId));await act(async()=>{await Promise.resolve();});vi.useFakeTimers();mark();
@@ -334,16 +352,16 @@ describe('local applied reference mapping',()=>{
   const baseWrite=vi.mocked(storeSourceForm).getMockImplementation()!;let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
   vi.mocked(storeSourceForm).mockImplementationOnce(async(scope,value)=>{await held;await baseWrite(scope,value);});
   fireEvent.click(screen.getByRole('button',{name:'在当前设计中使用此对应'}));await waitFor(()=>expect(storeSourceForm).toHaveBeenCalledOnce());
-  view.rerender(<ReconstructionPanel controller={controller} layout={{...measured,id:'other-local-project'}} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
-  view.rerender(<ReconstructionPanel controller={controller} layout={measured} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
+  view.rerender(<Panel controller={controller} layout={{...measured,id:'other-local-project'}} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
+  view.rerender(<Panel controller={controller} layout={measured} onApply={vi.fn()} images={[sourceA]} updateImage={vi.fn()} brief={INITIAL_BRIEF} openReferenceRequest={1}/>);
   await act(async()=>{release();});await waitFor(()=>expect(storeSourceForm).toHaveBeenCalledTimes(2));
   expect(saved().registration?.appliedBasis).toBeUndefined();expect(saved()).toMatchObject({text:'A-原正文'});
   expect(resolveReferenceImage(measured,[{...sourceA,scope:projectId}],saved()).status).toBe('needs-review');
-  expect(screen.queryByText('本机原图对应已核对，尚未同步到云端。',{selector:'p[role="status"]'})).toBeNull();
+  expect(screen.queryByText('已用于当前设计：A-原图.png · 3 个对应点 · 仅保存在本机',{selector:'p[role="status"]'})).toBeNull();
  });
 });
 afterEach(()=>{cleanup();controller.dispose();vi.restoreAllMocks();vi.useRealTimers();});
-function ui(){return render(<ReconstructionPanel controller={controller} layout={layout} onApply={vi.fn()} images={[image]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'保留结构，活动布置'}}/>);}
+function ui(){return render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[image]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'保留结构，活动布置'}}/>);}
 function measures(){fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3 米'}});}
 describe('reconstruction entry',()=>{
  it.each(['request','job'] as const)('explains an unconfigured recognition service from the %s and preserves the canvas',async origin=>{
@@ -351,7 +369,7 @@ describe('reconstruction entry',()=>{
   if(origin==='request')create.mockRejectedValue(Object.assign(new Error('SERVICE_NOT_CONFIGURED'),{code:'SERVICE_NOT_CONFIGURED'}));
   else create.mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'SERVICE_NOT_CONFIGURED'});
   const onApply=vi.fn();
-  render(<ReconstructionPanel controller={controller} layout={layout} onApply={onApply} images={[image]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
+  render(<Panel controller={controller} layout={layout} onApply={onApply} images={[image]} updateImage={vi.fn()} brief={INITIAL_BRIEF}/>);
   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));measures();
   fireEvent.click(screen.getByRole('radio',{name:/重新布置/}));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));
   const error=await screen.findByText('识别服务尚未配置，资料和当前场景已保留。');
@@ -364,7 +382,7 @@ describe('reconstruction entry',()=>{
  it('plans an existing confirmed v2 without requiring fresh images or dimensions',async()=>{
    const measured=createMeasuredRoomLayout(layout,{width:12,depth:8,height:3});
    const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
-   render(<ReconstructionPanel controller={controller} layout={measured} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'只改成森林主题'}}/>);
+   render(<Panel controller={controller} layout={measured} onApply={vi.fn()} images={[]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'只改成森林主题'}}/>);
    await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
    fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));await waitFor(()=>expect(create).toHaveBeenCalledOnce());
    expect(create.mock.calls[0]![0]).toMatchObject({sources:[],mode:'redesign',reviewedScene:{schemaVersion:2}});expect(create.mock.calls[0]![0].reviewedScene).toEqual(create.mock.calls[0]![0].scene);
@@ -447,20 +465,20 @@ describe('reconstruction entry',()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
   const floorplan={...image,kind:'floorplan' as const,name:'平面图.png'};
   const props={controller,layout,onApply:vi.fn(),images:[floorplan],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
-  const view=render(<ReconstructionPanel {...props}/>);
+  const view=render(<Panel {...props}/>);
   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   measures();
-  view.rerender(<ReconstructionPanel {...props} autoGenerateRequest={1}/>);
+  view.rerender(<Panel {...props} autoGenerateRequest={1}/>);
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
  });
  it('auto-selects redesign mode when a photo is uploaded',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
   const photo={...image,kind:'photo' as const,name:'现场.png'};
   const props={controller,layout,onApply:vi.fn(),images:[photo],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
-  const view=render(<ReconstructionPanel {...props}/>);
+  const view=render(<Panel {...props}/>);
   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   measures();
-  view.rerender(<ReconstructionPanel {...props} autoGenerateRequest={1}/>);
+  view.rerender(<Panel {...props} autoGenerateRequest={1}/>);
   await waitFor(()=>expect((screen.getByRole('radio',{name:/重新布置/}) as HTMLInputElement).checked).toBe(true));
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
  });
@@ -468,9 +486,9 @@ describe('reconstruction entry',()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
   const floorplan={...image,kind:'floorplan' as const,name:'平面图.png'};
   const props={controller,layout,onApply:vi.fn(),images:[floorplan],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
-  const view=render(<ReconstructionPanel {...props}/>);
+  const view=render(<Panel {...props}/>);
   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
-  view.rerender(<ReconstructionPanel {...props} autoGenerateRequest={1}/>);
+  view.rerender(<Panel {...props} autoGenerateRequest={1}/>);
   await waitFor(()=>expect(screen.getByText(/请至少填写一项平面尺寸/)).toBeTruthy());
   expect(create).not.toHaveBeenCalled();
  });
@@ -490,7 +508,7 @@ describe('local activity with an independent scene connection',()=>{
  function identity(){const state=controller.getSnapshot();return canonical({scope:localId,project:projectId,user:state.user!.id,api:controller.config.apiUrl,binding:state.geometryBinding});}
  function session(){const state=controller.getSnapshot();return canonical({identity:identity(),session:state.sessionId,lease:{session:state.lease!.sessionId,generation:state.lease!.generation},revision:state.revision});}
  function proposal(remote=projectId):SceneProposal {return {id:'60000000-0000-4000-8000-000000000001',project_id:remote,session_id:controller.getSnapshot().lease!.sessionId,generation:1,base_revision:1,local_revision:0,base_hash:'test',base_scene:layoutToBackendScene(local),candidate:layoutToBackendScene(local),expires_at:new Date(Date.now()+100000).toISOString(),applied_at:null,explanation:'场景候选'} as SceneProposal;}
- function mount(extra:Partial<React.ComponentProps<typeof ReconstructionPanel>>={}){const apply=vi.fn(),preview=vi.fn();const props={controller,layout:local,onApply:apply,onPreview:preview,images:[],updateImage:vi.fn(),brief:INITIAL_BRIEF,...extra};const view=render(<ReconstructionPanel {...props}/>);return {view,apply,preview,props};}
+ function mount(extra:Partial<PanelProps>={}){const apply=vi.fn(),preview=vi.fn();const props={controller,layout:local,onApply:apply,onPreview:preview,images:[],updateImage:vi.fn(),brief:INITIAL_BRIEF,...extra};const view=render(<Panel {...props}/>);return {view,apply,preview,props};}
  async function generate(){await waitFor(()=>expect((screen.getByRole('button',{name:'生成布置预览'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'生成布置预览'}));}
  it('uses local source forms, preserves records on apply, and sends scene-only input to the remote connection',async()=>{
   bind();vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',text:'原尺寸资料'});
@@ -557,14 +575,14 @@ describe('local activity with an independent scene connection',()=>{
   const authorize=vi.spyOn(controller,'authorizeAssets').mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
   const trial=mount();await generate();await waitFor(()=>expect(authorize).toHaveBeenCalledOnce());
   vi.mocked(controller.getSnapshot).mockReturnValue({...controller.getSnapshot(),user:{id:'another-user'}});
-  trial.view.rerender(<ReconstructionPanel {...trial.props}/>);await act(async()=>{finish({assetUrls:{},assetNames:{}});});
+  trial.view.rerender(<Panel {...trial.props}/>);await act(async()=>{finish({assetUrls:{},assetNames:{}});});
   expect(screen.queryByText('三维候选方案')).toBeNull();expect(trial.apply).not.toHaveBeenCalled();
  });
  it('keeps original-image registration and dimensions under the local ID with a remote binding',async()=>{
   bind();const source={id:'local-plan',name:'原图.png',kind:'floorplan' as const,width:1000,height:600,url:'blob:local-plan',blob:new Blob(['plan'])};
   const registration={sourceId:source.id,points:[{x:10,z:20},{x:610,z:20},{x:10,z:420}],worldWidth:12,worldDepth:8,imageWidth:1000,imageHeight:600,appliedBasis:referenceSceneBasis(local),confirmationId:'original'};
   vi.mocked(readSourceForm).mockResolvedValue({width:'12',depth:'8',height:'3',registration});mount({images:[source]});
-  await screen.findByText('本机原图对应已核对，尚未同步到云端。');
+  await screen.findByText('已用于当前设计：原图.png · 3 个对应点 · 仅保存在本机');
   expect(screen.getByText(/已识别：.*总宽 12 米/)).toBeDefined();
   expect(resolveReferenceImage(local,[{...source,scope:localId}],{registration}).status).toBe('ready');
   await act(async()=>{await flushSourceScope(localId);});
@@ -583,7 +601,7 @@ describe('local activity with an independent scene connection',()=>{
   bind();const source={...image,kind:'floorplan' as const,blob:new Blob(['first'])};const withSource=structuredClone(local);withSource.backendSceneV2!.sources=[{assetId,kind:'floorplan',name:image.name,width:1000,height:600}];
   const result=proposal();vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'ready',issues:[],proposal:result});vi.spyOn(controller,'authorizeAssets').mockResolvedValue({assetUrls:{},assetNames:{}});
   const trial=mount({layout:withSource,images:[source]});await generate();await screen.findByText('三维候选方案');
-  trial.view.rerender(<ReconstructionPanel {...trial.props} images={[{...source,blob:new Blob(['replacement'])}]}/>);
+  trial.view.rerender(<Panel {...trial.props} images={[{...source,blob:new Blob(['replacement'])}]}/>);
   expect((screen.getByRole('button',{name:'确认应用并保存'}) as HTMLButtonElement).disabled).toBe(true);expect(trial.preview.mock.calls.at(-1)?.[0]).toBeNull();
  });
  it('allows manual venue edits with an expired scene lease and keeps local activity records',async()=>{

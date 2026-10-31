@@ -23,7 +23,18 @@ export const SHIPPED_ASSETS: readonly ShippedAsset[] = [
   { assetId: 'shipped-white-round-table', kind: 'glb', name: '白色圆桌', path: 'model/white-round-table.glb', bytes: 2784124, image: 'thumb/white-round-table.png' },
   { assetId: 'shipped-scendance-m3-mvp', kind: 'spz', name: 'Scendance-M3-MVP', path: 'scene/scendance-m3-mvp.spz', bytes: 4388248, image: 'scene/scendance-m3-mvp.panorama.jpg' },
   { assetId: 'shipped-small-launch-hall', kind: 'spz', name: '小型发布会场地', path: 'scene/small-launch-hall.spz', bytes: 4837840, image: 'scene/small-launch-hall.panorama.jpg' },
+  { assetId: 'shipped-cloud-e2e-banquet', kind: 'spz', name: '云E2E·宴会厅文生', path: 'scene/cloud-e2e-banquet.spz', bytes: 4446785, image: 'scene/cloud-e2e-banquet.panorama.jpg' },
 ];
+
+/**
+ * D0 演示用的历史 World 场景：与 docs/evidence/aholo/world-3FO4K4QI6N4V 同源（4,388,248 B SPZ）。
+ * 只读复用，禁止再开扣额度的 World 生成。
+ */
+export const DEMO_WORLD_SCENE_ID = 'shipped-scendance-m3-mvp';
+export const DEMO_WORLD_TASK_ID = '3FO4K4QI6N4V';
+/** 2026-10-30 云 E2E 真扣费文生（主人授权「扣！」）；观感层，非样例。 */
+export const CLOUD_E2E_WORLD_TASK_ID = '3FO4K4RI3SQE';
+export const CLOUD_E2E_WORLD_SCENE_ID = 'shipped-cloud-e2e-banquet';
 
 export function shippedAssetUrl(asset: ShippedAsset): string {
   return `${BASE}/${asset.path}`;

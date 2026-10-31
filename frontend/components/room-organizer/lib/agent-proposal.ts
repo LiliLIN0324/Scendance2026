@@ -32,6 +32,8 @@ export interface VenueInput {
   depthM: number;
   indoorOutdoor: 'indoor' | 'outdoor';
   scaleOrigin: ScaleOrigin;
+  /** 地图圈画真轮廓（本地米）；有则立多边形壳。 */
+  polygonMeters?: ReadonlyArray<{ x: number; z: number }>;
 }
 
 export interface VenuePlan {
@@ -108,9 +110,9 @@ const seatCountIn = (items: readonly FurnitureItem[]): number => items.filter(it
  * 返回 null——本卡不动场地真相。
  */
 export function raiseVenue(input: VenueInput): VenuePlan | null {
-  const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin } = input;
+  const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin, polygonMeters } = input;
   if (base.scenePreset || base.backendSceneV2) return null;
-  const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin });
+  const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin, ...(polygonMeters?.length ? { polygonMeters } : {}) });
   const shellLayout = backendSceneToLayout(scene, { name: base.name, ...(base.id ? { projectId: base.id } : {}) });
   // 壳体只换结构这几栏：底图、层高、屋顶这些跟布置无关的现场信息得跟着人原来填的走。
   const shell: RoomLayout = { ...base, ...shellLayout, ...(base.roof ? { roof: base.roof } : {}) };
@@ -131,14 +133,16 @@ export function raiseVenue(input: VenueInput): VenuePlan | null {
   return { layout: clearedLayout, scene, cleared: current.filter(item => !item.locked && !isStructuralMarker(item)).length };
 }
 
-/** 编辑器自己立起来的矩形壳：没有内墙、柱子、多门窗或图纸证据，整壳按新尺寸重立不会毁掉真实结构。 */
+/** 编辑器自己立起来的壳（矩形或地图多边形）：没有内墙、柱子、多门窗或图纸证据，整壳可按新圈画重立。 */
 function rebuildableShell(layout: RoomLayout): boolean {
   const scene = layout.backendSceneV2;
   if (!scene || layout.floors.length !== 1 || (layout.roof?.style && layout.roof.style !== 'none')) return false;
-  if (scene.venue.shape !== 'rectangle' || scene.sources.length > 0 || scene.design) return false;
+  if ((scene.venue.shape !== 'rectangle' && scene.venue.shape !== 'polygon') || scene.sources.length > 0 || scene.design) return false;
   const { walls, openings, columns } = scene.structure;
-  return columns.length === 0 && openings.length <= 1 && walls.length <= 4
-    && walls.every(wall => wall.kind === 'exterior')
+  const wallOk = scene.venue.shape === 'polygon'
+    ? walls.every(wall => wall.kind === 'exterior')
+    : walls.length <= 4 && walls.every(wall => wall.kind === 'exterior');
+  return columns.length === 0 && openings.length <= 1 && wallOk
     && !layout.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind === 'interior'));
 }
 
@@ -148,10 +152,10 @@ function rebuildableShell(layout: RoomLayout): boolean {
  * 放得下就留下，放不下才撤，报数规则和 raiseVenue 同一条。
  */
 export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
-  const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin } = input;
+  const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin, polygonMeters } = input;
   if (base.floors.length !== 1) return null;
   if (!base.scenePreset && !rebuildableShell(base)) return null;
-  const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin });
+  const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin, ...(polygonMeters?.length ? { polygonMeters } : {}) });
   const shellLayout = backendSceneToLayout(scene, { name: base.name, ...(base.id ? { projectId: base.id } : {}) });
   const {
     scenePreset: _preset, backendSceneV2: _structure, backendVenue: _venue,

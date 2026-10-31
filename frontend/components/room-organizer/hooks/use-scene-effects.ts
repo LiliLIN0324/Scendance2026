@@ -274,7 +274,7 @@ export function useSceneEffects({
 
     removeTagged(scene, ROOM_OBJECT_TAGS.Floor, ROOM_OBJECT_TAGS.Wall);
     if (layout.backendSceneV2) {
-      buildStructureShell(THREE, scene, layout);
+      buildStructureShell(THREE, scene, layout, { onTextureLoaded: invalidate });
       const camera = cameraRef.current;
       if (camera) applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
       requestShadowUpdate();
@@ -338,6 +338,7 @@ export function useSceneEffects({
         ...(floor.hiddenWalls ? { hiddenWalls: floor.hiddenWalls } : {}),
         floorOpenings,
         floorPlanImage: index === 0 ? layout.floorPlanImage ?? null : null,
+          satelliteGroundRef: index === 0 ? !!layout.satelliteGroundRef : false,
         floorPlanOpacity: view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
         floorPlanFitMode: layout.floorPlanFitMode ?? 'stretch',
         floorPlan3DEffect: view.floorPlan3DEffect,
@@ -387,7 +388,7 @@ export function useSceneEffects({
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
     layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
-    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode,
+    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
     view.showReferenceImage, view.referenceImageOpacity,
     activeFloorIndex,

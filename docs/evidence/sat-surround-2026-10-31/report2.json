@@ -1,0 +1,46 @@
+{
+  "onNet": {
+    "checked": null,
+    "amap": {
+      "status": 200,
+      "type": "image/jpeg",
+      "len": 0
+    }
+  },
+  "onProbe": {
+    "noScene": true,
+    "layoutInfo": {
+      "satelliteGroundRef": true,
+      "hasFloorPlanImage": true,
+      "floorPlanPrefix": "http://127.0.0.1:3199/amap-static?location=120.53946249335763%2C30.4049361748693",
+      "opacity": 0.78,
+      "backendSceneV2": true,
+      "w": 12,
+      "h": 8
+    },
+    "canvasKeys": [
+      "__reactFiber$v0y6ng3i2s7",
+      "__reactProps$v0y6ng3i2s7"
+    ]
+  },
+  "offNet": {
+    "checked": null,
+    "amap": null
+  },
+  "offProbe": {
+    "noScene": true,
+    "layoutInfo": {
+      "satelliteGroundRef": false,
+      "hasFloorPlanImage": false,
+      "floorPlanPrefix": "",
+      "opacity": 0.78,
+      "backendSceneV2": true,
+      "w": 23.8,
+      "h": 16.1
+    },
+    "canvasKeys": [
+      "__reactFiber$v0y6ng3i2s7",
+      "__reactProps$v0y6ng3i2s7"
+    ]
+  }
+}
