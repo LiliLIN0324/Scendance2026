@@ -888,22 +888,14 @@ body {
 }
 @media (max-width:1080px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(220px, 42%);
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
   }
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage,
-  .sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed > .sc-canvas-stage,
-  .sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-canvas-stage { grid-column: 1; grid-row: 1; }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--wk-hair); }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-drawer,
-  .sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-left-drawer {
-    position: absolute; inset: 0 auto 48px 0; width: min(420px, 100%) !important; max-width: 100%; z-index: 55; grid-column: auto; grid-row: auto;
-  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1 / span 2; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 2; }
 }
 @media (max-width:420px) {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
@@ -937,36 +929,42 @@ body {
   --sc-type-meta: var(--fs-p2);
   background: var(--wk-canvas);
 }
-.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
-}
-.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer {
-  grid-template-columns: 64px minmax(320px, 400px) minmax(0, 1fr);
-}
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
   display: grid; gap: 0; left: 0; right: 0; bottom: 0; top: 48px;
-  /* 窄图标轨 · 左侧晴光栏 · 画布占满其余。工具抽屉叠在晴光栏上，不再另占一列。 */
-  grid-template-columns: 64px minmax(320px, 400px) minmax(0, 1fr);
+  /* 窄轨完整露出；左栏从轨右侧开始，宽度跟拖边走；画布占其余。 */
+  grid-template-columns: 64px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   background: var(--wk-canvas);
+}
+@media (min-width: 1081px) {
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
+    grid-template-columns: 64px var(--sc-left-card-width, 320px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
 }
 /* T-VISUAL-CHROME-2：底素材条为应用级全宽收起条（对照 04-final-flat.jpg），跨全部列。 */
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-bottom-bar { display: none; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel { grid-column: 2; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-drawer { grid-column: 2; grid-row: 1; z-index: 6; }
-.sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed > .sc-canvas-stage { grid-column: 2; }
-.sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-canvas-stage { grid-column: 3; }
-.sc-workbench .is-docked-layout.is-mode-rail.is-agent-collapsed.has-left-drawer > .sc-left-drawer { grid-column: 2; }
-/* 白纸：图标轨、晴光栏、画布。工具抽屉盖住晴光栏，不把画布挤成一条。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer {
-  background: var(--paper);
-  border-right: 1px solid var(--wk-hair);
-  overflow-y: auto; overflow-x: hidden;
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 4; }
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 1; }
+.sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { display: none; }
+.sc-left-column {
+  position: relative; min-width: 0; min-height: 0; height: 100%;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--paper); border-right: 1px solid var(--wk-hair);
 }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { grid-column: 2; grid-row: 1; z-index: 7; }
+/* 卡片是这一列的内容，不能再 absolute 到工作台左缘盖住 64px 图标轨。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel {
+  position: relative !important; inset: auto !important; left: auto !important; right: auto !important;
+  top: auto !important; bottom: auto !important;
+  flex: 1 1 auto !important; width: 100% !important; max-width: none !important; min-width: 0 !important; min-height: 0;
+  margin: 0; z-index: 1 !important; transform: none !important;
+}
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
   display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 8;
@@ -1085,14 +1083,15 @@ body {
   flex: 1; min-width: 0; position: relative;
 }
 /* 左侧面板：与栏同高的白纸页，不再浮起 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer {
-  position: relative; inset: auto; z-index: 6;
-  flex: none !important; width: 100% !important; max-width: none;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.sc-float-layer {
+  position: relative; inset: auto; z-index: 1;
+  flex: 1 1 auto !important; width: 100% !important; max-width: none !important;
   min-height: 0; min-width: 0; box-sizing: border-box;
-  background: var(--wk-paper); border: 0; border-right: 1px solid var(--wk-hair);
-  border-radius: 0; box-shadow: none;
+  background: var(--wk-paper); border: 0; border-radius: 0; box-shadow: none;
   display: flex; flex-direction: column; pointer-events: auto;
 }
+.sc-left-column.has-tool > .sc-agent-panel { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail:not(.has-left-column) > .sc-left-column { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-data-host {
   border: 0; border-radius: 0; background: transparent;
 }

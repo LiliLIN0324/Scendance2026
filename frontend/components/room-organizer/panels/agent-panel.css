@@ -257,10 +257,12 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-brief-tool-list button:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: -2px; }
 /* 简报比深工具窄：桌面端把 380px 的固定页收回来。 */
 @media (min-width: 1081px) {
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.has-brief {
-    flex-basis: var(--sc-left-card-width, 320px) !important;
-    width: var(--sc-left-card-width, 320px) !important;
-    max-width: var(--sc-left-card-width, 320px) !important;
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.sc-float-layer.has-brief,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel {
+    flex: 1 1 auto !important;
+    flex-basis: auto !important;
+    width: 100% !important;
+    max-width: none !important;
   }
 }
 .sc-left-card-resizer {
