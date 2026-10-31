@@ -162,6 +162,16 @@ describe('proposePlan — 布置候选只预览，确认前不写画布（T-02 �
     expect(proposal.blocked).toBeNull();
   });
 
+  it('发布会可以带签到台，仍只是预览，放不下就丢掉这一件', () => {
+    const staged = build().staged;
+    const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 8, checkin: true });
+    const items = itemsOf(last(proposal));
+    expect(items.some(item => item.name === '签到台')).toBe(true);
+    expect(proposal.overlapCount).toBe(0);
+    expect(proposal.blocked).toBeNull();
+    expect(itemsOf(staged).some(item => item.name === '签到台')).toBe(false);
+  });
+
   it('说了人数就按人数定桌椅组数，摆不下就把座位数如实报出来', () => {
     const staged = build().staged;
     const eight = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 8 });

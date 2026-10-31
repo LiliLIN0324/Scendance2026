@@ -886,6 +886,17 @@ body {
   .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-canvas-heading { display:flex; }
   .sc-workbench .is-docked-layout .sc-left-drawer { bottom:48px; }
 }
+@media (max-width:1080px) {
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1 / span 2; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 2; }
+}
 @media (max-width:420px) {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
   .sc-workbench .is-docked-layout.has-conversation .sc-canvas-stage { display:none; }
@@ -918,29 +929,42 @@ body {
   --sc-type-meta: var(--fs-p2);
   background: var(--wk-canvas);
 }
-.sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-agent-collapsed {
-  grid-template-columns: auto auto minmax(0, 1fr);
-}
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
   display: grid; gap: 0; left: 0; right: 0; bottom: 0; top: 48px;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
+  /* 窄轨完整露出；左栏从轨右侧开始，宽度跟拖边走；画布占其余。 */
+  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   background: var(--wk-canvas);
+}
+@media (min-width: 1081px) {
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
+    grid-template-columns: 64px var(--sc-left-card-width, 320px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
 }
 /* T-VISUAL-CHROME-2：底素材条为应用级全宽收起条（对照 04-final-flat.jpg），跨全部列。 */
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-bottom-bar { display: none; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-column: 1; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-drawer { grid-column: 2; grid-row: 1; }
-/* 白纸面板浮在画布灰底之上——左面板、右 Agent、底条、左轨四张白纸并列 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer {
-  background: var(--paper);
-  border-right: 1px solid var(--wk-hair);
-  overflow-y: auto; overflow-x: hidden;
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 4; }
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 1; }
+.sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { display: none; }
+.sc-left-column {
+  position: relative; min-width: 0; min-height: 0; height: 100%;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--paper); border-right: 1px solid var(--wk-hair);
 }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel,
-.sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { grid-column: 4; grid-row: 1; }
+/* 卡片是这一列的内容，不能再 absolute 到工作台左缘盖住 64px 图标轨。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel {
+  position: relative !important; inset: auto !important; left: auto !important; right: auto !important;
+  top: auto !important; bottom: auto !important;
+  flex: 1 1 auto !important; width: 100% !important; max-width: none !important; min-width: 0 !important; min-height: 0;
+  margin: 0; z-index: 1 !important; transform: none !important;
+}
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
   display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 8;
@@ -950,6 +974,13 @@ body {
 }
 /* 左轨以图标为主视觉；中文名在 data-tip / aria-label，不把汉字再铺在钮面上。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-word {
+  display: block; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate:hover {
+  color: #0668e5;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;
@@ -1052,14 +1083,33 @@ body {
   flex: 1; min-width: 0; position: relative;
 }
 /* 左侧面板：与栏同高的白纸页，不再浮起 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer {
-  position: relative; inset: auto; z-index: 5;
-  flex: 0 0 380px !important; width: 380px !important; max-width: 380px;
-  min-height: 0; box-sizing: border-box;
-  background: var(--wk-paper); border: 0; border-right: 1px solid var(--wk-hair);
-  border-radius: 0; box-shadow: none;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.sc-float-layer {
+  position: relative; inset: auto; z-index: 1;
+  flex: 1 1 auto !important; width: 100% !important; max-width: none !important;
+  min-height: 0; min-width: 0; box-sizing: border-box;
+  background: var(--wk-paper); border: 0; border-radius: 0; box-shadow: none;
   display: flex; flex-direction: column; pointer-events: auto;
 }
+.sc-left-column.has-tool > .sc-agent-panel { flex: 1 1 auto; }
+.sc-canvas-share {
+  position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 28;
+  width: min(380px, calc(100% - 80px));
+  display: flex; flex-direction: column; min-height: 0; overflow: auto;
+  height: auto; max-height: none;
+  background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(20, 20, 22, 0.08);
+}
+.sc-workbench .sc-canvas-share.sc-data-host { height: auto; flex: 1 1 auto; border: 0; border-radius: 12px; background: var(--wk-paper); }
+.sc-canvas-share-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--wk-hair); }
+.sc-canvas-share-bar strong { flex: 1; }
+.sc-canvas-share-bar button { border: 0; background: transparent; color: var(--wk-ink-soft); cursor: pointer; }
+.sc-review-hint {
+  position: absolute; top: 48px; left: 14px; z-index: 26; margin: 0;
+  padding: 4px 10px; border-radius: 999px; background: var(--wk-paper);
+  border: 1px solid var(--wk-hair); color: var(--wk-ink-soft); font-size: 12px;
+  pointer-events: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail:not(.has-left-column) > .sc-left-column { display: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-data-host {
   border: 0; border-radius: 0; background: transparent;
 }
@@ -1070,14 +1120,17 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-materials {
   display: none !important; /* materials live in bottom canvas drawer */
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-agent-panel { border-radius: 0; }
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-agent-panel {
+  width: auto; max-width: none; min-width: 0; flex: none;
+  border-radius: 0; border-left: 0; border-right: 1px solid var(--wk-hair);
+}
 /* Agent 关掉后：画布右上角一张浮窗卡片，让开 46px 工具列。
    原来是一条 34px 通高竖排把手，看不出能点、也看不出 Agent 在做什么。
    让开的宽度按工具列那颗「撤销」悬停纸条算：纸条往左探出约 40px，
    卡片右缘压在 1376 会把纸条切掉半截。 */
 /* 收起态：画布场边活物球（禁矩形信息卡）。不占右栏 grid 列。 */
 .sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb {
-  position: absolute; top: 14px; right: calc(var(--sc-rail-width, 46px) + 10px); z-index: 34;
+  position: absolute; top: 14px; left: 14px; right: auto; z-index: 34;
   width: 48px; height: 48px; padding: 0; border: 0; border-radius: 999px;
   display: grid; place-items: center; box-sizing: border-box;
   background: transparent; box-shadow: none; cursor: pointer;

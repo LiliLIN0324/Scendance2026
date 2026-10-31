@@ -59,6 +59,10 @@ export interface PlanInput {
   seatPriority?: boolean;
   /** desk-chair = 一人一套课桌椅（「课桌配椅子」「80 套」）；缺省按餐桌组摆。 */
   layoutMode?: 'dining' | 'desk-chair';
+  /** 缺省仍放舞台背景板。显式 false 才跳过（课室、或人说不要舞台）。 */
+  stage?: boolean;
+  /** 缺省不放签到台。发布会等活动或人点了签到才放，放不下就丢这一件。 */
+  checkin?: boolean;
 }
 
 export interface PlanProposal {
@@ -316,10 +320,20 @@ export function proposePlan(input: PlanInput): PlanProposal {
   const removing = current0.length - markers.length - locked.length;
   layouts.push(current);
 
-  // 1 定舞台位置：背景板贴后墙居中（现有物料条目）。课室没有舞台，跳过。
+  // 1 定舞台位置：背景板贴后墙居中（现有物料条目）。课室、或人说不要舞台，跳过。
   const backdrop = EVENT_CATALOG.find(entry => entry.materialId === 'backdrop');
-  if (backdrop && !deskChair) {
+  if (backdrop && !deskChair && input.stage !== false) {
     const item = { ...backdrop, id: uid(), position: { x: 0, z: -depthM / 2 + backdrop.depth / 2 + 0.4 }, rotation: 0 } as FurnitureItem;
+    const result = tryAdd(base, current, floorIndex, [item]);
+    current = result.layout; added += result.accepted; dropped += result.dropped;
+  }
+  // 签到台靠近南边入口、偏一侧，别堵在门洞正中。放不下只丢这一件。
+  const reception = EVENT_CATALOG.find(entry => entry.materialId === 'reception');
+  if (reception && !deskChair && input.checkin) {
+    const item = {
+      ...reception, id: uid(), rotation: Math.PI,
+      position: { x: -widthM / 2 + reception.width / 2 + 0.9, z: depthM / 2 - reception.depth / 2 - 0.9 },
+    } as FurnitureItem;
     const result = tryAdd(base, current, floorIndex, [item]);
     current = result.layout; added += result.accepted; dropped += result.dropped;
   }
