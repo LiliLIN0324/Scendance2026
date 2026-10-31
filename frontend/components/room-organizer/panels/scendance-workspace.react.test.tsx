@@ -243,9 +243,9 @@ describe('ScendanceViewTools design column', () => {
   it('renders one right-edge island of five round tools and tucks the rest into 视图', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 人视 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(9);
-    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '人视', '尺寸标注', '网格吸附', '更多工具']) {
+    // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 人视 / 漫游 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
+    expect(within(rail).getAllByRole('button')).toHaveLength(10);
+    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '人视', '漫游', '尺寸标注', '网格吸附', '更多工具']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     expect(rail.querySelector('#tool-satellite')).toBeNull();
@@ -257,8 +257,9 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.querySelector('#tool-grid')).toBeTruthy();
     expect(rail.querySelector('#tool-top')).toBeTruthy();
     expect(rail.querySelector('#tool-front')).toBeTruthy();
+    expect(rail.querySelector('#tool-walk')).toBeTruthy();
     expect(rail.querySelector('#tool-more')).toBeTruthy();
-    // 氛围条仍是收起的一颗，点开才铺出四条。
+    // 漫游在右轨一级；氛围菜单里不再重复。
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
@@ -344,7 +345,7 @@ describe('ScendanceViewTools design column', () => {
       expect((within(rail).getByRole('menuitem', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '漫游' })).toBeNull();
+    expect(within(rail).getByRole('button', { name: '漫游' })).toBeTruthy();
   });
 
   it('keeps the atmosphere controls in view once something is actually changed', () => {
@@ -365,13 +366,15 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 漫游 / 人群 / 天气 / 时段', () => {
+  it('wires 漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
     const values = contexts();
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
-    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '漫游' }));
+    const rail = screen.getByRole('navigation', { name: '工具' });
+    fireEvent.click(within(rail).getByRole('button', { name: '漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
+    expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '人群' }));
     expect(values.toggle).toHaveBeenCalledWith('showNpcs');
     // 天气弹层嵌在氛围弹层里：先点天气按钮展开子弹层（默认显示「晴朗」）
