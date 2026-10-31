@@ -1444,14 +1444,13 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
 
-  const shell = mode === 'review' ? ' is-review-shell' : mode === 'delivery' ? ' is-delivery-shell' : '';
-  return <aside id="agent-panel" className={`sc-agent-panel${shell}`} data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
+  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
     <header className="ap-head">
       <span className="mascot-slot" title="晴光在线">
         <img src={mascotOf(agent, mode)} alt="晴光" width={64} height={64} draggable={false}/>
         <span className="ap-online-dot" aria-label="在线" role="status"/>
       </span>
-      <strong>{mode === 'review' ? '评审' : mode === 'delivery' ? '执行' : 'Agent'}</strong>
+      <strong>Agent</strong>
       {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
       {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
       {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}

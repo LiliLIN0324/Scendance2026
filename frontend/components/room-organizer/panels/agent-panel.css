@@ -1,9 +1,5 @@
 /* v2.6 右栏 Agent。全部色彩/字号/圆角取自 docs/design-spec-2026.md（冷石画廊白 v2.2）。
    绿只出现在：选中 chip、发送键、成功状态点；警告/错误走语义 token。 */
-.sc-workbench .sc-agent-panel.is-review-shell { border-left: 3px solid var(--wk-green); background: var(--wk-plane); }
-.sc-workbench .sc-agent-panel.is-delivery-shell { border-left: 3px solid var(--wk-ink); background: var(--wk-plane); }
-.sc-workbench .sc-agent-panel.is-review-shell .ap-head,
-.sc-workbench .sc-agent-panel.is-delivery-shell .ap-head { background: var(--paper); }
 .sc-workbench .sc-agent-panel {
   --ap-green: var(--green);
   --ap-deep: var(--green-deep);

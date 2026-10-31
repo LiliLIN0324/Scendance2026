@@ -2,9 +2,22 @@
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DeliveryChecklistShell, ReviewAnnotationShell, dossierStatus, reviewStatusLabel } from './mode-shell';
+import { DeliveryChecklistShell, LayoutVenueCard, ReviewAnnotationShell, dossierStatus, reviewStatusLabel } from './mode-shell';
 
 afterEach(cleanup);
+
+describe('layout venue card', () => {
+  it('shows the activity facts and not the review or delivery lists', () => {
+    render(<LayoutVenueCard event="发布会" guests="80 人" dims="室内 · 12 × 9 m" />);
+    const card = screen.getByRole('region', { name: '布置' });
+    expect(card.textContent).toContain('场地');
+    expect(card.textContent).toContain('发布会');
+    expect(card.textContent).toContain('80 人');
+    expect(card.textContent).not.toContain('待确认');
+    expect(card.textContent).not.toContain('到场清单');
+    expect(card.textContent).not.toContain('这块场地从哪来');
+  });
+});
 
 describe('review annotation shell', () => {
   it('lists item names and status, and focuses the 3D item without a venue-origin card', () => {

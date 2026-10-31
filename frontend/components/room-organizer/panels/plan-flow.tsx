@@ -87,14 +87,13 @@ export function PlanHome({ onGenerate }: { onGenerate(sentence: string): void })
   </form>;
 }
 
-/** 挂在画布下缘的首屏。评审/执行不盖这张卡。工具坞是否让开由 onHomeChange 告诉工作台。 */
+/** 挂在画布下缘的首屏。三态不拆这块画布。工具坞是否让开由 onHomeChange 告诉工作台。 */
 export function PlanFlow({ onOpenAgent, onHomeChange }: { onOpenAgent(): void; onHomeChange(home: boolean): void }): JSX.Element | null {
   const agent = useAgent();
   const { layout } = useRoomEditor();
-  const mode = agent.callbacks?.workbenchMode ?? 'layout';
-  const home = mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null);
+  const home = isPlanHome(agent.state, layout, agent.proposal !== null);
   useEffect(() => { onHomeChange(home); }, [home, onHomeChange]);
-  useEffect(() => { if (agent.proposal && mode === 'layout') onOpenAgent(); }, [agent.proposal, onOpenAgent, mode]);
+  useEffect(() => { if (agent.proposal) onOpenAgent(); }, [agent.proposal, onOpenAgent]);
   if (!home) return null;
   return <PlanHome onGenerate={sentence => { void agent.send(sentence); }} />;
 }
