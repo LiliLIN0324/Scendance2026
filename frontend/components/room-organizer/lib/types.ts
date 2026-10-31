@@ -374,6 +374,10 @@ export interface RoomLayout {
    * 地图圈画的经纬度，只为再拉卫星参考底图。本地编辑元数据，不进场景线、不进 Aholo 上传。
    */
   mapGroundPolygon?: { lng: number; lat: number }[];
+  /**
+   * 地图场地中心经纬度。旧项目可能只有这一点、没有圈画点列。同样只用于卫星参考，不进上传。
+   */
+  mapLngLat?: { lng: number; lat: number };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
   neighbours?: NeighbourSpec;

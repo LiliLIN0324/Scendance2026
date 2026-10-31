@@ -220,6 +220,12 @@ describe('isRoomLayout', () => {
     expect(parseStoredLayout(layout)?.mapGroundPolygon).toEqual(polygon);
     expect(isRoomLayout(makeLayout({ floorPlanImage: 'http://127.0.0.1:3199/amap-static?location=120.5,30.4&x-ref=other' }))).toBe(false);
     expect(isRoomLayout(makeLayout({ floorPlanImage: 'https://127.0.0.1:3199/amap-static?x-ref=satellite-ground-ref' }))).toBe(false);
+    const sameOrigin = '/api/amap-static?location=120.5,30.4&zoom=16&size=768*768&scale=2&x-ref=satellite-ground-ref';
+    expect(isRoomLayout(makeLayout({ floorPlanImage: sameOrigin }))).toBe(true);
+    expect(parseStoredLayout(makeLayout({ floorPlanImage: sameOrigin }))?.floorPlanImage).toBe(sameOrigin);
+    expect(isRoomLayout(makeLayout({ floorPlanImage: 'https://evil.example/api/amap-static?x-ref=satellite-ground-ref' }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ mapLngLat: { lng: 120.54, lat: 30.4 } }))).toBe(true);
+    expect(isRoomLayout(makeLayout({ mapLngLat: { lng: 999, lat: 0 } }))).toBe(false);
     expect(isRoomLayout(makeLayout({ satelliteGroundRef: 'yes' as unknown as boolean }))).toBe(false);
     expect(isRoomLayout(makeLayout({ mapGroundPolygon: [{ lng: 999, lat: 0 }, { lng: 1, lat: 1 }, { lng: 2, lat: 2 }] }))).toBe(false);
   });

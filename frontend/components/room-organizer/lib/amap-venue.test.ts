@@ -197,6 +197,7 @@ describe('satellite ground backfill', () => {
     };
     expect(isMapOutdoorLayout(outdoor)).toBe(true);
     expect(satelliteGroundWanted(outdoor)).toBe(true);
+    expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城', mapLngLat: { lng: 120.54, lat: 30.4 } })).toBe(true);
     expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '室内宴会厅' })).toBe(false);
   });
 
@@ -204,6 +205,15 @@ describe('satellite ground backfill', () => {
     const url = satelliteProxyUrl(lShapePolygon(), 'secret-key');
     expect(url).toContain('http://127.0.0.1:3199/amap-static?');
     expect(url).toContain(`x-ref=${SATELLITE_GROUND_MARK}`);
+    expect(url).not.toContain('secret-key');
+  });
+
+  it('uses a same-origin satellite url on the production host', () => {
+    vi.stubGlobal('window', { location: { hostname: 'scendance.lilicoding.space' } });
+    const url = satelliteProxyUrl(lShapePolygon(), 'secret-key');
+    expect(url?.startsWith('/api/amap-static?')).toBe(true);
+    expect(url).toContain(`x-ref=${SATELLITE_GROUND_MARK}`);
+    expect(url).not.toContain('127.0.0.1');
     expect(url).not.toContain('secret-key');
   });
 
@@ -247,6 +257,7 @@ describe('satellite ground backfill', () => {
     });
     const legacy = { ...layout };
     delete legacy.mapGroundPolygon;
+    delete legacy.mapLngLat;
     delete legacy.satelliteGroundRef;
     delete legacy.floorPlanImage;
     const patch = await ensureSatelliteGround(legacy);
