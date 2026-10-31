@@ -1242,6 +1242,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
 /** 晴光形象对应的状态。点头像或这行字，回到这一态该做的事。 */
 function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
+  if (mode === 'review') return { text: '评审', tone: 'ask', hint: '钉在画布上，对话还在' };
+  if (mode === 'delivery') return { text: '执行', tone: 'idle', hint: '回到输入' };
   if (mode !== 'layout') return { text: '空闲', tone: 'idle', hint: '回到输入' };
   const s = agent.state;
   if (s === 'generating') return { text: '生成中', tone: 'busy', hint: '看进度' };
@@ -1488,7 +1490,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud }: {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot }: {
   onClose?(): void;
   /** 右栏底部切到「生成物件」。不传则面板自己记。 */
   generateOpen?: boolean;
@@ -1496,6 +1498,10 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   onPlaceProp?: ((item: CatalogItem) => boolean) | undefined;
   onOpenPropFallback?: (() => void) | undefined;
   onOpenPropCloud?: (() => void) | undefined;
+  /** 评审议题。挂在对话里，不替换整栏。 */
+  reviewSlot?: ReactNode;
+  /** 执行清单。挂在对话里，不替换整栏。 */
+  deliverySlot?: ReactNode;
 } = {}): JSX.Element {
   const agent = useAgent();
   const [laneFallback, setLaneFallback] = useState(false);
@@ -1566,6 +1572,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           </div>
         </>}
       </>}
+      {mode === 'review' && reviewSlot}
       {mode === 'review' && <div className="ap-card">
         <div className="ap-chips">
           <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>打开客户评审</button>
@@ -1573,6 +1580,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
         </div>
       </div>}
+      {mode === 'delivery' && deliverySlot}
       {mode === 'delivery' && <div className="ap-card">
         <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
         <div className="ap-chips">
