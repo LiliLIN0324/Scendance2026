@@ -29,6 +29,7 @@ import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } fro
 import { sameLayoutContent } from '../lib/persistence';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
+import { venueBriefLine } from '../lib/venue-brief-line';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
@@ -1234,6 +1235,18 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
 export type BriefTool = { id: string; label: string; hint: string; icon: ReactNode; group?: 'venue' | 'docs'; onOpen(): void };
 
 /**
+ * 活动简报的事实卡。工作台不再把它挂在左栏——场地一行在顶栏 `VenueBriefLine`。
+ * 这张卡仍给对话测试用：「这块场地从哪来」把图纸与地图并列，场地立起来后也不消失。
+ */
+/** 顶栏状态行：只在布置态占一行。评审不带「从哪来」，执行不带布置简报。 */
+export function VenueBriefLine(): JSX.Element | null {
+  const agent = useAgent();
+  if (agent.callbacks.workbenchMode !== 'layout') return null;
+  const line = venueBriefLine(agent.recap);
+  return <span className="sc-venue-brief" role="status" aria-label="场地简报" title={line}>{line}</span>;
+}
+
+/**
  * 左栏活动简报：只读，数字全部来自对话与当前画布。
  * 「这块场地从哪来」把量出场地的两条路（图纸与照片 / 地图圈画）并列钉在左边，场地立起来后也不消失——重圈是替换。
  * 评审·执行走左轨，模板·物料走底栏；这里不放输入框、不放生成按钮、不摆说明书。
@@ -1431,13 +1444,14 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
+  const shell = mode === 'review' ? ' is-review-shell' : mode === 'delivery' ? ' is-delivery-shell' : '';
+  return <aside id="agent-panel" className={`sc-agent-panel${shell}`} data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
     <header className="ap-head">
       <span className="mascot-slot" title="晴光在线">
         <img src={mascotOf(agent, mode)} alt="晴光" width={64} height={64} draggable={false}/>
         <span className="ap-online-dot" aria-label="在线" role="status"/>
       </span>
-      <strong>Agent</strong>
+      <strong>{mode === 'review' ? '评审' : mode === 'delivery' ? '执行' : 'Agent'}</strong>
       {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
       {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
       {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}

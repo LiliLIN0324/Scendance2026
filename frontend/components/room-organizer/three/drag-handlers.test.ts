@@ -117,6 +117,19 @@ describe('drag-handlers selection on press (#291)', () => {
     expect(t.handlers.onItemDoubleClick).toHaveBeenLastCalledWith('a');
   });
 
+  it('ignores select, drag and double-click while editing is locked', () => {
+    const t = setup(['b']);
+    detach = t.detach;
+    t.handlers.editingLocked = true;
+    t.canvas.dispatchEvent(pointer('pointerdown', 100, 100));
+    t.canvas.dispatchEvent(pointer('pointermove', 130, 100));
+    t.canvas.dispatchEvent(pointer('pointerup', 130, 100));
+    t.canvas.dispatchEvent(new MouseEvent('dblclick', { clientX: 100, clientY: 100, bubbles: true }));
+    expect(t.handlers.onItemSelect).not.toHaveBeenCalled();
+    expect(t.handlers.onItemDragStart).not.toHaveBeenCalled();
+    expect(t.handlers.onItemDoubleClick).not.toHaveBeenCalled();
+  });
+
   it('a double click on empty floor reports nothing', () => {
     const t = setup(['a']);
     detach = t.detach;
