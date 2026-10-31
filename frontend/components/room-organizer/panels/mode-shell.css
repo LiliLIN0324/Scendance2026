@@ -43,35 +43,74 @@
 .sc-mode-card dd { margin: 0; }
 .sc-mode-card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .sc-mode-card li { display: flex; flex-direction: column; gap: 4px; }
-.sc-mode-shell-item,
-.sc-mode-shell-acts button {
+.sc-issue-filters { display: flex; gap: 6px; }
+.sc-issue-filters button {
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 999px;
   background: var(--paper, #fff);
-  color: var(--wk-ink, #141416);
-  border-radius: 8px;
+  color: var(--wk-muted, #71767e);
   cursor: pointer;
 }
-.sc-mode-shell-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  text-align: left;
-}
-.sc-mode-shell-item b { font-weight: 600; color: var(--wk-muted, #71767e); }
-.sc-mode-card li.is-on .sc-mode-shell-item {
-  background: var(--wk-green-pale, #e8f0ea);
-  box-shadow: inset 0 0 0 1px var(--wk-green, #4a7c59);
-}
-.sc-mode-shell-acts { display: flex; gap: 6px; }
-.sc-mode-shell-acts button { padding: 4px 10px; font-size: 12px; }
-.sc-mode-shell-acts button[aria-pressed="true"] {
+.sc-issue-filters button[aria-pressed="true"] {
   background: var(--wk-green-pale, #e8f0ea);
   color: var(--wk-green-deep, #3a6247);
+  border-color: var(--wk-green, #4a7c59);
+}
+.sc-issue-list { min-height: 0; }
+.sc-issue-go {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 8px;
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+  text-align: left;
+  cursor: pointer;
+}
+.sc-issue-go b {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--wk-green, #4a7c59);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+.sc-issue-go span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-issue-go strong { font-weight: 600; }
+.sc-issue-go small { color: var(--wk-muted, #71767e); }
+.sc-mode-card li.is-on .sc-issue-go {
+  background: var(--wk-green-pale, #e8f0ea);
   box-shadow: inset 0 0 0 1px var(--wk-green, #4a7c59);
 }
-.sc-mode-shell-acts button:disabled { cursor: not-allowed; color: var(--faint, #a6aab2); background: var(--plane, #f4f5f7); }
+.sc-issue-acts { display: flex; gap: 10px; padding: 0 4px; }
+.sc-issue-acts button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--wk-green-deep, #3a6247);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sc-issue-confirm {
+  margin-top: auto;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--wk-green, #4a7c59);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-issue-note { margin: 0; color: var(--wk-muted, #71767e); font-size: 12px; }
 .sc-mode-card[aria-label="执行清单"] li {
   flex-direction: row;
   align-items: center;
@@ -83,4 +122,5 @@
 .sc-mode-card[aria-label="执行清单"] li:last-child { border-bottom: 0; }
 .sc-mode-card b[data-status="齐"] { color: var(--wk-green-deep, #3a6247); }
 .sc-mode-card b[data-status="缺"] { color: var(--wk-ink, #141416); }
-.sc-mode-shell-empty p { margin: 0 0 8px; color: var(--wk-muted, #71767e); }
+.sc-mode-shell-empty,
+.sc-mode-shell-empty p { margin: 0; color: var(--wk-muted, #71767e); }

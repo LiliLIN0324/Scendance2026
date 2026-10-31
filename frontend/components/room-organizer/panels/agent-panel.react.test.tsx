@@ -137,6 +137,15 @@ describe('T-04 delivery narrative in the Agent panel', () => {
   });
 
   // Agent 贯穿：评审/执行模式也留着输入框，说过的话必须回显在同一份记录里。
+  it('does not edit the layout from chat while review is open', async () => {
+    callbacks.workbenchMode = 'review';
+    const onApply = vi.fn();
+    render(ui(state.layout, onApply));
+    send('再加两把椅子');
+    expect(await screen.findByText(/不改布置/)).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
   it('keeps the conversation visible in review mode', async () => {
     callbacks.workbenchMode = 'review';
     render(ui(state.layout));
