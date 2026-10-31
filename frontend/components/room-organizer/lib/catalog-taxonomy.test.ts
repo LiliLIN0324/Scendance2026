@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
-import { measurementLabel } from '../three/measurement';
 import { catalogGroupKey, catalogGroupLabel, matchesCatalogFilter } from './catalog-taxonomy';
 import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 
@@ -30,11 +28,5 @@ describe('event catalog groups', () => {
     expect(FURNITURE_CATALOG.find(entry => entry.type === 'tree')?.category).toBe('outdoor');
     expect(catalogGroupKey('outdoor')).toBe('site');
     expect(FURNITURE_CATALOG.find(entry => entry.type === 'fridge')?.category).toBe('catering');
-  });
-
-  it('labels a stored metre length without changing it', () => {
-    expect(measurementLabel(2.4)).toBe('2.4 m');
-    expect(measurementLabel(0.5)).toBe(formatLengthMetres(0.5));
-    expect(measurementLabel(null)).toBe('');
   });
 });

@@ -35,8 +35,6 @@ function defaultSpanMeters(normalizedSpan: number): ProposeScaleResult {
 /**
  * T-3D-03 `propose_scale` hook for the upload path. Uses typed dimensions when
  * available; otherwise returns a conservative editable default (never silent truth).
- * The result is metres. The ruler labels it with `formatLengthMetres` and still
- * confirms `valueMeters` unchanged.
  */
 export function proposeScaleMeters(input: ProposeScaleInput): ProposeScaleResult {
   const external = input.externalProposer?.(input);

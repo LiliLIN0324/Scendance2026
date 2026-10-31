@@ -7,24 +7,6 @@
  */
 
 export const METRES_PER_UNIT = { mm: 0.001, cm: 0.01, m: 1, ft: 0.3048, in: 0.0254 } as const;
-
-/**
- * Label a length that is already stored in metres.
- * At least 1 m stays metres (`1.8 m`, `12 m`). Shorter lengths are labelled in
- * centimetres (`85 cm`) because that is how furniture is read on an event plan.
- * This does not convert storage — callers keep the metre number.
- */
-export function formatLengthMetres(metres: number): string {
-  if (!Number.isFinite(metres)) return '';
-  const negative = metres < 0;
-  const abs = Math.abs(metres);
-  const text = abs < 1 ? `${trimNumber(Math.round(abs * 1000) / 10)} cm` : `${trimNumber(Math.round(abs * 100) / 100)} m`;
-  return negative ? `-${text}` : text;
-}
-
-function trimNumber(value: number): string {
-  return String(value);
-}
 export type LengthUnit = keyof typeof METRES_PER_UNIT;
 export type PlanUnit = Extract<LengthUnit, 'mm' | 'cm' | 'm'>;
 export const PLAN_UNITS: readonly PlanUnit[] = ['mm', 'cm', 'm'];

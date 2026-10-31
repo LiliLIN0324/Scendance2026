@@ -6,10 +6,9 @@ import type { FurnitureCategory } from './types';
  * blueprint3d-modern hangs a Metadata record (name, item type) off each item and
  * lets a factory choose floor / wall / in-wall behaviour. react-planner registers
  * a category as `{ name, label }` and a property as `{ type, defaultValue }`,
- * with `length-measure` shown in the catalog unit. This table is that idea:
- * one name, one label, and a membership list. It is not a second catalog runtime,
- * and it does not store a second length. Lengths stay metres; `formatLengthMetres`
- * only labels them.
+ * with `length-measure` shown in the catalog unit. This table is only that
+ * grouping idea: one name, one label, and a membership list. It is not a second
+ * catalog runtime. Lengths stay metres and are not relabelled here.
  */
 export const CATALOG_GROUPS = [
   { key: 'stage', label: '舞台', icon: '台', members: ['stage'] },

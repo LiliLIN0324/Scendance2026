@@ -3,9 +3,8 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { normalizeRulerPoints, proposeScaleMeters } from '@/lib/floor-plan-scale';
 import { containedImagePoint, type ImagePoint } from '@/lib/source-storage';
-import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
+import { normalizeRulerPoints, proposeScaleMeters } from '@/lib/floor-plan-scale';
 import type { VenuePhoto } from './venue-photos-panel';
 import './floor-plan-ruler.css';
 
@@ -99,10 +98,6 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
   const line = points.length === 2 && image.width && image.height
     ? normalizeRulerPoints(points[0]!, points[1]!, image.width, image.height)
     : null;
-  const metresValue = Number(meters);
-  const echo = Number.isFinite(metresValue) && metresValue > 0 ? formatLengthMetres(metresValue) : '';
-  const planWidth = image.width ?? 0;
-  const planHeight = image.height ?? 0;
 
   return (
     <section className="rc-ruler" aria-label="两点定标尺">
@@ -123,12 +118,12 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
         onClick={event => addPoint(event.clientX, event.clientY)}
       >
         <img src={image.url} alt={`平面图：${image.name}`} />
-        {planWidth > 0 && planHeight > 0 && (
-          <svg viewBox={`0 0 ${planWidth} ${planHeight}`} preserveAspectRatio="xMidYMid meet">
+        {image.width && image.height && (
+          <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="xMidYMid meet">
             {points.map((point, index) => (
               <g key={index}>
-                <circle cx={point.x} cy={point.z} r={Math.max(4, planWidth / 120)} fill="#4A7C59" />
-                <text x={point.x} y={point.z - Math.max(6, planWidth / 100)} fill="#141416" fontSize={Math.max(10, planWidth / 80)} textAnchor="middle">
+                <circle cx={point.x} cy={point.z} r={Math.max(4, image.width / 120)} fill="#4A7C59" />
+                <text x={point.x} y={point.z - Math.max(6, image.width / 100)} fill="#141416" fontSize={Math.max(10, image.width / 80)} textAnchor="middle">
                   {index + 1}
                 </text>
               </g>
@@ -140,7 +135,7 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
                 x2={points[1]!.x}
                 y2={points[1]!.z}
                 stroke="#4A7C59"
-                strokeWidth={Math.max(2, planWidth / 200)}
+                strokeWidth={Math.max(2, image.width / 200)}
               />
             )}
           </svg>
@@ -166,7 +161,6 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
               setAiSuggested(false);
             }}
           />
-          {echo && <span className="rc-ruler-display">{echo}</span>}
         </label>
         {aiSuggested && meters && <span className="rc-ruler-ai">AI 建议，可改</span>}
         <button type="button" className="cr-generate" disabled={busy || points.length < 2 || !meters.trim()} onClick={() => void confirm()}>

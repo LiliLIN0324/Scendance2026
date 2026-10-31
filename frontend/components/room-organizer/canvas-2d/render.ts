@@ -1,4 +1,3 @@
-import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
 import { isSatelliteGroundImage, parseSatelliteImageBounds, satelliteImageShellRect } from '../lib/amap-venue';
 import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '../lib/constants';
 import { rotatedHalfExtents } from '../lib/geometry';
@@ -194,9 +193,9 @@ export function render2DTopDown(options: Render2DOptions): void {
   if (options.showMeasurements) {
     ctx.save(); ctx.font = 'bold 12px Arial';
     dimensionBlockers.push(labelBounds(offsetX + layout.width * scale / 2, offsetY - 10,
-      ctx.measureText(formatLengthMetres(layout.width)).width + 6, 16));
+      ctx.measureText(`${Number(layout.width.toFixed(2))}m`).width + 6, 16));
     dimensionBlockers.push(labelBounds(offsetX - 10, offsetY + layout.height * scale / 2,
-      16, ctx.measureText(formatLengthMetres(layout.height)).width + 6));
+      16, ctx.measureText(`${Number(layout.height.toFixed(2))}m`).width + 6));
     ctx.restore();
   }
   drawFurniture(ctx, options, offsetX, offsetY, scale, { width: viewWidth, height: viewHeight }, dimensionBlockers);
@@ -327,7 +326,7 @@ function drawZoneDraft(
   ctx.fillStyle = '#1d4ed8';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(`${formatLengthMetres(draft.w)} × ${formatLengthMetres(draft.d)}`, x + w / 2, y - 4);
+  ctx.fillText(`${draft.w.toFixed(1)}m × ${draft.d.toFixed(1)}m`, x + w / 2, y - 4);
   ctx.restore();
 }
 
@@ -772,7 +771,7 @@ function drawFurniture(
       const { halfW, halfD } = rotatedHalfExtents(item);
       if (cx + halfW * scale <= 0 || cx - halfW * scale >= viewport.width ||
           cy + halfD * scale <= 0 || cy - halfD * scale >= viewport.height) continue;
-      const text = `${formatLengthMetres(item.width)} × ${formatLengthMetres(item.depth)}`;
+      const text = `${Number(item.width.toFixed(2))}m × ${Number(item.depth.toFixed(2))}m`;
       ctx.save(); ctx.font = '10px Arial';
       const width = ctx.measureText(text).width + 6;
       ctx.restore();
@@ -836,11 +835,11 @@ function drawRoomDimensions(
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(formatLengthMetres(layout.width), offsetX + (layout.width * scale) / 2, offsetY - 10);
+  ctx.fillText(`${Number(layout.width.toFixed(2))}m`, offsetX + (layout.width * scale) / 2, offsetY - 10);
   ctx.save();
   ctx.translate(offsetX - 10, offsetY + (layout.height * scale) / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText(formatLengthMetres(layout.height), 0, 0);
+  ctx.fillText(`${Number(layout.height.toFixed(2))}m`, 0, 0);
   ctx.restore();
 }
 

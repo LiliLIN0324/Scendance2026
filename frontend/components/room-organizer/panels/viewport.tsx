@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { MAX_CUSTOM_SET_NAME_LENGTH } from '../lib/custom-sets';
 import { Icon, iconForItem } from '../plotcraft/icon';
-import { measurementLabel } from '../three/measurement';
 import { ChipButton, ChipNameField } from './chip-controls';
 import { Minimap } from './minimap';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
@@ -351,7 +350,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
                 ? 'Click a floor point to measure from · Esc to stop'
                 : props.measurementPointsPlaced === 1
                 ? 'Click a second point…'
-                : `Distance: ${measurementLabel(props.measurementDistance ?? 0)}`}
+                : `Distance: ${(props.measurementDistance ?? 0).toFixed(2)} m`}
             </StatusChip>
           </div>
         )}
@@ -398,7 +397,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
                       paddingLeft: 20,
                     }}
                   >
-                    {measurementLabel(props.wallDrawStatus.currentLength)}
+                    {props.wallDrawStatus.currentLength.toFixed(2)} m
                   </div>
                 )}
               {props.wallDrawStatus.snapKind === 'vertex' && (

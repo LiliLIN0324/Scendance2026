@@ -2,7 +2,6 @@
 
 import { Copy, Lock, RotateCcw, Trash2, Unlock, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
 import { useRoomEditor, useSelection } from '../contexts';
 import { layoutReducer } from '../hooks/layout-reducer';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
@@ -48,12 +47,9 @@ function DimensionInput({ label, value, min, disabled, onCommit }: {
     try { onCommit(next); submitted.current = draft; setError(''); }
     catch (caught) { setError(caught instanceof Error ? caught.message : '尺寸未能应用，请重新核对。'); }
   }
-  const typed = Number(draft);
-  const readout = formatLengthMetres(draft.trim() && Number.isFinite(typed) ? typed : value);
   return <label className="sc-field">{label}<input type="number" aria-label={label} min={min} max={MAX_ITEM_DIMENSION} step="any"
     value={draft} disabled={disabled} aria-invalid={!!error} onChange={event => { setDraft(event.target.value); submitted.current = null; setError(''); }}
     onBlur={commit} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
-    <span className="sc-length-readout">{readout}</span>
     {error && <span className="sc-warning" role="alert">{error}</span>}</label>;
 }
 

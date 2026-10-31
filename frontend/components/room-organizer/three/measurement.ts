@@ -1,4 +1,3 @@
-import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
 import { removeAndDispose } from './builder-utils';
 import type { Vec2 } from '../lib/types';
 import type * as ThreeNS from 'three';
@@ -59,10 +58,4 @@ export function measurementDistance(points: readonly Vec2[]): number | null {
   const [a, b] = points;
   if (!a || !b) return null;
   return Math.hypot(a.x - b.x, a.z - b.z);
-}
-
-/** HUD text for a metre length. The scene coordinates stay metres. */
-export function measurementLabel(metres: number | null): string {
-  if (metres === null || !Number.isFinite(metres)) return '';
-  return formatLengthMetres(metres);
 }
