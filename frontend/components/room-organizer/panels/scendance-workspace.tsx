@@ -17,6 +17,7 @@ import {
 } from '../lib/amap-venue';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
+import { noteVenueThreeIntent } from '../lib/venue-library';
 import { EnvironmentPreview } from './environment-preview';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
 import { GeneratedItemLibrary } from './generated-item-library';
@@ -391,7 +392,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
         <MousePointer2 size={24}/>
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
+      <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { if (view.view2D) noteVenueThreeIntent(); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
         <Axis3d size={24} aria-hidden="true"/>
       </button>
       <button type="button" id="tool-fit" data-tip="看全场" aria-label="看全场" disabled={view.view2D} onClick={onFit}>
@@ -403,7 +404,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       <button type="button" id="tool-front" data-tip="人视" aria-label="人视" aria-pressed={!view.view2D && preset === 'front' && !view.walkthroughMode} className={!view.view2D && preset === 'front' && !view.walkthroughMode ? 'is-active' : ''} onClick={() => choosePreset('front')}>
         <PersonStanding size={24} aria-hidden="true"/>
       </button>
-      <button type="button" id="tool-walk" data-tip="漫游" aria-label="漫游" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}>
+      <button type="button" id="tool-walk" data-tip="漫游" aria-label="漫游" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => { if (!view.walkthroughMode) noteVenueThreeIntent(); setWalkthrough(!view.walkthroughMode); }}>
         <Footprints size={24} aria-hidden="true"/>
       </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>

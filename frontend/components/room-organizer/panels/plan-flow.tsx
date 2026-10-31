@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { useRoomEditor } from '../contexts';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { sameLayoutContent } from '../lib/persistence';
+import { VENUE_LIGHT_HINT } from '../lib/venue-library';
 import { useAgent } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { AgentState } from '../lib/workbench-agent';
@@ -83,6 +84,7 @@ export function PlanHome({ onGenerate }: { onGenerate(sentence: string): void })
         {PLAN_HEADCOUNTS.map(count => <button key={count} type="button" aria-pressed={headcount === count} onClick={() => setHeadcount(count)}>{count} 人</button>)}
       </div>
     </fieldset>
+    <p className="sc-plan-venue-hint" role="note">{VENUE_LIGHT_HINT}</p>
     <button type="submit" className="sc-plan-act" disabled={!ready}>生成方案</button>
   </form>;
 }

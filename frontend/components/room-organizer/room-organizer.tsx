@@ -34,6 +34,7 @@ import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useSplatPreview } from './hooks/use-splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
+import { useVenueLibrary } from './hooks/use-venue-library';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
@@ -62,6 +63,7 @@ import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
+import { noteVenueThreeIntent } from './lib/venue-library';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
@@ -83,6 +85,7 @@ import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
+import { VenueLibraryPanel, VenueRailButton } from './panels/venue-library-panel';
 import { Viewport } from './panels/viewport';
 import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import type { HoverInfo } from './hooks/use-three-scene';
@@ -184,6 +187,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 工具抽屉和晴光列同时关着，左侧导航才算收起。logo 只写这两扇门。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
+  const venueLibrary = useVenueLibrary();
+  const [venueLibraryOpen, setVenueLibraryOpen] = useState(false);
+  const toggleVenueLibrary = useCallback(() => setVenueLibraryOpen(open => !open), []);
   const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed });
   const toggleNav = useCallback(() => {
     const next = toggleNavColumns({ agentCollapsed, sidebarCollapsed });
@@ -1629,21 +1635,24 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <nav className="sc-mode-rail-top" aria-label="晴光">
                 <QingguangRailButton open={!agentCollapsed} onOpen={openQingguang} />
               </nav>
+              <p role="status" className={`sc-rail-draft sc-rail-bingo${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
+              <nav className="sc-rail-tool-group" aria-label="场地库">
+                <VenueRailButton open={venueLibraryOpen} lit={venueLibrary.lit} onToggle={toggleVenueLibrary} />
+              </nav>
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
                 <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
                   onClick={() => businessToolsRef.current?.openReference()}><Ruler size={24} aria-hidden="true"/></button>
                 <button type="button" className="sc-rail-tool" aria-label="场地重建" data-tip="重建" title="现场照片重建 3D 场地 · 生成与候选确认"
-                  onClick={() => businessToolsRef.current?.openRebuild()}><Scan size={24} aria-hidden="true"/></button>
+                  onClick={() => { noteVenueThreeIntent(); businessToolsRef.current?.openRebuild(); }}><Scan size={24} aria-hidden="true"/></button>
               </nav></>
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="生成与场地观感">
                 <button type="button" className="sc-rail-tool sc-rail-generate" aria-label="生成物件" data-tip="生成" title="一句话生成 3D 物件。先确认扣额度才会提交。"
-                  onClick={() => { setComposerGenerate(true); setWorkbenchMode('layout'); setLeftMode('brief'); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }}><Sparkles size={22} aria-hidden="true"/><span className="sc-rail-word">生成</span></button>
+                  onClick={() => { noteVenueThreeIntent(); setComposerGenerate(true); setWorkbenchMode('layout'); setLeftMode('brief'); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }}><Sparkles size={22} aria-hidden="true"/><span className="sc-rail-word">生成</span></button>
                 <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="图片、场景观感、场地重建。文字生成在左侧晴光「生成」。"
-                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(true);setAgentCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
+                  onClick={()=>{ noteVenueThreeIntent(); setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(true);setAgentCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
               </nav></>}
             </div>
             <div className="sc-mode-rail-foot">
-              <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
               <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" title="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
               <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
@@ -1658,7 +1667,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {!agentCollapsed && <AssistantSessionDock />}
-          {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { noteVenueThreeIntent(); setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -1771,6 +1780,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               onCommit={commitReviewPin}
               onCancel={() => setPinDraft(null)}
             />
+            {venueLibraryOpen && <VenueLibraryPanel onClose={() => setVenueLibraryOpen(false)} />}
             <MapVenueOverlay onHangDemoEnvironment={hangDemoEnvironment} onReconUpload={luxDirectVisible ? preset => {
               setAholoReconPreset(preset);
               setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false);

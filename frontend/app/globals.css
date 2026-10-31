@@ -1037,6 +1037,10 @@ body {
   color: var(--wk-muted); font-size: 10px; line-height: 13px; font-weight: 400;
   text-align: center; letter-spacing: 0; white-space: nowrap;
 }
+/* 窄轨：锁标、晴光之下，草稿（Bingo 槽）再下才是场地。不进轨脚。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head .sc-rail-bingo {
+  margin: 4px 0 2px;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft.has-error { color: var(--err); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger {
   width: 34px; height: 34px; min-height: 34px; padding: 0; flex: none; flex-direction: row; gap: 0;
@@ -1085,6 +1089,19 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
 /* 原布置图标的槽位：同样的轨钮尺寸，里面换成晴光圆头像。右下白点是状态，不是模式选中条。 */
+/* 场地库：没被 3D 意图点亮时更灰；点开面板仍走选中条。折叠轨不放文案。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-muted {
+  color: var(--wk-ink-faint); opacity: 0.45;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-muted:hover {
+  color: var(--wk-ink-soft); opacity: 0.8; background: transparent;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue:not(.is-muted) {
+  color: var(--wk-ink);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-active {
+  opacity: 1; color: var(--wk-ink);
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang {
   position: relative; width: 36px; height: 36px; margin: 2px auto 4px; padding: 0;
   border-radius: 999px; background: transparent; font-weight: 400;
