@@ -24,7 +24,9 @@ describe('左轨主入口面板', () => {
 
   it('mutually excludes 晴光 dialogue from side panels in render guards', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
-    expect(source).toContain('!agentCollapsed && !sidePanel && <AgentPanel');
-    expect(source).toContain('open={!agentCollapsed && !sidePanel}');
+    expect(source).toContain('agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel');
+    expect(source).toContain('qingguangPanelOpen = !agentCollapsed && !agentClosing && !sidePanel');
+    expect(source).toContain('agentPanelVisible && <AgentPanel');
+    expect(source).toContain('qingguangPanelOpen={qingguangPanelOpen}');
   });
 });
