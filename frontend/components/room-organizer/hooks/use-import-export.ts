@@ -6,6 +6,7 @@ import {
   readLayoutFromFile,
 } from '../lib/file-io';
 import { confirmReplace, snapshotBeforeReplace } from '../lib/restore-point';
+import { itemProvenance, stampImportedItems } from '../lib/provenance';
 import { encodeShareUrl, isShareUrlReasonablySized } from '../lib/share';
 import type { LayoutActions } from './use-layout-state';
 import type { CameraPreset, RoomLayout } from '../lib/types';
@@ -155,7 +156,7 @@ export function useImportExport({
         const next = await readLayoutFromFile(file);
         if (!confirmReplace(layout, `the imported “${next.name}”`)) return false;
         snapshotBeforeReplace(layout);
-        actions.applyLayout(next);
+        actions.applyLayout(stampImportedItems(next, itemProvenance('import', new Date(), file.name)));
         onImported();
         return true;
       } catch (importError) {

@@ -47,7 +47,7 @@ vi.mock('./creative-studio', () => ({ useStudioAgent: () => studioMock }));
 const callbacks = {
   workbenchMode: 'layout' as WorkbenchMode,
   onOpenMaterials: vi.fn(), onSelectMode: vi.fn(), onOpenReview: vi.fn(),
-  onOpenDelivery: vi.fn(), onFit: vi.fn(),
+  onOpenDelivery: vi.fn(), onFit: vi.fn(), onFocusItems: vi.fn(),
 };
 
 function seatLayout(overrides: { locked?: boolean } = {}): RoomLayout {
@@ -83,6 +83,17 @@ function cloudPreview(): unknown {
     base: makeLayout(),
     layout: makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'cloud-seat', type: 'chair', name: '椅子', position: { x: 1, z: 1 } })] })] }),
     briefKey: '', scope: 'local',
+  };
+}
+
+/** 云端候选里两件桌子占同一块地：主动体检必须能报出来，且不能自动改画布。 */
+function cloudOverlapPreview(): unknown {
+  return {
+    ...cloudPreview() as Record<string, unknown>,
+    layout: makeLayout({ floors: [makeFloor({ items: [
+      makeItem({ id: 'cloud-table-a', type: 'table', name: '桌子', position: { x: 2, z: 2 } }),
+      makeItem({ id: 'cloud-table-b', type: 'table', name: '桌子', position: { x: 2, z: 2 } }),
+    ] })] }),
   };
 }
 
@@ -237,6 +248,21 @@ describe('T-03 review in the Agent panel', () => {
     expect(await screen.findByText('改法预览')).toBeTruthy();
     send('再看看哪里有问题');
     expect(await screen.findByText(/还有一版没确认：先点「确认布置」或「撤回」/)).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('proactively checks a cloud preview and can locate the objects it names', async () => {
+    studioMock.connection = '项目已连接';
+    const preview = cloudOverlapPreview();
+    studioMock.generate.mockImplementation(async () => { studioMock.preview = preview; });
+    const onApply = vi.fn();
+    render(ui(state.layout, onApply));
+    send('30 人，室内 12×9');
+    expect(await screen.findByText(/云端这版我按画布几何看了一遍/)).toBeTruthy();
+    const locate = await screen.findAllByRole('button', { name: '定位' });
+    expect(locate.length).toBeGreaterThan(0);
+    fireEvent.click(locate[0]!);
+    expect(callbacks.onFocusItems).toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect,vi } from 'vitest';
-import { WebIO } from '@gltf-transform/core';
+import { WebIO, type GLTF } from '@gltf-transform/core';
 import { database,owner,editor } from './fixtures.ts';
-import { generationCapabilities,generationRequestSchema } from '../supabase/functions/_shared/generation-contract.ts';
+import { generationCapabilities,generationRecordSchema,generationRequestSchema } from '../supabase/functions/_shared/generation-contract.ts';
 import { prepareGenerationRequest } from '../supabase/functions/_shared/generation-input.ts';
 import { compareTextureGeometry } from '../supabase/functions/_shared/generation-quality.ts';
 import { hunyuan } from '../supabase/functions/_shared/providers.ts';
@@ -37,11 +37,27 @@ describe('generation inputs and provider isolation',()=>{
     expect(generationRequestSchema.safeParse({...input,imageUrl:'https://attacker.test/x.png'}).success).toBe(false);
     expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(0);
   });
+  it('records a deterministic generation identity and stores it with the job',async()=>{
+    const aholo=env({LUX3D_API_KEY:'lux',LUX3D_TERMS_URL:'https://example.test/aholo',LUX3D_TERMS_REVIEWED_AT:'2026-10-28'});
+    const input={requestId:crypto.randomUUID(),prompt:'vase',provider:'aholo' as const};
+    const prepared=await prepareGenerationRequest(f.backend,owner,input,aholo),record=generationRecordSchema.parse(prepared.generation);
+    expect(record).toMatchObject({version:1,kind:'text',lane:'aholo',providerMode:'aholo',providerModel:'lux3d',
+      fingerprint:await sha256('vase'),promptSha256:await sha256('vase')});
+    expect((await prepareGenerationRequest(f.backend,owner,input,aholo)).generation.inputHash).toBe(record.inputHash);
+    const hy3d=await prepareGenerationRequest(f.backend,owner,{...input,provider:undefined},env());
+    expect(hy3d.fingerprint).toBe(record.fingerprint);
+    expect(hy3d.generation.inputHash).not.toBe(record.inputHash);
+    const job=await f.jobs(owner,'jobs.create',{...prepared,reserveCents:100});
+    expect(job.generation).toMatchObject(record);
+    await expect(f.jobs(owner,'jobs.create',{...prepared,requestId:crypto.randomUUID(),reserveCents:100,
+      generation:{...record,lane:'invented'}})).rejects.toThrow('INVALID_GENERATION_RECORD');
+  });
   it('pins provider identity and ignores later configuration on idempotent replay',async()=>{
     const ref=await image(),input={requestId:crypto.randomUUID(),prompt:'参考图物体',kind:'image',referenceImageAssetId:ref.id};
     const prepared=await prepareGenerationRequest(f.backend,owner,input,env());
     const job=await f.jobs(owner,'jobs.create',{...prepared,reserveCents:100});
-    expect(job).toMatchObject({kind:'image',provider_mode:'tokenhub',provider_model:'hy-3d-3.0',reference_image_asset_id:ref.id});
+    expect(job).toMatchObject({kind:'image',provider_mode:'tokenhub',provider_model:'hy-3d-3.0',reference_image_asset_id:ref.id,
+      generation:{version:1,kind:'image',lane:'hy3d',providerMode:'tokenhub',providerModel:'hy-3d-3.0',referenceImageAssetId:ref.id}});
     const replay=await f.jobs(owner,'jobs.create',{...await prepareGenerationRequest(f.backend,owner,input,env({HUNYUAN_MODEL:'hy-3d-3.1'})),reserveCents:100});
     expect(replay).toMatchObject({id:job.id,reused:true,provider_model:'hy-3d-3.0'});
     const calls:Record<string,unknown>[]=[];
@@ -93,5 +109,24 @@ describe('generation inputs and provider isolation',()=>{
     const bytes=await uvModel(),doc=await new WebIO().readBinary(bytes),uv=doc.getRoot().listMeshes()[0].listPrimitives()[0].getAttribute('TEXCOORD_0')!;
     uv.setElement(0,[0.5,0.5]);
     expect(await compareTextureGeometry(bytes,await new WebIO().writeBinary(doc))).toMatchObject({geometryPreserved:true,uvPreserved:false});
+  });
+  it('treats equivalent TRS and matrix node transforms as the same geometry',async()=>{
+    // A 0.1 m translation encoded as a node matrix round-trips through
+    // decompose+recompose with float error (~1e-9), so exact matrix equality
+    // would reject an otherwise identical texture result.
+    const withUv=(node:Record<string,unknown>)=>{
+      const fixture=tetrahedron(),geometry=fixture.resources['model.bin'];
+      const uv=new Float32Array([0,0,1,0,0,1,1,1]),combined=new Uint8Array(geometry.length+uv.byteLength);
+      combined.set(geometry);combined.set(new Uint8Array(uv.buffer),geometry.length);
+      fixture.resources['model.bin']=combined;fixture.json.buffers![0].byteLength=combined.length;
+      fixture.json.bufferViews!.push({buffer:0,byteOffset:geometry.length,byteLength:uv.byteLength,target:34962});
+      fixture.json.accessors!.push({bufferView:2,componentType:5126,count:4,type:'VEC2'});
+      fixture.json.meshes![0].primitives[0].attributes.TEXCOORD_0=2;
+      fixture.json.nodes=[node as GLTF.INode];
+      return packGltf(fixture.json,fixture.resources);
+    };
+    const trs=withUv({mesh:0,translation:[0.1,0.2,0.3]});
+    const matrix=withUv({mesh:0,matrix:[1,0,0,0,0,1,0,0,0,0,1,0,0.1,0.2,0.3,1]});
+    expect(await compareTextureGeometry(trs,matrix)).toMatchObject({geometryPreserved:true,uvPreserved:true});
   });
 });

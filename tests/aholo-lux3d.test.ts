@@ -89,6 +89,8 @@ describe('aholo lux3d lane (docs/AHOLO-INTEGRATION-PLAN.md M1)',()=>{
     expect(upload).toHaveBeenCalledTimes(1);
     const asset=await f.rpc(owner,'assets.get',{assetId:result.asset_id});
     expect(asset).toMatchObject({source:'aholo'});
-    expect(asset.metadata).toMatchObject({generation:{providerMode:'aholo',providerModel:'lux3d',kind:'text'}});
+    expect(result.generation).toMatchObject({version:1,lane:'aholo',providerMode:'aholo',providerModel:'lux3d',outputSha256:asset.sha256});
+    expect(asset.metadata).toMatchObject({generation:{providerMode:'aholo',providerModel:'lux3d',kind:'text',lane:'aholo',
+      recordVersion:1,inputHash:result.generation.inputHash,fingerprint:result.generation.fingerprint}});
   });
 });

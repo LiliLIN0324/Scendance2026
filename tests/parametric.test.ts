@@ -51,6 +51,8 @@ describe('parametric private immutable assets',()=>{
   it('replays without another upload, refuses changed replay and preserves older parameter versions',async()=>{
     const requestId=crypto.randomUUID(),first=await create(requestId),count=upload.mock.calls.length,replay=await create(requestId);
     expect(replay.reused).toBe(true);expect(replay.asset.id).toBe(first.asset.id);expect(upload.mock.calls.length).toBe(count);
+    expect(first.asset.metadata.parametric.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(replay.asset.metadata.parametric.fingerprint).toBe(first.asset.metadata.parametric.fingerprint);
     await expect(create(requestId,{...table,width:2})).rejects.toThrow('IDEMPOTENCY_CONFLICT');
     const changed=await create(undefined,{...table,width:2});expect(changed.asset.id).not.toBe(first.asset.id);expect(changed.asset.sha256).not.toBe(first.asset.sha256);
     expect((await f.rpc(owner,'assets.get',{assetId:first.asset.id})).sha256).toBe(first.asset.sha256);

@@ -110,7 +110,8 @@ export async function createParametricAsset(backend:Backend,actor:string,studioI
   let result=reservation;
   if(!reservation.asset) {
     const built=await buildParametricGlb(parameters);
-    const asset=await assetRecord(actor,built.bytes,{name:`${parametricNames[parameters.family]} · 参数模型`,source:'parametric',sourceId:`${PARAMETRIC_BUILDER_VERSION}:${parameters.family}`,license:{id:'Scendance-parametric',notice:'参数化构型；采购与施工规格待确认'},metadata:built.metadata},reservation.assetId);
+    const metadata={...built.metadata,parametric:{...built.metadata.parametric,fingerprint}};
+    const asset=await assetRecord(actor,built.bytes,{name:`${parametricNames[parameters.family]} · 参数模型`,source:'parametric',sourceId:`${PARAMETRIC_BUILDER_VERSION}:${parameters.family}`,license:{id:'Scendance-parametric',notice:'参数化构型；采购与施工规格待确认'},metadata},reservation.assetId);
     await backend.upload(asset.storagePath,built.bytes,'model/gltf-binary');
     result=await backend.scene(actor,'parametric.complete',{...data,asset});
   }

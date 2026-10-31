@@ -62,7 +62,8 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
       // Lux3D 产物带 bufferView 缺 target 与零法线两类瑕疵，先修复再过质量门（几何与 UV 不动）。
       const bytes=aholo?repairGlb(raw):raw;
       const metadata:Record<string,unknown>=await validateModel(bytes);
-      metadata.generation={kind:job.kind??'text',providerMode:job.provider_mode,providerModel:job.provider_model,referenceImageAssetId:job.reference_image_asset_id??undefined};
+      metadata.generation={kind:job.kind??'text',providerMode:job.provider_mode,providerModel:job.provider_model,referenceImageAssetId:job.reference_image_asset_id??undefined,
+        lane:job.generation?.lane,recordVersion:job.generation?.version,inputHash:job.generation?.inputHash,fingerprint:job.generation?.fingerprint};
       if(job.kind==='texture'){
         const source=await backend.scene(job.owner_id,'assets.get',{assetId:job.source_asset_id});
         if(!backend.readSourceBytes)throw new ApiError('SERVICE_NOT_CONFIGURED',503);

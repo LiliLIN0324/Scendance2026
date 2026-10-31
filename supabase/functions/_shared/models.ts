@@ -12,12 +12,26 @@ function glbJson(bytes: Uint8Array) {
   catch { throw new ApiError('INVALID_GLB',422); }
 }
 /** 修复 Aholo Lux3D 产物的两类瑕疵：bufferView 缺 target、法线含零向量（Khronos 校验按 Error 计）。
- *  字节层操作：法线归一化等长写回 BIN chunk，target 写进 JSON chunk 后重打包容器；几何与 UV 不动。 */
+ *  字节层操作：法线归一化等长写回 BIN chunk，target 写进 JSON chunk 后重打包容器；几何与 UV 不动。
+ *  输入是不可信的厂商产物：任何结构异常（缺 accessor/bufferView、越界、截断）都必须变成
+ *  ApiError('INVALID_GLB', 422)——裸 TypeError/RangeError 会被 worker 当成临时故障反复重试。 */
 export function repairGlb(bytes: Uint8Array): Uint8Array {
+  try { return repairGlbBytes(bytes); }
+  catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('INVALID_GLB', 422);
+  }
+}
+
+function repairGlbBytes(bytes: Uint8Array): Uint8Array {
   const json = glbJson(bytes);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const jsonLength = view.getUint32(12, true);
+  // BIN chunk 头必须存在，且声明的长度不能超出容器；否则下面的偏移计算会落到 GLB 之外。
+  if (20 + jsonLength + 8 > bytes.byteLength) throw new ApiError('INVALID_GLB', 422);
   const binOffset = 20 + jsonLength + 8;
+  const binChunkLength = view.getUint32(20 + jsonLength, true);
+  if (binChunkLength > bytes.byteLength - binOffset) throw new ApiError('INVALID_GLB', 422);
   const accessorView = (index: number) => json.accessors?.[index]?.bufferView;
   const seen = new Set<number>();
   for (const mesh of json.meshes ?? []) {
@@ -37,7 +51,11 @@ export function repairGlb(bytes: Uint8Array): Uint8Array {
     for (const primitive of mesh.primitives ?? []) {
       if (primitive.indices === undefined) continue;
       const bufferView = accessorView(primitive.indices);
-      if (bufferView !== undefined) json.bufferViews![bufferView].target = 34963;
+      if (bufferView !== undefined) {
+        const target = json.bufferViews?.[bufferView];
+        if (!target) throw new ApiError('INVALID_GLB', 422);
+        target.target = 34963;
+      }
     }
   }
   // 法线归一化：等长写回，零向量置 (0,1,0)。只碰语义为 NORMAL 的 accessor（POSITION 也是 VEC3，绝不能动）。
@@ -51,12 +69,25 @@ export function repairGlb(bytes: Uint8Array): Uint8Array {
     }
   }
   for (const accessorIndex of normalAccessors) {
+    // 读 BIN 之前把结构全部固定下来：缺 accessor / 缺 bufferView / 类型不符 / 越界都是坏 GLB。
     const accessor = accessorList[accessorIndex];
-    if (accessor.type !== 'VEC3' || accessor.componentType !== 5126) continue;
-    const bufferView = json.bufferViews![accessor.bufferView!];
-    const start = binOffset + (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    if (!accessor) throw new ApiError('INVALID_GLB', 422);
+    if (accessor.type !== 'VEC3' || accessor.componentType !== 5126) throw new ApiError('INVALID_GLB', 422);
+    const bufferView = accessor.bufferView === undefined ? undefined : json.bufferViews?.[accessor.bufferView];
+    if (!bufferView) throw new ApiError('INVALID_GLB', 422);
+    // GLB 的 BIN 只能对应 buffer 0；多 buffer 的偏移换算没有意义，直接拒绝而不是读错数据。
+    if (bufferView.buffer !== undefined && bufferView.buffer !== 0) throw new ApiError('INVALID_GLB', 422);
+    const count = accessor.count;
+    const viewOffset = bufferView.byteOffset ?? 0;
+    const byteOffset = accessor.byteOffset ?? 0;
     const stride = bufferView.byteStride ?? 12;
-    for (let i = 0; i < accessor.count; i++) {
+    const viewLength = bufferView.byteLength;
+    if (![count, viewOffset, byteOffset, stride, viewLength].every(n => Number.isSafeInteger(n)) || count < 1 || viewOffset < 0 || byteOffset < 0 || viewLength < 0 || stride < 12) throw new ApiError('INVALID_GLB', 422);
+    const start = binOffset + viewOffset + byteOffset;
+    // 整个 VEC3 元素必须同时落在该 bufferView 的 byteLength 内和 GLB BIN 区之内。
+    const end = start + (count - 1) * stride + 12;
+    if (end > binOffset + viewOffset + viewLength || end > binOffset + binChunkLength || end > bytes.byteLength) throw new ApiError('INVALID_GLB', 422);
+    for (let i = 0; i < count; i++) {
       const base = start + i * stride;
       const x = view.getFloat32(base, true), y = view.getFloat32(base + 4, true), z = view.getFloat32(base + 8, true);
       const length = Math.hypot(x, y, z);

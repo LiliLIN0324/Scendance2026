@@ -7,6 +7,7 @@ import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABELS } from '../lib/scene-handoff';
+import { ITEM_ORIGIN_LABELS } from '../lib/provenance';
 import { EventOperationsPanel } from './event-operations-panel';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
 import { MaterialCheckinPanel } from './material-checkin-panel';
@@ -265,7 +266,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         {onLocate && <button type="button" className="sc-button" onClick={() => onLocate(item.id)}>定位物件</button>}
         <HandoffEditor layout={layout} item={item} status={status} disabled={!editable || busy || status === 'checking'} onUpdate={onUpdateItem ?? (() => undefined)}/>
       </details>; })}</div>
-      <details className="sc-procurement-summary"><summary>采购汇总 · {preview.materials.length} 类</summary><ul>{preview.materials.map(row => <li key={row.objectIds[0]}>{row.name} × {row.quantity}<small>{row.width} × {row.depth} × {row.height} m · {row.procurement}</small></li>)}</ul></details>
+      <details className="sc-procurement-summary"><summary>采购汇总 · {preview.materials.length} 类</summary><ul>{preview.materials.map(row => <li key={row.objectIds[0]}>{row.name} × {row.quantity}<small>{row.width} × {row.depth} × {row.height} m · {row.procurement}{row.provenance.length ? ` · 来源：${[...new Set(row.provenance.map(entry => ITEM_ORIGIN_LABELS[entry.origin]))].join('、')}` : ''}</small></li>)}</ul></details>
     </>}
     </div>
     <div role="tabpanel" id="delivery-export" aria-labelledby="delivery-export-tab" hidden={view !== 'export'}>

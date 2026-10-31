@@ -18,7 +18,7 @@ import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
 import { useEventAtmosphere } from './hooks/use-event-atmosphere';
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
-import { useHistory } from './hooks/use-history';
+import { useLayoutHistory } from './hooks/use-layout-history';
 import { useImportExport } from './hooks/use-import-export';
 import { useItemDrag } from './hooks/use-item-drag';
 import { useItemPlacement } from './hooks/use-item-placement';
@@ -51,8 +51,12 @@ import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomId, randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
+import { mergeLayoutLaneSnapshot } from './lib/layout-lanes';
+import { layoutRuleErrors } from './lib/layout-rules';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
+import { itemProvenance, stampChangedItems } from './lib/provenance';
+import { proposalScopeViolations } from './lib/proposal-scope';
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
 import { editorItemLimit } from './lib/scene-presets';
@@ -84,7 +88,7 @@ import { StatusToastHost } from './panels/status-toast';
 import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
-import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import type { CatalogItem, ItemOrigin, RoomLayout, ViewSettings, WallId } from './lib/types';
 import type { SplatPaint } from './three/splat-preview';
 
 function zoomCamera(
@@ -764,9 +768,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     [activeFloor.items, actions, reseatCamera]
   );
 
-  const history = useHistory(layout, useCallback(
-    (snapshot: RoomLayout) => {
-      actions.applyLayout(snapshot);
+  const history = useLayoutHistory(layout, useCallback(
+    (snapshot) => {
+      actions.applyLayout(mergeLayoutLaneSnapshot(layoutStore.getState().layout, snapshot));
     },
     [actions]
   ));
@@ -1512,11 +1516,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     initiallyFramed.current = false;
   }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory]);
 
-  const onApplyCreative = useCallback((next: RoomLayout) => {
-    if (!canApplyLayoutGeometry(layoutStore.getState().layout, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
+  const onApplyCreative = useCallback((next: RoomLayout, origin: ItemOrigin = 'proposal') => {
+    const current = layoutStore.getState().layout;
+    if (origin === 'proposal') {
+      const scopeIssues = proposalScopeViolations(current, next);
+      if (scopeIssues.length > 0) throw new Error(`助手方案超出可修改范围：${scopeIssues.map((issue) => issue.message).join(' ')}`);
+    }
+    if (!canApplyLayoutGeometry(current, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
+    const ruleIssues = layoutRuleErrors(next);
+    if (ruleIssues.length > 0) throw new Error(ruleIssues.map((issue) => issue.message).join(' '));
     commitHistoryNow();
     snapshotBeforeReplace(layout);
-    actions.applyLayout({ ...next, ...(layout.designBook && !next.designBook ? { designBook: layout.designBook } : {}) });
+    // A proposal replaces the scene only; the production plan, operations and
+    // design book the user has been editing stay exactly as they are.
+    actions.applySceneLayout(stampChangedItems(current, next, itemProvenance(origin)));
     clearTransientSelection();
     initiallyFramed.current = false;
     setView(current => ({ ...current, view2D: false }));
@@ -1539,7 +1552,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const height = Math.round(splatState.meters.depth * 10) / 10;
     const current = layoutStore.getState().layout;
     if (Math.abs(width - current.width) <= 0.05 && Math.abs(height - current.height) <= 0.05) return;
-    onApplyCreative({ ...current, width, height });
+    try {
+      onApplyCreative({ ...current, width, height }, 'manual');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '实测尺寸与当前布局冲突，未自动校准。', 'info');
+    }
   }, [splatState, onApplyCreative]);
 
   const onBindProject = useCallback((projectId: string) => {
@@ -1587,6 +1604,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
         onFit: fitToRoom,
+        onFocusItems: ids => {
+          const target = activeFloor.items.find(item => ids.includes(item.id) && item.position);
+          if (!target?.position) return;
+          selectOnly(target.id, { keepPanel: true });
+          focusOn(target.position, undefined, activeFloorY);
+        },
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <header ref={headerRef} className="sc-header">
@@ -1596,7 +1619,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-header-actions">
             <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" data-tip="项目" title="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/></button>
             <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
-            <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+            <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={next => onApplyCreative(next, 'cloud')} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
         </header>
         <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed && sidebarCollapsed ? '' : ' has-left-column'}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`} style={{ ['--sc-left-card-width' as string]: `${leftCardWidth}px` }}>
@@ -1780,7 +1803,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             }}/>
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             <div id="workbench-material-shelf" className="sc-material-shelf sc-bottom-drawer" hidden={!materialsOpen} onWheel={event=>event.stopPropagation()} onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'){event.preventDefault();closeMaterialsShelf();}}}>
-              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}
+              {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={next => onApplyCreative(next, 'template')} controller={controller} placeCatalogItem={placeFromCatalog}
                 environment={{ preview: splatState, onStart: startStoredScene, onStop: stopSplat }}/>}
             </div>
             {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}

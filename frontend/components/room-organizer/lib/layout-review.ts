@@ -9,21 +9,46 @@ import type { FurnitureItem, RoomLayout, Vec2 } from './types';
  * T-03 ③ 快速优化：只读画布几何，报冲突与动线，并给一条能当场预览的改法。
  *
  * 边界钉死：
- * - 只报画布上的几何事实（重叠 / 出界 / 压墙柱 / 挡入口留空 / 桌椅间距），
+ * - 只报画布上的几何事实（重叠 / 出界 / 压墙柱 / 挡入口留空 / 桌椅间距 / 桌椅配套），
  *   不写消防、疏散、无障碍之类的合规结论。
+ * - 桌椅配套（孤椅 / 空桌）只报净距和座位数这类量得出来的事实，给不出稳妥改法就
+ *   `fix: null`，不替人补椅子、也不猜这桌本来要坐几个人。
  * - 改法只算候选布局，不写画布；确认仍由调用方走 T-02 的「确认布置」。
  * - 锁着的、结构标记、墙上门窗、户外物件一律不挪；跳过的要报出来。
  */
 
 export const SEAT_PULLOUT_METERS = 0.45;
 export const TABLE_PASSAGE_METERS = 0.9;
+/**
+ * 椅子到最近桌沿的净距不超过这个值，才算「配到了桌」。
+ * 比按中心点量的 1.6 m 更宽松：长桌两端的椅子中心离得远，但桌沿是挨着的。
+ */
+export const SEAT_TABLE_GAP_METERS = 1.8;
 
 const SEAT_TYPES = new Set(['chair', 'dining-chair', 'bench', 'armchair', 'garden-bench']);
 const TABLE_TYPES = new Set(['dining-table', 'table', 'counter', 'picnic-table', 'desk']);
+/** 会配椅子的桌：再加咖啡桌、边几——椅子、扶手椅围着它们坐是正常摆法。 */
+const PAIRING_TABLE_TYPES = new Set([...TABLE_TYPES, 'coffee-table', 'side-table']);
+/** 会按「有没有座位」来报空桌的桌：吧台/收银台本来就不配椅，咖啡桌、边几可以单独摆。 */
+const SEATING_TABLE_TYPES = new Set(['dining-table', 'table', 'picnic-table', 'desk']);
+/** 能按座位数估的桌：吧台和书桌的座位口径不统一，不判「座位不足」。 */
+const CAPACITY_TABLE_TYPES = new Set(['dining-table', 'table', 'picnic-table']);
+/** 「孤椅」只认椅子；长凳、扶手椅本来就可以单独摆，不合成对来报。 */
+const LOOSE_SEAT_TYPES = new Set(['chair', 'dining-chair']);
+/** 桌边每 0.75 m 保守估一个座位（经验估法，不是规范，也不写进结论）。 */
+const SEAT_PITCH_METERS = 0.75;
+/** 长边前留不到 0.3 m 就当这侧贴着墙，那侧按坐不了人算。 */
+const SIDE_CLEARANCE_METERS = 0.3;
+/** 4 座以内的小桌按人数摆都说得通，不判「座位不足」；估出的座位数至少到这个数才判。 */
+const MIN_CAPACITY_FOR_DEFICIT = 6;
+/** 明显不足：现有座位不到估出的一半，并且至少少这么多。 */
+const DEFICIT_MARGIN = 3;
 const CLUSTER_RADIUS = 1.8;
 const CLEARANCE_EPSILON = 1e-6;
 
-export type ReviewIssueKind = 'overlap' | 'structure' | 'bounds' | 'keep-out' | 'table-gap' | 'seat-clearance';
+export type ReviewIssueKind =
+  | 'overlap' | 'structure' | 'bounds' | 'keep-out' | 'table-gap' | 'seat-clearance'
+  | 'orphan-seat' | 'unpaired-table';
 export type ReviewFixKind = 'separate' | 'move-inside' | 'clear-structure' | 'clear-entrance' | 'widen-gap' | 'pull-in';
 
 export interface ReviewFix {
@@ -69,6 +94,8 @@ export interface ReviewFixResult {
 
 const ISSUE_ORDER: Record<ReviewIssueKind, number> = {
   overlap: 0, structure: 1, bounds: 2, 'keep-out': 3, 'table-gap': 4, 'seat-clearance': 5,
+  // 配套只报证据、没有改法，排在所有能动的改法之后。
+  'orphan-seat': 6, 'unpaired-table': 7,
 };
 
 const sideLabel: Record<'north' | 'south' | 'east' | 'west', string> = {
@@ -237,6 +264,130 @@ function tightTablePairs(layout: RoomLayout, floorIndex: number): TightTablePair
   return pairs;
 }
 
+/* ───────── 桌椅配套：只量净距和座位数，不给改法 ───────── */
+
+function isPairingTable(item: FurnitureItem): boolean { return PAIRING_TABLE_TYPES.has(item.type); }
+function isSeatingTable(item: FurnitureItem): boolean { return SEATING_TABLE_TYPES.has(item.type); }
+function isCapacityTable(item: FurnitureItem): boolean { return CAPACITY_TABLE_TYPES.has(item.type); }
+function isLooseSeat(item: FurnitureItem): boolean { return LOOSE_SEAT_TYPES.has(item.type); }
+
+/**
+ * 沿世界方向 `dir`（单位向量）从物件中心量到场地墙的净空，已扣掉物件在该方向的半宽。
+ * 旋转件按局部宽度轴 / 进深轴投影，和 boxOf 用同一套轴。
+ */
+function clearanceAlong(item: FurnitureItem, layout: RoomLayout, dir: Vec2): number {
+  const rotation = item.rotation ?? 0, cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const halfAlong = (item.width / 2) * Math.abs(cos * dir.x - sin * dir.z)
+    + (item.depth / 2) * Math.abs(sin * dir.x + cos * dir.z);
+  const cx = item.position?.x ?? 0, cz = item.position?.z ?? 0;
+  const toX = dir.x > 0 ? (layout.width / 2 - cx) / dir.x : dir.x < 0 ? (-layout.width / 2 - cx) / dir.x : Infinity;
+  const toZ = dir.z > 0 ? (layout.height / 2 - cz) / dir.z : dir.z < 0 ? (-layout.height / 2 - cz) / dir.z : Infinity;
+  return Math.min(toX, toZ) - halfAlong;
+}
+
+/**
+ * 桌子两条长边按 SEAT_PITCH_METERS 一个座位保守估出的座位数：只数两长边、贴墙那侧不计，
+ * 短边一个不数——估低了才不会把「按人数少摆两张」误报成座位不足。
+ */
+function tableSeatCapacity(table: FurnitureItem, layout: RoomLayout): number {
+  const rotation = table.rotation ?? 0, cos = Math.cos(rotation), sin = Math.sin(rotation);
+  // 宽 >= 深时长边沿宽度方向，外法线是进深轴 (sin, cos)；否则长边沿进深方向，外法线是宽度轴。
+  const longIsWidth = table.width >= table.depth;
+  const slots = Math.floor((longIsWidth ? table.width : table.depth) / SEAT_PITCH_METERS);
+  if (slots <= 0) return 0;
+  const normal: Vec2 = longIsWidth ? { x: sin, z: cos } : { x: cos, z: -sin };
+  const usableSides = [normal, { x: -normal.x, z: -normal.z }]
+    .filter(dir => clearanceAlong(table, layout, dir) >= SIDE_CLEARANCE_METERS).length;
+  return slots * usableSides;
+}
+
+interface SeatPairing { seat: FurnitureItem; table: FurnitureItem; gap: number; }
+
+/**
+ * 桌椅配套：报两种画布上量得出来的事实，`fix` 一律为 null。
+ * - 孤椅：这层大多数椅子已经配了桌，却有椅子离所有桌沿都超过 SEAT_TABLE_GAP_METERS；
+ * - 空桌 / 座位明显不足：桌子周围一个座位都没有，或两条长边的估计座位连一半都不到。
+ * 净距用 OBB 最近间隙，座位数是长边换算；都不是审美判断，也不下消防/承重/合规结论。
+ */
+function pairingIssues(layout: RoomLayout, items: readonly FurnitureItem[]): ReviewIssue[] {
+  const tables = items.filter(isPairingTable);
+  const seats = items.filter(item => SEAT_TYPES.has(item.type));
+  if (tables.length === 0 || seats.length === 0) return [];
+
+  const pairings: SeatPairing[] = seats.map(seat => {
+    let table = tables[0]!;
+    let gap = boxGap(seat, table);
+    for (const candidate of tables.slice(1)) {
+      const candidateGap = boxGap(seat, candidate);
+      if (candidateGap < gap) { gap = candidateGap; table = candidate; }
+    }
+    return { seat, table, gap };
+  });
+  const atTables = pairings.filter(entry => entry.gap <= SEAT_TABLE_GAP_METERS);
+  // 一半以上的座位已经挨着桌，才当这层是「桌椅成组」的摆法；整排会议椅、观众席
+  // 本来就不配桌，宁可不说，也不能把它们报成孤椅。
+  if (atTables.length * 2 < seats.length) return [];
+
+  const issues: ReviewIssue[] = [];
+  const pairedLoose = atTables.filter(entry => isLooseSeat(entry.seat));
+  const orphans = pairings.filter(entry => isLooseSeat(entry.seat) && entry.gap > SEAT_TABLE_GAP_METERS);
+  if (orphans.length > 0 && pairedLoose.length * 2 >= orphans.length + pairedLoose.length) {
+    const minGap = Math.min(...orphans.map(entry => entry.gap));
+    const worst = orphans.reduce((best, entry) => (entry.gap > best.gap ? entry : best));
+    const gapText = orphans.length === 1 ? `${minGap.toFixed(2)} m` : `${minGap.toFixed(2)}–${worst.gap.toFixed(2)} m`;
+    const count = `${orphans.length} 把椅子`;
+    issues.push({
+      id: `orphan-seat:${orphans.map(entry => entry.seat.id).sort().join('|')}`,
+      kind: 'orphan-seat',
+      title: `${count}离桌沿超过 ${SEAT_TABLE_GAP_METERS.toFixed(2)} m`,
+      detail: `${namesOf(orphans.map(entry => entry.seat))}到最近桌沿（${displayName(worst.table)}）${gapText}，`
+        + `超过 ${SEAT_TABLE_GAP_METERS.toFixed(2)} m 的成组距离；这一层另有 ${pairedLoose.length} 把椅子已经在桌边。`,
+      itemIds: orphans.map(entry => entry.seat.id),
+      fix: null,
+    });
+  }
+
+  const assessed = tables.filter(isSeatingTable).map(table => ({
+    table,
+    nearSeats: seats.filter(seat => boxGap(seat, table) <= SEAT_TABLE_GAP_METERS).length,
+  }));
+  const emptyTables = assessed.filter(entry => entry.nearSeats === 0);
+  if (emptyTables.length > 0) {
+    const count = `${emptyTables.length} 张桌`;
+    issues.push({
+      id: `unpaired-table:${emptyTables.map(entry => entry.table.id).sort().join('|')}`,
+      kind: 'unpaired-table',
+      title: `${count}旁边没有椅子`,
+      detail: `${namesOf(emptyTables.map(entry => entry.table))}四周 ${SEAT_TABLE_GAP_METERS.toFixed(2)} m 内没有找到座位；`
+        + `这一层一共有 ${seats.length} 个座位。`,
+      itemIds: emptyTables.map(entry => entry.table.id),
+      fix: null,
+    });
+  }
+
+  const sparse = assessed
+    .filter(entry => entry.nearSeats > 0 && isCapacityTable(entry.table))
+    .map(entry => ({ ...entry, capacity: tableSeatCapacity(entry.table, layout) }))
+    .filter(entry => entry.capacity >= MIN_CAPACITY_FOR_DEFICIT
+      && entry.nearSeats * 2 <= entry.capacity
+      && entry.capacity - entry.nearSeats >= DEFICIT_MARGIN);
+  if (sparse.length > 0) {
+    const worst = sparse.reduce((best, entry) => (entry.capacity - entry.nearSeats > best.capacity - best.nearSeats ? entry : best));
+    const more = sparse.length > 1 ? `另有 ${sparse.length - 1} 张桌同样偏空。` : '';
+    const count = `${sparse.length} 张桌`;
+    issues.push({
+      id: `unpaired-table:${sparse.map(entry => entry.table.id).sort().join('|')}:seats`,
+      kind: 'unpaired-table',
+      title: `${count}的座位明显不足`,
+      detail: `${displayName(worst.table)}两条长边按 ${SEAT_PITCH_METERS.toFixed(2)} m 一个座位估能坐 ${worst.capacity} 人，`
+        + `桌边只量到 ${worst.nearSeats} 个座位。${more}`,
+      itemIds: sparse.map(entry => entry.table.id),
+      fix: null,
+    });
+  }
+  return issues;
+}
+
 export function reviewLayout(layout: RoomLayout, floorIndex = 0): ReviewReport {
   const floor = floorOf(layout, floorIndex);
   const items = (floor?.items ?? []).filter(isReviewable);
@@ -342,6 +493,9 @@ export function reviewLayout(layout: RoomLayout, floorIndex = 0): ReviewReport {
       fix: { label: '把桌子这组往外让一点', kind: 'widen-gap', itemIds: [worst.a.id, worst.b.id] },
     });
   }
+
+  // 5. 桌椅配套：只报孤椅/空桌这类量得出来的事实，不给改法（挪椅去凑桌是改人意图）。
+  issues.push(...pairingIssues(layout, items));
 
   const entranceKnown = !!layout.entrance || (layout.backendVenue?.entrances?.length ?? 0) > 0
     || (floor?.items ?? []).some(item => !!item.venueEntranceId)
@@ -583,5 +737,8 @@ function fixTableGap(layout: RoomLayout, floorIndex: number, issue: ReviewIssue)
 export function proposeReviewFix(layout: RoomLayout, floorIndex: number, issue: ReviewIssue): ReviewFixResult | null {
   if (issue.kind === 'seat-clearance') return fixSeatClearance(layout, floorIndex, issue);
   if (issue.kind === 'table-gap') return fixTableGap(layout, floorIndex, issue);
+  // 孤椅/空桌只报证据：把椅子拖去凑桌、或者替人补椅子，都是在改人的摆法意图，
+  // 这里不算候选，也不假装有改法。
+  if (issue.kind === 'orphan-seat' || issue.kind === 'unpaired-table') return null;
   return fixConflicts(layout, floorIndex, issue);
 }

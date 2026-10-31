@@ -15,6 +15,11 @@ function table(id: string, x: number, z: number, overrides: Partial<FurnitureIte
   return makeItem({ id, type: 'table', name: '餐桌', width: 1.2, depth: 0.8, position: { x, z }, ...overrides });
 }
 
+/** 1.8 × 0.9 的餐桌：两条长边各放得下 3 把椅子，是现场最常见的六人桌。 */
+function diningTable(id: string, x: number, z: number, overrides: Partial<FurnitureItem> = {}): FurnitureItem {
+  return makeItem({ id, type: 'dining-table', name: '餐桌', width: 1.8, depth: 0.9, position: { x, z }, ...overrides });
+}
+
 function seatIssue(layout: RoomLayout): ReviewIssue {
   const issue = reviewLayout(layout).issues.find(candidate => candidate.kind === 'seat-clearance');
   expect(issue).toBeTruthy();
@@ -132,6 +137,97 @@ describe('reviewLayout', () => {
       const fixed = proposeReviewFix(layout, 0, issue);
       if (fixed) expect(JSON.stringify(fixed.skipped)).not.toMatch(/合规|消防|疏散|无障碍/);
     }
+  });
+});
+
+describe('桌椅配套', () => {
+  it('flags a chair left far from every table and reports the measured gap', () => {
+    const layout = layoutWith([
+      table('main', 0, 0),
+      chair('north', 0, 0.85),
+      chair('south', 0, -0.85),
+      chair('stray', 3.5, 3.5),
+    ]);
+    const report = reviewLayout(layout);
+    const issue = report.issues.find(candidate => candidate.kind === 'orphan-seat');
+    expect(issue).toBeTruthy();
+    expect(issue!.itemIds).toEqual(['stray']);
+    expect(issue!.title).toContain('椅子');
+    // 净距是画布上的实测值，不是「看起来宽敞」这种主观话。
+    expect(issue!.detail).toContain('2.85');
+    expect(issue!.detail).toContain('1.80');
+    expect(issue!.fix).toBeNull();
+    expect(report.issues.some(candidate => candidate.kind === 'unpaired-table')).toBe(false);
+    // 证据类问题不给改法：挪椅子去凑桌是改人的摆法，不冒充成候选。
+    expect(proposeReviewFix(layout, 0, issue!)).toBeNull();
+  });
+
+  it('does not flag a normally paired table set, desk or lone bench', () => {
+    const layout = layoutWith([
+      diningTable('big', 0, 0),
+      chair('n1', -0.55, 0.75), chair('n2', 0, 0.75), chair('n3', 0.55, 0.75),
+      chair('s1', -0.55, -0.75), chair('s2', 0, -0.75), chair('s3', 0.55, -0.75),
+      makeItem({ id: 'desk', type: 'desk', name: '工作桌', width: 1.2, depth: 0.6, position: { x: -3, z: 2 } }),
+      chair('desk-chair', -3, 2.6),
+      makeItem({ id: 'bench', type: 'bench', name: '长凳', width: 1.5, depth: 0.5, position: { x: 3, z: 3 } }),
+    ]);
+    const report = reviewLayout(layout);
+    expect(report.issues.filter(candidate => candidate.kind === 'orphan-seat' || candidate.kind === 'unpaired-table')).toEqual([]);
+    expect(report.clean).toBe(true);
+  });
+
+  it('counts a bench at a picnic table as seating, not as an empty table', () => {
+    const layout = layoutWith([
+      makeItem({ id: 'picnic', type: 'picnic-table', name: '野餐桌', width: 1.8, depth: 0.8, position: { x: 0, z: 0 } }),
+      makeItem({ id: 'bench', type: 'bench', name: '长凳', width: 1.6, depth: 0.4, position: { x: 0, z: 0.75 } }),
+    ]);
+    const report = reviewLayout(layout);
+    expect(report.issues.filter(candidate => candidate.kind === 'orphan-seat' || candidate.kind === 'unpaired-table')).toEqual([]);
+  });
+
+  it('flags a table with no seating while the rest of the set is seated', () => {
+    const layout = layoutWith([
+      table('seated', -2, 0),
+      chair('seat', -2, 0.75),
+      table('empty', 2, 0),
+    ]);
+    const report = reviewLayout(layout);
+    const issue = report.issues.find(candidate => candidate.kind === 'unpaired-table');
+    expect(issue).toBeTruthy();
+    expect(issue!.itemIds).toEqual(['empty']);
+    expect(issue!.title).toContain('桌');
+    expect(issue!.detail).toContain('没有找到座位');
+    expect(issue!.fix).toBeNull();
+    expect(report.issues.some(candidate => candidate.kind === 'orphan-seat')).toBe(false);
+    expect(proposeReviewFix(layout, 0, issue!)).toBeNull();
+  });
+
+  it('flags a long table whose measured seat count is far under its long-edge capacity', () => {
+    const layout = layoutWith([
+      diningTable('banquet', 0, 0, { width: 3, depth: 1 }),
+      chair('c1', -0.4, 1),
+      chair('c2', 0.4, 1),
+    ]);
+    const report = reviewLayout(layout);
+    const issue = report.issues.find(candidate => candidate.kind === 'unpaired-table');
+    expect(issue).toBeTruthy();
+    expect(issue!.itemIds).toEqual(['banquet']);
+    // 3 m 长的桌子两条长边按 0.75 m/座估 8 座，桌边只量到 2 个座位。
+    expect(issue!.detail).toContain('8');
+    expect(issue!.detail).toContain('2 个');
+    expect(issue!.detail).toContain('0.75');
+    expect(issue!.fix).toBeNull();
+    expect(report.issues.some(candidate => candidate.kind === 'orphan-seat')).toBe(false);
+  });
+
+  it('stays quiet when chairs and tables are not grouped yet', () => {
+    const layout = layoutWith([
+      table('t1', -2, 0), table('t2', 2, 0),
+      chair('c1', -3.5, 3.5), chair('c2', 3.5, -3.5),
+    ]);
+    const kinds = reviewLayout(layout).issues.map(candidate => candidate.kind);
+    expect(kinds).not.toContain('orphan-seat');
+    expect(kinds).not.toContain('unpaired-table');
   });
 });
 

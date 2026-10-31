@@ -209,7 +209,7 @@ export interface KeepOutRect {
 }
 
 /** True when the item's footprint overlaps the rect (touching edges don't count). */
-function itemEntersRect(item: FurnitureItem, rect: KeepOutRect): boolean {
+export function itemEntersRect(item: FurnitureItem, rect: KeepOutRect): boolean {
   if (!item.position) return false;
   if (rect.rotation) {
     const cos = Math.cos(rect.rotation);

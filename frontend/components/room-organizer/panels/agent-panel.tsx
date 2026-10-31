@@ -43,7 +43,7 @@ import { useStudioAgent } from './creative-studio';
 import { LaneSwitch, MaterialGenerateDock } from './material-generate-dock';
 import { SiteCaptureCard } from './site-capture-card';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
-import type { CatalogItem, RoomLayout } from '../lib/types';
+import type { CatalogItem, ItemOrigin, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import './agent-panel.css';
@@ -64,8 +64,11 @@ type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
-  /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
+  /** 问题卡绑定物件与画布版本，不能跨场景继续操作。 */
   action?: { label: string; run(): void };
+  issue?: ReviewIssue;
+  onLocate?(ids: string[]): void;
+  onFix?(issue: ReviewIssue): void;
 };
 /** 这一版要按哪组尺度摆：origin 记下米数是谁定的，只有人说过的才敢当事实念出来。 */
 type Scale = { length: number; width: number; origin: ScaleOrigin };
@@ -148,6 +151,7 @@ export interface LayoutAgentCallbacks {
   onOpenReview(): void;
   onOpenDelivery(): void;
   onFit(): void;
+  onFocusItems?(ids: string[]): void;
   /** 活动简报（完善需求） */
   onOpenBrief?(): void;
   /** 图纸尺寸面板 */
@@ -195,7 +199,7 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, origin?: ItemOrigin): void; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
@@ -211,6 +215,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const [baseName, setBaseName] = useState<string | null>(null);
   const [issue, setIssue] = useState<FileIssue | null>(null);
   const [dragging, setDragging] = useState(false);
+  const lastReviewedLayout = useRef<RoomLayout | null>(null);
+
   const [lengthText, setLengthRaw] = useState('');
   const [widthText, setWidthRaw] = useState('');
   const [dimsTouched, setDimsTouched] = useState(false);
@@ -384,12 +390,14 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', long: true, text: `看完了 ${report.checked} 件：没有互相挤、压墙柱、出界或拉不开的地方。这是几何体检，不是合规审查。${notes}` });
       return;
     }
-    say({ role: 'agent', long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
-    const actionable = report.issues.filter(issue => !!issue.fix);
-    for (const issue of actionable.slice(0, 3)) {
-      say({ role: 'agent', text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
+    say({ role: 'agent', long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空、座椅拉不开和桌椅配套，不是合规审查。${notes}` });
+    const shown = report.issues.slice(0, 3);
+    for (const issue of shown) {
+      say({ role: 'agent', text: `${issue.title}。${issue.detail}`, ...(issue.fix
+        ? { action: { label: `按这条改：${issue.fix.label}`, run: () => applyReviewFix(issue) } }
+        : { issue, onLocate: (ids: string[]) => callbacks.onFocusItems?.(ids) }) });
     }
-    const rest = actionable.length - Math.min(3, actionable.length);
+    const rest = report.issues.length - shown.length;
     if (rest > 0) say({ role: 'agent', amber: true, text: `还有 ${rest} 条没展开：先把上面这几条改了，再说一句「看看哪里有问题」，我接着看。` });
   }
 
@@ -664,6 +672,23 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
   }, [layout, planShownPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 提醒绑定体检时的画布：人确认、撤销或手动改了物件，旧问题卡不能再挂着当现状。
+  useEffect(() => {
+    const baseline = lastReviewedLayout.current;
+    if (!baseline || sameLayoutContent(layout, baseline)) return;
+    if (phase !== 'ready' && phase !== 'edited' && phase !== 'idle') return;
+    lastReviewedLayout.current = null;
+    setBubbles(items => items.some(bubble => bubble.issue) ? items.filter(bubble => !bubble.issue) : items);
+  }, [layout, phase]);
+
+  // 云端那一版落成预览后同样主动体检，不等人再问一句「看看哪里有问题」。
+  const cloudPreviewLayout = studio?.preview?.layout ?? null;
+  useEffect(() => {
+    if (!cloudPreviewLayout) return;
+    if (lastReviewedLayout.current && sameLayoutContent(lastReviewedLayout.current, cloudPreviewLayout)) return;
+    reviewCandidate(cloudPreviewLayout, '云端这版我按画布几何看了一遍');
+  }, [cloudPreviewLayout]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** 第 1 步的壳体播报：尺寸、墙与门、层高来源，一句一句照实说。 */
   function shellNote(scene: SceneV2, cleared: number): string {
     const venue = scene.venue;
@@ -710,6 +735,27 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 把候选一帧一帧推到画布上当预览：绿框 = 新摆的，红框 = 要撤掉的，虚线 = 原位。
    * 全程只调 onPreview，不 dispatch —— 自动存档与撤销栈都看不到它。
    */
+  /** 出方案后主动体检：只挂三条最高优先级，证据和改法都来自同一套几何函数。 */
+  function reviewCandidate(target: RoomLayout, lead = '我又按画布几何看了一遍'): void {
+    if (!callbacks.onFocusItems) return;
+    const report = reviewLayout(target, activeFloorIndex);
+    if (report.checked === 0) return;
+    lastReviewedLayout.current = target;
+    const shown = report.issues.slice(0, 3);
+    if (!shown.length) return;
+    say({ role: 'agent', long: true, text: `${lead} ${report.checked} 件，找到 ${report.issues.length} 条：只报画布上能测到的布置问题，不是合规审查。` });
+    for (const issue of shown) {
+      say({
+        role: 'agent', text: `${issue.title}。${issue.detail}`, issue,
+        onLocate: ids => callbacks.onFocusItems?.(ids),
+        onFix: fix => applyReviewFix(fix),
+      });
+    }
+    if (report.issues.length > shown.length) {
+      say({ role: 'agent', amber: true, text: `还有 ${report.issues.length - shown.length} 条没展开：先处理上面几条，或说「看看哪里有问题」，我按最新画布接着看。` });
+    }
+  }
+
   async function presentProposal(token: number, lead?: string): Promise<void> {
     const plan = proposal.current;
     if (!plan) return;
@@ -729,6 +775,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
       ? `${planView.blocked}先出一版给你看着改：${notes.join('，')}。确认按钮暂时点不动，改好场地或解锁再出一版。`
       : `${intro}${notes.join('，')}。${tail}` });
+    reviewCandidate(plan.layouts[plan.layouts.length - 1]!, '这版我按画布几何又看了一遍');
   }
 
   /**
@@ -773,7 +820,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     // 落盘走同一个确认回调（撤销/存快照都在里面），但只改外框不该把人从 2D 拽回 3D。
     const was2D = view.view2D;
-    try { onApply(venue.layout); }
+    try { onApply(venue.layout, 'venue'); }
     catch (error) {
       revertScaleToCanvas();
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
@@ -792,7 +839,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     setPhase('idle'); setProgress(0);
     const was2D = view.view2D;
     try {
-      onApply(createBlankVenue(live.current));
+      onApply(createBlankVenue(live.current), 'venue');
       if (was2D) setView(current => ({ ...current, view2D: true }));
       say({ role: 'agent', text: `空白场地立好了：${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m，要调尺寸就说「改成 15×10」。` });
     } catch (error) {
@@ -817,7 +864,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (venue) {
       // 场地是 T-01 已经确认过的真相：改的是墙体尺寸，不是物料，所以先落它，预览才对得上墙。
       // 落盘走 provider 的 onApply：提交撤销历史、存快照都在里面，直接 applyLayout 会绕过撤销。
-      try { onApply(venue.layout); }
+      try { onApply(venue.layout, 'venue'); }
       catch (error) {
         revertScaleToCanvas();
         say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
@@ -830,7 +877,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       // 否则按新尺度摆的桌椅会被旧边界判成放不下。等一帧再读 live，基线才包含这次的对齐。
       const current = live.current;
       if (Math.abs(current.width - scale.length) > 1e-6 || Math.abs(current.height - scale.width) > 1e-6) {
-        try { onApply({ ...current, width: scale.length, height: scale.width }); }
+        try { onApply({ ...current, width: scale.length, height: scale.width }, 'venue'); }
         catch (error) {
           revertScaleToCanvas();
           say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
@@ -1202,7 +1249,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       const was2D = view.view2D;
       try {
         const { layout, cleared } = createVenueFromPick(live.current, pick);
-        onApply(layout);
+        onApply(layout, 'venue');
         setVenueIO('outdoor');
         onVenueIOChange?.('outdoor');
         if (was2D) setView(current => ({ ...current, view2D: true }));
@@ -1438,7 +1485,10 @@ function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
     ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
     : <div key={bubble.id} className="ap-turn">
       <p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
-      {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
+      {bubble.issue ? <div className="ap-issue-actions">
+        <button type="button" className="ap-bubble-action" onClick={() => bubble.onLocate?.(bubble.issue!.itemIds)}>定位</button>
+        {bubble.issue.fix && <button type="button" className="ap-bubble-action" onClick={() => bubble.onFix?.(bubble.issue!)}>预览改法：{bubble.issue.fix.label}</button>}
+      </div> : bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
     </div>)}</>;
 }
 

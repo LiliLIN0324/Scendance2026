@@ -1,6 +1,7 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect } from 'vitest';
 import { database,owner,editor,outsider,studio,session,scene,chair } from './fixtures.ts';
 import { randomToken,sha256,sceneHash } from '../supabase/functions/_shared/domain.ts';
+import { groupBillOfMaterials } from '../supabase/functions/_shared/bom.ts';
 
 describe('PostgreSQL migrations and transactional contracts',()=>{
   let f:Awaited<ReturnType<typeof database>>,projectId:string,lease:Record<string,unknown>;
@@ -55,11 +56,25 @@ describe('PostgreSQL migrations and transactional contracts',()=>{
     await f.rpc(owner,'scene.save',{...lease,scene:s});
     const bom=(await f.rpc(owner,'projects.get',{projectId})).materials;expect(bom.map((r:{quantity:number})=>r.quantity).sort()).toEqual([1,2]);
     const tokenHash=await sha256(randomToken());const pub=await f.rpc(owner,'publish',{projectId,expectedRevision:1,tokenHash});
+
     await f.rpc(owner,'scene.save',{...lease,expectedRevision:1,scene:scene()});
     const shared=await f.rpc(null,'share.read',{tokenHash});expect(shared.scene.objects).toHaveLength(3);expect(JSON.stringify(shared)).not.toContain('internal');
     await expect(f.db.query("update scene_private.publications set name='mutated' where id=$1",[pub.publicationId])).rejects.toThrow('IMMUTABLE_PUBLICATION');
     await f.rpc(owner,'shares.revoke',{projectId,shareId:pub.shareId});
     await expect(f.rpc(null,'share.read',{tokenHash})).rejects.toThrow('SHARE_NOT_FOUND');
+  });
+  it('reports the same BOM as the shared grouping, including asset UUID case aliases',async()=>{
+    const assetId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await f.rpc(owner,'assets.register',{id:assetId,name:'真实物料A',source:'upload',format:'glb',byteSize:100,sha256:'a'.repeat(64),storagePath:'asset-a.glb',license:{},metadata:{}});
+    const s=scene(),base=chair();
+    s.objects=[chair('内部'),chair('内部'),{...chair(),notes:'贵宾席'},{...chair(),color:'#ff0000'},
+      {...base,materialId:'asset' as const,assetId},{...base,id:crypto.randomUUID(),materialId:'asset' as const,assetId:assetId.toUpperCase()}];
+    await f.rpc(owner,'scene.save',{...lease,scene:s});
+    const bom=(await f.rpc(owner,'projects.get',{projectId})).materials as {assetId:string|null;quantity:number}[];
+    const shared=groupBillOfMaterials(s.objects,{name:object=>String(object.materialId),assetKey:assetId=>assetId.toLowerCase()}).map(row=>row.quantity).sort((a,b)=>a-b);
+    expect(bom.map(row=>row.quantity).sort((a,b)=>a-b)).toEqual([1,1,2,2]);
+    expect(bom.map(row=>row.quantity).sort((a,b)=>a-b)).toEqual(shared);
+    expect(bom.filter(row=>row.assetId)).toMatchObject([{assetId,quantity:2}]);
   });
   it('only project creator/studio owner can publish or revoke',async()=>{
     await expect(f.rpc(editor,'publish',{projectId,expectedRevision:0,tokenHash:'a'.repeat(64)})).rejects.toThrow('FORBIDDEN');

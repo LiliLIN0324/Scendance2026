@@ -99,6 +99,10 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
     ? normalizeRulerPoints(points[0]!, points[1]!, image.width, image.height)
     : null;
 
+  // 图片元数据可能还没加载完；先落成数值，避免在回调里丢失收窄。
+  const imageWidth = image.width ?? 0;
+  const imageHeight = image.height ?? 0;
+
   return (
     <section className="rc-ruler" aria-label="两点定标尺">
       <header>
@@ -118,12 +122,12 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
         onClick={event => addPoint(event.clientX, event.clientY)}
       >
         <img src={image.url} alt={`平面图：${image.name}`} />
-        {image.width && image.height && (
-          <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="xMidYMid meet">
+        {imageWidth > 0 && imageHeight > 0 && (
+          <svg viewBox={`0 0 ${imageWidth} ${imageHeight}`} preserveAspectRatio="xMidYMid meet">
             {points.map((point, index) => (
               <g key={index}>
-                <circle cx={point.x} cy={point.z} r={Math.max(4, image.width / 120)} fill="#4A7C59" />
-                <text x={point.x} y={point.z - Math.max(6, image.width / 100)} fill="#141416" fontSize={Math.max(10, image.width / 80)} textAnchor="middle">
+                <circle cx={point.x} cy={point.z} r={Math.max(4, imageWidth / 120)} fill="#4A7C59" />
+                <text x={point.x} y={point.z - Math.max(6, imageWidth / 100)} fill="#141416" fontSize={Math.max(10, imageWidth / 80)} textAnchor="middle">
                   {index + 1}
                 </text>
               </g>
@@ -135,7 +139,7 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
                 x2={points[1]!.x}
                 y2={points[1]!.z}
                 stroke="#4A7C59"
-                strokeWidth={Math.max(2, image.width / 200)}
+                strokeWidth={Math.max(2, imageWidth / 200)}
               />
             )}
           </svg>

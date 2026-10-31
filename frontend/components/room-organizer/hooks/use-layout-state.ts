@@ -109,6 +109,12 @@ export interface LayoutActions {
   renameFloor(index: number, name: string): void;
   reorderFloor(from: number, to: number): void;
   applyLayout(layout: RoomLayout): void;
+  /**
+   * Replace the scene while keeping the store's production plan, event
+   * operations and design book. AI proposals and scene snapshots go through
+   * this so they can never roll back business documents.
+   */
+  applySceneLayout(scene: RoomLayout): void;
   /** Room zones on the active floor (#155). `addZone` returns the new zone's id. */
   addZone(zone: Omit<RoomZone, 'id'>): string;
   updateZone(id: string, patch: Partial<Omit<RoomZone, 'id'>>): void;

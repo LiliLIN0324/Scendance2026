@@ -61,6 +61,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 @media (prefers-reduced-motion: reduce) { .ap-turn, .ap-agent, .ap-user, .ap-card { animation: none; } }
 /* 一句话动作：贴在它那句下面，像对话里的下一步，不像表单按钮。 */
 .ap-turn { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ap-issue-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ap-bubble-action { min-height: 28px; padding: 0 12px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--plane); color: var(--ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-bubble-action:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); color: var(--ink); transform: translateY(-1px); }
 .ap-bubble-action:active { transform: none; }

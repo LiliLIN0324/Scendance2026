@@ -5,6 +5,17 @@ import type { ProductionPlan } from '../../../../supabase/functions/_shared/prod
 
 export type Vec2 = Readonly<{ x: number; z: number }>;
 
+/** Where an item instance entered the layout. */
+export type ItemOrigin = 'proposal' | 'import' | 'template' | 'cloud' | 'venue' | 'manual';
+
+export interface ItemProvenance {
+  origin: ItemOrigin;
+  /** ISO-8601 time the item entered the layout from this origin. */
+  at: string;
+  /** Optional trace back to the proposal, file or preset that produced it. */
+  ref?: string;
+}
+
 export type FurnitureType =
   | 'backdrop'
   | 'partition'
@@ -131,6 +142,8 @@ export interface FurnitureItem {
   assetId?: string;
   notes?: string;
   source?: 'builtin' | 'public_library' | 'generated' | 'local_sample';
+  /** Stamped when an AI proposal, import, preset or cloud load writes this instance. */
+  provenance?: ItemProvenance;
   /** A frontend loading reference; the backend scene stores assetId only. */
   glbUrl?: string;
   /** Named editable fixture within an archived scene model. */

@@ -164,7 +164,8 @@ const generationJobSchema = z.object({
   state: z.enum(["queued", "submitting", "submitted", "processing", "archiving", "ready", "added", "failed", "rejected", "submit_unknown"]),
   provider_job_id: z.string().nullable(), asset_id: uuid.nullable(),
   next_poll_at: dateString, attempts: z.number().int().nonnegative(), error_code: z.string().nullable(),
-  provider_usage: z.unknown(), created_at: dateString, updated_at: dateString, reused: z.boolean().optional(),
+  provider_usage: z.unknown(), generation: z.record(z.string(), z.unknown()).optional(),
+  created_at: dateString, updated_at: dateString, reused: z.boolean().optional(),
 }).refine(job => !["ready", "added"].includes(job.state) || job.asset_id !== null);
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 const generationCapabilitiesSchema = z.object({ model: z.string(), textToModel: z.boolean(), imageToModel: z.boolean(), texture: z.boolean(), textureRequiresImage: z.literal(true), aholoTextToModel: z.boolean().default(false), aholoImageToModel: z.boolean().default(false) });

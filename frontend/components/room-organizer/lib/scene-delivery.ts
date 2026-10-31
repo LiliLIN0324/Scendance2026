@@ -4,8 +4,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
 import assetIds from '../../../../assets/library/asset-ids.json';
 import catalogue from '../../../../assets/library/catalogue.json';
+import { groupBillOfMaterials } from '../../../../supabase/functions/_shared/bom';
 import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { migrateScene } from '../../../../supabase/functions/_shared/scene-migrate';
+import { structuralViolations } from '../../../../supabase/functions/_shared/structural-geometry';
 import { createFurnitureModel } from '../three/furniture-builders';
 import { disposeOwnedModel, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
 import { buildRoom } from '../three/room-builder';
@@ -13,8 +16,10 @@ import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
 import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
+import { layoutRuleErrors } from './layout-rules';
 import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
-import type { RoomLayout } from './types';
+import { provenanceText } from './provenance';
+import type { ItemProvenance, RoomLayout } from './types';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -23,7 +28,18 @@ export function deliveryScene(layout: RoomLayout) {
     throw new Error('完整场景预设暂不支持交付导出，固定场馆结构和物件会保留在云方案中。');
   }
   if(layout.entrance)throw new Error('当前交付不支持本地建筑入口扩展，请保留原始方案。');
-  return layoutToBackendScene(layout);
+  const issues = layoutRuleErrors(layout);
+  if (issues.length > 0) throw new Error(`布局未通过交付检查：${issues[0]!.message}`);
+  // Delivery always speaks the current Scene schema. Legacy v1 layouts gain only
+  // the perimeter walls their saved venue already implies; if that structure
+  // would intersect existing objects, stop rather than ship an inconsistent model.
+  const scene = migrateScene(layoutToBackendScene(layout)).scene;
+  const collision = structuralViolations(scene).find(violation => violation.code === 'WALL_COLLISION');
+  if (collision) {
+    const item = layout.floors.flatMap(floor => floor.items).find(entry => entry.id === collision.objectId);
+    throw new Error(`场景升级到结构版后，${item ? `“${item.name}”` : '物件'}与场界墙重叠，请先调整后再交付。`);
+  }
+  return scene;
 }
 const materialItems = (layout: RoomLayout) => layout.floors.flatMap(floor => floor.items.filter(item => !item.venueEntranceId && !item.structuralOpeningId && !item.structuralColumnId));
 const publicModels = new Map(catalogue.models.map(model => [(assetIds as Record<string,string>)[model.cdnUrl], model]));
@@ -31,6 +47,8 @@ export interface DeliveryMaterial {
   name: string; materialId: string; assetVersionId: string | null; source: string;
   width: number; depth: number; height: number; color: string; quantity: number; objectIds: string[];
   procurement: '概念物料，采购待确认' | '规格与采购待确认';
+  /** Every distinct origin that contributed an instance to this group. */
+  provenance: ItemProvenance[];
   sourceUrl: string | null; license: string | null; sha256: string | null;
 }
 
@@ -38,20 +56,26 @@ export interface DeliveryMaterial {
 export function deliveryMaterials(layout: RoomLayout): DeliveryMaterial[] {
   const scene = deliveryScene(layout);
   const names = new Map(materialItems(layout).map(item => [item.id, item]));
-  const groups = new Map<string, DeliveryMaterial>();
-  for (const object of scene.objects) {
-    const item = names.get(object.id)!;
+  const sourceOf = (object: (typeof scene.objects)[number]) => {
     const publicModel = object.assetId ? publicModels.get(object.assetId) : undefined;
-    const source = publicModel ? 'public_library' : item.source ?? (object.assetId ? 'cloud_asset' : 'builtin');
-    const key = JSON.stringify([object.assetId ?? object.materialId, object.size, object.color, source]);
-    const prior = groups.get(key);
-    if (prior) { prior.quantity++; prior.objectIds.push(object.id); continue; }
-    groups.set(key, { name: item.name, materialId: object.materialId, assetVersionId: object.assetId ?? null, source,
-      ...object.size, color: object.color, quantity: 1, objectIds: [object.id],
-      procurement: source === 'generated' ? '概念物料，采购待确认' : '规格与采购待确认',
-      sourceUrl: publicModel?.pageUrl ?? null, license: publicModel ? catalogue.license : null, sha256: publicModel?.sha256 ?? null });
-  }
-  return [...groups.values()];
+    return publicModel ? 'public_library' : names.get(object.id)!.source ?? (object.assetId ? 'cloud_asset' : 'builtin');
+  };
+  return groupBillOfMaterials(scene.objects, {
+    name: object => names.get(object.id)!.name,
+    source: sourceOf,
+    assetKey: assetId => assetId.toLowerCase(),
+  }).map(row => {
+    const publicModel = row.assetId ? publicModels.get(row.assetId) : undefined;
+    const provenance: ItemProvenance[] = [];
+    for (const object of row.objects) {
+      const entry = names.get(object.id)!.provenance;
+      if (entry && !provenance.some(prior => JSON.stringify(prior) === JSON.stringify(entry))) provenance.push(entry);
+    }
+    return { name: row.name, materialId: row.materialId ?? '', assetVersionId: row.assetId, source: row.source ?? 'builtin',
+      ...row.size, color: row.color, quantity: row.quantity, objectIds: row.objectIds,
+      procurement: row.source === 'generated' ? '概念物料，采购待确认' : '规格与采购待确认',
+      provenance, sourceUrl: publicModel?.pageUrl ?? null, license: publicModel ? catalogue.license : null, sha256: publicModel?.sha256 ?? null };
+  });
 }
 
 export interface DeliverySnapshot { id: string; generatedAt: string }
@@ -60,6 +84,7 @@ export interface DeliveryExecution extends Omit<Handoff, 'reviewedBasis'> {
   floorId: string; floorName: string; size: { width: number; depth: number; height: number };
   position: { x: number; z: number }; rotation: number; elevation: number;
   hasHandoff: boolean; effectiveStatus: Handoff['status'] | 'needs_review';
+  provenance: ItemProvenance | null;
 }
 
 export async function deliveryExecution(layout: RoomLayout): Promise<DeliveryExecution[]> {
@@ -71,7 +96,8 @@ export async function deliveryExecution(layout: RoomLayout): Promise<DeliveryExe
     return { ...handoff, objectId: object.id, name: item.name, materialId: object.materialId,
       assetVersionId: object.assetId ?? null, floorId: floor.id, floorName: floor.name,
       size: object.size, position: object.position, rotation: object.rotation, elevation: object.elevation ?? 0,
-      hasHandoff: !!item.handoff, effectiveStatus: await effectiveHandoffStatus(layout, item.id) };
+      hasHandoff: !!item.handoff, effectiveStatus: await effectiveHandoffStatus(layout, item.id),
+      provenance: item.provenance ?? null };
   }));
 }
 
@@ -111,17 +137,18 @@ function csvField(value: unknown): string {
   return `"${safe.replace(/"/g, '""')}"`;
 }
 export function sceneDeliveryCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): string {
-  const rows: unknown[][] = [['名称','物料类型','资产版本ID','来源','宽/m','深/m','高/m','颜色','数量','物件ID','采购状态','来源页面','许可','SHA256','交付编号','生成时间']];
-  for (const item of deliveryMaterials(layout)) rows.push([item.name,item.materialId,item.assetVersionId,item.source,item.width,item.depth,item.height,item.color,item.quantity,item.objectIds.join(';'),item.procurement,item.sourceUrl,item.license,item.sha256,snapshot?.id,snapshot?.generatedAt]);
+  const rows: unknown[][] = [['名称','物料类型','资产版本ID','来源','宽/m','深/m','高/m','颜色','数量','物件ID','采购状态','来源账本','来源页面','许可','SHA256','交付编号','生成时间']];
+  for (const item of deliveryMaterials(layout)) rows.push([item.name,item.materialId,item.assetVersionId,item.source,item.width,item.depth,item.height,item.color,item.quantity,item.objectIds.join(';'),item.procurement,item.provenance.map(provenanceText).join('\n'),item.sourceUrl,item.license,item.sha256,snapshot?.id,snapshot?.generatedAt]);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 
 export async function sceneExecutionCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
-  const rows: unknown[][] = [['物件ID','名称','物料类型','资产版本ID','楼层','宽/m','深/m','高/m','X/m','Z/m','旋转/度','离地/m','数量','负责人','期限','验收条件','记录状态','有效状态','证据链接','验收说明','交付编号','生成时间']];
+  const rows: unknown[][] = [['物件ID','名称','物料类型','资产版本ID','楼层','宽/m','深/m','高/m','X/m','Z/m','旋转/度','离地/m','数量','负责人','期限','验收条件','记录状态','有效状态','证据链接','验收说明','来源账本','交付编号','生成时间']];
   for (const item of await deliveryExecution(layout)) rows.push([item.objectId,item.name,item.materialId,item.assetVersionId,
     item.floorName,item.size.width,item.size.depth,item.size.height,item.position.x,item.position.z,item.rotation,item.elevation,
     1,item.ownerName,item.dueDate,item.acceptance,HANDOFF_STATUS_LABELS[item.status],
     item.hasHandoff ? HANDOFF_STATUS_LABELS[item.effectiveStatus] : '未分配',item.evidenceUrls.join('\n'),item.evidenceNote,
+    item.provenance ? provenanceText(item.provenance) : '',
     snapshot?.id,snapshot?.generatedAt]);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }

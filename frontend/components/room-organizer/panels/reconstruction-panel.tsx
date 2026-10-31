@@ -19,10 +19,10 @@ import { mergeProposalPresentation, type CreativeBrief } from '../lib/creative-b
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { VenuePhoto } from './venue-photos-panel';
-import type { RoomLayout } from '../lib/types';
+import type { ItemOrigin, RoomLayout } from '../lib/types';
 import './reconstruction-panel.css';
 
-interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; autoGenerateRequest?:number; sourcesRestoring?:boolean; onAddReferenceImages?:(files:FileList|null)=>Promise<void>; onBackToChat?:(() => void)|undefined }
+interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout, origin?: ItemOrigin):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; autoGenerateRequest?:number; sourcesRestoring?:boolean; onAddReferenceImages?:(files:FileList|null)=>Promise<void>; onBackToChat?:(() => void)|undefined }
 interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; rulerSourceImageId?:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; jobIdentity?:string; jobSession?:string; registration?:ReferenceRegistration; }
 const EMPTY:Form={width:'',depth:'',height:'',text:'',constraints:[],adjustment:''};
 /** 从一句自然语言里认出总宽、总深、层高；没提到就沿用已有值，整段清空才重置。 */
@@ -366,7 +366,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
         venueSessionKey(controller,scopeRef.current)!==venueEdit.sessionKey)throw new Error('当前场景或编辑会话已变化，草稿未应用，请重新核对。');
       const next=previewVenueEdit(venueEdit.base,{width:Number(venueEdit.width),depth:Number(venueEdit.depth),openings:venueEdit.openings});
       const frameChanged=next.width!==venueEdit.base.width||next.height!==venueEdit.base.height;
-      onApply(next);patch({width:String(next.width),depth:String(next.height)});setVenueEdit(null);
+      onApply(next, 'venue');patch({width:String(next.width),depth:String(next.height)});setVenueEdit(null);
       notifyVenue(`场地修改已应用，可撤销，并沿用当前场景的本机保存。${frameChanged?'总宽或总深已变化，请重新核对原图对应。':'原图对应的尺度保持。'}${cloud.project&&!localActivity?'云端保存状态请查看项目面板。':''}`,currentSceneKey(next));
     }catch(error){notifyVenue(errorText(error));}
   }

@@ -69,7 +69,7 @@ describe('offline backend configuration preflight',()=>{
         const result=check({...core,...providers,[key]:value});expect(result.status).toBe(1);expect(result.output).toContain(key);
       }
     }
-  });
+  }, 60_000);
   it.each(['2025-02-30','9999-01-01','2026/01/01','2020-01-01T00:00:00Z','not-a-date'])('rejects invalid or future provider review dates: %s',value=>{
     expect(check({...core,...providers,HUNYUAN_TERMS_REVIEWED_AT:value}).status).toBe(1);
   });

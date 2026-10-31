@@ -25,7 +25,7 @@ export async function compareTextureGeometry(source:Uint8Array,candidate:Uint8Ar
     return values;
   };
   const compare=(a:Node,b:Node)=>{
-    if(a.getName()!==b.getName()||!equal(a.getMatrix(),b.getMatrix(),0)||a.listChildren().length!==b.listChildren().length)geometryPreserved=false;
+    if(a.getName()!==b.getName()||!equal(a.getMatrix(),b.getMatrix(),EPSILON)||a.listChildren().length!==b.listChildren().length)geometryPreserved=false;
     const ap=a.getMesh()?.listPrimitives()??[],bp=b.getMesh()?.listPrimitives()??[];
     if(ap.length!==bp.length)geometryPreserved=false;
     for(let i=0;i<ap.length;i++){

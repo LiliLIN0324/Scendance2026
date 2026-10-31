@@ -681,6 +681,7 @@ describe('persisted-field whitelist and bounds (#350)', () => {
 
   it('keeps every field a fully-populated item can carry', () => {
     const item: Required<FurnitureItem> = {
+      provenance: { origin: 'manual', at: '2026-10-07T00:00:00.000Z', ref: 'schema-test' },
       handoff: { ownerName: '现场负责人', dueDate: '2026-10-07', acceptance: '尺寸与位置核对通过', status: 'review', evidenceUrls: [], evidenceNote: '' },
       structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall',
       materialId: 'asset',

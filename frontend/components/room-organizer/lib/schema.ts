@@ -6,6 +6,7 @@ import { orientMapShellNorthUp } from './amap-venue';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
+import { isItemProvenance } from './provenance';
 import { SCENE_PRESET_KEYS, type ScenePresetKey } from './scene-presets';
 import { NEIGHBOUR_FLAGS, isStreetSeed, isTerrainY } from './site';
 import { isStairsLeadIn, isStairsShape } from './stairs';
@@ -50,6 +51,8 @@ export const MAX_ID_LENGTH = 128;
 export const MAX_COLOR_LENGTH = 64;
 /** An item's emoji icon (multi-code-point sequences included). */
 export const MAX_ICON_LENGTH = 32;
+/** Free-text trace on an item's provenance record. */
+export const MAX_PROVENANCE_REF_LENGTH = 200;
 export const MAX_ITEMS_PER_FLOOR = 2000;
 export const MAX_INTERIOR_WALLS_PER_FLOOR = 1000;
 /**
@@ -204,6 +207,7 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   // disappear during whitelist repair or retain a false accepted status.
   if (v.handoff !== undefined && !handoffSchema.safeParse(v.handoff).success) return false;
   if (v.source !== undefined && !['builtin', 'public_library', 'generated', 'local_sample'].includes(v.source as string)) return false;
+  if (v.provenance !== undefined && !isItemProvenance(v.provenance)) return false;
   if (v.glbUrl !== undefined && !isGlbUrl(v.glbUrl)) return false;
   if (v.glbNode !== undefined && (typeof v.glbNode !== 'string' || !/^Preset_Object_\d{1,4}$/.test(v.glbNode))) return false;
   if (v.elevation !== undefined && (!isFiniteNumber(v.elevation) || (v.glbNode ? Math.abs(v.elevation) > MAX_ROOM_DIMENSION : v.elevation < 0 || v.elevation > 30))) return false;
@@ -560,6 +564,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   assetId: true,
   notes: true,
   source: true,
+  provenance: true,
   glbUrl: true,
   glbNode: true,
   venueEntranceId: true,
@@ -704,6 +709,10 @@ function repairItem(item: FurnitureItem): FurnitureItem {
   }
   if (item.cctvModelId !== undefined) patch.cctvModelId = capText(item.cctvModelId, MAX_ID_LENGTH);
   if (item.groupId !== undefined) patch.groupId = capText(item.groupId, MAX_ID_LENGTH);
+  if (item.provenance?.ref !== undefined) {
+    const ref = capText(item.provenance.ref, MAX_PROVENANCE_REF_LENGTH);
+    if (ref !== item.provenance.ref) patch.provenance = { ...item.provenance, ref };
+  }
   // A negative price turns the budget and every cost total upside down (#350).
   if (item.price !== undefined && item.price < 0) patch.price = 0;
   if (item.position) patch.position = repairVec2(item.position);

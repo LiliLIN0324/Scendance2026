@@ -180,4 +180,19 @@ describe('scene delivery',()=>{
     }
     expect(()=>verifyDeliveryReload(source,changed)).toThrow('复检失败');disposeOwnedModel(source);
   });
+  it('delivers a legacy v1 layout on the current scene schema with its inferred perimeter only',async()=>{
+    const exported=JSON.parse(await sceneDeliveryJson(layout([object(1)])));
+    expect(exported.scene.schemaVersion).toBe(2);
+    expect(exported.scene.structure.walls).toHaveLength(4);
+    expect(exported.scene.structure.walls.every((wall:{kind:string;status:string})=>wall.kind==='exterior'&&wall.status==='inferred')).toBe(true);
+    expect(exported.scene.venue.site).toBeUndefined();
+    expect(exported.scene.dimensions).toEqual([]);
+    expect(exported.scene.objects).toHaveLength(1);
+    expect(exported.materials[0].quantity).toBe(1);
+  });
+  it('stops delivery when legacy geometry would intersect the inferred perimeter wall',async()=>{
+    const current=layout([object(1)]);
+    current.floors[0].items[0]!.position={x:-3.76,z:0};
+    await expect(sceneDeliveryJson(current)).rejects.toThrow('与场界墙重叠');
+  });
 });

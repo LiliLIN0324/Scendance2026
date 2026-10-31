@@ -14,6 +14,25 @@ export const generationRequestSchema=z.strictObject({
   if(input.kind==='image'&&input.sourceAssetId)ctx.addIssue({code:'custom',path:['sourceAssetId'],message:'图生模型不保留原网格，请使用纹理模式'});
 });
 export type GenerationRequest=z.infer<typeof generationRequestSchema>;
+/**
+ * Deterministic record of what was asked and, once archived, what came back.
+ * `fingerprint` keeps the legacy request-idempotency meaning; `inputHash` covers
+ * the whole identity including the explicit provider so the same requestId can
+ * never be audited as one input while carrying two different vendor requests.
+ */
+export const generationRecordSchema=z.strictObject({
+  version:z.literal(1),
+  kind:z.enum(['text','image','texture']),
+  lane:z.enum(['offline','library','parametric','hy3d','aholo']),
+  fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
+  inputHash:z.string().regex(/^[a-f0-9]{64}$/),
+  promptSha256:z.string().regex(/^[a-f0-9]{64}$/),
+  providerMode:z.enum(['tokenhub','legacy','aholo']),
+  providerModel:z.enum(['hy-3d-3.0','hy-3d-3.1','hy-3d-texture','lux3d']),
+  referenceImageAssetId:uuid.optional(),
+  sourceAssetId:uuid.optional(),
+});
+export type GenerationRecord=z.infer<typeof generationRecordSchema>;
 export type GenerationProvider={providerMode:'tokenhub'|'legacy'|'aholo';providerModel:'hy-3d-3.0'|'hy-3d-3.1'|'hy-3d-texture'|'lux3d'};
 export function generationCapabilities(env:Env) {
   const mode=env('HUNYUAN_API_MODE')??'tokenhub',model=env('HUNYUAN_MODEL')??'hy-3d-3.0';
