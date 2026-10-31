@@ -145,7 +145,7 @@ describe('docked workspace integration', () => {
     expect(screen.queryByRole('combobox',{name:/布置工具|资料分类/})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'完善活动需求'}));
     const categories=screen.getByRole('combobox',{name:/布置工具|资料分类/}) as HTMLSelectElement;
-    expect(Array.from(categories.options).filter(option=>!option.hidden).map(option=>option.text)).toEqual(['活动需求','图纸与尺寸','场景模板','物料工具','更多…']);
+    expect(Array.from(categories.options).filter(option=>!option.hidden).map(option=>option.text)).toEqual(['活动需求','图纸与照片','场地重建','场景模板','物料工具','更多…']);
     expect(screen.getByTestId('docked-business-host').contains(categories)).toBe(true);
     const input=screen.getByRole('textbox',{name:'客户需求'});input.focus();fireEvent.keyDown(input,{key:'Escape'});
     await waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('button',{name:'完善活动需求'})));
@@ -237,7 +237,7 @@ describe('docked workspace integration', () => {
     selectMode('model');
     const instruction = '生成一把宽0.5米的椅子，保留其他物件';
     fireEvent.change(composer, { target: { value: instruction } });
-    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '方案评审', '场景模板']) {
+    for (const name of ['活动需求', '图纸与照片', '场地重建', '物料工具', '执行资料', '方案评审', '场景模板']) {
       selectBusiness(name);
       expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
       expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(composer);
@@ -302,13 +302,14 @@ describe('docked workspace integration', () => {
     selectMode('model');
     const host = screen.getByTestId('docked-business-host');
     const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' });
-    for (const name of ['活动需求', '图纸与尺寸', '物料工具', '执行资料', '方案评审', '场景模板']) {
+    for (const name of ['活动需求', '图纸与照片', '场地重建', '物料工具', '执行资料', '方案评审', '场景模板']) {
       const entry = screen.getByRole('button', { name: '外部图纸核对' }); fireEvent.click(entry); selectBusiness(name);
       const target = name === '活动需求' ? screen.getByRole('textbox', { name: '客户需求' })
         : name === '执行资料' ? screen.getByRole('group', { name: '执行工作单' })
           : name === '物料工具' ? screen.getByRole('button', { name: '椅' })
           : name === '场景模板' ? screen.getByRole('button', { name: '返回当前工作区' })
           : name === '方案评审' ? screen.getByRole('group', { name: '当前方案评审' })
+          : name === '场地重建' ? host.querySelector<HTMLElement>('[aria-label="场地重建与候选确认"]')!
           : host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
       target.focus(); fireEvent.keyDown(target, { key: 'Escape', cancelable: true });
       await waitFor(() => expect(host.hidden).toBe(true));
@@ -327,11 +328,7 @@ describe('docked workspace integration', () => {
   });
 
   it('keeps business and generator nodes in a stable host while changing tools, templates and chat visibility', async () => {
-    const mounted = vi.fn(), reconstructionMounted = vi.fn();
-    const reconstruction = await import('./reconstruction-panel'), Original = reconstruction.ReconstructionPanel;
-    vi.spyOn(reconstruction, 'ReconstructionPanel').mockImplementation(props => {
-      useEffect(() => { reconstructionMounted(); }, []); return <Original {...props}/>;
-    });
+    const mounted = vi.fn();
     function Generator() {
       const [value, setValue] = useState(''); useEffect(() => { mounted(); }, []);
       return <input aria-label="停靠测试模型描述" value={value} onChange={event => setValue(event.target.value)}/>;
@@ -339,7 +336,7 @@ describe('docked workspace integration', () => {
     renderUI(<DockedTrial generator={<Generator/>}/>); await act(async () => {});
     const host = screen.getByTestId('docked-business-host');
     expect(host.querySelector('[aria-label="客户需求"]')).toBeNull();
-    expect(reconstructionMounted).not.toHaveBeenCalled(); expect(mounted).not.toHaveBeenCalled();
+    expect(host.querySelector('.rc-panel')).toBeNull(); expect(mounted).not.toHaveBeenCalled();
     const composer = screen.getByRole('textbox', { name: '告诉助手你的想法' }) as HTMLTextAreaElement;
     expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
     expect(host.hidden).toBe(true);
@@ -366,10 +363,18 @@ describe('docked workspace integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回当前工作区' }));
     expect(screen.getByRole('textbox', { name: '停靠测试模型描述' })).toBe(model);
     expect((model as HTMLInputElement).value).toBe('模型字段保留'); expect(mounted).toHaveBeenCalledOnce();
-    expect(reconstructionMounted).toHaveBeenCalledOnce();
     selectMode('plan'); expect(composer.value).toBe('停靠策划草稿');
     selectBusiness('活动需求');
     expect(screen.getByRole('textbox', { name: '客户需求' })).toBe(demand); expect(demand.value).toBe('保留原需求文字');
+    selectBusiness('图纸与照片');
+    const measures = screen.getByRole('textbox', { name: '场地尺寸' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(measures.disabled).toBe(false));
+    fireEvent.change(measures, { target: { value: '总宽 12 米，总深 8 米' } });
+    selectBusiness('场地重建');
+    expect(host.querySelector('[aria-label="图纸尺寸与原图核对"]')).toBeNull();
+    expect(host.querySelector('[aria-label="场地重建与候选确认"]')).not.toBeNull();
+    selectBusiness('图纸与照片');
+    expect((screen.getByRole('textbox', { name: '场地尺寸' }) as HTMLTextAreaElement).value).toBe('总宽 12 米，总深 8 米');
     expect(document.querySelectorAll('#creative-message')).toHaveLength(1);
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
@@ -556,6 +561,8 @@ describe('docked workspace integration', () => {
     const host = screen.getByTestId('docked-business-host');
     const reference = host.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
     expect(document.activeElement).toBe(reference); expect(host.hidden).toBe(false);
+    expect(host.querySelector('[aria-label="图纸尺寸与原图核对"]')).not.toBeNull();
+    selectBusiness('场地重建');
     expect(host.querySelector('.rc-inputs')).not.toBeNull();
     selectBusiness('执行资料');
     expect(host.contains(screen.getByRole('group', { name: '执行工作单' }))).toBe(true);
@@ -604,12 +611,12 @@ describe('workspace navigation continuity', () => {
     expect(mounted).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '资料' }));
     const categories = screen.getByRole('combobox', { name: /布置工具|资料分类/ }) as HTMLSelectElement;
-    expect(Array.from(categories.options).filter(option => !option.hidden).map(option => option.text)).toEqual(['活动需求', '图纸与尺寸', '场景模板', '物料工具', '更多…']);
+    expect(Array.from(categories.options).filter(option => !option.hidden).map(option => option.text)).toEqual(['活动需求', '图纸与照片', '场地重建', '场景模板', '物料工具', '更多…']);
     expect(mounted).not.toHaveBeenCalled();
-    selectBusiness('图纸与尺寸'); expect(mounted).not.toHaveBeenCalled();
+    selectBusiness('图纸与照片'); expect(mounted).not.toHaveBeenCalled();
     selectBusiness('合同与约定'); expect(mounted).toHaveBeenCalledOnce();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('group', { name: '合同与约定资料' })));
-    expect(screen.getByText(/当前场景：/).hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('#agent-panel-plan')?.hidden).toBe(true);
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
 
@@ -628,7 +635,7 @@ describe('workspace navigation continuity', () => {
     const input = screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement;
     const target = screen.getByRole('group', { name: '合同与约定资料' });
     fireEvent.change(input, { target: { value: '演练：尚未保存的约定' } });
-    for (const name of ['活动需求', '图纸与尺寸', '执行资料', '方案评审', '物料工具']) {
+    for (const name of ['活动需求', '图纸与照片', '场地重建', '执行资料', '方案评审', '物料工具']) {
       selectBusiness(name); expect(screen.queryByRole('textbox', { name: '演练约定名称' })).toBeNull();
       await expect(flushSourceScope(projectId)).rejects.toThrow('演练约定有未保存修改');
       selectBusiness('合同与约定'); expect(screen.getByRole('textbox', { name: '演练约定名称' })).toBe(input);
@@ -680,7 +687,7 @@ describe('workspace navigation continuity', () => {
     expect(controller.startAgentRun).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
   });
 
-  it.each(['执行资料', '图纸与尺寸'] as const)('[repeat data entry] restores %s after materials without resetting fields or dispatching', async destination => {
+  it.each(['执行资料', '图纸与照片'] as const)('[repeat data entry] restores %s after materials without resetting fields or dispatching', async destination => {
     vi.stubGlobal('innerWidth', 1440);
     renderUI(<DockedTrial operations/>); await act(async () => {});
     const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
@@ -918,12 +925,6 @@ describe('top assistant entry', () => {
 
 describe('direct local delivery shortcut', () => {
   it('[reference integration] opens the original planning review panel and returns focus without remounting or losing drafts', async () => {
-    const reconstruction = await import('./reconstruction-panel'), Original = reconstruction.ReconstructionPanel;
-    const mounted = vi.fn();
-    vi.spyOn(reconstruction, 'ReconstructionPanel').mockImplementation(props => {
-      useEffect(() => { mounted(); }, []);
-      return <Original {...props}/>;
-    });
     function Trial() {
       const [request, setRequest] = useState(0), entry = useRef<HTMLButtonElement>(null);
       return <CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}>
@@ -935,7 +936,7 @@ describe('direct local delivery shortcut', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开晴光 Agent' }));
     await act(async () => {});
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '未发送策划草稿' } });
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     const originalPanel = rendered.container.querySelector('.rc-panel'), originalComposer = screen.getByRole('textbox', { name: '告诉助手你的想法' });
     selectMode('model');
     fireEvent.change(originalComposer, { target: { value: '未发送建模草稿' } });
@@ -944,8 +945,9 @@ describe('direct local delivery shortcut', () => {
     const review = rendered.container.querySelector<HTMLElement>('[aria-label="图纸与场地对应核对"]')!;
     expect((screen.getByRole('combobox', { name: '工作模式' }) as HTMLSelectElement).value).toBe('model');
     expect(document.activeElement).toBe(review);
-    expect(rendered.container.querySelector('.rc-inputs')).not.toBeNull();
-    expect(rendered.container.querySelector('.rc-panel')).toBe(originalPanel); expect(mounted).toHaveBeenCalledOnce();
+    expect(rendered.container.querySelector('[aria-label="图纸尺寸与原图核对"]')).not.toBeNull();
+    expect(rendered.container.querySelector('[aria-label="场地重建与候选确认"]')).toBeNull();
+    expect(rendered.container.querySelector('.rc-panel')).toBe(originalPanel);
     expect(screen.getByRole('textbox', { name: '告诉助手你的想法' })).toBe(originalComposer);
     expect((originalComposer as HTMLTextAreaElement).value).toBe('未发送建模草稿');
     expect(rendered.container.querySelectorAll('#creative-message')).toHaveLength(1);
@@ -1100,7 +1102,7 @@ function enableDirectApply():void {
   fireEvent.click(screen.getByRole('checkbox',{name:'明确指令直接应用'}));
 }
 function selectBusiness(name:string):void {
-  const destinations:Record<string,string>={'活动需求':'brief','图纸与尺寸':'reference','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
+  const destinations:Record<string,string>={'活动需求':'brief','图纸与照片':'reference','场地重建':'rebuild','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
   if(!screen.queryByRole('combobox',{name:/布置工具|资料分类/}))fireEvent.click(screen.getByRole('button',{name:'外部图纸核对'}));
   fireEvent.change(screen.getByRole('combobox',{name:/布置工具|资料分类/}),{target:{value:destinations[name]}});
 }
@@ -1370,7 +1372,7 @@ describe('creative brief and assistant interaction', () => {
     render(ui(createMeasuredRoomLayout(layout,{width:12,depth:10,height:3})));
     expect(screen.getByRole('button',{name:'按这份细表生成预览'})).toBeTruthy();
     expect(screen.getByText('按这份细表生成预览')).toBeTruthy();
-    selectBusiness('图纸与尺寸');
+    selectBusiness('场地重建');
     await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   });
 
@@ -1495,7 +1497,7 @@ describe('creative brief and assistant interaction', () => {
     vi.spyOn(sourceStorage, 'deleteSource').mockResolvedValue(undefined);
     const rendered = render(ui());
     const file = new File(['image fixture'], 'venue.png', { type: 'image/png' });
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     upload(rendered.container, [file]);
     await screen.findByRole('img', { name: '现场照片：venue.png' });
     expect(screen.getByLabelText('场地尺寸')).toBeTruthy();
@@ -1503,7 +1505,7 @@ describe('creative brief and assistant interaction', () => {
     selectBusiness('活动需求');
     expect(screen.getByRole('button',{name:'按这份细表生成预览'})).toBeTruthy();
     expect(screen.getByText('按这份细表生成预览')).toBeTruthy();
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
     await waitFor(() => expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull());
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:local-reference');
@@ -1519,7 +1521,7 @@ describe('creative brief and assistant interaction', () => {
     const cloudUpload = vi.spyOn(controller, 'uploadSource');
     const current = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
     const view = render(ui(current));
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     await screen.findByLabelText('上传核对平面图');
     upload(view.container, [new File(['photo'], 'camera.png', { type: 'image/png' })]);
     await screen.findByRole('img', { name: '现场照片：camera.png' });
@@ -1536,7 +1538,7 @@ describe('creative brief and assistant interaction', () => {
     const records = stored.mock.calls.map(([image]) => image);
     view.unmount(); vi.mocked(listStoredSources).mockResolvedValue(records);
     render(ui(current));
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     expect(await screen.findByRole('img', { name: '现场照片：camera.png' })).toBeTruthy();
     expect(await screen.findByRole('img', { name: '平面图：scan.png' })).toBeTruthy();
     expect(cloudUpload).not.toHaveBeenCalled(); expect(controller.startAgentRun).not.toHaveBeenCalled();
@@ -1549,7 +1551,7 @@ describe('creative brief and assistant interaction', () => {
     createBitmap.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const current = createMeasuredRoomLayout(layout, { width: 12, depth: 10, height: 3 });
     const view = render(ui(current)), file = new File(['old project'], 'old-scan.png', { type: 'image/png' });
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     await screen.findByLabelText('上传核对平面图');
     if (kind === 'photo') upload(view.container, [file]);
     else fireEvent.change(screen.getByLabelText('上传核对平面图'), { target: { files: [file] } });
@@ -1567,7 +1569,7 @@ describe('creative brief and assistant interaction', () => {
     ['oversized file', () => new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'venue.png', { type: 'image/png' }), '每张图片不能超过 5 MB。'],
   ])('rejects %s before creating a preview or decoding', async (_case, file, message) => {
     const rendered = render(ui());
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     upload(rendered.container, [file()]);
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull();
@@ -1579,7 +1581,7 @@ describe('creative brief and assistant interaction', () => {
     const close = vi.fn();
     createBitmap.mockResolvedValueOnce({ width: 5000, height: 768, close });
     const rendered = render(ui());
-    selectBusiness('图纸与尺寸');
+    selectBusiness('图纸与照片');
     upload(rendered.container, [new File(['image'], 'wide.png', { type: 'image/png' })]);
     expect(await screen.findByText('图片长宽请控制在 4096 像素以内。')).toBeTruthy();
     expect(close).toHaveBeenCalledOnce();

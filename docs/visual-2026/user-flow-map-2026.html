@@ -81,7 +81,8 @@
     <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
     <h1>用户旅程图 · 一条流程一条链</h1>
     <p class="sub">产品核心只有一件事：把<b>三维场地</b>立起来、把<b>三维物料</b>摆进去、做<b>空间规划</b>。其余流程都是把它接进生意的前景与后台，所以本图分三组画：核心四条链在前，进场前三条、出场后四条只作辅助。每条链从入口画面开始：点哪个按钮、箭头导向哪个页面或功能，一路画到终点。实拍全部来自<b>你正在使用的实例</b>（进行中状态：左栏「活动简报｜活动资料」页签、右栏 Agent 常驻）；暂无实拍的用虚线框（框内就是真实控件名）。虚线箭头＝提案中的跳转（F 卡）。</p>
-    <div class="meta"><span>2026-10-30 · v4</span><span>核心 4 链 · 辅助 7 链</span><span>实拍来源：本地实例 playwright</span></div>
+    <div class="meta"><span>2026-10-30 · v6 · C 泳道流线加密站位</span><span>核心 4 链 · 辅助 7 链</span><span>实拍来源：本地实例 playwright</span></div>
+    <p class="sub" style="margin-top:14px;color:rgba(255,255,255,.7)">配套：<a href="./product-one-pager-2026.html" style="color:#E8F0EA">产品一页纸</a> · <a href="./workbench-ia-2026.html" style="color:#E8F0EA">工作台 IA</a> · <a href="./confirm-export-2026.html" style="color:#E8F0EA">确认与导出</a> · <a href="./keep-kill-2026.html" style="color:#E8F0EA">KEEP/KILL</a> · <a href="./user-journey-2026.html" style="color:#E8F0EA">旅程</a> · <a href="./aholo-product-gap-2026.html" style="color:#E8F0EA">Aholo 缺口</a> · <a href="./design-spec-2026.html" style="color:#E8F0EA">设计规范</a> · <a href="./index-product-2026.html" style="color:#E8F0EA">索引</a></p>
   </header>
 
   <section>
@@ -120,9 +121,13 @@
         <div class="jlane"><span class="lane-tag">C 地图</span><div class="jflow">
           <div class="jnode"><div class="jwf"><i>左栏简报 · 这块场地从哪来（场地立没立起来都在）</i><div><span class="chip">图纸与照片</span><span class="chip hot">地图圈画</span><span class="chip">空白场地</span></div></div><div class="jcap"><span class="pg">左栏</span><b>这块场地从哪来</b><span>与「图纸与照片」并列钉在左边；场地立起来后不消失，重圈即替换</span></div></div>
           <div class="jarrow"><span class="a-label">点「地图圈画」<small>浮层盖住画布，圈地块要看清</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
-          <div class="jnode"><div class="jwf"><i>高德选址圈画（要先粘 Key 与安全密钥）</i><div><span class="chip">搜索地点</span><span class="chip">搜索</span></div><div><span class="chip hot">圈画场地</span><span class="chip hot">生成户外场地</span></div></div><div class="jcap"><span class="pg">画布浮层</span><b>圈一块地</b><span>需高德 Key 与联网，本机拍不到</span></div></div>
+          <div class="jnode"><div class="jwf"><i>高德选址圈画（Key + 圈边界 + 可选主客流线）</i><div><span class="chip">搜索地点</span><span class="chip">搜索</span></div><div><span class="chip hot">圈画场地</span><span class="chip hot">生成户外场地</span></div></div><div class="jcap"><span class="pg">画布浮层</span><b>圈一块地</b><span>需高德 Key 与联网，本机拍不到</span></div></div>
           <div class="jarrow"><span class="a-label">生成户外场地</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
-          <div class="jnode"><div class="jwf"><i>户外场地立好：真实范围按外接矩形报米数</i><div><span class="chip done">放得下的物料留着</span><span class="chip">放不下先撤 n 件</span></div></div><div class="jcap"><span class="pg">画布</span><b>户外场地</b><span>重圈走同一入口 · 进 S4 布置</span></div></div>
+          <div class="jnode"><div class="jwf"><i>户外场地立好：真轮廓壳体 + 外接矩形报米；可选卫星贴地参考（默认关，不可作重建素材）</i><div><span class="chip done">放得下的物料留着</span><span class="chip">放不下先撤 n 件</span></div></div><div class="jcap"><span class="pg">画布</span><b>户外场地</b><span>可挂历史观感样例 · 重圈同一入口</span></div></div>
+          <div class="jarrow"><span class="a-label">再开「地图」见采集单<small>高德只定场；卫星不可重建</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>现场采集单：沿主客流线加密站位 · 导出纸单</i><div><span class="chip">导出采集单</span><span class="chip hot">去上传现场素材</span></div></div><div class="jcap"><span class="pg">地图浮层</span><b>采集单</b><span>禁令：勿用高德/卫星当素材</span></div></div>
+          <div class="jarrow"><span class="a-label">左轨「观感」· 场地重建</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>场地重建（默认干跑）→ 挂环境预览</i><div><span class="chip">干跑重建</span><span class="chip hot">挂环境预览</span></div><div><span class="chip done">观感层不进碰撞</span></div></div><div class="jcap"><span class="pg">左栏观感</span><b>重建 → 观感</b><span>壳体+glTF 布置不变 · 进 S4</span></div></div>
         </div></div>
       </div></div>
       <p class="jback">F-03 已落：B 支路应用候选后，结果区出现「<b>回对话继续布置</b>」，一点即回到右栏对话并把光标放进输入框。维护项「<b>编辑当前场地</b>」在图纸与照片页底部（进阶块），不占主链。</p>
@@ -154,7 +159,7 @@
     <div class="flow anchor" id="s6">
       <div class="fmeta"><span class="sid">S6</span><h3>物料与生成物件</h3><small><span class="st ok">已对齐</span> · 卡点在外部服务（M1 待审合）</small></div>
       <div class="jflow-wrap"><div class="jflow">
-        <div class="jnode"><img src="shots/rail-aholo.png" alt="Aholo"/><div class="jcap"><span class="pg">左轨 Aholo</span><b>生成物件</b><span>三步教程：用法/等待预期/额度</span></div></div>
+        <div class="jnode"><img src="shots/rail-aholo.png" alt="观感"/><div class="jcap"><span class="pg">左轨观感</span><b>场地观感与物料</b><span>场地重建 / World / Lux3D · 禁卫星素材</span></div></div>
         <div class="jarrow"><span class="a-label">提交生成任务</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
         <div class="jnode"><div class="jwf"><i>任务卡：排队→生成→候选预览</i><div><span class="chip">预览</span><span class="chip">设定尺寸</span><span class="chip hot">加入场景</span></div></div><div class="jcap"><span class="pg">画布</span><b>物件入场景</b><span>概念道具，物料表如实标注</span></div></div>
         <div class="jarrow"><span class="a-label">「物料工具」页签</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>

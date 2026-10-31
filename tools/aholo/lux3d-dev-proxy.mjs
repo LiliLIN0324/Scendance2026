@@ -9,6 +9,7 @@ import { isIP } from 'node:net';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const LUX_BASE = 'https://api.aholo.ai/global';
 const WORLD_BASE = 'https://api.aholo3d.cn';
@@ -388,6 +389,64 @@ export function createServer({
     throw new HttpError(502, 'OUS 上传后未在时限内拿到文件地址');
   }
 
+  
+  async function fetchAmapStatic(searchParams) {
+    const location = searchParams.get('location') ?? '';
+    if (!/^\d{1,3}(?:\.\d+)?,\d{1,3}(?:\.\d+)?$/.test(location)) throw new HttpError(400, 'location invalid');
+    const [lngRaw, latRaw] = location.split(',');
+    const lng = Number(lngRaw);
+    const lat = Number(latRaw);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) throw new HttpError(400, 'location invalid');
+    let zoom = Number(searchParams.get('zoom') ?? '18');
+    // z19 对本 Key/区域常回「此区域无卫星图」；硬顶 18。
+    if (!Number.isInteger(zoom) || zoom < 3 || zoom > 18) zoom = Math.min(18, Math.max(3, Number.isFinite(zoom) ? Math.round(zoom) : 18));
+    if (zoom > 18) zoom = 18;
+    // 静态 maptype=satellite 对本 Key 常回矢量图；改拼高德卫星瓦片 style=6。
+    const require = createRequire(import.meta.url);
+    let sharp;
+    try {
+      sharp = require('../../frontend/node_modules/sharp');
+    } catch {
+      throw new HttpError(500, 'sharp unavailable for satellite stitch');
+    }
+    const n = Math.pow(2, zoom);
+    const x = Math.floor(((lng + 180) / 360) * n);
+    const latRad = (lat * Math.PI) / 180;
+    const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    // 3x3 tiles around center → ~768px
+    const tiles = [];
+    const span = 1;
+    for (let dy = -span; dy <= span; dy++) {
+      for (let dx = -span; dx <= span; dx++) {
+        const tx = x + dx;
+        const ty = y + dy;
+        if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue;
+        const host = 1 + ((tx + ty) % 4);
+        const url = `https://webst0${host}.is.autonavi.com/appmaptile?style=6&x=${tx}&y=${ty}&z=${zoom}`;
+        tiles.push({ dx, dy, url, tx, ty });
+      }
+    }
+    if (!tiles.length) throw new HttpError(502, 'no satellite tiles');
+    const loaded = await Promise.all(tiles.map(async tile => {
+      const res = await fetch(tile.url, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
+      if (!res.ok) throw new HttpError(502, 'tile HTTP ' + res.status);
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 100) throw new HttpError(502, 'empty tile');
+      return { ...tile, buf };
+    }));
+    const size = 256;
+    const grid = span * 2 + 1;
+    const composites = loaded.map(tile => ({
+      input: tile.buf,
+      left: (tile.dx + span) * size,
+      top: (tile.dy + span) * size,
+    }));
+    const bytes = await sharp({
+      create: { width: grid * size, height: grid * size, channels: 3, background: { r: 20, g: 30, b: 20 } },
+    }).composite(composites).jpeg({ quality: 86 }).toBuffer();
+    return { bytes, type: 'image/jpeg' };
+  }
+
   return createHttpServer({ requestTimeout: 360000, headersTimeout: 10000 }, async (req, res) => {
     let origin = '';
     try {
@@ -420,7 +479,19 @@ export function createServer({
         return;
       }
       let result;
-      if (req.method === 'GET' && url.pathname === '/health') {
+      if (req.method === 'GET' && url.pathname === '/amap-static') {
+        const { bytes, type } = await fetchAmapStatic(url.searchParams);
+        res.writeHead(200, {
+          'Content-Type': type,
+          'Content-Length': String(bytes.length),
+          'Cache-Control': 'private, max-age=600',
+          'X-Content-Type-Options': 'nosniff',
+          Vary: 'Origin',
+          'Access-Control-Allow-Origin': origin || '*',
+        });
+        res.end(bytes);
+        return;
+      } else if (req.method === 'GET' && url.pathname === '/health') {
         result = { ok: true, keyConfigured: Boolean(key), base, worldBase };
       } else if (req.method === 'GET' && url.pathname === '/meta') {
         result = await fetchMeta(url.searchParams.get('url'));
@@ -498,7 +569,7 @@ export function createServer({
       req.resume();
       if (!res.destroyed && !res.headersSent) {
         send(res, failure instanceof HttpError ? failure.statusCode : 500,
-          { error: failure instanceof HttpError ? failure.message : '代理请求失败' }, origin, key);
+          { error: failure instanceof HttpError ? failure.message : ('代理请求失败: ' + (failure && failure.message ? failure.message : String(failure))) }, origin, key);
       }
     }
   });

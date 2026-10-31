@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>幕景 · 产品一页纸 · 2026</title>
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+    --hair-soft:#EFEFF1; --hair:#E4E4E7;
+    --green:#4A7C59; --green-deep:#3A6247; --green-pale:#E8F0EA;
+    --warn:#96651F; --warn-bg:#FBF3E9; --err:#B4443C; --err-bg:#FAEFED;
+    --r-lg:16px; --r-sm:8px;
+    --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--plane);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+  header.hero{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:36px 36px 32px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.08em;font-size:13px;color:rgba(255,255,255,.85)}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  header.hero h1{font-size:28px;font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+  header.hero p.sub{color:rgba(255,255,255,.55);font-size:14px;max-width:720px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .meta span{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+  .navlinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .navlinks a{font-size:12px;color:rgba(255,255,255,.85);text-decoration:none;border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:4px 12px}
+  .navlinks a:hover{background:rgba(255,255,255,.10)}
+  section{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:28px 32px;margin-bottom:24px}
+  h2{font-size:19px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  h2 .no{color:var(--green);margin-right:8px;font-variant-numeric:tabular-nums}
+  p.lead{color:var(--ink-soft);font-size:13.5px;margin-bottom:18px;max-width:72ch}
+  .path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px}
+  .path .arrow{color:var(--green);font-weight:700}
+  .chip{display:inline-block;font-size:11.5px;border:1px solid var(--hair);border-radius:999px;padding:3px 10px;background:var(--plane);color:var(--ink-soft)}
+  .chip.hot{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.ok{background:var(--green-pale);color:var(--green-deep);border-color:#c9dbcf}
+  .chip.kill{background:var(--err-bg);color:var(--err);border-color:#f0c9c5}
+  .grid{display:grid;gap:12px}
+  @media(min-width:760px){.grid.cols2{grid-template-columns:1fr 1fr}.grid.cols3{grid-template-columns:1fr 1fr 1fr}.grid.cols5{grid-template-columns:repeat(5,1fr)}}
+  .card{background:var(--plane);border-radius:var(--r-sm);padding:16px 18px}
+  .card b{display:block;font-size:14px;margin-bottom:6px}
+  .card p,.card li{font-size:13px;color:var(--ink-soft);line-height:1.6}
+  ul.tight{margin:6px 0 0;padding-left:18px}
+  ul.tight li{margin:4px 0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:12px;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--hair)}
+  td{padding:12px;border-bottom:1px solid var(--hair-soft);vertical-align:top;color:var(--ink-soft)}
+  td strong{color:var(--ink)}
+  .keep{color:var(--green-deep);font-weight:700}
+  .kill{color:var(--err);font-weight:700}
+  a{color:var(--green)}
+  footer{color:var(--faint);font-size:12px;text-align:center;margin-top:36px}
+  pre.tree{background:var(--plane);border-radius:var(--r-sm);padding:18px 22px;font-size:12.5px;line-height:1.9;color:var(--ink-soft);overflow-x:auto;font-family:ui-monospace,Consolas,monospace}
+  pre.tree b{color:var(--ink)}
+  pre.tree i{color:var(--green);font-style:normal}
+  pre.tree em{color:var(--warn);font-style:normal}
+  .stage{background:var(--plane);border-radius:var(--r-sm);padding:14px}
+  .stage .k{font-size:11px;font-weight:600;color:var(--green);letter-spacing:.06em}
+  .stage h3{font-size:15px;font-weight:700;margin:4px 0 6px}
+  .stage p{font-size:12.5px;color:var(--ink-soft)}
+  @media(max-width:860px){header.hero h1{font-size:22px}.grid.cols5{grid-template-columns:1fr 1fr}}
+
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+    <h1>产品一页纸 · 3D 活动方案全流程生成</h1>
+    <p class="sub">一场活动走完一条路：选活动 → 定场地与人数 → 生成 → 确认 → 导出。布置、物料、执行是同一份方案的三块视图，不是三件产品。</p>
+    <div class="meta"><span>2026-10-30 · Asia/Shanghai</span><span>v1 · 产品钉</span><span>主交付给人看</span></div>
+    
+    <div class="navlinks">
+      <a href="./product-one-pager-2026.html">产品一页纸</a>
+      <a href="./workbench-ia-2026.html">工作台 IA</a>
+      <a href="./confirm-export-2026.html">确认与导出</a>
+      <a href="./keep-kill-2026.html">KEEP / KILL</a>
+      <a href="./user-journey-2026.html">旅程</a>
+      <a href="./user-flow-map-2026.html">流程图</a>
+      <a href="./aholo-product-gap-2026.html">Aholo 缺口</a>
+      <a href="./design-spec-2026.html">设计规范</a>
+      <a href="./qingguang-agent-spec-2026.html">晴光规范</a>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="no">01</span>一句话定位</h2>
+    <p class="lead"><strong style="color:var(--ink);font-size:17px">3D 活动方案全流程生成</strong> —— 把三维场地立起来、把三维物料摆进去、做空间规划，再导出可交接的执行资料。</p>
+    <div class="grid cols2">
+      <div class="card"><b>是什么</b><p>主办人在一个工作台里完成「这场活动怎么摆」：从活动类型与人数，到可确认的 3D 布置，再到物料与执行导出。</p></div>
+      <div class="card"><b>不是什么</b><p>不是第二工作台、不是重建 SaaS 首页、不是把场景/物件/合成并列成首屏产品。重建与观感只服务本场方案。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>主路径（钉死）</h2>
+    <div class="path">
+      <span class="chip hot">选活动</span><span class="arrow">→</span>
+      <span class="chip hot">定场地 · 人数</span><span class="arrow">→</span>
+      <span class="chip hot">生成方案</span><span class="arrow">→</span>
+      <span class="chip hot">预览确认</span><span class="arrow">→</span>
+      <span class="chip ok">导出</span>
+    </div>
+    <div class="grid cols5">
+      <div class="stage"><div class="k">1</div><h3>选活动</h3><p>点一张活动卡，记下这场是什么。</p></div>
+      <div class="stage"><div class="k">2</div><h3>定场 · 人数</h3><p>场地与人数；系统立起可布置场地。</p></div>
+      <div class="stage"><div class="k">3</div><h3>生成</h3><p>只点一颗「生成方案」；先停在预览。</p></div>
+      <div class="stage"><div class="k">4</div><h3>确认</h3><p>只点一颗确认；未确认不改仓 / 不落盘。</p></div>
+      <div class="stage"><div class="k">5</div><h3>导出</h3><p>执行资料再预览一次，确认后本机出文件。</p></div>
+    </div>
+    <p class="lead" style="margin-top:16px;margin-bottom:0">对话可加速，不负责考试。没选完也可跟晴光说一句：先建议 → 再预览 → 唯一确认后才写入。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>谁用</h2>
+    <table>
+      <tr><th style="width:22%">角色</th><th>要什么</th><th>主入口</th></tr>
+      <tr><td><strong>活动主办 / 策划</strong></td><td>快速出一版可给客户看的 3D 方案，再导出交接</td><td>首屏活动卡 + 生成；右栏晴光</td></tr>
+      <tr><td><strong>场地方 / 执行对接</strong></td><td>看清件数、场地尺寸、可打印/可发的执行资料</td><td>左轨「执行」</td></tr>
+      <tr><td><strong>内部评审 / 客户过目</strong></td><td>已确认方案的只读呈现，不改布置</td><td>左轨「评审」</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>成功标准</h2>
+    <div class="grid cols2">
+      <div class="card"><b>主路径可走完</b><ul class="tight"><li>新人 10 分钟内：选活动→定场人数→生成→确认→看见画布落盘</li><li>全程一步一主钮；空闲无绿色主按钮误导</li><li>确认前画布零写入；确认后可撤销一次</li></ul></div>
+      <div class="card"><b>不跑偏</b><ul class="tight"><li>左轨只有布置 / 评审 / 执行三枚</li><li>地图定场 ≠ 卫星当重建素材</li><li>干跑样例不冒充本场真实观感</li><li>不另开第二工作台</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>相关真源</h2>
+    <div class="card">
+      <ul class="tight">
+        <li><a href="./user-journey-2026.html">user-journey-2026.html</a> · 布置左栏旅程重塑</li>
+        <li><a href="./user-flow-map-2026.html">user-flow-map-2026.html</a> · 流程图（含地图→采集→观感）</li>
+        <li><a href="./aholo-product-gap-2026.html">aholo-product-gap-2026.html</a> · 观感产品化缺口</li>
+        <li><a href="./workbench-ia-2026.html">workbench-ia-2026.html</a> · 左轨与挂载点</li>
+        <li><a href="./confirm-export-2026.html">confirm-export-2026.html</a> · 确认闸与导出</li>
+        <li><a href="./keep-kill-2026.html">keep-kill-2026.html</a> · KEEP / KILL</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>给人打开的产品真源 · 视觉令牌对齐 design-spec-2026 · 幕景 SCENDANCE © 2026 · 本机未 commit</footer>
+</div>
+</body>
+</html>

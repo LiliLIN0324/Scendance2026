@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>晴光 · Agent 对话规范 — 幕景 Scendance</title>
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+    --hair-soft:#EFEFF1; --hair:#E4E4E7;
+    --green:#4A7C59; --green-deep:#3A6247; --green-pale:#EEF3EF;
+    --warn:#96651F; --warn-bg:#FBF3E9;
+    --amber-line:#C79A4B;
+    --r-lg:16px; --r-sm:8px;
+    --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","Source Han Sans CN","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"SFMono-Regular",Consolas,"Roboto Mono","Courier New",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--plane);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:1180px;margin:0 auto;padding:48px 28px 80px}
+  header.hero{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:36px 36px 32px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.08em;font-size:13px;color:rgba(255,255,255,.85)}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  header.hero h1{font-size:29px;font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+  header.hero p.sub{color:rgba(255,255,255,.58);font-size:14px;max-width:740px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .meta span{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+  section{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:28px 32px;margin-bottom:24px}
+  h2{font-size:19px;font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
+  p.lead{color:var(--ink-soft);font-size:13.5px;margin-bottom:20px;max-width:740px}
+  h3{font-size:14.5px;font-weight:700;margin:26px 0 8px}
+  h3:first-child{margin-top:0}
+  .src{font-family:var(--mono);font-size:11.5px;color:var(--faint);letter-spacing:0}
+  .src b{color:var(--muted);font-weight:600}
+  /* ── 一幕对话 ── */
+  .act{border:1px solid var(--hair);border-radius:12px;padding:20px 22px;margin-bottom:16px;background:var(--paper)}
+  .act>h4{font-size:15px;font-weight:700;margin-bottom:3px}
+  .act>p.why{font-size:12.5px;color:var(--muted);margin-bottom:16px;max-width:660px}
+  .dlg{display:flex;flex-direction:column;gap:9px;max-width:680px}
+  .line{border-left:2px solid var(--hair);padding:2px 0 2px 12px;font-size:13.5px}
+  .line u{text-decoration:none;display:block;font-size:10.5px;letter-spacing:.06em;color:var(--faint);margin-bottom:2px}
+  .line.user{border-left-color:var(--ink)}
+  .line.agent{border-left-color:var(--green)}
+  .line.agent.warn{border-left-color:var(--amber-line);background:var(--warn-bg);border-radius:0 6px 6px 0;padding-right:10px}
+  /* 全文的 <s> 一律当「旁注」用，不是删除线 */
+  s{text-decoration:none;color:var(--muted);font-size:12px}
+  .line s{display:block;margin-top:3px}
+  .line.canvas{border-left-color:var(--faint);border-left-style:dashed;font-size:12.5px;color:var(--ink-soft)}
+  .line.canvas u{color:var(--muted)}
+  .note{font-size:12px;color:var(--muted);margin-top:12px}
+  .note b{color:var(--ink-soft)}
+  /* ── 标签 ── */
+  .tag{display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600;white-space:nowrap;vertical-align:1px;margin-left:6px}
+  .tag.ok{background:var(--green-pale);color:var(--green-deep)}
+  .tag.gap{background:var(--warn-bg);color:var(--warn)}
+  .tag.ask{background:var(--plane-deep);color:var(--ink-soft)}
+  .tag.fix{background:#E7EEF6;color:#2F5472}
+  /* ── 表格 ── */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:11px 14px 11px 0;border-bottom:1px solid var(--hair-soft);vertical-align:top}
+  th{font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--hair);padding-bottom:8px;white-space:nowrap}
+  td:first-child{white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  td .src{display:block;margin-top:3px}
+  td s{display:block;margin-top:2px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--plane);border-radius:4px;padding:1px 5px;color:var(--ink-soft)}
+  .say{color:var(--green-deep)}
+  .no{color:var(--warn)}
+  /* ── 硬钉三卡 ── */
+  .nails{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .nail{border-top:2px solid var(--green);padding-top:14px}
+  .nail b{display:block;font-size:15px;margin-bottom:6px}
+  .nail p{font-size:13px;color:var(--ink-soft);margin-bottom:10px}
+  /* ── 七段流水线 ── */
+  .pipe{display:flex;gap:0;overflow-x:auto;padding-bottom:8px}
+  .stage{flex:1 1 0;min-width:132px;position:relative;padding:0 12px 0 0}
+  .stage + .stage{padding-left:12px}
+  .stage:not(:first-child)::before{content:"";position:absolute;left:-1px;top:16px;width:11px;height:1px;background:var(--faint)}
+  .stage i{font-style:normal;display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--green-deep);background:var(--green-pale);border-radius:6px;padding:3px 9px;margin-bottom:8px}
+  .stage b{display:block;font-size:13.5px;margin-bottom:4px}
+  .stage p{font-size:12px;color:var(--ink-soft);line-height:1.6}
+  /* ── 预览框色例 ── */
+  .keys{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:12.5px;color:var(--ink-soft);margin-bottom:18px}
+  .keys i{font-style:normal;display:inline-block;width:26px;height:16px;border-radius:3px;margin-right:7px;vertical-align:-2px}
+  .k-new{border:1.5px solid var(--green);background:var(--green-pale)}
+  .k-move{border:1.5px dashed var(--amber-line)}
+  .k-cut{border:1.5px solid #B4574A;background:#FAEFED}
+  .k-old{border:1px dashed var(--faint)}
+  .k-blue{border:1.5px solid #3E6E9E;background:#EAF1F7}
+  /* ── 头像状态 ── */
+  .faces{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .face{border:1px solid var(--hair);border-radius:12px;padding:14px}
+  .face img{display:block;width:40px;height:40px;border-radius:50%;background:var(--plane)}
+  .face b{display:block;font-size:13px;margin:9px 0 3px}
+  .face p{font-size:11.5px;color:var(--muted);line-height:1.55}
+  /* ── 清单 ── */
+  ul.tight{list-style:none}
+  ul.tight li{position:relative;padding-left:17px;font-size:13.5px;color:var(--ink-soft);margin-bottom:7px}
+  ul.tight li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--green)}
+  ul.no-list li::before{background:var(--warn)}
+  .check td:first-child{width:26px}
+  .box{width:13px;height:13px;border:1px solid var(--faint);border-radius:3px;display:inline-block;margin-top:4px}
+  footer{color:var(--faint);font-size:12px;text-align:center;margin-top:36px;line-height:1.9}
+  @media (max-width:900px){.nails{grid-template-columns:1fr}.faces{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+    <h1>晴光 · Agent 对话规范</h1>
+    <p class="sub">幕景的 AI-native 全部落在晴光这条对话链路上。这份说明改成一幕一幕的对话来写：你说了什么、晴光回什么、画布上看到什么。三行里出现的每一句晴光的话，都是从代码里逐字抄出来的，不是我编的台词。</p>
+    <div class="meta">
+      <span>真相源：本仓代码 2026-10-30</span>
+      <span>范围：布置模式（对话四步 ①场地 ②布置 ③优化 ④交付）</span>
+      <span>命名：晴光 Qingguang · 3D 毛绒</span>
+      <span>上层依据：docs/ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>怎么读这份说明</h2>
+    <p class="lead">每一幕三段，固定是这个顺序。看任何一幕，只需要问三件事：话有没有被听懂、晴光有没有越权、画布上动没动。</p>
+    <div class="dlg">
+      <div class="line user"><u>你说</u>输入框里打出来的那句原话，或者拖进画布的文件、点到的文字链。</div>
+      <div class="line agent"><u>晴光说</u>右栏气泡里的话。底色变琥珀的那一行，是她把你拦下来了。</div>
+      <div class="line canvas"><u>画布上看到</u>这一句话之后，画布上真实发生的变化——没变就写「画布没动」。</div>
+    </div>
+    <p class="note">文中出现的具体件数、座数后面一律标着「按画布实测」：这些数字是那一块地、那一版算法算出来的结果，换一块地就换一个数。晴光不会先报一个数再去凑它。</p>
+    <p class="src" style="margin-top:18px">三行都在 <b>panels/agent-panel.tsx</b> 里：<code>say()</code> 进气泡、<code>onPreview()</code> 进画布、<code>onApply()</code> 才落盘。</p>
+  </section>
+
+  <section>
+    <h2>三条不可让的硬钉</h2>
+    <p class="lead">整份规范下面所有对话，都是这三条的推论。每一条先看它长什么样，再看它怎么把人拦住。</p>
+    <div class="nails">
+      <div class="nail">
+        <b>确认之前，画布一个字节都不改</b>
+        <p>提案只活在内存里一个 <code>ref</code> 上，全程只推预览帧。撤销历史、自动存档、协作者的选中态，都看不见它。</p>
+        <div class="dlg">
+          <div class="line agent"><u>晴光说</u>绿框是新摆的 42 件 · 按 80 人摆了 80 座<s>（卡上只有一颗「确认布置」，撤回和换一版是文字链）</s></div>
+          <div class="line canvas"><u>画布上看到</u>绿框挂着，但此刻按 Ctrl+Z 撤销不了任何东西——因为压根没写过。</div>
+        </div>
+      </div>
+      <div class="nail">
+        <b>墙没确认前，不把米数当事实念</b>
+        <p>场地尺寸有五种来路，只有你说过或填过的才算确认。推出来的必须带着「折算／估算、待你确认」一起说。</p>
+        <div class="dlg">
+          <div class="line user"><u>你说</u>300 平米</div>
+          <div class="line agent"><u>晴光说</u>300 ㎡ 按 4:3 折算是 20 × 15 m，你改过我才当准</div>
+          <div class="line user"><u>你说</u>改成 20×15</div>
+          <div class="line agent"><u>晴光说</u>20 × 15 m（300 ㎡）<s>这一句之后才当事实念</s></div>
+        </div>
+      </div>
+      <div class="nail">
+        <b>不装懂、不装有能力</b>
+        <p>算不出改法就说算不出；没有分区层就说没有；本机没连云就常驻一条「演示环境」。宁可不接这句话。</p>
+        <div class="dlg">
+          <div class="line user"><u>你说</u>换区</div>
+          <div class="line agent"><u>晴光说</u>换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。</div>
+          <div class="line canvas"><u>画布上看到</u>画布没动，另给一条替代路径：要换布局就说「换一版」。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>一句话进来，先走这七段</h2>
+    <p class="lead">你打的字到画布上的物料，中间是这七道。后面每一幕对话，都能在这里指出它卡在第几段。</p>
+    <div class="pipe">
+      <div class="stage"><i>1</i><b>命令闸</b><p>先当命令认：停一下 / 撤回 / 换一版 / 出清单 / 导出。认出来就不进简报，免得「停一下」被记成需求。</p></div>
+      <div class="stage"><i>2</i><b>归一化</b><p>去空格、全角转半角、中文数字转阿拉伯。「十二乘九」和「12*9」走同一条路。</p></div>
+      <div class="stage"><i>3</i><b>先抠面积再数人头</b><p>「108 平米」不能被读成 108 人；顺序反过来就会算错。</p></div>
+      <div class="stage"><i>4</i><b>听懂</b><p>接上云项目先问模型 <code>/brief/extract</code>，12 秒不回来就用规则版兜底。</p></div>
+      <div class="stage"><i>5</i><b>跨句记忆</b><p>这一句没说全的，沿用上一句记下的。分三句说完和一句说完是同一版方案。</p></div>
+      <div class="stage"><i>6</i><b>决策</b><p>四种回法：出方案 / 只催缺的那格 / 复述已记下的 / 承认这句没接住。</p></div>
+      <div class="stage"><i>7</i><b>落地</b><p>立壳体 → 算候选 → 逐帧预览 → 人点确认才一次 <code>applyLayout</code>。</p></div>
+    </div>
+    <p class="src">闸与解析：<b>lib/workbench-agent.ts</b> · 决策与记忆：<b>lib/brief-agent.ts</b> <code>parseBriefTurn</code> · 落地：<b>panels/agent-panel.tsx</b> <code>send</code> → <code>runLocal</code></p>
+  </section>
+
+  <section>
+    <h2>对话全集</h2>
+    <p class="lead">这一节是主体：把晴光能接的话、会拦的话、答不上的话，一幕一幕摆出来。要验收产品，照着这些句子逐句打一遍就行。</p>
+
+    <h3>把需求一句说全</h3>
+    <div class="act">
+      <h4>一句话里有人数、有室内外、有长宽</h4>
+      <p class="why">七段全过，直接出方案。这是最短的一条路。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>80 人发布会，室内 12×9</div>
+        <div class="line agent"><u>晴光说</u>场地立起来了：12 × 9 m，室内壳子，四面外墙、正面留了一个主入口，门位标的是待确认，层高没听你说，先按默认 4 m。</div>
+        <div class="line agent"><u>晴光说</u>绿框是新摆的 42 件 · 按 80 人摆了 80 座<s>（件数按画布实测；顶部五步进度正在走：读场地 / 定舞台位置 / 摆桌椅 / 放绿植 / 检查重叠）</s></div>
+        <div class="line canvas"><u>画布上看到</u>四面墙和门洞立住，桌椅一帧一帧长出来，末帧停在预览；此刻还没落盘。</div>
+      </div>
+      <p class="src">壳体文案 <code>shellNote</code> · 读数文案 <code>planLines</code>（均在 panels/agent-panel.tsx）</p>
+    </div>
+
+    <div class="act">
+      <h4>一句话只说了一半</h4>
+      <p class="why">缺场地尺寸就不能出方案——出等于猜。她先把接住的部分念回给你听，只催缺的那一格。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>80 人发布会</div>
+        <div class="line agent"><u>晴光说</u>记下了：80 人 · 发布会。还差场地多大：说一句 「室内 12×9」或「108 平米」。</div>
+        <div class="line canvas"><u>画布上看到</u>画布没动。左栏简报上人数已经填成 80，尺寸还是空的。</div>
+        <div class="line user"><u>你说</u>39×20</div>
+        <div class="line agent"><u>晴光说</u>场地立起来了：39 × 20 m……<s>裸长宽也接，不必重说人数——这是跨句记忆</s></div>
+      </div>
+      <p class="note">催第二次会换说法，不重复同一句开场白：「还差场地多大：直接报长宽（「39×20」）或面积（「300 平米」），我就能先出一版。」人数已经说过，示例里就不会再写「40 人」误导你。</p>
+    </div>
+
+    <div class="act">
+      <h4>分三句说完，也算一版</h4>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>发布会</div>
+        <div class="line agent"><u>晴光说</u>记下了：发布会。还差场地多大：说一句 「室内 12×9」或「108 平米」。</div>
+        <div class="line user"><u>你说</u>大概 80 人</div>
+        <div class="line agent"><u>晴光说</u>记下了：80 人 · 发布会。还差场地多大……</div>
+        <div class="line user"><u>你说</u>室内 12×9</div>
+        <div class="line agent"><u>晴光说</u>场地立起来了：12 × 9 m……<s>三句凑齐，出一版，不是三版</s></div>
+      </div>
+      <p class="src">记忆合并：<b>lib/brief-agent.ts</b> <code>parseBriefTurn</code>（<code>memory</code> 逐句累加）· 复述：<code>summarizeMemory</code></p>
+    </div>
+
+    <div class="act">
+      <h4>说了一句跟布置无关的话</h4>
+      <p class="why">这里分两种，措辞不一样：一个要素都没接到，和不接但记忆里本来就有东西。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>今天天气不错<s>（画布是空的，什么槽都没填上）</s></div>
+        <div class="line agent warn"><u>晴光说</u>这句我没接住。跟我说一句「80 人，室内 12×9」这样的需求，我就能先出一版预览。</div>
+        <div class="line canvas"><u>画布上看到</u>画布没动，零颗绿钮。</div>
+        <div class="line user"><u>你说</u>你叫什么名字<s>（前面已经记下 80 人 · 室内 · 12×9）</s></div>
+        <div class="line agent warn"><u>晴光说</u>这句我没接住。已记下：80 人 · 室内 · 12 × 9 m · 发布会。要调布置直接说，比如「加两把椅子」或「换个摆法」。</div>
+      </div>
+      <p class="note">第二句里的 <b>12 × 9 m 是这次修订补上的</b> <span class="tag fix">本次修好</span>：以前只报「80 人 · 室内」，把你刚确认过的尺寸吞掉了——对着你确认过的事实装失忆。</p>
+    </div>
+
+    <h3>只改场地，不改布置</h3>
+    <div class="act">
+      <h4>「改成 15×10」</h4>
+      <p class="why">只动壳体边界，不是新开一轮布置提案。不把人从 2D 拽回 3D，也不要求再确认一遍布置。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>改成 15×10</div>
+        <div class="line agent"><u>晴光说</u>场地改成 15 × 10 m。</div>
+        <div class="line canvas"><u>画布上看到</u>墙往外推了一圈，原有物料能放下的都留在原位；放不下的一并撤掉并报件数：「场地改成 8 × 6 m，3 件物料放不下先撤了」。</div>
+      </div>
+      <p class="src">判成 sizeOnly：<b>lib/workbench-agent.ts</b> <code>isVenueSizeOnly</code> · 文案：<code>sizeOnlyNote</code> · 落盘走同一条 <code>onApply</code>（撤销历史一步能整体退回）</p>
+    </div>
+
+    <div class="act">
+      <h4>同样的 12×9，五种来路，五种说法</h4>
+      <p class="why">来源不同，晴光能说的分量就不同。置信度决定墙体证据状态，也决定播报措辞——这就是「确认前不报假米数」的落地方式。</p>
+      <table>
+        <thead><tr><th>你怎么给的</th><th>晴光怎么说</th><th>墙的状态</th></tr></thead>
+        <tbody>
+          <tr><td>「12×9」说过长宽</td><td class="say">12 × 9 m（108 ㎡）——当成事实念</td><td><span class="tag ok">confirmed</span></td></tr>
+          <tr><td>模板与云场景自带的固定尺寸</td><td class="say">同上，也当确认过</td><td><span class="tag ok">confirmed</span></td></tr>
+          <tr><td>「108 平米」只说面积</td><td class="say">108 ㎡ 按 4:3 折算是 12 × 9 m，你改过我才当准</td><td><span class="tag ask">inferred</span></td></tr>
+          <tr><td>拖图纸后「按图纸估」</td><td class="say">按图纸比例估的 12 × 9 m，等你确认</td><td><span class="tag ask">inferred</span></td></tr>
+          <tr><td>没说，沿用画布当前空地</td><td class="say">场地尺寸还没定<s>壳立起来后补一句「不对就说一句『12×9』」</s></td><td><span class="tag gap">low / inferred</span></td></tr>
+        </tbody>
+      </table>
+      <p class="src">五档播报：<b>lib/workbench-agent.ts</b> <code>describeExtraction</code> · 来源判定：<code>scaleOriginOf</code></p>
+    </div>
+
+    <div class="act">
+      <h4>拖进一张图纸</h4>
+      <p class="why">图片只当参照，读不出真实米数——本期不做 DXF 矢量层。唯一诚实的做法是给一个按图纸比例估的数，并且标着「估的」。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u><s>把 plan.png 拖到画布上</s></div>
+        <div class="line agent"><u>晴光说</u>底图铺好了，它只当参照，我读不出真实米数。要么说一句「12×9」，要么让我按图纸比例估一版。</div>
+        <div class="line canvas"><u>画布上看到</u>右栏浮出一颗「按图纸估一版」；墙还没立。</div>
+        <div class="line user"><u>你说</u>300平米，按图纸估</div>
+        <div class="line agent"><u>晴光说</u>按图纸比例和你说的 300 ㎡估的 24 × 12 m，先按它出一版。这是估的：不对就再说一句长宽。</div>
+        <div class="line canvas"><u>画布上看到</u>24 × 12 m 的壳 + 一版候选；简报上尺寸档位标成「估的」。</div>
+      </div>
+      <p class="note">这一幕里「<b>和你说的 300 ㎡</b>」是这次修订补上的 <span class="tag fix">本次修好</span>。改之前，同一句话折的是<b>画布上那块旧空地</b>的面积——图纸比例 × 12×8，你打的「300 平米」白说了一场，报出来的米数还小得离谱。现在同一句话里两件事都算：面积先记进记忆，再拿去折。</p>
+      <p class="note">还没拖图纸就点估算，她不会硬编一个数：「还没拖图纸，我按不出比例。说一句「12×9」或「300 平米」，我就按它立场地。」</p>
+      <p class="src"><b>panels/agent-panel.tsx</b> <code>estimateFromPlan</code> · <code>send</code> 的估算分支 · 折算 <code>suggestDimsFromImageRatio</code></p>
+    </div>
+
+    <h3>报了一个画布撑不住的尺寸</h3>
+    <div class="act">
+      <h4>「改成 200×150」</h4>
+      <p class="why">对话的输入口径认到 500 米（那是给人打字的边界），立墙只认到 100 米（编辑器全局硬闸）。这两档是有意分开的，但<b>挡下来说什么</b>是这次修的。</p>
+      <table>
+        <thead><tr><th></th><th>话怎么说</th><th>简报读数</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>改之前</td>
+            <td class="no">「这个尺度我立不起来，改一下卡片里的数字试试。」<s>表单早就砍掉了，对话是唯一入口——「卡片里的数字」指不到任何能点的东西，是个死胡同。</s></td>
+            <td class="no">挂着刚被拒掉的 200 × 150 m，而画布还是原来那块地，两处对不上。</td>
+          </tr>
+          <tr>
+            <td>改之后 <span class="tag fix">本次修好</span></td>
+            <td class="say">「这块场地最多立到 100 米——再大画布撑不住。先说一句 100 米以内的长宽，比如「80×60」，我按它出一版。」</td>
+            <td class="say">退回画布真实读数：80 人 · 室内 · 12 × 8 m。被拒的尺寸一个都不留。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="dlg" style="margin-top:18px">
+        <div class="line user"><u>你说</u>改成 200×150</div>
+        <div class="line agent warn"><u>晴光说</u>这块场地最多立到 100 米——再大画布撑不住。先说一句 100 米以内的长宽，比如「80×60」，我按它出一版。</div>
+        <div class="line canvas"><u>画布上看到</u>画布没动，一帧都没写。简报读数还是 12 × 8 m。</div>
+        <div class="line user"><u>你说</u>改成 0.4×9</div>
+        <div class="line agent warn"><u>晴光说</u>场地长宽至少 1 米。说一句新的长宽，比如「12×9」，我按它出一版。</div>
+      </div>
+      <p class="src">上界与文案：<b>lib/venue-shell.ts</b> <code>VENUE_MAX_DIMENSION_M</code> = <code>MAX_ROOM_DIMENSION</code>（constants.ts:34）· 退回读数：<b>panels/agent-panel.tsx</b> <code>revertScaleToCanvas</code></p>
+    </div>
+
+    <div class="act">
+      <h4>户外的场地</h4>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>50 人户外市集，40×30</div>
+        <div class="line agent"><u>晴光说</u>场地立起来了：40 × 30 m，户外场地，这一版先不砌墙也不开门，层高没听你说，先按默认 4 m。</div>
+        <div class="line canvas"><u>画布上看到</u>零墙零门，只报范围；简报的室内外自动切成户外。</div>
+      </div>
+      <p class="note">为什么不假造一个入口：真相字段 <code>mainEntrance.openingId</code> 必须指向真实开口。宁可不报入口，也不编一个。</p>
+      <p class="note">地图圈画：按外接矩形报真实范围，布置壳上限 100 m；圈到超过 100 m 时取其中一块 100×100 m 规划区，真实范围写进场地名。</p>
+    </div>
+
+    <h3>摆完之后的那些话</h3>
+    <div class="act">
+      <h4>「加两把椅子」</h4>
+      <p class="why">只加点名的那几件，仍然只出候选。放得下几件就报几件，不假装全放上了。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>加两把椅子</div>
+        <div class="line agent"><u>晴光说</u>在这版上又加了椅子：<s>下一行是同一张卡的读数</s> 绿框是新摆的 2 件</div>
+        <div class="line agent warn"><u>或者</u>按你说的加 2 件椅子，只放得下 1 件：</div>
+        <div class="line canvas"><u>画布上看到</u>只有一把椅子的绿框；另一件没落点，<code>findAdditionSpot</code> 返回 null 就直说放不下。</div>
+      </div>
+    </div>
+
+    <div class="act">
+      <h4>摆不下的时候怎么说</h4>
+      <p class="why">「放不下」从来不是估出来的，是三道几何闸判出来的。每道闸的措辞不一样，不能混成一句「放不下」。</p>
+      <div class="dlg">
+        <div class="line agent"><u>座数诚实</u>只摆得下 62 座，其余 18 位按站立留空</div>
+        <div class="line agent"><u>已经加座重排还差人</u>这版最多摆 62 座，还差 18 位；可以换更大的场地，或按站立留空<s>不再暗示「再点一次就能补齐」</s></div>
+        <div class="line agent"><u>整组拒摆</u>42 件放不下，没采纳</div>
+        <div class="line agent warn"><u>跟墙冲突</u>这版提案里有跟墙体或边界冲突的物料，先挪开或解锁再重新出一版。<s>确认按钮按住不亮</s></div>
+      </div>
+      <p class="src"><b>lib/agent-proposal.ts</b> <code>proposePlan</code>（<code>dropped</code> / <code>setFitsRoom</code> / <code>findAdditionSpot</code>）· <code>canApplyLayoutGeometry</code></p>
+    </div>
+
+    <div class="act">
+      <h4>锁着的物料</h4>
+      <div class="dlg">
+        <div class="line agent"><u>本地这一版</u>锁定 6 件我没动</div>
+        <div class="line agent warn"><u>云端那一版动了锁着的</u>我不改锁着的东西，先解锁或换一版。<s>确认按钮被按住</s></div>
+      </div>
+      <p class="note">本地是「不动并报名」，云端是「动了就按住确认」——两种规矩不混着说。</p>
+    </div>
+
+    <div class="act">
+      <h4>点「确认布置」之前与之后</h4>
+      <div class="dlg">
+        <div class="line user"><u>你说</u><s>点绿框上的「确认布置」</s></div>
+        <div class="line canvas"><u>画布上看到</u>一次 <code>applyLayout</code> 全量落盘，件件可拖；撤销一步能整体退回这一版。</div>
+        <div class="line agent"><u>晴光说</u>这一版布置<s>卡上读数：件数、座数、重叠告警。绿钮收回。</s></div>
+        <div class="line user"><u>你说</u><s>然后你在画布上按了 Ctrl+Z，或手动拖开了一件</s></div>
+        <div class="line agent"><u>晴光说</u>画布改过了（撤销或手动调整），「这一版布置」的卡我收了；要再出一版随时说。</div>
+        <div class="line canvas"><u>画布上看到</u>卡按内容比较收回，右栏不停在旧态。</div>
+      </div>
+      <p class="src">失效判定：<b>panels/agent-panel.tsx</b>（提案期间画布 identity 比较 / 确认后内容比较）</p>
+    </div>
+
+    <div class="act">
+      <h4>「停一下」「接着摆」</h4>
+      <div class="dlg">
+        <div class="line agent"><u>正在出方案</u>正在摆桌椅 · <s>右侧一颗文字链「停一下」</s></div>
+        <div class="line user"><u>你说</u>停一下</div>
+        <div class="line agent"><u>晴光说</u>先停在这儿了，预览收回、画布没动。要接着看就点「接着摆」。</div>
+        <div class="line agent"><u>右栏</u>停在第 3 步 · 接着摆 · 不要了</div>
+        <div class="line user"><u>你说</u>接着摆</div>
+        <div class="line canvas"><u>画布上看到</u>从第 3 步的帧接着推，前面摆好的不重演。</div>
+      </div>
+      <p class="note">「停一下」先过命令闸，不会被当成一句需求记进简报。云端那一版的说法是「停了，云端任务取消，画布没动。要再出一版就说一句。」</p>
+    </div>
+
+    <div class="act">
+      <h4>「这次没出成」</h4>
+      <div class="dlg">
+        <div class="line canvas"><u>画布上看到</u>顶部一颗琥珀 pill「! 这次没出成，场地和设置都还在」</div>
+        <div class="line agent warn"><u>晴光说</u>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</div>
+      </div>
+      <p class="note">重试是重跑上一句，不另开一个生成入口——对话仍是唯一入口。</p>
+    </div>
+
+    <div class="act">
+      <h4>「看看哪里有问题」</h4>
+      <p class="why">六类几何问题按固定顺序排：重叠 · 压墙/柱 · 出界 · 门前留空 · 桌间距过近 · 座椅拉不开。阈值：起身 0.45 m · 通行 0.9 m · 聚簇 1.8 m · 最近桌 1.6 m。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>看看哪里有问题</div>
+        <div class="line agent"><u>晴光说</u>没有重叠，也没超出场地。<s>有问题就报件数并黄色标出：「3 件物料重叠或超出场地，画布上已用黄色标出。」</s></div>
+        <div class="line user"><u>你说</u>挪一下第三件</div>
+        <div class="line agent"><u>晴光说</u>按这条改：主桌与背景板重叠（改完还剩 2 条要处理）。<s>蓝框是新位置，琥珀线框是原位</s></div>
+        <div class="line agent warn"><u>算不出改法时</u>这条我算不出稳妥改法，先不硬挪。自己拖一下，或把周围腾一点空间再试。</div>
+        <div class="line agent warn"><u>画布刚被改过</u>画布刚变过，这条现在不成立了。再说一句「看看哪里有问题」，我重新体检。</div>
+      </div>
+      <p class="note">她<b>不装合规</b>：没有消防、疏散、无障碍依据就不下那种结论；明说「隔墙边的起身空间这版没量，只查了压墙」；图上认不出入口就回「入口通道我不猜」。跳过项按原因分开点名——锁着是规矩，找不到落点是能力边界。</p>
+      <p class="src"><b>lib/layout-review.ts</b> <code>reviewLayout</code> / <code>proposeReviewFix</code></p>
+    </div>
+
+    <div class="act">
+      <h4>问她要清单、要文案、要换区</h4>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>出物料清单</div>
+        <div class="line agent warn"><u>画布还空着</u>画布上还没有物料，清单是空的。说一句「出方案」我先摆一版，或者说「加两把椅子」直接往上加。</div>
+        <div class="line user"><u>你说</u>换区</div>
+        <div class="line agent warn"><u>晴光说</u>换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。要换布局就说「换一版」；单件位置在画布上直接拖。这条先记进暂留清单。</div>
+      </div>
+    </div>
+
+    <div class="act">
+      <h4>交付给搭建方</h4>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>导出给搭建方</div>
+        <div class="line agent warn"><u>这一版还没确认</u>这一版还没稳，确认先不亮。等预览停住再说导出。</div>
+        <div class="line agent"><u>晴光说</u>好，我在本机生成完整活动交接。</div>
+        <div class="line agent"><u>接着</u>交接文件已下载，可离线打开与打印；只在这台机器上生成，由你交给搭建方。</div>
+        <div class="line user"><u>你说</u>先不用导</div>
+        <div class="line agent"><u>晴光说</u>好，先不导出。要导的时候说一声就行。</div>
+      </div>
+      <p class="note">「完整活动交接包含需求、物料、制作和点验，只在这台机器上生成。」——她从不代发客户链接，也不擅自离开画布。</p>
+    </div>
+
+    <h3>连上云项目时，同样的话</h3>
+    <div class="act">
+      <h4>对话一个字不用改</h4>
+      <p class="why">连接四态：离线引导 → 正在准备工作台 → 功能已开放 → 项目已连接。只有第四态让「说话」直接驱动云端出方案；卡片、确认闸、播报与本地<b>完全同一套</b>。</p>
+      <div class="dlg">
+        <div class="line user"><u>你说</u>80 人发布会，室内 12×9</div>
+        <div class="line agent"><u>晴光说</u>发布会 · 80 人 · 室内 108 ㎡ · 请出布置方案<s>拼成一句可核对的条件发给云，并带 requirePreview:true——本次运行永不自动落盘</s></div>
+        <div class="line canvas"><u>画布上看到</u>POST /projects/{id}/agent-runs 之后逐帧轮询，仍是绿框预览、仍是一颗「确认布置」。</div>
+        <div class="line agent warn"><u>这期间别人改了场地 / 编辑权换代</u>场地、需求或编辑权在这期间变了，这版先别确认，重新出一版。</div>
+        <div class="line user"><u>你说</u>停一下</div>
+        <div class="line agent"><u>晴光说</u>停了，云端任务取消，画布没动。要再出一版就说一句。</div>
+      </div>
+      <table style="margin-top:18px">
+        <thead><tr><th>云侧规格</th><th>约定</th></tr></thead>
+        <tbody>
+          <tr><td>工具循环</td><td>9 个白名单工具、最多 6 轮：读场景 · 检索授权资源 · 参数化建模 · 读材质 · 材质副本 · 试算校验 · 提交候选 · 物料统计 · 可选文生 3D。第 6 轮强制收口到 <code>submit_candidates</code>。</td></tr>
+          <tr><td>候选真实性</td><td>每个候选都基于<b>同一份原始草稿</b>，禁止累积应用；多方案要 3 个有实际差异的候选，重复直接报 <code>CANDIDATES_NOT_DISTINCT</code>。不编造价格与库存。</td></tr>
+          <tr><td>抽槽接口</td><td><code>/brief/extract</code> 需登录；三个 key 都没配时 <code>enabled:false</code>，前端落回规则版；12 秒超时同样落回。<b>决策始终在前端。</b></td></tr>
+          <tr><td>密钥</td><td>模型优先级 <code>AGENT_CHAT_*</code> 自建网关 → Tokendance 网关 → DeepSeek 官方。全部只在 Supabase secrets / Deno env 里读，浏览器不接触。</td></tr>
+          <tr><td>本机兜底</td><td>本机 mock 后端<b>没有</b> <code>/brief/extract</code> 与 <code>/agent-runs</code>，右栏常驻「演示环境 · 方案由本机规则生成，未连接真实 AI 模型」。这条不许摘。</td></tr>
+        </tbody>
+      </table>
+      <p class="src">前端云侧 <b>panels/creative-studio.tsx</b> · 解析 <b>lib/agent-resolver.ts</b> · 工具循环 <b>supabase/functions/_shared/agent-runner.ts</b></p>
+    </div>
+
+    <div class="act">
+      <h4>它坚决不做的事</h4>
+      <ul class="no-list tight">
+        <li>不静默落画布、不代拖 3D、不做破坏性而无确认的动作。</li>
+        <li>墙没确认前不把识别出的米数当事实念；不假装已经识别 CAD。</li>
+        <li>不动锁着的物料；动了就要在卡上按住确认并说明。</li>
+        <li>不编造库存、价格、消防或无障碍结论；不把这些包装成合规审查。</li>
+        <li>不擅自跳 <code>/projects</code>、外链或离开画布；不代发客户链接。</li>
+        <li>不做跨项目长期记忆；不把某场活动的资料带到另一场。</li>
+        <li>不在按钮旁堆说明书；不常驻「下一步」；空闲态零绿钮；不同时两颗绿。</li>
+        <li>不把对话进度升格成左轨第四图标——左轨永远三图标。</li>
+        <li>把西湖清趣、幕景宇宙、个人站的需求写进本仓。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>可见状态：一屏只说一件事</h2>
+    <p class="lead">抬头状态点<b>只许两种说法</b>：做好了 / 发现问题。等你确认、正在出方案由头像和卡片自己说话，不重复一遍。状态靠换切图，不把角标叠画在头像上。</p>
+    <div class="faces">
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40.png" alt="晴光默认"/><b>在线 · 等一句话</b><p>empty / dragHover / baseReady 等前置态</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-ask.png" alt="晴光等你确认"/><b>等你确认</b><p>planProposed · generatePaused</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-done.png" alt="晴光做好了"/><b>做好了</b><p>planReady / planEdited 且无重叠</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-issue.png" alt="晴光发现问题"/><b>发现问题</b><p>失败 · 尺寸非法 · 文件不收 · 有重叠或提案被按住</p></div>
+    </div>
+    <h3>预览框的四种线</h3>
+    <div class="keys">
+      <span><i class="k-new"></i>绿框 = 新摆</span>
+      <span><i class="k-blue"></i>蓝框 = 体检挪到的新位置</span>
+      <span><i class="k-move"></i>琥珀虚线 = 挪动过的原位</span>
+      <span><i class="k-cut"></i>红框 = 要撤掉</span>
+      <span><i class="k-old"></i>灰虚线 = 原位</span>
+    </div>
+    <p class="src">状态合成：<b>panels/agent-panel.tsx</b> <code>state</code> · 状态点 <code>headerStatus</code> · 头像 <code>mascotOf</code> · 画布状态层 <code>AgentCanvasOverlay</code>；收起后画布右上留一颗可拖的浮窗。</p>
+  </section>
+
+  <section>
+    <h2>本次修订：写规范时发现的四处，都改了</h2>
+    <p class="lead">这几条是照着代码逐字核对时发现的，不是设计意图的分歧。每一处都补了测试。</p>
+    <table>
+      <thead><tr><th>问题</th><th>改法</th><th>代码</th></tr></thead>
+      <tbody>
+        <tr><td>超 100 m 被挡下时说「改一下卡片里的数字试试」——表单已砍掉，那是个死胡同。</td><td>报出上限 100 米和原因，并给一句能直接说出口的下一步「比如 80×60」。</td><td class="src"><b>lib/venue-shell.ts</b></td></tr>
+        <tr><td>立壳失败后，左栏简报还挂着刚被拒掉的 200 × 150 m，画布却还是原来的地。</td><td>新增 <code>revertScaleToCanvas</code>：场地一字节没变，读数就退回画布真实米数（5 处失败出口）。</td><td class="src"><b>panels/agent-panel.tsx</b></td></tr>
+        <tr><td>「这句我没接住。已记下：80 人 · 室内」把你刚确认过的 12×9 吞了。</td><td><code>summarizeMemory</code> 补尺度一档：说过长宽报「12 × 9 m」，只说过面积报「300 ㎡」，不编造长宽。</td><td class="src"><b>lib/brief-agent.ts</b></td></tr>
+        <tr><td>「300 平米，按图纸估」折的是画布旧空地，说的面积白说。</td><td>先抠出这句里的面积记进记忆再折；播报改成「按图纸比例和你说的 300 ㎡估的…」。</td><td class="src"><b>panels/agent-panel.tsx</b></td></tr>
+      </tbody>
+    </table>
+    <p class="src">测试：<b>venue-shell.test.ts</b>（上限文案 + 不再提卡片）· <b>brief-agent.test.ts</b>（复述含尺度）· <b>agent-panel.react.test.tsx</b>（图纸跟面积 / 100 米拒绝后简报收回，两条端到端）。<code>npx vitest run</code> 定向 106 条绿，<code>tsc --noEmit</code> 干净。</p>
+  </section>
+
+  <section>
+    <h2>现状边界：照实写，不留「假装已有」</h2>
+    <table>
+      <thead><tr><th>项</th><th>现状</th><th>性质</th></tr></thead>
+      <tbody>
+        <tr><td>模型开关</td><td><code>NEXT_PUBLIC_AGENT_ENABLED=1</code> 没写进 <code>.env.example</code>，本机默认关——真实抽槽要显式打开，日常跑的是规则版兜底。</td><td><span class="tag ask">配置</span></td></tr>
+        <tr><td>100 / 500 两档</td><td>对话输入与卡片口径认到 500 m（<code>DIM_MAX</code>，有测试钉着），立墙只认 100 m（编辑器全局硬闸）。本次把挡下时的话修顺了，两档本身是有意分工。</td><td><span class="tag ask">分工</span></td></tr>
+        <tr><td>换区</td><td>没有分区层，没有可点的换区控件，按区域整组搬物料还没入口。晴光如实说清并给替代路径。</td><td><span class="tag gap">未做</span></td></tr>
+        <tr><td>图纸识别</td><td>DXF 矢量层 = 下一 MVP；DWG/PDF 本期不收。底图只当参照，尺寸要么说一句，要么明确标「估的」。</td><td><span class="tag gap">下期</span></td></tr>
+        <tr><td>云端读数</td><td><code>keptLocked</code> 与 <code>dropped</code> 恒为 0——服务端只报「谁变了」，这两项本地才算得出。</td><td><span class="tag ask">差异</span></td></tr>
+        <tr><td>体检覆盖面</td><td>只查画布几何六类；起身空间只在桌旁量，隔墙边没量；入口靠图上开口，认不出就不判门前留空。</td><td><span class="tag ask">覆盖面</span></td></tr>
+        <tr><td>氛围</td><td>本阶段不做 mood 深挖：禁 Bloom、室内雨、bake 进 Scene；「看看下雨天」只在户外评审态给一颗工具列同款控件。</td><td><span class="tag ask">Out</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>地图支路硬钉：定场 ≠ 重建素材</h2>
+    <p class="lead">户外地图支路已接通采集单与左栏「场地观感」。晴光说话时必须把定场与重建分开，不许暗示卫星图能出 3D。</p>
+    <div class="nails">
+      <div class="nail">
+        <b>高德只定场 + 采集单</b>
+        <p>圈画报真实米数、立壳体、给出沿边界站位。不说「用地图直接重建」。用户问卫星能不能当素材时，直接拒绝并指向现场视频/照片。</p>
+        <div class="dlg">
+          <div class="line user"><u>你说</u>能不能用卫星图重建这块地</div>
+          <div class="line agent"><u>晴光说</u>不能。卫星和高德图只用来圈范围；重建要你按采集单在现场拍视频或绕场照片，再进左轨「观感 · 场地重建」。</div>
+        </div>
+      </div>
+      <div class="nail">
+        <b>观感层不是布置几何</b>
+        <p>World / 场地重建铺的是背景观感；碰撞、落盘、导出几何仍只认壳体与 glTF 物料。不要说「点云也能拖动物料」。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>附录 A · 常量与真相字段</h2>
+    <p class="lead">上面每一幕话，都是这些数字和字段推出来的。</p>
+    <ul class="tight">
+      <li>壳体：层高默认 <code>4.0 m</code>（没说就标 <code>heightSource:'default'</code>）、外墙厚 <code>0.16 m</code>、主入口宽上限 <code>1.8 m</code>、高上限 <code>2.2 m</code>，开口状态一律 <code>inferred</code>（待确认）。户外零墙零门。</li>
+      <li>真相字段只有三个：<code>venue.height</code>、<code>venue.site.mainEntrance.openingId</code>、<code>indoorOutdoor</code>。禁止另造 <code>ceilingHeightM</code> 这类平行字段。</li>
+      <li>尺寸：最小 <code>1 m</code>，立墙上限 <code>100 m</code>，对话输入上限 <code>500 m</code>，地图圈画布置壳上限 <code>100 m</code>。</li>
+      <li>本地摆场常量：餐桌 <code>areaSets = max(1, floor(面积/30))</code>、<code>wantedSets = ceil(人数/4)</code>、<code>count = max(1, min(可用槽, wantedSets, areaSets×2))</code>；课桌椅墙距 0.35 · 椅距 0.7 · 列距 1.7 · 行距 2.1，未给人头按 1.8 ㎡/人推；背景板贴北墙内侧 0.4 m；点缀 3–6 件、带随机种子可复现。</li>
+      <li>提案契约：确认前零写入 · 逐帧推进（每帧 420 ms，末帧停 120 ms，五步文案）· 确认才一次落盘 · 画布被改即作废并说明 · 一屏一颗绿钮。</li>
+    </ul>
+    <p class="src"><b>lib/venue-shell.ts</b> · <b>lib/agent-proposal.ts</b> · <b>lib/furniture-sets.ts</b> · <b>lib/surprise.ts</b> · <b>lib/constants.ts</b></p>
+  </section>
+
+  <section>
+    <h2>附录 B · 右栏 15 态对照</h2>
+    <table>
+      <thead><tr><th>状态</th><th>画布</th><th>右栏</th></tr></thead>
+      <tbody>
+        <tr><td><code>empty</code> … <code>baseReady</code></td><td>空地 / 底图已铺（仅参照）</td><td>只一个输入框，<b>零绿钮</b>，不上来甩一串起步卡</td></tr>
+        <tr><td><code>dragHover</code></td><td>落区「松手铺成底图 · 图片 20 MB 以内」</td><td>—</td></tr>
+        <tr><td><code>nonImageRejected</code> 等文件态</td><td>不收，画布不变</td><td>琥珀一句 + 「重新选文件 / 换个文件」</td></tr>
+        <tr><td><code>dimsInvalid</code></td><td>不变</td><td>报错原因（负数 / 至少 1 m / 上限）</td></tr>
+        <tr><td><code>generating</code></td><td>逐帧预览，顶部 pill「正在摆桌椅」</td><td>五步进度 + 「停一下」</td></tr>
+        <tr><td><code>generatePaused</code></td><td>预览收回，画布没动</td><td>「停在第 N 步 · 接着摆 · 不要了」</td></tr>
+        <tr><td><code>generateFailed</code></td><td>场地和设置都还在</td><td>「这次没出成，可能是网络断了」+ 重试</td></tr>
+        <tr><td><code>planProposed</code></td><td>这版预览挂着</td><td>唯一一颗「确认布置」+ 撤回 / 换一版文字链</td></tr>
+        <tr><td><code>planReady</code> / <code>planEdited</code></td><td>已落盘，件件可拖</td><td>「这一版布置」读数 + 重叠琥珀告警；绿钮收回</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>附录 C · 验收：照着打一遍就行</h2>
+    <p class="lead">打开 <code>/editor</code>，本机 mock 即可。前八条来自上层框架的截图级 checkbox，后段是对话级判据。每一行都能截图或实测证明。</p>
+    <table class="check">
+      <thead><tr><th></th><th>打这句</th><th>判据</th></tr></thead>
+      <tbody>
+        <tr><td><span class="box"></span></td><td>「80 人发布会，室内 12×9」</td><td>画布有可见方案或明确待确认预览——不是只涨聊天气泡</td></tr>
+        <tr><td><span class="box"></span></td><td>空闲右栏</td><td>找不到任何 <code>btn-primary</code>（含导出、下一步类）</td></tr>
+        <tr><td><span class="box"></span></td><td>「发布会」→「80 人」→「12×9」</td><td>分三句只出一版；中途每次催的都是缺的那格</td></tr>
+        <tr><td><span class="box"></span></td><td>「今天天气不错」</td><td>琥珀一句，画布不动，不空跑一趟生成</td></tr>
+        <tr><td><span class="box"></span></td><td>「108 平米」</td><td>播报带「按 4:3 折算、你改过我才当准」，墙标 inferred</td></tr>
+        <tr><td><span class="box"></span></td><td>「改成 15×10」</td><td>只动壳、一句短播报、不把你从 2D 拽回 3D</td></tr>
+        <tr><td><span class="box"></span></td><td>拖图纸 →「300平米，按图纸估」</td><td>折的是 300 ㎡ 不是画布旧空地，播报含「你说的 300 ㎡」<span class="tag fix">本次修好</span></td></tr>
+        <tr><td><span class="box"></span></td><td>「改成 200×150」</td><td>报出 100 米上限与一句可说的下一步；简报退回真实米数<span class="tag fix">本次修好</span></td></tr>
+        <tr><td><span class="box"></span></td><td>「加两把椅子」</td><td>只加两件的绿框；放不下几件就直说只放得下几件</td></tr>
+        <tr><td><span class="box"></span></td><td>预览期间「改成 8×6」</td><td>预览作废并说明原因；确认前撤销栈里没有提案</td></tr>
+        <tr><td><span class="box"></span></td><td>摆一版后「看看哪里有问题」</td><td>六类按固定顺序报；算不出改法就直说不硬挪</td></tr>
+        <tr><td><span class="box"></span></td><td>锁 6 件后「换一版」</td><td>卡上出现「锁定 6 件我没动」；云端动了锁定件则确认钮按住</td></tr>
+        <tr><td><span class="box"></span></td><td>「停一下」→「接着摆」</td><td>预览收回、画布没动；接着摆从第 N 帧续，不重演</td></tr>
+        <tr><td><span class="box"></span></td><td>「换区」</td><td>如实说没有分区层并给替代路径，不硬演一个假控件</td></tr>
+        <tr><td><span class="box"></span></td><td>「导出给搭建方」</td><td>未确认时绿钮不亮并给一句原因；确认后只在本机生成</td></tr>
+        <tr><td><span class="box"></span></td><td>本机 mock 下打开右栏</td><td>常驻「演示环境 · 未连接真实 AI 模型」一条，不许摘</td></tr>
+        <tr><td><span class="box"></span></td><td>看抬头状态点</td><td>只出现「做好了」/「发现问题」两种说法</td></tr>
+        <tr><td><span class="box"></span></td><td>数左轨图标</td><td>永远三图标；对话进度不升格成第四图标</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>附录 D · 代码索引</h2>
+    <p class="lead">按符号名找，不按行号——行号会漂，函数名不漂。</p>
+    <table>
+      <thead><tr><th>要看什么</th><th>去哪儿</th></tr></thead>
+      <tbody>
+        <tr><td>一句话怎么变成决策</td><td class="src"><b>lib/brief-agent.ts</b> <code>parseBriefTurn</code> · <code>summarizeMemory</code></td></tr>
+        <tr><td>命令闸 · 解析 · 播报 · 只改尺寸判定</td><td class="src"><b>lib/workbench-agent.ts</b> <code>parseBriefSentence</code> · <code>describeExtraction</code> · <code>isVenueSizeOnly</code> · <code>hasBriefSignals</code> · <code>pendingPlanOf</code></td></tr>
+        <tr><td>壳体与真相字段</td><td class="src"><b>lib/venue-shell.ts</b> <code>buildVenueShell</code> · <code>VENUE_MAX_DIMENSION_M</code></td></tr>
+        <tr><td>本地摆场引擎与三道闸</td><td class="src"><b>lib/agent-proposal.ts</b> <code>raiseVenue</code> · <code>replaceVenueWithShell</code> · <code>proposePlan</code> · <code>proposeAddition</code></td></tr>
+        <tr><td>几何体检</td><td class="src"><b>lib/layout-review.ts</b> <code>reviewLayout</code> · <code>proposeReviewFix</code></td></tr>
+        <tr><td>对话气泡、预览、确认、状态</td><td class="src"><b>panels/agent-panel.tsx</b> <code>send</code> · <code>runLocal</code> · <code>presentProposal</code> · <code>planLines</code> · <code>shellNote</code> · <code>sizeOnlyNote</code> · <code>revertScaleToCanvas</code> · <code>estimateFromPlan</code> · <code>headerStatus</code> · <code>mascotOf</code></td></tr>
+        <tr><td>云侧</td><td class="src"><b>panels/creative-studio.tsx</b> · <b>lib/agent-resolver.ts</b> · <b>supabase/functions/_shared/agent-runner.ts</b> · <b>providers.ts</b> · <b>api.ts</b> · 本机 mock <b>mock-server.cjs</b></td></tr>
+        <tr><td>测试</td><td class="src"><b>lib/brief-agent.test.ts</b> 12+ · <b>lib/venue-shell.test.ts</b> · <b>lib/agent-proposal.test.ts</b> · <b>lib/layout-review.test.ts</b> · <b>panels/agent-panel.react.test.tsx</b></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    晴光 · Agent 对话规范 — 幕景 Scendance · 真相源为本仓代码 2026-10-30<br/>
+    所有「晴光说」逐字取自代码；所有件数与座数标注「按画布实测」，不作为固定承诺。
+  </footer>
+
+</div>
+</body>
+</html>

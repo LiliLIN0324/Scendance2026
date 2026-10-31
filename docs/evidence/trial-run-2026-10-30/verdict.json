@@ -1,0 +1,29 @@
+﻿{
+  "verdict": "PASS",
+  "url": "http://127.0.0.1:3000/editor",
+  "proxy": "http://127.0.0.1:3199/health ok keyConfigured",
+  "vitest": {
+    "shipped-assets+amap-venue+venue-shell+site-recon-mock": "30 passed",
+    "lux3d-direct-test.react": "7 passed"
+  },
+  "ui": {
+    "mapDialog": true,
+    "satelliteDefaultOff": true,
+    "demoLNonRectShell": true,
+    "envPreviewBanquet": true,
+    "splatOn": true,
+    "splatOff": true,
+    "dryRunDefaultOn": true
+  },
+  "hardNails": {
+    "noNewAholoTask": true,
+    "noCommitPush": true,
+    "satelliteNotRecon": true,
+    "splatLookOnly": true,
+    "dryRunLeftOn": true
+  },
+  "screenshots": "docs/evidence/trial-run-2026-10-30/",
+  "boxCopies": "/workspace/scendance-trial/",
+  "gapOpened": true,
+  "timeAsiaShanghai": "2026-10-30 ~21:40"
+}

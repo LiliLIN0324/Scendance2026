@@ -2,7 +2,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { polygonBboxMeters } from '../lib/amap-venue';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, SATELLITE_GROUND_LABEL, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
+import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
+import { defaultGuestFlow } from '../lib/site-capture';
 
 declare global {
   interface Window {
@@ -37,10 +39,25 @@ function loadAmap(key: string, security: string): Promise<void> {
   return loaderPromise;
 }
 
-export interface VenuePickResult { name: string; location: string; polygon: { lng: number; lat: number }[] }
+export interface VenuePickResult {
+  name: string;
+  location: string;
+  polygon: { lng: number; lat: number }[];
+  /** 圈内主客流线折点；缺省时上层用默认长轴流线加密站位。 */
+  flow?: { lng: number; lat: number }[];
+  /** 可选卫星贴地参考底图（默认关）；仅观感，不可作重建素材。 */
+  satelliteGround?: boolean;
+  /** 已拉取的真实卫星参考 data URL（仅观感，不进重建上传）。 */
+  satelliteGroundImage?: string;
+}
 
-/** 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 外接矩形生成场地。key 只留在本机。 */
-export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickResult): void; onClose(): void }) {
+type DrawMode = 'polygon' | 'polyline' | null;
+
+/**
+ * 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 可选画主客流线 → 真轮廓壳体；可选卫星贴地参考（默认关）。key 只留在本机。
+ * grow = 交给浮层撑高度：圈一块地要能看清地块，左栏那条 260px 的窄缝圈不准。
+ */
+export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick: VenuePickResult): void; onClose(): void; grow?: boolean }) {
   const [key, setKey] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_KEY, KEY_STORAGE));
   const [security, setSecurity] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE, SECURITY_STORAGE));
   const [status, setStatus] = useState('');
@@ -49,11 +66,17 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
   const [pickName, setPickName] = useState('盐官潮乐之城');
   const [pickLocation, setPickLocation] = useState('');
   const [bbox, setBbox] = useState<{ width: number; depth: number } | null>(null);
+  const [flowMeters, setFlowMeters] = useState<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  /** 卫星贴地参考：默认关；开了只贴观感底图，绝不进 Aholo 上传。 */
+  const [satelliteGround, setSatelliteGround] = useState(false);
+  const [busy, setBusy] = useState(false);
   const mapRef = useRef<unknown>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const toolRef = useRef<{ close?(clear?: boolean): void } | null>(null);
+  const toolRef = useRef<{ close?(clear?: boolean): void; polygon?(): void; polyline?(): void } | null>(null);
   const drawRef = useRef<{ lng: number; lat: number }[]>([]);
+  const flowRef = useRef<{ lng: number; lat: number }[]>([]);
+  const drawModeRef = useRef<DrawMode>(null);
 
   useEffect(() => {
     if (!key) return;
@@ -64,17 +87,43 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
       const AMap = window.AMap as any;
       const map = new AMap.Map(containerRef.current, { zoom: 15, center: [120.5394, 30.4049], mapStyle: 'amap://styles/whitesmoke' });
       mapRef.current = map;
-      const satellite = new AMap.TileLayer();
+      // 选址圈画底图用真卫星层，便于对照；贴地参考另拉静态卫星图。
+      const satellite = AMap.TileLayer?.Satellite
+        ? new AMap.TileLayer.Satellite()
+        : new AMap.TileLayer();
       satellite.setMap(map);
       satellite.show();
       const mouseTool = new AMap.MouseTool(map);
       mouseTool.on('draw', (data: any) => {
-        // 2.0 的 payload 各版本在 overlay / obj 上放过图形本身，也直接回传 polygon 实例。
         const overlay = data?.overlay ?? data?.obj ?? data;
         const path = overlay?.getPath?.() ?? [];
-        drawRef.current = path.map((p: any) => ({ lng: Number(p.lng), lat: Number(p.lat) }));
-        // 少于 3 点等于没圈成面，别把 0 × 0 m 当成结果摆给用户。
-        setBbox(drawRef.current.length < 3 ? null : polygonBboxMeters(drawRef.current));
+        const points = path.map((p: any) => ({ lng: Number(p.lng), lat: Number(p.lat) }));
+        const mode = drawModeRef.current;
+        drawModeRef.current = null;
+        if (mode === 'polyline') {
+          flowRef.current = points;
+          if (points.length >= 2) {
+            const latMid = points.reduce((s: number, p: { lat: number }) => s + p.lat, 0) / points.length;
+            const kx = metersPerDegreeLng(latMid);
+            let len = 0;
+            for (let i = 0; i < points.length - 1; i++) {
+              const a = points[i]!;
+              const b = points[i + 1]!;
+              len += Math.hypot((b.lng - a.lng) * kx, (b.lat - a.lat) * METERS_PER_DEGREE_LAT);
+            }
+            setFlowMeters(Math.round(len * 10) / 10);
+            setStatus(`主客流线约 ${Math.round(len * 10) / 10} m。可点「生成户外场地」，或重画流线。`);
+          } else {
+            setFlowMeters(null);
+          }
+        } else {
+          drawRef.current = points;
+          // 少于 3 点等于没圈成面，别把 0 × 0 m 当成结果摆给用户。
+          setBbox(drawRef.current.length < 3 ? null : polygonBboxMeters(drawRef.current));
+          if (drawRef.current.length >= 3) {
+            setStatus('边界已闭合。可再点「画主客流线」，或直接生成（未画则用默认长轴流线）。');
+          }
+        }
         try { mouseTool.close(false); } catch { /* 已闭合 */ }
       });
       toolRef.current = mouseTool;
@@ -83,6 +132,16 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
     }).catch(failure => setStatus(failure instanceof Error ? failure.message : String(failure)));
     return () => { cancelled = true; };
   }, [key, security]);
+
+  // 浮层开合与全屏都会改容器尺寸，高德按旧尺寸渲染会留下空白，得让它重量一次。
+  useEffect(() => {
+    const node = containerRef.current;
+    const map = mapRef.current as { resize?(): void } | null;
+    if (!node || !map || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => map.resize?.());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [mapReady]);
 
   function search() {
     const AMap = window.AMap as unknown as { PlaceSearch?: new (opts: Record<string, unknown>) => { search(kw: string, cb: (status: string, result: unknown) => void): void } };
@@ -104,17 +163,95 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
   }
 
   function startDraw() {
+    drawModeRef.current = 'polygon';
     setStatus('在卫星图上点击勾出场地边界，双击或回到起点闭合。');
-    (toolRef.current as unknown as { polygon?(): void } | null)?.polygon?.();
+    toolRef.current?.polygon?.();
   }
 
-  function generate() {
+  function startFlow() {
+    if (drawRef.current.length < 3) {
+      setStatus('先圈出场地边界，再画主客流线。');
+      return;
+    }
+    drawModeRef.current = 'polyline';
+    setStatus('在圈内点出主客流线折点，双击结束。站位会沿这条线加密。');
+    toolRef.current?.polyline?.();
+  }
+
+  function staticKey(): string {
+    // Next 只内联字面量 NEXT_PUBLIC_* 访问
+    return process.env.NEXT_PUBLIC_AMAP_STATIC_KEY || key;
+  }
+
+  async function resolveSatelliteImage(polygon: { lng: number; lat: number }[]): Promise<string | undefined> {
+    if (!satelliteGround) return undefined;
+    setStatus('正在拉取卫星参考底图…');
+    const image = await Promise.race([
+      fetchSatelliteGroundDataUrl(polygon, staticKey()),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 9000)),
+    ]);
+    if (!image) {
+      setStatus('卫星静态图暂不可用，已用参考占位底图（仍不可作重建素材）。');
+      return undefined;
+    }
+    setStatus('');
+    return image;
+  }
+
+  async function generate() {
+    if (busy) return;
     if (drawRef.current.length < 3) { setStatus('先在卫星图上圈出场地。'); return; }
-    onPick({ name: pickName.trim() || '户外场地', location: pickLocation, polygon: drawRef.current });
+    setBusy(true);
+    try {
+      const flow = flowRef.current.length >= 2 ? flowRef.current : defaultGuestFlow(drawRef.current);
+      const satelliteGroundImage = await resolveSatelliteImage(drawRef.current);
+      onPick({
+        name: pickName.trim() || '户外场地',
+        location: pickLocation,
+        polygon: drawRef.current,
+        flow,
+        satelliteGround,
+        satelliteGroundImage,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** D3 演示：不手画也能立一块非矩形（L 轮廓）户外壳，并带默认长轴流线；可选卫星贴地。 */
+  async function demoPick() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const lat = 30.4049;
+      const lng = 120.5394;
+      const dLng = 12 / metersPerDegreeLng(lat);
+      const dLat = 8 / METERS_PER_DEGREE_LAT;
+      // L 形：外接约 12×8 m，轮廓非轴对齐矩形，便于肉眼验收真轮廓壳体。
+      const polygon = [
+        { lng, lat },
+        { lng: lng + dLng, lat },
+        { lng: lng + dLng, lat: lat + dLat * 0.45 },
+        { lng: lng + dLng * 0.45, lat: lat + dLat * 0.45 },
+        { lng: lng + dLng * 0.45, lat: lat + dLat },
+        { lng, lat: lat + dLat },
+      ];
+      const satelliteGroundImage = await resolveSatelliteImage(polygon);
+      onPick({
+        name: pickName.trim() || '盐官潮乐之城',
+        location: pickLocation || '海宁盐官',
+        polygon,
+        flow: defaultGuestFlow(polygon),
+        satelliteGround,
+        satelliteGroundImage,
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!key || !security) {
-    return <div className="sc-aholo-task" aria-label="高德选址圈画">
+    return <div className={`sc-aholo-task${grow ? ' is-grow' : ''}`} aria-label="高德选址圈画">
       <p className="sc-note">需要高德开放平台（lbs.amap.com）的 <strong>Web端(JS API)</strong> Key 与安全密钥。两者只存在本机浏览器，不会上传。</p>
       <label className="sc-field" htmlFor="amap-key-input">高德 Key</label>
       <input id="amap-key-input" className="sc-lux-direct-input" value={key} onChange={event => setKey(event.target.value)} placeholder="粘贴 Key" />
@@ -128,24 +265,35 @@ export function AmapVenuePicker({ onPick, onClose }: { onPick(pick: VenuePickRes
     </div>;
   }
 
-  return <div className="sc-aholo-task" aria-label="高德选址圈画">
-    <div style={{ display: 'flex', gap: 6 }}>
+  return <div className={`sc-aholo-task${grow ? ' is-grow' : ''}`} aria-label="高德选址圈画">
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative', zIndex: 2 }}>
       <input aria-label="搜索地点" type="text" value={query} placeholder="搜索地点，如：盐官潮乐之城"
         onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') search(); }} />
-      <button type="button" className="sc-button" onClick={search}>搜索</button>
+      <button type="button" className="sc-button" onClick={search} disabled={busy}>搜索</button>
+      <button type="button" className="sc-button" onClick={() => void demoPick()} disabled={busy} title="不手画：立 L 轮廓户外壳（非矩形）+ 默认长轴流线站位">演示圈画 · L 轮廓</button>
     </div>
     {results.length > 0 && <ul className="sc-lux-direct-results">
       {results.map(result => <li key={result.id}>
         <button type="button" onClick={() => focusResult(result)}>{result.name}<span className="sc-note"> {result.address}</span></button>
       </li>)}
     </ul>}
-    <div ref={containerRef} style={{ width: '100%', height: 260, borderRadius: 10, border: '1px solid var(--sc-line)' }} />
-    <div style={{ display: 'flex', gap: 6 }}>
-      <button type="button" className="sc-button" onClick={startDraw} disabled={!mapReady}>圈画场地</button>
-      <button type="button" className="sc-button" onClick={generate} disabled={!bbox}>生成户外场地</button>
-      <button type="button" className="sc-button" onClick={onClose}>关闭</button>
+    <div ref={containerRef} style={{ width: '100%', position: 'relative', zIndex: 0, ...(grow ? { flex: '1 1 auto', minHeight: 240, minWidth: 0 } : { height: 260 }), borderRadius: 10, border: '1px solid var(--sc-line)' }} />
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative', zIndex: 2, flexShrink: 0 }}>
+      <button type="button" className="sc-button" onClick={startDraw} disabled={!mapReady || busy}>圈画场地</button>
+      <button type="button" className="sc-button" onClick={startFlow} disabled={!mapReady || !bbox || busy}>画主客流线</button>
+      <button type="button" className="sc-button" onClick={() => void generate()} disabled={!bbox || busy}>{busy ? '处理中…' : '生成户外场地'}</button>
+      {!grow && <button type="button" className="sc-button" onClick={onClose}>关闭</button>}
     </div>
-    {bbox && <p className="sc-note">圈画外接矩形：<strong>{bbox.width} × {bbox.depth} m</strong>（自动按纬度换算真实米数）</p>}
+    {bbox && <p className="sc-note">圈画外接矩形：<strong>{bbox.width} × {bbox.depth} m</strong>
+      {flowMeters != null ? <> · 主客流线 <strong>{flowMeters} m</strong></> : <> · 未手画流线时用默认长轴</>}
+      （立壳跟多边形真轮廓，不只外接矩形）
+    </p>}
+    <label className="sc-note" style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative', zIndex: 2 }}>
+      <input type="checkbox" checked={satelliteGround} disabled={busy} onChange={event => setSatelliteGround(event.target.checked)}
+        aria-label="卫星贴地参考底图" />
+      卫星贴地参考底图（可选·默认关）· {SATELLITE_GROUND_LABEL}
+    </label>
+    {satelliteGround && <p className="sc-note" role="note">{RECON_MATERIAL_BAN}</p>}
     {status && <p className="sc-note">{status}</p>}
   </div>;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, Layers, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -37,6 +37,7 @@ import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
+import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -59,7 +60,7 @@ import { canApplyLayoutGeometry, structuralItemCollides, venueArea, materialCoun
 import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
-import { ActivityBrief, AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider } from './panels/agent-panel';
+import { ActivityBrief, AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
 import { CloudPanel } from './panels/cloud-panel';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
@@ -77,9 +78,9 @@ import type { GameMode } from './lib/types';
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 import type { SplatPaint } from './three/splat-preview';
 
-/** 简报底折叠：只放别处没有主入口的深资料。评审/执行走左轨，模板/物料走底栏。 */
+/** 简报里的入口：group 'venue' 上到「这块场地从哪来」和地图圈画并列，'docs' 仍收进底部折叠。评审/执行走左轨，模板/物料走底栏。 */
 const RAIL_TOOLS = [
-  { id: 'reference', label: '图纸尺寸', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference', group: 'venue' as const },
+  { id: 'reference', label: '图纸与照片', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference', group: 'venue' as const },
   { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', Icon: ClipboardList, open: 'openBrief', group: 'docs' as const },
   { id: 'model', label: '物料建模', hint: '生成新物料与调整材质', Icon: Boxes, open: 'openModelTools', group: 'docs' as const },
   { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial', group: 'docs' as const },
@@ -191,6 +192,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
   // 本机直连 Aholo 的测试入口：只在 next dev 出现，构建产物里这颗按钮不存在。
   const luxDirectVisible = process.env.NODE_ENV === 'development';
+  // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
+  const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
   const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
@@ -198,11 +201,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
   const [backupOpenRequest, setBackupOpenRequest] = useState(0);
   const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
-  const [workspaceOpenRequest, setWorkspaceOpenRequest] = useState(0);
   const [publicationOpenRequest, setPublicationOpenRequest] = useState(0);
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
-  const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'}>({serial:0,tab:'materials'});
+  const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'|'environment'|'generated'}>({serial:0,tab:'materials'});
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
   const businessHostRef = useRef<HTMLDivElement>(null);
   const businessToolsRef = useRef<BusinessToolsApi | null>(null);
@@ -973,6 +975,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
   }, [setView, startSplat]);
+  /** D0：地图立壳后自动挂历史 World .spz（只读 shipped，不扣额度）。 */
+  const hangDemoEnvironment = useCallback(() => {
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+    setMaterialTabRequest(current => ({ serial: current.serial + 1, tab: 'environment' }));
+    setMaterialsOpen(true);
+    try {
+      void startSplat(storedAholoSceneSource(DEMO_WORLD_SCENE_ID));
+    } catch (failure) {
+      notify(failure instanceof Error ? failure.message : String(failure), 'error');
+    }
+  }, [setView, startSplat]);
 
   useEffect(() => {
     const focusObject = (event: Event) => {
@@ -1384,9 +1397,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setView(current => ({ ...current, view2D: false }));
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
-  /** 场景生成里的「取回并预览」：先落盘再切到 3D，失败由面板自己说明。点云按真实米制铺（scale 1），不缩放。 */
+  /** 场景生成/真重建「取回并预览」：先落盘再切到 3D；真成功挂本场 .spz 时同步打开环境预览抽屉，替换当前观感层。 */
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
+    setMaterialTabRequest(current => ({ serial: current.serial + 1, tab: 'environment' }));
+    setMaterialsOpen(true);
     await startSplat(await loadAholoSceneSource(source));
   }, [setView, startSplat]);
   // 高斯优先（用户裁决）：预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）；场地跟高斯走，不反过来。
@@ -1471,23 +1486,28 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
                 })}
               </nav>
-              {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="接口测试">
-                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="Aholo 接口测试" title="本机直连 Aholo 接口（仅本地开发可见）"
-                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>Aholo</span></button>
+              <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
+                <button type="button" className="sc-rail-tool" aria-label="图纸与照片" title="图纸、照片与实测尺寸"
+                  onClick={() => businessToolsRef.current?.openReference()}><Ruler size={20} aria-hidden="true"/><span>图纸</span></button>
+                <button type="button" className="sc-rail-tool" aria-label="场地重建" title="现场照片重建 3D 场地 · 生成与候选确认"
+                  onClick={() => businessToolsRef.current?.openRebuild()}><Layers size={20} aria-hidden="true"/><span>重建</span></button>
+              </nav></>
+              {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="场地观感与物料">
+                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" title="采集单上传 · World 观感 · Lux3D 物件（本机开发可见）"
+                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>观感</span></button>
               </nav></>}
             </div>
           </div>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
-              <button type="button" aria-pressed={leftMode==='brief'} onClick={()=>{setLeftMode('brief');setMaterialsOpen(false);setSidebarCollapsed(false);}}>活动简报</button>
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
-              {(businessOpen||leftMode==='business')&&<button type="button" aria-pressed={leftMode==='business'} onClick={()=>{setLeftMode('business');setMaterialsOpen(false);setBusinessOpen(true);setSidebarCollapsed(false);setWorkspaceOpenRequest(value => value + 1);}}>{workbenchMode==='review'?'评审资料':workbenchMode==='delivery'?'执行资料':'活动资料'}</button>}
+              {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-brief-pane" hidden={leftMode!=='brief'}><ActivityBrief tools={RAIL_TOOLS.map(tool => ({ id: tool.id, label: tool.label, hint: tool.hint, group: tool.group, icon: <tool.Icon size={16} aria-hidden="true"/>, onOpen: () => businessToolsRef.current?.[tool.open]() }))}/></div>
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
-            {luxDirectVisible && <div className="sc-left-content" hidden={leftMode!=='lux3d'}><Lux3dDirectTest onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/></div>}
+            {luxDirectVisible && <div className="sc-left-content" hidden={leftMode!=='lux3d'}><Lux3dDirectTest reconPreset={aholoReconPreset} onHangMockScene={hangDemoEnvironment} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/></div>}
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
           </div>
           <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
@@ -1567,6 +1587,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         }}
       />
             <AgentCanvasOverlay/>
+            <MapVenueOverlay onHangDemoEnvironment={hangDemoEnvironment} onReconUpload={luxDirectVisible ? preset => {
+              setAholoReconPreset(preset);
+              setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(false);
+            } : undefined}/>
             <PlanFlow onOpenAgent={() => setAgentCollapsed(false)} onHomeChange={setPlanHome}/>
             <div className={`sc-canvas-heading${canvasDetailOpen ? ' has-detail' : ''}`}>
               <span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span>
@@ -1606,7 +1630,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             {agentCollapsed && <AgentReopenCard onOpen={() => setAgentCollapsed(false)}/>}
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setSidebarCollapsed(false); setLeftMode('business'); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceOpenRequest={workspaceOpenRequest} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
+          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setSidebarCollapsed(false); setLeftMode('business'); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
           {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)}/>}
         </main>
       </div>

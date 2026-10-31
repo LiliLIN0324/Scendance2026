@@ -13,29 +13,32 @@
  * 生成入口只有一个：对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  */
-import { ArrowUp, Check, FileImage, Loader2, Paperclip, RotateCw, X } from 'lucide-react';
+import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { useRoomEditor } from '../contexts';
+import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
-import { createVenueFromPick, polygonBboxMeters } from '../lib/amap-venue';
+import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { sameLayoutContent } from '../lib/persistence';
+import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseMaterialRequest, pendingPlanOf,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
   scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
+import { SiteCaptureCard } from './site-capture-card';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
@@ -161,10 +164,11 @@ interface AgentValue {
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   /** 左栏简报的空地文字链：不用先开物料库，一键立 12×8 空壳。 */
   startBlankVenue(): void;
+  /** 左轨常驻的地图入口：场地立起来也进得来，返回 null = 场地已换成圈画这块，否则是挡路的原因。 */
   mapPickerOpen: boolean;
   startMapVenuePicker(): void;
   closeMapVenuePicker(): void;
-  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[] }): void;
+  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[] }): string | null;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
   /** 上一版云任务还在恢复：最后一帧没稳，不亮确认。 */
@@ -509,11 +513,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   function estimateFromPlan(): Scale | null {
     const pixels = planPixels.current;
     if (!pixels) { say({ role: 'agent', amber: true, text: '还没拖图纸，我按不出比例。说一句「12×9」或「300 平米」，我就按它立场地。' }); return null; }
-    const area = Math.max(4, live.current.width * live.current.height);
-    const dims = suggestDimsFromImageRatio(pixels.width, pixels.height, area);
+    // 人说过面积就用说的折，画布当前大小只在谁都没说过时兜底——否则「300 平米」白说了一场。
+    const stated = memoryRef.current.areaM2;
+    const dims = suggestDimsFromImageRatio(pixels.width, pixels.height, stated ?? live.current.width * live.current.height);
     setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
     setScaleOrigin('plan');
-    say({ role: 'agent', text: `按图纸比例估的 ${formatArea(dims.length)} × ${formatArea(dims.width)} m，先按它出一版。这是估的：不对就再说一句长宽。` });
+    say({ role: 'agent', text: `${stated !== null ? `按图纸比例和你说的 ${formatArea(stated)} ㎡` : '按图纸比例'}估的 ${formatArea(dims.length)} × ${formatArea(dims.width)} m，先按它出一版。这是估的：不对就再说一句长宽。` });
     return { length: dims.length, width: dims.width, origin: 'plan' };
   }
 
@@ -717,6 +722,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }
 
   /**
+   * 立壳被挡下 = 场地一个字节都没变：尺寸读数退回画布真实米数。
+   * 不然简报会挂着刚被拒掉的「200 × 150 m」，而画布还是原来那块地，两处对不上。
+   */
+  function revertScaleToCanvas(): void {
+    const { width, height } = live.current;
+    setLengthRaw(String(width)); setWidthRaw(String(height)); setScaleOrigin('canvas');
+  }
+
+  /**
    * 纯改尺寸：只落壳，不开进度、预览卡或绿钮。场地一变，旧提案就不再代表画布，
    * 这里静默收回（不另发「预览作废」的恐吓条），由用户自己的改尺寸动作说了算。
    */
@@ -738,10 +752,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     try {
       venue = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
     } catch (error) {
+      revertScaleToCanvas();
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
       return;
     }
     if (!venue) {
+      revertScaleToCanvas();
       say({ role: 'agent', amber: true, text: '这个场地是导入或生成的复杂结构，不能只改外框；要换尺寸得先重新立一块矩形空地。' });
       return;
     }
@@ -749,6 +765,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const was2D = view.view2D;
     try { onApply(venue.layout); }
     catch (error) {
+      revertScaleToCanvas();
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
       return;
     }
@@ -783,6 +800,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     let venue: VenuePlan | null;
     try { venue = (resized ? replaceVenueWithShell(input) : null) ?? raiseVenue(input); }
     catch (error) {
+      revertScaleToCanvas();
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
     }
@@ -791,6 +809,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       // 落盘走 provider 的 onApply：提交撤销历史、存快照都在里面，直接 applyLayout 会绕过撤销。
       try { onApply(venue.layout); }
       catch (error) {
+        revertScaleToCanvas();
         say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
         setPhase('failed'); return;
       }
@@ -803,6 +822,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       if (Math.abs(current.width - scale.length) > 1e-6 || Math.abs(current.height - scale.width) > 1e-6) {
         try { onApply({ ...current, width: scale.length, height: scale.width }); }
         catch (error) {
+          revertScaleToCanvas();
           say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度落不下来，先挪一下物料再改。' });
           setPhase('failed'); return;
         }
@@ -1030,7 +1050,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     say({ role: 'user', text: trimmed });
     // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
-    if (isEstimateCommand(trimmed)) { estimateAndGenerate(); return; }
+    if (isEstimateCommand(trimmed)) {
+      // 「300 平米，按图纸估」是一句话里的两件事：这句的面积要先记进记忆，估算才不会退回画布上的旧尺寸。
+      const statedArea = parseBriefSentence(trimmed).areaM2;
+      if (statedArea !== null) memoryRef.current = { ...memoryRef.current, areaM2: statedArea };
+      estimateAndGenerate();
+      return;
+    }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
     const request = parseMaterialRequest(trimmed);
     if (request) { addMaterials(request); return; }
@@ -1129,7 +1155,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
     applyMapVenuePick: pick => {
-      if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再圈场地。' }); return; }
+      if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
       runToken.current++;
       if (proposal.current) dropProposal();
       discardCloudPreview();
@@ -1141,13 +1167,24 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
         setVenueIO('outdoor');
         onVenueIOChange?.('outdoor');
         if (was2D) setView(current => ({ ...current, view2D: true }));
+        if (pick.satelliteGround) {
+          setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: layout.floorPlanOpacity ?? 0.55 }));
+        }
         const dims = polygonBboxMeters(pick.polygon);
         const clamped = dims.width > 100 || dims.depth > 100;
         const dropped = cleared ? `${cleared} 件物料放不下先撤了` : '物料照常摆';
-        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形）${clamped ? '，布置壳取其中一块 100 × 100 m 规划区' : ''}，${dropped}。` });
-        setMapPickerOpen(false);
+        const polyNote = (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon')
+          ? '，壳体按圈画真轮廓（非仅外接矩形）'
+          : '';
+        const satNote = pick.satelliteGround
+          ? '；已开卫星贴地参考底图（仅观感，不可作重建素材）'
+          : '';
+        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。历史宴会厅环境预览正在挂到画布背景（只读复用 World 样例，不新开额度）；浮层收起后就能看见。采集单还在——再点「地图」可导出或上传现场素材做本场重建。` });
+        return null;
       } catch (error) {
-        say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '地图场地没立起来，再试一次。' });
+        const reason = error instanceof Error ? error.message : '地图场地没立起来，再试一次。';
+        say({ role: 'agent', amber: true, text: reason });
+        return reason;
       }
     },
     exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
@@ -1197,7 +1234,8 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
 export type BriefTool = { id: string; label: string; hint: string; icon: ReactNode; group?: 'venue' | 'docs'; onOpen(): void };
 
 /**
- * 左栏活动简报：只读，数字全部来自对话与当前画布；底部只收别处没有主入口的深资料（图纸/需求表/合同）。
+ * 左栏活动简报：只读，数字全部来自对话与当前画布。
+ * 「这块场地从哪来」把量出场地的两条路（图纸与照片 / 地图圈画）并列钉在左边，场地立起来后也不消失——重圈是替换。
  * 评审·执行走左轨，模板·物料走底栏；这里不放输入框、不放生成按钮、不摆说明书。
  */
 export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.Element {
@@ -1215,6 +1253,8 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
     : agent.proposal
       ? '这版还没确认'
       : '';
+  const venueRows = tools.filter(tool => tool.group === 'venue');
+  const docsRows = tools.filter(tool => tool.group !== 'venue');
   return <section className="sc-brief" aria-label="活动简报">
     <strong className="sc-brief-title">{layout.name || event || '未命名活动'}</strong>
     <dl className="sc-brief-rows">
@@ -1226,29 +1266,93 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
     {agent.baseName && <p className="sc-brief-note">底图 · {agent.baseName} · 仅作参照</p>}
     {note && <p className="sc-brief-note">{note}</p>}
     {status && <p className="sc-brief-status"><span aria-hidden="true"/>{status}</p>}
-    {!known && <div className="sc-brief-blank">
-      <button type="button" className="sc-brief-blank-link" onClick={agent.startBlankVenue}>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</button>
-      <button type="button" className="sc-brief-blank-link" onClick={agent.startMapVenuePicker}>{agent.mapPickerOpen ? '收起地图选址' : '从地图圈画户外场地'}</button>
-      {agent.mapPickerOpen && <AmapVenuePicker onClose={() => agent.closeMapVenuePicker()} onPick={pick => {
-        agent.applyMapVenuePick(pick);
-      }} />}
-    </div>}
-    {tools.length > 0 && <details className="sc-brief-tools">
+    <div className="sc-brief-venue-ways" role="group" aria-label="这块场地从哪来">
+      <p className="sc-brief-tool-group-label">这块场地从哪来</p>
+      <div className="sc-brief-tool-list">
+        {venueRows.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
+        <button type="button" title={known ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={16} aria-hidden="true"/><span>地图圈画</span></button>
+        {!known && <button type="button" title="先给一块空地，尺寸回头在对话里说" onClick={agent.startBlankVenue}><SquareDashed size={16} aria-hidden="true"/><span>空白场地 · {BLANK_VENUE.width} × {BLANK_VENUE.depth} m</span></button>}
+      </div>
+    </div>
+    {docsRows.length > 0 && <details className="sc-brief-tools">
       <summary>更多资料</summary>
       <div className="sc-brief-tool-groups">
-        {(['venue', 'docs'] as const).map(group => {
-          const rows = tools.filter(tool => (tool.group ?? 'docs') === group);
-          if (!rows.length) return null;
-          return <div key={group} className="sc-brief-tool-group" role="group" aria-label={group === 'venue' ? '场地' : '文书'}>
-            <p className="sc-brief-tool-group-label">{group === 'venue' ? '场地' : '文书'}</p>
-            <div className="sc-brief-tool-list">
-              {rows.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
-            </div>
-          </div>;
-        })}
+        <div className="sc-brief-tool-group" role="group" aria-label="文书">
+          <p className="sc-brief-tool-group-label">文书</p>
+          <div className="sc-brief-tool-list">
+            {docsRows.map(tool => <button key={tool.id} type="button" title={tool.hint} onClick={tool.onOpen}>{tool.icon}<span>{tool.label}</span></button>)}
+          </div>
+        </div>
       </div>
     </details>}
   </section>;
+}
+
+/**
+ * 左轨那颗常驻「地图」：圈画是这块场地第一步，只藏在简报的一张卡里，收起左栏就找不着了。
+ * 再点一次就把浮层收回去，跟简报里那条链共用同一个开关。
+ */
+export function MapRailButton(): JSX.Element {
+  const agent = useAgent();
+  return <nav className="sc-rail-tool-group" aria-label="地图选址">
+    <button type="button" className={`sc-rail-tool${agent.mapPickerOpen ? ' is-active' : ''}`} aria-pressed={agent.mapPickerOpen} aria-label="地图选址"
+      title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={20} aria-hidden="true"/><span>地图</span></button>
+  </nav>;
+}
+
+/**
+ * 盖住画布的地图浮层：圈边界要看得清地块，左栏那条窄缝里一个像素就是一米多。
+ * 场地已经立起来时同样进这里重圈——替换走 raiseVenue 那条老规矩，放得下的物料留着，放不下才撤并报数。
+ */
+export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
+  /** 采集单拍完的素材要交给 Aholo 重建；重建入口可达时才传，按钮不会指向打不开的面板。 */
+  onReconUpload?: ((preset: { name: string; hint: string }) => void) | undefined;
+  /** D0：立壳成功后挂上历史 World .spz 背景；传入则自动收起浮层让画布可见。 */
+  onHangDemoEnvironment?: (() => void) | undefined;
+}): JSX.Element | null {
+  const agent = useAgent();
+  const [wide, setWide] = useState(false);
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const [capture, setCapture] = useState<{ plan: CapturePlan; polygon: AmapPoint[]; name: string; location: string } | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  useDialogFocus(agent.mapPickerOpen, panel, {
+    trap: true,
+    onEscape: () => { if (wide) setWide(false); else agent.closeMapVenuePicker(); },
+  });
+  // 上次挡路的原因不该跟着下一次打开一起回来。采集单留着——关浮层再开还能看见刚才那份，重圈一份才换掉。
+  useEffect(() => { if (!agent.mapPickerOpen) setBlocked(null); }, [agent.mapPickerOpen]);
+  if (!agent.mapPickerOpen) return null;
+  const upload = onReconUpload && capture
+    ? () => {
+        onReconUpload({
+          name: capture.name,
+          hint: `${capture.plan.mode === 'flow' ? '沿流线 ' : ''}${capture.plan.stops.length} 个站位 · 共 ${capture.plan.shots} 张${capture.plan.preferVideo ? '，或一段绕场视频' : ''}`,
+        });
+        agent.closeMapVenuePicker();
+      }
+    : undefined;
+  return <div className={`sc-map-overlay${wide ? ' is-wide' : ''}`} ref={panel} role="dialog" aria-modal="true" aria-label="地图选址" tabIndex={-1}>
+    <div className="sc-map-head">
+      <strong>地图选址</strong>
+      <span className="sc-note">{agent.venueUp ? '重新圈一块会替换现在的场地。' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地。'}</span>
+      <button type="button" className="sc-button" onClick={() => setWide(value => !value)}>{wide ? '退出全屏' : '全屏'}</button>
+      <button type="button" className="sc-button" onClick={agent.closeMapVenuePicker}>关闭</button>
+    </div>
+    {blocked && <p className="sc-map-blocked" role="alert">{blocked}</p>}
+    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} onPick={pick => {
+      const reason = agent.applyMapVenuePick(pick);
+      setBlocked(reason);
+      // 场地没立起来就不出采集单——那份站位对应的地块并不存在。
+      setCapture(reason ? null : { plan: capturePlanForVenue(pick.polygon, pick.flow), polygon: pick.polygon, name: pick.name, location: pick.location });
+      // D0：立壳即挂历史 splat，并收起浮层露出画布；采集单状态仍留着，再开地图还能看见。
+      if (!reason) {
+        // 开了卫星贴地时先露出地面参考；样例 splat 可随后在环境预览手动挂。
+        if (onHangDemoEnvironment && !pick.satelliteGround) onHangDemoEnvironment();
+        agent.closeMapVenuePicker();
+      }
+    }} />
+    {capture && <SiteCaptureCard plan={capture.plan} polygon={capture.polygon} name={capture.name} location={capture.location} onUpload={upload}/>}
+  </div>;
 }
 
 function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {

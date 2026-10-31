@@ -3,7 +3,7 @@
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { listAholoAssets } from '../lib/aholo-assets';
-import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
+import { DEMO_WORLD_SCENE_ID, listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 
 type SceneCard = { assetId: string; name: string; image?: string };
@@ -20,7 +20,9 @@ export function EnvironmentPreview({ preview, onStart, onStop }: {
   const scenes = useMemo<SceneCard[]>(() => {
     const shipped = listShippedAssets('spz').map(asset => {
       const image = shippedImageUrl(asset);
-      return { assetId: asset.assetId, name: asset.name, ...(image ? { image } : {}) };
+      const sample = asset.assetId === DEMO_WORLD_SCENE_ID || asset.assetId === 'shipped-small-launch-hall';
+      const name = sample ? `${asset.name}（样例·非本场）` : asset.name;
+      return { assetId: asset.assetId, name, ...(image ? { image } : {}) };
     });
     const local = listAholoAssets().filter(asset => asset.kind !== 'glb')
       .map(asset => ({ assetId: asset.assetId, name: asset.name }));
@@ -36,7 +38,7 @@ export function EnvironmentPreview({ preview, onStart, onStop }: {
       {preview.status !== 'error' && <button type="button" className="sc-button" onClick={onStop}>退出预览</button>}
     </p>}
     {scenes.length === 0
-      ? <p className="sc-note sc-material-empty">还没有可预览的 3DGS 场景。在「Aholo 接口测试 · 场景生成」里取回后会出现在这里。</p>
+      ? <p className="sc-note sc-material-empty">还没有本场观感包。在左轨「观感」·「场地重建」真成功取回后会出现在这里；下方仓库项标「样例·非本场」，勿冒充本场。</p>
       : <div className="sc-material-rail" role="group" aria-label="环境预览">
         {scenes.map(scene => <button type="button" key={scene.assetId} className="sc-material-card"
           disabled={busy} aria-pressed={scene.assetId === preview.assetId && preview.status !== 'idle'}

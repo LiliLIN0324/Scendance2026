@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>幕景 · KEEP / KILL · 2026</title>
+<style>
+  :root{
+    --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
+    --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+    --hair-soft:#EFEFF1; --hair:#E4E4E7;
+    --green:#4A7C59; --green-deep:#3A6247; --green-pale:#E8F0EA;
+    --warn:#96651F; --warn-bg:#FBF3E9; --err:#B4443C; --err-bg:#FAEFED;
+    --r-lg:16px; --r-sm:8px;
+    --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--plane);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:1080px;margin:0 auto;padding:48px 28px 80px}
+  header.hero{background:var(--ink);color:#fff;border-radius:var(--r-lg);padding:36px 36px 32px;margin-bottom:28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.08em;font-size:13px;color:rgba(255,255,255,.85)}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+  header.hero h1{font-size:28px;font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+  header.hero p.sub{color:rgba(255,255,255,.55);font-size:14px;max-width:720px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .meta span{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+  .navlinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .navlinks a{font-size:12px;color:rgba(255,255,255,.85);text-decoration:none;border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:4px 12px}
+  .navlinks a:hover{background:rgba(255,255,255,.10)}
+  section{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);padding:28px 32px;margin-bottom:24px}
+  h2{font-size:19px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  h2 .no{color:var(--green);margin-right:8px;font-variant-numeric:tabular-nums}
+  p.lead{color:var(--ink-soft);font-size:13.5px;margin-bottom:18px;max-width:72ch}
+  .path{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 14px}
+  .path .arrow{color:var(--green);font-weight:700}
+  .chip{display:inline-block;font-size:11.5px;border:1px solid var(--hair);border-radius:999px;padding:3px 10px;background:var(--plane);color:var(--ink-soft)}
+  .chip.hot{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.ok{background:var(--green-pale);color:var(--green-deep);border-color:#c9dbcf}
+  .chip.kill{background:var(--err-bg);color:var(--err);border-color:#f0c9c5}
+  .grid{display:grid;gap:12px}
+  @media(min-width:760px){.grid.cols2{grid-template-columns:1fr 1fr}.grid.cols3{grid-template-columns:1fr 1fr 1fr}.grid.cols5{grid-template-columns:repeat(5,1fr)}}
+  .card{background:var(--plane);border-radius:var(--r-sm);padding:16px 18px}
+  .card b{display:block;font-size:14px;margin-bottom:6px}
+  .card p,.card li{font-size:13px;color:var(--ink-soft);line-height:1.6}
+  ul.tight{margin:6px 0 0;padding-left:18px}
+  ul.tight li{margin:4px 0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:12px;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--hair)}
+  td{padding:12px;border-bottom:1px solid var(--hair-soft);vertical-align:top;color:var(--ink-soft)}
+  td strong{color:var(--ink)}
+  .keep{color:var(--green-deep);font-weight:700}
+  .kill{color:var(--err);font-weight:700}
+  a{color:var(--green)}
+  footer{color:var(--faint);font-size:12px;text-align:center;margin-top:36px}
+  pre.tree{background:var(--plane);border-radius:var(--r-sm);padding:18px 22px;font-size:12.5px;line-height:1.9;color:var(--ink-soft);overflow-x:auto;font-family:ui-monospace,Consolas,monospace}
+  pre.tree b{color:var(--ink)}
+  pre.tree i{color:var(--green);font-style:normal}
+  pre.tree em{color:var(--warn);font-style:normal}
+  .stage{background:var(--plane);border-radius:var(--r-sm);padding:14px}
+  .stage .k{font-size:11px;font-weight:600;color:var(--green);letter-spacing:.06em}
+  .stage h3{font-size:15px;font-weight:700;margin:4px 0 6px}
+  .stage p{font-size:12.5px;color:var(--ink-soft)}
+  @media(max-width:860px){header.hero h1{font-size:22px}.grid.cols5{grid-template-columns:1fr 1fr}}
+
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
+    <h1>KEEP / KILL · 产品禁令墙</h1>
+    <p class="sub">钉死该留的与必须杀掉的。违反任一条 = 产品跑偏。尤其：禁第二工作台、禁卫星当重建素材、禁样例冒充本场。</p>
+    <div class="meta"><span>2026-10-30 · Asia/Shanghai</span><span>KEEP / KILL</span><span>对齐 README 留在面上</span></div>
+    
+    <div class="navlinks">
+      <a href="./product-one-pager-2026.html">产品一页纸</a>
+      <a href="./workbench-ia-2026.html">工作台 IA</a>
+      <a href="./confirm-export-2026.html">确认与导出</a>
+      <a href="./keep-kill-2026.html">KEEP / KILL</a>
+      <a href="./user-journey-2026.html">旅程</a>
+      <a href="./user-flow-map-2026.html">流程图</a>
+      <a href="./aholo-product-gap-2026.html">Aholo 缺口</a>
+      <a href="./design-spec-2026.html">设计规范</a>
+      <a href="./qingguang-agent-spec-2026.html">晴光规范</a>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="no">01</span>KEEP（必须留下）</h2>
+    <table>
+      <tr><th style="width:28%">条目</th><th>说明</th></tr>
+      <tr><td class="keep">KEEP · 一条主路径</td><td>选活动 → 定场人数 → 生成 → 确认 → 导出</td></tr>
+      <tr><td class="keep">KEEP · 左轨三枚</td><td>布置 / 评审 / 执行；没有第四枚</td></tr>
+      <tr><td class="keep">KEEP · 确认前零写入</td><td>提案预览；人点确认才落盘 / 改仓</td></tr>
+      <tr><td class="keep">KEEP · 一步一主钮</td><td>空闲无绿色主按钮；确认钮只在待确认态出现一次</td></tr>
+      <tr><td class="keep">KEEP · 三视图一份方案</td><td>布置 · 物料 · 执行资料可来回切，不另开产品</td></tr>
+      <tr><td class="keep">KEEP · 晴光场边一次</td><td>右栏对话是生成主入口；不另开全屏聊天吃掉画布</td></tr>
+      <tr><td class="keep">KEEP · 高德只定场</td><td>地图圈画 + 采集单；重建走现场素材 / 干跑</td></tr>
+      <tr><td class="keep">KEEP · 观感只铺背景</td><td>.spz / 3DGS 不进碰撞、不进落盘几何；壳体 + glTF 布置不变</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>KILL（必须杀掉）</h2>
+    <table>
+      <tr><th style="width:28%">条目</th><th>为什么杀</th></tr>
+      <tr><td class="kill">KILL · 第二工作台</td><td>重建 / World / Lux 另开一套首页 = 产品碎成两半；全部挂回布置轨「观感」</td></tr>
+      <tr><td class="kill">KILL · 卫星当重建素材</td><td>高德/卫星不可作 3DGS 重建输入；采集单与面板顶条必须写清禁令</td></tr>
+      <tr><td class="kill">KILL · 样例冒充本场</td><td>干跑历史宴会厅等样例须标明样例；不得暗示「这就是你刚圈的场地实拍重建」</td></tr>
+      <tr><td class="kill">KILL · 第四枚左轨</td><td>场景 / 物件 / 合成 / 接口测试升轨 = IA 崩</td></tr>
+      <tr><td class="kill">KILL · 两颗确认 / 向导化</td><td>n/4 步骤条、双确认、空闲绿钮引导 = 考试感</td></tr>
+      <tr><td class="kill">KILL · 生成中可确认</td><td>对着空气点确认 = 不确定性不诚实</td></tr>
+      <tr><td class="kill">KILL · 中英混用主钮</td><td>界面主行动必须中文动词统一</td></tr>
+      <tr><td class="kill">KILL · 未确认就导出当真</td><td>交付物只能来自已确认方案（或明确标注草稿）</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>一句话自检</h2>
+    <div class="grid cols2">
+      <div class="card"><b>做功能前问</b><ul class="tight"><li>它是否让「选→定→生成→确认→导出」更快更清楚？</li><li>它是否需要新左轨图标或新工作台？需要 = 停</li></ul></div>
+      <div class="card"><b>上观感前问</b><ul class="tight"><li>素材是否现场采集（非卫星）？</li><li>屏上是否写清样例 / 干跑 / 不进碰撞？</li></ul></div>
+    </div>
+    <p class="lead" style="margin-top:14px;margin-bottom:0">配套：<a href="./product-one-pager-2026.html">一页纸</a> · <a href="./workbench-ia-2026.html">IA</a> · <a href="./confirm-export-2026.html">确认导出</a> · <a href="./aholo-product-gap-2026.html">Aholo 缺口</a>。</p>
+  </section>
+
+  <footer>给人打开的产品真源 · 视觉令牌对齐 design-spec-2026 · 幕景 SCENDANCE © 2026 · 本机未 commit</footer>
+</div>
+</body>
+</html>

@@ -13,7 +13,7 @@
  * 模型化路径：turn 函数是唯一接缝，后续接 Vercel AI SDK（选型见 docs/plans/agent-reference-study.md）
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
-import { HEADCOUNT_MAX, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
+import { formatArea, HEADCOUNT_MAX, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
 
 /** 布置形态：dining = 餐桌组（默认），desk-chair = 一人一套课桌椅。 */
 export type LayoutMode = 'dining' | 'desk-chair';
@@ -64,11 +64,14 @@ const EDUCATION_PATTERN = /(小学|中学|大学|学校|课堂|上课|讲课|教
 const DESK_CHAIR_PATTERN = /(课桌|课椅|桌椅|一人一套|每人一套|一套课桌|桌(子)?[^]{0,6}配[^]{0,6}椅)/;
 const BARE_NUMBER_PATTERN = /^(\d{1,5})(个|人)?$/;
 
-/** 记忆里已有的要素复述给人听：人数 · 室内外 · 形态 · 类型。 */
+/** 记忆里已有的要素复述给人听：人数 · 室内外 · 尺度 · 形态 · 类型。 */
 export function summarizeMemory(memory: BriefMemory): string {
   const parts: string[] = [];
   if (memory.headcount !== null) parts.push(`${memory.headcount} 人`);
   if (memory.venueIO !== null) parts.push(memory.venueIO === 'indoor' ? '室内' : '户外');
+  // 说过的尺度也要复述：只报「80 人 · 室内」而把刚给的「12×9」吞掉，等于对人确认过的事实装失忆。
+  if (memory.lengthM !== null && memory.widthM !== null) parts.push(`${formatArea(memory.lengthM)} × ${formatArea(memory.widthM)} m`);
+  else if (memory.areaM2 !== null) parts.push(`${formatArea(memory.areaM2)} ㎡`);
   if (memory.layoutMode === 'desk-chair') parts.push('一人一套课桌椅');
   if (memory.event !== null) parts.push(memory.event);
   return parts.join(' · ');

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { presetModelUrl } from '../lib/scene-presets';
-import { ActivityBrief, AgentPanel, LayoutAgentProvider } from './agent-panel';
+import { ActivityBrief, AgentPanel, LayoutAgentProvider, MapVenueOverlay, type BriefTool } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 
@@ -256,11 +256,38 @@ describe('T-UI visible interaction', () => {
     expect(within(brief).queryByText('来自对话')).toBeNull();
     expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
     expect(within(brief).queryByRole('textbox')).toBeNull();
-    // 只有两条空地文字链：简报仍然是只读事实，不在左栏摆表单。
+    // 简报里能点的只有「这块场地从哪来」这一组。
     const actions = within(brief).getAllByRole('button');
-    expect(actions).toHaveLength(2);
-    expect(actions[0]!.textContent).toContain('空白场地');
-    expect(actions[1]!.textContent).toContain('从地图圈画户外场地');
+    expect(actions.map(button => button.textContent)).toEqual(['地图圈画', '空白场地 · 12 × 8 m']);
+  });
+
+  it('offers the map next to the drawings and opens it over the canvas', () => {
+    const tools: BriefTool[] = [
+      { id: 'reference', label: '图纸与照片', hint: '图纸、照片与实测尺寸', icon: <span aria-hidden="true"/>, group: 'venue', onOpen: vi.fn() },
+      { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', icon: <span aria-hidden="true"/>, group: 'docs', onOpen: vi.fn() },
+    ];
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
+    const ways = screen.getByRole('group', { name: '这块场地从哪来' });
+    // 量出同一块场地的两条路并列，不再一个在左栏一个在左轨。
+    expect(within(ways).getAllByRole('button').map(button => button.textContent)).toEqual(['图纸与照片', '地图圈画', '空白场地 · 12 × 8 m']);
+    expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
+    fireEvent.click(within(ways).getByRole('button', { name: /地图圈画/ }));
+    const overlay = screen.getByRole('dialog', { name: '地图选址' });
+    expect(within(overlay).getByText(/搜地点/)).toBeTruthy();
+    expect(within(overlay).getByLabelText('高德选址圈画')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
+  });
+
+  it('still offers the map once a venue is standing, as a replacement', () => {
+    state.layout = { ...seatLayout(), backendVenue: { shape: 'rectangle', entrances: [], width: 12, depth: 8, height: 4 } };
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={[]}/><MapVenueOverlay/></LayoutAgentProvider>);
+    const ways = screen.getByRole('group', { name: '这块场地从哪来' });
+    // 场地立起来后空地文字链退场，地图圈画留着。
+    expect(within(ways).getAllByRole('button').map(button => button.textContent)).toEqual(['地图圈画']);
+    fireEvent.click(within(ways).getByRole('button', { name: /地图圈画/ }));
+    // 入口不消失，浮层里说清楚这一圈是替换。
+    expect(within(screen.getByRole('dialog', { name: '地图选址' })).getByText('重新圈一块会替换现在的场地。')).toBeTruthy();
   });
 
   // F-02：左栏表单是次要轨，但改过的值必须看得见——简报和对话回显读的是同一个 recap。
@@ -570,5 +597,38 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
     expect(onPreview).toHaveBeenCalled();
     // 壳体落盘走 onApply（进撤销历史）；带人数所以仍出提案，物料等确认。
     expect(onApply).toHaveBeenCalledTimes(1);
+  }, 25000);
+});
+
+describe('T-PLAN 按图纸估跟住说过的面积', () => {
+  it('「300 平米，按图纸估」折的是说过的 300 ㎡，不是画布上那块旧空地', async () => {
+    // jsdom 的 Image 不会为 data URL 触发 onload，也没有 canvas 缩放：给一张 2:1 的图纸（边长在缩放阈值内）走真链路。
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 1200;
+      naturalHeight = 600;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    });
+    const onApply = vi.fn();
+    render(<LocalHarness initial={makeLayout({ width: 12, height: 8 })} onApply={onApply}/>);
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    expect(await screen.findByRole('button', { name: /按图纸估一版/ })).toBeTruthy();
+
+    send('300平米，按图纸估');
+    const line = await screen.findByText(/你说的 300 ㎡/, undefined, { timeout: 15000 });
+    const dims = line.textContent?.match(/估的 ([\d.]+) × ([\d.]+) m/);
+    expect(Number(dims?.[1]) * Number(dims?.[2])).toBeGreaterThan(12 * 8);
+    vi.unstubAllGlobals();
+  }, 25000);
+
+  it('报出 100 米上限，并把被拒的尺寸从简报里收回——画布没变，简报就不能跟着变', async () => {
+    const onApply = vi.fn();
+    render(<LocalHarness initial={makeLayout({ width: 12, height: 8 })} onApply={onApply} brief/>);
+    send('改成 200×150');
+    expect(await screen.findByText(/这块场地最多立到 100 米/)).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+    await waitFor(() => expect(within(screen.getByLabelText('活动简报')).getByText(/室内 · 12 × 8 m/)).toBeTruthy());
+    expect(screen.getByLabelText('活动简报').textContent).not.toContain('200 × 150');
   }, 25000);
 });

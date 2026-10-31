@@ -156,6 +156,8 @@ export interface RoomBuilderOptions {
   floorOpenings?: readonly FloorOpening[];
   floorPlanImage: string | null;
   floorPlanOpacity: number;
+  /** 卫星贴地参考：用不受灯光影响的 Basic 材质，保证 3D 地面看得见。 */
+  satelliteGroundRef?: boolean;
   floorPlanFitMode: FloorPlanFitMode;
   floorPlan3DEffect: boolean;
   /** View-only: keep the source image's shell semantics when it is hidden. */
@@ -365,6 +367,7 @@ function buildFloorPlanMaterial(
     // First cache-miss call: kick off the one and only decode for this build.
     sharedLoad.started = true;
     const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
     return loader.load(imageUrl, (loaded) => {
       const image = loaded.image as HTMLImageElement;
       floorPlanImageCache = { url: imageUrl, image };
@@ -405,6 +408,14 @@ function buildFloorPlanMaterial(
     params.displacementScale = 0.3;
   }
 
+  if (options.satelliteGroundRef) {
+    return new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: Math.max(0.55, options.floorPlanOpacity || 0.78),
+      side: THREE.DoubleSide,
+    });
+  }
   return new THREE.MeshStandardMaterial(params);
 }
 

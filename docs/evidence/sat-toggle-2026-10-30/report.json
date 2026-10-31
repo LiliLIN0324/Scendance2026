@@ -1,0 +1,52 @@
+{
+  "steps": {
+    "onNet": {
+      "checked": true,
+      "amapStatus": 200,
+      "amapType": "image/jpeg",
+      "amapBytes": 0,
+      "amapUrl": "http://127.0.0.1:3199/amap-static?location=120.53946249335763%2C30.40493617486932&zoom=18&size=768*768&scale=2&x-ref=satellite-ground-ref"
+    },
+    "probeOn": {
+      "noScene": true,
+      "keys": [
+        "__reactFiber$s7xbs27bvu9",
+        "__reactProps$s7xbs27bvu9"
+      ]
+    },
+    "on": {
+      "satelliteGroundRef": true,
+      "floorPlanImage": "http://127.0.0.1:3199/amap-static?location=120.53946249335763%2C30.40493617486932&zoom=18&size=768*768&scale=2&x-ref=satellite-ground-ref",
+      "opacity": 0.78,
+      "backendSceneV2": true,
+      "name": "盐官潮乐之城 · 海宁盐官",
+      "w": 12,
+      "h": 8
+    },
+    "offNet": {
+      "checked": false,
+      "amapStatus": null,
+      "amapType": null,
+      "amapBytes": null,
+      "amapUrl": null
+    },
+    "probeOff": {
+      "noScene": true
+    },
+    "off": {
+      "floorPlanImage": null,
+      "name": "盐官潮乐之城 · 海宁盐官"
+    }
+  },
+  "failed": [
+    {
+      "url": "http://127.0.0.1:3199/amap-static?location=120.53946249335763%2C30.40493617486932&zoom=18&size=768*768&scale=2&x-ref=sat",
+      "err": "net::ERR_ABORTED"
+    }
+  ],
+  "cons": [
+    "error:Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "error:Failed to load resource: net::ERR_CONNECTION_CLOSED",
+    "error:Failed to load resource: net::ERR_CONNECTION_CLOSED"
+  ]
+}

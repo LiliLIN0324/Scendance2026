@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DIRECT_BASE } from '../lib/aholo-assets';
+import {
+  isMockReconTask,
+  makeMockReconTaskId,
+  mockReconSuccessDetail,
+  RECON_MATERIAL_BAN,
+  VENUE_PACKAGE_MISSING,
+  MOCK_HANG_DONE_NOTE,
+  CREDIT_CONFIRM_LABEL,
+  VENUE_PACKAGE_HUNG,
+} from '../lib/site-recon-mock';
 import { AholoGuideCard } from './aholo-guide-card';
 import { loadAholoCatalogItem } from '../lib/aholo-model-placement';
 import type { CatalogItem } from '../lib/types';
@@ -135,9 +145,19 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
   </>;
 }
 
-function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace, onPreviewScene }: {
+function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPlace, onPreviewScene }: {
   kind: Kind; online: boolean | null; onHistory: () => void;
   resume: { kind: Kind; taskid: string; prompt: string; startedAt: number } | null;
+  /** 地图采集单带过来的这块地：名字填进场景名称，应拍数量贴在素材选择框下面。 */
+  reconPreset: { name: string; hint: string } | null;
+  /** 场地重建默认干跑：不打代理、不扣额度；关掉才走真 /world-recon。 */
+  mockRecon: boolean;
+  onMockRecon: (value: boolean) => void;
+  /** 真调扣额度确认闸：关干跑后须勾选才允许提交。 */
+  creditConfirmed: boolean;
+  onCreditConfirmed: (value: boolean) => void;
+  /** 干跑成功后挂环境预览：等同 D0 hangDemo（历史 shipped .spz）。 */
+  onHangMockScene?: (() => void) | undefined;
   unresolved: HistoryEntry | undefined;
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string }) => Promise<void>) | undefined;
@@ -155,6 +175,7 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
   const [image, setImage] = useState('');
   const [readingImage, setReadingImage] = useState(false);
   const [imageError, setImageError] = useState('');
+  const [presetHint, setPresetHint] = useState('');
   const [taskid, setTaskid] = useState('');
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [startedAt, setStartedAt] = useState(0);
@@ -170,6 +191,7 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
   const [previewing, setPreviewing] = useState(false);
   const [previewNote, setPreviewNote] = useState('');
   const [previewError, setPreviewError] = useState('');
+  const [mockHangNote, setMockHangNote] = useState('');
   const [retry, setRetry] = useState(0);
   const mounted = useRef(false);
   const submitLock = useRef(false);
@@ -209,6 +231,15 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
     setStartedAt(resume.startedAt); setTaskid(resume.taskid); setRetry(value => value + 1);
   }, [resume, kind, taskKey, pendingKey]);
 
+  // 从地图采集单跳过来：这块地的名字填进场景名称，应拍数量跟着素材选择框提示。同一份预设只应用一次。
+  const appliedPreset = useRef<typeof reconPreset>(null);
+  useEffect(() => {
+    if (kind !== 'recon' || !reconPreset || appliedPreset.current === reconPreset) return;
+    appliedPreset.current = reconPreset;
+    setName(reconPreset.name.slice(0, 100));
+    setPresetHint(reconPreset.hint);
+  }, [kind, reconPreset]);
+
   const terminal = detail !== null && TERMINAL.includes(detail.status);
   const busy = submitting || uncertain || Boolean(taskid && !terminal);
   const validInput = kind === 'image' ? Boolean(image) && !readingImage
@@ -224,6 +255,8 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
 
   useEffect(() => {
     if (!taskid) return;
+    // 干跑任务没有公网产物，不查代理。
+    if (isMockReconTask(taskid)) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
@@ -273,18 +306,36 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
 
   async function submit() {
     const text = prompt.trim();
-    if (!validInput || submitLock.current || busy || online !== true) return;
+    const dryRun = kind === 'recon' && mockRecon;
+    const liveRecon = kind === 'recon' && !mockRecon;
+    if (!validInput || submitLock.current || busy || (!dryRun && online !== true)) return;
+    if (liveRecon && !creditConfirmed) return;
     submitLock.current = true;
     placeGeneration.current += 1;
     const start = Date.now();
     setError(''); setDetail(null); setTaskid(''); setLastCheckedAt(0);
     setPlacing(false); setPlaceNote(''); setPlaceError('');
-    setPreviewing(false); setPreviewNote(''); setPreviewError('');
+    setPreviewing(false); setPreviewNote(''); setPreviewError(''); setMockHangNote('');
     setStartedAt(start); setElapsedSec(0); setSubmitting(true);
     remember(pendingKey, { prompt: text, startedAt: start });
     remember(taskKey, null);
     try {
       let taskidResponse: { taskid: string | number };
+      if (dryRun) {
+        // D1 干跑：只走「选文件 → 完成 → 挂预览」形状，不打 /recon-upload /world-recon。
+        const id = makeMockReconTaskId(start);
+        const done = mockReconSuccessDetail();
+        remember(taskKey, { taskid: id, prompt: text || name.trim() || '场地重建干跑', startedAt: start });
+        remember(pendingKey, null);
+        appendHistory({ kind, taskid: id, prompt: text || name.trim() || '场地重建干跑', startedAt: start, status: done.status, label: done.statusLabel, at: start });
+        onHistory();
+        if (mounted.current) {
+          setUncertain(false);
+          setTaskid(id);
+          setDetail(done);
+        }
+        return;
+      }
       if (kind === 'recon') {
         // 素材经本机代理上传 OUS 换公网地址，再创建重建任务；返回的 worldId 走同一套轮询与预览。
         const resources = [];
@@ -350,7 +401,9 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
     try {
       const metaUrl = world ? metaOutputOf(detail?.outputs ?? []) : undefined;
       await onPreviewScene({ url, name: (world ? name : prompt).trim() || prompt.trim(), taskid, ...(metaUrl ? { metaUrl } : {}) });
-      if (mounted.current) setPreviewNote('已铺成 3D 背景，画布上可随时退出。');
+      if (mounted.current) {
+        setPreviewNote(kind === 'recon' ? VENUE_PACKAGE_HUNG : '已铺成 3D 背景，画布上可随时退出。');
+      }
     } catch (failure) {
       if (mounted.current) setPreviewError(failure instanceof Error ? failure.message : String(failure));
     } finally {
@@ -377,17 +430,38 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
     <AholoGuideCard world={world} recon={kind === 'recon'} />
     {world && <>
       <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
-      <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || online !== true} onChange={event => setName(event.target.value)} />
+      <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || (kind === 'recon' ? (!mockRecon && online !== true) : online !== true)} onChange={event => setName(event.target.value)} />
     </>}
     {kind === 'recon' && <>
+      <p className="sc-note" role="status">{mockRecon
+        ? '本场包状态：仍缺本场包（干跑只挂宴会厅样例作观感演示）。'
+        : creditConfirmed
+          ? '本场包状态：待真调上传 → 成功后可挂本场 .spz 替换样例。'
+          : '本场包状态：仍缺本场包；关干跑后须勾选扣额度确认闸再真调。'}</p>
+      <p className="sc-note"><label>
+        <input type="checkbox" checked={mockRecon} disabled={busy} onChange={event => {
+          const next = event.target.checked;
+          onMockRecon(next);
+          if (next) onCreditConfirmed(false);
+        }} />
+        {' '}干跑模拟（不扣额度）
+      </label></p>
+      {!mockRecon && <p className="sc-warning" role="status">已关掉干跑：提交会走本机代理真调，消耗 Aholo 额度。</p>}
+      {!mockRecon && <p className="sc-note"><label>
+        <input type="checkbox" checked={creditConfirmed} disabled={busy || online !== true}
+          onChange={event => onCreditConfirmed(event.target.checked)} />
+        {' '}{CREDIT_CONFIRM_LABEL}
+      </label></p>}
       <label className="sc-field" htmlFor={`${prefix}-recon-files`}>场地素材</label>
       <input id={`${prefix}-recon-files`} type="file" multiple
-        accept="video/mp4,video/quicktime,.insv,image/jpeg,image/png,image/webp" disabled={busy || online !== true}
+        accept="video/mp4,video/quicktime,.insv,image/jpeg,image/png,image/webp" disabled={busy || (!mockRecon && online !== true)}
         onChange={event => { setReconFiles([...event.target.files ?? []]); event.target.value = ''; }} />
-      <p className="sc-note">Insta360 全景或普通视频一段即可；用照片则至少 20 张、绕场地一圈多角度。素材经本机代理上传至 Aholo。</p>
+      <p className="sc-note">Insta360 全景或普通视频一段即可；用照片则至少 20 张、绕场地一圈多角度。{mockRecon ? '干跑只校验选文件形状，不上传。' : '素材经本机代理上传至 Aholo。'}</p>
+      <p className="sc-warning" role="note">{RECON_MATERIAL_BAN}</p>
+      {presetHint && <p className="sc-note">这块地的采集单：{presetHint}。按单子拍完再拖进来，重建出来的尺度才对得上圈画的范围。</p>}
       {reconFiles.length > 0 && <p className="sc-note">已选 {reconFiles.length} 个文件{reconFiles.some(file => file.size > 5 * 1024 * 1024) ? '（含较大文件，上传可能需要几分钟）' : ''}</p>}
       <label className="sc-field" htmlFor={`${prefix}-quality`}>重建质量</label>
-      <select id={`${prefix}-quality`} value={reconQuality} disabled={busy || online !== true} onChange={event => setReconQuality(event.target.value)}>
+      <select id={`${prefix}-quality`} value={reconQuality} disabled={busy || mockRecon || online !== true} onChange={event => setReconQuality(event.target.value)}>
         <option value="normal">标准（推荐）</option>
         <option value="high">专业（更慢更精细）</option>
         <option value="low">极速预览</option>
@@ -411,8 +485,12 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
       <textarea id={`${prefix}-prompt`} maxLength={world ? 2000 : 200} rows={3} value={prompt} disabled={busy || online !== true}
         placeholder={world ? '例：温暖的木质咖啡馆，大窗户，午后阳光' : '例：一张白色圆桌，极简风格'} onChange={event => setPrompt(event.target.value)} />
     </>}
-    <button type="button" className="sc-button sc-full" disabled={busy || online !== true || !validInput} onClick={() => void submit()}>
-      {submitting ? '提交中…' : uncertain ? '等待确认原任务' : taskid && !terminal ? '正在跟踪任务…' : kind === 'recon' ? '上传并开始重建（消耗额度）' : '直连生成（消耗额度）'}
+    <button type="button" className="sc-button sc-full" disabled={busy || (!(kind === 'recon' && mockRecon) && online !== true) || !validInput || (kind === 'recon' && !mockRecon && !creditConfirmed)} onClick={() => void submit()}>
+      {submitting ? '提交中…' : uncertain ? '等待确认原任务' : taskid && !terminal ? '正在跟踪任务…'
+        : kind === 'recon' && mockRecon ? '干跑重建（不扣额度）'
+        : kind === 'recon' && !creditConfirmed ? '先勾选扣额度确认闸'
+        : kind === 'recon' ? '上传并开始重建（消耗额度）'
+        : '直连生成（消耗额度）'}
     </button>
     {unresolved && !taskid && !uncertain && <p className="sc-warning">本机还有一个未确认完成的{config.label}（{new Date(unresolved.at).toLocaleString('zh-CN', { hour12: false })}），再点生成会另起一个任务、再扣一次额度；先在历史记录里查看它的结果。</p>}
     {(submitting || taskid || uncertain) && <>
@@ -434,18 +512,30 @@ function DirectTaskPanel({ kind, online, resume, onHistory, unresolved, onPlace,
     {placeNote && <p className="sc-note">{placeNote}</p>}
     {placeError && <p className="sc-warning" role="alert">{placeError}</p>}
     {splatOutput && <button type="button" className="sc-button sc-full" disabled={previewing}
-      onClick={() => void previewScene(splatOutput)}>{previewing ? '正在取回场景…' : '在 3D 场景预览'}</button>}
+      onClick={() => void previewScene(splatOutput)}>{previewing ? '正在取回场景…' : kind === 'recon' ? '挂本场环境预览（替换样例）' : '在 3D 场景预览'}</button>}
+    {kind === 'recon' && detail?.status === 3 && isMockReconTask(taskid) && onHangMockScene && <button type="button" className="sc-button sc-full"
+      onClick={() => { onHangMockScene(); setMockHangNote(MOCK_HANG_DONE_NOTE); }}>挂样例环境预览（仍缺本场包）</button>}
+    {kind === 'recon' && detail?.status === 3 && isMockReconTask(taskid) && <p className="sc-warning" role="status">{VENUE_PACKAGE_MISSING}</p>}
     {previewNote && <p className="sc-note">{previewNote}</p>}
+    {mockHangNote && <p className="sc-note">{mockHangNote}</p>}
     {previewError && <p className="sc-warning" role="alert">{previewError}</p>}
   </div>;
 }
 
-export function Lux3dDirectTest({ onPlace, onPreviewScene }: {
+export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, reconPreset }: {
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => Promise<void>) | undefined;
+  /** 干跑重建成功后挂环境：等同 D0 hangDemoEnvironment。 */
+  onHangMockScene?: (() => void) | undefined;
+  /** 地图采集单「去上传现场素材」带过来的一块地：直接切到场地重建并填好名字。 */
+  reconPreset?: { name: string; hint: string } | null;
 }) {
   const [kind, setKind] = useState<Kind>('text');
   const [visited, setVisited] = useState<Kind[]>(['text']);
+  /** 默认干跑，避免误点真调扣额度；联调真 Aholo 时再关掉。 */
+  const [mockRecon, setMockRecon] = useState(true);
+  /** 真调扣额度确认闸：关干跑后须勾选；重新打开干跑时清零。 */
+  const [creditConfirmed, setCreditConfirmed] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);
   const [connectionError, setConnectionError] = useState('');
   const [history, setHistory] = useState(readHistory);
@@ -466,6 +556,14 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene }: {
   function select(next: Kind) {
     setKind(next); setVisited(previous => previous.includes(next) ? previous : [...previous, next]);
   }
+  // 采集单把这块地送来时人已经在左栏，不用再点一次「场地重建」标签。
+  const openedPreset = useRef<typeof reconPreset>(null);
+  useEffect(() => {
+    if (!reconPreset || openedPreset.current === reconPreset) return;
+    openedPreset.current = reconPreset;
+    setKind('recon');
+    setVisited(previous => previous.includes('recon') ? previous : [...previous, 'recon']);
+  }, [reconPreset]);
   function openHistoryTask(item: HistoryEntry) {
     select(item.kind);
     setResume({ kind: item.kind, taskid: item.taskid, prompt: item.prompt, startedAt: item.startedAt });
@@ -476,10 +574,12 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene }: {
   }
   const kinds = Object.keys(CAPABILITIES) as Kind[];
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>Aholo 接口测试</h2><p>本机直连，查看真实生成状态与产物。</p></div>
+    <div className="sc-section-heading"><div><h2>场地观感与物料</h2><p>现场重建铺观感层 · 文案出场景 · Lux3D 物件。壳体与布置物料不变；观感层不进碰撞、不进落盘几何。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
+    <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>
+    {reconPreset && <p className="sc-note sc-aholo-from-capture" role="status">来自采集单「{reconPreset.name}」· {reconPreset.hint}。已切到「场地重建」，可直接选现场素材。</p>}
     {connectionError && <p className="sc-warning" role="alert">{connectionError}</p>}
     <div className="sc-aholo-history" id="aholo-history" hidden={!historyOpen}>
       {history.length === 0 ? <p className="sc-note">本机还没有生成记录。发起一次生成后会出现在这里。</p> : <>
@@ -494,14 +594,14 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene }: {
       </>}
     </div>
     {historyOpen && history.length > 0 && <p className="sc-note">记录只存描述与状态；产物链接会过期，点「查看」回 Aholo 取最新结果。</p>}
-    <div className="sc-aholo-tabs" role="tablist" aria-label="Aholo 生成方式">{kinds.map((key, index) => <button
+    <div className="sc-aholo-tabs" role="tablist" aria-label="场地观感与物料方式">{kinds.map((key, index) => <button
       key={key} id={`aholo-tab-${key}`} type="button" role="tab" aria-selected={kind === key} aria-controls={`aholo-panel-${key}`}
       tabIndex={kind === key ? 0 : -1} onClick={() => select(key)} onKeyDown={event => {
         const next = event.key === 'ArrowRight' ? kinds[(index + 1) % kinds.length] : event.key === 'ArrowLeft' ? kinds[(index + kinds.length - 1) % kinds.length] : event.key === 'Home' ? kinds[0] : event.key === 'End' ? kinds[kinds.length - 1] : undefined;
         if (next) { event.preventDefault(); select(next); document.getElementById(`aholo-tab-${next}`)?.focus(); }
       }}>{CAPABILITIES[key].label}</button>)}</div>
     {kinds.map(key => <section key={key} id={`aholo-panel-${key}`} role="tabpanel" aria-labelledby={`aholo-tab-${key}`} hidden={kind !== key}>
-      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} onHistory={onHistory} onPlace={onPlace} onPreviewScene={onPreviewScene}
+      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPlace={onPlace} onPreviewScene={onPreviewScene}
         unresolved={history.find(item => item.kind === key && !TERMINAL.includes(item.status))} />}
     </section>)}
   </div>;

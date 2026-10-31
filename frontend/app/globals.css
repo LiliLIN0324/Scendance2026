@@ -1002,6 +1002,8 @@ body {
 .sc-lux-direct textarea { resize: vertical; }
 .sc-lux-direct input[type='file'] { width: 100%; min-width: 0; font: inherit; font-size: var(--sc-type-meta); }
 .sc-lux-direct-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); color: var(--sc-ink); overflow-wrap: anywhere; }
+.sc-aholo-path { margin: 0; padding: 8px 10px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--wk-plane, var(--plane)); color: var(--sc-ink); font-size: var(--sc-type-meta); line-height: 1.55; }
+.sc-aholo-from-capture { margin: 0; }
 .sc-aholo-tabs { display: flex; border-bottom: 1px solid var(--sc-line); }
 .sc-aholo-tabs button { flex: 1; padding: 10px 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--sc-type-meta); cursor: pointer; }
 .sc-aholo-tabs button[aria-selected='true'] { border-bottom-color: var(--wk-green); color: var(--sc-ink); font-weight: 600; }

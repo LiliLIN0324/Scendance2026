@@ -18,7 +18,7 @@ import './workbench-shelf.css';
 
 interface LibraryProps {
   controller?: BackendSession;
-  openTabRequest?: { serial: number; tab: 'materials' | 'presets' | 'environment' };
+  openTabRequest?: { serial: number; tab: 'materials' | 'presets' | 'environment' | 'generated' };
   onClose?(): void;
   capturePlacement?(): CatalogPlacementGuard;
   onLoadPreset(layout: RoomLayout): void;

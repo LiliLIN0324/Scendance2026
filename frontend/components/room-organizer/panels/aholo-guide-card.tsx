@@ -20,7 +20,7 @@ const WORLD_STEPS: GuideStep[] = [
   { icon: Layers, title: '② 铺成 3D 背景', text: '完成后取回产物，按真实尺度铺在场地里；仅用于环境氛围展示，不参与布置与碰撞计算。' },
 ];
 const RECON_STEPS: GuideStep[] = [
-  { icon: Video, title: '① 绕场拍摄', text: '用手机绕真实场地拍一段视频（或 Insta360 全景；用照片则至少 20 张、多角度覆盖），门口、窗户和陈设尽量拍清楚。' },
+  { icon: Video, title: '① 绕场拍摄', text: '用手机绕真实场地拍一段视频（或 Insta360 全景；用照片则至少 20 张、多角度覆盖）。禁止高德瓦片/卫星截图当素材。' },
   { icon: Timer, title: '② 上传重建', text: '素材经本机代理上传至 Aholo World 重建 3DGS，通常约 15-30 分钟，可先去布置其他内容。' },
   { icon: Layers, title: '③ 真实场地进幕景', text: '重建出的就是你的真实场地：铺成 3D 背景后，物料照常摆；仅作环境展示，不参与布置与碰撞计算。' },
 ];
@@ -58,7 +58,8 @@ export function AholoGuideCard({ world = false, recon = false, surface = 'direct
           <span><strong>{step.title}</strong><span className="sc-aholo-guide-text">{step.text}</span></span>
         </div>;
       })}
-      {world && <p className="sc-aholo-guide-foot">提示：非室内场景处于 Beta，质量可能不稳，演示优先用室内文案。</p>}
+      {recon && <p className="sc-aholo-guide-foot">提示：高德/卫星图只用于圈范围，不能当重建素材；未确认布置不改本地仓。</p>}
+      {world && !recon && <p className="sc-aholo-guide-foot">提示：非室内场景处于 Beta，质量可能不稳，演示优先用室内文案。</p>}
     </div>}
   </div>;
 }

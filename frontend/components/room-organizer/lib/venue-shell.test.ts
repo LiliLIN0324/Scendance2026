@@ -48,8 +48,16 @@ describe('T-01 venue shell truth', () => {
   });
 
   it('rejects a scale outside the metre range instead of building nonsense', () => {
-    expect(() => buildVenueShell({ widthM: 0.4, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })).toThrow();
-    expect(() => buildVenueShell({ widthM: 900, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })).toThrow();
+    expect(() => buildVenueShell({ widthM: 0.4, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })).toThrow(/至少 1 米/);
+    expect(() => buildVenueShell({ widthM: 900, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })).toThrow(/最多立到 100 米/);
+  });
+
+  it('points the over-max refusal back at the dialogue, not at a card that no longer exists', () => {
+    let message = '';
+    try { buildVenueShell({ widthM: 200, depthM: 150, indoorOutdoor: 'indoor', scaleOrigin: 'stated' }); }
+    catch (error) { message = (error as Error).message; }
+    expect(message).toContain('80×60');
+    expect(message).not.toContain('卡片');
   });
 
   it('survives the editor round trip with the entrance truth attached', () => {
@@ -96,5 +104,41 @@ describe('T-01 venue shell truth', () => {
     expect(pruneVenueSite(undefined, [])).toBeUndefined();
     expect(pruneVenueSite({ mainEntrance: { openingId: 'a' }, indoorOutdoor: 'outdoor' }, ['b'])).toEqual({ indoorOutdoor: 'outdoor' });
     expect(pruneVenueSite({ mainEntrance: { openingId: 'a' } }, ['b'])).toBeUndefined();
+  });
+
+  it('raises a polygon contour shell when local metres are provided', () => {
+    const poly = [
+      { x: 0, z: 0 }, { x: 12, z: 0 }, { x: 12, z: 3.6 },
+      { x: 5.4, z: 3.6 }, { x: 5.4, z: 8 }, { x: 0, z: 8 },
+    ];
+    const shell = buildVenueShell({
+      widthM: 12, depthM: 8, indoorOutdoor: 'outdoor', scaleOrigin: 'typed', polygonMeters: poly,
+    });
+    expect(shell.venue.shape).toBe('polygon');
+    expect(shell.venue.polygon).toHaveLength(6);
+    expect(shell.structure.walls).toHaveLength(0);
+    expect(sceneSchema.safeParse(shell).success).toBe(true);
+  });
+
+  it('walls an indoor polygon along the true contour, not a 4-corner rectangle', () => {
+    const poly = [
+      { x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 4 },
+      { x: 4, z: 4 }, { x: 4, z: 8 }, { x: 0, z: 8 },
+    ];
+    const shell = buildVenueShell({
+      widthM: 10, depthM: 8, indoorOutdoor: 'indoor', scaleOrigin: 'stated', polygonMeters: poly,
+    });
+    expect(shell.venue.shape).toBe('polygon');
+    expect(shell.structure.walls).toHaveLength(6);
+    expect(shell.structure.walls.every(w => w.kind === 'exterior')).toBe(true);
+    expect(shell.structure.openings).toHaveLength(1);
+    expect(sceneSchema.safeParse(shell).success).toBe(true);
+  });
+
+  it('falls back to a rectangle shell when polygon metres are missing', () => {
+    const shell = buildVenueShell({ widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' });
+    expect(shell.venue.shape).toBe('rectangle');
+    expect(shell.venue.polygon).toBeUndefined();
+    expect(shell.structure.walls).toHaveLength(4);
   });
 });

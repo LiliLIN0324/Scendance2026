@@ -29,7 +29,7 @@ import { ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ProjectReviewPanel } from './project-review-panel';
-import { ReconstructionPanel } from './reconstruction-panel';
+import { useReconstructionPanel } from './reconstruction-panel';
 import { SceneDeliveryPanel, exportActivityHandoff } from './scene-delivery-panel';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
@@ -954,7 +954,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
-export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceOpenRequest=0, referencePanelRef, referencePanel, view='brief', onSkip, onBackToChat, forcePreview=false }: { showNotice?: boolean; descriptionRef?: RefObject<HTMLTextAreaElement>; referenceOpenRequest?: number; referencePanelRef?: RefObject<HTMLDivElement>; referencePanel?: ReactNode; view?: 'brief'|'reference'; onSkip?:()=>void; onBackToChat?:()=>void; forcePreview?: boolean }):JSX.Element {
+export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceOpenRequest=0, referencePanelRef, referencePanel, view='brief', onSkip, onBackToChat, onSwitchView, forcePreview=false }: { showNotice?: boolean; descriptionRef?: RefObject<HTMLTextAreaElement>; referenceOpenRequest?: number; referencePanelRef?: RefObject<HTMLDivElement>; referencePanel?: ReactNode; view?: 'brief'|'reference'|'rebuild'; onSkip?:()=>void; onBackToChat?:()=>void; onSwitchView?:((view:'brief'|'reference'|'rebuild')=>void)|undefined; forcePreview?: boolean }):JSX.Element {
   const studio=useStudio();
   const update=(patch:Partial<CreativeBrief>)=>studio.setBrief(current=>({...current,...patch}));
   const blankScaffold=isBlankBriefScaffold(studio.brief.description);
@@ -973,10 +973,16 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
   // One idea at a time, swapped on demand: three stacked articles were mostly noise.
   const [ideaIndex,setIdeaIndex]=useState(0);
   const idea=IDEA_CARDS[ideaIndex%IDEA_CARDS.length];
+  // 重建的表单、任务与候选只有一份状态；页签决定放哪一块，来回切换不打断进行中的识别。
+  const zones=useReconstructionPanel({controller:studio.controller,layout:studio.layout,onApply:studio.onApply,onPreview:studio.onPreview,images:studio.images,updateImage:studio.updateImage,brief:studio.brief,openReferenceRequest:referenceOpenRequest,autoGenerateRequest:studio.autoGenerateRequest,sourcesRestoring:studio.sourcesRestoring,onAddReferenceImages:files=>studio.addImages(files,'floorplan'),onBackToChat});
+  const restoring=<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>;
   if(view==='reference') return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
     <VenuePhotosPanel images={studio.images} addImages={studio.addImages} removeImage={studio.removeImage} onKindChange={(id,kind)=>studio.updateImage(id,{kind})}/>
     <div ref={referencePanelRef} tabIndex={-1} aria-label="图纸与场地对应核对">{referencePanel}</div>
-    {studio.sourcesRestoring?<p role="status">正在核实图纸恢复，请完成后继续编辑。</p>:<ReconstructionPanel controller={studio.controller} layout={studio.layout} onApply={studio.onApply} onPreview={studio.onPreview} images={studio.images} updateImage={studio.updateImage} brief={studio.brief} openReferenceRequest={referenceOpenRequest} autoGenerateRequest={studio.autoGenerateRequest} onAddReferenceImages={files=>studio.addImages(files,'floorplan')} onBackToChat={onBackToChat}/>}
+    {studio.sourcesRestoring?restoring:<>{zones.site}{zones.notice}{onSwitchView&&<p className="cr-hint"><button type="button" className="rc-secondary" onClick={()=>onSwitchView('rebuild')}>去场地重建出 3D 预览</button></p>}</>}
+  </fieldset>;
+  if(view==='rebuild') return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
+    {studio.sourcesRestoring?restoring:<>{zones.rebuild}{zones.notice}{onSwitchView&&<p className="cr-hint">图纸、照片与已知尺寸在「图纸与照片」页核对。<button type="button" className="rc-secondary" onClick={()=>onSwitchView('reference')}>去图纸与照片</button></p>}</>}
   </fieldset>;
   return <fieldset className="cr-brief" disabled={studio.backupPending} style={{border:0,padding:0,minWidth:0}}>
     <section className="cr-brief-sec">
@@ -1023,6 +1029,8 @@ const CHAT_MODES = {plan:'场景策划',model:'物料建模'} as const;
 export type BusinessToolsApi = {
   openBrief():void;
   openReference():void;
+  /** 左轨「重建」与简报里的入口都走这条；抽屉里不再有页签。 */
+  openRebuild():void;
   openDelivery():void;
   openReview():void;
   openTemplates():void;
@@ -1091,7 +1099,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const focusChat=useRef(false);
   const [mode,setMode]=useState<ChatMode>('plan');
   const [businessMode,setBusinessMode]=useState<BusinessMode>('plan');
-  const [planCategory,setPlanCategory]=useState<'brief'|'reference'>('brief');
+  const [planCategory,setPlanCategory]=useState<'brief'|'reference'|'rebuild'>('brief');
   const [suggestionsOpen,setSuggestionsOpen]=useState(false);
   const [suggestionsDismissed,setSuggestionsDismissed]=useState(false);
   const [localReferenceRequest,setLocalReferenceRequest]=useState(0);
@@ -1391,6 +1399,8 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     }
   }
   function openReference(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusReference.current=true;focusBrief.current=false;focusDelivery.current=false;returnToReferenceEntry.current=true;returnToWorkspaceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setPlanCategory('reference');setTemplatesOpen(false);setLocalReferenceRequest(value=>value+1);resizeWorkspace(true);if(!docked)setExpanded(true);}
+  /** 场地重建页：与图纸页共用重建状态，切页签不打断任务；进出都靠 focusWorkspace 把焦点交给工作区。 */
+  function openRebuild(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;focusWorkspace.current=true;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;setBusinessMode('plan');setPlanCategory('rebuild');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);}
   function openDelivery(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;focusDelivery.current=true;returnToDeliveryEntry.current=true;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;setDeliveryOpened(true);setBusinessMode('delivery');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);queueMicrotask(()=>deliveryFocusTarget.current?.focus());}
   function openDeliveryView(view:'operations'|'materials',event:React.MouseEvent<HTMLButtonElement>):void {
     setDeliveryViewRequest({serial:++deliveryViewSerial.current,view});openDelivery(event);
@@ -1415,7 +1425,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     focusCommercial.current=true;setCommercialOpened(true);setBusinessMode('commercial');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
   }
   // 左栏工具栏出口：room-organizer 直接调用这些入口，不必把 handler 提升到上层。
-  if(toolsApiRef)toolsApiRef.current={openBrief,openReference,openDelivery,openReview,openTemplates,openModelTools,openCommercial};
+  if(toolsApiRef)toolsApiRef.current={openBrief,openReference,openRebuild,openDelivery,openReview,openTemplates,openModelTools,openCommercial};
   const businessCategory=templatesOpen?'templates':businessMode==='plan'?planCategory:businessMode;
   const primaryCategoryValue = businessCategory === 'commercial' ? 'more' : businessCategory;
   const hasConversation=studio.messages.some(message=>message.id!=='welcome');
@@ -1432,16 +1442,15 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'晴光':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸。不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
   const businessContent=(
       <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
-        <header className="cr-business-heading">
+        {(workbenchMode==='review'||workbenchMode==='delivery'||!hideCategorySelect||!onOpenTemplates)&&<header className="cr-business-heading">
           {workbenchMode==='review'?<div className="cr-mode-banner"><strong>发给客户</strong><span>核对后导出离线 HTML，或发布云端只读链接；都由你发送</span></div>:workbenchMode==='delivery'?<div className="cr-mode-banner"><strong>执行 · 本机内部资料</strong><span>活动安排、点验、导出与本机备份</span></div>:
-          (!hideCategorySelect&&<label className="cr-business-category"><span className="sr-only">布置工具</span><select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与尺寸</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>)}
-          {workbenchMode==='layout'&&<nav className="cr-business-links" aria-label="活动资料视图"><button type="button" aria-pressed={businessCategory==='brief'} className={businessCategory==='brief'?'is-on':''} onClick={()=>openBrief()}>客户需求</button><button type="button" aria-pressed={businessCategory==='reference'} className={businessCategory==='reference'?'is-on':''} onClick={()=>openReference()}>图纸与照片</button><button type="button" aria-pressed={businessMode==='model'} className={businessMode==='model'?'is-on':''} onClick={()=>openModelTools()}>物料工具</button></nav>}
+          (!hideCategorySelect&&<label className="cr-business-category"><span className="sr-only">布置工具</span><select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='rebuild')openRebuild();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与照片</option><option value="rebuild">场地重建</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>)}
           {!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={16}/>返回素材</button>}</div>}
-        </header>
+        </header>}
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
         {leaseLost&&<p className="cr-agent-notice" role={projectsError?'alert':'status'}>{projectsError||'这个项目现在由别人编辑，你的改动只保留在本机。'}{!projectsError&&<button type="button" onClick={()=>void goProjects()}>去项目页接手编辑</button>}</p>}
         {businessMode==='commercial'&&workbenchMode==='layout'&&<p className="cr-hint" role="status">合同与约定已放入「更多」。深度商业档案仍保留，不占主流程。</p>}
-        <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>{planCategory==='reference'?'图纸与尺寸':'活动需求与场地资料'}</summary><CreativeBriefPanel view={planCategory} showNotice={false} forcePreview={docked&&suppressAgentLauncher} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel} referencePanel={referenceImagePanel} onSkip={()=>{resizeWorkspace(false);}} onBackToChat={()=>openChatRef.current()}/></details></section>
+        <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>{planCategory==='reference'?'图纸与照片':planCategory==='rebuild'?'场地重建':'活动需求与场地资料'}</summary><CreativeBriefPanel view={planCategory} showNotice={false} forcePreview={docked&&suppressAgentLauncher} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel} referencePanel={referenceImagePanel} onSkip={()=>{resizeWorkspace(false);}} onBackToChat={()=>openChatRef.current()} onSwitchView={value=>{if(value==='rebuild')openRebuild();else if(value==='reference')openReference();else openBrief();}}/></details></section>
         <section id="agent-panel-model" aria-label="物料建模" hidden={businessMode!=='model'||templatesOpen}>
           <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
           <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>chooseModelExample(label!,prompt!)}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
@@ -1451,7 +1460,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
         <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel storageIdentity={JSON.stringify([studio.controller.config.apiUrl,studio.controller.getSnapshot().user?.id??null,studio.reviewSource.scope])} source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,prefill:prefillReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} {...(onOpenPublication?{onOpenCloudShare:onOpenPublication}:{})} inputLocked={studio.backupPending} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
         {commercialPanel!=null&&<section id="agent-panel-commercial" aria-label="合同与约定" hidden={businessMode!=='commercial'||templatesOpen}>{commercialOpened&&<div ref={commercialTarget} tabIndex={-1} role="group" aria-label="合同与约定资料">{commercialPanel}</div>}</section>}
         {!onOpenTemplates&&<section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>}
-        <p className="cr-selection-context" hidden={businessMode==='commercial'}>当前场景：{materialCount(sceneItems)} 件物料 · 已选中 {selectedCount} 件{selectedItem?` · ${selectedItem.name}`:''}</p>
       </div>
   );
   return <div className={`cr-assistant ${docked?'is-docked':''} ${studio.expanded?'is-open':''} ${!docked&&studio.expanded&&workspaceExpanded?'is-workspace-expanded':''} ${selectedItem?'has-properties':''}`}>
