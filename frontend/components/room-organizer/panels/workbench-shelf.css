@@ -437,6 +437,77 @@
 }
 .sc-compact-shelf .sc-preset-utilities details:not([open]) { position:relative; }
 
+/* 物料库不再留左侧四图标。＋ 格、收藏星、标签 ＋ 跟卡片走。 */
+.sc-shelf-top { position: relative; }
+.sc-shelf-top > .sc-library-rail-close {
+  position: absolute; right: 8px; top: 0; z-index: 2;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border: 0; border-radius: 8px; background: transparent; color: var(--wk-muted); cursor: pointer;
+}
+.sc-material-tile { position: relative; min-width: 0; min-height: 0; }
+.sc-compact-shelf .sc-material-rail > .sc-material-tile {
+  flex: 0 0 var(--sc-shelf-card-width);
+  width: var(--sc-shelf-card-width);
+  height: 100%;
+}
+.sc-compact-shelf .sc-material-rail > .sc-material-tile > .sc-material-card {
+  width: 100%; height: 100%; flex: none;
+}
+.sc-material-plus {
+  display: grid; place-items: center;
+  background: var(--wk-plane); color: var(--wk-ink, #141416);
+}
+.sc-material-plus-mark { font-size: 40px; line-height: 1; font-weight: 500; }
+.sc-material-star, .sc-material-tagpin {
+  position: absolute; z-index: 3; display: grid; place-items: center;
+  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 999px;
+  background: rgba(255,255,255,.94); color: var(--wk-ink-soft); cursor: pointer;
+}
+.sc-material-star { right: 6px; bottom: 6px; opacity: 0; }
+.sc-material-tagpin { left: 6px; bottom: 6px; width: auto; padding: 0 6px; font-size: 11px; }
+.sc-material-tile:hover .sc-material-star,
+.sc-material-tile:focus-within .sc-material-star,
+.sc-material-star.is-on { opacity: 1; }
+.sc-material-star.is-on, .sc-material-tagpin.is-on { color: #e2b000; }
+.sc-bucket-add, .sc-bucket-add-form button {
+  min-width: 26px; padding: 0 8px;
+}
+.sc-bucket-add-form { display: inline-flex; align-items: center; gap: 4px; }
+.sc-bucket-add-form input {
+  width: 88px; height: 26px; padding: 0 8px;
+  border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper);
+}
+.sc-material-create-menu {
+  position: fixed; z-index: 80; display: flex; flex-direction: column; gap: 6px;
+  min-width: 240px; max-width: 320px; padding: 10px;
+  background: var(--wk-paper, #fff); border: 1px solid var(--wk-hair); border-radius: 12px;
+  box-shadow: var(--e1, 0 8px 24px rgba(20,20,22,.12));
+}
+.sc-material-create-menu button, .sc-material-create-actions button {
+  text-align: left; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--wk-ink, #141416); cursor: pointer;
+}
+.sc-material-create-menu button:hover, .sc-material-create-actions button:hover { background: var(--wk-green-pale, #e8f0ea); }
+.sc-material-create-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--wk-ink-soft); }
+.sc-material-create-field textarea, .sc-material-create-field input[type="file"] { font: inherit; color: var(--wk-ink, #141416); }
+.sc-material-create-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.sc-material-create-credit { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.sc-space-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; height: 100%; overflow: auto; padding: 8px 14px 12px; }
+.sc-space-head { display: flex; align-items: center; gap: 12px; }
+.sc-space-head h2 { margin: 0; font-size: 16px; line-height: 22px; }
+.sc-space-head p { margin: 2px 0 0; color: var(--wk-muted); font-size: 12px; line-height: 18px; }
+.sc-space-head > div { flex: 1; min-width: 0; }
+.sc-space-new {
+  flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 8px;
+  background: var(--wk-green, #4a7c59); color: #fff; font-weight: 600; cursor: pointer;
+}
+.sc-space-section h3 { margin: 0 0 6px; font-size: 13px; }
+.sc-space-panel .sc-library-presets,
+.sc-space-panel .sc-preset-board { height: auto; overflow: visible; flex: none; }
+.sc-space-panel .sc-preset-rail { flex: none; height: 168px; }
+.sc-space-panel .sc-material-rail { flex: none; height: 148px; }
+.sc-space-confirm { position: relative; inset: auto; }
+
 /* ── 导出效果图弹层 · 图纸白 ──────────────────────────────────────────
    设计稿：白纸浮层、描边选项、绿色只给主操作与选中态。 */
 .sc-workbench .sc-tool-pop.sc-export-pop {

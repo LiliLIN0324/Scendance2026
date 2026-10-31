@@ -24,7 +24,7 @@ export const CATALOG_GROUPS = [
   { key: 'rest', label: '休息', icon: '休', members: ['rest', 'bedroom'] },
   { key: 'logistics', label: '后勤', icon: '后', members: ['logistics', 'storage', 'tools', 'bathroom'] },
   { key: 'structure', label: '结构', icon: '构', members: ['structure'] },
-  { key: 'site', label: '场地', icon: '场', members: ['site', 'outdoor', 'sports', 'vehicles', 'scenes'] },
+  { key: 'site', label: '空间', icon: '空', members: ['site', 'outdoor', 'sports', 'vehicles', 'scenes'] },
 ] as const satisfies readonly {
   key: FurnitureCategory;
   label: string;

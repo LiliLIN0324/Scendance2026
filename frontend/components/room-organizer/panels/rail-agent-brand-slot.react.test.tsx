@@ -3,6 +3,15 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./agent-panel', () => ({
+  useAgent: () => ({
+    callbacks: { workbenchMode: 'layout' },
+    state: 'idle',
+  }),
+  qingguangHeaderStatus: () => ({ text: '在线', tone: 'idle' as const, hint: '' }),
+}));
+
 import { RailAgentBrandSlot } from './rail-agent-brand-slot';
 
 afterEach(cleanup);

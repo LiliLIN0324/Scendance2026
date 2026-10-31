@@ -55,7 +55,7 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
     try {
       onApply(createBlankVenue(before));
       setNotice('');
-    } catch (error) { setNotice(error instanceof Error ? error.message : '空白场地没立起来，请重试。'); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : '空白空间没立起来，请重试。'); }
     finally { loading.current = false; setBusy(null); }
   }
   const choose = (choice: RailChoice): void => {
@@ -75,11 +75,11 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
     <div ref={rail.setRef} onKeyDown={rail.onKeyDown} className="sc-preset-rail" role="group" aria-label="场景模板" tabIndex={0}>
       <div className="sc-preset-tile" key="blank">
         <button className="sc-preset-card" type="button" disabled={busy !== null} onClick={() => press('blank')}
-          aria-label={`载入空白场地 ${BLANK_VENUE.width} × ${BLANK_VENUE.depth} 米`} title="从一块能改尺寸的空地开始，不带模板场馆">
+          aria-label={`载入空白空间 ${BLANK_VENUE.width} × ${BLANK_VENUE.depth} 米`} title="从一块能改尺寸的空地开始，不带模板场馆">
           <span className="sc-preset-blank" aria-hidden="true"><small>{BLANK_VENUE.width} × {BLANK_VENUE.depth} m · 可改尺寸</small></span>
-          <strong>空白场地</strong>
+          <strong>空白空间</strong>
         </button>
-        {pending === 'blank' && <div className="sc-preset-confirm" role="group" aria-label="确认换成空白场地">
+        {pending === 'blank' && <div className="sc-preset-confirm" role="group" aria-label="确认换成空白空间">
           <p>{confirmCopy('blank')}</p>
           <div><button type="button" className="is-go" onClick={choose.bind(null, 'blank')}>确认换成</button>
           <button type="button" onClick={() => setPending(null)}>取消</button></div>

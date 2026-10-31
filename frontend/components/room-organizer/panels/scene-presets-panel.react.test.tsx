@@ -33,9 +33,9 @@ it('puts the blank venue first and loads a 12 × 8 m editable shell without a pr
   const apply = vi.fn();
   render(<ScenePresetsPanel layout={INITIAL_LAYOUT} onApply={apply}/>);
   const first = document.querySelector('.sc-preset-rail .sc-preset-tile');
-  expect(first?.textContent).toContain('空白场地');
+  expect(first?.textContent).toContain('空白空间');
 
-  fireEvent.click(screen.getByRole('button', { name: '载入空白场地 12 × 8 米' }));
+  fireEvent.click(screen.getByRole('button', { name: '载入空白空间 12 × 8 米' }));
   expect(loadScenePreset).not.toHaveBeenCalled();
   const next = apply.mock.calls[0]![0] as RoomLayout;
   expect(next.width).toBe(12);
@@ -51,12 +51,12 @@ it('asks on the blank card before clearing a worked-on layout', () => {
   const apply = vi.fn();
   const populated = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0], items: [{ id: 'existing' }] }] } as RoomLayout;
   render(<ScenePresetsPanel layout={populated} onApply={apply}/>);
-  fireEvent.click(screen.getByRole('button', { name: '载入空白场地 12 × 8 米' }));
-  expect(screen.getByRole('group', { name: '确认换成空白场地' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '载入空白空间 12 × 8 米' }));
+  expect(screen.getByRole('group', { name: '确认换成空白空间' })).toBeTruthy();
   expect(apply).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: '取消' }));
-  expect(screen.queryByRole('group', { name: '确认换成空白场地' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '载入空白场地 12 × 8 米' }));
+  expect(screen.queryByRole('group', { name: '确认换成空白空间' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '载入空白空间 12 × 8 米' }));
   fireEvent.click(screen.getByRole('button', { name: '确认换成' }));
   const next = apply.mock.calls[0]![0] as RoomLayout;
   expect(next.floors[0]?.items.some(item => item.id === 'existing')).toBe(false);
