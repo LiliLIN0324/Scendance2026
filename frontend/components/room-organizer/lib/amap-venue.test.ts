@@ -356,6 +356,36 @@ describe('satellite ground backfill', () => {
     expect(orientMapShellNorthUp(restored!)).toBe(restored);
   });
 
+  it('keeps a map L with the notch in the upper right: north stays at z=0, the top of the plan', () => {
+    const lat = 30.45;
+    const lng = 120.55;
+    const east = (meters: number) => lng + meters / metersPerDegreeLng(lat);
+    const north = (meters: number) => lat + meters / METERS_PER_DEGREE_LAT;
+    // 左竖杆通高，底边向东。右上是缺口。
+    const polygon = [
+      { lng, lat: north(80) },
+      { lng: east(40), lat: north(80) },
+      { lng: east(40), lat: north(30) },
+      { lng: east(120), lat: north(30) },
+      { lng: east(120), lat },
+      { lng, lat },
+    ];
+    const local = polygonToLocalMeters(polygon);
+    const top = local.points.filter(point => point.z < 1);
+    const bottom = local.points.filter(point => point.z > local.depth - 1);
+    const width = Math.max(...local.points.map(point => point.x));
+    expect(Math.max(...top.map(point => point.x))).toBeLessThan(width / 2);
+    expect(Math.max(...bottom.map(point => point.x))).toBeGreaterThan(width - 1);
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '手画', polygon, satelliteGround: false,
+    });
+    const shell = layout.backendVenue?.polygon ?? [];
+    const shellTop = shell.filter(point => point.z < 1);
+    const shellBottom = shell.filter(point => point.z > layout.height - 1);
+    expect(Math.max(...shellTop.map(point => point.x))).toBeLessThan(layout.width / 2);
+    expect(Math.max(...shellBottom.map(point => point.x))).toBeGreaterThan(layout.width - 1);
+  });
+
   it('keeps an oversized site on the same origin after the shell is scaled under 100m', () => {
     const lat = 30.4;
     const lng = 120.53;

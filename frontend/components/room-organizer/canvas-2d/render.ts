@@ -166,7 +166,7 @@ export function render2DTopDown(options: Render2DOptions): void {
   drawFloor(ctx, layout, floor, offsetX, offsetY, scale, options, satellitePainted);
   drawGrid(ctx, layout, offsetX, offsetY, scale);
   ctx.restore();
-  drawVenuePolygon(ctx, layout, offsetX, offsetY, scale);
+  drawVenuePolygon(ctx, layout, offsetX, offsetY, scale, satellitePainted);
   // The stairwell the floor below cuts through this slab (#290), under everything placed over it.
   drawStairwellHoles(ctx, layout, planFloorIndex(layout.floors, floor), { scale, offsetX, offsetY });
   // Zone tints sit on the floor under the walls; their labels go over the
@@ -423,6 +423,7 @@ function drawVenuePolygon(
   offsetX: number,
   offsetY: number,
   scale: number,
+  satellitePainted: boolean,
 ): void {
   const polygon = layout.backendVenue?.polygon;
   if (!polygon || polygon.length < 3) return;
@@ -435,12 +436,16 @@ function drawVenuePolygon(
   });
   ctx.closePath();
   ctx.save();
+  if (!satellitePainted) {
+    ctx.fillStyle = 'rgba(47, 107, 255, 0.16)';
+    ctx.fill();
+  }
   ctx.lineJoin = 'round';
   ctx.lineWidth = 5;
   ctx.strokeStyle = 'rgba(255,255,255,0.92)';
   ctx.stroke();
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = '#1f6b4a';
+  ctx.strokeStyle = '#2f6bff';
   ctx.stroke();
   ctx.restore();
 }

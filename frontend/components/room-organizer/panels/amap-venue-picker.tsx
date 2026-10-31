@@ -67,7 +67,11 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
     loadAmapScript(key, security).then(() => {
       if (cancelled || !containerRef.current) return;
       const AMap = window.AMap as any;
-      const map = new AMap.Map(containerRef.current, { zoom: 15, center: [120.5394, 30.4049], mapStyle: 'amap://styles/whitesmoke' });
+      const remembered = (savedPolygonRef.current ?? []).filter((point: { lng: number; lat: number }) => Number.isFinite(point.lng) && Number.isFinite(point.lat));
+      const center = remembered.length
+        ? [remembered.reduce((sum: number, point: { lng: number }) => sum + point.lng, 0) / remembered.length, remembered.reduce((sum: number, point: { lat: number }) => sum + point.lat, 0) / remembered.length]
+        : [120.5394, 30.4049];
+      const map = new AMap.Map(containerRef.current, { zoom: remembered.length >= 3 ? 17 : 15, center, mapStyle: 'amap://styles/whitesmoke' });
       mapRef.current = map;
       // 选址圈画底图用真卫星层，便于对照；贴地参考另拉静态卫星图。
       const satellite = AMap.TileLayer?.Satellite
@@ -75,17 +79,21 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
         : new AMap.TileLayer();
       satellite.setMap(map);
       satellite.show();
-      const remembered = savedPolygonRef.current;
-      if (remembered && remembered.length >= 3 && AMap.Polygon) {
-        const overlay = new AMap.Polygon({
-          path: remembered.map((point: { lng: number; lat: number }) => new AMap.LngLat(point.lng, point.lat)),
-          strokeColor: '#1f6b4a',
-          strokeWeight: 3,
-          fillColor: '#1f6b4a',
-          fillOpacity: 0.15,
-        });
-        overlay.setMap(map);
-        map.setFitView?.([overlay]);
+      if (remembered.length >= 3 && AMap.Polygon) {
+        try {
+          const overlay = new AMap.Polygon({
+            path: remembered.map((point: { lng: number; lat: number }) => [point.lng, point.lat]),
+            strokeColor: '#2f6bff',
+            strokeWeight: 3,
+            fillColor: '#2f6bff',
+            fillOpacity: 0.18,
+            zIndex: 60,
+          });
+          overlay.setMap(map);
+          const fit = () => map.setFitView?.([overlay], false, [48, 48, 48, 48]);
+          fit();
+          map.on?.('complete', fit);
+        } catch { /* 标不上上次的范围也不挡重新圈 */ }
       }
       const mouseTool = new AMap.MouseTool(map);
       mouseTool.on('draw', (data: any) => {

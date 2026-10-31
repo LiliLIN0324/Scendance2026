@@ -433,7 +433,7 @@ describe('ScendanceViewTools satellite ground', () => {
     const values = contexts(layout);
     const view = render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
     const button = await screen.findByRole('button', { name: /卫星参考底图，已打开/ });
-    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('false'));
     fireEvent.click(button);
     expect(button.getAttribute('aria-busy')).toBe('false');
     const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;

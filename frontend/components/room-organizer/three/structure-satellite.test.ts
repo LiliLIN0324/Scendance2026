@@ -139,4 +139,48 @@ describe('satellite floor texture', () => {
     expect(surroundUv.getX(surroundIndex)).toBeCloseTo(shared.u, 4);
     expect(surroundUv.getY(surroundIndex)).toBeCloseTo(shared.v, 4);
   });
+
+  it('shows geographic north above south in the top-down camera, with the surround on the same photo', () => {
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+    camera.position.set(0, 80, 0.001);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const depth = 60;
+    const project = (z: number) => new THREE.Vector3(0, 0, z - depth / 2).project(camera);
+    expect(project(0).y).toBeGreaterThan(project(depth).y);
+    vi.stubGlobal('Image', class {
+      onload: null | (() => void) = null;
+      onerror: null | (() => void) = null;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    });
+    const lat = 30.45;
+    const lng = 120.55;
+    const east = (meters: number) => lng + meters / (111_320 * Math.cos((lat * Math.PI) / 180));
+    const north = (meters: number) => lat + meters / 110_574;
+    const polygon = [
+      { lng, lat: north(80) },
+      { lng: east(40), lat: north(80) },
+      { lng: east(40), lat: north(30) },
+      { lng: east(120), lat: north(30) },
+      { lng: east(120), lat },
+      { lng, lat },
+    ];
+    const image = satelliteProxyUrl(polygon, 'secret-key')!;
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官', location: '手画', polygon, satelliteGround: true, satelliteGroundImage: image,
+    });
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, layout);
+    const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
+    const uv = surround.geometry.getAttribute('uv');
+    const xs = Array.from({ length: uv.count }, (_, index) => uv.getX(index));
+    const ys = Array.from({ length: uv.count }, (_, index) => uv.getY(index));
+    expect(Math.min(...xs)).toBeGreaterThan(-0.02);
+    expect(Math.max(...xs)).toBeLessThan(1.02);
+    expect(Math.min(...ys)).toBeGreaterThan(-0.02);
+    expect(Math.max(...ys)).toBeLessThan(1.02);
+    const material = surround.material as THREE.MeshBasicMaterial;
+    expect(material.color.getHex()).toBe(0xffffff);
+    expect(material.opacity).toBeLessThan(0.7);
+  });
 });

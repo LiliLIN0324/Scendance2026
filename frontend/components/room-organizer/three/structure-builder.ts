@@ -171,7 +171,7 @@ export function buildStructureShell(
     const surroundMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.55,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
