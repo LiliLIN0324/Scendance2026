@@ -700,4 +700,13 @@ describe('CloudPanel section entry points', () => {
     expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('false');
   });
+
+  it('shows a shell draft note in the account menu without replacing the cloud badge', () => {
+    const initial = backendSceneToLayout(scene, { projectId, name: original.name });
+    render(<CloudPanel controller={controller} layout={initial} onLoadLayout={vi.fn()} draftNote={{ label: '已保存到本机', error: false }} />);
+    fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
+    expect(screen.getByText('已保存到本机')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '我的项目' }));
+    expect(screen.getByText('本地草稿')).toBeTruthy();
+  });
 });

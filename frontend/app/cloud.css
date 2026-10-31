@@ -42,14 +42,15 @@
 .sc-recovery-button{appearance:none;cursor:pointer;border:1px solid var(--sc-line);border-radius:var(--r-sm);padding:10px 16px;font:500 12px var(--sc-font);background:var(--wk-paper);color:var(--sc-ink);transition:background var(--sc-fast) var(--sc-ease),transform var(--sc-fast) var(--sc-ease)}
 .sc-recovery-button--primary{background:var(--sc-ink);border-color:var(--sc-ink);color:var(--wk-paper)}
 /* 打开工作台的骨架屏：不画进度条，只把外壳形状摆出来等资源到位。 */
-.sc-boot{position:fixed;inset:0;display:grid;grid-template-rows:48px minmax(0,1fr) 40px;background:var(--wk-paper);color:var(--sc-ink);font-family:var(--sc-font);overflow:hidden}
-.sc-boot-top{display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--hair-soft,#EFEFF1)}
+.sc-boot{position:fixed;inset:0;display:grid;grid-template-rows:40px minmax(0,1fr) 40px;background:var(--wk-paper);color:var(--sc-ink);font-family:var(--sc-font);overflow:hidden}
+.sc-boot-top{display:flex;align-items:center;gap:8px;padding:0 12px 0 16px;border-bottom:1px solid var(--hair-soft,#EFEFF1)}
 .sc-boot-mark{width:20px;height:20px;border-radius:6px;flex:none}
 .sc-boot-line{height:8px;border-radius:4px;flex:none}
 .sc-boot-line--soft{opacity:.7}
-.sc-boot-dot{margin-left:auto;width:24px;height:24px;border-radius:50%;flex:none}
-.sc-boot-main{display:grid;grid-template-columns:56px minmax(0,1fr) 300px;gap:10px;padding:8px;min-height:0}
-.sc-boot-rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:6px}
+.sc-boot-dot{width:22px;height:22px;border-radius:50%;flex:none}
+.sc-boot-main{display:grid;grid-template-columns:64px minmax(0,1fr) 300px;gap:10px;padding:8px;min-height:0}
+.sc-boot-rail{display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;padding-top:6px;min-height:0}
+.sc-boot-rail-foot{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding-top:8px;border-top:1px solid var(--hair-soft,#EFEFF1)}
 .sc-boot-tile{width:28px;height:28px;border-radius:8px;flex:none}
 .sc-boot-canvas{border-radius:12px;min-height:0}
 .sc-boot-aside{display:flex;flex-direction:column;gap:10px;padding:6px 2px 0;min-width:0}
@@ -60,7 +61,7 @@
 .sc-boot-note{margin:0 0 0 auto;font-size:11px;line-height:16px;letter-spacing:.01em;color:var(--muted,#71767E)}
 .sc-boot-mark,.sc-boot-line,.sc-boot-dot,.sc-boot-tile,.sc-boot-canvas,.sc-boot-card,.sc-boot-thumb{background:var(--wk-plane);animation:sc-boot-breathe 1.2s var(--sc-ease) infinite}
 @keyframes sc-boot-breathe{0%,100%{opacity:1}50%{opacity:.55}}
-@media(max-width:1100px){.sc-boot-main{grid-template-columns:56px minmax(0,1fr)}.sc-boot-aside{display:none}}
+@media(max-width:1100px){.sc-boot-main{grid-template-columns:64px minmax(0,1fr)}.sc-boot-aside{display:none}}
 @media(max-width:720px){.sc-boot-main{grid-template-columns:minmax(0,1fr)}.sc-boot-rail{display:none}}
 @media(prefers-reduced-motion:reduce){.sc-boot-mark,.sc-boot-line,.sc-boot-dot,.sc-boot-tile,.sc-boot-canvas,.sc-boot-card,.sc-boot-thumb{animation:none}}
 @media(hover:hover) and (pointer:fine){.sc-cloud-trigger:hover:not(:active){background:var(--wk-paper);transform:translateY(-1px)}.sc-cloud-dialog button:not(:disabled):hover,.sc-recovery-button:hover{background:var(--wk-paper);border-color:var(--wk-hair)}.sc-cloud-dialog button.sc-cloud-primary:not(:disabled):hover,.sc-recovery-button--primary:hover{background:var(--wk-ink);border-color:var(--wk-ink)}.sc-cloud-dialog button.sc-cloud-close:hover{background:var(--wk-plane);color:var(--sc-ink)}}
@@ -90,6 +91,8 @@
 .sc-account-profile>div{display:grid;gap:4px;flex:1;min-width:0}
 .sc-account-profile strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}
 .sc-account-profile>div>span{font-size:12px;color:var(--sc-muted);overflow-wrap:anywhere}
+.sc-account-profile>div>.sc-account-draft{font-size:11px;line-height:1.4;color:var(--wk-muted,#71767E)}
+.sc-account-profile>div>.sc-account-draft.has-error{color:var(--err,#B4443C)}
 .sc-account-profile>a,.sc-account-profile>button{flex:none}
 .sc-account-nav{display:flex;gap:24px;padding:0 32px;border-bottom:1px solid var(--sc-line);overflow-x:auto}
 .sc-account-nav button{background:none!important;border:0;border-bottom:2px solid transparent;border-radius:0;padding:13px 0;box-shadow:none;white-space:nowrap;color:var(--sc-muted);font-size:13px}
