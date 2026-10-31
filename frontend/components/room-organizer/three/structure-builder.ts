@@ -11,6 +11,46 @@ export interface StructureShellOptions {
   onTextureLoaded?: () => void;
 }
 
+/** jpeg / png / svg 占位都走 Image。createImageBitmap 会拒绝 SVG，地面就被涂成橄榄绿。 */
+function loadSatelliteTexture(THREE: typeof import('three'), url: string): Promise<import('three').Texture> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const texture = new THREE.Texture(image);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.flipY = true;
+      texture.needsUpdate = true;
+      resolve(texture);
+    };
+    image.onerror = () => reject(new Error('sat decode'));
+    image.src = url;
+  });
+}
+
+/** 解码失败时仍把禁令文案画到地面上，避免只剩一块纯色。 */
+function paintSatelliteLabel(THREE: typeof import('three'), label: string): import('three').Texture | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 360;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.fillStyle = '#2f4a38';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = 'rgba(0,0,0,0.55)';
+  context.fillRect(16, 16, canvas.width - 32, 84);
+  context.fillStyle = '#f0e6c8';
+  context.font = '28px sans-serif';
+  context.fillText(label, 32, 70);
+  const texture = new THREE.Texture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 /** Measured v2 shell: floor polygon and each wall's own thickness, height and holes. */
 export function buildStructureShell(
   THREE: typeof import('three'),
@@ -64,33 +104,25 @@ export function buildStructureShell(
     floorMesh.material = satMat;
     floorMesh.userData.satelliteGroundRef = true;
     floorMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
-    // fetch→ImageBitmap 比 TextureLoader+crossOrigin 更稳（代理偶发 CONNECTION_CLOSED）
+    // HTMLImageElement 能解开 jpeg 瓦片和 SVG 占位。createImageBitmap 解不开 SVG，
+    // 失败时曾经把地面涂成 0x445544（纯橄榄绿），网络里却是 200 的图。
     const url = layout.floorPlanImage!;
-    void (async () => {
-      try {
-        const res = await fetch(url, { mode: 'cors', credentials: 'omit', signal: AbortSignal.timeout(20000) });
-        if (!res.ok) throw new Error('sat http ' + res.status);
-        const blob = await res.blob();
-        if (!blob.type.startsWith('image/') && blob.size < 1000) throw new Error('sat not image');
-        const bitmap = await createImageBitmap(blob);
-        const texture = new THREE.Texture(bitmap);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.flipY = true;
-        texture.needsUpdate = true;
-        if (floorMesh.material !== satMat) return; // 已被重建替换
-        satMat.map = texture;
+    void loadSatelliteTexture(THREE, url).then(texture => {
+      if (floorMesh.material !== satMat) { texture.dispose(); return; }
+      satMat.map = texture;
+      satMat.color = new THREE.Color(0xffffff);
+      satMat.needsUpdate = true;
+      options.onTextureLoaded?.();
+    }).catch(() => {
+      if (floorMesh.material !== satMat) return;
+      const fallback = paintSatelliteLabel(THREE, SATELLITE_GROUND_LABEL);
+      if (fallback) {
+        satMat.map = fallback;
         satMat.color = new THREE.Color(0xffffff);
-        satMat.needsUpdate = true;
-        options.onTextureLoaded?.();
-      } catch {
-        if (floorMesh.material !== satMat) return;
-        satMat.color = new THREE.Color(0x445544);
-        satMat.needsUpdate = true;
-        options.onTextureLoaded?.();
       }
-    })();
+      satMat.needsUpdate = true;
+      options.onTextureLoaded?.();
+    });
 
     // 圈外浅色半透明周边：外矩形挖 venue hole，仅卫星参考开时出现
     const padM = Math.max(4, 0.25 * Math.max(layout.width, layout.height));

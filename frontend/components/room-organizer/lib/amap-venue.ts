@@ -208,10 +208,14 @@ export async function fetchSatelliteGroundDataUrl(
   try {
     const probe = await fetch(proxy, { method: 'GET', signal: AbortSignal.timeout(10000) });
     if (!probe.ok) return null;
-    // 读一点确认是图；不把整图塞进布局
-    const type = probe.headers.get('content-type') || '';
-    if (!type.startsWith('image/')) return null;
-    await probe.body?.cancel?.();
+    // 读头确认是图。不要 await body.cancel()：取消失败会把已经 200 的卫星图当成没拉到，
+    // 随后只留下 SVG 占位，而 createImageBitmap 解不开 SVG，地面就变成橄榄绿。
+    const type = (probe.headers.get('content-type') || '').toLowerCase();
+    const bytes = new Uint8Array(await probe.arrayBuffer());
+    const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+    const png = bytes[0] === 0x89 && bytes[1] === 0x50;
+    if (!type.startsWith('image/') && !jpeg && !png) return null;
+    if (bytes.byteLength < 100) return null;
     return proxy;
   } catch {
     return null;
@@ -391,6 +395,23 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
     satelliteGroundRef: true,
     ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located) } : {}),
   };
+}
+
+/**
+ * 演示圈画已经有 polygon / mapLngLat 时绝不能报「未定位」。
+ * 只有既没有坐标、这次也没贴上真图，才区分缺 Key 和地点没搜到。
+ */
+export function satelliteMissReason(
+  layout: Pick<RoomLayout, 'mapGroundPolygon' | 'mapLngLat'>,
+  patch: SatelliteGroundPatch | null,
+  keys: { key: string; staticKey: string },
+): 'key' | 'place' | null {
+  const hasLocation = (layout.mapGroundPolygon?.length ?? 0) >= 3
+    || (!!layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat));
+  if (hasLocation) return null;
+  if (patch && !isPlaceholderSatellite(patch.floorPlanImage)) return null;
+  if (!keys.staticKey && !keys.key) return 'key';
+  return patch ? null : 'place';
 }
 
 export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGroundPatch): RoomLayout {

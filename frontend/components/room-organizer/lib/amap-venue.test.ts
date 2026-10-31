@@ -14,6 +14,8 @@ import {
   satelliteProxyUrl,
   ensureSatelliteGround,
   rectangleAroundMeters,
+  fetchSatelliteGroundDataUrl,
+  satelliteMissReason,
 } from './amap-venue';
 import { INITIAL_LAYOUT } from './initial-layout';
 import type { RoomLayout } from './types';
@@ -220,10 +222,13 @@ describe('satellite ground backfill', () => {
   it('fills a stored polygon from the proxy when the key is set', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
     vi.stubGlobal('window', {});
+    const bytes = new Uint8Array(120);
+    bytes[0] = 0xff;
+    bytes[1] = 0xd8;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       headers: { get: () => 'image/jpeg' },
-      body: { cancel: vi.fn() },
+      arrayBuffer: async () => bytes.buffer,
     }));
     const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
       name: '盐官潮乐之城', location: '海宁盐官', polygon: lShapePolygon(), satelliteGround: false,
@@ -238,10 +243,13 @@ describe('satellite ground backfill', () => {
   it('geocodes a legacy map shell that never stored a polygon', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
+    const bytes = new Uint8Array(120);
+    bytes[0] = 0xff;
+    bytes[1] = 0xd8;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       headers: { get: () => 'image/jpeg' },
-      body: { cancel: vi.fn() },
+      arrayBuffer: async () => bytes.buffer,
     }));
     vi.stubGlobal('window', {
       AMap: {
@@ -267,6 +275,31 @@ describe('satellite ground backfill', () => {
     expect(center.lng / 4).toBeCloseTo(120.54, 4);
     expect(center.lat / 4).toBeCloseTo(30.405, 4);
     expect(rectangleAroundMeters({ lng: 120.54, lat: 30.405 }, legacy.width, legacy.height)).toHaveLength(4);
+  });
+
+  it('does not report 未定位 when the drawn polygon is already known', () => {
+    expect(satelliteMissReason(
+      { mapGroundPolygon: lShapePolygon(), mapLngLat: { lng: 120.54, lat: 30.4 } },
+      null,
+      { key: 'js-key', staticKey: 'static-key' },
+    )).toBeNull();
+    expect(satelliteMissReason({}, null, { key: '', staticKey: '' })).toBe('key');
+    expect(satelliteMissReason({}, null, { key: 'js-key', staticKey: 'static-key' })).toBe('place');
+  });
+
+  it('keeps a same-origin satellite url when the jpeg header is oddly cased', async () => {
+    vi.stubGlobal('window', { location: { hostname: 'scendance.lilicoding.space' } });
+    const bytes = new Uint8Array(120);
+    bytes[0] = 0xff;
+    bytes[1] = 0xd8;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'Image/JPEG' },
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const url = await fetchSatelliteGroundDataUrl(lShapePolygon());
+    expect(url?.startsWith('/api/amap-static?')).toBe(true);
+    expect(url).toContain('x-ref=satellite-ground-ref');
   });
 
   it('uses a placeholder when the key is missing so the ground is not left plain', async () => {
