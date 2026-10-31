@@ -243,16 +243,19 @@ describe('ScendanceViewTools design column', () => {
   it('renders one right-edge island of five round tools and tucks the rest into 视图', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 右缘竖排 6 圆钮（参考图 04-final-flat）：选择 / 2D·3D / 看全场 / 尺寸 / 视图 / 氛围。
-    expect(within(rail).getAllByRole('button')).toHaveLength(6);
-    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '尺寸标注', '视图与更多工具']) {
+    // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 尺寸 / 网格 / 视图 / 氛围。卫星只在户外。
+    expect(within(rail).getAllByRole('button')).toHaveLength(8);
+    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '尺寸标注', '网格吸附', '视图与更多工具']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
+    expect(rail.querySelector('#tool-satellite')).toBeNull();
     expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('false');
-    // 撤销/重做/缩放/网格/导出都收进「视图」菜单，不在常驻列里。
-    for (const id of ['tool-grid', 'tool-undo', 'tool-zoom-out', 'tool-export']) {
+    // 撤销/重做/缩放/导出仍在眼睛菜单；俯视和网格已在右轨。
+    for (const id of ['tool-undo', 'tool-zoom-out', 'tool-export']) {
       expect(rail.querySelector(`#${id}`)).toBeNull();
     }
+    expect(rail.querySelector('#tool-grid')).toBeTruthy();
+    expect(rail.querySelector('#tool-top')).toBeTruthy();
     // 氛围条仍是收起的一颗，点开才铺出四条。
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
@@ -275,18 +278,20 @@ describe('ScendanceViewTools design column', () => {
     expect(onFit).toHaveBeenCalledTimes(1);
     fireEvent.click(within(rail).getByRole('button', { name: '尺寸标注' }));
     expect(values.toggle).toHaveBeenCalledWith('showMeasurements');
+    fireEvent.click(within(rail).getByRole('button', { name: '俯视' }));
+    expect(onApplyPreset).toHaveBeenCalledWith('top');
+    fireEvent.click(within(rail).getByRole('button', { name: '网格吸附' }));
+    expect(values.toggle).toHaveBeenCalledWith('snapToGrid');
     fireEvent.click(within(rail).getByRole('button', { name: '视图与更多工具' }));
     expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('true');
+    for (const name of ['整体', '人视']) {
+      expect(within(rail).getByRole('menuitemradio', { name })).toBeTruthy();
+    }
     for (const name of ['撤销', '重做', '缩小', '放大', '导出效果图']) {
       expect(within(rail).getByRole('menuitem', { name })).toBeTruthy();
     }
-    expect(within(rail).getByRole('menuitemcheckbox', { name: '网格吸附' })).toBeTruthy();
-    // 选视角是一锤子买卖：选定即收起菜单。
-    fireEvent.click(within(rail).getByRole('menuitemradio', { name: '俯视' }));
-    expect(onApplyPreset).toHaveBeenCalledWith('top');
-    expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('false');
-    // 再开一次验证历史 / 缩放 / 网格 / 导出；这些动作本身不收起菜单。
-    fireEvent.click(within(rail).getByRole('button', { name: '视图与更多工具' }));
+    expect(within(rail).queryByRole('menuitemradio', { name: '俯视' })).toBeNull();
+    expect(within(rail).queryByRole('menuitemcheckbox', { name: '网格吸附' })).toBeNull();
     fireEvent.click(within(rail).getByRole('menuitem', { name: '撤销' }));
     fireEvent.click(within(rail).getByRole('menuitem', { name: '重做' }));
     fireEvent.click(within(rail).getByRole('menuitem', { name: '缩小' }));
@@ -294,11 +299,10 @@ describe('ScendanceViewTools design column', () => {
     expect(values.history.undo).toHaveBeenCalledTimes(1);
     expect(values.history.redo).toHaveBeenCalledTimes(1);
     expect(onZoom.mock.calls).toEqual([['-'], ['+']]);
-    fireEvent.click(within(rail).getByRole('menuitemcheckbox', { name: '网格吸附' }));
     expect(values.toggle.mock.calls).toEqual([['showMeasurements'], ['snapToGrid']]);
     expect(onExportImage).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(within(rail).queryByRole('menuitemcheckbox', { name: '网格吸附' })).toBeNull();
+    expect(within(rail).queryByRole('menuitem', { name: '撤销' })).toBeNull();
     expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -405,7 +409,7 @@ describe('ScendanceViewTools satellite ground', () => {
 
   it('does not put a satellite button on an ordinary indoor room', () => {
     render(<Providers values={contexts()}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    expect(screen.queryByRole('button', { name: /卫星参考底图/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /卫星贴地/ })).toBeNull();
   });
 
   it('shows tool-satellite for a planning-zone title even when the shell is not a polygon', async () => {
@@ -414,7 +418,7 @@ describe('ScendanceViewTools satellite ground', () => {
     const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' });
     const values = contexts(layout);
     render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const button = screen.getByRole('button', { name: /卫星参考底图，已打开/ });
+    const button = screen.getByRole('button', { name: /卫星贴地，已打开/ });
     expect(button.id).toBe('tool-satellite');
     expect(button.getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => expect(values.actions.applyLayout).toHaveBeenCalled());
@@ -426,7 +430,7 @@ describe('ScendanceViewTools satellite ground', () => {
   it('keeps tool-satellite visible when the layer was explicitly turned off', () => {
     const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m', satelliteGroundRef: false });
     render(<Providers values={contexts(layout)}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const button = screen.getByRole('button', { name: /卫星参考底图，已关闭/ });
+    const button = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
     expect(button.id).toBe('tool-satellite');
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
@@ -453,7 +457,7 @@ describe('ScendanceViewTools satellite ground', () => {
     try {
     const values = contexts(legacySaltShell());
     render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const button = screen.getByRole('button', { name: /卫星参考底图，已打开/ });
+    const button = screen.getByRole('button', { name: /卫星贴地，已打开/ });
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.classList.contains('is-active')).toBe(true);
     await waitFor(() => expect(values.actions.applyLayout).toHaveBeenCalled());
@@ -476,13 +480,13 @@ describe('ScendanceViewTools satellite ground', () => {
     ] };
     const values = contexts(on);
     const { rerender } = render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: /卫星参考底图，已打开/ }));
+    fireEvent.click(screen.getByRole('button', { name: /卫星贴地，已打开/ }));
     const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof on;
     expect(hidden.satelliteGroundRef).toBe(false);
     expect(hidden.floorPlanImage).toBe(image);
     const offValues = contexts(hidden);
     rerender(<Providers values={offValues}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const offButton = screen.getByRole('button', { name: /卫星参考底图，已关闭/ });
+    const offButton = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
     expect(offButton.getAttribute('aria-pressed')).toBe('false');
     expect(offButton.classList.contains('is-active')).toBe(false);
     fireEvent.click(offButton);

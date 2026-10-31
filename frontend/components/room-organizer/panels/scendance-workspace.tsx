@@ -258,7 +258,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
   const satelliteAttempt = useRef('');
-  const satelliteTip = satelliteMiss === 'key' ? '卫星参考·需高德 Key' : satelliteMiss === 'place' ? '卫星参考·未定位' : '卫星参考';
+  const satelliteTip = satelliteMiss === 'key' ? '卫星贴地·需高德 Key' : satelliteMiss === 'place' ? '卫星贴地·未定位' : '卫星贴地';
   const fillSatellite = useCallback((startedId: string, startedName: string, mine: number) => {
     const source = layoutRef.current;
     setSatelliteBusy(true);
@@ -370,11 +370,18 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       <button type="button" id="tool-fit" data-tip="看全场" aria-label="看全场" disabled={view.view2D} onClick={onFit}>
         <Crosshair size={24}/>
       </button>
+      <button type="button" id="tool-top" data-tip="俯视" aria-label="俯视" aria-pressed={!view.view2D && preset === 'top'} className={!view.view2D && preset === 'top' ? 'is-active' : ''} onClick={() => choosePreset('top')}>
+        <Square size={24} aria-hidden="true"/>
+      </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
         <Ruler size={24}/>
       </button>
-      {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星参考底图，已打开。${SATELLITE_GROUND_LABEL}` : `卫星参考底图，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
-        <Satellite size={24}/>
+      <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
+        <Grid size={24} aria-hidden="true"/>
+      </button>
+      {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。 */}
+      {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
+        <Satellite size={24} aria-hidden="true"/>
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
@@ -384,16 +391,13 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
         {viewOpen && <div id="tool-view-menu" className="sc-tool-pop sc-more-pop sc-icon-menu" role="menu" aria-label="视图与更多工具">
           {!exportOpen ? <>
             <span className="sc-tool-menu-label" role="presentation">视角</span>
-            {ANGLE_PRESETS.map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-label={entry.label} data-tip={entry.label} aria-checked={!view.view2D && preset === entry.id} className={`sc-tool-icon${!view.view2D && preset === entry.id ? ' is-active' : ''}`} onClick={() => choosePreset(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
+            {ANGLE_PRESETS.filter(entry => entry.id !== 'top').map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-label={entry.label} data-tip={entry.label} aria-checked={!view.view2D && preset === entry.id} className={`sc-tool-icon${!view.view2D && preset === entry.id ? ' is-active' : ''}`} onClick={() => choosePreset(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
             <span className="sc-more-sep" aria-hidden="true"/>
             <button type="button" id="tool-undo" className="sc-tool-icon" role="menuitem" aria-label="撤销" data-tip="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={20} aria-hidden="true"/></button>
             <button type="button" id="tool-redo" className="sc-tool-icon" role="menuitem" aria-label="重做" data-tip="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={20} aria-hidden="true"/></button>
             <button type="button" id="tool-zoom-out" className="sc-tool-icon" role="menuitem" aria-label="缩小" data-tip="缩小" disabled={view.view2D} onClick={() => onZoom('-')}><ZoomOut size={20} aria-hidden="true"/></button>
             <button type="button" id="tool-zoom-in" className="sc-tool-icon" role="menuitem" aria-label="放大" data-tip="放大" disabled={view.view2D} onClick={() => onZoom('+')}><ZoomIn size={20} aria-hidden="true"/></button>
-            <span className="sc-more-sep" aria-hidden="true"/>
-            <button type="button" id="tool-grid" role="menuitemcheckbox" aria-label="网格吸附" data-tip="网格吸附" aria-checked={view.snapToGrid} className={`sc-tool-icon${view.snapToGrid ? ' is-active' : ''}`} onClick={() => toggle('snapToGrid')}><Grid size={20} aria-hidden="true"/></button>
-            <span className="sc-more-sep" aria-hidden="true"/>
-            {onExportImage && <button type="button" id="tool-export" className="sc-tool-icon" role="menuitem" aria-label="导出效果图" data-tip="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={20} aria-hidden="true"/></button>}
+            {onExportImage && <><span className="sc-more-sep" aria-hidden="true"/><button type="button" id="tool-export" className="sc-tool-icon" role="menuitem" aria-label="导出效果图" data-tip="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={20} aria-hidden="true"/></button></>}
           </> : <div className="sc-more-export sc-export-pop" role="dialog" aria-label="导出效果图选项">
             <button type="button" className="sc-more-back" onClick={() => setExportOpen(false)}><ArrowLeft size={16} aria-hidden="true"/><span>导出效果图</span></button>
             <div className="sc-export-group" role="group" aria-label="导出视角">
