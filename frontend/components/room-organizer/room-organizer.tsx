@@ -1593,15 +1593,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onFit: fitToRoom,
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
-        <header ref={headerRef} className="sc-header">
-          <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong className="sc-brand-cn">幕景</strong></a>
+        <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
-        </header>
+        </div>
         <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed && sidebarCollapsed ? '' : ' has-left-column'}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`} style={{ ['--sc-left-card-width' as string]: `${leftCardWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
+              <a className="sc-brand sc-rail-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={22} /></span><strong className="sc-brand-cn">幕景</strong></a>
               <nav className="sc-mode-rail-top" aria-label="工作流程">
                 {WORKBENCH_MODES.map(mode => {
                   const active = workbenchMode === mode.id;
