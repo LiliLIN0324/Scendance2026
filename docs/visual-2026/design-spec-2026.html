@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幕景 Scendance · 2026 设计规范 · v2.6.5</title>
+<title>幕景 Scendance · 2026 设计规范 · v2.6.6</title>
 <link rel="preconnect" href="https://fonts.loli.net" crossorigin>
 <link href="https://fonts.loli.net/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -329,7 +329,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       <p class="cover-line" style="margin-top:16px;font-size:13px">2026 设计规范 · 品牌、界面、AI-native 一本读完</p>
     </div>
     <div class="cover-meta">
-      <div class="cover-chips"><span>v2.6.5</span><span>2026-10-29</span><span>18 节</span></div>
+      <div class="cover-chips"><span>v2.6.6</span><span>2026-10-31</span><span>18 节</span></div>
       <p class="cover-line">纯白纸面 · 发丝线分区 · 近黑墨字 · 鼠尾草绿点睛</p>
     </div>
   </div>
@@ -706,7 +706,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 <!-- ═══ 四、图标与阴影 ═══ -->
 <section id="sec-04">
   <h2>四、图标与阴影</h2>
-  <p class="note">lucide 线性图标，统一描边 1.75，单色继承文字色；尺寸 16 / 20 / 24（32 仅整页空态主图标），52 枚在用清单与一义一标见第五节。E0 为默认——一切元素无阴影，分区靠 1px 发丝线；阴影只给浮层。</p>
+  <p class="note">lucide 线性图标，统一描边 1.75，单色继承文字色；尺寸 16 / 20 / 24（32 仅整页空态主图标），68 枚在用清单与一义一标见第五节。E0 为默认——一切元素无阴影，分区靠 1px 发丝线；阴影只给浮层。</p>
 
 <div class="block"><span class="cap">阴影层级 · E0 默认 / E1 浮层 / E2 模态</span>
     <div class="ecards">
@@ -720,7 +720,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
 <!-- ═══ 五、图标索引 ═══ -->
 <section id="sec-05">
   <h2>五、图标索引 · 页面在用</h2>
-  <p class="note">UI 图标只有一个来源：lucide-react 1.48，24 网格、描边 1.75、圆头圆角、单色继承文字色。页面当前在用 52 枚，按语义分 5 组；家具与材质另属「领域符号」，不进本表。</p>
+  <p class="note">UI 图标只有一个来源：lucide-react 1.48，24 网格、描边 1.75、圆头圆角、单色继承文字色。页面当前在用 68 枚，按语义分 5 组；家具与材质另属「领域符号」，不进本表。</p>
 
     <div class="block"><span class="cap">图标尺寸 · 字形方格（宽 × 高）与触达区分离</span>
   <table class="tbl">
@@ -734,9 +734,9 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
   </table>
   <p class="note">规矩：图标字形永远是正方形容器(lucide 24 网格),宽高同档,不存在 16×20 这类长方字形;「尺寸」指的是字形方格,可点击时外层按钮另给 ≥32×32 触达区——字形小、靶子大,两者不混谈。宽度不用时图标永远不单独出现,必须与文字或 32px 钮同组。</p>
 </div>
-<div class="block"><span class="cap">索引 · 52 枚 · 一义一标</span>
-    <p class="note" style="margin:0 0 10px">每枚只标中文用途,英文组件名悬停可见;与 md 规范四节图标表一一对应。<code>docs/design-spec-2026.md</code> §1.4。</p>
-    <div class="ixgrp"><b>导航与轨道 · 11</b>
+<div class="block"><span class="cap">索引 · 68 枚 · 一义一标</span>
+    <p class="note" style="margin:0 0 10px">每枚只标中文用途,英文组件名悬停可见;与 md 规范四节图标表一一对应。<code>docs/design-spec-2026.md</code> §1.4。画布顶不放「布置 / 物料 / 执行资料」分段，这三档只走左轨：布置 <code>SquareStack</code>、评审 <code>Send</code>、执行 <code>ListChecks</code>。场地重建用 <code>Scan</code>，不用 <code>Layers</code>——lucide 里 <code>Layers</code> 是 <code>Layers3</code>（图层）的别名。撤销 <code>Undo2</code>、重做 <code>Redo2</code> 不与复位 <code>RotateCcw</code>、重试 <code>RotateCw</code> 混。</p>
+    <div class="ixgrp"><b>导航与轨道 · 19</b>
       <div class="ixgrid">
       <div class="ix" title="Boxes"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="m7 16.5 5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3"/><path d="m17 16.5 4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15"/><path d="m12 8 4.74-2.85"/><path d="M12 13.5V8"/></svg><span>物料工具</span></div>
       <div class="ix" title="ClipboardList"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg><span>活动需求</span></div>
@@ -749,9 +749,17 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       <div class="ix" title="FolderOpen"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg><span>项目与目录</span></div>
       <div class="ix" title="Building2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 12h4"/><path d="M10 8h4"/><path d="M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></svg><span>当前工作室</span></div>
       <div class="ix" title="Users"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg><span>协作成员</span></div>
+      <div class="ix" title="Map"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg><span>地图选址</span></div>
+      <div class="ix" title="Scan"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg><span>场地重建</span></div>
+      <div class="ix" title="Shapes"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></svg><span>场地观感</span></div>
+      <div class="ix" title="Satellite"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13.5 6.5-3.148-3.148a1.205 1.205 0 0 0-1.704 0L6.352 5.648a1.205 1.205 0 0 0 0 1.704L9.5 10.5"/><path d="M16.5 7.5 19 5"/><path d="m17.5 10.5 3.148 3.148a1.205 1.205 0 0 1 0 1.704l-2.296 2.296a1.205 1.205 0 0 1-1.704 0L13.5 14.5"/><path d="M9 21a6 6 0 0 0-6-6"/><path d="M9.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l4.296-4.296a1.205 1.205 0 0 0 0-1.704l-2.296-2.296a1.205 1.205 0 0 0-1.704 0z"/></svg><span>卫星贴地</span></div>
+      <div class="ix" title="LayoutTemplate"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></svg><span>场景模板</span></div>
+      <div class="ix" title="Trees"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z"/><path d="M7 16v6"/><path d="M13 19v3"/><path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5"/></svg><span>环境预览</span></div>
+      <div class="ix" title="Package"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></svg><span>物料库</span></div>
+      <div class="ix" title="SquareDashed"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/></svg><span>空白场地</span></div>
       </div>
     </div>
-    <div class="ixgrp"><b>画布视图 · 8</b>
+    <div class="ixgrp"><b>画布视图 · 16</b>
       <div class="ixgrid">
       <div class="ix" title="MousePointer2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg><span>选择</span></div>
       <div class="ix" title="Crosshair"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg><span>准星</span></div>
@@ -761,6 +769,14 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       <div class="ix" title="Sun"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span>晴天光照</span></div>
       <div class="ix" title="CloudRain"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/></svg><span>阴雨光照</span></div>
       <div class="ix" title="Footprints"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg><span>足迹漫游</span></div>
+      <div class="ix" title="Axis3d"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 10.5 15 9"/><path d="M4 4v15a1 1 0 0 0 1 1h15"/><path d="M4.293 19.707 6 18"/><path d="m9 15 1.5-1.5"/></svg><span>平面 / 立体</span></div>
+      <div class="ix" title="Cuboid"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 22v-8"/><path d="M2.336 8.89 10 14l11.715-7.029"/><path d="M22 14a2 2 0 0 1-.971 1.715l-10 6a2 2 0 0 1-2.138-.05l-6-4A2 2 0 0 1 2 16v-6a2 2 0 0 1 .971-1.715l10-6a2 2 0 0 1 2.138.05l6 4A2 2 0 0 1 22 8z"/></svg><span>整体视角</span></div>
+      <div class="ix" title="Square"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/></svg><span>俯视</span></div>
+      <div class="ix" title="PersonStanding"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1"/><path d="m9 20 3-6 3 6"/><path d="m6 8 6 2 6-2"/><path d="M12 10v4"/></svg><span>人视</span></div>
+      <div class="ix" title="Undo2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg><span>撤销</span></div>
+      <div class="ix" title="Redo2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></svg><span>重做</span></div>
+      <div class="ix" title="ZoomIn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg><span>放大</span></div>
+      <div class="ix" title="ZoomOut"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/></svg><span>缩小</span></div>
       </div>
     </div>
     <div class="ixgrp"><b>Agent 与输入 · 8</b>
@@ -821,6 +837,9 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       <tr><td style="white-space:nowrap"><b>搜索</b> <code>Search</code><span style="color:var(--muted)">· 框内左侧</span></td><td style="white-space:nowrap"><b>上传</b> <code>ImagePlus</code><span style="color:var(--muted)">· 图纸 / 照片</span></td></tr>
       <tr><td style="white-space:nowrap"><b>更多</b> <code>MoreHorizontal</code><span style="color:var(--muted)">· 溢出菜单</span></td><td style="white-space:nowrap"><b>外链</b> <code>ArrowUpRight</code><span style="color:var(--muted)">· 新页面</span></td></tr>
       <tr><td style="white-space:nowrap"><b>返回</b> <code>ArrowLeft</code></td><td style="white-space:nowrap"><b>展开 / 收起</b> <code>ChevronDown / ChevronUp</code><span style="color:var(--muted)">· 不用 + / −</span></td></tr>
+      <tr><td style="white-space:nowrap"><b>撤销 / 重做</b> <code>Undo2 / Redo2</code><span style="color:var(--muted)">· 不与复位、重试混</span></td><td style="white-space:nowrap"><b>放大 / 缩小</b> <code>ZoomIn / ZoomOut</code></td></tr>
+      <tr><td style="white-space:nowrap"><b>地图</b> <code>Map</code><span style="color:var(--muted)">· 选址圈画</span></td><td style="white-space:nowrap"><b>卫星</b> <code>Satellite</code><span style="color:var(--muted)">· 贴地参考，不作重建素材</span></td></tr>
+      <tr><td style="white-space:nowrap"><b>左轨布置</b> <code>SquareStack</code><span style="color:var(--muted)">· 画布顶不再分段</span></td><td style="white-space:nowrap"><b>左轨执行</b> <code>ListChecks</code><span style="color:var(--muted)">· 评审 Send</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -2035,8 +2054,8 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
     </div>
   </div>
 </section><footer>
-  <p class="note">幕景 Scendance · 2026 设计规范 v2.6.5 · 2026-10-29 · 条款与 design-spec-2026.md（v2.5.1）一致</p>
-  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。v2.6.1 补品牌文案表：主 slogan 钉死「为相聚，留一方空间。」。v2.6.2 品牌标志收档：删去 App icon / mono / mono-reverse / icon-mono 各档，只留标准 color 与反白 reverse（反白样张补深底）；二维码中心用反白垫深底。v2.6.3 去重：品牌标志整块从「四、图标与阴影」并入 00 节，删掉重复的尺寸阶梯、重复的禁则与「本节不重复」的指路块；§四 只剩 lucide 图标与阴影。另补上第五节漏掉的一个 <code>&lt;/div&gt;</code>、删掉一处重复的 <code>&lt;/section&gt;</code>。v2.6.4 晴光补定稿资产：主图加全身、六种状态成块、头像 32/40/64 阶梯；加载态文案改成定稿画面里的「顶部三球环绕」。 v2.6.5 晴光重出：「在问你」定稿单图抠净棋盘格、头像三态角标变体与 128 同取景版进规范。</p>
+  <p class="note">幕景 Scendance · 2026 设计规范 v2.6.6 · 2026-10-31 · 条款与 design-spec-2026.md（v2.5.1）一致</p>
+  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。v2.6.1 补品牌文案表：主 slogan 钉死「为相聚，留一方空间。」。v2.6.2 品牌标志收档：删去 App icon / mono / mono-reverse / icon-mono 各档，只留标准 color 与反白 reverse（反白样张补深底）；二维码中心用反白垫深底。v2.6.3 去重：品牌标志整块从「四、图标与阴影」并入 00 节，删掉重复的尺寸阶梯、重复的禁则与「本节不重复」的指路块；§四 只剩 lucide 图标与阴影。另补上第五节漏掉的一个 <code>&lt;/div&gt;</code>、删掉一处重复的 <code>&lt;/section&gt;</code>。v2.6.4 晴光补定稿资产：主图加全身、六种状态成块、头像 32/40/64 阶梯；加载态文案改成定稿画面里的「顶部三球环绕」。 v2.6.5 晴光重出：「在问你」定稿单图抠净棋盘格、头像三态角标变体与 128 同取景版进规范。v2.6.6 第五节补工作台在用图标：地图、场地重建、场地观感、卫星贴地、场景模板、环境预览、物料库、空白场地，以及平面/立体、整体、俯视、人视、撤销、重做、放大、缩小。布置 / 评审 / 执行只在左轨，画布顶不加分段。色板不动。</p>
 </footer>
 
 </div>

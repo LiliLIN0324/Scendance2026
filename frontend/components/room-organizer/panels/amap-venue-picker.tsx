@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 'use client';
 
+import { Satellite, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from '../lib/amap-script';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, SATELLITE_GROUND_LABEL, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
-import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
 import { defaultGuestFlow } from '../lib/site-capture';
+import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
 
 // Next 只静态内联 process.env.NEXT_PUBLIC_* 的字面量访问，用变量取 key 在浏览器里恒为空。
 function envOrStorage(envValue: string | undefined, storageKey: string): string {
@@ -243,7 +244,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative', zIndex: 2 }}>
       <input aria-label="搜索地点" type="text" value={query} placeholder="搜索地点，如：盐官潮乐之城"
         onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') search(); }} />
-      <button type="button" className="sc-button" onClick={search} disabled={busy}>搜索</button>
+      <button type="button" className="sc-button" aria-label="搜索" data-tip="搜索" title="搜索" onClick={search} disabled={busy}><Search size={16} aria-hidden="true"/></button>
       <button type="button" className="sc-button" onClick={() => void demoPick()} disabled={busy} title="不手画：立 L 轮廓户外壳（非矩形）+ 默认长轴流线站位">演示圈画 · L 轮廓</button>
     </div>
     {results.length > 0 && <ul className="sc-lux-direct-results">
@@ -265,6 +266,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
     <label className="sc-note" style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative', zIndex: 2 }}>
       <input type="checkbox" checked={satelliteGround} disabled={busy} onChange={event => setSatelliteGround(event.target.checked)}
         aria-label="卫星贴地参考底图" />
+      <Satellite size={16} aria-hidden="true"/>
       卫星贴地参考底图（默认开）· {SATELLITE_GROUND_LABEL}
     </label>
     {satelliteGround && <p className="sc-note" role="note">{RECON_MATERIAL_BAN}</p>}

@@ -3,7 +3,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
-import { PlanHome, PlanPlates, isPlanHome, materialRows, planGenerateSentence } from './plan-flow';
+import { PlanFlow, PlanHome, isPlanHome, planGenerateSentence } from './plan-flow';
+
+vi.mock('../contexts', () => ({
+  useRoomEditor: () => ({ layout: { width: 18, height: 12 }, activeFloor: { items: [] } }),
+}));
+vi.mock('./agent-panel', () => ({
+  useAgent: () => ({ state: 'planReady', proposal: { id: 'plan' }, send: vi.fn() }),
+}));
 
 afterEach(() => { cleanup(); });
 
@@ -26,19 +33,14 @@ describe('plan flow v2', () => {
     expect(planGenerateSentence('发布会', '室内 12×9', 80)).toBe('80 人发布会，室内 12×9，出方案');
   });
 
-  it('treats plates as views of one plan', () => {
-    const onExport = vi.fn();
-    render(<PlanPlates items={[{ name: '共创桌' }, { name: '共创桌' }, { name: '活动座椅' }]} areaLabel="80 ㎡" onExport={onExport} />);
-    expect(screen.getByRole('tab', { name: '布置' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.queryByRole('tabpanel')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: '物料' }));
-    expect(screen.getByText('共创桌')).toBeTruthy();
-    expect(materialRows([{ name: '共创桌' }, { name: '共创桌' }])).toEqual([{ name: '共创桌', count: 2 }]);
-    fireEvent.click(screen.getByRole('tab', { name: '执行资料' }));
-    expect(screen.getByText('3 件 · 80 ㎡')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '导出交接' }));
-    expect(onExport).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: '导出交接' }).className).not.toContain('btn-primary');
+  it('does not mount a canvas switch for 布置 / 物料 / 执行资料 after a plan exists', () => {
+    const onHomeChange = vi.fn();
+    const { container } = render(<PlanFlow onOpenAgent={vi.fn()} onHomeChange={onHomeChange} />);
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(screen.queryByRole('tab', { name: '布置' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: '物料' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: '执行资料' })).toBeNull();
+    expect(onHomeChange).toHaveBeenCalledWith(false);
   });
 
   it('shows the home only before a plan exists', () => {
