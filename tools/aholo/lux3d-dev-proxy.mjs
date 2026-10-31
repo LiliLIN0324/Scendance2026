@@ -390,7 +390,76 @@ export function createServer({
   }
 
   
+  function mercatorPixel(lng, lat, zoom) {
+    const span = (2 ** zoom) * 256;
+    const latRad = lat * Math.PI / 180;
+    return {
+      x: (lng + 180) / 360 * span,
+      y: (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * span,
+    };
+  }
+
+  async function fetchAmapBounds(sharp, west, south, east, north) {
+    let zoom = 18;
+    while (zoom > 3) {
+      const nw = mercatorPixel(west, north, zoom);
+      const se = mercatorPixel(east, south, zoom);
+      if (Math.max(se.x - nw.x, se.y - nw.y) <= 1024) break;
+      zoom -= 1;
+    }
+    const nw = mercatorPixel(west, north, zoom);
+    const se = mercatorPixel(east, south, zoom);
+    const srcW = se.x - nw.x;
+    const srcH = se.y - nw.y;
+    if (srcW < 1 || srcH < 1) throw new HttpError(400, 'bounds invalid');
+    const longEdge = Math.max(srcW, srcH);
+    const fit = longEdge > 768 ? 768 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
+    const outW = Math.max(2, Math.round(srcW * fit));
+    const outH = Math.max(2, Math.round(srcH * fit));
+    const tile = 256;
+    const x0 = Math.floor(nw.x / tile);
+    const x1 = Math.floor((se.x - 1e-6) / tile);
+    const y0 = Math.floor(nw.y / tile);
+    const y1 = Math.floor((se.y - 1e-6) / tile);
+    const limit = 2 ** zoom;
+    const loaded = [];
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (tx < 0 || ty < 0 || tx >= limit || ty >= limit) continue;
+        const host = 1 + ((tx + ty) % 4);
+        const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=6&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
+        if (!res.ok) throw new HttpError(502, 'tile HTTP ' + res.status);
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length < 100) throw new HttpError(502, 'empty tile');
+        loaded.push({ input: buf, left: (tx - x0) * tile, top: (ty - y0) * tile });
+      }
+    }
+    if (!loaded.length) throw new HttpError(502, 'no satellite tiles');
+    const mosaicW = (x1 - x0 + 1) * tile;
+    const mosaicH = (y1 - y0 + 1) * tile;
+    const cropLeft = Math.max(0, Math.min(mosaicW - 1, Math.round(nw.x - x0 * tile)));
+    const cropTop = Math.max(0, Math.min(mosaicH - 1, Math.round(nw.y - y0 * tile)));
+    const cropW = Math.max(1, Math.min(mosaicW - cropLeft, Math.round(srcW)));
+    const cropH = Math.max(1, Math.min(mosaicH - cropTop, Math.round(srcH)));
+    const bytes = await sharp({
+      create: { width: mosaicW, height: mosaicH, channels: 3, background: { r: 20, g: 30, b: 20 } },
+    }).composite(loaded).extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH }).resize(outW, outH).jpeg({ quality: 86 }).toBuffer();
+    return { bytes, type: 'image/jpeg' };
+  }
+
   async function fetchAmapStatic(searchParams) {
+    const west = Number(searchParams.get('west'));
+    const south = Number(searchParams.get('south'));
+    const east = Number(searchParams.get('east'));
+    const north = Number(searchParams.get('north'));
+    if ([searchParams.get('west'), searchParams.get('south'), searchParams.get('east'), searchParams.get('north')].some(value => value != null)) {
+      if (![west, south, east, north].every(Number.isFinite) || !(east > west) || !(north > south)) throw new HttpError(400, 'bounds invalid');
+      const require = createRequire(import.meta.url);
+      let sharp;
+      try { sharp = require('../../frontend/node_modules/sharp'); }
+      catch { throw new HttpError(500, 'sharp unavailable for satellite stitch'); }
+      return fetchAmapBounds(sharp, west, south, east, north);
+    }
     const location = searchParams.get('location') ?? '';
     if (!/^\d{1,3}(?:\.\d+)?,\d{1,3}(?:\.\d+)?$/.test(location)) throw new HttpError(400, 'location invalid');
     const [lngRaw, latRaw] = location.split(',');

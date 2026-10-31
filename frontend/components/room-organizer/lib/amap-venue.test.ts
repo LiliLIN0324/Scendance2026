@@ -16,8 +16,17 @@ import {
   rectangleAroundMeters,
   fetchSatelliteGroundDataUrl,
   satelliteMissReason,
+  groundRegistration,
+  shellMetersToSatelliteUv,
+  parseSatelliteImageBounds,
+  satelliteImageAligned,
+  satelliteImageShellRect,
+  orientMapShellNorthUp,
+  metersPerDegreeLng,
+  METERS_PER_DEGREE_LAT,
 } from './amap-venue';
 import { INITIAL_LAYOUT } from './initial-layout';
+import { parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
 /** L 形：外接约 12×8 m，非轴对齐矩形。 */
@@ -275,6 +284,133 @@ describe('satellite ground backfill', () => {
     expect(center.lng / 4).toBeCloseTo(120.54, 4);
     expect(center.lat / 4).toBeCloseTo(30.405, 4);
     expect(rectangleAroundMeters({ lng: 120.54, lat: 30.405 }, legacy.width, legacy.height)).toHaveLength(4);
+  });
+
+  it('aligns the shell with the satellite image: center stays centered and north stays up', () => {
+    const polygon = lShapePolygon();
+    const registration = groundRegistration(polygon);
+    expect(registration).not.toBeNull();
+    const local = polygonToLocalMeters(polygon);
+    const scale = registration!.frame.scale;
+    const center = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth / 2 * scale, registration!.frame, registration!.bounds);
+    expect(center.u).toBeCloseTo(0.5, 4);
+    expect(center.v).toBeCloseTo(0.5, 4);
+    const north = shellMetersToSatelliteUv(local.width / 2 * scale, 0, registration!.frame, registration!.bounds);
+    const south = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth * scale, registration!.frame, registration!.bounds);
+    expect(north.v).toBeGreaterThan(south.v);
+    expect(registration!.frame.latSign).toBe(-1);
+    const northVertex = local.points.reduce((best, point) => point.z < best.z ? point : best);
+    const southVertex = local.points.reduce((best, point) => point.z > best.z ? point : best);
+    expect(northVertex.z).toBeLessThan(0.2);
+    expect(southVertex.z).toBeGreaterThan(local.depth - 0.2);
+    const west = shellMetersToSatelliteUv(0, local.depth / 2 * scale, registration!.frame, registration!.bounds);
+    const east = shellMetersToSatelliteUv(local.width * scale, local.depth / 2 * scale, registration!.frame, registration!.bounds);
+    expect(east.u).toBeGreaterThan(west.u);
+    const url = satelliteProxyUrl(polygon, 'secret-key');
+    expect(url).toContain('west=');
+    expect(url).toContain('north=');
+    expect(url).not.toContain('zoom=');
+    const parsed = parseSatelliteImageBounds(url!);
+    expect(parsed?.west).toBeCloseTo(registration!.bounds.west, 6);
+    expect(parsed?.north).toBeCloseTo(registration!.bounds.north, 6);
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: false,
+    });
+    expect(layout.mapGroundFrame?.lng0).toBeCloseTo(registration!.frame.lng0, 6);
+    expect(layout.mapGroundFrame?.scale).toBe(registration!.frame.scale);
+    expect(satelliteImageAligned(url)).toBe(true);
+    expect(satelliteImageAligned(url!.replace(/west=[^&]+&south=[^&]+&east=[^&]+&north=[^&]+/, 'location=120.54,30.40&zoom=18'))).toBe(false);
+    const shell = layout.backendVenue?.polygon ?? [];
+    expect(shell.length).toBeGreaterThanOrEqual(3);
+    for (const point of shell) {
+      const sign = registration!.frame.latSign ?? -1;
+      const lng = registration!.frame.lng0 + (point.x / registration!.frame.scale) / metersPerDegreeLng(registration!.frame.latMid);
+      const lat = registration!.frame.lat0 + sign * (point.z / registration!.frame.scale) / METERS_PER_DEGREE_LAT;
+      const nearest = polygon.reduce((best, candidate) => {
+        const east = (candidate.lng - lng) * metersPerDegreeLng(registration!.frame.latMid);
+        const north = (candidate.lat - lat) * METERS_PER_DEGREE_LAT;
+        return Math.min(best, Math.hypot(east, north));
+      }, Infinity);
+      expect(nearest).toBeLessThan(0.2);
+    }
+    const drawn = satelliteProxyUrl(polygon, 'secret-key');
+    expect(drawn).toBe(url);
+    const rect = satelliteImageShellRect(registration!.frame, registration!.bounds);
+    expect(rect.northAtTop).toBe(true);
+    expect(rect.z).toBeLessThan(0);
+    expect(orientMapShellNorthUp(layout)).toBe(layout);
+    const depth = layout.height;
+    const flipped = (layout.backendVenue?.polygon ?? []).map(point => ({ ...point, z: Math.round((depth - point.z) * 10) / 10 }));
+    const stale = {
+      ...layout,
+      backendVenue: { ...layout.backendVenue!, polygon: flipped },
+      backendSceneV2: layout.backendSceneV2
+        ? { ...layout.backendSceneV2, venue: { ...layout.backendSceneV2.venue, polygon: flipped } }
+        : layout.backendSceneV2,
+    };
+    const restored = parseStoredLayout(JSON.parse(JSON.stringify(stale)));
+    expect(restored?.mapGroundPolygon).toEqual(layout.mapGroundPolygon);
+    const restoredNorth = restored!.backendVenue!.polygon!.reduce((best, point) => point.z < best.z ? point : best);
+    expect(restoredNorth.z).toBeLessThan(0.2);
+    expect(restored?.mapGroundFrame?.latSign).toBe(-1);
+    expect(orientMapShellNorthUp(restored!)).toBe(restored);
+  });
+
+  it('keeps a map L with the notch in the upper right: north stays at z=0, the top of the plan', () => {
+    const lat = 30.45;
+    const lng = 120.55;
+    const east = (meters: number) => lng + meters / metersPerDegreeLng(lat);
+    const north = (meters: number) => lat + meters / METERS_PER_DEGREE_LAT;
+    // 左竖杆通高，底边向东。右上是缺口。
+    const polygon = [
+      { lng, lat: north(80) },
+      { lng: east(40), lat: north(80) },
+      { lng: east(40), lat: north(30) },
+      { lng: east(120), lat: north(30) },
+      { lng: east(120), lat },
+      { lng, lat },
+    ];
+    const local = polygonToLocalMeters(polygon);
+    const top = local.points.filter(point => point.z < 1);
+    const bottom = local.points.filter(point => point.z > local.depth - 1);
+    const width = Math.max(...local.points.map(point => point.x));
+    expect(Math.max(...top.map(point => point.x))).toBeLessThan(width / 2);
+    expect(Math.max(...bottom.map(point => point.x))).toBeGreaterThan(width - 1);
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '手画', polygon, satelliteGround: false,
+    });
+    const shell = layout.backendVenue?.polygon ?? [];
+    const shellTop = shell.filter(point => point.z < 1);
+    const shellBottom = shell.filter(point => point.z > layout.height - 1);
+    expect(Math.max(...shellTop.map(point => point.x))).toBeLessThan(layout.width / 2);
+    expect(Math.max(...shellBottom.map(point => point.x))).toBeGreaterThan(layout.width - 1);
+  });
+
+  it('keeps an oversized site on the same origin after the shell is scaled under 100m', () => {
+    const lat = 30.4;
+    const lng = 120.53;
+    const dLng = 200 / metersPerDegreeLng(lat);
+    const dLat = 80 / METERS_PER_DEGREE_LAT;
+    const polygon = [
+      { lng, lat },
+      { lng: lng + dLng, lat },
+      { lng: lng + dLng, lat: lat + dLat },
+      { lng, lat: lat + dLat },
+    ];
+    const registration = groundRegistration(polygon);
+    expect(registration!.frame.scale).toBeLessThan(1);
+    expect(registration!.shellWidth).toBeLessThanOrEqual(100);
+    const east = shellMetersToSatelliteUv(registration!.shellWidth, registration!.shellDepth / 2, registration!.frame, registration!.bounds);
+    const west = shellMetersToSatelliteUv(0, registration!.shellDepth / 2, registration!.frame, registration!.bounds);
+    expect(east.u).toBeGreaterThan(west.u);
+    expect(east.u).toBeLessThan(0.95);
+    expect(west.u).toBeGreaterThan(0.05);
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon, satelliteGround: false,
+    });
+    expect(layout.mapGroundFrame?.scale).toBeCloseTo(registration!.frame.scale, 6);
+    expect(layout.width).toBe(registration!.shellWidth);
+    expect(layout.height).toBe(registration!.shellDepth);
   });
 
   it('does not report 未定位 when the drawn polygon is already known', () => {

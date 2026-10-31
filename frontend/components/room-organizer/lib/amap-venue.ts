@@ -28,20 +28,21 @@ export function polygonBboxMeters(polygon: AmapPoint[]): { width: number; depth:
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 /**
- * 高德经纬度多边形 → 本地米制点列（原点在西南角，x 向东、z 向北）。
+ * 高德经纬度多边形 → 本地米制点列。
+ * x 向东；z=0 是北缘（平面图上沿、房间的北），z 向南。这样和地图的北在上一致。
  * 有点列就保留真轮廓；无 ≥3 点则退化为空（上层再走轴对齐矩形）。
  */
 export function polygonToLocalMeters(polygon: AmapPoint[]): { width: number; depth: number; points: LocalPoint[] } {
   if (polygon.length < 3) return { width: 0, depth: 0, points: [] };
   const lats = polygon.map(p => p.lat);
   const lngs = polygon.map(p => p.lng);
-  const lat0 = Math.min(...lats);
+  const latNorth = Math.max(...lats);
   const lng0 = Math.min(...lngs);
-  const latMid = (lat0 + Math.max(...lats)) / 2;
+  const latMid = (Math.min(...lats) + latNorth) / 2;
   const mLng = metersPerDegreeLng(latMid);
   const raw = polygon.map(p => ({
     x: (p.lng - lng0) * mLng,
-    z: (p.lat - lat0) * METERS_PER_DEGREE_LAT,
+    z: (latNorth - p.lat) * METERS_PER_DEGREE_LAT,
   }));
   const width = Math.max(...raw.map(p => p.x));
   const depth = Math.max(...raw.map(p => p.z));
@@ -170,22 +171,205 @@ export function usesLocalAmapProxy(): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '';
 }
 
+/** 3D 圈外留白（壳体米）。卫星图必须带上同样一圈，否则贴地会对不齐。 */
+export function satellitePadMeters(shellWidth: number, shellDepth: number): number {
+  return Math.max(4, 0.25 * Math.max(shellWidth, shellDepth));
+}
+
+export interface MapGroundFrame {
+  /** 西缘经度（壳体 x=0）。 */
+  lng0: number;
+  /** 壳体 z=0 的纬度。新圈画里这是北缘。 */
+  lat0: number;
+  latMid: number;
+  /** 壳体米 / 真实米。超过 100m 才小于 1。 */
+  scale: number;
+  /**
+   * z 增加时纬度的方向。-1：z 向南（北在 z=0，和地图、平面图上沿一致）。
+   * +1：旧壳体 z 向北。缺省按 +1，避免把还没重存的旧帧读反。
+   */
+  latSign?: -1 | 1;
+}
+
+export interface SatelliteImageBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
 /**
- * 卫星参考图地址（Key 不进地址）。本机是 3199，生产是同源 /api/amap-static。
- * 仅观感贴地，带 SATELLITE_GROUND_MARK，绝不进 Aholo 上传。
+ * 演示 L 和手圈多边形都走这里：x 向东，z=0 为北缘，超过 100m 才等比缩小。
+ * 卫星图范围用同一套原点和缩放，再向外加一圈 pad。
  */
-export function satelliteProxyUrl(polygon: AmapPoint[], _key?: string): string | null {
+export function groundRegistration(polygon: AmapPoint[]): {
+  frame: MapGroundFrame;
+  bounds: SatelliteImageBounds;
+  shellWidth: number;
+  shellDepth: number;
+} | null {
   if (polygon.length < 3) return null;
-  const lats = polygon.map(point => point.lat);
+  const local = polygonToLocalMeters(polygon);
+  const fitted = fitPolygonToShellLimit(local);
+  if (local.width < 0.01 || local.depth < 0.01) return null;
   const lngs = polygon.map(point => point.lng);
-  const lng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-  const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
-  const bbox = polygonBboxMeters(polygon);
+  const lats = polygon.map(point => point.lat);
+  const lng0 = Math.min(...lngs);
+  const latNorth = Math.max(...lats);
+  const latSouth = Math.min(...lats);
+  const frame: MapGroundFrame = {
+    lng0,
+    lat0: latNorth,
+    latMid: (latSouth + latNorth) / 2,
+    scale: fitted.points.length >= 3 ? fitted.scale : 1,
+    latSign: -1,
+  };
+  const shellWidth = fitted.points.length >= 3 ? fitted.width : Math.max(2, round1(local.width));
+  const shellDepth = fitted.points.length >= 3 ? fitted.depth : Math.max(2, round1(local.depth));
+  return { frame, bounds: satelliteBoundsForFrame(polygon, frame, shellWidth, shellDepth), shellWidth, shellDepth };
+}
+
+export function satelliteBoundsForFrame(
+  polygon: AmapPoint[],
+  frame: MapGroundFrame,
+  shellWidth: number,
+  shellDepth: number,
+): SatelliteImageBounds {
+  const lngs = polygon.map(point => point.lng);
+  const lats = polygon.map(point => point.lat);
+  const padReal = satellitePadMeters(shellWidth, shellDepth) / (frame.scale > 0 ? frame.scale : 1);
+  const mLng = metersPerDegreeLng(frame.latMid);
+  return {
+    west: Math.min(...lngs) - padReal / mLng,
+    east: Math.max(...lngs) + padReal / mLng,
+    south: Math.min(...lats) - padReal / METERS_PER_DEGREE_LAT,
+    north: Math.max(...lats) + padReal / METERS_PER_DEGREE_LAT,
+  };
+}
+
+/** 壳体米（x=0 西缘，z=0 为 frame.lat0）→ 卫星图像素比例。v 向北为 1，配合贴图 flipY。 */
+export function shellMetersToSatelliteUv(
+  localX: number,
+  localZ: number,
+  frame: MapGroundFrame,
+  bounds: SatelliteImageBounds,
+): { u: number; v: number } {
+  const scale = frame.scale > 0 ? frame.scale : 1;
+  const sign = frame.latSign ?? 1;
+  const lng = frame.lng0 + (localX / scale) / metersPerDegreeLng(frame.latMid);
+  const lat = frame.lat0 + sign * (localZ / scale) / METERS_PER_DEGREE_LAT;
+  return {
+    u: (lng - bounds.west) / (bounds.east - bounds.west),
+    v: (lat - bounds.south) / (bounds.north - bounds.south),
+  };
+}
+
+/** 卫星图在壳体米制里的矩形。z 是平面图上的较小值（靠上的一边）。 */
+export function satelliteImageShellRect(
+  frame: MapGroundFrame,
+  bounds: SatelliteImageBounds,
+): { x: number; z: number; width: number; depth: number; northAtTop: boolean } {
+  const scale = frame.scale > 0 ? frame.scale : 1;
+  const sign = frame.latSign ?? 1;
+  const mLng = metersPerDegreeLng(frame.latMid);
+  const zOf = (lat: number) => (lat - frame.lat0) * METERS_PER_DEGREE_LAT * scale / sign;
+  const x = (bounds.west - frame.lng0) * mLng * scale;
+  const zNorth = zOf(bounds.north);
+  const zSouth = zOf(bounds.south);
+  return {
+    x,
+    z: Math.min(zNorth, zSouth),
+    width: (bounds.east - bounds.west) * mLng * scale,
+    depth: Math.abs(zSouth - zNorth),
+    northAtTop: zNorth <= zSouth,
+  };
+}
+
+/** 纬度与壳体 z 的协方差。大于 0 表示 z 向北（旧壳体，和地图上下相反）。 */
+function latZCovariance(polygon: AmapPoint[], shell: { z: number }[]): number | null {
+  if (polygon.length !== shell.length || polygon.length < 3) return null;
+  const meanLat = polygon.reduce((sum, point) => sum + point.lat, 0) / polygon.length;
+  const meanZ = shell.reduce((sum, point) => sum + point.z, 0) / shell.length;
+  let cov = 0;
+  for (let i = 0; i < polygon.length; i++) cov += (polygon[i]!.lat - meanLat) * (shell[i]!.z - meanZ);
+  return cov;
+}
+
+/** 已有壳体时，帧必须跟着壳体的 z 方向，不能假设每次都是新的北在上。 */
+export function frameForExistingShell(polygon: AmapPoint[], shell?: { x: number; z: number }[] | null): MapGroundFrame | null {
+  const registration = groundRegistration(polygon);
+  if (!registration) return null;
+  const cov = shell && shell.length ? latZCovariance(polygon, shell) : null;
+  if (cov !== null && cov > 1e-6) {
+    return {
+      lng0: registration.frame.lng0,
+      lat0: Math.min(...polygon.map(point => point.lat)),
+      latMid: registration.frame.latMid,
+      scale: registration.frame.scale,
+      latSign: 1,
+    };
+  }
+  return registration.frame;
+}
+
+/**
+ * 旧圈画把地理北放在 z 最大的一边，平面图上沿却是 z=0。
+ * 打开存档时把顶点翻到北在上，并换成同一套帧。已经朝北的原样返回。
+ */
+export function orientMapShellNorthUp(layout: RoomLayout): RoomLayout {
+  const geo = layout.mapGroundPolygon;
+  const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
+  if (!geo || geo.length < 3 || !shell || shell.length < 3) return layout;
+  const cov = latZCovariance(geo, shell);
+  if (cov === null || cov <= 1e-6) return layout;
+  const depth = layout.backendVenue?.depth ?? layout.backendSceneV2?.venue.depth ?? layout.height;
+  const flip = (points: { x: number; z: number }[]) => points.map(point => ({
+    ...point,
+    z: Math.min(depth, Math.max(0, Math.round((depth - point.z) * 10) / 10)),
+  }));
+  const registration = groundRegistration(geo);
+  const venue = layout.backendVenue?.polygon
+    ? { ...layout.backendVenue, polygon: flip(layout.backendVenue.polygon) }
+    : layout.backendVenue;
+  const scene = layout.backendSceneV2?.venue.polygon
+    ? { ...layout.backendSceneV2, venue: { ...layout.backendSceneV2.venue, polygon: flip(layout.backendSceneV2.venue.polygon) } }
+    : layout.backendSceneV2;
+  return {
+    ...layout,
+    ...(venue ? { backendVenue: venue } : {}),
+    ...(scene ? { backendSceneV2: scene } : {}),
+    ...(registration ? { mapGroundFrame: registration.frame } : {}),
+  };
+}
+
+export function parseSatelliteImageBounds(url: string): SatelliteImageBounds | null {
+  try {
+    const params = new URL(url, 'https://scendance.lilicoding.space').searchParams;
+    const west = Number(params.get('west'));
+    const south = Number(params.get('south'));
+    const east = Number(params.get('east'));
+    const north = Number(params.get('north'));
+    if (![west, south, east, north].every(Number.isFinite) || !(east > west) || !(north > south)) return null;
+    return { west, south, east, north };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 卫星参考图地址（Key 不进地址）。范围是圈画外接矩形加一圈 pad，不是任意 zoom 的方形瓦片。
+ * 本机是 3199，生产是同源 /api/amap-static。
+ */
+export function satelliteProxyUrl(polygon: AmapPoint[], _key?: string, frame?: MapGroundFrame, shell?: { width: number; depth: number }): string | null {
+  const registration = groundRegistration(polygon);
+  if (!registration) return null;
+  const used = frame ?? registration.frame;
+  const bounds = satelliteBoundsForFrame(polygon, used, shell?.width ?? registration.shellWidth, shell?.depth ?? registration.shellDepth);
   const params = new URLSearchParams({
-    location: `${lng},${lat}`,
-    zoom: String(satelliteZoomForMeters(bbox.width, bbox.depth)),
-    size: '768*768',
-    scale: '2',
+    west: bounds.west.toFixed(7),
+    south: bounds.south.toFixed(7),
+    east: bounds.east.toFixed(7),
+    north: bounds.north.toFixed(7),
     'x-ref': SATELLITE_GROUND_MARK,
   });
   const query = params.toString();
@@ -201,8 +385,10 @@ export function satelliteProxyUrl(polygon: AmapPoint[], _key?: string): string |
 export async function fetchSatelliteGroundDataUrl(
   polygon: AmapPoint[],
   _key?: string,
+  frame?: MapGroundFrame,
+  shell?: { width: number; depth: number },
 ): Promise<string | null> {
-  const proxy = satelliteProxyUrl(polygon);
+  const proxy = satelliteProxyUrl(polygon, _key, frame, shell);
   if (!proxy || typeof window === 'undefined') return null;
   // 浏览器直连 restapi 常被掐；走本机代理。用代理 URL 直接贴地（勿嵌 data URL，避免 localStorage 爆）。
   try {
@@ -294,6 +480,14 @@ export function hasFetchedSatellite(url: string | undefined | null): boolean {
   return true;
 }
 
+/**
+ * 图的经纬度范围必须和壳体是同一套，才能按 UV 对齐。
+ * 旧的 location/zoom 方形瓦片没有这个范围，不能当成已经贴准。
+ */
+export function satelliteImageAligned(url: string | undefined | null): boolean {
+  return !!url && hasFetchedSatellite(url) && parseSatelliteImageBounds(url) !== null;
+}
+
 export async function geocodeAmapPlace(query: string, key: string, security: string): Promise<AmapPoint | null> {
   if (query.trim().length < 2 || !key || typeof window === 'undefined') return null;
   try {
@@ -365,6 +559,7 @@ export interface SatelliteGroundPatch {
   /** 定位成功才有；失败时只贴占位，不编造经纬度。 */
   mapGroundPolygon?: AmapPoint[];
   mapLngLat?: { lng: number; lat: number };
+  mapGroundFrame?: MapGroundFrame;
 }
 
 /**
@@ -376,24 +571,29 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
   const polygon = await resolveSatellitePolygon(layout);
   const located = polygon && polygon.length >= 3 ? polygon : null;
   if (located) {
-    const fetched = await fetchSatelliteGroundDataUrl(located);
-    if (fetched) {
+    const registration = groundRegistration(located);
+    const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
+    const frame = layout.mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
+    const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height });
+    if (fetched && frame) {
       return {
         floorPlanImage: fetched,
         floorPlanOpacity: 0.78,
         satelliteGroundRef: true,
         mapGroundPolygon: located,
         mapLngLat: centroid(located),
+        mapGroundFrame: frame,
       };
     }
   }
-  if (isPlaceholderSatellite(layout.floorPlanImage)) return null;
+  // 已经有真图（哪怕还是旧的方形瓦片）或占位时，拉取失败不要改掉它，避免钮一开就变空白。
+  if (isPlaceholderSatellite(layout.floorPlanImage) || hasFetchedSatellite(layout.floorPlanImage)) return null;
   const bbox = located ? polygonBboxMeters(located) : { width: layout.width, depth: layout.height };
   return {
     floorPlanImage: makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height),
     floorPlanOpacity: 0.78,
     satelliteGroundRef: true,
-    ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located) } : {}),
+    ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located), ...(layout.mapGroundFrame ? { mapGroundFrame: layout.mapGroundFrame } : {}) } : {}),
   };
 }
 
@@ -422,6 +622,7 @@ export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGr
     satelliteGroundRef: true,
     ...(patch.mapGroundPolygon ? { mapGroundPolygon: patch.mapGroundPolygon } : {}),
     ...(patch.mapLngLat ? { mapLngLat: patch.mapLngLat } : {}),
+    ...(patch.mapGroundFrame ? { mapGroundFrame: patch.mapGroundFrame } : {}),
   };
 }
 
@@ -467,7 +668,11 @@ export function createVenueFromPick(
   if (!plan) throw new Error('这块场地是有内墙或图纸证据的真实结构，先在结构里清出一块空地，再来圈画。');
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
   // 圈画经纬度跟着场地走，方便 3D 里后补卫星图；不进场景线、不进采集上传。
-  let layout: RoomLayout = { ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon) };
+  const registration = groundRegistration(pick.polygon);
+  let layout: RoomLayout = {
+    ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon),
+    ...(registration ? { mapGroundFrame: registration.frame } : {}),
+  };
   if (pick.satelliteGround) {
     const raw = pick.satelliteGroundImage?.trim() ?? '';
     const image = raw && (
