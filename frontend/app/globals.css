@@ -1110,15 +1110,7 @@ body {
 }
 .sc-workbench .sc-canvas-heading > span { white-space: nowrap; }
 .sc-workbench .sc-canvas-dot { display: none; }
-/* 顶栏只留一行尺寸：点数与面积点一下才展开，别常驻成第二行说明。 */
-.sc-workbench .sc-canvas-heading.has-detail { flex-wrap: wrap; row-gap: 2px; }
-.sc-workbench .sc-canvas-size {
-  pointer-events: auto; padding: 0; border: 0; background: none;
-  font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
-}
-.sc-workbench .sc-canvas-size:hover { color: var(--wk-ink); }
-.sc-workbench .sc-canvas-size:focus-visible { outline: 2px solid var(--ink-soft); outline-offset: 2px; border-radius: 3px; }
-.sc-workbench .sc-canvas-heading .sc-canvas-count { flex: 0 0 100%; color: var(--wk-ink-faint, #a8aba2); white-space: nowrap; }
+/* 顶栏只留视图种类（3D 场景 / 2D 平面），不暴露场地宽深数字。 */
 /* 设计稿：左栏面板内不再重复顶部分类签、流程提示卡与折叠标题 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-left-context { display: none; }
 /* 参考图气质：抽屉内工具行图标去绿。 */

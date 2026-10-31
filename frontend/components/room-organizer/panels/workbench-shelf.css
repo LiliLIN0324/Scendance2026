@@ -341,8 +341,6 @@
 .sc-compact-shelf .sc-material-preview { background:var(--wk-plane); border-radius:8px; }
 /* 底条 MATERIALS 把手已改为全宽薄条（样式在 globals.css），此处不再覆盖。 */
 /* 画布抬头信息层级 */
-.sc-workbench .sc-canvas-size { color:var(--wk-ink,#141416); font-weight:600; font-variant-numeric:tabular-nums; }
-.sc-workbench .sc-canvas-count { color:var(--wk-muted); }
 
 /* ── 抽屉拖高抓手 ────────────────────────────────────────────────
    物料与模板都是横着一排，拖高只让缩略图变大，不会多出几排。 */
