@@ -29,8 +29,7 @@ describe('晴光模式轨入口', () => {
 
   it('does not mount the three mode icons on the workbench rail', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
-    expect(source).toContain('<QingguangRailButton');
-    expect(source).toContain('<WorkbenchBrandToggle');
+    expect(source).toContain('<RailAgentBrandSlot');
     expect(source).not.toContain('aria-label="工作流程"');
     expect(source).not.toContain('aria-label={mode.label}');
     expect(source).not.toMatch(/\b(SquareStack|ListChecks|Send)\b/);

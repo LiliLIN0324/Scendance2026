@@ -1,4 +1,4 @@
-/* 方案会话列表。挂在左栏晴光之上，不进顶栏。色彩沿用工作台冷石 token。 */
+/* 方案会话：默认只在 History overlay 内展开（见 agent-panel.css）。 */
 .sc-session-history {
   display: flex;
   flex-direction: column;
@@ -13,6 +13,12 @@
   font-size: var(--fs-p1, 14px);
   line-height: var(--lh-p1, 22px);
 }
+.sc-session-history.is-overlay {
+  max-height: none;
+  flex: 1;
+  border-bottom: 0;
+}
+.sc-session-history.is-overlay .sc-session-search { margin-top: 8px; }
 .sc-session-history-head {
   display: flex;
   align-items: center;

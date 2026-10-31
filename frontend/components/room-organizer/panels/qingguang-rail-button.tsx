@@ -2,13 +2,16 @@
  * 原「布置」图标那一格。只放晴光头像，打开旁边的对话面板，不切换模式。
  * 评审、执行不占这一轨。
  */
+import type { RefObject } from 'react';
+
 export const QINGGUANG_RAIL_MASCOT = '/assets/assistant/qingguang-3d-40.png';
 
-export function QingguangRailButton({ open, onOpen }: { open: boolean; onOpen(): void }): JSX.Element {
+export function QingguangRailButton({ open, onOpen, buttonRef }: { open: boolean; onOpen(): void; buttonRef?: RefObject<HTMLButtonElement | null> }): JSX.Element {
   return (
     <button
+      ref={buttonRef}
       type="button"
-      className="sc-rail-qingguang"
+      className={`sc-rail-qingguang${open ? ' is-panel-open' : ''}`}
       aria-expanded={open}
       aria-label="晴光"
       data-tip="晴光"

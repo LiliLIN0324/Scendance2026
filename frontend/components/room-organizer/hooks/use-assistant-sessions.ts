@@ -21,6 +21,8 @@ import {
 export interface AssistantSessionsController {
   ready: boolean;
   saveFailed: boolean;
+  /** 当前选中的会话；不受搜索过滤影响。 */
+  activeSession: AssistantSession | null;
   /** 已按收藏优先、最近更新排序，并套上搜索。 */
   visible: readonly AssistantSession[];
   totalCount: number;
@@ -100,10 +102,14 @@ export function useAssistantSessions(): AssistantSessionsController {
 
   const sessions = index?.sessions ?? [];
   const visible = filterAssistantSessions(sortAssistantSessions(sessions), query);
+  const activeSession = index?.activeId
+    ? sessions.find(item => item.id === index.activeId) ?? null
+    : null;
 
   return {
     ready: index !== null,
     saveFailed,
+    activeSession,
     visible,
     totalCount: sessions.length,
     activeId: index?.activeId ?? null,
