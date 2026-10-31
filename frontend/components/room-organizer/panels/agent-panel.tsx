@@ -32,6 +32,7 @@ import { sameLayoutContent } from '../lib/persistence';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import { venueBriefLine } from '../lib/venue-brief-line';
+import { VENUE_LIGHT_HINT, noteVenueThreeIntent } from '../lib/venue-library';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
@@ -1200,7 +1201,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     proposal: phase === 'proposed' ? activeProposal : null,
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
     cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
-    mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
+    mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => { if (!value) noteVenueThreeIntent(); return !value; }); }, closeMapVenuePicker: () => setMapPickerOpen(false),
     applyMapVenuePick: pick => {
       if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
       runToken.current++;
@@ -1238,7 +1239,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     send, rainOn: view.weather === 'rain',
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
-    walkthrough: () => setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false })),
+    walkthrough: () => { noteVenueThreeIntent(); setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false })); },
   };
   return <AgentContext.Provider value={value}>
     {children}
@@ -1554,6 +1555,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     </header>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
+      {mode === 'layout' && agent.bubbles.length === 0 && <p className="ap-venue-hint" role="note">{VENUE_LIGHT_HINT}</p>}
       {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {mode === 'review' && <><p className="ap-divider">评审 · {layout.name || '未命名活动'}</p><p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p></>}
       {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}

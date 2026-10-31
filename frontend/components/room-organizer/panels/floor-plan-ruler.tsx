@@ -120,14 +120,17 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
         <img src={image.url} alt={`平面图：${image.name}`} />
         {image.width && image.height && (
           <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="xMidYMid meet">
-            {points.map((point, index) => (
+            {points.map((point, index) => {
+              const width = image.width ?? 0;
+              return (
               <g key={index}>
-                <circle cx={point.x} cy={point.z} r={Math.max(4, image.width / 120)} fill="#4A7C59" />
-                <text x={point.x} y={point.z - Math.max(6, image.width / 100)} fill="#141416" fontSize={Math.max(10, image.width / 80)} textAnchor="middle">
+                <circle cx={point.x} cy={point.z} r={Math.max(4, width / 120)} fill="#4A7C59" />
+                <text x={point.x} y={point.z - Math.max(6, width / 100)} fill="#141416" fontSize={Math.max(10, width / 80)} textAnchor="middle">
                   {index + 1}
                 </text>
               </g>
-            ))}
+              );
+            })}
             {line && (
               <line
                 x1={points[0]!.x}

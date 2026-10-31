@@ -32,6 +32,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-close:hover { background: var(--wk-plane); color: var(--wk-ink); }
 /* 演示环境注记：并入对话流顶部的 muted 小字，不再是头部下的分隔条。 */
 .ap-demo-note { margin: 0; padding: 0 2px 2px; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); background: transparent; border-bottom: 0; flex: 0 0 auto; }
+.ap-venue-hint { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); }
 .ap-status { font-size: var(--fs-cap); color: var(--ap-grey); display: inline-flex; align-items: center; gap: 5px; }
 .ap-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
 .ap-status.is-ok { color: var(--ap-green); }

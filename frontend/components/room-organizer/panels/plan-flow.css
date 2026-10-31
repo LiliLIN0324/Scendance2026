@@ -68,4 +68,10 @@
   color: var(--faint, #a1a1aa);
   cursor: not-allowed;
 }
+.sc-plan-venue-hint {
+  margin: 0;
+  font-size: var(--fs-cap, 12px);
+  line-height: 1.4;
+  color: var(--wk-ink-soft, #71767e);
+}
 .sc-canvas-stage.is-plan-home .sc-agent-reopen.is-orb { right: 14px; }

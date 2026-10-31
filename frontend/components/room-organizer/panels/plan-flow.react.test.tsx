@@ -23,6 +23,7 @@ describe('plan flow v2', () => {
     expect(generate.className).not.toContain('btn-primary');
     expect(screen.queryByRole('tab', { name: '布置' })).toBeNull();
     expect(screen.queryByText(/Scene|Object|Compose|WorldGen|Meshy|Spline/)).toBeNull();
+    expect(screen.getByRole('note').textContent).toBe('需要 3D 时会点亮场地');
 
     fireEvent.click(screen.getByRole('button', { name: '发布会' }));
     fireEvent.click(screen.getByRole('button', { name: '室内 12×9' }));

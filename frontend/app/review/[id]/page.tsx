@@ -1,12 +1,13 @@
-'use client';
+import { ReviewLinkClient } from './review-link-client';
 
-import { useParams } from 'next/navigation';
-import { ReviewSharePage } from '@/components/room-organizer/panels/review-share-page';
+/**
+ * 静态导出要求动态段声明参数。具体分享 id 在打开的浏览器里读，
+ * 构建时不预生成每一条链接。
+ */
+export function generateStaticParams(): Array<{ id: string }> {
+  return [{ id: 'local' }];
+}
 
-/** 分享出去的方案页。不挂工作台编辑器。 */
 export default function ReviewLinkPage(): JSX.Element {
-  const params = useParams();
-  const raw = params?.id;
-  const shareId = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] ?? '' : '';
-  return <ReviewSharePage shareId={shareId} />;
+  return <ReviewLinkClient />;
 }
