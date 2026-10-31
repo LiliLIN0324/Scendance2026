@@ -7,13 +7,12 @@ import {
   SATELLITE_GROUND_LABEL,
   applySatelliteGroundPatch,
   ensureSatelliteGround,
-  hasFetchedSatellite,
   hideSatelliteGround,
   isMapOutdoorLayout,
-  isPlaceholderSatellite,
   isSatelliteGroundImage,
   readAmapKeys,
   satelliteGroundWanted,
+  satelliteImageAligned,
   satelliteMissReason,
 } from '../lib/amap-venue';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -258,11 +257,22 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
   const satelliteAttempt = useRef('');
+  const busyTimer = useRef(0);
   const satelliteTip = satelliteMiss === 'key' ? '卫星贴地·需高德 Key' : satelliteMiss === 'place' ? '卫星贴地·未定位' : '卫星贴地';
-  const fillSatellite = useCallback((startedId: string, startedName: string, mine: number) => {
+  const releaseBusy = useCallback((mine: number) => {
+    window.clearTimeout(busyTimer.current);
+    if (satelliteRequest.current === mine) setSatelliteBusy(false);
+  }, []);
+  const fillSatellite = useCallback((startedId: string, startedName: string, mine: number, showBusy: boolean) => {
     const source = layoutRef.current;
-    setSatelliteBusy(true);
-    setSatelliteMiss(null);
+    window.clearTimeout(busyTimer.current);
+    // 进场自动补图不占钮。只有人点开时才亮 busy，并且到点或结束一定放开。
+    if (showBusy) {
+      setSatelliteBusy(true);
+      busyTimer.current = window.setTimeout(() => releaseBusy(mine), 12000);
+    } else {
+      setSatelliteBusy(false);
+    }
     void ensureSatelliteGround(source).then(patch => {
       if (mine !== satelliteRequest.current) return;
       const current = layoutRef.current;
@@ -271,37 +281,43 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       if (!patch) return;
       actions.applyLayout(applySatelliteGroundPatch(current, patch));
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
-    }).finally(() => { if (mine === satelliteRequest.current) setSatelliteBusy(false); });
-  }, [actions, setView]);
+    }).finally(() => { if (showBusy) releaseBusy(mine); });
+  }, [actions, releaseBusy, setView]);
+  useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
-    if (!satelliteOn || hasFetchedSatellite(layout.floorPlanImage)) return undefined;
+    if (!satelliteOn || satelliteImageAligned(layout.floorPlanImage)) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
-    if (layout.floorPlanImage && !isPlaceholderSatellite(layout.floorPlanImage)) return undefined;
+    // 旧的 location/zoom 卫星图没有经纬度范围，要重拉，否则贴地会对不齐。
+    if (layout.floorPlanImage && !isSatelliteGroundImage(layout.floorPlanImage)) return undefined;
     const token = `${layout.id ?? ''}|${layout.name}|${layout.floorPlanImage ?? ''}|${layout.mapGroundPolygon?.length ?? 0}`;
     if (satelliteAttempt.current === token) return undefined;
     satelliteAttempt.current = token;
     const mine = ++satelliteRequest.current;
-    fillSatellite(layout.id ?? '', layout.name, mine);
+    fillSatellite(layout.id ?? '', layout.name, mine, false);
     return () => {
       if (satelliteRequest.current !== mine) return;
       satelliteRequest.current += 1;
       if (satelliteAttempt.current === token) satelliteAttempt.current = '';
+      window.clearTimeout(busyTimer.current);
+      setSatelliteBusy(false);
     };
   }, [satelliteOn, layout.id, layout.name, layout.floorPlanImage, layout.mapGroundPolygon, fillSatellite]);
   const turnSatellite = () => {
-    const mine = ++satelliteRequest.current;
     const current = layoutRef.current;
+    satelliteRequest.current += 1;
+    window.clearTimeout(busyTimer.current);
+    setSatelliteBusy(false);
     if (satelliteOn) {
-      setSatelliteBusy(false);
       actions.applyLayout(hideSatelliteGround(current));
       return;
     }
-    if (hasFetchedSatellite(current.floorPlanImage)) {
+    if (satelliteImageAligned(current.floorPlanImage)) {
       actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: current.floorPlanOpacity ?? 0.78 }));
       return;
     }
-    fillSatellite(current.id ?? '', current.name, mine);
+    actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
+    fillSatellite(current.id ?? '', current.name, satelliteRequest.current, true);
   };
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);

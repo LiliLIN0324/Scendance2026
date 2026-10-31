@@ -28,6 +28,68 @@ describe('pages amap functions', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('crops the satellite to the drawn bounds with north at the top', async () => {
+    const draws: { x: number; y: number; w: number; h: number }[] = [];
+    let canvasW = 0;
+    let canvasH = 0;
+    class FakeCanvas {
+      width: number;
+      height: number;
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+        canvasW = width;
+        canvasH = height;
+      }
+      getContext() {
+        return { drawImage: (_bitmap: unknown, x: number, y: number, w: number, h: number) => { draws.push({ x, y, w, h }); } };
+      }
+      async convertToBlob() {
+        const bytes = new Uint8Array(180);
+        bytes[0] = 0xff;
+        bytes[1] = 0xd8;
+        return new Blob([bytes], { type: 'image/jpeg' });
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeCanvas);
+    vi.stubGlobal('createImageBitmap', async () => ({ close() {} }));
+    const tile = new Uint8Array(180);
+    tile[0] = 0xff;
+    tile[1] = 0xd8;
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(tile, { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    });
+    try {
+      const response = await handleAmapStatic(
+        new Request('https://scendance.lilicoding.space/api/amap-static?west=120.53&south=30.40&east=120.55&north=30.405&x-ref=satellite-ground-ref'),
+        { AMAP_STATIC_KEY: 'secret-key' },
+        fetchImpl as typeof fetch,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('image/jpeg');
+      expect(canvasW).toBeGreaterThan(canvasH * 1.5);
+      expect(draws.length).toBeGreaterThan(0);
+      expect(Math.min(...draws.map(draw => draw.x))).toBeLessThanOrEqual(0);
+      expect(Math.min(...draws.map(draw => draw.y))).toBeLessThanOrEqual(0);
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls.every(url => url.includes('style=6'))).toBe(true);
+      expect(urls[0]).not.toContain('secret-key');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not fall back to a centered square when the drawn bounds cannot be rendered', async () => {
+    const response = await handleAmapStatic(
+      new Request('https://scendance.lilicoding.space/api/amap-static?west=120.53&south=30.40&east=120.54&north=30.41&x-ref=satellite-ground-ref'),
+      { AMAP_STATIC_KEY: 'secret-key' },
+      vi.fn() as typeof fetch,
+    );
+    expect(response.status).toBe(502);
+  });
+
   it('rejects a satellite request without the reference mark', async () => {
     const response = await handleAmapStatic(
       new Request('https://scendance.lilicoding.space/api/amap-static?location=120.54,30.40&zoom=16'),
