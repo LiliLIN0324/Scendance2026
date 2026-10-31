@@ -207,6 +207,23 @@ describe('isRoomLayout', () => {
     expect(isRoomLayout(layout)).toBe(false);
   });
 
+  it('keeps a localhost satellite proxy and the map polygon, and rejects other http images', () => {
+    const image = 'http://127.0.0.1:3199/amap-static?location=120.5,30.4&zoom=18&size=768*768&scale=2&x-ref=satellite-ground-ref';
+    const polygon = [
+      { lng: 120.53, lat: 30.40 },
+      { lng: 120.54, lat: 30.40 },
+      { lng: 120.54, lat: 30.41 },
+    ];
+    const layout = makeLayout({ floorPlanImage: image, satelliteGroundRef: true, mapGroundPolygon: polygon });
+    expect(isRoomLayout(layout)).toBe(true);
+    expect(parseStoredLayout(layout)?.floorPlanImage).toBe(image);
+    expect(parseStoredLayout(layout)?.mapGroundPolygon).toEqual(polygon);
+    expect(isRoomLayout(makeLayout({ floorPlanImage: 'http://127.0.0.1:3199/amap-static?location=120.5,30.4&x-ref=other' }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ floorPlanImage: 'https://127.0.0.1:3199/amap-static?x-ref=satellite-ground-ref' }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ satelliteGroundRef: 'yes' as unknown as boolean }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ mapGroundPolygon: [{ lng: 999, lat: 0 }, { lng: 1, lat: 1 }, { lng: 2, lat: 2 }] }))).toBe(false);
+  });
+
   it('accepts exactly MAX_ROOM_DIMENSION and exactly MAX_FLOORS', () => {
     const layout = makeLayout({
       width: MAX_ROOM_DIMENSION,

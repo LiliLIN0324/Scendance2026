@@ -1,5 +1,6 @@
 import type { RoomLayout } from './types';
 import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
+import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
 import { RECON_MATERIAL_BAN } from './site-recon-mock';
 
 export type AmapPoint = { lng: number; lat: number };
@@ -104,7 +105,7 @@ export function isSatelliteGroundImage(url: string | undefined | null): boolean 
 
 /**
  * 生成贴地参考占位 SVG（非真实瓦片、非重建素材）。
- * 仅当静态图拉取失败时兜底；默认不启用，由圈画面板开关决定。
+ * 仅当静态图拉取失败时兜底。地图户外壳默认打开卫星贴地；人关掉后不再自动补。
  */
 export function makeSatelliteGroundPlaceholder(widthM: number, depthM: number): string {
   const w = Math.max(120, Math.round(widthM * 8));
@@ -163,37 +164,184 @@ export function buildSatelliteStaticMapUrl(
 }
 
 /**
- * 拉取静态卫星图并叠禁令文案，落成 data URL（带 SATELLITE_GROUND_MARK）。
+ * 本机卫星代理 URL（Key 不进地址）。浏览器再探测一次，确认代理真能回图。
+ * 仅观感贴地，带 SATELLITE_GROUND_MARK，绝不进 Aholo 上传。
+ */
+export function satelliteProxyUrl(polygon: AmapPoint[], key: string): string | null {
+  const amapUrl = buildSatelliteStaticMapUrl(polygon, key);
+  if (!amapUrl) return null;
+  const parsed = new URL(amapUrl);
+  const q = new URLSearchParams(parsed.search);
+  q.delete('key');
+  q.delete('maptype');
+  q.set('x-ref', SATELLITE_GROUND_MARK);
+  return `http://127.0.0.1:3199/amap-static?${q.toString()}`;
+}
+
+/**
+ * 拉取静态卫星图并落成代理 URL（带 SATELLITE_GROUND_MARK）。
  * 失败返回 null，上层再退到占位 SVG。
  */
 export async function fetchSatelliteGroundDataUrl(
   polygon: AmapPoint[],
   key: string,
 ): Promise<string | null> {
-  const amapUrl = buildSatelliteStaticMapUrl(polygon, key);
-  if (!amapUrl) return null;
+  const proxy = satelliteProxyUrl(polygon, key);
+  if (!proxy || typeof window === 'undefined') return null;
   // 浏览器直连 restapi 常被掐；走本机代理。用代理 URL 直接贴地（勿嵌 data URL，避免 localStorage 爆）。
   try {
-    if (typeof window !== 'undefined') {
-      const parsed = new URL(amapUrl);
-      const q = new URLSearchParams(parsed.search);
-      q.delete('key');
-      q.delete('maptype');
-      q.set('x-ref', SATELLITE_GROUND_MARK);
-      const proxy = `http://127.0.0.1:3199/amap-static?${q.toString()}`;
-      const probe = await fetch(proxy, { method: 'GET', signal: AbortSignal.timeout(10000) });
-      if (!probe.ok) return null;
-      // 读一点确认是图；不把整图塞进布局
-      const type = probe.headers.get('content-type') || '';
-      if (!type.startsWith('image/')) return null;
-      await probe.body?.cancel?.();
-      return proxy;
-    }
+    const probe = await fetch(proxy, { method: 'GET', signal: AbortSignal.timeout(10000) });
+    if (!probe.ok) return null;
+    // 读一点确认是图；不把整图塞进布局
+    const type = probe.headers.get('content-type') || '';
+    if (!type.startsWith('image/')) return null;
+    await probe.body?.cancel?.();
+    return proxy;
   } catch {
     return null;
   }
-  // Node / 非浏览器：仍可返回 amap URL（测试用不到真拉）
-  return null;
+}
+
+function storageGet(key: string): string {
+  try { return globalThis.localStorage?.getItem(key) ?? ''; } catch { return ''; }
+}
+
+/** 现有 NEXT_PUBLIC_AMAP_* / 本机已存 Key。不提供粘贴入口。 */
+export function readAmapKeys(): { key: string; security: string; staticKey: string } {
+  const key = process.env.NEXT_PUBLIC_AMAP_KEY || storageGet(AMAP_KEY_STORAGE);
+  const security = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE || storageGet(AMAP_SECURITY_STORAGE);
+  const staticKey = process.env.NEXT_PUBLIC_AMAP_STATIC_KEY || key;
+  return { key, security, staticKey };
+}
+
+/** 场地名里的地点，丢掉「规划区 / 真实范围」这类尺寸注。 */
+export function mapVenuePlaceQuery(name: string): string {
+  const parts = name.split('·').map(part => part.trim()).filter(Boolean);
+  const useful = parts.filter(part => !part.startsWith('规划区') && !part.startsWith('真实范围'));
+  return useful.slice(0, 2).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/** 以地理中心按场地米数摊一块矩形，供没有存圈画点列的旧场地补卫星图。 */
+export function rectangleAroundMeters(center: AmapPoint, widthM: number, depthM: number): AmapPoint[] {
+  const halfLng = Math.max(widthM, 4) / 2 / metersPerDegreeLng(center.lat);
+  const halfLat = Math.max(depthM, 4) / 2 / METERS_PER_DEGREE_LAT;
+  return [
+    { lng: center.lng - halfLng, lat: center.lat - halfLat },
+    { lng: center.lng + halfLng, lat: center.lat - halfLat },
+    { lng: center.lng + halfLng, lat: center.lat + halfLat },
+    { lng: center.lng - halfLng, lat: center.lat + halfLat },
+  ];
+}
+
+/** 地图立出的户外壳：多边形 + 户外，或已经记下圈画经纬度。室内矩形不是这条路径。 */
+export function isMapOutdoorLayout(layout: RoomLayout): boolean {
+  if ((layout.mapGroundPolygon?.length ?? 0) >= 3) return true;
+  const venue = layout.backendSceneV2?.venue ?? layout.backendVenue;
+  if (!venue || venue.site?.indoorOutdoor === 'indoor') return false;
+  if (venue.shape === 'polygon' && venue.site?.indoorOutdoor === 'outdoor') return true;
+  return venue.shape === 'polygon' && /规划区/.test(layout.name);
+}
+
+/**
+ * 地图户外场地默认要看卫星贴地。`false` 是人关掉的，重新打开前不再自动拉。
+ * `true` 是打开。缺省则只对地图户外壳默认打开。
+ */
+export function satelliteGroundWanted(layout: RoomLayout): boolean {
+  if (layout.satelliteGroundRef === false) return false;
+  if (layout.satelliteGroundRef === true) return true;
+  return isMapOutdoorLayout(layout);
+}
+
+export function isPlaceholderSatellite(url: string | undefined | null): boolean {
+  return !!url && url.startsWith('data:image/svg') && isSatelliteGroundImage(url);
+}
+
+/** 已经有可贴地的卫星图（代理或位图），占位 SVG 不算。 */
+export function hasFetchedSatellite(url: string | undefined | null): boolean {
+  return isSatelliteGroundImage(url) && !isPlaceholderSatellite(url);
+}
+
+export async function geocodeAmapPlace(query: string, key: string, security: string): Promise<AmapPoint | null> {
+  if (query.trim().length < 2 || !key || typeof window === 'undefined') return null;
+  try {
+    await loadAmapScript(key, security);
+  } catch {
+    return null;
+  }
+  const PlaceSearch = window.AMap?.PlaceSearch;
+  if (!PlaceSearch) return null;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), 8000);
+    try {
+      const searcher = new PlaceSearch({ city: '全国', pageSize: 1 });
+      searcher.search(query, (status, result) => {
+        clearTimeout(timer);
+        const poi = (result as { poiList?: { pois?: { location?: { lng?: number; lat?: number } }[] } } | null)?.poiList?.pois?.[0];
+        const lng = Number(poi?.location?.lng);
+        const lat = Number(poi?.location?.lat);
+        resolve(status === 'complete' && Number.isFinite(lng) && Number.isFinite(lat) ? { lng, lat } : null);
+      });
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
+}
+
+/** 优先用立壳时存下的圈画；旧场地没有点列时，用场地名向高德要一个中心再摊矩形。 */
+export async function resolveSatellitePolygon(layout: RoomLayout): Promise<AmapPoint[] | null> {
+  const stored = layout.mapGroundPolygon;
+  if (stored && stored.length >= 3) return stored.map(point => ({ lng: point.lng, lat: point.lat }));
+  if (!isMapOutdoorLayout(layout)) return null;
+  const query = mapVenuePlaceQuery(layout.name);
+  if (!query || query === '户外场地' || query === '未命名' || query === '未命名活动') return null;
+  const { key, security } = readAmapKeys();
+  const center = await geocodeAmapPlace(query, key, security);
+  if (!center) return null;
+  return rectangleAroundMeters(center, layout.width, layout.height);
+}
+
+export interface SatelliteGroundPatch {
+  floorPlanImage: string;
+  floorPlanOpacity: number;
+  satelliteGroundRef: true;
+  mapGroundPolygon: AmapPoint[];
+}
+
+/**
+ * 补齐卫星参考底图。Key 不可用、或旧场地定位失败时返回 null（调用方保持素色地面）。
+ * 代理探测失败则退回带禁令文案的占位图，避免永远白壳。图只写 floorPlanImage，不进采集上传。
+ */
+export async function ensureSatelliteGround(layout: RoomLayout): Promise<SatelliteGroundPatch | null> {
+  const { staticKey } = readAmapKeys();
+  if (!staticKey) return null;
+  const polygon = await resolveSatellitePolygon(layout);
+  if (!polygon || polygon.length < 3) return null;
+  const fetched = await fetchSatelliteGroundDataUrl(polygon, staticKey);
+  if (!fetched && isPlaceholderSatellite(layout.floorPlanImage)) return null;
+  const bbox = polygonBboxMeters(polygon);
+  const image = fetched ?? makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height);
+  return {
+    floorPlanImage: image,
+    floorPlanOpacity: 0.78,
+    satelliteGroundRef: true,
+    mapGroundPolygon: polygon,
+  };
+}
+
+export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGroundPatch): RoomLayout {
+  return {
+    ...layout,
+    floorPlanImage: patch.floorPlanImage,
+    floorPlanOpacity: patch.floorPlanOpacity,
+    satelliteGroundRef: true,
+    mapGroundPolygon: patch.mapGroundPolygon,
+  };
+}
+
+/** 关掉贴地：留下图和圈画点，下次打开不必重拉。素色地面由 satelliteGroundRef === false 决定。 */
+export function hideSatelliteGround(layout: RoomLayout): RoomLayout {
+  return { ...layout, satelliteGroundRef: false };
 }
 
 export function createVenueFromPick(
@@ -232,7 +380,8 @@ export function createVenueFromPick(
   const plan = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
   if (!plan) throw new Error('这块场地是有内墙或图纸证据的真实结构，先在结构里清出一块空地，再来圈画。');
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
-  let layout: RoomLayout = { ...plan.layout, name };
+  // 圈画经纬度跟着场地走，方便 3D 里后补卫星图；不进场景线、不进采集上传。
+  let layout: RoomLayout = { ...plan.layout, name, mapGroundPolygon: pick.polygon };
   if (pick.satelliteGround) {
     const raw = pick.satelliteGroundImage?.trim() ?? '';
     const image = raw && (
@@ -249,10 +398,9 @@ export function createVenueFromPick(
       floorPlanOpacity: 0.78,
       satelliteGroundRef: true,
     };
-  } else if (layout.satelliteGroundRef || isSatelliteGroundImage(layout.floorPlanImage)) {
-    const next = { ...layout };
-    delete next.floorPlanImage;
-    delete next.satelliteGroundRef;
+  } else if (pick.satelliteGround === false) {
+    const next = { ...layout, satelliteGroundRef: false as const };
+    if (isSatelliteGroundImage(next.floorPlanImage)) delete next.floorPlanImage;
     layout = next;
   }
   return { layout, cleared: plan.cleared };
