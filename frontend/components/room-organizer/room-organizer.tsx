@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Scan, Send, Shapes, SquareStack } from 'lucide-react';
+import { FolderOpen, ListChecks, PanelLeftClose, Ruler, Scan, Send, Shapes, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -61,13 +61,14 @@ import { canApplyLayoutGeometry, structuralItemCollides, venueArea, materialCoun
 import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
-import { ActivityBrief, AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay, VenueBriefLine } from './panels/agent-panel';
 import { CloudPanel } from './panels/cloud-panel';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
+import { WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { ReferenceImageControls } from './panels/reference-image-controls';
@@ -78,14 +79,6 @@ import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 import type { SplatPaint } from './three/splat-preview';
-
-/** 简报里的入口：group 'venue' 上到「这块场地从哪来」和地图圈画并列，'docs' 仍收进底部折叠。评审/执行走左轨，模板/物料走底栏。 */
-const RAIL_TOOLS = [
-  { id: 'reference', label: '图纸与照片', hint: '图纸、照片与实测尺寸', Icon: Ruler, open: 'openReference', group: 'venue' as const },
-  { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', Icon: ClipboardList, open: 'openBrief', group: 'docs' as const },
-  { id: 'model', label: '物料建模', hint: '生成新物料与调整材质', Icon: Boxes, open: 'openModelTools', group: 'docs' as const },
-  { id: 'commercial', label: '合同约定', hint: '合同与商业档案', Icon: FileText, open: 'openCommercial', group: 'docs' as const },
-] as const satisfies ReadonlyArray<{ id: string; label: string; hint: string; Icon: typeof ClipboardList; open: keyof BusinessToolsApi; group: 'venue' | 'docs' }>;
 
 function zoomCamera(
   camera: import('three').PerspectiveCamera,
@@ -242,7 +235,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const handleWorkspaceVisibility = useCallback((open: boolean) => {
     setBusinessOpen(open);
     if (open) { setLeftMode('business'); setMaterialsOpen(false); setSidebarCollapsed(false); }
-    else setLeftMode('brief');
+    else { setLeftMode('brief'); setSidebarCollapsed(true); }
   }, []);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   const closeMaterialsShelf = useCallback(() => {
@@ -274,7 +267,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setSidebarCollapsed(true);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.sc-mode-rail button[aria-pressed="true"]')?.focus());
   }, []);
-  // T-UI：左轨只有三颗阶段钮，点了就让左栏回到活简报；深表单不再占主舞台。
+  // 左轨只换左栏卡片。主区 3D 和右轨不动。
   const selectWorkbenchMode = useCallback((mode: WorkbenchMode) => {
     setWorkbenchMode(mode);
     setWorkbenchModeSerial(value => value + 1);
@@ -840,8 +833,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (lastSelectedObjectId.current === selectedObjectId) return;
     lastSelectedObjectId.current = selectedObjectId;
     if (selectedObjectId) { setMaterialsOpen(false); return; }
-    // 取消选中后属性面板没有内容可显示，退回活简报（T-UI）；不再擅自掀开物料库。
-    if (leftMode === 'properties') setLeftMode('brief');
+    // 取消选中后属性面板没有内容。简报已挂顶栏，左栏收起，不再退回那张卡。
+    if (leftMode === 'properties') { setLeftMode('brief'); setSidebarCollapsed(true); }
   }, [selectedObjectId, leftMode]);
 
   const hasSignalItems = useMemo(
@@ -1473,7 +1466,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         <header ref={headerRef} className="sc-header">
           <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong className="sc-brand-cn">幕景</strong><span className="sc-brand-dot" aria-hidden="true"/><span className="sc-brand-en"><i aria-hidden="true">S</i>CENDANCE</span></a>
           <span className="sc-brand-divider" aria-hidden="true"/>
-          <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
+          <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><VenueBriefLine /><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
           <div className="sc-header-actions">
             <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" data-tip="项目" title="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/></button>
             <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
@@ -1509,7 +1502,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
               {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
-            <div className="sc-left-content sc-brief-pane" hidden={leftMode!=='brief'}><ActivityBrief tools={RAIL_TOOLS.map(tool => ({ id: tool.id, label: tool.label, hint: tool.hint, group: tool.group, icon: <tool.Icon size={16} aria-hidden="true"/>, onOpen: () => businessToolsRef.current?.[tool.open]() }))}/></div>
+            <div className="sc-left-content sc-mode-card-host" hidden={leftMode!=='brief'}><WorkbenchModeCard onFocusItem={id => {
+              const item = activeFloor.items.find(entry => entry.id === id);
+              selectOnly(id, { keepPanel: true });
+              if (item?.position) focusOn(item.position, undefined, activeFloorY);
+            }} onExport={() => { setAgentCollapsed(false); }} /></div>
             <div className="sc-left-content" hidden={leftMode!=='properties'}>{selectedItem&&<ItemContextPopover embedded
               hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>

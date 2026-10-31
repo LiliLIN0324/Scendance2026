@@ -29,6 +29,7 @@ import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } fro
 import { sameLayoutContent } from '../lib/persistence';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
+import { venueBriefLine } from '../lib/venue-brief-line';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
@@ -1232,6 +1233,18 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
 }
 
 export type BriefTool = { id: string; label: string; hint: string; icon: ReactNode; group?: 'venue' | 'docs'; onOpen(): void };
+
+/**
+ * 活动简报的事实卡。工作台不再把它挂在左栏——场地一行在顶栏 `VenueBriefLine`。
+ * 这张卡仍给对话测试用：「这块场地从哪来」把图纸与地图并列，场地立起来后也不消失。
+ */
+/** 顶栏状态行：只在布置态占一行。评审不带「从哪来」，执行不带布置简报。 */
+export function VenueBriefLine(): JSX.Element | null {
+  const agent = useAgent();
+  if (agent.callbacks.workbenchMode !== 'layout') return null;
+  const line = venueBriefLine(agent.recap);
+  return <span className="sc-venue-brief" role="status" aria-label="场地简报" title={line}>{line}</span>;
+}
 
 /**
  * 左栏活动简报：只读，数字全部来自对话与当前画布。
