@@ -1,21 +1,27 @@
 import { useEffect, useRef } from 'react';
+import {
+  CROWD_MAX,
+  createCrowdWalkers,
+  crowdColliders,
+  planCrowdRoute,
+  stepCrowdWalker,
+  type CrowdVenue,
+  type CrowdWalker,
+} from '../lib/crowd-route';
 import { disposeObject } from '../three/builder-utils';
 import { type HumanFigureRig, buildHumanFigure, poseWalk } from '../three/builders/human-figure';
+import type { FurnitureItem, InteriorWall } from '../lib/types';
 import type * as ThreeNS from 'three';
 
 type ThreeModule = typeof import('three');
 
 const NPC_TAG = 'npc';
+const NO_ITEMS: readonly FurnitureItem[] = [];
+const NO_WALLS: readonly InteriorWall[] = [];
 
 interface NpcState {
   group: ThreeNS.Group;
-  position: { x: number; z: number };
-  target: { x: number; z: number };
-  speed: number;
-  /** Walk-cycle phase driving the procedural limb swing. */
-  phase: number;
-  /** Seconds left standing at the current waypoint before walking on. */
-  pause: number;
+  walker: CrowdWalker;
   rig: HumanFigureRig;
 }
 
@@ -28,6 +34,13 @@ export interface UseNpcsOptions {
   roomDepth: number;
   /** Y-offset to plant the NPCs on the active floor. */
   floorY: number;
+  /** Placed furniture and partitions the crowd walks around. Same solids as walkthrough. */
+  items?: readonly FurnitureItem[];
+  interiorWalls?: readonly InteriorWall[];
+  /** Scene-space venue polygon (SW origin). Omitted → the rectangular footprint. */
+  polygon?: readonly { x: number; z: number }[];
+  /** Main-entrance opening id. When it matches a door, the crowd files in from that door. */
+  mainEntranceId?: string;
   /** Request a render on the next animation frame (render-on-demand). */
   invalidate?: () => void;
   /**
@@ -38,16 +51,18 @@ export interface UseNpcsOptions {
 }
 
 /**
- * Sprinkles a few procedurally-built, brightly coloured figures into the scene
- * and walks them between random waypoints inside the room. They stay on the
- * procedural model for the whole session: the rigged mannequin reads as a
- * grey robot next to them, and these walkers are set dressing rather than the
- * placed people that use people.glb. Cleanup tears down all NPC meshes and
- * the RAF loop on every dependency change.
+ * Atmosphere preview: up to three coloured figures walk a route inside the
+ * venue. This is not the first-person walkthrough — that camera stays on
+ * PointerLock / WASD and is never moved from here.
+ *
+ * With a main entrance they start just inside that door and file in. Otherwise
+ * they walk the free cells of the footprint. Limb swing only plays while a
+ * figure actually translates, so a pause is a stand, not an in-place cycle.
  */
 export function useNpcs(options: UseNpcsOptions): void {
   const {
-    enabled, count = 3, threeModuleRef, sceneRef, roomWidth, roomDepth, floorY, invalidate, requestShadowUpdate,
+    enabled, count = CROWD_MAX, threeModuleRef, sceneRef, roomWidth, roomDepth, floorY,
+    items = NO_ITEMS, interiorWalls = NO_WALLS, polygon, mainEntranceId, invalidate, requestShadowUpdate,
   } = options;
   const stateRef = useRef<NpcState[]>([]);
 
@@ -56,16 +71,22 @@ export function useNpcs(options: UseNpcsOptions): void {
     const THREE = threeModuleRef.current;
     const scene = sceneRef.current;
     if (!THREE || !scene) return undefined;
+    if (roomWidth <= 0.4 || roomDepth <= 0.4) return undefined;
 
-    const halfW = roomWidth / 2 - 0.4;
-    const halfD = roomDepth / 2 - 0.4;
-    if (halfW <= 0.2 || halfD <= 0.2) return undefined;
-
-    const npcs: NpcState[] = [];
-    for (let i = 0; i < count; i++) {
-      npcs.push(createNpc(THREE, scene, halfW, halfD, floorY, i));
-    }
+    const venue: CrowdVenue = {
+      roomWidth,
+      roomDepth,
+      items,
+      interiorWalls,
+      ...(polygon && polygon.length >= 3 ? { polygon } : {}),
+      ...(mainEntranceId ? { mainEntranceId } : {}),
+    };
+    const plan = planCrowdRoute(venue);
+    const colliders = crowdColliders(venue);
+    const walkers = createCrowdWalkers(plan, count, colliders);
+    const npcs: NpcState[] = walkers.map((walker, index) => createNpc(THREE, scene, floorY, index, walker));
     stateRef.current = npcs;
+    invalidate?.();
 
     let rafId = 0;
     let lastTime = performance.now();
@@ -74,10 +95,21 @@ export function useNpcs(options: UseNpcsOptions): void {
       const now = performance.now();
       const delta = Math.min(0.1, (now - lastTime) / 1000);
       lastTime = now;
-      // Only request a repaint (and a shadow-map recompute) when an NPC
-      // actually moved this frame. When every NPC is idling at its target the
-      // render loop stays parked instead of pinning the GPU at refresh rate.
-      const moved = stepNpcs(stateRef.current, delta, halfW, halfD, floorY);
+      let moved = false;
+      for (const npc of stateRef.current) {
+        const stepped = stepCrowdWalker(npc.walker, plan, colliders, delta);
+        npc.group.position.x = npc.walker.x;
+        npc.group.position.z = npc.walker.z;
+        npc.group.rotation.y = npc.walker.facing;
+        if (stepped) {
+          poseWalk(npc.rig, npc.walker.phase, 1);
+          npc.group.position.y = floorY + Math.abs(Math.cos(npc.walker.phase)) * 0.025;
+          moved = true;
+        } else {
+          poseWalk(npc.rig, 0, 0);
+          npc.group.position.y = floorY;
+        }
+      }
       if (moved) {
         requestShadowUpdate?.();
         invalidate?.();
@@ -98,22 +130,20 @@ export function useNpcs(options: UseNpcsOptions): void {
       requestShadowUpdate?.();
       invalidate?.();
     };
-  }, [enabled, count, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, roomWidth, roomDepth, floorY]);
+  }, [enabled, count, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, roomWidth, roomDepth, floorY, items, interiorWalls, polygon, mainEntranceId]);
 }
 
 function createNpc(
   THREE: ThreeModule,
   scene: ThreeNS.Scene,
-  halfW: number,
-  halfD: number,
   floorY: number,
-  index: number
+  index: number,
+  walker: CrowdWalker,
 ): NpcState {
   const palette = [0xc62828, 0x2e7d32, 0x1565c0, 0xf9a825, 0x6a1b9a];
   const hairPalette = [0x2b1d14, 0x5a3825, 0x1a1a1a, 0x8d6e4a, 0x3b2a20];
   const skinPalette = [0xe0ac8a, 0xc68863, 0x8d5a3b, 0xf1c7a5, 0xa8714f];
   const pick = (list: number[]) => list[index % list.length] ?? list[0]!;
-  // Slight height variety so a group of walkers doesn't look cloned.
   const heightScale = 0.94 + ((index * 37) % 11) / 100;
 
   const figure = buildHumanFigure(THREE, {
@@ -126,80 +156,9 @@ function createNpc(
   const group = figure.group;
   group.scale.setScalar(heightScale);
   group.userData.type = NPC_TAG;
-
-  const position = { x: rand(-halfW, halfW), z: rand(-halfD, halfD) };
-  group.position.set(position.x, floorY, position.z);
+  group.position.set(walker.x, floorY, walker.z);
+  group.rotation.y = walker.facing;
   scene.add(group);
 
-  return {
-    group,
-    position,
-    target: { x: rand(-halfW, halfW), z: rand(-halfD, halfD) },
-    speed: 0.6 + Math.random() * 0.5,
-    phase: Math.random() * Math.PI * 2,
-    pause: 0,
-    rig: figure.rig,
-  };
-}
-
-/**
- * Advances every NPC one frame. Returns true when anything visibly changed
- * this frame, so the caller can skip the repaint / shadow recompute while
- * walkers all stand still at their waypoints.
- */
-function stepNpcs(
-  npcs: NpcState[],
-  delta: number,
-  halfW: number,
-  halfD: number,
-  floorY: number
-): boolean {
-  let moved = false;
-  for (const npc of npcs) {
-    if (npc.pause > 0) {
-      npc.pause -= delta;
-      continue;
-    }
-
-    const dx = npc.target.x - npc.position.x;
-    const dz = npc.target.z - npc.position.z;
-    const distance = Math.hypot(dx, dz);
-
-    if (distance < 0.15) {
-      // Reached the waypoint: stand for a moment, then head somewhere new.
-      npc.target = { x: rand(-halfW, halfW), z: rand(-halfD, halfD) };
-      npc.pause = 1.5 + Math.random() * 3;
-      poseWalk(npc.rig, 0, 0);
-      npc.group.position.y = floorY;
-      moved = true;
-      continue;
-    }
-
-    moved = true;
-
-    const step = npc.speed * delta;
-    const nx = npc.position.x + (dx / distance) * step;
-    const nz = npc.position.z + (dz / distance) * step;
-    npc.position.x = clamp(nx, -halfW, halfW);
-    npc.position.z = clamp(nz, -halfD, halfD);
-
-    // Face the direction of travel.
-    npc.group.rotation.y = Math.atan2(dx, dz);
-    npc.group.position.x = npc.position.x;
-    npc.group.position.z = npc.position.z;
-
-    // Swing limbs about hips/shoulders; a small bob at each footfall.
-    npc.phase += delta * npc.speed * 7;
-    poseWalk(npc.rig, npc.phase);
-    npc.group.position.y = floorY + Math.abs(Math.cos(npc.phase)) * 0.025;
-  }
-  return moved;
-}
-
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+  return { group, walker, rig: figure.rig };
 }
