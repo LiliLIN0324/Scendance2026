@@ -1091,6 +1091,10 @@ body {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang img {
   width: 28px; height: 28px; border-radius: 999px; object-fit: cover; display: block; pointer-events: none;
+  transition: opacity 180ms var(--ease-spec, ease), transform 180ms var(--ease-spec, ease);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang.is-panel-open img {
+  opacity: 0; transform: scale(0.88);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot {
   display: block; position: absolute; right: 1px; bottom: 1px; width: 8px; height: 8px; border-radius: 50%;

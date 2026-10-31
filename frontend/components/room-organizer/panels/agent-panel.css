@@ -23,6 +23,10 @@
 /* ── 头部（oddeNova 同构：会话标题 + History + 新会话，无双头像） ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
 .ap-session-head { justify-content: space-between; gap: 12px; height: auto; min-height: 52px; padding: 10px 12px 12px; }
+.ap-session-identity { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.ap-session-avatar-slot { position: relative; display: inline-flex; flex: 0 0 36px; width: 36px; height: 36px; opacity: 0; transition: opacity 120ms var(--ease-spec, ease); }
+.ap-session-avatar-slot.is-visible { opacity: 1; }
+.ap-session-avatar { width: 36px; height: 36px; display: block; object-fit: cover; border-radius: 50%; }
 .ap-session-title {
   margin: 0; flex: 1; min-width: 0;
   font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink);

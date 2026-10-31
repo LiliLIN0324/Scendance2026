@@ -8,7 +8,7 @@ import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_MAX, LEFT_CARD_WIDTH_MIN } fro
  * - `sidebarCollapsed`：工具抽屉（选中物料 / 观感）
  *
  * 两扇都关着 = 导航收起（64px 轨，只见 logo）。
- * 任一扇开着 = 导航展开（左卡在，顶上是短品牌条）。
+ * 任一扇开着 = 导航展开（左卡在，顶上是晴光对话头，不再重复幕景品牌条）。
  *
  * logo 只写这两扇门：收起时两扇都关；展开时只开晴光，工具抽屉保持关着。
  * 晴光自己的收起、模式切换、打开评审/执行，以及以后同样去写这两扇门的场景回调

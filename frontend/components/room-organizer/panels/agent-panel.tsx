@@ -46,6 +46,7 @@ import { SiteCaptureCard } from './site-capture-card';
 import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
 import { useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay } from './session-history-panel';
+import { QINGGUANG_RAIL_MASCOT } from './qingguang-rail-button';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
@@ -1501,8 +1502,12 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot }: {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true }: {
   onClose?(): void;
+  /** 晴光头像 DOM，供轨 ↔ 顶栏飞入动画测量。 */
+  headerAvatarRef?: React.RefObject<HTMLSpanElement | null>;
+  /** 飞入结束后才显示顶栏静态头像，避免与 FLIP 重影。 */
+  headerAvatarVisible?: boolean;
   /** 右栏底部切到「生成物件」。不传则面板自己记。 */
   generateOpen?: boolean;
   onGenerateOpen?(next: boolean): void;
@@ -1553,7 +1558,12 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
     <header className="ap-head ap-session-head">
-      <h1 className="ap-session-title" title={sessionTitle}>{sessionTitle}</h1>
+      <div className="ap-session-identity">
+        <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
+          <img className="ap-session-avatar" src={QINGGUANG_RAIL_MASCOT} alt="" width={36} height={36} draggable={false} />
+        </span>
+        <h1 className="ap-session-title" title={sessionTitle}>{sessionTitle}</h1>
+      </div>
       <div className="ap-session-actions">
         <button
           type="button"

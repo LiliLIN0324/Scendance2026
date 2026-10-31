@@ -78,6 +78,7 @@ import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './p
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { QingguangRailButton } from './panels/qingguang-rail-button';
+import { QingguangAvatarFlight } from './panels/qingguang-avatar-flight';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -183,14 +184,28 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 工具抽屉和晴光列同时关着，左侧导航才算收起。logo 只写这两扇门。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
+  const [agentClosing, setAgentClosing] = useState(false);
+  const qingguangRailRef = useRef<HTMLButtonElement>(null);
+  const qingguangHeaderAvatarRef = useRef<HTMLSpanElement>(null);
+  const agentPanelVisible = !agentCollapsed || agentClosing;
+  const [headerAvatarVisible, setHeaderAvatarVisible] = useState(false);
   const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed });
   const toggleNav = useCallback(() => {
     const next = toggleNavColumns({ agentCollapsed, sidebarCollapsed });
     setAgentCollapsed(next.agentCollapsed);
     setSidebarCollapsed(next.sidebarCollapsed);
-    const focusSelector = isNavExpanded(next) ? '#workbench-nav-column .sc-nav-brand' : '.sc-mode-rail .sc-nav-brand';
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(focusSelector)?.focus());
+    setAgentClosing(false);
+    const focusSelector = isNavExpanded(next) ? '#agent-panel .ap-session-title' : '.sc-mode-rail .sc-nav-brand';
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(focusSelector)?.focus());
   }, [agentCollapsed, sidebarCollapsed]);
+  useEffect(() => {
+    if (agentCollapsed || agentClosing) {
+      setHeaderAvatarVisible(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setHeaderAvatarVisible(true), 280);
+    return () => window.clearTimeout(timer);
+  }, [agentCollapsed, agentClosing]);
   /** 晴光栏在左侧。关掉后再从画布上的晴光浮标打开，回到布置对话。 */
   const [composerGenerate, setComposerGenerate] = useState(false);
   const [planHome, setPlanHome] = useState(true);
@@ -337,6 +352,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
   }, []);
   const openQingguang = useCallback(() => {
+    setAgentClosing(false);
     setAgentCollapsed(false);
     setSidebarCollapsed(true);
     requestAnimationFrame(() => {
@@ -344,6 +360,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
       (input ?? panel)?.focus();
     });
+  }, []);
+  const closeQingguang = useCallback(() => {
+    setAgentClosing(true);
+    window.setTimeout(() => {
+      setAgentCollapsed(true);
+      setAgentClosing(false);
+      qingguangRailRef.current?.focus();
+    }, 280);
   }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单仍浮在画布上。不把晴光切成评审或执行。
@@ -1624,9 +1648,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
-              {!navExpanded && <WorkbenchBrandToggle expanded={false} onToggle={toggleNav} />}
+              <WorkbenchBrandToggle expanded={navExpanded} onToggle={toggleNav} />
               <nav className="sc-mode-rail-top" aria-label="晴光">
-                <QingguangRailButton open={!agentCollapsed} onOpen={openQingguang} />
+                <QingguangRailButton buttonRef={qingguangRailRef} open={!agentCollapsed && !agentClosing} onOpen={openQingguang} />
               </nav>
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
                 <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
@@ -1648,7 +1672,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </div>
           </div>
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
-          {navExpanded && <WorkbenchBrandToggle expanded onToggle={toggleNav} />}
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
@@ -1656,7 +1679,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {agentPanelVisible && <AgentPanel headerAvatarRef={qingguangHeaderAvatarRef} headerAvatarVisible={headerAvatarVisible} onClose={closeQingguang} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -1679,6 +1702,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               onExport={() => { setAgentCollapsed(false); }}
             /> : undefined}/>}
           <LeftCardResizer width={leftCardWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
+          <QingguangAvatarFlight
+            open={!agentCollapsed && !agentClosing}
+            railRef={qingguangRailRef}
+            headerAvatarRef={qingguangHeaderAvatarRef}
+          />
           </div>
           <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
             if (workbenchMode !== 'layout' || !pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
