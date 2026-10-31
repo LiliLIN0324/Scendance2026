@@ -42,6 +42,7 @@ import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
+import { crowdHintsFromLayout } from './lib/crowd-route';
 import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
 import { hasCollisions, totalCost } from './lib/geometry';
@@ -1057,6 +1058,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     measurementPoints,
   });
 
+  const crowdHints = crowdHintsFromLayout(layout);
   useNpcs({
     enabled: isReady && view.showNpcs && !view.view2D,
     invalidate,
@@ -1066,6 +1068,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     roomWidth: layout.width,
     roomDepth: layout.height,
     floorY: activeFloorY,
+    items: activeFloor.items,
+    ...(activeFloor.interiorWalls ? { interiorWalls: activeFloor.interiorWalls } : {}),
+    ...(crowdHints.polygon ? { polygon: crowdHints.polygon } : {}),
+    ...(crowdHints.mainEntranceId ? { mainEntranceId: crowdHints.mainEntranceId } : {}),
   });
 
   useWeather({

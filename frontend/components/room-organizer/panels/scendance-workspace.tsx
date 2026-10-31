@@ -427,8 +427,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
         </button>
         {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">
           <span className="sc-tool-menu-label" role="presentation">氛围</span>
-          <button type="button" id="tool-walk" role="menuitemcheckbox" aria-checked={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={16}/><span>漫游</span></button>
-          <button type="button" id="tool-crowd" role="menuitemcheckbox" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={16}/><span>人群</span></button>
+          <button type="button" id="tool-walk" role="menuitemcheckbox" title="第一人称查看场地（WASD）。不带动人群" aria-checked={view.walkthroughMode} className={view.walkthroughMode ? 'is-active' : ''} onClick={() => setWalkthrough(!view.walkthroughMode)}><Footprints size={16}/><span>漫游</span></button>
+          <button type="button" id="tool-crowd" role="menuitemcheckbox" title="约 3 人从主入口沿通道走进场，避开家具。不移动相机" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={16}/><span>人群</span></button>
           <span className="sc-more-sep" aria-hidden="true"/>
           <button type="button" id="tool-weather" role="menuitem" aria-haspopup="listbox" aria-expanded={weatherOpen} onClick={() => { setWeatherOpen(open => !open); setTimeOpen(false); }}>
             {view.weather === 'clear' ? <Sun size={16}/> : <CloudRain size={16}/>}
