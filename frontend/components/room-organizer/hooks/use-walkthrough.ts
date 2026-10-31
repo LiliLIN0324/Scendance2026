@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildWalkColliders, resolveWalkerStep } from '../lib/walk-collision';
+import { adoptWalkPointerLock, walkPointerLocked } from '../lib/walk-engage';
 import type { FurnitureItem, InteriorWall } from '../lib/types';
 import type { WalkCollider, WalkCollisionOptions, WalkerPosition } from '../lib/walk-collision';
 import type * as ThreeNS from 'three';
@@ -73,13 +74,18 @@ const WALKER_RADIUS = 0.3;
  * switch mid-walk only re-seats the camera's height — it never tears the mode
  * down and drops pointer lock (see #67).
  */
+export type WalkthroughPhase = 'pending' | 'locked' | 'needs-click';
+
 export interface UseWalkthroughResult {
   /**
-   * The browser refused the last pointer-lock request (Chrome does for about
-   * a second after Esc released it). Cleared by the next successful lock (#351).
+   * `pending` while the button's pointer-lock request is in flight, `locked`
+   * once the cursor is captured, `needs-click` when the browser refused or
+   * the lock dropped (Esc) and another canvas click is required (#351).
    */
-  lockRefused: boolean;
+  phase: WalkthroughPhase;
 }
+
+const pointerLockControlsPromise = import('three/examples/jsm/controls/PointerLockControls.js');
 
 export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughResult {
   const {
@@ -98,7 +104,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     onExit,
   } = options;
 
-  const [lockRefused, setLockRefused] = useState(false);
+  const [phase, setPhase] = useState<WalkthroughPhase>('pending');
 
   // Colliders are rebuilt only when the floor's contents change, never per
   // frame (#156). Outside walkthrough the memo is skipped entirely.
@@ -135,6 +141,51 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     invalidateRef.current?.();
   }, [enabled, eyeHeight, cameraRef]);
 
+  // Warm the controls module so the first walk click doesn't wait on a network
+  // fetch before it can adopt a lock the button already requested.
+  useEffect(() => {
+    void pointerLockControlsPromise;
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) {
+      setPhase('pending');
+      return undefined;
+    }
+    const canvas = canvasRef.current;
+    const doc = canvas?.ownerDocument ?? document;
+    let settled = false;
+    const sync = () => {
+      const locked = walkPointerLocked(canvas);
+      if (locked) {
+        settled = true;
+        setPhase('locked');
+      } else if (settled) {
+        setPhase('needs-click');
+      }
+    };
+    const onError = () => {
+      settled = true;
+      setPhase('needs-click');
+    };
+    doc.addEventListener('pointerlockchange', sync);
+    doc.addEventListener('pointerlockerror', onError);
+    // A lock that never arrives (hidden canvas, missing gesture) must not sit
+    // on "正在进入" forever. The canvas click listener below is the retry.
+    const timer = window.setTimeout(() => {
+      if (!settled && !walkPointerLocked(canvas)) {
+        settled = true;
+        setPhase('needs-click');
+      }
+    }, 700);
+    sync();
+    return () => {
+      window.clearTimeout(timer);
+      doc.removeEventListener('pointerlockchange', sync);
+      doc.removeEventListener('pointerlockerror', onError);
+    };
+  }, [enabled, canvasRef]);
+
   useEffect(() => {
     if (!enabled) return undefined;
 
@@ -150,6 +201,14 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     const pressed = new Set<string>();
     let cancelled = false;
     let controls: PointerLockControlsType | null = null;
+    // Release a lock the rail button took even if controls never finished
+    // attaching (toggle off during the import).
+    const releaseLock = () => {
+      if (canvas.ownerDocument.pointerLockElement === canvas) {
+        try { canvas.ownerDocument.exitPointerLock(); } catch { /* already unlocked */ }
+      }
+    };
+    cleanup.push(releaseLock);
     let savedCameraPosition: ThreeNS.Vector3 | null = null;
     let rafId = 0;
 
@@ -184,10 +243,14 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     };
 
     void (async () => {
-      const controlsModule = await import('three/examples/jsm/controls/PointerLockControls.js');
+      const controlsModule = await pointerLockControlsPromise;
       if (cancelled) return;
 
       controls = new controlsModule.PointerLockControls(camera, canvas);
+      adoptWalkPointerLock(controls, canvas);
+      const adopt = () => { if (controls) adoptWalkPointerLock(controls, canvas); };
+      canvas.ownerDocument.addEventListener('pointerlockchange', adopt);
+      cleanup.push(() => canvas.ownerDocument.removeEventListener('pointerlockchange', adopt));
       savedCameraPosition = camera.position.clone();
       camera.position.set(0, eyeHeightRef.current, 3);
       camera.lookAt(0, eyeHeightRef.current, 0);
@@ -198,7 +261,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       // (#351). PointerLockControls still tracks the lock through
       // pointerlockchange, whoever requested it.
       const markRefused = () => {
-        if (!cancelled) setLockRefused(true);
+        if (!cancelled) setPhase('needs-click');
       };
       const requestLock = () => {
         if (controls?.isLocked) return;
@@ -209,7 +272,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
           markRefused();
         }
       };
-      const clearRefused = () => setLockRefused(false);
+      const clearRefused = () => setPhase('locked');
       canvas.addEventListener('click', requestLock);
       cleanup.push(() => canvas.removeEventListener('click', requestLock));
       canvas.ownerDocument.addEventListener('pointerlockerror', markRefused);
@@ -254,6 +317,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
         const delta = Math.min(0.05, (now - lastTime) / 1000);
         lastTime = now;
 
+        if (controls) adoptWalkPointerLock(controls, canvas);
         if (!controls?.isLocked) return;
         // Walkthrough is an active mode: mouse-look mutates the camera outside
         // this loop, so render every frame while pointer lock is engaged.
@@ -302,7 +366,6 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
 
     return () => {
       cancelled = true;
-      setLockRefused(false);
       for (const fn of cleanup) {
         try {
           fn();
@@ -314,5 +377,5 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     };
   }, [enabled, canvasRef, threeModuleRef, cameraRef, orbitRef]);
 
-  return { lockRefused };
+  return { phase };
 }
