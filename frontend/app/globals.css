@@ -1140,7 +1140,7 @@ body {
 .sc-workbench .sc-header-actions .sc-project-btn:hover {
   color: var(--wk-ink); background: var(--wk-plane);
 }
-/* Right tool column: one vertical island of 5 round buttons (reference 04-final-flat). */
+/* Right tool column: vertical round buttons (reference 04-final-flat), plus the satellite reference toggle on map shells. */
 .sc-workbench .sc-tool-column.sc-canvas-rail {
   position: absolute !important; right: 12px; top: 50%; left: auto; bottom: auto;
   transform: translateY(-50%) !important; grid-area: unset !important;

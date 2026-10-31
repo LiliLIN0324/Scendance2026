@@ -2,41 +2,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from '../lib/amap-script';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, SATELLITE_GROUND_LABEL, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
 import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
 import { defaultGuestFlow } from '../lib/site-capture';
-
-declare global {
-  interface Window {
-    _AMapSecurityConfig?: { securityJsCode: string };
-    AMap?: any;
-  }
-}
-
-const KEY_STORAGE = 'scendance:amap-key';
-const SECURITY_STORAGE = 'scendance:amap-security';
-const SCRIPT_ID = 'scendance-amap-script';
 
 // Next 只静态内联 process.env.NEXT_PUBLIC_* 的字面量访问，用变量取 key 在浏览器里恒为空。
 function envOrStorage(envValue: string | undefined, storageKey: string): string {
   if (envValue) return envValue;
   try { return localStorage.getItem(storageKey) ?? ''; } catch { return ''; }
-}
-
-let loaderPromise: Promise<void> | null = null;
-function loadAmap(key: string, security: string): Promise<void> {
-  if (window.AMap) return Promise.resolve();
-  if (loaderPromise) return loaderPromise;
-  window._AMapSecurityConfig = { securityJsCode: security };
-  loaderPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.id = SCRIPT_ID;
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.PlaceSearch,AMap.MouseTool,AMap.ToolBar`;
-    script.onload = () => resolve();
-    script.onerror = () => { loaderPromise = null; reject(new Error('高德脚本加载失败，检查网络与 Key 域名白名单（需含 localhost:3000）。')); };
-    document.head.appendChild(script);
-  });
-  return loaderPromise;
 }
 
 export interface VenuePickResult {
@@ -45,7 +19,7 @@ export interface VenuePickResult {
   polygon: { lng: number; lat: number }[];
   /** 圈内主客流线折点；缺省时上层用默认长轴流线加密站位。 */
   flow?: { lng: number; lat: number }[];
-  /** 可选卫星贴地参考底图（默认关）；仅观感，不可作重建素材。 */
+  /** 卫星贴地参考底图（默认开）；仅观感，不可作重建素材。 */
   satelliteGround?: boolean;
   /** 已拉取的真实卫星参考 data URL（仅观感，不进重建上传）。 */
   satelliteGroundImage?: string;
@@ -54,12 +28,12 @@ export interface VenuePickResult {
 type DrawMode = 'polygon' | 'polyline' | null;
 
 /**
- * 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 可选画主客流线 → 真轮廓壳体；可选卫星贴地参考（默认关）。key 只留在本机。
+ * 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 可选画主客流线 → 真轮廓壳体；卫星贴地参考默认开（仍仅观感）。key 只留在本机。
  * grow = 交给浮层撑高度：圈一块地要能看清地块，左栏那条 260px 的窄缝圈不准。
  */
 export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick: VenuePickResult): void; onClose(): void; grow?: boolean }) {
-  const [key, setKey] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_KEY, KEY_STORAGE));
-  const [security, setSecurity] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE, SECURITY_STORAGE));
+  const [key, setKey] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_KEY, AMAP_KEY_STORAGE));
+  const [security, setSecurity] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE, AMAP_SECURITY_STORAGE));
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('盐官潮乐之城');
   const [results, setResults] = useState<{ id: string; name: string; address: string; location: { lng: number; lat: number } }[]>([]);
@@ -68,8 +42,8 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
   const [bbox, setBbox] = useState<{ width: number; depth: number } | null>(null);
   const [flowMeters, setFlowMeters] = useState<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  /** 卫星贴地参考：默认关；开了只贴观感底图，绝不进 Aholo 上传。 */
-  const [satelliteGround, setSatelliteGround] = useState(false);
+  /** 卫星贴地参考：地图立壳默认开；只贴观感底图，绝不进 Aholo 上传。 */
+  const [satelliteGround, setSatelliteGround] = useState(true);
   const [busy, setBusy] = useState(false);
   const mapRef = useRef<unknown>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -82,7 +56,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
     if (!key) return;
     let cancelled = false;
     setStatus('正在加载高德地图…');
-    loadAmap(key, security).then(() => {
+    loadAmapScript(key, security).then(() => {
       if (cancelled || !containerRef.current) return;
       const AMap = window.AMap as any;
       const map = new AMap.Map(containerRef.current, { zoom: 15, center: [120.5394, 30.4049], mapStyle: 'amap://styles/whitesmoke' });
@@ -211,7 +185,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
         polygon: drawRef.current,
         flow,
         satelliteGround,
-        satelliteGroundImage,
+        ...(satelliteGroundImage ? { satelliteGroundImage } : {}),
       });
     } finally {
       setBusy(false);
@@ -243,7 +217,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
         polygon,
         flow: defaultGuestFlow(polygon),
         satelliteGround,
-        satelliteGroundImage,
+        ...(satelliteGroundImage ? { satelliteGroundImage } : {}),
       });
     } finally {
       setBusy(false);
@@ -258,7 +232,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
       <label className="sc-field" htmlFor="amap-security-input">安全密钥 securityJsCode</label>
       <input id="amap-security-input" className="sc-lux-direct-input" value={security} onChange={event => setSecurity(event.target.value)} placeholder="粘贴安全密钥" />
       <button type="button" className="sc-button" disabled={!key.trim() || !security.trim()}
-        onClick={() => { try { localStorage.setItem(KEY_STORAGE, key.trim()); localStorage.setItem(SECURITY_STORAGE, security.trim()); } catch { /* 只丢缓存 */ } setStatus('已保存本机，正在加载…'); loadAmap(key.trim(), security.trim()).then(() => setStatus('')).catch(failure => setStatus(failure instanceof Error ? failure.message : String(failure))); }}>
+        onClick={() => { try { localStorage.setItem(AMAP_KEY_STORAGE, key.trim()); localStorage.setItem(AMAP_SECURITY_STORAGE, security.trim()); } catch { /* 只丢缓存 */ } setStatus('已保存本机，正在加载…'); loadAmapScript(key.trim(), security.trim()).then(() => setStatus('')).catch(failure => setStatus(failure instanceof Error ? failure.message : String(failure))); }}>
         保存并加载地图
       </button>
       {status && <p className="sc-note">{status}</p>}
@@ -291,7 +265,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
     <label className="sc-note" style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative', zIndex: 2 }}>
       <input type="checkbox" checked={satelliteGround} disabled={busy} onChange={event => setSatelliteGround(event.target.checked)}
         aria-label="卫星贴地参考底图" />
-      卫星贴地参考底图（可选·默认关）· {SATELLITE_GROUND_LABEL}
+      卫星贴地参考底图（默认开）· {SATELLITE_GROUND_LABEL}
     </label>
     {satelliteGround && <p className="sc-note" role="note">{RECON_MATERIAL_BAN}</p>}
     {status && <p className="sc-note">{status}</p>}
