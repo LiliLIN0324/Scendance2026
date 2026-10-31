@@ -252,6 +252,24 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
+  it('shows venue capability chips under the composer', () => {
+    const onOpenReference = vi.fn();
+    const onOpenGenerate = vi.fn();
+    render(<LayoutAgentProvider callbacks={{ ...callbacks, onOpenReference, onOpenGenerate, luxToolsVisible: true }} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><MapVenueOverlay/></LayoutAgentProvider>);
+    const group = screen.getByRole('group', { name: '你可以做什么' });
+    expect(screen.getByText('你可以做什么')).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /图纸与照片/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /空白场地/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /生成物件/ })).toBeTruthy();
+    fireEvent.click(within(group).getByRole('button', { name: /图纸与照片/ }));
+    expect(onOpenReference).toHaveBeenCalled();
+    fireEvent.click(within(group).getByRole('button', { name: /地图选址/ }));
+    expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
+    fireEvent.click(within(group).getByRole('button', { name: /生成物件/ }));
+    expect(onOpenGenerate).toHaveBeenCalled();
+  });
+
   it('keeps the left rail on 布置 and sends review or delivery elsewhere', async () => {
     const { WORKBENCH_MODES, demoteLegacyMode } = await import('../lib/workbench-mode');
     expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout']);

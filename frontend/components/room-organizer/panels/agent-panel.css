@@ -124,6 +124,12 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-field-value.is-static { cursor: default; }
 .ap-pen { font-size: var(--fs-cap); color: var(--wk-muted); margin-left: 4px; }
 .ap-choices, .ap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-capabilities { flex: 0 0 auto; margin: 0 12px 8px; padding: 0 2px; display: flex; flex-direction: column; gap: 6px; }
+.ap-capability-label { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); font-weight: 500; }
+.ap-capability-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-capability-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-capability-chip:hover { border-color: var(--wk-ink-soft); background: var(--wk-plane); transform: translateY(-1px); }
+.ap-capability-chip svg { flex: 0 0 auto; color: var(--wk-ink-soft); }
 .sc-agent-panel .chip { border: 1px solid var(--wk-hair); background: var(--wk-paper); border-radius: var(--r-sm); padding: 4px 10px; font-size: var(--fs-p2); color: var(--wk-ink); }
 .sc-agent-panel .chip.is-on { border-color: var(--ap-green); background: var(--ap-pale2); color: var(--ap-deep); }
 .ap-venue { display: flex; flex-direction: column; gap: 8px; }
