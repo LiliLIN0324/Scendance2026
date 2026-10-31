@@ -45,13 +45,13 @@ export function BootSkeleton(): JSX.Element {
   return (
     <div className="sc-boot" role="status" aria-live="polite">
       <div className="sc-boot-top" aria-hidden="true">
-        <span className="sc-boot-mark" />
         <span className="sc-boot-line" style={{ width: 96 }} />
         <span className="sc-boot-line sc-boot-line--soft" style={{ width: 52 }} />
         <span className="sc-boot-dot" />
       </div>
       <div className="sc-boot-main" aria-hidden="true">
         <div className="sc-boot-rail">
+          <span className="sc-boot-mark" />
           <span className="sc-boot-tile" />
           <span className="sc-boot-tile" />
           <span className="sc-boot-tile" />
