@@ -2,8 +2,8 @@ import { BrandMark } from '../../brand-mark';
 import { navToggleLabel } from '../lib/nav-chrome';
 
 /**
- * 工作台 logo。点一下收起或展开左侧导航。
- * 收起时只放锁标；展开时在左卡顶上排「幕景」和一点绿。
+ * 工作台 logo。只住在最左窄轨顶上，点一下收起或展开左侧那一列。
+ * 收起和展开都是同一颗锁标，下面带「幕景」小字；不铺成方案会话或对话卡的标题。
  * 开合本身不在这里记，由调用方用晴光列和工具抽屉两扇门算出来。
  */
 export function WorkbenchBrandToggle({ expanded, onToggle }: {
@@ -14,7 +14,7 @@ export function WorkbenchBrandToggle({ expanded, onToggle }: {
   return (
     <button
       type="button"
-      className={expanded ? 'sc-nav-brand is-wordmark' : 'sc-nav-brand is-mark'}
+      className="sc-nav-brand is-mark"
       aria-expanded={expanded}
       aria-controls="workbench-nav-column"
       aria-label={label}
@@ -23,10 +23,7 @@ export function WorkbenchBrandToggle({ expanded, onToggle }: {
       onClick={onToggle}
     >
       <span className="sc-brand-mark"><BrandMark size={28} /></span>
-      {expanded && <>
-        <strong className="sc-brand-cn">幕景</strong>
-        <span className="sc-brand-dot" aria-hidden="true" />
-      </>}
+      <span className="sc-rail-word">幕景</span>
     </button>
   );
 }

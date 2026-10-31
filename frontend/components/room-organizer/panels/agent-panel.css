@@ -20,8 +20,18 @@
 }
 .sc-workbench .is-docked-layout.has-conversation .sc-agent-panel { display: none; }
 
-/* ── 头部 ── */
+/* ── 头部：会话标题 + 历史 / 新会话。窄轨已有晴光头像，这里不再放第二颗。 ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
+.ap-head.ap-session-head { height: 48px; padding: 0 8px 0 12px; gap: 8px; }
+.ap-session-title { margin: 0; flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; font: inherit; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-session-tools { display: flex; align-items: center; gap: 2px; flex: none; }
+.ap-session-tool { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--wk-ink-soft); cursor: pointer; }
+.ap-session-tool:hover, .ap-session-tool.is-on { background: var(--wk-plane); color: var(--wk-ink); }
+.ap-can-do { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ap-can-do > p { margin: 0; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-muted); }
+.ap-thread { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ap-history-mask { position: absolute; inset: 0; z-index: 8; margin: 0; padding: 0; border: 0; background: transparent; cursor: default; }
+.ap-history-overlay { position: absolute; z-index: 9; top: 8px; left: 12px; right: 12px; max-height: 33.333%; overflow: auto; border: 1px solid var(--wk-hair); border-radius: 12px; background: var(--wk-paper); box-shadow: 0 10px 28px rgba(20, 20, 22, .1); }
 button.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; padding: 0; border: 0; background: transparent; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
 .ap-status { border: 0; background: transparent; padding: 0; cursor: pointer; }
 .mascot-slot img { width: 48px; height: 48px; display: block; object-fit: cover; border-radius: 50%; }

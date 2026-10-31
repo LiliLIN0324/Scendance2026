@@ -1,0 +1,103 @@
+/* 场地库贴在画布上，气质跟左栏方案会话一样：纸底、发丝线、少字。 */
+.sc-venue-library {
+  position: absolute;
+  left: 12px;
+  top: 52px;
+  bottom: 16px;
+  z-index: 30;
+  width: min(360px, calc(100% - 80px));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
+  background: var(--wk-paper, #fff);
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(20, 20, 22, 0.08);
+  color: var(--wk-ink, #141416);
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+}
+.sc-venue-library-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--wk-hair, #e4e4e7);
+}
+.sc-venue-library-head h2 {
+  margin: 0;
+  flex: 1;
+  font-size: var(--fs-h3, 16px);
+  line-height: var(--lh-h3, 24px);
+  font-weight: 600;
+}
+.sc-venue-library-head button,
+.sc-venue-actions button,
+.sc-venue-list > li > button {
+  border: 0;
+  background: transparent;
+  color: var(--wk-ink-soft, #71767e);
+  font: inherit;
+  font-size: var(--fs-p2, 12px);
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-venue-library-head button:hover,
+.sc-venue-actions button:hover,
+.sc-venue-list > li > button:hover { color: var(--wk-ink, #141416); }
+.sc-venue-detail {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  margin: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--wk-plane, #f4f5f7);
+}
+.sc-venue-detail p { margin: 0; color: var(--wk-muted, #71767e); font-size: var(--fs-p2, 12px); line-height: var(--lh-p2, 20px); }
+.sc-venue-section { padding: 12px 12px 4px; }
+.sc-venue-section h3 {
+  margin: 0 0 8px;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  font-weight: 600;
+  color: var(--wk-muted, #71767e);
+}
+.sc-venue-empty,
+.sc-venue-save {
+  margin: 0 0 8px;
+  color: var(--wk-muted, #71767e);
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+}
+.sc-venue-list { list-style: none; margin: 0; padding: 0 0 8px; display: flex; flex-direction: column; gap: 8px; }
+.sc-venue-list > li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+}
+.sc-venue-list > li > button,
+.sc-venue-actions { grid-column: 2; justify-self: start; }
+.sc-venue-actions { display: flex; gap: 10px; }
+.sc-venue-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: block;
+}
+.sc-venue-copy { min-width: 0; display: flex; flex-direction: column; }
+.sc-venue-copy strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-venue-copy small {
+  color: var(--wk-muted, #71767e);
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+}

@@ -2,8 +2,8 @@
  * 评审完成回执。
  *
  * 评审方在方案页点「完成评审」后，写进本机 localStorage。
- * 创作者工作台收起态的活物球（`AgentReopenCard`，产品旧称 Bingo 球）
- * 读到回执就加 `is-review-returned`，球带红环。
+ * 创作者工作台窄轨第三格（Bingo / 草稿，`RailBingoDraft`）
+ * 读到回执就加 `is-review-returned`。不另画一颗浮球。
  *
  * 本刀是同一浏览器的演示钩子：不写 Supabase，球也不按 planKey 过滤。
  * 后刀再接真状态：用 planKey 对齐当前布置，并跨设备同步。

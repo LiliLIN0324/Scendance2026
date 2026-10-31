@@ -143,7 +143,7 @@ export function ReviewSharePage(): JSX.Element {
   };
 
   return (
-    <main className="rsp" data-review-share-page="true" data-review-source={plan?.source ?? phase.kind}>
+    <main className="rsp" data-review-share-page="true" data-review-side="client" data-review-source={plan?.source ?? phase.kind}>
       <header className="rsp-mast">
         <p className="rsp-brand"><span>幕景</span><small>Scendance</small></p>
         <p className="rsp-mast-status">可评论方案 · 只读</p>

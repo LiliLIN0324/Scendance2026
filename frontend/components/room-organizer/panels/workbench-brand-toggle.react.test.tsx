@@ -9,14 +9,18 @@ import { WorkbenchBrandToggle } from './workbench-brand-toggle';
 afterEach(cleanup);
 
 describe('workbench brand toggle', () => {
-  it('names the collapsed and expanded actions, and only shows 幕景 when expanded', () => {
+  it('keeps the mark and the short 幕景 word on the same rail button in both states', () => {
     const onToggle = vi.fn();
     const { rerender } = render(<WorkbenchBrandToggle expanded={false} onToggle={onToggle} />);
     const open = screen.getByRole('button', { name: '展开导航栏' });
     expect(open.getAttribute('aria-expanded')).toBe('false');
     expect(open.getAttribute('data-tip')).toBe('展开导航栏');
-    expect(open.textContent).not.toContain('幕景');
+    expect(open.classList.contains('is-mark')).toBe(true);
+    expect(open.classList.contains('is-wordmark')).toBe(false);
+    expect(open.textContent).toContain('幕景');
+    expect(open.querySelector('.sc-brand-mark')).not.toBeNull();
     expect(open.querySelector('.sc-brand-dot')).toBeNull();
+    expect(open.textContent).not.toContain('SCENDANCE');
     fireEvent.click(open);
     expect(onToggle).toHaveBeenCalledOnce();
 
@@ -24,8 +28,9 @@ describe('workbench brand toggle', () => {
     const close = screen.getByRole('button', { name: '收起导航栏' });
     expect(close.getAttribute('aria-expanded')).toBe('true');
     expect(close.getAttribute('data-tip')).toBe('收起导航栏');
+    expect(close.classList.contains('is-mark')).toBe(true);
     expect(close.textContent).toContain('幕景');
-    expect(close.querySelector('.sc-brand-dot')).not.toBeNull();
+    expect(close.querySelector('.sc-brand-dot')).toBeNull();
     expect(close.textContent).not.toContain('SCENDANCE');
   });
 });
@@ -52,19 +57,21 @@ function NavHarness({ initial }: { initial: NavColumns }): JSX.Element {
 describe('logo mapped onto the two existing doors', () => {
   it('collapses 晴光 from the logo and opens it again without a third flag', () => {
     render(<NavHarness initial={{ agentCollapsed: false, sidebarCollapsed: true }} />);
-    expect(screen.getByRole('button', { name: '收起导航栏' }).textContent).toContain('幕景');
-    fireEvent.click(screen.getByRole('button', { name: '收起导航栏' }));
+    const close = screen.getByRole('button', { name: '收起导航栏' });
+    expect(close.textContent).toContain('幕景');
+    expect(close.classList.contains('is-wordmark')).toBe(false);
+    fireEvent.click(close);
     const shell = document.querySelector('[data-nav]') as HTMLElement;
     expect(shell.dataset.nav).toBe('collapsed');
     expect(shell.dataset.agent).toBe('true');
     expect(shell.dataset.drawer).toBe('true');
-    expect(screen.getByRole('button', { name: '展开导航栏' }).textContent).not.toContain('幕景');
+    expect(screen.getByRole('button', { name: '展开导航栏' }).textContent).toContain('幕景');
 
     fireEvent.click(screen.getByRole('button', { name: '展开导航栏' }));
     expect(shell.dataset.nav).toBe('expanded');
     expect(shell.dataset.agent).toBe('false');
     expect(shell.dataset.drawer).toBe('true');
-    expect(screen.getByRole('button', { name: '收起导航栏' }).textContent).toContain('幕景');
+    expect(screen.getByRole('button', { name: '收起导航栏' }).classList.contains('is-mark')).toBe(true);
   });
 
   it('follows 晴光 and the tool drawer when those controls move on their own', () => {
@@ -78,7 +85,7 @@ describe('logo mapped onto the two existing doors', () => {
     expect(shell.dataset.nav).toBe('expanded');
     expect(shell.dataset.agent).toBe('true');
     expect(shell.dataset.drawer).toBe('false');
-    expect(screen.getByRole('button', { name: '收起导航栏' }).textContent).toContain('幕景');
+    expect(screen.getByRole('button', { name: '收起导航栏' }).classList.contains('is-mark')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: '收起导航栏' }));
     expect(shell.dataset.nav).toBe('collapsed');
