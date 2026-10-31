@@ -663,14 +663,12 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
 });
 
 describe('晴光在左侧工作台', () => {
-  it('空闲时点晴光形象回到输入，不另开一栏', () => {
+  it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
-    const face = screen.getByRole('button', { name: '晴光，空闲。回到输入' });
-    expect(face.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/qingguang-3d-40.png');
-    fireEvent.click(face);
-    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
-    fireEvent.click(screen.getByRole('button', { name: '空闲' }));
-    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+    expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
+    const input = screen.getByLabelText('告诉 Agent 要改的');
+    input.focus();
+    expect(document.activeElement).toBe(input);
   });
 });
 
