@@ -31,7 +31,13 @@ type DrawMode = 'polygon' | 'polyline' | null;
  * 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 可选画主客流线 → 真轮廓壳体；卫星贴地参考默认开（仍仅观感）。key 只留在本机。
  * grow = 交给浮层撑高度：圈一块地要能看清地块，左栏那条 260px 的窄缝圈不准。
  */
-export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick: VenuePickResult): void; onClose(): void; grow?: boolean }) {
+export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }: {
+  onPick(pick: VenuePickResult): void;
+  onClose(): void;
+  grow?: boolean;
+  /** 已经存进场地的圈画。打开地图时画在卫星图上，方便对照；再圈一次会换成新的。 */
+  savedPolygon?: { lng: number; lat: number }[];
+}) {
   const [key, setKey] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_KEY, AMAP_KEY_STORAGE));
   const [security, setSecurity] = useState(() => envOrStorage(process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE, AMAP_SECURITY_STORAGE));
   const [status, setStatus] = useState('');
@@ -51,6 +57,8 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
   const drawRef = useRef<{ lng: number; lat: number }[]>([]);
   const flowRef = useRef<{ lng: number; lat: number }[]>([]);
   const drawModeRef = useRef<DrawMode>(null);
+  const savedPolygonRef = useRef(savedPolygon);
+  savedPolygonRef.current = savedPolygon;
 
   useEffect(() => {
     if (!key) return;
@@ -67,6 +75,18 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
         : new AMap.TileLayer();
       satellite.setMap(map);
       satellite.show();
+      const remembered = savedPolygonRef.current;
+      if (remembered && remembered.length >= 3 && AMap.Polygon) {
+        const overlay = new AMap.Polygon({
+          path: remembered.map((point: { lng: number; lat: number }) => new AMap.LngLat(point.lng, point.lat)),
+          strokeColor: '#1f6b4a',
+          strokeWeight: 3,
+          fillColor: '#1f6b4a',
+          fillOpacity: 0.15,
+        });
+        overlay.setMap(map);
+        map.setFitView?.([overlay]);
+      }
       const mouseTool = new AMap.MouseTool(map);
       mouseTool.on('draw', (data: any) => {
         const overlay = data?.overlay ?? data?.obj ?? data;
@@ -102,7 +122,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false }: { onPick(pick
       });
       toolRef.current = mouseTool;
       setMapReady(true);
-      setStatus('');
+      setStatus(remembered && remembered.length >= 3 ? '上次圈的范围已标在图上。再圈一次会换成新的场地。' : '');
     }).catch(failure => setStatus(failure instanceof Error ? failure.message : String(failure)));
     return () => { cancelled = true; };
   }, [key, security]);

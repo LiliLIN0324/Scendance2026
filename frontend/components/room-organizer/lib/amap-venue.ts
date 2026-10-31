@@ -28,20 +28,21 @@ export function polygonBboxMeters(polygon: AmapPoint[]): { width: number; depth:
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 /**
- * 高德经纬度多边形 → 本地米制点列（原点在西南角，x 向东、z 向北）。
+ * 高德经纬度多边形 → 本地米制点列。
+ * x 向东；z=0 是北缘（平面图上沿、房间的北），z 向南。这样和地图的北在上一致。
  * 有点列就保留真轮廓；无 ≥3 点则退化为空（上层再走轴对齐矩形）。
  */
 export function polygonToLocalMeters(polygon: AmapPoint[]): { width: number; depth: number; points: LocalPoint[] } {
   if (polygon.length < 3) return { width: 0, depth: 0, points: [] };
   const lats = polygon.map(p => p.lat);
   const lngs = polygon.map(p => p.lng);
-  const lat0 = Math.min(...lats);
+  const latNorth = Math.max(...lats);
   const lng0 = Math.min(...lngs);
-  const latMid = (lat0 + Math.max(...lats)) / 2;
+  const latMid = (Math.min(...lats) + latNorth) / 2;
   const mLng = metersPerDegreeLng(latMid);
   const raw = polygon.map(p => ({
     x: (p.lng - lng0) * mLng,
-    z: (p.lat - lat0) * METERS_PER_DEGREE_LAT,
+    z: (latNorth - p.lat) * METERS_PER_DEGREE_LAT,
   }));
   const width = Math.max(...raw.map(p => p.x));
   const depth = Math.max(...raw.map(p => p.z));
@@ -176,10 +177,18 @@ export function satellitePadMeters(shellWidth: number, shellDepth: number): numb
 }
 
 export interface MapGroundFrame {
+  /** 西缘经度（壳体 x=0）。 */
   lng0: number;
+  /** 壳体 z=0 的纬度。新圈画里这是北缘。 */
   lat0: number;
   latMid: number;
+  /** 壳体米 / 真实米。超过 100m 才小于 1。 */
   scale: number;
+  /**
+   * z 增加时纬度的方向。-1：z 向南（北在 z=0，和地图、平面图上沿一致）。
+   * +1：旧壳体 z 向北。缺省按 +1，避免把还没重存的旧帧读反。
+   */
+  latSign?: -1 | 1;
 }
 
 export interface SatelliteImageBounds {
@@ -190,7 +199,7 @@ export interface SatelliteImageBounds {
 }
 
 /**
- * 演示 L 和手圈多边形都走这里：西南角为原点，x 东、z 北，超过 100m 才等比缩小。
+ * 演示 L 和手圈多边形都走这里：x 向东，z=0 为北缘，超过 100m 才等比缩小。
  * 卫星图范围用同一套原点和缩放，再向外加一圈 pad。
  */
 export function groundRegistration(polygon: AmapPoint[]): {
@@ -206,13 +215,14 @@ export function groundRegistration(polygon: AmapPoint[]): {
   const lngs = polygon.map(point => point.lng);
   const lats = polygon.map(point => point.lat);
   const lng0 = Math.min(...lngs);
-  const lat0 = Math.min(...lats);
-  const lat1 = Math.max(...lats);
+  const latNorth = Math.max(...lats);
+  const latSouth = Math.min(...lats);
   const frame: MapGroundFrame = {
     lng0,
-    lat0,
-    latMid: (lat0 + lat1) / 2,
+    lat0: latNorth,
+    latMid: (latSouth + latNorth) / 2,
     scale: fitted.points.length >= 3 ? fitted.scale : 1,
+    latSign: -1,
   };
   const shellWidth = fitted.points.length >= 3 ? fitted.width : Math.max(2, round1(local.width));
   const shellDepth = fitted.points.length >= 3 ? fitted.depth : Math.max(2, round1(local.depth));
@@ -237,7 +247,7 @@ export function satelliteBoundsForFrame(
   };
 }
 
-/** 壳体米（西南角为 0）→ 卫星图像素比例。v 向北为 1，配合贴图 flipY。 */
+/** 壳体米（x=0 西缘，z=0 为 frame.lat0）→ 卫星图像素比例。v 向北为 1，配合贴图 flipY。 */
 export function shellMetersToSatelliteUv(
   localX: number,
   localZ: number,
@@ -245,11 +255,90 @@ export function shellMetersToSatelliteUv(
   bounds: SatelliteImageBounds,
 ): { u: number; v: number } {
   const scale = frame.scale > 0 ? frame.scale : 1;
+  const sign = frame.latSign ?? 1;
   const lng = frame.lng0 + (localX / scale) / metersPerDegreeLng(frame.latMid);
-  const lat = frame.lat0 + (localZ / scale) / METERS_PER_DEGREE_LAT;
+  const lat = frame.lat0 + sign * (localZ / scale) / METERS_PER_DEGREE_LAT;
   return {
     u: (lng - bounds.west) / (bounds.east - bounds.west),
     v: (lat - bounds.south) / (bounds.north - bounds.south),
+  };
+}
+
+/** 卫星图在壳体米制里的矩形。z 是平面图上的较小值（靠上的一边）。 */
+export function satelliteImageShellRect(
+  frame: MapGroundFrame,
+  bounds: SatelliteImageBounds,
+): { x: number; z: number; width: number; depth: number; northAtTop: boolean } {
+  const scale = frame.scale > 0 ? frame.scale : 1;
+  const sign = frame.latSign ?? 1;
+  const mLng = metersPerDegreeLng(frame.latMid);
+  const zOf = (lat: number) => (lat - frame.lat0) * METERS_PER_DEGREE_LAT * scale / sign;
+  const x = (bounds.west - frame.lng0) * mLng * scale;
+  const zNorth = zOf(bounds.north);
+  const zSouth = zOf(bounds.south);
+  return {
+    x,
+    z: Math.min(zNorth, zSouth),
+    width: (bounds.east - bounds.west) * mLng * scale,
+    depth: Math.abs(zSouth - zNorth),
+    northAtTop: zNorth <= zSouth,
+  };
+}
+
+/** 纬度与壳体 z 的协方差。大于 0 表示 z 向北（旧壳体，和地图上下相反）。 */
+function latZCovariance(polygon: AmapPoint[], shell: { z: number }[]): number | null {
+  if (polygon.length !== shell.length || polygon.length < 3) return null;
+  const meanLat = polygon.reduce((sum, point) => sum + point.lat, 0) / polygon.length;
+  const meanZ = shell.reduce((sum, point) => sum + point.z, 0) / shell.length;
+  let cov = 0;
+  for (let i = 0; i < polygon.length; i++) cov += (polygon[i]!.lat - meanLat) * (shell[i]!.z - meanZ);
+  return cov;
+}
+
+/** 已有壳体时，帧必须跟着壳体的 z 方向，不能假设每次都是新的北在上。 */
+export function frameForExistingShell(polygon: AmapPoint[], shell?: { x: number; z: number }[] | null): MapGroundFrame | null {
+  const registration = groundRegistration(polygon);
+  if (!registration) return null;
+  const cov = shell && shell.length ? latZCovariance(polygon, shell) : null;
+  if (cov !== null && cov > 1e-6) {
+    return {
+      lng0: registration.frame.lng0,
+      lat0: Math.min(...polygon.map(point => point.lat)),
+      latMid: registration.frame.latMid,
+      scale: registration.frame.scale,
+      latSign: 1,
+    };
+  }
+  return registration.frame;
+}
+
+/**
+ * 旧圈画把地理北放在 z 最大的一边，平面图上沿却是 z=0。
+ * 打开存档时把顶点翻到北在上，并换成同一套帧。已经朝北的原样返回。
+ */
+export function orientMapShellNorthUp(layout: RoomLayout): RoomLayout {
+  const geo = layout.mapGroundPolygon;
+  const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
+  if (!geo || geo.length < 3 || !shell || shell.length < 3) return layout;
+  const cov = latZCovariance(geo, shell);
+  if (cov === null || cov <= 1e-6) return layout;
+  const depth = layout.backendVenue?.depth ?? layout.backendSceneV2?.venue.depth ?? layout.height;
+  const flip = (points: { x: number; z: number }[]) => points.map(point => ({
+    ...point,
+    z: Math.min(depth, Math.max(0, Math.round((depth - point.z) * 10) / 10)),
+  }));
+  const registration = groundRegistration(geo);
+  const venue = layout.backendVenue?.polygon
+    ? { ...layout.backendVenue, polygon: flip(layout.backendVenue.polygon) }
+    : layout.backendVenue;
+  const scene = layout.backendSceneV2?.venue.polygon
+    ? { ...layout.backendSceneV2, venue: { ...layout.backendSceneV2.venue, polygon: flip(layout.backendSceneV2.venue.polygon) } }
+    : layout.backendSceneV2;
+  return {
+    ...layout,
+    ...(venue ? { backendVenue: venue } : {}),
+    ...(scene ? { backendSceneV2: scene } : {}),
+    ...(registration ? { mapGroundFrame: registration.frame } : {}),
   };
 }
 
@@ -483,7 +572,8 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
   const located = polygon && polygon.length >= 3 ? polygon : null;
   if (located) {
     const registration = groundRegistration(located);
-    const frame = layout.mapGroundFrame ?? registration?.frame;
+    const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
+    const frame = layout.mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
     const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height });
     if (fetched && frame) {
       return {

@@ -1,3 +1,4 @@
+import { isSatelliteGroundImage, parseSatelliteImageBounds, satelliteImageShellRect } from '../lib/amap-venue';
 import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '../lib/constants';
 import { rotatedHalfExtents } from '../lib/geometry';
 import { planDrawOrder } from '../lib/plan-order';
@@ -155,15 +156,17 @@ export function render2DTopDown(options: Render2DOptions): void {
 
   const { scale, offsetX, offsetY } = get2DViewTransform(viewWidth, viewHeight, layout, options.padding ?? PADDING);
 
+  const satellitePainted = paintAlignedSatellite(ctx, layout, floor, offsetX, offsetY, scale, options);
   ctx.save();
   if (layout.backendVenue?.polygon) {
     ctx.beginPath();
     layout.backendVenue.polygon.forEach((p, i) => { if (i) ctx.lineTo(offsetX + p.x * scale, offsetY + p.z * scale); else ctx.moveTo(offsetX + p.x * scale, offsetY + p.z * scale); });
     ctx.closePath(); ctx.clip();
   }
-  drawFloor(ctx, layout, floor, offsetX, offsetY, scale, options);
+  drawFloor(ctx, layout, floor, offsetX, offsetY, scale, options, satellitePainted);
   drawGrid(ctx, layout, offsetX, offsetY, scale);
   ctx.restore();
+  drawVenuePolygon(ctx, layout, offsetX, offsetY, scale);
   // The stairwell the floor below cuts through this slab (#290), under everything placed over it.
   drawStairwellHoles(ctx, layout, planFloorIndex(layout.floors, floor), { scale, offsetX, offsetY });
   // Zone tints sit on the floor under the walls; their labels go over the
@@ -370,6 +373,78 @@ export function computeFloorPlanPlacement(
   return { source: fullSource, dest: fullDest };
 }
 
+function isGroundFloor(layout: RoomLayout, floor: FloorLayout): boolean {
+  return layout.floors[0] === floor || layout.floors[0]?.id === floor.id;
+}
+
+/** 卫星图按壳体同一套经纬度铺到平面上。北在上时图的上沿就是北边，不再拉满外接矩形。 */
+function paintAlignedSatellite(
+  ctx: CanvasRenderingContext2D,
+  layout: RoomLayout,
+  floor: FloorLayout,
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage'>,
+): boolean {
+  if (options.showFloorPlan === false || options.referenceImage || !isGroundFloor(layout, floor)) return false;
+  if (layout.satelliteGroundRef === false) return false;
+  const url = layout.floorPlanImage;
+  const frame = layout.mapGroundFrame;
+  const bounds = url ? parseSatelliteImageBounds(url) : null;
+  if (!url || !frame || !bounds || !isSatelliteGroundImage(url)) return false;
+  const cached = floorPlanImageCache;
+  if (cached?.url === url && cached.image.complete && cached.image.naturalWidth > 0) {
+    const rect = satelliteImageShellRect(frame, bounds);
+    const dx = offsetX + rect.x * scale;
+    const dy = offsetY + rect.z * scale;
+    const dw = rect.width * scale;
+    const dh = rect.depth * scale;
+    ctx.save();
+    ctx.globalAlpha = options.floorPlanOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
+    if (rect.northAtTop) ctx.drawImage(cached.image, dx, dy, dw, dh);
+    else ctx.drawImage(cached.image, dx, dy + dh, dw, -dh);
+    ctx.restore();
+    return true;
+  }
+  if (cached?.url !== url && typeof Image !== 'undefined') {
+    const image = new Image();
+    floorPlanImageCache = { url, image };
+    image.onload = () => { if (floorPlanImageCache?.image === image) requestRepaint(); };
+    image.src = url;
+  }
+  return false;
+}
+
+/** 圈画轮廓。户外壳体没有墙，不描这条线的话平面上只剩一块外接矩形。 */
+function drawVenuePolygon(
+  ctx: CanvasRenderingContext2D,
+  layout: RoomLayout,
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+): void {
+  const polygon = layout.backendVenue?.polygon;
+  if (!polygon || polygon.length < 3) return;
+  ctx.beginPath();
+  polygon.forEach((point, index) => {
+    const x = offsetX + point.x * scale;
+    const y = offsetY + point.z * scale;
+    if (index) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  });
+  ctx.closePath();
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#1f6b4a';
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFloor(
   ctx: CanvasRenderingContext2D,
   layout: RoomLayout,
@@ -377,15 +452,17 @@ function drawFloor(
   offsetX: number,
   offsetY: number,
   scale: number,
-  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage'>
+  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage'>,
+  satellitePainted = false,
 ): void {
+  if (satellitePainted) return;
   // The tracing image belongs to the ground floor only, like in 3D
   // (use-scene-effects keys it on floor index 0) — painting it under every
   // storey put the ground-floor scan in upstairs blueprints (#218). Derived
   // here from data both callers already pass, so no caller can forget it.
-  const isGroundFloor = layout.floors[0] === floor || layout.floors[0]?.id === floor.id;
-  const referenceImage = isGroundFloor ? options.referenceImage : undefined;
-  const url = isGroundFloor && options.showFloorPlan !== false
+  const ground = isGroundFloor(layout, floor);
+  const referenceImage = ground ? options.referenceImage : undefined;
+  const url = ground && options.showFloorPlan !== false
     ? referenceImage?.url ?? (layout.backendSceneV2 ? undefined : layout.floorPlanImage) : undefined;
   if (url) {
     // Fill the floor colour first so there's a base while (or if) the image is

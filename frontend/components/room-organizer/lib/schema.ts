@@ -2,6 +2,7 @@ import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-c
 import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import { orientMapShellNorthUp } from './amap-venue';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
@@ -156,7 +157,8 @@ function isMapGroundFrame(value: unknown): boolean {
   return isFiniteNumber(value.lng0) && Math.abs(value.lng0) <= 180
     && isFiniteNumber(value.lat0) && Math.abs(value.lat0) <= 90
     && isFiniteNumber(value.latMid) && Math.abs(value.latMid) <= 90
-    && isFiniteNumber(value.scale) && value.scale > 0 && value.scale <= 1;
+    && isFiniteNumber(value.scale) && value.scale > 0 && value.scale <= 1
+    && (value.latSign === undefined || value.latSign === 1 || value.latSign === -1);
 }
 
 function isLngLatPoint(value: unknown): boolean {
@@ -421,7 +423,9 @@ export function parseStoredLayout(value: unknown): RoomLayout | null {
       : null;
   if (!layout) return null;
   const parsed = parseLayoutEventOperations(layout);
-  return parsed ? withUniqueIds(repairLayout(parsed)) : null;
+  const cleaned = parsed ? withUniqueIds(repairLayout(parsed)) : null;
+  // 旧圈画 z 向北，平面上沿是 z=0。读档时翻成北在上；已经朝北的仍是原对象。
+  return cleaned ? orientMapShellNorthUp(cleaned) : null;
 }
 
 /** Validate local business metadata before a load or snapshot can replace the current draft. */

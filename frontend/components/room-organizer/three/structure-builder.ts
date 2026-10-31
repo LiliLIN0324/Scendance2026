@@ -45,7 +45,7 @@ function writeGeographicUv(
   const pos = geometry.getAttribute('position');
   const uv = new Float32Array(pos.count * 2);
   for (let i = 0; i < pos.count; i++) {
-    // Shape 里 y = -(z - depth/2)，转回壳体米：x 向东、z 向北。贴图 flipY 后 v=1 是图的北边。
+    // Shape 里 y = -(z - depth/2)，转回壳体 z。新圈画 z=0 是北；旧帧用 latSign 区分。
     const localX = pos.getX(i) + width / 2;
     const localZ = depth / 2 - pos.getY(i);
     const { u, v } = shellMetersToSatelliteUv(localX, localZ, frame, bounds);

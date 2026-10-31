@@ -1321,6 +1321,7 @@ export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
   });
   // 上次挡路的原因不该跟着下一次打开一起回来。采集单留着——关浮层再开还能看见刚才那份，重圈一份才换掉。
   useEffect(() => { if (!agent.mapPickerOpen) setBlocked(null); }, [agent.mapPickerOpen]);
+  const { layout } = useRoomEditor();
   if (!agent.mapPickerOpen) return null;
   const upload = onReconUpload && capture
     ? () => {
@@ -1339,7 +1340,7 @@ export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
       <button type="button" className="sc-button" onClick={agent.closeMapVenuePicker}>关闭</button>
     </div>
     {blocked && <p className="sc-map-blocked" role="alert">{blocked}</p>}
-    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} onPick={pick => {
+    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} {...(layout.mapGroundPolygon ? { savedPolygon: layout.mapGroundPolygon } : {})} onPick={pick => {
       const reason = agent.applyMapVenuePick(pick);
       setBlocked(reason);
       // 场地没立起来就不出采集单——那份站位对应的地块并不存在。

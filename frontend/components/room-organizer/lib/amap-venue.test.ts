@@ -20,10 +20,13 @@ import {
   shellMetersToSatelliteUv,
   parseSatelliteImageBounds,
   satelliteImageAligned,
+  satelliteImageShellRect,
+  orientMapShellNorthUp,
   metersPerDegreeLng,
   METERS_PER_DEGREE_LAT,
 } from './amap-venue';
 import { INITIAL_LAYOUT } from './initial-layout';
+import { parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
 /** L 形：外接约 12×8 m，非轴对齐矩形。 */
@@ -292,9 +295,14 @@ describe('satellite ground backfill', () => {
     const center = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth / 2 * scale, registration!.frame, registration!.bounds);
     expect(center.u).toBeCloseTo(0.5, 4);
     expect(center.v).toBeCloseTo(0.5, 4);
-    const south = shellMetersToSatelliteUv(local.width / 2 * scale, 0, registration!.frame, registration!.bounds);
-    const north = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth * scale, registration!.frame, registration!.bounds);
+    const north = shellMetersToSatelliteUv(local.width / 2 * scale, 0, registration!.frame, registration!.bounds);
+    const south = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth * scale, registration!.frame, registration!.bounds);
     expect(north.v).toBeGreaterThan(south.v);
+    expect(registration!.frame.latSign).toBe(-1);
+    const northVertex = local.points.reduce((best, point) => point.z < best.z ? point : best);
+    const southVertex = local.points.reduce((best, point) => point.z > best.z ? point : best);
+    expect(northVertex.z).toBeLessThan(0.2);
+    expect(southVertex.z).toBeGreaterThan(local.depth - 0.2);
     const west = shellMetersToSatelliteUv(0, local.depth / 2 * scale, registration!.frame, registration!.bounds);
     const east = shellMetersToSatelliteUv(local.width * scale, local.depth / 2 * scale, registration!.frame, registration!.bounds);
     expect(east.u).toBeGreaterThan(west.u);
@@ -315,8 +323,9 @@ describe('satellite ground backfill', () => {
     const shell = layout.backendVenue?.polygon ?? [];
     expect(shell.length).toBeGreaterThanOrEqual(3);
     for (const point of shell) {
+      const sign = registration!.frame.latSign ?? -1;
       const lng = registration!.frame.lng0 + (point.x / registration!.frame.scale) / metersPerDegreeLng(registration!.frame.latMid);
-      const lat = registration!.frame.lat0 + (point.z / registration!.frame.scale) / METERS_PER_DEGREE_LAT;
+      const lat = registration!.frame.lat0 + sign * (point.z / registration!.frame.scale) / METERS_PER_DEGREE_LAT;
       const nearest = polygon.reduce((best, candidate) => {
         const east = (candidate.lng - lng) * metersPerDegreeLng(registration!.frame.latMid);
         const north = (candidate.lat - lat) * METERS_PER_DEGREE_LAT;
@@ -326,6 +335,25 @@ describe('satellite ground backfill', () => {
     }
     const drawn = satelliteProxyUrl(polygon, 'secret-key');
     expect(drawn).toBe(url);
+    const rect = satelliteImageShellRect(registration!.frame, registration!.bounds);
+    expect(rect.northAtTop).toBe(true);
+    expect(rect.z).toBeLessThan(0);
+    expect(orientMapShellNorthUp(layout)).toBe(layout);
+    const depth = layout.height;
+    const flipped = (layout.backendVenue?.polygon ?? []).map(point => ({ ...point, z: Math.round((depth - point.z) * 10) / 10 }));
+    const stale = {
+      ...layout,
+      backendVenue: { ...layout.backendVenue!, polygon: flipped },
+      backendSceneV2: layout.backendSceneV2
+        ? { ...layout.backendSceneV2, venue: { ...layout.backendSceneV2.venue, polygon: flipped } }
+        : layout.backendSceneV2,
+    };
+    const restored = parseStoredLayout(JSON.parse(JSON.stringify(stale)));
+    expect(restored?.mapGroundPolygon).toEqual(layout.mapGroundPolygon);
+    const restoredNorth = restored!.backendVenue!.polygon!.reduce((best, point) => point.z < best.z ? point : best);
+    expect(restoredNorth.z).toBeLessThan(0.2);
+    expect(restored?.mapGroundFrame?.latSign).toBe(-1);
+    expect(orientMapShellNorthUp(restored!)).toBe(restored);
   });
 
   it('keeps an oversized site on the same origin after the shell is scaled under 100m', () => {

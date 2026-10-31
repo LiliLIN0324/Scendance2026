@@ -380,9 +380,9 @@ export interface RoomLayout {
   mapLngLat?: { lng: number; lat: number };
   /**
    * 圈画经纬度换到壳体米制时用的原点与缩放。卫星 UV 靠它对齐，不进场景线、不进上传。
-   * lng0/lat0 是外接矩形西南角，scale 是壳体米 / 真实米（超过 100m 才会小于 1）。
+   * lng0 是西缘，lat0 是壳体 z=0 的纬度。latSign 为 -1 时 z 向南（北在平面图上沿）。
    */
-  mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number };
+  mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
   neighbours?: NeighbourSpec;
