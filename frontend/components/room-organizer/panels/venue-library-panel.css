@@ -1,0 +1,111 @@
+/* 左栏场地面板（与 bingo-panel.css 共用 .sc-rail-side-panel 壳） */
+.sc-workbench .sc-venue-library.sc-rail-side-panel .sc-venue-library-head {
+  height: 64px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--wk-hair);
+}
+.sc-workbench .sc-venue-library.sc-rail-side-panel .sc-venue-library-head h2 {
+  margin: 0;
+  flex: 1;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  font-weight: 600;
+}
+.sc-workbench .sc-venue-library-body .sc-venue-library-head button:not(.rsp-close) {
+  border: 0;
+  background: transparent;
+  color: var(--wk-ink-soft);
+  font: inherit;
+  font-size: var(--fs-p2);
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-workbench .sc-venue-detail {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--wk-plane);
+}
+.sc-workbench .sc-venue-detail p {
+  margin: 0;
+  color: var(--wk-muted);
+  font-size: var(--fs-p2);
+  line-height: var(--lh-p2);
+}
+.sc-workbench .sc-venue-section { padding: 4px 0 8px; }
+.sc-workbench .sc-venue-section h3 {
+  margin: 0 0 8px;
+  font-size: var(--fs-p2);
+  line-height: var(--lh-p2);
+  font-weight: 600;
+  color: var(--wk-muted);
+}
+.sc-workbench .sc-venue-empty,
+.sc-workbench .sc-venue-save {
+  margin: 0 0 8px;
+  color: var(--wk-muted);
+  font-size: var(--fs-p2);
+  line-height: var(--lh-p2);
+}
+.sc-workbench .sc-venue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sc-workbench .sc-venue-list > li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+}
+.sc-workbench .sc-venue-list > li > button,
+.sc-workbench .sc-venue-actions {
+  grid-column: 2;
+  justify-self: start;
+}
+.sc-workbench .sc-venue-actions {
+  display: flex;
+  gap: 10px;
+}
+.sc-workbench .sc-venue-actions button,
+.sc-workbench .sc-venue-list > li > button {
+  border: 0;
+  background: transparent;
+  color: var(--wk-ink-soft);
+  font: inherit;
+  font-size: var(--fs-p2);
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-workbench .sc-venue-actions button:hover,
+.sc-workbench .sc-venue-list > li > button:hover {
+  color: var(--wk-ink);
+}
+.sc-workbench .sc-venue-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: block;
+}
+.sc-workbench .sc-venue-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sc-workbench .sc-venue-copy strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-workbench .sc-venue-copy small {
+  color: var(--wk-muted);
+  font-size: var(--fs-p2);
+  line-height: var(--lh-p2);
+}
