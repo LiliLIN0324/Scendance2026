@@ -8,6 +8,7 @@
 import { planDrawOrder } from '../plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../street';
 import { zoneArea } from '../zones';
+import { planExportVisibility, planLengthLabel, type PlanExportVisibility } from './export-visibility';
 import {
   gridLinePositions,
   INTERIOR_WALL_THICKNESS_M,
@@ -41,6 +42,11 @@ export interface SvgExportOptions {
   /** Margin (px) around the plan content for the title, dimensions, and scale bar. */
   margin?: number;
   theme?: Partial<SvgPlanTheme>;
+  /**
+   * Which layers to draw. `roomDimensions` is ignored here: width × depth in
+   * one string belongs on the print title block, not on this sheet.
+   */
+  visibility?: Partial<PlanExportVisibility>;
 }
 
 /** The sheet `layoutToSvg` draws on, in SVG px and in world metres. */
@@ -95,6 +101,7 @@ export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: Svg
   const scale = options.pxPerMetre ?? DEFAULT_SVG_PX_PER_METRE;
   const margin = options.margin ?? DEFAULT_SVG_MARGIN;
   const theme: SvgPlanTheme = { ...DEFAULT_THEME, ...options.theme };
+  const layers = planExportVisibility(options.visibility);
 
   const roomW = layout.width * scale;
   const roomD = layout.height * scale;
@@ -124,18 +131,21 @@ export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: Svg
     `<g class="plan" transform="translate(${fmt(rootX)} ${fmt(rootY)})">`,
     `<rect x="${fmt(margin)}" y="${fmt(margin)}" width="${fmt(roomW)}" height="${fmt(roomD)}" fill="${escapeXml(floor.floorColor)}"/>`,
     renderGrid(layout, margin, scale, theme),
-    renderZones(floor, px, py, scale, theme),
-    renderRoomOutline(layout, floor, margin, scale, theme),
-    renderInteriorWalls(floor, px, py, scale, theme),
-    renderStairwellHoles(layout, floor, px, py, theme),
-    ...openings.map((item) => renderOpening(item, px, py, scale, theme)),
-    ...furniture.map((item) => renderFurniture(item, px, py, scale, theme)),
+    renderZones(floor, px, py, scale, theme, layers.roomLabels),
+    renderRoomOutline(layout, floor, margin, scale, theme, layers.walls),
+    renderInteriorWalls(floor, px, py, scale, theme, layers.walls),
+    renderStairwellHoles(layout, floor, px, py, theme, layers.stairs),
+    ...openings
+      .filter((item) => (item.type === 'door' ? layers.doors : layers.windows))
+      .map((item) => renderOpening(item, px, py, scale, theme)),
+    ...furniture.map((item) => renderFurniture(item, px, py, scale, theme, layers)),
     `</g>`,
     // Annotations sit in the margin band around the content — the content
     // spans (margin, margin) → (totalW − margin, totalH − margin) on the
-    // sheet — so no item can overprint them.
+    // sheet — so no item can overprint them. The title stays when room
+    // labels are off: it is the sheet title, not a zone name.
     `<text class="plan-title" x="${fmt(margin)}" y="${fmt(margin - 22)}" font-size="14" font-weight="bold" fill="${theme.label}">${escapeXml(title)}</text>`,
-    `<text class="plan-dims" x="${fmt(totalW - margin)}" y="${fmt(margin - 22)}" font-size="11" text-anchor="end" fill="${theme.label}">${fmt(layout.width)} m × ${fmt(layout.height)} m</text>`,
+    layers.wallDimensions ? renderEdgeDimensions(layout, margin, scale, rootX, rootY, theme) : '',
     renderScaleBar(layout, margin, scale, totalH, theme),
     `</svg>`,
   ];
@@ -159,13 +169,39 @@ function renderGrid(layout: RoomLayout, margin: number, scale: number, theme: Sv
   return `<path class="grid" d="${segments.join(' ')}" stroke="${theme.grid}" stroke-width="1" fill="none"/>`;
 }
 
+function renderEdgeDimensions(
+  layout: RoomLayout,
+  margin: number,
+  scale: number,
+  rootX: number,
+  rootY: number,
+  theme: SvgPlanTheme
+): string {
+  // External width above the north edge and depth beside the west edge,
+  // in sheet px. The plan group is translated, so the room's top-left on
+  // the sheet is (root + margin).
+  const left = rootX + margin;
+  const top = rootY + margin;
+  const widthX = left + (layout.width * scale) / 2;
+  const widthY = top - 14;
+  const depthX = left - 14;
+  const depthY = top + (layout.height * scale) / 2;
+  const fill = theme.label;
+  return [
+    `<text class="dimension" data-layer="DIMENSIONS" x="${fmt(widthX)}" y="${fmt(widthY)}" font-size="11" text-anchor="middle" fill="${fill}">${planLengthLabel(layout.width)}</text>`,
+    `<text class="dimension" data-layer="DIMENSIONS" x="${fmt(depthX)}" y="${fmt(depthY)}" font-size="11" text-anchor="middle" fill="${fill}" transform="rotate(-90 ${fmt(depthX)} ${fmt(depthY)})">${planLengthLabel(layout.height)}</text>`,
+  ].join('\n');
+}
+
 function renderRoomOutline(
   layout: RoomLayout,
   floor: FloorLayout,
   margin: number,
   scale: number,
-  theme: SvgPlanTheme
+  theme: SvgPlanTheme,
+  showWalls: boolean
 ): string {
+  if (!showWalls) return '';
   // Per-edge like canvas-2d/render.ts drawRoomOutline: a hidden wall reads as
   // a light dashed boundary instead of a solid wall.
   const x0 = margin;
@@ -200,7 +236,7 @@ function renderRoomOutline(
     const style = hidden
       ? `stroke="${theme.hiddenWall}" stroke-width="1.5" stroke-dasharray="6 4"`
       : `stroke="${theme.wall}" stroke-width="3"`;
-    return `<line class="wall" x1="${fmt(edge.x1)}" y1="${fmt(edge.y1)}" x2="${fmt(edge.x2)}" y2="${fmt(edge.y2)}" ${style}/>`;
+    return `<line class="wall" data-layer="WALLS" x1="${fmt(edge.x1)}" y1="${fmt(edge.y1)}" x2="${fmt(edge.x2)}" y2="${fmt(edge.y2)}" ${style}/>`;
   });
   if (recess) {
     lines.unshift(
@@ -220,7 +256,8 @@ function renderZones(
   px: (x: number) => string,
   py: (z: number) => string,
   scale: number,
-  theme: SvgPlanTheme
+  theme: SvgPlanTheme,
+  showLabels: boolean
 ): string {
   const zones = floor.zones ?? [];
   if (zones.length === 0) return '';
@@ -232,8 +269,12 @@ function renderZones(
       return [
         `<g class="zone">`,
         `<rect x="${px(zone.x)}" y="${py(zone.z)}" width="${fmt(zone.w * scale)}" height="${fmt(zone.d * scale)}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-opacity="0.7" stroke-width="1.5"/>`,
-        `<text x="${cx}" y="${top}" font-size="12" font-weight="bold" text-anchor="middle" fill="${theme.label}">${escapeXml(zone.name)}</text>`,
-        `<text x="${cx}" y="${top}" dy="1.2em" font-size="10" text-anchor="middle" fill="${theme.label}">${zoneArea(zone).toFixed(1)} m²</text>`,
+        showLabels
+          ? `<text data-layer="ROOMS" x="${cx}" y="${top}" font-size="12" font-weight="bold" text-anchor="middle" fill="${theme.label}">${escapeXml(zone.name)}</text>`
+          : '',
+        showLabels
+          ? `<text data-layer="ROOMS" x="${cx}" y="${top}" dy="1.2em" font-size="10" text-anchor="middle" fill="${theme.label}">${zoneArea(zone).toFixed(1)} m²</text>`
+          : '',
         `</g>`,
       ].join('');
     })
@@ -245,14 +286,15 @@ function renderInteriorWalls(
   px: (x: number) => string,
   py: (z: number) => string,
   scale: number,
-  theme: SvgPlanTheme
+  theme: SvgPlanTheme,
+  showWalls: boolean
 ): string {
   const walls = floor.interiorWalls ?? [];
-  if (walls.length === 0) return '';
+  if (!showWalls || walls.length === 0) return '';
   const width = fmt(Math.max(2, INTERIOR_WALL_THICKNESS_M * scale));
   const lines = walls.map(
     (wall) =>
-      `<line class="interior-wall" x1="${px(wall.x1)}" y1="${py(wall.z1)}" x2="${px(wall.x2)}" y2="${py(wall.z2)}" stroke="${theme.interiorWall}" stroke-width="${width}" stroke-linecap="butt"/>`
+      `<line class="interior-wall" data-layer="WALLS" x1="${px(wall.x1)}" y1="${py(wall.z1)}" x2="${px(wall.x2)}" y2="${py(wall.z2)}" stroke="${theme.interiorWall}" stroke-width="${width}" stroke-linecap="butt"/>`
   );
   return lines.join('\n');
 }
@@ -274,7 +316,8 @@ function renderOpening(
   const hw = w / 2;
   const gap = 0.2 * scale;
   const transform = `translate(${px(item.position.x)} ${py(item.position.z)}) rotate(${fmt(-((item.rotation ?? 0) * 180) / Math.PI)})`;
-  const parts: string[] = [`<g class="opening" data-type="${escapeXml(item.type)}" transform="${transform}">`];
+  const layer = item.type === 'door' ? 'DOORS' : 'WINDOWS';
+  const parts: string[] = [`<g class="opening" data-type="${escapeXml(item.type)}" data-layer="${layer}" transform="${transform}">`];
   parts.push(
     `<rect x="${fmt(-hw)}" y="${fmt(-gap / 2)}" width="${fmt(w)}" height="${fmt(gap)}" fill="${theme.background}"/>`
   );
@@ -298,7 +341,8 @@ function renderFurniture(
   px: (x: number) => string,
   py: (z: number) => string,
   scale: number,
-  theme: SvgPlanTheme
+  theme: SvgPlanTheme,
+  layers: PlanExportVisibility
 ): string {
   const w = item.width * scale;
   const d = item.depth * scale;
@@ -312,8 +356,12 @@ function renderFurniture(
       ? `<text class="label" x="0" y="0" dy="0.35em" font-size="10" text-anchor="middle" fill="${theme.label}">${escapeXml(item.name)}</text>`
       : '';
   // Stairs carry treads and a climb arrow instead of a name (#290).
-  if (item.type === 'stairs') return `<g transform="${transform}">${rect}</g>${renderStairsSymbol(item, px, py, theme)}`;
-  return `<g transform="${transform}">${rect}${label}</g>`;
+  if (item.type === 'stairs') {
+    if (!layers.stairs) return '';
+    return `<g data-layer="STAIRS" transform="${transform}">${rect}</g>${renderStairsSymbol(item, px, py, theme)}`;
+  }
+  if (!layers.furniture) return '';
+  return `<g data-layer="FURNITURE" transform="${transform}">${rect}${label}</g>`;
 }
 
 /**
@@ -332,13 +380,13 @@ function renderStairsSymbol(
     .map(({ from, to }) => `M ${at(from)} L ${at(to)}`)
     .join(' ');
   const { shaft, head } = stairArrow(item);
-  if (shaft.length < 2) return `<path class="stairs" d="${treads}" stroke="${theme.furnitureStroke}" stroke-width="1" fill="none"/>`;
+  if (shaft.length < 2) return `<path class="stairs" data-layer="STAIRS" d="${treads}" stroke="${theme.furnitureStroke}" stroke-width="1" fill="none"/>`;
   const arrow = [
     `M ${shaft.map(at).join(' L ')}`,
     ...head.map(({ from, to }) => `M ${at(from)} L ${at(to)}`),
   ].join(' ');
   return [
-    `<g class="stairs" stroke="${theme.furnitureStroke}" fill="none" stroke-linecap="round" stroke-linejoin="round">`,
+    `<g class="stairs" data-layer="STAIRS" stroke="${theme.furnitureStroke}" fill="none" stroke-linecap="round" stroke-linejoin="round">`,
     `<path class="treads" d="${treads}" stroke-width="1"/>`,
     `<path class="arrow" d="${arrow}" stroke-width="2"/>`,
     `<circle cx="${px(shaft[0]!.x)}" cy="${py(shaft[0]!.z)}" r="2.5" fill="${theme.furnitureStroke}" stroke="none"/>`,
@@ -356,13 +404,15 @@ function renderStairwellHoles(
   floor: FloorLayout,
   px: (x: number) => string,
   py: (z: number) => string,
-  theme: SvgPlanTheme
+  theme: SvgPlanTheme,
+  showStairs: boolean
 ): string {
+  if (!showStairs) return '';
   const floorIndex = layout.floors.findIndex((candidate) => candidate === floor || candidate.id === floor.id);
   return stairwellOutlines(layout, floorIndex)
     .map(
       (outline) =>
-        `<polygon class="stairwell" points="${outline.map((p) => `${px(p.x)},${py(p.z)}`).join(' ')}" fill="${theme.furnitureStroke}" fill-opacity="0.12" stroke="${theme.furnitureStroke}" stroke-width="1.5" stroke-dasharray="6 4"/>`
+        `<polygon class="stairwell" data-layer="STAIRS" points="${outline.map((p) => `${px(p.x)},${py(p.z)}`).join(' ')}" fill="${theme.furnitureStroke}" fill-opacity="0.12" stroke="${theme.furnitureStroke}" stroke-width="1.5" stroke-dasharray="6 4"/>`
     )
     .join('\n');
 }
