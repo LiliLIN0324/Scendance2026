@@ -1,4 +1,5 @@
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
+import { CATALOG_GROUPS, catalogGroupKey, catalogGroupLabel, matchesCatalogFilter } from './catalog-taxonomy';
 import { isGlbUrl } from './glb-url';
 
 /** Unified, lazily loaded catalogue: Chinese labels with original names for search. */
@@ -28,8 +29,8 @@ export interface OnlineModel {
 }
 
 /**
- * Bucket labels are a lookup rather than a closed union: a new family in the catalogue
- * should appear in the rail on its own, falling back to its raw key.
+ * Raw catalogue family names. The rail shows event groups (`catalogGroupLabel`);
+ * these stay in search so 「音响乐器」 and 「绿植景观」 still find a model.
  */
 export const ONLINE_BUCKET_LABELS: Readonly<Record<string, string>> = {
   seating: '座椅沙发', tables: '桌台柜台', exhibition: '摊位展陈', stage: '舞台设施',
@@ -39,8 +40,9 @@ export const ONLINE_BUCKET_LABELS: Readonly<Record<string, string>> = {
   food: '餐饮用品', vehicles: '交通载具', scenes: '完整场景',
 };
 
+/** The chip label: an event group, or the raw key when the family is new. */
 export function onlineBucketLabel(bucket: string): string {
-  return ONLINE_BUCKET_LABELS[bucket] ?? (bucket || '其他');
+  return catalogGroupLabel(bucket);
 }
 
 export interface OnlineBucket {
@@ -130,19 +132,25 @@ export function normalizeOnlineModels(raw: unknown): OnlineModel[] {
   return models;
 }
 
-/** Buckets, busiest first, so the most useful families sit closest to 全部. */
+/**
+ * Event groups in catalog order, busiest-within-group already summed.
+ * A family that is not in the taxonomy still gets its own chip.
+ */
 export function buildOnlineModelIndex(models: readonly OnlineModel[]): OnlineModelIndex {
   const counts = new Map<string, number>();
   for (const model of models) {
     if (!model.bucket) continue;
-    counts.set(model.bucket, (counts.get(model.bucket) ?? 0) + 1);
+    const key = catalogGroupKey(model.bucket);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return {
-    models,
-    buckets: [...counts]
-      .map(([key, count]) => ({ key, label: onlineBucketLabel(key), count }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-Hans-CN')),
-  };
+  const known = new Set<string>(CATALOG_GROUPS.map(group => group.key));
+  const buckets: OnlineBucket[] = CATALOG_GROUPS
+    .filter(group => counts.has(group.key))
+    .map(group => ({ key: group.key, label: group.label, count: counts.get(group.key) ?? 0 }));
+  for (const [key, count] of counts) {
+    if (!known.has(key)) buckets.push({ key, label: onlineBucketLabel(key), count });
+  }
+  return { models, buckets };
 }
 
 /**
@@ -157,9 +165,9 @@ export function filterOnlineModels(
 ): OnlineModel[] {
   const needle = query.trim().toLowerCase();
   return models.filter(model => {
-    if (bucket && model.bucket !== bucket) return false;
+    if (bucket && !matchesCatalogFilter(model.bucket, bucket)) return false;
     if (!needle) return true;
-    const text = [model.name, model.originalName, model.subcategory, onlineBucketLabel(model.bucket), model.slug].join(' ').toLowerCase();
+    const text = [model.name, model.originalName, model.subcategory, onlineBucketLabel(model.bucket), ONLINE_BUCKET_LABELS[model.bucket], model.slug].join(' ').toLowerCase();
     return needle.split(/\s+/).every(word => text.includes(word));
   });
 }

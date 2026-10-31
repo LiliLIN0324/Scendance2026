@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { sceneSchema, type SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import { measurement } from '../../../../supabase/functions/_shared/structural-geometry';
+import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
 import { useRoomEditor, useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { mergeProposalPresentation } from '../lib/creative-brief';
@@ -103,7 +104,7 @@ export function StructuralPropertiesPanel(): JSX.Element | null {
     <form key={`${selected.kind}:${selected.value.id}:${JSON.stringify(selected.value)}`} onSubmit={submit}>
       <div className="sc-dimension-grid">
         {wall && <>
-          <label className="sc-field">墙长 / m<output>{Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z).toFixed(3)}</output></label>
+          <label className="sc-field">墙长 / m<output>{formatLengthMetres(Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z))}</output></label>
           <Dimension label="墙厚 / m" name="thickness" value={wall.thickness} min={0.02} max={2}/>
           <Dimension label="墙高 / m" name="height" value={wall.height} min={0.02} max={current.venue.height}/>
         </>}

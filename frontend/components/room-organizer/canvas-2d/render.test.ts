@@ -14,9 +14,9 @@ it('rounds item and room dimension labels to at most two decimal places without 
   const floor = { id: 'floor', name: 'test floor', floorColor: '#ffffff', floorPattern: 'solid' as const, items: [item] };
   const layout = { name: 'measured', width: 10.12345, height: 8.77777, floors: [floor] };
   render2DTopDown({ canvas, layout, floor, selectedItemId: item.id, showMeasurements: true, showWiFiSignals: false, hasCollision: () => false });
-  expect(texts).toContain('1.24m × 0.89m');
-  expect(texts).toContain('10.12m');
-  expect(texts).toContain('8.78m');
+  expect(texts).toContain('1.24 m × 88.9 cm');
+  expect(texts).toContain('10.12 m');
+  expect(texts).toContain('8.78 m');
   expect(item.width).toBe(1.2367);
 });
 
@@ -102,7 +102,7 @@ it('does not move a fully offscreen selected item dimension onto the viewport ed
   const ctx = new Proxy(methods, { get: (target, key) => target[key as keyof typeof methods] ?? (() => {}) });
   const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
   render2DTopDown({ canvas, layout, floor, selectedItemId: outside.id, showMeasurements: true, showWiFiSignals: false, hasCollision: () => false });
-  expect(rectangles).toHaveLength(2); expect(texts).toContain('0.45m × 0.45m'); expect(texts).not.toContain('0.82m × 0.83m');
+  expect(rectangles).toHaveLength(2); expect(texts).toContain('45 cm × 45 cm'); expect(texts).not.toContain('82 cm × 83 cm');
   expect(JSON.stringify(layout)).toBe(original);
 });
 

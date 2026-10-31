@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {detectPlanUnit,explainUnitFit,isPlausiblePlanScale,normalizeRecognizedUnits,parseLength,scaleRecognizedScene,unitFromText,METRE_BANDS,PLAN_UNITS,PLAUSIBLE_PLAN_SCALE,type ScaleSample} from '../supabase/functions/_shared/units.ts';
+import {detectPlanUnit,explainUnitFit,formatLengthMetres,isPlausiblePlanScale,normalizeRecognizedUnits,parseLength,scaleRecognizedScene,unitFromText,METRE_BANDS,PLAN_UNITS,PLAUSIBLE_PLAN_SCALE,type ScaleSample} from '../supabase/functions/_shared/units.ts';
 import {sceneV2Schema} from '../supabase/functions/_shared/domain.ts';
 
 const p=(x:number,z:number)=>({x,z});
@@ -122,5 +122,20 @@ describe('recognised payload normalisation',()=>{
   it('passes through anything it cannot prove',()=>{
     for(const input of [null,{},{scene:null},{scene:{schemaVersion:1}},{scene:{schemaVersion:2,venue:{width:12000,shape:'rectangle',entrances:[]}}}])
       expect(normalizeRecognizedUnits(input).report.applied).toBe(false);
+  });
+});
+
+describe('length display',()=>{
+  it('labels metres at 1 m and above, centimetres below, and does not rewrite the number',()=>{
+    const stored = 0.85;
+    expect(formatLengthMetres(12)).toBe('12 m');
+    expect(formatLengthMetres(1.2367)).toBe('1.24 m');
+    expect(formatLengthMetres(10.12345)).toBe('10.12 m');
+    expect(formatLengthMetres(stored)).toBe('85 cm');
+    expect(formatLengthMetres(0.88888)).toBe('88.9 cm');
+    expect(formatLengthMetres(0.45)).toBe('45 cm');
+    expect(formatLengthMetres(0.01)).toBe('1 cm');
+    expect(stored).toBe(0.85);
+    expect(formatLengthMetres(Number.NaN)).toBe('');
   });
 });

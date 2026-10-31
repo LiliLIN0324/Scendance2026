@@ -663,9 +663,11 @@ const TYPE_TO_ICON: Record<string, PlotcraftIconName> = {
 };
 
 const CATEGORY_TO_ICON: Record<string, PlotcraftIconName> = {
-  seating: 'chair', tables: 'table', bedroom: 'bed', storage: 'box',
-  kitchen: 'fireplace', bathroom: 'bath', electronics: 'light',
-  security: 'vision', decor: 'plant', outdoor: 'tree', people: 'person', structure: 'window',
+  stage: 'build', checkin: 'table', booth: 'box', seating: 'chair', tables: 'table',
+  av: 'light', decor: 'plant', signage: 'target', people: 'person', catering: 'fireplace',
+  rest: 'bed', logistics: 'box', structure: 'window', site: 'tree',
+  bedroom: 'bed', storage: 'box', kitchen: 'fireplace', bathroom: 'bath',
+  electronics: 'light', security: 'vision', outdoor: 'tree',
 };
 
 export function iconForItem(type: string, category?: string): PlotcraftIconName {

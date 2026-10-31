@@ -98,6 +98,8 @@ describe('selected summary and colour', () => {
     fireEvent.change(ground, { target: { value: '3.2' } });
     expect(editor.actions.moveItem).toHaveBeenCalledWith('placed-1', 2, 3.2);
     expect((screen.getByRole('spinbutton', { name: '宽 / 米' }) as HTMLInputElement).value).toBe('0.78');
+    expect(screen.getByText('78 cm')).toBeTruthy();
+    expect(screen.getByText('90 cm')).toBeTruthy();
     expect(screen.getByRole('button', { name: '旋转 90°' }).closest('section')?.textContent).toContain('位置与角度');
   });
 

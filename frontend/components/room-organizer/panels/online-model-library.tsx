@@ -2,6 +2,7 @@
 
 import { Loader2, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatLengthMetres } from '../../../../supabase/functions/_shared/units';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { captureCatalogPlacement, type CatalogPlacementGuard } from '../lib/catalog-placement-guard';
@@ -180,6 +181,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
           {busy === model.slug && <span className="sc-material-add"><Loader2 className="cr-spin" size={12}/></span>}
         </span>
         <span className="sc-material-name">{onlineModelDisplayName(model)}</span>
+        <span className="sc-material-size">{formatLengthMetres(model.width)} × {formatLengthMetres(model.depth)} × {formatLengthMetres(model.height)}</span>
       </button>)}
       {filtered.length > shown.length && <button type="button" className="sc-material-more" onClick={() => setVisible(current => current + PAGE_SIZE)}>
         再显示 {Math.min(PAGE_SIZE, filtered.length - shown.length)} 个

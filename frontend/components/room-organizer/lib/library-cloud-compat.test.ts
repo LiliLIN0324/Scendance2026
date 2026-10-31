@@ -11,7 +11,7 @@ describe('merged catalogue cloud compatibility',()=>{
   it('keeps every model and its identity through save, reload and local serialization, including thin models',()=>{
     const models=normalizeOnlineModels(catalogue);
     expect(models).toHaveLength(528);
-    expect(buildOnlineModelIndex(models).buckets).toHaveLength(19);
+    expect(buildOnlineModelIndex(models).buckets).toHaveLength(12);
     expect(new Set(models.map(m=>m.assetId)).size).toBe(528);
     for(const model of models){
       expect(model.assetId).toBe((assetIds as Record<string,string>)[model.glb]);
