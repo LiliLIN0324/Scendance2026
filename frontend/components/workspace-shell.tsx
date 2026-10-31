@@ -44,7 +44,6 @@ const RoomOrganizer = dynamic(
 export function BootSkeleton(): JSX.Element {
   return (
     <div className="sc-boot" role="status" aria-live="polite">
-      <div className="sc-boot-top" aria-hidden="true" />
       <div className="sc-boot-main" aria-hidden="true">
         <div className="sc-boot-rail">
           <span className="sc-boot-mark" />

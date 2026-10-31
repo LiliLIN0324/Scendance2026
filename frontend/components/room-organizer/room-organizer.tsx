@@ -1,10 +1,11 @@
 'use client';
 
-import { PanelLeftClose, Ruler, Scan, Settings, Shapes, Sparkles, SquareStack } from 'lucide-react';
+import { PanelLeftClose, Ruler, Scan, Settings, Shapes, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
+import { reviewShareHref } from '../review-share-page/load-plan';
 import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
@@ -55,14 +56,14 @@ import { snapshotBeforeReplace } from './lib/restore-point';
 import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
 import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
+import { encodeShareUrl } from './lib/share';
 import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
-import { issueReviewShare } from './lib/review-share';
-import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
+import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
 import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
@@ -77,6 +78,7 @@ import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
+import { QingguangRailButton } from './panels/qingguang-rail-button';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -197,7 +199,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const conversationEntryRef = useRef<HTMLButtonElement>(null);
   const [compactViewport, setCompactViewport] = useState(false);
-  const headerRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
   const [leftCardWidth, setLeftCardWidth] = useState(() => {
@@ -323,8 +325,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setAgentCollapsed(false);
   }, []);
   const issueReviewLink = useCallback(async () => {
-    const issued = issueReviewShare(layoutStore.getState().layout, window.location.origin);
-    return { url: issued.url };
+    const encoded = await encodeShareUrl(layoutStore.getState().layout, window.location.origin);
+    const url = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
+    if (!url) throw new Error('评审链接没有生成。');
+    return { url };
   }, []);
   const exportHandoff = useCallback(() => {
     setAgentCollapsed(false);
@@ -332,6 +336,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, []);
   const openMaterialsFromShare = useCallback(() => {
     document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
+  }, []);
+  const openQingguang = useCallback(() => {
+    setAgentCollapsed(false);
+    setSidebarCollapsed(true);
+    requestAnimationFrame(() => {
+      const panel = document.getElementById('agent-panel');
+      const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
+      (input ?? panel)?.focus();
+    });
   }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单仍浮在画布上。不把晴光切成评审或执行。
@@ -1604,20 +1617,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onFit: fitToRoom,
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
-        <header ref={headerRef} className="sc-header">
+        <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
-        </header>
+        </div>
         <main data-nav={navExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${navExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`} style={{ ['--sc-left-card-width' as string]: `${leftCardWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
               {!navExpanded && <WorkbenchBrandToggle expanded={false} onToggle={toggleNav} />}
-              <nav className="sc-mode-rail-top" aria-label="工作流程">
-                {WORKBENCH_MODES.map(mode => {
-                  const active = workbenchMode === mode.id;
-                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} data-tip={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><SquareStack size={24} aria-hidden="true"/></button>;
-                })}
+              <nav className="sc-mode-rail-top" aria-label="晴光">
+                <QingguangRailButton open={!agentCollapsed} onOpen={openQingguang} />
               </nav>
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
                 <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
@@ -1808,7 +1818,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
               </div>
             </div>}
-            {agentCollapsed && <AgentReopenCard onOpen={() => { setComposerGenerate(false); setSidebarCollapsed(true); setLeftMode('brief'); setBusinessOpen(false); setAgentCollapsed(false); }}/>}
+            {agentCollapsed && <AgentReopenCard onOpen={openQingguang}/>}
             </div>
           </div>
           <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>

@@ -73,7 +73,7 @@ export function ShareMenu({ actions, openRequest = 0, closeSignal = 0 }: {
       const result = await actions.onIssueReviewLink();
       setUrl(result.url);
       const copied = await copyText(result.url);
-      setNotice(copied ? '链接已复制。同一浏览器打开即可评论。' : '链接已生成。请从框里手动复制。');
+      setNotice(copied ? '链接已复制。对方打开即可看平面并评论。' : '链接已生成。请从框里手动复制。');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
@@ -109,7 +109,7 @@ export function ShareMenu({ actions, openRequest = 0, closeSignal = 0 }: {
       <button type="button" onClick={() => { actions?.onOpenMaterials(); setOpen(false); }}>打开资料</button>
       <span className="sc-more-sep" aria-hidden="true"/>
       <button type="button" onClick={() => { actions?.onOpenChecklist(); setOpen(false); }}>到场清单</button>
-      <p>评审链接和评论存在这台浏览器。导出交接、资料库用的是工作台里已有的入口。</p>
+      <p>方案跟在链接里，打开的是 /review/。评论写在打开页面的这台浏览器，不上传。导出交接、资料库用的是工作台里已有的入口。</p>
     </div>}
   </div>;
 }

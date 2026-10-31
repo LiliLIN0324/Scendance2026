@@ -854,7 +854,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
   function confirmProposal(): void {
     if (callbacks.workbenchMode !== 'layout') {
-      say({ role: 'agent', text: '现在不改布置。回左轨「布置」再确认这一版。' });
+      say({ role: 'agent', text: '现在不改布置。这一版先留着，回到布置对话再确认。' });
       return;
     }
     const plan = proposal.current;
@@ -1080,7 +1080,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       }
       if (isExportCommand(trimmed)) { proposeExport(); return; }
       if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
-      say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回左轨「布置」。' });
+      say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回到布置对话再说。' });
       return;
     }
     // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
@@ -1321,7 +1321,7 @@ export function VenueBriefLine(): JSX.Element | null {
 /**
  * 左栏活动简报：只读，数字全部来自对话与当前画布。
  * 「这块场地从哪来」把量出场地的两条路（图纸与照片 / 地图圈画）并列钉在左边，场地立起来后也不消失——重圈是替换。
- * 评审·执行走左轨，模板·物料走底栏；这里不放输入框、不放生成按钮、不摆说明书。
+ * 评审和执行不占左轨，从分享菜单打开。模板·物料走底栏；这里不放输入框、不放生成按钮、不摆说明书。
  */
 export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.Element {
   const agent = useAgent();

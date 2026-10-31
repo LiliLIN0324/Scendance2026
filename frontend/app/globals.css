@@ -929,10 +929,10 @@ body {
   --sc-type-meta: var(--fs-p2);
   background: var(--wk-canvas);
 }
-/* 品牌锁标在导航上开合，账户在轨脚。顶栏不再留一截白边。 */
-.sc-workbench .sc-header {
-  height: 0; min-height: 0; padding: 0; gap: 0; border: 0; overflow: hidden;
-  background: transparent; box-shadow: none;
+/* #29：整条白顶收成零高度。品牌锁标在导航上开合，不另占一截白条。 */
+.sc-workbench > .sc-header {
+  position: absolute; width: 0; height: 0; min-height: 0; margin: 0; padding: 0;
+  border: 0; overflow: hidden; background: transparent; animation: none;
 }
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
   display: grid; gap: 0; left: 0; right: 0; bottom: 0; top: 0;
@@ -1084,6 +1084,19 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
+/* 原布置图标的槽位：同样的轨钮尺寸，里面换成晴光圆头像。右下白点是状态，不是模式选中条。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang {
+  position: relative; width: 36px; height: 36px; margin: 2px auto 4px; padding: 0;
+  border-radius: 999px; background: transparent; font-weight: 400;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang img {
+  width: 28px; height: 28px; border-radius: 999px; object-fit: cover; display: block; pointer-events: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot {
+  display: block; position: absolute; right: 1px; bottom: 1px; width: 8px; height: 8px; border-radius: 50%;
+  background: #fff; border: 1.5px solid var(--wk-ink, #141416); box-sizing: border-box; pointer-events: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:hover { background: transparent; }
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
 .sc-lux-direct input[type='text'], .sc-lux-direct textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--paper); color: inherit; font: inherit; }
@@ -1129,7 +1142,7 @@ body {
 .sc-aholo-history .sc-button:hover { color: var(--sc-ink); text-decoration: underline; }
 .sc-aholo-history li:last-child { border-bottom: 0; padding-bottom: 0; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage {
-  flex: 1; min-width: 0; position: relative;
+  flex: 1; min-width: 0; position: relative; padding-top: 0;
 }
 /* 左侧面板：与栏同高的白纸页，不再浮起 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.sc-float-layer {
