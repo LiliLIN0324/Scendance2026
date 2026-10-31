@@ -181,14 +181,14 @@ describe('ScendanceLibrary shelf lifecycle', () => {
   it('raises the drawer from the grip and remembers how tall the user made it', () => {
     const test = librarySetup();
     const grip = screen.getByRole('separator', { name: '调整物料库高度' });
-    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('212px');
+    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('180px');
     fireEvent.keyDown(grip, { key: 'ArrowUp' });
-    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('236px');
-    expect(window.localStorage.getItem('scendance-shelf-height')).toBe('236');
+    expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('204px');
+    expect(window.localStorage.getItem('scendance-shelf-height')).toBe('204');
     fireEvent.keyDown(grip, { key: 'End' });
     expect(document.documentElement.style.getPropertyValue('--sc-shelf-height')).toBe('476px');
     fireEvent.keyDown(grip, { key: 'Home' });
-    expect(window.localStorage.getItem('scendance-shelf-height')).toBe('176');
+    expect(window.localStorage.getItem('scendance-shelf-height')).toBe('156');
     expect(test.placeCatalogItem).not.toHaveBeenCalled();
     window.localStorage.clear();
   });

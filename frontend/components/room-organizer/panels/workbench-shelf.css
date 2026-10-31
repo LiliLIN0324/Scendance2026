@@ -297,8 +297,8 @@
   border-bottom-color:var(--wk-ink,#141416);
 }
 .sc-compact-shelf .sc-library-heading > .sc-icon-button { color:var(--wk-muted); }
-.sc-compact-shelf .sc-library-content { padding:8px 14px; }
-.sc-compact-shelf .sc-material-toolbar { flex:0 0 30px; height:30px; gap:12px; margin-bottom:6px; }
+.sc-compact-shelf .sc-library-content { padding:4px 12px 6px; }
+.sc-compact-shelf .sc-material-toolbar { flex:0 0 30px; height:30px; gap:12px; margin-bottom:2px; }
 .sc-compact-shelf .sc-bucket-rail { gap:8px; }
 /* 分类很多时右缘渐隐，提示「后面还有」；滚到底自动取消。 */
 .sc-compact-shelf .sc-bucket-rail[data-overflow="more"] {
@@ -471,6 +471,11 @@
 .sc-material-star.is-on, .sc-material-tagpin.is-on { color: #e2b000; }
 .sc-bucket-add, .sc-bucket-add-form button {
   min-width: 26px; padding: 0 8px;
+}
+.sc-bucket-rail > .sc-bucket-add,
+.sc-bucket-rail > .sc-bucket-add-form {
+  flex: 0 0 auto;
+  align-self: center;
 }
 .sc-bucket-add-form { display: inline-flex; align-items: center; gap: 4px; }
 .sc-bucket-add-form input {

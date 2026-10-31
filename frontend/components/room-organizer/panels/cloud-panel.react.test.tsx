@@ -611,6 +611,24 @@ describe('CloudPanel source protection before leaving the workspace', () => {
   });
 });
 
+it('closes the account dialog from the backdrop and leaves clicks inside the panel alone', () => {
+  const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
+  render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  openAccount();
+  const dialog = document.querySelector('dialog') as HTMLDialogElement;
+  vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
+    x: 80, y: 40, top: 40, left: 80, bottom: 640, right: 1120, width: 1040, height: 600, toJSON() { return {}; },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '团队演示' }), { clientX: 240, clientY: 160 });
+  expect(dialog.hasAttribute('open')).toBe(true);
+  expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(dialog, { clientX: 400, clientY: 200 });
+  expect(dialog.hasAttribute('open')).toBe(true);
+  fireEvent.click(dialog, { clientX: 12, clientY: 12 });
+  expect(dialog.hasAttribute('open')).toBe(false);
+  offline.dispose();
+});
+
 it('keeps account-panel keys away from canvas shortcuts while preserving native dialog defaults', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);

@@ -1,9 +1,8 @@
 /**
  * 经营地点库的本机状态。
  *
- * 场地不是另一套主流程：开局可以没有场，入口保持灰。
- * 用户要 3D 布置或进入空间时才点亮。收藏与点亮都写这一把 localStorage，
- * 不进画布撤销，不接真实模型。
+ * 收藏与点亮都写这一把 localStorage，不进画布撤销，不接真实模型。
+ * 用户要 3D 布置或进入空间时才点亮。左轨不再单独挂「场地」入口。
  */
 
 import { safeGetItem, safeSetItem } from './safe-storage';
@@ -49,11 +48,6 @@ export function emptyVenueLibrary(): VenueLibraryState {
 
 export function venueTemplateById(id: string): VenueTemplate | null {
   return VENUE_TEMPLATES.find(item => item.id === id) ?? null;
-}
-
-/** 轨上的灰态和打开态。未点亮保持 is-muted；面板开着再加 is-active。 */
-export function venueEntryClassName(base: string, lit: boolean, open: boolean): string {
-  return `${base}${open ? ' is-active' : ''}${lit ? '' : ' is-muted'}`;
 }
 
 export function lightVenueLibrary(state: VenueLibraryState): VenueLibraryState {

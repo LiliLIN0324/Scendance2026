@@ -458,7 +458,15 @@ describe('OnlineModelLibrary', () => {
     fireEvent.click(screen.getByRole('button', { name: '收藏物料 Lounge Chaise' }));
     expect(screen.getByRole('button', { name: '取消收藏物料 Lounge Chaise' }).getAttribute('aria-pressed')).toBe('true');
     expect(JSON.parse(localStorage.getItem(MATERIAL_LIBRARY_META_KEY) ?? '{}').favorites).toContain('seating-chaise');
-    fireEvent.click(screen.getByRole('button', { name: '新建标签' }));
+    const tags = screen.getByRole('group', { name: '线上模型分类' });
+    const tagText = (node: Element | null) => (node?.textContent ?? '').replace(/\s+/g, '');
+    expect(tagText(tags.children[0])).toMatch(/^全部/);
+    expect(tags.children[1]?.getAttribute('aria-label')).toBe('加标签');
+    expect(tagText(tags.children[2])).toMatch(/^收藏/);
+    fireEvent.click(screen.getByRole('button', { name: '加标签' }));
+    expect(tags.children[1]?.classList.contains('sc-bucket-add-form')).toBe(true);
+    expect(tagText(tags.children[0])).toMatch(/^全部/);
+    expect(tagText(tags.children[2])).toMatch(/^收藏/);
     fireEvent.change(screen.getByRole('textbox', { name: '新标签名称' }), { target: { value: '沙滩' } });
     fireEvent.click(screen.getByRole('button', { name: '确认新标签' }));
     expect(screen.getByRole('button', { name: /^沙滩/ })).toBeTruthy();

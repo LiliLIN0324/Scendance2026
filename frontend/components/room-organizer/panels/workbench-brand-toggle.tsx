@@ -18,7 +18,6 @@ export function WorkbenchBrandToggle({ expanded, onToggle }: {
       aria-controls="workbench-nav-column"
       aria-label={label}
       data-tip={label}
-      title={label}
       onClick={onToggle}
     >
       <span className="sc-brand-mark"><BrandMark size={28} /></span>

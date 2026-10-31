@@ -14,6 +14,8 @@ describe('workbench brand toggle', () => {
     const { rerender } = render(<WorkbenchBrandToggle expanded={false} onToggle={onToggle} />);
     const open = screen.getByRole('button', { name: '展开导航栏' });
     expect(open.getAttribute('aria-expanded')).toBe('false');
+    expect(open.getAttribute('data-tip')).toBe('展开导航栏');
+    expect(open.getAttribute('title')).toBeNull();
     expect(open.className).toContain('is-mark');
     expect(open.textContent).not.toContain('幕景');
     expect(open.querySelector('.sc-brand-dot')).toBeNull();
@@ -23,6 +25,8 @@ describe('workbench brand toggle', () => {
     rerender(<WorkbenchBrandToggle expanded onToggle={onToggle} />);
     const close = screen.getByRole('button', { name: '收起导航栏' });
     expect(close.getAttribute('aria-expanded')).toBe('true');
+    expect(close.getAttribute('data-tip')).toBe('收起导航栏');
+    expect(close.getAttribute('title')).toBeNull();
     expect(close.className).toContain('is-mark');
     expect(close.textContent).not.toContain('幕景');
     expect(close.querySelector('.sc-brand-dot')).toBeNull();
