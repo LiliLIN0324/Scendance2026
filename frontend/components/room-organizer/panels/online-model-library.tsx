@@ -229,16 +229,16 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
     <div className="sc-material-toolbar">
       <div ref={bucketRail} className="sc-bucket-rail" role="group" aria-label="线上模型分类" data-overflow={bucketMore ? 'more' : undefined}>
         {chip('', '全部', index.models.length)}
-        {chip('__fav', '收藏', favoriteCount)}
-        {chip('__generated', '生成', generatedCount)}
-        {index.buckets.map(entry => chip(entry.key, entry.label, entry.count))}
-        {meta.customTags.map(tag => chip(`tag:${tag}`, tag, Object.values(meta.assignments).filter(tags => tags.includes(tag)).length))}
         {tagDraft
           ? <form className="sc-bucket-add-form" onSubmit={event => { event.preventDefault(); createTag(); }}>
             <input aria-label="新标签名称" value={tagName} maxLength={16} placeholder="新标签" onChange={event => setTagName(event.target.value)}/>
             <button type="submit" aria-label="确认新标签">添加</button>
           </form>
-          : <button type="button" className="sc-bucket-add" aria-label="新建标签" title="新建标签" onClick={() => { setTagDraft(true); setTagError(''); }}>+</button>}
+          : <button type="button" className="sc-bucket-add" aria-label="加标签" title="加标签" onClick={() => { setTagDraft(true); setTagError(''); }}>+</button>}
+        {chip('__fav', '收藏', favoriteCount)}
+        {chip('__generated', '生成', generatedCount)}
+        {index.buckets.map(entry => chip(entry.key, entry.label, entry.count))}
+        {meta.customTags.map(tag => chip(`tag:${tag}`, tag, Object.values(meta.assignments).filter(tags => tags.includes(tag)).length))}
       </div>
       <label className="sc-search-mini">
         <Search size={20}/>

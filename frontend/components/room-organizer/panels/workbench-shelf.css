@@ -472,6 +472,11 @@
 .sc-bucket-add, .sc-bucket-add-form button {
   min-width: 26px; padding: 0 8px;
 }
+.sc-bucket-rail > .sc-bucket-add,
+.sc-bucket-rail > .sc-bucket-add-form {
+  flex: 0 0 auto;
+  align-self: center;
+}
 .sc-bucket-add-form { display: inline-flex; align-items: center; gap: 4px; }
 .sc-bucket-add-form input {
   width: 88px; height: 26px; padding: 0 8px;

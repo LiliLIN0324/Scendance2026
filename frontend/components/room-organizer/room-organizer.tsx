@@ -84,8 +84,7 @@ import { PlanFlow } from './panels/plan-flow';
 import { QingguangAvatarFlight } from './panels/qingguang-avatar-flight';
 import { RailAgentBrandSlot } from './panels/rail-agent-brand-slot';
 import { SpaceIcon } from './panels/space-icon';
-import { VenueLibraryPanel, VenueRailButton } from './panels/venue-library-panel';
-import { useVenueLibrary } from './hooks/use-venue-library';
+import { VenueLibraryPanel } from './panels/venue-library-panel';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -194,7 +193,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [agentCollapsed, setAgentCollapsed] = useState(false);
   const [agentClosing, setAgentClosing] = useState(false);
   const [sidePanel, setSidePanel] = useState<RailSidePanel | null>(null);
-  const venueLibrary = useVenueLibrary();
   const qingguangRailRef = useRef<HTMLButtonElement>(null);
   const qingguangHeaderAvatarRef = useRef<HTMLSpanElement>(null);
   const agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel;
@@ -429,18 +427,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       setAgentCollapsed(true);
       setSidebarCollapsed(true);
       return 'bingo';
-    });
-  }, []);
-  const toggleVenuePanel = useCallback(() => {
-    setAgentClosing(false);
-    setSidePanel(current => {
-      if (current === 'venue') {
-        setAgentCollapsed(true);
-        return null;
-      }
-      setAgentCollapsed(true);
-      setSidebarCollapsed(true);
-      return 'venue';
     });
   }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
@@ -1790,7 +1776,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   <Package size={22} aria-hidden="true" />
                   <span className="sc-rail-word">物料</span>
                 </button>
-                <VenueRailButton open={sidePanel === 'venue'} lit={venueLibrary.lit} onToggle={toggleVenuePanel} />
               </nav>
             </div>
             <div className="sc-mode-rail-foot">

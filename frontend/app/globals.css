@@ -699,6 +699,8 @@ body {
    search pinned to the corner and stops the grid from being pushed down the panel. */
 .sc-material-toolbar { display: flex; align-items: center; gap: var(--sc-space-sm); margin-bottom: var(--sc-space-md); }
 .sc-bucket-rail { display: flex; flex-wrap: nowrap; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.sc-bucket-rail > .sc-bucket-add,
+.sc-bucket-rail > .sc-bucket-add-form { flex: 0 0 auto; align-self: center; }
 .sc-bucket-rail::-webkit-scrollbar { display: none; }
 .sc-bucket-rail button { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--sc-line); border-radius: 999px; background: var(--paper); color: var(--wk-muted); font-size: var(--fs-p2); padding: 4px var(--sc-space-sm); }
 .sc-bucket-rail button b { font-weight: 500; opacity: .6; font-variant-numeric: tabular-nums; }
@@ -1017,7 +1019,28 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo.is-review-returned {
   box-shadow: inset 0 0 0 2px #d4534a;
 }
+/* 左轨「空间」：一颗浅色圆角钮，上图标、中箭头、下文字。不再另挂摊位图标。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-space {
+  width: 52px;
+  margin: 6px auto 2px;
+  padding: 8px 4px 7px;
+  gap: 1px;
+  border-radius: 16px;
+  background: var(--wk-plane);
+  color: var(--wk-ink);
+  font-weight: 600;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-space:hover {
+  background: var(--wk-plane);
+  color: var(--wk-ink);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-space.is-active {
+  background: var(--wk-green-pale, #eef3ef);
+  color: var(--wk-ink);
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-space .sc-space-chevron {
+  margin-top: 1px;
+  color: var(--wk-ink-soft);
   transition: transform .16s ease;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-space.is-active .sc-space-chevron {
@@ -1163,18 +1186,6 @@ body {
   background:
     radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
     var(--paper);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-muted {
-  color: var(--wk-ink-faint); opacity: 0.45;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-muted:hover {
-  color: var(--wk-ink-soft); opacity: 0.8; background: transparent;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue:not(.is-muted) {
-  color: var(--wk-ink);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-active {
-  opacity: 1; color: var(--wk-ink);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:hover { background: transparent; }
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }

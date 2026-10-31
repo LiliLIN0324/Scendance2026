@@ -1,36 +1,13 @@
 'use client';
 
-import { Store } from 'lucide-react';
 import { useState } from 'react';
 import { useVenueLibrary } from '../hooks/use-venue-library';
 import {
   VENUE_TEMPLATES,
-  venueEntryClassName,
   type VenueTemplate,
 } from '../lib/venue-library';
 import './bingo-panel.css';
 import './venue-library-panel.css';
-
-export function VenueRailButton({ open, lit, onToggle }: {
-  open: boolean;
-  lit: boolean;
-  onToggle(): void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      className={venueEntryClassName('sc-rail-venue', lit, open)}
-      aria-pressed={open}
-      aria-label="场地"
-      data-venue-lit={lit ? '1' : '0'}
-      data-tip="场地"
-      title="场地"
-      onClick={onToggle}
-    >
-      <Store size={22} aria-hidden="true" />
-    </button>
-  );
-}
 
 /**
  * 左栏场地面板。不进画布浮层，与晴光 / Bingo 互斥。
