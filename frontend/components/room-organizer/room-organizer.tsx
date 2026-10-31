@@ -81,6 +81,7 @@ import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
+import { QingguangAvatarFlight } from './panels/qingguang-avatar-flight';
 import { RailAgentBrandSlot } from './panels/rail-agent-brand-slot';
 import { VenueLibraryPanel, VenueRailButton } from './panels/venue-library-panel';
 import { useVenueLibrary } from './hooks/use-venue-library';

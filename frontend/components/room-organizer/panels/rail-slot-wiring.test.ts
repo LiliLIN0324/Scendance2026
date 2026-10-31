@@ -13,5 +13,7 @@ describe('rail slot wiring in room organizer', () => {
     expect(source).toContain('railShowsBrand = qingguangPanelOpen && headerAvatarVisible');
     expect(source).toContain('railShowsQingguang = !railShowsBrand');
     expect(source).toContain('<RailAgentBrandSlot');
+    expect(source).toContain("import { QingguangAvatarFlight } from './panels/qingguang-avatar-flight'");
+    expect(source).toContain('<QingguangAvatarFlight');
   });
 });
