@@ -12,7 +12,7 @@ export const QINGGUANG_RAIL_MASCOT = '/assets/assistant/qingguang-3d-40.png';
 export function QingguangRailButton({ open, onOpen, buttonRef }: {
   open: boolean;
   onOpen(): void;
-  buttonRef?: RefObject<HTMLButtonElement | null>;
+  buttonRef?: RefObject<HTMLButtonElement>;
 }): JSX.Element {
   const agent = useAgent();
   const mode = agent.callbacks.workbenchMode;

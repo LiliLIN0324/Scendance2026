@@ -40,7 +40,10 @@ export interface BingoPlanFeedback {
   pins: BingoFeedbackPin[];
 }
 
-export function reviewPlanKeysForBingoPlan(plan: Pick<BingoPlan, 'projectKey' | 'shareId' | 'reviewPlanKey' | 'clientHref'>): string[] {
+/** Fields the helper needs to find PR #37 share pins and the older comment stores. */
+type BingoFeedbackPlan = Pick<BingoPlan, 'projectKey' | 'shareId' | 'reviewPlanKey' | 'clientHref'>;
+
+export function reviewPlanKeysForBingoPlan(plan: BingoFeedbackPlan): string[] {
   const keys = new Set<string>();
   if (plan.reviewPlanKey) keys.add(plan.reviewPlanKey);
   if (plan.projectKey) keys.add(plan.projectKey);
@@ -51,7 +54,7 @@ export function reviewPlanKeysForBingoPlan(plan: Pick<BingoPlan, 'projectKey' | 
 }
 
 export function readBingoPlanFeedback(
-  plan: Pick<BingoPlan, 'projectKey' | 'shareId' | 'reviewPlanKey' | 'clientHref'>,
+  plan: BingoFeedbackPlan,
   storage: Pick<Storage, 'getItem'> | null = typeof window !== 'undefined' ? window.localStorage : null,
 ): BingoPlanFeedback {
   const sharePins = new Map<string, BingoFeedbackPin>();
@@ -107,7 +110,7 @@ function mapSharePin(pin: ReviewPin): BingoFeedbackPin {
 }
 
 function readLegacyComments(
-  plan: Pick<BingoPlan, 'projectKey' | 'shareId' | 'clientHref'>,
+  plan: BingoFeedbackPlan,
   storage: Pick<Storage, 'getItem'> | null,
 ): BingoFeedbackPin[] {
   const pins = new Map<string, BingoFeedbackPin>();

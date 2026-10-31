@@ -98,6 +98,8 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
   const line = points.length === 2 && image.width && image.height
     ? normalizeRulerPoints(points[0]!, points[1]!, image.width, image.height)
     : null;
+  // `width` is optional; the map callback cannot see the JSX `&&` narrowing.
+  const markerWidth = image.width ?? 0;
 
   return (
     <section className="rc-ruler" aria-label="两点定标尺">
@@ -122,8 +124,8 @@ export function FloorPlanRuler({ image, dimensionText = '', busy = false, focusR
           <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="xMidYMid meet">
             {points.map((point, index) => (
               <g key={index}>
-                <circle cx={point.x} cy={point.z} r={Math.max(4, image.width / 120)} fill="#4A7C59" />
-                <text x={point.x} y={point.z - Math.max(6, image.width / 100)} fill="#141416" fontSize={Math.max(10, image.width / 80)} textAnchor="middle">
+                <circle cx={point.x} cy={point.z} r={Math.max(4, markerWidth / 120)} fill="#4A7C59" />
+                <text x={point.x} y={point.z - Math.max(6, markerWidth / 100)} fill="#141416" fontSize={Math.max(10, markerWidth / 80)} textAnchor="middle">
                   {index + 1}
                 </text>
               </g>

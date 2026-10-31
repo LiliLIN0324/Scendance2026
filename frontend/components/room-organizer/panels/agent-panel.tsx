@@ -1285,24 +1285,6 @@ export function qingguangHeaderStatus(agent: AgentValue, mode: WorkbenchMode): {
   return { text: '空闲', tone: 'idle', hint: '回到输入' };
 }
 
-function jumpToQingguang(agent: AgentValue): void {
-  const s = agent.state;
-  const show = (id: string) => document.getElementById(id)?.scrollIntoView({ block: 'nearest' });
-  if (s === 'generating' || s === 'generatePaused') { show('gen-progress'); return; }
-  if (s === 'planProposed') {
-    show('plan-proposal');
-    document.getElementById('step-cta')?.focus();
-    return;
-  }
-  if (s === 'planReady' || s === 'planEdited') { show('plan-summary'); return; }
-  if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') {
-    show('inline-error');
-    return;
-  }
-  const input = document.getElementById('prop-input') ?? document.getElementById('ap-input');
-  input?.focus();
-}
-
 /**
  * 晴光头像按状态切独立切图（`qingguang-3d-40-{ask|done|issue}`）：
  * 禁把角标叠画在头像上，所以状态靠换图，不用徽标。
@@ -1550,7 +1532,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
 export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true }: {
   onClose?(): void;
   /** 晴光头像 DOM，供轨 ↔ 顶栏飞入动画测量。 */
-  headerAvatarRef?: React.RefObject<HTMLSpanElement | null>;
+  headerAvatarRef?: React.RefObject<HTMLSpanElement>;
   /** 飞入结束后才显示顶栏静态头像，避免与 FLIP 重影。 */
   headerAvatarVisible?: boolean;
   /** 右栏底部切到「生成物件」。不传则面板自己记。 */
