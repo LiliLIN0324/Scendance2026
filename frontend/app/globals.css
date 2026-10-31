@@ -1140,6 +1140,10 @@ body {
   display: flex; flex-direction: column; pointer-events: auto;
 }
 .sc-left-column.has-tool > .sc-agent-panel { flex: 1 1 auto; }
+/* 方案会话贴在左栏里、晴光之上。不要拉成和第二列一样高，列表自己滚动。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-session-history {
+  position: relative; flex: 0 1 auto; width: 100%; min-height: 0; z-index: 2;
+}
 .sc-canvas-share {
   position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 28;
   width: min(380px, calc(100% - 80px));
