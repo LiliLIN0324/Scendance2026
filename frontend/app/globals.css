@@ -911,7 +911,7 @@ body {
    禁旧奶油 #F4F5F7、#4A7C59、#A58B69、靛蓝主色、毛玻璃。图标沿用现产品。 */
 .sc-workbench {
   /* 色彩全部继承 :root 规范 token（docs/design-spec-2026.md）；此处只留工作台字号映射。 */
-  /* 收起后的模式轨。展开的短品牌条不另起一列，铺满左卡（--sc-left-card-width，240–480，默认 320）。 */
+  /* 最左窄轨。幕景锁标始终在这 64px 顶上，不另铺一列品牌条。 */
   --sc-nav-rail-width: 64px;
   --wk-muted: #71767E;
   --sc-ink: var(--wk-ink);
@@ -982,35 +982,22 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-word {
   display: block; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0;
 }
-/* 收起时轨顶只留锁标。窄屏那条「藏起品牌标」不能把这颗开关一起藏掉。 */
+/* 轨顶品牌：锁标在上，「幕景」小字在下。点它开合左列。两种状态都留在窄轨，不进会话列。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand {
-  flex-direction: row; justify-content: center; gap: 0; width: 100%; min-height: 44px;
-  margin: 0 0 6px; padding: 4px 0; color: var(--wk-ink);
+  flex-direction: column; justify-content: center; gap: 1px; width: 100%; min-height: 48px;
+  margin: 0 0 4px; padding: 2px 0 4px; color: var(--wk-ink);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark {
   display: grid; width: 29px; height: 31px;
 }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > span.sc-rail-word {
+  display: block; color: var(--wk-ink); font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.04em;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand:hover {
   background: var(--wk-plane); color: var(--wk-ink);
 }
-/* 展开：短品牌条铺满左卡当前宽度，不另写一列像素。 */
-.sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark {
-  position: relative; display: flex; align-items: center; justify-content: flex-start; gap: 8px;
-  flex: none; width: 100%; box-sizing: border-box; min-height: 48px; margin: 0; padding: 8px 14px;
-  border: 0; border-bottom: 1px solid var(--wk-hair); border-radius: 0;
-  background: var(--wk-paper); color: var(--wk-ink); text-align: left;
-}
-.sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark:hover { background: var(--wk-plane); }
-.sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark .sc-brand-mark { display: grid; width: 29px; height: 31px; }
-.sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark .sc-brand-cn { display: inline; }
-.sc-workbench .sc-left-column > .sc-nav-brand[data-tip]::after {
-  content: attr(data-tip); position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  padding: 3px 7px; border-radius: var(--r-sm); background: var(--wk-ink); color: #fff;
-  font-size: 11px; font-weight: 400; line-height: 15px; letter-spacing: 0; white-space: nowrap;
-  opacity: 0; pointer-events: none; transition: opacity .12s ease;
-}
-.sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:hover::after,
-.sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:focus-visible::after { opacity: 1; }
+/* 名字在钮上。右侧纸条会盖住「方案会话」，这里不再飘出去。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand[data-tip]::after { content: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate:hover {
   color: #0668e5;

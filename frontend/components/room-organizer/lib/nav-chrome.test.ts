@@ -3,8 +3,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
-  NAV_BRAND_BAR_TRACKS,
-  NAV_BRAND_BAR_WIDTH,
   NAV_COLLAPSE_LABEL,
   NAV_EXPAND_LABEL,
   NAV_RAIL_WIDTH_PX,
@@ -38,15 +36,20 @@ describe('nav chrome state', () => {
     expect(navToggleLabel(false)).toBe(NAV_EXPAND_LABEL);
   });
 
-  it('keeps the collapsed rail at 64px and lets the brand bar fill the 240–480 card', () => {
+  it('keeps the brand on the 64px rail and off the session column', () => {
     expect(NAV_RAIL_WIDTH_PX).toBe(64);
-    expect(NAV_BRAND_BAR_WIDTH).toBe('100%');
-    expect(NAV_BRAND_BAR_TRACKS).toEqual({ min: 240, default: 320, max: 480 });
     const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
     expect(css).toMatch(/--sc-nav-rail-width:\s*64px/);
     expect(css).toContain('grid-template-columns: var(--sc-nav-rail-width) var(--sc-left-card-width, 320px)');
-    expect(css).toMatch(/\.sc-nav-brand\.is-wordmark\s*\{[^}]*width:\s*100%/);
+    expect(css).not.toMatch(/\.sc-left-column\s*>\s*\.sc-nav-brand/);
     expect(css).not.toMatch(/sc-nav-brand[^}]{0,240}188px/);
+    const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
+    const rail = source.slice(source.indexOf('className="sc-mode-rail"'), source.indexOf('id="workbench-nav-column"'));
+    const column = source.slice(source.indexOf('id="workbench-nav-column"'));
+    expect(rail.match(/<WorkbenchBrandToggle/g)).toHaveLength(1);
+    expect(rail.indexOf('<WorkbenchBrandToggle')).toBeLessThan(rail.indexOf('<QingguangRailButton'));
+    expect(column).not.toContain('WorkbenchBrandToggle');
+    expect(column).toContain('<AssistantSessionDock');
   });
 
   it('does not store a separate navExpanded flag beside the two doors', () => {

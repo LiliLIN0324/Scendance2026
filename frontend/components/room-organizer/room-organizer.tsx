@@ -189,7 +189,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const next = toggleNavColumns({ agentCollapsed, sidebarCollapsed });
     setAgentCollapsed(next.agentCollapsed);
     setSidebarCollapsed(next.sidebarCollapsed);
-    const focusSelector = isNavExpanded(next) ? '#workbench-nav-column .sc-nav-brand' : '.sc-mode-rail .sc-nav-brand';
+    const focusSelector = '.sc-mode-rail .sc-nav-brand';
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(focusSelector)?.focus());
   }, [agentCollapsed, sidebarCollapsed]);
   /** 晴光栏在左侧。关掉后再从画布上的晴光浮标打开，回到布置对话。 */
@@ -1625,7 +1625,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
-              {!navExpanded && <WorkbenchBrandToggle expanded={false} onToggle={toggleNav} />}
+              <WorkbenchBrandToggle expanded={navExpanded} onToggle={toggleNav} />
               <nav className="sc-mode-rail-top" aria-label="晴光">
                 <QingguangRailButton open={!agentCollapsed} onOpen={openQingguang} />
               </nav>
@@ -1649,7 +1649,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </div>
           </div>
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
-          {navExpanded && <WorkbenchBrandToggle expanded onToggle={toggleNav} />}
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
