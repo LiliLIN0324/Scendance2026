@@ -735,7 +735,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
   <p class="note">规矩：图标字形永远是正方形容器(lucide 24 网格),宽高同档,不存在 16×20 这类长方字形;「尺寸」指的是字形方格,可点击时外层按钮另给 ≥32×32 触达区——字形小、靶子大,两者不混谈。宽度不用时图标永远不单独出现,必须与文字或 32px 钮同组。</p>
 </div>
 <div class="block"><span class="cap">索引 · 68 枚 · 一义一标</span>
-    <p class="note" style="margin:0 0 10px">每枚只标中文用途,英文组件名悬停可见;与 md 规范四节图标表一一对应。<code>docs/design-spec-2026.md</code> §1.4。画布分段「布置 / 物料 / 执行资料」不另起图标：布置用 <code>SquareStack</code>（布局模式），物料用 <code>Boxes</code>（物料工具），执行资料用 <code>ListChecks</code>（执行清单）。场地重建用 <code>Scan</code>，不用 <code>Layers</code>——lucide 里 <code>Layers</code> 是 <code>Layers3</code>（图层）的别名。撤销 <code>Undo2</code>、重做 <code>Redo2</code> 不与复位 <code>RotateCcw</code>、重试 <code>RotateCw</code> 混。</p>
+    <p class="note" style="margin:0 0 10px">每枚只标中文用途,英文组件名悬停可见;与 md 规范四节图标表一一对应。<code>docs/design-spec-2026.md</code> §1.4。画布顶不放「布置 / 物料 / 执行资料」分段，这三档只走左轨：布置 <code>SquareStack</code>、评审 <code>Send</code>、执行 <code>ListChecks</code>。场地重建用 <code>Scan</code>，不用 <code>Layers</code>——lucide 里 <code>Layers</code> 是 <code>Layers3</code>（图层）的别名。撤销 <code>Undo2</code>、重做 <code>Redo2</code> 不与复位 <code>RotateCcw</code>、重试 <code>RotateCw</code> 混。</p>
     <div class="ixgrp"><b>导航与轨道 · 19</b>
       <div class="ixgrid">
       <div class="ix" title="Boxes"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="m7 16.5 5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3"/><path d="m17 16.5 4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15"/><path d="m12 8 4.74-2.85"/><path d="M12 13.5V8"/></svg><span>物料工具</span></div>
@@ -839,7 +839,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
       <tr><td style="white-space:nowrap"><b>返回</b> <code>ArrowLeft</code></td><td style="white-space:nowrap"><b>展开 / 收起</b> <code>ChevronDown / ChevronUp</code><span style="color:var(--muted)">· 不用 + / −</span></td></tr>
       <tr><td style="white-space:nowrap"><b>撤销 / 重做</b> <code>Undo2 / Redo2</code><span style="color:var(--muted)">· 不与复位、重试混</span></td><td style="white-space:nowrap"><b>放大 / 缩小</b> <code>ZoomIn / ZoomOut</code></td></tr>
       <tr><td style="white-space:nowrap"><b>地图</b> <code>Map</code><span style="color:var(--muted)">· 选址圈画</span></td><td style="white-space:nowrap"><b>卫星</b> <code>Satellite</code><span style="color:var(--muted)">· 贴地参考，不作重建素材</span></td></tr>
-      <tr><td style="white-space:nowrap"><b>布置分段</b> <code>SquareStack</code><span style="color:var(--muted)">· 与左轨布局同一枚</span></td><td style="white-space:nowrap"><b>物料 / 执行分段</b> <code>Boxes / ListChecks</code></td></tr>
+      <tr><td style="white-space:nowrap"><b>左轨布置</b> <code>SquareStack</code><span style="color:var(--muted)">· 画布顶不再分段</span></td><td style="white-space:nowrap"><b>左轨执行</b> <code>ListChecks</code><span style="color:var(--muted)">· 评审 Send</span></td></tr>
     </tbody>
   </table>
   </div>
@@ -2055,7 +2055,7 @@ footer{border-top:1px solid var(--hair);padding-top:24px}
   </div>
 </section><footer>
   <p class="note">幕景 Scendance · 2026 设计规范 v2.6.6 · 2026-10-31 · 条款与 design-spec-2026.md（v2.5.1）一致</p>
-  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。v2.6.1 补品牌文案表：主 slogan 钉死「为相聚，留一方空间。」。v2.6.2 品牌标志收档：删去 App icon / mono / mono-reverse / icon-mono 各档，只留标准 color 与反白 reverse（反白样张补深底）；二维码中心用反白垫深底。v2.6.3 去重：品牌标志整块从「四、图标与阴影」并入 00 节，删掉重复的尺寸阶梯、重复的禁则与「本节不重复」的指路块；§四 只剩 lucide 图标与阴影。另补上第五节漏掉的一个 <code>&lt;/div&gt;</code>、删掉一处重复的 <code>&lt;/section&gt;</code>。v2.6.4 晴光补定稿资产：主图加全身、六种状态成块、头像 32/40/64 阶梯；加载态文案改成定稿画面里的「顶部三球环绕」。 v2.6.5 晴光重出：「在问你」定稿单图抠净棋盘格、头像三态角标变体与 128 同取景版进规范。v2.6.6 第五节补工作台在用图标：地图、场地重建、场地观感、卫星贴地、场景模板、环境预览、物料库、空白场地，以及平面/立体、整体、俯视、人视、撤销、重做、放大、缩小。布置 / 物料 / 执行资料沿用既有 SquareStack / Boxes / ListChecks。色板不动。</p>
+  <p class="note" style="margin-top:6px">v2.6 只改三处：封面换成视觉入口；品牌补「形态谱系 · 八种在场」与「禁用 · 六种改法」；导航按真实工作台重画，六个入口的落点写死。v2.6.1 补品牌文案表：主 slogan 钉死「为相聚，留一方空间。」。v2.6.2 品牌标志收档：删去 App icon / mono / mono-reverse / icon-mono 各档，只留标准 color 与反白 reverse（反白样张补深底）；二维码中心用反白垫深底。v2.6.3 去重：品牌标志整块从「四、图标与阴影」并入 00 节，删掉重复的尺寸阶梯、重复的禁则与「本节不重复」的指路块；§四 只剩 lucide 图标与阴影。另补上第五节漏掉的一个 <code>&lt;/div&gt;</code>、删掉一处重复的 <code>&lt;/section&gt;</code>。v2.6.4 晴光补定稿资产：主图加全身、六种状态成块、头像 32/40/64 阶梯；加载态文案改成定稿画面里的「顶部三球环绕」。 v2.6.5 晴光重出：「在问你」定稿单图抠净棋盘格、头像三态角标变体与 128 同取景版进规范。v2.6.6 第五节补工作台在用图标：地图、场地重建、场地观感、卫星贴地、场景模板、环境预览、物料库、空白场地，以及平面/立体、整体、俯视、人视、撤销、重做、放大、缩小。布置 / 评审 / 执行只在左轨，画布顶不加分段。色板不动。</p>
 </footer>
 
 </div>

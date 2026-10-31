@@ -105,13 +105,13 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 
 | 组 | 枚数 | 图标（用途） |
 |---|---|---|
-| 导航与轨道 | 19 | `Boxes` 物料工具、`ClipboardList` 活动需求、`FileText` 合同约定、`Ruler` 图纸尺寸、`SquareStack` 布局模式（画布「布置」分段同此枚）、`ListChecks` 执行清单（画布「执行资料」分段同此枚）、`Send` 评审模式、`PanelLeftClose` 收起面板、`FolderOpen` 项目与目录、`Building2` 当前工作室、`Users` 协作成员、`Map` 地图选址、`Scan` 场地重建、`Shapes` 场地观感、`Satellite` 卫星贴地、`LayoutTemplate` 场景模板、`Trees` 环境预览、`Package` 物料库、`SquareDashed` 空白场地 |
+| 导航与轨道 | 19 | `Boxes` 物料工具、`ClipboardList` 活动需求、`FileText` 合同约定、`Ruler` 图纸尺寸、`SquareStack` 布局模式（左轨「布置」，画布顶不再分段）、`ListChecks` 执行清单（左轨「执行」）、`Send` 评审模式、`PanelLeftClose` 收起面板、`FolderOpen` 项目与目录、`Building2` 当前工作室、`Users` 协作成员、`Map` 地图选址、`Scan` 场地重建、`Shapes` 场地观感、`Satellite` 卫星贴地、`LayoutTemplate` 场景模板、`Trees` 环境预览、`Package` 物料库、`SquareDashed` 空白场地 |
 | 画布视图 | 16 | `MousePointer2` 选择、`Crosshair` 准星、`Grid` 吸附网格、`Eye` 显隐、`Camera` 导出图像、`Sun` 晴天光照、`CloudRain` 阴雨光照、`Footprints` 足迹漫游、`Axis3d` 平面/立体、`Cuboid` 整体视角、`Square` 俯视、`PersonStanding` 人视、`Undo2` 撤销、`Redo2` 重做、`ZoomIn` 放大、`ZoomOut` 缩小 |
 | Agent 与输入 | 8 | `ArrowUp` 发送、`Paperclip` 附图纸/照片、`FileImage` 图片文件、`MoreHorizontal` 更多、`Loader2` 加载、`RotateCw` 重试、`Sparkles` 生成·Agent、`X` 关闭 |
 | 编辑与操作 | 12 | `Copy` 复制、`Trash2` 删除、`Lock` 锁定、`Unlock` 解锁、`RotateCcw` 复位、`RefreshCw` 换一条、`Maximize2` 全屏、`Minimize2` 退出全屏、`SlidersHorizontal` 助手设置、`Plus` 新增、`Search` 搜索、`FlaskConical` 演示环境 |
 | 状态与通用 | 13 | `Check` 成功·选中、`ChevronDown` 展开、`ChevronUp` 收起、`ArrowLeft` 返回、`ArrowRight` 前进、`ArrowUpRight` 外链·打开、`LockKeyhole` 私有·只读、`Layers3` 图层、`Box` 物料·空间、`ImagePlus` 上传图片、`UserRound` 个人、`UsersRound` 团队、`Settings2` 设置 |
 
-**一义一标**：关闭只用 `X`，不用 `X` 表示删除（`Trash2` 专指删除）；成功/选中 `Check` · 加载 `Loader2`（唯一允许旋转的图标）· 新增 `Plus` · 搜索 `Search` · 更多 `MoreHorizontal` · 展开/收起 `ChevronDown`/`ChevronUp` · 全屏成对 `Maximize2`/`Minimize2` · 复位 `RotateCcw`、换一条 `RefreshCw`、重试 `RotateCw`（三者不混）· 撤销 `Undo2`、重做 `Redo2`（不与复位、重试混）· 放大/缩小 `ZoomIn`/`ZoomOut` · 锁定 `Lock`/`Unlock` · 发送 `ArrowUp` · 上传 `ImagePlus` · 外链 `ArrowUpRight`。画布分段「布置 / 物料 / 执行资料」分别用 `SquareStack` / `Boxes` / `ListChecks`，不另起一枚。场地重建用 `Scan`；不要用 `Layers`，它在 lucide-react 1.48 里是 `Layers3`（图层）的别名。新增图标前先查表，同义不复用两枚。
+**一义一标**：关闭只用 `X`，不用 `X` 表示删除（`Trash2` 专指删除）；成功/选中 `Check` · 加载 `Loader2`（唯一允许旋转的图标）· 新增 `Plus` · 搜索 `Search` · 更多 `MoreHorizontal` · 展开/收起 `ChevronDown`/`ChevronUp` · 全屏成对 `Maximize2`/`Minimize2` · 复位 `RotateCcw`、换一条 `RefreshCw`、重试 `RotateCw`（三者不混）· 撤销 `Undo2`、重做 `Redo2`（不与复位、重试混）· 放大/缩小 `ZoomIn`/`ZoomOut` · 锁定 `Lock`/`Unlock` · 发送 `ArrowUp` · 上传 `ImagePlus` · 外链 `ArrowUpRight`。左轨布置 / 执行分别用 `SquareStack` / `ListChecks`（评审 `Send`）；画布顶不再加「布置 / 物料 / 执行资料」分段。场地重建用 `Scan`；不要用 `Layers`，它在 lucide-react 1.48 里是 `Layers3`（图层）的别名。新增图标前先查表，同义不复用两枚。
 
 **领域符号（不进 UI 栅格）**：`frontend/components/room-organizer/plotcraft/icon.tsx` 是 PlotCraft 图标集（stroke 1.5、圆头圆角、`currentColor`）承担户型与家具语义（墙/窗/门/地面/楼梯/屋顶/家具/画布工具）；`frontend/components/room-organizer/panels/scendance-workspace.tsx:27` 的 `MaterialGlyph`（72×58、stroke 2.3–2.4、24–30% `currentColor` 填充）是物料缩略线稿。两者只出现在画布、物料卡与户型上下文；工具栏、按钮、菜单一律 lucide，两种风格不混在同一个图标钮里。
 
