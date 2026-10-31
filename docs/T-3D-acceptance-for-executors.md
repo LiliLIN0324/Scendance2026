@@ -12,6 +12,9 @@
 
 ---
 
+> **【产品钉 2026-10-31 · 平面图上传】** 主路径 = 上传 → 两点定标尺（AI 可预填米数）→ 确认进场地。砍多余标定/多步向导。详见 `FLOORPLAN-UPLOAD-PATH-2026-10-31.md`。
+
+
 ### T-3D-01 摄入（图片底图 MVP）
 **做**：`POST /assets/floorplan` 仅 PNG/JPEG；记 asset + 哈希；DXF/DWG/PDF → 明确拒绝文案（与现 `nonImageRejected` 一致）。  
 **验收**：非图片上传被拒且有可读原因；图片可叠为底图。  
@@ -22,10 +25,11 @@
 **验收**：3D 包围盒与手输长宽误差 ≤ 0.5%；底图按壳拉伸对齐。  
 **禁**：未确认比例时用 `$INSUNITS` 静默定米。
 
-### T-3D-03 比例确认闸（一键边长）
-**做**：`propose_scale` 出最长外墙尺寸条；`confirm_scale` 写入 `DimensionConstraint` + `venue.site.scale.confidence=high`。  
-**验收**：确认一边后，相对该边误差 ≤1%；`confidence` 可追溯。  
-**人闸**：必现；Agent 不可跳过。
+### T-3D-03 比例确认闸（两点定标尺 · 上传主路径唯一人闸）
+**做**：上传后主路径只留这一步——用户在图上点两点（或等价选一边），确认两点间距米数；AI 可 `propose_scale` 预填，用户可改；`confirm_scale` 写入 `DimensionConstraint` + `venue.site.scale.confidence=high`，随即进场地。  
+**验收**：确认后相对该段误差 ≤1%；`confidence` 可追溯；确认前不报假米。  
+**人闸**：必现；Agent 不可跳过。  
+**禁**：多步标定向导；上传后先逼手输长宽/先跑结构识别才给进场地。
 
 ### T-3D-04 层高与主入口
 **做**：默认层高 4.0 m 且 `heightSource=default`/`inferred`；多门时 `list_entrance_candidates` + `set_main_entrance(openingId)`。  
