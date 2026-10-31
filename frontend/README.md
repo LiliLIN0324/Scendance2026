@@ -61,11 +61,11 @@ python3 -m http.server 3018 --bind 127.0.0.1 --directory out
 
 ## 可评论方案页
 
-对方审方案时打开 `/review/#layout=…`。这一页只有只读平面和评论，路径不是工作台 `/` 或 `/editor`。
+对方审方案时打开 `/review/#layout=…`。这一页只有只读平面和画内议题钉，路径不是工作台 `/` 或 `/editor`。
 
 - 井号后的片段与编辑器 `encodeShareUrl` 生成的 `#layout=` 相同。分享菜单把绝对 origin 和这个片段交给 `reviewShareHref`（`components/review-share-page/load-plan.ts`），得到 `https://<主机>/review/#layout=…`。
-- 页面可以发表评论，也可以对一条评论再回复一层。回复不能再往下嵌。
-- 评论存在本机 `localStorage`，键名 `scendance-review-share-comments-v1`。刷新还在。这是演示存储，不写 Supabase，换一台设备不会跟着走。每份方案最多 80 条，最多保留 40 份方案。
+- 在平面点物件或地面落钉，写一句短意见（与工作台 `ReviewPinLayer` / `review-pins` 同一套）。右侧栏只做钉列表汇总。
+- 钉存在本机 `localStorage`，键名 `scendance-review-share-pins-v1`。刷新还在。这是演示存储，不写 Supabase，换一台设备不会跟着走。每份方案最多 80 条，最多保留 40 份方案。
 - 「完成评审」再写一笔回执，键名 `scendance-review-share-return-v1`。创作者在同一浏览器打开工作台并收起球时，球带红环（`AgentReopenCard` 的 `is-review-returned`，产品旧称 Bingo 球）。这一刀不按方案编号过滤，也不跨设备；后刀再接真状态。
 - 不带 `#layout=` 时：有本机布置（`scendance-editor-local-v1`）就预览这份当前方案；没有则打开示例场地「周末共创工作坊」。`/review/?demo=1` 固定打开示例。
 - 片段在但解不开（过长或损坏）时，页面停在错误说明，不改显另一份方案。

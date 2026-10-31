@@ -16,9 +16,9 @@ import type { RoomLayout } from '../room-organizer/lib/types';
 export const REVIEW_SHARE_PATH = '/review/';
 
 export const REVIEW_PLAN_NOTICES = {
-  link: '这是分享链接里的方案快照。此页只读，可查看平面并评论。',
+  link: '这是分享链接里的方案快照。此页只读，可在平面上落钉评审。',
   local: '这是这台浏览器当前保存的布置。对方要看同一份，请打开 /review/#layout= 评审链接。',
-  sample: '没有分享快照，也没有本机布置。先展示示例场地，方便试用评论。',
+  sample: '没有分享快照，也没有本机布置。先展示示例场地，方便试用落钉评审。',
 } as const;
 
 export const REVIEW_PLAN_ERRORS = {

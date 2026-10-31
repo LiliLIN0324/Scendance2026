@@ -1,12 +1,37 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { STORAGE_KEY } from '../room-organizer/lib/constants';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+const LOCAL_LAYOUT_KEY = 'scendance-editor-local-v1';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
-import { REVIEW_COMMENT_STORAGE_KEY } from './comments';
 import { REVIEW_RETURN_STORAGE_KEY } from './review-return';
 import { ReviewSharePage } from './review-share-page';
+import { REVIEW_SHARE_PIN_STORAGE_KEY } from './share-pins';
 import type { RoomLayout } from '../room-organizer/lib/types';
+
+vi.mock('./review-plan-sheet', () => ({
+  ReviewPlanSheet: ({
+    onAnchor,
+    onCommitPin,
+  }: {
+    onAnchor(anchor: { itemId: string | null; x: number; z: number }): void;
+    onCommitPin(text: string): void;
+  }) => (
+    <div className="rsp-plan-stage">
+      <canvas aria-label="平面预览 mock" />
+      <button type="button" onClick={() => onAnchor({ itemId: null, x: 0, z: 0 })}>mock-plan-click</button>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onCommitPin('主舞台偏左');
+        }}
+      >
+        <input aria-label="议题" />
+        <button type="submit">钉上</button>
+      </form>
+    </div>
+  ),
+  itemNames: (items: readonly { id: string; name: string }[]) => items,
+}));
 
 /** Uncompressed `#layout=` fragment. jsdom has no Blob.stream(), so the test skips deflate. */
 function layoutHash(layout: RoomLayout): string {
@@ -22,6 +47,7 @@ function layoutHash(layout: RoomLayout): string {
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   window.history.replaceState(null, '', '/review/');
 });
 
@@ -32,32 +58,23 @@ async function openSample(): Promise<void> {
 }
 
 describe('review share page', () => {
-  it('shows the sample plan, posts a comment, and keeps a reply after remount', async () => {
+  it('shows the sample plan, drops a pin on the canvas, and keeps it after remount', async () => {
     await openSample();
     expect(screen.getByText(/示例场地/)).toBeTruthy();
     expect(screen.getByText(/共创桌/)).toBeTruthy();
-    expect(document.querySelector('img[alt*="平面预览"]')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/晴光|模式轨|执行页|到场清单/);
     expect(document.querySelector('.sc-mode-rail, .sc-agent-panel, #agent-panel, .sc-workbench')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
-    expect(screen.getByRole('alert').textContent).toMatch(/称呼/);
-
-    fireEvent.change(screen.getByLabelText('称呼'), { target: { value: '甲方' } });
-    fireEvent.change(screen.getByLabelText('意见'), { target: { value: '主舞台偏左' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
+    fireEvent.click(screen.getByRole('button', { name: 'mock-plan-click' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '议题' }), { target: { value: '主舞台偏左' } });
+    fireEvent.click(screen.getByRole('button', { name: '钉上' }));
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '回复 甲方' }));
-    fireEvent.change(screen.getByLabelText('意见'), { target: { value: '舞台保持居中' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表回复' }));
-    expect(await screen.findByText('舞台保持居中')).toBeTruthy();
-    expect(localStorage.getItem(REVIEW_COMMENT_STORAGE_KEY)).toContain('主舞台偏左');
+    expect(localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY)).toContain('主舞台偏左');
 
     cleanup();
+    window.history.replaceState(null, '', '/review/?demo=1');
     render(<ReviewSharePage />);
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();
-    expect(screen.getByText('舞台保持居中')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '完成评审' }));
     expect(await screen.findByRole('button', { name: '已完成评审' })).toBeTruthy();
@@ -72,7 +89,7 @@ describe('review share page', () => {
     expect(screen.getByText(/分享链接里的方案快照/)).toBeTruthy();
     cleanup();
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...INITIAL_LAYOUT, name: '本机共创' }));
+    localStorage.setItem(LOCAL_LAYOUT_KEY, JSON.stringify({ ...INITIAL_LAYOUT, name: '本机共创' }));
     window.history.replaceState(null, '', '/review/');
     render(<ReviewSharePage />);
     expect(await screen.findByRole('heading', { name: '本机共创' })).toBeTruthy();
@@ -100,6 +117,6 @@ describe('review share page', () => {
     window.history.replaceState(null, '', '/review/#layout=!!!');
     render(<ReviewSharePage />);
     expect((await screen.findByRole('alert')).textContent).toMatch(/读不出来/);
-    expect(screen.queryByLabelText('意见')).toBeNull();
+    expect(document.querySelector('.rsp-plan-stage canvas')).toBeNull();
   });
 });
