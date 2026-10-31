@@ -67,17 +67,20 @@ function PlanFeedbackBlock({ plan }: { plan: BingoPlan }): JSX.Element {
 
 function FeedbackPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {
   if (feedback.pins.length === 0) {
-    return <p className="sc-bingo-feedback-empty">甲方还没在这份方案上留钉评。对方打开链接后可以留言，你会在这里看到汇总。</p>;
+    return <p className="sc-bingo-feedback-empty">甲方还没在这份方案的画内落钉。对方打开链接点平面即可留钉评，你会在这里看到汇总。</p>;
   }
   return (
     <ol className="sc-bingo-feedback-list">
       {feedback.pins.map(pin => (
-        <li key={pin.id}>
+        <li key={pin.id} data-source={pin.source}>
           <article>
             <header>
               <strong>{pin.author}</strong>
-              <time dateTime={pin.createdAt}>{formatFeedbackTime(pin.createdAt)}</time>
+              {pin.pinStatus && <span className={`sc-bingo-pin-status is-${pin.pinStatus}`}>{pin.pinStatus === 'resolved' ? '已处理' : '待处理'}</span>}
+              {pin.source === 'legacy-comment' && <span className="sc-bingo-pin-legacy">旧侧栏</span>}
+              {pin.createdAt && <time dateTime={pin.createdAt}>{formatFeedbackTime(pin.createdAt)}</time>}
             </header>
+            {pin.placement && <p className="sc-bingo-pin-place">{pin.placement}</p>}
             <p>{pin.body}</p>
             {pin.replies.length > 0 && (
               <ul>
@@ -141,7 +144,7 @@ export function BingoPanel({ onClose, draftNote }: {
       </header>
       <div className="rsp-body sc-bingo-panel-body">
         <p className="sc-bingo-lede" role="note">
-          这里只看<strong>甲方反馈</strong>：钉评、回复和「完成评审」回执。链接发给对方去 <code>/review</code> 钉评；你在这读汇总，不用自己当甲方写评论。
+          这里只看<strong>甲方反馈</strong>：画内钉评与「完成评审」回执。链接发给对方去 <code>/review</code> 落钉；你在这读汇总，侧栏旧评论仅只读兼容。
         </p>
         <p className={`sc-bingo-draft-note${draftNote.error ? ' has-error' : ''}`} role="status" title={draftNote.title}>
           本机草稿 · {draftNote.label}

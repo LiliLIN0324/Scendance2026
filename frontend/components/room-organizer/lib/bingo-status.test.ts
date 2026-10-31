@@ -32,6 +32,7 @@ function mark(shareId: string, extra: Record<string, unknown> = {}) {
     projectKey: 'local-draft',
     title: '发布会',
     shareId,
+    reviewPlanKey: shareId,
     markedAt: '2026-10-31T00:00:00.000Z',
     ...extra,
   };

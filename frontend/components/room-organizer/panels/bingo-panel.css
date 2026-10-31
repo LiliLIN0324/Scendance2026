@@ -172,6 +172,21 @@
   color: var(--wk-muted);
 }
 .sc-bingo-feedback-list header strong { color: var(--wk-ink); font-weight: 600; }
+.sc-bingo-pin-status {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--warn);
+}
+.sc-bingo-pin-status.is-resolved { color: var(--wk-muted); }
+.sc-bingo-pin-legacy {
+  font-size: var(--fs-cap);
+  color: var(--wk-muted);
+}
+.sc-bingo-pin-place {
+  margin: 2px 0 0;
+  font-size: var(--fs-cap);
+  color: var(--wk-muted);
+}
 .sc-bingo-feedback-list p { margin: 4px 0 0; font-size: var(--fs-p2); line-height: var(--lh-p2); }
 .sc-bingo-feedback-list ul {
   list-style: none;

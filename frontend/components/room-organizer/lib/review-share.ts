@@ -202,12 +202,14 @@ export function rememberReviewLinkMark(input: {
   title: string;
   shareId: string;
   clientUrl: string;
+  reviewPlanKey: string;
   markedAt?: string;
 }): void {
   const projectKey = clip(input.projectKey, 80);
   const shareId = clip(input.shareId, 80);
   const clientUrl = clip(input.clientUrl, 512);
-  if (!projectKey || !shareId || !clientUrl) return;
+  const reviewPlanKey = clip(input.reviewPlanKey, 80);
+  if (!projectKey || !shareId || !clientUrl || !reviewPlanKey) return;
   rememberReviewMark({
     saved: true,
     status: 'needs-review',
@@ -216,10 +218,11 @@ export function rememberReviewLinkMark(input: {
     shareId,
     markedAt: input.markedAt ?? new Date().toISOString(),
     clientUrl,
+    reviewPlanKey,
   });
 }
 
-function rememberReviewMark(mark: ReviewBingoMark & { clientUrl?: string }): void {
+function rememberReviewMark(mark: ReviewBingoMark & { clientUrl?: string; reviewPlanKey?: string }): void {
   const rest = readReviewMarks().filter(entry => entry.projectKey !== mark.projectKey);
   writeJson(MARK_KEY, [mark, ...rest].slice(0, MAX_MARKS));
 }

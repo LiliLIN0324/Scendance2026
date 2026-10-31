@@ -50,6 +50,20 @@ export function reviewShareHref(origin: string, layoutHash: string): string | nu
   }
 }
 
+/** 与 `/review/#layout=` 页 `loadReviewPlan` 使用的 planKey 一致，供 Bingo 对齐甲方钉。 */
+export function reviewPlanKeyForShareHash(hash: string): string | null {
+  if (!isShareHash(hash)) return null;
+  return `link:${fnv1a(hash)}`;
+}
+
+export function reviewPlanKeyForClientUrl(url: string): string | null {
+  try {
+    return reviewPlanKeyForShareHash(new URL(url).hash);
+  } catch {
+    return null;
+  }
+}
+
 export function readLocalReviewLayout(storage: Pick<Storage, 'getItem'> | null): RoomLayout | null {
   if (!storage) return null;
   try {

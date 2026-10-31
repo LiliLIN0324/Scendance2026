@@ -9,6 +9,8 @@
  * 不建 Supabase，也不按设备同步。
  */
 
+import { reviewPlanKeyForClientUrl } from '../../review-share-page/load-plan';
+
 export const BINGO_MARK_KEY = 'scendance.reviewMark.v1';
 export const BINGO_RETURN_KEY = 'scendance-review-share-return-v1';
 
@@ -25,6 +27,8 @@ export interface BingoPlan {
   title: string;
   shareId: string;
   markedAt: string;
+  /** 与 `/review` 甲方钉存储的 planKey 对齐（PR #37 share-pins）。 */
+  reviewPlanKey: string;
   /** 甲方打开的链接。创作者侧 Bingo 只读反馈，不当成「去评审页写评论」入口。 */
   clientHref: string;
   returned: boolean;
@@ -139,13 +143,17 @@ function parsePlan(value: unknown, receipt: BingoReceipt | null): BingoPlan | nu
   if (!projectKey || !record.markedAt) return null;
   const clientUrl = typeof record.clientUrl === 'string' ? clip(record.clientUrl, 512) : '';
   const clientHref = clientUrl || (SHARE_ID.test(shareId) ? reviewPlanHref(shareId) : '/review/');
+  const storedReviewKey = typeof record.reviewPlanKey === 'string' ? clip(record.reviewPlanKey, MAX_KEY) : '';
+  const reviewPlanKey = storedReviewKey || reviewPlanKeyForClientUrl(clientHref) || projectKey;
+  const receiptKeys = new Set([projectKey, shareId, reviewPlanKey]);
   return {
     projectKey,
     title: typeof record.title === 'string' && clip(record.title, MAX_TITLE) ? clip(record.title, MAX_TITLE) : '未命名活动',
     shareId,
     markedAt: record.markedAt,
+    reviewPlanKey,
     clientHref,
-    returned: receipt !== null && (receipt.planKey === shareId || receipt.planKey === projectKey),
+    returned: receipt !== null && receiptKeys.has(receipt.planKey),
   };
 }
 
