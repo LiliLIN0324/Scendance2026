@@ -1618,6 +1618,24 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
  * 支持全窗口任意拖动——mousedown 在卡片 body 上按住即可拖，释放后停在原位。
  * 拖动距离 < 5px 视为点击，触发 onOpen 打开面板。
  */
+/** 窄轨上的晴光。工作台只从这里进出对话，不再在画布上另放一颗球。 */
+export function QingguangRailButton({ open, onToggle }: { open: boolean; onToggle(): void }): JSX.Element {
+  const agent = useAgent();
+  const mode = agent.callbacks.workbenchMode;
+  return (
+    <button
+      type="button"
+      className={`sc-rail-qingguang${open ? ' is-open' : ''}`}
+      aria-label={open ? '收起晴光' : '打开晴光 Agent'}
+      aria-pressed={open}
+      title={open ? '收起晴光' : '打开晴光'}
+      onClick={onToggle}
+    >
+      <img src={mascotOf(agent, mode)} alt="" width={40} height={40} draggable={false}/>
+    </button>
+  );
+}
+
 export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const agent = useAgent();
   const mode = agent.callbacks.workbenchMode;

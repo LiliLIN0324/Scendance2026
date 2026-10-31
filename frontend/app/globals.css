@@ -1046,8 +1046,33 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.is-active { color: var(--wk-ink); font-weight: 600; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:disabled { background: var(--plane); color: var(--faint); opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
-/* 评审收藏球：左轨脚、设置之上。圆形状态，不是模式标，也不是晴光。
+/* 窄轨顶：幕景锁标、晴光、紧挨其下的评审球。球不进轨脚。
    待发是空心，待评审是琥珀色环加份数，已回执是红环。简卡向画布展开。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-lead {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: 100%; flex: none; padding-bottom: 8px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--wk-hair);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail a.sc-rail-mark {
+  width: 40px; height: 40px; display: grid; place-items: center; flex: none;
+  color: var(--wk-ink); border-radius: 10px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail a.sc-rail-mark:hover { background: var(--wk-plane); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang {
+  width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
+  border: 0; border-radius: 999px; background: transparent; box-shadow: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:focus-visible {
+  background: transparent; transform: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang img {
+  width: 40px; height: 40px; border-radius: 50%; display: block; pointer-events: none;
+  background: #DBE5CF; box-shadow: 0 4px 14px rgba(20, 20, 22, 0.14);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang.is-open img {
+  box-shadow: 0 0 0 2px var(--wk-green), 0 4px 14px rgba(20, 20, 22, 0.14);
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-bingo {
   position: relative; display: flex; justify-content: center; width: 100%; min-height: 40px; flex: none;
 }
@@ -1088,7 +1113,7 @@ body {
 /* 简卡要盖过画布上的方案首页（z-index 24）。球在轨的层叠上下文里，打开时把整条轨抬上来。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail:has(.sc-bingo-card) { z-index: 46; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-bingo-card {
-  position: absolute; left: calc(100% + 10px); bottom: 0; z-index: 2;
+  position: absolute; left: calc(100% + 10px); top: 0; z-index: 2;
   width: 280px; max-height: min(360px, 70vh); overflow: auto; box-sizing: border-box;
   padding: 12px; border: 1px solid var(--hair); border-radius: var(--r-md);
   background: var(--paper); color: var(--ink); box-shadow: var(--e1); text-align: left;

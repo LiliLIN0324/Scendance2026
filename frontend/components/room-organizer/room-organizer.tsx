@@ -65,7 +65,7 @@ import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from '.
 import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
-import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapRailButton, MapVenueOverlay, QingguangRailButton } from './panels/agent-panel';
 import { BingoStatusBall } from './panels/bingo-status-ball';
 import { CanvasHeading } from './panels/canvas-heading';
 import { CloudPanel } from './panels/cloud-panel';
@@ -1603,6 +1603,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
+              <div className="sc-rail-lead">
+                <a className="sc-rail-mark" href="/introduction" aria-label="幕景锁标" title="幕景" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><BrandMark size={28} /></a>
+                <QingguangRailButton open={!agentCollapsed} onToggle={() => {
+                  if (agentCollapsed) { setComposerGenerate(false); setSidebarCollapsed(true); setLeftMode('brief'); setBusinessOpen(false); setAgentCollapsed(false); }
+                  else setAgentCollapsed(true);
+                }} />
+                <BingoStatusBall />
+              </div>
               <nav className="sc-mode-rail-top" aria-label="工作流程">
                 {WORKBENCH_MODES.map(mode => {
                   const active = workbenchMode === mode.id;
@@ -1624,7 +1632,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               </nav></>}
             </div>
             <div className="sc-mode-rail-foot">
-              <BingoStatusBall />
               <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
               <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" title="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
               <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
@@ -1788,13 +1795,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}
                 environment={{ preview: splatState, onStart: startStoredScene, onStop: stopSplat }}/>}
             </div>
-            {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}
+            {/* 物料条挂在画布栏底。晴光入口在窄轨顶，不另放画布球。 */}
             {!planHome && <div className="sc-bottom-bar">
               <div className="sc-bottom-bar-center">
                 <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
               </div>
             </div>}
-            {agentCollapsed && <AgentReopenCard onOpen={() => { setComposerGenerate(false); setSidebarCollapsed(true); setLeftMode('brief'); setBusinessOpen(false); setAgentCollapsed(false); }}/>}
             </div>
           </div>
           <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
