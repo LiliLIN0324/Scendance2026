@@ -645,14 +645,19 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
 });
 
 describe('晴光在左侧工作台', () => {
-  it('空闲时点晴光形象回到输入，不另开一栏', () => {
+  it('对话列顶是会话标题和历史钮，不放第二颗晴光头像', async () => {
     render(ui(makeLayout()));
-    const face = screen.getByRole('button', { name: '晴光，空闲。回到输入' });
-    expect(face.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/qingguang-3d-40.png');
-    fireEvent.click(face);
+    const title = screen.getByRole('button', { name: '新会话' });
+    expect(title.closest('header')?.querySelector('img')).toBeNull();
+    expect(screen.queryByRole('button', { name: /晴光，/ })).toBeNull();
+    fireEvent.click(title);
     expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
-    fireEvent.click(screen.getByRole('button', { name: '空闲' }));
-    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+    expect(screen.queryByRole('list', { name: '方案会话列表' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '会话历史' }));
+    expect(await screen.findByRole('list', { name: '方案会话列表' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '方案会话' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '关闭会话历史' }));
+    expect(screen.queryByRole('list', { name: '方案会话列表' })).toBeNull();
   });
 });
 

@@ -24,6 +24,8 @@ export interface AssistantSessionsController {
   /** 已按收藏优先、最近更新排序，并套上搜索。 */
   visible: readonly AssistantSession[];
   totalCount: number;
+  /** 当前会话标题。搜索滤掉它时也还在，对话列顶用这个，不跟列表走。 */
+  activeTitle: string;
   activeId: string | null;
   query: string;
   setQuery(value: string): void;
@@ -101,11 +103,14 @@ export function useAssistantSessions(): AssistantSessionsController {
   const sessions = index?.sessions ?? [];
   const visible = filterAssistantSessions(sortAssistantSessions(sessions), query);
 
+  const active = sessions.find(session => session.id === index?.activeId);
+
   return {
     ready: index !== null,
     saveFailed,
     visible,
     totalCount: sessions.length,
+    activeTitle: active?.title || '新会话',
     activeId: index?.activeId ?? null,
     query,
     setQuery,
