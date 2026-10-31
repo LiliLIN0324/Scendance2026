@@ -27,6 +27,8 @@ describe('event catalog groups', () => {
     expect(matchesCatalogFilter('audio', 'storage')).toBe(false);
     expect(FURNITURE_CATALOG.find(entry => entry.type === 'tree')?.category).toBe('outdoor');
     expect(catalogGroupKey('outdoor')).toBe('site');
+    expect(catalogGroupLabel('site')).toBe('空间');
+    expect(catalogGroupLabel('outdoor')).toBe('空间');
     expect(FURNITURE_CATALOG.find(entry => entry.type === 'fridge')?.category).toBe('catering');
   });
 });

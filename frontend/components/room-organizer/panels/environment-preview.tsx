@@ -38,7 +38,7 @@ export function EnvironmentPreview({ preview, onStart, onStop }: {
       {preview.status !== 'error' && <button type="button" className="sc-button" onClick={onStop}>退出预览</button>}
     </p>}
     {scenes.length === 0
-      ? <p className="sc-note sc-material-empty">还没有本场观感包。在左轨「观感」·「场地重建」真成功取回后会出现在这里；下方仓库项标「样例·非本场」，勿冒充本场。</p>
+      ? <p className="sc-note sc-material-empty">还没有本场观感包。从地图采集单完成重建并取回后会出现在这里；下方仓库项标「样例·非本场」，勿冒充本场。</p>
       : <div className="sc-material-rail" role="group" aria-label="环境预览">
         {scenes.map(scene => <button type="button" key={scene.assetId} className="sc-material-card"
           disabled={busy} aria-pressed={scene.assetId === preview.assetId && preview.status !== 'idle'}

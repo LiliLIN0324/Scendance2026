@@ -287,7 +287,7 @@ describe('T-UI visible interaction', () => {
     expect(within(brief).queryByRole('textbox')).toBeNull();
     // 简报里能点的只有「这块场地从哪来」这一组。
     const actions = within(brief).getAllByRole('button');
-    expect(actions.map(button => button.textContent)).toEqual(['地图圈画', '空白场地 · 12 × 8 m']);
+    expect(actions.map(button => button.textContent)).toEqual(['地图圈画', '空白空间 · 12 × 8 m']);
   });
 
   it('offers the map next to the drawings and opens it over the canvas', () => {
@@ -298,7 +298,7 @@ describe('T-UI visible interaction', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 量出同一块场地的两条路并列，不再一个在左栏一个在左轨。
-    expect(within(ways).getAllByRole('button').map(button => button.textContent)).toEqual(['图纸与照片', '地图圈画', '空白场地 · 12 × 8 m']);
+    expect(within(ways).getAllByRole('button').map(button => button.textContent)).toEqual(['图纸与照片', '地图圈画', '空白空间 · 12 × 8 m']);
     expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
     fireEvent.click(within(ways).getByRole('button', { name: /地图圈画/ }));
     const overlay = screen.getByRole('dialog', { name: '地图选址' });
@@ -606,8 +606,8 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
     const brief = screen.getByLabelText('活动简报');
     expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
 
-    fireEvent.click(within(brief).getByRole('button', { name: /空白场地 · 12 × 8 m/ }));
-    expect(await screen.findByText(/空白场地立好了：12 × 8 m/)).toBeTruthy();
+    fireEvent.click(within(brief).getByRole('button', { name: /空白空间 · 12 × 8 m/ }));
+    expect(await screen.findByText(/空白空间立好了：12 × 8 m/)).toBeTruthy();
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     const applied = onApply.mock.calls[0]![0] as RoomLayout;
     expect(applied.width).toBe(12);

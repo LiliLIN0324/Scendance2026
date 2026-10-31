@@ -104,7 +104,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
             history.commitNow(); actions.resizeItem(item.id, dimension.key, value);
           }}/>) }
       </div>
-        {structuralSize ? <p className="sc-note">门窗宽、高和柱子尺寸请到“素材 → 场景模板 → 已建空间的结构微调”中调整。门窗深度随所在墙厚变化。</p>
+        {structuralSize ? <p className="sc-note">门窗宽、高和柱子尺寸请到“空间 → 场景模板 → 已建空间的结构微调”中调整。门窗深度随所在墙厚变化。</p>
           : entranceSize ? <p className="sc-note">该出入口目前只显示尺寸，请在“补充尺寸”中记录实测值并核对场地资料。</p>
           : <p className="sc-note">输入后按回车或离开字段应用。{item.glbUrl || item.assetId || item.glbNode ? '只调整当前物件尺寸，原模型保持不变。' : ''}</p>}
       </section>
