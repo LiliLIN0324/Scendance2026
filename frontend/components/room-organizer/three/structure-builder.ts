@@ -1,4 +1,4 @@
-import { SATELLITE_GROUND_LABEL, parseSatelliteImageBounds, satellitePadMeters, shellMetersToSatelliteUv } from '../lib/amap-venue';
+import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePadMeters, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
@@ -12,8 +12,8 @@ export interface StructureShellOptions {
 }
 
 /**
- * 没有经纬度范围的旧图：UV 用圈内顶点包围盒。圈外点落到 0..1 之外，Clamp 只是把边缘像素拉出去。
- * 有 west/south/east/north 时改走 writeGeographicUv，和卫星图同一套范围。
+ * 旧图没有经纬度范围时，整张照片铺在「壳体 + 圈外留白」上，而不是只铺圈内。
+ * 留白若仍用圈内包围盒当 0..1，顶点会跑到贴图外，ClampToEdge 把边缘像素拉成横竖线带。
  */
 function writeNormalizedUv(
   THREE: typeof import('three'),
@@ -62,6 +62,7 @@ function loadSatelliteTexture(THREE: typeof import('three'), url: string): Promi
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.anisotropy = 16;
       texture.flipY = true;
       texture.needsUpdate = true;
       resolve(texture);
@@ -119,19 +120,25 @@ export function buildStructureShell(
   floorMesh.userData.type = 'floor';
   if (useSat) {
     // 贴地参考：半透明叠在壳体地面；文案标记保证不可当重建素材。
-    // ShapeGeometry 默认 UV=米制坐标，须归一化到 0..1，否则 Clamp 只采到边角灰点。
+    // ShapeGeometry 默认 UV=米制坐标，须归一化到照片矩形，否则 Clamp 只采到边角并拉成线带。
     // 用 MeshBasicMaterial（同 room-builder）：不受光照/金属度影响，卫星色可见。
-    const pos = floorMesh.geometry.getAttribute('position');
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i);
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-    }
     const imageBounds = parseSatelliteImageBounds(layout.floorPlanImage ?? '');
-    const frame = layout.mapGroundFrame;
+    const shellPolygon = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
+    const frame = imageBounds
+      ? layout.mapGroundFrame ?? (layout.mapGroundPolygon ? frameForExistingShell(layout.mapGroundPolygon, shellPolygon) : null)
+      : null;
+    // 有经纬度就让网格外沿等于照片范围。没有时，照片覆盖壳体加同一圈留白，圈外采到的是照片外圈像素，不是被 Clamp 拉长的一条边。
+    const pad = satellitePadMeters(layout.width, layout.height);
+    const photoRect = imageBounds && frame
+      ? satellitePhotoShapeRect(layout.width, layout.height, frame, imageBounds)
+      : {
+          minX: -layout.width / 2 - pad,
+          maxX: layout.width / 2 + pad,
+          minY: -layout.height / 2 - pad,
+          maxY: layout.height / 2 + pad,
+        };
     if (imageBounds && frame) writeGeographicUv(THREE, floorMesh.geometry, layout.width, layout.height, frame, imageBounds);
-    else writeNormalizedUv(THREE, floorMesh.geometry, minX, maxX, minY, maxY);
+    else writeNormalizedUv(THREE, floorMesh.geometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
     floorMat.dispose();
     const satMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -144,15 +151,12 @@ export function buildStructureShell(
     floorMesh.userData.satelliteGroundRef = true;
     floorMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
 
-    // 圈外仍是同一张卫星，只是更淡；UV 跟圈内同一套，边缘外用 Clamp 延续。不要用纯色垫盖住影像。
-    const padM = satellitePadMeters(layout.width, layout.height);
-    const halfW = layout.width / 2;
-    const halfD = layout.height / 2;
+    // 圈外仍是同一张卫星，只是更淡。外沿停在照片矩形上，UV 落在 0..1 里，才能看见周边地貌而不是边缘拉丝。
     const surroundShape = new THREE.Shape();
-    surroundShape.moveTo(-halfW - padM, -halfD - padM);
-    surroundShape.lineTo( halfW + padM, -halfD - padM);
-    surroundShape.lineTo( halfW + padM,  halfD + padM);
-    surroundShape.lineTo(-halfW - padM,  halfD + padM);
+    surroundShape.moveTo(photoRect.minX, photoRect.minY);
+    surroundShape.lineTo(photoRect.maxX, photoRect.minY);
+    surroundShape.lineTo(photoRect.maxX, photoRect.maxY);
+    surroundShape.lineTo(photoRect.minX, photoRect.maxY);
     surroundShape.closePath();
     const venueHole = new THREE.Path();
     // hole 绕序与外轮廓相反，避免 ShapeGeometry 挖洞失败
@@ -167,7 +171,7 @@ export function buildStructureShell(
     surroundShape.holes.push(venueHole);
     const surroundGeometry = new THREE.ShapeGeometry(surroundShape);
     if (imageBounds && frame) writeGeographicUv(THREE, surroundGeometry, layout.width, layout.height, frame, imageBounds);
-    else writeNormalizedUv(THREE, surroundGeometry, minX, maxX, minY, maxY);
+    else writeNormalizedUv(THREE, surroundGeometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
     const surroundMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -190,6 +194,7 @@ export function buildStructureShell(
     const applyMap = (texture: ThreeNS.Texture) => {
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.anisotropy = 16;
       satMat.map = texture;
       surroundMat.map = texture;
       satMat.color = new THREE.Color(0xffffff);

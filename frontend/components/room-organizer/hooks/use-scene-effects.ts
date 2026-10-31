@@ -389,6 +389,8 @@ export function useSceneEffects({
     // interior wall stays double-cut into the exterior wall (#119).
     layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef,
+    layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
+    layout.mapGroundPolygon?.length,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
     view.showReferenceImage, view.referenceImageOpacity,
     activeFloorIndex,

@@ -264,6 +264,30 @@ export function shellMetersToSatelliteUv(
   };
 }
 
+/**
+ * 卫星图在 Shape 平面（x 向东、y 向北）里的外接矩形。
+ * 圈外网格必须停在这张矩形上：再往外的顶点 UV 会落到 0..1 之外，Clamp 就把边缘像素拉成线带。
+ */
+export function satellitePhotoShapeRect(
+  width: number,
+  depth: number,
+  frame: MapGroundFrame,
+  bounds: SatelliteImageBounds,
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  const rect = satelliteImageShellRect(frame, bounds);
+  const x0 = rect.x - width / 2;
+  const x1 = x0 + rect.width;
+  const yOf = (z: number) => depth / 2 - z;
+  const y0 = yOf(rect.z);
+  const y1 = yOf(rect.z + rect.depth);
+  return {
+    minX: Math.min(x0, x1),
+    maxX: Math.max(x0, x1),
+    minY: Math.min(y0, y1),
+    maxY: Math.max(y0, y1),
+  };
+}
+
 /** 卫星图在壳体米制里的矩形。z 是平面图上的较小值（靠上的一边）。 */
 export function satelliteImageShellRect(
   frame: MapGroundFrame,
