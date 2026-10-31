@@ -836,7 +836,7 @@ body {
 .sc-workbench .is-docked-layout .sc-left-drawer.has-business { flex-basis:420px; width:420px; }
 .sc-workbench .is-docked-layout.has-conversation .sc-left-drawer.has-business { flex-basis:clamp(300px,28vw,360px); width:clamp(300px,28vw,360px); }
 .sc-workbench .is-docked-layout .cr-assistant.is-docked:not(.is-open) { display:none; }
-.sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:212px; flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:0; background:transparent; padding:0; box-sizing:border-box; }
+.sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:180px; flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:0; background:transparent; padding:0; box-sizing:border-box; }
 .sc-workbench .is-docked-layout .sc-canvas-stage { --sc-rail-width:46px; position:relative; inset:auto; flex:1 1 auto; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:0; background:transparent; overflow:visible; container:canvas-stage / size; padding: 6px 8px 6px 8px; box-sizing:border-box; }
 .sc-workbench .sc-scene-viewport { position:relative; inset:auto; grid-area:1 / 1; min-width:0; min-height:0; overflow:hidden; border-radius:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06); container:scene-viewport / size; }
 .sc-workbench .sc-editor-dock { display:contents; pointer-events:auto; }
@@ -871,7 +871,7 @@ body {
 .sc-workbench .sc-canvas-heading { max-width:calc(100% - 78px); flex-wrap:nowrap; gap:6px; overflow:hidden; }
 .sc-workbench .sc-canvas-heading > span:last-child { overflow:hidden; text-overflow:ellipsis; }
 @media (max-height:600px) {
-  .sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:152px; }
+  .sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:140px; }
 }
 @media (max-width:1080px) {
   .sc-workbench .sc-workspace.is-docked-layout { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:8px; }
@@ -1512,11 +1512,11 @@ body {
   background: var(--wk-paper); border: 0; border-top: 1px solid var(--wk-hair); border-radius: 0;
   box-shadow: none; z-index: 35; overflow: hidden; pointer-events: auto;
 }
-/* 物料入口从底条挪到左轨「空间」之下。抽屉贴底，并向上补上原来底条和旧入口那一截，让面板和更低的图标仍连成一块。 */
+/* 物料入口已在左轨。抽屉贴底，高度只包住一排卡片，不再补旧底条那一截。 */
 .sc-workbench .sc-canvas-stage.has-material-shelf .sc-material-shelf.sc-bottom-drawer.is-raised,
 .sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-raised {
   bottom: 0;
-  height: calc(var(--sc-shelf-height, 212px) + 88px);
+  height: var(--sc-shelf-height, 180px);
 }
 .sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-space {
   height: min(70vh, 520px);

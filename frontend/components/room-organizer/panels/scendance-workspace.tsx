@@ -45,8 +45,8 @@ const SHELF_HEIGHT_KEY = 'scendance-shelf-height';
 
 function shelfBounds() {
   const compact = window.innerHeight < 580 || window.innerWidth <= 640;
-  // 默认比最低点多留一行，缩略图才看得出是啥；拖高只是让图更大。
-  return { min: compact ? 150 : 176, default: compact ? 150 : 212, max: Math.max(compact ? 262 : 288, Math.round(window.innerHeight * 0.62)) };
+  // 一排卡片的高度：标签条 + 缩略图 + 名字。拖高只是让图更大。
+  return { min: compact ? 132 : 156, default: compact ? 140 : 180, max: Math.max(compact ? 262 : 288, Math.round(window.innerHeight * 0.62)) };
 }
 
 function clampShelfHeight(value: number): number {
@@ -85,7 +85,7 @@ export function ShelfGrip({ shelfRef, label = '调整物料库高度' }: { shelf
     setHeight(next);
     window.localStorage.setItem(SHELF_HEIGHT_KEY, String(next));
   };
-  const { min, max } = height ? shelfBounds() : { min: 212, max: 212 };
+  const { min, max } = height ? shelfBounds() : { min: 156, max: 156 };
 
   return <div
     ref={gripRef}
