@@ -5,12 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { BootSkeleton } from './workspace-shell';
 
 describe('BootSkeleton', () => {
-  it('shows a short brand bar and parks the account cluster on the rail foot', () => {
+  it('drops the white top bar and parks the brand mark on the rail', () => {
     const { container } = render(<BootSkeleton />);
-    const top = container.querySelector('.sc-boot-top');
-    expect(top?.querySelector('.sc-boot-mark')).toBeTruthy();
-    expect(top?.querySelectorAll('.sc-boot-line')).toHaveLength(1);
-    expect(top?.querySelector('.sc-boot-dot')).toBeNull();
+    expect(container.querySelector('.sc-boot-top')).toBeNull();
+    const rail = container.querySelector('.sc-boot-rail');
+    expect(rail?.firstElementChild?.classList.contains('sc-boot-mark')).toBe(true);
     const foot = container.querySelector('.sc-boot-rail-foot');
     expect(foot?.querySelector('.sc-boot-tile')).toBeTruthy();
     expect(foot?.querySelector('.sc-boot-dot')).toBeTruthy();

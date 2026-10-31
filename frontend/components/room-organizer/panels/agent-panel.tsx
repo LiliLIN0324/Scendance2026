@@ -17,6 +17,7 @@
 import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
+import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
@@ -195,7 +196,7 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
@@ -853,7 +854,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
   function confirmProposal(): void {
     if (callbacks.workbenchMode !== 'layout') {
-      say({ role: 'agent', text: '现在不改布置。回左轨「布置」再确认这一版。' });
+      say({ role: 'agent', text: '现在不改布置。这一版先留着，回到布置对话再确认。' });
       return;
     }
     const plan = proposal.current;
@@ -1055,6 +1056,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     say({ role: 'agent', text: '好，先不导出。要导的时候说一声就行。' });
   }
 
+  const handledHandoffExport = useRef(handoffExportRequest);
+  useEffect(() => {
+    if (handoffExportRequest === handledHandoffExport.current) return;
+    handledHandoffExport.current = handoffExportRequest;
+    if (handoffExportRequest > 0) proposeExport();
+  }, [handoffExportRequest]);
+
   async function send(text: string): Promise<void> {
     const trimmed = text.trim(); if (!trimmed) return;
     // 「停一下」是命令，不是需求：正在摆就停手，摆好了还没确认就撤回，别把它当成一句话记进简报。
@@ -1072,7 +1080,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       }
       if (isExportCommand(trimmed)) { proposeExport(); return; }
       if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
-      say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回左轨「布置」。' });
+      say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回到布置对话再说。' });
       return;
     }
     // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
@@ -1313,7 +1321,7 @@ export function VenueBriefLine(): JSX.Element | null {
 /**
  * 左栏活动简报：只读，数字全部来自对话与当前画布。
  * 「这块场地从哪来」把量出场地的两条路（图纸与照片 / 地图圈画）并列钉在左边，场地立起来后也不消失——重圈是替换。
- * 评审·执行走左轨，模板·物料走底栏；这里不放输入框、不放生成按钮、不摆说明书。
+ * 评审和执行不占左轨，从分享菜单打开。模板·物料走底栏；这里不放输入框、不放生成按钮、不摆说明书。
  */
 export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.Element {
   const agent = useAgent();
@@ -1624,7 +1632,22 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const status = headerStatus(agent, mode);
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // 评审页「完成评审」的本机回执。有回执就给收起球加红环（旧称 Bingo 球）。
+  // 后刀再按 planKey 对齐当前布置，并换成跨设备真状态。见 review-return.ts。
+  const [reviewReturned, setReviewReturned] = useState(false);
   const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setReviewReturned(reviewOrbShouldTurnRed(readReviewReturn(window.localStorage)));
+      } catch {
+        setReviewReturned(false);
+      }
+    };
+    sync();
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
@@ -1673,10 +1696,11 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   return (
     <button
       type="button"
-      className={`sc-agent-reopen is-orb${isDragging ? ' is-dragging' : ''}`}
+      className={`sc-agent-reopen is-orb${isDragging ? ' is-dragging' : ''}${reviewOrbClass(reviewReturned)}`}
       data-tone={tone}
+      data-review-return={reviewReturned ? '1' : '0'}
       aria-label="打开晴光 Agent"
-      title={status ? `晴光 · ${status.text} · 点开，按住可拖` : '晴光 · 点开，按住可拖'}
+      title={reviewReturned ? '晴光 · 评审已回 · 点开，按住可拖' : status ? `晴光 · ${status.text} · 点开，按住可拖` : '晴光 · 点开，按住可拖'}
       style={style}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1684,7 +1708,7 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
       onPointerCancel={() => { dragState.current = null; setIsDragging(false); }}
     >
       <img src={mascotOf(agent, mode)} alt="" width={40} height={40} draggable={false}/>
-      {status && <span className={`sc-agent-reopen-dot is-${status.tone}`} aria-hidden="true"/>}
+      {status && <span className={`sc-agent-reopen-dot is-${status.tone}${reviewReturned ? ' is-returned' : ''}`} aria-hidden="true"/>}
     </button>
   );
 }

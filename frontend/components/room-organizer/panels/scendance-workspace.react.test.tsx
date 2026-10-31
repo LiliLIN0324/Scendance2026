@@ -244,8 +244,9 @@ describe('ScendanceViewTools design column', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
     // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 人视 / 漫游 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(10);
-    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '人视', '漫游', '尺寸标注', '网格吸附', '更多工具']) {
+    expect(within(rail).getAllByRole('button')).toHaveLength(11);
+    expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
+    for (const name of ['分享', '选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '人视', '漫游', '尺寸标注', '网格吸附', '更多工具']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     expect(rail.querySelector('#tool-satellite')).toBeNull();

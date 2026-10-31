@@ -252,10 +252,12 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('keeps the left rail at exactly the three workbench modes', async () => {
-    const { WORKBENCH_MODES } = await import('../lib/workbench-mode');
-    expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout', 'review', 'delivery']);
-    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置', '评审', '执行']);
+  it('keeps the left rail on 布置 and sends review or delivery elsewhere', async () => {
+    const { WORKBENCH_MODES, demoteLegacyMode } = await import('../lib/workbench-mode');
+    expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout']);
+    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置']);
+    expect(demoteLegacyMode('review')).toBe('open-share');
+    expect(demoteLegacyMode('delivery')).toBe('open-checklist');
   });
 
   it('renders the activity brief as read-only facts from the conversation', () => {

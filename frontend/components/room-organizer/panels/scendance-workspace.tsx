@@ -18,6 +18,7 @@ import {
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
 import { EnvironmentPreview } from './environment-preview';
+import { ShareMenu, type ShareMenuActions } from './share-menu';
 import { GeneratedItemLibrary } from './generated-item-library';
 import { OnlineModelLibrary } from './online-model-library';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -203,6 +204,10 @@ interface ViewToolsProps {
   onExportImage?(options: { view: 'current' | CameraPreset; scale: number }): Promise<boolean> | void;
   /** 评审 / 执行不撤销、不重做布置。 */
   layoutLocked?: boolean;
+  /** 工具轨唯一分享入口。不传时菜单仍可打开，动作提示未接入。 */
+  shareActions?: ShareMenuActions;
+  /** 旧评审入口改道时递增。 */
+  shareOpenRequest?: number;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -237,7 +242,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true, onLighting, layoutLocked = false }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true, onLighting, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
   const { view, setView, toggle, history, layout, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [viewOpen, setViewOpen] = useState(false);
@@ -248,6 +253,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
   const [exportScale, setExportScale] = useState(2);
   const [exporting, setExporting] = useState(false);
+  const [shareClose, setShareClose] = useState(0);
+  const quietShare = () => setShareClose(value => value + 1);
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
   // 氛围条默认收起成一颗「氛围」：真开了人群/雨雪/非正午就展开，别让人找不到关掉它的地方（漫游在右轨一级钮）。
   const atmosphereShown = atmosphereOpen || view.showNpcs || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
@@ -378,6 +385,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   return (
     /* 圆钮贴在画布右上角。常用项都是一级钮；撤销、缩放、导出和整体收进省略号。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
+      <ShareMenu {...(shareActions ? { actions: shareActions } : {})} openRequest={shareOpenRequest} closeSignal={shareClose}/>
+      <span className="sc-tool-sep" aria-hidden="true"/>
       <button type="button" id="tool-select" data-tip="选择" aria-label="选择：点击物料并框选" aria-pressed={selectActive} className={selectActive ? 'is-active' : ''} onClick={chooseSelect}>
         <MousePointer2 size={24}/>
       </button>
@@ -409,7 +418,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
-        <button type="button" id="tool-more" data-tip="更多" aria-label="更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-more-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+        <button type="button" id="tool-more" data-tip="更多" aria-label="更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-more-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { quietShare(); setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <MoreHorizontal size={24} aria-hidden="true"/>
         </button>
         {viewOpen && <div id="tool-more-menu" className="sc-tool-pop sc-more-pop sc-icon-menu" role="menu" aria-label="更多工具">
@@ -443,7 +452,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       </div>
       {showAtmosphere && <span className="sc-tool-sep" aria-hidden="true"/>}
       {showAtmosphere && <div className="sc-tool-menu" ref={atmosphereMenuRef}>
-        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { setAtmosphereOpen(open => !open); setViewOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { quietShare(); setAtmosphereOpen(open => !open); setViewOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
           <Sun size={24}/>
         </button>
         {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">
