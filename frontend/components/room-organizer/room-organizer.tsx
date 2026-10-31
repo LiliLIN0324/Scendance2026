@@ -88,6 +88,7 @@ import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
+import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
@@ -1861,6 +1862,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           finally { placement.dispose(); }
         }}
       />
+            <EnvironmentLoad active={splatState.status === 'loading'} name={splatState.name} {...(splatState.progress === undefined ? {} : { progress: splatState.progress })} />
             <AgentCanvasOverlay/>
             <ReviewPinLayer
               pins={reviewMarks}
