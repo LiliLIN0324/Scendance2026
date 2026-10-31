@@ -29,7 +29,10 @@ describe('plan flow v2', () => {
   it('treats plates as views of one plan', () => {
     const onExport = vi.fn();
     render(<PlanPlates items={[{ name: '共创桌' }, { name: '共创桌' }, { name: '活动座椅' }]} areaLabel="80 ㎡" onExport={onExport} />);
-    expect(screen.getByRole('tab', { name: '布置' }).getAttribute('aria-selected')).toBe('true');
+    const layoutTab = screen.getByRole('tab', { name: '布置' });
+    expect(layoutTab.getAttribute('aria-selected')).toBe('true');
+    expect(layoutTab.querySelector('svg')).toBeTruthy();
+    expect(layoutTab.textContent).toBe('');
     expect(screen.queryByRole('tabpanel')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: '物料' }));
     expect(screen.getByText('共创桌')).toBeTruthy();

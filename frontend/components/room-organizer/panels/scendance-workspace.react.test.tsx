@@ -261,7 +261,10 @@ describe('ScendanceViewTools design column', () => {
     // 氛围四条在竖列 rail 的弹出菜单里。
     expect(rail.querySelector('.sc-atmosphere-group')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
-    fireEvent.click(within(rail).getByRole('button', { name: '2D / 3D' }));
+    const dimension = within(rail).getByRole('button', { name: '2D / 3D' });
+    expect(dimension.querySelector('svg')).toBeTruthy();
+    expect(dimension.textContent).not.toMatch(/2D|3D/);
+    fireEvent.click(dimension);
     expect(values.toggle).toHaveBeenCalledWith('view2D');
   });
 
@@ -496,8 +499,9 @@ describe('MaterialDrawerHandle', () => {
     const { rerender } = render(<MaterialDrawerHandle open={false} onToggle={onToggle} buttonRef={buttonRef}/>);
     const button = screen.getByRole('button', { name: '展开物料库' });
     expect(buttonRef.current).toBe(button);
-    // T-VISUAL-CHROME：底素材条为全宽收起条，标签即把手本体（对照 04-final-flat.jpg）。
-    expect(button.textContent).toContain('物料');
+    // 底条是分区切换：主视觉是物料图标，中文名留在 aria-label。
+    expect(button.querySelector('svg')).toBeTruthy();
+    expect(button.textContent ?? '').not.toMatch(/物料/);
     expect(button.getAttribute('aria-controls')).toBe('workbench-material-shelf');
     fireEvent.click(button);
     expect(onToggle).toHaveBeenCalledTimes(1);

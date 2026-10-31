@@ -6,6 +6,7 @@
  * 生成之后，布置 / 物料 / 执行资料是同一份方案的三块视图。
  * 场景、物件、合成不在这里出现。
  */
+import { Boxes, ListChecks, SquareStack, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useRoomEditor } from '../contexts';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
@@ -32,11 +33,11 @@ export const PLAN_VENUES = [
 
 export const PLAN_HEADCOUNTS = [30, 80, 120] as const;
 
-const PLATES = [
-  { id: 'layout', label: '布置' },
-  { id: 'materials', label: '物料' },
-  { id: 'execution', label: '执行资料' },
-] as const;
+const PLATES: ReadonlyArray<{ id: 'layout' | 'materials' | 'execution'; label: string; Icon: LucideIcon }> = [
+  { id: 'layout', label: '布置', Icon: SquareStack },
+  { id: 'materials', label: '物料', Icon: Boxes },
+  { id: 'execution', label: '执行资料', Icon: ListChecks },
+];
 
 type PlateId = (typeof PLATES)[number]['id'];
 
@@ -104,7 +105,7 @@ export function PlanPlates({ items, areaLabel, onExport }: {
   const rows = materialRows(items);
   return <section className="sc-plan-plates" aria-label="方案">
     <div role="tablist" aria-label="方案视图">
-      {PLATES.map(entry => <button key={entry.id} type="button" role="tab" aria-selected={plate === entry.id} onClick={() => setPlate(entry.id)}>{entry.label}</button>)}
+      {PLATES.map(entry => <button key={entry.id} type="button" role="tab" aria-label={entry.label} data-tip={entry.label} title={entry.label} aria-selected={plate === entry.id} onClick={() => setPlate(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
     </div>
     {plate === 'materials' && <div role="tabpanel" aria-label="物料">
       {rows.length === 0

@@ -93,6 +93,36 @@
   background: var(--paper, #fff);
   border: 1px solid var(--wk-hair, #e4e4e7);
 }
+.sc-plan-plates [role="tab"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  position: relative;
+}
+.sc-plan-plates [role="tab"][data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--wk-ink, #141416);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 15px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+  z-index: 8;
+}
+.sc-plan-plates [role="tab"][data-tip]:hover::after,
+.sc-plan-plates [role="tab"][data-tip]:focus-visible::after { opacity: 1; }
 .sc-plan-plates [role="tabpanel"] {
   padding: 10px 12px;
   min-width: 220px;
