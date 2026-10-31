@@ -258,11 +258,18 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
   const satelliteAttempt = useRef('');
+  const busyTimer = useRef(0);
   const satelliteTip = satelliteMiss === 'key' ? '卫星参考·需高德 Key' : satelliteMiss === 'place' ? '卫星参考·未定位' : '卫星参考';
+  const releaseBusy = useCallback((mine: number) => {
+    window.clearTimeout(busyTimer.current);
+    if (satelliteRequest.current === mine) setSatelliteBusy(false);
+  }, []);
   const fillSatellite = useCallback((startedId: string, startedName: string, mine: number) => {
     const source = layoutRef.current;
     setSatelliteBusy(true);
-    setSatelliteMiss(null);
+    window.clearTimeout(busyTimer.current);
+    // 挂起的补拉不能把钮一直占住；到点仍未结束就放开，开关本身不看 busy。
+    busyTimer.current = window.setTimeout(() => releaseBusy(mine), 12000);
     void ensureSatelliteGround(source).then(patch => {
       if (mine !== satelliteRequest.current) return;
       const current = layoutRef.current;
@@ -271,8 +278,9 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       if (!patch) return;
       actions.applyLayout(applySatelliteGroundPatch(current, patch));
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
-    }).finally(() => { if (mine === satelliteRequest.current) setSatelliteBusy(false); });
-  }, [actions, setView]);
+    }).finally(() => releaseBusy(mine));
+  }, [actions, releaseBusy, setView]);
+  useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
     if (!satelliteOn || hasFetchedSatellite(layout.floorPlanImage)) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
@@ -286,13 +294,16 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       if (satelliteRequest.current !== mine) return;
       satelliteRequest.current += 1;
       if (satelliteAttempt.current === token) satelliteAttempt.current = '';
+      window.clearTimeout(busyTimer.current);
+      setSatelliteBusy(false);
     };
   }, [satelliteOn, layout.id, layout.name, layout.floorPlanImage, layout.mapGroundPolygon, fillSatellite]);
   const turnSatellite = () => {
-    const mine = ++satelliteRequest.current;
     const current = layoutRef.current;
+    satelliteRequest.current += 1;
+    window.clearTimeout(busyTimer.current);
+    setSatelliteBusy(false);
     if (satelliteOn) {
-      setSatelliteBusy(false);
       actions.applyLayout(hideSatelliteGround(current));
       return;
     }
@@ -301,7 +312,8 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: current.floorPlanOpacity ?? 0.78 }));
       return;
     }
-    fillSatellite(current.id ?? '', current.name, mine);
+    actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
+    fillSatellite(current.id ?? '', current.name, satelliteRequest.current);
   };
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);

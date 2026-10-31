@@ -420,6 +420,36 @@ describe('ScendanceViewTools satellite ground', () => {
     expect(String(applied.floorPlanImage)).toContain('satellite-ground-ref');
   });
 
+  it('turns the satellite button off immediately while a fetch is still hanging', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
+    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
+    vi.stubGlobal('fetch', () => new Promise(() => {}));
+    const layout = makeLayout({
+      name: '盐官潮乐之城 · 规划区 12×8m',
+      mapGroundPolygon: [
+        { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
+      ],
+    });
+    const values = contexts(layout);
+    const view = render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const button = await screen.findByRole('button', { name: /卫星参考底图，已打开/ });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-busy')).toBe('false');
+    const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
+    expect(hidden.satelliteGroundRef).toBe(false);
+    const offValues = contexts(hidden);
+    view.rerender(<Providers values={offValues}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const offButton = screen.getByRole('button', { name: /卫星参考底图，已关闭/ });
+    expect(offButton.getAttribute('aria-busy')).toBe('false');
+    fireEvent.click(offButton);
+    const opened = offValues.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
+    expect(opened.satelliteGroundRef).toBe(true);
+    expect(offButton.getAttribute('aria-busy')).toBe('true');
+    view.rerender(<Providers values={contexts(opened)}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    expect(screen.getByRole('button', { name: /卫星参考底图，已打开/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('keeps tool-satellite visible when the layer was explicitly turned off', () => {
     const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m', satelliteGroundRef: false });
     render(<Providers values={contexts(layout)}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);

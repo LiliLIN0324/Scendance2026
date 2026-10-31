@@ -11,7 +11,25 @@ export interface StructureShellOptions {
   onTextureLoaded?: () => void;
 }
 
-/** jpeg / png / svg 占位都走 Image。createImageBitmap 会拒绝 SVG，地面就被涂成橄榄绿。 */
+/** UV 用圈内顶点的包围盒。圈外点会落到 0..1 之外，Clamp 把边缘影像延续出去。 */
+function writeNormalizedUv(
+  THREE: typeof import('three'),
+  geometry: import('three').BufferGeometry,
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+): void {
+  const pos = geometry.getAttribute('position');
+  const spanX = Math.max(1e-6, maxX - minX);
+  const spanY = Math.max(1e-6, maxY - minY);
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    uv[i * 2] = (pos.getX(i) - minX) / spanX;
+    uv[i * 2 + 1] = 1 - (pos.getY(i) - minY) / spanY;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
 function loadSatelliteTexture(THREE: typeof import('three'), url: string): Promise<import('three').Texture> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -86,13 +104,7 @@ export function buildStructureShell(
       if (x < minX) minX = x; if (x > maxX) maxX = x;
       if (y < minY) minY = y; if (y > maxY) maxY = y;
     }
-    const spanX = Math.max(1e-6, maxX - minX), spanY = Math.max(1e-6, maxY - minY);
-    const uv = new Float32Array(pos.count * 2);
-    for (let i = 0; i < pos.count; i++) {
-      uv[i * 2] = (pos.getX(i) - minX) / spanX;
-      uv[i * 2 + 1] = 1 - (pos.getY(i) - minY) / spanY;
-    }
-    floorMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    writeNormalizedUv(THREE, floorMesh.geometry, minX, maxX, minY, maxY);
     floorMat.dispose();
     const satMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -104,27 +116,8 @@ export function buildStructureShell(
     floorMesh.material = satMat;
     floorMesh.userData.satelliteGroundRef = true;
     floorMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
-    // HTMLImageElement 能解开 jpeg 瓦片和 SVG 占位。createImageBitmap 解不开 SVG，
-    // 失败时曾经把地面涂成 0x445544（纯橄榄绿），网络里却是 200 的图。
-    const url = layout.floorPlanImage!;
-    void loadSatelliteTexture(THREE, url).then(texture => {
-      if (floorMesh.material !== satMat) { texture.dispose(); return; }
-      satMat.map = texture;
-      satMat.color = new THREE.Color(0xffffff);
-      satMat.needsUpdate = true;
-      options.onTextureLoaded?.();
-    }).catch(() => {
-      if (floorMesh.material !== satMat) return;
-      const fallback = paintSatelliteLabel(THREE, SATELLITE_GROUND_LABEL);
-      if (fallback) {
-        satMat.map = fallback;
-        satMat.color = new THREE.Color(0xffffff);
-      }
-      satMat.needsUpdate = true;
-      options.onTextureLoaded?.();
-    });
 
-    // 圈外浅色半透明周边：外矩形挖 venue hole，仅卫星参考开时出现
+    // 圈外仍是同一张卫星，只是更淡；UV 跟圈内同一套，边缘外用 Clamp 延续。不要用纯色垫盖住影像。
     const padM = Math.max(4, 0.25 * Math.max(layout.width, layout.height));
     const halfW = layout.width / 2;
     const halfD = layout.height / 2;
@@ -145,14 +138,16 @@ export function buildStructureShell(
     }
     venueHole.closePath();
     surroundShape.holes.push(venueHole);
+    const surroundGeometry = new THREE.ShapeGeometry(surroundShape);
+    writeNormalizedUv(THREE, surroundGeometry, minX, maxX, minY, maxY);
     const surroundMat = new THREE.MeshBasicMaterial({
-      color: 0xf4f5f7,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.4,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    const surroundMesh = new THREE.Mesh(new THREE.ShapeGeometry(surroundShape), surroundMat);
+    const surroundMesh = new THREE.Mesh(surroundGeometry, surroundMat);
     surroundMesh.rotation.x = -Math.PI / 2;
     surroundMesh.position.y = -0.01;
     surroundMesh.receiveShadow = false;
@@ -161,6 +156,27 @@ export function buildStructureShell(
     surroundMesh.userData.satelliteGroundRef = true;
     surroundMesh.userData.satelliteGroundLabel = SATELLITE_GROUND_LABEL;
     scene.add(surroundMesh);
+    // HTMLImageElement 能解开 jpeg 瓦片和 SVG 占位。createImageBitmap 解不开 SVG，
+    // 失败时曾经把地面涂成 0x445544（纯橄榄绿），网络里却是 200 的图。
+    const url = layout.floorPlanImage!;
+    const applyMap = (texture: ThreeNS.Texture) => {
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      satMat.map = texture;
+      surroundMat.map = texture;
+      satMat.color = new THREE.Color(0xffffff);
+      satMat.needsUpdate = true;
+      surroundMat.needsUpdate = true;
+      options.onTextureLoaded?.();
+    };
+    void loadSatelliteTexture(THREE, url).then(texture => {
+      if (floorMesh.material !== satMat) { texture.dispose(); return; }
+      applyMap(texture);
+    }).catch(() => {
+      if (floorMesh.material !== satMat) return;
+      const fallback = paintSatelliteLabel(THREE, SATELLITE_GROUND_LABEL);
+      if (fallback && floorMesh.material === satMat) applyMap(fallback);
+    });
   }
   scene.add(floorMesh);
   const signedArea = points.reduce((total, p, i) => {

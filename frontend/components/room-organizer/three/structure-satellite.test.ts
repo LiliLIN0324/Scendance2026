@@ -27,7 +27,13 @@ describe('satellite floor texture', () => {
     const material = floor?.material as THREE.MeshBasicMaterial | undefined;
     expect(material?.map).toBeTruthy();
     expect(material?.color.getHex()).toBe(0xffffff);
-    expect(scene.children.some(child => child.userData.satelliteSurroundFade)).toBe(true);
+    const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh | undefined;
+    const surroundMaterial = surround?.material as THREE.MeshBasicMaterial | undefined;
+    expect(surroundMaterial?.color.getHex()).toBe(0xffffff);
+    expect(surroundMaterial?.opacity).toBeLessThan(material?.opacity ?? 1);
+    expect(surroundMaterial?.map).toBe(material?.map);
+    const uv = surround?.geometry.getAttribute('uv');
+    expect(uv && Array.from({ length: uv.count }, (_, index) => uv.getX(index)).some(value => value < 0 || value > 1)).toBe(true);
   });
 
   it('draws the ban label when the satellite url cannot be decoded', async () => {
