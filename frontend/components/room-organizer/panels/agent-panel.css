@@ -20,8 +20,41 @@
 }
 .sc-workbench .is-docked-layout.has-conversation .sc-agent-panel { display: none; }
 
-/* ── 头部 ── */
+/* ── 头部（oddeNova 同构：会话标题 + History + 新会话，无双头像） ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
+.ap-session-head { justify-content: space-between; gap: 12px; height: auto; min-height: 52px; padding: 10px 12px 12px; }
+.ap-session-identity { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.ap-session-avatar-slot { position: relative; display: inline-flex; flex: 0 0 36px; width: 36px; height: 36px; opacity: 0; transition: opacity 120ms var(--ease-spec, ease); }
+.ap-session-avatar-slot.is-visible { opacity: 1; }
+.ap-session-avatar { width: 36px; height: 36px; display: block; object-fit: cover; border-radius: 50%; }
+.ap-session-title {
+  margin: 0; flex: 1; min-width: 0;
+  font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ap-session-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.ap-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: var(--wk-ink-soft); cursor: pointer;
+}
+.ap-icon-btn:hover { background: var(--wk-plane); color: var(--wk-ink); }
+.ap-icon-btn.is-on { background: var(--wk-plane); color: var(--wk-ink); }
+.ap-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ap-history-scrim {
+  position: absolute; inset: 0; z-index: 8; margin: 0; padding: 0; border: 0;
+  background: transparent; cursor: default;
+}
+.ap-history-panel {
+  position: absolute; top: 0; left: 8px; right: 8px; z-index: 9;
+  max-height: 33.333%; min-height: 0; overflow: hidden;
+  border: 1px solid var(--wk-hair); border-radius: var(--r-md);
+  background: var(--paper); box-shadow: 0 8px 28px rgba(20, 20, 22, 0.08);
+}
+.ap-history-panel .sc-session-history.is-overlay {
+  max-height: none; height: 100%; border-bottom: 0;
+}
+.ap-history-panel .sc-session-list { max-height: none; flex: 1; }
 button.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; padding: 0; border: 0; background: transparent; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
 .ap-status { border: 0; background: transparent; padding: 0; cursor: pointer; }
 .mascot-slot img { width: 48px; height: 48px; display: block; object-fit: cover; border-radius: 50%; }

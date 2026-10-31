@@ -13,6 +13,8 @@ export interface SessionHistoryPanelProps {
   query: string;
   saveFailed: boolean;
   now?: number;
+  /** overlay = 对话区上的历史层，顶栏动作在 Agent 头里。 */
+  variant?: 'overlay' | 'panel';
   onQuery(value: string): void;
   onCreate(): void;
   onSelect(id: string): void;
@@ -22,8 +24,8 @@ export interface SessionHistoryPanelProps {
 }
 
 /**
- * 方案会话列表面板：搜索、新开、行内改名、收藏、删除确认。
- * 自研交互，不从外部参考实现搬组件。挂载点在左栏，不进晴光业务面板。
+ * 方案会话列表：搜索、收藏、行内改名、删除确认。
+ * oddeNova 同构：默认只在 History overlay 里展开，不常驻左栏大面板。
  */
 export function SessionHistoryPanel({
   sessions,
@@ -32,6 +34,7 @@ export function SessionHistoryPanel({
   query,
   saveFailed,
   now,
+  variant = 'panel',
   onQuery,
   onCreate,
   onSelect,
@@ -44,6 +47,7 @@ export function SessionHistoryPanel({
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const skipCommit = useRef(false);
   const clock = now ?? Date.now();
+  const overlay = variant === 'overlay';
 
   function beginRename(session: AssistantSession): void {
     skipCommit.current = false;
@@ -70,14 +74,19 @@ export function SessionHistoryPanel({
   }
 
   return (
-    <section className="sc-session-history" aria-label="方案会话">
-      <header className="sc-session-history-head">
-        <h2>方案会话</h2>
-        <button type="button" className="sc-session-new" aria-label="新开会话" onClick={onCreate}>
-          <MessageCirclePlus size={16} aria-hidden="true" />
-          <span>新会话</span>
-        </button>
-      </header>
+    <section
+      className={`sc-session-history${overlay ? ' is-overlay' : ''}`}
+      aria-label="方案会话"
+    >
+      {!overlay && (
+        <header className="sc-session-history-head">
+          <h2>方案会话</h2>
+          <button type="button" className="sc-session-new" aria-label="新开会话" onClick={onCreate}>
+            <MessageCirclePlus size={16} aria-hidden="true" />
+            <span>新会话</span>
+          </button>
+        </header>
+      )}
       <label className="sc-session-search">
         <Search size={15} aria-hidden="true" />
         <input
@@ -89,7 +98,7 @@ export function SessionHistoryPanel({
         />
       </label>
       {totalCount === 0 ? (
-        <p className="sc-session-empty">还没有会话。点右上角「新会话」开始一场。</p>
+        <p className="sc-session-empty">{overlay ? '还没有会话。点顶栏「新会话」开始。' : '还没有会话。点右上角「新会话」开始一场。'}</p>
       ) : sessions.length === 0 ? (
         <p className="sc-session-empty">没有匹配的会话</p>
       ) : (
@@ -165,7 +174,40 @@ export function SessionHistoryPanel({
   );
 }
 
-/** 左栏挂载件：自己读本机索引，不经过晴光面板的生成状态。 */
+export interface SessionHistoryOverlayProps {
+  open: boolean;
+  onClose(): void;
+  onSelect(id: string): void;
+}
+
+/** History 浮层：挂在晴光对话区上方，约占 1/3 高。 */
+export function SessionHistoryOverlay({ open, onClose, onSelect }: SessionHistoryOverlayProps): JSX.Element | null {
+  const sessions = useAssistantSessions();
+  if (!open || !sessions.ready) return null;
+  return (
+    <>
+      <button type="button" className="ap-history-scrim" aria-label="关闭会话历史" onClick={onClose} />
+      <div className="ap-history-panel">
+        <SessionHistoryPanel
+          variant="overlay"
+          sessions={sessions.visible}
+          totalCount={sessions.totalCount}
+          activeId={sessions.activeId}
+          query={sessions.query}
+          saveFailed={sessions.saveFailed}
+          onQuery={sessions.setQuery}
+          onCreate={() => { sessions.openSession(); onClose(); }}
+          onSelect={id => { sessions.selectSession(id); onSelect(id); onClose(); }}
+          onRename={sessions.renameSession}
+          onToggleFavorite={sessions.toggleFavorite}
+          onDelete={sessions.deleteSession}
+        />
+      </div>
+    </>
+  );
+}
+
+/** @deprecated 左栏常驻 dock 已移除；测试与 Story 仍可直接挂载面板。 */
 export function AssistantSessionDock(): JSX.Element {
   const sessions = useAssistantSessions();
   if (!sessions.ready) {
