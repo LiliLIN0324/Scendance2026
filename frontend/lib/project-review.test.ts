@@ -310,7 +310,7 @@ describe('customer-readable review rendering', () => {
     expect(review.current.layout.floors[0].items[0].rotation).toBe(Math.PI / 2);
   });
 
-  it('scopes crowded plan label hiding to review diagrams without changing shapes, titles or source names', () => {
+  it('keeps names that would spill off the plan out of the drawing, and still hides the labels that remain', () => {
     const original = layout();
     const longName = '演练座椅的超长名称保留在逐件附录中';
     original.floors[0].items[0].name = longName;
@@ -318,7 +318,9 @@ describe('customer-readable review rendering', () => {
     const review = createProjectReviewSnapshot(input({ layout: original }));
     const before = JSON.stringify(review);
     const document = new DOMParser().parseFromString(projectReviewHtml(review), 'text/html');
-    expect(document.querySelector('.plan text.label')!.textContent).toBe(longName);
+    const labels = [...document.querySelectorAll('.plan text.label')].map((node) => node.textContent);
+    expect(labels).toContain('同名椅');
+    expect(labels).not.toContain(longName);
     expect(document.querySelector('style')!.textContent).toContain('.plan text.label{display:none}');
     expect(document.querySelector('.plan .plan-title')!.textContent).toContain(original.name);
     expect(document.querySelector('.plan .plan-title')!.textContent).toContain(original.floors[0].name);
