@@ -8,7 +8,7 @@ export function QingguangRailButton({ open, onOpen }: { open: boolean; onOpen():
   return (
     <button
       type="button"
-      className="sc-rail-qingguang"
+      className={`sc-rail-qingguang${open ? ' is-active' : ''}`}
       aria-expanded={open}
       aria-label="晴光"
       data-tip="晴光"

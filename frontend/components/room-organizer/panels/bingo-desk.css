@@ -1,0 +1,65 @@
+.sc-rail-desk.sc-agent-panel { border-radius: 0; border-left: 0; }
+.sc-desk-kicker { color: var(--wk-muted, #71767e); font-size: 12px; }
+.sc-desk-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 16px 20px;
+}
+.sc-desk-block { display: flex; flex-direction: column; gap: 8px; }
+.sc-desk-block header { display: flex; align-items: baseline; gap: 8px; }
+.sc-desk-block header strong { font-size: 14px; }
+.sc-desk-block header span,
+.sc-desk-block p { margin: 0; color: var(--wk-muted, #71767e); font-size: 12px; line-height: 1.6; }
+.sc-desk-block ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sc-desk-block li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sc-desk-block li a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.sc-desk-block li span { color: var(--wk-muted, #71767e); font-size: 12px; }
+.sc-desk-block li button,
+.sc-desk-primary {
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  background: var(--paper, #fff);
+  color: inherit;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.sc-desk-block li button { padding: 4px 8px; font-size: 12px; }
+.sc-desk-block li button[aria-pressed="true"] { background: var(--wk-green-pale, #e8f0ea); border-color: var(--wk-green, #4a7c59); }
+.sc-desk-primary {
+  align-self: flex-start;
+  padding: 8px 12px;
+  background: var(--wk-ink, #141416);
+  color: #fff;
+  border-color: var(--wk-ink, #141416);
+}
+.sc-desk-primary[aria-pressed="true"] { background: var(--wk-green, #4a7c59); border-color: var(--wk-green, #4a7c59); }
+.sc-desk-block > a { font-size: 12px; color: var(--wk-green-deep, #2f5d45); }
+.sc-rail-desk .sc-mode-card { height: auto; padding: 0; background: transparent; }
+.sc-rail-desk[data-desk="venue"] .sc-desk-block li { flex-wrap: wrap; align-items: flex-start; }
+.sc-rail-desk[data-desk="venue"] .sc-desk-block li > button:first-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  background: var(--paper, #fff);
+  color: inherit;
+}
+.sc-rail-desk[data-desk="venue"] .sc-desk-block li > button:first-child small {
+  color: var(--wk-muted, #71767e);
+  font-size: 12px;
+}
+.sc-rail-desk[data-desk="venue"] .sc-desk-block li [role="group"] {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}

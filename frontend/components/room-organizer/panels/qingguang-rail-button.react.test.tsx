@@ -37,4 +37,19 @@ describe('晴光模式轨入口', () => {
     const openQingguang = source.slice(source.indexOf('const openQingguang'), source.indexOf('const openBusinessWorkspace'));
     expect(openQingguang).not.toContain('setWorkbenchMode');
   });
+
+  it('mounts 晴光, Bingo and 场地 as three desks, not one shared shell', () => {
+    const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
+    expect(source).toContain('<QingguangRailButton');
+    expect(source).toContain('<BingoRailButton');
+    expect(source).toContain('<VenueRailButton');
+    expect(source).toContain("railDesk === 'qingguang' && <AgentPanel");
+    expect(source).toContain("railDesk === 'bingo' && <BingoDesk");
+    expect(source).toContain("railDesk === 'venue' && <VenueDesk");
+    const agentAt = source.indexOf("railDesk === 'qingguang' && <AgentPanel");
+    const bingoAt = source.indexOf("railDesk === 'bingo' && <BingoDesk");
+    const venueAt = source.indexOf("railDesk === 'venue' && <VenueDesk");
+    expect(bingoAt).toBeGreaterThan(agentAt);
+    expect(venueAt).toBeGreaterThan(bingoAt);
+  });
 });
