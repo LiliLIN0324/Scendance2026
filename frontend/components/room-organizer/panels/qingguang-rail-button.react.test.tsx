@@ -28,6 +28,9 @@ describe('晴光模式轨入口', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(button.querySelector('img')?.getAttribute('src')).toBe(QINGGUANG_RAIL_MASCOT);
     expect(button.querySelector('.sc-rail-qingguang-dot.is-idle')).toBeTruthy();
+    expect(button.getAttribute('data-tip')).toBe('晴光');
+    expect(button.getAttribute('title')).toBeNull();
+    expect(button.textContent ?? '').not.toMatch(/晴光/);
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledOnce();
   });

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Package, PanelLeftClose, Settings } from 'lucide-react';
+import { Package, PanelLeftClose, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -1754,12 +1754,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   aria-controls="workbench-space-shelf"
                   aria-label="空间"
                   data-tip="空间"
-                  title="空间"
                   onClick={toggleSpaceShelf}
                 >
                   <SpaceIcon size={22} />
-                  <ChevronDown className="sc-space-chevron" size={12} aria-hidden="true" />
-                  <span className="sc-rail-word">空间</span>
                 </button>
                 <button
                   type="button"
@@ -1770,17 +1767,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   aria-controls="workbench-material-shelf"
                   aria-label="物料"
                   data-tip="物料"
-                  title="物料"
                   onClick={toggleMaterialsShelf}
                 >
                   <Package size={22} aria-hidden="true" />
-                  <span className="sc-rail-word">物料</span>
                 </button>
               </nav>
             </div>
             <div className="sc-mode-rail-foot">
               <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
-              <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" title="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
+              <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
               <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>

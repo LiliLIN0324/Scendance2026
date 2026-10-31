@@ -25,7 +25,6 @@ export function QingguangRailButton({ open, onOpen, buttonRef }: {
       aria-expanded={open}
       aria-label="晴光"
       data-tip="晴光"
-      title={`晴光 · ${status.text}`}
       onClick={onOpen}
     >
       <img src={QINGGUANG_RAIL_MASCOT} alt="" width={28} height={28} draggable={false} />

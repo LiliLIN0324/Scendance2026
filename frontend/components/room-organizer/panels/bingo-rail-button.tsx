@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   bingoBallLabel,
-  bingoPhaseLabel,
   emptyBingoSnapshot,
   readBingoSnapshot,
   type BingoSnapshot,
@@ -36,7 +35,6 @@ export function BingoRailButton({ open, onToggle }: { open: boolean; onToggle():
 
   const phase = ready ? snapshot.phase : 'to-send';
   const label = ready ? bingoBallLabel(snapshot) : '收反馈';
-  const phaseLabel = bingoPhaseLabel(phase);
   const count = ready && snapshot.phase === 'awaiting' ? String(snapshot.plans.length) : '';
 
   return (
@@ -48,8 +46,9 @@ export function BingoRailButton({ open, onToggle }: { open: boolean; onToggle():
       aria-pressed={open}
       aria-label={label}
       data-tip="Bingo"
-      title={ready ? `Bingo · 收反馈 · ${phaseLabel}` : 'Bingo · 收反馈'}
       onClick={onToggle}
-    />
+    >
+      {count ? <span className="sc-bingo-count">{count}</span> : null}
+    </button>
   );
 }
