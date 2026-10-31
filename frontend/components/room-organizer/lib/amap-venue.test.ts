@@ -21,6 +21,7 @@ import {
   parseSatelliteImageBounds,
   satelliteImageAligned,
   satelliteImageShellRect,
+  satellitePhotoShapeRect,
   orientMapShellNorthUp,
   metersPerDegreeLng,
   METERS_PER_DEGREE_LAT,
@@ -318,6 +319,25 @@ describe('satellite ground backfill', () => {
     });
     expect(layout.mapGroundFrame?.lng0).toBeCloseTo(registration!.frame.lng0, 6);
     expect(layout.mapGroundFrame?.scale).toBe(registration!.frame.scale);
+    const shape = satellitePhotoShapeRect(registration!.shellWidth, registration!.shellDepth, registration!.frame, registration!.bounds);
+    const cornerUv = (x: number, y: number) => shellMetersToSatelliteUv(
+      x + registration!.shellWidth / 2,
+      registration!.shellDepth / 2 - y,
+      registration!.frame,
+      registration!.bounds,
+    );
+    for (const point of [
+      cornerUv(shape.minX, shape.minY),
+      cornerUv(shape.maxX, shape.minY),
+      cornerUv(shape.minX, shape.maxY),
+      cornerUv(shape.maxX, shape.maxY),
+    ]) {
+      expect(point.u).toBeGreaterThanOrEqual(-1e-6);
+      expect(point.u).toBeLessThanOrEqual(1 + 1e-6);
+      expect(point.v).toBeGreaterThanOrEqual(-1e-6);
+      expect(point.v).toBeLessThanOrEqual(1 + 1e-6);
+      expect(Math.min(point.u, 1 - point.u, point.v, 1 - point.v)).toBeLessThan(1e-6);
+    }
     expect(satelliteImageAligned(url)).toBe(true);
     expect(satelliteImageAligned(url!.replace(/west=[^&]+&south=[^&]+&east=[^&]+&north=[^&]+/, 'location=120.54,30.40&zoom=18'))).toBe(false);
     const shell = layout.backendVenue?.polygon ?? [];
