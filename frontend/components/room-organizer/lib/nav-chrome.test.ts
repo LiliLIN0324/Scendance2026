@@ -81,6 +81,12 @@ describe('nav chrome state', () => {
     expect(bingo).not.toMatch(/href=\{?plan\.href/);
     expect(bingo).not.toMatch(/打开评审页<\/a>/);
     expect(bingo).toContain('复制甲方评审链接');
+    expect(bingo).toContain('在画布场地点钉');
+    expect(source).toContain('enterVenueReviewPins');
+    expect(source).toContain("setWorkbenchMode('review')");
+    const clientReview = readFileSync(join(here, '../../review-share-page/review-share-page.tsx'), 'utf8');
+    expect(clientReview).toContain('ReviewSharePlanStage');
+    expect(clientReview).not.toContain('发表评论');
   });
 
   it('does not store a separate navExpanded flag beside the two doors', () => {

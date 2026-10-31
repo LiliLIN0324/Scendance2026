@@ -2,6 +2,7 @@
  * 开发端 Bingo 收件箱：只读甲方在本机演示里留下的反馈，不打开甲方评审页。
  */
 import { commentThreads, readReviewComments, type ReviewThread } from '../../review-share-page/comments';
+import { readReviewSharePins } from '../../review-share-page/review-share-pins';
 
 const SHARE_COMMENT_PREFIX = 'scendance.reviewComments.v1.';
 const SHARE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,6 +23,15 @@ export function readDeveloperFeedback(
   input: { shareId: string; projectKey: string },
 ): DeveloperFeedbackSummary {
   if (!storage) return { threadCount: 0, lines: [] };
+  for (const planKey of planKeysForMark(input)) {
+    const { pins } = readReviewSharePins(planKey, storage);
+    if (pins.length > 0) {
+      return {
+        threadCount: pins.length,
+        lines: pins.slice(0, 6).map(pin => ({ author: pin.author, body: pin.text })),
+      };
+    }
+  }
   const shareComments = readShareComments(storage, input.shareId);
   if (shareComments.length > 0) {
     return summarizeShareComments(shareComments);

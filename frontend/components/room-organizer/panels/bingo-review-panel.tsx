@@ -47,7 +47,13 @@ function PlanFeedback({ plan }: { plan: BingoPlan }): JSX.Element | null {
 /**
  * 开发端 Bingo：只看甲方反馈与评审状态。不打开甲方钉评页，也不在此发表评论。
  */
-export function BingoReviewPanel({ onClose }: { onClose(): void }): JSX.Element {
+export function BingoReviewPanel({
+  onClose,
+  onEnterVenueReview,
+}: {
+  onClose(): void;
+  onEnterVenueReview(): void;
+}): JSX.Element {
   const [snapshot, setSnapshot] = useState<BingoSnapshot>(emptyBingoSnapshot);
   const [ready, setReady] = useState(false);
   const [copyNote, setCopyNote] = useState('');
@@ -98,6 +104,9 @@ export function BingoReviewPanel({ onClose }: { onClose(): void }): JSX.Element 
         <p className="sc-bingo-boundary" role="note">
           甲方在分享页只读钉评；这里只看对方反馈与状态。不要在本机打开评审页自评。
         </p>
+        <button type="button" className="sc-bingo-enter-review" onClick={onEnterVenueReview}>
+          在画布场地点钉
+        </button>
         {snapshot.receipt && (
           <p className="sc-bingo-receipt">
             甲方已点完成评审 · {formatBingoTime(snapshot.receipt.at) || snapshot.receipt.at}

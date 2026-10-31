@@ -345,7 +345,24 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const openMaterialsFromShare = useCallback(() => {
     document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click();
   }, []);
+  const exitVenueReviewPins = useCallback(() => {
+    setWorkbenchMode('layout');
+    setPinDraft(null);
+  }, []);
+  const enterVenueReviewPins = useCallback(() => {
+    setBingoPanelOpen(false);
+    setVenueLibraryOpen(false);
+    setMaterialsOpen(false);
+    setBusinessOpen(false);
+    setSidebarCollapsed(true);
+    setAgentCollapsed(true);
+    setComposerGenerate(false);
+    setWorkbenchMode('review');
+    setWorkbenchModeSerial(value => value + 1);
+    setPinDraft(null);
+  }, []);
   const toggleQingguang = useCallback(() => {
+    exitVenueReviewPins();
     setBingoPanelOpen(false);
     setVenueLibraryOpen(false);
     if (!agentCollapsed) {
@@ -362,8 +379,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
       (input ?? panel)?.focus();
     });
-  }, [agentCollapsed]);
+  }, [agentCollapsed, exitVenueReviewPins]);
   const toggleBingoPanel = useCallback(() => {
+    exitVenueReviewPins();
     setVenueLibraryOpen(false);
     if (bingoPanelOpen) {
       setBingoPanelOpen(false);
@@ -372,8 +390,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setAgentCollapsed(true);
     setSidebarCollapsed(true);
     setBingoPanelOpen(true);
-  }, [bingoPanelOpen]);
+  }, [bingoPanelOpen, exitVenueReviewPins]);
   const toggleVenueLibrary = useCallback(() => {
+    exitVenueReviewPins();
     setBingoPanelOpen(false);
     setVenueLibraryOpen(open => {
       const next = !open;
@@ -383,7 +402,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       return next;
     });
-  }, []);
+  }, [exitVenueReviewPins]);
   const openQingguang = toggleQingguang;
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     setBingoPanelOpen(false);
@@ -1686,7 +1705,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {bingoPanelOpen && <BingoReviewPanel onClose={() => setBingoPanelOpen(false)} />}
+          {bingoPanelOpen && (
+            <BingoReviewPanel
+              onClose={() => setBingoPanelOpen(false)}
+              onEnterVenueReview={enterVenueReviewPins}
+            />
+          )}
           {!agentCollapsed && !bingoPanelOpen && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onOpenDrawings={() => businessToolsRef.current?.openReference()} onOpenFrame={() => businessToolsRef.current?.openRebuild()} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}

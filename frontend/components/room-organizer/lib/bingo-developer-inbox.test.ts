@@ -1,8 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import { REVIEW_COMMENT_STORAGE_KEY } from '../../review-share-page/comments';
+import { REVIEW_SHARE_PINS_KEY } from '../../review-share-page/review-share-pins';
 import { readDeveloperFeedback } from './bingo-developer-inbox';
 
 describe('readDeveloperFeedback', () => {
+  it('reads share-page venue pins for the developer inbox', () => {
+    const storage = {
+      getItem(key: string) {
+        if (key !== REVIEW_SHARE_PINS_KEY) return null;
+        return JSON.stringify({
+          version: 1,
+          lastAuthor: '甲方',
+          byPlan: {
+            'sample:initial': [
+              {
+                id: 'pin-1',
+                planKey: 'sample:initial',
+                floorId: 'f0',
+                itemId: null,
+                x: 0,
+                z: 0,
+                author: '甲方',
+                text: '主舞台偏左',
+                createdAt: '2026-10-31T12:00:00.000Z',
+              },
+            ],
+          },
+        });
+      },
+    };
+    const summary = readDeveloperFeedback(storage, {
+      shareId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      projectKey: 'sample:initial',
+    });
+    expect(summary.threadCount).toBe(1);
+    expect(summary.lines[0]?.body).toBe('主舞台偏左');
+  });
+
   it('reads share-scoped comments for the developer inbox without opening the client page', () => {
     const shareId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
     const storage = {
