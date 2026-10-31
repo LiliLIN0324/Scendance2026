@@ -79,12 +79,12 @@ import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
 import { QingguangRailButton } from './panels/qingguang-rail-button';
 import { QingguangAvatarFlight } from './panels/qingguang-avatar-flight';
+import { RailAgentBrandSlot } from './panels/rail-agent-brand-slot';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
 import { Viewport } from './panels/viewport';
-import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -206,6 +206,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const timer = window.setTimeout(() => setHeaderAvatarVisible(true), 280);
     return () => window.clearTimeout(timer);
   }, [agentCollapsed, agentClosing]);
+  const qingguangPanelOpen = !agentCollapsed && !agentClosing;
+  const railShowsBrand = qingguangPanelOpen && headerAvatarVisible;
+  const railShowsQingguang = !railShowsBrand;
   /** 晴光栏在左侧。关掉后再从画布上的晴光浮标打开，回到布置对话。 */
   const [composerGenerate, setComposerGenerate] = useState(false);
   const [planHome, setPlanHome] = useState(true);
@@ -1648,10 +1651,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
-              <WorkbenchBrandToggle expanded={navExpanded} onToggle={toggleNav} />
-              <nav className="sc-mode-rail-top" aria-label="晴光">
-                <QingguangRailButton buttonRef={qingguangRailRef} open={!agentCollapsed && !agentClosing} onOpen={openQingguang} />
-              </nav>
+              <RailAgentBrandSlot
+                showBrand={railShowsBrand}
+                showQingguang={railShowsQingguang}
+                navExpanded={navExpanded}
+                qingguangPanelOpen={qingguangPanelOpen}
+                onToggleNav={toggleNav}
+                onOpenQingguang={openQingguang}
+                qingguangRailRef={qingguangRailRef}
+              />
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
                 <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
                   onClick={() => businessToolsRef.current?.openReference()}><Ruler size={24} aria-hidden="true"/></button>
@@ -1703,7 +1711,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             /> : undefined}/>}
           <LeftCardResizer width={leftCardWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           <QingguangAvatarFlight
-            open={!agentCollapsed && !agentClosing}
+            open={qingguangPanelOpen}
             railRef={qingguangRailRef}
             headerAvatarRef={qingguangHeaderAvatarRef}
           />

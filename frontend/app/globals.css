@@ -982,7 +982,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-word {
   display: block; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0;
 }
-/* 收起时轨顶只留锁标。窄屏那条「藏起品牌标」不能把这颗开关一起藏掉。 */
+/* 幕景锁标只在晴光展开时占轨顶格；收起时该格交给晴光头像（见 .sc-rail-agent-brand-slot）。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand {
   flex-direction: row; justify-content: center; gap: 0; width: 100%; min-height: 44px;
   margin: 0 0 6px; padding: 4px 0; color: var(--wk-ink);
@@ -1084,6 +1084,20 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
+/* 轨顶一格：收起 = 晴光头像；展开 = 交叉淡入幕景锁标（头像已飞到对话头）。 */
+.sc-rail-agent-brand-slot {
+  position: relative; flex: none; width: 36px; height: 40px; margin: 2px auto 4px;
+}
+.sc-rail-agent-brand-slot .sc-rail-slot-layer {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 220ms var(--ease-spec, ease);
+}
+.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-on { opacity: 1; pointer-events: auto; }
+.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-brand button.sc-nav-brand {
+  width: 36px; min-height: 36px; height: 36px; margin: 0; padding: 0;
+}
+.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang .sc-mode-rail-top { margin: 0; padding: 0; }
+.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang button.sc-rail-qingguang { margin: 0; }
 /* 原布置图标的槽位：同样的轨钮尺寸，里面换成晴光圆头像。右下白点是状态，不是模式选中条。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang {
   position: relative; width: 36px; height: 36px; margin: 2px auto 4px; padding: 0;
