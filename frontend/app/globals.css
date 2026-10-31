@@ -699,6 +699,8 @@ body {
    search pinned to the corner and stops the grid from being pushed down the panel. */
 .sc-material-toolbar { display: flex; align-items: center; gap: var(--sc-space-sm); margin-bottom: var(--sc-space-md); }
 .sc-bucket-rail { display: flex; flex-wrap: nowrap; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.sc-bucket-rail > .sc-bucket-add,
+.sc-bucket-rail > .sc-bucket-add-form { flex: 0 0 auto; align-self: center; }
 .sc-bucket-rail::-webkit-scrollbar { display: none; }
 .sc-bucket-rail button { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--sc-line); border-radius: 999px; background: var(--paper); color: var(--wk-muted); font-size: var(--fs-p2); padding: 4px var(--sc-space-sm); }
 .sc-bucket-rail button b { font-weight: 500; opacity: .6; font-variant-numeric: tabular-nums; }
@@ -834,7 +836,7 @@ body {
 .sc-workbench .is-docked-layout .sc-left-drawer.has-business { flex-basis:420px; width:420px; }
 .sc-workbench .is-docked-layout.has-conversation .sc-left-drawer.has-business { flex-basis:clamp(300px,28vw,360px); width:clamp(300px,28vw,360px); }
 .sc-workbench .is-docked-layout .cr-assistant.is-docked:not(.is-open) { display:none; }
-.sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:212px; flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:0; background:transparent; padding:0; box-sizing:border-box; }
+.sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:180px; flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:0; background:transparent; padding:0; box-sizing:border-box; }
 .sc-workbench .is-docked-layout .sc-canvas-stage { --sc-rail-width:46px; position:relative; inset:auto; flex:1 1 auto; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:0; background:transparent; overflow:visible; container:canvas-stage / size; padding: 6px 8px 6px 8px; box-sizing:border-box; }
 .sc-workbench .sc-scene-viewport { position:relative; inset:auto; grid-area:1 / 1; min-width:0; min-height:0; overflow:hidden; border-radius:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06); container:scene-viewport / size; }
 .sc-workbench .sc-editor-dock { display:contents; pointer-events:auto; }
@@ -869,7 +871,7 @@ body {
 .sc-workbench .sc-canvas-heading { max-width:calc(100% - 78px); flex-wrap:nowrap; gap:6px; overflow:hidden; }
 .sc-workbench .sc-canvas-heading > span:last-child { overflow:hidden; text-overflow:ellipsis; }
 @media (max-height:600px) {
-  .sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:152px; }
+  .sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:140px; }
 }
 @media (max-width:1080px) {
   .sc-workbench .sc-workspace.is-docked-layout { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:8px; }
@@ -977,11 +979,8 @@ body {
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
   overflow: visible;
 }
-/* 左轨以图标为主视觉；中文名在 data-tip / aria-label，不把汉字再铺在钮面上。 */
+/* 窄轨只留图标。名称不写在钮下；悬停或选中时只出右侧黑胶囊（data-tip），不另挂 title。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-word {
-  display: block; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0;
-}
 /* 幕景锁标只在晴光展开时占轨顶格；收起时该格交给晴光头像（见 .sc-rail-agent-brand-slot）。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand {
   flex-direction: row; justify-content: center; gap: 0; width: 100%; min-height: 44px;
@@ -1017,21 +1016,16 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo.is-review-returned {
   box-shadow: inset 0 0 0 2px #d4534a;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-space .sc-space-chevron {
-  transition: transform .16s ease;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-space.is-active .sc-space-chevron {
-  transform: rotate(180deg);
-}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;
-  transform: translateY(-50%); padding: 3px 7px; border-radius: var(--r-sm);
+  transform: translateY(-50%); padding: 3px 7px; border-radius: 999px;
   background: var(--wk-ink); color: #fff; font-size: 11px; font-weight: 400; line-height: 15px;
   letter-spacing: 0; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:hover::after,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after { opacity: 1; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active[data-tip]::after { opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-top,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -1073,14 +1067,8 @@ body {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:hover { background: var(--wk-plane); color: var(--wk-ink); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active {
-  /* 参考图：左缘 2-3px 品牌绿竖条 + 极淡背景，不做填充方块。 */
   position: relative;
-  background: var(--wk-green-pale, #eef3ef); color: var(--wk-ink); font-weight: 600;
-  box-shadow: none;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active::before {
-  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
-  border-radius: 0 2px 2px 0; background: var(--wk-green);
+  color: var(--wk-ink); font-weight: 600;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-divider {
   display: block; height: 1px; margin: 7px 4px; background: var(--wk-hair); flex: none;
@@ -1094,7 +1082,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
 /* 轨顶一格：收起 = 晴光头像；展开 = 交叉淡入幕景锁标（头像已飞到对话头）。 */
 .sc-rail-agent-brand-slot {
-  position: relative; flex: none; width: 36px; height: 40px; margin: 2px auto 4px;
+  position: relative; flex: none; width: 40px; height: 40px; margin: 2px auto 4px;
 }
 .sc-rail-agent-brand-slot .sc-rail-slot-layer {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -1131,12 +1119,10 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball {
-  width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
-  border-radius: 999px; border: 1.5px solid var(--hair);
   background:
     radial-gradient(circle at 50% 50%, transparent 0 5px, var(--faint) 5.5px 7px, transparent 7.5px),
     var(--paper);
-  box-shadow: none; color: var(--ink-soft);
+  color: var(--ink-soft);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball:hover,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball:focus-visible {
@@ -1150,9 +1136,8 @@ body {
   box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
   background: var(--paper); color: var(--warn);
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball[data-count]::after {
-  content: attr(data-count);
-  position: static; transform: none; opacity: 1; pointer-events: none;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball > .sc-bingo-count {
+  display: block; position: static; opacity: 1; pointer-events: none;
   padding: 0; border-radius: 0; background: transparent; color: var(--warn);
   font-size: 13px; font-weight: 600; line-height: 1; letter-spacing: 0; white-space: nowrap;
 }
@@ -1164,19 +1149,47 @@ body {
     radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
     var(--paper);
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-muted {
-  color: var(--wk-ink-faint); opacity: 0.45;
+/* Bingo / 空间 / 物料 / 晴光：同一枚细线圆罩。绿条跟圆罩走，不贴轨的左缘。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
+  width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
+  border-radius: 999px; border: 1.5px solid var(--hair); background: var(--paper);
+  box-shadow: inset 0 1px 2px rgba(20, 20, 22, 0.10); color: var(--wk-ink);
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-muted:hover {
-  color: var(--wk-ink-soft); opacity: 0.8; background: transparent;
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:focus-visible {
+  background: var(--paper); color: var(--wk-ink); transform: translateY(-1px);
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue:not(.is-muted) {
-  color: var(--wk-ink);
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active {
+  background: var(--paper); color: var(--wk-ink); font-weight: 400;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-venue.is-active {
-  opacity: 1; color: var(--wk-ink);
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before {
+  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--wk-green);
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:hover { background: transparent; }
+.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang button.sc-rail-qingguang.sc-rail-disc {
+  margin: 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc:focus-visible,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc.is-active {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 5px, var(--faint) 5.5px 7px, transparent 7.5px),
+    var(--paper);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc[data-status="awaiting"] {
+  border: 2px solid var(--warn);
+  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
+  background: var(--paper); color: var(--warn);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc.is-returned,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc[data-status="returned"] {
+  border: 3px solid var(--err);
+  box-shadow: 0 0 0 4px rgba(180, 68, 60, 0.22);
+  background:
+    radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
+    var(--paper);
+}
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
 .sc-lux-direct input[type='text'], .sc-lux-direct textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--paper); color: inherit; font: inherit; }
@@ -1512,11 +1525,11 @@ body {
   background: var(--wk-paper); border: 0; border-top: 1px solid var(--wk-hair); border-radius: 0;
   box-shadow: none; z-index: 35; overflow: hidden; pointer-events: auto;
 }
-/* 物料入口从底条挪到左轨「空间」之下。抽屉贴底，并向上补上原来底条和旧入口那一截，让面板和更低的图标仍连成一块。 */
+/* 物料入口已在左轨。抽屉贴底，高度只包住一排卡片，不再补旧底条那一截。 */
 .sc-workbench .sc-canvas-stage.has-material-shelf .sc-material-shelf.sc-bottom-drawer.is-raised,
 .sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-raised {
   bottom: 0;
-  height: calc(var(--sc-shelf-height, 212px) + 88px);
+  height: var(--sc-shelf-height, 180px);
 }
 .sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-space {
   height: min(70vh, 520px);

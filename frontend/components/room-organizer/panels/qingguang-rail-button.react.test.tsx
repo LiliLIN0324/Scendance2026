@@ -28,6 +28,10 @@ describe('晴光模式轨入口', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(button.querySelector('img')?.getAttribute('src')).toBe(QINGGUANG_RAIL_MASCOT);
     expect(button.querySelector('.sc-rail-qingguang-dot.is-idle')).toBeTruthy();
+    expect(button.className).toContain('sc-rail-disc');
+    expect(button.getAttribute('data-tip')).toBe('晴光');
+    expect(button.getAttribute('title')).toBeNull();
+    expect(button.textContent ?? '').not.toMatch(/晴光/);
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledOnce();
   });
@@ -36,7 +40,9 @@ describe('晴光模式轨入口', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).toContain('<RailAgentBrandSlot');
     expect(source).toContain('<BingoRailButton');
-    expect(source).toContain('<VenueRailButton');
+    expect(source).toContain('aria-label="空间"');
+    expect(source).not.toContain('<VenueRailButton');
+    expect(source).not.toContain('aria-label="场地"');
     expect(source).not.toContain('AgentReopenCard');
     expect(source).not.toContain('AssistantSessionDock');
     expect(source).not.toContain('aria-label="工作流程"');

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Package, PanelLeftClose, Settings } from 'lucide-react';
+import { Package, PanelLeftClose, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -85,8 +85,7 @@ import { PlanFlow } from './panels/plan-flow';
 import { QingguangAvatarFlight } from './panels/qingguang-avatar-flight';
 import { RailAgentBrandSlot } from './panels/rail-agent-brand-slot';
 import { SpaceIcon } from './panels/space-icon';
-import { VenueLibraryPanel, VenueRailButton } from './panels/venue-library-panel';
-import { useVenueLibrary } from './hooks/use-venue-library';
+import { VenueLibraryPanel } from './panels/venue-library-panel';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -195,7 +194,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [agentCollapsed, setAgentCollapsed] = useState(false);
   const [agentClosing, setAgentClosing] = useState(false);
   const [sidePanel, setSidePanel] = useState<RailSidePanel | null>(null);
-  const venueLibrary = useVenueLibrary();
   const qingguangRailRef = useRef<HTMLButtonElement>(null);
   const qingguangHeaderAvatarRef = useRef<HTMLSpanElement>(null);
   const agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel;
@@ -430,18 +428,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       setAgentCollapsed(true);
       setSidebarCollapsed(true);
       return 'bingo';
-    });
-  }, []);
-  const toggleVenuePanel = useCallback(() => {
-    setAgentClosing(false);
-    setSidePanel(current => {
-      if (current === 'venue') {
-        setAgentCollapsed(true);
-        return null;
-      }
-      setAgentCollapsed(true);
-      setSidebarCollapsed(true);
-      return 'venue';
     });
   }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
@@ -1781,40 +1767,34 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <BingoRailButton open={sidePanel === 'bingo'} onToggle={toggleBingoPanel} />
                 <button
                   type="button"
-                  className={`sc-rail-tool sc-rail-space${spaceOpen ? ' is-active' : ''}`}
+                  className={`sc-rail-tool sc-rail-space sc-rail-disc${spaceOpen ? ' is-active' : ''}`}
                   aria-pressed={spaceOpen}
                   aria-expanded={spaceOpen}
                   aria-controls="workbench-space-shelf"
                   aria-label="空间"
                   data-tip="空间"
-                  title="空间"
                   onClick={toggleSpaceShelf}
                 >
                   <SpaceIcon size={22} />
-                  <ChevronDown className="sc-space-chevron" size={12} aria-hidden="true" />
-                  <span className="sc-rail-word">空间</span>
                 </button>
                 <button
                   type="button"
                   ref={toolsEntryRef}
-                  className={`sc-rail-tool sc-rail-materials${materialsOpen ? ' is-active' : ''}`}
+                  className={`sc-rail-tool sc-rail-materials sc-rail-disc${materialsOpen ? ' is-active' : ''}`}
                   aria-pressed={materialsOpen}
                   aria-expanded={materialsOpen}
                   aria-controls="workbench-material-shelf"
                   aria-label="物料"
                   data-tip="物料"
-                  title="物料"
                   onClick={toggleMaterialsShelf}
                 >
                   <Package size={22} aria-hidden="true" />
-                  <span className="sc-rail-word">物料</span>
                 </button>
-                <VenueRailButton open={sidePanel === 'venue'} lit={venueLibrary.lit} onToggle={toggleVenuePanel} />
               </nav>
             </div>
             <div className="sc-mode-rail-foot">
               <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
-              <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" title="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
+              <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
               <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
