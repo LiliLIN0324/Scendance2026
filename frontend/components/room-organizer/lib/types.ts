@@ -367,7 +367,7 @@ export interface RoomLayout {
   /**
    * 卫星/高德贴地参考底图开关：仅观感辅助，与 RECON_MATERIAL_BAN 一致，
    * 不得进入 Aholo 上传/重建素材列表。
-   * `true` 打开；`false` 是人关掉的（地图户外壳不再自动补图）；缺省则地图户外壳默认打开。
+   * `true` 打开；`false` 是人关掉的（不再自动补图）；缺省则规划区 / 户外简报 / 地图壳默认打开。
    */
   satelliteGroundRef?: boolean;
   /**

@@ -233,18 +233,24 @@ export function rectangleAroundMeters(center: AmapPoint, widthM: number, depthM:
   ];
 }
 
-/** 地图立出的户外壳：多边形 + 户外，或已经记下圈画经纬度。室内矩形不是这条路径。 */
+/**
+ * 该不该出现卫星参考、并在没人关过时默认打开。
+ * 旧项目常常没有 mapGroundPolygon，backend 场地也还是矩形：名字里的「规划区」、
+ * 场地简报的户外，或已经贴过的卫星图，都算。明确标成室内、又没有这些痕迹的矩形不算。
+ */
 export function isMapOutdoorLayout(layout: RoomLayout): boolean {
   if ((layout.mapGroundPolygon?.length ?? 0) >= 3) return true;
+  if (isSatelliteGroundImage(layout.floorPlanImage)) return true;
+  if (/规划区/.test(layout.name)) return true;
   const venue = layout.backendSceneV2?.venue ?? layout.backendVenue;
   if (!venue || venue.site?.indoorOutdoor === 'indoor') return false;
-  if (venue.shape === 'polygon' && venue.site?.indoorOutdoor === 'outdoor') return true;
-  return venue.shape === 'polygon' && /规划区/.test(layout.name);
+  if (venue.site?.indoorOutdoor === 'outdoor') return true;
+  return venue.shape === 'polygon';
 }
 
 /**
- * 地图户外场地默认要看卫星贴地。`false` 是人关掉的，重新打开前不再自动拉。
- * `true` 是打开。缺省则只对地图户外壳默认打开。
+ * 上面这些场地默认要看卫星贴地。`false` 是人关掉的，重新打开前不再自动拉。
+ * `true` 是打开。缺省则按 isMapOutdoorLayout。
  */
 export function satelliteGroundWanted(layout: RoomLayout): boolean {
   if (layout.satelliteGroundRef === false) return false;
@@ -305,27 +311,37 @@ export interface SatelliteGroundPatch {
   floorPlanImage: string;
   floorPlanOpacity: number;
   satelliteGroundRef: true;
-  mapGroundPolygon: AmapPoint[];
+  /** 定位成功才有；失败时只贴占位，不编造经纬度。 */
+  mapGroundPolygon?: AmapPoint[];
 }
 
 /**
- * 补齐卫星参考底图。Key 不可用、或旧场地定位失败时返回 null（调用方保持素色地面）。
- * 代理探测失败则退回带禁令文案的占位图，避免永远白壳。图只写 floorPlanImage，不进采集上传。
+ * 补齐卫星参考底图。代理拉到了就用真图；Key 不可用、定位失败或探测失败时退回占位 SVG
+ * （带禁令文案），不要让地面停在素色。已经是占位且这次仍失败则返回 null，避免来回重贴。
+ * 图只写 floorPlanImage，不进采集上传。
  */
 export async function ensureSatelliteGround(layout: RoomLayout): Promise<SatelliteGroundPatch | null> {
   const { staticKey } = readAmapKeys();
-  if (!staticKey) return null;
-  const polygon = await resolveSatellitePolygon(layout);
-  if (!polygon || polygon.length < 3) return null;
-  const fetched = await fetchSatelliteGroundDataUrl(polygon, staticKey);
-  if (!fetched && isPlaceholderSatellite(layout.floorPlanImage)) return null;
-  const bbox = polygonBboxMeters(polygon);
-  const image = fetched ?? makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height);
+  const polygon = staticKey ? await resolveSatellitePolygon(layout) : null;
+  const located = polygon && polygon.length >= 3 ? polygon : null;
+  if (located && staticKey) {
+    const fetched = await fetchSatelliteGroundDataUrl(located, staticKey);
+    if (fetched) {
+      return {
+        floorPlanImage: fetched,
+        floorPlanOpacity: 0.78,
+        satelliteGroundRef: true,
+        mapGroundPolygon: located,
+      };
+    }
+  }
+  if (isPlaceholderSatellite(layout.floorPlanImage)) return null;
+  const bbox = located ? polygonBboxMeters(located) : { width: layout.width, depth: layout.height };
   return {
-    floorPlanImage: image,
+    floorPlanImage: makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height),
     floorPlanOpacity: 0.78,
     satelliteGroundRef: true,
-    mapGroundPolygon: polygon,
+    ...(located ? { mapGroundPolygon: located } : {}),
   };
 }
 
@@ -335,7 +351,7 @@ export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGr
     floorPlanImage: patch.floorPlanImage,
     floorPlanOpacity: patch.floorPlanOpacity,
     satelliteGroundRef: true,
-    mapGroundPolygon: patch.mapGroundPolygon,
+    ...(patch.mapGroundPolygon ? { mapGroundPolygon: patch.mapGroundPolygon } : {}),
   };
 }
 
