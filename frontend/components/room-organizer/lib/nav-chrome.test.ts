@@ -47,9 +47,31 @@ describe('nav chrome state', () => {
     const rail = source.slice(source.indexOf('className="sc-mode-rail"'), source.indexOf('id="workbench-nav-column"'));
     const column = source.slice(source.indexOf('id="workbench-nav-column"'));
     expect(rail.match(/<WorkbenchBrandToggle/g)).toHaveLength(1);
-    expect(rail.indexOf('<WorkbenchBrandToggle')).toBeLessThan(rail.indexOf('<QingguangRailButton'));
+    const marks = ['<WorkbenchBrandToggle', '<QingguangRailButton', '<RailBingoDraft', '<MapRailButton'];
+    const places = marks.map(mark => rail.indexOf(mark));
+    expect(places.every(place => place >= 0)).toBe(true);
+    expect(places).toEqual([...places].sort((a, b) => a - b));
+    const foot = rail.slice(rail.indexOf('sc-mode-rail-foot'));
+    expect(foot).toContain('aria-label="设置"');
+    expect(foot).not.toContain('RailBingoDraft');
+    expect(foot).not.toContain('sc-rail-draft');
+    expect(rail.slice(0, rail.indexOf('<MapRailButton'))).not.toContain('aria-label="设置"');
+    expect(rail.slice(0, rail.indexOf('<MapRailButton'))).not.toContain('SessionHistory');
+    expect(rail).not.toContain('aria-label="图纸与照片"');
+    expect(rail).not.toContain('aria-label="场地重建"');
+    expect(rail).not.toContain('aria-label="生成物件"');
+    expect(rail).not.toContain('aria-label="场地观感与物料"');
     expect(column).not.toContain('WorkbenchBrandToggle');
-    expect(column).toContain('<AssistantSessionDock');
+    expect(column).not.toContain('<AssistantSessionDock');
+    expect(source).not.toContain('<AgentReopenCard');
+    expect(source).not.toContain('<CanvasHeading');
+    const chat = readFileSync(join(here, '../panels/agent-panel.tsx'), 'utf8');
+    const chatCss = readFileSync(join(here, '../panels/agent-panel.css'), 'utf8');
+    expect(chat).toContain('aria-label="会话历史"');
+    expect(chat).toContain('<SessionHistoryPanel');
+    expect(chat).toContain('embedded');
+    expect(chat).not.toContain('mascot-slot');
+    expect(chatCss).toMatch(/\.ap-history-overlay\s*\{[^}]*max-height:\s*33\.333%/);
   });
 
   it('does not store a separate navExpanded flag beside the two doors', () => {
