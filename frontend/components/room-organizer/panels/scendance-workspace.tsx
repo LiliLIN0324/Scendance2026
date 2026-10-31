@@ -1,8 +1,20 @@
 'use client';
 
-import { Camera, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Sparkles, Sun, Trees, Users, X } from 'lucide-react';
+import { Camera, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Satellite, Sparkles, Sun, Trees, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
+import {
+  SATELLITE_GROUND_LABEL,
+  applySatelliteGroundPatch,
+  ensureSatelliteGround,
+  hasFetchedSatellite,
+  hideSatelliteGround,
+  isMapOutdoorLayout,
+  isPlaceholderSatellite,
+  isSatelliteGroundImage,
+  readAmapKeys,
+  satelliteGroundWanted,
+} from '../lib/amap-venue';
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
 import { EnvironmentPreview } from './environment-preview';
@@ -224,7 +236,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
 export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage, showAtmosphere = true, onLighting }: ViewToolsProps): JSX.Element {
-  const { view, setView, toggle, history, layout } = useRoomEditor();
+  const { view, setView, toggle, history, layout, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [viewOpen, setViewOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
@@ -237,6 +249,63 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
   // 氛围条默认收起成一颗「氛围」：真开了漫游/人群/雨雪/非正午就展开，别让人找不到关掉它的地方。
   const atmosphereShown = atmosphereOpen || view.walkthroughMode || view.showNpcs || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
+  const satelliteVenue = isMapOutdoorLayout(layout) || layout.satelliteGroundRef !== undefined || isSatelliteGroundImage(layout.floorPlanImage);
+  const satelliteOn = satelliteGroundWanted(layout);
+  const [satelliteBusy, setSatelliteBusy] = useState(false);
+  const [satelliteMiss, setSatelliteMiss] = useState<'key' | 'place' | null>(null);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const satelliteRequest = useRef(0);
+  const satelliteAttempt = useRef('');
+  const satelliteTip = satelliteMiss === 'key' ? '卫星参考·需高德 Key' : satelliteMiss === 'place' ? '卫星参考·未定位' : '卫星参考';
+  const fillSatellite = useCallback((startedId: string, startedName: string, mine: number) => {
+    const source = layoutRef.current;
+    setSatelliteBusy(true);
+    setSatelliteMiss(null);
+    void ensureSatelliteGround(source).then(patch => {
+      if (mine !== satelliteRequest.current) return;
+      const current = layoutRef.current;
+      if ((current.id ?? '') !== startedId || current.name !== startedName || current.satelliteGroundRef === false) return;
+      if (!patch) {
+        const keys = readAmapKeys();
+        const needsGeocode = (current.mapGroundPolygon?.length ?? 0) < 3;
+        setSatelliteMiss(!keys.staticKey || (needsGeocode && !keys.key) ? 'key' : 'place');
+        return;
+      }
+      actions.applyLayout(applySatelliteGroundPatch(current, patch));
+      setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
+    }).finally(() => { if (mine === satelliteRequest.current) setSatelliteBusy(false); });
+  }, [actions, setView]);
+  useEffect(() => {
+    if (!satelliteOn || hasFetchedSatellite(layout.floorPlanImage)) return undefined;
+    // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
+    if (layout.floorPlanImage && !isPlaceholderSatellite(layout.floorPlanImage)) return undefined;
+    const token = `${layout.id ?? ''}|${layout.name}|${layout.floorPlanImage ?? ''}|${layout.mapGroundPolygon?.length ?? 0}`;
+    if (satelliteAttempt.current === token) return undefined;
+    satelliteAttempt.current = token;
+    const mine = ++satelliteRequest.current;
+    fillSatellite(layout.id ?? '', layout.name, mine);
+    return () => {
+      if (satelliteRequest.current !== mine) return;
+      satelliteRequest.current += 1;
+      if (satelliteAttempt.current === token) satelliteAttempt.current = '';
+    };
+  }, [satelliteOn, layout.id, layout.name, layout.floorPlanImage, layout.mapGroundPolygon, fillSatellite]);
+  const turnSatellite = () => {
+    const mine = ++satelliteRequest.current;
+    const current = layoutRef.current;
+    if (satelliteOn) {
+      setSatelliteBusy(false);
+      actions.applyLayout(hideSatelliteGround(current));
+      return;
+    }
+    if (hasFetchedSatellite(current.floorPlanImage)) {
+      actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
+      setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: current.floorPlanOpacity ?? 0.78 }));
+      return;
+    }
+    fillSatellite(current.id ?? '', current.name, mine);
+  };
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   const selectActive = !view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode;
@@ -307,6 +376,9 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
         <Ruler size={24}/>
       </button>
+      {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星参考底图，已打开。${SATELLITE_GROUND_LABEL}` : `卫星参考底图，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
+        <Satellite size={24}/>
+      </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
         <button type="button" id="tool-view" data-tip="视图" aria-label="视图与更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-view-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>

@@ -10,6 +10,7 @@ import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
+import { createVenueFromPick } from '../lib/amap-venue';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { OnlineModel } from '../lib/online-models';
@@ -139,7 +140,7 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     // 物件模型有自己的入口，不该混进环境列表。
     expect(screen.queryByRole('button', { name: '预览一张白色圆桌' })).toBeNull();
     // 仓库留档的那几段场景不读浏览器记录，换一台机器也还在这一格里。
-    expect(screen.getByRole('button', { name: '预览小型发布会场地' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: '预览小型发布会场地（样例·非本场）' })).not.toBeNull();
     // 还没预览就不许出现「退出预览」，也不许有一条假装成功的状态行。
     expect(screen.queryByRole('button', { name: '退出预览' })).toBeNull();
     expect(card.getAttribute('aria-pressed')).toBe('false');
@@ -373,6 +374,92 @@ describe('ScendanceViewTools atmosphere menus', () => {
     fireEvent.click(screen.getByRole('option', { name: /黄昏/ }));
     const time = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(time(makeViewSettings()).timeOfDay).toBe(18);
+  });
+});
+
+describe('ScendanceViewTools satellite ground', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function legacySaltShell() {
+    const polygon = [
+      { lng: 120.53, lat: 30.40 },
+      { lng: 120.548, lat: 30.40 },
+      { lng: 120.548, lat: 30.409 },
+      { lng: 120.53, lat: 30.409 },
+    ];
+    const { layout } = createVenueFromPick(makeLayout(), {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon,
+    });
+    const legacy = { ...layout };
+    delete legacy.satelliteGroundRef;
+    delete legacy.floorPlanImage;
+    delete legacy.mapGroundPolygon;
+    return legacy;
+  }
+
+  it('does not put a satellite button on an ordinary indoor room', () => {
+    render(<Providers values={contexts()}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    expect(screen.queryByRole('button', { name: /卫星参考底图/ })).toBeNull();
+  });
+
+  it('defaults the satellite toggle on for a map shell and fills a missing image', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
+    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/jpeg' },
+      body: { cancel: vi.fn() },
+    }));
+    const previousAmap = window.AMap;
+    window.AMap = {
+      PlaceSearch: class {
+        search(_query: string, cb: (status: string, result: unknown) => void) {
+          cb('complete', { poiList: { pois: [{ location: { lng: 120.54, lat: 30.405 } }] } });
+        }
+      },
+    };
+    try {
+    const values = contexts(legacySaltShell());
+    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const button = screen.getByRole('button', { name: /卫星参考底图，已打开/ });
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.classList.contains('is-active')).toBe(true);
+    await waitFor(() => expect(values.actions.applyLayout).toHaveBeenCalled());
+    const applied = values.actions.applyLayout.mock.calls.at(-1)![0] as ReturnType<typeof legacySaltShell>;
+    expect(applied.satelliteGroundRef).toBe(true);
+    expect(applied.floorPlanImage).toContain('127.0.0.1:3199/amap-static');
+    expect(applied.floorPlanImage).toContain('satellite-ground-ref');
+    expect(applied.floorPlanImage).not.toContain('test-static');
+    expect(applied.mapGroundPolygon?.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      if (previousAmap) window.AMap = previousAmap;
+      else delete window.AMap;
+    }
+  });
+
+  it('turns satellite off to a plain ground flag and back on without dropping the image', () => {
+    const image = 'http://127.0.0.1:3199/amap-static?location=120.54,30.405&zoom=16&size=768*768&scale=2&x-ref=satellite-ground-ref';
+    const on = { ...legacySaltShell(), satelliteGroundRef: true as const, floorPlanImage: image, mapGroundPolygon: [
+      { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
+    ] };
+    const values = contexts(on);
+    const { rerender } = render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    fireEvent.click(screen.getByRole('button', { name: /卫星参考底图，已打开/ }));
+    const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof on;
+    expect(hidden.satelliteGroundRef).toBe(false);
+    expect(hidden.floorPlanImage).toBe(image);
+    const offValues = contexts(hidden);
+    rerender(<Providers values={offValues}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const offButton = screen.getByRole('button', { name: /卫星参考底图，已关闭/ });
+    expect(offButton.getAttribute('aria-pressed')).toBe('false');
+    expect(offButton.classList.contains('is-active')).toBe(false);
+    fireEvent.click(offButton);
+    const restored = offValues.actions.applyLayout.mock.calls.at(-1)![0] as typeof on;
+    expect(restored.satelliteGroundRef).toBe(true);
+    expect(restored.floorPlanImage).toBe(image);
   });
 });
 

@@ -119,11 +119,39 @@ function isOptionalBoolean(value: unknown): boolean {
  * A floor-plan image flows straight into `new THREE.TextureLoader().load(url)`
  * in three/room-builder.ts. A poisoned localStorage entry or imported JSON
  * could point it at `http://attacker/beacon.png`, firing an outbound request on
- * load. Only accept inline `data:image/...` URLs so nothing can trigger a
- * network fetch.
+ * load. Inline `data:image/...` is the general case. The only other URL kept
+ * is the localhost satellite proxy (x-ref=satellite-ground-ref): it is a
+ * reference texture, not an arbitrary beacon.
  */
 function isDataImageUrl(value: unknown): value is string {
   return typeof value === 'string' && /^data:image\//.test(value);
+}
+
+/**
+ * 卫星贴地只允许本机代理（与 amap-venue 的 SATELLITE_GROUND_MARK 一致）。
+ * 其它 http(s) 仍拒绝，避免存档在加载时去打任意外站。
+ */
+function isSatelliteProxyUrl(value: string): boolean {
+  if (!/^http:\/\/(?:127\.0\.0\.1|localhost):3199\/amap-static\?/.test(value) || value.length > 2000) return false;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.hash || url.port !== '3199') return false;
+    if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost')) return false;
+    return url.searchParams.get('x-ref') === 'satellite-ground-ref';
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedFloorPlanImage(value: unknown): value is string {
+  return isDataImageUrl(value) || (typeof value === 'string' && isSatelliteProxyUrl(value));
+}
+
+function isLngLatPoint(value: unknown): boolean {
+  return isPlainObject(value)
+    && isFiniteNumber(value.lng) && isFiniteNumber(value.lat)
+    && value.lng >= -180 && value.lng <= 180
+    && value.lat >= -90 && value.lat <= 90;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -301,7 +329,12 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
     return false;
   }
 
-  if (v.floorPlanImage !== undefined && !isDataImageUrl(v.floorPlanImage)) return false;
+  if (v.floorPlanImage !== undefined && !isAllowedFloorPlanImage(v.floorPlanImage)) return false;
+  if (v.satelliteGroundRef !== undefined && typeof v.satelliteGroundRef !== 'boolean') return false;
+  if (v.mapGroundPolygon !== undefined && (
+    !Array.isArray(v.mapGroundPolygon) || v.mapGroundPolygon.length < 3 || v.mapGroundPolygon.length > 64
+    || !v.mapGroundPolygon.every(isLngLatPoint)
+  )) return false;
   // Opacity outside [0,1] is corruption, not preference — the UI slider only
   // produces this range and canvas globalAlpha silently misbehaves outside it.
   if (
@@ -478,6 +511,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   floorPlanOpacity: true,
   floorPlanFitMode: true,
   satelliteGroundRef: true,
+  mapGroundPolygon: true,
   terrain: true,
   neighbours: true,
   entrance: true,
