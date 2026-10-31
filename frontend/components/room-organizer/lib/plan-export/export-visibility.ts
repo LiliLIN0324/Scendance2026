@@ -38,7 +38,8 @@ export const DXF_LAYER_COLOURS: Record<DxfLayerName, number> = {
  * What a plan file draws. Defaults match a fully visible plan.
  * `roomDimensions` is the print title block's width × depth; SVG and DXF
  * leave that field to the print sheet (openPlan3D draws it on the print
- * layout only). `wallDimensions` is the external width and depth on DIMENSIONS.
+ * layout only). `wallDimensions` is the external width and depth on the
+ * DXF DIMENSIONS layer. The SVG sheet does not draw those edge labels.
  */
 export interface PlanExportVisibility {
   walls: boolean;

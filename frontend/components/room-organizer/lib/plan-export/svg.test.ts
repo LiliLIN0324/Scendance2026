@@ -39,8 +39,8 @@ describe('layoutToSvg', () => {
     expect(count(svg, 'class="furniture"')).toBe(2);
     // Chair at (1, 1), rotation π/4 → canvas-convention −45° about its centre.
     expect(svg).toContain('translate(310 310) rotate(-45)');
-    // Name labels ride inside the rotated group.
-    expect(svg).toContain('>Chair</text>');
+    // The name stays inside the footprint group, counter-rotated so it reads upright.
+    expect(svg).toMatch(/<text class="label"[^>]*transform="rotate\(45\)"[^>]*>Chair<\/text>/);
     expect(svg).toContain('>Sofa</text>');
   });
 
@@ -61,13 +61,32 @@ describe('layoutToSvg', () => {
     const svg = layoutToSvg(layout, floor);
     const grid = /class="grid" d="([^"]+)"/.exec(svg);
     expect(grid).not.toBeNull();
-    // Centre-anchored 0.5 m grid on 8 m: 17 vertical + 17 horizontal lines.
-    expect(count(grid![1]!, 'M ')).toBe(34);
+    // Whole-metre guides on an 8 m room: −4…4 inclusive, 9 vertical + 9 horizontal.
+    // The half-metre snap grid stays in the editor; it is not drawn here.
+    expect(count(grid![1]!, 'M ')).toBe(18);
     expect(count(svg, 'class="wall"')).toBe(4);
     expect(count(svg, 'data-layer="WALLS"')).toBe(5); // 4 shell edges + 1 partition
     // Only the hidden south wall is dashed.
     expect(count(svg, 'stroke-dasharray="6 4"')).toBe(1);
     expect(count(svg, 'class="interior-wall"')).toBe(1);
+  });
+
+  it('honours layer switches without restoring edge lengths or a half-metre grid', () => {
+    const { layout, floor } = makeFixture();
+    const svg = layoutToSvg(layout, floor, {
+      visibility: { walls: false, doors: false, windows: false, furniture: false, stairs: false, wallDimensions: false },
+    });
+    expect(svg).not.toContain('data-layer="WALLS"');
+    expect(svg).not.toContain('data-layer="DOORS"');
+    expect(svg).not.toContain('data-layer="WINDOWS"');
+    expect(svg).not.toContain('data-layer="FURNITURE"');
+    expect(svg).not.toContain('class="dimension"');
+    expect(svg).not.toContain('data-layer="DIMENSIONS"');
+    expect(svg).toContain('class="plan-dims"');
+    expect(svg).toContain('>8 × 8 m</text>');
+    const grid = /class="grid" d="([^"]+)"/.exec(svg);
+    expect(grid).not.toBeNull();
+    expect(count(grid![1]!, 'M ')).toBe(18);
   });
 
   it('notches the north wall for the recessed entrance and paints the porch as outside (#285)', () => {
@@ -93,17 +112,22 @@ describe('layoutToSvg', () => {
     expect(count(layoutToSvg(two, upper), 'class="wall"')).toBe(4);
   });
 
-  it('includes the floor name, external edge lengths, and a scale bar', () => {
+  it('includes the floor name, one overall size under the title, and a scale bar', () => {
     const { layout, floor } = makeFixture();
     const svg = layoutToSvg(layout, floor);
     expect(svg).toContain('My Home — Ground Floor');
     expect(svg).toContain('class="scale-bar"');
     expect(svg).toContain('>2 m</text>');
-    // Width above the north edge, depth beside the west edge. Not a combined readout.
-    expect(svg).toContain('class="dimension" data-layer="DIMENSIONS" x="260" y="46"');
-    expect(svg).toContain('transform="rotate(-90 46 260)">8 m</text>');
-    expect(svg).not.toContain('class="plan-dims"');
+    expect(svg).toContain('class="plan-title" x="60" y="26"');
+    expect(svg).toContain('class="plan-dims" x="60" y="50"');
+    expect(svg).toContain('>8 × 8 m</text>');
+    // Not CAD edge lengths on the north and west sides.
+    expect(svg).not.toContain('class="dimension"');
+    expect(svg).not.toContain('data-layer="DIMENSIONS"');
     expect(svg).not.toContain('8 m × 8 m');
+    const withoutEdgeLabels = layoutToSvg(layout, floor, { visibility: { wallDimensions: false } });
+    expect(withoutEdgeLabels).toContain('>8 × 8 m</text>');
+    expect(withoutEdgeLabels).not.toContain('class="dimension"');
   });
 
   it('is deterministic for the same layout', () => {
@@ -120,7 +144,7 @@ describe('layoutToSvg', () => {
 
   it('escapes markup in user-supplied names', () => {
     const floor = makeFloor({
-      items: [makeItem({ name: '<b>&"evil"</b>', position: { x: 0, z: 0 } })],
+      items: [makeItem({ name: '<b>&"evil"</b>', width: 3, depth: 1, position: { x: 0, z: 0 } })],
     });
     const layout = makeLayout({ name: 'A & B', floors: [floor] });
     const svg = layoutToSvg(layout, floor);
@@ -136,6 +160,25 @@ describe('layoutToSvg', () => {
     const svg = layoutToSvg(makeLayout({ floors: [floor] }), floor);
     expect(count(svg, 'class="furniture"')).toBe(1);
     expect(svg).not.toContain('Tiny Camera</text>');
+  });
+
+  it('drops a name that would run outside its footprint, and keeps the larger name when two overlap', () => {
+    const floor = makeFloor({
+      items: [
+        makeItem({ id: 'chair', name: '演练座椅1', width: 0.45, depth: 0.45, position: { x: 2, z: 0 }, rotation: Math.PI }),
+        makeItem({ id: 'sofa', type: 'sofa', name: 'Sofa', width: 2, depth: 0.9, position: { x: 0, z: 0 } }),
+        makeItem({ id: 'on-sofa', name: 'Chair', position: { x: 0, z: 0 } }),
+      ],
+    });
+    const svg = layoutToSvg(makeLayout({ floors: [floor] }), floor);
+    expect(svg).not.toContain('演练座椅1');
+    expect(svg).toContain('>Sofa</text>');
+    expect(svg).not.toContain('>Chair</text>');
+    // Shell, guide, and the one accent — not the old construction greys.
+    expect(svg).toContain('#141416');
+    expect(svg).toContain('#4A7C59');
+    expect(svg).not.toContain('#666666');
+    expect(svg).not.toContain('#333333');
   });
 
   it('keeps the room at the same sheet position when nothing sits outside the walls (#287)', () => {
@@ -161,7 +204,7 @@ describe('layoutToSvg', () => {
     expect(svg).toContain('>Oak Tree</text>');
     // … and the scale bar sits in the bottom margin band below the tree's
     // lowest edge (7.4 m → 630 px), no longer overprinted.
-    expect(svg).toContain('y1="664" x2="160" y2="664"');
+    expect(svg).toContain('<rect x="60" y="656" width="100" height="6" fill="none"');
   });
 
   it('translates the room when items extend past the north or west walls (#287)', () => {
@@ -175,10 +218,12 @@ describe('layoutToSvg', () => {
     expect(svg).toContain('viewBox="0 0 820 690"');
     // Room top-left moves from (60, 60) to ((−4 + 11.2) × 50, (−4 + 8.6) × 50) = (360, 230).
     expect(svg).toContain('<g class="plan" transform="translate(300 170)">');
-    // Title and dims hug the content corners in the top margin band.
-    expect(svg).toContain('class="plan-title" x="60" y="38"');
-    // Room top-left is (360, 230); width label sits 14 px above its centre.
-    expect(svg).toContain('class="dimension" data-layer="DIMENSIONS" x="560" y="216"');
+    // Size sits under the title, not on the north or west edges.
+    expect(svg).toContain('class="plan-title" x="60" y="26"');
+    expect(svg).toContain('class="plan-dims" x="60" y="50"');
+    expect(svg).toContain('>8 × 8 m</text>');
+    expect(svg).not.toContain('class="dimension"');
+    expect(svg).not.toContain('data-layer="DIMENSIONS"');
   });
 
   it('draws room zones as tinted rects with name and area, under the walls (#155)', () => {
@@ -188,7 +233,7 @@ describe('layoutToSvg', () => {
     const svg = layoutToSvg(makeLayout({ floors: [floor] }), floor);
     // Corner (−4, −4) in an 8×8 room at 50 px/m + 60 px margin → (60, 60), 150×100 px.
     expect(svg).toContain(
-      '<rect x="60" y="60" width="150" height="100" fill="#3b82f6" fill-opacity="0.18" stroke="#3b82f6"'
+      '<rect x="60" y="60" width="150" height="100" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-opacity="0.45"'
     );
     expect(svg).toContain('data-layer="ROOMS"');
     expect(svg).toContain('Bed &amp; Bath</text>');
