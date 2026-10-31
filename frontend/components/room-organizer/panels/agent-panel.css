@@ -229,9 +229,28 @@
 /* 简报比深工具窄：桌面端把 380px 的固定页收回来。 */
 @media (min-width: 1081px) {
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.has-brief {
-    flex-basis: 320px !important; width: 320px !important; max-width: 320px;
+    flex-basis: var(--sc-left-card-width, 320px) !important;
+    width: var(--sc-left-card-width, 320px) !important;
+    max-width: var(--sc-left-card-width, 320px) !important;
   }
 }
+.sc-left-card-resizer {
+  position: absolute; top: 0; right: 0; z-index: 8; width: 8px; height: 100%;
+  padding: 0; border: 0; background: transparent; cursor: col-resize; touch-action: none;
+}
+.sc-left-card-resizer::after {
+  content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
+  background: var(--wk-hair, #e4e4e7);
+}
+.sc-left-card-resizer:hover::after,
+.sc-left-card-resizer:focus-visible::after,
+.sc-workbench.is-left-resizing .sc-left-card-resizer::after {
+  width: 2px; background: var(--wk-ink-soft, #55585f);
+}
+.sc-left-card-resizer:focus-visible { outline: none; }
+.sc-workbench.is-left-resizing,
+.sc-workbench.is-left-resizing * { cursor: col-resize; }
+.sc-workbench.is-left-resizing .sc-scene-viewport { pointer-events: none; }
 /* 深工具仍留在左栏时，恢复「活动简报 / 执行资料」与收起钮，给人一条明确的回路。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-business .sc-left-heading,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-business .sc-left-context { display: flex; }

@@ -48,6 +48,7 @@ import { notify } from './lib/editor-notices';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomSuffix } from './lib/ids';
+import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
@@ -67,6 +68,7 @@ import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
+import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
@@ -184,6 +186,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const headerRef = useRef<HTMLElement>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [leftMode, setLeftMode] = useState<'brief'|'properties'|'business'|'lux3d'>('brief');
+  const [leftCardWidth, setLeftCardWidth] = useState(() => {
+    if (typeof window === 'undefined') return LEFT_CARD_WIDTH_DEFAULT;
+    try { return parseLeftCardWidth(localStorage.getItem(LEFT_CARD_WIDTH_KEY)); } catch { return LEFT_CARD_WIDTH_DEFAULT; }
+  });
+  const [leftCardResizing, setLeftCardResizing] = useState(false);
+  const rememberLeftCardWidth = useCallback((next: number) => {
+    setLeftCardWidth(next);
+    try { localStorage.setItem(LEFT_CARD_WIDTH_KEY, String(next)); } catch { /* 隐私模式写不进就只留在这一页 */ }
+  }, []);
   // 左轨「观感」默认生产也显示；设 NEXT_PUBLIC_LUX3D_RAIL=0 可关掉。面板内生产走 shipped/云路径，不打 127.0.0.1。
   const luxDirectVisible = process.env.NEXT_PUBLIC_LUX3D_RAIL !== '0';
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
@@ -1462,7 +1473,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
         onFit: fitToRoom,
       }}>
-      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}`}>
+      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <header ref={headerRef} className="sc-header">
           <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong className="sc-brand-cn">幕景</strong><span className="sc-brand-dot" aria-hidden="true"/><span className="sc-brand-en"><i aria-hidden="true">S</i>CENDANCE</span></a>
           <span className="sc-brand-divider" aria-hidden="true"/>
@@ -1497,7 +1508,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               </nav></>}
             </div>
           </div>
-          <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
+          <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`} style={leftMode==='brief' ? { ['--sc-left-card-width' as string]: `${leftCardWidth}px` } : undefined}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
               {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
@@ -1512,6 +1523,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => selectOnly(null)}/>}</div>
             {luxDirectVisible && <div className="sc-left-content" hidden={leftMode!=='lux3d'}><Lux3dDirectTest reconPreset={aholoReconPreset} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onOpenCloudModels={() => businessToolsRef.current?.openModelTools()} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/></div>}
             <div ref={businessHostRef} className="sc-data-host" hidden={!businessOpen||leftMode!=='business'}/>
+            {!sidebarCollapsed && leftMode==='brief' && <LeftCardResizer width={leftCardWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />}
           </div>
           <div className={`sc-canvas-stage has-bottom-drawer ${selectedItem ? 'has-selection' : ''}${materialsOpen ? ' has-material-shelf' : ''}${planHome ? ' is-plan-home' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
             if (!pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
