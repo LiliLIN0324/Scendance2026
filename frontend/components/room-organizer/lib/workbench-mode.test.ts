@@ -3,23 +3,22 @@ import {
   WORKBENCH_MODE_DEFAULT,
   WORKBENCH_MODE_ICONS,
   WORKBENCH_MODES,
+  demoteLegacyMode,
   type WorkbenchMode,
 } from './workbench-mode';
 
-describe('workbench modes (Phase 1 IA)', () => {
-  it('exposes 布置 | 评审 | 执行 with default layout', () => {
-    expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout', 'review', 'delivery']);
-    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置', '评审', '执行']);
+describe('workbench modes', () => {
+  it('keeps 布置 as the only resident rail mode', () => {
+    expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout']);
+    expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置']);
     expect(WORKBENCH_MODE_DEFAULT).toBe('layout');
+    expect(WORKBENCH_MODE_ICONS.layout).toBe('SquareStack');
   });
 
-  it('maps distinct collapsed-rail icons (not materials/nav duplicates)', () => {
-    const icons = WORKBENCH_MODES.map(mode => WORKBENCH_MODE_ICONS[mode.id]);
-    expect(icons).toEqual(['SquareStack', 'Send', 'ListChecks']);
-    expect(new Set(icons).size).toBe(3);
-    for (const reserved of ['Boxes', 'Layers', 'Eye', 'Grid', 'ClipboardList', 'LayoutGrid', 'Truck'] as const) {
-      expect(icons).not.toContain(reserved);
-    }
+  it('sends legacy review and delivery clicks to share or the checklist', () => {
+    expect(demoteLegacyMode('layout')).toBe('layout');
+    expect(demoteLegacyMode('review')).toBe('open-share');
+    expect(demoteLegacyMode('delivery')).toBe('open-checklist');
     for (const mode of ['layout', 'review', 'delivery'] as WorkbenchMode[]) {
       expect(WORKBENCH_MODE_ICONS[mode]).toBeTruthy();
     }

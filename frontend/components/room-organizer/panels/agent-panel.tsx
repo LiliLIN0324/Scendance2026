@@ -195,7 +195,7 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
@@ -1054,6 +1054,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     setExportPreview(false);
     say({ role: 'agent', text: '好，先不导出。要导的时候说一声就行。' });
   }
+
+  const handledHandoffExport = useRef(handoffExportRequest);
+  useEffect(() => {
+    if (handoffExportRequest === handledHandoffExport.current) return;
+    handledHandoffExport.current = handoffExportRequest;
+    if (handoffExportRequest > 0) proposeExport();
+  }, [handoffExportRequest]);
 
   async function send(text: string): Promise<void> {
     const trimmed = text.trim(); if (!trimmed) return;
