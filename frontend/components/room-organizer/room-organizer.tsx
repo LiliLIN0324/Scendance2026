@@ -1,6 +1,6 @@
 'use client';
 
-import { PanelLeftClose, Ruler, Scan, Settings, Shapes, Sparkles } from 'lucide-react';
+import { PanelLeftClose, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -68,7 +68,7 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
-import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay } from './panels/agent-panel';
 import { BingoPanel } from './panels/bingo-panel';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { CloudPanel } from './panels/cloud-panel';
@@ -1693,6 +1693,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
         onFit: fitToRoom,
+        onOpenReference: () => businessToolsRef.current?.openReference(),
+        onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
+        onOpenLux3d: () => {
+          noteVenueThreeIntent();
+          setLeftMode('lux3d');
+          setMaterialsOpen(false);
+          setBusinessOpen(false);
+          setSidebarCollapsed(true);
+          setSidePanel(null);
+          setAgentClosing(false);
+          setAgentCollapsed(false);
+        },
+        onOpenGenerate: () => {
+          setComposerGenerate(true);
+          setWorkbenchMode('layout');
+          setLeftMode('brief');
+          setBusinessOpen(false);
+          setSidebarCollapsed(true);
+          setSidePanel(null);
+          setAgentClosing(false);
+          setAgentCollapsed(false);
+        },
+        luxToolsVisible: luxDirectVisible,
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
@@ -1716,18 +1739,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <BingoRailButton open={sidePanel === 'bingo'} onToggle={toggleBingoPanel} />
                 <VenueRailButton open={sidePanel === 'venue'} lit={venueLibrary.lit} onToggle={toggleVenuePanel} />
               </nav>
-              <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
-                <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
-                  onClick={() => businessToolsRef.current?.openReference()}><Ruler size={24} aria-hidden="true"/></button>
-                <button type="button" className="sc-rail-tool" aria-label="场地重建" data-tip="重建" title="现场照片重建 3D 场地 · 生成与候选确认"
-                  onClick={() => businessToolsRef.current?.openRebuild()}><Scan size={24} aria-hidden="true"/></button>
-              </nav></>
-              {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="生成与场地观感">
-                <button type="button" className="sc-rail-tool sc-rail-generate" aria-label="生成物件" data-tip="生成" title="一句话生成 3D 物件。先确认扣额度才会提交。"
-                  onClick={() => { setComposerGenerate(true); setWorkbenchMode('layout'); setLeftMode('brief'); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); }}><Sparkles size={22} aria-hidden="true"/><span className="sc-rail-word">生成</span></button>
-                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="图片、场景观感、场地重建。文字生成在左侧晴光「生成」。"
-                  onClick={()=>{ noteVenueThreeIntent(); setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(true);setSidePanel(null);setAgentCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
-              </nav></>}
             </div>
             <div className="sc-mode-rail-foot">
               <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>

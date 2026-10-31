@@ -15,6 +15,13 @@ describe('左轨主入口面板', () => {
     expect(source).toContain("sidePanel === 'venue' && <VenueLibraryPanel");
     expect(source).not.toContain('AgentReopenCard');
     expect(source).not.toMatch(/venueLibraryOpen\s*&&\s*<VenueLibraryPanel/);
+    expect(source).not.toContain('<MapRailButton');
+    expect(source).not.toContain('aria-label="场地资料"');
+    expect(source).not.toContain('aria-label="生成与场地观感"');
+    expect(source).toContain('onOpenReference:');
+    const agentSource = readFileSync(join(here, 'agent-panel.tsx'), 'utf8');
+    expect(agentSource).toContain('你可以做什么');
+    expect(agentSource).toContain('id="ap-capabilities"');
   });
 
   it('expands the left card when a side panel is open without 晴光', () => {
