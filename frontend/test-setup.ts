@@ -1,11 +1,12 @@
 import { beforeEach, vi } from 'vitest';
 import { clearSupabaseBrowserCookies } from './lib/supabase/client';
 
-// layout.tsx 用 next/font/google 接 Inter、思源黑体与 Playfair；jsdom 里没有字体管线，mock 成空壳。
-vi.mock('next/font/google', () => ({
-  Inter: () => ({ variable: '--font-inter', style: { fontFamily: 'var(--font-inter)' } }),
-  Noto_Sans_SC: () => ({ variable: '--font-noto-sc', style: { fontFamily: 'var(--font-noto-sc)' } }),
-  Playfair_Display: () => ({ variable: '--font-playfair', style: { fontFamily: 'var(--font-playfair)' } }),
+// layout.tsx 用 next/font/local 接 Inter 与 Playfair；jsdom 里没有字体管线，mock 成空壳。
+vi.mock('next/font/local', () => ({
+  default: (options?: { variable?: string }) => {
+    const variable = options?.variable ?? '--font-local';
+    return { variable, style: { fontFamily: 'var(' + variable + ')' } };
+  },
 }));
 
 beforeEach(() => {
