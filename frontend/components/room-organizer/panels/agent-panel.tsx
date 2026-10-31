@@ -14,7 +14,7 @@
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
-import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
+import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
@@ -43,6 +43,9 @@ import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
 import { LaneSwitch, MaterialGenerateDock } from './material-generate-dock';
 import { SiteCaptureCard } from './site-capture-card';
+import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
+import { useAssistantSessions } from '../hooks/use-assistant-sessions';
+import { SessionHistoryOverlay } from './session-history-panel';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
@@ -1512,6 +1515,8 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   deliverySlot?: ReactNode;
 } = {}): JSX.Element {
   const agent = useAgent();
+  const assistantSessions = useAssistantSessions();
+  const [showHistory, setShowHistory] = useState(false);
   const [laneFallback, setLaneFallback] = useState(false);
   const [propSeed, setPropSeed] = useState<{ kind: 'text' | 'world'; prompt: string; nonce: number } | null>(null);
   const propLane = generateOpen ?? laneFallback;
@@ -1530,7 +1535,6 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   const [draft, setDraft] = useState('');
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const status = headerStatus(agent, mode);
   const demo = isDemoBackend();
   const items = materialCount(activeFloor.items);
   useEffect(() => { feed.current?.scrollTo?.({ top: feed.current.scrollHeight }); }, [agent.bubbles.length, agent.state, mode]);
@@ -1541,17 +1545,44 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   const preStates = !generating && !proposed && !paused && !planShown && agent.state !== 'generateFailed';
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
+  const sessionTitle = assistantSessions.activeSession?.title ?? ASSISTANT_SESSION_DEFAULT_TITLE;
+
+  useEffect(() => {
+    setShowHistory(false);
+  }, [assistantSessions.activeId]);
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
-    <header className="ap-head">
-      <button type="button" className="mascot-slot" data-tone={status.tone} aria-label={`晴光，${status.text}。${status.hint}`} onClick={() => jumpToQingguang(agent)}>
-        <img src={mascotOf(agent, mode)} alt="" width={64} height={64} draggable={false}/>
-        <span className={`ap-online-dot is-${status.tone}`} aria-hidden="true"/>
-      </button>
-      <strong>晴光</strong>
-      <button type="button" id="agent-state" className={`ap-status is-${status.tone}`} onClick={() => jumpToQingguang(agent)}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</button>
-      {onClose && <button type="button" className="ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
+    <header className="ap-head ap-session-head">
+      <h1 className="ap-session-title" title={sessionTitle}>{sessionTitle}</h1>
+      <div className="ap-session-actions">
+        <button
+          type="button"
+          className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}
+          aria-expanded={showHistory}
+          aria-label="会话历史"
+          title="会话历史"
+          onClick={() => setShowHistory(value => !value)}
+        >
+          <Clock size={18} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="ap-icon-btn"
+          aria-label="新开会话"
+          title="新开会话"
+          onClick={() => { assistantSessions.openSession(); setShowHistory(false); inputRef.current?.focus(); }}
+        >
+          <MessageCirclePlus size={18} aria-hidden="true" />
+        </button>
+        {onClose && (
+          <button type="button" className="ap-icon-btn ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}>
+            <X size={20} aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </header>
+    <div className="ap-body">
+      <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* index-only for now */ }} />
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
@@ -1604,6 +1635,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
+    </div>
     </div>
     {propLane
       ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>

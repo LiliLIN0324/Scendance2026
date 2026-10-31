@@ -111,6 +111,31 @@ describe('session history panel', () => {
   });
 });
 
+describe('session history overlay variant', () => {
+  it('hides the dock header and new-session control', () => {
+    render(
+      <SessionHistoryPanel
+        sessions={sampleIndex().sessions}
+        totalCount={2}
+        activeId="ses-1"
+        query=""
+        saveFailed={false}
+        now={NOW}
+        variant="overlay"
+        onQuery={() => {}}
+        onCreate={() => {}}
+        onSelect={() => {}}
+        onRename={() => {}}
+        onToggleFavorite={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('heading', { name: '方案会话' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '新开会话' })).toBeNull();
+    expect(screen.getByRole('searchbox', { name: '搜索会话' })).toBeTruthy();
+  });
+});
+
 describe('assistant session dock', () => {
   it('persists a seeded session locally and leaves the layout draft alone', async () => {
     const layoutDraftKey = 'scendance-editor-local-v1';

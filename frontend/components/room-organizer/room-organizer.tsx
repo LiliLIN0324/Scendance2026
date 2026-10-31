@@ -66,8 +66,7 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
-import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
-import { AssistantSessionDock } from './panels/session-history-panel';
+import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
 import { CloudPanel } from './panels/cloud-panel';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
@@ -1657,7 +1656,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {!agentCollapsed && <AssistantSessionDock />}
           {!agentCollapsed && <AgentPanel onClose={()=>setAgentCollapsed(true)} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
@@ -1812,13 +1810,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {materialsOpen && <ScendanceLibrary openTabRequest={materialTabRequest} onClose={closeMaterialsShelf} capturePlacement={capturePlacement} onLoadPreset={onApplyCreative} controller={controller} placeCatalogItem={placeFromCatalog}
                 environment={{ preview: splatState, onStart: startStoredScene, onStop: stopSplat }}/>}
             </div>
-            {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起态晴光球也在画布内，不占右栏 grid。 */}
+            {/* 物料条挂在画布栏底（globals：.sc-canvas-stage > .sc-bottom-bar）；收起晴光只靠左轨头像，不在画布再挂 agent 球。 */}
             {!planHome && <div className="sc-bottom-bar">
               <div className="sc-bottom-bar-center">
                 <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
               </div>
             </div>}
-            {agentCollapsed && <AgentReopenCard onOpen={openQingguang}/>}
             </div>
           </div>
           <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
