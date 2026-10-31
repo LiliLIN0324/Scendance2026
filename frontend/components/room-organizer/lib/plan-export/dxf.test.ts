@@ -40,13 +40,20 @@ describe('layoutToDxf', () => {
     expect(dxf).toContain('$INSUNITS\n70\n6');
   });
 
-  it('declares the six plan layers in the LAYER table', () => {
+  it('declares the plan layers in the LAYER table', () => {
     const { layout, floor } = makeFixture();
     const dxf = layoutToDxf(layout, floor);
-    expect(DXF_LAYERS).toEqual(['WALLS', 'INTERIOR', 'OPENINGS', 'FURNITURE', 'LABELS', 'STAIRWELL']);
+    expect(DXF_LAYERS).toEqual(['WALLS', 'DOORS', 'WINDOWS', 'FURNITURE', 'DIMENSIONS', 'ROOMS', 'STAIRS']);
     for (const layer of DXF_LAYERS) {
       expect(dxf).toContain(`0\nLAYER\n2\n${layer}\n`);
     }
+    // ACI colours follow openPlan3D: doors 30, windows 5, furniture 3, dimensions 8, rooms 4.
+    expect(dxf).toContain('2\nDOORS\n70\n0\n62\n30\n6\nCONTINUOUS');
+    expect(dxf).toContain('2\nWINDOWS\n70\n0\n62\n5\n6\nCONTINUOUS');
+    expect(dxf).not.toContain('2\nOPENINGS\n');
+    expect(dxf).not.toContain('2\nLABELS\n');
+    expect(dxf).not.toContain('2\nINTERIOR\n');
+    expect(dxf).not.toContain('2\nSTAIRWELL\n');
   });
 
   it('emits closed LWPOLYLINEs for the room outline and each furniture footprint', () => {
@@ -89,27 +96,39 @@ describe('layoutToDxf', () => {
     expect(count(layoutToDxf(two, upper), '90\n8\n70\n1')).toBe(0);
   });
 
-  it('emits LINE work for interior walls and opening marks, plus the door swing ARC', () => {
+  it('emits LINE work for partitions and openings, plus the door swing ARC', () => {
     const { layout, floor } = makeFixture();
     const dxf = layoutToDxf(layout, floor);
-    // 1 interior wall + door (2 jamb ticks + leaf) + window (2 ticks + centre).
-    expect(count(dxf, '0\nLINE')).toBe(7);
+    // 1 partition on WALLS + door (2 jamb ticks + leaf) + window (2 ticks + a pair of lines).
+    expect(count(dxf, '0\nLINE')).toBe(8);
     expect(count(dxf, '0\nARC')).toBe(1);
-    expect(count(dxf, '8\nINTERIOR')).toBe(1);
-    expect(count(dxf, '8\nOPENINGS')).toBe(7);
+    expect(count(dxf, '8\nWALLS')).toBe(2); // shell polyline + partition
+    expect(count(dxf, '8\nDOORS')).toBe(4); // 3 lines + arc
+    expect(count(dxf, '8\nWINDOWS')).toBe(4);
+    expect(dxf).not.toContain('8\nOPENINGS');
+    expect(dxf).not.toContain('8\nINTERIOR');
     // Door on the north wall (rotation 0): hinge at CAD (3.55, 8), quarter
     // swing sweeping CCW from 270° back to the closed position at 0°.
-    expect(dxf).toContain('0\nARC\n8\nOPENINGS\n10\n3.550\n20\n8.000\n40\n0.900\n50\n270.000\n51\n0.000');
+    expect(dxf).toContain('0\nARC\n8\nDOORS\n10\n3.550\n20\n8.000\n40\n0.900\n50\n270.000\n51\n0.000');
+    // Window pair sits ±3 cm off the centreline (CAD x 8 → 7.970 and 8.030).
+    expect(dxf).toContain('0\nLINE\n8\nWINDOWS\n10\n7.970\n20\n4.450\n11\n7.970\n21\n3.550');
+    expect(dxf).toContain('0\nLINE\n8\nWINDOWS\n10\n8.030\n20\n4.450\n11\n8.030\n21\n3.550');
   });
 
-  it('labels each furniture item and the floor itself with TEXT', () => {
+  it('puts prop names on FURNITURE, the sheet title on ROOMS, and edge lengths on DIMENSIONS', () => {
     const { layout, floor } = makeFixture();
     const dxf = layoutToDxf(layout, floor);
-    expect(count(dxf, '0\nTEXT')).toBe(3); // 2 furniture labels + floor title
-    expect(count(dxf, '8\nLABELS')).toBe(3);
+    expect(count(dxf, '0\nTEXT')).toBe(5); // 2 prop names + title + width + depth
+    expect(count(dxf, '8\nLABELS')).toBe(0);
+    expect(count(dxf, '8\nFURNITURE')).toBe(4); // 2 footprints + 2 names
+    expect(count(dxf, '8\nROOMS')).toBe(1);
+    expect(count(dxf, '8\nDIMENSIONS')).toBe(2);
     expect(dxf).toContain('1\nChair');
     expect(dxf).toContain('1\nSofa');
     expect(dxf).toContain('1\nMy Home - Ground Floor');
+    expect(dxf).toContain('1\n8 m');
+    // Depth label is rotated 90° on the west side.
+    expect(dxf).toContain('50\n90.000\n1\n8 m');
   });
 
   it('formats every coordinate to fixed 3-dp precision with no NaN', () => {
@@ -173,7 +192,7 @@ describe('layoutToDxf', () => {
     expect(layoutToDxf(layout, floor)).toBe(layoutToDxf(layout, floor));
   });
 
-  it('emits stair treads and arrow on FURNITURE, and the stairwell above on its own layer (#290)', () => {
+  it('emits stair treads and arrow on STAIRS, and the stairwell above on the same layer (#290)', () => {
     const stairs = makeItem({ id: 'st', type: 'stairs', name: 'Stairs', width: 1.2, depth: 2.4, height: 3, position: { x: 0, z: 0 } });
     const ground = makeFloor({ id: 'g', items: [stairs] });
     const first = makeFloor({ id: 'f', name: 'First Floor' });
@@ -185,11 +204,38 @@ describe('layoutToDxf', () => {
     expect(count(groundDxf, '0\nLWPOLYLINE')).toBe(3);
     expect(count(groundDxf, '90\n14\n70\n0')).toBe(1);
     expect(groundDxf).not.toContain('8\nSTAIRWELL');
+    expect(count(groundDxf, '8\nSTAIRS')).toBeGreaterThan(0);
+    expect(groundDxf).not.toContain('8\nFURNITURE');
 
     const firstDxf = layoutToDxf(layout, first);
-    expect(count(firstDxf, '8\nSTAIRWELL')).toBe(1);
+    expect(count(firstDxf, '8\nSTAIRS')).toBe(1);
     // A closed 4-corner hole, 1.3 m wide about the room's centre line x = 4.
-    expect(firstDxf).toContain('8\nSTAIRWELL\n100\nAcDbPolyline\n90\n4\n70\n1\n10\n3.350');
+    expect(firstDxf).toContain('8\nSTAIRS\n100\nAcDbPolyline\n90\n4\n70\n1\n10\n3.350');
     expect(count(firstDxf, '0\nLINE')).toBe(0);
+  });
+
+  it('drops hidden layers and still draws openings when the walls are hidden', () => {
+    const { layout, floor } = makeFixture();
+    const dxf = layoutToDxf(layout, floor, { walls: false, furniture: false, wallDimensions: false, doors: false });
+    expect(dxf).toContain('2\nWALLS\n');
+    expect(dxf).not.toContain('8\nWALLS');
+    expect(dxf).not.toContain('1\nChair');
+    expect(dxf).not.toContain('8\nDOORS');
+    expect(dxf).not.toContain('8\nDIMENSIONS');
+    expect(count(dxf, '8\nWINDOWS')).toBe(4);
+    expect(dxf).toContain('1\nMy Home - Ground Floor');
+  });
+
+  it('writes zone name and area on ROOMS and omits them when room labels are off', () => {
+    const floor = makeFloor({
+      zones: [{ id: 'z1', name: 'Bed & Bath', color: '#4A7C59', x: -4, z: -4, w: 3, d: 2 }],
+    });
+    const layout = makeLayout({ floors: [floor] });
+    const dxf = layoutToDxf(layout, floor);
+    expect(dxf).toContain('1\nBed & Bath');
+    expect(dxf).toContain('1\n6.0 m\\U+00B2');
+    const hidden = layoutToDxf(layout, floor, { roomLabels: false });
+    expect(hidden).not.toContain('Bed & Bath');
+    expect(hidden).toContain('1\nMy Home - Ground Floor');
   });
 });

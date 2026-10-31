@@ -13,12 +13,25 @@
  *   100/AcDbEntity + 100/AcDbPolyline subclass markers — without either, a
  *   strict parser mis-reads the layer/closed flag or refuses the entity
  *   (verified against ezdxf: parses with zero audit errors as emitted).
- * - Openings are LINE jamb ticks + a centre line, doors add the swing ARC.
- * - Labels are horizontal TEXT (rotating text helps nobody in CAD).
+ * - Doors are LINE jamb ticks + the leaf, plus the swing ARC, on DOORS.
+ *   Windows are jamb ticks plus two lines ±3 cm off the centreline, on WINDOWS
+ *   (openPlan3D's parallel-line window; the old single centre line is gone).
+ * - Prop names are TEXT on FURNITURE. The sheet title and zone name/area are
+ *   TEXT on ROOMS. External width and depth are TEXT on DIMENSIONS.
+ * - Stair treads, the climb arrow and the stairwell void are on STAIRS.
+ *   Item names stay horizontal; only the depth label is rotated.
  */
 
 import { planDrawOrder } from '../plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../street';
+import { zoneArea } from '../zones';
+import {
+  DXF_LAYER_COLOURS,
+  DXF_LAYER_NAMES,
+  planExportVisibility,
+  planLengthLabel,
+  type PlanExportVisibility,
+} from './export-visibility';
 import {
   itemWorldCorners,
   openingAxes,
@@ -30,17 +43,15 @@ import {
 } from './plan-geometry';
 import type { FloorLayout, RoomLayout } from '../types';
 
-export const DXF_LAYERS = ['WALLS', 'INTERIOR', 'OPENINGS', 'FURNITURE', 'LABELS', 'STAIRWELL'] as const;
+export const DXF_LAYERS = DXF_LAYER_NAMES;
 
-/** ACI colour per layer (7 white, 8 grey, 5 blue, 3 green, 2 yellow, 1 red). */
-const LAYER_COLOURS: Record<(typeof DXF_LAYERS)[number], number> = {
-  WALLS: 7,
-  INTERIOR: 8,
-  OPENINGS: 5,
-  FURNITURE: 3,
-  LABELS: 2,
-  STAIRWELL: 1,
-};
+/** ACI colour per layer. See export-visibility.ts. */
+const LAYER_COLOURS = DXF_LAYER_COLOURS;
+
+/** Window lines sit this far either side of the centreline, in metres (openPlan3D uses 3 cm). */
+const WINDOW_PAIR_OFFSET_M = 0.03;
+/** External dimension text sits this far outside the shell, in metres. */
+const DIMENSION_OFFSET_M = 0.35;
 
 /** The entity emitters `layoutToDxf` closes over, as the stair helpers take them (#290). */
 type DxfPolyline = (layer: string, points: ReadonlyArray<readonly [string, string]>, closed: boolean) => void;
@@ -53,7 +64,12 @@ const LABEL_TEXT_HEIGHT = 0.18;
 const TITLE_TEXT_HEIGHT = 0.35;
 
 /** Render one floor of a building as a DXF R12 document (metres, 1:1). */
-export function layoutToDxf(layout: RoomLayout, floor: FloorLayout): string {
+export function layoutToDxf(
+  layout: RoomLayout,
+  floor: FloorLayout,
+  visibility: Partial<PlanExportVisibility> = {}
+): string {
+  const layers = planExportVisibility(visibility);
   const lines: string[] = [];
   const put = (code: number, value: string | number): void => {
     lines.push(String(code), String(value));
@@ -124,12 +140,21 @@ export function layoutToDxf(layout: RoomLayout, floor: FloorLayout): string {
     put(11, x2);
     put(21, y2);
   };
-  const text = (layer: string, x: string, y: string, height: number, value: string, centred: boolean): void => {
+  const text = (
+    layer: string,
+    x: string,
+    y: string,
+    height: number,
+    value: string,
+    centred: boolean,
+    rotationDeg = 0
+  ): void => {
     put(0, 'TEXT');
     put(8, layer);
     put(10, x);
     put(20, y);
     put(40, fmt(height));
+    if (rotationDeg) put(50, fmt(rotationDeg));
     put(1, sanitizeText(value));
     if (centred) {
       put(72, 1);
@@ -142,54 +167,87 @@ export function layoutToDxf(layout: RoomLayout, floor: FloorLayout): string {
   // in the export — the footprint is real even when the 2D view fades a wall.
   // A recessed entrance (#285) notches the north edge: the polyline goes in
   // along the east cheek, across the recess's back and out along the west
-  // cheek — eight vertices. (The back wall's centreline is on INTERIOR too,
-  // like the 2D view draws it; its door is an ordinary opening.)
-  const recess = entrancePlanOutline(layout, planFloorIndex(layout.floors, floor));
-  const northEdge: ReadonlyArray<readonly [string, string]> = recess
-    ? [
-        [cx(recess.x1), cy(recess.frontZ)],
-        [cx(recess.x1), cy(recess.backZ)],
-        [cx(recess.x0), cy(recess.backZ)],
-        [cx(recess.x0), cy(recess.frontZ)],
-      ]
-    : [];
-  polyline(
-    'WALLS',
-    [
-      [fmt(0), fmt(0)],
-      [fmt(layout.width), fmt(0)],
-      [fmt(layout.width), fmt(layout.height)],
-      ...northEdge,
-      [fmt(0), fmt(layout.height)],
-    ],
-    true
-  );
+  // cheek — eight vertices. (The recess back wall's centreline is on WALLS
+  // with the other partitions, like the 2D view draws it; its door is an
+  // ordinary opening.)
+  // `walls` hides the shell and the partitions. Openings still trace the wall
+  // they sit on, matching openPlan3D's visiblePlanFloor.
+  if (layers.walls) {
+    const recess = entrancePlanOutline(layout, planFloorIndex(layout.floors, floor));
+    const northEdge: ReadonlyArray<readonly [string, string]> = recess
+      ? [
+          [cx(recess.x1), cy(recess.frontZ)],
+          [cx(recess.x1), cy(recess.backZ)],
+          [cx(recess.x0), cy(recess.backZ)],
+          [cx(recess.x0), cy(recess.frontZ)],
+        ]
+      : [];
+    polyline(
+      'WALLS',
+      [
+        [fmt(0), fmt(0)],
+        [fmt(layout.width), fmt(0)],
+        [fmt(layout.width), fmt(layout.height)],
+        ...northEdge,
+        [fmt(0), fmt(layout.height)],
+      ],
+      true
+    );
 
-  // Interior walls: centrelines (the 0.16 m thickness is a render style).
-  for (const wall of floor.interiorWalls ?? []) {
-    line('INTERIOR', cx(wall.x1), cy(wall.z1), cx(wall.x2), cy(wall.z2));
+    // Interior partitions share WALLS. Thickness stays a render style.
+    for (const wall of floor.interiorWalls ?? []) {
+      line('WALLS', cx(wall.x1), cy(wall.z1), cx(wall.x2), cy(wall.z2));
+    }
   }
 
-  emitStairwellHoles(layout, floor, cx, cy, polyline);
+  if (layers.stairs) emitStairwellHoles(layout, floor, cx, cy, polyline);
 
   // Same bottom-to-top layer order as the on-screen plan (#286).
   const { openings, furniture } = splitPlanItems(planDrawOrder(floor.items));
 
-  for (const item of openings) emitOpening(item, cx, cy, line, put);
+  for (const item of openings) {
+    if (item.type === 'door' ? layers.doors : layers.windows) emitOpening(item, cx, cy, line, put);
+  }
 
   for (const item of furniture) {
+    if (item.type === 'stairs') {
+      if (!layers.stairs) continue;
+      const corners = itemWorldCorners(item);
+      polyline(
+        'STAIRS',
+        corners.map((corner) => [cx(corner.x), cy(corner.z)] as const),
+        true
+      );
+      emitStairs(item, cx, cy, line, polyline);
+      continue;
+    }
+    if (!layers.furniture) continue;
     const corners = itemWorldCorners(item);
     polyline(
       'FURNITURE',
       corners.map((corner) => [cx(corner.x), cy(corner.z)] as const),
       true
     );
-    text('LABELS', cx(item.position.x), cy(item.position.z), LABEL_TEXT_HEIGHT, item.name, true);
-    if (item.type === 'stairs') emitStairs(item, cx, cy, line, polyline);
+    text('FURNITURE', cx(item.position.x), cy(item.position.z), LABEL_TEXT_HEIGHT, item.name, true);
   }
 
-  // Floor title above the north wall.
-  text('LABELS', fmt(0), fmt(layout.height + 0.5), TITLE_TEXT_HEIGHT, `${layout.name} - ${floor.name}`, false);
+  if (layers.roomLabels) {
+    for (const zone of floor.zones ?? []) {
+      const nameX = cx(zone.x + zone.w / 2);
+      const nameY = cy(zone.z + 0.3);
+      text('ROOMS', nameX, nameY, LABEL_TEXT_HEIGHT, zone.name, true);
+      text('ROOMS', nameX, cy(zone.z + 0.55), 0.12, `${zoneArea(zone).toFixed(1)} m²`, true);
+    }
+  }
+
+  if (layers.wallDimensions) {
+    text('DIMENSIONS', fmt(layout.width / 2), fmt(layout.height + DIMENSION_OFFSET_M), LABEL_TEXT_HEIGHT, planLengthLabel(layout.width), true);
+    text('DIMENSIONS', fmt(-DIMENSION_OFFSET_M), fmt(layout.height / 2), LABEL_TEXT_HEIGHT, planLengthLabel(layout.height), true, 90);
+  }
+
+  // Sheet title. The print title block owns this on paper; DXF has no title
+  // block, so the same string is TEXT on ROOMS and is not gated by roomLabels.
+  text('ROOMS', fmt(0), fmt(layout.height + 0.5), TITLE_TEXT_HEIGHT, `${layout.name} - ${floor.name}`, false);
 
   put(0, 'ENDSEC');
   put(0, 'EOF');
@@ -199,7 +257,7 @@ export function layoutToDxf(layout: RoomLayout, floor: FloorLayout): string {
 /**
  * A stair's plan symbol (#290) beside its footprint: tread nosings as LINEs
  * and the up-arrow as an open LWPOLYLINE along the walk line plus two barb
- * LINEs at the head — all on FURNITURE, since they belong to the item.
+ * LINEs at the head — all on STAIRS, with the footprint.
  */
 function emitStairs(
   item: PlacedItem,
@@ -209,24 +267,24 @@ function emitStairs(
   polyline: DxfPolyline
 ): void {
   for (const { from, to } of stairTreadSegments(item)) {
-    line('FURNITURE', cx(from.x), cy(from.z), cx(to.x), cy(to.z));
+    line('STAIRS', cx(from.x), cy(from.z), cx(to.x), cy(to.z));
   }
   const { shaft, head } = stairArrow(item);
   if (shaft.length < 2) return;
   polyline(
-    'FURNITURE',
+    'STAIRS',
     shaft.map((p) => [cx(p.x), cy(p.z)] as const),
     false
   );
   for (const { from, to } of head) {
-    line('FURNITURE', cx(from.x), cy(from.z), cx(to.x), cy(to.z));
+    line('STAIRS', cx(from.x), cy(from.z), cx(to.x), cy(to.z));
   }
 }
 
 /**
  * The stairwell the floor below cuts through this floor's slab (#290): one
- * closed LWPOLYLINE per hole on its own STAIRWELL layer, so CAD users can
- * hatch or hide the void independently of the furniture.
+ * closed LWPOLYLINE per hole on STAIRS, with the stair symbol, so one switch
+ * hides the void and the flight.
  */
 function emitStairwellHoles(
   layout: RoomLayout,
@@ -238,7 +296,7 @@ function emitStairwellHoles(
   const floorIndex = layout.floors.findIndex((candidate) => candidate === floor || candidate.id === floor.id);
   for (const outline of stairwellOutlines(layout, floorIndex)) {
     polyline(
-      'STAIRWELL',
+      'STAIRS',
       outline.map((p) => [cx(p.x), cy(p.z)] as const),
       true
     );
@@ -258,11 +316,12 @@ function emitOpening(
   const pos = item.position;
   const endA = { x: pos.x - along.x * half, z: pos.z - along.z * half };
   const endB = { x: pos.x + along.x * half, z: pos.z + along.z * half };
+  const layer = item.type === 'door' ? 'DOORS' : 'WINDOWS';
 
   // Jamb ticks across the wall at both ends of the opening.
   for (const end of [endA, endB]) {
     line(
-      'OPENINGS',
+      layer,
       cx(end.x - into.x * tick),
       cy(end.z - into.z * tick),
       cx(end.x + into.x * tick),
@@ -275,18 +334,22 @@ function emitOpening(
     // quarter arc from the closed to the open position. In CAD coords `along`
     // sits at angle θ and `into` at θ − 90°, so the CCW arc runs θ−90 → θ.
     const leafTip = { x: endA.x + into.x * item.width, z: endA.z + into.z * item.width };
-    line('OPENINGS', cx(endA.x), cy(endA.z), cx(leafTip.x), cy(leafTip.z));
+    line('DOORS', cx(endA.x), cy(endA.z), cx(leafTip.x), cy(leafTip.z));
     const thetaDeg = ((item.rotation ?? 0) * 180) / Math.PI;
     put(0, 'ARC');
-    put(8, 'OPENINGS');
+    put(8, 'DOORS');
     put(10, cx(endA.x));
     put(20, cy(endA.z));
     put(40, fmt(item.width));
     put(50, fmt(normalizeDeg(thetaDeg - 90)));
     put(51, fmt(normalizeDeg(thetaDeg)));
   } else {
-    // Window: the double-line symbol's centre line along the wall.
-    line('OPENINGS', cx(endA.x), cy(endA.z), cx(endB.x), cy(endB.z));
+    // Two lines ±3 cm off the centreline. No centre line.
+    for (const sign of [-1, 1]) {
+      const ox = into.x * WINDOW_PAIR_OFFSET_M * sign;
+      const oz = into.z * WINDOW_PAIR_OFFSET_M * sign;
+      line(layer, cx(endA.x + ox), cy(endA.z + oz), cx(endB.x + ox), cy(endB.z + oz));
+    }
   }
 }
 

@@ -6,6 +6,13 @@
  * raster blueprint route).
  */
 
+import {
+  planExportVisibility,
+  planFloorSummary,
+  planLengthLabel,
+  PRINT_PLAN_EXPORT_VISIBILITY,
+  type PlanExportVisibility,
+} from './export-visibility';
 import { planContentBounds } from './plan-geometry';
 import { DEFAULT_SVG_MARGIN, layoutToSvg, planSheetSize } from './svg';
 import type { FloorLayout, RoomLayout } from '../types';
@@ -82,21 +89,28 @@ export function printScaleLabel(scale: PrintScale): string {
 }
 
 /** Open a print-ready, true-to-scale vector plan of the given floor. */
-export function openPlanPrintWindow(layout: RoomLayout, floor: FloorLayout): void {
+export function openPlanPrintWindow(
+  layout: RoomLayout,
+  floor: FloorLayout,
+  visibility: Partial<PlanExportVisibility> = {}
+): void {
+  // Print draws the room width × depth in the title block. SVG/DXF do not,
+  // unless a caller opts in. Other switches default to visible.
+  const layers = planExportVisibility({ ...PRINT_PLAN_EXPORT_VISIBILITY, ...visibility });
   // The sheet follows the plan content (room + outdoor items, #287), so the
   // scale is chosen for that extent, not the room alone.
   const content = planContentBounds(layout, floor);
   const scale = pickPrintScale(content.maxX - content.minX, content.maxZ - content.minZ);
   const pxPerMetre = printPxPerMetre(scale.denominator);
-  const svg = layoutToSvg(layout, floor, { pxPerMetre });
+  const svg = layoutToSvg(layout, floor, { pxPerMetre, visibility: layers });
   const sheet = planSheetSize(layout, floor, { pxPerMetre });
 
   const html = renderPrintHtml({
     title: `${layout.name} — ${floor.name}`,
     layoutName: layout.name,
     floorName: floor.name,
-    dims: `${layout.width} m × ${layout.height} m`,
-    itemCount: floor.items.length,
+    dims: layers.roomDimensions ? `${planLengthLabel(layout.width)} × ${planLengthLabel(layout.height)}` : '',
+    summary: planFloorSummary(floor),
     scaleLabel: printScaleLabel(scale),
     date: new Date().toLocaleDateString(),
     orientation: scale.orientation,
@@ -120,8 +134,10 @@ interface PrintHtmlInput {
   title: string;
   layoutName: string;
   floorName: string;
+  /** Room width × depth. Empty when room dimensions are off. */
   dims: string;
-  itemCount: number;
+  /** Whole-floor counts, including layers left out of the drawing. */
+  summary: string;
   scaleLabel: string;
   date: string;
   orientation: PrintOrientation;
@@ -158,12 +174,16 @@ function renderPrintHtml(input: PrintHtmlInput): string {
         <td class="k">Floor</td><td>${escapeHtml(input.floorName)}</td>
       </tr>
       <tr>
-        <td class="k">Footprint</td><td>${escapeHtml(input.dims)} · ${input.itemCount} items</td>
+        <td class="k">Units</td><td>metres</td>
         <td class="k">Scale</td><td>${escapeHtml(input.scaleLabel)}</td>
       </tr>
+      ${input.dims ? `<tr><td class="k">Footprint</td><td colspan="3">${escapeHtml(input.dims)}</td></tr>` : ''}
       <tr>
         <td class="k">Date</td><td>${escapeHtml(input.date)}</td>
         <td class="k">Drawn by</td><td>Standalone Room Organizer</td>
+      </tr>
+      <tr>
+        <td class="k">Contents</td><td colspan="3">${escapeHtml(input.summary)}</td>
       </tr>
     </table>
   </body>

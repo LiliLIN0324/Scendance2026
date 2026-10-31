@@ -49,7 +49,9 @@ describe('layoutToSvg', () => {
     const svg = layoutToSvg(layout, floor);
     expect(count(svg, 'class="opening"')).toBe(2);
     expect(svg).toContain('data-type="door"');
+    expect(svg).toContain('data-layer="DOORS"');
     expect(svg).toContain('data-type="window"');
+    expect(svg).toContain('data-layer="WINDOWS"');
     // Door swing: quarter arc with radius = width (0.9 m × 50 px/m).
     expect(svg).toContain('A 45 45 0 0 1');
   });
@@ -62,6 +64,7 @@ describe('layoutToSvg', () => {
     // Centre-anchored 0.5 m grid on 8 m: 17 vertical + 17 horizontal lines.
     expect(count(grid![1]!, 'M ')).toBe(34);
     expect(count(svg, 'class="wall"')).toBe(4);
+    expect(count(svg, 'data-layer="WALLS"')).toBe(5); // 4 shell edges + 1 partition
     // Only the hidden south wall is dashed.
     expect(count(svg, 'stroke-dasharray="6 4"')).toBe(1);
     expect(count(svg, 'class="interior-wall"')).toBe(1);
@@ -90,12 +93,17 @@ describe('layoutToSvg', () => {
     expect(count(layoutToSvg(two, upper), 'class="wall"')).toBe(4);
   });
 
-  it('includes the floor name and a scale bar', () => {
+  it('includes the floor name, external edge lengths, and a scale bar', () => {
     const { layout, floor } = makeFixture();
     const svg = layoutToSvg(layout, floor);
     expect(svg).toContain('My Home — Ground Floor');
     expect(svg).toContain('class="scale-bar"');
     expect(svg).toContain('>2 m</text>');
+    // Width above the north edge, depth beside the west edge. Not a combined readout.
+    expect(svg).toContain('class="dimension" data-layer="DIMENSIONS" x="260" y="46"');
+    expect(svg).toContain('transform="rotate(-90 46 260)">8 m</text>');
+    expect(svg).not.toContain('class="plan-dims"');
+    expect(svg).not.toContain('8 m × 8 m');
   });
 
   it('is deterministic for the same layout', () => {
@@ -169,7 +177,8 @@ describe('layoutToSvg', () => {
     expect(svg).toContain('<g class="plan" transform="translate(300 170)">');
     // Title and dims hug the content corners in the top margin band.
     expect(svg).toContain('class="plan-title" x="60" y="38"');
-    expect(svg).toContain('class="plan-dims" x="760" y="38"');
+    // Room top-left is (360, 230); width label sits 14 px above its centre.
+    expect(svg).toContain('class="dimension" data-layer="DIMENSIONS" x="560" y="216"');
   });
 
   it('draws room zones as tinted rects with name and area, under the walls (#155)', () => {
@@ -181,9 +190,14 @@ describe('layoutToSvg', () => {
     expect(svg).toContain(
       '<rect x="60" y="60" width="150" height="100" fill="#3b82f6" fill-opacity="0.18" stroke="#3b82f6"'
     );
+    expect(svg).toContain('data-layer="ROOMS"');
     expect(svg).toContain('Bed &amp; Bath</text>');
     expect(svg).toContain('>6.0 m²</text>');
     expect(svg.indexOf('class="zone"')).toBeLessThan(svg.indexOf('class="wall"'));
+    const hidden = layoutToSvg(makeLayout({ floors: [floor] }), floor, { visibility: { roomLabels: false } });
+    expect(hidden).toContain('class="zone"');
+    expect(hidden).not.toContain('Bed &amp; Bath');
+    expect(hidden).not.toContain('m²');
   });
 
   it('draws stairs as treads with an up-arrow, and the stairwell on the floor above (#290)', () => {
@@ -196,6 +210,7 @@ describe('layoutToSvg', () => {
     const groundSvg = layoutToSvg(layout, ground);
     expect(count(groundSvg, 'class="furniture"')).toBe(2);
     expect(count(groundSvg, 'class="stairs"')).toBe(2);
+    expect(count(groundSvg, 'data-layer="STAIRS"')).toBe(4); // footprint group + symbol group, twice
     expect(count(groundSvg, 'class="arrow"')).toBe(2);
     // No name label: the symbol says what it is.
     expect(groundSvg).not.toContain('>Stairs</text>');
