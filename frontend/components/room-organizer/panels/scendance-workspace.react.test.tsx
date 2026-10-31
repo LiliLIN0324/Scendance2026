@@ -243,19 +243,21 @@ describe('ScendanceViewTools design column', () => {
   it('renders one right-edge island of five round tools and tucks the rest into 视图', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 尺寸 / 网格 / 视图 / 氛围。卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(8);
-    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '尺寸标注', '网格吸附', '视图与更多工具']) {
+    // 室内常驻：选择 / 2D·3D / 看全场 / 俯视 / 人视 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
+    expect(within(rail).getAllByRole('button')).toHaveLength(9);
+    for (const name of ['选择：点击物料并框选', '2D / 3D', '看全场', '俯视', '人视', '尺寸标注', '网格吸附', '更多工具']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     expect(rail.querySelector('#tool-satellite')).toBeNull();
-    expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('false');
-    // 撤销/重做/缩放/导出仍在眼睛菜单；俯视和网格已在右轨。
+    expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('false');
+    // 撤销/重做/缩放/导出和整体在省略号里；俯视、人视、网格在右轨。
     for (const id of ['tool-undo', 'tool-zoom-out', 'tool-export']) {
       expect(rail.querySelector(`#${id}`)).toBeNull();
     }
     expect(rail.querySelector('#tool-grid')).toBeTruthy();
     expect(rail.querySelector('#tool-top')).toBeTruthy();
+    expect(rail.querySelector('#tool-front')).toBeTruthy();
+    expect(rail.querySelector('#tool-more')).toBeTruthy();
     // 氛围条仍是收起的一颗，点开才铺出四条。
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
@@ -280,13 +282,14 @@ describe('ScendanceViewTools design column', () => {
     expect(values.toggle).toHaveBeenCalledWith('showMeasurements');
     fireEvent.click(within(rail).getByRole('button', { name: '俯视' }));
     expect(onApplyPreset).toHaveBeenCalledWith('top');
+    fireEvent.click(within(rail).getByRole('button', { name: '人视' }));
+    expect(onApplyPreset).toHaveBeenCalledWith('front');
     fireEvent.click(within(rail).getByRole('button', { name: '网格吸附' }));
     expect(values.toggle).toHaveBeenCalledWith('snapToGrid');
-    fireEvent.click(within(rail).getByRole('button', { name: '视图与更多工具' }));
-    expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('true');
-    for (const name of ['整体', '人视']) {
-      expect(within(rail).getByRole('menuitemradio', { name })).toBeTruthy();
-    }
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
+    expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('true');
+    expect(within(rail).getByRole('menuitemradio', { name: '整体' })).toBeTruthy();
+    expect(within(rail).queryByRole('menuitemradio', { name: '人视' })).toBeNull();
     for (const name of ['撤销', '重做', '缩小', '放大', '导出效果图']) {
       expect(within(rail).getByRole('menuitem', { name })).toBeTruthy();
     }
@@ -303,13 +306,13 @@ describe('ScendanceViewTools design column', () => {
     expect(onExportImage).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(within(rail).queryByRole('menuitem', { name: '撤销' })).toBeNull();
-    expect(within(rail).getByRole('button', { name: '视图与更多工具' }).getAttribute('aria-expanded')).toBe('false');
+    expect(within(rail).getByRole('button', { name: '更多工具' }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it('exports a render from the 视图 popover with the chosen frame and quality', async () => {
     const onExportImage = vi.fn().mockResolvedValue(true);
     const { rail } = renderTools(makeViewSettings(), onExportImage);
-    fireEvent.click(within(rail).getByRole('button', { name: '视图与更多工具' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
     fireEvent.click(within(rail).getByRole('menuitem', { name: '导出效果图' }));
     const dialog = screen.getByRole('dialog', { name: '导出效果图选项' });
     expect(dialog.textContent).toContain('导出效果图');
@@ -323,7 +326,7 @@ describe('ScendanceViewTools design column', () => {
   it('defaults to the current view at 2× and marks the choices active', async () => {
     const onExportImage = vi.fn().mockResolvedValue(true);
     const { rail } = renderTools(makeViewSettings(), onExportImage);
-    fireEvent.click(within(rail).getByRole('button', { name: '视图与更多工具' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
     fireEvent.click(within(rail).getByRole('menuitem', { name: '导出效果图' }));
     expect((screen.getByRole('button', { name: '跟随当前' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByRole('button', { name: '高清 2×' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
@@ -336,7 +339,7 @@ describe('ScendanceViewTools design column', () => {
     render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
     expect((within(rail).getByRole('button', { name: '看全场' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(within(rail).getByRole('button', { name: '视图与更多工具' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '更多工具' }));
     for (const name of ['缩小', '放大']) {
       expect((within(rail).getByRole('menuitem', { name }) as HTMLButtonElement).disabled).toBe(true);
     }

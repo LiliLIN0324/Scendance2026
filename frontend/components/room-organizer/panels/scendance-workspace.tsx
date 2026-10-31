@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Axis3d, Boxes, Camera, ChevronUp, CloudRain, Crosshair, Cuboid, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, PersonStanding, Redo2, Ruler, Satellite, Sparkles, Square, Sun, Trees, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Axis3d, Boxes, Camera, ChevronUp, CloudRain, Crosshair, Cuboid, Footprints, Grid, LayoutTemplate, MoreHorizontal, MousePointer2, Package, PersonStanding, Redo2, Ruler, Satellite, Sparkles, Square, Sun, Trees, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
@@ -358,7 +358,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   }, [viewOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown]);
 
   return (
-    /* T-VISUAL-CHROME-2：右缘竖排圆钮列（参考图 04-final-flat），次要功能收进弹出菜单。 */
+    /* 圆钮贴在画布右上角。常用项都是一级钮；撤销、缩放、导出和整体收进省略号。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
       <button type="button" id="tool-select" data-tip="选择" aria-label="选择：点击物料并框选" aria-pressed={selectActive} className={selectActive ? 'is-active' : ''} onClick={chooseSelect}>
         <MousePointer2 size={24}/>
@@ -373,6 +373,9 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       <button type="button" id="tool-top" data-tip="俯视" aria-label="俯视" aria-pressed={!view.view2D && preset === 'top'} className={!view.view2D && preset === 'top' ? 'is-active' : ''} onClick={() => choosePreset('top')}>
         <Square size={24} aria-hidden="true"/>
       </button>
+      <button type="button" id="tool-front" data-tip="人视" aria-label="人视" aria-pressed={!view.view2D && preset === 'front'} className={!view.view2D && preset === 'front' ? 'is-active' : ''} onClick={() => choosePreset('front')}>
+        <PersonStanding size={24} aria-hidden="true"/>
+      </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
         <Ruler size={24}/>
       </button>
@@ -385,13 +388,12 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
-        <button type="button" id="tool-view" data-tip="视图" aria-label="视图与更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-view-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <Eye size={24}/>
+        <button type="button" id="tool-more" data-tip="更多" aria-label="更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-more-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+          <MoreHorizontal size={24} aria-hidden="true"/>
         </button>
-        {viewOpen && <div id="tool-view-menu" className="sc-tool-pop sc-more-pop sc-icon-menu" role="menu" aria-label="视图与更多工具">
+        {viewOpen && <div id="tool-more-menu" className="sc-tool-pop sc-more-pop sc-icon-menu" role="menu" aria-label="更多工具">
           {!exportOpen ? <>
-            <span className="sc-tool-menu-label" role="presentation">视角</span>
-            {ANGLE_PRESETS.filter(entry => entry.id !== 'top').map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-label={entry.label} data-tip={entry.label} aria-checked={!view.view2D && preset === entry.id} className={`sc-tool-icon${!view.view2D && preset === entry.id ? ' is-active' : ''}`} onClick={() => choosePreset(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
+            {ANGLE_PRESETS.filter(entry => entry.id === 'iso').map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-label={entry.label} data-tip={entry.label} aria-checked={!view.view2D && preset === entry.id} className={`sc-tool-icon${!view.view2D && preset === entry.id ? ' is-active' : ''}`} onClick={() => choosePreset(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
             <span className="sc-more-sep" aria-hidden="true"/>
             <button type="button" id="tool-undo" className="sc-tool-icon" role="menuitem" aria-label="撤销" data-tip="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={20} aria-hidden="true"/></button>
             <button type="button" id="tool-redo" className="sc-tool-icon" role="menuitem" aria-label="重做" data-tip="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={20} aria-hidden="true"/></button>

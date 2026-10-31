@@ -1157,13 +1157,13 @@ body {
 .sc-workbench .sc-header-actions .sc-project-btn:hover {
   color: var(--wk-ink); background: var(--wk-plane);
 }
-/* Right tool column: vertical round buttons (reference 04-final-flat), lifted above center, plus the satellite reference toggle on map shells. */
+/* Right tool column: pinned to the 3D canvas top-right, not the window and not vertically centered. */
 .sc-workbench .sc-tool-column.sc-canvas-rail {
-  position: absolute !important; right: 12px; top: calc(50% - 56px); left: auto; bottom: auto;
-  transform: translateY(-50%) !important; grid-area: unset !important;
+  position: absolute !important; right: 12px; top: 12px; left: auto; bottom: auto;
+  transform: none !important; grid-area: unset !important;
   width: 44px; max-width: 44px; box-sizing: border-box;
   display: flex !important; flex-direction: column !important; align-items: center;
-  justify-content: center; padding: 0; gap: 6px;
+  justify-content: flex-start; padding: 0; gap: 6px;
   border: 0; border-radius: 0; background: transparent;
   box-shadow: none; z-index: 35; overflow: visible;
   max-height: calc(100% - 24px);
