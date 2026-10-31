@@ -1,4 +1,4 @@
-import { isSatelliteGroundImage, SATELLITE_GROUND_LABEL } from '../lib/amap-venue';
+import { SATELLITE_GROUND_LABEL } from '../lib/amap-venue';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
@@ -31,7 +31,7 @@ export function buildStructureShell(
   const useSat = !!(layout.satelliteGroundRef && layout.floorPlanImage);
   const floorMat = buildFloorMaterial(THREE, {
     pattern: floor.floorPattern ?? 'solid', color: floor.floorColor, roomWidth: layout.width, roomDepth: layout.height });
-  const floorMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), floorMat);
+  const floorMesh = new THREE.Mesh<ThreeNS.ShapeGeometry, ThreeNS.Material>(new THREE.ShapeGeometry(shape), floorMat);
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
   floorMesh.userData.type = 'floor';
