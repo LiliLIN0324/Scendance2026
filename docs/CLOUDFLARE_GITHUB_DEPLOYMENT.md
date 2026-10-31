@@ -22,14 +22,14 @@ Cloudflare Pages 已通过 GitHub 集成连接到仓库。推送到 `main` 会�
 | 设置 | 值 |
 | --- | --- |
 | Root directory | `/` |
-| Build command | `npm ci && npm --prefix frontend ci && NEXT_PUBLIC_SUPABASE_URL=<url> NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable key> NEXT_PUBLIC_GENERATION_ENABLED=false npm --prefix frontend run build` |
+| Build command | `npm ci && npm --prefix frontend ci && NEXT_PUBLIC_SUPABASE_URL=<url> NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable key> NEXT_PUBLIC_GENERATION_ENABLED=false NEXT_PUBLIC_AMAP_KEY=<key> NEXT_PUBLIC_AMAP_SECURITY_CODE=<code> NEXT_PUBLIC_AMAP_STATIC_KEY=<static key> npm --prefix frontend run build` |
 | Build output directory | `frontend/out` |
 | Build caching | 关闭 |
 | Node.js | 由仓库中的 `.nvmrc`（根目录与 `frontend/` 各一份）固定为 `24.15.0` |
 
 `Root directory` 必须是仓库根目录 `/`：`frontend/lib/backend-session.ts` 会 import 仓库根目录下的 `supabase/functions/_shared/*`，那些文件解析依赖时要找**仓库根目录的 `node_modules`**。若把 root directory 改成 `frontend`，根目录依赖不会被安装，构建会在 `Can't resolve 'zod'` 处失败。
 
-`NEXT_PUBLIC_*` 必须写进 Build command：本项目实测构建镜像不会把 Pages 项目里的环境变量注入构建过程（`NODE_VERSION=24.15.0` 已配置但构建仍使用默认的 Node 22.16.0，日志行为 `Detected the following tools from environment: nodejs@22.16.0`），因此 Node 版本改用 `.nvmrc` 文件、Supabase 公开配置改在 Build command 中内联。这些值都是浏览器公开配置；`service_role`、`sb_secret_`、AI 供应商密钥和 worker secret 不得内联在这里。
+`NEXT_PUBLIC_*`（含 Supabase 公开配置与高德 `NEXT_PUBLIC_AMAP_KEY` / `NEXT_PUBLIC_AMAP_SECURITY_CODE` / `NEXT_PUBLIC_AMAP_STATIC_KEY`）必须写进 Build command：本项目实测构建镜像不会把 Pages 项目里的环境变量注入构建过程（`NODE_VERSION=24.15.0` 已配置但构建仍使用默认的 Node 22.16.0，日志行为 `Detected the following tools from environment: nodejs@22.16.0`），因此 Node 版本改用 `.nvmrc` 文件、Supabase 公开配置改在 Build command 中内联。这些值都是浏览器公开配置；`service_role`、`sb_secret_`、AI 供应商密钥和 worker secret 不得内联在这里。
 
 `npm ci` 由构建镜像自带的 npm 10 执行，因此 `package-lock.json` 必须与 npm 10 兼容。依赖变动后重新生成锁文件：
 

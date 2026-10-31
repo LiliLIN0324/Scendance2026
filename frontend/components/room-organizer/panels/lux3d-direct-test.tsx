@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DIRECT_BASE } from '../lib/aholo-assets';
+import { DIRECT_BASE, isLux3dLocalProxy } from '../lib/aholo-assets';
+import { CLOUD_E2E_WORLD_SCENE_ID, DEMO_WORLD_SCENE_ID, listShippedAssets } from '../lib/shipped-assets';
 import {
   isMockReconTask,
   makeMockReconTaskId,
@@ -13,7 +14,7 @@ import {
   VENUE_PACKAGE_HUNG,
 } from '../lib/site-recon-mock';
 import { AholoGuideCard } from './aholo-guide-card';
-import { loadAholoCatalogItem } from '../lib/aholo-model-placement';
+import { loadAholoCatalogItem, loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import type { CatalogItem } from '../lib/types';
 
 const POLL_MS = 5000;
@@ -522,11 +523,15 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   </div>;
 }
 
-export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, reconPreset }: {
+export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, onOpenCloudModels, reconPreset }: {
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => Promise<void>) | undefined;
   /** 干跑重建成功后挂环境：等同 D0 hangDemoEnvironment。 */
   onHangMockScene?: (() => void) | undefined;
+  /** 线上挂已发布 SPZ 观感层（不打本机代理）。 */
+  onPreviewShippedScene?: ((assetId: string) => void) | undefined;
+  /** 线上真生成走云：打开活动资料「物料工具」里的 Lux3D。 */
+  onOpenCloudModels?: (() => void) | undefined;
   /** 地图采集单「去上传现场素材」带过来的一块地：直接切到场地重建并填好名字。 */
   reconPreset?: { name: string; hint: string } | null;
 }) {
@@ -542,7 +547,15 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, reco
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resume, setResume] = useState<{ kind: Kind; taskid: string; prompt: string; startedAt: number } | null>(null);
   const onHistory = useCallback(() => setHistory(readHistory()), []);
+  const localProxy = isLux3dLocalProxy();
+  const [placingShipped, setPlacingShipped] = useState<string | null>(null);
+  const [shippedError, setShippedError] = useState('');
   useEffect(() => {
+    if (!localProxy) {
+      setOnline(false);
+      setConnectionError('');
+      return;
+    }
     const controller = new AbortController();
     void request<{ keyConfigured: boolean }>('/health', { signal: controller.signal }).then(body => {
       if (controller.signal.aborted) return;
@@ -552,7 +565,19 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, reco
       if (!controller.signal.aborted) { setOnline(false); setConnectionError(String(failure.message)); }
     });
     return () => controller.abort();
-  }, []);
+  }, [localProxy]);
+  async function placeShipped(assetId: string) {
+    if (!onPlace || placingShipped) return;
+    setPlacingShipped(assetId); setShippedError('');
+    try {
+      const item = await loadStoredAholoCatalogItem(assetId);
+      if (!onPlace(item)) setShippedError('未能放入场地，请稍后重试。');
+    } catch (failure) {
+      setShippedError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setPlacingShipped(null);
+    }
+  }
   function select(next: Kind) {
     setKind(next); setVisited(previous => previous.includes(next) ? previous : [...previous, next]);
   }
@@ -579,6 +604,23 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, reco
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
     <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>
+    {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
+      <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；真生成物件请用云端 Lux3D（活动资料 · 物料工具）。场地重建仍可干跑挂样例。</p>
+      <div className="sc-aholo-cloud-actions">
+        <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂云E2E宴会厅观感</button>
+        <button type="button" className="sc-button" onClick={() => { if (onPreviewShippedScene) onPreviewShippedScene(DEMO_WORLD_SCENE_ID); else onHangMockScene?.(); }}>挂样例环境预览</button>
+        {onOpenCloudModels && <button type="button" className="sc-button" onClick={onOpenCloudModels}>打开云端物料生成</button>}
+      </div>
+      <div className="sc-aholo-cloud-actions" role="group" aria-label="已发布物件">
+        {listShippedAssets('glb').map(asset => (
+          <button key={asset.assetId} type="button" className="sc-button" disabled={placingShipped !== null}
+            onClick={() => void placeShipped(asset.assetId)}>
+            {placingShipped === asset.assetId ? '摆放中…' : `摆放·${asset.name}`}
+          </button>
+        ))}
+      </div>
+      {shippedError && <p className="sc-warning" role="alert">{shippedError}</p>}
+    </div>}
     {reconPreset && <p className="sc-note sc-aholo-from-capture" role="status">来自采集单「{reconPreset.name}」· {reconPreset.hint}。已切到「场地重建」，可直接选现场素材。</p>}
     {connectionError && <p className="sc-warning" role="alert">{connectionError}</p>}
     <div className="sc-aholo-history" id="aholo-history" hidden={!historyOpen}>

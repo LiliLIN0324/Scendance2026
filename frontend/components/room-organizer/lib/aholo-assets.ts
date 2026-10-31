@@ -3,6 +3,17 @@ import { isGlbUrl } from './glb-url';
 /** 本机直连代理地址；密钥只留在代理侧，前端只谈路径。 */
 export const DIRECT_BASE = (process.env.NEXT_PUBLIC_LUX3D_DIRECT_URL ?? 'http://127.0.0.1:3199').replace(/\/+$/, '');
 
+/** 是否走本机 lux3d-dev-proxy（127/localhost）。生产默认不走，避免点了就打 127.0.0.1:3199。 */
+export function isLux3dLocalProxy(): boolean {
+  try {
+    const host = new URL(DIRECT_BASE).hostname;
+    if (host !== '127.0.0.1' && host !== 'localhost') return false;
+  } catch {
+    return false;
+  }
+  return process.env.NODE_ENV === 'development';
+}
+
 export type AholoAssetKind = 'glb' | 'spz' | 'ply';
 const KINDS: AholoAssetKind[] = ['glb', 'spz', 'ply'];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
