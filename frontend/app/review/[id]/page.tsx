@@ -1,12 +1,13 @@
-'use client';
+import { ReviewLinkClient } from './review-link-client';
 
-import { useParams } from 'next/navigation';
-import { ReviewSharePage } from '@/components/room-organizer/panels/review-share-page';
+/**
+ * `output: 'export'` requires at least one concrete path.
+ * Cloudflare Pages rewrites every `/review/:id` onto this shell; the client reads the real id from the URL.
+ */
+export function generateStaticParams(): Array<{ id: string }> {
+  return [{ id: 'local' }];
+}
 
-/** 分享出去的方案页。不挂工作台编辑器。 */
 export default function ReviewLinkPage(): JSX.Element {
-  const params = useParams();
-  const raw = params?.id;
-  const shareId = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] ?? '' : '';
-  return <ReviewSharePage shareId={shareId} />;
+  return <ReviewLinkClient />;
 }

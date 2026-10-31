@@ -1,0 +1,3 @@
+# Static export only prerenders /review/local. Serve that shell for every share id
+# without changing the browser URL, so the client can read the real id.
+/review/:id /review/local.html 200

@@ -22,7 +22,7 @@ export function RailAgentBrandSlot({
   qingguangPanelOpen: boolean;
   onToggleNav(): void;
   onOpenQingguang(): void;
-  qingguangRailRef: RefObject<HTMLButtonElement | null>;
+  qingguangRailRef: RefObject<HTMLButtonElement>;
 }): JSX.Element {
   return (
     <div className="sc-rail-agent-brand-slot" data-rail-slot={showBrand ? 'brand' : 'qingguang'}>

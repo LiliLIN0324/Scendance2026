@@ -52,6 +52,26 @@ describe('readBingoPlanFeedback', () => {
     expect(feedbackSummaryLabel(feedback, false)).toBe('甲方 1 条画内钉评');
   });
 
+  it('reads legacy comments stored under a distinct reviewPlanKey', () => {
+    const storage = bucket();
+    appendReviewComment(storage, {
+      planKey: 'link:0a4b1c2d',
+      author: '客户甲',
+      body: '灯再暖一点',
+      parentId: null,
+    });
+    const feedback = readBingoPlanFeedback({
+      projectKey: 'local-draft',
+      shareId: 'local-draft',
+      reviewPlanKey: 'link:0a4b1c2d',
+      clientHref: 'http://localhost/review/#layout=abc',
+    }, storage);
+    expect(feedback.sharePinCount).toBe(0);
+    expect(feedback.legacyCount).toBe(1);
+    expect(feedback.pins[0]?.body).toBe('灯再暖一点');
+    expect(feedback.pins[0]?.source).toBe('legacy-comment');
+  });
+
   it('falls back to legacy sidebar comments only when no share pins exist', () => {
     const storage = bucket();
     appendReviewComment(storage, {
