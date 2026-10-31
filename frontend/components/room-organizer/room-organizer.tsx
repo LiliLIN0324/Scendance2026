@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, ClipboardList, FileText, FolderOpen, Layers, ListChecks, PanelLeftClose, Ruler, Send, Shapes, SquareStack } from 'lucide-react';
+import { Boxes, ClipboardList, FileText, FolderOpen, ListChecks, PanelLeftClose, Ruler, Scan, Send, Shapes, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -42,6 +42,7 @@ import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
+import { crowdHintsFromLayout } from './lib/crowd-route';
 import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
 import { hasCollisions, totalCost } from './lib/geometry';
@@ -1057,6 +1058,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     measurementPoints,
   });
 
+  const crowdHints = crowdHintsFromLayout(layout);
   useNpcs({
     enabled: isReady && view.showNpcs && !view.view2D,
     invalidate,
@@ -1066,6 +1068,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     roomWidth: layout.width,
     roomDepth: layout.height,
     floorY: activeFloorY,
+    items: activeFloor.items,
+    ...(activeFloor.interiorWalls ? { interiorWalls: activeFloor.interiorWalls } : {}),
+    ...(crowdHints.polygon ? { polygon: crowdHints.polygon } : {}),
+    ...(crowdHints.mainEntranceId ? { mainEntranceId: crowdHints.mainEntranceId } : {}),
   });
 
   useWeather({
@@ -1469,7 +1475,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <span className="sc-brand-divider" aria-hidden="true"/>
           <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
           <div className="sc-header-actions">
-            <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/><span>项目</span></button>
+            <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" data-tip="项目" title="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/></button>
             <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
             <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
@@ -1483,18 +1489,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 {WORKBENCH_MODES.map(mode => {
                   const active = workbenchMode === mode.id;
                   const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
-                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/><span>{mode.label}</span></button>;
+                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} data-tip={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/></button>;
                 })}
               </nav>
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
-                <button type="button" className="sc-rail-tool" aria-label="图纸与照片" title="图纸、照片与实测尺寸"
-                  onClick={() => businessToolsRef.current?.openReference()}><Ruler size={20} aria-hidden="true"/><span>图纸</span></button>
-                <button type="button" className="sc-rail-tool" aria-label="场地重建" title="现场照片重建 3D 场地 · 生成与候选确认"
-                  onClick={() => businessToolsRef.current?.openRebuild()}><Layers size={20} aria-hidden="true"/><span>重建</span></button>
+                <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
+                  onClick={() => businessToolsRef.current?.openReference()}><Ruler size={24} aria-hidden="true"/></button>
+                <button type="button" className="sc-rail-tool" aria-label="场地重建" data-tip="重建" title="现场照片重建 3D 场地 · 生成与候选确认"
+                  onClick={() => businessToolsRef.current?.openRebuild()}><Scan size={24} aria-hidden="true"/></button>
               </nav></>
               {luxDirectVisible && <><span className="sc-rail-divider"/><nav className="sc-rail-tool-group" aria-label="场地观感与物料">
-                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" title="采集单上传 · World 观感 · Lux3D 物件"
-                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={20} aria-hidden="true"/><span>观感</span></button>
+                <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="采集单上传 · World 观感 · Lux3D 物件"
+                  onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
               </nav></>}
             </div>
           </div>

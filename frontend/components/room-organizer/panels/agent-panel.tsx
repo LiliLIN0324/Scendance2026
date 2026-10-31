@@ -13,7 +13,7 @@
  * 生成入口只有一个：对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  */
-import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
+import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { useRoomEditor } from '../contexts';
@@ -1296,7 +1296,7 @@ export function MapRailButton(): JSX.Element {
   const agent = useAgent();
   return <nav className="sc-rail-tool-group" aria-label="地图选址">
     <button type="button" className={`sc-rail-tool${agent.mapPickerOpen ? ' is-active' : ''}`} aria-pressed={agent.mapPickerOpen} aria-label="地图选址"
-      title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={20} aria-hidden="true"/><span>地图</span></button>
+      data-tip="地图" title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={24} aria-hidden="true"/></button>
   </nav>;
 }
 
@@ -1336,8 +1336,8 @@ export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
     <div className="sc-map-head">
       <strong>地图选址</strong>
       <span className="sc-note">{agent.venueUp ? '重新圈一块会替换现在的场地。' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地。'}</span>
-      <button type="button" className="sc-button" onClick={() => setWide(value => !value)}>{wide ? '退出全屏' : '全屏'}</button>
-      <button type="button" className="sc-button" onClick={agent.closeMapVenuePicker}>关闭</button>
+      <button type="button" className="sc-button" aria-label={wide ? '退出全屏' : '全屏'} data-tip={wide ? '退出全屏' : '全屏'} title={wide ? '退出全屏' : '全屏'} onClick={() => setWide(value => !value)}>{wide ? <Minimize2 size={16} aria-hidden="true"/> : <Maximize2 size={16} aria-hidden="true"/>}</button>
+      <button type="button" className="sc-button" aria-label="关闭" data-tip="关闭" title="关闭" onClick={agent.closeMapVenuePicker}><X size={16} aria-hidden="true"/></button>
     </div>
     {blocked && <p className="sc-map-blocked" role="alert">{blocked}</p>}
     <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} {...(layout.mapGroundPolygon ? { savedPolygon: layout.mapGroundPolygon } : {})} onPick={pick => {
