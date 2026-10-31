@@ -1205,6 +1205,13 @@ body {
 .sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb .sc-agent-reopen-dot.is-busy,
 .sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb .sc-agent-reopen-dot.is-ok { background: var(--wk-green); }
 .sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb .sc-agent-reopen-dot.is-warn { background: var(--warn); }
+/* 评审回执钩子：方案页记下完成后，收起球加红环。跨设备真状态后刀再接。 */
+.sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb.is-review-returned img {
+  box-shadow: 0 0 0 3px #c23b2e, 0 4px 14px rgba(194, 59, 46, 0.45);
+}
+.sc-workbench .sc-canvas-stage .sc-agent-reopen.is-orb.is-review-returned .sc-agent-reopen-dot.is-returned {
+  background: #c23b2e;
+}
 /* 旧矩形卡选择器留空以免别处误用 */
 .sc-workbench .sc-agent-reopen-copy { display: none; }
 /* 画布抬头：白纸卡片浮在画布灰底上，发丝线描边 */

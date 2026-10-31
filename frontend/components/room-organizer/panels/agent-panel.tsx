@@ -17,6 +17,7 @@
 import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
+import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
@@ -1631,7 +1632,22 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const status = headerStatus(agent, mode);
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // 评审页「完成评审」的本机回执。有回执就给收起球加红环（旧称 Bingo 球）。
+  // 后刀再按 planKey 对齐当前布置，并换成跨设备真状态。见 review-return.ts。
+  const [reviewReturned, setReviewReturned] = useState(false);
   const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setReviewReturned(reviewOrbShouldTurnRed(readReviewReturn(window.localStorage)));
+      } catch {
+        setReviewReturned(false);
+      }
+    };
+    sync();
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
@@ -1680,10 +1696,11 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   return (
     <button
       type="button"
-      className={`sc-agent-reopen is-orb${isDragging ? ' is-dragging' : ''}`}
+      className={`sc-agent-reopen is-orb${isDragging ? ' is-dragging' : ''}${reviewOrbClass(reviewReturned)}`}
       data-tone={tone}
+      data-review-return={reviewReturned ? '1' : '0'}
       aria-label="打开晴光 Agent"
-      title={status ? `晴光 · ${status.text} · 点开，按住可拖` : '晴光 · 点开，按住可拖'}
+      title={reviewReturned ? '晴光 · 评审已回 · 点开，按住可拖' : status ? `晴光 · ${status.text} · 点开，按住可拖` : '晴光 · 点开，按住可拖'}
       style={style}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1691,7 +1708,7 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
       onPointerCancel={() => { dragState.current = null; setIsDragging(false); }}
     >
       <img src={mascotOf(agent, mode)} alt="" width={40} height={40} draggable={false}/>
-      {status && <span className={`sc-agent-reopen-dot is-${status.tone}`} aria-hidden="true"/>}
+      {status && <span className={`sc-agent-reopen-dot is-${status.tone}${reviewReturned ? ' is-returned' : ''}`} aria-hidden="true"/>}
     </button>
   );
 }
