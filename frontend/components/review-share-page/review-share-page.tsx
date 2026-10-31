@@ -1,17 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { layoutToSvg } from '../room-organizer/lib/plan-export/svg';
-import {
-  appendReviewComment,
-  commentThreads,
-  readReviewComments,
-  REVIEW_COMMENT_AUTHOR_MAX,
-  REVIEW_COMMENT_BODY_MAX,
-  REVIEW_COMMENT_STORAGE_KEY,
-  type ReviewComment,
-  type ReviewCommentFailure,
-} from './comments';
+import { useEffect, useMemo, useState } from 'react';
 import {
   loadReviewPlan,
   readLocalReviewLayout,
@@ -19,31 +8,33 @@ import {
   type LoadedReviewPlan,
 } from './load-plan';
 import { markReviewReturned, readReviewReturn } from './review-return';
+import { ReviewSharePlanStage } from './review-share-plan-stage';
+import {
+  addReviewSharePin,
+  readReviewSharePins,
+  type ReviewSharePin,
+} from './review-share-pins';
 import type { FloorLayout, FurnitureItem, RoomLayout } from '../room-organizer/lib/types';
-
-const FORM_ERRORS: Record<ReviewCommentFailure, string> = {
-  author: '请填写称呼，最多 24 个字。',
-  body: '请写下意见，最多 500 个字。',
-  'reply-target': '要回复的那条评论已经不在了。',
-  'reply-nested': '回复只到一层。请直接回复原来的那条意见。',
-  full: '这份方案的演示评论已有 80 条，新的意见没有保存。',
-  storage: '浏览器没有收下这条评论。',
-  plan: '这条评论没有对应的方案，没有保存。',
-};
 
 type Phase =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'ready'; plan: LoadedReviewPlan };
 
+const PIN_ERRORS = {
+  author: '先填写称呼，再钉上意见。',
+  text: '写一句再钉上。',
+  full: '这份方案的钉评已满，新的意见没有保存。',
+  storage: '浏览器没有收下这条钉评。',
+  plan: '这条钉评没有对应的方案，没有保存。',
+} as const;
+
 export function ReviewSharePage(): JSX.Element {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [floorIndex, setFloorIndex] = useState(0);
-  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [pins, setPins] = useState<ReviewSharePin[]>([]);
   const [author, setAuthor] = useState('');
-  const [body, setBody] = useState('');
-  const [replyTo, setReplyTo] = useState<string | null>(null);
-  const [formError, setFormError] = useState('');
+  const [activePinId, setActivePinId] = useState<string | null>(null);
   const [returned, setReturned] = useState(false);
   const [returnNote, setReturnNote] = useState('');
 
@@ -61,21 +52,19 @@ export function ReviewSharePage(): JSX.Element {
       }).then((result) => {
         if (!active || current !== ticket) return;
         setFloorIndex(0);
-        setBody('');
-        setReplyTo(null);
-        setFormError('');
+        setActivePinId(null);
         if (!result.ok) {
           setPhase({ kind: 'error', message: REVIEW_PLAN_ERRORS[result.reason] });
-          setComments([]);
+          setPins([]);
           return;
         }
-        const stored = readStored(result.plan.planKey);
-        setComments(stored.comments);
+        const stored = readReviewSharePins(result.plan.planKey, safeStorage());
+        setPins(stored.pins);
         setAuthor(stored.lastAuthor);
         const receipt = readReviewReturn(safeStorage());
         const already = receipt?.planKey === result.plan.planKey;
         setReturned(already);
-        setReturnNote(already ? '这份方案已记下完成。创作者在这台浏览器收起球时，球会带上红环。' : '');
+        setReturnNote(already ? '这份方案已记下完成。创作者在这台浏览器打开 Bingo 时会看到回执。' : '');
         setPhase({ kind: 'ready', plan: result.plan });
       });
     };
@@ -88,42 +77,34 @@ export function ReviewSharePage(): JSX.Element {
     };
   }, []);
 
-  useEffect(() => {
-    if (replyTo && !comments.some((comment) => comment.id === replyTo && comment.parentId === null)) {
-      setReplyTo(null);
-    }
-  }, [comments, replyTo]);
-
   const plan = phase.kind === 'ready' ? phase.plan : null;
   const floor = plan ? plan.layout.floors[floorIndex] ?? plan.layout.floors[0] : undefined;
-  const svg = useMemo(() => (plan && floor ? safeSvg(plan.layout, floor) : null), [plan, floor]);
+  const floorPins = useMemo(
+    () => (floor ? pins.filter(pin => pin.floorId === floor.id) : []),
+    [pins, floor],
+  );
   const legend = floor ? itemLegend(floor.items) : { rows: [], hidden: 0 };
-  const threads = commentThreads(comments);
-  const replyTarget = replyTo ? comments.find((comment) => comment.id === replyTo) ?? null : null;
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!plan) return;
+  const onAddPin = (input: { itemId: string | null; x: number; z: number; text: string }) => {
+    if (!plan || !floor) return;
     const storage = safeStorage();
-    if (!storage) {
-      setFormError(FORM_ERRORS.storage);
-      return;
-    }
-    const result = appendReviewComment(storage, {
+    if (!storage) return;
+    const result = addReviewSharePin(storage, {
       planKey: plan.planKey,
+      floorId: floor.id,
+      itemId: input.itemId,
+      x: input.x,
+      z: input.z,
       author,
-      body,
-      parentId: replyTo,
+      text: input.text,
     });
     if (!result.ok) {
-      setFormError(FORM_ERRORS[result.reason]);
+      window.alert(PIN_ERRORS[result.reason]);
       return;
     }
-    setComments(result.comments);
+    setPins(result.pins);
     setAuthor(result.lastAuthor);
-    setBody('');
-    setReplyTo(null);
-    setFormError('');
+    setActivePinId(result.pin.id);
   };
 
   const onComplete = () => {
@@ -139,14 +120,14 @@ export function ReviewSharePage(): JSX.Element {
       return;
     }
     setReturned(true);
-    setReturnNote('已记下完成。创作者在这台浏览器打开工作台并收起球时，球会带上红环。');
+    setReturnNote('已记下完成。创作者在这台浏览器打开 Bingo 时会看到回执。');
   };
 
   return (
-    <main className="rsp" data-review-share-page="true" data-review-source={plan?.source ?? phase.kind}>
+    <main className="rsp" data-review-share-page="true" data-review-side="client" data-review-source={plan?.source ?? phase.kind}>
       <header className="rsp-mast">
         <p className="rsp-brand"><span>幕景</span><small>Scendance</small></p>
-        <p className="rsp-mast-status">可评论方案 · 只读</p>
+        <p className="rsp-mast-status">甲方钉评 · 只读方案</p>
       </header>
       {phase.kind === 'loading' ? (
         <section className="rsp-state" role="status"><h1>正在打开方案</h1><p>正在读取平面。</p></section>
@@ -166,11 +147,15 @@ export function ReviewSharePage(): JSX.Element {
                 ))}
               </div>
             )}
-            <div className="rsp-sheet">
-              {svg ? <PlanSheet src={svgSrc(svg)} alt={`${plan.layout.name}，${floor.name}平面预览`} /> : (
-                <p className="rsp-sheet-fallback" role="status">这层平面暂时画不出来。下面仍列出场内物件。</p>
-              )}
-            </div>
+            <ReviewSharePlanStage
+              layout={plan.layout}
+              floor={floor}
+              pins={floorPins}
+              activeId={activePinId}
+              author={author}
+              onAuthor={setAuthor}
+              onAddPin={onAddPin}
+            />
             <div className="rsp-legend">
               <h2>场内物件</h2>
               {legend.rows.length === 0 ? <p>这一层平面上还没有物件。</p> : (
@@ -183,55 +168,35 @@ export function ReviewSharePage(): JSX.Element {
                   ))}
                 </ul>
               )}
-              {legend.hidden > 0 && <p className="rsp-zones">还有 {legend.hidden} 种物件，都画在平面上。</p>}
-              {(floor.zones ?? []).length > 0 && (
-                <p className="rsp-zones">分区：{(floor.zones ?? []).map((zone) => zone.name).join('、')}</p>
-              )}
             </div>
           </section>
-          <section className="rsp-comments" aria-labelledby="rsp-comments-title">
+          <section className="rsp-comments" aria-labelledby="rsp-pins-title">
             <div className="rsp-comments-scroll">
-              <h2 id="rsp-comments-title">评论</h2>
-              <p className="rsp-persist">评论留在这台浏览器，刷新还在，不会同步到其他设备。</p>
-              {threads.length === 0 ? <p className="rsp-empty">还没有评论。看完平面后可以留下一条意见。</p> : (
+              <h2 id="rsp-pins-title">钉评列表</h2>
+              <p className="rsp-persist">在左侧平面点位置落钉。列表只做汇总，不是唯一评论方式。</p>
+              {floorPins.length === 0 ? (
+                <p className="rsp-empty">还没有钉评。点平面或物件开始。</p>
+              ) : (
                 <ol className="rsp-thread">
-                  {threads.map((thread) => (
-                    <li key={thread.root.id}>
-                      <CommentCard comment={thread.root} />
-                      <button type="button" className="rsp-reply" aria-label={`回复 ${thread.root.author}`} onClick={() => { setReplyTo(thread.root.id); setFormError(''); }}>回复</button>
-                      {thread.replies.length > 0 && (
-                        <ol className="rsp-replies">
-                          {thread.replies.map((reply) => <li key={reply.id}><CommentCard comment={reply} /></li>)}
-                        </ol>
-                      )}
+                  {floorPins.map((pin, index) => (
+                    <li key={pin.id}>
+                      <button
+                        type="button"
+                        className={`rsp-pin-row${activePinId === pin.id ? ' is-on' : ''}`}
+                        onClick={() => setActivePinId(pin.id)}
+                      >
+                        <strong>钉 {index + 1} · {pin.author}</strong>
+                        <span>{pin.text}</span>
+                      </button>
                     </li>
                   ))}
                 </ol>
               )}
-              <details className="rsp-entry">
-                <summary>分享链接怎么进这一页</summary>
-                <p>评审链接是 <code>/review/#layout=…</code>。井号后的片段与编辑器里的方案哈希相同，路径用 /review/。对方打开后就是这一页：平面和评论。</p>
-                <p>评论写在 localStorage，键名 <code>{REVIEW_COMMENT_STORAGE_KEY}</code>。这是演示存储，不进 Supabase。</p>
-              </details>
             </div>
             <div className="rsp-finish">
               <button type="button" onClick={onComplete}>{returned ? '已完成评审' : '完成评审'}</button>
-              <p role="status">{returnNote || '点完成评审后，创作者这边的球会变红。这一笔只留在这台浏览器。'}</p>
+              <p role="status">{returnNote || '点完成评审后，创作者在 Bingo 会看到回执。'}</p>
             </div>
-            <form className="rsp-form" onSubmit={onSubmit} noValidate>
-              {replyTarget && (
-                <p className="rsp-replying">正在回复 {replyTarget.author}：{excerpt(replyTarget.body)} <button type="button" onClick={() => setReplyTo(null)}>取消回复</button></p>
-              )}
-              <label htmlFor="rsp-author">称呼</label>
-              <input id="rsp-author" name="author" autoComplete="nickname" maxLength={REVIEW_COMMENT_AUTHOR_MAX} value={author} onChange={(event) => setAuthor(event.target.value)} />
-              <label htmlFor="rsp-body">意见</label>
-              <textarea id="rsp-body" name="body" rows={4} maxLength={REVIEW_COMMENT_BODY_MAX} value={body} onChange={(event) => setBody(event.target.value)} />
-              <div className="rsp-form-row">
-                <button type="submit">{replyTo ? '发表回复' : '发表评论'}</button>
-                <span>{[...body].length}/{REVIEW_COMMENT_BODY_MAX}</span>
-              </div>
-              {formError && <p className="rsp-form-error" role="alert">{formError}</p>}
-            </form>
           </section>
         </div>
       ) : (
@@ -241,49 +206,12 @@ export function ReviewSharePage(): JSX.Element {
   );
 }
 
-function PlanSheet({ src, alt }: { src: string; alt: string }): JSX.Element {
-  // 平面是当场生成的 SVG data URL。用 img 让脚本不执行；next/image 优化不了这种地址。
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} />
-  );
-}
-
-function CommentCard({ comment }: { comment: ReviewComment }): JSX.Element {
-  return (
-    <article className="rsp-card">
-      <header><strong>{comment.author}</strong><time dateTime={comment.createdAt}>{formatWhen(comment.createdAt)}</time></header>
-      <p>{comment.body}</p>
-    </article>
-  );
-}
-
-function readStored(planKey: string): { comments: ReviewComment[]; lastAuthor: string } {
-  try {
-    return readReviewComments(planKey, safeStorage());
-  } catch {
-    return { comments: [], lastAuthor: '' };
-  }
-}
-
 function safeStorage(): Storage | null {
   try {
     return window.localStorage;
   } catch {
     return null;
   }
-}
-
-function safeSvg(layout: RoomLayout, floor: FloorLayout): string | null {
-  try {
-    return layoutToSvg(layout, floor);
-  } catch {
-    return null;
-  }
-}
-
-function svgSrc(svg: string): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 function placedCount(items: readonly FurnitureItem[]): number {
@@ -313,15 +241,4 @@ function metres(value: number): string {
   if (!Number.isFinite(value)) return '—';
   const rounded = Math.round(value * 100) / 100;
   return String(Object.is(rounded, -0) ? 0 : rounded);
-}
-
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function excerpt(text: string): string {
-  const chars = [...text];
-  return chars.length > 36 ? `${chars.slice(0, 36).join('')}…` : text;
 }

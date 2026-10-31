@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { STORAGE_KEY } from '../room-organizer/lib/constants';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
-import { REVIEW_COMMENT_STORAGE_KEY } from './comments';
 import { REVIEW_RETURN_STORAGE_KEY } from './review-return';
+import { REVIEW_SHARE_PINS_KEY } from './review-share-pins';
 import { ReviewSharePage } from './review-share-page';
 import type { RoomLayout } from '../room-organizer/lib/types';
 
@@ -23,6 +23,7 @@ function layoutHash(layout: RoomLayout): string {
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, '', '/review/');
+  localStorage.clear();
 });
 
 async function openSample(): Promise<void> {
@@ -31,37 +32,47 @@ async function openSample(): Promise<void> {
   await screen.findByRole('heading', { name: INITIAL_LAYOUT.name });
 }
 
+function mockPlanSheetRect(): void {
+  const img = document.querySelector('.rsp-sheet-interactive img');
+  if (!img) throw new Error('plan sheet image missing');
+  img.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 300,
+    top: 0,
+    left: 0,
+    bottom: 300,
+    right: 400,
+    toJSON: () => ({}),
+  });
+}
+
 describe('review share page', () => {
-  it('shows the sample plan, posts a comment, and keeps a reply after remount', async () => {
+  it('shows the sample plan, drops a pin on the sheet, and keeps it after remount', async () => {
     await openSample();
     expect(screen.getByText(/示例场地/)).toBeTruthy();
     expect(screen.getByText(/共创桌/)).toBeTruthy();
     expect(document.querySelector('img[alt*="平面预览"]')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/晴光|模式轨|执行页|到场清单/);
     expect(document.querySelector('.sc-mode-rail, .sc-agent-panel, #agent-panel, .sc-workbench')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
-    expect(screen.getByRole('alert').textContent).toMatch(/称呼/);
+    expect(screen.queryByLabelText('意见')).toBeNull();
+    expect(screen.getByText(/点平面或物件落钉/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('称呼'), { target: { value: '甲方' } });
-    fireEvent.change(screen.getByLabelText('意见'), { target: { value: '主舞台偏左' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
+    mockPlanSheetRect();
+    fireEvent.click(document.querySelector('.rsp-sheet-interactive')!);
+    fireEvent.change(screen.getByLabelText('议题'), { target: { value: '主舞台偏左' } });
+    fireEvent.click(screen.getByRole('button', { name: '钉上' }));
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '回复 甲方' }));
-    fireEvent.change(screen.getByLabelText('意见'), { target: { value: '舞台保持居中' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表回复' }));
-    expect(await screen.findByText('舞台保持居中')).toBeTruthy();
-    expect(localStorage.getItem(REVIEW_COMMENT_STORAGE_KEY)).toContain('主舞台偏左');
+    expect(localStorage.getItem(REVIEW_SHARE_PINS_KEY)).toContain('主舞台偏左');
 
     cleanup();
     render(<ReviewSharePage />);
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();
-    expect(screen.getByText('舞台保持居中')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '完成评审' }));
     expect(await screen.findByRole('button', { name: '已完成评审' })).toBeTruthy();
-    expect(screen.getByText(/红环/)).toBeTruthy();
     expect(localStorage.getItem(REVIEW_RETURN_STORAGE_KEY)).toContain('sample:initial');
   });
 
@@ -100,6 +111,6 @@ describe('review share page', () => {
     window.history.replaceState(null, '', '/review/#layout=!!!');
     render(<ReviewSharePage />);
     expect((await screen.findByRole('alert')).textContent).toMatch(/读不出来/);
-    expect(screen.queryByLabelText('意见')).toBeNull();
+    expect(screen.queryByLabelText('议题')).toBeNull();
   });
 });

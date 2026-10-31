@@ -1,4 +1,5 @@
-/* 方案会话列表。挂在左栏晴光之上，不进顶栏。色彩沿用工作台冷石 token。 */
+/* 方案会话列表。工作台里叠在对话列上（is-embedded），不占左列。色彩沿用工作台冷石 token。 */
+.sc-session-history.is-embedded { max-height: none; border-bottom: 0; background: transparent; }
 .sc-session-history {
   display: flex;
   flex-direction: column;

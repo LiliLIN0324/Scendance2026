@@ -19,11 +19,16 @@ export interface SessionHistoryPanelProps {
   onRename(id: string, title: string): void;
   onToggleFavorite(id: string): void;
   onDelete(id: string): void;
+  /**
+   * 嵌在对话列里时不画「方案会话」大标题，也不再放一颗「新会话」。
+   * 那两件事在对话列顶：标题，以及旁边的历史 / 新会话小钮。
+   */
+  embedded?: boolean;
 }
 
 /**
- * 方案会话列表面板：搜索、新开、行内改名、收藏、删除确认。
- * 自研交互，不从外部参考实现搬组件。挂载点在左栏，不进晴光业务面板。
+ * 方案会话列表：搜索、改名、收藏、删除确认。
+ * 自研交互。默认整块只给测试和旧挂载；工作台里用 embedded，叠在对话流上，不占左列。
  */
 export function SessionHistoryPanel({
   sessions,
@@ -38,6 +43,7 @@ export function SessionHistoryPanel({
   onRename,
   onToggleFavorite,
   onDelete,
+  embedded = false,
 }: SessionHistoryPanelProps): JSX.Element {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -70,14 +76,14 @@ export function SessionHistoryPanel({
   }
 
   return (
-    <section className="sc-session-history" aria-label="方案会话">
-      <header className="sc-session-history-head">
+    <section className={`sc-session-history${embedded ? ' is-embedded' : ''}`} aria-label="方案会话">
+      {!embedded && <header className="sc-session-history-head">
         <h2>方案会话</h2>
         <button type="button" className="sc-session-new" aria-label="新开会话" onClick={onCreate}>
           <MessageCirclePlus size={16} aria-hidden="true" />
           <span>新会话</span>
         </button>
-      </header>
+      </header>}
       <label className="sc-session-search">
         <Search size={15} aria-hidden="true" />
         <input

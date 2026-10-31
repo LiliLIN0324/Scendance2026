@@ -111,12 +111,88 @@ body:has(.rsp) {
   border-radius: 12px;
 }
 
-.rsp-floors {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
+.rsp-sheet-stage { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.rsp-pin-hint {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--paper, #fff);
+  border: 1px solid var(--hair, #e4e4e7);
+  font-size: 12px;
+  color: var(--muted, #71767e);
+  align-self: flex-start;
 }
+.rsp-pin-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.rsp-pin-author input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--hair, #e4e4e7);
+  border-radius: 8px;
+  font: inherit;
+}
+.rsp-sheet-interactive {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid var(--hair, #e4e4e7);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  cursor: crosshair;
+}
+.rsp-sheet-interactive img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.rsp-share-pins {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.rsp-share-pins > button {
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+.rsp-share-composer {
+  z-index: 3;
+  pointer-events: auto;
+}
+.rsp-pin-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--hair, #e4e4e7);
+  border-radius: 10px;
+  background: var(--paper, #fff);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.rsp-pin-row.is-on {
+  border-color: var(--green, #4a7c59);
+  background: var(--green-pale, #eef3ef);
+}
+.rsp-pin-row span { color: var(--muted, #71767e); font-size: 13px; line-height: 1.5; }
+
+.rsp-form,
+.rsp-form label,
+.rsp-replying {
+  display: none;
+}
+
 
 .rsp-sheet {
   margin-top: 16px;

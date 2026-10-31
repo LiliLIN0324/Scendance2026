@@ -14,11 +14,13 @@
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
-import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
+import { ArrowUp, Check, FileImage, History, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { useRoomEditor } from '../contexts';
+import { useAssistantSessions } from '../hooks/use-assistant-sessions';
+import { SessionHistoryPanel } from './session-history-panel';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
@@ -47,6 +49,7 @@ import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
+import { QINGGUANG_RAIL_MASCOT } from './qingguang-rail-button';
 import './agent-panel.css';
 
 type GenerateFill = { kind: 'text' | 'world'; prompt: string; nonce: number };
@@ -1381,7 +1384,7 @@ export function MapRailButton(): JSX.Element {
   const agent = useAgent();
   return <nav className="sc-rail-tool-group" aria-label="地图选址">
     <button type="button" className={`sc-rail-tool${agent.mapPickerOpen ? ' is-active' : ''}`} aria-pressed={agent.mapPickerOpen} aria-label="地图选址"
-      data-tip="地图" title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={24} aria-hidden="true"/></button>
+      data-tip="场地" title={agent.venueUp ? '重新圈一块会替换现在的场地' : '搜地点 → 在卫星图上圈出边界 → 生成户外场地'} onClick={agent.startMapVenuePicker}><MapIcon size={24} aria-hidden="true"/><span className="sc-rail-word">场地</span></button>
   </nav>;
 }
 
@@ -1498,7 +1501,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot }: {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, onOpenDrawings, onOpenFrame, reviewSlot, deliverySlot }: {
   onClose?(): void;
   /** 右栏底部切到「生成物件」。不传则面板自己记。 */
   generateOpen?: boolean;
@@ -1506,6 +1509,10 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   onPlaceProp?: ((item: CatalogItem) => boolean) | undefined;
   onOpenPropFallback?: (() => void) | undefined;
   onOpenPropCloud?: (() => void) | undefined;
+  /** 原左轨「图纸」。进对话芯片，不占窄轨。 */
+  onOpenDrawings?: () => void;
+  /** 原左轨框选 / 重建。 */
+  onOpenFrame?: () => void;
   /** 评审议题。挂在对话里，不替换整栏。 */
   reviewSlot?: ReactNode;
   /** 执行清单。挂在对话里，不替换整栏。 */
@@ -1530,7 +1537,8 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   const [draft, setDraft] = useState('');
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const status = headerStatus(agent, mode);
+  const sessions = useAssistantSessions();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const demo = isDemoBackend();
   const items = materialCount(activeFloor.items);
   useEffect(() => { feed.current?.scrollTo?.({ top: feed.current.scrollHeight }); }, [agent.bubbles.length, agent.state, mode]);
@@ -1543,15 +1551,40 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
 
   return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
-    <header className="ap-head">
-      <button type="button" className="mascot-slot" data-tone={status.tone} aria-label={`晴光，${status.text}。${status.hint}`} onClick={() => jumpToQingguang(agent)}>
-        <img src={mascotOf(agent, mode)} alt="" width={64} height={64} draggable={false}/>
-        <span className={`ap-online-dot is-${status.tone}`} aria-hidden="true"/>
-      </button>
-      <strong>晴光</strong>
-      <button type="button" id="agent-state" className={`ap-status is-${status.tone}`} onClick={() => jumpToQingguang(agent)}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</button>
-      {onClose && <button type="button" className="ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
+    <header className="ap-head ap-session-head">
+      <span className="ap-session-mascot" aria-hidden="true">
+        <img src={QINGGUANG_RAIL_MASCOT} alt="" width={28} height={28} draggable={false} />
+        <span className="ap-online-dot is-ok" aria-hidden="true" />
+      </span>
+      <button type="button" className="ap-session-title" onClick={() => jumpToQingguang(agent)}>{sessions.activeTitle}</button>
+      <div className="ap-session-tools">
+        <button type="button" className={`ap-session-tool${historyOpen ? ' is-on' : ''}`} aria-pressed={historyOpen} aria-label="会话历史" title="会话历史" onClick={() => setHistoryOpen(open => !open)}><History size={16} aria-hidden="true"/></button>
+        <button type="button" className="ap-session-tool" aria-label="新开会话" title="新开会话" onClick={() => { sessions.openSession(); setHistoryOpen(false); }}><MessageCirclePlus size={16} aria-hidden="true"/></button>
+        {onClose && <button type="button" className="ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
+      </div>
     </header>
+    <div className="ap-thread">
+      {historyOpen && <>
+        <button type="button" className="ap-history-mask" aria-label="关闭会话历史" onClick={() => setHistoryOpen(false)}/>
+        <div className="ap-history-overlay">
+          {sessions.ready
+            ? <SessionHistoryPanel
+                embedded
+                sessions={sessions.visible}
+                totalCount={sessions.totalCount}
+                activeId={sessions.activeId}
+                query={sessions.query}
+                saveFailed={sessions.saveFailed}
+                onQuery={sessions.setQuery}
+                onCreate={() => { sessions.openSession(); setHistoryOpen(false); }}
+                onSelect={id => { sessions.selectSession(id); setHistoryOpen(false); }}
+                onRename={sessions.renameSession}
+                onToggleFavorite={sessions.toggleFavorite}
+                onDelete={sessions.deleteSession}
+              />
+            : <p className="sc-session-empty">正在读取本机会话…</p>}
+        </div>
+      </>}
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
@@ -1559,6 +1592,16 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
       {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}
       {/* 对话记录三种模式共用：评审/执行里说过的话也得看得见，不然输入框就成了摆设。 */}
       <Bubbles agent={agent}/>
+      {mode === 'layout' && preStates && <div className="ap-can-do">
+        <p>你可以做什么</p>
+        <div className="ap-chips">
+          <button type="button" className="chip" onClick={agent.startMapVenuePicker}>地图</button>
+          <button type="button" className="chip" onClick={() => onOpenDrawings?.()}>图纸</button>
+          <button type="button" className="chip" onClick={() => onOpenFrame?.()}>框选</button>
+          <button type="button" className="chip" onClick={() => setPropLane(true)}>生成</button>
+          <button type="button" className="chip" onClick={() => onOpenPropFallback?.()}>形状</button>
+        </div>
+      </div>}
       {mode === 'layout' && <>
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
@@ -1604,6 +1647,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
+    </div>
     </div>
     {propLane
       ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
