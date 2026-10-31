@@ -1,0 +1,118 @@
+/* 环境预览加载：冷石纸面 + 鼠尾草绿点睛。不铺灰盒、不毛玻璃、不转圈满屏。 */
+.sc-env-load {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  pointer-events: none;
+  color: var(--ink, #141416);
+  animation: sc-env-load-in var(--dur-2, 200ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1)) both;
+}
+.sc-env-load.is-leaving {
+  animation: sc-env-load-out 280ms var(--ease-spec, cubic-bezier(.2, 0, 0, 1)) both;
+}
+.sc-env-load-mark {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 2px;
+  animation: sc-env-load-breathe 2.4s var(--ease-spec, cubic-bezier(.2, 0, 0, 1)) infinite;
+}
+.sc-env-load-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid #4A7C59;
+  opacity: .35;
+  animation: sc-env-load-ring 2.4s var(--ease-spec, cubic-bezier(.2, 0, 0, 1)) infinite;
+}
+.sc-env-load-kicker {
+  margin: 0;
+  font: 500 11px/16px var(--font-sans, sans-serif);
+  letter-spacing: .08em;
+  color: var(--wk-muted, #71767E);
+}
+.sc-env-load-name {
+  margin: 0;
+  max-width: min(280px, calc(100% - 48px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 14px/22px var(--font-sans, sans-serif);
+  color: var(--ink, #141416);
+}
+.sc-env-load-track {
+  position: relative;
+  width: min(168px, calc(100% - 64px));
+  height: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--plane-deep, #ECEDEF);
+}
+.sc-env-load-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #4A7C59;
+  transition: width var(--dur-2, 200ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
+}
+.sc-env-load-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .72), transparent);
+  animation: sc-env-load-sheen 1.6s var(--ease-spec, cubic-bezier(.2, 0, 0, 1)) infinite;
+}
+.sc-env-load-fill.is-unknown {
+  width: 36%;
+  animation: sc-env-load-sweep 1.6s var(--ease-spec, cubic-bezier(.2, 0, 0, 1)) infinite;
+}
+.sc-env-load-meta {
+  margin: 0;
+  font: 500 11px/16px var(--font-sans, sans-serif);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  color: var(--faint, #A6AAB2);
+}
+
+@keyframes sc-env-load-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-env-load-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sc-env-load-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+@keyframes sc-env-load-ring {
+  0% { transform: scale(.72); opacity: .55; }
+  70%, 100% { transform: scale(1.35); opacity: 0; }
+}
+@keyframes sc-env-load-sweep {
+  0% { transform: translateX(-130%); }
+  100% { transform: translateX(310%); }
+}
+@keyframes sc-env-load-sheen {
+  0% { transform: translateX(-160%); }
+  100% { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-env-load,
+  .sc-env-load.is-leaving,
+  .sc-env-load-mark,
+  .sc-env-load-ring,
+  .sc-env-load-fill,
+  .sc-env-load-fill::after,
+  .sc-env-load-fill.is-unknown {
+    animation: none;
+  }
+  .sc-env-load-fill { transition: none; }
+  .sc-env-load-fill.is-unknown { transform: none; width: 36%; }
+}
