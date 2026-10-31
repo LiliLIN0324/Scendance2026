@@ -21,7 +21,7 @@ export function QingguangRailButton({ open, onOpen, buttonRef }: {
     <button
       ref={buttonRef}
       type="button"
-      className={`sc-rail-qingguang${open ? ' is-panel-open' : ''}`}
+      className={`sc-rail-qingguang sc-rail-disc${open ? ' is-panel-open' : ''}`}
       aria-expanded={open}
       aria-label="晴光"
       data-tip="晴光"

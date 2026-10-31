@@ -1748,7 +1748,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <BingoRailButton open={sidePanel === 'bingo'} onToggle={toggleBingoPanel} />
                 <button
                   type="button"
-                  className={`sc-rail-tool sc-rail-space${spaceOpen ? ' is-active' : ''}`}
+                  className={`sc-rail-tool sc-rail-space sc-rail-disc${spaceOpen ? ' is-active' : ''}`}
                   aria-pressed={spaceOpen}
                   aria-expanded={spaceOpen}
                   aria-controls="workbench-space-shelf"
@@ -1761,7 +1761,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <button
                   type="button"
                   ref={toolsEntryRef}
-                  className={`sc-rail-tool sc-rail-materials${materialsOpen ? ' is-active' : ''}`}
+                  className={`sc-rail-tool sc-rail-materials sc-rail-disc${materialsOpen ? ' is-active' : ''}`}
                   aria-pressed={materialsOpen}
                   aria-expanded={materialsOpen}
                   aria-controls="workbench-material-shelf"

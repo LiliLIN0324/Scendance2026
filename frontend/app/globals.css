@@ -1016,15 +1016,6 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo.is-review-returned {
   box-shadow: inset 0 0 0 2px #d4534a;
 }
-/* 空间与其它轨钮一样只露图标。选中时淡底，名称走右侧胶囊。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-space {
-  width: 40px; height: 40px; min-height: 40px; margin: 4px auto 2px; padding: 0; gap: 0;
-  border-radius: 14px; background: var(--wk-plane); color: var(--wk-ink);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-space:hover,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-space.is-active {
-  background: var(--wk-green-pale, #eef3ef); color: var(--wk-ink);
-}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;
@@ -1076,14 +1067,8 @@ body {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:hover { background: var(--wk-plane); color: var(--wk-ink); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active {
-  /* 参考图：左缘 2-3px 品牌绿竖条 + 极淡背景，不做填充方块。 */
   position: relative;
-  background: var(--wk-green-pale, #eef3ef); color: var(--wk-ink); font-weight: 600;
-  box-shadow: none;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active::before {
-  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
-  border-radius: 0 2px 2px 0; background: var(--wk-green);
+  color: var(--wk-ink); font-weight: 600;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-divider {
   display: block; height: 1px; margin: 7px 4px; background: var(--wk-hair); flex: none;
@@ -1097,7 +1082,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
 /* 轨顶一格：收起 = 晴光头像；展开 = 交叉淡入幕景锁标（头像已飞到对话头）。 */
 .sc-rail-agent-brand-slot {
-  position: relative; flex: none; width: 36px; height: 40px; margin: 2px auto 4px;
+  position: relative; flex: none; width: 40px; height: 40px; margin: 2px auto 4px;
 }
 .sc-rail-agent-brand-slot .sc-rail-slot-layer {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -1134,12 +1119,10 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball {
-  width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
-  border-radius: 999px; border: 1.5px solid var(--hair);
   background:
     radial-gradient(circle at 50% 50%, transparent 0 5px, var(--faint) 5.5px 7px, transparent 7.5px),
     var(--paper);
-  box-shadow: none; color: var(--ink-soft);
+  color: var(--ink-soft);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball:hover,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball:focus-visible {
@@ -1166,7 +1149,47 @@ body {
     radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
     var(--paper);
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang:hover { background: transparent; }
+/* Bingo / 空间 / 物料 / 晴光：同一枚细线圆罩。绿条跟圆罩走，不贴轨的左缘。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
+  width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
+  border-radius: 999px; border: 1.5px solid var(--hair); background: var(--paper);
+  box-shadow: inset 0 1px 2px rgba(20, 20, 22, 0.10); color: var(--wk-ink);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:focus-visible {
+  background: var(--paper); color: var(--wk-ink); transform: translateY(-1px);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active {
+  background: var(--paper); color: var(--wk-ink); font-weight: 400;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before {
+  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--wk-green);
+}
+.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang button.sc-rail-qingguang.sc-rail-disc {
+  margin: 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc:focus-visible,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc.is-active {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 5px, var(--faint) 5.5px 7px, transparent 7.5px),
+    var(--paper);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc[data-status="awaiting"] {
+  border: 2px solid var(--warn);
+  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
+  background: var(--paper); color: var(--warn);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc.is-returned,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc[data-status="returned"] {
+  border: 3px solid var(--err);
+  box-shadow: 0 0 0 4px rgba(180, 68, 60, 0.22);
+  background:
+    radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
+    var(--paper);
+}
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
 .sc-lux-direct input[type='text'], .sc-lux-direct textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--paper); color: inherit; font: inherit; }

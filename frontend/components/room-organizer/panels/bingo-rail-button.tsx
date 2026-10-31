@@ -40,7 +40,7 @@ export function BingoRailButton({ open, onToggle }: { open: boolean; onToggle():
   return (
     <button
       type="button"
-      className={`sc-bingo-ball sc-rail-bingo${open ? ' is-active' : ''}${phase === 'returned' ? ' is-returned' : ''}`}
+      className={`sc-bingo-ball sc-rail-bingo sc-rail-disc${open ? ' is-active' : ''}${phase === 'returned' ? ' is-returned' : ''}`}
       data-status={phase}
       {...(count ? { 'data-count': count } : {})}
       aria-pressed={open}
