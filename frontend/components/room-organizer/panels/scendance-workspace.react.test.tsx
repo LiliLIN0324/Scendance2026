@@ -405,6 +405,29 @@ describe('ScendanceViewTools satellite ground', () => {
     expect(screen.queryByRole('button', { name: /卫星参考底图/ })).toBeNull();
   });
 
+  it('shows tool-satellite for a planning-zone title even when the shell is not a polygon', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
+    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
+    const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' });
+    const values = contexts(layout);
+    render(<Providers values={values}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const button = screen.getByRole('button', { name: /卫星参考底图，已打开/ });
+    expect(button.id).toBe('tool-satellite');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(values.actions.applyLayout).toHaveBeenCalled());
+    const applied = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
+    expect(applied.satelliteGroundRef).toBe(true);
+    expect(String(applied.floorPlanImage)).toContain('satellite-ground-ref');
+  });
+
+  it('keeps tool-satellite visible when the layer was explicitly turned off', () => {
+    const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m', satelliteGroundRef: false });
+    render(<Providers values={contexts(layout)}><ScendanceViewTools onApplyPreset={vi.fn()} onFit={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const button = screen.getByRole('button', { name: /卫星参考底图，已关闭/ });
+    expect(button.id).toBe('tool-satellite');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+
   it('defaults the satellite toggle on for a map shell and fills a missing image', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');

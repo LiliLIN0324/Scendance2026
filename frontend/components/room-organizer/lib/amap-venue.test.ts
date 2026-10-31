@@ -180,10 +180,40 @@ describe('satellite ground backfill', () => {
     expect(satelliteGroundWanted({ ...layout, satelliteGroundRef: true })).toBe(true);
   });
 
+  it('shows satellite for a planning-zone name or an outdoor brief even when the shell is not a polygon', () => {
+    const named = { ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' };
+    delete named.mapGroundPolygon;
+    delete named.satelliteGroundRef;
+    delete named.floorPlanImage;
+    expect(named.backendVenue?.shape).not.toBe('polygon');
+    expect(isMapOutdoorLayout(named)).toBe(true);
+    expect(satelliteGroundWanted(named)).toBe(true);
+    expect(satelliteGroundWanted({ ...named, satelliteGroundRef: false })).toBe(false);
+
+    const outdoor = {
+      ...(INITIAL_LAYOUT as RoomLayout),
+      name: '海边舞台',
+      backendVenue: { shape: 'rectangle' as const, width: 40, depth: 20, height: 4, entrances: [], site: { indoorOutdoor: 'outdoor' as const } },
+    };
+    expect(isMapOutdoorLayout(outdoor)).toBe(true);
+    expect(satelliteGroundWanted(outdoor)).toBe(true);
+    expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城', mapLngLat: { lng: 120.54, lat: 30.4 } })).toBe(true);
+    expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '室内宴会厅' })).toBe(false);
+  });
+
   it('builds a localhost proxy url without the key', () => {
     const url = satelliteProxyUrl(lShapePolygon(), 'secret-key');
     expect(url).toContain('http://127.0.0.1:3199/amap-static?');
     expect(url).toContain(`x-ref=${SATELLITE_GROUND_MARK}`);
+    expect(url).not.toContain('secret-key');
+  });
+
+  it('uses a same-origin satellite url on the production host', () => {
+    vi.stubGlobal('window', { location: { hostname: 'scendance.lilicoding.space' } });
+    const url = satelliteProxyUrl(lShapePolygon(), 'secret-key');
+    expect(url?.startsWith('/api/amap-static?')).toBe(true);
+    expect(url).toContain(`x-ref=${SATELLITE_GROUND_MARK}`);
+    expect(url).not.toContain('127.0.0.1');
     expect(url).not.toContain('secret-key');
   });
 
@@ -227,23 +257,27 @@ describe('satellite ground backfill', () => {
     });
     const legacy = { ...layout };
     delete legacy.mapGroundPolygon;
+    delete legacy.mapLngLat;
     delete legacy.satelliteGroundRef;
     delete legacy.floorPlanImage;
     const patch = await ensureSatelliteGround(legacy);
     expect(mapVenuePlaceQuery(legacy.name)).toContain('盐官潮乐之城');
     expect(patch?.mapGroundPolygon).toHaveLength(4);
-    const center = patch!.mapGroundPolygon.reduce((sum, point) => ({ lng: sum.lng + point.lng, lat: sum.lat + point.lat }), { lng: 0, lat: 0 });
+    const center = patch!.mapGroundPolygon!.reduce((sum, point) => ({ lng: sum.lng + point.lng, lat: sum.lat + point.lat }), { lng: 0, lat: 0 });
     expect(center.lng / 4).toBeCloseTo(120.54, 4);
     expect(center.lat / 4).toBeCloseTo(30.405, 4);
     expect(rectangleAroundMeters({ lng: 120.54, lat: 30.405 }, legacy.width, legacy.height)).toHaveLength(4);
   });
 
-  it('does not invent a ground image when no key is available', async () => {
+  it('uses a placeholder when the key is missing so the ground is not left plain', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官潮乐之城', location: '海宁盐官', polygon: lShapePolygon(), satelliteGround: false,
-    });
-    expect(await ensureSatelliteGround(layout)).toBeNull();
+    const named = { ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城 · 规划区 84.6×100m' };
+    const patch = await ensureSatelliteGround(named);
+    expect(patch?.satelliteGroundRef).toBe(true);
+    expect(patch?.floorPlanImage).toContain(SATELLITE_GROUND_MARK);
+    expect(patch?.floorPlanImage?.startsWith('data:image/svg')).toBe(true);
+    expect(patch?.mapGroundPolygon).toBeUndefined();
+    expect(await ensureSatelliteGround({ ...named, floorPlanImage: patch!.floorPlanImage, satelliteGroundRef: true })).toBeNull();
   });
 });

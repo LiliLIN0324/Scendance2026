@@ -367,13 +367,17 @@ export interface RoomLayout {
   /**
    * 卫星/高德贴地参考底图开关：仅观感辅助，与 RECON_MATERIAL_BAN 一致，
    * 不得进入 Aholo 上传/重建素材列表。
-   * `true` 打开；`false` 是人关掉的（地图户外壳不再自动补图）；缺省则地图户外壳默认打开。
+   * `true` 打开；`false` 是人关掉的（不再自动补图）；缺省则规划区 / 户外简报 / 地图壳默认打开。
    */
   satelliteGroundRef?: boolean;
   /**
    * 地图圈画的经纬度，只为再拉卫星参考底图。本地编辑元数据，不进场景线、不进 Aholo 上传。
    */
   mapGroundPolygon?: { lng: number; lat: number }[];
+  /**
+   * 地图场地中心经纬度。旧项目可能只有这一点、没有圈画点列。同样只用于卫星参考，不进上传。
+   */
+  mapLngLat?: { lng: number; lat: number };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
   neighbours?: NeighbourSpec;

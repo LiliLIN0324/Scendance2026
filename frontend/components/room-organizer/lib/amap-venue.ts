@@ -163,30 +163,46 @@ export function buildSatelliteStaticMapUrl(
   return `https://restapi.amap.com/v3/staticmap?${params.toString()}`;
 }
 
+/** 本机开发走 3199；生产（含 scendance.lilicoding.space）走同源 /api/amap-static，Key 留在 Pages。 */
+export function usesLocalAmapProxy(): boolean {
+  if (typeof window === 'undefined') return true;
+  const host = window.location?.hostname ?? '';
+  return host === 'localhost' || host === '127.0.0.1' || host === '';
+}
+
 /**
- * 本机卫星代理 URL（Key 不进地址）。浏览器再探测一次，确认代理真能回图。
+ * 卫星参考图地址（Key 不进地址）。本机是 3199，生产是同源 /api/amap-static。
  * 仅观感贴地，带 SATELLITE_GROUND_MARK，绝不进 Aholo 上传。
  */
-export function satelliteProxyUrl(polygon: AmapPoint[], key: string): string | null {
-  const amapUrl = buildSatelliteStaticMapUrl(polygon, key);
-  if (!amapUrl) return null;
-  const parsed = new URL(amapUrl);
-  const q = new URLSearchParams(parsed.search);
-  q.delete('key');
-  q.delete('maptype');
-  q.set('x-ref', SATELLITE_GROUND_MARK);
-  return `http://127.0.0.1:3199/amap-static?${q.toString()}`;
+export function satelliteProxyUrl(polygon: AmapPoint[], _key?: string): string | null {
+  if (polygon.length < 3) return null;
+  const lats = polygon.map(point => point.lat);
+  const lngs = polygon.map(point => point.lng);
+  const lng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+  const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const bbox = polygonBboxMeters(polygon);
+  const params = new URLSearchParams({
+    location: `${lng},${lat}`,
+    zoom: String(satelliteZoomForMeters(bbox.width, bbox.depth)),
+    size: '768*768',
+    scale: '2',
+    'x-ref': SATELLITE_GROUND_MARK,
+  });
+  const query = params.toString();
+  return usesLocalAmapProxy()
+    ? `http://127.0.0.1:3199/amap-static?${query}`
+    : `/api/amap-static?${query}`;
 }
 
 /**
  * 拉取静态卫星图并落成代理 URL（带 SATELLITE_GROUND_MARK）。
- * 失败返回 null，上层再退到占位 SVG。
+ * 失败返回 null，上层再退到占位 SVG。第二个参数只为兼容旧调用，不会写进地址。
  */
 export async function fetchSatelliteGroundDataUrl(
   polygon: AmapPoint[],
-  key: string,
+  _key?: string,
 ): Promise<string | null> {
-  const proxy = satelliteProxyUrl(polygon, key);
+  const proxy = satelliteProxyUrl(polygon);
   if (!proxy || typeof window === 'undefined') return null;
   // 浏览器直连 restapi 常被掐；走本机代理。用代理 URL 直接贴地（勿嵌 data URL，避免 localStorage 爆）。
   try {
@@ -216,9 +232,12 @@ export function readAmapKeys(): { key: string; security: string; staticKey: stri
 
 /** 场地名里的地点，丢掉「规划区 / 真实范围」这类尺寸注。 */
 export function mapVenuePlaceQuery(name: string): string {
-  const parts = name.split('·').map(part => part.trim()).filter(Boolean);
-  const useful = parts.filter(part => !part.startsWith('规划区') && !part.startsWith('真实范围'));
-  return useful.slice(0, 2).join(' ').replace(/\s+/g, ' ').trim();
+  return name
+    .replace(/规划区\s*[\d.]+[×xX][\d.]+m.*$/u, '')
+    .replace(/真实范围.*$/u, '')
+    .replace(/[·・]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** 以地理中心按场地米数摊一块矩形，供没有存圈画点列的旧场地补卫星图。 */
@@ -233,18 +252,26 @@ export function rectangleAroundMeters(center: AmapPoint, widthM: number, depthM:
   ];
 }
 
-/** 地图立出的户外壳：多边形 + 户外，或已经记下圈画经纬度。室内矩形不是这条路径。 */
+/**
+ * 该不该出现卫星参考、并在没人关过时默认打开。
+ * 旧项目常常没有 mapGroundPolygon，backend 场地也还是矩形：名字里的「规划区」、
+ * 场地简报的户外，或已经贴过的卫星图，都算。明确标成室内、又没有这些痕迹的矩形不算。
+ */
 export function isMapOutdoorLayout(layout: RoomLayout): boolean {
   if ((layout.mapGroundPolygon?.length ?? 0) >= 3) return true;
+  if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) return true;
+  if (isSatelliteGroundImage(layout.floorPlanImage)) return true;
+  // 缺圈画点列也要露出钮：规划区 / 真实范围只会出现在地图立壳的名字里。
+  if (/规划区|真实范围/.test(layout.name)) return true;
   const venue = layout.backendSceneV2?.venue ?? layout.backendVenue;
   if (!venue || venue.site?.indoorOutdoor === 'indoor') return false;
-  if (venue.shape === 'polygon' && venue.site?.indoorOutdoor === 'outdoor') return true;
-  return venue.shape === 'polygon' && /规划区/.test(layout.name);
+  if (venue.site?.indoorOutdoor === 'outdoor') return true;
+  return venue.shape === 'polygon';
 }
 
 /**
- * 地图户外场地默认要看卫星贴地。`false` 是人关掉的，重新打开前不再自动拉。
- * `true` 是打开。缺省则只对地图户外壳默认打开。
+ * 上面这些场地默认要看卫星贴地。`false` 是人关掉的，重新打开前不再自动拉。
+ * `true` 是打开。缺省则按 isMapOutdoorLayout。
  */
 export function satelliteGroundWanted(layout: RoomLayout): boolean {
   if (layout.satelliteGroundRef === false) return false;
@@ -256,9 +283,11 @@ export function isPlaceholderSatellite(url: string | undefined | null): boolean 
   return !!url && url.startsWith('data:image/svg') && isSatelliteGroundImage(url);
 }
 
-/** 已经有可贴地的卫星图（代理或位图），占位 SVG 不算。 */
+/** 已经有可贴地的卫星图（代理或位图），占位 SVG 不算。生产上的 127.0.0.1 地址不算，否则会一直纯色。 */
 export function hasFetchedSatellite(url: string | undefined | null): boolean {
-  return isSatelliteGroundImage(url) && !isPlaceholderSatellite(url);
+  if (!isSatelliteGroundImage(url) || isPlaceholderSatellite(url)) return false;
+  if (!usesLocalAmapProxy() && !!url && (url.includes('127.0.0.1:3199') || url.includes('localhost:3199'))) return false;
+  return true;
 }
 
 export async function geocodeAmapPlace(query: string, key: string, security: string): Promise<AmapPoint | null> {
@@ -288,44 +317,79 @@ export async function geocodeAmapPlace(query: string, key: string, security: str
   });
 }
 
-/** 优先用立壳时存下的圈画；旧场地没有点列时，用场地名向高德要一个中心再摊矩形。 */
+async function geocodeViaSameOrigin(query: string): Promise<AmapPoint | null> {
+  if (typeof window === 'undefined' || usesLocalAmapProxy()) return null;
+  try {
+    const response = await fetch(`/api/amap-geocode?keywords=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    const body = await response.json() as { lng?: number; lat?: number };
+    const lng = Number(body.lng);
+    const lat = Number(body.lat);
+    return Number.isFinite(lng) && Number.isFinite(lat) ? { lng, lat } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 优先用立壳时存下的圈画或中心点；旧场地没有点列时，用场地名向高德要一个中心再摊矩形。 */
 export async function resolveSatellitePolygon(layout: RoomLayout): Promise<AmapPoint[] | null> {
   const stored = layout.mapGroundPolygon;
   if (stored && stored.length >= 3) return stored.map(point => ({ lng: point.lng, lat: point.lat }));
+  if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) {
+    return rectangleAroundMeters(layout.mapLngLat, layout.width, layout.height);
+  }
   if (!isMapOutdoorLayout(layout)) return null;
   const query = mapVenuePlaceQuery(layout.name);
   if (!query || query === '户外场地' || query === '未命名' || query === '未命名活动') return null;
   const { key, security } = readAmapKeys();
-  const center = await geocodeAmapPlace(query, key, security);
+  const center = (key ? await geocodeAmapPlace(query, key, security) : null) ?? await geocodeViaSameOrigin(query);
   if (!center) return null;
   return rectangleAroundMeters(center, layout.width, layout.height);
+}
+
+function centroid(points: AmapPoint[]): { lng: number; lat: number } {
+  return {
+    lng: points.reduce((sum, point) => sum + point.lng, 0) / points.length,
+    lat: points.reduce((sum, point) => sum + point.lat, 0) / points.length,
+  };
 }
 
 export interface SatelliteGroundPatch {
   floorPlanImage: string;
   floorPlanOpacity: number;
   satelliteGroundRef: true;
-  mapGroundPolygon: AmapPoint[];
+  /** 定位成功才有；失败时只贴占位，不编造经纬度。 */
+  mapGroundPolygon?: AmapPoint[];
+  mapLngLat?: { lng: number; lat: number };
 }
 
 /**
- * 补齐卫星参考底图。Key 不可用、或旧场地定位失败时返回 null（调用方保持素色地面）。
- * 代理探测失败则退回带禁令文案的占位图，避免永远白壳。图只写 floorPlanImage，不进采集上传。
+ * 补齐卫星参考底图。同源或本机代理拉到了就用真图；定位失败或探测失败时退回占位 SVG
+ * （带 satellite-ground-ref），不要让地面停在素色。已经是占位且这次仍失败则返回 null，避免来回重贴。
+ * 图只写 floorPlanImage，不进采集上传。浏览器不携带高德 Key。
  */
 export async function ensureSatelliteGround(layout: RoomLayout): Promise<SatelliteGroundPatch | null> {
-  const { staticKey } = readAmapKeys();
-  if (!staticKey) return null;
   const polygon = await resolveSatellitePolygon(layout);
-  if (!polygon || polygon.length < 3) return null;
-  const fetched = await fetchSatelliteGroundDataUrl(polygon, staticKey);
-  if (!fetched && isPlaceholderSatellite(layout.floorPlanImage)) return null;
-  const bbox = polygonBboxMeters(polygon);
-  const image = fetched ?? makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height);
+  const located = polygon && polygon.length >= 3 ? polygon : null;
+  if (located) {
+    const fetched = await fetchSatelliteGroundDataUrl(located);
+    if (fetched) {
+      return {
+        floorPlanImage: fetched,
+        floorPlanOpacity: 0.78,
+        satelliteGroundRef: true,
+        mapGroundPolygon: located,
+        mapLngLat: centroid(located),
+      };
+    }
+  }
+  if (isPlaceholderSatellite(layout.floorPlanImage)) return null;
+  const bbox = located ? polygonBboxMeters(located) : { width: layout.width, depth: layout.height };
   return {
-    floorPlanImage: image,
+    floorPlanImage: makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height),
     floorPlanOpacity: 0.78,
     satelliteGroundRef: true,
-    mapGroundPolygon: polygon,
+    ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located) } : {}),
   };
 }
 
@@ -335,7 +399,8 @@ export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGr
     floorPlanImage: patch.floorPlanImage,
     floorPlanOpacity: patch.floorPlanOpacity,
     satelliteGroundRef: true,
-    mapGroundPolygon: patch.mapGroundPolygon,
+    ...(patch.mapGroundPolygon ? { mapGroundPolygon: patch.mapGroundPolygon } : {}),
+    ...(patch.mapLngLat ? { mapLngLat: patch.mapLngLat } : {}),
   };
 }
 
@@ -381,13 +446,14 @@ export function createVenueFromPick(
   if (!plan) throw new Error('这块场地是有内墙或图纸证据的真实结构，先在结构里清出一块空地，再来圈画。');
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
   // 圈画经纬度跟着场地走，方便 3D 里后补卫星图；不进场景线、不进采集上传。
-  let layout: RoomLayout = { ...plan.layout, name, mapGroundPolygon: pick.polygon };
+  let layout: RoomLayout = { ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon) };
   if (pick.satelliteGround) {
     const raw = pick.satelliteGroundImage?.trim() ?? '';
     const image = raw && (
       raw.startsWith('data:image/')
       || raw.startsWith('http://127.0.0.1:3199/amap-static?')
       || raw.startsWith('http://localhost:3199/amap-static?')
+      || raw.startsWith('/api/amap-static?')
       || isSatelliteGroundImage(raw)
     )
       ? raw

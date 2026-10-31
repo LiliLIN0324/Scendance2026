@@ -132,11 +132,15 @@ function isDataImageUrl(value: unknown): value is string {
  * 其它 http(s) 仍拒绝，避免存档在加载时去打任意外站。
  */
 function isSatelliteProxyUrl(value: string): boolean {
-  if (!/^http:\/\/(?:127\.0\.0\.1|localhost):3199\/amap-static\?/.test(value) || value.length > 2000) return false;
+  if (value.length > 2000 || value.includes('#') || value.includes('\\')) return false;
+  const local = /^http:\/\/(?:127\.0\.0\.1|localhost):3199\/amap-static\?/.test(value);
+  const sameOrigin = value.startsWith('/api/amap-static?') && !value.startsWith('//');
+  if (!local && !sameOrigin) return false;
   try {
-    const url = new URL(value);
-    if (url.username || url.password || url.hash || url.port !== '3199') return false;
-    if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost')) return false;
+    const url = new URL(value, 'https://scendance.lilicoding.space');
+    if (url.username || url.password || url.hash) return false;
+    if (local && (url.port !== '3199' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') || url.protocol !== 'http:')) return false;
+    if (sameOrigin && url.pathname !== '/api/amap-static') return false;
     return url.searchParams.get('x-ref') === 'satellite-ground-ref';
   } catch {
     return false;
@@ -335,6 +339,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
     !Array.isArray(v.mapGroundPolygon) || v.mapGroundPolygon.length < 3 || v.mapGroundPolygon.length > 64
     || !v.mapGroundPolygon.every(isLngLatPoint)
   )) return false;
+  if (v.mapLngLat !== undefined && !isLngLatPoint(v.mapLngLat)) return false;
   // Opacity outside [0,1] is corruption, not preference — the UI slider only
   // produces this range and canvas globalAlpha silently misbehaves outside it.
   if (
@@ -512,6 +517,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   floorPlanFitMode: true,
   satelliteGroundRef: true,
   mapGroundPolygon: true,
+  mapLngLat: true,
   terrain: true,
   neighbours: true,
   entrance: true,
