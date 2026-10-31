@@ -641,3 +641,44 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
     expect(screen.getByLabelText('活动简报').textContent).not.toContain('200 × 150');
   }, 25000);
 });
+
+describe('晴光在左侧工作台', () => {
+  it('空闲时点晴光形象回到输入，不另开一栏', () => {
+    render(ui(makeLayout()));
+    const face = screen.getByRole('button', { name: '晴光，空闲。回到输入' });
+    expect(face.querySelector('img')?.getAttribute('src')).toBe('/assets/assistant/qingguang-3d-40.png');
+    fireEvent.click(face);
+    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+    fireEvent.click(screen.getByRole('button', { name: '空闲' }));
+    expect(document.activeElement).toBe(screen.getByLabelText('告诉 Agent 要改的'));
+  });
+});
+
+describe('右栏生成物件', () => {
+  it('生成和布置分开，切过去不再留着晴光的发送', () => {
+    render(ui(makeLayout()));
+    expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '切换到生成物件' }));
+    expect(screen.queryByRole('button', { name: '发送' })).toBeNull();
+    expect(screen.getByRole('button', { name: '生成物件' })).toBeTruthy();
+    expect(screen.getByText('按 Tab 填入')).toBeTruthy();
+    expect(screen.getByLabelText('物件描述')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '布置' }));
+    expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+  });
+
+  it('生成场景只把句子填进生成条，不打接口', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(ui(makeLayout()));
+    fireEvent.change(screen.getByLabelText('告诉 Agent 要改的'), { target: { value: '生成一个竹林场景' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(screen.getByText(/还没提交，不会扣额度/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '填到生成条' }));
+    expect((screen.getByLabelText('物件描述') as HTMLTextAreaElement).value).toBe('生成一个竹林场景');
+    expect(screen.getByRole('button', { name: '场景' }).getAttribute('aria-pressed')).toBe('true');
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});

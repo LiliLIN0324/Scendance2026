@@ -312,6 +312,58 @@ export function isVenueSizeOnly(extraction: BriefExtraction): boolean {
   return hasSize && extraction.headcount === null && extraction.event === null && extraction.timeOfDay === null;
 }
 
+/**
+ * 这一轮用哪块场地：人刚说的长宽/面积优先；没说、但场地已经立起来，就用画布上这块，并标明是现成的。
+ * 空地还没立壳时保持 canvas，回话不报米数。
+ */
+export function workingScale(
+  extraction: BriefExtraction,
+  canvas: { width: number; height: number; venueUp: boolean },
+  previous: ScaleOrigin,
+): { length: number; width: number; origin: ScaleOrigin; fromVenue: boolean } {
+  const origin = scaleOriginOf(extraction, previous);
+  if (origin === 'stated' && extraction.lengthM !== null && extraction.widthM !== null) {
+    return { length: extraction.lengthM, width: extraction.widthM, origin, fromVenue: false };
+  }
+  if (origin === 'area' && extraction.areaM2 !== null) {
+    return { ...suggestDimsFromArea(extraction.areaM2), origin, fromVenue: false };
+  }
+  if (canvas.venueUp && canvas.width > 0 && canvas.height > 0) {
+    return { length: canvas.width, width: canvas.height, origin: previous === 'canvas' ? 'typed' : previous, fromVenue: true };
+  }
+  return { length: canvas.width, width: canvas.height, origin: 'canvas', fromVenue: false };
+}
+
+/** 发布会这类先占舞台和签到；课室两者都不要。没点名就按活动类型猜，说「不要」就关掉。 */
+export function layoutAnchors(text: string, event: string | null, layoutMode: 'dining' | 'desk-chair'): { stage: boolean; checkin: boolean } {
+  if (layoutMode === 'desk-chair') return { stage: false, checkin: false };
+  const compact = text.replace(/\s+/g, '');
+  const noStage = /不要舞台|不设舞台|无舞台/.test(compact);
+  const noCheckin = /不要签到|不设签到|无签到/.test(compact);
+  const gathering = event !== null && event !== '市集';
+  return {
+    stage: !noStage && (/舞台|背景板/.test(compact) || gathering || event === null),
+    checkin: !noCheckin && (/签到|接待/.test(compact) || gathering),
+  };
+}
+
+/**
+ * 文生物件 / 场景：只整理要提交的那句，不提交。
+ * 布置句（出方案、加人）返回 null，免得把布置当成扣费生成。
+ */
+export function prepareAholoAsk(raw: string): { kind: 'text' | 'world'; prompt: string; title: string } | null {
+  const text = raw.trim();
+  const compact = text.replace(/\s+/g, '');
+  if (!compact || /出方案|布置|确认布置|加一把|加一张|加一个/.test(compact)) return null;
+  if (/场景生成|文生场景|生成.{0,24}场景|做.{0,12}场景/.test(compact)) {
+    return { kind: 'world', prompt: text, title: '场景' };
+  }
+  if (/文字建模|文生物件|文生3d|文生三维|文生(?!场景)|生成.{0,24}物件|做.{0,12}物件/i.test(compact)) {
+    return { kind: 'text', prompt: text, title: '物件' };
+  }
+  return null;
+}
+
 /** 尺度是从哪儿来的：只有人说过或填过的才算确认。 */
 export function scaleOriginOf(extraction: BriefExtraction, previous: ScaleOrigin): ScaleOrigin {
   if (extraction.lengthM !== null && extraction.widthM !== null) return 'stated';

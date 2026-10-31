@@ -10,8 +10,9 @@
  * 第 1 步「读场地」先把确认过的尺度立成可布置壳体（四面外墙 + 主入口 + 层高，见 lib/venue-shell）。
  * 底图只收图片（复用 layout.floorPlanImage）：图纸只当参照，长宽要么说一句「12×9」、要么说「按图纸估」，
  * 未确认前不把米数说成事实（docs/AI-NATIVE-FOR-EXECUTORS.md 对话四步 ①）。
- * 生成入口只有一个：对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
+ * 布置方案的入口只有对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
+ * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
 import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -33,18 +34,22 @@ import { venueBriefLine } from '../lib/venue-brief-line';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
-  scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
+  prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
+import { LaneSwitch, MaterialGenerateDock } from './material-generate-dock';
 import { SiteCaptureCard } from './site-capture-card';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
-import type { RoomLayout } from '../lib/types';
+import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import './agent-panel.css';
+
+type GenerateFill = { kind: 'text' | 'world'; prompt: string; nonce: number };
+let onGenerateFill: ((seed: GenerateFill) => void) | null = null;
 
 const MASCOT_DIR = '/assets/assistant/qingguang-3d';
 const STEP_DELAY_MS = 420;
@@ -219,6 +224,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const briefRef = useRef(brief); briefRef.current = brief;
   // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
   const memoryRef = useRef<BriefMemory>(initialBriefMemory());
+  /** 这一句要不要舞台/签到。缺省跟旧行为：放舞台、不放签到。 */
+  const anchorsRef = useRef({ stage: true, checkin: false });
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -503,11 +510,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 一句话里刚说的尺度要当场用上：setState 还没渲染，读 lengthCheck 会拿到旧值，
    * 所以「一句话 → 方案预览」这条路把解析结果直接算成尺度传给生成器。
    */
-  function scaleFrom(extraction: BriefExtraction): Scale {
-    const origin = scaleOriginOf(extraction, scaleOrigin);
-    if (origin === 'stated' && extraction.lengthM !== null && extraction.widthM !== null) return { length: extraction.lengthM, width: extraction.widthM, origin };
-    if (origin === 'area' && extraction.areaM2 !== null) return { ...suggestDimsFromArea(extraction.areaM2), origin };
-    return readScale();
+  function venueIsUp(layout: RoomLayout = live.current): boolean {
+    const floor = layout.floors[Math.min(activeFloorIndex, Math.max(0, layout.floors.length - 1))];
+    return layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || layout.scenePreset !== undefined || (floor?.interiorWalls?.length ?? 0) > 0;
+  }
+
+  function scaleFrom(extraction: BriefExtraction): Scale & { fromVenue: boolean } {
+    return workingScale(extraction, { width: live.current.width, height: live.current.height, venueUp: venueIsUp() }, scaleOrigin);
   }
 
   /** 「按图纸估」：底图只当参照，折出来的长宽是估的，说完就按它出预览，说错了再讲一句新的。 */
@@ -831,7 +840,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       }
     }
     let plan: PlanProposal;
-    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode }); }
+    const anchors = anchorsRef.current;
+    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, stage: anchors.stage, checkin: anchors.checkin }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
@@ -1074,6 +1084,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
+    const aholo = prepareAholoAsk(trimmed);
+    if (aholo) {
+      say({
+        role: 'agent',
+        text: `准备生成${aholo.title}：「${aholo.prompt}」。还没提交，不会扣额度。勾确认再点蓝钮。`,
+        action: { label: '填到生成条', run: () => onGenerateFill?.({ kind: aholo.kind, prompt: aholo.prompt, nonce: Date.now() }) },
+      });
+      return;
+    }
     const request = parseMaterialRequest(trimmed);
     if (request) { addMaterials(request); return; }
     if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
@@ -1105,8 +1124,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     syncMemory(turn.memory);
     const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
+    const anchors = layoutAnchors(trimmed, turn.memory.event, turn.memory.layoutMode);
+    anchorsRef.current = anchors;
     const scale = scaleFrom(merged);
-    const summary = describeExtraction(merged, scale);
+    const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
+    const summary = `${describeExtraction(merged, scale)}${scale.fromVenue ? ' · 按现在的场地' : ''}`;
     const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
     // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
     // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
@@ -1134,9 +1156,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       });
       return;
     }
+    const zoneLine = zoneBit ? `${zoneBit}先占位。` : '';
     say({ role: 'agent', text: turn.filledScaleAsk
-      ? `记下了：${summary}${carried}。先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
-      : `按这些先出一版：${summary}${carried}。画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      ? `记下了：${summary}${carried}。${zoneLine}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
+      : `按这些先出一版：${summary}${carried}。${zoneLine}画布上是预览，点「确认布置」才写进画布。${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
     runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }
@@ -1217,17 +1240,43 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
 /* ───────────────────────── 右栏 ───────────────────────── */
 
-/** 抬头状态点只许两种说法：做好了 / 发现问题。等你确认、正在出方案由头像与卡片自己说话，不重复一遍。 */
-function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: '做好了' | '发现问题'; tone: 'ok' | 'warn' } | null {
-  if (mode !== 'layout') return { text: '做好了', tone: 'ok' };
+/** 晴光形象对应的状态。点头像或这行字，回到这一态该做的事。 */
+function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
+  if (mode === 'review') return { text: '评审', tone: 'ask', hint: '钉在画布上，对话还在' };
+  if (mode === 'delivery') return { text: '执行', tone: 'idle', hint: '回到输入' };
+  if (mode !== 'layout') return { text: '空闲', tone: 'idle', hint: '回到输入' };
   const s = agent.state;
-  if (s === 'generateFailed') return { text: '发现问题', tone: 'warn' };
-  if (s === 'planProposed') return agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0)
-    ? { text: '发现问题', tone: 'warn' } : null;
-  if (s === 'planReady' || s === 'planEdited') {
-    return agent.overlapCount > 0 ? { text: '发现问题', tone: 'warn' } : { text: '做好了', tone: 'ok' };
+  if (s === 'generating') return { text: '生成中', tone: 'busy', hint: '看进度' };
+  if (s === 'generatePaused') return { text: '先停着', tone: 'ask', hint: '接着摆或撤回' };
+  if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') {
+    return { text: '没出成', tone: 'warn', hint: '看原因' };
   }
-  return null;
+  if (s === 'planProposed') {
+    const issue = agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0);
+    return issue ? { text: '发现问题', tone: 'warn', hint: '看这版' } : { text: '等你确认', tone: 'ask', hint: '去确认布置' };
+  }
+  if (s === 'planReady' || s === 'planEdited') {
+    return agent.overlapCount > 0 ? { text: '发现问题', tone: 'warn', hint: '看这一版' } : { text: '已出方案', tone: 'ok', hint: '看这一版' };
+  }
+  return { text: '空闲', tone: 'idle', hint: '回到输入' };
+}
+
+function jumpToQingguang(agent: AgentValue): void {
+  const s = agent.state;
+  const show = (id: string) => document.getElementById(id)?.scrollIntoView({ block: 'nearest' });
+  if (s === 'generating' || s === 'generatePaused') { show('gen-progress'); return; }
+  if (s === 'planProposed') {
+    show('plan-proposal');
+    document.getElementById('step-cta')?.focus();
+    return;
+  }
+  if (s === 'planReady' || s === 'planEdited') { show('plan-summary'); return; }
+  if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') {
+    show('inline-error');
+    return;
+  }
+  const input = document.getElementById('prop-input') ?? document.getElementById('ap-input');
+  input?.focus();
 }
 
 /**
@@ -1242,7 +1291,7 @@ function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
     const issue = agent.proposal?.blocked || (agent.proposal?.review && agent.proposal.overlapCount > 0);
     return `${MASCOT_DIR}-40-${issue ? 'issue' : 'ask'}.png`;
   }
-  if (s === 'generatePaused') return `${MASCOT_DIR}-40-ask.png`;
+  if (s === 'generating' || s === 'generatePaused') return `${MASCOT_DIR}-40-ask.png`;
   if (s === 'generateFailed' || s === 'dimsInvalid' || s === 'nonImageRejected' || s === 'fileUnsupported' || s === 'fileTooLarge' || s === 'fileReadFailed') return `${MASCOT_DIR}-40-issue.png`;
   return `${MASCOT_DIR}-40.png`;
 }
@@ -1441,8 +1490,33 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot }: {
+  onClose?(): void;
+  /** 右栏底部切到「生成物件」。不传则面板自己记。 */
+  generateOpen?: boolean;
+  onGenerateOpen?(next: boolean): void;
+  onPlaceProp?: ((item: CatalogItem) => boolean) | undefined;
+  onOpenPropFallback?: (() => void) | undefined;
+  onOpenPropCloud?: (() => void) | undefined;
+  /** 评审议题。挂在对话里，不替换整栏。 */
+  reviewSlot?: ReactNode;
+  /** 执行清单。挂在对话里，不替换整栏。 */
+  deliverySlot?: ReactNode;
+} = {}): JSX.Element {
   const agent = useAgent();
+  const [laneFallback, setLaneFallback] = useState(false);
+  const [propSeed, setPropSeed] = useState<{ kind: 'text' | 'world'; prompt: string; nonce: number } | null>(null);
+  const propLane = generateOpen ?? laneFallback;
+  function setPropLane(next: boolean) {
+    if (generateOpen === undefined) setLaneFallback(next);
+    onGenerateOpen?.(next);
+  }
+  const setPropLaneRef = useRef(setPropLane);
+  setPropLaneRef.current = setPropLane;
+  useEffect(() => {
+    onGenerateFill = seed => { setPropSeed(seed); setPropLaneRef.current(true); };
+    return () => { onGenerateFill = null; };
+  }, []);
   const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const [draft, setDraft] = useState('');
@@ -1460,17 +1534,15 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
+  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
     <header className="ap-head">
-      <span className="mascot-slot" title="晴光在线">
-        <img src={mascotOf(agent, mode)} alt="晴光" width={64} height={64} draggable={false}/>
-        <span className="ap-online-dot" aria-label="在线" role="status"/>
-      </span>
-      <strong>Agent</strong>
-      {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
-      {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
-      {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}
-      {onClose && <button type="button" className="ap-close" aria-label="关闭 Agent" title="关闭 Agent" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
+      <button type="button" className="mascot-slot" data-tone={status.tone} aria-label={`晴光，${status.text}。${status.hint}`} onClick={() => jumpToQingguang(agent)}>
+        <img src={mascotOf(agent, mode)} alt="" width={64} height={64} draggable={false}/>
+        <span className={`ap-online-dot is-${status.tone}`} aria-hidden="true"/>
+      </button>
+      <strong>晴光</strong>
+      <button type="button" id="agent-state" className={`ap-status is-${status.tone}`} onClick={() => jumpToQingguang(agent)}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</button>
+      {onClose && <button type="button" className="ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}><X size={20} aria-hidden="true"/></button>}
     </header>
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
@@ -1500,6 +1572,7 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
           </div>
         </>}
       </>}
+      {mode === 'review' && reviewSlot}
       {mode === 'review' && <div className="ap-card">
         <div className="ap-chips">
           <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>打开客户评审</button>
@@ -1507,6 +1580,7 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
           {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
         </div>
       </div>}
+      {mode === 'delivery' && deliverySlot}
       {mode === 'delivery' && <div className="ap-card">
         <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
         <div className="ap-chips">
@@ -1523,14 +1597,17 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>
-    <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
-      <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
-      <div className="ap-composer-bar">
-        <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={20} aria-hidden="true"/></button>
-        <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
-      </div>
-    </form>
+    {propLane
+      ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
+      : <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
+        <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
+        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
+        <div className="ap-composer-bar">
+          <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={20} aria-hidden="true"/></button>
+          <LaneSwitch prop={false} onChange={next => { if (next) setPropLane(true); }}/>
+          <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
+        </div>
+      </form>}
   </aside>;
 }
 

@@ -9,7 +9,7 @@
   /* 同区三档（§一.2）：面板内 CAP 11 并入 P2 12，整栏只剩 16/14/12 三档。 */
   --fs-cap: var(--fs-p2);
   --lh-cap: var(--lh-p2);
-  flex: 0 0 clamp(300px, 27vw, 344px); width: clamp(300px, 27vw, 344px);
+  flex: 0 0 clamp(320px, 32vw, 400px); width: clamp(320px, 32vw, 400px);
   min-width: 0; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box;
   background: var(--paper);
   border-left: 1px solid var(--wk-hair);
@@ -22,7 +22,8 @@
 
 /* ── 头部 ── */
 .ap-head { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 14px; border-bottom: 1px solid var(--wk-hair); flex: 0 0 auto; }
-.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; background: transparent; border-radius: 50%; flex-shrink: 0; }
+button.mascot-slot { position: relative; display: inline-flex; width: 48px; height: 48px; flex: 0 0 48px; padding: 0; border: 0; background: transparent; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
+.ap-status { border: 0; background: transparent; padding: 0; cursor: pointer; }
 .mascot-slot img { width: 48px; height: 48px; display: block; object-fit: cover; border-radius: 50%; }
 .ap-online-dot { position: absolute; right: 1px; bottom: 1px; z-index: 1; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; background: var(--wk-ink-soft, #71767e); border: 2px solid var(--wk-paper, #fff); box-shadow: 0 0 0 1px rgba(20, 20, 22, .06); }
 .ap-head strong { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink); }
@@ -35,6 +36,10 @@
 .ap-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
 .ap-status.is-ok { color: var(--ap-green); }
 .ap-status.is-warn { color: var(--warn); }
+.ap-status.is-busy, .ap-status.is-ask { color: var(--wk-ink); }
+.ap-online-dot.is-ok { background: var(--ap-green, #4A7C59); }
+.ap-online-dot.is-warn { background: var(--warn, #96651F); }
+.ap-online-dot.is-busy, .ap-online-dot.is-ask { background: #0668e5; }
 .ap-stage { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; font-size: var(--fs-cap); font-weight: 500; color: var(--wk-ink-soft); gap: 3px; }
 .ap-stage small { font-weight: 400; color: var(--ap-grey); }
 .ap-stage-bar { display: flex; gap: 3px; }
@@ -136,6 +141,30 @@
 .ap-send { border: 1px solid transparent; width: 32px; height: 32px; border-radius: 50%; background: var(--ink, #141416); color: #fff; display: grid; place-items: center; transition: background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-send:hover:not(:disabled) { border-color: transparent; background: #2A2C31; transform: translateY(-1px); }
 .ap-send:disabled { color: var(--wk-ink-faint); background: var(--wk-plane); cursor: default; }
+/* 布置 / 生成：生成是蓝色字，和晴光的墨色发送分开。 */
+.ap-lane { display: inline-flex; align-items: center; border: 1px solid var(--wk-hair); border-radius: 999px; overflow: hidden; flex: none; }
+.ap-lane button { border: 0; background: transparent; padding: 2px 8px; font-size: var(--fs-p2); line-height: 20px; color: var(--wk-muted); cursor: pointer; }
+.ap-lane button[aria-pressed='true'] { background: var(--wk-plane); color: var(--wk-ink); font-weight: 600; }
+.ap-lane button.is-generate { color: #0668e5; font-weight: 600; }
+.ap-lane button.is-generate[aria-pressed='true'] { background: rgba(6, 104, 229, .08); color: #0668e5; }
+.sc-gen-dock { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 0 0 auto; }
+.sc-gen-thread { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; max-height: 168px; overflow: auto; }
+.sc-gen-empty { margin: 0; text-align: center; color: var(--wk-muted); font-size: var(--fs-p1); }
+.sc-gen-field { position: relative; min-height: 44px; }
+.sc-gen-ghost { position: absolute; left: 0; top: 0; right: 0; color: var(--wk-muted, #71767e); pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p1); line-height: var(--lh-p1); }
+.ap-composer.is-generate:focus-within { border-color: #0668e5; box-shadow: 0 0 0 3px rgba(6, 104, 229, .16); }
+.ap-composer.is-generate textarea { width: 100%; min-height: 44px; background: transparent; }
+.ap-composer.is-generate .ap-composer-bar { flex-wrap: wrap; }
+.sc-gen-meta { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.sc-gen-tab { font-size: var(--fs-p2); color: var(--wk-muted); white-space: nowrap; }
+.sc-gen-credit { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-p2); color: var(--wk-ink-soft); cursor: pointer; white-space: nowrap; }
+.sc-workbench button.sc-gen-go { width: 30px; height: 30px; border: 0; border-radius: 50%; padding: 0; background: #0668e5; color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; opacity: 1; }
+.sc-workbench button.sc-gen-go:hover:not(:disabled) { background: #237ae8; color: #fff; }
+.sc-workbench button.sc-gen-go:disabled { opacity: .5; background: #0668e5; color: #fff; cursor: default; }
+.sc-gen-stop { width: 10px; height: 10px; border-radius: 2px; background: #fff; }
+.sc-gen-warn { margin: 0; font-size: var(--fs-p2); color: var(--warn, #96651f); }
+.sc-gen-foot { margin: 0; display: flex; gap: 10px; }
+.sc-gen-resume { border: 0; background: transparent; padding: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
 /* ── 环境感知行：AI 活着的最低调信号 ── */
 @keyframes ap-breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
@@ -228,10 +257,12 @@
 .sc-brief-tool-list button:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: -2px; }
 /* 简报比深工具窄：桌面端把 380px 的固定页收回来。 */
 @media (min-width: 1081px) {
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.has-brief {
-    flex-basis: var(--sc-left-card-width, 320px) !important;
-    width: var(--sc-left-card-width, 320px) !important;
-    max-width: var(--sc-left-card-width, 320px) !important;
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.sc-float-layer.has-brief,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel {
+    flex: 1 1 auto !important;
+    flex-basis: auto !important;
+    width: 100% !important;
+    max-width: none !important;
   }
 }
 .sc-left-card-resizer {
