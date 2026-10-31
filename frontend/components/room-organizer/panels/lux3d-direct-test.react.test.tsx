@@ -68,9 +68,14 @@ describe('Aholo 产品化壳体', () => {
     offline();
     render(<Lux3dDirectTest/>);
     expect(screen.getByRole('heading', { name: '场地观感与物料' })).toBeTruthy();
+    expect(screen.getByText(/右栏底部「生成」/)).toBeTruthy();
     expect(screen.getByText(/主路径：地图圈画/)).toBeTruthy();
     expect(screen.getByText(/卫星不可作重建素材/)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Aholo 接口测试' })).toBeNull();
+    const gated = screen.getByRole('button', { name: '先勾选扣额度确认闸' }) as HTMLButtonElement;
+    expect(gated.disabled).toBe(true);
+    fireEvent.click(gated);
+    expect(screen.queryByText(/正在提交/)).toBeNull();
   });
 
   it('采集单预设时显示来源条并切到场地重建', async () => {

@@ -950,6 +950,13 @@ body {
 }
 /* 左轨以图标为主视觉；中文名在 data-tip / aria-label，不把汉字再铺在钮面上。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-word {
+  display: block; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool.sc-rail-generate:hover {
+  color: #0668e5;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;

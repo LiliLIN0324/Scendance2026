@@ -10,8 +10,9 @@
  * 第 1 步「读场地」先把确认过的尺度立成可布置壳体（四面外墙 + 主入口 + 层高，见 lib/venue-shell）。
  * 底图只收图片（复用 layout.floorPlanImage）：图纸只当参照，长宽要么说一句「12×9」、要么说「按图纸估」，
  * 未确认前不把米数说成事实（docs/AI-NATIVE-FOR-EXECUTORS.md 对话四步 ①）。
- * 生成入口只有一个：对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
+ * 布置方案的入口只有对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
+ * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
 import { ArrowUp, Check, FileImage, Loader2, Map as MapIcon, Maximize2, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -39,9 +40,10 @@ import {
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
+import { LaneSwitch, MaterialGenerateDock } from './material-generate-dock';
 import { SiteCaptureCard } from './site-capture-card';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
-import type { RoomLayout } from '../lib/types';
+import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import './agent-panel.css';
@@ -1441,8 +1443,22 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud }: {
+  onClose?(): void;
+  /** 右栏底部切到「生成物件」。不传则面板自己记。 */
+  generateOpen?: boolean;
+  onGenerateOpen?(next: boolean): void;
+  onPlaceProp?: ((item: CatalogItem) => boolean) | undefined;
+  onOpenPropFallback?: (() => void) | undefined;
+  onOpenPropCloud?: (() => void) | undefined;
+} = {}): JSX.Element {
   const agent = useAgent();
+  const [laneFallback, setLaneFallback] = useState(false);
+  const propLane = generateOpen ?? laneFallback;
+  function setPropLane(next: boolean) {
+    if (generateOpen === undefined) setLaneFallback(next);
+    onGenerateOpen?.(next);
+  }
   const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const [draft, setDraft] = useState('');
@@ -1523,14 +1539,17 @@ export function AgentPanel({ onClose }: { onClose?(): void } = {}): JSX.Element 
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>
-    <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
-      <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-      <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
-      <div className="ap-composer-bar">
-        <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={20} aria-hidden="true"/></button>
-        <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
-      </div>
-    </form>
+    {propLane
+      ? <MaterialGenerateDock onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
+      : <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
+        <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
+        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
+        <div className="ap-composer-bar">
+          <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={20} aria-hidden="true"/></button>
+          <LaneSwitch prop={false} onChange={next => { if (next) setPropLane(true); }}/>
+          <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
+        </div>
+      </form>}
   </aside>;
 }
 

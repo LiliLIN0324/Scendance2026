@@ -54,7 +54,7 @@ export function GeneratedItemLibrary({ disabled = false, onAdd }: {
     {error && <p className="sc-warning sc-material-note" role="alert">{error}</p>}
     {assets.length === 0
       // 撤掉最后一张卡之后仍要说清为什么，否则失败看起来像「本来就没有」。
-      ? <p className="sc-note sc-material-empty">本机还没有生成好的物件。在左轨「观感」·「文字建模 / 图片建模」生成并取回后，它们会出现在这里。</p>
+      ? <p className="sc-note sc-material-empty">本机还没有生成好的物件。在右栏「生成」写一句，或在左轨「观感」里图片建模，取回后会出现在这里。</p>
       : <div className="sc-material-rail" role="group" aria-label="生成物件">
         {assets.map(asset => <button type="button" key={asset.assetId} className="sc-material-card"
           disabled={disabled || busy !== null} onClick={() => void add(asset.assetId, asset.shipped)}
