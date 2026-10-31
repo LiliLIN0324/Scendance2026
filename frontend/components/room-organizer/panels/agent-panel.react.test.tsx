@@ -252,7 +252,7 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('keeps the left rail at exactly the three workbench modes', async () => {
+  it('keeps review and delivery as conversation capabilities, not rail buttons', async () => {
     const { WORKBENCH_MODES } = await import('../lib/workbench-mode');
     expect(WORKBENCH_MODES.map(mode => mode.id)).toEqual(['layout', 'review', 'delivery']);
     expect(WORKBENCH_MODES.map(mode => mode.label)).toEqual(['布置', '评审', '执行']);

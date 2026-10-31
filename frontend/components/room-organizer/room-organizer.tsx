@@ -1,6 +1,6 @@
 'use client';
 
-import { ListChecks, PanelLeftClose, Ruler, Scan, Send, Settings, Shapes, Sparkles, SquareStack } from 'lucide-react';
+import { PanelLeftClose, Ruler, Scan, Settings, Shapes, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -63,7 +63,7 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
-import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
+import { WORKBENCH_MODE_DEFAULT, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
 import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
@@ -77,6 +77,7 @@ import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
+import { QingguangRailButton } from './panels/qingguang-rail-button';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
@@ -182,7 +183,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
-  /** 晴光栏在左侧。关掉后再从画布上的晴光浮标打开，回到布置对话。 */
+  /** 晴光栏在左侧。关掉后再点轨上头像或画布浮标，回到对话工作台。 */
   const [composerGenerate, setComposerGenerate] = useState(false);
   const [planHome, setPlanHome] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
@@ -298,7 +299,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setSidebarCollapsed(true);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.sc-mode-rail button[aria-pressed="true"]')?.focus());
   }, []);
-  // 左轨换的是画布在干什么，不把晴光整列换掉。评审钉在场内，图纸和执行资料浮在画布上。
+  // 评审、执行不从这轨进。点晴光只打开旁边的对话面板，不切布置模式。
   const selectWorkbenchMode = useCallback((mode: WorkbenchMode) => {
     setWorkbenchMode(mode);
     setWorkbenchModeSerial(value => value + 1);
@@ -307,6 +308,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setLeftMode('brief');
     setSidebarCollapsed(true);
     setAgentCollapsed(false);
+  }, []);
+  const openQingguang = useCallback(() => {
+    setAgentCollapsed(false);
+    setSidebarCollapsed(true);
+    requestAnimationFrame(() => {
+      const panel = document.getElementById('agent-panel');
+      const input = document.getElementById('ap-input') ?? document.getElementById('prop-input');
+      (input ?? panel)?.focus();
+    });
   }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     setWorkbenchMode(mode);
@@ -1602,13 +1612,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
-              <nav className="sc-mode-rail-top" aria-label="工作流程">
-                {WORKBENCH_MODES.map(mode => {
-                  const active = workbenchMode === mode.id;
-                  const Icon = mode.id === 'layout' ? SquareStack : mode.id === 'review' ? Send : ListChecks;
-                  return <button key={mode.id} type="button" className={active ? 'is-active' : ''} aria-pressed={active} aria-label={mode.label} data-tip={mode.label} title={mode.hint} onClick={() => selectWorkbenchMode(mode.id)}><Icon size={24} aria-hidden="true"/></button>;
-                })}
+              <nav className="sc-mode-rail-top" aria-label="晴光">
+                <QingguangRailButton open={!agentCollapsed} onOpen={openQingguang} />
               </nav>
+              {/* 下面几枚是原有工具，不是布置/评审/执行，本刀不加重。Bingo 球和「场地」兜底后置。 */}
               <><span className="sc-rail-divider"/><MapRailButton/><nav className="sc-rail-tool-group" aria-label="场地资料">
                 <button type="button" className="sc-rail-tool" aria-label="图纸与照片" data-tip="图纸" title="图纸、照片与实测尺寸"
                   onClick={() => businessToolsRef.current?.openReference()}><Ruler size={24} aria-hidden="true"/></button>
@@ -1792,7 +1799,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <MaterialDrawerHandle open={materialsOpen} onToggle={toggleMaterialsShelf} buttonRef={toolsEntryRef}/>
               </div>
             </div>}
-            {agentCollapsed && <AgentReopenCard onOpen={() => { setComposerGenerate(false); setSidebarCollapsed(true); setLeftMode('brief'); setBusinessOpen(false); setAgentCollapsed(false); }}/>}
+            {agentCollapsed && <AgentReopenCard onOpen={openQingguang}/>}
             </div>
           </div>
           <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>

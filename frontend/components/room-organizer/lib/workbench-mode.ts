@@ -1,4 +1,8 @@
-/** Top-level editor IA modes (Phase 1). Planning brief nests under layout — no separate 策划 mode. */
+/**
+ * Capabilities behind 晴光. The creation surface stays 晴光 + canvas.
+ * Review and delivery are not mode-rail buttons; conversation actions (or a later share menu) still open them.
+ * Planning brief nests under layout — no separate 策划 mode.
+ */
 export type WorkbenchMode = 'layout' | 'review' | 'delivery';
 
 export const WORKBENCH_MODES: ReadonlyArray<{ id: WorkbenchMode; label: string; hint: string }> = [
@@ -8,12 +12,5 @@ export const WORKBENCH_MODES: ReadonlyArray<{ id: WorkbenchMode; label: string; 
 ];
 
 export const WORKBENCH_MODE_DEFAULT: WorkbenchMode = 'layout';
-
-/** Collapsed ~48px rail lucide names — distinct from materials Boxes / view Layers|Eye|Grid / header ClipboardList. */
-export const WORKBENCH_MODE_ICONS = {
-  layout: 'SquareStack',
-  review: 'Send',
-  delivery: 'ListChecks',
-} as const satisfies Record<WorkbenchMode, string>;
 
 export const WORKFLOW_GUIDE_DISMISS_KEY = 'scendance.workflowGuide.dismissed';

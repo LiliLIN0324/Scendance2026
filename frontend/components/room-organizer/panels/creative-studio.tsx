@@ -1262,7 +1262,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     if(workbenchModeSerial===handledWorkbenchMode.current)return;
     handledWorkbenchMode.current=workbenchModeSerial;
     setTemplatesOpen(false);
-    // T-UI：左轨三图标只切对话上下文，不把左栏掀成评审/执行表单。
+    // 对话打开评审/执行时同步工作区内容，不靠左轨三枚模式标，也不把左栏掀成表单。
     // 表单打开只走对话 chip 的 reviewOpenRequest / deliveryOpenRequest 路径。
     // 若工作区正开着，只把内容同步回当前模式对应的视图，不动展开态。
     if(workbenchMode==='layout'){setBusinessMode(current=>current==='plan'?current:'plan');setPlanCategory('brief');}
