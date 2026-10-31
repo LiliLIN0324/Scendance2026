@@ -9,9 +9,13 @@ type Context = { request: Request; env: AmapServerEnv };
  */
 export async function handleAmapStatic(request: Request, env: AmapServerEnv, fetchImpl: typeof fetch = fetch): Promise<Response> {
   const url = new URL(request.url);
+  if (url.searchParams.get('x-ref') !== 'satellite-ground-ref') return new Response('ref invalid', { status: 400 });
+  const bounded = await renderLngLatBounds(url.searchParams, fetchImpl);
+  if (bounded === 'invalid') return new Response('bounds invalid', { status: 400 });
+  if (bounded) return imageResponse(bounded.bytes, bounded.type);
+  if (url.searchParams.has('west')) return new Response('bounds render unavailable', { status: 502 });
   const point = parseLocation(url.searchParams.get('location'));
   if (!point) return new Response('location invalid', { status: 400 });
-  if (url.searchParams.get('x-ref') !== 'satellite-ground-ref') return new Response('ref invalid', { status: 400 });
   const zoom = clampZoom(url.searchParams.get('zoom'));
   const stitched = await stitchSatelliteTiles(point.lng, point.lat, zoom, fetchImpl);
   if (stitched) return imageResponse(stitched.bytes, stitched.type);
@@ -49,6 +53,81 @@ export async function handleAmapStatic(request: Request, env: AmapServerEnv, fet
     return imageResponse(bytes, 'image/jpeg');
   } catch {
     return new Response('tile failed', { status: 502 });
+  }
+}
+
+const TILE = 256;
+
+function mercatorPixel(lng: number, lat: number, zoom: number): { x: number; y: number } {
+  const span = (2 ** zoom) * TILE;
+  const latRad = lat * Math.PI / 180;
+  return {
+    x: (lng + 180) / 360 * span,
+    y: (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * span,
+  };
+}
+
+function chooseZoom(west: number, south: number, east: number, north: number): number {
+  for (let zoom = 18; zoom >= 3; zoom--) {
+    const nw = mercatorPixel(west, north, zoom);
+    const se = mercatorPixel(east, south, zoom);
+    if (Math.max(se.x - nw.x, se.y - nw.y) <= 1024) return zoom;
+  }
+  return 3;
+}
+
+/**
+ * 把 west/south/east/north 裁成一张北向上的图。左上角像素就是西北角，和壳体 UV 同一套。
+ * 没有画布时返回 null，不能改回「中心点方形瓦片」，否则贴地会整块错位。
+ */
+async function renderLngLatBounds(
+  params: URLSearchParams,
+  fetchImpl: typeof fetch,
+): Promise<{ bytes: ArrayBuffer; type: string } | 'invalid' | null> {
+  const west = Number(params.get('west'));
+  const south = Number(params.get('south'));
+  const east = Number(params.get('east'));
+  const north = Number(params.get('north'));
+  const present = [params.get('west'), params.get('south'), params.get('east'), params.get('north')].some(value => value != null);
+  if (!present) return null;
+  if (![west, south, east, north].every(Number.isFinite) || !(east > west) || !(north > south)) return 'invalid';
+  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') return null;
+  try {
+    const zoom = chooseZoom(west, south, east, north);
+    const nw = mercatorPixel(west, north, zoom);
+    const se = mercatorPixel(east, south, zoom);
+    const srcW = se.x - nw.x;
+    const srcH = se.y - nw.y;
+    if (srcW < 1 || srcH < 1) return 'invalid';
+    const longEdge = Math.max(srcW, srcH);
+    const fit = longEdge > 768 ? 768 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
+    const outW = Math.max(2, Math.round(srcW * fit));
+    const outH = Math.max(2, Math.round(srcH * fit));
+    const canvas = new OffscreenCanvas(outW, outH);
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const x0 = Math.floor(nw.x / TILE);
+    const x1 = Math.floor((se.x - 1e-6) / TILE);
+    const y0 = Math.floor(nw.y / TILE);
+    const y1 = Math.floor((se.y - 1e-6) / TILE);
+    const limit = 2 ** zoom;
+    const scaleX = outW / srcW;
+    const scaleY = outH / srcH;
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (tx < 0 || ty < 0 || tx >= limit || ty >= limit) continue;
+        const host = 1 + ((tx + ty) % 4);
+        const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=6&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
+        if (!response.ok) return null;
+        const bitmap = await createImageBitmap(await response.blob());
+        context.drawImage(bitmap, (tx * TILE - nw.x) * scaleX, (ty * TILE - nw.y) * scaleY, TILE * scaleX, TILE * scaleY);
+        bitmap.close();
+      }
+    }
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.86 });
+    return { bytes: await blob.arrayBuffer(), type: 'image/jpeg' };
+  } catch {
+    return null;
   }
 }
 

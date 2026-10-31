@@ -16,6 +16,12 @@ import {
   rectangleAroundMeters,
   fetchSatelliteGroundDataUrl,
   satelliteMissReason,
+  groundRegistration,
+  shellMetersToSatelliteUv,
+  parseSatelliteImageBounds,
+  satelliteImageAligned,
+  metersPerDegreeLng,
+  METERS_PER_DEGREE_LAT,
 } from './amap-venue';
 import { INITIAL_LAYOUT } from './initial-layout';
 import type { RoomLayout } from './types';
@@ -275,6 +281,78 @@ describe('satellite ground backfill', () => {
     expect(center.lng / 4).toBeCloseTo(120.54, 4);
     expect(center.lat / 4).toBeCloseTo(30.405, 4);
     expect(rectangleAroundMeters({ lng: 120.54, lat: 30.405 }, legacy.width, legacy.height)).toHaveLength(4);
+  });
+
+  it('aligns the shell with the satellite image: center stays centered and north stays up', () => {
+    const polygon = lShapePolygon();
+    const registration = groundRegistration(polygon);
+    expect(registration).not.toBeNull();
+    const local = polygonToLocalMeters(polygon);
+    const scale = registration!.frame.scale;
+    const center = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth / 2 * scale, registration!.frame, registration!.bounds);
+    expect(center.u).toBeCloseTo(0.5, 4);
+    expect(center.v).toBeCloseTo(0.5, 4);
+    const south = shellMetersToSatelliteUv(local.width / 2 * scale, 0, registration!.frame, registration!.bounds);
+    const north = shellMetersToSatelliteUv(local.width / 2 * scale, local.depth * scale, registration!.frame, registration!.bounds);
+    expect(north.v).toBeGreaterThan(south.v);
+    const west = shellMetersToSatelliteUv(0, local.depth / 2 * scale, registration!.frame, registration!.bounds);
+    const east = shellMetersToSatelliteUv(local.width * scale, local.depth / 2 * scale, registration!.frame, registration!.bounds);
+    expect(east.u).toBeGreaterThan(west.u);
+    const url = satelliteProxyUrl(polygon, 'secret-key');
+    expect(url).toContain('west=');
+    expect(url).toContain('north=');
+    expect(url).not.toContain('zoom=');
+    const parsed = parseSatelliteImageBounds(url!);
+    expect(parsed?.west).toBeCloseTo(registration!.bounds.west, 6);
+    expect(parsed?.north).toBeCloseTo(registration!.bounds.north, 6);
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: false,
+    });
+    expect(layout.mapGroundFrame?.lng0).toBeCloseTo(registration!.frame.lng0, 6);
+    expect(layout.mapGroundFrame?.scale).toBe(registration!.frame.scale);
+    expect(satelliteImageAligned(url)).toBe(true);
+    expect(satelliteImageAligned(url!.replace(/west=[^&]+&south=[^&]+&east=[^&]+&north=[^&]+/, 'location=120.54,30.40&zoom=18'))).toBe(false);
+    const shell = layout.backendVenue?.polygon ?? [];
+    expect(shell.length).toBeGreaterThanOrEqual(3);
+    for (const point of shell) {
+      const lng = registration!.frame.lng0 + (point.x / registration!.frame.scale) / metersPerDegreeLng(registration!.frame.latMid);
+      const lat = registration!.frame.lat0 + (point.z / registration!.frame.scale) / METERS_PER_DEGREE_LAT;
+      const nearest = polygon.reduce((best, candidate) => {
+        const east = (candidate.lng - lng) * metersPerDegreeLng(registration!.frame.latMid);
+        const north = (candidate.lat - lat) * METERS_PER_DEGREE_LAT;
+        return Math.min(best, Math.hypot(east, north));
+      }, Infinity);
+      expect(nearest).toBeLessThan(0.2);
+    }
+    const drawn = satelliteProxyUrl(polygon, 'secret-key');
+    expect(drawn).toBe(url);
+  });
+
+  it('keeps an oversized site on the same origin after the shell is scaled under 100m', () => {
+    const lat = 30.4;
+    const lng = 120.53;
+    const dLng = 200 / metersPerDegreeLng(lat);
+    const dLat = 80 / METERS_PER_DEGREE_LAT;
+    const polygon = [
+      { lng, lat },
+      { lng: lng + dLng, lat },
+      { lng: lng + dLng, lat: lat + dLat },
+      { lng, lat: lat + dLat },
+    ];
+    const registration = groundRegistration(polygon);
+    expect(registration!.frame.scale).toBeLessThan(1);
+    expect(registration!.shellWidth).toBeLessThanOrEqual(100);
+    const east = shellMetersToSatelliteUv(registration!.shellWidth, registration!.shellDepth / 2, registration!.frame, registration!.bounds);
+    const west = shellMetersToSatelliteUv(0, registration!.shellDepth / 2, registration!.frame, registration!.bounds);
+    expect(east.u).toBeGreaterThan(west.u);
+    expect(east.u).toBeLessThan(0.95);
+    expect(west.u).toBeGreaterThan(0.05);
+    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon, satelliteGround: false,
+    });
+    expect(layout.mapGroundFrame?.scale).toBeCloseTo(registration!.frame.scale, 6);
+    expect(layout.width).toBe(registration!.shellWidth);
+    expect(layout.height).toBe(registration!.shellDepth);
   });
 
   it('does not report 未定位 when the drawn polygon is already known', () => {

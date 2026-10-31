@@ -151,6 +151,14 @@ function isAllowedFloorPlanImage(value: unknown): value is string {
   return isDataImageUrl(value) || (typeof value === 'string' && isSatelliteProxyUrl(value));
 }
 
+function isMapGroundFrame(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  return isFiniteNumber(value.lng0) && Math.abs(value.lng0) <= 180
+    && isFiniteNumber(value.lat0) && Math.abs(value.lat0) <= 90
+    && isFiniteNumber(value.latMid) && Math.abs(value.latMid) <= 90
+    && isFiniteNumber(value.scale) && value.scale > 0 && value.scale <= 1;
+}
+
 function isLngLatPoint(value: unknown): boolean {
   return isPlainObject(value)
     && isFiniteNumber(value.lng) && isFiniteNumber(value.lat)
@@ -340,6 +348,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
     || !v.mapGroundPolygon.every(isLngLatPoint)
   )) return false;
   if (v.mapLngLat !== undefined && !isLngLatPoint(v.mapLngLat)) return false;
+  if (v.mapGroundFrame !== undefined && !isMapGroundFrame(v.mapGroundFrame)) return false;
   // Opacity outside [0,1] is corruption, not preference — the UI slider only
   // produces this range and canvas globalAlpha silently misbehaves outside it.
   if (
@@ -518,6 +527,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   satelliteGroundRef: true,
   mapGroundPolygon: true,
   mapLngLat: true,
+  mapGroundFrame: true,
   terrain: true,
   neighbours: true,
   entrance: true,

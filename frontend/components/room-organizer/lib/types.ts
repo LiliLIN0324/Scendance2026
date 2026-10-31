@@ -378,6 +378,11 @@ export interface RoomLayout {
    * 地图场地中心经纬度。旧项目可能只有这一点、没有圈画点列。同样只用于卫星参考，不进上传。
    */
   mapLngLat?: { lng: number; lat: number };
+  /**
+   * 圈画经纬度换到壳体米制时用的原点与缩放。卫星 UV 靠它对齐，不进场景线、不进上传。
+   * lng0/lat0 是外接矩形西南角，scale 是壳体米 / 真实米（超过 100m 才会小于 1）。
+   */
+  mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
   neighbours?: NeighbourSpec;

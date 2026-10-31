@@ -497,7 +497,7 @@ describe('ScendanceViewTools satellite ground', () => {
   });
 
   it('turns satellite off to a plain ground flag and back on without dropping the image', () => {
-    const image = 'http://127.0.0.1:3199/amap-static?location=120.54,30.405&zoom=16&size=768*768&scale=2&x-ref=satellite-ground-ref';
+    const image = 'http://127.0.0.1:3199/amap-static?west=120.5300000&south=30.4000000&east=120.5400000&north=30.4100000&x-ref=satellite-ground-ref';
     const on = { ...legacySaltShell(), satelliteGroundRef: true as const, floorPlanImage: image, mapGroundPolygon: [
       { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
     ] };

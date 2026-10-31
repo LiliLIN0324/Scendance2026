@@ -7,13 +7,12 @@ import {
   SATELLITE_GROUND_LABEL,
   applySatelliteGroundPatch,
   ensureSatelliteGround,
-  hasFetchedSatellite,
   hideSatelliteGround,
   isMapOutdoorLayout,
-  isPlaceholderSatellite,
   isSatelliteGroundImage,
   readAmapKeys,
   satelliteGroundWanted,
+  satelliteImageAligned,
   satelliteMissReason,
 } from '../lib/amap-venue';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -282,9 +281,10 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   }, [actions, releaseBusy, setView]);
   useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
-    if (!satelliteOn || hasFetchedSatellite(layout.floorPlanImage)) return undefined;
+    if (!satelliteOn || satelliteImageAligned(layout.floorPlanImage)) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
-    if (layout.floorPlanImage && !isPlaceholderSatellite(layout.floorPlanImage)) return undefined;
+    // 旧的 location/zoom 卫星图没有经纬度范围，要重拉，否则贴地会对不齐。
+    if (layout.floorPlanImage && !isSatelliteGroundImage(layout.floorPlanImage)) return undefined;
     const token = `${layout.id ?? ''}|${layout.name}|${layout.floorPlanImage ?? ''}|${layout.mapGroundPolygon?.length ?? 0}`;
     if (satelliteAttempt.current === token) return undefined;
     satelliteAttempt.current = token;
@@ -307,7 +307,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
       actions.applyLayout(hideSatelliteGround(current));
       return;
     }
-    if (hasFetchedSatellite(current.floorPlanImage)) {
+    if (satelliteImageAligned(current.floorPlanImage)) {
       actions.applyLayout({ ...current, satelliteGroundRef: true, floorPlanOpacity: current.floorPlanOpacity ?? 0.78 });
       setView(next => ({ ...next, showReferenceImage: true, referenceImageOpacity: current.floorPlanOpacity ?? 0.78 }));
       return;
