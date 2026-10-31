@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio } from './workbench-agent';
+import { checkDim, classifyFile, describeExtraction, hasBriefSignals, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenerateCommand, isGenericMaterialRequest, isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, pendingPlanOf, prepareAholoAsk, scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale } from './workbench-agent';
 
 describe('workbench agent v2.4', () => {
   it('validates length/width 1–500 m with handoff copy', () => {
@@ -81,6 +81,26 @@ describe('一句话开场解析', () => {
     expect(typed).toContain('沙龙');
     const stated = describeExtraction(parseBriefSentence('12x8米，60人的沙龙'), { length: 12, width: 8, origin: 'stated' });
     expect(stated).toContain('12 × 8 m（96 ㎡）');
+  });
+  it('uses the standing venue size and still stays silent on a bare canvas', () => {
+    const standing = workingScale(parseBriefSentence('60人的沙龙'), { width: 12, height: 9, venueUp: true }, 'canvas');
+    expect(standing).toMatchObject({ length: 12, width: 9, origin: 'typed', fromVenue: true });
+    expect(describeExtraction(parseBriefSentence('60人的沙龙'), standing)).toContain('12 × 9 m');
+    const bare = workingScale(parseBriefSentence('60人的沙龙'), { width: 10, height: 8, venueUp: false }, 'canvas');
+    expect(bare.origin).toBe('canvas');
+    expect(bare.fromVenue).toBe(false);
+    expect(describeExtraction(parseBriefSentence('60人的沙龙'), bare)).toContain('场地尺寸还没定');
+  });
+  it('names stage and check-in for a launch, and skips both for a classroom', () => {
+    expect(layoutAnchors('80人发布会', '发布会', 'dining')).toEqual({ stage: true, checkin: true });
+    expect(layoutAnchors('不要签到', '发布会', 'dining').checkin).toBe(false);
+    expect(layoutAnchors('课桌配椅子', '教学', 'desk-chair')).toEqual({ stage: false, checkin: false });
+  });
+  it('prepares an Aholo sentence without treating a layout ask as a paid generate', () => {
+    expect(prepareAholoAsk('生成一个竹林场景')).toEqual({ kind: 'world', prompt: '生成一个竹林场景', title: '场景' });
+    expect(prepareAholoAsk('文生一张白桌')).toMatchObject({ kind: 'text', title: '物件' });
+    expect(prepareAholoAsk('80 人发布会，出方案')).toBeNull();
+    expect(prepareAholoAsk('加一个签到台')).toBeNull();
   });
   it('stays silent on metres before the scale is confirmed', () => {
     // 硬钉「确认前不报假米数」：画布当前那块空地不是场地真相，一个字米数都不能报。

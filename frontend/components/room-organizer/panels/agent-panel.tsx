@@ -34,8 +34,8 @@ import { venueBriefLine } from '../lib/venue-brief-line';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
-  scaleOriginOf, suggestDimsFromArea, suggestDimsFromImageRatio,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
+  prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
   type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
@@ -47,6 +47,9 @@ import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 import './agent-panel.css';
+
+type GenerateFill = { kind: 'text' | 'world'; prompt: string; nonce: number };
+let onGenerateFill: ((seed: GenerateFill) => void) | null = null;
 
 const MASCOT_DIR = '/assets/assistant/qingguang-3d';
 const STEP_DELAY_MS = 420;
@@ -221,6 +224,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const briefRef = useRef(brief); briefRef.current = brief;
   // 对话记忆（brief-agent）：人数/尺寸/形态跨句累积，解析失配不再退回开场白。
   const memoryRef = useRef<BriefMemory>(initialBriefMemory());
+  /** 这一句要不要舞台/签到。缺省跟旧行为：放舞台、不放签到。 */
+  const anchorsRef = useRef({ stage: true, checkin: false });
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -505,11 +510,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 一句话里刚说的尺度要当场用上：setState 还没渲染，读 lengthCheck 会拿到旧值，
    * 所以「一句话 → 方案预览」这条路把解析结果直接算成尺度传给生成器。
    */
-  function scaleFrom(extraction: BriefExtraction): Scale {
-    const origin = scaleOriginOf(extraction, scaleOrigin);
-    if (origin === 'stated' && extraction.lengthM !== null && extraction.widthM !== null) return { length: extraction.lengthM, width: extraction.widthM, origin };
-    if (origin === 'area' && extraction.areaM2 !== null) return { ...suggestDimsFromArea(extraction.areaM2), origin };
-    return readScale();
+  function venueIsUp(layout: RoomLayout = live.current): boolean {
+    const floor = layout.floors[Math.min(activeFloorIndex, Math.max(0, layout.floors.length - 1))];
+    return layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || layout.scenePreset !== undefined || (floor?.interiorWalls?.length ?? 0) > 0;
+  }
+
+  function scaleFrom(extraction: BriefExtraction): Scale & { fromVenue: boolean } {
+    return workingScale(extraction, { width: live.current.width, height: live.current.height, venueUp: venueIsUp() }, scaleOrigin);
   }
 
   /** 「按图纸估」：底图只当参照，折出来的长宽是估的，说完就按它出预览，说错了再讲一句新的。 */
@@ -833,7 +840,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       }
     }
     let plan: PlanProposal;
-    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode }); }
+    const anchors = anchorsRef.current;
+    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, stage: anchors.stage, checkin: anchors.checkin }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
@@ -1076,6 +1084,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
+    const aholo = prepareAholoAsk(trimmed);
+    if (aholo) {
+      say({
+        role: 'agent',
+        text: `准备生成${aholo.title}：「${aholo.prompt}」。还没提交，不会扣额度。勾确认再点蓝钮。`,
+        action: { label: '填到生成条', run: () => onGenerateFill?.({ kind: aholo.kind, prompt: aholo.prompt, nonce: Date.now() }) },
+      });
+      return;
+    }
     const request = parseMaterialRequest(trimmed);
     if (request) { addMaterials(request); return; }
     if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
@@ -1107,8 +1124,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     syncMemory(turn.memory);
     const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
+    const anchors = layoutAnchors(trimmed, turn.memory.event, turn.memory.layoutMode);
+    anchorsRef.current = anchors;
     const scale = scaleFrom(merged);
-    const summary = describeExtraction(merged, scale);
+    const zoneBit = [anchors.stage ? '舞台' : null, anchors.checkin ? '签到' : null].filter(Boolean).join('、');
+    const summary = `${describeExtraction(merged, scale)}${scale.fromVenue ? ' · 按现在的场地' : ''}`;
     const carried = extraction.headcount === null && turn.memory.headcount !== null ? ` · 沿用 ${turn.memory.headcount} 人` : '';
     // 只说「改成 15×10」= 只动场地壳：不排布置、不出预览卡、不亮确认绿钮。
     // 例外：这是在补答追问的尺寸时，报完尺寸就该直接出方案。
@@ -1136,9 +1156,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       });
       return;
     }
+    const zoneLine = zoneBit ? `${zoneBit}先占位。` : '';
     say({ role: 'agent', text: turn.filledScaleAsk
-      ? `记下了：${summary}${carried}。先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
-      : `按这些先出一版：${summary}${carried}。画布上是预览，点「确认布置」才写进画布。${suffix}` });
+      ? `记下了：${summary}${carried}。${zoneLine}先出一版：画布上是预览，点「确认布置」才写进画布。${suffix}`
+      : `按这些先出一版：${summary}${carried}。${zoneLine}画布上是预览，点「确认布置」才写进画布。${suffix}` });
     const variant = command === 'again' ? (seed.current += 1, seed.current) : seed.current;
     runGeneration(null, variant, command === 'again' ? '换一版不同的布局' : '', scale);
   }
@@ -1454,11 +1475,18 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
 } = {}): JSX.Element {
   const agent = useAgent();
   const [laneFallback, setLaneFallback] = useState(false);
+  const [propSeed, setPropSeed] = useState<{ kind: 'text' | 'world'; prompt: string; nonce: number } | null>(null);
   const propLane = generateOpen ?? laneFallback;
   function setPropLane(next: boolean) {
     if (generateOpen === undefined) setLaneFallback(next);
     onGenerateOpen?.(next);
   }
+  const setPropLaneRef = useRef(setPropLane);
+  setPropLaneRef.current = setPropLane;
+  useEffect(() => {
+    onGenerateFill = seed => { setPropSeed(seed); setPropLaneRef.current(true); };
+    return () => { onGenerateFill = null; };
+  }, []);
   const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const [draft, setDraft] = useState('');
@@ -1476,13 +1504,13 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Agent">
+  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
     <header className="ap-head">
       <span className="mascot-slot" title="晴光在线">
         <img src={mascotOf(agent, mode)} alt="晴光" width={64} height={64} draggable={false}/>
         <span className="ap-online-dot" aria-label="在线" role="status"/>
       </span>
-      <strong>Agent</strong>
+      <strong>晴光</strong>
       {status && <span id="agent-state" className={`ap-status is-${status.tone}`}><span className="ap-status-dot" aria-hidden="true"/>{status.text}</span>}
       {/* T-UI：隐藏 n/4 向导进度条，不制造「交付 4/4」的表单感；阶段只留在浮窗小字里。 */}
       {/* 收起面板一步直达：✕ 直接 onClose，收起后画布右上留重开浮卡。 */}
@@ -1540,7 +1568,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
       </div>}
     </div>
     {propLane
-      ? <MaterialGenerateDock onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
+      ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
       : <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>

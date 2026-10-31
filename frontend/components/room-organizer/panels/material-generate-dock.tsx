@@ -8,6 +8,8 @@ import type { CatalogItem } from '../lib/types';
 
 /** 空输入时打出来的那句。Tab 填的是整句，不是打到一半的字。 */
 export const GENERATE_SUGGESTIONS = ['一张白色圆桌，极简', '浅木色签到台', '两把圈椅，配一张长桌'] as const;
+const WORLD_SUGGESTIONS = ['温暖的木质咖啡馆，午后', '竹林边的小舞台', '白墙展厅，一排展台'] as const;
+export type GenerateKind = 'text' | 'world';
 
 const TERMINAL = new Set([3, 4, 6]);
 const HISTORY_KEY = 'scendance:aholo-history';
@@ -17,24 +19,26 @@ function prefersStill(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches !== false;
 }
 
-function useSuggestion(active: boolean): { full: string; shown: string } {
+function useSuggestion(list: readonly string[]): { full: string; shown: string } {
   const [index, setIndex] = useState(0);
-  const [count, setCount] = useState(() => (prefersStill() ? GENERATE_SUGGESTIONS[0].length : 0));
+  const [count, setCount] = useState(() => (prefersStill() ? list[0]!.length : 0));
+  const key = list.join('|');
+  useEffect(() => { setIndex(0); setCount(prefersStill() ? (list[0]?.length ?? 0) : 0); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!active || prefersStill()) return;
-    const full = GENERATE_SUGGESTIONS[index] ?? GENERATE_SUGGESTIONS[0];
+    if (prefersStill()) return;
+    const full = list[index] ?? list[0] ?? '';
     if (count < full.length) {
       const timer = window.setTimeout(() => setCount(value => value + 1), 72);
       return () => window.clearTimeout(timer);
     }
     const timer = window.setTimeout(() => {
-      setIndex(value => (value + 1) % GENERATE_SUGGESTIONS.length);
+      setIndex(value => (value + 1) % list.length);
       setCount(0);
     }, 1400);
     return () => window.clearTimeout(timer);
-  }, [active, index, count]);
-  const full = GENERATE_SUGGESTIONS[index] ?? GENERATE_SUGGESTIONS[0];
-  return { full, shown: prefersStill() || !active ? full : full.slice(0, count) };
+  }, [list, index, count]);
+  const full = list[index] ?? list[0] ?? '';
+  return { full, shown: prefersStill() ? full : full.slice(0, count) };
 }
 
 function isAbort(failure: unknown): boolean {
@@ -84,14 +88,14 @@ function glbOf(outputs: string[]): string | undefined {
   });
 }
 
-function rememberHistory(entry: { taskid: string; prompt: string; startedAt: number; status: number; label: string }) {
+function rememberHistory(entry: { kind: GenerateKind; taskid: string; prompt: string; startedAt: number; status: number; label: string }) {
   try {
     const raw = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as unknown[];
     const items = Array.isArray(raw) ? raw : [];
-    const next = { kind: 'text', at: Date.now(), ...entry };
+    const next = { at: Date.now(), ...entry };
     const rest = items.filter(item => {
       const row = item as { kind?: string; taskid?: string };
-      return !(row.kind === 'text' && row.taskid === entry.taskid);
+      return !(row.kind === entry.kind && row.taskid === entry.taskid);
     });
     localStorage.setItem(HISTORY_KEY, JSON.stringify([next, ...rest].slice(0, 30)));
   } catch { /* 存不下历史不影响这一次。 */ }
@@ -108,16 +112,19 @@ export function LaneSwitch({ prop, onChange }: { prop: boolean; onChange(next: b
  * 右栏底部的物件生成条，贴着晴光对话，不进布置提案。
  * 思考强度不放：文生没有质量档，扣额度确认已经挡住误点。
  */
-export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, onOpenCloud, forceProxy }: {
+export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, onOpenCloud, forceProxy, seed }: {
   onBackToChat(): void;
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onOpenFallback?: (() => void) | undefined;
   onOpenCloud?: (() => void) | undefined;
   /** 测试里强制走本机代理判断；正式界面不传，跟 isLux3dLocalProxy 走。 */
   forceProxy?: boolean;
+  /** 晴光准备好的一句。只填进输入框，不提交。 */
+  seed?: { kind: GenerateKind; prompt: string; nonce: number } | null;
 }): JSX.Element {
   const localProxy = forceProxy ?? isLux3dLocalProxy();
-  const { full, shown } = useSuggestion(true);
+  const [mode, setMode] = useState<GenerateKind>('text');
+  const { full, shown } = useSuggestion(mode === 'world' ? WORLD_SUGGESTIONS : GENERATE_SUGGESTIONS);
   const [prompt, setPrompt] = useState('');
   const [creditConfirmed, setCreditConfirmed] = useState(false);
   const [needCredit, setNeedCredit] = useState(false);
@@ -135,6 +142,18 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
   const openTaskRef = useRef('');
   const mounted = useRef(true);
   useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    if (!seed) return;
+    if (openTaskRef.current || lock.current) {
+      setNote('上一单还在，这句先不覆盖，也不会再提交。');
+      return;
+    }
+    setMode(seed.kind);
+    setPrompt(seed.prompt);
+    setCreditConfirmed(false);
+    setNeedCredit(false);
+    inputRef.current?.focus();
+  }, [seed]);
   useEffect(() => () => { mounted.current = false; run.current += 1; abortRef.current?.abort(); }, []);
   useEffect(() => {
     if (!localProxy) return;
@@ -167,21 +186,24 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     setNote(accepted ? '已停止查询。任务已受理，不会再提交一次。' : '已停下。还没确认是否受理，先别再点生成。');
   }
 
-  async function poll(taskid: string, name: string, signal: AbortSignal, runId: number) {
+  async function poll(kind: GenerateKind, taskid: string, name: string, signal: AbortSignal, runId: number) {
     const started = Date.now();
+    const query = kind === 'world' ? `/world?worldId=${encodeURIComponent(taskid)}` : `/task?taskid=${encodeURIComponent(taskid)}`;
     while (run.current === runId && !signal.aborted) {
-      const body = await request<{ status: number; statusLabel?: string; outputs?: string[] }>(`/task?taskid=${encodeURIComponent(taskid)}`, { signal });
+      const body = await request<{ status: number; statusLabel?: string; outputs?: string[] }>(query, { signal });
       if (!mounted.current || run.current !== runId) return;
       const outputs = Array.isArray(body.outputs) ? body.outputs.filter((item): item is string => typeof item === 'string') : [];
-      rememberHistory({ taskid, prompt: name, startedAt: started, status: body.status, label: body.statusLabel ?? '' });
+      rememberHistory({ kind, taskid, prompt: name, startedAt: started, status: body.status, label: body.statusLabel ?? '' });
       if (TERMINAL.has(body.status)) {
         setRunning(false);
         clearTask();
         if (body.status === 3) {
-          const url = glbOf(outputs);
+          const url = kind === 'text' ? glbOf(outputs) : undefined;
           setResult(url ? { url, taskid, name } : null);
           setPrompt('');
-          setNote(url ? '生成好了，可以放进场景。' : '生成完成，但没有模型文件。');
+          setNote(kind === 'world'
+            ? '场景好了。到左轨「观感」取回，这里不再提交。'
+            : url ? '生成好了，可以放进场景。' : '生成完成，但没有模型文件。');
         } else {
           setNote(body.status === 4 ? '生成失败。再点会再扣一次。' : '生成已取消，没有再提交。');
         }
@@ -197,7 +219,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     }
   }
 
-  async function runSubmit(text: string) {
+  async function runSubmit(kind: GenerateKind, text: string) {
     if (lock.current || openTaskRef.current) return;
     lock.current = true;
     const runId = ++run.current;
@@ -210,18 +232,20 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     setNote('正在提交…');
     let accepted = false;
     try {
-      const body = await request<{ taskid: string | number }>('/text-to-3d', {
+      const payload = kind === 'world' ? { name: text.slice(0, 40), prompt: text } : { prompt: text };
+      const body = await request<{ taskid: string | number }>(kind === 'world' ? '/world' : '/text-to-3d', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text }), signal: controller.signal,
+        body: JSON.stringify(payload), signal: controller.signal,
       });
       if (!mounted.current || run.current !== runId) return;
       const taskid = String(body.taskid ?? '');
-      if (!/^\d+$/.test(taskid)) throw new Error('接口没返回有效任务号。');
+      const idOk = kind === 'world' ? /^[A-Za-z0-9_-]{1,128}$/ : /^\d+$/;
+      if (!idOk.test(taskid)) throw new Error('接口没返回有效任务号。');
       accepted = true;
       setCreditConfirmed(false);
       rememberTask(taskid);
-      rememberHistory({ taskid, prompt: text, startedAt: started, status: 0, label: '已提交' });
-      await poll(taskid, text, controller.signal, runId);
+      rememberHistory({ kind, taskid, prompt: text, startedAt: started, status: 0, label: '已提交' });
+      await poll(kind, taskid, text, controller.signal, runId);
     } catch (failure) {
       if (!mounted.current || run.current !== runId) return;
       if (isAbort(failure)) {
@@ -254,7 +278,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
       return;
     }
     setNeedCredit(false);
-    void runSubmit(text);
+    void runSubmit(mode, text);
   }
 
   async function place() {
@@ -280,7 +304,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     abortRef.current = controller;
     setRunning(true);
     try {
-      await poll(openTask, echo || prompt.trim() || '物件', controller.signal, runId);
+      await poll(mode, openTask, echo || prompt.trim() || '物件', controller.signal, runId);
     } catch (failure) {
       if (mounted.current && run.current === runId && !isAbort(failure)) {
         setNote(failure instanceof Error ? failure.message : '查询中断，没有再提交。');
@@ -299,7 +323,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
 
   return <div className="sc-gen-dock" data-lane="generate" data-online={online === true ? 'yes' : online === false ? 'no' : 'wait'}>
     <div className="sc-gen-thread" role="log" aria-label="生成记录">
-      {!echo && !note && <p className="sc-gen-empty">说一件物件，生成 3D。</p>}
+      {!echo && !note && <p className="sc-gen-empty">{mode === 'world' ? '说一个场景，生成 3D。' : '说一件物件，生成 3D。'}</p>}
       {echo && <div className="ap-user"><strong>{echo}</strong></div>}
       {note && <p className="ap-agent">{note}</p>}
       {result && onPlace && <button type="button" className="ap-bubble-action" disabled={placing} onClick={() => void place()}>{placing ? '正在取回…' : '放进场景'}</button>}
@@ -329,6 +353,10 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
             <span aria-hidden="true">确认扣额度</span>
           </label>
         </div>
+        <div className="ap-lane" role="group" aria-label="生成种类">
+          <button type="button" aria-pressed={mode === 'text'} disabled={running || held} onClick={() => setMode('text')}>物件</button>
+          <button type="button" aria-pressed={mode === 'world'} disabled={running || held} onClick={() => setMode('world')}>场景</button>
+        </div>
         <LaneSwitch prop onChange={next => { if (!next) onBackToChat(); }} />
         <button type="button" className="sc-gen-go" aria-label={label} disabled={disabled} onClick={go}>
           {running ? <span className="sc-gen-stop" aria-hidden="true" /> : <ArrowUp size={16} aria-hidden="true" />}
@@ -337,7 +365,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
       {needCredit && !creditConfirmed && <p className="sc-gen-warn" role="status">先勾选确认扣额度，才会提交。</p>}
       <p className="sc-gen-foot">
         {!localProxy && onOpenCloud && <button type="button" className="sc-gen-resume" onClick={onOpenCloud}>云端备用</button>}
-        {onOpenFallback && <button type="button" className="sc-gen-resume" onClick={onOpenFallback}>图片和重建</button>}
+        {onOpenFallback && <button type="button" className="sc-gen-resume" title="图片和重建在观感里。重建默认干跑，这里不提交。" onClick={onOpenFallback}>图片和重建</button>}
       </p>
     </form>
   </div>;
