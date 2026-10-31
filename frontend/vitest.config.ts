@@ -3,7 +3,13 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Mirror tsconfig's `@/*` path so panel components are importable in tests.
-  resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)) } },
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('.', import.meta.url)),
+      // Supabase shared modules import zod from their directory; resolve via frontend deps.
+      zod: fileURLToPath(new URL('./node_modules/zod/index.js', import.meta.url)),
+    },
+  },
   // Next's tsconfig sets `jsx: preserve` (Next compiles JSX itself); the
   // vitest transform must compile it instead for the React-facing suites.
   oxc: { jsx: { runtime: 'automatic' } },
