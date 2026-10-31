@@ -58,10 +58,11 @@ import { parseLayoutEventOperations } from './lib/schema';
 import { playSound, type SoundCue } from './lib/sounds';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
-import { canApplyLayoutGeometry, structuralItemCollides, venueArea, materialCount } from './lib/structural-layout';
+import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
+import { CanvasHeading } from './panels/canvas-heading';
 import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay, VenueBriefLine } from './panels/agent-panel';
 import { CloudPanel } from './panels/cloud-panel';
 import { CommercialWorkspace } from './panels/commercial-workspace';
@@ -146,7 +147,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
-  const [canvasDetailOpen, setCanvasDetailOpen] = useState(false);
   const [captionEpoch, setCaptionEpoch] = useState(0);
   const [previewCaptionVisible, setPreviewCaptionVisible] = useState(false);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
@@ -1607,15 +1607,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               setLeftMode('lux3d'); setMaterialsOpen(false); setBusinessOpen(false); setSidebarCollapsed(false);
             } : undefined}/>
             <PlanFlow onOpenAgent={() => setAgentCollapsed(false)} onHomeChange={setPlanHome}/>
-            <div className={`sc-canvas-heading${canvasDetailOpen ? ' has-detail' : ''}`}>
-              <span className="sc-canvas-kind">{view.view2D ? '2D 平面' : '3D 场景'}</span>
-              <button type="button" className="sc-canvas-size" aria-expanded={canvasDetailOpen} aria-controls="canvas-detail" title={canvasDetailOpen ? '收起物料数与面积' : '查看物料数与面积'} onClick={() => setCanvasDetailOpen(open => !open)}>
-                {layout.scenePreset
-                  ? `${SCENE_PRESETS[layout.scenePreset].name} · ${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`
-                  : `${Number(layout.width.toFixed(2))} × ${Number(layout.height.toFixed(2))} m`}
-              </button>
-              {canvasDetailOpen && <span className="sc-canvas-count" id="canvas-detail">{materialCount(activeFloor.items)} 件物料 · {venueArea(layout).toFixed(1)} m²</span>}
-            </div>
+            <CanvasHeading view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {splatState.status === 'ready' && <div className="sc-local-conflict" role="status"><span>环境预览：{splatState.name} · {splatState.meters ? `已按高斯实测 ${splatState.meters.width} × ${splatState.meters.depth} m 校准场地，` : '场地壳体已让位，'}物料照常摆</span><button type="button" onClick={stopSplat}>退出预览</button></div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
