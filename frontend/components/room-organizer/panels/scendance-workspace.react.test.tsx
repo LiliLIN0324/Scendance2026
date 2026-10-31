@@ -159,9 +159,9 @@ describe('ScendanceLibrary shelf lifecycle', () => {
   it('keeps category, search, pagination and the scrolling row through tabs, collapse and 2D', async () => {
     const test = librarySetup();
     await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
-    fireEvent.click(screen.getByRole('button', { name: /^座椅/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^座席/ }));
     fireEvent.click(screen.getByRole('tab', { name: '物料库' }));
-    expect(screen.getByRole('button', { name: /^座椅/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /^座席/ }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.change(screen.getByRole('textbox', { name: /搜索/ }), { target: { value: 'Rehearsal Model' } });
     fireEvent.click(screen.getByRole('button', { name: /^再显示/ }));
     expect(tiles()).toHaveLength(30);

@@ -1,5 +1,6 @@
 import { ensureFloorPlanImageDecoded, render2DTopDown } from '../canvas-2d/render';
-import { CATEGORIES, CURRENCY_SYMBOL } from './constants';
+import { CATALOG_GROUPS, catalogGroupKey } from './catalog-taxonomy';
+import { CURRENCY_SYMBOL } from './constants';
 import { floorKeepOut } from './floor-keep-out';
 import { footprintArea, hasCollisions, itemCountByCategory, totalCost } from './geometry';
 import { entrancePlanOutline, planFloorIndex, type EntranceBuilding } from './street';
@@ -69,8 +70,13 @@ export async function openBlueprintPrintWindow(layout: RoomLayout, floor: FloorL
     footprint: footprintArea(floor.items).toFixed(1),
     cost: totalCost(floor.items).toLocaleString(),
   };
-  const counts = itemCountByCategory(floor.items);
-  const legend = CATEGORIES.filter((category) => counts.has(category.key))
+  const rawCounts = itemCountByCategory(floor.items);
+  const counts = new Map<string, number>();
+  for (const [key, count] of rawCounts) {
+    const group = catalogGroupKey(key);
+    counts.set(group, (counts.get(group) ?? 0) + count);
+  }
+  const legend = CATALOG_GROUPS.filter((category) => counts.has(category.key))
     .map((category) => `<li><span>${category.icon}</span> ${category.label}: ${counts.get(category.key) ?? 0}</li>`)
     .join('');
   // Per-room cost and area from the floor's zones (#155) — the printout is

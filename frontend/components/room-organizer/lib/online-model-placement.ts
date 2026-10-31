@@ -1,6 +1,7 @@
 import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
+import { catalogGroupKey } from './catalog-taxonomy';
 import type { OnlineModel } from './online-models';
-import type { CatalogItem } from './types';
+import type { CatalogItem, FurnitureCategory } from './types';
 import type { BackendSession } from '@/lib/backend-session';
 
 /** Click and drop both authorize and load the same catalogue asset before placement. */
@@ -15,5 +16,7 @@ export async function loadOnlineCatalogItem(model: OnlineModel, controller?: Bac
   }
   return createGlbCatalogItem({ name: model.name, url,
     ...(model.assetId ? { assetId: model.assetId } : {}),
-    width: model.width, depth: model.depth, height: model.height, source: 'public_library' });
+    width: model.width, depth: model.depth, height: model.height, source: 'public_library',
+    category: catalogGroupKey(model.bucket) as FurnitureCategory,
+  });
 }

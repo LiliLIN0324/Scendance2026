@@ -1,4 +1,5 @@
 import { catalog as eventMaterials } from '../../../../supabase/functions/_shared/domain';
+import { CATALOG_GROUPS } from './catalog-taxonomy';
 import type { CatalogItem, CategoryMeta, FloorLayout, RoofSpec, RoofStyle, RoomLayout } from './types';
 
 export const STORAGE_KEY = 'scendance-editor-local-v1';
@@ -59,20 +60,12 @@ export const WINDOW_SILL_HEIGHT = 0.9;
  */
 export const DEFAULT_FLOOR_PLAN_OPACITY = 0.5;
 
-export const CATEGORIES: readonly CategoryMeta[] = [
-  { key: 'seating', label: 'Seating', icon: '🪑' },
-  { key: 'tables', label: 'Tables', icon: '🟫' },
-  { key: 'bedroom', label: 'Bedroom', icon: '🛏️' },
-  { key: 'storage', label: 'Storage', icon: '📚' },
-  { key: 'kitchen', label: 'Kitchen', icon: '🍳' },
-  { key: 'bathroom', label: 'Bathroom', icon: '🛁' },
-  { key: 'electronics', label: 'Electronics', icon: '📺' },
-  { key: 'security', label: 'Security', icon: '🎥' },
-  { key: 'decor', label: 'Decor', icon: '🪴' },
-  { key: 'outdoor', label: 'Outdoor', icon: '🌳' },
-  { key: 'people', label: 'People', icon: '🧍' },
-  { key: 'structure', label: 'Structure', icon: '🪜' },
-] as const;
+/** Event groups, in rail order. Legacy home keys still load; they are not chips. */
+export const CATEGORIES: readonly CategoryMeta[] = CATALOG_GROUPS.map(group => ({
+  key: group.key,
+  label: group.label,
+  icon: group.icon,
+}));
 
 export const FURNITURE_CATALOG = [
   // Seating
@@ -89,46 +82,46 @@ export const FURNITURE_CATALOG = [
   { type: 'side-table', category: 'tables', name: 'Side Table', width: 0.5, depth: 0.5, height: 0.55, color: '#8B4513', icon: '🟫', price: 90 },
   { type: 'desk', category: 'tables', name: 'Desk', width: 1.2, depth: 0.6, height: 0.75, color: '#8B4513', icon: '🖥️', price: 320 },
 
-  // Bedroom
-  { type: 'bed', category: 'bedroom', name: 'Double Bed', width: 2.0, depth: 1.6, height: 0.6, color: '#E8E8E8', icon: '🛏️', price: 800 },
-  { type: 'nightstand', category: 'bedroom', name: 'Nightstand', width: 0.5, depth: 0.4, height: 0.6, color: '#8B4513', icon: '🕯️', price: 120 },
-  { type: 'wardrobe', category: 'bedroom', name: 'Wardrobe', width: 1.4, depth: 0.6, height: 2.1, color: '#6D4C41', icon: '🚪', price: 540 },
-  { type: 'dresser', category: 'bedroom', name: 'Dresser', width: 1.2, depth: 0.5, height: 0.9, color: '#8B4513', icon: '🗄️', price: 380 },
+  // 休息 — leftover parametric beds, grouped for events rather than a bedroom library.
+  { type: 'bed', category: 'rest', name: 'Double Bed', width: 2.0, depth: 1.6, height: 0.6, color: '#E8E8E8', icon: '🛏️', price: 800 },
+  { type: 'nightstand', category: 'rest', name: 'Nightstand', width: 0.5, depth: 0.4, height: 0.6, color: '#8B4513', icon: '🕯️', price: 120 },
+  { type: 'wardrobe', category: 'rest', name: 'Wardrobe', width: 1.4, depth: 0.6, height: 2.1, color: '#6D4C41', icon: '🚪', price: 540 },
+  { type: 'dresser', category: 'rest', name: 'Dresser', width: 1.2, depth: 0.5, height: 0.9, color: '#8B4513', icon: '🗄️', price: 380 },
 
-  // Storage
-  { type: 'bookshelf', category: 'storage', name: 'Bookshelf', width: 1.0, depth: 0.3, height: 2.0, color: '#654321', icon: '📚', price: 260 },
-  { type: 'cabinet', category: 'storage', name: 'Cabinet', width: 0.9, depth: 0.4, height: 1.6, color: '#5D4037', icon: '🗃️', price: 310 },
+  // 后勤
+  { type: 'bookshelf', category: 'logistics', name: 'Bookshelf', width: 1.0, depth: 0.3, height: 2.0, color: '#654321', icon: '📚', price: 260 },
+  { type: 'cabinet', category: 'logistics', name: 'Cabinet', width: 0.9, depth: 0.4, height: 1.6, color: '#5D4037', icon: '🗃️', price: 310 },
 
-  // Kitchen
-  { type: 'fridge', category: 'kitchen', name: 'Refrigerator', width: 0.7, depth: 0.7, height: 1.8, color: '#E0E0E0', icon: '🧊', price: 1200 },
-  { type: 'stove', category: 'kitchen', name: 'Stove', width: 0.7, depth: 0.65, height: 0.9, color: '#424242', icon: '🍳', price: 850 },
-  { type: 'dishwasher', category: 'kitchen', name: 'Dishwasher', width: 0.6, depth: 0.6, height: 0.85, color: '#9E9E9E', icon: '🍽️', price: 700 },
-  { type: 'kitchen-sink', category: 'kitchen', name: 'Kitchen Sink', width: 0.9, depth: 0.6, height: 0.9, color: '#BDBDBD', icon: '🚰', price: 450 },
-  { type: 'counter', category: 'kitchen', name: 'Counter', width: 1.2, depth: 0.6, height: 0.9, color: '#D7CCC8', icon: '🟫', price: 280 },
+  // 餐饮
+  { type: 'fridge', category: 'catering', name: 'Refrigerator', width: 0.7, depth: 0.7, height: 1.8, color: '#E0E0E0', icon: '🧊', price: 1200 },
+  { type: 'stove', category: 'catering', name: 'Stove', width: 0.7, depth: 0.65, height: 0.9, color: '#424242', icon: '🍳', price: 850 },
+  { type: 'dishwasher', category: 'catering', name: 'Dishwasher', width: 0.6, depth: 0.6, height: 0.85, color: '#9E9E9E', icon: '🍽️', price: 700 },
+  { type: 'kitchen-sink', category: 'catering', name: 'Kitchen Sink', width: 0.9, depth: 0.6, height: 0.9, color: '#BDBDBD', icon: '🚰', price: 450 },
+  { type: 'counter', category: 'catering', name: 'Counter', width: 1.2, depth: 0.6, height: 0.9, color: '#D7CCC8', icon: '🟫', price: 280 },
 
-  // Bathroom
-  { type: 'toilet', category: 'bathroom', name: 'Toilet', width: 0.4, depth: 0.7, height: 0.8, color: '#FAFAFA', icon: '🚽', price: 220 },
-  { type: 'bathtub', category: 'bathroom', name: 'Bathtub', width: 1.7, depth: 0.8, height: 0.55, color: '#FAFAFA', icon: '🛁', price: 950 },
-  { type: 'shower', category: 'bathroom', name: 'Shower', width: 0.9, depth: 0.9, height: 2.1, color: '#E1F5FE', icon: '🚿', price: 680 },
-  { type: 'bathroom-sink', category: 'bathroom', name: 'Bathroom Sink', width: 0.6, depth: 0.45, height: 0.85, color: '#FAFAFA', icon: '🪞', price: 280 },
+  // 后勤（卫生间仍按后勤归组；几何不依赖这个键）
+  { type: 'toilet', category: 'logistics', name: 'Toilet', width: 0.4, depth: 0.7, height: 0.8, color: '#FAFAFA', icon: '🚽', price: 220 },
+  { type: 'bathtub', category: 'logistics', name: 'Bathtub', width: 1.7, depth: 0.8, height: 0.55, color: '#FAFAFA', icon: '🛁', price: 950 },
+  { type: 'shower', category: 'logistics', name: 'Shower', width: 0.9, depth: 0.9, height: 2.1, color: '#E1F5FE', icon: '🚿', price: 680 },
+  { type: 'bathroom-sink', category: 'logistics', name: 'Bathroom Sink', width: 0.6, depth: 0.45, height: 0.85, color: '#FAFAFA', icon: '🪞', price: 280 },
 
-  // Electronics
-  { type: 'tv', category: 'electronics', name: 'TV Stand', width: 1.5, depth: 0.4, height: 0.5, color: '#2C3E50', icon: '📺', price: 600 },
-  { type: 'computer', category: 'electronics', name: 'Computer', width: 0.5, depth: 0.5, height: 0.5, color: '#37474F', icon: '🖥️', price: 950 },
-  { type: 'lamp', category: 'electronics', name: 'Lamp', width: 0.3, depth: 0.3, height: 1.5, color: '#FFD700', icon: '💡', price: 110 },
-  { type: 'floor-lamp', category: 'electronics', name: 'Floor Lamp', width: 0.35, depth: 0.35, height: 1.7, color: '#FFB300', icon: '🪔', price: 180 },
-  { type: 'wifi', category: 'electronics', name: 'Wi-Fi AP', width: 0.2, depth: 0.2, height: 0.1, color: '#0088FF', icon: '📶', price: 140, isWiFiAccessPoint: true, signalRange: 10 },
-  { type: 'router', category: 'electronics', name: 'Router', width: 0.3, depth: 0.2, height: 0.1, color: '#1a1a1a', icon: '🌐', price: 160 },
+  // 视听
+  { type: 'tv', category: 'av', name: 'TV Stand', width: 1.5, depth: 0.4, height: 0.5, color: '#2C3E50', icon: '📺', price: 600 },
+  { type: 'computer', category: 'av', name: 'Computer', width: 0.5, depth: 0.5, height: 0.5, color: '#37474F', icon: '🖥️', price: 950 },
+  { type: 'lamp', category: 'av', name: 'Lamp', width: 0.3, depth: 0.3, height: 1.5, color: '#FFD700', icon: '💡', price: 110 },
+  { type: 'floor-lamp', category: 'av', name: 'Floor Lamp', width: 0.35, depth: 0.35, height: 1.7, color: '#FFB300', icon: '🪔', price: 180 },
+  { type: 'wifi', category: 'av', name: 'Wi-Fi AP', width: 0.2, depth: 0.2, height: 0.1, color: '#0088FF', icon: '📶', price: 140, isWiFiAccessPoint: true, signalRange: 10 },
+  { type: 'router', category: 'av', name: 'Router', width: 0.3, depth: 0.2, height: 0.1, color: '#1a1a1a', icon: '🌐', price: 160 },
   // LEGACY variant: this is the original electronics-category "CCTV" (a simple
   // signal-circle item, isCCTV/signalRange). It is superseded by the
   // 'security-camera' entry below (security category, real vision cone), but is
   // kept here for backward compatibility so previously saved layouts that
   // reference `type: 'cctv'` still load and render. Do not remove.
-  { type: 'cctv', category: 'electronics', name: 'CCTV Camera', width: 0.15, depth: 0.15, height: 0.2, color: '#2C2C2C', icon: '📹', price: 230, isCCTV: true, signalRange: 8 },
+  { type: 'cctv', category: 'av', name: 'CCTV Camera', width: 0.15, depth: 0.15, height: 0.2, color: '#2C2C2C', icon: '📹', price: 230, isCCTV: true, signalRange: 8 },
   // Security — cameras live in their own category and are browsed via the
   // dedicated CctvMenu (grouped by type); this base entry backs every model.
   // Defaults mirror the Hikvision DS-2CD2143G2-I dome (see lib/cctv-models); height doubles as the wall-mount height (≈2.4 m).
-  { type: 'security-camera', category: 'security', name: 'Security Camera', width: 0.25, depth: 0.2, height: 2.4, color: '#1F2933', icon: '🎥', price: 380, hasVisionCone: true, visionRange: 30, visionFov: 103, cctvModelId: 'hik-2cd2143g2' },
+  { type: 'security-camera', category: 'av', name: 'Security Camera', width: 0.25, depth: 0.2, height: 2.4, color: '#1F2933', icon: '🎥', price: 380, hasVisionCone: true, visionRange: 30, visionFov: 103, cctvModelId: 'hik-2cd2143g2' },
 
   // Decor
   { type: 'plant', category: 'decor', name: 'House Plant', width: 0.4, depth: 0.4, height: 1.0, color: '#228B22', icon: '🪴', price: 60 },
@@ -287,9 +280,9 @@ export const ROOM_TEMPLATES = {
 const EVENT_STYLES: Record<string, Pick<CatalogItem, 'type' | 'category' | 'color' | 'icon'>> = {
   chair: { type: 'chair', category: 'seating', color: '#78958B', icon: '椅' },
   table: { type: 'table', category: 'tables', color: '#C9B89D', icon: '桌' },
-  reception: { type: 'counter', category: 'tables', color: '#B5C3B2', icon: '签' },
-  backdrop: { type: 'backdrop', category: 'decor', color: '#375B4B', icon: '景' },
-  display: { type: 'bookshelf', category: 'storage', color: '#BCA68C', icon: '展' },
+  reception: { type: 'counter', category: 'checkin', color: '#B5C3B2', icon: '签' },
+  backdrop: { type: 'backdrop', category: 'stage', color: '#375B4B', icon: '景' },
+  display: { type: 'bookshelf', category: 'booth', color: '#BCA68C', icon: '展' },
   partition: { type: 'partition', category: 'structure', color: '#DDD9CA', icon: '隔' },
   carpet: { type: 'rug', category: 'decor', color: '#D2BA9C', icon: '毯' },
   decoration: { type: 'plant', category: 'decor', color: '#5C785F', icon: '饰' },

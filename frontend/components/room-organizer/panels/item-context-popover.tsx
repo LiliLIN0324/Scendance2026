@@ -4,6 +4,7 @@ import { Copy, Lock, RotateCcw, Trash2, Unlock, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { layoutReducer } from '../hooks/layout-reducer';
+import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { MAX_ITEM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
 import { onlineModelThumb } from '../lib/online-models';
 import { editorItemLimit } from '../lib/scene-presets';
@@ -88,7 +89,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
     <header><div><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={20}/></button></header>
     <div className="sc-properties-content">
-      <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span></div>
+      <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span>{item.category && <span>分类 · {catalogGroupLabel(item.category)}</span>}</div>
       <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={16}/> : <Unlock size={16}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
       {props.hasCollision && <p className="sc-warning">物料可能重叠或超出场地，请检查位置。</p>}
       <section><h3>物料尺寸</h3><div className="sc-dimension-grid">

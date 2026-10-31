@@ -201,11 +201,13 @@ export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
 export interface GlbCatalogInput {
   name: string; url: string; width: number; depth: number; height: number;
   assetId?: string; materialId?: FurnitureItem['materialId']; source?: FurnitureItem['source']; notes?: string;
+  /** Event group. Omitted placements stay in 布景. */
+  category?: FurnitureItem['category'];
 }
 export function createGlbCatalogItem(input: GlbCatalogInput): CatalogItem {
   return {
     type: 'glb-asset', name: input.name, width: input.width, depth: input.depth, height: input.height,
-    color: '#ffffff', icon: '◇', price: 0, category: 'decor', glbUrl: input.url,
+    color: '#ffffff', icon: '◇', price: 0, category: input.category ?? 'decor', glbUrl: input.url,
     source: input.source ?? (input.assetId ? 'public_library' : 'local_sample'),
     materialId: input.materialId ?? 'asset', notes: input.notes ?? '',
     ...(input.assetId ? { assetId: input.assetId } : {}),
