@@ -49,12 +49,13 @@ describe('categoriesForMode (#151)', () => {
 
 describe('resolveToolForMode (#151)', () => {
   it('keeps a selection the mode offers', () => {
-    expect(resolveToolForMode('buy', 'kitchen')).toBe('kitchen');
+    expect(resolveToolForMode('buy', 'seating')).toBe('seating');
     expect(resolveToolForMode('build', 'walls')).toBe('walls');
   });
 
   it("falls back to the mode's first tool when the selection belongs to the other mode", () => {
     expect(resolveToolForMode('buy', 'walls')).toBe(categoriesForMode('buy')[0]);
+    expect(resolveToolForMode('buy', 'kitchen')).toBe(categoriesForMode('buy')[0]);
     expect(resolveToolForMode('build', 'seating')).toBe(categoriesForMode('build')[0]);
   });
 
@@ -69,6 +70,7 @@ describe('catalogCategoryForTool (#151)', () => {
   });
 
   it('passes catalog categories through', () => {
-    expect(catalogCategoryForTool('bedroom')).toBe('bedroom');
+    expect(catalogCategoryForTool('booth')).toBe('booth');
+    expect(catalogCategoryForTool('checkin')).toBe('checkin');
   });
 });

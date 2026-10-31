@@ -401,7 +401,7 @@ describe('OnlineModelLibrary', () => {
     expect(await screen.findByRole('button', { name: '添加Box Hedge' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
     expect(screen.getByRole('button', { name: /^舞台/ }).getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(screen.getByRole('button', { name: /^座椅/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^座席/ }));
     expect((screen.getByLabelText('搜索全库线上模型') as HTMLInputElement).value).toBe('');
     expect(await screen.findByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
     expect(tiles()).toHaveLength(1);

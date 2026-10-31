@@ -90,18 +90,28 @@ export type StairsShape = 'straight' | 'winder';
 export type FloorPlanFitMode = 'stretch' | 'cover' | 'contain';
 
 export type FurnitureCategory =
+  | 'stage'
+  | 'checkin'
+  | 'booth'
   | 'seating'
   | 'tables'
+  | 'av'
+  | 'decor'
+  | 'signage'
+  | 'people'
+  | 'catering'
+  | 'rest'
+  | 'logistics'
+  | 'structure'
+  | 'site'
+  // Legacy home-library keys still load. Display rolls them into the groups above.
   | 'bedroom'
   | 'storage'
   | 'kitchen'
   | 'bathroom'
   | 'electronics'
   | 'security'
-  | 'decor'
-  | 'outdoor'
-  | 'people'
-  | 'structure';
+  | 'outdoor';
 
 export interface CategoryMeta {
   key: FurnitureCategory;

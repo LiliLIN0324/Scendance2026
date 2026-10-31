@@ -1,3 +1,4 @@
+import { CATALOG_GROUPS } from './catalog-taxonomy';
 import type { FurnitureCategory, GameMode } from './types';
 
 /**
@@ -7,26 +8,14 @@ import type { FurnitureCategory, GameMode } from './types';
 export type BuildToolKey = FurnitureCategory | 'walls';
 
 /**
- * Every tool the bottom-left panel can show, in display order. DESIGN and
- * FURNISH each show a slice of this list (#151): the structure tools shape
- * the building, the rest fill it. Doors/windows lead the DESIGN slice so a
- * fresh mode lands on a category with catalog tiles rather than on the wall
- * toggle.
+ * Structure tools first, then event groups in catalog order (舞台, 签到, 展位,
+ * 座席, …). Legacy home chips (bedroom, kitchen, bathroom) are not tools;
+ * saved items with those keys still resolve through the group table.
  */
 export const BUILD_TOOLS: readonly BuildToolKey[] = [
   'structure',
   'walls',
-  'seating',
-  'tables',
-  'bedroom',
-  'storage',
-  'kitchen',
-  'bathroom',
-  'decor',
-  'electronics',
-  'security',
-  'outdoor',
-  'people',
+  ...CATALOG_GROUPS.map(group => group.key).filter(key => key !== 'structure'),
 ];
 
 const STRUCTURE_KEYS: ReadonlySet<BuildToolKey> = new Set<BuildToolKey>(['walls', 'structure']);

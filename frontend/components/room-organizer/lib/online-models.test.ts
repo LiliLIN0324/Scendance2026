@@ -115,9 +115,9 @@ describe('buildOnlineModelIndex', () => {
 
   it('labels and counts every family, busiest first', () => {
     expect(index.buckets).toEqual([
-      { key: 'stage', label: '舞台设施', count: 3 },
-      { key: 'seating', label: '座椅沙发', count: 2 },
-      { key: 'plants', label: '绿植景观', count: 1 },
+      { key: 'stage', label: '舞台', count: 3 },
+      { key: 'seating', label: '座席', count: 2 },
+      { key: 'decor', label: '布景', count: 1 },
     ]);
   });
 
@@ -134,7 +134,9 @@ describe('buildOnlineModelIndex', () => {
 
 describe('onlineBucketLabel', () => {
   it('translates a known family and falls back to the raw key otherwise', () => {
-    expect(onlineBucketLabel('seating')).toBe('座椅沙发');
+    expect(onlineBucketLabel('seating')).toBe('座席');
+    expect(onlineBucketLabel('audio')).toBe('视听');
+    expect(onlineBucketLabel('plants')).toBe('布景');
     expect(onlineBucketLabel('unmapped-family')).toBe('unmapped-family');
     expect(onlineBucketLabel('')).toBe('其他');
     expect(ONLINE_BUCKET_LABELS.stage).toBe('舞台设施');
@@ -165,6 +167,7 @@ describe('filterOnlineModels', () => {
   it('narrows by family on its own, and combines with the query', () => {
     expect(filterOnlineModels(models, '', 'stage').map(model => model.slug)).toEqual(['stage-tower-0002']);
     expect(filterOnlineModels(models, 'tower', 'seating')).toHaveLength(0);
+    expect(filterOnlineModels(models, '', 'av')).toHaveLength(0);
   });
 
   it('returns nothing when the query matches no field', () => {
