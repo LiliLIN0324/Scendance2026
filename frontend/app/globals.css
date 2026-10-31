@@ -943,13 +943,22 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { grid-column: 4; grid-row: 1; }
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
-  display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 8;
   flex: 0 0 64px; width: 64px; padding: 10px 4px; box-sizing: border-box;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
-  overflow-y: auto; overflow-x: hidden;
+  overflow: visible;
 }
-/* T-VISUAL-CHROME：左轨三段「布置/评审/执行」图标+小字现身（对照终稿左轨）。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: block; }
+/* 左轨以图标为主视觉；中文名在 data-tip / aria-label，不把汉字再铺在钮面上。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
+  content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%); padding: 3px 7px; border-radius: var(--r-sm);
+  background: var(--wk-ink); color: #fff; font-size: 11px; font-weight: 400; line-height: 15px;
+  letter-spacing: 0; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:hover::after,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after { opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-top,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -1132,20 +1141,29 @@ body {
   color: var(--wk-muted); font-size: 11px; white-space: nowrap;
 }
 .sc-workbench .sc-header-actions .sc-project-btn {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 32px;
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; min-width: 32px;
   padding: 5px 8px; border: 0; border-radius: var(--r-sm);
   background: transparent; color: var(--wk-ink-soft, #55585F); font-size: var(--fs-p1);
 }
+.sc-workbench .sc-header-actions .sc-project-btn[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0;
+  padding: 3px 7px; border-radius: var(--r-sm); background: var(--wk-ink); color: #fff;
+  font-size: 11px; font-weight: 400; line-height: 15px; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
+}
+.sc-workbench .sc-header-actions .sc-project-btn[data-tip]:hover::after,
+.sc-workbench .sc-header-actions .sc-project-btn[data-tip]:focus-visible::after { opacity: 1; }
 .sc-workbench .sc-header-actions .sc-project-btn:hover {
   color: var(--wk-ink); background: var(--wk-plane);
 }
-/* Right tool column: vertical round buttons (reference 04-final-flat), plus the satellite reference toggle on map shells. */
+/* Right tool column: pinned to the 3D canvas top-right, not the window and not vertically centered. */
 .sc-workbench .sc-tool-column.sc-canvas-rail {
-  position: absolute !important; right: 12px; top: 50%; left: auto; bottom: auto;
-  transform: translateY(-50%) !important; grid-area: unset !important;
+  position: absolute !important; right: 12px; top: 12px; left: auto; bottom: auto;
+  transform: none !important; grid-area: unset !important;
   width: 44px; max-width: 44px; box-sizing: border-box;
   display: flex !important; flex-direction: column !important; align-items: center;
-  justify-content: center; padding: 0; gap: 6px;
+  justify-content: flex-start; padding: 0; gap: 6px;
   border: 0; border-radius: 0; background: transparent;
   box-shadow: none; z-index: 35; overflow: visible;
   max-height: calc(100% - 24px);
@@ -1207,8 +1225,19 @@ body {
 .sc-workbench .sc-tool-pop button.is-active {
   background: var(--sc-accent-soft) !important; color: var(--sc-accent-ink) !important;
 }
-/* 视图菜单：视角、撤销/重做、缩放、网格、导出都收在这里，文字始终可见。 */
+/* 视图菜单：视角、撤销/重做、缩放、网格、导出收在这里，主视觉是图标，中文名在悬停纸条。 */
 .sc-workbench .sc-more-pop { min-width: 170px; padding: 6px; gap: 1px; max-height: min(70vh, 420px); overflow-y: auto; }
+.sc-workbench .sc-icon-menu { min-width: 0; width: max-content; align-items: center; overflow: visible; }
+.sc-workbench .sc-icon-menu .sc-more-sep { width: 20px; }
+.sc-workbench .sc-tool-column .sc-icon-menu > button.sc-tool-icon {
+  width: 36px !important; height: 36px !important; min-width: 36px !important; min-height: 36px !important;
+  padding: 0 !important; justify-content: center; border-radius: 50% !important;
+}
+.sc-workbench .sc-icon-menu .sc-more-export { width: 208px; align-items: stretch; }
+.sc-workbench .sc-icon-menu .sc-more-export button {
+  width: 100% !important; height: auto !important; min-height: 0 !important; min-width: 0 !important;
+  border-radius: 6px !important; padding: 6px 8px !important; justify-content: flex-start;
+}
 .sc-workbench .sc-more-pop .sc-tool-menu-label {
   padding: 3px 8px 2px; font-size: var(--fs-cap); color: var(--wk-muted);
 }
@@ -1254,6 +1283,14 @@ body {
 .sc-workbench .sc-material-drawer-handle .sc-materials-label {
   font-weight: 600;
 }
+.sc-workbench .sc-material-drawer-handle[data-tip]::after {
+  content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%); padding: 3px 7px; border-radius: var(--r-sm);
+  background: var(--wk-ink); color: #fff; font-size: 11px; font-weight: 400; line-height: 15px;
+  letter-spacing: 0; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
+}
+.sc-workbench .sc-material-drawer-handle[data-tip]:hover::after,
+.sc-workbench .sc-material-drawer-handle[data-tip]:focus-visible::after { opacity: 1; }
 .sc-workbench .sc-material-drawer-handle .sc-materials-chevron {
   color: var(--wk-ink-faint, #a1a1aa); transition: transform .16s ease;
 }

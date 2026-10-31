@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, ChevronUp, CloudRain, Crosshair, Eye, Footprints, Grid, LayoutTemplate, MousePointer2, Package, Ruler, Satellite, Sparkles, Sun, Trees, Users, X } from 'lucide-react';
+import { ArrowLeft, Axis3d, Boxes, Camera, ChevronUp, CloudRain, Crosshair, Cuboid, Footprints, Grid, LayoutTemplate, MoreHorizontal, MousePointer2, Package, PersonStanding, Redo2, Ruler, Satellite, Sparkles, Square, Sun, Trees, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
@@ -220,10 +220,10 @@ const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }
   { label: '昏', hour: 18, title: '黄昏' },
   { label: '夜', hour: 21, title: '夜晚' },
 ];
-const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string }> = [
-  { id: 'iso', label: '整体' },
-  { id: 'top', label: '俯视' },
-  { id: 'front', label: '人视' },
+const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string; Icon: LucideIcon }> = [
+  { id: 'iso', label: '整体', Icon: Cuboid },
+  { id: 'top', label: '俯视', Icon: Square },
+  { id: 'front', label: '人视', Icon: PersonStanding },
 ];
 const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string }> = [
   { id: 'current', label: '跟随当前' },
@@ -258,7 +258,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   layoutRef.current = layout;
   const satelliteRequest = useRef(0);
   const satelliteAttempt = useRef('');
-  const satelliteTip = satelliteMiss === 'key' ? '卫星参考·需高德 Key' : satelliteMiss === 'place' ? '卫星参考·未定位' : '卫星参考';
+  const satelliteTip = satelliteMiss === 'key' ? '卫星贴地·需高德 Key' : satelliteMiss === 'place' ? '卫星贴地·未定位' : '卫星贴地';
   const fillSatellite = useCallback((startedId: string, startedName: string, mine: number) => {
     const source = layoutRef.current;
     setSatelliteBusy(true);
@@ -358,44 +358,50 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   }, [viewOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown]);
 
   return (
-    /* T-VISUAL-CHROME-2：右缘竖排圆钮列（参考图 04-final-flat），次要功能收进弹出菜单。 */
+    /* 圆钮贴在画布右上角。常用项都是一级钮；撤销、缩放、导出和整体收进省略号。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
       <button type="button" id="tool-select" data-tip="选择" aria-label="选择：点击物料并框选" aria-pressed={selectActive} className={selectActive ? 'is-active' : ''} onClick={chooseSelect}>
         <MousePointer2 size={24}/>
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
       <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
-        <span className="sc-rail-2d">{view.view2D ? '2D' : '3D'}</span>
+        <Axis3d size={24} aria-hidden="true"/>
       </button>
       <button type="button" id="tool-fit" data-tip="看全场" aria-label="看全场" disabled={view.view2D} onClick={onFit}>
         <Crosshair size={24}/>
       </button>
+      <button type="button" id="tool-top" data-tip="俯视" aria-label="俯视" aria-pressed={!view.view2D && preset === 'top'} className={!view.view2D && preset === 'top' ? 'is-active' : ''} onClick={() => choosePreset('top')}>
+        <Square size={24} aria-hidden="true"/>
+      </button>
+      <button type="button" id="tool-front" data-tip="人视" aria-label="人视" aria-pressed={!view.view2D && preset === 'front'} className={!view.view2D && preset === 'front' ? 'is-active' : ''} onClick={() => choosePreset('front')}>
+        <PersonStanding size={24} aria-hidden="true"/>
+      </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
         <Ruler size={24}/>
       </button>
-      {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星参考底图，已打开。${SATELLITE_GROUND_LABEL}` : `卫星参考底图，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
-        <Satellite size={24}/>
+      <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
+        <Grid size={24} aria-hidden="true"/>
+      </button>
+      {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。 */}
+      {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
+        <Satellite size={24} aria-hidden="true"/>
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       <div className="sc-tool-menu" ref={viewMenuRef}>
-        <button type="button" id="tool-view" data-tip="视图" aria-label="视图与更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-view-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <Eye size={24}/>
+        <button type="button" id="tool-more" data-tip="更多" aria-label="更多工具" aria-haspopup="menu" aria-expanded={viewOpen} aria-controls="tool-more-menu" className={viewOpen ? 'is-active' : ''} onClick={() => { setViewOpen(open => !open); setExportOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+          <MoreHorizontal size={24} aria-hidden="true"/>
         </button>
-        {viewOpen && <div id="tool-view-menu" className="sc-tool-pop sc-more-pop" role="menu" aria-label="视图与更多工具">
+        {viewOpen && <div id="tool-more-menu" className="sc-tool-pop sc-more-pop sc-icon-menu" role="menu" aria-label="更多工具">
           {!exportOpen ? <>
-            <span className="sc-tool-menu-label" role="presentation">视角</span>
-            {ANGLE_PRESETS.map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-checked={!view.view2D && preset === entry.id} className={!view.view2D && preset === entry.id ? 'is-active' : ''} onClick={() => choosePreset(entry.id)}>{entry.label}</button>)}
+            {ANGLE_PRESETS.filter(entry => entry.id === 'iso').map(entry => <button type="button" key={entry.id} role="menuitemradio" aria-label={entry.label} data-tip={entry.label} aria-checked={!view.view2D && preset === entry.id} className={`sc-tool-icon${!view.view2D && preset === entry.id ? ' is-active' : ''}`} onClick={() => choosePreset(entry.id)}><entry.Icon size={20} aria-hidden="true"/></button>)}
             <span className="sc-more-sep" aria-hidden="true"/>
-            <button type="button" id="tool-undo" role="menuitem" disabled={!history.canUndo} onClick={history.undo}>撤销</button>
-            <button type="button" id="tool-redo" role="menuitem" disabled={!history.canRedo} onClick={history.redo}>重做</button>
-            <button type="button" id="tool-zoom-out" role="menuitem" disabled={view.view2D} onClick={() => onZoom('-')}>缩小</button>
-            <button type="button" id="tool-zoom-in" role="menuitem" disabled={view.view2D} onClick={() => onZoom('+')}>放大</button>
-            <span className="sc-more-sep" aria-hidden="true"/>
-            <button type="button" id="tool-grid" role="menuitemcheckbox" aria-checked={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}><Grid size={16}/><span>网格吸附</span></button>
-            <span className="sc-more-sep" aria-hidden="true"/>
-            {onExportImage && <button type="button" id="tool-export" role="menuitem" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={16}/><span>导出效果图</span></button>}
+            <button type="button" id="tool-undo" className="sc-tool-icon" role="menuitem" aria-label="撤销" data-tip="撤销" disabled={!history.canUndo} onClick={history.undo}><Undo2 size={20} aria-hidden="true"/></button>
+            <button type="button" id="tool-redo" className="sc-tool-icon" role="menuitem" aria-label="重做" data-tip="重做" disabled={!history.canRedo} onClick={history.redo}><Redo2 size={20} aria-hidden="true"/></button>
+            <button type="button" id="tool-zoom-out" className="sc-tool-icon" role="menuitem" aria-label="缩小" data-tip="缩小" disabled={view.view2D} onClick={() => onZoom('-')}><ZoomOut size={20} aria-hidden="true"/></button>
+            <button type="button" id="tool-zoom-in" className="sc-tool-icon" role="menuitem" aria-label="放大" data-tip="放大" disabled={view.view2D} onClick={() => onZoom('+')}><ZoomIn size={20} aria-hidden="true"/></button>
+            {onExportImage && <><span className="sc-more-sep" aria-hidden="true"/><button type="button" id="tool-export" className="sc-tool-icon" role="menuitem" aria-label="导出效果图" data-tip="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} onClick={() => setExportOpen(true)}><Camera size={20} aria-hidden="true"/></button></>}
           </> : <div className="sc-more-export sc-export-pop" role="dialog" aria-label="导出效果图选项">
-            <button type="button" className="sc-more-back" onClick={() => setExportOpen(false)}>← 导出效果图</button>
+            <button type="button" className="sc-more-back" onClick={() => setExportOpen(false)}><ArrowLeft size={16} aria-hidden="true"/><span>导出效果图</span></button>
             <div className="sc-export-group" role="group" aria-label="导出视角">
               <span>视角</span>
               <div className="sc-export-options">
@@ -463,12 +469,13 @@ export function MaterialDrawerHandle({ open, onToggle, buttonRef }: { open: bool
         id="material-drawer-handle"
         className={`sc-material-drawer-handle${open ? ' is-active' : ''}`}
         title={open ? '收起物料库' : '展开物料库'}
+        data-tip={open ? '收起物料库' : '展开物料库'}
         aria-label={open ? '收起物料库' : '展开物料库'}
         aria-expanded={open}
         aria-controls="workbench-material-shelf"
         onClick={onToggle}
       >
-        <span className="sc-materials-label">物料</span>
+        <Boxes size={20} aria-hidden="true"/>
         <ChevronUp className="sc-materials-chevron" size={16} aria-hidden="true"/>
       </button>
     </div>

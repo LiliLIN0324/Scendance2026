@@ -1,19 +1,18 @@
 'use client';
 
 /**
- * v2 首屏与结果视图。
+ * v2 首屏。
  * 首屏只有活动卡、场地、人数和一颗「生成方案」。
- * 生成之后，布置 / 物料 / 执行资料是同一份方案的三块视图。
+ * 出方案之后画布顶不再加「布置 / 物料 / 执行资料」分段，这三档只走左轨。
  * 场景、物件、合成不在这里出现。
  */
 import { useEffect, useState } from 'react';
 import { useRoomEditor } from '../contexts';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { sameLayoutContent } from '../lib/persistence';
-import { venueArea } from '../lib/structural-layout';
-import { formatArea, type AgentState } from '../lib/workbench-agent';
 import { useAgent } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
+import type { AgentState } from '../lib/workbench-agent';
 import './plan-flow.css';
 
 export const PLAN_ACTIVITIES = [
@@ -32,14 +31,6 @@ export const PLAN_VENUES = [
 
 export const PLAN_HEADCOUNTS = [30, 80, 120] as const;
 
-const PLATES = [
-  { id: 'layout', label: '布置' },
-  { id: 'materials', label: '物料' },
-  { id: 'execution', label: '执行资料' },
-] as const;
-
-type PlateId = (typeof PLATES)[number]['id'];
-
 const HOME_HIDDEN: ReadonlySet<AgentState> = new Set([
   'generating', 'generatePaused', 'generateFailed', 'planProposed', 'planReady', 'planEdited',
 ]);
@@ -53,12 +44,6 @@ export function isPlanHome(state: AgentState, layout: RoomLayout, hasProposal: b
 /** 一句话交给既有生成入口，不另开「场景生成 / 布置生成」。 */
 export function planGenerateSentence(activityPhrase: string, venuePhrase: string, headcount: number): string {
   return `${headcount} 人${activityPhrase}，${venuePhrase}，出方案`;
-}
-
-export function materialRows(items: readonly { name: string }[]): { name: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const item of items) counts.set(item.name, (counts.get(item.name) ?? 0) + 1);
-  return [...counts.entries()].map(([name, count]) => ({ name, count }));
 }
 
 export function PlanHome({ onGenerate }: { onGenerate(sentence: string): void }): JSX.Element {
@@ -95,40 +80,13 @@ export function PlanHome({ onGenerate }: { onGenerate(sentence: string): void })
   </form>;
 }
 
-export function PlanPlates({ items, areaLabel, onExport }: {
-  items: readonly { name: string }[];
-  areaLabel: string;
-  onExport(): void;
-}): JSX.Element {
-  const [plate, setPlate] = useState<PlateId>('layout');
-  const rows = materialRows(items);
-  return <section className="sc-plan-plates" aria-label="方案">
-    <div role="tablist" aria-label="方案视图">
-      {PLATES.map(entry => <button key={entry.id} type="button" role="tab" aria-selected={plate === entry.id} onClick={() => setPlate(entry.id)}>{entry.label}</button>)}
-    </div>
-    {plate === 'materials' && <div role="tabpanel" aria-label="物料">
-      {rows.length === 0
-        ? <p>这一版还没有物料</p>
-        : <ul>{rows.map(row => <li key={row.name}><span>{row.name}</span><b>{row.count}</b></li>)}</ul>}
-    </div>}
-    {plate === 'execution' && <div role="tabpanel" aria-label="执行资料">
-      <p>{items.length} 件 · {areaLabel}</p>
-      <button type="button" className="sc-plan-act" onClick={onExport}>导出交接</button>
-    </div>}
-  </section>;
-}
-
-/** 挂在画布上：首屏或三块视图。工具坞是否让开，由 onHomeChange 告诉工作台。 */
-export function PlanFlow({ onOpenAgent, onHomeChange }: { onOpenAgent(): void; onHomeChange(home: boolean): void }): JSX.Element {
+/** 挂在画布上的只有首屏。出方案后不再往画布顶加分段，工具坞是否让开由 onHomeChange 告诉工作台。 */
+export function PlanFlow({ onOpenAgent, onHomeChange }: { onOpenAgent(): void; onHomeChange(home: boolean): void }): JSX.Element | null {
   const agent = useAgent();
-  const { layout, activeFloor } = useRoomEditor();
+  const { layout } = useRoomEditor();
   const home = isPlanHome(agent.state, layout, agent.proposal !== null);
   useEffect(() => { onHomeChange(home); }, [home, onHomeChange]);
   useEffect(() => { if (agent.proposal) onOpenAgent(); }, [agent.proposal, onOpenAgent]);
   if (home) return <PlanHome onGenerate={sentence => { void agent.send(sentence); }} />;
-  return <PlanPlates
-    items={activeFloor.items}
-    areaLabel={`${formatArea(venueArea(layout))} ㎡`}
-    onExport={() => { onOpenAgent(); agent.previewExport(); }}
-  />;
+  return null;
 }
