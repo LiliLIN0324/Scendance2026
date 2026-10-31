@@ -87,3 +87,7 @@ curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/ro
 4. 访问 `https://scendance-scene-planner-ewz.pages.dev/` 与 `https://scendance.lilicoding.space/`，确认页面正常。若自定义域名只返回正文 `disabled`，见上一节的 Worker 路由说明。
 
 Cloudflare 只构建和发布前端静态产物。Supabase 数据库迁移和 Edge Functions 仍按 [OWN_SUPABASE_TUTORIAL.md](OWN_SUPABASE_TUTORIAL.md) 单独部署。
+
+## 卫星参考底图 `/api/amap-static`
+
+生产页（`scendance.lilicoding.space`）不能访问 `127.0.0.1:3199`。仓库根目录 `functions/api/amap-static.ts` 与 `functions/api/amap-geocode.ts` 是 Pages Functions，浏览器只打同源地址。高德 Key 放在 Pages 项目的**运行时**环境变量，任选其一：`AMAP_STATIC_KEY`、`AMAP_KEY`、`NEXT_PUBLIC_AMAP_STATIC_KEY`、`NEXT_PUBLIC_AMAP_KEY`。只写在 Build command 里的值不会进入函数运行时。本机 `next dev` 仍直接请求 `127.0.0.1:3199/amap-static`。
