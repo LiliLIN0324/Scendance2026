@@ -149,6 +149,27 @@ describe('useCanvas2DInteraction gestures (#291, #292)', () => {
     expect(params.onItemDragStart).toHaveBeenCalledTimes(1);
   });
 
+  it('a review click pins the item and does not drag or select it', () => {
+    const onReviewAnchor = vi.fn();
+    const { params, fire } = setup([]);
+    params.editingLocked = true;
+    params.onReviewAnchor = onReviewAnchor;
+    fire('pointerdown', 0, 0);
+    fire('pointerup', 0, 0);
+    expect(onReviewAnchor).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'a' }));
+    expect(params.onItemSelect).not.toHaveBeenCalled();
+    expect(params.onItemDragStart).not.toHaveBeenCalled();
+  });
+
+  it('a locked plan click does not select when there is nothing to pin', () => {
+    const { params, fire } = setup([]);
+    params.editingLocked = true;
+    fire('pointerdown', 0, 0);
+    fire('pointerup', 0, 0);
+    expect(params.onItemSelect).not.toHaveBeenCalled();
+    expect(params.onItemDragStart).not.toHaveBeenCalled();
+  });
+
   it('ghost repaints retain a hidden reference and its display opacity', () => {
     const { params, fire } = setup([]);
     params.view = { ...params.view, showReferenceImage: false, referenceImageOpacity: 0.2 };
