@@ -72,9 +72,8 @@
   /* 动效：120/200/300ms，统一缓动 */
   --dur-1: 120ms; --dur-2: 200ms; --dur-3: 300ms;
   --ease-spec: cubic-bezier(.2, 0, 0, 1);
-  /* 字族：西文数字 Inter（v2.3 裁决，next/font 自托管 --font-inter），Arial 只做降级；
-     中文思源黑体（next/font/google 加载 Noto Sans SC） */
-  --font-sans: var(--font-inter, "Inter"), Arial, var(--font-noto-sc, "Noto Sans SC"), "Source Han Sans SC",
+  /* 字族：西文/数字 Inter（仓内 next/font/local --font-inter），Arial 降级；中文系统栈（不拉 Google） */
+  --font-sans: var(--font-inter, "Inter"), Arial, "Noto Sans SC", "Source Han Sans SC",
     "Source Han Sans CN", "PingFang SC", "Microsoft YaHei", sans-serif;
   /* 字阶（全产品仅 7 档） */
   --fs-h1: 24px; --lh-h1: 34px;

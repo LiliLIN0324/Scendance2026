@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { BootSkeleton, WorkspaceShell } from '@/components/workspace-shell';
 import { AuthProvider } from '@/lib/auth-provider';
-import { Inter, Noto_Sans_SC, Playfair_Display } from 'next/font/google';
+import localFont from 'next/font/local';
 import type { Metadata } from 'next';
 import './globals.css';
 import './cloud.css';
@@ -10,27 +10,28 @@ import './workspace.css';
 import './assets.css';
 import './share.css';
 
-// 设计规范 v2.3 裁决：西文与数字 = Inter，Arial 只做降级。next/font 在构建时
-// 自托管字体文件，运行时不依赖 Google CDN（部署在大陆也可用）。
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+// 设计规范 v2.3：西文/数字 = Inter（仓内 woff2 + next/font/local），构建不拉 fonts.google
+//（Cloudflare 上 Noto_Sans_SC 曾 TypeError null reading '1'）。中文走系统栈，不 vendor 整包。
+const inter = localFont({
+  src: [
+    { path: './fonts/Inter-400.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/Inter-500.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/Inter-600.woff2', weight: '600', style: 'normal' },
+  ],
   variable: '--font-inter',
   display: 'swap',
 });
 
-const notoSansSC = Noto_Sans_SC({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-noto-sc',
-  display: 'swap',
-});
-
-// 品牌字标衬线定版：英文 Playfair Display，S 用 Italic 500 做锚点。
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  style: ['normal', 'italic'],
+// 品牌字标衬线：英文 Playfair Display，S 用 Italic 500 做锚点。
+const playfair = localFont({
+  src: [
+    { path: './fonts/PlayfairDisplay-400.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/PlayfairDisplay-500.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/PlayfairDisplay-600.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/PlayfairDisplay-400-Italic.woff2', weight: '400', style: 'italic' },
+    { path: './fonts/PlayfairDisplay-500-Italic.woff2', weight: '500', style: 'italic' },
+    { path: './fonts/PlayfairDisplay-600-Italic.woff2', weight: '600', style: 'italic' },
+  ],
   variable: '--font-playfair',
   display: 'swap',
 });
@@ -81,11 +82,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // Extensions such as Trancy inject root attributes before hydration.
   // Limit the escape hatch to html; descendants still validate normally.
   return (
-    <html lang="zh-CN" suppressHydrationWarning className={`${inter.variable} ${notoSansSC.variable} ${playfair.variable}`}>
+    <html lang="zh-CN" suppressHydrationWarning className={`${inter.variable} ${playfair.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
-      <body className={`${inter.variable} ${notoSansSC.variable} ${playfair.variable}`}><Suspense fallback={<BootSkeleton />}><AuthProvider><WorkspaceShell>{children}</WorkspaceShell></AuthProvider></Suspense></body>
+      <body className={`${inter.variable} ${playfair.variable}`}><Suspense fallback={<BootSkeleton />}><AuthProvider><WorkspaceShell>{children}</WorkspaceShell></AuthProvider></Suspense></body>
     </html>
   );
 }
