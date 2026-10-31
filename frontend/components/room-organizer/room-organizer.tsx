@@ -1,13 +1,10 @@
 'use client';
 
 import { FolderOpen, ListChecks, PanelLeftClose, Ruler, Scan, Send, Shapes, Sparkles, SquareStack } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
-import { flushSourceScope } from '@/lib/source-storage';
-import { BrandMark } from '../brand-mark';
 import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
@@ -50,6 +47,7 @@ import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomId, randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
+import { isNavExpanded, toggleNavColumns } from './lib/nav-chrome';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
@@ -82,6 +80,7 @@ import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { StatusToastHost } from './panels/status-toast';
 import { Viewport } from './panels/viewport';
+import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -125,8 +124,6 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
 };
 
 export function RoomOrganizer({ controller: providedController, isActive = true }: { controller?: BackendSession; isActive?: boolean } = {}): JSX.Element {
-  const router = useRouter();
-  const navigationPending = useRef(false);
   const dropActive = useRef(isActive);
   useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
@@ -180,8 +177,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [extraSelectedIds, setExtraSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
+  // 工具抽屉和晴光列同时关着，左侧导航才算收起。logo 只写这两扇门。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
+  const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed });
+  const toggleNav = useCallback(() => {
+    const next = toggleNavColumns({ agentCollapsed, sidebarCollapsed });
+    setAgentCollapsed(next.agentCollapsed);
+    setSidebarCollapsed(next.sidebarCollapsed);
+    const focusSelector = isNavExpanded(next) ? '#workbench-nav-column .sc-nav-brand' : '.sc-mode-rail .sc-nav-brand';
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(focusSelector)?.focus());
+  }, [agentCollapsed, sidebarCollapsed]);
   /** 晴光栏在左侧。关掉后再从画布上的晴光浮标打开，回到布置对话。 */
   const [composerGenerate, setComposerGenerate] = useState(false);
   const [planHome, setPlanHome] = useState(true);
@@ -326,19 +332,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     openBusinessWorkspace('delivery');
     setBackupOpenRequest(value => value + 1);
   }, [openBusinessWorkspace]);
-  const openIntroduction = async () => {
-    if (navigationPending.current) return;
-    navigationPending.current = true;
-    const owner = controller, id = layoutStore.getState().layout.id, userId = owner.getSnapshot().user?.id;
-    const epoch = placementIdentity.current.epoch;
-    try {
-      await flushSourceScope(id ?? 'local');
-      if (layoutStore.getState().layout.id !== id || placementIdentity.current.controller !== owner ||
-        placementIdentity.current.epoch !== epoch || owner.getSnapshot().user?.id !== userId) throw new Error('活动或登录状态已变化，请核对后重新打开官网。');
-      router.push('/introduction');
-    } catch (caught) { notify(caught instanceof Error ? caught.message : '资料尚未保存，请完成保存或放弃修改后再离开。', 'error'); }
-    finally { navigationPending.current = false; }
-  };
   const [pendingCatalog, setPendingCatalog] = useState<CatalogItem | null>(null);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
@@ -1590,8 +1583,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <header ref={headerRef} className="sc-header">
-          <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong className="sc-brand-cn">幕景</strong><span className="sc-brand-dot" aria-hidden="true"/><span className="sc-brand-en"><i aria-hidden="true">S</i>CENDANCE</span></a>
-          <span className="sc-brand-divider" aria-hidden="true"/>
           <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><VenueBriefLine /><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
           <div className="sc-header-actions">
             <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" data-tip="项目" title="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/></button>
@@ -1599,11 +1590,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
           </div>
         </header>
-        <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed && sidebarCollapsed ? '' : ' has-left-column'}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`} style={{ ['--sc-left-card-width' as string]: `${leftCardWidth}px` }}>
+        <main data-nav={navExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${navExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`} style={{ ['--sc-left-card-width' as string]: `${leftCardWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
+              {!navExpanded && <WorkbenchBrandToggle expanded={false} onToggle={toggleNav} />}
               <nav className="sc-mode-rail-top" aria-label="工作流程">
                 {WORKBENCH_MODES.map(mode => {
                   const active = workbenchMode === mode.id;
@@ -1625,7 +1617,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               </nav></>}
             </div>
           </div>
-          <div className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
+          <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
+          {navExpanded && <WorkbenchBrandToggle expanded onToggle={toggleNav} />}
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
