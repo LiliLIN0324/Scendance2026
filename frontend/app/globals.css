@@ -591,9 +591,9 @@ body {
 .sc-workbench button:disabled { cursor: not-allowed; background: var(--plane); color: var(--faint); opacity: 1; }
 .sc-workbench :is(button, input, textarea, select):focus-visible { outline: 2px solid var(--ink-soft); outline-offset: 2px; }
 .sc-header {
-  height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 16px;
+  box-sizing: border-box; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 16px;
   margin: 0; position: relative; z-index: 60; border-radius: 0;
-  color: var(--sc-ink); border: 1px solid var(--sc-line);
+  color: var(--sc-ink); border: 0; border-bottom: 1px solid var(--sc-line);
   background: var(--sc-surface); box-shadow: none;
 }
 /* Brand Lockup — 三页统一排法（详见 docs/design-spec-2026.md §2） */
@@ -824,7 +824,6 @@ body {
   .sc-canvas-stage.has-selection .sc-view-tools, .sc-canvas-stage.has-selection .sc-canvas-heading { display: none; }
 }
 @media (max-width: 480px) {
-  .sc-brand-mark { display: none; }
   .sc-header { gap: 6px; }
 }
 
@@ -901,8 +900,7 @@ body {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
   .sc-workbench .is-docked-layout.has-conversation .sc-canvas-stage { display:none; }
   .sc-workbench .is-docked-layout .cr-assistant.is-docked { grid-area:1 / 1; }
-  .sc-workbench .sc-header { gap:8px; padding:0 8px; }
-  .sc-workbench .sc-header-actions { gap:4px; }
+  .sc-workbench .sc-header { gap:6px; padding:0 8px; }
   .sc-workbench .sc-brand strong { display:none; }
   .sc-workbench .sc-canvas-heading { top:12px; left:12px; gap:4px; max-width:calc(100% - 105px); }
 }
@@ -930,7 +928,7 @@ body {
   background: var(--wk-canvas);
 }
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
-  display: grid; gap: 0; left: 0; right: 0; bottom: 0; top: 48px;
+  display: grid; gap: 0; left: 0; right: 0; bottom: 0; top: 40px;
   /* 窄轨完整露出；左栏从轨右侧开始，宽度跟拖边走；画布占其余。 */
   grid-template-columns: 64px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -996,8 +994,23 @@ body {
 }
 /* 左下「设置」：贴底 + 发丝线与上方阶段组分隔。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
-  margin-top: auto; width: 100%; padding-top: 6px; border-top: 1px solid var(--wk-hair);
+  margin-top: auto; width: 100%; padding-top: 8px; gap: 6px; border-top: 1px solid var(--wk-hair);
 }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft {
+  margin: 0; max-width: 100%; padding: 0 2px;
+  color: var(--wk-muted); font-size: 10px; line-height: 13px; font-weight: 400;
+  text-align: center; letter-spacing: 0; white-space: nowrap;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft.has-error { color: var(--err); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger {
+  width: 34px; height: 34px; min-height: 34px; padding: 0; flex: none; flex-direction: row; gap: 0;
+  border: 1px solid var(--sc-line); border-radius: 999px; background: transparent; box-shadow: none;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger > .sc-account-trigger-avatar {
+  display: grid; width: 28px; height: 28px;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-cloud-trigger:active { transform: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail.is-wide button {
   flex-direction: row; justify-content: flex-start; gap: 9px; padding: 8px 10px; text-align: left;
 }
@@ -1173,38 +1186,9 @@ body {
   margin: 0; padding: 0; border: 0; border-radius: 0;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .cr-agent-brief > summary { display: none; }
-.sc-workbench .sc-brand-divider {
-  width: 1px; height: 20px; background: var(--wk-hair); margin: 0 4px 0 8px; flex: none;
-}
-.sc-workbench .sc-project-heading {
-  display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
-}
-.sc-workbench .sc-project-heading strong { display: inline; max-width: 220px; flex: none; }
 .sc-workbench .sc-venue-brief {
-  margin: 0; min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--wk-muted); font-size: 12px; line-height: 1.4;
-}
-.sc-workbench .sc-tag-draft {
-  display: inline-flex; align-items: center; height: 22px; padding: 0; flex: none;
-  border-radius: 0; background: transparent; border: 0;
-  color: var(--wk-muted); font-size: 11px; white-space: nowrap;
-}
-.sc-workbench .sc-header-actions .sc-project-btn {
-  position: relative;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; min-width: 32px;
-  padding: 5px 8px; border: 0; border-radius: var(--r-sm);
-  background: transparent; color: var(--wk-ink-soft, #55585F); font-size: var(--fs-p1);
-}
-.sc-workbench .sc-header-actions .sc-project-btn[data-tip]::after {
-  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0;
-  padding: 3px 7px; border-radius: var(--r-sm); background: var(--wk-ink); color: #fff;
-  font-size: 11px; font-weight: 400; line-height: 15px; white-space: nowrap;
-  opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
-}
-.sc-workbench .sc-header-actions .sc-project-btn[data-tip]:hover::after,
-.sc-workbench .sc-header-actions .sc-project-btn[data-tip]:focus-visible::after { opacity: 1; }
-.sc-workbench .sc-header-actions .sc-project-btn:hover {
-  color: var(--wk-ink); background: var(--wk-plane);
 }
 /* Right tool column: pinned to the 3D canvas top-right, not the window and not vertically centered. */
 .sc-workbench .sc-tool-column.sc-canvas-rail {
