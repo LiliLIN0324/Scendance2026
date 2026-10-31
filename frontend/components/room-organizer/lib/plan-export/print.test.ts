@@ -63,6 +63,10 @@ describe('openPlanPrintWindow', () => {
   it('declares the chosen scale and orientation and sizes the plan to it', () => {
     const html = openAndCapture(8, 8);
     expect(html).toContain('1:75 (A4 portrait)');
+    expect(html).toContain('>metres</td>');
+    expect(html).toContain('Footprint');
+    expect(html).toContain('8 m × 8 m');
+    expect(html).toContain('Contents');
     expect(html).toContain('@page { size: A4 portrait;');
     // 8 m at 1:75 is 106.7 mm plus 2 × 15 mm margins.
     expect(html).toContain('.plan { width: 136.7mm; }');
