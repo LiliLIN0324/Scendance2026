@@ -262,6 +262,10 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
       deps.invalidate();
       return true;
     },
+    /** Drop the borrowed orbit pose without moving the camera (walk owns it). */
+    discardSavedView() {
+      savedView = null;
+    },
     /** 只停显示，点云还留在显存里：同一场景再点开不用重新解码。 */
     stop() {
       shownId = '';

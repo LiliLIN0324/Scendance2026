@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { MAX_CUSTOM_SET_NAME_LENGTH } from '../lib/custom-sets';
+import { WALK_CANVAS_ID } from '../lib/walk-engage';
 import { Icon, iconForItem } from '../plotcraft/icon';
 import { ChipButton, ChipNameField } from './chip-controls';
 import { Minimap } from './minimap';
+import type { WalkthroughPhase } from '../hooks/use-walkthrough';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type { FloorLayout } from '../lib/types';
 
@@ -36,8 +38,10 @@ export interface ViewportProps {
   showMeasurements: boolean;
   showMinimap: boolean;
   walkthroughActive?: boolean;
-  /** The browser refused pointer lock; the hint asks for another click (#351). */
-  walkthroughLockRefused?: boolean;
+  /** Pointer-lock progress for the eye-level walk hint. */
+  walkthroughPhase?: WalkthroughPhase;
+  /** Sample / World gaussian is the backdrop; the hint says walk stays at eye height. */
+  walkthroughInEnvironment?: boolean;
   hover?: HoverState | null;
   measurementDistance?: number | null;
   /** Points placed with the distance tool; absent while the tool is off. */
@@ -115,6 +119,7 @@ export function Viewport(props: ViewportProps): JSX.Element {
         />
         <canvas
           ref={props.canvasRef}
+          id={WALK_CANVAS_ID}
           className={props.view2D ? 'hidden' : ''}
           style={{
             width: '100%',
@@ -297,6 +302,18 @@ function StatusChip({
   );
 }
 
+function walkHint(phase: WalkthroughPhase | undefined, inEnvironment: boolean | undefined): string {
+  if (phase === 'locked') {
+    return inEnvironment
+      ? '眼高走进环境 · WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出'
+      : 'WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出';
+  }
+  if (phase === 'needs-click') {
+    return inEnvironment ? '再点一下画面，按眼高走进环境' : '再点一下画面，开始第一人称走动';
+  }
+  return '正在进入第一人称…';
+}
+
 function ViewportOverlays(props: ViewportProps): JSX.Element {
   return (
     <>
@@ -332,9 +349,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
           >
             <StatusChip intent="accent">
               <Icon name="live" size={14} />
-              {props.walkthroughLockRefused
-                ? '再点一下画面开始漫游'
-                : 'WASD 走动 · Shift 加速 · Esc 退出'}
+              {walkHint(props.walkthroughPhase, props.walkthroughInEnvironment)}
             </StatusChip>
           </div>
         </>
