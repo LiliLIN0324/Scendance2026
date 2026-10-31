@@ -1,0 +1,173 @@
+/* 方案会话列表。挂在左栏晴光之上，不进顶栏。色彩沿用工作台冷石 token。 */
+.sc-session-history {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: min(280px, 42%);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--wk-paper, #fff);
+  border-bottom: 1px solid var(--wk-hair, #e4e4e7);
+  color: var(--wk-ink, #141416);
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+}
+.sc-session-history-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 10px 12px 6px;
+}
+.sc-session-history-head h2 {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-h3, 16px);
+  line-height: var(--lh-h3, 24px);
+  font-weight: 600;
+}
+.sc-session-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm, 10px);
+  background: transparent;
+  color: var(--wk-ink, #141416);
+  font: inherit;
+  font-size: var(--fs-p2, 12px);
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-session-new:hover { background: var(--wk-plane, #f4f5f7); }
+.sc-session-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 32px;
+  margin: 0 12px 8px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--wk-plane, #f4f5f7);
+  color: var(--wk-muted, #71767e);
+}
+.sc-session-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--wk-ink, #141416);
+  font: inherit;
+  font-size: var(--fs-p1, 14px);
+}
+.sc-session-search input::placeholder { color: var(--wk-muted, #71767e); }
+.sc-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 8px;
+  overflow: auto;
+  min-height: 0;
+  max-height: 196px;
+}
+.sc-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 4px 6px;
+  border-radius: 8px;
+}
+.sc-session-row.is-active { background: var(--wk-green-pale, #eef3ef); }
+.sc-session-row.is-confirming { grid-template-columns: minmax(0, 1fr); }
+.sc-session-row.is-confirming .sc-session-confirm { grid-column: 1 / -1; justify-content: flex-end; padding-bottom: 2px; }
+.sc-session-row.is-renaming { outline: 1.5px solid var(--wk-green, #4a7c59); outline-offset: -1px; }
+.sc-session-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-session-open strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-session-open small {
+  color: var(--wk-muted, #71767e);
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+}
+.sc-session-rename {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 2px 0;
+  padding: 4px 8px;
+  border: 1.5px solid var(--wk-green, #4a7c59);
+  border-radius: 8px;
+  background: var(--wk-paper, #fff);
+  color: inherit;
+  font: inherit;
+}
+.sc-session-actions,
+.sc-session-confirm {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 0;
+}
+.sc-session-actions button,
+.sc-session-confirm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wk-ink-soft, #71767e);
+  cursor: pointer;
+}
+.sc-session-actions button:hover,
+.sc-session-confirm button:hover { background: rgba(20, 20, 22, 0.06); color: var(--wk-ink, #141416); }
+.sc-session-actions button.is-on { color: var(--wk-green-deep, #3a6247); }
+.sc-session-confirm { gap: 2px; padding-right: 2px; }
+.sc-session-confirm span {
+  color: var(--wk-ink-soft, #71767e);
+  font-size: var(--fs-p2, 12px);
+  white-space: nowrap;
+}
+.sc-session-confirm button {
+  width: auto;
+  padding: 0 6px;
+  font: inherit;
+  font-size: var(--fs-p2, 12px);
+  font-weight: 600;
+}
+.sc-session-confirm button.is-danger { color: var(--err, #b4443c); }
+.sc-session-empty,
+.sc-session-save {
+  margin: 4px 12px 10px;
+  color: var(--wk-muted, #71767e);
+  font-size: var(--fs-p2, 12px);
+}
+.sc-session-save { color: var(--err, #b4443c); }
