@@ -168,7 +168,7 @@ interface AgentValue {
   mapPickerOpen: boolean;
   startMapVenuePicker(): void;
   closeMapVenuePicker(): void;
-  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[] }): string | null;
+  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
   /** 上一版云任务还在恢复：最后一帧没稳，不亮确认。 */
