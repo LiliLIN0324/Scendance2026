@@ -21,18 +21,20 @@ describe('nav chrome state', () => {
     expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: false })).toBe(true);
     expect(isNavExpanded({ agentCollapsed: false, sidebarCollapsed: false })).toBe(true);
     expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true })).toBe(false);
+    expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true, sidePanel: 'bingo' })).toBe(true);
+    expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true, sidePanel: 'venue' })).toBe(true);
   });
 
   it('closes both doors from any open combination, and opens only 晴光 from fully closed', () => {
-    const closed = { agentCollapsed: true, sidebarCollapsed: true };
+    const closed = { agentCollapsed: true, sidebarCollapsed: true, sidePanel: null };
     expect(toggleNavColumns({ agentCollapsed: false, sidebarCollapsed: true })).toEqual(closed);
     expect(toggleNavColumns({ agentCollapsed: true, sidebarCollapsed: false })).toEqual(closed);
     expect(toggleNavColumns({ agentCollapsed: false, sidebarCollapsed: false })).toEqual(closed);
-    expect(toggleNavColumns(closed)).toEqual({ agentCollapsed: false, sidebarCollapsed: true });
+    expect(toggleNavColumns(closed)).toEqual({ agentCollapsed: false, sidebarCollapsed: true, sidePanel: null });
   });
 
   it('round-trips the default 晴光 column without remembering a third flag', () => {
-    const openAgent = { agentCollapsed: false, sidebarCollapsed: true };
+    const openAgent = { agentCollapsed: false, sidebarCollapsed: true, sidePanel: null };
     expect(toggleNavColumns(toggleNavColumns(openAgent))).toEqual(openAgent);
     expect(navToggleLabel(true)).toBe(NAV_COLLAPSE_LABEL);
     expect(navToggleLabel(false)).toBe(NAV_EXPAND_LABEL);

@@ -1253,7 +1253,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 /* ───────────────────────── 右栏 ───────────────────────── */
 
 /** 晴光形象对应的状态。点头像或这行字，回到这一态该做的事。 */
-function headerStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
+export function qingguangHeaderStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
   if (mode === 'review') return { text: '评审', tone: 'ask', hint: '钉在画布上，对话还在' };
   if (mode === 'delivery') return { text: '执行', tone: 'idle', hint: '回到输入' };
   if (mode !== 'layout') return { text: '空闲', tone: 'idle', hint: '回到输入' };
@@ -1671,7 +1671,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
 export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const agent = useAgent();
   const mode = agent.callbacks.workbenchMode;
-  const status = headerStatus(agent, mode);
+  const status = qingguangHeaderStatus(agent, mode);
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   // 评审页「完成评审」的本机回执。有回执就给收起球加红环（旧称 Bingo 球）。

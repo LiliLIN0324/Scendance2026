@@ -197,7 +197,32 @@ export function addReviewComment(shareId: string, input: { parentId: string | nu
   return comment;
 }
 
-function rememberReviewMark(mark: ReviewBingoMark): void {
+export function rememberReviewLinkMark(input: {
+  projectKey: string;
+  title: string;
+  shareId: string;
+  clientUrl: string;
+  reviewPlanKey: string;
+  markedAt?: string;
+}): void {
+  const projectKey = clip(input.projectKey, 80);
+  const shareId = clip(input.shareId, 80);
+  const clientUrl = clip(input.clientUrl, 512);
+  const reviewPlanKey = clip(input.reviewPlanKey, 80);
+  if (!projectKey || !shareId || !clientUrl || !reviewPlanKey) return;
+  rememberReviewMark({
+    saved: true,
+    status: 'needs-review',
+    projectKey,
+    title: clip(input.title, MAX_TITLE) || '未命名活动',
+    shareId,
+    markedAt: input.markedAt ?? new Date().toISOString(),
+    clientUrl,
+    reviewPlanKey,
+  });
+}
+
+function rememberReviewMark(mark: ReviewBingoMark & { clientUrl?: string; reviewPlanKey?: string }): void {
   const rest = readReviewMarks().filter(entry => entry.projectKey !== mark.projectKey);
   writeJson(MARK_KEY, [mark, ...rest].slice(0, MAX_MARKS));
 }
