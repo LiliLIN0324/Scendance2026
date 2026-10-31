@@ -51,7 +51,11 @@ export function readGenerationIntent(storage: Pick<Storage, 'getItem'>, key: str
 export function assetError(error: unknown): string {
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
   const messages: Record<string, string> = {
-    SERVICE_NOT_CONFIGURED: '三维生成服务尚未配置，请联系管理员完成配置。',
+    SERVICE_NOT_CONFIGURED: 'Aholo Lux3D 尚未在云端配置（需 LUX3D_API_KEY 与条款）。可改用左侧晴光「生成」走本机代理，或「观感」里的备用入口。',
+    HY3_RETIRED: '旧版 HY-3D 生成已停用。请改用 Aholo Lux3D：左侧晴光「生成」、活动资料里的「生成物件」，或本机代理联调。',
+    PROVIDER_FAILED: 'Aholo 生成失败，额度可能已扣。请稍后重试，或改用「观感 / 图片和重建」等备用入口。',
+    PROVIDER_REJECTED: 'Aholo 拒绝了这次请求，请改描述或换参考图后再试。',
+    PROVIDER_TASK_CANCELLED: 'Aholo 任务已取消。可重新提交，或使用备用生成入口。',
     BILLING_NOT_CONFIGURED: '生成预算尚未配置，请联系管理员。',
     BUDGET_EXCEEDED: '生成预算已用完。请联系管理员核对预算，重试会沿用同一请求编号。',
     GENERATION_BUSY: '已有生成任务等待完成，请稍后重试同一请求。',

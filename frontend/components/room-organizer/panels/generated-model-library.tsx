@@ -16,18 +16,28 @@ const activeStates = new Set(['queued','submitting','submitted','processing','ar
 const message = assetError;
 export interface TextureVariantReady { sourceAssetId:string;variantAssetId:string;objectIds?:string[] }
 export interface GenerationTarget { sourceAssetId?:string;sourceObjectIds?:string[];onVariantReady?(variant:TextureVariantReady):void }
-export function GeneratedModelLibrary({ controller, disabled = false, onAdd, ...target }: {
+export function GeneratedModelLibrary({ controller, disabled = false, onAdd, onOpenLocalGenerate, onOpenFallback, ...target }: {
   controller?: BackendSession; disabled?: boolean; onAdd(item: CatalogItem): void;
+  /** 晴光栏本机 Aholo 生成（无云端 Lux3D 时引导主路径） */
+  onOpenLocalGenerate?: (() => void) | undefined;
+  /** 观感 / 图片建模等备用入口 */
+  onOpenFallback?: (() => void) | undefined;
 } & GenerationTarget): JSX.Element {
   return controller ? <ScopedGeneration controller={controller} disabled={disabled} onAdd={onAdd} {...target}/>
     : <p className="sc-note">登录后可查看历史模型。</p>;
 }
-interface ConnectedProps extends GenerationTarget { controller: BackendSession; disabled: boolean; onAdd(item: CatalogItem): void }
+interface ConnectedProps extends GenerationTarget { controller: BackendSession; disabled: boolean; onAdd(item: CatalogItem): void;
+  onOpenLocalGenerate?: (() => void) | undefined;
+  onOpenFallback?: (() => void) | undefined;
+}
 function ScopedGeneration(props: ConnectedProps): JSX.Element {
   const cloud=useBackendSession(props.controller);
   return <ConnectedGeneration key={`${props.controller.config.apiUrl}:${cloud.user?.id}:${cloud.project?.id}`} {...props}/>;
 }
-function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourceObjectIds, onVariantReady }: ConnectedProps): JSX.Element {
+function ConnectedGeneration({ controller, disabled, onAdd, onOpenLocalGenerate, onOpenFallback, sourceAssetId, sourceObjectIds, onVariantReady }: ConnectedProps & {
+  onOpenLocalGenerate?: (() => void) | undefined;
+  onOpenFallback?: (() => void) | undefined;
+}): JSX.Element {
   const cloud = useBackendSession(controller);
   const userId = cloud.user?.id, projectId = cloud.project?.id;
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
@@ -126,9 +136,10 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
 
   const validSize = Object.values(dimensions).every(value => Number.isFinite(value) && value >= 0.1 && value <= 50);
   const luxReady = Boolean(capabilities?.aholoTextToModel) && !disabled && !cloud.writeBlocked;
-  return <section className="sc-generated-models" aria-label="历史 3D 模型">
-    {luxReady && <div className="sc-section-heading" aria-label="生成物件">
-      <div><h2>生成物件</h2><p>一句话或一张照片生成全新物件，完成后出现在下方任务列表。</p></div>
+  const aholoConfigured = Boolean(capabilities?.aholoTextToModel || capabilities?.aholoImageToModel);
+  return <section className="sc-generated-models" aria-label="Aholo 云端物件">
+    {luxReady && <div className="sc-section-heading" aria-label="Aholo Lux3D 生成物件">
+      <div><h2>Aholo · 生成物件</h2><p>云端 Lux3D：一句话或参考图生成 GLB，完成后出现在下方任务列表。</p></div>
       <div>
         <AholoGuideCard surface="library" />
         <label className="sc-field" htmlFor="lux3d-prompt">物件描述</label>
@@ -140,13 +151,26 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
           onChange={event => { void pickLuxReference(event.target.files?.[0]); event.target.value = ''; }} />
         {luxReference && <p className="sc-note">已选参考图：{luxReference.name}（提交后按照片建模，描述作为补充说明）</p>}
         <button type="button" className="sc-button" disabled={luxPending || !luxPrompt.trim()}
-          onClick={() => void submitLux3d()}>{luxPending ? '已提交，生成中…' : '生成物件'}</button>
+          onClick={() => void submitLux3d()}>{luxPending ? '已提交，Aholo 生成中…' : '用 Aholo 生成物件'}</button>
+      </div>
+    </div>}
+    {!luxReady && userId && !aholoConfigured && <div className="sc-section-heading" role="note" aria-label="Aholo 未配置">
+      <div><h2>Aholo · 生成物件</h2><p className="sc-note">云端尚未开通 Aholo Lux3D（LUX3D_API_KEY / 条款）。主路径请用左侧晴光「生成」+ 本机代理；备用图片与重建在「观感」。</p></div>
+      <div className="sc-aholo-cloud-actions">
+        {onOpenLocalGenerate && <button type="button" className="sc-button" onClick={onOpenLocalGenerate}>打开晴光 Aholo 生成</button>}
+        {onOpenFallback && <button type="button" className="sc-button btn-outline" onClick={onOpenFallback}>备用：观感 / 图片建模</button>}
       </div>
     </div>}
     <div className="sc-section-heading"><div><h2>历史模型</h2><p>已有模型与材质版本仍可使用。</p></div></div>
     {!userId ? <p className="sc-note">请先登录云项目。</p> : <>
       <button type="button" className="sc-button sc-full" onClick={() => { setError(''); setRefresh(value => value + 1); }}>刷新任务状态</button>
-      {error && <p className="sc-warning" role="alert">{error}</p>}
+      {error && <div className="sc-warning" role="alert">
+        {error}
+        {(onOpenLocalGenerate || onOpenFallback) && /Aholo|HY-3D|尚未在云端配置|已停用/.test(error) && <span className="sc-aholo-cloud-actions">
+          {onOpenLocalGenerate && <button type="button" className="sc-gen-resume" onClick={onOpenLocalGenerate}>改走晴光生成</button>}
+          {onOpenFallback && <button type="button" className="sc-gen-resume" onClick={onOpenFallback}>打开备用入口</button>}
+        </span>}
+      </div>}
       {jobs.length > 0 && <>
         <div className="sc-dimension-grid">{(['width', 'depth', 'height'] as const).map((key, index) =>
           <label className="sc-field" key={key}>{['宽度 / m', '进深 / m', '高度 / m'][index]}<input aria-label={`生成模型${['宽度', '进深', '高度'][index]}`} type="number" min={0.1} max={50} step={0.1}

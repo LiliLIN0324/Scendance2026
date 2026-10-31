@@ -19,7 +19,7 @@ import type { CatalogItem } from '../lib/types';
 
 const POLL_MS = 5000;
 const CAPABILITIES = {
-  text: { label: '文字建模', path: '/text-to-3d', storage: 'scendance:lux3d-direct', id: /^\d+$/ },
+  text: { label: '文字（备用）', path: '/text-to-3d', storage: 'scendance:lux3d-direct', id: /^\d+$/ },
   image: { label: '图片建模', path: '/image-to-3d', storage: 'scendance:aholo-image', id: /^\d+$/ },
   world: { label: '场景生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
   recon: { label: '场地重建', path: '/world-recon', storage: 'scendance:aholo-recon', id: /^[a-zA-Z0-9_-]{1,128}$/ },
@@ -603,7 +603,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   }
   const kinds = Object.keys(CAPABILITIES) as Kind[];
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>场地观感与物料</h2><p>文字生成在左侧晴光「生成」，确认扣额度后才提交。这里留图片、场景和场地重建。观感层不进碰撞、不进落盘几何。</p></div>
+    <div className="sc-section-heading"><div><h2>备用 · 观感与图片</h2><p>主路径是左侧晴光「Aholo 生成」（Lux3D 文生/图生）。这里留图片建模、场景观感与场地重建；文字建模仅作本机联调兜底。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
@@ -613,7 +613,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
       <div className="sc-aholo-cloud-actions">
         <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂云E2E宴会厅观感</button>
         <button type="button" className="sc-button" onClick={() => { if (onPreviewShippedScene) onPreviewShippedScene(DEMO_WORLD_SCENE_ID); else onHangMockScene?.(); }}>挂样例环境预览</button>
-        {onOpenCloudModels && <button type="button" className="sc-button" onClick={onOpenCloudModels}>打开云端物料生成</button>}
+        {onOpenCloudModels && <button type="button" className="sc-button" onClick={onOpenCloudModels}>打开云端 Aholo 物料</button>}
       </div>
       <div className="sc-aholo-cloud-actions" role="group" aria-label="已发布物件">
         {listShippedAssets('glb').map(asset => (

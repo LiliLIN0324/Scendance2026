@@ -35,8 +35,12 @@ describe('aholo lux3d lane (docs/AHOLO-INTEGRATION-PLAN.md M1)',()=>{
     // Provider identity is pinned: later config changes must not re-vendor an old job.
     await expect(f.jobs(owner,'jobs.create',{...await prepareGenerationRequest(f.backend,owner,{...input,provider:undefined},env(baseEnv)),reserveCents:100})).resolves.toMatchObject({reused:true});
   });
-  it('keeps the default cloud lane on HY-3D even when aholo is configured',async()=>{
+  it('defaults the cloud text lane to Aholo Lux3D when both vendors are configured',async()=>{
     const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},env(baseEnv));
+    expect(prepared).toMatchObject({providerMode:'aholo',providerModel:'lux3d'});
+  });
+  it('keeps HY-3D as the text fallback when Aholo is not configured',async()=>{
+    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},env({HUNYUAN_API_KEY:'test',HUNYUAN_API_MODE:'tokenhub',HUNYUAN_TERMS_URL:'https://example.test/terms',HUNYUAN_TERMS_REVIEWED_AT:'2026-10-03'}));
     expect(prepared).toMatchObject({providerMode:'tokenhub',providerModel:'hy-3d-3.0'});
   });
   it('submits text/image tasks to the Lux3D endpoints and unwraps the c/d shell',async()=>{

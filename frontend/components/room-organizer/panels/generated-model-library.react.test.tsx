@@ -151,11 +151,11 @@ describe('Lux3D (Aholo) generation entry', () => {
     const off = render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     await screen.findByRole('heading', { name: '历史模型' });
     await act(async () => { await Promise.resolve(); });
-    expect(screen.queryByRole('button', { name: '生成物件' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '用 Aholo 生成物件' })).toBeNull();
     off.unmount();
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
-    expect(await screen.findByRole('button', { name: '生成物件' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '用 Aholo 生成物件' })).toBeTruthy();
     expect(screen.queryByLabelText('物料描述')).toBeNull();
     expect(screen.queryByLabelText('生成方式')).toBeNull();
   });
@@ -178,7 +178,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     await waitFor(() => expect(controller.uploadGenerationReference).toHaveBeenCalledOnce());
     expect(screen.getByText(/已选参考图：venue.png/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('物件描述'), { target: { value: '现场照片里的讲台' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
     expect(create.mock.calls[0]![2]).toEqual({ kind: 'image', referenceImageAssetId: assetId, provider: 'aholo' });
     await waitFor(() => expect(screen.queryByText(/已选参考图/)).toBeNull());
@@ -187,7 +187,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(await screen.findByLabelText('物件描述'), { target: { value: '  一张白色圆桌  ' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
     expect(create.mock.calls[0]![2]).toEqual({ provider: 'aholo' });
     expect(create.mock.calls[0]![0]).toBe('一张白色圆桌');
@@ -196,8 +196,8 @@ describe('Lux3D (Aholo) generation entry', () => {
   it('rejects an empty prompt locally without calling the paid endpoint', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
-    await screen.findByRole('button', { name: '生成物件' });
-    expect((screen.getByRole('button', { name: '生成物件' }) as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByRole('button', { name: '用 Aholo 生成物件' });
+    expect((screen.getByRole('button', { name: '用 Aholo 生成物件' }) as HTMLButtonElement).disabled).toBe(true);
     expect(create).not.toHaveBeenCalled();
   });
   it('surfaces a provider rejection without clearing the draft prompt', async () => {
@@ -205,7 +205,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     create.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'SERVICE_NOT_CONFIGURED', status: 503 }));
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(await screen.findByLabelText('物件描述'), { target: { value: '一张白色圆桌' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
     expect((screen.getByLabelText('物件描述') as HTMLInputElement).value).toBe('一张白色圆桌');
   });
