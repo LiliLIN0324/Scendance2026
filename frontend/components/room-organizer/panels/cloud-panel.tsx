@@ -18,13 +18,13 @@ import { useLocalProjectBackup } from './creative-studio';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; publicationRequest?: number; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement> }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; publicationRequest?: number; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string } }
 
 function isLocalMockBackend(): boolean {
   return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes('localhost:3099');
 }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, publicationRequest = 0, openRequest, triggerRef }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, publicationRequest = 0, openRequest, triggerRef, draftNote }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
@@ -107,7 +107,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     setSection('publication');
     if (!dialog.current?.open) dialog.current?.showModal();
   }, [publicationRequest]);
-  // 多入口分区直达（IA 拆分）：右上「项目」→ projects、左下「设置」→ team、头像 → assets。
+  // 多入口分区直达：左下「设置」→ team、头像 → assets。项目仍在账户菜单里。
   const openedOpenRequest = useRef(0);
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
@@ -260,7 +260,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     <dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={onClose} onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">
       <div className="sc-cloud-heading"><div><span className="sc-cloud-eyebrow">SCENDANCE / 账户中心</span><h2 id="cloud-title">你的创作，从这里继续。</h2></div><button className="sc-cloud-close" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={20}/></button></div>
-      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>前往登录</Link>}</div>
+      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{accountName.slice(0, 1).toUpperCase()}</span><div><strong>{accountName}</strong><span>{cloud.user?.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user?.email ?? '在本机布置场地，也可以探索团队演示。'}</span>{draftNote ? <span className={`sc-account-draft${draftNote.error ? ' has-error' : ''}`} title={draftNote.title}>{draftNote.label}</span> : null}</div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>前往登录</Link>}</div>
       <nav className="sc-account-nav" aria-label="账户导航">{[
         ['projects', '我的项目'], ['team', '团队演示'], ['permissions', '权限演示'], ['assets', '素材库'], ['publication', '发布管理'],
       ].map(([id, label]) => <button type="button" key={id} aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}</nav>

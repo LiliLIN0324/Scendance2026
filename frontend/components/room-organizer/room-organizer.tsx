@@ -1,6 +1,6 @@
 'use client';
 
-import { FolderOpen, ListChecks, PanelLeftClose, Ruler, Scan, Send, Shapes, Sparkles, SquareStack } from 'lucide-react';
+import { ListChecks, PanelLeftClose, Ruler, Scan, Send, Settings, Shapes, Sparkles, SquareStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -66,7 +66,7 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, WORKBENCH_MODES, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
-import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay, VenueBriefLine } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, AgentReopenCard, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './panels/agent-panel';
 import { CloudPanel } from './panels/cloud-panel';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
@@ -221,6 +221,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [backupOpenRequest, setBackupOpenRequest] = useState(0);
   const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
   const [publicationOpenRequest, setPublicationOpenRequest] = useState(0);
+  const [accountOpenRequest, setAccountOpenRequest] = useState<{ serial: number; section: string }>({ serial: 0, section: 'team' });
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
   const [materialTabRequest, setMaterialTabRequest] = useState<{serial:number;tab:'materials'|'presets'|'environment'|'generated'}>({serial:0,tab:'materials'});
@@ -1573,6 +1574,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     canvas:canvasRef,canvas2D:canvas2DRef,scene:sceneRef,renderer:rendererRef,camera:cameraRef,
     pendingPreview:!!previewCandidate,isInteracting:()=>isDragActive()||!!wallDraft||!!placingId||!!pendingCatalog});
   const reviewContext=JSON.stringify(referenceImage.layer??null);
+  const draftLabel = saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿';
+  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '草稿';
+  const draftTitle = saveError ? '本机保存失败，请导出备份' : draftLabel;
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -1590,14 +1594,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <header ref={headerRef} className="sc-header">
-          <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong className="sc-brand-cn">幕景</strong><span className="sc-brand-dot" aria-hidden="true"/><span className="sc-brand-en"><i aria-hidden="true">S</i>CENDANCE</span></a>
-          <span className="sc-brand-divider" aria-hidden="true"/>
-          <div className="sc-project-heading"><strong title={layout.name || '未命名活动'}>{layout.name || '未命名活动'}</strong><VenueBriefLine /><span role="status" title={saveError ? '本机保存失败，请导出备份' : undefined} className={`sc-tag-draft ${saveError ? 'has-error' : ''}`}>{saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿'}</span></div>
-          <div className="sc-header-actions">
-            <button ref={workspaceEntryRef} type="button" className="sc-project-btn" aria-label="项目" data-tip="项目" title="项目" onClick={() => document.querySelector<HTMLButtonElement>('.sc-cloud-trigger')?.click()}><FolderOpen size={16} aria-hidden="true"/></button>
-            <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
-            <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
-          </div>
+          <a className="sc-brand" href="/introduction" aria-label="幕景 · 打开官网" onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;event.preventDefault();void openIntroduction();}}><span className="sc-brand-mark"><BrandMark size={28} /></span><strong className="sc-brand-cn">幕景</strong></a>
+          <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
         </header>
         <main className={`sc-workspace is-docked-layout is-mode-rail${agentCollapsed && sidebarCollapsed ? '' : ' has-left-column'}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}${materialsOpen?' has-material-shelf':''}`} style={{ ['--sc-left-card-width' as string]: `${leftCardWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
@@ -1623,6 +1621,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 <button type="button" className={`sc-rail-tool${leftMode==='lux3d'?' is-active':''}`} aria-pressed={leftMode==='lux3d'} aria-label="场地观感与物料" data-tip="观感" title="图片、场景观感、场地重建。文字生成在左侧晴光「生成」。"
                   onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setBusinessOpen(false);setSidebarCollapsed(true);setAgentCollapsed(false);}}><Shapes size={24} aria-hidden="true"/></button>
               </nav></>}
+            </div>
+            <div className="sc-mode-rail-foot">
+              <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
+              <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" title="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
+              <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           <div className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
