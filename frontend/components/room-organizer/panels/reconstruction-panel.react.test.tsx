@@ -362,7 +362,16 @@ describe('local applied reference mapping',()=>{
 });
 afterEach(()=>{cleanup();controller.dispose();vi.restoreAllMocks();vi.useRealTimers();});
 function ui(){return render(<Panel controller={controller} layout={layout} onApply={vi.fn()} images={[image]} updateImage={vi.fn()} brief={{...INITIAL_BRIEF,description:'保留结构，活动布置'}}/>);}
-function measures(){fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3 米'}});}
+function measures(){
+  const summary=screen.queryByText('无平面图？手输长宽（旁路）');
+  if(summary)fireEvent.click(summary);
+  fireEvent.change(screen.getByLabelText('场地尺寸'),{target:{value:'总宽 12 米，总深 8 米，层高 3 米'}});
+}
+function markRuler(map:HTMLElement,start:{x:number;y:number},end:{x:number;y:number}):void{
+  map.getBoundingClientRect=()=>({left:0,top:0,width:1000,height:600,right:1000,bottom:600,x:0,y:0,toJSON:()=>({})});
+  fireEvent.click(map,{clientX:start.x,clientY:start.y});
+  fireEvent.click(map,{clientX:end.x,clientY:end.y});
+}
 describe('reconstruction entry',()=>{
  it.each(['request','job'] as const)('explains an unconfigured recognition service from the %s and preserves the canvas',async origin=>{
   const create=vi.spyOn(controller,'createReconstruction');
@@ -461,14 +470,18 @@ describe('reconstruction entry',()=>{
   await waitFor(()=>expect(screen.queryByText(/比例已锁定/)).toBeNull());
  });
 
- it('auto-starts reconstruction when images are uploaded and dimensions are ready',async()=>{
+ it('starts reconstruction after floorplan ruler confirmation',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
-  const floorplan={...image,kind:'floorplan' as const,name:'平面图.png'};
+  vi.spyOn(controller,'uploadSource').mockResolvedValue({assetId,kind:'floorplan',name:'平面图.png',width:1000,height:600});
+  const floorplan={...image,kind:'floorplan' as const,name:'平面图.png',blob:new Blob(['plan'])};
   const props={controller,layout,onApply:vi.fn(),images:[floorplan],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
-  const view=render(<Panel {...props}/>);
+  render(<Panel {...props}/>);
   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
-  measures();
-  view.rerender(<Panel {...props} autoGenerateRequest={1}/>);
+  const map=screen.getByRole('button',{name:'在平面图上标记标尺两个端点'});
+  markRuler(map,{x:100,y:60},{x:900,y:60});
+  await waitFor(()=>expect((screen.getByLabelText('标尺长度（米）') as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('标尺长度（米）'),{target:{value:'10'}});
+  fireEvent.click(screen.getByRole('button',{name:'确认标尺并进场地'}));
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
  });
  it('auto-selects redesign mode when a photo is uploaded',async()=>{
@@ -482,14 +495,14 @@ describe('reconstruction entry',()=>{
   await waitFor(()=>expect((screen.getByRole('radio',{name:/重新布置/}) as HTMLInputElement).checked).toBe(true));
   await waitFor(()=>expect(create).toHaveBeenCalledOnce());
  });
- it('shows a hint when images are uploaded but dimensions are missing',async()=>{
+ it('opens the ruler after floorplan upload instead of demanding manual width first',async()=>{
   const create=vi.spyOn(controller,'createReconstruction').mockResolvedValue({id:jobId,state:'failed',issues:[],error_code:'TEST_PROVIDER'});
-  const floorplan={...image,kind:'floorplan' as const,name:'平面图.png'};
+  const floorplan={...image,kind:'floorplan' as const,name:'平面图.png',blob:new Blob(['plan'])};
   const props={controller,layout,onApply:vi.fn(),images:[floorplan],updateImage:vi.fn(),brief:{...INITIAL_BRIEF,description:'保留结构'},autoGenerateRequest:0};
   const view=render(<Panel {...props}/>);
   await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   view.rerender(<Panel {...props} autoGenerateRequest={1}/>);
-  await waitFor(()=>expect(screen.getByText(/请至少填写一项平面尺寸/)).toBeTruthy());
+  await waitFor(()=>expect(screen.getByRole('region',{name:'两点定标尺'})).toBeTruthy());
   expect(create).not.toHaveBeenCalled();
  });
 });

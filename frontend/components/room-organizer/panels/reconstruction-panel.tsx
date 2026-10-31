@@ -10,6 +10,7 @@ import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace
 import { updateReviewedWall, openingLine, imageRegistration, mergeRecognizedDimensions } from '@/lib/reconstruction-review';
 import { referenceSceneBasis, referenceStructure, resolveReferenceImage, type ReferenceRegistration } from '@/lib/reference-image';
 import { containedImagePoint, parseDimensionText, readSourceForm, storeSourceForm, registerSourceFlush, type ImagePoint } from '@/lib/source-storage';
+import { FloorPlanRuler, type RulerConfirmation } from './floor-plan-ruler';
 import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { useSelection } from '../contexts';
@@ -22,7 +23,7 @@ import type { RoomLayout } from '../lib/types';
 import './reconstruction-panel.css';
 
 interface Props { controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout):void; onPreview?: ((layout: RoomLayout|null)=>void)|undefined; images: VenuePhoto[]; updateImage(id:string,patch:Partial<VenuePhoto>):void; brief: CreativeBrief; openReferenceRequest?:number; autoGenerateRequest?:number; sourcesRestoring?:boolean; onAddReferenceImages?:(files:FileList|null)=>Promise<void>; onBackToChat?:(() => void)|undefined }
-interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; jobIdentity?:string; jobSession?:string; registration?:ReferenceRegistration; }
+interface Form { width:string; depth:string; height:string; text:string; constraints:DimensionConstraint[]; adjustment:string; rulerSourceImageId?:string; jobId?:string|undefined; requestId?:string|undefined; requestKey?:string|undefined; jobBase?:string|undefined; jobInput?:string|undefined; fixedIds?:Record<string,string>; jobSources?:string; jobMode?:'restore'|'redesign'; jobIdentity?:string; jobSession?:string; registration?:ReferenceRegistration; }
 const EMPTY:Form={width:'',depth:'',height:'',text:'',constraints:[],adjustment:''};
 /** 从一句自然语言里认出总宽、总深、层高；没提到就沿用已有值，整段清空才重置。 */
 function sizeFields(text:string,current:Pick<Form,'width'|'depth'|'height'>):Pick<Form,'width'|'depth'|'height'> {
@@ -223,7 +224,9 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   const [reidentify,setReidentify]=useState(false);
   const [job,setJob]=useState<ReconstructionJob|null>(null),[review,setReview]=useState<SceneV2|null>(null),[reviewConfirmed,setReviewConfirmed]=useState(false);
   const [scaleLength,setScaleLength]=useState('');
+  const [rulerFocusRequest,setRulerFocusRequest]=useState(0);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[pollingPaused,setPollingPaused]=useState(false);
+  const floorplanRulerPath=useRef(false),autoContinueReview=useRef(false),autoApplyReady=useRef(false);
   const [appliedGuide,setAppliedGuide]=useState(false);
   const [selectedWall,setSelectedWall]=useState<string|null>(null);
   const inputDetails=useRef<HTMLDivElement>(null),formSaveTimer=useRef<ReturnType<typeof setTimeout>>();
@@ -235,8 +238,12 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   const formHydration=useRef<Promise<void>>(Promise.resolve());
   const alive=useRef(true),scopeRef=useRef(scope),layoutRef=useRef(layout),formRef=useRef(form),pending=useRef(false);
   const generateRef=useRef<(continueReview?:boolean)=>Promise<void>>(async()=>{});
+  const applyRef=useRef<()=>Promise<void>>(async()=>{});
   scopeRef.current=scope;layoutRef.current=layout;formRef.current=form;
   const hasPhotos=images.some(image=>image.kind!=='floorplan');
+  const primaryFloorplan=images.find(image=>image.kind==='floorplan'&&image.width&&image.height&&(image.blob||image.assetId));
+  const hasConfirmedRulerScale=form.constraints.some(d=>d.kind==='distance'&&d.status==='confirmed'&&d.start&&d.end&&d.valueMeters>0);
+  const showFloorPlanRuler=formReady&&!!primaryFloorplan&&!hasConfirmedRulerScale&&!layout.backendSceneV2;
   const remoteProjectId=geometryProjectId(controller,scope),localActivity=isLocalActivityWorkspace(controller);
   const identityKey=geometryIdentity(controller,scope);
   const sessionKey=canonical({identity:identityKey,session:cloud.sessionId,lease:cloud.lease?{session:cloud.lease.sessionId,generation:cloud.lease.generation}:null,revision:cloud.revision});
@@ -273,19 +280,26 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   })();
   const venueChanged=!!venueEdit&&!!venueCandidate.layout&&currentSceneKey(venueCandidate.layout)!==venueEdit.sceneKey;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  // 上传图纸后自动对齐尺寸并生成 3D 空间：由父组件在 addImages 完成后递增 autoGenerateRequest 触发。
+  // 上传平面图后只打开两点标尺（唯一人闸）；无图时才走手输长宽旁路。
   const hasPlanarDimension=Number(form.width)>0||Number(form.depth)>0||form.constraints.some(d=>d.kind!=='height'&&d.valueMeters>0);
   const autoGenDone=useRef(0);
   useEffect(()=>{
     if(autoGenerateRequest<=0||!formReady)return;
     if(autoGenDone.current===autoGenerateRequest)return;
     if(venueEdit||pending.current||requestRunning)return;
-    if(!connected){setNotice(connectionBlockedReason||'正在准备场景连接，完成后将自动生成 3D 空间…');if(cloud.configured)void prepareConnection();return;}
-    if(!layout.backendSceneV2&&!hasPlanarDimension){setNotice('已上传图纸，请至少填写一项平面尺寸（总宽/总深），填写后将自动生成 3D 空间。');return;}
+    if(primaryFloorplan&&!hasConfirmedRulerScale&&!layout.backendSceneV2){
+      autoGenDone.current=autoGenerateRequest;
+      setRulerFocusRequest(autoGenerateRequest);
+      setNotice('');
+      if(!connected&&cloud.configured)void prepareConnection();
+      return;
+    }
+    if(!connected){setNotice(connectionBlockedReason||'正在准备场景连接…');if(cloud.configured)void prepareConnection();return;}
+    if(!layout.backendSceneV2&&!hasPlanarDimension&&!primaryFloorplan){setNotice('无平面图时可手输总宽/总深，或上传平面图后用两点标尺。');autoGenDone.current=autoGenerateRequest;return;}
     if(hasPhotos&&!mode){setMode('redesign');return;}
     autoGenDone.current=autoGenerateRequest;
     void generateRef.current();
-  },[autoGenerateRequest,formReady,connected,venueEdit,requestRunning,layout.backendSceneV2,hasPlanarDimension,hasPhotos,mode]);
+  },[autoGenerateRequest,formReady,connected,venueEdit,requestRunning,layout.backendSceneV2,hasPlanarDimension,hasPhotos,mode,primaryFloorplan,hasConfirmedRulerScale]);
   useEffect(()=>{
     let cancelled=false;hydratedScope.current=null;setLoaded(false);setLoadError('');
     formRef.current=EMPTY;setForm(EMPTY);setJob(null);setReview(null);setPreview(null);setVenueEdit(null);setVenueNotice(null);setMode('');setReidentify(false);setPollingPaused(false);setNotice('');setReviewConfirmed(false);
@@ -296,6 +310,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
           (['width','depth','height','text','adjustment'] as const).some(key=>saved[key]!==undefined&&typeof saved[key]!=='string')||
           saved.constraints!==undefined&&!Array.isArray(saved.constraints))throw new Error('Invalid saved form');
         formRef.current={...EMPTY,...saved};setForm(formRef.current);
+        if(formRef.current.constraints.some(d=>d.kind==='distance'&&d.status==='confirmed'&&d.start&&d.end))floorplanRulerPath.current=true;
       }
       savedForm.current={scope,value:formRef.current};hydratedScope.current=scope;setLoaded(true);
     }).catch(()=>{if(!cancelled)setLoadError('本机图纸资料读取失败，自动保存已暂停。请重试读取。');});
@@ -359,13 +374,20 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   async function acceptJob(result:ReconstructionJob,expectedScope:string,isCurrent:()=>boolean):Promise<void> {
     if(!alive.current||scopeRef.current!==expectedScope||!isCurrent())return;
     if(result.proposal&&result.proposal.project_id!==geometryProjectId(controller,expectedScope))throw new Error('候选属于其他场景连接，当前资料已保留，请重新查询原任务。');
-    if(result.state==='needs_review'&&result.candidate){setReview(result.candidate);setReviewConfirmed(false);const detected=result.candidate.dimensions;setForm(current=>({...current,constraints:mergeRecognizedDimensions(current.constraints,detected,Object.values(current.fixedIds??{}))}));}
+    if(result.state==='needs_review'&&result.candidate){
+      setReview(result.candidate);setReviewConfirmed(false);const detected=result.candidate.dimensions;setForm(current=>({...current,constraints:mergeRecognizedDimensions(current.constraints,detected,Object.values(current.fixedIds??{}))}));
+      if(floorplanRulerPath.current&&formRef.current.constraints.some(d=>d.kind==='distance'&&d.status==='confirmed'&&d.start&&d.end)){
+        const autoReview=sceneV2Schema.parse({...result.candidate,structure:{walls:result.candidate.structure.walls.map(w=>({...w,status:'confirmed'})),openings:result.candidate.structure.openings.map(o=>({...o,status:'confirmed'})),columns:result.candidate.structure.columns.map(c=>({...c,status:'confirmed'}))}});
+        setReview(autoReview);setReviewConfirmed(true);queueMicrotask(()=>void generateRef.current(true));
+      }
+    }
     if(result.state==='ready'&&result.proposal){
       const assets=await controller.authorizeAssets(result.proposal.candidate);
       await Promise.all(Object.entries(assets.assetUrls).map(([id,url])=>ensureGlbAsset(id,url)));
       if(!alive.current||scopeRef.current!==expectedScope||!isCurrent())return;
       const next=mergeProposalPresentation(layoutRef.current,backendSceneToLayout(result.proposal.candidate,{projectId:layoutRef.current.id!,name:layoutRef.current.name,...assets}));
       setPreview({proposal:result.proposal,layout:next,assets});
+      if(floorplanRulerPath.current&&!autoApplyReady.current){autoApplyReady.current=true;queueMicrotask(()=>void applyRef.current());}
     }
     jobSourceVersion.current=sourceVersion.current;setJob(result);
   }
@@ -396,6 +418,23 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   },[busy,formReady,form.jobId,form.jobIdentity,cloud.user?.id,remoteProjectId,identityKey,sessionKey,scope,pollingPaused,job?.state]);
 
   function patch(patch:Partial<Form>){if(hydratedScope.current!==scope)return;formRef.current={...formRef.current,...patch};setForm(formRef.current);}
+  async function confirmRulerScale(confirmation:RulerConfirmation):Promise<void>{
+    if(venueEdit)throw new Error('请先确认或取消场地编辑，再定标尺。');
+    if(referenceSaving.current||pending.current||!formReady)throw new Error('当前表单仍在读取或保存，请稍后确认标尺。');
+    if(!connected){
+      setNotice(connectionBlockedReason||'正在准备场景连接…');
+      await prepareConnection();
+      if(!connected)throw new Error(connectionBlockedReason||'请先连接场景服务，再确认标尺。');
+    }
+    const existing=formRef.current.constraints.find(d=>d.kind==='distance'&&d.label==='图纸标尺');
+    const dimension:DimensionConstraint={id:existing?.id??crypto.randomUUID(),kind:'distance',label:'图纸标尺',valueMeters:confirmation.valueMeters,status:'confirmed',start:confirmation.start,end:confirmation.end,
+      ...(confirmation.sourceAssetId?{sourceAssetId:confirmation.sourceAssetId}:{})};
+    patch({constraints:[...formRef.current.constraints.filter(d=>d.id!==dimension.id),dimension],rulerSourceImageId:confirmation.sourceImageId});
+    floorplanRulerPath.current=true;autoContinueReview.current=false;autoApplyReady.current=false;
+    await saveForm(scope,formRef.current).catch(()=>{});
+    setNotice('');
+    await generate();
+  }
   async function confirmReference(registration:ReferenceRegistration):Promise<void>{
     if(venueEdit)throw new Error('请先确认或取消场地编辑，再核对原图对应。');
     if(referenceSaving.current||pending.current||!formReady)throw new Error('当前表单仍在读取或保存，请稍后确认原图对应。');
@@ -428,6 +467,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   }
   async function uploadSources(isCurrent:()=>boolean):Promise<SourceImage[]>{const sources:SourceImage[]=[];for(const image of images){if(!isCurrent())throw new Error('场景连接或图纸已变化，请重新核对。');const kind=image.kind??'photo';if(image.assetId){sources.push({assetId:image.assetId,kind,name:image.name,width:image.width!,height:image.height!});continue;}if(!image.blob)throw new Error(`缺少 ${image.name} 的原始图片，请重新选择。`);const uploaded=await controller.uploadSource(image.blob,image.name,kind);if(!isCurrent())throw new Error('场景连接或图纸已变化，请重新核对。');updateImage(image.id,{assetId:uploaded.assetId,uploadedKind:kind});sources.push(uploaded);}return sources;}
   async function generate(continueReview=false):Promise<void>{
+    const form=formRef.current;
     if(venueEdit){setNotice('请先确认或取消场地编辑，再生成方案。');return;}
     if(pending.current)return;if(referenceSaving.current){setNotice('正在保存原图对应，请完成后再生成。');return;}setNotice('');
     if(!connected){setNotice(connectionBlockedReason||'本机资料已保留。请先准备场景连接，再生成方案。');return;}
@@ -438,7 +478,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
     if(hasPhotos&&!mode){setNotice('本次包含现场照片，请先选择「还原现场」或「重新布置」。');return;}
     const fixed=[['width','总宽',form.width],['depth','总深',form.depth],['height','层高',form.height]] as const;
     if(fixed.some(([, ,value])=>value!==''&&(!Number.isFinite(Number(value))||Number(value)<=0))){setNotice('填写的尺寸须为大于零的米数。');return;}
-    if(!(layout.backendSceneV2&&!reidentify&&!sourcesChanged)&&!fixed.some(([kind,,value])=>kind!=='height'&&Number(value)>0)&&!form.constraints.some(d=>d.kind!=='height'&&d.valueMeters>0)){setNotice('请至少提供一项已知平面尺寸；非等比例手绘和照片通常需要多项尺寸。');return;}
+    if(!(layout.backendSceneV2&&!reidentify&&!sourcesChanged)&&!fixed.some(([kind,,value])=>kind!=='height'&&Number(value)>0)&&!form.constraints.some(d=>d.kind!=='height'&&d.valueMeters>0)&&!hasConfirmedRulerScale){setNotice('请先完成两点标尺，或（无平面图时）手输一项平面尺寸。');return;}
     if(continueReview&&(!review||!reviewConfirmed||reviewStale)){setNotice('请先核对并确认候选结构；场景或要求变化后须重新识别。');return;}
     const base=layoutRef.current,submittedInput=inputRef.current,submittedScope=scopeRef.current,epoch=scopeEpoch.current.epoch;
     const expectedIdentity=geometryIdentity(controller,submittedScope),expectedSession=sessionKey;
@@ -451,7 +491,11 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
       const scene=layoutToBackendScene(base),sources=await uploadSources(current);
       if(!current())throw new Error('场景连接或图纸已变化，请重新核对。');
       const fixedIds=form.fixedIds??{width:crypto.randomUUID(),depth:crypto.randomUUID(),height:crypto.randomUUID()};
-      let dimensions:DimensionConstraint[]=[...fixed.filter(([, ,value])=>value!=='').map(([kind,label,value])=>({id:fixedIds[kind]!,kind,label,valueMeters:Number(value),status:'confirmed' as const})),...form.constraints.map(d=>({...d,...(d.sourceAssetId?{sourceAssetId:sources[images.findIndex(image=>image.id===d.sourceAssetId||image.assetId===d.sourceAssetId)]?.assetId??d.sourceAssetId}:{} )}))];
+      let dimensions:DimensionConstraint[]=[...fixed.filter(([, ,value])=>value!=='').map(([kind,label,value])=>({id:fixedIds[kind]!,kind,label,valueMeters:Number(value),status:'confirmed' as const})),...form.constraints.map(d=>({...d,...(d.sourceAssetId?{sourceAssetId:sources[images.findIndex(image=>image.id===d.sourceAssetId||image.assetId===d.sourceAssetId)]?.assetId??d.sourceAssetId}:{})}))];
+      if(form.rulerSourceImageId){
+        const rulerAsset=sources[images.findIndex(image=>image.id===form.rulerSourceImageId)]?.assetId;
+        dimensions=dimensions.map(d=>d.label==='图纸标尺'&&d.kind==='distance'?{...d,...(rulerAsset?{sourceAssetId:rulerAsset}:{})}:d);
+      }
       if(scene.schemaVersion===2&&!reidentify&&!dimensions.length)dimensions=scene.dimensions;
       if(continueReview)dimensions=dimensions.map(d=>({...d,status:'confirmed'}));
       const selectedIds=[...selection.allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id));
@@ -498,10 +542,16 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
       if(!current())return;
       const after=controller.getSnapshot();
       if(!result.acceptedLocally||after.lease?.sessionId!==lease?.sessionId||after.lease?.generation!==lease?.generation)throw new Error('应用期间本地有新修改，已保留草稿；请核对云端新版本。');
-      onApply(addDesign(base,mergeProposalPresentation(base,backendSceneToLayout(result.scene,{projectId:base.id!,name:base.name,...selected.assets}))));
-      setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');setAppliedGuide(true);
+      let nextLayout=mergeProposalPresentation(base,backendSceneToLayout(result.scene,{projectId:base.id!,name:base.name,...selected.assets}));
+      if(floorplanRulerPath.current&&nextLayout.backendSceneV2?.schemaVersion===2){
+        nextLayout={...nextLayout,backendSceneV2:{...nextLayout.backendSceneV2,venue:{...nextLayout.backendSceneV2.venue,site:{...nextLayout.backendSceneV2.venue.site,scale:{confidence:'high'}}}}};
+      }
+      onApply(addDesign(base,nextLayout));
+      setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});
+      setNotice(floorplanRulerPath.current?'场地已就绪，可开始布置。':'候选已应用并保存，可用一次撤销恢复应用前的本地方案。');setAppliedGuide(true);
     }catch(error){if(current())setNotice(errorText(error));}finally{pending.current=false;if(alive.current)setBusy(false);}
   }
+  applyRef.current=apply;
   const reviewedWall=review?.structure.walls.find(w=>w.id===selectedWall);
   function updateWall(patch:Partial<SceneV2['structure']['walls'][number]>){if(!reviewedWall||!review)return;setReview(updateReviewedWall(review,reviewedWall.id,patch));}
   // 比例确认闸：识别后先锁定比例再核对结构。最长外墙优先提议，第二面墙可复核。
@@ -531,10 +581,15 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   const siteZone=<section className="rc-panel" aria-label="图纸尺寸与原图核对">
     {!formReady&&<p className="cr-hint" role={loadError?'alert':'status'}>{loadError||'正在读取本机图纸资料…'}</p>}
     {loadError&&<button type="button" className="rc-secondary" onClick={()=>setLoadAttempt(value=>value+1)}>重试读取图纸资料</button>}
+    {showFloorPlanRuler&&primaryFloorplan&&<FloorPlanRuler image={primaryFloorplan} dimensionText={form.text} busy={busy||requestRunning} focusRequest={rulerFocusRequest} onConfirm={confirmRulerScale}/>}
     <fieldset className="rc-existing-controls" aria-label="图纸与场地尺寸" disabled={!!venueEdit||!formReady}>
     {layout.backendSceneV2&&generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}
-    <label className="cr-label">已知尺寸（米）<textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米；北墙 8 米，入口宽 1.2 米"/></label>
-    {(form.width||form.depth||form.height)&&<p className="cr-hint" role="status">已识别：{[form.width&&`总宽 ${form.width} 米`,form.depth&&`总深 ${form.depth} 米`,form.height&&`层高 ${form.height} 米`].filter(Boolean).join(' · ')}</p>}
+    <details className="rc-manual-shell" open={!primaryFloorplan&&!layout.backendSceneV2}>
+      <summary>无平面图？手输长宽（旁路）</summary>
+      <p className="cr-hint">没有上传平面图时才需要手输；上传后请用上方两点标尺。</p>
+      <label className="cr-label">已知尺寸（米）<textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米"/></label>
+      {(form.width||form.depth||form.height)&&<p className="cr-hint" role="status">已识别：{[form.width&&`总宽 ${form.width} 米`,form.depth&&`总深 ${form.depth} 米`,form.height&&`层高 ${form.height} 米`].filter(Boolean).join(' · ')}</p>}
+    </details>
     {form.constraints.length>0&&<div className="rc-constraints" aria-label="尺寸清单">{form.constraints.map(d=><div key={d.id}><input aria-label="尺寸说明" title={d.status==='confirmed'?'用户确认':'模型识别，待核对'} value={d.label} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,label:e.target.value}:v)})}/><input aria-label={`${d.label} 米数`} type="number" min="0.001" step="0.001" value={d.valueMeters} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,valueMeters:e.target.valueAsNumber,status:'confirmed'}:v)})}/><span>米</span><button type="button" aria-label={`删除尺寸 ${d.label}`} onClick={()=>patch({constraints:form.constraints.filter(v=>v.id!==d.id)})}><X size={16}/></button>{review&&(d.kind==='wall'||d.kind==='distance')&&<><select aria-label={`${d.label} 对应对象`} value={d.targetId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetId:e.target.value||undefined}:v)})}><option value="">关联墙、门窗或柱子</option>{review.structure.walls.map((w,index)=>({w,index})).filter(({w})=>!d.sourceAssetId||(w.evidence??[]).some(e=>e.sourceAssetId===(images.find(image=>image.id===d.sourceAssetId)?.assetId??d.sourceAssetId))).map(({w,index})=><option value={w.id} key={w.id}>墙 {index+1}</option>)}{review.structure.openings.map((o,index)=><option value={o.id} key={o.id}>{o.kind==='door'?'门':'窗'} {index+1}</option>)}{review.structure.columns.map((c,index)=><option value={c.id} key={c.id}>柱子 {index+1}</option>)}</select>{d.targetId&&<select aria-label={`${d.label} 测量方向`} value={d.measure??'length'} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,measure:e.target.value as 'width'|'depth'|'height'|'length'}:v)})}><option value="length">长度 / 两柱中心距</option><option value="width">宽度</option><option value="depth">深度</option><option value="height">高度</option></select>}{review.structure.columns.some(c=>c.id===d.targetId)&&<select aria-label={`${d.label} 另一根柱子`} value={d.targetEndId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetEndId:e.target.value||undefined}:v)})}><option value="">测量单柱尺寸</option>{review.structure.columns.filter(c=>c.id!==d.targetId).map((c,index)=><option value={c.id} key={c.id}>至柱子 {index+1}</option>)}</select>}</>}</div>)}</div>}
     </fieldset>
     {formReady&&currentStructure&&!(review&&job?.state==='needs_review')&&<ReferenceImageReview scene={currentStructure} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={onAddReferenceImages} applied openRequest={openReferenceRequest}/>}
@@ -577,7 +632,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
     <section className="rc-block" aria-label="进度与核对">
     {form.jobId&&!job&&<div className="rc-job" role="status"><strong>{form.jobIdentity&&form.jobIdentity!==identityKey?'原任务等待恢复场景连接':'正在恢复原重建任务'}</strong><small>任务 {form.jobId.slice(0,8)}</small>{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>setPollingPaused(false)}>继续查询原任务</button>}</div>}
     {job&&<div className="rc-job" role="status"><strong>{LABELS[job.state]}</strong><small>任务 {job.id.slice(0,8)}</small>{stale&&<p>场景、资料、要求或编辑会话已变化，旧结果仅供核对。请重新生成后应用。</p>}{job.issues.map((issue,index)=><p key={`${issue.code}-${index}`}>{issue.message}</p>)}{job.error_code&&<p>{errorCodeText(job.error_code)}</p>}{pollingPaused&&<button type="button" className="rc-secondary" onClick={()=>{setPollingPaused(false);setNotice('');}}>继续查询原任务</button>}</div>}
-    {review&&job?.state==='needs_review'&&<div className="rc-review"><h4>核对识别结构</h4><p className="cr-hint">结构示意使用米制坐标。点击墙线编辑，核对门窗、柱子与看不到的区域；确认意味着你已根据现场或图纸核实。</p>
+    {review&&job?.state==='needs_review'&&!floorplanRulerPath.current&&<div className="rc-review"><h4>核对识别结构</h4><p className="cr-hint">结构示意使用米制坐标。点击墙线编辑，核对门窗、柱子与看不到的区域；确认意味着你已根据现场或图纸核实。</p>
       {!confirmedPlanarDimension&&<div className="rc-scale-gate" role="group" aria-label="比例确认">
         <p><strong>认出 {review.structure.walls.length} 面墙 · {review.structure.openings.filter(o=>o.kind==='door').length} 扇门 · {review.structure.columns.length} 根柱</strong> · 请先确认比例</p>
         {scaleWall?<><p className="cr-hint">图中已高亮最长外墙（墙 {scaleWallIndex}），输入它的真实长度以锁定全图比例：</p>
@@ -594,6 +649,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
       {review.objects.length>0&&<div className="rc-review-objects"><h4>核对识别物件与碰撞</h4><p className="cr-hint">有冲突的物件会标记为「需调整」。修改位置、旋转或尺寸后，服务会重新校验；锁定物件保留。</p>{review.objects.map((object,index)=><details key={object.id}><summary>{job.issues.some(issue=>issue.targetId===object.id)?'需调整 · ':''}物件 {index+1} · {object.materialId}{object.locked?' · 已锁定':''}</summary>{object.locked?<p>此物件已锁定，请先在主场景中解锁并重新生成。</p>:<><div className="rc-measures"><NumberField label="位置 X" value={object.position.x} onChange={x=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,x}}:o)})}/><NumberField label="位置 Z" value={object.position.z} onChange={z=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,position:{...o.position,z}}:o)})}/><NumberField label="旋转角度" value={object.rotation} onChange={rotation=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,rotation}:o)})}/>{(['width','depth','height'] as const).map(key=><NumberField key={key} label={{width:'宽度',depth:'深度',height:'高度'}[key]} value={object.size[key]} onChange={value=>setReview({...review,objects:review.objects.map(o=>o.id===object.id?{...o,size:{...o.size,[key]:value}}:o)})}/>)}</div><button type="button" className="rc-secondary" onClick={()=>setReview({...review,objects:review.objects.filter(o=>o.id!==object.id),...(review.design?{design:{...review.design,highlights:review.design.highlights.map(h=>({...h,objectIds:h.objectIds.filter(id=>id!==object.id)})),requirements:review.design.requirements.map(r=>({...r,objectIds:r.objectIds.filter(id=>id!==object.id)}))}}:{})})}>删除误识别物件</button></>}</details>)}</div>}
       <label className="cr-check"><input type="checkbox" checked={reviewConfirmed} onChange={e=>setReviewConfirmed(e.target.checked)}/><span>我已核对所有墙段、门窗、柱子和不可见区域，确认上述结构与尺寸。</span></label><button className="rc-secondary" type="button" disabled={busy||!reviewConfirmed||reviewStale||!confirmedPlanarDimension} onClick={()=>void generate(true)}>确认结构并继续设计</button>
     </div>}
+    {review&&job?.state==='needs_review'&&floorplanRulerPath.current&&<div className="rc-review" role="status"><p className="cr-hint">标尺已确认，正在识别结构并进入场地…</p></div>}
     </section>
     <section className="rc-block" aria-label="结果与确认">
     {preview&&<div className="rc-candidate"><h4>三维候选方案</h4><p>{preview.proposal.explanation}</p>{preview.proposal.candidate.schemaVersion===2&&preview.proposal.candidate.design&&<><strong>{preview.proposal.candidate.design.concept}</strong>{preview.proposal.candidate.design.highlights.map((h,index)=><button key={index} type="button" className="rc-highlight" onClick={()=>focusObject(h.objectIds[0])}><strong>{h.title}</strong><span>{h.description}</span></button>)}{preview.proposal.candidate.design.requirements.map((r,index)=><div className={`rc-requirement is-${r.status}`} key={index}><strong>{{satisfied:'已满足',partial:'部分满足',unmet:'未满足'}[r.status]} · {r.text}</strong><p>{r.reason}</p></div>)}</>}

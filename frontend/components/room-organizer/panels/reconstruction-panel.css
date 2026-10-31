@@ -6,7 +6,7 @@
 
 /* 用户旅程重排：步骤提示 / 连接前置卡 / 进阶场地调整 */
 .rc-connect{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;margin:0 0 12px;background:var(--paper);border:1px solid var(--warn);border-radius:var(--r-sm)}.rc-connect p{margin:0;font-size:var(--fs-p2)}.rc-connect strong{display:block;font-size:var(--fs-p2);color:var(--ink)}.rc-connect small{display:block;margin-top:2px;font-size:var(--fs-cap);color:var(--ink-soft)}.rc-connect button{flex-shrink:0}
-.rc-manual-venue{margin-top:16px;margin-bottom:0}
+.rc-manual-shell{margin:8px 0 12px;padding:10px 12px;background:var(--plane);border:1px solid var(--wk-hair);border-radius:var(--r-sm)}.rc-manual-shell summary{cursor:pointer;font-weight:650;color:var(--ink-soft)}
 
 /* 旅程分区：输入 fieldset 只锁表单；进度核对与结果独立成区 */
 .rc-block{margin-top:14px}
