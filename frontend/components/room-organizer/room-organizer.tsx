@@ -1178,6 +1178,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   sceneBoxRef.current = sceneRef;
   invalidateBoxRef.current = invalidate;
 
+  // 环境预览就绪时，围栏换成点云真实范围：1:1 实景漫游（不再被 12×9 的场地板困住）。
+  const splatWalkBounds = splatState.status === 'ready' ? splatState.walkBounds ?? null : null;
+
   const { phase: walkthroughPhase } = useWalkthrough({
     enabled: isReady && walkthroughActive,
     invalidate,
@@ -1189,6 +1192,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     eyeHeight: activeFloorY + Math.min(1.6, activeStoreyHeight - 0.2),
     roomWidth: layout.width,
     roomDepth: layout.height,
+    ...(splatWalkBounds ? { walkBounds: splatWalkBounds } : {}),
     items: activeFloor.items,
     ...(activeFloor.interiorWalls ? { interiorWalls: activeFloor.interiorWalls } : {}),
     onExit: useCallback(() => {
@@ -1899,6 +1903,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         walkthroughActive={walkthroughActive}
         walkthroughPhase={walkthroughPhase}
         walkthroughInEnvironment={splatState.status === 'ready'}
+        walkthroughMetric={splatWalkBounds !== null}
         measurementDistance={measurementDistance(measurementPoints)}
         {...(view.measurementMode ? { measurementPointsPlaced: measurementPoints.length } : {})}
         wallDrawStatus={

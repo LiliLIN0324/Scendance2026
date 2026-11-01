@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import { fitSplatBox, frameSplatView, paintAsBackLayer, percentile, robustBox, rotatedBox, upAxisQuaternion } from './splat-preview';
+import { fitSplatBox, frameSplatView, paintAsBackLayer, percentile, robustBox, rotatedBox, upAxisQuaternion, walkBoundsOf } from './splat-preview';
 
 const box = (min: [number, number, number], max: [number, number, number]) =>
   new THREE.Box3(new THREE.Vector3(...min), new THREE.Vector3(...max));
@@ -110,5 +110,18 @@ describe('预览机位站进场内', () => {
     expect(view.position.y).toBeLessThanOrEqual(1.2);
     expect(view.position.y).toBeGreaterThan(0);
     expect(view.target.y).toBeLessThan(1.2);
+  });
+});
+
+describe('1:1 实景漫游边界', () => {
+  it('落地盒折成真实米制水平范围，地面高度跟着走', () => {
+    expect(walkBoundsOf(box([-20, 0, -13], [20, 4.5, 13]))).toEqual({
+      minX: -20, maxX: 20, minZ: -13, maxZ: 13, minY: 0,
+    });
+  });
+
+  it('薄片 / 空点云不给出围栏，退回原来的场地边界', () => {
+    expect(walkBoundsOf(box([0, 0, 0], [40, 4, 0]))).toBeNull();
+    expect(walkBoundsOf(box([0, 0, 0], [0, 0, 0]))).toBeNull();
   });
 });

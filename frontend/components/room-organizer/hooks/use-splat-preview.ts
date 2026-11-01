@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSplatPreview } from '../three/splat-preview';
-import type { SplatMeters, SplatPaint, SplatPreview, SplatSource, SplatUpAxis } from '../three/splat-preview';
+import type { SplatMeters, SplatPaint, SplatPreview, SplatSource, SplatUpAxis, SplatWalkBounds } from '../three/splat-preview';
 import type * as ThreeNS from 'three';
 
 export type SplatPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
-export type SplatPreviewState = Readonly<{ status: SplatPreviewStatus; assetId: string; name: string; progress?: number; splats?: number; error?: string; meters?: SplatMeters }>;
+export type SplatPreviewState = Readonly<{ status: SplatPreviewStatus; assetId: string; name: string; progress?: number; splats?: number; error?: string; meters?: SplatMeters; walkBounds?: SplatWalkBounds }>;
 
 const IDLE: SplatPreviewState = { status: 'idle', assetId: '', name: '' };
 
@@ -79,7 +79,8 @@ export function useSplatPreview(deps: {
       // 壳体在预览里不投影，阴影图是静态的，进出都要补一次。
       requestShadowUpdate();
       setState({ status: 'ready', assetId: source.assetId, name: source.name, splats: result.splats,
-        ...(result.meters ? { meters: result.meters } : {}) });
+        ...(result.meters ? { meters: result.meters } : {}),
+        ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}) });
     } catch (failure) {
       if (attempt.current !== current) return;
       setState({

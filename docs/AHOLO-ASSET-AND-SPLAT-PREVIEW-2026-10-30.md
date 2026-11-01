@@ -79,3 +79,17 @@ npx vitest run components/room-organizer/panels/lux3d-direct-test.react.test.tsx
 npx vitest run components/room-organizer/panels/scendance-workspace.react.test.tsx     # 16 pass
 npx tsc --noEmit && npx eslint <改过的文件>                                        # 无输出
 ```
+
+## 8. 1:1 实景漫游（2026-11-01 增补）
+
+环境预览就绪后进「走一遍给客户看」，围栏从场地 footprint 换成点云落地盒：
+`splat-preview.ts` 的 `walkBoundsOf(box)` 给出 `minX/maxX/minZ/maxZ/minY`，
+`use-walkthrough.ts` 的 `walkBounds` 选项把它当水平夹取范围（`clampToWalkBounds`，
+留 0.35 m 墙距），相机水平位置在每步之后夹一次。
+
+- 点云本来是按真实米制落位（`fitSplatBox` 不再参与，`scale = 1`），所以这一步
+  只是把「能走到哪」从 12×9 m 的布置区放开到扫描出来的整座大厅；不是把点云再缩放。
+- HUD 在漫游提示前加 `1:1 实景 ·`，提示当前围栏是真实扫描范围。
+- 点云没加载 / 只有样片场景时行为不变：仍按 `roomWidth/roomDepth` 围栏走。
+- 测试：`use-walkthrough.test.ts`（3 条围栏用例）、`splat-preview.test.ts` 新增
+  `1:1 实景漫游边界` 2 条。

@@ -23,6 +23,11 @@ export interface UseWalkthroughOptions {
   /** Room footprint (metres) used to clamp the walker inside the walls. */
   roomWidth?: number;
   roomDepth?: number;
+  /**
+   * 环境预览把 Aholo 3DGS 场景按真实米制立好之后，这条边界替换 footprint 围栏：
+   * 人走的是点云里的实际空间，而不是布置区那一小块（1:1 实景漫游）。
+   */
+  walkBounds?: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }> | null;
   /** The active floor's furniture and partitions the walker collides with (#156). */
   items?: readonly FurnitureItem[];
   interiorWalls?: readonly InteriorWall[];
@@ -57,6 +62,23 @@ const WALL_MARGIN = 0.35;
 // Shoulder-width walker: wide enough that the camera's near plane never pokes
 // into a sofa, narrow enough to fit a 0.8 m doorway with room to spare (#156).
 const WALKER_RADIUS = 0.3;
+
+/**
+ * Clamp the walker to a metric box (Aholo 3DGS 场景的真实范围) instead of the
+ * room footprint. Exported so the 1:1 围栏 can be unit-tested without WebGL.
+ */
+export function clampToWalkBounds(
+  position: { x: number; z: number },
+  bounds: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }>,
+  margin = WALL_MARGIN
+): void {
+  const minX = bounds.minX + margin;
+  const maxX = bounds.maxX - margin;
+  const minZ = bounds.minZ + margin;
+  const maxZ = bounds.maxZ - margin;
+  if (maxX > minX) position.x = Math.max(minX, Math.min(maxX, position.x));
+  if (maxZ > minZ) position.z = Math.max(minZ, Math.min(maxZ, position.z));
+}
 
 /**
  * First-person walkthrough mode using PointerLockControls.
@@ -114,6 +136,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     walkSpeed = 3.0,
     roomWidth = Infinity,
     roomDepth = Infinity,
+    walkBounds = null,
     items = NO_ITEMS,
     interiorWalls = NO_WALLS,
     invalidate,
@@ -144,6 +167,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
   const walkSpeedRef = useRef(walkSpeed);
   const roomWidthRef = useRef(roomWidth);
   const roomDepthRef = useRef(roomDepth);
+  const walkBoundsRef = useRef(walkBounds);
   const collidersRef = useRef(colliders);
   const invalidateRef = useRef(invalidate);
   const onExitRef = useRef(onExit);
@@ -151,6 +175,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
   walkSpeedRef.current = walkSpeed;
   roomWidthRef.current = roomWidth;
   roomDepthRef.current = roomDepth;
+  walkBoundsRef.current = walkBounds;
   collidersRef.current = colliders;
   invalidateRef.current = invalidate;
   onExitRef.current = onExit;
@@ -261,6 +286,12 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
     cleanup.push(() => window.removeEventListener('keydown', onEscape));
 
     const clampToFootprint = (): void => {
+      // 环境预览立着真实米制的点云时，围栏换成点云边界：这段是 1:1 实景漫游。
+      const bounds = walkBoundsRef.current;
+      if (bounds) {
+        clampToWalkBounds(camera.position, bounds);
+        return;
+      }
       const halfW = roomWidthRef.current / 2 - WALL_MARGIN;
       const halfD = roomDepthRef.current / 2 - WALL_MARGIN;
       if (Number.isFinite(halfW) && halfW > 0) {
