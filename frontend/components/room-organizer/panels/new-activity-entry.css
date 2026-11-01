@@ -1,0 +1,12 @@
+/* 轨顶「新建活动」：与 Bingo/空间/物料同一枚细线圆罩，向右侧弹出轻卡片。
+   卡片挂在 body 上，避免窄轨的按钮规则把弹层里的表单揉成轨道图标。 */
+.sc-rail-new-activity{position:relative;display:flex;justify-content:center;width:100%;margin:2px 0 6px}
+.sc-new-activity-pop{position:fixed;z-index:70;width:min(320px,calc(100vw - 96px));background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:12px;box-shadow:var(--e2)}
+.sc-new-activity-pop .sc-activity-group{border:0;border-radius:0;background:transparent}
+.sc-new-activity-pop .sc-activity-head{padding-right:44px}
+.sc-new-activity-pop button{font-family:inherit;color:var(--sc-ink);border:1px solid var(--sc-line);background:var(--wk-paper);border-radius:var(--r-sm);padding:9px 12px;font-size:var(--fs-p2);font-weight:500;cursor:pointer;box-shadow:inset 0 1px 0 #ffffffa6}
+.sc-new-activity-pop button:disabled{opacity:1;background:var(--plane);color:var(--faint);cursor:not-allowed}
+.sc-new-activity-pop .sc-cloud-primary{color:var(--wk-paper);background:var(--sc-ink);border-color:var(--sc-ink)}
+.sc-new-activity-pop button:focus-visible{outline:2px solid var(--ink-soft);outline-offset:2px}
+.sc-new-activity-pop button.sc-new-activity-close{position:absolute;top:10px;right:10px;z-index:1;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:none;box-shadow:none;color:var(--sc-muted)}
+.sc-new-activity-pop button.sc-new-activity-close:hover{background:var(--wk-plane-deep);color:var(--wk-ink)}

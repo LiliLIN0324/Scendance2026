@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { DEMO_WORLD_SCENE_ID, listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
+import { MaterialThumb } from './material-thumb';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 
 type SceneCard = { assetId: string; name: string; image?: string };
@@ -45,9 +46,8 @@ export function EnvironmentPreview({ preview, onStart, onStop }: {
           onClick={() => onStart(scene.assetId)} aria-label={`预览${scene.name}`} title={`${scene.name}\n点击作为环境预览`}>
           <span className="sc-material-preview">
             {scene.image
-              // eslint-disable-next-line @next/next/no-img-element
-              && <img className="sc-material-thumb" src={scene.image} alt="" draggable={false} loading="lazy" decoding="async"/>}
-            {!scene.image && <span className="sc-material-thumb-empty">{busy && scene.assetId === preview.assetId ? <Loader2 className="cr-spin" size={14}/> : '▦'}</span>}
+              ? <MaterialThumb src={scene.image}/>
+              : <span className="sc-material-thumb-empty">{busy && scene.assetId === preview.assetId ? <Loader2 className="cr-spin" size={14}/> : '▦'}</span>}
           </span>
           <span className="sc-material-name">{scene.name}</span>
         </button>)}

@@ -430,6 +430,20 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(seats.length).toBeGreaterThanOrEqual(30);
   }, 20000);
 
+  it('作废本地旧候选：画布改过之后，确认按钮不能再把旧候选盖上去', async () => {
+    const onApply = vi.fn();
+    const initial = makeLayout();
+    const { rerender } = render(ui(initial, onApply));
+    send('30 人，室内 12×9');
+    await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
+    const callsBefore = onApply.mock.calls.length;
+
+    rerender(ui({ ...initial, width: 10 }, onApply));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull());
+    expect(await screen.findByText(/场景在这期间改过了，这版预览先作废/)).toBeTruthy();
+    expect(onApply).toHaveBeenCalledTimes(callsBefore);
+  }, 20000);
+
   it('keeps the confirm hidden while a version is paused mid-generation', async () => {
     const onPreview = vi.fn();
     render(<LocalHarness initial={makeLayout()} onApply={vi.fn()} onPreview={onPreview}/>);

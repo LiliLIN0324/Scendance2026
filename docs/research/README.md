@@ -6,6 +6,7 @@
 
 | 路径 | 内容 |
 |------|------|
+| [`research/generation/`](research/generation/) | 生成链路（2026-11-01）：基线审计、两上游机制、五系统交叉验证、场景脚本与评审 |
 | [`research/3dgs/`](research/3dgs/) | 三维高斯溅射：对比表、MVP、不适合清单 |
 | `research/floorplan/` | （待迁）平面图→3D；现公开仓见 [floorplan-to-3d](https://github.com/LiliLIN0324/floorplan-to-3d) |
 | `research/ai-native/` | （待迁）AI-native 页面升级规格 |

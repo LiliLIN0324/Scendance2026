@@ -193,6 +193,17 @@ describe('complete local activity archives', () => {
     expect(listed.activities.map(row => row.projectId)).toEqual(['second-house', projectId]);
     expect(listed.unreadableProjectIds).toEqual(['broken-house']); expect(records).toEqual(before);
     expect(listed.activities[1].itemCount).toBe(first.layout.floors.reduce((sum, floor) => sum + floor.items.length, 0));
+    const preview = listed.activities[1].preview!;
+    expect(preview.floors).toEqual(first.layout.floors);
+    for (const key of ['floorPlanImage', 'designBook', 'productionPlan', 'eventOperations', 'itemLayers', 'backendSceneV2'] as const) expect(preview[key]).toBeUndefined();
+  });
+
+  it('puts the captured 3D cover beside its archive and ignores a record that is not an image', async () => {
+    records.set(address(), backup());
+    records.set(JSON.stringify(['local-activity-cover', projectId]), { dataUrl: 'data:image/jpeg;base64,AAAA', capturedAt: createdAt });
+    expect((await listLocalActivities()).activities[0].cover).toBe('data:image/jpeg;base64,AAAA');
+    records.set(JSON.stringify(['local-activity-cover', projectId]), { dataUrl: 'javascript:alert(1)', capturedAt: createdAt });
+    expect((await listLocalActivities()).activities[0].cover).toBeUndefined();
   });
 });
 

@@ -101,10 +101,12 @@ describe('introduction and sign-in entry', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
   });
 
-  it('explains measured inputs and structure review without running recognition on entry', () => {
+  it('explains the scheme-first flow without running recognition on entry', () => {
     render(<IntroPage controller={controller(false)} onEnter={vi.fn()} />);
-    expect(screen.getByText(/上传图纸或现场照片，补充实测尺寸和活动需求/)).toBeTruthy();
-    expect(screen.getByText(/核对空间结构，再在三维场景里完善你的方案/)).toBeTruthy();
+    expect(screen.getByText(/选活动、定场地和人数，先出一版布置建议/)).toBeTruthy();
+    expect(screen.getByText('01 / 定下活动')).toBeTruthy();
+    expect(screen.getByText('02 / 生成并确认')).toBeTruthy();
+    expect(screen.getByText('03 / 导出交付')).toBeTruthy();
     expect(screen.getByRole('img', { name: /活动空间概念插画/ })).toBeTruthy();
     expect(screen.getByText('活动空间概念示意 · 实际方案由你来布置')).toBeTruthy();
     expect(mockFetch).not.toHaveBeenCalled();

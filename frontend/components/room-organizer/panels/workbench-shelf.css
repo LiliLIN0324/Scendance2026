@@ -338,7 +338,7 @@
   border-radius:var(--r-sm); background:var(--wk-green,#4a7c59); color:#fff;
 }
 .sc-compact-shelf .sc-material-name { color:var(--wk-ink,#141416); font-size:var(--fs-cap); }
-.sc-compact-shelf .sc-material-preview { background:var(--wk-plane); border-radius:8px; }
+.sc-compact-shelf .sc-material-preview { background:var(--wk-plane); border-radius:8px; box-shadow:inset 0 0 0 1px var(--wk-hair-soft); }
 /* 底条 MATERIALS 把手已改为全宽薄条（样式在 globals.css），此处不再覆盖。 */
 /* 画布抬头信息层级 */
 

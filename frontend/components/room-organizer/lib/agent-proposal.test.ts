@@ -181,6 +181,16 @@ describe('proposePlan — 布置候选只预览，确认前不写画布（T-02 �
     expect(twenty.seats!).toBeGreaterThan(eight.seats!);
     expect(twenty.seats!).toBeLessThan(20);
   });
+
+  it('摆不下的件按原因记诊断，件数与 dropped 对得上', () => {
+    const base = makeLayout({ width: 2.6, height: 4, floors: [makeFloor()] });
+    const venue = raiseVenue({ base, floorIndex: 0, widthM: 2.6, depthM: 4, indoorOutdoor: 'outdoor', scaleOrigin: 'stated' });
+    const staged = venue ? venue.layout : base;
+    const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 2.6, depthM: 4, variant: 0 });
+    expect(proposal.dropped).toBeGreaterThan(0);
+    expect(proposal.diagnostics!.reduce((sum, item) => sum + item.count, 0)).toBe(proposal.dropped);
+    expect(proposal.diagnostics!.every(item => item.severity === 'warning')).toBe(true);
+  });
 });
 
 describe('proposePlan — 一人一套课桌椅（desk-chair，2026-10-27 课室场景）', () => {
@@ -295,5 +305,17 @@ describe('proposeAddition — 对话加物料也只出候选', () => {
     expect(proposal.added).toBeLessThan(50);
     expect(proposal.dropped).toBe(50 - proposal.added);
     expect(proposal.accepted[0]).toMatchObject({ placed: proposal.added, requested: 50 });
+    expect(proposal.diagnostics).toEqual([
+      { severity: 'warning', code: 'NO_SPOT', count: 50 - proposal.added, names: ['椅子'], message: '附近没有空位' },
+    ]);
+  });
+
+  it('目录里没有的物料也按件记账，不静默吞掉', () => {
+    const proposal = proposeAddition({ base: staged(), floorIndex: 0, requests: [{ materialId: 'not-a-material', count: 2 }] });
+    expect(proposal.added).toBe(0);
+    expect(proposal.dropped).toBe(2);
+    expect(proposal.diagnostics).toEqual([
+      { severity: 'warning', code: 'UNKNOWN_MATERIAL', count: 2, names: ['not-a-material'], message: '物料目录里没有这件' },
+    ]);
   });
 });

@@ -162,23 +162,23 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
     <main className="sc-intro">
       <header className="sc-intro-header">
         <a className="sc-intro-brand" href="/introduction" aria-label="打开幕景官网"><span className="sc-intro-brand-icon" aria-hidden="true"><BrandMark size={28} /></span><strong className="sc-intro-brand-cn">幕景</strong><span className="sc-intro-brand-dot" aria-hidden="true"/><span className="sc-intro-brand-en"><i aria-hidden="true">S</i>CENDANCE</span></a>
-        <span className="sc-intro-version">活动空间工作台 <span>v1.0.0 · 图纸重建预览</span></span>
+        <span className="sc-intro-version">活动空间工作台 <span>v3.0.1 · 活动方案</span></span>
       </header>
 
       <div className="sc-intro-content">
         <section className="sc-intro-story" aria-labelledby="sc-intro-title">
           <p className="sc-intro-eyebrow"><span aria-hidden="true" />让每一个活动想法，都有落脚的地方</p>
           <h1 id="sc-intro-title">为相聚，<br />留<span>一方空间。</span></h1>
-          <p className="sc-intro-description">上传图纸或现场照片，补充实测尺寸和活动需求，<br className="sc-intro-desktop-break" />核对空间结构，再在三维场景里完善你的方案。</p>
+          <p className="sc-intro-description">选活动、定场地和人数，先出一版布置建议，<br className="sc-intro-desktop-break" />确认之后，物料与执行资料都从同一份方案里来。</p>
           <figure className="sc-intro-visual">
             <div className="sc-intro-visual-label"><span aria-hidden="true" />从一个想法，到一个空间</div>
             <EventIllustration />
             <figcaption>活动空间概念示意 · 实际方案由你来布置</figcaption>
           </figure>
           <ol className="sc-intro-steps" aria-label="幕景使用流程">
-            <li><ImagePlus size={20} aria-hidden="true" /><div><span>01 / 提供资料</span><p>上传图纸或照片，填写尺寸与需求</p></div></li>
-            <li><Box size={20} aria-hidden="true" /><div><span>02 / 布置空间</span><p>在三维画布里调整物料</p></div></li>
-            <li><Layers3 size={20} aria-hidden="true" /><div><span>03 / 保存方案</span><p>保存草稿，继续完善细节</p></div></li>
+            <li><ImagePlus size={20} aria-hidden="true" /><div><span>01 / 定下活动</span><p>选活动类型、场地和人数</p></div></li>
+            <li><Box size={20} aria-hidden="true" /><div><span>02 / 生成并确认</span><p>先看一版建议，确认后才写进画布</p></div></li>
+            <li><Layers3 size={20} aria-hidden="true" /><div><span>03 / 导出交付</span><p>物料清单与执行资料一起带走</p></div></li>
           </ol>
         </section>
 

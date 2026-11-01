@@ -34,7 +34,7 @@ describe('the shared backend scene adapter', () => {
     item.glbNode = 'Preset_Object_0'; item.glbUrl = 'https://example.test/custom.glb';
     expect(() => layoutToBackendScene(layout)).toThrow('不在已归档的模型中');
     delete item.glbNode;
-    expect(() => layoutToBackendScene(layout)).toThrow('本地 GLB 样例尚未归档');
+    expect(() => layoutToBackendScene(layout)).toThrow('本地模型尚未归档到云端');
   });
   it('maps a non-square 30 degree object to identical physical corners in Three.js', () => {
     const input = scene();
@@ -93,7 +93,7 @@ describe('the shared backend scene adapter', () => {
   it('rejects a local GLB sample on cloud export rather than assigning a fictitious cloud ID', () => {
     const layout = backendSceneToLayout(scene());
     Object.assign(layout.floors[0].items[0], { type: 'glb-asset', glbUrl: '/assets/models/table.glb', materialId: 'asset' });
-    expect(() => layoutToBackendScene(layout)).toThrow('本地 GLB');
+    expect(() => layoutToBackendScene(layout)).toThrow('本地模型尚未归档到云端');
   });
 
   it('rejects multistorey, missing entrances and local floorplans instead of dropping them', () => {

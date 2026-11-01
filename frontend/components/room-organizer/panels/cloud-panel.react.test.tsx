@@ -47,7 +47,7 @@ let controller: BackendSession;
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
 
-function openAccount(section: '我的项目' | '团队演示' | '素材库' | '发布管理' = '我的项目'): void {
+function openAccount(section: '我的项目' | '素材库' | '发布管理' = '我的项目'): void {
   fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
   fireEvent.click(screen.getByRole('button', { name: section }));
 }
@@ -199,13 +199,13 @@ describe('CloudPanel delayed project replacement', () => {
     const onLoadLayout = vi.fn();
     queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     if (entry === 'url') window.history.replaceState(null, '', `/editor/?project=${otherId}`);
-    const rendered = render(<CloudPanel controller={controller} layout={local} onLoadLayout={onLoadLayout}/>);
+    render(<CloudPanel controller={controller} layout={local} onLoadLayout={onLoadLayout}/>);
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
     if (entry === 'button') {
       openAccount();
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: '打开' })); });
     } else {
-      await waitFor(() => expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(true));
+      await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true));
     }
     expect(screen.getByText(LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy();
     expect(getProject).not.toHaveBeenCalled();
@@ -433,9 +433,9 @@ it('uses the canonical auth page instead of a second cloud login form', async ()
   const rendered = render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   openProjects(rendered.container);
   expect(screen.queryByLabelText('密码')).toBeNull();
-  expect(screen.getByRole('link', { name: '前往登录' }).getAttribute('href')).toBe('/auth');
-  fireEvent.click(screen.getByRole('link', { name: '前往登录' }));
-  await waitFor(() => expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false));
+  expect(screen.getByRole('link', { name: '登录' }).getAttribute('href')).toBe('/auth');
+  fireEvent.click(screen.getByRole('link', { name: '登录' }));
+  await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
   expect(push).toHaveBeenCalledExactlyOnceWith('/auth');
   anonymous.dispose();
 });
@@ -445,12 +445,12 @@ it('closes the cloud dialog when signing out redirects to auth', async () => {
   queue([]);
   const rendered = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   openProjects(rendered.container);
-  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
   await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
   queue({});
   fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
   await waitFor(() => expect(controller.getSnapshot().user).toBeNull());
-  expect(rendered.container.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);
 });
 
 it('filters projects by name and studio and clears an empty search', async () => {
@@ -473,15 +473,23 @@ it('filters projects by name and studio and clears an empty search', async () =>
 it('defaults demo permissions to all enabled and keeps changes separate from real access and canvas', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   const load = vi.fn();
-  render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={load} />);
-  openAccount();
+  const props = { controller: offline, layout: backendSceneToLayout(scene), onLoadLayout: load };
+  const view = render(<CloudPanel {...props} />);
+  view.rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }} />);
   const requestCount = mockFetch.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: '团队演示' }));
   fireEvent.change(screen.getByLabelText('演示成员姓名'), { target: { value: '陈知远' } });
+  fireEvent.change(screen.getByLabelText('演示成员邮箱或手机号'), { target: { value: 'chen.zhiyuan@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: '添加演示成员' }));
+  expect(screen.getByText('4 位演示成员')).toBeTruthy();
+  expect(screen.getByText('chen.zhiyuan@example.com')).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('演示成员姓名'), { target: { value: '重复联系人' } });
+  fireEvent.change(screen.getByLabelText('演示成员邮箱或手机号'), { target: { value: 'CHEN.ZHIYUAN@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: '添加演示成员' }));
+  expect(screen.getByText('该邮箱或手机号已在演示团队中。')).toBeTruthy();
   expect(screen.getByText('4 位演示成员')).toBeTruthy();
   fireEvent.change(screen.getByRole('combobox', { name: '陈知远的演示角色' }), { target: { value: 'viewer' } });
   fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
+  fireEvent.click(screen.getByRole('button', { name: '权限说明' }));
   expect(screen.getByText('功能默认开放 · 权限仅作演示')).toBeTruthy();
   expect(screen.getAllByRole('checkbox').every(checkbox => (checkbox as HTMLInputElement).checked)).toBe(true);
   fireEvent.click(screen.getByRole('checkbox', { name: '查看成员：导出方案' }));
@@ -535,7 +543,7 @@ it('offers local activities without cloud configuration but excludes a requested
 
 describe('CloudPanel source protection before leaving the workspace', () => {
   const entries = ['login', 'manage', 'logout'] as const;
-  const labels = { login: '前往登录', manage: '管理工作室、项目与成员', logout: '退出登录' };
+  const labels = { login: '登录', manage: '管理工作室、项目与成员', logout: '退出登录' };
   const message = '演练约定有未保存修改，请先保存或放弃修改。';
 
   function entryControl(entry: typeof entries[number]): HTMLElement {
@@ -565,7 +573,7 @@ describe('CloudPanel source protection before leaving the workspace', () => {
       openAccount();
       expect(fireEvent.click(entryControl(entry))).toBe(entry === 'logout');
       expect(await screen.findByText(message)).toBeTruthy();
-      expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+      expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
       expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
       expect(push).not.toHaveBeenCalled();
       expect(signOut).not.toHaveBeenCalled();
@@ -574,7 +582,7 @@ describe('CloudPanel source protection before leaving the workspace', () => {
       if (entry === 'logout') queue({});
       const control = entryControl(entry);
       fireEvent.click(control); fireEvent.click(control);
-      await waitFor(() => expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(false));
+      await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
       expect(flush).toHaveBeenCalledTimes(2);
       expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
       if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
@@ -598,12 +606,12 @@ describe('CloudPanel source protection before leaving the workspace', () => {
       const control = entryControl(entry);
       fireEvent.click(control); fireEvent.click(control);
       await waitFor(() => expect(flush).toHaveBeenCalledOnce());
-      expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+      expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
       expect(entry === 'logout' ? control.hasAttribute('disabled') : control.getAttribute('aria-disabled') === 'true').toBe(true);
       expect(push).not.toHaveBeenCalled(); expect(signOut).not.toHaveBeenCalled();
       if (entry === 'logout') queue({});
       await act(async () => { finish(); });
-      await waitFor(() => expect(view.container.querySelector('dialog')?.hasAttribute('open')).toBe(false));
+      await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
       expect(flush).toHaveBeenCalledOnce();
       if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
       else { expect(push).toHaveBeenCalledExactlyOnceWith(entry === 'login' ? '/auth' : '/projects/'); expect(signOut).not.toHaveBeenCalled(); }
@@ -613,8 +621,9 @@ describe('CloudPanel source protection before leaving the workspace', () => {
 
 it('closes the account dialog from the backdrop and leaves clicks inside the panel alone', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
-  render(<CloudPanel controller={offline} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
-  openAccount();
+  const props = { controller: offline, layout: backendSceneToLayout(scene), onLoadLayout: vi.fn() };
+  const view = render(<CloudPanel {...props} />);
+  view.rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }} />);
   const dialog = document.querySelector('dialog') as HTMLDialogElement;
   vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
     x: 80, y: 40, top: 40, left: 80, bottom: 640, right: 1120, width: 1040, height: 600, toJSON() { return {}; },
@@ -716,7 +725,32 @@ describe('CloudPanel section entry points', () => {
     expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('true');
     rerender(<CloudPanel {...props} openRequest={{ serial: 2, section: 'team' }}/>);
     expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
+  });
+
+  it('keeps settings and account in separate surfaces', () => {
+    const initial = backendSceneToLayout(scene, { projectId, name: original.name });
+    const props = { controller, layout: initial, onLoadLayout: vi.fn() };
+    const { rerender } = render(<CloudPanel {...props}/>);
+    fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
+    expect(screen.queryByText('SCENDANCE / 账户中心')).toBeNull();
+    expect(screen.getByRole('heading', { name: '账户中心' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '账户说明' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '团队演示' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '权限演示' })).toBeNull();
+
+    rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }}/>);
+    expect(screen.queryByText('SCENDANCE / 设置')).toBeNull();
+    expect(screen.getByRole('heading', { name: '团队与权限' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '关闭设置面板' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '素材库' })).toBeNull();
+    expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
+    fireEvent.click(screen.getByRole('button', { name: '权限说明' }));
+    expect(screen.getByText('功能默认开放 · 权限仅作演示')).toBeTruthy();
   });
 
   it('shows a shell draft note in the account menu without replacing the cloud badge', () => {

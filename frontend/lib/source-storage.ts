@@ -66,17 +66,28 @@ const DATABASE = 'scendance-source-images-v1';
 export type SourceFormKey = string | [string, string];
 const sourceChangeKey = (scope: SourceFormKey) => JSON.stringify(scope);
 const sourceListeners = new Map<string, Set<() => void>>();
+const namespaceListeners = new Map<string, Set<() => void>>();
 /** Read-only views refresh after the original owner has committed its form/images. */
 export function subscribeSourceRecordChanges(scope: SourceFormKey, listener: () => void): () => void {
   const key = sourceChangeKey(scope), listeners = sourceListeners.get(key) ?? new Set<() => void>();
   listeners.add(listener); sourceListeners.set(key, listeners);
   return () => { listeners.delete(listener); if (!listeners.size) sourceListeners.delete(key); };
 }
+/** Lists watch a whole compound-key namespace: archives are written by whichever panel is open. */
+export function subscribeSourceNamespace(namespace: string, listener: () => void): () => void {
+  const listeners = namespaceListeners.get(namespace) ?? new Set<() => void>();
+  listeners.add(listener); namespaceListeners.set(namespace, listeners);
+  return () => { listeners.delete(listener); if (!listeners.size) namespaceListeners.delete(namespace); };
+}
 export function subscribeSourceChanges(scope: string, listener: () => void): () => void { return subscribeSourceRecordChanges(scope, listener); }
 function changedSource(scope?: SourceFormKey): void {
-  for (const [key, listeners] of sourceListeners) if (scope === undefined || sourceChangeKey(scope) === key) {
-    for (const listener of listeners) { try { listener(); } catch { /* A view cannot turn a committed save into a failed write. */ } }
-  }
+  const notify = (listeners: Set<() => void> | undefined): void => {
+    for (const listener of listeners ?? []) { try { listener(); } catch { /* A view cannot turn a committed save into a failed write. */ } }
+  };
+  for (const [key, listeners] of sourceListeners) if (scope === undefined || sourceChangeKey(scope) === key) notify(listeners);
+  const namespace = scope === undefined ? undefined : Array.isArray(scope) ? scope[0] : undefined;
+  if (scope === undefined) for (const listeners of namespaceListeners.values()) notify(listeners);
+  else if (namespace) notify(namespaceListeners.get(namespace));
 }
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

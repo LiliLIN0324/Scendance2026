@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
+import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
@@ -79,6 +80,7 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
+import { NewActivityEntry } from './panels/new-activity-entry';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
@@ -1703,9 +1705,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     ...(referenceImage.layer?{referenceImage:referenceImage.layer}:{}),
     canvas:canvasRef,canvas2D:canvas2DRef,scene:sceneRef,renderer:rendererRef,camera:cameraRef,
     pendingPreview:!!previewCandidate,isInteracting:()=>isDragActive()||!!wallDraft||!!placingId||!!pendingCatalog});
+  // 活动封面取当前三维画面；归档面板通过注册表取图，不直接持有 WebGL 场景。
+  useEffect(() => registerStageCover(() => {
+    const renderer = rendererRef.current, scene = sceneRef.current, camera = cameraRef.current, canvas = canvasRef.current;
+    if (!isReady || view.view2D || !renderer || !scene || !camera || !canvas) return null;
+    renderer.render(scene, camera);
+    return encodeStageCover(canvas);
+  }), [isReady, view.view2D]);
   const reviewContext=JSON.stringify(referenceImage.layer??null);
   const draftLabel = saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿';
-  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '草稿';
+  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '';
   const draftTitle = saveError ? '本机保存失败，请导出备份' : draftLabel;
   return (
     <RoomEditorProvider value={roomEditorValue}>
@@ -1763,6 +1772,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 onOpenQingguang={openQingguang}
                 qingguangRailRef={qingguangRailRef}
               />
+              <NewActivityEntry layout={layout}/>
               <nav className="sc-mode-rail-primary" aria-label="Bingo、空间与物料">
                 <BingoRailButton open={sidePanel === 'bingo'} onToggle={toggleBingoPanel} />
                 <button
@@ -1793,7 +1803,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               </nav>
             </div>
             <div className="sc-mode-rail-foot">
-              <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>
+              {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
               <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>

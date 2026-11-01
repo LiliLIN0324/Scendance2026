@@ -1,0 +1,19 @@
+# 生成链路调研（2026-11-01）
+
+一句话 → 计划工件 → 确定性校验 → 一次终态提交。结论与规格见各篇；本仓只文档，场景脚本代码不在本仓。
+
+## 阅读顺序
+
+1. [`scendance-generation-baseline-2026-11-01.md`](scendance-generation-baseline-2026-11-01.md) — 幕景 3.0.0 现状审计：两条链路、两套 IR、四层校验、唯一落盘通道，附基线测试结果。
+2. [`petitmaker-construction-logic-2026-11-01.md`](petitmaker-construction-logic-2026-11-01.md) — 智能建造项目的 12 张机制卡；Apache-2.0，只借机制与形状。
+3. [`oddenova-music-generation-2026-11-01.md`](oddenova-music-generation-2026-11-01.md) — 音乐生成项目的 12 个机制；AGPL-3.0，未复制源码、prompt 或名单。
+4. [`parallel-systems-generation-2026-11-01.md`](parallel-systems-generation-2026-11-01.md) — 五个外部系统交叉验证共性，定位幕景缺的三件：计划工件、逐条诊断、生成前可行域。
+5. [`scendance-generation-synthesis-2026-11-01.md`](scendance-generation-synthesis-2026-11-01.md) — 收口：七条同构机制、场景脚本落地设计、验证证据、下一步排序。
+6. [`scene-script-code-review-2026-11-01.md`](scene-script-code-review-2026-11-01.md) — 对抗式评审（P0 1 / P1 4 / P2 9 / P3 8），每条带复现与最小修复。
+
+前四篇是证据，第五篇是结论，第六篇是对第五篇落地代码的独立复核；以评审快照的 `file:line` 为准，后续代码变动可能使行号漂移。
+
+## 边界
+
+- 上游许可证：PetitMaker 代码 Apache-2.0（素材/品牌另有条款）；oddeNova 为 AGPL-3.0，只借机制，不复制代码与文本。
+- 数字只写入已实测或已注明来源的部分；待核项留在各篇“存疑”或“仍待核”章节。

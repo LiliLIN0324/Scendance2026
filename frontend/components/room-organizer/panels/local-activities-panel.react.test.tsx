@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { archiveLocalActivity, listLocalActivities, readLocalActivity, type NewLocalActivityMode } from '@/lib/local-activities';
 import { createLocalProjectBackupV3, parseLocalProjectBackupJson, serializeLocalProjectBackupV3, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { registerStageCover } from '@/lib/stage-cover';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -69,6 +70,69 @@ function submit(): void { fireEvent.submit(screen.getByRole('form', { name: '新
 function listedTarget() { return { projectId: targetId, name: target.name, archivedAt: '2026-10-09T03:00:00Z', itemCount: 1 }; }
 
 describe('local activity creation and switching', () => {
+  it('splits the create card and the archive list for their outside entry points', async () => {
+    const actions: LocalProjectBackupActions = {
+      prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+    };
+    const view = render(<LocalActivitiesPanel mode="create" layout={original} actions={actions}/>);
+    expect(screen.getByRole('form', { name: '新建本机活动' })).toBeTruthy();
+    expect(screen.queryByText('本机活动')).toBeNull();
+    view.rerender(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
+    expect(screen.queryByRole('form', { name: '新建本机活动' })).toBeNull();
+    expect(await screen.findByText('本机活动')).toBeTruthy();
+  });
+
+  it('puts the open canvas first in the same list and keeps a duplicate archive out of it', async () => {
+    const actions: LocalProjectBackupActions = {
+      prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+    };
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [
+      { projectId: originalId, name: original.name, archivedAt: '2026-10-09T03:00:00Z', itemCount: 1 },
+      { ...listedTarget(), preview: target },
+    ], unreadableProjectIds: [] });
+    render(<LocalActivitiesPanel mode="list" layout={original} actions={actions} currentStatus="有改动待保存"/>);
+    const cards = await waitFor(() => screen.getAllByRole('listitem'));
+    expect(cards[0].getAttribute('aria-label')).toBe(`当前活动「${original.name}」`);
+    expect(cards[0].textContent).toContain('1 个物件 · 有改动待保存');
+    expect(screen.getByText('当前')).toBeTruthy();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: `打开活动「${target.name}」` })).toBeTruthy();
+  });
+
+  it('takes a live 3D still for the current card once the panel is on screen', async () => {
+    const stop = registerStageCover(() => 'data:image/jpeg;base64,BBBB');
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(): void { this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver); }
+      unobserve(): void {}
+      disconnect(): void {}
+    });
+    try {
+      const actions: LocalProjectBackupActions = {
+        prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+      };
+      const view = render(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
+      await waitFor(() => expect(view.container.querySelector('li.is-current .sc-activity-thumb-image')?.getAttribute('src'))
+        .toBe('data:image/jpeg;base64,BBBB'));
+    } finally { stop(); }
+  });
+
+  it('shows the captured 3D still on the card and keeps the plan only as a fallback', async () => {
+    const actions: LocalProjectBackupActions = {
+      prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+    };
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [{ ...listedTarget(), preview: target }], unreadableProjectIds: [] });
+    const view = render(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
+    const archived = (): Element | undefined => view.container.querySelectorAll('.sc-local-activities-list li')[1];
+    expect(await screen.findByText(target.name)).toBeTruthy();
+    expect(archived()?.querySelector('.sc-activity-thumb-canvas')).toBeTruthy();
+    expect(archived()?.querySelector('.sc-activity-thumb-image')).toBeNull();
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [{ ...listedTarget(), cover: 'data:image/jpeg;base64,AAAA' }], unreadableProjectIds: [] });
+    fireEvent.click(screen.getByRole('button', { name: '刷新活动列表' }));
+    await waitFor(() => expect(archived()?.querySelector('.sc-activity-thumb-image')?.getAttribute('src')).toBe('data:image/jpeg;base64,AAAA'));
+    expect(archived()?.querySelector('.sc-activity-thumb-canvas')).toBeNull();
+  });
+
   it.each(['empty', 'reuse-layout'] as const)('archives first and uses the real creator for a fresh %s activity without carrying old business data', async (mode: NewLocalActivityMode) => {
     const ui = setup(true);name('  演练新活动  ');
     if (mode === 'reuse-layout') fireEvent.click(screen.getByRole('radio', { name: '沿用当前布置' }));

@@ -2,6 +2,7 @@ import { canonical } from '../../supabase/functions/_shared/domain';
 import { mergeMaterialCheckinLedgers } from '../../supabase/functions/_shared/material-checkin-contract';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../components/room-organizer/lib/initial-layout';
 import { MAX_NAME_LENGTH } from '../components/room-organizer/lib/schema';
+import { readActivityCovers } from './activity-cover';
 import {
   createLocalProjectBackupV3, parseLocalProjectBackupJson,
   type LocalProjectBackupV3, type ValidatedLocalProjectRestoreCandidate,
@@ -16,6 +17,10 @@ export interface LocalActivitySummary {
   name: string;
   archivedAt: string;
   itemCount: number;
+  /** Geometry-only copy for the list thumbnail; attachments and embedded copies are dropped. */
+  preview?: RoomLayout;
+  /** 3D still captured when the activity was archived; older archives fall back to `preview`. */
+  cover?: string;
 }
 export interface LocalActivityList {
   activities: LocalActivitySummary[];
@@ -91,14 +96,32 @@ export async function readLocalActivity(projectId: string): Promise<ValidatedLoc
   return parseLocalProjectBackupJson(JSON.stringify(backup));
 }
 
+/** Thumbnails draw floors only; keeping attachments or embedded scene copies would pin them in list state. */
+function previewLayout(layout: RoomLayout): RoomLayout {
+  const preview: RoomLayout = { ...layout };
+  delete preview.floorPlanImage;
+  delete preview.designBook;
+  delete preview.backendSceneV2;
+  delete preview.backendVenue;
+  delete preview.backendCamera;
+  delete preview.backendLighting;
+  delete preview.itemLayers;
+  delete preview.productionPlan;
+  delete preview.eventOperations;
+  return preview;
+}
+
 export async function listLocalActivities(): Promise<LocalActivityList> {
   const records = await listSourceRecords<unknown>(LOCAL_ACTIVITIES_NAMESPACE);
+  const covers = await readActivityCovers().catch(() => new Map<string, string>());
   const activities: LocalActivitySummary[] = [], unreadableProjectIds: string[] = [];
   for (const record of records) {
     try {
       const backup = checkedArchive(record.value, record.key[1]);
+      const cover = covers.get(record.key[1]);
       activities.push({ projectId: record.key[1], name: backup.layout.name, archivedAt: backup.createdAt,
-        itemCount: backup.layout.floors.reduce((count, floor) => count + floor.items.length, 0) });
+        itemCount: backup.layout.floors.reduce((count, floor) => count + floor.items.length, 0),
+        preview: previewLayout(backup.layout), ...(cover ? { cover } : {}) });
     } catch { unreadableProjectIds.push(record.key[1]); }
   }
   activities.sort((a, b) => Date.parse(b.archivedAt) - Date.parse(a.archivedAt) || a.projectId.localeCompare(b.projectId));

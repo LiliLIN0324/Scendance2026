@@ -21,6 +21,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
     const task = recovery && hash.includes('access_token=')
       ? controller.acceptCallback(hash, 'recovery')
       : controller.restoreSession(recovery);
+    // 本机 Supabase 没起时，auth-js 会对 refresh 重试七八次；别让本地工作台跟着白屏。
+    if (!callback && !recovery) window.setTimeout(() => setReady(true), 1500);
     void task
       .catch(err => setError(err instanceof Error ? err.message : '登录验证失败，请重试。'))
       .finally(() => {
