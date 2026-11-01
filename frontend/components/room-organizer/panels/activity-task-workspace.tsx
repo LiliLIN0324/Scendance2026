@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
@@ -139,7 +139,7 @@ export function ActivityTaskWorkspace(props: Props): JSX.Element {
   }
   async function flush(guard: () => void) {
     const id = layoutStore.getState().layout.id;
-    if (!id) throw new Error('请先保存本机活动编号。');
+    if (!id) throw new Error('请先保存活动编号。');
     skipOwnFlush.current = true;
     try { await flushSourceScope(id); guard(); } finally { skipOwnFlush.current = false; }
   }

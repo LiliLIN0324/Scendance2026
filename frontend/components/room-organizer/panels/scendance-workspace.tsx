@@ -357,7 +357,7 @@ export function ScendanceViewTools({ onApplyPreset, onFit, onZoom, onExportImage
   return (
     /* 圆钮贴在画布右上角。常用项都是一级钮；撤销、缩放、导出和整体收进省略号。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
-      <ShareMenu {...(shareActions ? { actions: shareActions } : {})} openRequest={shareOpenRequest} closeSignal={shareClose}/>
+      <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} openRequest={shareOpenRequest} closeSignal={shareClose}/>
       <span className="sc-tool-sep" aria-hidden="true"/>
       <button type="button" id="tool-select" data-tip="选择" aria-label="选择：点击物料并框选" aria-pressed={selectActive} className={selectActive ? 'is-active' : ''} onClick={chooseSelect}>
         <MousePointer2 size={24}/>

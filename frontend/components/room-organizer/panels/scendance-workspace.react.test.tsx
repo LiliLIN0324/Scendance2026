@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -205,10 +205,10 @@ describe('ScendanceViewTools design column', () => {
   it('renders one right-edge island of five round tools and tucks the rest into 视图', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 室内常驻：分享 / 选择 / 2D·3D / 看全场 / 第一人称走进场 / 俯视 / 正面机位 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
+    // 室内常驻：发布 / 选择 / 2D·3D / 看全场 / 第一人称走进场 / 俯视 / 正面机位 / 尺寸 / 网格 / 更多 / 氛围。卫星只在户外。
     expect(within(rail).getAllByRole('button')).toHaveLength(11);
-    expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
-    for (const name of ['分享', '选择：点击物料并框选', '2D / 3D', '看全场', '第一人称走进场', '俯视', '正面机位', '尺寸标注', '网格吸附', '更多工具']) {
+    expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
+    for (const name of ['发布', '选择：点击物料并框选', '2D / 3D', '看全场', '第一人称走进场', '俯视', '正面机位', '尺寸标注', '网格吸附', '更多工具']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     expect(rail.querySelector('#tool-satellite')).toBeNull();

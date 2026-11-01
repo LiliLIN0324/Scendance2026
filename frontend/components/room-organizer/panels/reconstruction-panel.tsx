@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 /* Source previews use private blob/signed URLs and preserve original image coordinates. */
 /* eslint-disable @next/next/no-img-element */
@@ -401,7 +401,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
     let cancelled=false;
     void controller.resumeGeometryWorkbench(layoutToBackendScene(layoutRef.current),layoutRef.current.name??'本地活动',scope).then(project=>{
       if(cancelled)return;
-      if(!project||project.id!==saved.binding?.cloudProjectId){setPollingPaused(true);setNotice('原任务的场景连接未能恢复，任务编号与本机资料已保留。');}
+      if(!project||project.id!==saved.binding?.cloudProjectId){setPollingPaused(true);setNotice('原任务的场景连接未能恢复，任务编号与资料已保留。');}
     }).catch(error=>{if(!cancelled){setPollingPaused(true);setNotice(`原任务连接恢复暂停：${errorText(error)}`);}});
     return()=>{cancelled=true;};
   },[controller,formReady,form.jobId,form.jobIdentity,cloud.user,cloud.project,scope,pollingPaused]);
@@ -470,7 +470,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
     const form=formRef.current;
     if(venueEdit){setNotice('请先确认或取消场地编辑，再生成方案。');return;}
     if(pending.current)return;if(referenceSaving.current){setNotice('正在保存原图对应，请完成后再生成。');return;}setNotice('');
-    if(!connected){setNotice(connectionBlockedReason||'本机资料已保留。请先准备场景连接，再生成方案。');return;}
+    if(!connected){setNotice(connectionBlockedReason||'资料已保留。请先准备场景连接，再生成方案。');return;}
     if(!images.length&&!layout.backendSceneV2){setNotice('请先添加平面图或现场照片。');return;}
     const currentStructure=layout.backendSceneV2;
     const sourcesChanged=!!currentStructure&&images.length>0&&(images.length!==currentStructure.sources.length||images.some(image=>!image.assetId||!currentStructure.sources.some(source=>source.assetId===image.assetId&&source.kind===(image.kind??'photo'))));
@@ -522,7 +522,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
       await assertGeometryActionSource(base,controller);
       if(scopeEpoch.current.epoch!==epoch||layoutRef.current!==base||geometryIdentity(controller,scopeRef.current)!==identity)throw new Error('当前活动或账户已变化，请重新准备场景连接。');
       await controller.ensureGeometryWorkbenchReady(layoutToBackendScene(base),base.name??'本地活动',scopeRef.current);
-      if(alive.current&&scopeEpoch.current.epoch===epoch)setNotice('场景连接已准备好，可以生成方案。本机活动资料已保留。');
+      if(alive.current&&scopeEpoch.current.epoch===epoch)setNotice('场景连接已准备好，可以生成方案。活动资料已保留。');
     }catch(error){if(alive.current&&scopeEpoch.current.epoch===epoch)setNotice(errorText(error));}
     finally{pending.current=false;if(alive.current)setBusy(false);}
   }
@@ -620,7 +620,7 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
   const rebuildZone=<section className="rc-panel" aria-label="场地重建与候选确认">
     <fieldset className="rc-existing-controls" aria-label="生成输入" disabled={!!venueEdit||!formReady}>
     <div className="rc-inputs" ref={inputDetails}>
-    {localActivity&&!connected&&<div className="rc-connect" role="group" aria-label="连接场景服务"><p><strong>生成前需要连接场景服务</strong><small>上传的图纸与本机资料会保留；连接只建立安全通道，不改动场景。</small></p><button type="button" className="rc-secondary" disabled={busy||!formReady} onClick={()=>void prepareConnection()}>{busy?'正在连接…':'连接场景服务'}</button></div>}
+    {localActivity&&!connected&&<div className="rc-connect" role="group" aria-label="连接场景服务"><p><strong>生成前需要连接场景服务</strong><small>上传的图纸与资料会保留；连接只建立安全通道，不改动场景。</small></p><button type="button" className="rc-secondary" disabled={busy||!formReady} onClick={()=>void prepareConnection()}>{busy?'正在连接…':'连接场景服务'}</button></div>}
     {(images.length>0||!!layout.backendSceneV2)&&<>
       {layout.backendSceneV2&&images.length>0&&<label className="cr-check"><input type="checkbox" checked={reidentify} onChange={event=>setReidentify(event.target.checked)}/><span><strong>重新识别结构</strong><small>默认沿用已确认的墙、门窗与柱子，直接规划风格和布置。换图或需要重测时开启。</small></span></label>}
       {hasPhotos&&<fieldset className="rc-mode"><legend>本次照片生成模式 <small>每次请选择</small></legend>{([['restore','还原现场','保留已有家具与外观'],['redesign','重新布置','保留固定结构与锁定物件']] as const).map(([value,label,hint])=><label key={value}><input type="radio" name={`photo-mode-${scope}`} value={value} checked={mode===value} onChange={()=>setMode(value)}/><span><strong>{label}</strong><small>{hint}</small></span></label>)}</fieldset>}

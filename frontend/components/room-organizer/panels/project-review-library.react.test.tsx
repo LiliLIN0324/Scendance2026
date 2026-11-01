@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,9 +74,9 @@ describe('local review library panel', () => {
     try {
       await waitFor(() => expect(readProjectReviewLibrary).toHaveBeenCalledTimes(2));
       await ready();
-      expect(screen.getByText(/本机草稿保存于/).textContent).toContain(new Date(freshDraft.savedAt).toLocaleString());
+      expect(screen.getByText(/草稿保存于/).textContent).toContain(new Date(freshDraft.savedAt).toLocaleString());
       await act(async () => { first.resolve({ ...empty(), draft: { ...draft, revision: 'strict-old-revision', savedAt: '2026-10-09T06:00:00.000Z' } }); });
-      expect(screen.getByText(/本机草稿保存于/).textContent).toContain(new Date(freshDraft.savedAt).toLocaleString());
+      expect(screen.getByText(/草稿保存于/).textContent).toContain(new Date(freshDraft.savedAt).toLocaleString());
       fireEvent.click(button('保存说明草稿'));
       await screen.findByText('说明草稿已保存到本机。');
       expect(saveProjectReviewDraft).toHaveBeenCalledExactlyOnceWith('identity-a', input, freshDraft.revision);
@@ -100,7 +100,7 @@ describe('local review library panel', () => {
     expect((await screen.findByRole('alert')).textContent).not.toContain('UNTRUSTED_ERROR_INSTRUCTION');
     expect(button('保存说明草稿').disabled).toBe(true); expect(saveProjectReviewDraft).not.toHaveBeenCalled();
     await expect(flushSourceScope(source.scope)).resolves.toBeUndefined();
-    fireEvent.click(button('重试读取本机资料')); await ready(); expect(readProjectReviewLibrary).toHaveBeenCalledTimes(2);
+    fireEvent.click(button('重试读取资料')); await ready(); expect(readProjectReviewLibrary).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('alert')).toBeNull(); expect(saveProjectReviewDraft).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe('local review library panel', () => {
     await screen.findByRole('alert'); expect(screen.getByText(/当前说明有未保存修改/)).toBeTruthy();
     expect(ui.onLoadDraft).not.toHaveBeenCalled(); await expect(flushSourceScope(source.scope)).rejects.toThrow('未保存修改');
     stored = { ...empty(), draft: { ...draft, revision: 'draft-2' } };
-    fireEvent.click(button('重新读取本机资料')); await ready(); fireEvent.click(button('保存说明草稿'));
+    fireEvent.click(button('重新读取资料')); await ready(); fireEvent.click(button('保存说明草稿'));
     await screen.findByText('说明草稿已保存到本机。');
     expect(vi.mocked(saveProjectReviewDraft).mock.calls.at(-1)?.[2]).toBe('draft-2');
   });
@@ -200,7 +200,7 @@ describe('local review library panel', () => {
     expect(vi.mocked(saveProjectReviewDraft).mock.calls.at(-1)?.[2]).toBe(null);
     expect(stored.draft?.revision).toBe('other-newer'); expect(stored.draft?.summary).toBe(draft.summary);
     expect(screen.queryByText('说明草稿已保存到本机。')).toBeNull();
-    fireEvent.click(button('重新读取本机资料')); await ready(); fireEvent.click(button('保存说明草稿'));
+    fireEvent.click(button('重新读取资料')); await ready(); fireEvent.click(button('保存说明草稿'));
     await screen.findByText('说明草稿已保存到本机。');
     expect(vi.mocked(saveProjectReviewDraft).mock.calls.at(-1)?.[2]).toBe('other-newer');
   });

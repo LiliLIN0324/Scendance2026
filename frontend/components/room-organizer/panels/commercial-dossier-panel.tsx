@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { MAX_COMMERCIAL_BACKUP_BYTES, preflightCommercialBackupJson, restoreCommercialBackupJson, serializeCommercialBackup, type CommercialRestoreCandidate } from '@/lib/commercial-dossier-backup';
@@ -128,7 +128,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
       latest.current.identity.projectId === ticket.projectId && operation.current?.ticket.id === ticket.id;
   }
   function checkedGuard(ticket: Ticket): void {
-    if (!current(ticket) || !eligible()) throw new Error('本机活动身份已变化，本次操作已停止。');
+    if (!current(ticket) || !eligible()) throw new Error('活动身份已变化，本次操作已停止。');
     const result = (latest.current.guard as () => unknown)();
     if (result && typeof (result as { then?: unknown }).then === 'function') throw new Error('当前身份未能核对，请重新读取。');
   }
@@ -403,7 +403,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
 
   return <section className="sc-commercial" aria-label="合同与约定">
     <header className="sc-commercial-heading"><div><h2>合同与约定</h2><p className="sc-commercial-subtle">登记已有资料、保存原件与版本。金额和收付款节点为手工记录，人工报告不代替验签。</p></div></header>
-    {!eligible() ? <p className="sc-commercial-warning">请先打开编号明确的本机活动。正式云项目暂不读取本机商务资料。</p> : <>
+    {!eligible() ? <p className="sc-commercial-warning">请先打开编号明确的活动。云项目的商务资料暂未接入。</p> : <>
       <div className="sc-commercial-toolbar"><button type="button" className="sc-button" disabled={!!props.disabled || busy !== null} onClick={() => void reload()}>重新读取核对</button>
         <Field label="本次录入人" value={viewGeneration.current === generation ? recorder : ''} limit={commercialDossierLimits.party} disabled={!!formBlocked} onChange={value => { if (editable() && previewRef.current?.candidate.status !== 'present') setRecorder(value); }}/>
         <label className="sc-field">资料性质<select value={dataKind} disabled={!!formBlocked || read?.status === 'present'} onChange={event => { if (editable() && previewRef.current?.candidate.status !== 'present' && read?.status === 'absent') setDataKind(event.currentTarget.value as typeof dataKind); }}>{Object.entries(kindNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label></div>

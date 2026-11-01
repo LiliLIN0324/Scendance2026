@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Lux3dDirectTest } from './lux3d-direct-test';
 import { RECON_MATERIAL_BAN, CREDIT_CONFIRM_LABEL, VENUE_PACKAGE_MISSING, MOCK_HANG_DONE_NOTE } from '../lib/site-recon-mock';
@@ -63,6 +63,25 @@ describe('Aholo 场地重建接住地图采集单', () => {
   });
 });
 
+describe('生成内部按物料 / 场地分组', () => {
+  it('两组标签都在；点生成给哪个 kind 就直接落到那一组', async () => {
+    offline();
+    const { rerender } = render(<Lux3dDirectTest/>);
+    expect(screen.getByText('物料生成')).toBeTruthy();
+    expect(screen.getByText('场地生成')).toBeTruthy();
+    // 四个标签仍是一条 tablist，顺序不变。
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['文字建模', '图片建模', '场景生成', '场地重建']);
+    rerender(<Lux3dDirectTest openKind={{ kind: 'world', nonce: 1 }}/>);
+    await vi.waitFor(() => {
+      expect(screen.getByRole('tab', { name: '场景生成' }).getAttribute('aria-selected')).toBe('true');
+    });
+    rerender(<Lux3dDirectTest openKind={{ kind: 'recon', nonce: 2 }}/>);
+    await vi.waitFor(() => {
+      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+});
+
 describe('Aholo 产品化壳体', () => {
   it('面板标题是场地观感与物料，并写明主路径与禁令', () => {
     offline();
@@ -85,6 +104,39 @@ describe('Aholo 产品化壳体', () => {
       expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
     });
     expect(screen.getByText(/来自采集单「盐官潮乐之城」/)).toBeTruthy();
+  });
+});
+
+describe('物料生成 / 场地生成各自成弹窗', () => {
+  it('物料生成只露两张卡：文字建模与图片建模，默认选文字建模，长说明收进 info', () => {
+    offline();
+    render(<Lux3dDirectTest group="materials"/>);
+    expect(screen.getByRole('heading', { name: '物料生成' })).toBeTruthy();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    const cards = screen.getAllByRole('radio');
+    expect(cards.length).toBe(2);
+    expect(cards[0]?.textContent).toContain('文字建模');
+    expect(cards[1]?.textContent).toContain('图片建模');
+    expect(cards[0]?.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('radio', { name: /场地重建/ })).toBeNull();
+    // 卡上一行交代常驻，长说明默认收起，点 info 才展开。
+    const info = screen.getByLabelText('文字建模说明');
+    expect(info.closest('details')?.hasAttribute('open')).toBe(false);
+    fireEvent.click(info);
+    expect(info.closest('details')?.hasAttribute('open')).toBe(true);
+    expect(screen.getByText(/默认干跑，不连真接口/)).toBeTruthy();
+  });
+
+  it('场地生成只露场景生成与场地重建两张卡，点另一张就切过去', () => {
+    offline();
+    render(<Lux3dDirectTest group="venue"/>);
+    expect(screen.getByRole('heading', { name: '场地生成' })).toBeTruthy();
+    const cards = screen.getAllByRole('radio');
+    expect(cards.map(card => card.textContent)).toEqual([expect.stringContaining('场景生成'), expect.stringContaining('场地重建')]);
+    expect(cards[0]?.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(cards[1]!);
+    expect(cards[1]?.getAttribute('aria-checked')).toBe('true');
+    expect(within(screen.getByRole('region', { name: '场地重建' })).getByLabelText('场景名称')).toBeTruthy();
   });
 });
 

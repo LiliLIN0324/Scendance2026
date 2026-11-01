@@ -1,16 +1,15 @@
-'use client';
+﻿'use client';
 
-import { ArrowUpRight, FolderOpen, Images, Search, Send, ShieldCheck, UserRound, UsersRound, X } from 'lucide-react';
+import { ArrowUpRight, FolderOpen, Images, Search, ShieldCheck, UserRound, UsersRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
-import { PublicationPanel } from '@/components/business/publication-panel';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
-import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
+import { consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -20,7 +19,7 @@ import { InfoTip } from './info-tip';
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; publicationRequest?: number; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string } }
+interface Props { controller?: BackendSession; layout: RoomLayout; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string } }
 
 /** 点在对话框边框外（背后遮罩）才关。面板里的点击、按钮都不关。 */
 export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): void {
@@ -34,7 +33,7 @@ function isLocalMockBackend(): boolean {
   return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes('localhost:3099');
 }
 
-export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, publicationRequest = 0, openRequest, triggerRef, draftNote }: Props): JSX.Element {
+export function CloudPanel({ layout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const cloud = useBackendSession(controller);
@@ -76,7 +75,6 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
 
   const userId = cloud.user?.id;
   const studioProjects = projects.filter(project => project.studio_id === studioId && (!sceneConnection || project.id !== cloud.project?.id));
-  const selectedStudio = studios.find(studio => studio.id === studioId);
   useEffect(() => {
     if (!sceneConnection || !cloud.project || !projectsLoaded) return;
     const { id, name, studio_id, revision } = cloud.project;
@@ -88,6 +86,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     if (!userId || busy) return;
     const id = requestedProjectId;
     if (!id || openedRequest.current === `${userId}:${id}`) return;
+    // 无感挂云自己同步的 ?project=：项目刚建好、画布已是内容本体，重开会清掉撤销历史，凭标记跳过。
+    if (consumeSelfAttachedProject(userId, id)) { openedRequest.current = `${userId}:${id}`; return; }
     if (!cloud.writeBlocked && cloud.project?.id !== id) {
       setNotice('请先释放当前项目的编辑权，再打开链接中的项目。');
       setSurface('account'); setSection('projects');
@@ -109,17 +109,10 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     void Promise.all([controller.listProjects(), controller.listStudios()]).then(([nextProjects, nextStudios]) => {
       if (cancelled) return;
       setProjects(nextProjects); setStudios(nextStudios); setStudioId(preferredStudio(userId, nextStudios, controller.getSnapshot().project?.studio_id)); setProjectsLoaded(true);
-    }).catch(() => { if (!cancelled) setNotice('项目加载失败，请点击刷新列表重试。'); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
+    }).catch(() => { if (!cancelled) setNotice('项目加载失败，请点击刷新重试。'); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
-  const openedPublicationRequest = useRef(0);
-  useEffect(() => {
-    if (publicationRequest <= 0 || openedPublicationRequest.current === publicationRequest) return;
-    openedPublicationRequest.current = publicationRequest;
-    setSurface('account'); setSection('publication');
-    if (!dialog.current?.open) dialog.current?.showModal();
-  }, [publicationRequest]);
-  // 多入口分区直达：左下「设置」只开团队/权限演示；头像开账户（资料、项目、素材、发布）。
+  // 多入口分区直达：左下「设置」只开团队/权限演示；头像开账户（项目、素材）。
   const openedOpenRequest = useRef(0);
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
@@ -268,24 +261,25 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   }
 
   const filteredProjects = studioProjects.filter(project => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const saveStatus = sceneConnection ? '场景已连接 · 活动存本机' : !cloud.user || !bound ? '本地草稿' : cloud.writeBlocked ? '云项目 · 只读' : dirty ? '有改动待保存' : '云端已保存';
-  const accountName = cloud.user?.is_anonymous ? '访客' : cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : cloud.configured ? '未登录' : '本机工作台');
+  // §二.4 默认在云上：状态只说结果，不解释文件存在哪。
+  const saveStatus = sceneConnection ? '场景已连接' : !cloud.user || !bound ? '草稿' : cloud.writeBlocked ? '只读' : dirty ? '有改动' : '已保存';
+  const accountName = cloud.user?.is_anonymous ? '访客' : cloud.user?.email?.split('@')[0] || (cloud.user ? '我的账户' : '访客');
   const accountDetail = cloud.user ? (cloud.user.is_anonymous ? '独立访客身份 · 普通用户权限' : cloud.user.email ?? '我的账户') : null;
-  const draftStatus = draftNote?.label ?? (cloud.user ? null : cloud.configured ? '草稿保存在这台电脑，登录后可跨设备继续' : '草稿保存在这台电脑');
+  const draftStatus = draftNote?.label ?? (cloud.user ? null : '草稿');
   const settingsSurface = surface === 'settings';
   const navItems: Array<[string, string, string, typeof FolderOpen]> = settingsSurface
     ? [['team', '团队', '团队演示', UsersRound], ['permissions', '权限', '权限演示', ShieldCheck]]
-    : [['projects', '我的项目', '我的项目', FolderOpen], ['assets', '素材库', '素材库', Images], ['publication', '发布管理', '发布管理', Send]];
+    : [['projects', '我的项目', '我的项目', FolderOpen], ['assets', '素材库', '素材库', Images]];
 
   return <>
-    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户与素材库" title="账户与素材库 · 项目、素材与发布" aria-haspopup="dialog" onClick={() => { setSurface('account'); setSection('assets'); dialog.current?.showModal(); }}>
+    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户与素材库" title="账户与素材库 · 项目与素材" aria-haspopup="dialog" onClick={() => { setSurface('account'); setSection('assets'); dialog.current?.showModal(); }}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><UserRound size={20}/></span>
     </button>
     {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={onClose} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
       <div className="sc-account-scroll">
       <div className={`sc-cloud-heading${settingsSurface ? ' is-settings' : ''}`}>{settingsSurface
         ? <div><h2 id="cloud-title">团队与权限</h2></div>
-        : <div className="sc-account-title"><h2 id="cloud-title">账户中心</h2><InfoTip label="账户说明"><strong>本地与云端分开保存</strong><span>本地草稿与云端版本分别保存；云端写入失败时，当前画布仍然保留。</span></InfoTip></div>}<button className="sc-cloud-close" type="button" aria-label={settingsSurface ? '关闭设置面板' : '关闭账户面板'} autoFocus onClick={() => dialog.current?.close()}><X size={20}/></button></div>
+        : <div className="sc-account-title"><h2 id="cloud-title">账户中心</h2></div>}<button className="sc-cloud-close" type="button" aria-label={settingsSurface ? '关闭设置面板' : '关闭账户面板'} autoFocus onClick={() => dialog.current?.close()}><X size={20}/></button></div>
       <nav className="sc-account-nav" aria-label={settingsSurface ? '设置导航' : '账户导航'}>{navItems.map(([id, label, name, Icon]) => <button type="button" key={id} aria-label={name} aria-pressed={section === id} onClick={() => setSection(id)}><Icon size={15} aria-hidden="true"/>{label}</button>)}</nav>
       {!settingsSurface && <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{cloud.user ? accountName.slice(0, 1).toUpperCase() : <UserRound size={20}/>}</span><div><strong>{accountName}</strong><span>{accountDetail}{accountDetail && draftStatus ? <span aria-hidden="true"> · </span> : null}{draftStatus ? <span className={`sc-account-draft${draftNote?.error ? ' has-error' : ''}`} title={draftNote?.title}>{draftStatus}</span> : null}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <>{isLocalMockBackend() && <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signIn('dev@mock.local', 'mock'); setNotice('已用本地测试账户登录。'); })}>本地测试登录</button>}{cloud.configured && <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>登录</Link>}</>}</div>}
       <div className="sc-account-body">
@@ -295,25 +289,27 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         ? <LocalActivitiesPanel mode="list" layout={layout} actions={localActivities} disabled={busy} currentStatus={saveStatus} onComplete={() => dialog.current?.close()}/>
         : <div className="sc-account-canvas"><span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={20}/></span><div><small>当前画布</small><strong>{layout.name || '未命名活动'}</strong></div><span className="sc-cloud-badge">{saveStatus}</span></div>}
       {sceneConnection && <section className="sc-cloud-current" aria-label="当前活动的场景连接">
-        <h3>当前只连接场景服务</h3>
-        <p>活动编号保持不变。场景和本次需求用于助手处理；任务、制作计划与点验继续保存在本机，不随场景连接上传。</p>
-        <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.disconnectGeometryWorkbench(); setNotice('场景服务已断开，本机活动和原连接记录已保留。下次使用助手时会重新核对连接。'); })}>断开场景服务</button>
+        <h3>场景助手已连接</h3>
+        <p>只用于助手处理当前场景。</p>
+        <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.disconnectGeometryWorkbench(); setNotice('场景服务已断开。下次使用助手时会重新连接。'); })}>断开场景服务</button>
       </section>}
       {!cloud.configured ? <div className="sc-cloud-offline">
-        <span className="sc-cloud-badge">本地工作台</span>
-        <h3>当前使用本地工作台</h3>
-        <p>当前环境尚未连接云服务。草稿保留在此浏览器，连接后可在账户中统一管理云项目。</p>
-        <p className="sc-cloud-muted">当前画布支持导出符合后端格式的场景文件，便于交接和检查。</p>
+        <span className="sc-cloud-badge">离线</span>
+        <h3>暂时无法连接</h3>
+        <p>请检查网络后重试。</p>
         <button type="button" onClick={downloadContract} disabled={!!conversionError}>导出场景数据</button>
       </div> : !cloud.user ? null : <div className="sc-cloud-content">
-        <div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>{sceneConnection?'其他云项目':'云项目快捷入口'}</h3><InfoTip label="项目说明"><strong>这里是快捷入口</strong><span>{sceneConnection?'当前活动的场景连接已显示在上方。':'完整工作室与项目管理请优先使用 /projects；此处仅作编辑器快捷入口。'}</span></InfoTip></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新列表</button></div>
+        <div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>文件</h3></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新</button></div>
         <div className="sc-account-project-grid"><section aria-label="项目列表">
-        <div className="sc-account-filters"><label className="sc-account-search"><Search size={20} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索项目名称" value={query} onChange={event => setQuery(event.target.value)} /></label><select aria-label="当前工作室" disabled={busy || loadingProjects} value={studioId} onChange={event => { setStudioId(event.target.value); if (userId) rememberStudio(userId, event.target.value); }}>{!studios.length && <option value="">尚未加入工作室</option>}{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select></div>
-        <div className="sc-account-list-caption"><span>项目 / 工作室</span><span>{loadingProjects ? '加载中…' : projectsLoaded ? `${filteredProjects.length} 个项目` : '尚未加载'}</span></div>
-        {loadingProjects && <p className="sc-account-empty" role="status">正在加载你的项目…</p>}
-        <ul className="sc-cloud-projects">{filteredProjects.map(project => <li key={project.id}>
-          <span className="sc-account-project-icon" aria-hidden="true"><FolderOpen size={20}/></span>
-          <div className="sc-account-project-info"><strong>{project.name}</strong><small>{studios.find(studio => studio.id === project.studio_id)?.name ?? '工作室'} · 版本 {project.revision}</small><small>{project.id === cloud.project?.id ? '当前项目' : project.current_editor && project.lease_expires && Date.parse(project.lease_expires) > Date.now() ? '有成员正在编辑' : '可打开查看'}</small></div><button type="button" disabled={busy || !cloud.writeBlocked} onClick={() => {
+        {(loadingProjects || !!filteredProjects.length) && <div className="sc-account-filters"><label className="sc-account-search"><Search size={20} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索文件" value={query} onChange={event => setQuery(event.target.value)} /></label>{studios.length > 1 && <select aria-label="当前工作室" disabled={busy || loadingProjects} value={studioId} onChange={event => { setStudioId(event.target.value); if (userId) rememberStudio(userId, event.target.value); }}>{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select>}</div>}
+        {loadingProjects && <p className="sc-account-empty" role="status">正在加载…</p>}
+        <ul className="sc-file-grid">{filteredProjects.map(project => {
+          const current = project.id === cloud.project?.id;
+          const editingElsewhere = !current && project.current_editor && project.lease_expires && Date.parse(project.lease_expires) > Date.now();
+          return <li key={project.id} className={`sc-file-card${current ? ' is-current' : ''}`}>
+          <span className="sc-file-thumb" aria-hidden="true"><FolderOpen size={26}/></span>
+          <div className="sc-file-info"><strong>{project.name}</strong><small>{current ? '当前' : editingElsewhere ? '他人编辑中' : '只读'}</small></div>
+          <button type="button" className="sc-file-open" disabled={busy || !cloud.writeBlocked} onClick={() => {
           if (!confirmReplace()) return;
           void run(async () => {
             const openingFrom = layoutRef.current;
@@ -322,14 +318,11 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
             setBoundLayout(undefined);
             const opened = await controller.getProject(project.id, candidate => { assertNoLocalHandoffCloudTransition(layoutRef.current); backendSceneToLayout(candidate.scene, { projectId: candidate.id, name: candidate.name }); });
             await acceptScene(opened.scene, opened.id, opened.name, openingFrom);
-            setNotice('已打开云端方案；获取编辑权后可以保存修改。');
+            setNotice('已打开项目。');
           });
-        }}>打开</button></li>)}</ul>
-        {!loadingProjects && projectsLoaded && !filteredProjects.length && <div className="sc-account-empty"><FolderOpen size={24} aria-hidden="true"/><h3>{studioProjects.length ? '没有匹配的项目' : sceneConnection?'暂无其他云项目':'这个工作室还没有项目'}</h3><p>{studioProjects.length ? '试试其他名称。' : sceneConnection?'当前活动的完整资料仍保存在本机。':'把当前画布存为新项目，或切换工作室。'}</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
-        {!cloud.writeBlocked && <p className="sc-cloud-muted">{sceneConnection?'打开其他云项目前，请先断开场景服务并保留本机备份。':'切换项目或新建前，请先保存修改并释放当前项目的编辑权。'}</p>}
-        <div className="sc-cloud-new">
-          <p className="sc-cloud-muted">{selectedStudio ? `新项目将归属「${selectedStudio.name}」` : '请先创建或加入工作室。'}</p>
-          <button type="button" disabled={busy || sceneConnection || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
+        }}>打开</button></li>;
+        })}</ul>
+        <button type="button" className="sc-file-new" aria-label="新方案" disabled={busy || sceneConnection || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
             const current = layoutRef.current;
             await assertCloudTransition(current);
             await flushSourceScope(current.id ?? 'local');
@@ -344,18 +337,21 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
               await assertCloudTransition(layoutRef.current);
               if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
               try { await copySourceScope(current.id ?? 'local', created.id); }
-              catch { sourceNotice = ' 本机资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
+              catch { sourceNotice = ' 资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
               await acceptScene(created.scene, created.id, created.name, current);
             } catch(error) {
-              throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对本机资料。'}`);
+              throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对资料。'}`);
             }
             await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
-          })}>把当前画布创建为新项目</button>
-        </div>
-        </section><aside aria-label="当前项目管理">
+          })}>新方案</button>
+        {!loadingProjects && !studioProjects.length && <p className="sc-account-empty">还没有其他方案</p>}
+        {!loadingProjects && !!studioProjects.length && !filteredProjects.length && <div className="sc-account-empty"><p>没有匹配的文件</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
+        {!cloud.writeBlocked && <p className="sc-cloud-muted">切换项目前，请先保存改动并释放编辑权。</p>}
+        </section></div>
+        <aside aria-label="当前项目管理">
         {cloud.project && !sceneConnection && <section className="sc-cloud-current">
-          <span className="sc-cloud-eyebrow">{studios.find(studio => studio.id === cloud.project?.studio_id)?.name ?? '所属工作室加载中'} / 当前云项目</span><h3>{cloud.project.name}</h3>
-          <p>版本 {cloud.revision} · {cloud.writeBlocked ? '尚未持有有效编辑权，改动只保留在本地' : '你正在编辑，每 30 秒续期'}{dirty ? ' · 画布有未保存改动' : ''}</p>
+          <h3>{cloud.project.name}</h3>
+          <p>{cloud.writeBlocked ? '只读' : dirty ? '有改动' : '已保存'}</p>
           <label>项目名称<input maxLength={120} value={projectName} onChange={event => setProjectName(event.target.value)} /></label>
           <button type="button" disabled={busy || cloud.writeBlocked || !projectName.trim() || projectName.trim() === cloud.project.name} onClick={() => void run(async () => { await controller.renameProject(projectName.trim()); await refreshProjects(); setNotice('项目名称已更新，画布草稿仍保留。'); })}>保存名称</button>
           <div className="sc-cloud-actions">
@@ -375,7 +371,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
                 catch (error) { await controller.releaseLease(); throw error; }
                 setNotice('已载入最新版本并获得编辑权。');
               });
-            }}>获取编辑权</button>
+            }}>开始编辑</button>
             <button className="sc-cloud-primary" type="button" disabled={busy || cloud.writeBlocked || !bound || !!conversionError} onClick={() => void run(async () => {
               const current = layoutRef.current;
               await assertCloudTransition(current);
@@ -388,20 +384,19 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
               await assertCloudTransition(layoutRef.current);
               setSavedFingerprint(submitted);
               setNotice(`已保存云端版本 ${saved.revision}${saved.warnings.length ? '，请留意场地重叠提示' : ''}。`);
-            })}>保存到云端</button>
+            })}>保存</button>
             <button type="button" disabled={busy || cloud.writeBlocked} onClick={() => {
               if (dirty && !window.confirm('画布还有未保存到云端的改动。释放编辑权不会保存这些改动，确认交接吗？')) return;
               void run(async () => { await controller.releaseLease(); setNotice('编辑权已释放，队友可以接手。'); });
-            }}>释放编辑权</button>
+            }}>完成编辑</button>
           </div>
           {!bound && <p className="sc-cloud-muted">画布已切换到另一份本地草稿。请重新获取编辑权，或将当前草稿创建为新项目。</p>}
         </section>}
-        <Link className="sc-account-manage-link" href="/projects/" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/projects/'); }}>管理工作室、项目与成员 <ArrowUpRight size={16} aria-hidden="true"/></Link>
-        </aside></div>
+        <Link className="sc-account-manage-link" href="/projects/" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/projects/'); }}>所有文件 <ArrowUpRight size={16} aria-hidden="true"/></Link>
+        </aside>
       </div>}
       </section>
-      <section hidden={section !== 'assets'} aria-label="账户素材库"><div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>素材库</h3><InfoTip label="素材说明"><strong>可复用的场景物料</strong><span>管理可复用的场景物料。</span></InfoTip></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录账户后查看云端素材。</p>}</section>
-      <section hidden={section !== 'publication'} aria-label="发布管理"><div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>发布管理</h3><InfoTip label="发布说明"><strong>链接由你发送</strong><span>发布后由你复制链接发送；系统不会自动通知客户。</span></InfoTip></div></div>{sceneConnection ? <p className="sc-account-empty">当前连接用于场景处理。需要交给客户的资料，请从“方案评审”核对并导出。</p> : cloud.user && cloud.project && cloud.revision !== null ? <PublicationPanel controller={controller} projectId={cloud.project.id} revision={cloud.revision} dirty={dirty || !bound || busy || !!conversionError} /> : !cloud.user ? <div className="sc-account-empty"><p>发布云端只读链接要先登录，再把方案保存为云项目。</p><p>离线评审 HTML 不需要登录，可在「方案评审」里生成并下载。</p><button type="button" disabled={busy} onClick={() => void navigateFromWorkspace('/auth')}>去登录</button></div> : <div className="sc-account-empty"><p>先在「我的项目」里打开并保存一个云项目，才能发布云端只读链接。</p><button type="button" disabled={busy} onClick={() => setSection('projects')}>去我的项目</button></div>}</section>
+      <section hidden={section !== 'assets'} aria-label="账户素材库"><div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>素材库</h3><InfoTip label="素材说明"><strong>可复用的场景物料</strong><span>管理可复用的场景物料。</span></InfoTip></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录后查看素材。</p>}</section>
       </>)}
       {!settingsSurface && conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
       {!settingsSurface && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}

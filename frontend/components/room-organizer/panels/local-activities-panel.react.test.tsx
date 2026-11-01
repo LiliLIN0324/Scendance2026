@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { flushSync } from 'react-dom';
@@ -66,7 +66,7 @@ function setup(commitRestore = false) {
   };
 }
 function name(value = '演练新活动'): void { fireEvent.change(screen.getByRole('textbox', { name: '新活动名称' }), { target: { value } }); }
-function submit(): void { fireEvent.submit(screen.getByRole('form', { name: '新建本机活动' })); }
+function submit(): void { fireEvent.submit(screen.getByRole('form', { name: '新建活动' })); }
 function listedTarget() { return { projectId: targetId, name: target.name, archivedAt: '2026-10-09T03:00:00Z', itemCount: 1 }; }
 
 describe('local activity creation and switching', () => {
@@ -75,11 +75,11 @@ describe('local activity creation and switching', () => {
       prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
     };
     const view = render(<LocalActivitiesPanel mode="create" layout={original} actions={actions}/>);
-    expect(screen.getByRole('form', { name: '新建本机活动' })).toBeTruthy();
-    expect(screen.queryByText('本机活动')).toBeNull();
+    expect(screen.getByRole('form', { name: '新建活动' })).toBeTruthy();
+    expect(screen.queryByText('最近活动')).toBeNull();
     view.rerender(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
-    expect(screen.queryByRole('form', { name: '新建本机活动' })).toBeNull();
-    expect(await screen.findByText('本机活动')).toBeTruthy();
+    expect(screen.queryByRole('form', { name: '新建活动' })).toBeNull();
+    expect(await screen.findByText('最近活动')).toBeTruthy();
   });
 
   it('puts the open canvas first in the same list and keeps a duplicate archive out of it', async () => {
@@ -188,7 +188,7 @@ describe('local activity creation and switching', () => {
     const storedList = { activities: [listedTarget()], unreadableProjectIds: ['house-unreadable-original'] };
     vi.mocked(listLocalActivities).mockResolvedValue(storedList);
     vi.mocked(readLocalActivity).mockRejectedValueOnce(new Error('演练目标归档无法完整读取，原资料已保留'));
-    const ui = setup();expect(await screen.findByText(/有1份本机活动无法读取，原资料已保留/)).toBeTruthy();
+    const ui = setup();expect(await screen.findByText(/有1份活动无法读取，资料已保留/)).toBeTruthy();
     expect(archiveLocalActivity).not.toHaveBeenCalled();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: `打开活动「${target.name}」` }));
     await screen.findByText('演练目标归档无法完整读取，原资料已保留');

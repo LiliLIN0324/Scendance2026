@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { formatMoneyMinor, parseMoneyMinor } from '@/lib/production-plan';

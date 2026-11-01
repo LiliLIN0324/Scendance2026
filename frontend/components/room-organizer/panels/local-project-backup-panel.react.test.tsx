@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { Blob as NodeBlob } from 'node:buffer';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

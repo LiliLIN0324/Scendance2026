@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import { HelpCircle, Layers, MousePointerClick, PencilLine, Timer, Video, X, Globe } from 'lucide-react';
