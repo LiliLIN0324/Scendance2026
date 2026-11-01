@@ -13,6 +13,13 @@ const labels: Record<GenerationJob['state'], string> = {
   rejected: '模型未通过检查', submit_unknown: '提交结果待核对，请联系管理员',
 };
 const activeStates = new Set(['queued','submitting','submitted','processing','archiving']);
+// An ambiguous submission stays submit_unknown only until the backend grace window ends; the worker
+// then turns it into failed (SUBMIT_RESULT_UNKNOWN_EXPIRED) and the member can generate again. While
+// that window is open the status read repeats so the release becomes visible without a manual refresh;
+// older rows are terminal and never read again. No state here resubmits a generation.
+const ambiguousGraceMs = 11 * 60_000;
+const awaitingRelease = (job: GenerationJob) => job.state === 'submit_unknown'
+  && Date.now() - Date.parse(job.updated_at) < ambiguousGraceMs;
 const message = assetError;
 export interface TextureVariantReady { sourceAssetId:string;variantAssetId:string;objectIds?:string[] }
 export interface GenerationTarget { sourceAssetId?:string;sourceObjectIds?:string[];onVariantReady?(variant:TextureVariantReady):void }
@@ -60,7 +67,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
         if (!alive) return;
         setJobs(result);
         // Only status reads repeat. A submit_unknown task never resubmits here.
-        if (result.some(job => activeStates.has(job.state))) timer = setTimeout(() => void read(), 30_000);
+        if (result.some(job => activeStates.has(job.state) || awaitingRelease(job))) timer = setTimeout(() => void read(), 30_000);
       } catch (failure) { if (alive) setError(message(failure)); }
     }
     void read();
