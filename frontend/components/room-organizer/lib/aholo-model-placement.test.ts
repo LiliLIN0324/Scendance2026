@@ -175,7 +175,7 @@ describe('Aholo 产物摆进布置场景 (#66)', () => {
 
   it('仓库留档的场景不查注册表、不发请求，直接给本站那条 SPZ', () => {
     expect(storedAholoSceneSource('shipped-small-launch-hall')).toEqual({
-      assetId: 'shipped-small-launch-hall', name: '小型发布会场地',
+      assetId: 'shipped-small-launch-hall', name: '发布会小厅',
       url: '/showcase/assets/generated/scene/small-launch-hall.spz',
     });
   });

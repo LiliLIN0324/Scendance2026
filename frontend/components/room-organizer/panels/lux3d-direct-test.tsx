@@ -611,7 +611,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
       <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；真生成物件请用云端 Lux3D（活动资料 · 物料工具）。场地重建仍可干跑挂样例。</p>
       <div className="sc-aholo-cloud-actions">
-        <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂云E2E宴会厅观感</button>
+        <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂宴会厅观感</button>
         <button type="button" className="sc-button" onClick={() => { if (onPreviewShippedScene) onPreviewShippedScene(DEMO_WORLD_SCENE_ID); else onHangMockScene?.(); }}>挂样例环境预览</button>
         {onOpenCloudModels && <button type="button" className="sc-button" onClick={onOpenCloudModels}>打开云端物料生成</button>}
       </div>

@@ -1,6 +1,7 @@
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { backendSceneToLayout } from './backend-adapter';
+import { mergeDiagnostics, rejectedDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
 import { hasCollisions, itemsOverlap } from './geometry';
 import { randomSuffix } from './ids';
@@ -10,6 +11,7 @@ import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides } fr
 import { surpriseLayout } from './surprise';
 import type { FurnitureItem, RoomLayout, Vec2 } from './types';
 import { buildVenueShell, type ScaleOrigin } from './venue-shell';
+import type { PlanArtifact } from './plan-artifact';
 
 /**
  * 晴光出布置方案用的两块纯函数：先立场地（T-01 的真相），再在立好的壳体上算一份**没写进画布**的候选。
@@ -93,6 +95,10 @@ export interface PlanProposal {
   kind?: 'review';
   /** 体检改法里锁着或找不到落点、没动的物料名；不能装作全挪了。 */
   skipped?: string[];
+  /** 没放进去的件数与原因；dropped 是它的件数合计。 */
+  diagnostics?: PlanDiagnostic[];
+  /** 这一版的内容身份：确认前比对场地与候选，不看对象引用。 */
+  artifact?: PlanArtifact;
 }
 
 const uid = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${randomSuffix()}`);
@@ -196,17 +202,28 @@ export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
  * 一批一批试：`addItems` 在 reducer 里是**整批**几何否决，一批中有一件穿墙就整批消失
  * （换一版曾经清空桌子）。这里先整批试，被拒再逐件试，越界的只丢它自己。
  */
-function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items: FurnitureItem[]): { layout: RoomLayout; accepted: number; dropped: number } {
+function tryAdd(base: RoomLayout, current: RoomLayout, floorIndex: number, items: FurnitureItem[]): {
+  layout: RoomLayout;
+  accepted: number;
+  dropped: number;
+  rejected: Array<{ name: string; code: 'STRUCTURAL_COLLISION' | 'OUT_OF_BOUNDS' }>;
+} {
   const existing = current.floors[floorIndex]?.items ?? [];
   const batch = withItems(current, floorIndex, [...existing, ...items]);
-  if (canApplyLayoutGeometry(base, batch)) return { layout: batch, accepted: items.length, dropped: 0 };
+  if (canApplyLayoutGeometry(base, batch)) return { layout: batch, accepted: items.length, dropped: 0, rejected: [] };
   let layout = current;
   let accepted = 0;
+  const rejected: Array<{ name: string; code: 'STRUCTURAL_COLLISION' | 'OUT_OF_BOUNDS' }> = [];
   for (const item of items) {
     const next = withItems(layout, floorIndex, [...(layout.floors[floorIndex]?.items ?? []), item]);
-    if (canApplyLayoutGeometry(base, next)) { layout = next; accepted++; }
+    if (canApplyLayoutGeometry(base, next)) { layout = next; accepted++; continue; }
+    // 逐件试还过不了：是压到墙/柱，还是整件出了场地边界——先分清楚，别混成一句「放不下」。
+    rejected.push({
+      name: item.name,
+      code: structuralItemCollides(item, next, floorIndex) ? 'STRUCTURAL_COLLISION' : 'OUT_OF_BOUNDS',
+    });
   }
-  return { layout, accepted, dropped: items.length - accepted };
+  return { layout, accepted, dropped: items.length - accepted, rejected };
 }
 
 /** 候选场景里的重叠：跟编辑器同一套算法，只是跑在没落盘的候选上。 */
@@ -312,20 +329,26 @@ export function proposePlan(input: PlanInput): PlanProposal {
   const deskChair = input.layoutMode === 'desk-chair';
   let added = 0;
   let dropped = 0;
+  let diagnostics: PlanDiagnostic[] = [];
 
   const current0 = base.floors[floorIndex]?.items ?? [];
   const markers = structuralOnly(current0);
   const locked = current0.filter(item => item.locked && !isStructuralMarker(item));
   let current = withItems(base, floorIndex, [...markers, ...locked]);
   const removing = current0.length - markers.length - locked.length;
+  const accept = (result: ReturnType<typeof tryAdd>): void => {
+    current = result.layout;
+    added += result.accepted;
+    dropped += result.dropped;
+    diagnostics = mergeDiagnostics(diagnostics, rejectedDiagnostics(result.rejected));
+  };
   layouts.push(current);
 
   // 1 定舞台位置：背景板贴后墙居中（现有物料条目）。课室、或人说不要舞台，跳过。
   const backdrop = EVENT_CATALOG.find(entry => entry.materialId === 'backdrop');
   if (backdrop && !deskChair && input.stage !== false) {
     const item = { ...backdrop, id: uid(), position: { x: 0, z: -depthM / 2 + backdrop.depth / 2 + 0.4 }, rotation: 0 } as FurnitureItem;
-    const result = tryAdd(base, current, floorIndex, [item]);
-    current = result.layout; added += result.accepted; dropped += result.dropped;
+    accept(tryAdd(base, current, floorIndex, [item]));
   }
   // 签到台靠近南边入口、偏一侧，别堵在门洞正中。放不下只丢这一件。
   const reception = EVENT_CATALOG.find(entry => entry.materialId === 'reception');
@@ -334,8 +357,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
       ...reception, id: uid(), rotation: Math.PI,
       position: { x: -widthM / 2 + reception.width / 2 + 0.9, z: depthM / 2 - reception.depth / 2 - 0.9 },
     } as FurnitureItem;
-    const result = tryAdd(base, current, floorIndex, [item]);
-    current = result.layout; added += result.accepted; dropped += result.dropped;
+    accept(tryAdd(base, current, floorIndex, [item]));
   }
   layouts.push(current);
 
@@ -351,8 +373,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
         const slot = slots[index]!;
         const desk = { ...deskEntry, id: uid(), position: slot, rotation: 0 } as FurnitureItem;
         const chair = { ...chairEntry, id: uid(), position: { x: slot.x, z: slot.z + 0.7 }, rotation: Math.PI } as FurnitureItem;
-        const result = tryAdd(base, current, floorIndex, [desk, chair]);
-        current = result.layout; added += result.accepted; dropped += result.dropped;
+        accept(tryAdd(base, current, floorIndex, [desk, chair]));
         // 一排长一帧：80 套别播成 160 帧把预览拖穿。
         if (index % cols === cols - 1 || index === slots.length - 1) layouts.push(current);
       }
@@ -369,8 +390,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
       const tableIdsBefore = new Set((current.floors[floorIndex]?.items ?? []).filter(item => item.type === 'dining-table').map(item => item.id));
       for (const center of slots.slice(0, count)) {
         const items = buildFurnitureSet(dining, { center, roomWidth: widthM, roomDepth: depthM }).map(withId);
-        const result = tryAdd(base, current, floorIndex, items);
-        current = result.layout; added += result.accepted; dropped += result.dropped;
+        accept(tryAdd(base, current, floorIndex, items));
       }
       // 座位优先：只给这一版新摆的桌子补座，锁着的老桌子不碰。
       if (seatPriority && (input.guests ?? 0) > 0) {
@@ -387,8 +407,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
     .filter(item => item.id.includes('decor') && (item.type === 'plant' || item.type === 'flowerpot'))
     .map(withId);
   if (plants.length) {
-    const result = tryAdd(base, current, floorIndex, plants);
-    current = result.layout; added += result.accepted; dropped += result.dropped;
+    accept(tryAdd(base, current, floorIndex, plants));
   }
   layouts.push(current);
 
@@ -404,7 +423,7 @@ export function proposePlan(input: PlanInput): PlanProposal {
   return {
     layouts, added, removing, keptLocked: locked.length, dropped,
     overlapCount: overlaps.count, overlapNames: overlaps.names, blocked,
-    guests: input.guests ?? null, seats, seatPriority,
+    guests: input.guests ?? null, seats, seatPriority, diagnostics,
   };
 }
 
@@ -465,11 +484,17 @@ export function proposeAddition(input: { base: RoomLayout; floorIndex: number; r
   let items = floor.items.slice();
   const layouts: RoomLayout[] = [base];
   const accepted: AdditionProposal['accepted'] = [];
+  const diagnostics: PlanDiagnostic[] = [];
   let added = 0;
   let dropped = 0;
   for (const request of input.requests) {
     const entry = EVENT_CATALOG.find(catalogItem => catalogItem.materialId === request.materialId);
-    if (!entry) { dropped += request.count; accepted.push({ materialId: request.materialId, name: request.materialId, requested: request.count, placed: 0 }); continue; }
+    if (!entry) {
+      dropped += request.count;
+      accepted.push({ materialId: request.materialId, name: request.materialId, requested: request.count, placed: 0 });
+      diagnostics.push({ severity: 'warning', code: 'UNKNOWN_MATERIAL', count: request.count, names: [request.materialId], message: '物料目录里没有这件' });
+      continue;
+    }
     let placed = 0;
     for (let index = 0; index < request.count; index++) {
       const item = { ...entry, id: uid(), rotation: 0 } as FurnitureItem;
@@ -480,6 +505,9 @@ export function proposeAddition(input: { base: RoomLayout; floorIndex: number; r
     }
     // 一次请求只长一帧：加 10 把椅子不该播 10 帧、把预览拖成十几秒。
     if (placed) layouts.push(withItems(base, floorIndex, items));
+    if (request.count > placed) {
+      diagnostics.push({ severity: 'warning', code: 'NO_SPOT', count: request.count - placed, names: [entry.name], message: '附近没有空位' });
+    }
     dropped += request.count - placed;
     accepted.push({ materialId: request.materialId, name: entry.name, requested: request.count, placed });
   }
@@ -489,5 +517,6 @@ export function proposeAddition(input: { base: RoomLayout; floorIndex: number; r
   return {
     layouts, added, removing: 0, keptLocked: floor.items.filter(item => item.locked && !isStructuralMarker(item)).length,
     dropped, overlapCount: overlaps.count, overlapNames: overlaps.names, blocked, accepted, guests: null, seats: 0,
+    diagnostics,
   };
 }

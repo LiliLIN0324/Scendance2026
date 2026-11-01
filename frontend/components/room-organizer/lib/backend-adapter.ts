@@ -168,7 +168,7 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
       throw new SceneAdapterError('UNKNOWN_PRESET_NODE', '场景预设节点不在已归档的模型中，未保存。');
     }
     if ((item.type === 'glb-asset' || item.glbUrl) && !assetId && presetNode === undefined) {
-      throw new SceneAdapterError('LOCAL_ASSET_NOT_UPLOADED', '本地 GLB 样例尚未归档到云端，不能作为云资产保存。');
+      throw new SceneAdapterError('LOCAL_ASSET_NOT_UPLOADED', '本地模型尚未归档到云端，不能作为云资产保存。');
     }
     const inferred = Object.entries(rendererTypes).find(([, type]) => type === item.type)?.[0];
     const materialId = item.materialId ?? inferred;

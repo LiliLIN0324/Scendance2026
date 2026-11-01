@@ -63,9 +63,43 @@
   font-size: var(--fs-c1, 14px);
   cursor: pointer;
 }
-.sc-plan-act:disabled {
+.sc-plan-act:disabled,
+.sc-plan-act.is-disabled {
   background: var(--plane, #f4f5f7);
   color: var(--faint, #a1a1aa);
   cursor: not-allowed;
+}
+.sc-plan-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--wk-ink-soft, #71767e);
+  font-size: var(--fs-cap, 12px);
+}
+.sc-plan-custom label { display: inline-flex; align-items: center; gap: 4px; }
+.sc-plan-custom input {
+  width: 72px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 6px;
+  background: var(--paper, #fff);
+  color: var(--wk-ink, #141416);
+  font: inherit;
+  font-size: var(--fs-c1, 13px);
+}
+.sc-plan-custom input:focus {
+  outline: none;
+  border-color: var(--wk-green, #4a7c59);
+  box-shadow: 0 0 0 2px var(--wk-green-pale, #eef3ef);
+}
+.sc-plan-need {
+  margin: 0;
+  text-align: center;
+  color: var(--wk-ink-soft, #71767e);
+  font-size: var(--fs-cap, 12px);
+  line-height: 1.4;
 }
 .sc-canvas-stage.is-plan-home .sc-agent-reopen.is-orb { right: 14px; }

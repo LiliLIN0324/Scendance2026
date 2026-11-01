@@ -26,9 +26,11 @@ import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/a
 import { AmapVenuePicker } from './amap-venue-picker';
 import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
+import { describeDiagnostics, type PlanDiagnostic } from '../lib/diagnostics';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { sameLayoutContent } from '../lib/persistence';
+import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicable } from '../lib/plan-artifact';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import { venueBriefLine } from '../lib/venue-brief-line';
@@ -98,6 +100,8 @@ interface ProposalView extends PendingPlan {
   review?: boolean;
   /** 体检里锁着或找不到落点、没动的物料名。 */
   skipped?: string[];
+  /** 没放进去的件数与原因；有它就按条说，不再只报一个总数。 */
+  diagnostics?: PlanDiagnostic[];
 }
 
 /** 本地候选那份读数直接搬到卡片上（生成器已经算好了件数与重叠）。 */
@@ -107,7 +111,23 @@ function viewOfLocalPlan(plan: PlanProposal): ProposalView {
     overlapCount: plan.overlapCount, overlapNames: plan.overlapNames,
     source: 'local', keptLocked: plan.keptLocked, dropped: plan.dropped, blocked: plan.blocked,
     guests: plan.guests ?? null, seats: plan.seats ?? 0, seatPriority: !!plan.seatPriority,
-    review: plan.kind === 'review', skipped: plan.skipped ?? [],
+    review: plan.kind === 'review', skipped: plan.skipped ?? [], diagnostics: plan.diagnostics ?? [],
+  };
+}
+
+/** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
+function withPlanArtifact(plan: PlanProposal, base: RoomLayout): PlanProposal {
+  const candidate = plan.layouts[plan.layouts.length - 1];
+  if (!candidate) return plan;
+  return {
+    ...plan,
+    artifact: makePlanArtifact({
+      base, candidate,
+      counts: {
+        added: plan.added, removed: plan.removing, moved: plan.moved ?? 0,
+        keptLocked: plan.keptLocked, dropped: plan.dropped, overlap: plan.overlapCount,
+      },
+    }),
   };
 }
 
@@ -122,7 +142,10 @@ function planLines(view: ProposalView): string[] {
   }
   if (view.removing) lines.push(`红框是要撤掉的 ${view.removing} 件`);
   if (view.keptLocked) lines.push(`锁定 ${view.keptLocked} 件我没动`);
-  if (view.dropped) lines.push(`${view.dropped} 件放不下，没采纳`);
+  const droppedLine = view.diagnostics?.length
+    ? describeDiagnostics(view.diagnostics)
+    : view.dropped ? `${view.dropped} 件放不下，没采纳` : null;
+  if (droppedLine) lines.push(droppedLine);
   if (view.skipped?.length) lines.push(`${view.skipped.length} 件没动：${view.skipped.slice(0, 4).join('、')}${view.skipped.length > 4 ? ' 等' : ''}`);
   // 人数是这一版的条件：摆得下就说摆了几座，摆不下就直说多少人得站着，不拿「已按 80 人布置」糊过去。
   // 已经按「加座」重排过还差人，就报场地最多能坐多少，不再暗示再点一次就能补齐。
@@ -442,7 +465,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       kind: 'review',
       skipped: [...new Set(result.skipped.map(skip => skip.name))],
     };
-    proposal.current = plan; proposalBase.current = base;
+    proposal.current = withPlanArtifact(plan, base); proposalBase.current = base;
     // 画布本来就是改之前的样子，省掉基线那一帧，直接看挪完的结果。
     shownSteps.current = 1;
     lastSource.current = 'local';
@@ -474,7 +497,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     if (!pending) proposalBase.current = live.current;
-    proposal.current = plan;
+    proposal.current = withPlanArtifact(plan, proposalBase.current ?? live.current);
     // 画布本来就是「加之前」的样子：省掉基线那一帧，直接看加上之后的结果。
     shownSteps.current = 1;
     const lead = placed < request.count
@@ -656,10 +679,18 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const phaseRef = useRef(phase); phaseRef.current = phase;
 
   // 提案算的是「从这一帧场景出发」的候选：人手动改过物料或场地，旧候选就不再代表现状，作废。
+  // 有身份就比内容指纹；没有身份（旧数据）才退回对象引用。
   const pendingPhase = phase === 'proposed' || phase === 'paused';
   useEffect(() => {
     if (!pendingPhase) return;
-    if (!proposal.current || !proposalBase.current || live.current === proposalBase.current) return;
+    const plan = proposal.current;
+    if (!plan) return;
+    if (plan.artifact) {
+      const check = planIsApplicable(plan.artifact, live.current);
+      if (!check.ok) invalidateProposal(PLAN_OBSOLETE_COPY[check.reason]);
+      return;
+    }
+    if (!proposalBase.current || live.current === proposalBase.current) return;
     invalidateProposal('画布在这期间被改过了');
   }, [layout, pendingPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -860,7 +891,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
     }
-    proposal.current = plan; proposalBase.current = live.current; shownSteps.current = 0;
+    proposal.current = withPlanArtifact(plan, live.current); proposalBase.current = live.current; shownSteps.current = 0;
     await presentProposal(token);
   }
 
@@ -873,15 +904,20 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     const plan = proposal.current;
     if (!plan) { confirmCloud(); return; }
     if (plan.blocked) { say({ role: 'agent', amber: true, text: plan.blocked }); return; }
-    if (proposalBase.current && live.current !== proposalBase.current) { invalidateProposal('场景在这期间改过了'); return; }
-    try { onApply(plan.layouts[plan.layouts.length - 1]!); }
+    const final = plan.layouts[plan.layouts.length - 1];
+    if (!final) { invalidateProposal('这一版没有可落盘的候选'); return; }
+    if (plan.artifact) {
+      const check = planIsApplicable(plan.artifact, live.current);
+      if (!check.ok) { invalidateProposal(PLAN_OBSOLETE_COPY[check.reason]); return; }
+      if (!planCoversLayout(plan.artifact, final)) { invalidateProposal(PLAN_OBSOLETE_COPY['layout-mismatch']); return; }
+    } else if (proposalBase.current && live.current !== proposalBase.current) { invalidateProposal('场景在这期间改过了'); return; }
+    try { onApply(final); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。' });
       return;
     }
     const added = plan.added;
-    const final = plan.layouts[plan.layouts.length - 1];
-    const finalFloor = final?.floors[Math.min(activeFloorIndex, final.floors.length - 1)];
+    const finalFloor = final.floors[Math.min(activeFloorIndex, final.floors.length - 1)];
     const total = finalFloor ? finalFloor.items.filter(item => !isStructuralMarker(item)).length : added;
     const review = plan.kind === 'review';
     const moved = plan.moved ?? 0;
@@ -1569,7 +1605,11 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const demo = isDemoBackend();
   const items = materialCount(activeFloor.items);
-  useEffect(() => { feed.current?.scrollTo?.({ top: feed.current.scrollHeight }); }, [agent.bubbles.length, agent.state, mode]);
+  // 空会话要让人先看见顶上那句指路，别一进来就滚到底。
+  useEffect(() => {
+    if (agent.bubbles.length === 0 && mode === 'layout') return;
+    feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
+  }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
@@ -1622,6 +1662,10 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
       <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* index-only for now */ }} />
     <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
+      {mode === 'layout' && agent.bubbles.length === 0 && agent.state !== 'generating' && <div className="ap-lead">
+        <p className="ap-lead-title">先说一句，或从下面挑</p>
+        <p className="ap-lead-body">选好活动、场地和人数，我会先给一版布置建议；你确认后才写进画布。</p>
+      </div>}
       {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {mode === 'review' && <><p className="ap-divider">评审 · {layout.name || '未命名活动'}</p><p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p></>}
       {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}

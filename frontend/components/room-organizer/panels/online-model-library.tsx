@@ -16,6 +16,7 @@ import { loadOnlineCatalogItem } from '../lib/online-model-placement';
 import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { MaterialCreateCell } from './material-create-cell';
+import { MaterialThumb } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
@@ -74,7 +75,6 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
   const [busy, setBusy] = useState<string | null>(null);
   const [bucketMore, setBucketMore] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [failedThumbnails, setFailedThumbnails] = useState<ReadonlySet<string>>(new Set());
   const [meta, setMeta] = useState<MaterialLibraryMeta>(emptyMaterialLibraryMeta);
   const [generated, setGenerated] = useState<GeneratedCard[]>([]);
   const [pending, setPending] = useState<GeneratedCard[]>([]);
@@ -267,10 +267,9 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
             }}
             onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n拖到空间或直接点击添加`}>
             <span className="sc-material-preview">
-              {model.thumb && !failedThumbnails.has(model.slug)
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img className="sc-material-thumb" src={model.thumb} alt="" draggable={false} loading="lazy" decoding="async" onError={() => setFailedThumbnails(current => new Set(current).add(model.slug))}/>
-                : <span className="sc-material-thumb-empty">{model.thumb ? '预览未载入' : '暂无预览'}</span>}
+              {model.thumb
+                ? <MaterialThumb src={model.thumb}/>
+                : <span className="sc-material-thumb-empty">暂无预览</span>}
               {busy === model.slug && <span className="sc-material-add"><Loader2 className="cr-spin" size={12}/></span>}
             </span>
             <span className="sc-material-name">{name}</span>
@@ -302,8 +301,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
             aria-label={pendingCard ? `生成中 ${card.name}` : `添加${card.name}`} title={`${card.name}\n生成`}>
             <span className="sc-material-preview">
               {card.image
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img className="sc-material-thumb" src={card.image} alt="" draggable={false} loading="lazy" decoding="async"/>
+                ? <MaterialThumb src={card.image}/>
                 : <span className="sc-material-thumb-empty">{busy === card.id ? <Loader2 className="cr-spin" size={14}/> : '生成'}</span>}
             </span>
             <span className="sc-material-name">{card.name}</span>

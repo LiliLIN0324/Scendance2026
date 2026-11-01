@@ -19,7 +19,8 @@ describe('plan flow v2', () => {
     const onGenerate = vi.fn();
     render(<PlanHome onGenerate={onGenerate} />);
     const generate = screen.getByRole('button', { name: '生成方案' }) as HTMLButtonElement;
-    expect(generate.disabled).toBe(true);
+    expect(generate.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('status').textContent).toBe('还差：活动、场地、人数');
     expect(generate.className).not.toContain('btn-primary');
     expect(screen.queryByRole('tab', { name: '布置' })).toBeNull();
     expect(screen.queryByText(/Scene|Object|Compose|WorldGen|Meshy|Spline/)).toBeNull();
@@ -27,10 +28,28 @@ describe('plan flow v2', () => {
     fireEvent.click(screen.getByRole('button', { name: '发布会' }));
     fireEvent.click(screen.getByRole('button', { name: '室内 12×9' }));
     fireEvent.click(screen.getByRole('button', { name: '80 人' }));
-    expect(generate.disabled).toBe(false);
+    expect(generate.getAttribute('aria-disabled')).toBe('false');
     fireEvent.click(generate);
     expect(onGenerate).toHaveBeenCalledWith('80 人发布会，室内 12×9，出方案');
     expect(planGenerateSentence('发布会', '室内 12×9', 80)).toBe('80 人发布会，室内 12×9，出方案');
+  });
+
+  it('takes a custom venue and headcount, and explains a grey button', () => {
+    const onGenerate = vi.fn();
+    render(<PlanHome onGenerate={onGenerate} />);
+    const generate = screen.getByRole('button', { name: '生成方案' });
+    fireEvent.click(screen.getByRole('button', { name: '品牌快闪' }));
+    fireEvent.click(generate);
+    expect(screen.getByRole('status').textContent).toBe('先选好场地、人数，再生成方案。');
+
+    fireEvent.click(screen.getByRole('button', { name: '自定义场地' }));
+    fireEvent.change(screen.getByLabelText('场地宽度（米）'), { target: { value: '16' } });
+    fireEvent.change(screen.getByLabelText('场地深度（米）'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: '自定义人数' }));
+    fireEvent.change(screen.getByLabelText('人数（人）'), { target: { value: '200' } });
+    expect(screen.queryByRole('status')).toBeNull();
+    fireEvent.click(generate);
+    expect(onGenerate).toHaveBeenCalledWith('200 人快闪，16×10 米，出方案');
   });
 
   it('does not mount a canvas switch for 布置 / 物料 / 执行资料 after a plan exists', () => {

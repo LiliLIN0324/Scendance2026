@@ -21,9 +21,9 @@ const BASE = '/showcase/assets/generated';
 export const SHIPPED_ASSETS: readonly ShippedAsset[] = [
   { assetId: 'shipped-chinese-wood-armchair', kind: 'glb', name: '中式木扶手椅', path: 'model/chinese-wood-armchair.glb', bytes: 6433368, image: 'thumb/chinese-wood-armchair.png' },
   { assetId: 'shipped-white-round-table', kind: 'glb', name: '白色圆桌', path: 'model/white-round-table.glb', bytes: 2784124, image: 'thumb/white-round-table.png' },
-  { assetId: 'shipped-scendance-m3-mvp', kind: 'spz', name: 'Scendance-M3-MVP', path: 'scene/scendance-m3-mvp.spz', bytes: 4388248, image: 'scene/scendance-m3-mvp.panorama.jpg' },
-  { assetId: 'shipped-small-launch-hall', kind: 'spz', name: '小型发布会场地', path: 'scene/small-launch-hall.spz', bytes: 4837840, image: 'scene/small-launch-hall.panorama.jpg' },
-  { assetId: 'shipped-cloud-e2e-banquet', kind: 'spz', name: '云E2E·宴会厅文生', path: 'scene/cloud-e2e-banquet.spz', bytes: 4446785, image: 'scene/cloud-e2e-banquet.panorama.jpg' },
+  { assetId: 'shipped-scendance-m3-mvp', kind: 'spz', name: '宴会厅 A', path: 'scene/scendance-m3-mvp.spz', bytes: 4388248, image: 'scene/scendance-m3-mvp.panorama.jpg' },
+  { assetId: 'shipped-small-launch-hall', kind: 'spz', name: '发布会小厅', path: 'scene/small-launch-hall.spz', bytes: 4837840, image: 'scene/small-launch-hall.panorama.jpg' },
+  { assetId: 'shipped-cloud-e2e-banquet', kind: 'spz', name: '宴会厅 B', path: 'scene/cloud-e2e-banquet.spz', bytes: 4446785, image: 'scene/cloud-e2e-banquet.panorama.jpg' },
 ];
 
 /**

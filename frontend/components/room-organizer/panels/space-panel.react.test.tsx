@@ -35,7 +35,7 @@ describe('SpacePanel', () => {
     rememberAholoAsset({ assetId: '00000000-0000-4000-8000-000000000000', kind: 'spz', name: '午后咖啡馆', bytes: 20_000_000, savedAt: 1 });
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview}/>);
     const card = await screen.findByRole('button', { name: '预览午后咖啡馆' });
-    expect(screen.getByRole('button', { name: '预览小型发布会场地（样例·非本场）' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '预览发布会小厅（样例·非本场）' })).toBeTruthy();
     fireEvent.click(card);
     expect(preview.onStart).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000000');
   });

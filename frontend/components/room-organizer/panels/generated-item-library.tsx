@@ -6,6 +6,7 @@ import { listAholoAssets } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import type { CatalogItem } from '../lib/types';
+import { MaterialThumb } from './material-thumb';
 
 type ItemCard = { assetId: string; name: string; image?: string; shipped: boolean };
 
@@ -61,9 +62,8 @@ export function GeneratedItemLibrary({ disabled = false, onAdd }: {
           aria-label={`添加${asset.name}`} title={`${asset.name}\n点击添加`}>
           <span className="sc-material-preview">
             {asset.image
-              // eslint-disable-next-line @next/next/no-img-element
-              && <img className="sc-material-thumb" src={asset.image} alt="" draggable={false} loading="lazy" decoding="async"/>}
-            {!asset.image && <span className="sc-material-thumb-empty">{busy === asset.assetId ? <Loader2 className="cr-spin" size={14}/> : '◇'}</span>}
+              ? <MaterialThumb src={asset.image}/>
+              : <span className="sc-material-thumb-empty">{busy === asset.assetId ? <Loader2 className="cr-spin" size={14}/> : '◇'}</span>}
             {busy === asset.assetId && <span className="sc-material-add"><Loader2 className="cr-spin" size={12}/></span>}
           </span>
           <span className="sc-material-name">{asset.name}</span>
