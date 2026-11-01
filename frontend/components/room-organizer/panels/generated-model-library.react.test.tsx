@@ -14,10 +14,10 @@ const assetId = '20000000-0000-4000-8000-000000000001';
 const legacyIntent = { requestId: '30000000-0000-4000-8000-000000000001', prompt: '旧面板中的木椅' };
 const sessionKey = 'scendance:3d-intent:member';
 const localKey = () => intentStorageKey(controller.config.apiUrl, 'member');
-function job(state: GenerationJob['state'] = 'queued'): GenerationJob {
+function job(state: GenerationJob['state'] = 'queued', updatedAt = '2026-10-03T03:00:00Z'): GenerationJob {
   return { id, owner_id: 'member', prompt: '绿色藤编椅', state, asset_id: state === 'ready' ? assetId : null,
     provider_job_id: null, next_poll_at: '2026-10-03T03:00:00Z', attempts: 0, error_code: null,
-    provider_usage: null, created_at: '2026-10-03T03:00:00Z', updated_at: '2026-10-03T03:00:00Z' };
+    provider_usage: null, created_at: '2026-10-03T03:00:00Z', updated_at: updatedAt };
 }
 let controller: BackendSession;
 let list: MockInstance<BackendSession['listGenerationJobs']>;
@@ -64,6 +64,17 @@ describe('single object generation UI', () => {
     expect(screen.getByRole('status').textContent).toContain('待核对');
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(list).toHaveBeenCalledOnce(); expect(create).not.toHaveBeenCalled();
+  });
+
+  it('watches a fresh submit_unknown until the worker releases the grace window', async () => {
+    vi.useFakeTimers();
+    list.mockResolvedValueOnce([job('submit_unknown', new Date().toISOString())]).mockResolvedValue([job('failed')]);
+    render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole('status').textContent).toContain('待核对');
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(screen.getByRole('status').textContent).toContain('生成失败');
+    expect(list).toHaveBeenCalledTimes(2); expect(create).not.toHaveBeenCalled();
   });
 
   it('resumes active task status reads without another generation', async () => {
