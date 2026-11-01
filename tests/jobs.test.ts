@@ -37,6 +37,36 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
     await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
   });
+  it('releases an ambiguous submission after the grace window instead of locking the queue',async()=>{
+    const j=await f.jobs(owner,'jobs.create',input());
+    await f.jobs(null,'jobs.claim');
+    await f.db.query("update scene_private.generation_jobs set worker_until=now()-interval '1 second' where id=$1",[j.id]);
+    expect(await f.jobs(null,'jobs.claim')).toBeNull();
+    // Inside the window the ambiguity is still shown to the user and the fence stays taken.
+    await f.db.query("update scene_private.generation_jobs set updated_at=now()-interval '9 minutes' where id=$1",[j.id]);
+    expect(await f.jobs(null,'jobs.claim')).toBeNull();
+    expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
+    await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
+    // Past the window the claim sweep fails it terminally: never a resubmit, but the fence frees up.
+    await f.db.query("update scene_private.generation_jobs set updated_at=now()-interval '11 minutes' where id=$1",[j.id]);
+    expect(await f.jobs(null,'jobs.claim')).toBeNull();
+    const expired=await f.jobs(owner,'jobs.get',{id:j.id});
+    expect(expired.state).toBe('failed');expect(expired.error_code).toBe('SUBMIT_RESULT_UNKNOWN_EXPIRED');
+    expect((await f.db.query<{state:string}>('select state from scene_private.requests where id=$1',[j.id])).rows[0].state).toBe('failed');
+    await expect(f.jobs(owner,'jobs.create',input())).resolves.toMatchObject({state:'queued'});
+  });
+  it('resolves one ambiguous submission on demand for its owner only',async()=>{
+    const j=await f.jobs(owner,'jobs.create',input());
+    await f.jobs(null,'jobs.claim');
+    await f.db.query("update scene_private.generation_jobs set worker_until=now()-interval '1 second' where id=$1",[j.id]);
+    await f.jobs(null,'jobs.claim');
+    expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
+    await expect(f.jobs(editor,'jobs.resolve_unknown',{id:j.id})).rejects.toThrow('FORBIDDEN');
+    const resolved=await f.jobs(owner,'jobs.resolve_unknown',{id:j.id});
+    expect(resolved.state).toBe('failed');expect(resolved.error_code).toBe('SUBMIT_RESULT_UNKNOWN_CONFIRMED');
+    await expect(f.jobs(owner,'jobs.resolve_unknown',{id:j.id})).rejects.toThrow('INVALID_JOB_TRANSITION');
+    await expect(f.jobs(owner,'jobs.create',input())).resolves.toMatchObject({state:'queued'});
+  });
   it('expires an old queued task before making a paid submission',async()=>{
     const j=await f.jobs(owner,'jobs.create',input());
     await f.db.query("update scene_private.generation_jobs set created_at=now()-interval '24 hours' where id=$1",[j.id]);
