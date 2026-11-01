@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,7 +74,7 @@ describe('independent customer review panel', () => {
   it('loads only saved text and clears every disclosure and capture permission', async () => {
     vi.mocked(readProjectReviewLibrary).mockResolvedValue({version:1,files:[],draft:{revision:'draft-1',summary:'保存的方案说明',pending:'保存的待确认项',savedAt:'2026-10-09T00:00:00Z'}});
     setup({},JSON.stringify(['api','account-a',initialSource.scope]));
-    fireEvent.click(screen.getByText('本机草稿与文件',{exact:true}));
+    fireEvent.click(screen.getByText('草稿与文件',{exact:true}));
     for(const name of ['包含当前活动需求','包含当前设计说明','包含当前画面','允许在评审画面中包含当前参考底图'])fireEvent.click(screen.getByLabelText(name,{exact:true}));
     const load=await screen.findByRole('button',{name:'载入已保存说明'});await waitFor(()=>expect((load as HTMLButtonElement).disabled).toBe(false));fireEvent.click(load);
     await waitFor(()=>expect((screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement).value).toBe('保存的方案说明'));

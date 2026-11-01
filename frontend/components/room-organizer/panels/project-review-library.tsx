@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -96,7 +96,7 @@ export function ProjectReviewLibraryPanel(props: ProjectReviewLibraryPanelProps)
   function saveDraft(): void {
     if (blocked || !data || draftRevision.current?.epoch !== epoch) return;
     const submitted = { ...props.draft }, expectedRevision = draftRevision.current.revision;
-    void run('draft-save', '说明草稿未能核实保存，请重新读取本机资料后重试。当前输入已保留。', async token => {
+    void run('draft-save', '说明草稿未能核实保存，请重新读取资料后重试。当前输入已保留。', async token => {
       const draft = await saveProjectReviewDraft(token.key, submitted, expectedRevision);
       if (!current(token)) return;
       const fresh = checked(await readProjectReviewLibrary(token.key), token.scope);
@@ -128,7 +128,7 @@ export function ProjectReviewLibraryPanel(props: ProjectReviewLibraryPanelProps)
     const file = props.file;
     const input = { id: file.snapshot.snapshot.id, title: file.snapshot.current.layout.name,
       generatedAt: file.snapshot.snapshot.generatedAt, source: { ...file.snapshot.source }, html: file.html };
-    void run('file-save', '当前评审文件未能核实保存。请重新读取本机资料或重新准备评审文件。', async token => {
+    void run('file-save', '当前评审文件未能核实保存。请重新读取资料或重新准备评审文件。', async token => {
       const verify = () => {
         if (!current(token) || latest.current.file !== file || latest.current.file.html !== input.html ||
           input.source.scope !== token.scope || !sameSource(latest.current.file.snapshot.source, input.source) ||
@@ -174,7 +174,7 @@ export function ProjectReviewLibraryPanel(props: ProjectReviewLibraryPanelProps)
     <p className="sc-note">说明草稿只保存两段文字。载入会替换当前说明并重置公开选项，不载入历史画面或公开许可。</p>
     <p className="sc-note">本机说明和历史文件不会随场景与活动备份迁移；历史文件可单独下载带走。</p>
     <p className="sc-note">最多保留 {MAX_PROJECT_REVIEW_FILES} 份文件，每份 {MAX_PROJECT_REVIEW_FILE_BYTES / 1024 / 1024} MiB、合计 {MAX_PROJECT_REVIEW_LIBRARY_BYTES / 1024 / 1024} MiB。满后请先删除不再需要的本机副本。</p>
-    <p className="sc-note">{dirty ? '当前说明有未保存修改。' : '当前说明没有未保存修改。'}{data?.draft ? ` 本机草稿保存于 ${time(data.draft.savedAt)}。` : ready ? ' 尚无本机说明草稿。' : ''}</p>
+    <p className="sc-note">{dirty ? '当前说明有未保存修改。' : '当前说明没有未保存修改。'}{data?.draft ? ` 草稿保存于 ${time(data.draft.savedAt)}。` : ready ? ' 尚无本机说明草稿。' : ''}</p>
     <div className="sc-project-review-actions">
       <button type="button" className="sc-button" disabled={blocked} onClick={saveDraft}>保存说明草稿</button>
       <button type="button" className="sc-button" disabled={blocked || !data?.draft} onClick={loadDraft}>载入已保存说明</button>
@@ -182,7 +182,7 @@ export function ProjectReviewLibraryPanel(props: ProjectReviewLibraryPanelProps)
         props.onLoadDraft({ ...baseline.current.text }); setError(''); setNotice('已放弃本次说明修改，并重置公开选项。');
       }}>放弃说明修改</button>}
       <button type="button" className="sc-button" disabled={blocked || !props.file || props.file.snapshot.images.some(image => image.approvedForCustomer !== true)} onClick={saveFile}>保存当前评审文件</button>
-      <button type="button" className="sc-button" disabled={props.disabled || !!busy} onClick={() => void read()}>{readState === 'error' ? '重试读取本机资料' : '重新读取本机资料'}</button>
+      <button type="button" className="sc-button" disabled={props.disabled || !!busy} onClick={() => void read()}>{readState === 'error' ? '重试读取资料' : '重新读取资料'}</button>
     </div>
     {busy && <p className="sc-note" role="status">{busy === 'read' ? '正在读取本机评审资料…' : '正在处理本机评审资料…'}</p>}
     {data && <details><summary>本机评审文件（{data.files.length}）</summary>

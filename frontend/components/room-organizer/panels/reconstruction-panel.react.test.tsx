@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act,cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import { BackendSession,getBackendConfig,type ReconstructionJob,type SceneProposal } from '@/lib/backend-session';
@@ -573,7 +573,7 @@ describe('local activity with an independent scene connection',()=>{
   bind();const state=controller.getSnapshot();vi.mocked(readSourceForm).mockResolvedValue({jobId,jobIdentity:identity(),jobSession:session()});
   vi.mocked(controller.getSnapshot).mockReturnValue({...state,project:null,lease:null,geometryBinding:null,writeBlocked:true});
   const resume=vi.spyOn(controller,'resumeGeometryWorkbench').mockResolvedValue(null),ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady'),create=vi.spyOn(controller,'createReconstruction');mount();
-  await screen.findByText('原任务的场景连接未能恢复，任务编号与本机资料已保留。');
+  await screen.findByText('原任务的场景连接未能恢复，任务编号与资料已保留。');
   expect(resume).toHaveBeenCalledWith(layoutToBackendScene(local),local.name,localId);expect(ensure).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();
  });
  it('does not restore an old local job for another account',async()=>{

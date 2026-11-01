@@ -91,17 +91,17 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
     if (before !== layoutRef.current) throw new Error('确认期间画布已变化，请检查后重新加入素材。');
     const next = addAssetToLayout(before, { ...preview.asset, ...authorized }, size);
     onApplyLayout(next); setPreview(null);
-    setNotice(bound?'素材已加入当前画布，可撤销；尚未保存到云端。请使用“保存到云端”提交。':'素材已加入当前画布，可撤销。请留意本机保存状态。');
+    setNotice(bound?'素材已加入当前画布，可撤销；尚未保存。请使用“保存”提交。':'素材已加入当前画布，可撤销。请留意保存状态。');
   }
 
-  return <section className="sc-assets" aria-label="个人云素材">
-    <button type="button" className="sc-assets-toggle" aria-expanded={open} aria-controls="sc-assets-content" onClick={() => setOpen(value => !value)}>个人云素材 <span aria-hidden="true">{open ? '−' : '+'}</span></button>
+  return <section className="sc-assets" aria-label="素材库">
+    <button type="button" className="sc-assets-toggle" aria-expanded={open} aria-controls="sc-assets-content" onClick={() => setOpen(value => !value)}>素材库 <span aria-hidden="true">{open ? '−' : '+'}</span></button>
     {open && <div id="sc-assets-content">
-      {!userId ? <p>请先登录工作室，再查看个人云素材。</p> : <>
-        <p className="sc-assets-intro">查看你的云素材。公共模型继续在工作台物料库中挑选。</p>
-        <div className="sc-assets-section-heading"><h4>本人云素材</h4><button type="button" disabled={!!pending || busy} onClick={() => void run('刷新素材', refreshAssets)}>刷新素材</button></div>
+      {!userId ? <p>登录后查看素材。</p> : <>
+        <p className="sc-assets-intro">可复用的场景物料。</p>
+        <div className="sc-assets-section-heading"><h4>素材</h4><button type="button" disabled={!!pending || busy} onClick={() => void run('刷新素材', refreshAssets)}>刷新素材</button></div>
         {loading && <p role="status">正在更新素材…</p>}
-        {!loading && !assets.length && <p>还没有个人云素材。公共模型位于工作台的“物料库”。</p>}
+        {!loading && !assets.length && <p>还没有素材。</p>}
         <ul className="sc-assets-list">{assets.map(asset => <li key={asset.id}><div><strong>{asset.name}</strong><small>{asset.source === 'polyhaven' ? 'Poly Haven' : asset.source} · {asset.format.toUpperCase()} · {(asset.byte_size / 1024 / 1024).toFixed(1)} MB</small></div>
           {asset.format === 'glb' ? <button type="button" disabled={!!pending || busy} onClick={() => void run('加载模型预览', account => loadPreview(asset.id, account))}>预览 {asset.name}</button> : <span>场地底图</span>}
         </li>)}</ul>
@@ -112,7 +112,7 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
           <div className="sc-assets-dimensions">{([['width', '宽'], ['depth', '深'], ['height', '高']] as const).map(([field, label]) => <label key={field}>{label}（米）<input aria-label={`模型${label}（米）`} type="number" min={field === 'height' ? .01 : .1} max={field === 'height' ? 30 : 50} step="0.01" value={Number.isNaN(size[field]) ? '' : size[field]} onChange={event => setSize(value => ({ ...value, [field]: event.target.value === '' ? NaN : Number(event.target.value) }))}/></label>)}</div>
           <div className="sc-assets-actions"><button type="button" className="sc-assets-primary" disabled={!validAssetSize(size) || !canAdd || !!pending} onClick={() => void run('加入模型', addPreview)}>确认加入当前画布</button><button type="button" disabled={!!pending || busy} onClick={() => void run('更新素材授权', account => loadPreview(preview.asset.id, account))}>重新授权</button></div>
           {!canAdd && <p>当前项目正在操作或尚无编辑权，请获取编辑权后加入。</p>}
-          <small>加入位置为场地中央。可在画布移动、复制或撤销；{bound?'加入后仍需保存到云端。':'加入后请核对本机保存状态，模型保留原引用。'}</small>
+          <small>加入位置为场地中央。可在画布移动、复制或撤销；{bound?'加入后仍需保存。':'加入后请核对保存状态，模型保留原引用。'}</small>
         </section>}
       </>}
       {pending && <p role="status">正在{pending}…</p>}

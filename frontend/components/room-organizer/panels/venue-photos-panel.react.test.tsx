@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -50,7 +50,7 @@ describe('venue photo viewer', () => {
     rendered.rerender(view(false));
     expect(screen.getByRole('img', { name: '现场照片：场地.jpg' }).getAttribute('src')).toBe(photo.url);
     fireEvent.click(screen.getByRole('button', { name: '放大 场地.jpg' }));
-    expect(screen.getByText('本机资料 · 生成时提交模型')).toBeTruthy();
+    expect(screen.getByText('资料 · 生成时提交模型')).toBeTruthy();
     expect(removeImage).not.toHaveBeenCalled();
   });
 

@@ -152,7 +152,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
       // Provider restore may itself replace the baseline; only its intended activity may receive completion.
       if (active(token) && !baseline.current.disabled && baseline.current.permissionEpoch === token.permissionEpoch &&
           (baseline.current.epoch === token.epoch || baseline.current.scope === targetScope)) {
-        setNotice({ scope: targetScope, text: `已打开「${candidate.layout.name}」，原活动已归档到本机。` });
+        setNotice({ scope: targetScope, text: `已打开「${candidate.layout.name}」。` });
         setError(''); if (!targetId) setName(''); onComplete?.();
       }
     } catch (caught) {
@@ -176,13 +176,13 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   const currentItems = layout.floors.reduce((count, floor) => count + floor.items.length, 0);
   const currentName = layout.name || '未命名活动';
 
-  return <section ref={sectionRef} className="sc-local-activities" aria-label="本机活动">
+  return <section ref={sectionRef} className="sc-local-activities" aria-label="最近活动">
     {identityMissing && <p className="sc-handoff-error" role="alert">请先保存有明确编号的当前活动，再新建或打开其他活动。</p>}
     {showCreate && <div className="sc-activity-group">
       <header className="sc-activity-head">
-        <div className="sc-settings-title"><h3>新建本机活动</h3><InfoTip label="本机活动说明"><strong>切换前自动归档</strong><span>新建或打开前，先将当前完整活动归档到本机；照片附件和模型文件仍需另行保留。新活动不带入原需求、任务、制作计划、工作单、备注、方案历史、底图附件或点验账册，空场地尺寸之后可按实际修改。</span></InfoTip></div>
+        <div className="sc-settings-title"><h3>新建活动</h3><InfoTip label="新建说明"><strong>切换前自动归档</strong><span>新建或打开前，当前活动会自动存档。新活动不带入原需求、任务、制作计划、方案历史或点验账册。</span></InfoTip></div>
       </header>
-      <form className="sc-activity-form" aria-label="新建本机活动" onSubmit={create}>
+      <form className="sc-activity-form" aria-label="新建活动" onSubmit={create}>
         <fieldset disabled={locked}>
           <label className="sc-field"><span>新活动名称</span><input value={name} maxLength={MAX_NAME_LENGTH} placeholder="输入活动名称" onChange={event => { if (!locked && !pending.current) setName(event.currentTarget.value); }}/></label>
           <div className="sc-local-activities-modes">
@@ -195,13 +195,12 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
     </div>}
     {showList && <div className="sc-activity-group">
       <header className="sc-activity-head">
-        <div className="sc-settings-title"><h3>本机活动</h3><span className="sc-settings-count is-chip">{archives.length + 1} 个</span></div>
+        <div className="sc-settings-title"><h3>最近活动</h3><span className="sc-settings-count is-chip">{archives.length + 1} 个</span></div>
         <button type="button" className="sc-activity-refresh" aria-label="刷新活动列表" title="刷新活动列表" disabled={disabled || busy || listLoading} onClick={() => void refresh()}><RefreshCw size={15} aria-hidden="true"/></button>
       </header>
       {listLoading && <p className="sc-activity-status" role="status">正在读取活动列表…</p>}
       {listError && <p className="sc-handoff-error" role="alert">{listError}</p>}
-      {activities.unreadableProjectIds.length > 0 && <p className="sc-handoff-error" role="alert">有{activities.unreadableProjectIds.length}份本机活动无法读取，原资料已保留。请先核对备份。</p>}
-      {!listLoading && !activities.activities.length && !listError && <p className="sc-activity-status">还没有归档活动。新建或切换活动时，当前画布会自动归档到这里。</p>}
+      {activities.unreadableProjectIds.length > 0 && <p className="sc-handoff-error" role="alert">有{activities.unreadableProjectIds.length}份活动无法读取，资料已保留。请先核对备份。</p>}
       <ul className="sc-local-activities-list">
         <li className="is-current" aria-label={`当前活动「${currentName}」`}>
           <div className="sc-activity-thumb">
@@ -225,6 +224,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
           </div>
         </li>)}
       </ul>
+      {!listLoading && !archives.length && !listError && <p className="sc-activity-status">新建或切换活动时，当前画布会自动归档到这里。</p>}
     </div>}
     {working && <p className="sc-activity-status" role="status">{working === 'prepare' ? '正在准备当前活动…' : working === 'archive' ? '正在归档并核对当前活动…' : working === 'read' ? '正在读取待打开活动…' : '正在打开并核实保存…'}</p>}
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}

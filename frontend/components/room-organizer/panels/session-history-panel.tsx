@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { MessageCirclePlus, Pencil, Search, Star, Trash } from 'lucide-react';
 import { useRef, useState } from 'react';

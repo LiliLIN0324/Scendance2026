@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -246,7 +246,7 @@ export function ProjectReviewPanel({ source, actions, disabled = false, inputLoc
         <button type="button" className="sc-button btn-outline" disabled={disabled || inputLocked || !identityMatches} onClick={onOpenCloudShare}>打开发布管理</button>
       </div>}
     </section>
-    {storageIdentity && <details className="sc-review-library-entry"><summary>本机草稿与文件</summary>
+    {storageIdentity && <details className="sc-review-library-entry"><summary>草稿与文件</summary>
       <ProjectReviewLibraryPanel key={storageIdentity} identityKey={storageIdentity} scope={source.scope}
         draft={identityMatches?{summary:settings.summary,pending:settings.pending}:{summary:'',pending:''}} onLoadDraft={draft=>change({...initialSettings(),...draft})}
         file={ready?file:null} getSource={actions.getSource} disabled={disabled||inputLocked||!identityMatches||working!==null||!sourceMatches}/>

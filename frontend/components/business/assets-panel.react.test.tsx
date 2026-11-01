@@ -43,7 +43,7 @@ function setup(bound = false) {
   const onApplyLayout = vi.fn();
   const props = { controller, layout: backendSceneToLayout(scene), onApplyLayout, bound, busy: false };
   const view = render(<AssetsPanel {...props}/>);
-  fireEvent.click(screen.getByRole('button', { name: '个人云素材' }));
+  fireEvent.click(screen.getByRole('button', { name: '素材库' }));
   return { ...view, props, onApplyLayout };
 }
 describe('personal cloud assets', () => {
@@ -119,6 +119,6 @@ describe('personal cloud assets', () => {
     setup(); fireEvent.click(await screen.findByRole('button', { name: '预览 木椅' }));
     await act(async () => { await controller.signOut(); finish(authorized); });
     expect(screen.queryByRole('region', { name: '三维素材预览' })).toBeNull();
-    expect(screen.getByText(/请先登录工作室/)).toBeTruthy();
+    expect(screen.getByText(/登录后查看素材/)).toBeTruthy();
   });
 });

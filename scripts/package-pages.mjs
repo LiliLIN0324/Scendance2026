@@ -2,9 +2,10 @@ import { cp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { packageScenePresets } from './package-scene-presets.mjs';
 
-// The standalone 幕景 官网 lives at the repository root, not inside the Next app.
-// Mirror it into frontend/public/ so one output serves both modes:
-//   next dev            → /introduction (and /showcase/*) are served directly
+// The standalone 幕景 官网 and its 新手指引 live at the repository root, not
+// inside the Next app. Mirror them into frontend/public/ so one output serves
+// both modes:
+//   next dev            → /introduction, /guide (and /showcase/*) are served directly
 //   next build (export) → public/ is copied into frontend/out/
 // Run from the frontend npm scripts (`predev` / `prebuild`), never by hand.
 const root = new URL('../', import.meta.url);
@@ -26,4 +27,7 @@ const introduction = (await readFile(new URL('introduction.html', root), 'utf8')
   .replaceAll('./renderer-webgl.js', '/showcase/renderer-webgl.js')
   .replaceAll('./${a.localPath}', '/showcase/${a.localPath}');
 await writeFile(new URL('introduction.html', publicDir), introduction);
-console.log(`Packaged /introduction and /showcase in ${fileURLToPath(publicDir)}`);
+const guide = (await readFile(new URL('guide.html', root), 'utf8'))
+  .replaceAll('./assets/', '/showcase/assets/');
+await writeFile(new URL('guide.html', publicDir), guide);
+console.log(`Packaged /introduction, /guide and /showcase in ${fileURLToPath(publicDir)}`);

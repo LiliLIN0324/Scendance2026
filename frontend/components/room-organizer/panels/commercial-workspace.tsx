@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -75,7 +75,7 @@ export function CommercialWorkspace({ controller, layout, isActive, ensurePersis
       verified.current = captured; setReadyEpoch(captured);
     } catch (caught) {
       if (mounted.current && sampleRef.current().epoch === captured) {
-        setError(caught instanceof Error ? caught.message : '本机活动尚未保存，请完成保存后重新读取约定。');
+        setError(caught instanceof Error ? caught.message : '活动尚未保存，请完成保存后重新读取约定。');
       }
     }
   }, [identity.epoch, identity.active, identity.mode, identity.projectId, retry]);
@@ -87,11 +87,11 @@ export function CommercialWorkspace({ controller, layout, isActive, ensurePersis
     const current = sampleRef.current();
     if (current.epoch !== before) refresh();
     if (!mounted.current || !current.active || current.mode !== 'local' || current.epoch !== capturedEpoch ||
-      !current.projectId || verified.current !== capturedEpoch) throw new Error('本机活动或登录状态已变化，请重新读取约定。');
+      !current.projectId || verified.current !== capturedEpoch) throw new Error('活动或登录状态已变化，请重新读取约定。');
   };
   return <>
     {identity.mode === 'local' && !ready && <div role={error ? 'alert' : 'status'} className="sc-note">
-      <p>{error || '正在核对本机活动保存状态…'}</p>
+      <p>{error || '正在核对活动保存状态…'}</p>
       <button type="button" className="sc-button" onClick={() => setRetry(value => value + 1)}>重新读取约定</button>
     </div>}
     <div hidden={!ready}>
