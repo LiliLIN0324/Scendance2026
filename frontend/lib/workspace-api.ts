@@ -28,3 +28,15 @@ export function preferredStudio(userId: string, studios: Studio[], fallback = ''
 export function rememberStudio(userId: string, studioId: string): void {
   try { localStorage.setItem(`scendance:studio:${userId}`, studioId); } catch { /* Storage is optional. */ }
 }
+
+/** 无感挂云自己写入 ?project= 的标记：CloudPanel 读到该参数时凭标记跳过「重开项目」，画布与撤销历史不动。 */
+const selfAttachedProjects = new Set<string>();
+export function markSelfAttachedProject(userId: string, projectId: string): void {
+  selfAttachedProjects.add(`${userId}:${projectId}`);
+}
+/** 一次性消费：命中即移除，不影响之后真正的链接打开。 */
+export function consumeSelfAttachedProject(userId: string, projectId: string): boolean {
+  const key = `${userId}:${projectId}`;
+  const marked = selfAttachedProjects.delete(key);
+  return marked;
+}

@@ -22,7 +22,7 @@ const key = (identityKey: string): [string, string] => ['project-review-library'
 const htmlTags = new Set('html head body meta title style main header footer section article h1 h2 h3 h4 p span div dl dt dd table thead tbody tr th td figure figcaption details summary img br strong em small input label'.split(' '));
 const svgTags = new Set('svg title g rect path line polygon polyline circle ellipse text tspan'.split(' '));
 const htmlAttributes = new Set('lang charset name content http-equiv class id open alt width height colspan rowspan role aria-label aria-hidden type for'.split(' '));
-const svgAttributes = new Set('xmlns viewbox width height class id x y x1 y1 x2 y2 cx cy r rx ry d points transform fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-dasharray font-family font-size font-weight text-anchor dy dx opacity role aria-label'.split(' '));
+const svgAttributes = new Set('xmlns viewbox width height class id x y x1 y1 x2 y2 cx cy r rx ry d points transform fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-dasharray font-family font-size font-weight text-anchor dy dx opacity role aria-label data-layer paint-order'.split(' '));
 const policy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'";
 
 function assertData(value: unknown, ancestors = new Set<object>(), depth = 0): void {
@@ -84,6 +84,9 @@ export function validateProjectReviewFileHtml(html: string, expected?: Pick<Save
       if (!(svg ? svgAttributes : htmlAttributes).has(name)) throw new Error('评审文件包含活动属性或外部资源，未保存或打开。');
       // Inline style is only allowed as a static color swatch (materials table), never a resource or layout channel.
       if (name === 'style' && !(tag === 'span' && /^background:#[0-9a-fA-F]{6}$/.test(attribute.value.trim()))) throw new Error('评审文件包含活动属性或外部资源，未保存或打开。');
+      // Layer names are inert plan metadata; the text halo keyword list is presentational only. Both are still checked.
+      if (name === 'data-layer' && !/^[A-Z][A-Z_]{0,23}$/.test(attribute.value)) throw new Error('评审文件包含活动属性或外部资源，未保存或打开。');
+      if (name === 'paint-order' && !/^(stroke|fill|markers)(\s+(stroke|fill|markers)){0,2}$/.test(attribute.value.trim())) throw new Error('评审文件包含活动属性或外部资源，未保存或打开。');
       if (svg && ['fill', 'stroke', 'font-family'].includes(name)) checkCss(attribute.value);
     }
     if (tag === 'style') checkCss(element.textContent ?? '');

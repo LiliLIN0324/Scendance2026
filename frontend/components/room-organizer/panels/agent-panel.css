@@ -114,9 +114,9 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-user strong { font-weight: 500; display: block; word-break: break-all; }
 .ap-user.is-file strong { font-weight: 600; }
 .ap-user small { display: block; font-size: var(--fs-cap); color: rgba(255, 255, 255, .64); }
-/* 演示提示 muted 一行，勿大黄块（T-VISUAL-CHROME §9）。 */
-.ap-user .ap-warn, .ap-warn-line { color: rgba(255, 255, 255, .76); display: flex; align-items: center; gap: 5px; }
-.ap-user .ap-warn span, .ap-warn-line span { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .28); color: #fff; font-size: 10px; font-weight: 700; flex: 0 0 14px; }
+/* 演示提示 muted 一行，勿大黄块（T-VISUAL-CHROME §9）。白字只限墨底气泡，卡片里的警告行要用语义色。 */
+.ap-user .ap-warn { color: rgba(255, 255, 255, .76); display: flex; align-items: center; gap: 5px; }
+.ap-user .ap-warn span { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .28); color: #fff; font-size: 10px; font-weight: 700; flex: 0 0 14px; }
 
 /* ── 信息卡 ── */
 .ap-card { border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -164,48 +164,63 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-inline-error p { margin: 0; color: var(--warn); display: flex; gap: 6px; align-items: flex-start; line-height: 1.5; }
 .ap-plan strong { font-size: var(--fs-p1); }
 .ap-plan p { margin: 0; }
+/* 本次结果 = 一次运行的账单：成功/被拒/没动/空结果各一行，不用卡片再套一层。 */
+.ap-outcome { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--wk-hair); }
+.ap-outcome-label { font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-outcome-line { font-size: var(--fs-p2); color: var(--wk-ink-soft); font-weight: 600; }
 /* 座位这件事要能一眼对上人数：单独一行，不混在件数里。 */
 .ap-plan .ap-seats { font-size: var(--fs-p2); font-weight: 600; color: var(--wk-ink-soft); }
 .ap-plan .ap-seat-fix { margin: -4px 0 0; }
 .ap-ok-line { color: var(--ap-green); font-size: var(--fs-p2); }
-.ap-warn-line { font-size: var(--fs-p2); }
+.ap-warn-line { color: var(--warn); font-size: var(--fs-p2); display: flex; align-items: flex-start; gap: 5px; }
+.ap-warn-line span { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; background: rgba(150, 101, 31, .12); color: var(--warn); font-size: 10px; font-weight: 700; flex: 0 0 14px; }
 
 /* ── 输入区：命令条（AI 主入口）── */
-.ap-composer { margin: 0 12px 12px; border: 1px solid var(--wk-hair); border-radius: var(--r-lg); background: var(--wk-paper); padding: 10px 10px 8px 14px; display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; box-shadow: var(--e1); transition: border-color var(--dur-1) var(--ease-spec), box-shadow var(--dur-1) var(--ease-spec); }
+.ap-composer { margin: 0 12px 12px; border: 1px solid var(--wk-hair); border-radius: 22px; background: var(--wk-paper); padding: 12px 12px 8px 16px; display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; box-shadow: var(--e1); transition: border-color var(--dur-1) var(--ease-spec), box-shadow var(--dur-1) var(--ease-spec); }
 /* 聚焦 = 淡绿光环（品牌 soft 色做焦点反馈，克制的现代感）。 */
 .ap-composer:focus-within { border-color: var(--wk-ink-soft); box-shadow: 0 0 0 3px var(--wk-green-pale); }
-.ap-composer textarea { border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; }
+.ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 44px; }
 .ap-composer textarea:focus, .ap-composer textarea:focus-visible { outline: none; box-shadow: none; }
-.ap-composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ap-composer-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.ap-composer-left { display: flex; align-items: center; gap: 6px; min-width: 0; justify-self: start; }
+.ap-composer-bar > .ap-lane { justify-self: center; }
+.ap-composer-bar > .ap-send, .ap-composer-bar > .sc-gen-go { justify-self: end; }
 .ap-attach { border: 0; background: transparent; border-radius: var(--r-sm); padding: 3px; display: flex; align-items: center; color: var(--wk-ink-faint); }
 .ap-attach:hover:not(:disabled) { color: var(--wk-ink-soft); background: var(--wk-plane); }
+/* 待发附件：选进来的图纸/照片先挂在输入框上，点发送才读进场地。 */
+.sc-chat-file { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; border: 1px solid var(--wk-hair); border-radius: 10px; background: var(--wk-plane); max-width: 100%; }
+.sc-chat-file-thumb { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; border: 1px solid var(--wk-hair); background: var(--wk-paper); flex: none; }
+.sc-chat-file-name { font-size: var(--fs-p2); color: var(--wk-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-chat-file-remove { margin-left: auto; border: 0; background: transparent; color: var(--wk-ink-faint); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; flex: none; }
+.sc-chat-file-remove:hover { color: var(--wk-ink); background: var(--wk-hair); }
+/* 聊天区里的图纸/照片：跟这条消息一起留着，刷新后还能再打开。 */
+.ap-msg-image { display: block; max-width: 100%; max-height: 168px; margin-top: 4px; border-radius: 8px; border: 1px solid var(--wk-hair); object-fit: cover; }
 /* 发送键：全产品唯一的绿色圆形（32px，v2.2 §按钮）。 */
-.ap-send { border: 1px solid transparent; width: 32px; height: 32px; border-radius: 50%; background: var(--ink, #141416); color: #fff; display: grid; place-items: center; transition: background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-send { border: 1px solid transparent; width: 30px; height: 30px; border-radius: 50%; background: var(--ink, #141416); color: #fff; display: grid; place-items: center; transition: background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-send:hover:not(:disabled) { border-color: transparent; background: #2A2C31; transform: translateY(-1px); }
 .ap-send:disabled { color: var(--wk-ink-faint); background: var(--wk-plane); cursor: default; }
 /* 布置 / 生成：生成是蓝色字，和晴光的墨色发送分开。 */
 .ap-lane { display: inline-flex; align-items: center; border: 1px solid var(--wk-hair); border-radius: 999px; overflow: hidden; flex: none; }
-.ap-lane button { border: 0; background: transparent; padding: 2px 8px; font-size: var(--fs-p2); line-height: 20px; color: var(--wk-muted); cursor: pointer; }
-.ap-lane button[aria-pressed='true'] { background: var(--wk-plane); color: var(--wk-ink); font-weight: 600; }
-.ap-lane button.is-generate { color: #0668e5; font-weight: 600; }
-.ap-lane button.is-generate[aria-pressed='true'] { background: rgba(6, 104, 229, .08); color: #0668e5; }
-.sc-gen-dock { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 0 0 auto; }
+.ap-lane button { border: 0; background: transparent; padding: 2px 8px; font-size: var(--fs-p2); line-height: 20px; color: var(--wk-muted); cursor: pointer; transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec); }
+/* 选中的那一侧才是蓝色，布置 / 生成同一套；没选中的保持灰。 */
+.ap-lane button[aria-pressed='true'] { background: rgba(6, 104, 229, .10); color: #0668e5; font-weight: 600; }
+/* 生成区中间有一个零高度的折叠层：用 flex gap 会在它两侧各加一次间距，把「你可以做什么」到输入框撑成 24px。改用显式 margin，跟布置模式一样保持 8px。 */
+.sc-gen-dock { display: flex; flex-direction: column; gap: 0; min-height: 0; flex: 0 0 auto; }
 .sc-gen-thread { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; max-height: 168px; overflow: auto; }
-.sc-gen-empty { margin: 0; text-align: center; color: var(--wk-muted); font-size: var(--fs-p1); }
-.sc-gen-field { position: relative; min-height: 44px; }
+.sc-gen-field { position: relative; display: flex; min-height: 44px; }
 .sc-gen-ghost { position: absolute; left: 0; top: 0; right: 0; color: var(--wk-muted, #71767e); pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p1); line-height: var(--lh-p1); }
+/* 布置轨同款：空输入时把引导句逐字打在框里，按 Tab 填整句。 */
+.ap-composer-field { position: relative; display: flex; min-height: 44px; }
+.ap-composer-field textarea { width: 100%; }
+.ap-ghost { position: absolute; left: 0; top: 0; right: 0; color: var(--wk-muted, #71767e); pointer-events: none; white-space: pre-wrap; font-size: var(--fs-p1); line-height: var(--lh-p1); }
 .ap-composer.is-generate:focus-within { border-color: #0668e5; box-shadow: 0 0 0 3px rgba(6, 104, 229, .16); }
 .ap-composer.is-generate textarea { width: 100%; min-height: 44px; background: transparent; }
-.ap-composer.is-generate .ap-composer-bar { flex-wrap: wrap; }
-.sc-gen-meta { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
-.sc-gen-tab { font-size: var(--fs-p2); color: var(--wk-muted); white-space: nowrap; }
-.sc-gen-credit { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-p2); color: var(--wk-ink-soft); cursor: pointer; white-space: nowrap; }
 .sc-workbench button.sc-gen-go { width: 30px; height: 30px; border: 0; border-radius: 50%; padding: 0; background: #0668e5; color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; opacity: 1; }
 .sc-workbench button.sc-gen-go:hover:not(:disabled) { background: #237ae8; color: #fff; }
 .sc-workbench button.sc-gen-go:disabled { opacity: .5; background: #0668e5; color: #fff; cursor: default; }
 .sc-gen-stop { width: 10px; height: 10px; border-radius: 2px; background: #fff; }
 .sc-gen-warn { margin: 0; font-size: var(--fs-p2); color: var(--warn, #96651f); }
-.sc-gen-foot { margin: 0; display: flex; gap: 10px; }
+.sc-gen-capabilities { margin: 0 12px 8px; padding: 0 2px; }
 .sc-gen-resume { border: 0; background: transparent; padding: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
 /* ── 环境感知行：AI 活着的最低调信号 ── */
@@ -269,6 +284,30 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-map-head .sc-note { flex: 1 1 auto; color: var(--wk-muted); }
 .sc-map-head .sc-button { flex: none; }
 .sc-map-blocked { margin: 0; color: var(--warn); font-size: var(--fs-p2); line-height: var(--lh-p2); }
+/* 「换场地 / 新建」弹层：卡片栅格（从空白开始 / 项目卡带俯视缩略 / 新建项目），底部一个主钮。 */
+.sc-venue-overlay { position: absolute; inset: 12px; z-index: 45; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: var(--r-lg); box-shadow: var(--e2); overflow: hidden; }
+.sc-venue-picker { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+/* 卡片栅格（规范 v2.5.2 §二.4：选择器 icon 优先 + 卡片视觉；选中 = ink-soft 描边 + 右上绿勾） */
+.sc-venue-picker-grid { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; }
+.sc-venue-card { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-md); background: var(--wk-paper); color: var(--wk-ink); cursor: pointer; text-align: left; transition: border-color var(--dur-1) var(--ease-spec); }
+.sc-venue-card:hover { border-color: var(--wk-muted); }
+.sc-venue-card.is-on { border-color: var(--wk-ink-soft); }
+.sc-venue-card-check { position: absolute; top: 8px; right: 8px; color: var(--green); }
+.sc-venue-card-visual { display: grid; place-items: center; aspect-ratio: 16 / 10; margin-bottom: 6px; border-radius: var(--r-sm); background: var(--wk-plane); color: var(--wk-ink-soft); overflow: hidden; }
+.sc-venue-card-visual .sc-venue-preview { width: 100%; height: 100%; }
+.sc-venue-card strong { font-size: var(--fs-p1); font-weight: 500; }
+.sc-venue-card small { font-size: var(--fs-p2); color: var(--wk-muted); }
+.sc-venue-picker-note { margin: 4px 2px; font-size: var(--fs-p2); color: var(--wk-muted); display: flex; align-items: center; gap: 6px; }
+.sc-venue-preview .vp-venue { fill: var(--wk-paper); stroke: var(--wk-ink-soft); stroke-width: 1.2; }
+.sc-venue-preview .vp-entrance { fill: var(--green); }
+.sc-venue-preview .vp-object { fill: var(--wk-ink-soft); opacity: .55; }
+.sc-venue-picker-name { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-p2); color: var(--wk-muted); }
+.sc-venue-picker-name input { height: 32px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p1); }
+.sc-venue-picker-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--wk-hair); }
+.sc-venue-picker-foot .sc-venue-picker-note { flex: 1 1 auto; margin: 0; }
+.sc-venue-picker-go { border: 0; border-radius: var(--r-sm); height: 34px; padding: 0 18px; background: var(--ink); color: #fff; font-weight: 500; font-size: var(--fs-c1); cursor: pointer; }
+.sc-venue-picker-go:hover:not(:disabled) { background: #2A2C31; }
+.sc-venue-picker-go:disabled { background: var(--plane); color: var(--faint); cursor: not-allowed; }
 .sc-map-overlay .sc-aholo-task.is-grow { flex: 1 1 auto; min-height: 0; padding-top: 0; overflow: hidden; }
 .sc-map-overlay .sc-lux-direct-results { max-height: 92px; overflow: auto; }
 /* 采集单贴在地图下面：站位清单收进折叠，高度留给圈画。 */
@@ -329,3 +368,51 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-business .sc-left-context { display: flex; }
 /* 深工具打开时把焦点交给面板容器用于朗读；容器不是控件，不该画一圈浏览器默认黑框。 */
 .sc-data-host [role="group"]:focus { outline: none; }
+
+/* ── 输入区改版：左下「+」菜单、类型轻标、生成选项按需展开 ── */
+.ap-plus { position: relative; display: flex; flex: none; }
+.ap-plus-btn {
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--wk-hair);
+  background: var(--wk-paper); color: var(--wk-ink-faint); display: grid; place-items: center;
+  cursor: pointer; transition: color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), border-color var(--dur-1) var(--ease-spec);
+}
+.ap-plus-btn:hover, .ap-plus-btn[aria-expanded='true'] { background: var(--wk-plane); color: var(--wk-ink); }
+.ap-menu {
+  position: absolute; bottom: calc(100% + 8px); left: -4px; z-index: 40; min-width: 208px;
+  padding: 6px; border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper);
+  box-shadow: 0 12px 32px rgba(20, 20, 22, .14); display: flex; flex-direction: column; gap: 2px;
+  animation: ap-menu-in var(--dur-2) var(--ease-spec);
+}
+.ap-menu.is-down { bottom: auto; top: calc(100% + 8px); }
+@keyframes ap-menu-in { from { opacity: 0; transform: translateY(4px) scale(.985); } }
+.ap-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0;
+  border-radius: 10px; background: none; color: var(--wk-ink); text-align: left; cursor: pointer;
+}
+.ap-menu-item:hover:not(:disabled), .ap-menu-item:focus-visible { background: var(--wk-plane); outline: none; }
+.ap-menu-item:disabled { color: var(--wk-ink-faint); cursor: default; }
+.ap-menu-icon { display: grid; place-items: center; width: 18px; flex: none; color: var(--wk-muted); }
+.ap-menu-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.ap-menu-label { font-size: var(--fs-p2); line-height: var(--lh-p2); }
+.ap-menu-hint { font-size: var(--fs-cap); color: var(--wk-muted); white-space: nowrap; }
+.ap-menu-check { margin-left: auto; flex: none; color: #0668e5; }
+/* 生成记录与扣额度确认：没内容时高度为 0，有内容才平滑长出来。 */
+.sc-gen-fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-3) var(--ease-spec); }
+.sc-gen-fold.is-open { grid-template-rows: 1fr; margin-bottom: 8px; }
+.sc-gen-fold-inner { overflow: hidden; min-height: 0; }
+.sc-gen-confirm {
+  margin: 8px 0 2px; padding: 10px 12px; border: 1px solid var(--wk-hair); border-radius: 14px;
+  background: var(--wk-plane); display: flex; flex-direction: column; gap: 8px;
+  animation: ap-in var(--dur-2) var(--ease-spec);
+}
+.sc-gen-confirm-text { margin: 0; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-ink-soft); }
+.sc-gen-confirm-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.sc-gen-confirm-go {
+  border: 0; border-radius: 999px; padding: 5px 14px; background: #0668e5; color: #fff;
+  font-size: var(--fs-p2); line-height: var(--lh-p2); cursor: pointer;
+}
+.sc-gen-confirm-go:hover { background: #237ae8; }
+@media (prefers-reduced-motion: reduce) {
+  .sc-gen-fold { transition: none; }
+  .ap-menu, .sc-gen-confirm { animation: none; }
+}

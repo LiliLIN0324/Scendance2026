@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { productionReferenceKey } from '@/lib/production-plan';

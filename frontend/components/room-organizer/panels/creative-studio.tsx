@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { ArrowLeft, ArrowUp, Check, Loader2, Maximize2, Minimize2, RefreshCw, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -244,7 +244,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
   async function assertCurrentLocalRecords(currentLayout:RoomLayout):Promise<void> {
     const currentScope=agentScopeRef.current,currentBrief=briefRef.current;
     await assertGeometryActionSource(currentLayout,controller);
-    if(!alive.current||layoutRef.current!==currentLayout||agentScopeRef.current!==currentScope||briefRef.current!==currentBrief)throw new Error('核对本机资料期间项目或需求已变化，当前输入已保留，请重试。');
+    if(!alive.current||layoutRef.current!==currentLayout||agentScopeRef.current!==currentScope||briefRef.current!==currentBrief)throw new Error('核对资料期间项目或需求已变化，当前输入已保留，请重试。');
   }
   const requestedCloudCheckins=typeof window!=='undefined'&&new URL(window.location.href).searchParams.has('project');
   const checkins=useMaterialCheckins({projectId:layout.id,enabled:!!layout.id&&isLocalActivityWorkspace(controller,requestedCloudCheckins),prepareWrite:async()=>{
@@ -604,7 +604,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       const restored=await Promise.all(missing.map(async source=>({...source,kind:saved.find(image=>image.assetId===source.assetId)?.kind??source.kind,id:saved.find(image=>image.assetId===source.assetId)?.id??source.assetId,url:await controller.sourceImageUrl(source.assetId),uploadedKind:source.kind})));
       if(cancelled||scopeRef.current!==scope)return;
       imageRef.current=[...imageRef.current,...restored.filter(source=>!imageRef.current.some(image=>image.assetId===source.assetId))].slice(0,12);setImages(imageRef.current);
-    }).catch(error=>{if(!cancelled)setNotice(error instanceof Error?error.message:'云端资料暂时无法恢复，本机资料已保留。');});
+    }).catch(error=>{if(!cancelled)setNotice(error instanceof Error?error.message:'云端资料暂时无法恢复，资料已保留。');});
     return()=>{cancelled=true;};
   },[controller,cloud.user,cloud.project?.id,scope]);
   useEffect(()=>registerSourceFlush(scope,async()=>{
@@ -1038,7 +1038,7 @@ export type BusinessToolsApi = {
   openCommercial():void;
 };
 
-export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest=0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, backupOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, suppressAgentLauncher=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, onOpenPublication, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
+export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest=0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, backupOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, suppressAgentLauncher=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
   onOpenTemplates?:()=>void;
   /** 左栏工具轨已列出这些去处时，标题栏不再重复一个分类下拉。 */
   hideCategorySelect?: boolean;
@@ -1049,8 +1049,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   reviewOpenRequest?: number;
   reviewEntryRef?: RefObject<HTMLButtonElement>;
   captureReview?: (snapshot:ProjectReviewSnapshot, options:ProjectReviewCaptureOptions, getSource:()=>ProjectReviewSource)=>Promise<ProjectReviewCapture>;
-  /** 打开账户面板的「发布管理」；只打开入口，不生成也不发送链接。 */
-  onOpenPublication?: ()=>void;
   generationPanel?: ReactNode | ((context: GenerationContext) => ReactNode);
   commercialPanel?: ReactNode;
   /** 参考底图开关：画布右上角不再浮，跟着「图纸尺寸」面板走。 */
@@ -1443,7 +1441,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const businessContent=(
       <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
         {(workbenchMode==='review'||workbenchMode==='delivery'||!hideCategorySelect||!onOpenTemplates)&&<header className="cr-business-heading">
-          {workbenchMode==='review'?<div className="cr-mode-banner"><strong>发给客户</strong><span>核对后导出离线 HTML，或发布云端只读链接；都由你发送</span></div>:workbenchMode==='delivery'?<div className="cr-mode-banner"><strong>执行 · 本机内部资料</strong><span>活动安排、点验、导出与本机备份</span></div>:
+          {workbenchMode==='review'?<div className="cr-mode-banner"><strong>发给客户</strong><span>核对后导出离线 HTML，由你发送</span></div>:workbenchMode==='delivery'?<div className="cr-mode-banner"><strong>执行 · 本机内部资料</strong><span>活动安排、点验、导出与本机备份</span></div>:
           (!hideCategorySelect&&<label className="cr-business-category"><span className="sr-only">布置工具</span><select value={primaryCategoryValue} onChange={event=>{const value=event.target.value;if(value==='more'||value==='commercial')openCommercial();else if(value==='brief')openBrief();else if(value==='reference')openReference();else if(value==='rebuild')openRebuild();else if(value==='templates')openTemplates();else if(value==='model')openModelTools();else if(value==='delivery')openDelivery();else if(value==='review')openReview();}}><option value="brief">活动需求</option><option value="reference">图纸与照片</option><option value="rebuild">场地重建</option><option value="templates">场景模板</option><option value="model">物料工具</option><option value="more">更多…</option><option value="delivery" hidden>执行资料</option><option value="review" hidden>方案评审</option>{commercialPanel!=null&&<option value="commercial" hidden>合同与约定</option>}</select></label>)}
           {!onOpenTemplates&&<div>{docked&&templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}>返回当前工作区</button>}{docked&&<button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={16}/>返回素材</button>}</div>}
         </header>}
@@ -1457,7 +1455,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={(docked?workspaceExpanded:studio.expanded)&&!templatesOpen&&businessMode==='model'&&modelTool==='customize'}/></div>}
         </section>
         <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
-        <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel storageIdentity={JSON.stringify([studio.controller.config.apiUrl,studio.controller.getSnapshot().user?.id??null,studio.reviewSource.scope])} source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,prefill:prefillReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} {...(onOpenPublication?{onOpenCloudShare:onOpenPublication}:{})} inputLocked={studio.backupPending} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
+        <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel storageIdentity={JSON.stringify([studio.controller.config.apiUrl,studio.controller.getSnapshot().user?.id??null,studio.reviewSource.scope])} source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,prefill:prefillReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} inputLocked={studio.backupPending} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
         {commercialPanel!=null&&<section id="agent-panel-commercial" aria-label="合同与约定" hidden={businessMode!=='commercial'||templatesOpen}>{commercialOpened&&<div ref={commercialTarget} tabIndex={-1} role="group" aria-label="合同与约定资料">{commercialPanel}</div>}</section>}
         {!onOpenTemplates&&<section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>}
       </div>

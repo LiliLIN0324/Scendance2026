@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DIRECT_BASE, isLux3dLocalProxy } from '../lib/aholo-assets';
+import { Check, Info } from 'lucide-react';
+import { DIRECT_BASE, isLux3dLocalProxy, type AholoDirectKind } from '../lib/aholo-assets';
 import { CLOUD_E2E_WORLD_SCENE_ID, DEMO_WORLD_SCENE_ID, listShippedAssets } from '../lib/shipped-assets';
 import {
   isMockReconTask,
@@ -14,6 +15,7 @@ import {
   VENUE_PACKAGE_HUNG,
 } from '../lib/site-recon-mock';
 import { AholoGuideCard } from './aholo-guide-card';
+import { KIND_ICONS } from './kind-icons';
 import { loadAholoCatalogItem, loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import type { CatalogItem } from '../lib/types';
 
@@ -24,7 +26,36 @@ const CAPABILITIES = {
   world: { label: '场景生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
   recon: { label: '场地重建', path: '/world-recon', storage: 'scendance:aholo-recon', id: /^[a-zA-Z0-9_-]{1,128}$/ },
 };
-type Kind = keyof typeof CAPABILITIES;
+type Kind = AholoDirectKind;
+/** 生成轨把两条能力拆成两个弹窗：物料生成只出物件，场地生成只出场地。 */
+export type AholoGenGroup = 'materials' | 'venue';
+const GROUP_COPY: Record<AholoGenGroup, { title: string; hint: string; kinds: Kind[] }> = {
+  materials: { title: '物料生成', hint: '出可摆放的带材质物件：一句描述，或一张照片。', kinds: ['text', 'image'] },
+  venue: { title: '场地生成', hint: '出可漫游的 3DGS 场地：文字生成场景，或从采集单重建现场。', kinds: ['world', 'recon'] },
+};
+/** 一张卡只留标题、一行交代和一张示意；长说明收进右上 info。 */
+const CARD_COPY: Record<Kind, { meta: string; thumb: string; info: string }> = {
+  text: {
+    meta: '一句描述 → 带材质物件',
+    thumb: '/showcase/assets/generated/thumb/white-round-table.png',
+    info: '走 Aholo Lux3D 文字建模：描述越具体，材质与比例越稳。默认干跑，不连真接口、不扣额度。',
+  },
+  image: {
+    meta: '一张照片 → 同款物件',
+    thumb: '/showcase/assets/generated/thumb/chinese-wood-armchair.png',
+    info: '走 Aholo Lux3D 图片建模：一张主体清楚、背景干净的照片最好。默认干跑，确认后才提交。',
+  },
+  world: {
+    meta: '一句场景描述 → 可漫游 3DGS',
+    thumb: '/showcase/assets/generated/scene/scendance-m3-mvp.panorama.jpg',
+    info: '走 Aholo World 文字生成：一句话交代场地气质与时间，生成结果挂进「环境预览」当观感层，可永远漫游。',
+  },
+  recon: {
+    meta: '现场照片 / 视频 → 真场地 3DGS',
+    thumb: '/showcase/assets/generated/scene/cloud-e2e-banquet.panorama.jpg',
+    info: '主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
+  },
+};
 type TaskDetail = { status: number; statusLabel: string; outputs: string[]; progress?: number; panoUrl?: string };
 type SavedTask = { taskid?: string; prompt: string; startedAt: number };
 const TERMINAL = [3, 4, 6];
@@ -527,7 +558,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   </div>;
 }
 
-export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, onOpenCloudModels, reconPreset }: {
+export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, onOpenCloudModels, reconPreset, openKind, group }: {
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => Promise<void>) | undefined;
   /** 干跑重建成功后挂环境：等同 D0 hangDemoEnvironment。 */
@@ -538,9 +569,13 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   onOpenCloudModels?: (() => void) | undefined;
   /** 地图采集单「去上传现场素材」带过来的一块地：直接切到场地重建并填好名字。 */
   reconPreset?: { name: string; hint: string } | null;
+  /** 生成轨「物料生成 / 场地生成」带过来的落点：nonce 变一次就切一次标签。 */
+  openKind?: { kind: AholoDirectKind; nonce: number } | null;
+  /** 从生成条两张卡进来时只露一组：物料只出物件，场地只出场地。不传则仍是四档合一的观感面板。 */
+  group?: AholoGenGroup;
 }) {
-  const [kind, setKind] = useState<Kind>('text');
-  const [visited, setVisited] = useState<Kind[]>(['text']);
+  const [kind, setKind] = useState<Kind>(group === 'venue' ? 'world' : 'text');
+  const [visited, setVisited] = useState<Kind[]>(group === 'venue' ? ['world'] : ['text']);
   /** 默认干跑，避免误点真调扣额度；联调真 Aholo 时再关掉。 */
   const [mockRecon, setMockRecon] = useState(true);
   /** 真调扣额度确认闸：关干跑后须勾选；重新打开干跑时清零。 */
@@ -593,6 +628,14 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     setKind('recon');
     setVisited(previous => previous.includes('recon') ? previous : [...previous, 'recon']);
   }, [reconPreset]);
+  // 生成轨点「物料生成 / 场地生成」时，直接落在对应那组标签上。
+  const openedKind = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openKind || openedKind.current === openKind.nonce) return;
+    openedKind.current = openKind.nonce;
+    setKind(openKind.kind);
+    setVisited(previous => previous.includes(openKind.kind) ? previous : [...previous, openKind.kind]);
+  }, [openKind]);
   function openHistoryTask(item: HistoryEntry) {
     select(item.kind);
     setResume({ kind: item.kind, taskid: item.taskid, prompt: item.prompt, startedAt: item.startedAt });
@@ -602,12 +645,30 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     onHistory();
   }
   const kinds = Object.keys(CAPABILITIES) as Kind[];
+  /** 拆开的弹窗只露本组两档；四档合一的观感面板仍按原分组摆。 */
+  const shownKinds = group ? GROUP_COPY[group].kinds : kinds;
+  /** 出物料的两档和出场景的两档分两组摆；键盘左右仍按 kinds 一条线走。 */
+  const tabGroups: { label: string; kinds: Kind[] }[] = [
+    { label: '物料生成', kinds: ['text', 'image'] },
+    { label: '场地生成', kinds: ['world', 'recon'] },
+  ];
+  const renderTab = (key: Kind) => {
+    const index = kinds.indexOf(key);
+    const Icon = KIND_ICONS[key];
+    return <button
+      key={key} id={`aholo-tab-${key}`} type="button" role="tab" aria-selected={kind === key} aria-controls={`aholo-panel-${key}`}
+      tabIndex={kind === key ? 0 : -1} onClick={() => select(key)} onKeyDown={event => {
+        const next = event.key === 'ArrowRight' ? kinds[(index + 1) % kinds.length] : event.key === 'ArrowLeft' ? kinds[(index + kinds.length - 1) % kinds.length] : event.key === 'Home' ? kinds[0] : event.key === 'End' ? kinds[kinds.length - 1] : undefined;
+        if (next) { event.preventDefault(); select(next); document.getElementById(`aholo-tab-${next}`)?.focus(); }
+      }}><Icon size={14} aria-hidden="true"/>{CAPABILITIES[key].label}</button>;
+  };
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>场地观感与物料</h2><p>文字生成在左侧晴光「生成」，确认扣额度后才提交。这里留图片、场景和场地重建。观感层不进碰撞、不进落盘几何。</p></div>
+    <div className="sc-section-heading"><div><h2>{group ? GROUP_COPY[group].title : '场地观感与物料'}</h2>
+      <p>{group ? GROUP_COPY[group].hint : '文字生成在左侧晴光「生成」，确认扣额度后才提交。这里分两组：「物料生成」出物件（文字建模、图片建模）；「场地生成」出场地（场景生成、场地重建）。观感层不进碰撞、不进落盘几何。'}</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
-    <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>
+    {!group && <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>}
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
       <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；真生成物件请用云端 Lux3D（活动资料 · 物料工具）。场地重建仍可干跑挂样例。</p>
       <div className="sc-aholo-cloud-actions">
@@ -640,13 +701,32 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
       </>}
     </div>
     {historyOpen && history.length > 0 && <p className="sc-note">记录只存描述与状态；产物链接会过期，点「查看」回 Aholo 取最新结果。</p>}
-    <div className="sc-aholo-tabs" role="tablist" aria-label="场地观感与物料方式">{kinds.map((key, index) => <button
-      key={key} id={`aholo-tab-${key}`} type="button" role="tab" aria-selected={kind === key} aria-controls={`aholo-panel-${key}`}
-      tabIndex={kind === key ? 0 : -1} onClick={() => select(key)} onKeyDown={event => {
-        const next = event.key === 'ArrowRight' ? kinds[(index + 1) % kinds.length] : event.key === 'ArrowLeft' ? kinds[(index + kinds.length - 1) % kinds.length] : event.key === 'Home' ? kinds[0] : event.key === 'End' ? kinds[kinds.length - 1] : undefined;
-        if (next) { event.preventDefault(); select(next); document.getElementById(`aholo-tab-${next}`)?.focus(); }
-      }}>{CAPABILITIES[key].label}</button>)}</div>
-    {kinds.map(key => <section key={key} id={`aholo-panel-${key}`} role="tabpanel" aria-labelledby={`aholo-tab-${key}`} hidden={kind !== key}>
+    {group
+      ? <div className="sc-aholo-cards" role="radiogroup" aria-label={GROUP_COPY[group].title}>
+        {GROUP_COPY[group].kinds.map(key => {
+          const selected = kind === key;
+          const Icon = KIND_ICONS[key];
+          return <div key={key} className={`sc-aholo-card-wrap${selected ? ' is-on' : ''}`}>
+            <button type="button" role="radio" aria-checked={selected} className="sc-aholo-card" onClick={() => select(key)}>
+              <span className="sc-aholo-card-thumb" aria-hidden="true">
+                <img src={CARD_COPY[key].thumb} alt="" loading="lazy"/>
+              </span>
+              <span className="sc-aholo-card-title"><Icon size={14} aria-hidden="true"/>{CAPABILITIES[key].label}</span>
+              <span className="sc-aholo-card-meta">{CARD_COPY[key].meta}</span>
+            </button>
+            {selected && <span className="sc-aholo-card-check" aria-hidden="true"><Check size={12}/></span>}
+            <details className="sc-aholo-card-info">
+              <summary aria-label={`${CAPABILITIES[key].label}说明`} title="说明"><Info size={14} aria-hidden="true"/></summary>
+              <p>{CARD_COPY[key].info}</p>
+            </details>
+          </div>;
+        })}
+      </div>
+      : <div className="sc-aholo-tabs" role="tablist" aria-label="场地观感与物料方式">{tabGroups.map(tabGroup => <div key={tabGroup.label} className="sc-aholo-tab-group" role="presentation">
+        <span className="sc-aholo-tab-group-label" aria-hidden="true">{tabGroup.label}</span>
+        {tabGroup.kinds.map(renderTab)}
+      </div>)}</div>}
+    {shownKinds.map(key => <section key={key} id={`aholo-panel-${key}`} aria-label={CAPABILITIES[key].label} role={group ? 'region' : 'tabpanel'} hidden={kind !== key}>
       {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPlace={onPlace} onPreviewScene={onPreviewScene}
         unresolved={history.find(item => item.kind === key && !TERMINAL.includes(item.status))} />}
     </section>)}

@@ -64,6 +64,10 @@ const WALKER_RADIUS = 0.3;
  * When `enabled` flips on, this hook:
  *  - Disables the orbit controls.
  *  - Lazy-loads PointerLockControls and attaches them to the canvas.
+ *  - Captures the pointer on the button's gesture, so the cursor disappears and
+ *    mouse-look steers; if the browser refuses the lock (embedded webview,
+ *    permissions policy, lost focus) the walk falls back to drag-look with the
+ *    cursor visible, so "走进场" never dead-ends (#351).
  *  - Moves the camera to eye level and listens for WASD / arrow movement,
  *    with Shift for sprint.
  *  - Slides the walker around furniture and interior walls (#156) and clamps
@@ -74,13 +78,25 @@ const WALKER_RADIUS = 0.3;
  * switch mid-walk only re-seats the camera's height — it never tears the mode
  * down and drops pointer lock (see #67).
  */
-export type WalkthroughPhase = 'pending' | 'locked' | 'needs-click';
+export type WalkthroughPhase = 'pending' | 'locked' | 'drag' | 'unlocked';
+
+// Look sensitivity and pitch clamp for the pointer-lock-free fallback. Chrome's
+// PointerLockControls uses 0.002 * pointerSpeed and clamps at ±(π/2 − 0.01);
+// matching them keeps the feel identical whichever way the look is driven.
+const DRAG_LOOK_SPEED = 0.0025;
+const DRAG_PITCH_LIMIT = Math.PI / 2 - 0.01;
+// A press that travels fewer CSS pixels is a click that retries pointer lock;
+// anything more is a drag-look gesture and must not also request the lock.
+const DRAG_CLICK_SLOP = 4;
 
 export interface UseWalkthroughResult {
   /**
    * `pending` while the button's pointer-lock request is in flight, `locked`
-   * once the cursor is captured, `needs-click` when the browser refused or
-   * the lock dropped (Esc) and another canvas click is required (#351).
+   * once the cursor is captured, `drag` when the browser refused the lock, and
+   * `unlocked` when a lock that had worked was released (Esc). Both fallback
+   * phases keep the walk running with the cursor visible and the left button
+   * held to look around (#351); only `unlocked` can retake the lock, with a
+   * press-release on the canvas.
    */
   phase: WalkthroughPhase;
 }
@@ -105,6 +121,15 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
   } = options;
 
   const [phase, setPhase] = useState<WalkthroughPhase>('pending');
+  // Read by the RAF loop without re-running the init effect: while the phase
+  // is `drag` the loop keeps scrolling the walker even though no pointer lock
+  // is held (the drag fallback still walks with WASD).
+  const phaseRef = useRef<WalkthroughPhase>(phase);
+  phaseRef.current = phase;
+  // True once a lock actually landed: a released lock may be retaken by a
+  // canvas click, while a lock the browser refuses never is (that only spams
+  // pointerlockerror and never works in that environment).
+  const lockedOnceRef = useRef(false);
 
   // Colliders are rebuilt only when the floor's contents change, never per
   // frame (#156). Outside walkthrough the memo is skipped entirely.
@@ -159,23 +184,27 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       const locked = walkPointerLocked(canvas);
       if (locked) {
         settled = true;
+        lockedOnceRef.current = true;
         setPhase('locked');
       } else if (settled) {
-        setPhase('needs-click');
+        // The browser released the capture (Esc) while the mode stayed on:
+        // keep walking with the drag fallback instead of freezing.
+        setPhase(lockedOnceRef.current ? 'unlocked' : 'drag');
       }
     };
     const onError = () => {
       settled = true;
-      setPhase('needs-click');
+      setPhase(lockedOnceRef.current ? 'unlocked' : 'drag');
     };
     doc.addEventListener('pointerlockchange', sync);
     doc.addEventListener('pointerlockerror', onError);
     // A lock that never arrives (hidden canvas, missing gesture) must not sit
-    // on "正在进入" forever. The canvas click listener below is the retry.
+    // on "正在进入" forever. Fall back to drag-look so the walk always starts;
+    // a later press-release on the canvas retries the lock.
     const timer = window.setTimeout(() => {
       if (!settled && !walkPointerLocked(canvas)) {
         settled = true;
-        setPhase('needs-click');
+        setPhase('drag');
       }
     }, 700);
     sync();
@@ -261,7 +290,7 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       // (#351). PointerLockControls still tracks the lock through
       // pointerlockchange, whoever requested it.
       const markRefused = () => {
-        if (!cancelled) setPhase('needs-click');
+        if (!cancelled) setPhase(lockedOnceRef.current ? 'unlocked' : 'drag');
       };
       const requestLock = () => {
         if (controls?.isLocked) return;
@@ -272,9 +301,10 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
           markRefused();
         }
       };
-      const clearRefused = () => setPhase('locked');
-      canvas.addEventListener('click', requestLock);
-      cleanup.push(() => canvas.removeEventListener('click', requestLock));
+      const clearRefused = () => {
+        lockedOnceRef.current = true;
+        setPhase('locked');
+      };
       canvas.ownerDocument.addEventListener('pointerlockerror', markRefused);
       cleanup.push(() => canvas.ownerDocument.removeEventListener('pointerlockerror', markRefused));
       controls.addEventListener('lock', clearRefused);
@@ -288,6 +318,59 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
       cleanup.push(() => window.removeEventListener('blur', releaseHeldKeys));
       controls.addEventListener('unlock', releaseHeldKeys);
       cleanup.push(() => controls?.removeEventListener('unlock', releaseHeldKeys));
+
+      // Pointer-lock-free fallback: a refused or dropped lock must not freeze
+      // the walk. The cursor stays visible, holding the left button drags the
+      // view, WASD keeps scrolling through the RAF loop, and a press-release
+      // without travel retries the lock inside the gesture (#351).
+      const dragEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+      let dragPointer: number | null = null;
+      let dragX = 0;
+      let dragY = 0;
+      let dragMoved = false;
+      const onDragStart = (event: PointerEvent) => {
+        if (controls?.isLocked || event.button !== 0) return;
+        dragPointer = event.pointerId;
+        dragX = event.clientX;
+        dragY = event.clientY;
+        dragMoved = false;
+        try { canvas.setPointerCapture(event.pointerId); } catch { /* jsdom / older engines */ }
+      };
+      const onDragMove = (event: PointerEvent) => {
+        if (controls?.isLocked || dragPointer !== event.pointerId) return;
+        if (!dragMoved && Math.hypot(event.clientX - dragX, event.clientY - dragY) < DRAG_CLICK_SLOP) return;
+        dragMoved = true;
+        dragEuler.setFromQuaternion(camera.quaternion);
+        dragEuler.y -= (event.clientX - dragX) * DRAG_LOOK_SPEED;
+        dragEuler.x -= (event.clientY - dragY) * DRAG_LOOK_SPEED;
+        dragEuler.x = Math.max(-DRAG_PITCH_LIMIT, Math.min(DRAG_PITCH_LIMIT, dragEuler.x));
+        camera.quaternion.setFromEuler(dragEuler);
+        dragX = event.clientX;
+        dragY = event.clientY;
+        invalidateRef.current?.();
+      };
+      const onDragCancel = (event: PointerEvent) => {
+        if (dragPointer !== event.pointerId) return;
+        dragPointer = null;
+        try { canvas.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+      };
+      const onDragEnd = (event: PointerEvent) => {
+        if (dragPointer !== event.pointerId) return;
+        const wasClick = !dragMoved;
+        onDragCancel(event);
+        // A press-release without travel retakes a lock that had worked and
+        // was released (Esc). In an environment that refuses pointer lock
+        // outright, clicking must not retry: it only logs pointerlockerror.
+        if (wasClick && !controls?.isLocked && lockedOnceRef.current) requestLock();
+      };
+      canvas.addEventListener('pointerdown', onDragStart);
+      canvas.addEventListener('pointermove', onDragMove);
+      canvas.addEventListener('pointerup', onDragEnd);
+      canvas.addEventListener('pointercancel', onDragCancel);
+      cleanup.push(() => canvas.removeEventListener('pointerdown', onDragStart));
+      cleanup.push(() => canvas.removeEventListener('pointermove', onDragMove));
+      cleanup.push(() => canvas.removeEventListener('pointerup', onDragEnd));
+      cleanup.push(() => canvas.removeEventListener('pointercancel', onDragCancel));
       // Release pointer lock BEFORE disconnecting: an exit path that tears the
       // mode down while still locked would otherwise leave the cursor captured
       // with no mousemove handler attached (#114). No-op when already unlocked.
@@ -318,7 +401,9 @@ export function useWalkthrough(options: UseWalkthroughOptions): UseWalkthroughRe
         lastTime = now;
 
         if (controls) adoptWalkPointerLock(controls, canvas);
-        if (!controls?.isLocked) return;
+        // Keep walking when pointer lock was refused or dropped: the drag
+        // fallback owns the camera look, the loop still owns the movement.
+        if (!controls?.isLocked && phaseRef.current !== 'drag' && phaseRef.current !== 'unlocked') return;
         // Walkthrough is an active mode: mouse-look mutates the camera outside
         // this loop, so render every frame while pointer lock is engaged.
         invalidateRef.current?.();

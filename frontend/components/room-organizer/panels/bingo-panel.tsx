@@ -147,7 +147,7 @@ export function BingoPanel({ onClose, draftNote }: {
           这里只看<strong>甲方反馈</strong>：画内钉评与「完成评审」回执。链接发给对方去 <code>/review</code> 落钉；你在这读汇总，侧栏旧评论仅只读兼容。
         </p>
         <p className={`sc-bingo-draft-note${draftNote.error ? ' has-error' : ''}`} role="status" title={draftNote.title}>
-          本机草稿 · {draftNote.label}
+          草稿 · {draftNote.label}
         </p>
         {snapshot.receipt && (
           <div className="sc-bingo-receipt-card" role="status">

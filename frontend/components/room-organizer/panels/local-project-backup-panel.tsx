@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { readLocalProjectBackupFile, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
