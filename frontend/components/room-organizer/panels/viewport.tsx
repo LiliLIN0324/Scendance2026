@@ -42,6 +42,8 @@ export interface ViewportProps {
   walkthroughPhase?: WalkthroughPhase;
   /** Sample / World gaussian is the backdrop; the hint says walk stays at eye height. */
   walkthroughInEnvironment?: boolean;
+  /** The backdrop is metric: the walker roams the scanned bounds 1:1, not the plate. */
+  walkthroughMetric?: boolean;
   hover?: HoverState | null;
   measurementDistance?: number | null;
   /** Points placed with the distance tool; absent while the tool is off. */
@@ -302,10 +304,11 @@ function StatusChip({
   );
 }
 
-function walkHint(phase: WalkthroughPhase | undefined, inEnvironment: boolean | undefined): string {
+function walkHint(phase: WalkthroughPhase | undefined, inEnvironment: boolean | undefined, metric?: boolean): string {
+  const metricPrefix = metric ? '1:1 实景 · ' : '';
   if (phase === 'locked') {
     return inEnvironment
-      ? '眼高走进环境 · WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出'
+      ? `${metricPrefix}眼高走进环境 · WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出`
       : 'WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出';
   }
   if (phase === 'unlocked') {
@@ -358,7 +361,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
           >
             <StatusChip intent="accent">
               <Icon name="live" size={14} />
-              {walkHint(props.walkthroughPhase, props.walkthroughInEnvironment)}
+              {walkHint(props.walkthroughPhase, props.walkthroughInEnvironment, props.walkthroughMetric)}
             </StatusChip>
           </div>
         </>

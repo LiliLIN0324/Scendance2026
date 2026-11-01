@@ -6,6 +6,11 @@ import type { SplatMesh, SparkRenderer } from '@sparkjsdev/spark';
 export type SplatUpAxis = 'X' | 'Y' | 'Z';
 /** 本机稳定地址（`/asset/<uuid>.spz`）：Spark 按后缀认格式，所以不用再传类型。 */
 export type SplatMeters = Readonly<{ width: number; depth: number; height: number }>;
+/**
+ * 落地后的真实米制水平边界：第一人称漫游用它代替场地 footprint 围栏，
+ * 让人在点云里走扫描出来的实际空间，而不是布置区那 12×9 米。
+ */
+export type SplatWalkBounds = Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number; minY: number }>;
 export type SplatSource = Readonly<{ assetId: string; url: string; name: string; meters?: SplatMeters }>;
 export type SplatLoadOptions = Readonly<{
   /** 场地最长水平边（米）：无真实尺度时的兜底——点云按它等比缩放。 */
@@ -65,6 +70,13 @@ export function fitSplatBox(box: THREE.Box3, sizeMeters: number): SplatFit {
   const scale = sizeMeters > 0 && horizontal > EPSILON ? sizeMeters / horizontal : 1;
   const center = box.getCenter(new THREE.Vector3());
   return { scale, position: new THREE.Vector3(-center.x * scale, -box.min.y * scale, -center.z * scale) };
+}
+
+/** 把落地后的包围盒折成漫游边界；退化盒（薄片 / 空点云）退回 null，让调用方保留旧围栏。 */
+export function walkBoundsOf(box: THREE.Box3): SplatWalkBounds | null {
+  const size = box.getSize(new THREE.Vector3());
+  if (!(size.x > EPSILON) || !(size.z > EPSILON)) return null;
+  return Object.freeze({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, minY: box.min.y });
 }
 
 export type SplatOrbit = { target: THREE.Vector3; update(): void };
@@ -162,7 +174,7 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     mesh = null;
   }
 
-  async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number; meters: SplatMeters }>> {
+  async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number; meters: SplatMeters; walkBounds: SplatWalkBounds | null }>> {
     if (disposed) throw new Error('环境预览已关闭。');
     const sparkModule = await sparkPromise;
     if (disposed) throw new Error('环境预览已关闭。');
@@ -226,6 +238,8 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
         depth: Math.round(placed.z * 10) / 10,
         height: Math.round(placed.y * 10) / 10,
       },
+      // 第一人称 1:1 漫游的围栏：同一条落位盒，不重算。
+      walkBounds: walkBoundsOf(bounds),
     });
   }
 
