@@ -308,8 +308,17 @@ function walkHint(phase: WalkthroughPhase | undefined, inEnvironment: boolean | 
       ? '眼高走进环境 · WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出'
       : 'WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出';
   }
-  if (phase === 'needs-click') {
-    return inEnvironment ? '再点一下画面，按眼高走进环境' : '再点一下画面，开始第一人称走动';
+  if (phase === 'unlocked') {
+    return inEnvironment
+      ? '按住左键拖动转头 · WASD 走动 · 点一下画面上锁鼠标 · Esc 退出'
+      : '按住左键拖动转头 · WASD 走动 · Shift 加速 · 点一下画面上锁鼠标 · Esc 退出';
+  }
+  if (phase === 'drag') {
+    // The browser refused pointer lock in this environment, so the cursor
+    // stays visible and looking is a drag — never promise a lock click (#351).
+    return inEnvironment
+      ? '眼高走进环境 · 按住左键拖动转头 · WASD 走动 · Esc 退出'
+      : '按住左键拖动转头 · WASD 走动 · Shift 加速 · Esc 退出';
   }
   return '正在进入第一人称…';
 }

@@ -15,6 +15,8 @@ export function isLux3dLocalProxy(): boolean {
 }
 
 export type AholoAssetKind = 'glb' | 'spz' | 'ply';
+/** 观感面板里的四种生成方式：前两种产物件（物料生成），后两种产场地（场地生成）。 */
+export type AholoDirectKind = 'text' | 'image' | 'world' | 'recon';
 const KINDS: AholoAssetKind[] = ['glb', 'spz', 'ply'];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const taskidPattern = /^[A-Za-z0-9_-]{1,128}$/;

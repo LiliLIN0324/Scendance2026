@@ -14,23 +14,26 @@
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
-import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, Ruler, Scan, Shapes, Sparkles, SquareDashed, X } from 'lucide-react';
+import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
+import type { AholoDirectKind } from '../lib/aholo-assets';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
 import { AmapVenuePicker } from './amap-venue-picker';
+import { VenuePicker } from './venue-picker';
 import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
-import { describeDiagnostics, type PlanDiagnostic } from '../lib/diagnostics';
+import { type PlanDiagnostic } from '../lib/diagnostics';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { sameLayoutContent } from '../lib/persistence';
 import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicable } from '../lib/plan-artifact';
+import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
 import { venueBriefLine } from '../lib/venue-brief-line';
@@ -45,7 +48,9 @@ import {
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
 import { LaneSwitch, MaterialGenerateDock } from './material-generate-dock';
+import { ComposerPlus } from './composer-plus';
 import { SiteCaptureCard } from './site-capture-card';
+import { SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
 import { useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay } from './session-history-panel';
@@ -60,6 +65,9 @@ type GenerateFill = { kind: 'text' | 'world'; prompt: string; nonce: number };
 let onGenerateFill: ((seed: GenerateFill) => void) | null = null;
 
 const MASCOT_DIR = '/assets/assistant/qingguang-3d';
+
+/** 布置轨空输入时的引导句：跟生成条一样逐字打出来，按 Tab 填整句。 */
+const LAYOUT_SUGGESTIONS = ['80 人发布会，室内 12×9', '30 人圆桌晚宴，室内 15×10', '户外市集，6 个摊位，要遮阳'] as const;
 const STEP_DELAY_MS = 420;
 /** 云提案有自己的失效条件（基线/需求/编辑权/租约）。确认按钮按住时说的那句，卡片和按钮共用一条。 */
 const CLOUD_STALE = '场地、需求或编辑权在这期间变了，这版先别确认，重新出一版。';
@@ -72,6 +80,8 @@ type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
+  /** 选进来的图纸/照片：跟这条消息一起留在聊天区，不是只把文件名当一行字。 */
+  image?: string;
   /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
   action?: { label: string; run(): void };
 };
@@ -83,6 +93,8 @@ type Scale = { length: number; width: number; origin: ScaleOrigin };
  * 卡片只认这几个数，谁来提案都得先预览、由人点「确认布置」才落盘。
  */
 interface ProposalView extends PendingPlan {
+  /** 这次运行的结果账单：放进/挪动/撤掉、被拒原因、没动件数与空结果原因。 */
+  outcome: RunOutcome;
   source: 'local' | 'cloud';
   /** 本地提案里 Agent 没动的锁定件数。 */
   keptLocked: number;
@@ -108,7 +120,7 @@ interface ProposalView extends PendingPlan {
 function viewOfLocalPlan(plan: PlanProposal): ProposalView {
   return {
     added: plan.added, removing: plan.removing, changed: plan.moved ?? 0, lockedTouched: 0,
-    overlapCount: plan.overlapCount, overlapNames: plan.overlapNames,
+    overlapCount: plan.overlapCount, overlapNames: plan.overlapNames, outcome: outcomeOfPlan(plan),
     source: 'local', keptLocked: plan.keptLocked, dropped: plan.dropped, blocked: plan.blocked,
     guests: plan.guests ?? null, seats: plan.seats ?? 0, seatPriority: !!plan.seatPriority,
     review: plan.kind === 'review', skipped: plan.skipped ?? [], diagnostics: plan.diagnostics ?? [],
@@ -129,35 +141,6 @@ function withPlanArtifact(plan: PlanProposal, base: RoomLayout): PlanProposal {
       },
     }),
   };
-}
-
-/** 卡片与气泡共用的那句话：新摆几件、动了几件已有的、要撤几件旧的。 */
-function planLines(view: ProposalView): string[] {
-  const lines: string[] = [];
-  if (view.review) {
-    if (view.changed) lines.push(`蓝框是挪到的新位置 ${view.changed} 件（琥珀线框是原位）`);
-  } else {
-    if (view.added) lines.push(`绿框是新摆的 ${view.added} 件`);
-    if (view.changed) lines.push(`蓝框是挪动过的 ${view.changed} 件`);
-  }
-  if (view.removing) lines.push(`红框是要撤掉的 ${view.removing} 件`);
-  if (view.keptLocked) lines.push(`锁定 ${view.keptLocked} 件我没动`);
-  const droppedLine = view.diagnostics?.length
-    ? describeDiagnostics(view.diagnostics)
-    : view.dropped ? `${view.dropped} 件放不下，没采纳` : null;
-  if (droppedLine) lines.push(droppedLine);
-  if (view.skipped?.length) lines.push(`${view.skipped.length} 件没动：${view.skipped.slice(0, 4).join('、')}${view.skipped.length > 4 ? ' 等' : ''}`);
-  // 人数是这一版的条件：摆得下就说摆了几座，摆不下就直说多少人得站着，不拿「已按 80 人布置」糊过去。
-  // 已经按「加座」重排过还差人，就报场地最多能坐多少，不再暗示再点一次就能补齐。
-  if (view.guests && view.guests > 0) {
-    const seats = view.seats ?? 0;
-    lines.push(seats >= view.guests
-      ? `按 ${view.guests} 人摆了 ${seats} 座`
-      : view.seatPriority
-        ? `这版最多摆 ${seats} 座，还差 ${view.guests - seats} 位；可以换更大的场地，或按站立留空`
-        : `只摆得下 ${seats} 座，其余 ${view.guests - seats} 位按站立留空`);
-  }
-  return lines;
 }
 
 /** 体检改法没动成时，按原因点名：锁着是规矩，找不到落点是能力边界，不能混成一句。 */
@@ -211,6 +194,10 @@ interface AgentValue {
   mapPickerOpen: boolean;
   startMapVenuePicker(): void;
   closeMapVenuePicker(): void;
+  /** 「换场地 / 新建」弹层：空白场地、我的云项目、新建项目同一个入口。 */
+  venuePickerOpen: boolean;
+  startVenuePicker(): void;
+  closeVenuePicker(): void;
   applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
@@ -223,6 +210,9 @@ interface AgentValue {
   /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
   exportPreview: boolean; previewExport(): void; confirmExport(): void; dismissExport(): void;
   acceptFile(file: File): void; retryFile(): void; pickFile(): void;
+  /** 选进来、还没发出去的图纸/照片：挂在输入框上，点发送才读进场地。 */
+  pendingFile: { name: string; url: string } | null;
+  removePendingFile(): void;
   send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
 }
 
@@ -265,6 +255,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const anchorsRef = useRef({ stage: true, checkin: false });
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
   const [exportPreview, setExportPreview] = useState(false);
@@ -275,6 +266,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const lastFile = useRef<File | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
+  /** 选进来、还没发出去的图纸/照片：先摆在输入框里，等一句需求再一起发。 */
+  const [pendingFile, setPendingFile] = useState<{ file: File; url: string } | null>(null);
   const runToken = useRef(0);
   const seed = useRef(1);
   const colliding = useRef(collidingIds); colliding.current = collidingIds;
@@ -612,12 +605,16 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       id => byId.get(id)?.name ?? '物件',
     );
     const current = studioRef.current;
+    const blocked = current?.expired ? '这版已经过期了，重新出一版再看。'
+      : current?.stale ? CLOUD_STALE
+      : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料：我不改锁着的东西，先解锁或换一版。`
+      : null;
     return {
-      ...plan, source: 'cloud', keptLocked: 0, dropped: 0,
-      blocked: current?.expired ? '这版已经过期了，重新出一版再看。'
-        : current?.stale ? CLOUD_STALE
-        : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料：我不改锁着的东西，先解锁或换一版。`
-        : null,
+      ...plan, source: 'cloud', keptLocked: 0, dropped: 0, blocked,
+      outcome: buildOutcome({
+        added: plan.added, removing: plan.removing, changed: plan.changed, keptLocked: 0, dropped: 0,
+        blocked, lockedTouched: plan.lockedTouched,
+      }),
     };
   }, []);
   const cloudProposal = useMemo(() => cloudViewOf(studio?.preview ?? null), [cloudViewOf, studio?.preview, studio?.stale, studio?.expired]);
@@ -641,7 +638,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       setIssue(null); setBaseName(file.name);
       // 图纸只当参照：不把按比例折出来的数字悄悄填进卡片，也不说成「读到的尺寸」。
       planPixels.current = { width: pixels.width, height: pixels.height };
-      say({ role: 'user', text: file.name, meta: '图片 · 1 页' });
+      say({ role: 'user', text: file.name, meta: '图片 · 1 页', image: url });
       // 拖图也算主入口：说过尺度就照它出一版；没说过就只差一步，给一个当场能点的「按图纸估一版」。
       if (lengthCheck.ok && widthCheck.ok) {
         const scale: Scale = { length: lengthCheck.value, width: widthCheck.value, origin: scaleOrigin };
@@ -659,6 +656,19 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
   }
 
+  /** 选文件先挂到输入框，不进对话、不改画布；点发送才按原来的链路读进场地。 */
+  async function stageFile(file: File): Promise<void> {
+    const verdict = classifyFile(file);
+    if (verdict !== 'image') { await acceptFile(file); return; }
+    try {
+      const url = await readImageAsDataUrl(file);
+      setIssue(null);
+      setPendingFile({ file, url });
+    } catch {
+      await acceptFile(file);
+    }
+  }
+
   // 拖文件到画布或右栏：只认 Files，不干扰物料拖放。
   useEffect(() => {
     if (callbacks.workbenchMode !== 'layout') return undefined;
@@ -670,7 +680,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       if (!hasFiles(event)) return;
       event.preventDefault(); dragDepth.current = 0; setDragging(false);
       const file = event.dataTransfer?.files?.[0];
-      if (file && phaseRef.current !== 'generating') void acceptFile(file);
+      if (file && phaseRef.current !== 'generating') void stageFile(file);
     };
     window.addEventListener('dragenter', enter); window.addEventListener('dragleave', leave);
     window.addEventListener('dragover', over); window.addEventListener('drop', drop);
@@ -769,11 +779,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     setPhase('proposed');
     const planView = viewOfLocalPlan(plan);
-    const notes = planLines(planView);
     const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
+    // 件数与原因只在下面那张卡的「本次结果」里说一遍，气泡不再复读数字。
     say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
-      ? `${planView.blocked}先出一版给你看着改：${notes.join('，')}。确认按钮暂时点不动，改好场地或解锁再出一版。`
-      : `${intro}${notes.join('，')}。${tail}` });
+      ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。`
+      : `${intro}结果写在下面那张卡上。${tail}` });
   }
 
   /**
@@ -993,8 +1003,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     lastSource.current = 'cloud';
     setProgress(GEN_STEPS.length); setPhase('proposed');
     say({ role: 'agent', amber: !!view.blocked, text: view.blocked
-      ? `云端给了一版：${planLines(view).join('，')}。${view.blocked}`
-      : `云端给了一版：${planLines(view).join('，')}。画布上是预览，还没落盘，点「确认布置」才写进画布。` });
+      ? `云端给了一版，结果明细在下面。${view.blocked}`
+      : '云端给了一版，结果明细在下面。画布上是预览，还没落盘，点「确认布置」才写进画布。' });
     return true;
   }
 
@@ -1113,7 +1123,15 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }, [handoffExportRequest]);
 
   async function send(text: string): Promise<void> {
-    const trimmed = text.trim(); if (!trimmed) return;
+    // 图纸/照片先在输入框里等：这一句发出去时才算读过、才铺底图；纯发文件也算一步。
+    const attachment = pendingFile;
+    if (attachment) setPendingFile(null);
+    const trimmed = text.trim();
+    if (!trimmed && !attachment) return;
+    if (attachment) {
+      await acceptFile(attachment.file);
+      if (!trimmed) return;
+    }
     // 「停一下」是命令，不是需求：正在摆就停手，摆好了还没确认就撤回，别把它当成一句话记进简报。
     if (isStopCommand(trimmed) && (phase === 'generating' || phase === 'proposed' || phase === 'paused')) {
       say({ role: 'user', text: trimmed });
@@ -1250,6 +1268,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
     cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
+    venuePickerOpen, startVenuePicker: () => setVenuePickerOpen(true), closeVenuePicker: () => setVenuePickerOpen(false),
     applyMapVenuePick: pick => {
       if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
       runToken.current++;
@@ -1285,6 +1304,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     },
     exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
+    pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
+    removePendingFile: () => setPendingFile(null),
     send, rainOn: view.weather === 'rain',
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
     walkthrough: () => {
@@ -1294,7 +1315,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   };
   return <AgentContext.Provider value={value}>
     {children}
-    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void acceptFile(file); }}/>
+    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void stageFile(file); }}/>
   </AgentContext.Provider>;
 }
 
@@ -1430,17 +1451,14 @@ type CapabilityChip = {
 
 function AgentCapabilityPrompts(): JSX.Element | null {
   const agent = useAgent();
-  const lux = agent.callbacks.luxToolsVisible !== false;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
 
+  // 布置只放场地与需求这一层；生成为什么不在这里，跟「生成」条那片「你可以做什么」对得上。
   const chips: CapabilityChip[] = [
+    { id: 'venue', label: '新建/换场地', title: '空白场地、我的云项目，或只起个名字新建一个', icon: <MapPin size={14} aria-hidden="true"/>, run: agent.startVenuePicker, active: agent.venuePickerOpen },
     { id: 'map', label: '地图选址', title: '搜地点 → 在卫星图上圈出边界', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen },
-    { id: 'reference', label: '图纸与照片', title: '图纸、照片与实测尺寸', icon: <Ruler size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenReference?.() },
-    { id: 'blank', label: '空白场地', title: `先给一块 ${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m 空地，尺寸回头在对话里说`, icon: <SquareDashed size={14} aria-hidden="true"/>, run: agent.startBlankVenue },
-    { id: 'generate', label: '生成物件', title: '一句话生成 3D 物件，确认扣额度才提交', icon: <Sparkles size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenGenerate?.() },
-    { id: 'lux3d', label: '场地观感', title: '图片、场景观感与物料', icon: <Shapes size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenLux3d?.() },
-    { id: 'rebuild', label: '场地重建', title: '现场照片重建 3D 场地', icon: <Scan size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenRebuild?.() },
-  ].filter(chip => lux || !['generate', 'lux3d', 'rebuild'].includes(chip.id));
+    { id: 'reference', label: '图纸与照片', title: '图纸、照片与实测尺寸', icon: <Paperclip size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenReference?.() },
+  ];
 
   return <div id="ap-capabilities" className="ap-capabilities">
     <p className="ap-capability-label">你可以做什么</p>
@@ -1508,9 +1526,28 @@ export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
   </div>;
 }
 
+/**
+ * 「换场地 / 新建」弹层：与地图浮层同款盖画布。云项目同标签 router.push（认证按标签页存），
+ * 空白场地复用 startBlankVenue 那条立壳链；新建只起名字，没工作室时静默建「个人工作室」。
+ */
+export function VenuePickerOverlay(): JSX.Element | null {
+  const agent = useAgent();
+  const panel = useRef<HTMLDivElement>(null);
+  useDialogFocus(agent.venuePickerOpen, panel, { trap: true, onEscape: agent.closeVenuePicker });
+  if (!agent.venuePickerOpen) return null;
+  return <div className="sc-venue-overlay" ref={panel} role="dialog" aria-modal="true" aria-label="换场地 / 新建" tabIndex={-1}>
+    <div className="sc-map-head">
+      <strong>换场地 / 新建</strong>
+      <span className="sc-note">空白场地立刻开工；云项目同标签打开，进度都在。</span>
+      <button type="button" className="sc-button" aria-label="关闭" data-tip="关闭" title="关闭" onClick={agent.closeVenuePicker}><X size={16} aria-hidden="true"/></button>
+    </div>
+    <VenuePicker onClose={agent.closeVenuePicker} onBlankVenue={() => { agent.startBlankVenue(); agent.closeVenuePicker(); }} />
+  </div>;
+}
+
 function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
   return <>{agent.bubbles.map(bubble => bubble.role === 'user'
-    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
+    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
     : <div key={bubble.id} className="ap-turn">
       <p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
       {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
@@ -1546,15 +1583,14 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
     const hold = agent.cloudBusy || agent.recovering;
   return <div className="ap-card ap-plan" id="plan-proposal">
     <strong>{review ? '改法预览' : '这版还在预览'}</strong>
-    <p>{formatArea(venueArea(layout))} ㎡ · {review
-      ? `只挪位置，其他没动 · 挪了 ${plan.changed} 件`
-      : <>新摆 {plan.added} 件{plan.changed ? ` · 挪动 ${plan.changed} 件` : ''}{plan.removing ? ` · 要撤 ${plan.removing} 件旧的` : ''}</>}</p>
+    <div className="ap-outcome" role="note" aria-label="本次结果">
+      <p className="ap-outcome-label">本次结果 · {formatArea(venueArea(layout))} ㎡</p>
+      {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
+    </div>
     {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `按 ${guests} 人摆了 ${seats} 座`}</p>}
     {short && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
     {short && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">场地最多摆得下 {seats} 座；要再多人，得换更大的场地或按站立留空。</p>}
     {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
-    {plan.keptLocked > 0 && <p className="ap-small">锁定 {plan.keptLocked} 件我没动。</p>}
-    {review && !!plan.skipped?.length && <p className="ap-small">没动 {plan.skipped.length} 件：{plan.skipped.slice(0, 3).join('、')}{plan.skipped.length > 3 ? ' 等' : ''}（锁着或没找到稳妥落点）。</p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{agent.recovering && !agent.cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
@@ -1575,7 +1611,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   generateOpen?: boolean;
   onGenerateOpen?(next: boolean): void;
   onPlaceProp?: ((item: CatalogItem) => boolean) | undefined;
-  onOpenPropFallback?: (() => void) | undefined;
+  onOpenPropFallback?: ((kind: AholoDirectKind) => void) | undefined;
   onOpenPropCloud?: (() => void) | undefined;
   /** 评审议题。挂在对话里，不替换整栏。 */
   reviewSlot?: ReactNode;
@@ -1598,6 +1634,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     onGenerateFill = seed => { setPropSeed(seed); setPropLaneRef.current(true); };
     return () => { onGenerateFill = null; };
   }, []);
+  /** 「+」里直接点名生成种类：进生成条、定好物件/场景，输入框留空等一句话。 */
   const { layout, activeFloor } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const [draft, setDraft] = useState('');
@@ -1611,6 +1648,9 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
+  const suggestion = useSuggestion(LAYOUT_SUGGESTIONS);
+  // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
+  const ghostVisible = mode === 'layout' && !draft.trim() && !generating;
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
@@ -1719,16 +1759,34 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     </div>
     </div>
     {propLane
-      ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenFallback={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
+      ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenAholo={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
       : <>
         {mode === 'layout' && <AgentCapabilityPrompts/>}
         <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
-        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send(draft); setDraft(''); } }}/>
+        {agent.pendingFile && <div className="sc-chat-file">
+          <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
+          <span className="sc-chat-file-name">{agent.pendingFile.name}</span>
+          <button type="button" className="sc-chat-file-remove" aria-label="移除附件" onClick={agent.removePendingFile}><X size={14} aria-hidden="true"/></button>
+        </div>}
+        <div className="ap-composer-field">
+        {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown}/>}
+        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void agent.send(draft); setDraft(''); }
+        }}/>
+        </div>
         <div className="ap-composer-bar">
-          <button type="button" className="ap-attach" aria-label="附图纸 / 现场照片" title="附图纸 / 现场照片" onClick={agent.pickFile} disabled={mode !== 'layout' || generating}><Paperclip size={20} aria-hidden="true"/></button>
+          <div className="ap-composer-left">
+            <ComposerPlus label="场地与附件" items={[
+              { id: 'venue', label: '新建/换场地', hint: '立壳体，或换一套场地尺度', icon: <MapPin size={16} aria-hidden="true"/>, disabled: generating, run: agent.startVenuePicker },
+              { id: 'locate', label: '地图选址', hint: '圈一块地，量出真实尺寸', icon: <MapIcon size={16} aria-hidden="true"/>, disabled: generating, run: agent.startMapVenuePicker },
+              { id: 'attach', label: '图纸与照片', hint: '平面图、效果图或现场照片', icon: <Paperclip size={16} aria-hidden="true"/>, disabled: mode !== 'layout' || generating, run: agent.pickFile },
+            ]}/>
+          </div>
           <LaneSwitch prop={false} onChange={next => { if (next) setPropLane(true); }}/>
-          <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={20}/></button>
+          <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim() && !agent.pendingFile}><ArrowUp size={18}/></button>
         </div>
       </form>
       </>}

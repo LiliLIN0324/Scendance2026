@@ -1,10 +1,11 @@
 'use client';
 
-import { Package, PanelLeftClose, Settings } from 'lucide-react';
+import { Package, PanelLeftClose, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
+import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { get2DViewTransform } from './canvas-2d/render';
@@ -22,6 +23,7 @@ import { useImportExport } from './hooks/use-import-export';
 import { useItemDrag } from './hooks/use-item-drag';
 import { useItemPlacement } from './hooks/use-item-placement';
 import { useKeyboardPlacement } from './hooks/use-keyboard-placement';
+import { useSilentCloudAttach } from './hooks/use-silent-cloud-attach';
 import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts';
 import { useLayoutPersistence } from './hooks/use-layout-persistence';
 import { useLayoutState } from './hooks/use-layout-state';
@@ -38,6 +40,7 @@ import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
+import type { AholoDirectKind } from './lib/aholo-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -70,17 +73,18 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
-import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay } from './panels/agent-panel';
 import { BingoPanel } from './panels/bingo-panel';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { CloudPanel } from './panels/cloud-panel';
+import { SettingsMenu } from './panels/settings-menu';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
-import { NewActivityEntry } from './panels/new-activity-entry';
+import type { AholoGenGroup } from './panels/lux3d-direct-test';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
@@ -244,6 +248,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const luxDirectVisible = process.env.NEXT_PUBLIC_LUX3D_RAIL !== '0';
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
   const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
+  // 生成轨点「物料生成 / 场地生成」：观感面板落到对应那组标签；nonce 让同一入口连点也生效。
+  const [lux3dOpenKind, setLux3dOpenKind] = useState<{ kind: AholoDirectKind; nonce: number } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
@@ -263,7 +269,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
   const [backupOpenRequest, setBackupOpenRequest] = useState(0);
   const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
-  const [publicationOpenRequest, setPublicationOpenRequest] = useState(0);
   const [accountOpenRequest, setAccountOpenRequest] = useState<{ serial: number; section: string }>({ serial: 0, section: 'team' });
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
@@ -388,6 +393,24 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     });
     return { url };
   }, []);
+  // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
+  const publishVersion = useCallback(async () => {
+    const snapshot = controller.getSnapshot();
+    if (!snapshot.configured) throw new Error('发布服务还没连上。');
+    if (!snapshot.user || snapshot.user.is_anonymous) throw new Error('登录后再发布。');
+    const projectId = snapshot.project?.id ?? layoutStore.getState().layout.id;
+    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    if (snapshot.writeBlocked) throw new Error('这个项目现在是只读，取回编辑权后再发布。');
+    if (snapshot.dirty || !Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再发布。');
+    try {
+      const publication = publicationSchema.parse(await controller.businessRequest<unknown>(
+        `/projects/${encodeURIComponent(projectId)}/publish`, 'POST', { expectedRevision: snapshot.revision },
+      ));
+      return { url: publication.url, revision: publication.revision };
+    } catch (error) {
+      throw new Error(shareErrorMessage(error));
+    }
+  }, [controller]);
   const exportHandoff = useCallback(() => {
     setSidePanel(null);
     setAgentCollapsed(false);
@@ -1678,6 +1701,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const onBindProject = useCallback((projectId: string) => {
     actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
   }, [actions]);
+  // 无感挂云（设计规范 v2.5.2 §二.4）：登录态摆上第一件物料时静默建云项目并接上保存链。
+  useSilentCloudAttach({ controller, layout, onBindProject });
 
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
     setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
@@ -1713,9 +1738,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     return encodeStageCover(canvas);
   }), [isReady, view.view2D]);
   const reviewContext=JSON.stringify(referenceImage.layer??null);
-  const draftLabel = saveError ? '本机保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存到本机' : '本地草稿';
+  // §二.4 默认在云上：保存态只说「已保存」，不出现云/本地二元说法。
+  const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存' : '草稿';
   const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '';
-  const draftTitle = saveError ? '本机保存失败，请导出备份' : draftLabel;
+  const draftTitle = saveError ? '保存失败，请导出备份' : draftLabel;
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -1772,7 +1798,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 onOpenQingguang={openQingguang}
                 qingguangRailRef={qingguangRailRef}
               />
-              <NewActivityEntry layout={layout}/>
               <nav className="sc-mode-rail-primary" aria-label="Bingo、空间与物料">
                 <BingoRailButton open={sidePanel === 'bingo'} onToggle={toggleBingoPanel} />
                 <button
@@ -1804,19 +1829,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </div>
             <div className="sc-mode-rail-foot">
               {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
-              <button ref={workspaceEntryRef} type="button" className="sc-rail-settings" aria-label="设置" data-tip="设置" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Settings size={22} aria-hidden="true"/></button>
-              <CloudPanel controller={controller} layout={layout} publicationRequest={publicationOpenRequest} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <SettingsMenu buttonRef={workspaceEntryRef} />
+              <button type="button" className="sc-rail-team" aria-label="团队" data-tip="团队" onClick={() => setAccountOpenRequest(current => ({ serial: current.serial + 1, section: 'team' }))}><Users size={22} aria-hidden="true"/></button>
+              <CloudPanel controller={controller} layout={layout} openRequest={accountOpenRequest} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setMaterialsOpen(false);setSpaceOpen(false);setSidebarCollapsed(false);}}>选中物料</button>}
-              {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLeftMode('lux3d');setMaterialsOpen(false);setSpaceOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
+              {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLux3dOpenKind(null);setLeftMode('lux3d');setMaterialsOpen(false);setSpaceOpen(false);setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {agentPanelVisible && <AgentPanel headerAvatarRef={qingguangHeaderAvatarRef} headerAvatarVisible={headerAvatarVisible} onClose={closeQingguang} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={() => { noteVenueThreeIntent(); setLeftMode('lux3d'); setMaterialsOpen(false); setSpaceOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentClosing(false); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {agentPanelVisible && <AgentPanel headerAvatarRef={qingguangHeaderAvatarRef} headerAvatarVisible={headerAvatarVisible} onClose={closeQingguang} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={(kind) => { noteVenueThreeIntent(); setLux3dOpenKind({ kind, nonce: Date.now() }); setLeftMode('lux3d'); setMaterialsOpen(false); setSpaceOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentClosing(false); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -1943,6 +1969,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               setAholoReconPreset(preset);
               setLeftMode('lux3d'); setMaterialsOpen(false); setSpaceOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false);
             } : undefined}/>
+            <VenuePickerOverlay/>
             {checklistOpen && <aside className="sc-checklist-drawer" role="dialog" aria-label="到场清单">
               <button type="button" className="sc-checklist-dismiss" onClick={() => setChecklistOpen(false)}>关闭</button>
               <DeliveryChecklistShell items={activeFloor.items} onExport={exportHandoff}/>
@@ -1954,10 +1981,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
                 onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
             </div>}
-            {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
-              <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
-              <Lux3dDirectTest reconPreset={aholoReconPreset} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onOpenCloudModels={() => businessToolsRef.current?.openModelTools()} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
-            </div>}
+            {luxDirectVisible && leftMode === 'lux3d' && (() => {
+              /** 从生成条的两张卡进来，弹窗只留本组；从观感轨进来才是四档合一。 */
+              const group: AholoGenGroup | undefined = aholoReconPreset ? 'venue'
+                : lux3dOpenKind ? (lux3dOpenKind.kind === 'text' || lux3dOpenKind.kind === 'image' ? 'materials' : 'venue') : undefined;
+              return <div className="sc-canvas-share">
+                <div className="sc-canvas-share-bar"><strong>{group === 'materials' ? '物料生成' : group === 'venue' ? '场地生成' : '场地观感'}</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
+                <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} {...(group ? { group } : {})} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onOpenCloudModels={() => businessToolsRef.current?.openModelTools()} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
+              </div>;
+            })()}
             <PlanFlow onOpenAgent={() => { setSidePanel(null); setAgentCollapsed(false); }} onHomeChange={setPlanHome}/>
             <CanvasHeading view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
@@ -1968,7 +2000,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
+            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFit={fitToRoom} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;
@@ -1984,7 +2016,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </div>
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} onOpenPublication={()=>setPublicationOpenRequest(value=>value+1)} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
+          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
         </main>
       </div>
       </LayoutAgentProvider>

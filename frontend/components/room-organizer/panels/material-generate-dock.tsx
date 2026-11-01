@@ -1,10 +1,14 @@
 'use client';
 
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Cloud } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { DIRECT_BASE, isLux3dLocalProxy } from '../lib/aholo-assets';
+import { DIRECT_BASE, isLux3dLocalProxy, type AholoDirectKind } from '../lib/aholo-assets';
 import { CREDIT_CONFIRM_LABEL } from '../lib/site-recon-mock';
+import { ComposerPlus } from './composer-plus';
+import { KIND_ICONS } from './kind-icons';
+import { SuggestionGhost, useSuggestion } from './typed-suggestion';
 import type { CatalogItem } from '../lib/types';
+import type { ReactNode } from 'react';
 
 /** 空输入时打出来的那句。Tab 填的是整句，不是打到一半的字。 */
 export const GENERATE_SUGGESTIONS = ['一张白色圆桌，极简', '浅木色签到台', '两把圈椅，配一张长桌'] as const;
@@ -13,33 +17,6 @@ export type GenerateKind = 'text' | 'world';
 
 const TERMINAL = new Set([3, 4, 6]);
 const HISTORY_KEY = 'scendance:aholo-history';
-
-function prefersStill(): boolean {
-  if (typeof window.matchMedia !== 'function') return true;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches !== false;
-}
-
-function useSuggestion(list: readonly string[]): { full: string; shown: string } {
-  const [index, setIndex] = useState(0);
-  const [count, setCount] = useState(() => (prefersStill() ? list[0]!.length : 0));
-  const key = list.join('|');
-  useEffect(() => { setIndex(0); setCount(prefersStill() ? (list[0]?.length ?? 0) : 0); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (prefersStill()) return;
-    const full = list[index] ?? list[0] ?? '';
-    if (count < full.length) {
-      const timer = window.setTimeout(() => setCount(value => value + 1), 72);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => {
-      setIndex(value => (value + 1) % list.length);
-      setCount(0);
-    }, 1400);
-    return () => window.clearTimeout(timer);
-  }, [list, index, count]);
-  const full = list[index] ?? list[0] ?? '';
-  return { full, shown: prefersStill() ? full : full.slice(0, count) };
-}
 
 function isAbort(failure: unknown): boolean {
   return failure instanceof DOMException && failure.name === 'AbortError';
@@ -112,10 +89,11 @@ export function LaneSwitch({ prop, onChange }: { prop: boolean; onChange(next: b
  * 晴光栏底部的物件生成条，贴着对话，不进布置提案。
  * 思考强度不放：文生没有质量档，扣额度确认已经挡住误点。
  */
-export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, onOpenCloud, forceProxy, seed }: {
+export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenAholo, onOpenCloud, forceProxy, seed }: {
   onBackToChat(): void;
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
-  onOpenFallback?: (() => void) | undefined;
+  /** 物料生成 / 场地生成：打开观感面板并落在对应那组标签上。 */
+  onOpenAholo?: ((kind: AholoDirectKind) => void) | undefined;
   onOpenCloud?: (() => void) | undefined;
   /** 测试里强制走本机代理判断；正式界面不传，跟 isLux3dLocalProxy 走。 */
   forceProxy?: boolean;
@@ -127,7 +105,10 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
   const { full, shown } = useSuggestion(mode === 'world' ? WORLD_SUGGESTIONS : GENERATE_SUGGESTIONS);
   const [prompt, setPrompt] = useState('');
   const [creditConfirmed, setCreditConfirmed] = useState(false);
-  const [needCredit, setNeedCredit] = useState(false);
+  /** 扣额度这一步改成按提交那一下再问：勾选不常驻，也不占输入框下的一排。 */
+  const [confirming, setConfirming] = useState(false);
+  /** 「+」选过物料/场地之后，按钮图标跟着换成对应那颗；没选过仍是「+」。 */
+  const [pickedKind, setPickedKind] = useState<GenerateKind | null>(null);
   const [online, setOnline] = useState<boolean | null>(localProxy ? null : false);
   const [running, setRunning] = useState(false);
   const [note, setNote] = useState('');
@@ -149,9 +130,10 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
       return;
     }
     setMode(seed.kind);
+    setPickedKind(seed.kind);
     setPrompt(seed.prompt);
     setCreditConfirmed(false);
-    setNeedCredit(false);
+    setConfirming(false);
     inputRef.current?.focus();
   }, [seed]);
   useEffect(() => () => { mounted.current = false; run.current += 1; abortRef.current?.abort(); }, []);
@@ -165,6 +147,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     });
     return () => controller.abort();
   }, [localProxy]);
+  useEffect(() => { if (!prompt.trim()) setConfirming(false); }, [prompt]);
 
   function rememberTask(taskid: string) {
     openTaskRef.current = taskid;
@@ -182,6 +165,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     abortRef.current?.abort();
     lock.current = false;
     setRunning(false);
+    setConfirming(false);
     if (!accepted) setCreditConfirmed(false);
     setNote(accepted ? '已停止查询。任务已受理，不会再提交一次。' : '已停下。还没确认是否受理，先别再点生成。');
   }
@@ -227,6 +211,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     abortRef.current = controller;
     const started = Date.now();
     setRunning(true);
+    setConfirming(false);
     setResult(null);
     setEcho(text);
     setNote('正在提交…');
@@ -263,22 +248,38 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
     }
   }
 
+  function modeChanged(next: GenerateKind) {
+    setMode(next);
+    setConfirming(false);
+  }
+
+  function localProxyNote(): string {
+    return online === null
+      ? '正在确认本机代理，还没提交。'
+      : localProxy
+        ? '本机代理还不能生成，不会提交，也不会扣额度。'
+        : '本机代理没开，不会提交，也不会扣额度。';
+  }
+
+  /** 第一下按提交：先把扣额度说清楚，不直接打接口。 */
   function go() {
     if (running) { stop(); return; }
     if (openTaskRef.current) return;
-    const text = prompt.trim();
-    if (!text) return;
-    if (!creditConfirmed) { setNeedCredit(true); return; }
+    if (!prompt.trim()) return;
+    if (!creditConfirmed) { setConfirming(true); return; }
+    submitConfirmed();
+  }
+
+  /** 二次确认之后才真提交；同一单确认过就不再问第二次。 */
+  function submitConfirmed() {
+    if (running || openTaskRef.current || lock.current) return;
     if (online !== true) {
-      setNote(online === null
-        ? '正在确认本机代理，还没提交。'
-        : localProxy
-          ? '本机代理还不能生成，不会提交，也不会扣额度。'
-          : '本机代理没开，不会提交，也不会扣额度。');
+      setNote(localProxyNote());
       return;
     }
-    setNeedCredit(false);
-    void runSubmit(mode, text);
+    setCreditConfirmed(true);
+    setConfirming(false);
+    void runSubmit(mode, prompt.trim());
   }
 
   async function place() {
@@ -319,54 +320,69 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenFallback, on
 
   const held = Boolean(openTask) && !running;
   const disabled = running ? false : !prompt.trim() || held;
-  const label = running ? '停止生成' : held ? '生成进行中' : '生成物件';
+  const label = running ? '停止生成' : held ? '生成进行中' : mode === 'world' ? '生成场景' : '生成物件';
+  /** 没有记录、也没有要确认的事时，输入框下面什么都不长。 */
+  const hasThread = Boolean(echo || note || result || held);
+  const expanded = hasThread || confirming;
+  /** 出物料和出场地是两条能力，不挂页脚细链接，跟「布置」一样在输入框上方给一片「你可以做什么」。 */
+  const offers: { id: string; label: string; title: string; icon: ReactNode; run(): void }[] = [];
+  if (onOpenAholo) {
+    offers.push({ id: 'materials', label: '物料生成', title: '文字建模、图片建模：出可摆放的物件与材质', icon: <KIND_ICONS.text size={14} aria-hidden="true"/>, run: () => { setPickedKind('text'); onOpenAholo('text'); } });
+    offers.push({ id: 'venue', label: '场地生成', title: '场景生成、场地重建：出可漫游的 3DGS 场地', icon: <KIND_ICONS.world size={14} aria-hidden="true"/>, run: () => { setPickedKind('world'); onOpenAholo('world'); } });
+  }
+  if (!localProxy && onOpenCloud) offers.push({ id: 'cloud', label: '云端备用', title: '本机代理不在时走云端生成', icon: <Cloud size={14} aria-hidden="true"/>, run: onOpenCloud });
 
   return <div className="sc-gen-dock" data-lane="generate" data-online={online === true ? 'yes' : online === false ? 'no' : 'wait'}>
-    <div className="sc-gen-thread" role="log" aria-label="生成记录">
-      {!echo && !note && <p className="sc-gen-empty">{mode === 'world' ? '说一个场景，生成 3D。' : '说一件物件，生成 3D。'}</p>}
-      {echo && <div className="ap-user"><strong>{echo}</strong></div>}
-      {note && <p className="ap-agent">{note}</p>}
-      {result && onPlace && <button type="button" className="ap-bubble-action" disabled={placing} onClick={() => void place()}>{placing ? '正在取回…' : '放进场景'}</button>}
-      {held && <button type="button" className="sc-gen-resume" onClick={() => void resume()}>继续查询</button>}
+    {offers.length > 0 && <div className="ap-capabilities sc-gen-capabilities">
+      <p className="ap-capability-label">你可以做什么</p>
+      <div className="ap-capability-chips" role="group" aria-label="你可以做什么">
+        {offers.map(offer => <button key={offer.id} type="button" className="chip ap-capability-chip" title={offer.title} onClick={offer.run}>
+          {offer.icon}<span>{offer.label}</span>
+        </button>)}
+      </div>
+    </div>}
+    <div className={`sc-gen-fold${expanded ? ' is-open' : ''}`}>
+      <div className="sc-gen-fold-inner">
+        {hasThread && <div className="sc-gen-thread" role="log" aria-label="生成记录">
+          {echo && <div className="ap-user"><strong>{echo}</strong></div>}
+          {note && <p className="ap-agent">{note}</p>}
+          {result && onPlace && <button type="button" className="ap-bubble-action" disabled={placing} onClick={() => void place()}>{placing ? '正在取回…' : '放进场景'}</button>}
+          {held && <button type="button" className="sc-gen-resume" onClick={() => void resume()}>继续查询</button>}
+        </div>}
+        {confirming && <div className="sc-gen-confirm" role="group" aria-label="扣额度确认">
+          <p className="sc-gen-confirm-text">{CREDIT_CONFIRM_LABEL}。确认后才会提交，提交一次扣一次。</p>
+          <div className="sc-gen-confirm-row">
+            <button type="button" className="sc-gen-resume" onClick={() => setConfirming(false)}>取消</button>
+            <button type="button" className="sc-gen-confirm-go" onClick={submitConfirmed}>确认提交</button>
+          </div>
+        </div>}
+      </div>
     </div>
     <form id="prop-composer" className="ap-composer is-generate" onSubmit={event => { event.preventDefault(); go(); }}>
-      <label className="sr-only" htmlFor="prop-input">物件描述</label>
+      <label className="sr-only" htmlFor="prop-input">{mode === 'world' ? '场景描述' : '物件描述'}</label>
       <div className="sc-gen-field">
-        {!prompt && <span className="sc-gen-ghost" aria-hidden="true" data-suggestion={full}>{shown}</span>}
+        {!prompt && <SuggestionGhost className="sc-gen-ghost" full={full} shown={shown}/>}
         <textarea id="prop-input" ref={inputRef} rows={2} maxLength={200} value={prompt} disabled={running || held}
-          aria-describedby="prop-tab-hint"
           onChange={event => setPrompt(event.target.value)}
           onKeyDown={event => {
             if (event.nativeEvent.isComposing) return;
             if (event.key === 'Tab' && !prompt.trim()) { event.preventDefault(); setPrompt(full); return; }
-            if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); go(); }
+            if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (confirming) submitConfirmed(); else go(); }
+            if (event.key === 'Escape' && confirming) { event.preventDefault(); setConfirming(false); }
           }} />
       </div>
       <div className="ap-composer-bar">
-        <div className="sc-gen-meta">
-          {!prompt.trim() && <span className="sc-gen-tab" id="prop-tab-hint">按 Tab 填入</span>}
-          <label className="sc-gen-credit">
-            <input type="checkbox" checked={creditConfirmed} disabled={running || held}
-              aria-invalid={needCredit && !creditConfirmed}
-              aria-label={CREDIT_CONFIRM_LABEL}
-              onChange={event => { setCreditConfirmed(event.target.checked); if (event.target.checked) setNeedCredit(false); }} />
-            <span aria-hidden="true">确认扣额度</span>
-          </label>
-        </div>
-        <div className="ap-lane" role="group" aria-label="生成种类">
-          <button type="button" aria-pressed={mode === 'text'} disabled={running || held} onClick={() => setMode('text')}>物件</button>
-          <button type="button" aria-pressed={mode === 'world'} disabled={running || held} onClick={() => setMode('world')}>场景</button>
+        <div className="ap-composer-left">
+          <ComposerPlus label="生成种类" icon={pickedKind === 'text' ? <KIND_ICONS.text size={16} aria-hidden="true" /> : pickedKind === 'world' ? <KIND_ICONS.world size={16} aria-hidden="true" /> : undefined} items={[
+            { id: 'object', label: '物料', hint: '文字或图片，出可摆放的物件', active: pickedKind === 'text', icon: <KIND_ICONS.text size={16} aria-hidden="true" />, run: () => { setPickedKind('text'); modeChanged('text'); } },
+            { id: 'scene', label: '场地', hint: '一句场景描述，出可漫游的 3DGS', active: pickedKind === 'world', icon: <KIND_ICONS.world size={16} aria-hidden="true" />, run: () => { setPickedKind('world'); modeChanged('world'); } },
+          ]} />
         </div>
         <LaneSwitch prop onChange={next => { if (!next) onBackToChat(); }} />
         <button type="button" className="sc-gen-go" aria-label={label} disabled={disabled} onClick={go}>
-          {running ? <span className="sc-gen-stop" aria-hidden="true" /> : <ArrowUp size={16} aria-hidden="true" />}
+          {running ? <span className="sc-gen-stop" aria-hidden="true" /> : <ArrowUp size={18} aria-hidden="true" />}
         </button>
       </div>
-      {needCredit && !creditConfirmed && <p className="sc-gen-warn" role="status">先勾选确认扣额度，才会提交。</p>}
-      <p className="sc-gen-foot">
-        {!localProxy && onOpenCloud && <button type="button" className="sc-gen-resume" onClick={onOpenCloud}>云端备用</button>}
-        {onOpenFallback && <button type="button" className="sc-gen-resume" title="图片和重建在观感里。重建默认干跑，这里不提交。" onClick={onOpenFallback}>图片和重建</button>}
-      </p>
     </form>
   </div>;
 }

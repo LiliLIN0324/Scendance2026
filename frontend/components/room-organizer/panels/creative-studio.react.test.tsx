@@ -84,8 +84,8 @@ function DeliveryShortcutTrial({ current = layout, operations = false }: { curre
   </CreativeStudioProvider>;
 }
 
-function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace, onConversation, onTemplates, operations = false, localSaveError = false, workbenchMode, onOpenPublication, reviewOpenRequest, deliveryOpenRequest }: {
-  current?: RoomLayout; generator?: ReactNode; commercialPanel?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; onTemplates?:()=>void; operations?: boolean; localSaveError?: boolean; workbenchMode?: WorkbenchMode; onOpenPublication?:()=>void; reviewOpenRequest?: number; deliveryOpenRequest?: number;
+function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace, onConversation, onTemplates, operations = false, localSaveError = false, workbenchMode, reviewOpenRequest, deliveryOpenRequest }: {
+  current?: RoomLayout; generator?: ReactNode; commercialPanel?: ReactNode; onWorkspace?: (visible: boolean) => void; onConversation?: (visible: boolean) => void; onTemplates?:()=>void; operations?: boolean; localSaveError?: boolean; workbenchMode?: WorkbenchMode; reviewOpenRequest?: number; deliveryOpenRequest?: number;
 }) {
   const host = useRef<HTMLDivElement>(null), referenceEntry = useRef<HTMLButtonElement>(null), conversationEntry = useRef<HTMLButtonElement>(null);
   const workspaceEntry = useRef<HTMLButtonElement>(null), toolsEntry = useRef<HTMLButtonElement>(null);
@@ -105,7 +105,6 @@ function DockedTrial({ current = layout, generator, commercialPanel, onWorkspace
     <CreativeAssistant docked businessHostRef={host} generationPanel={generator} commercialPanel={commercialPanel} toolsApiRef={briefApi}
       {...(onTemplates?{onOpenTemplates:onTemplates}:{})}
       {...(workbenchMode?{workbenchMode,workbenchModeSerial:1}:{workbenchModeSerial:0})}
-      {...(onOpenPublication?{onOpenPublication}:{})}
       {...(reviewOpenRequest?{reviewOpenRequest}:{})}
       {...(deliveryOpenRequest?{deliveryOpenRequest}:{})}
       workspaceEntryRef={workspaceEntry}
@@ -742,7 +741,7 @@ describe('workspace navigation continuity', () => {
     const dataEntry = screen.getByRole('button', { name: '资料' }), toolsEntry = screen.getByRole('button', { name: '素材' });
     fireEvent.click(dataEntry); selectBusiness('方案评审');
     const review = screen.getByRole('group', { name: '当前方案评审' });
-    fireEvent.click(screen.getByText('本机草稿与文件'));
+    fireEvent.click(screen.getByText('草稿与文件'));
     await waitFor(() => expect(screen.getByRole('button', { name: '保存说明草稿' }).hasAttribute('disabled')).toBe(false));
     const summary = screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
     fireEvent.change(summary, { target: { value: '演练：素材页往返仍未保存的方案说明。' } });
@@ -1846,7 +1845,7 @@ describe('complete local backup transactions', () => {
   async function mountReview(){
     renderUI(<Trial review/>);await waitFor(()=>expect(briefState().ready).toBe(true));
     fireEvent.click(screen.getByRole('button',{name:'打开生产方案评审'}));
-    const entry=await screen.findByText('本机草稿与文件',{exact:true});fireEvent.click(entry);entry.closest('details')!.open=true;
+    const entry=await screen.findByText('草稿与文件',{exact:true});fireEvent.click(entry);entry.closest('details')!.open=true;
     await waitFor(()=>expect((screen.getByRole('button',{name:'保存说明草稿'}) as HTMLButtonElement).disabled).toBe(false));
   }
 
@@ -2637,19 +2636,16 @@ describe('review workspace integration',()=>{
     fireEvent.click(screen.getByRole('button',{name:'返回素材'}));
     expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('一把椅子的未发送需求');
   });
-  it('wires local review prefill and the cloud publication entry without sending anything',async()=>{
-    const onOpenPublication=vi.fn();
-    const view=renderUI(<DockedTrial workbenchMode="review" onOpenPublication={onOpenPublication}/>);await act(async()=>{});
-    view.rerender(<DockedTrial workbenchMode="review" reviewOpenRequest={1} onOpenPublication={onOpenPublication}/>);await act(async()=>{});
-    expect(screen.getByText('核对后导出离线 HTML，或发布云端只读链接；都由你发送')).toBeTruthy();
+  it('wires local review prefill without sending anything',async()=>{
+    const view=renderUI(<DockedTrial workbenchMode="review"/>);await act(async()=>{});
+    view.rerender(<DockedTrial workbenchMode="review" reviewOpenRequest={1}/>);await act(async()=>{});
+    expect(screen.getByText('核对后导出离线 HTML，由你发送')).toBeTruthy();
     const summary=screen.getByLabelText('简短方案说明（选填）') as HTMLTextAreaElement;
     expect(summary.value).toBe('');
     fireEvent.click(screen.getByRole('button',{name:'生成说明参考'}));
     expect(summary.value).toContain('【方案简述参考');
     fireEvent.change(summary,{target:{value:'演练：人改过的说明'}});
     expect(summary.value).toBe('演练：人改过的说明');
-    fireEvent.click(screen.getByRole('button',{name:'打开发布管理'}));
-    expect(onOpenPublication).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toContain('已发送');
   });
   it('labels the execution workspace as local internal material',async()=>{

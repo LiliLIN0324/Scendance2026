@@ -254,20 +254,24 @@ describe('T-UI visible interaction', () => {
 
   it('shows venue capability chips under the composer', () => {
     const onOpenReference = vi.fn();
-    const onOpenGenerate = vi.fn();
-    render(<LayoutAgentProvider callbacks={{ ...callbacks, onOpenReference, onOpenGenerate, luxToolsVisible: true }} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider callbacks={{ ...callbacks, onOpenReference, luxToolsVisible: true }} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><MapVenueOverlay/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(screen.getByText('你可以做什么')).toBeTruthy();
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /图纸与照片/ })).toBeTruthy();
-    expect(within(group).getByRole('button', { name: /空白场地/ })).toBeTruthy();
-    expect(within(group).getByRole('button', { name: /生成物件/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /新建\/换场地/ })).toBeTruthy();
+    expect(within(group).queryByRole('button', { name: /空白场地/ })).toBeNull();
+    // 生成类能力归「生成」条：布置的芯片里不再混生成物件 / 场地重建。
+    expect(within(group).queryByRole('button', { name: /生成物件/ })).toBeNull();
+    expect(within(group).queryByRole('button', { name: /场地重建/ })).toBeNull();
+    // 布置的「+」里只有场地与附件，生成不在这里。
+    fireEvent.click(screen.getByRole('button', { name: '场地与附件' }));
+    expect(screen.getAllByRole('menuitem').map(item => item.querySelector('.ap-menu-label')?.textContent)).toEqual(['新建/换场地', '地图选址', '图纸与照片']);
+    fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.click(within(group).getByRole('button', { name: /图纸与照片/ }));
     expect(onOpenReference).toHaveBeenCalled();
     fireEvent.click(within(group).getByRole('button', { name: /地图选址/ }));
     expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
-    fireEvent.click(within(group).getByRole('button', { name: /生成物件/ }));
-    expect(onOpenGenerate).toHaveBeenCalled();
   });
 
   it('keeps the left rail on 布置 and sends review or delivery elsewhere', async () => {
@@ -656,6 +660,10 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
     const onApply = vi.fn();
     render(<LocalHarness initial={makeLayout({ width: 12, height: 8 })} onApply={onApply}/>);
     fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    // 选中先在输入框挂住，不立刻进对话；点发送才按原链路读进场地。
+    expect(await screen.findByText('plan.png')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /按图纸估一版/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
     expect(await screen.findByRole('button', { name: /按图纸估一版/ })).toBeTruthy();
 
     send('300平米，按图纸估');
@@ -676,6 +684,31 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
   }, 25000);
 });
 
+describe('T-ATTACH 图纸照片先进输入框', () => {
+  it('选进来先挂在输入框，点发送才进对话；也能撤掉', async () => {
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 1200;
+      naturalHeight = 600;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    });
+    render(<LocalHarness initial={makeLayout({ width: 12, height: 8 })} onApply={vi.fn()}/>);
+    const sendButton = screen.getByRole('button', { name: '发送' }) as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(true);
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    expect(await screen.findByText('plan.png')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '移除附件' })).toBeTruthy();
+    expect(sendButton.disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: /按图纸估一版/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '移除附件' }));
+    expect(screen.queryByText('plan.png')).toBeNull();
+    expect(screen.queryByRole('button', { name: '移除附件' })).toBeNull();
+    expect(sendButton.disabled).toBe(true);
+    vi.unstubAllGlobals();
+  }, 25000);
+});
+
 describe('晴光在左侧工作台', () => {
   it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
@@ -684,17 +717,42 @@ describe('晴光在左侧工作台', () => {
     input.focus();
     expect(document.activeElement).toBe(input);
   });
+
+  it('空输入时把引导句逐字打出来，Tab 一次填整句', () => {
+    render(ui(makeLayout()));
+    expect(document.querySelector('.ap-ghost')?.textContent).toBe('80 人发布会，室内 12×9');
+    const input = screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;
+    // 引导层出现时 placeholder 让位，不能再叠一层灰字。
+    expect(input.getAttribute('placeholder')).toBe('');
+    fireEvent.keyDown(input, { key: 'Tab' });
+    expect(input.value).toBe('80 人发布会，室内 12×9');
+    // 填满之后引导层让开，不再压在真句子上。
+    expect(document.querySelector('.ap-ghost')).toBeNull();
+  });
 });
 
 describe('右栏生成物件', () => {
   it('生成和布置分开，切过去不再留着晴光的发送', () => {
-    render(ui(makeLayout()));
+    const openAholo = vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel onOpenPropFallback={openAholo}/></LayoutAgentProvider>);
     expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '切换到生成物件' }));
     expect(screen.queryByRole('button', { name: '发送' })).toBeNull();
     expect(screen.getByRole('button', { name: '生成物件' })).toBeTruthy();
-    expect(screen.getByText('按 Tab 填入')).toBeTruthy();
+    // 左下只有一颗「+」，选过种类之前不预设物料/场地。
+    expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-plus');
+    expect(screen.getByRole('button', { name: '生成种类' })).toBeTruthy();
     expect(screen.getByLabelText('物件描述')).toBeTruthy();
+    // 生成模式不再把图片/重建压在页脚：输入框上方同样有一片「你可以做什么」，只放两条生成能力。
+    const genGroup = screen.getByRole('group', { name: '你可以做什么' });
+    expect(within(genGroup).getByRole('button', { name: /物料生成/ })).toBeTruthy();
+    expect(within(genGroup).getByRole('button', { name: /场地生成/ })).toBeTruthy();
+    expect(within(genGroup).queryByRole('button', { name: /地图选址/ })).toBeNull();
+    expect(screen.queryByText('图片和重建')).toBeNull();
+    fireEvent.click(within(genGroup).getByRole('button', { name: /场地生成/ }));
+    expect(openAholo).toHaveBeenLastCalledWith('world');
+    // 选过场地之后，「+」自己换成场地图标。
+    expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-scan');
     fireEvent.click(screen.getByRole('button', { name: '布置' }));
     expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
     expect(studioMock.generate).not.toHaveBeenCalled();
@@ -708,8 +766,8 @@ describe('右栏生成物件', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     expect(screen.getByText(/还没提交，不会扣额度/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '填到生成条' }));
-    expect((screen.getByLabelText('物件描述') as HTMLTextAreaElement).value).toBe('生成一个竹林场景');
-    expect(screen.getByRole('button', { name: '场景' }).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByLabelText('场景描述') as HTMLTextAreaElement).value).toBe('生成一个竹林场景');
+    expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-scan');
     expect(fetchMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });

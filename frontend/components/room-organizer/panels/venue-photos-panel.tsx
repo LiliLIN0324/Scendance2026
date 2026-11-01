@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { ImagePlus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -47,7 +47,7 @@ export function VenuePhotosPanel({ images, addImages, removeImage, onKindChange 
         <header><strong>{expanded.name}</strong><button ref={close} type="button" aria-label="关闭照片预览" onClick={() => setExpandedId(null)}><X size={20}/></button></header>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={expanded.url} alt={`放大${expanded.kind==='floorplan'?'平面图':'现场照片'}：${expanded.name}`}/>
-        <p>{expanded.assetId?'已上传项目私有存储':'本机资料 · 生成时提交模型'}</p>
+        <p>{expanded.assetId?'已上传项目私有存储':'资料 · 生成时提交模型'}</p>
       </div>
     </div>, portalRoot)}
   </section>;

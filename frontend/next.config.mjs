@@ -18,11 +18,15 @@ const nextConfig = {
     };
     return config;
   },
-  // The 官网 is a standalone static page shipped through public/ (see
-  // scripts/package-pages.mjs). Cloudflare Pages resolves /introduction to
-  // /introduction.html on its own; this rewrite gives `next dev` the same URL.
+  // The 官网 and 新手指引 are standalone static pages shipped through public/
+  // (see scripts/package-pages.mjs). Cloudflare Pages resolves /introduction
+  // and /guide to their .html files on its own; these rewrites give `next dev`
+  // the same URLs.
   async rewrites() {
-    return [{ source: '/introduction', destination: '/introduction.html' }];
+    return [
+      { source: '/introduction', destination: '/introduction.html' },
+      { source: '/guide', destination: '/guide.html' },
+    ];
   },
 };
 export default nextConfig;

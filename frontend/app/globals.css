@@ -1201,9 +1201,28 @@ body {
 .sc-lux-direct-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); color: var(--sc-ink); overflow-wrap: anywhere; }
 .sc-aholo-path { margin: 0; padding: 8px 10px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--wk-plane, var(--plane)); color: var(--sc-ink); font-size: var(--sc-type-meta); line-height: 1.55; }
 .sc-aholo-from-capture { margin: 0; }
-.sc-aholo-tabs { display: flex; border-bottom: 1px solid var(--sc-line); }
-.sc-aholo-tabs button { flex: 1; padding: 10px 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--sc-type-meta); cursor: pointer; }
+.sc-aholo-tabs { display: flex; align-items: stretch; border-bottom: 1px solid var(--sc-line); }
+.sc-aholo-tab-group { display: flex; flex: 1; min-width: 0; align-items: stretch; }
+.sc-aholo-tab-group + .sc-aholo-tab-group { border-left: 1px solid var(--sc-line); }
+.sc-aholo-tab-group-label { display: flex; align-items: center; padding: 0 8px 0 10px; color: var(--muted); font-size: 10px; letter-spacing: .06em; white-space: nowrap; }
+.sc-aholo-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: 1; padding: 10px 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--sc-type-meta); cursor: pointer; }
 .sc-aholo-tabs button[aria-selected='true'] { border-bottom-color: var(--wk-green); color: var(--sc-ink); font-weight: 600; }
+/* 拆开的生成弹窗：从选项里挑能力用卡片，图先说话，长说明收进 info。 */
+.sc-aholo-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sc-aholo-card-wrap { position: relative; min-width: 0; }
+.sc-aholo-card { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 10px; border: 1px solid var(--sc-line); border-radius: var(--r-md); background: var(--paper); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec); }
+.sc-aholo-card:hover { border-color: var(--wk-ink-soft, var(--sc-line)); }
+.sc-aholo-card-wrap.is-on .sc-aholo-card { border-color: var(--wk-ink-soft, var(--sc-line)); }
+.sc-aholo-card-thumb { display: block; aspect-ratio: 1.7; border-radius: 10px; overflow: hidden; background: var(--wk-plane, var(--plane)); border: 1px solid var(--wk-hair, var(--sc-line)); }
+.sc-aholo-card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sc-aholo-card-title { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-p1); font-weight: 600; color: var(--sc-ink); }
+.sc-aholo-card-meta { font-size: var(--fs-cap); color: var(--sc-muted); line-height: 1.5; }
+.sc-aholo-card-check { position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; border-radius: 50%; background: var(--wk-green, #2f7d4f); color: #fff; display: grid; place-items: center; }
+.sc-aholo-card-info { position: absolute; top: 6px; right: 32px; }
+.sc-aholo-card-info summary { list-style: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; color: var(--sc-muted); cursor: pointer; background: var(--paper); border: 1px solid var(--wk-hair, var(--sc-line)); }
+.sc-aholo-card-info summary::-webkit-details-marker { display: none; }
+.sc-aholo-card-info[open] summary { color: var(--sc-ink); border-color: var(--wk-ink-soft, var(--sc-line)); }
+.sc-aholo-card-info p { position: absolute; top: 32px; right: 0; z-index: 6; width: 220px; margin: 0; padding: 10px 12px; border: 1px solid var(--sc-line); border-radius: var(--r-md); background: var(--paper); box-shadow: 0 12px 30px rgba(20, 20, 22, 0.14); font-size: var(--sc-type-meta); color: var(--sc-ink); line-height: 1.6; }
 .sc-aholo-task { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
 .sc-aholo-task .sc-note { overflow-wrap: anywhere; }
 .sc-aholo-guide { position: relative; }
@@ -1443,22 +1462,92 @@ body {
 .sc-workbench .sc-tool-column .sc-more-pop > button { display: flex; align-items: center; justify-content: flex-start; gap: 8px; white-space: nowrap; }
 .sc-workbench .sc-tool-column .sc-more-pop > button span { flex: 1; text-align: left; }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
-.sc-workbench .sc-share-menu {
-  width: 280px; min-width: 280px; max-height: min(70vh, 480px);
-  padding: 10px; gap: 6px; align-items: stretch;
+/* 发布卡片：预览、扫码、项目大纲，再加带走资料的次要入口。 */
+.sc-workbench .sc-publish-card {
+  width: 320px; min-width: 320px; max-width: 320px; max-height: min(72vh, 560px);
+  padding: 12px; gap: 10px; align-items: stretch;
+  box-sizing: border-box; overflow-x: hidden; overflow-y: auto;
 }
-.sc-workbench .sc-share-menu p,
-.sc-workbench .sc-share-menu label {
+.sc-workbench .sc-publish-card > * { flex: 0 0 auto; max-width: 100%; }
+.sc-workbench .sc-publish-card p,
+.sc-workbench .sc-publish-card label {
   margin: 0; font-size: 12px; line-height: 1.5; color: var(--wk-muted);
 }
-.sc-workbench .sc-share-menu .sc-share-kicker { color: var(--wk-ink); font-weight: 600; }
-.sc-workbench .sc-share-menu label { display: grid; gap: 4px; }
-.sc-workbench .sc-share-menu input {
+.sc-workbench .sc-publish-card .sc-publish-kicker {
+  display: block; font-size: 10.5px; letter-spacing: .08em;
+  color: var(--wk-muted); font-weight: 600;
+}
+.sc-workbench .sc-publish-card section { display: grid; gap: 6px; }
+.sc-workbench .sc-publish-card .sc-publish-preview strong {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px; font-weight: 600; color: var(--wk-ink); line-height: 1.3;
+}
+.sc-workbench .sc-publish-card .sc-publish-preview small { font-size: 11.5px; color: var(--wk-muted); }
+.sc-workbench .sc-publish-plan {
+  display: block; width: 100%; height: 96px;
+  border-radius: 10px; border: 1px solid var(--wk-hair);
+  background: var(--wk-paper);
+}
+.sc-workbench .sc-publish-plan-ground { fill: var(--plane-deep); }
+.sc-workbench .sc-publish-qr-frame {
+  width: 136px; height: 136px; padding: 6px; border-radius: 10px;
+  border: 1px solid var(--wk-hair); background: #FFFFFF;
+}
+.sc-workbench .sc-publish-qr-frame svg { display: block; width: 100%; height: 100%; }
+.sc-workbench .sc-publish-qr-frame.is-empty,
+.sc-workbench .sc-publish-qr-frame.is-pending {
+  display: grid; place-items: center; border-style: dashed; color: var(--wk-muted);
+  background: var(--plane);
+}
+.sc-workbench .sc-publish-card .sc-publish-outline dl {
+  display: grid; gap: 3px; margin: 0;
+}
+.sc-workbench .sc-publish-card .sc-publish-outline dl > div {
+  display: grid; grid-template-columns: 46px 1fr; gap: 8px; align-items: baseline;
+}
+.sc-workbench .sc-publish-card .sc-publish-outline dt { font-size: 11.5px; color: var(--wk-muted); }
+.sc-workbench .sc-publish-card .sc-publish-outline dd {
+  margin: 0; font-size: 12px; color: var(--wk-ink); line-height: 1.45;
+}
+.sc-workbench .sc-tool-pop button.sc-publish-primary {
+  background: var(--green) !important; color: #FFFFFF !important;
+  text-align: center; font-weight: 600; padding: 8px 10px !important;
+  border-radius: 8px !important;
+}
+.sc-workbench .sc-tool-pop button.sc-publish-primary:disabled { opacity: .55; }
+.sc-workbench .sc-publish-card .sc-publish-row { display: flex; gap: 6px; }
+.sc-workbench .sc-publish-card .sc-publish-row > button,
+.sc-workbench .sc-publish-card .sc-publish-row > a {
+  flex: 1 1 0; min-width: 0; width: auto !important; text-align: center; font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--wk-hair); border-radius: 8px;
+  color: var(--wk-ink); text-decoration: none; box-sizing: border-box;
+}
+.sc-workbench .sc-publish-card .sc-publish-more { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.sc-workbench .sc-tool-pop .sc-publish-more > button {
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px;
+  padding: 5px 8px !important; font-size: 12px;
+}
+.sc-workbench .sc-publish-card label { display: grid; gap: 4px; }
+
+/* 左下「设置」小弹层：新手指引 / GitHub / 隐私政策，链接样式对齐工具弹层按钮。 */
+.sc-workbench .sc-rail-settings-wrap { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; }
+/* 设置挨着左侧导轨底部：弹层向右、向上展开，避免超出视口。 */
+.sc-workbench .sc-settings-pop { top: auto; right: auto; bottom: 0; left: calc(100% + 8px); min-width: 140px; padding: 6px; gap: 1px; }
+.sc-workbench .sc-settings-pop .sc-settings-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 6px;
+  color: var(--sc-ink); font-size: 12px; text-decoration: none; white-space: nowrap;
+}
+.sc-workbench .sc-settings-pop .sc-settings-link:hover { background: var(--wk-plane); }
+/* 窄屏左栏是 z-index 55 的浮层，会压住整条导轨；弹层打开时把导轨抬到它上面。 */
+@media (max-width: 1080px) {
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail:has(.sc-settings-pop) { z-index: 56; }
+}
+.sc-workbench .sc-publish-card input {
   width: 100%; box-sizing: border-box; padding: 6px 8px;
   border: 1px solid var(--wk-hair); border-radius: 6px;
   background: var(--wk-paper); color: var(--wk-ink); font-size: 12px;
 }
-.sc-workbench .sc-share-menu a { font-size: 12px; color: var(--wk-green-deep, #3a6247); }
 .sc-workbench .sc-checklist-drawer {
   position: absolute; z-index: 34; top: 12px; left: 12px;
   width: min(340px, calc(100% - 76px)); max-height: min(520px, calc(100% - 24px));
