@@ -1,5 +1,5 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect,vi } from 'vitest';
-import { database,owner } from './fixtures.ts';
+import { database,owner,editor } from './fixtures.ts';
 import { generationCapabilities,generationRequestSchema } from '../supabase/functions/_shared/generation-contract.ts';
 import { prepareGenerationRequest } from '../supabase/functions/_shared/generation-input.ts';
 import { aholoLux3d } from '../supabase/functions/_shared/providers.ts';
@@ -38,6 +38,18 @@ describe('aholo lux3d lane (docs/AHOLO-INTEGRATION-PLAN.md M1)',()=>{
   it('keeps the default cloud lane on HY-3D even when aholo is configured',async()=>{
     const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},env(baseEnv));
     expect(prepared).toMatchObject({providerMode:'tokenhub',providerModel:'hy-3d-3.0'});
+  });
+  it('retires HY-3D without taking the peer Aholo engine down',async()=>{
+    const retired=env({...baseEnv,HY3_RETIRED:'true'});
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},retired)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
+    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',provider:'aholo' as const},retired);
+    expect(prepared).toMatchObject({providerMode:'aholo',providerModel:'lux3d'});
+  });
+  it('validates the Aholo reference image against the caller before reserving',async()=>{
+    const register=async(actor:string)=>{const id=crypto.randomUUID();return f.rpc(actor,'assets.register',{id,name:'Reference',source:'upload',format:'png',storagePath:`${actor}/${crypto.randomUUID()}/reference.png`,byteSize:100,sha256:'a'.repeat(64),metadata:{width:512,height:512},license:{}});};
+    const own=await register(owner),other=await register(editor);
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',kind:'image',referenceImageAssetId:own.id,provider:'aholo' as const},env(baseEnv))).resolves.toMatchObject({providerMode:'aholo'});
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',kind:'image',referenceImageAssetId:other.id,provider:'aholo' as const},env(baseEnv))).rejects.toThrow();
   });
   it('submits text/image tasks to the Lux3D endpoints and unwraps the c/d shell',async()=>{
     const network=vi.fn(async(url, init?)=>{

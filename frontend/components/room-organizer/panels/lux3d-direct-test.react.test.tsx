@@ -13,27 +13,29 @@ function offline() {
   return fetchMock;
 }
 
+const card = (name: '场景生成' | '场地重建') => screen.getByRole('radio', { name: new RegExp(`^${name}`) });
+const venue = (name: '场景生成' | '场地重建') => within(screen.getByRole('region', { name }));
+
 describe('Aholo 场地重建接住地图采集单', () => {
   it('采集单送来一块地时自动切到场地重建，名字和应拍数量都带过来', async () => {
     offline();
     const { rerender } = render(<Lux3dDirectTest/>);
-    expect(screen.getByRole('tab', { name: '文字建模' }).getAttribute('aria-selected')).toBe('true');
+    expect(card('场景生成').getAttribute('aria-checked')).toBe('true');
 
     rerender(<Lux3dDirectTest reconPreset={{ name: '盐官潮乐之城', hint: '12 个站位 · 共 24 张' }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场地重建').getAttribute('aria-checked')).toBe('true');
     });
-    expect((screen.getByLabelText('场景名称') as HTMLInputElement).value).toBe('盐官潮乐之城');
+    expect((venue('场地重建').getByLabelText('场景名称') as HTMLInputElement).value).toBe('盐官潮乐之城');
     expect(screen.getByText(/这块地的采集单：12 个站位 · 共 24 张/)).toBeTruthy();
   });
 
   it('没有采集单时不抢她的输入：名字保持默认，也不凭空多一行提示', async () => {
     offline();
     render(<Lux3dDirectTest/>);
-    const tab = screen.getByRole('tab', { name: '场地重建' });
-    tab.click();
-    await vi.waitFor(() => { expect(tab.getAttribute('aria-selected')).toBe('true'); });
-    expect((screen.getByLabelText('场景名称') as HTMLInputElement).value).toBe('Scendance 场景测试');
+    fireEvent.click(card('场地重建'));
+    await vi.waitFor(() => { expect(card('场地重建').getAttribute('aria-checked')).toBe('true'); });
+    expect((venue('场地重建').getByLabelText('场景名称') as HTMLInputElement).value).toBe('Scendance 场景测试');
     expect(screen.queryByText(/这块地的采集单/)).toBeNull();
   });
 
@@ -42,11 +44,11 @@ describe('Aholo 场地重建接住地图采集单', () => {
     const onHang = vi.fn();
     render(<Lux3dDirectTest onHangMockScene={onHang} reconPreset={{ name: '盐官潮乐之城', hint: '12 个站位 · 共 24 张' }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场地重建').getAttribute('aria-checked')).toBe('true');
     });
     expect(screen.getByText(RECON_MATERIAL_BAN)).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: /干跑模拟/ })).toBeTruthy();
-    const input = screen.getByLabelText('场地素材') as HTMLInputElement;
+    const input = venue('场地重建').getByLabelText('场地素材') as HTMLInputElement;
     const clip = new File([new Uint8Array([1, 2, 3])], '绕场.mp4', { type: 'video/mp4' });
     fireEvent.change(input, { target: { files: [clip] } });
     // health 的失败请求可能已发出；清空后再点干跑，确认重建路径不再打代理。
@@ -63,32 +65,41 @@ describe('Aholo 场地重建接住地图采集单', () => {
   });
 });
 
-describe('生成内部按物料 / 场地分组', () => {
-  it('两组标签都在；点生成给哪个 kind 就直接落到那一组', async () => {
+describe('场地观感只出场地', () => {
+  it('两张卡只有场景生成与场地重建，没有物料的文字 / 图片建模', () => {
+    offline();
+    render(<Lux3dDirectTest/>);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.getAllByRole('radio').map(item => item.textContent)).toEqual([
+      expect.stringContaining('场景生成'), expect.stringContaining('场地重建'),
+    ]);
+    expect(screen.queryByText('文字建模')).toBeNull();
+    expect(screen.queryByText('图片建模')).toBeNull();
+    expect(screen.queryByText('物料生成')).toBeNull();
+  });
+
+  it('点生成给哪个 kind 就直接选中哪张卡', async () => {
     offline();
     const { rerender } = render(<Lux3dDirectTest/>);
-    expect(screen.getByText('物料生成')).toBeTruthy();
-    expect(screen.getByText('场地生成')).toBeTruthy();
-    // 四个标签仍是一条 tablist，顺序不变。
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['文字建模', '图片建模', '场景生成', '场地重建']);
+    expect(card('场景生成').getAttribute('aria-checked')).toBe('true');
     rerender(<Lux3dDirectTest openKind={{ kind: 'world', nonce: 1 }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场景生成' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场景生成').getAttribute('aria-checked')).toBe('true');
     });
     rerender(<Lux3dDirectTest openKind={{ kind: 'recon', nonce: 2 }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场地重建').getAttribute('aria-checked')).toBe('true');
     });
   });
 });
 
 describe('Aholo 产品化壳体', () => {
-  it('面板标题是场地观感与物料，并写明主路径与禁令', () => {
+  it('面板标题是场地观感，并写明主路径与禁令', () => {
     offline();
     render(<Lux3dDirectTest/>);
-    expect(screen.getByRole('heading', { name: '场地观感与物料' })).toBeTruthy();
-    expect(screen.getByText(/左侧晴光「生成」/)).toBeTruthy();
-    expect(screen.getByText(/主路径：地图圈画/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '场地观感' })).toBeTruthy();
+    expect(screen.getAllByText(/物料生成在晴光的「物料生成」里/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/主路径：地图圈画/).length).toBeGreaterThan(0);
     expect(screen.getByText(/卫星不可作重建素材/)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Aholo 接口测试' })).toBeNull();
     const gated = screen.getByRole('button', { name: '先勾选扣额度确认闸' }) as HTMLButtonElement;
@@ -101,42 +112,9 @@ describe('Aholo 产品化壳体', () => {
     offline();
     render(<Lux3dDirectTest reconPreset={{ name: '盐官潮乐之城', hint: '12 个站位 · 共 24 张' }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场地重建').getAttribute('aria-checked')).toBe('true');
     });
     expect(screen.getByText(/来自采集单「盐官潮乐之城」/)).toBeTruthy();
-  });
-});
-
-describe('物料生成 / 场地生成各自成弹窗', () => {
-  it('物料生成只露两张卡：文字建模与图片建模，默认选文字建模，长说明收进 info', () => {
-    offline();
-    render(<Lux3dDirectTest group="materials"/>);
-    expect(screen.getByRole('heading', { name: '物料生成' })).toBeTruthy();
-    expect(screen.queryByRole('tablist')).toBeNull();
-    const cards = screen.getAllByRole('radio');
-    expect(cards.length).toBe(2);
-    expect(cards[0]?.textContent).toContain('文字建模');
-    expect(cards[1]?.textContent).toContain('图片建模');
-    expect(cards[0]?.getAttribute('aria-checked')).toBe('true');
-    expect(screen.queryByRole('radio', { name: /场地重建/ })).toBeNull();
-    // 卡上一行交代常驻，长说明默认收起，点 info 才展开。
-    const info = screen.getByLabelText('文字建模说明');
-    expect(info.closest('details')?.hasAttribute('open')).toBe(false);
-    fireEvent.click(info);
-    expect(info.closest('details')?.hasAttribute('open')).toBe(true);
-    expect(screen.getByText(/默认干跑，不连真接口/)).toBeTruthy();
-  });
-
-  it('场地生成只露场景生成与场地重建两张卡，点另一张就切过去', () => {
-    offline();
-    render(<Lux3dDirectTest group="venue"/>);
-    expect(screen.getByRole('heading', { name: '场地生成' })).toBeTruthy();
-    const cards = screen.getAllByRole('radio');
-    expect(cards.map(card => card.textContent)).toEqual([expect.stringContaining('场景生成'), expect.stringContaining('场地重建')]);
-    expect(cards[0]?.getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(cards[1]!);
-    expect(cards[1]?.getAttribute('aria-checked')).toBe('true');
-    expect(within(screen.getByRole('region', { name: '场地重建' })).getByLabelText('场景名称')).toBeTruthy();
   });
 });
 
@@ -145,12 +123,12 @@ describe('D2 真重建闸与本场包状态', () => {
     offline();
     render(<Lux3dDirectTest reconPreset={{ name: '盐官潮乐之城', hint: '12 个站位 · 共 24 张' }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场地重建').getAttribute('aria-checked')).toBe('true');
     });
     fireEvent.click(screen.getByRole('checkbox', { name: /干跑模拟/ }));
     expect(screen.getByText(/已关掉干跑/)).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: CREDIT_CONFIRM_LABEL })).toBeTruthy();
-    const input = screen.getByLabelText('场地素材') as HTMLInputElement;
+    const input = venue('场地重建').getByLabelText('场地素材') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File([new Uint8Array([1])], '绕场.mp4', { type: 'video/mp4' })] } });
     // offline：代理未就绪，即使勾选确认闸按钮仍因 online!==true 不可点；先断言未勾选时文案是确认闸提示。
     expect(screen.getByRole('button', { name: '先勾选扣额度确认闸' })).toBeTruthy();
@@ -162,10 +140,10 @@ describe('D2 真重建闸与本场包状态', () => {
     const onHang = vi.fn();
     render(<Lux3dDirectTest onHangMockScene={onHang} reconPreset={{ name: '盐官潮乐之城', hint: '12 个站位 · 共 24 张' }}/>);
     await vi.waitFor(() => {
-      expect(screen.getByRole('tab', { name: '场地重建' }).getAttribute('aria-selected')).toBe('true');
+      expect(card('场地重建').getAttribute('aria-checked')).toBe('true');
     });
     expect(screen.getByText(/仍缺本场包/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('场地素材'), {
+    fireEvent.change(venue('场地重建').getByLabelText('场地素材'), {
       target: { files: [new File([new Uint8Array([1])], '绕场.mp4', { type: 'video/mp4' })] },
     });
     fetchMock.mockClear();

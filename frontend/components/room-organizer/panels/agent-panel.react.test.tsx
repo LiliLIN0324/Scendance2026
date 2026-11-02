@@ -733,8 +733,9 @@ describe('晴光在左侧工作台', () => {
 
 describe('右栏生成物件', () => {
   it('生成和布置分开，切过去不再留着晴光的发送', () => {
-    const openAholo = vi.fn();
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel onOpenPropFallback={openAholo}/></LayoutAgentProvider>);
+    const openMaterials = vi.fn();
+    const openVenue = vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel onOpenPropMaterials={openMaterials} onOpenPropVenue={openVenue}/></LayoutAgentProvider>);
     expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '切换到生成物件' }));
     expect(screen.queryByRole('button', { name: '发送' })).toBeNull();
@@ -748,9 +749,12 @@ describe('右栏生成物件', () => {
     expect(within(genGroup).getByRole('button', { name: /物料生成/ })).toBeTruthy();
     expect(within(genGroup).getByRole('button', { name: /场地生成/ })).toBeTruthy();
     expect(within(genGroup).queryByRole('button', { name: /地图选址/ })).toBeNull();
+    expect(within(genGroup).queryByRole('button', { name: /云端备用/ })).toBeNull();
     expect(screen.queryByText('图片和重建')).toBeNull();
+    fireEvent.click(within(genGroup).getByRole('button', { name: /物料生成/ }));
+    expect(openMaterials).toHaveBeenCalledOnce();
     fireEvent.click(within(genGroup).getByRole('button', { name: /场地生成/ }));
-    expect(openAholo).toHaveBeenLastCalledWith('world');
+    expect(openVenue).toHaveBeenCalledOnce();
     // 选过场地之后，「+」自己换成场地图标。
     expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-scan');
     fireEvent.click(screen.getByRole('button', { name: '布置' }));

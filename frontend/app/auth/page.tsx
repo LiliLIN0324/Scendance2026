@@ -12,5 +12,9 @@ export default function AuthPage(): JSX.Element {
     router.replace(safeReturnPath(new URLSearchParams(window.location.search).get('next')));
   }
 
-  return <IntroPage controller={controller} ready={ready} authError={error} onEnter={() => router.push('/?local=1')} onAuthenticated={enterWorkspace} />;
+  const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL?.trim() ?? '';
+  const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '';
+  const demoAccount = demoEmail && demoPassword ? { email: demoEmail, password: demoPassword } : undefined;
+
+  return <IntroPage controller={controller} ready={ready} authError={error} demoAccount={demoAccount} onEnter={() => router.push('/?local=1')} onAuthenticated={enterWorkspace} />;
 }

@@ -53,6 +53,16 @@
 .sc-intro-login h2 { margin: 0; font-size: 26px; letter-spacing: -.7px; font-weight: 650; }
 .sc-intro-login-copy { overflow-wrap: anywhere; margin: 10px 0 clamp(14px, 2.3vh, 24px); font-size: 12px; color: var(--ink-soft); line-height: 1.6; }
 .sc-intro-form { display: grid; }
+/* Demo credentials: shown only when the build supplies them, one tap fills the form. */
+.sc-intro-demo { display: flex; align-items: center; gap: 12px; margin-bottom: clamp(12px, 1.8vh, 18px); padding: 12px 14px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--plane); }
+.sc-intro-demo > svg { flex: none; color: var(--faint); }
+.sc-intro-demo-fields { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.sc-intro-demo p { display: flex; gap: 8px; align-items: baseline; margin: 0; min-width: 0; }
+.sc-intro-demo span { flex: none; font-size: var(--fs-cap); color: var(--faint); }
+.sc-intro-demo code { overflow-wrap: anywhere; font-size: 12px; color: var(--ink); }
+.sc-intro-demo button { flex: none; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--paper); color: var(--ink); font-size: var(--fs-cap); font-family: inherit; padding: 7px 12px; }
+.sc-intro-demo button:hover:not(:disabled) { border-color: var(--ink); }
+.sc-intro-demo button:disabled { background: var(--plane); color: var(--faint); opacity: 1; cursor: not-allowed; }
 /* Sign in / sign up share one card: the toggle swaps the fields, never the page. */
 .sc-intro-auth-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--wk-hair); margin-bottom: 26px; }
 .sc-intro-auth-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 0 0 14px; background: none; color: var(--ink-soft); font-size: var(--fs-p1); }

@@ -21,7 +21,6 @@ import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
-import type { AholoDirectKind } from '../lib/aholo-assets';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
 import { AmapVenuePicker } from './amap-venue-picker';
@@ -1601,7 +1600,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropFallback, onOpenPropCloud, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true }: {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropMaterials, onOpenPropVenue, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true }: {
   onClose?(): void;
   /** 晴光头像 DOM，供轨 ↔ 顶栏飞入动画测量。 */
   headerAvatarRef?: React.RefObject<HTMLSpanElement>;
@@ -1611,8 +1610,8 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   generateOpen?: boolean;
   onGenerateOpen?(next: boolean): void;
   onPlaceProp?: ((item: CatalogItem) => boolean) | undefined;
-  onOpenPropFallback?: ((kind: AholoDirectKind) => void) | undefined;
-  onOpenPropCloud?: (() => void) | undefined;
+  onOpenPropMaterials?: (() => void) | undefined;
+  onOpenPropVenue?: (() => void) | undefined;
   /** 评审议题。挂在对话里，不替换整栏。 */
   reviewSlot?: ReactNode;
   /** 执行清单。挂在对话里，不替换整栏。 */
@@ -1759,7 +1758,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     </div>
     </div>
     {propLane
-      ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenAholo={onOpenPropFallback} onOpenCloud={onOpenPropCloud}/>
+      ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenMaterials={onOpenPropMaterials} onOpenVenue={onOpenPropVenue}/>
       : <>
         {mode === 'layout' && <AgentCapabilityPrompts/>}
         <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>

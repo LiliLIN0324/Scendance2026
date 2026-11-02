@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Info } from 'lucide-react';
-import { DIRECT_BASE, isLux3dLocalProxy, type AholoDirectKind } from '../lib/aholo-assets';
+import { DIRECT_BASE, isLux3dLocalProxy } from '../lib/aholo-assets';
 import { CLOUD_E2E_WORLD_SCENE_ID, DEMO_WORLD_SCENE_ID, listShippedAssets } from '../lib/shipped-assets';
 import {
   isMockReconTask,
@@ -16,35 +16,17 @@ import {
 } from '../lib/site-recon-mock';
 import { AholoGuideCard } from './aholo-guide-card';
 import { KIND_ICONS } from './kind-icons';
-import { loadAholoCatalogItem, loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
+import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import type { CatalogItem } from '../lib/types';
 
 const POLL_MS = 5000;
 const CAPABILITIES = {
-  text: { label: '文字建模', path: '/text-to-3d', storage: 'scendance:lux3d-direct', id: /^\d+$/ },
-  image: { label: '图片建模', path: '/image-to-3d', storage: 'scendance:aholo-image', id: /^\d+$/ },
   world: { label: '场景生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
   recon: { label: '场地重建', path: '/world-recon', storage: 'scendance:aholo-recon', id: /^[a-zA-Z0-9_-]{1,128}$/ },
 };
-type Kind = AholoDirectKind;
-/** 生成轨把两条能力拆成两个弹窗：物料生成只出物件，场地生成只出场地。 */
-export type AholoGenGroup = 'materials' | 'venue';
-const GROUP_COPY: Record<AholoGenGroup, { title: string; hint: string; kinds: Kind[] }> = {
-  materials: { title: '物料生成', hint: '出可摆放的带材质物件：一句描述，或一张照片。', kinds: ['text', 'image'] },
-  venue: { title: '场地生成', hint: '出可漫游的 3DGS 场地：文字生成场景，或从采集单重建现场。', kinds: ['world', 'recon'] },
-};
+type Kind = keyof typeof CAPABILITIES;
 /** 一张卡只留标题、一行交代和一张示意；长说明收进右上 info。 */
 const CARD_COPY: Record<Kind, { meta: string; thumb: string; info: string }> = {
-  text: {
-    meta: '一句描述 → 带材质物件',
-    thumb: '/showcase/assets/generated/thumb/white-round-table.png',
-    info: '走 Aholo Lux3D 文字建模：描述越具体，材质与比例越稳。默认干跑，不连真接口、不扣额度。',
-  },
-  image: {
-    meta: '一张照片 → 同款物件',
-    thumb: '/showcase/assets/generated/thumb/chinese-wood-armchair.png',
-    info: '走 Aholo Lux3D 图片建模：一张主体清楚、背景干净的照片最好。默认干跑，确认后才提交。',
-  },
   world: {
     meta: '一句场景描述 → 可漫游 3DGS',
     thumb: '/showcase/assets/generated/scene/scendance-m3-mvp.panorama.jpg',
@@ -107,11 +89,6 @@ function safeResultUrl(value: string | undefined) {
   if (!value) return false;
   try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; }
   catch { return false; }
-}
-
-/** 带材质的 GLB 才是能摆进布置场景的物件；签名链接先过安全校验。 */
-function glbOutputOf(outputs: string[]): string | undefined {
-  return outputs.filter(safeResultUrl).find(url => new URL(url).pathname.toLowerCase().endsWith('.glb'));
 }
 
 /** 环境预览优先单包 SPZ；没有才退回 PLY。LOD 元数据不是场景本体，但它是唯一带真实尺度的文件。 */
@@ -177,7 +154,7 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
   </>;
 }
 
-function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPlace, onPreviewScene }: {
+function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPreviewScene }: {
   kind: Kind; online: boolean | null; onHistory: () => void;
   resume: { kind: Kind; taskid: string; prompt: string; startedAt: number } | null;
   /** 地图采集单带过来的这块地：名字填进场景名称，应拍数量贴在素材选择框下面。 */
@@ -191,22 +168,17 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   /** 干跑成功后挂环境预览：等同 D0 hangDemo（历史 shipped .spz）。 */
   onHangMockScene?: (() => void) | undefined;
   unresolved: HistoryEntry | undefined;
-  onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string }) => Promise<void>) | undefined;
 }) {
   const config = CAPABILITIES[kind];
   const taskKey = `${config.storage}-task`;
   const pendingKey = `${config.storage}-pending`;
-  const world = kind === 'world' || kind === 'recon';
   const [reconFiles, setReconFiles] = useState<File[]>([]);
   const [reconQuality, setReconQuality] = useState('normal');
   const isVideoClip = (file: File) => /\.(mp4|mov|insv)$/i.test(file.name);
   const reconValid = reconFiles.length > 0 && (reconFiles.some(isVideoClip) || reconFiles.length >= 20);
   const [prompt, setPrompt] = useState('');
   const [name, setName] = useState('Scendance 场景测试');
-  const [image, setImage] = useState('');
-  const [readingImage, setReadingImage] = useState(false);
-  const [imageError, setImageError] = useState('');
   const [presetHint, setPresetHint] = useState('');
   const [taskid, setTaskid] = useState('');
   const [detail, setDetail] = useState<TaskDetail | null>(null);
@@ -217,9 +189,6 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   const [checking, setChecking] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
   const [error, setError] = useState('');
-  const [placing, setPlacing] = useState(false);
-  const [placeNote, setPlaceNote] = useState('');
-  const [placeError, setPlaceError] = useState('');
   const [previewing, setPreviewing] = useState(false);
   const [previewNote, setPreviewNote] = useState('');
   const [previewError, setPreviewError] = useState('');
@@ -227,12 +196,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   const [retry, setRetry] = useState(0);
   const mounted = useRef(false);
   const submitLock = useRef(false);
-  const placeLock = useRef(false);
   const previewLock = useRef(false);
-  // 重新提交会让在途的摆放结果作废，否则会把它放进下一个任务。
-  const placeGeneration = useRef(0);
-  const imageReader = useRef<FileReader | null>(null);
-  const imageInput = useRef<HTMLInputElement>(null);
   const live = useRef({ prompt, startedAt });
   useEffect(() => { live.current = { prompt, startedAt }; });
   const record = useCallback((entry: { taskid: string; status: number; label: string }) => {
@@ -247,7 +211,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
       setPrompt(saved.prompt); setStartedAt(saved.startedAt);
       setTaskid(saved.taskid ?? ''); setUncertain(!saved.taskid);
     }
-    return () => { mounted.current = false; imageReader.current?.abort(); };
+    return () => { mounted.current = false; };
   }, [kind, pendingKey, taskKey]);
 
   const resumed = useRef<typeof resume>(null);
@@ -256,9 +220,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     resumed.current = resume;
     remember(taskKey, { taskid: resume.taskid, prompt: resume.prompt, startedAt: resume.startedAt });
     remember(pendingKey, null);
-    placeGeneration.current += 1;
     setPrompt(resume.prompt); setDetail(null); setError(''); setUncertain(false);
-    setPlacing(false); setPlaceNote(''); setPlaceError('');
     setPreviewing(false); setPreviewNote(''); setPreviewError('');
     setStartedAt(resume.startedAt); setTaskid(resume.taskid); setRetry(value => value + 1);
   }, [resume, kind, taskKey, pendingKey]);
@@ -274,9 +236,9 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
 
   const terminal = detail !== null && TERMINAL.includes(detail.status);
   const busy = submitting || uncertain || Boolean(taskid && !terminal);
-  const validInput = kind === 'image' ? Boolean(image) && !readingImage
-    : kind === 'recon' ? Boolean(name.trim()) && reconValid
-    : Boolean(prompt.trim()) && (!world || Boolean(name.trim()));
+  const validInput = kind === 'recon'
+    ? Boolean(name.trim()) && reconValid
+    : Boolean(prompt.trim()) && Boolean(name.trim());
   useEffect(() => {
     if (!startedAt || terminal) return;
     const update = () => setElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
@@ -297,7 +259,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     async function poll() {
       setChecking(true);
       try {
-        const query = world ? `/world?worldId=${encodeURIComponent(taskid)}` : `/task?taskid=${encodeURIComponent(taskid)}`;
+        const query = `/world?worldId=${encodeURIComponent(taskid)}`;
         const body = await request<TaskDetail>(query, { signal: controller.signal });
         if (cancelled) return;
         setDetail(body); setLastCheckedAt(Date.now());
@@ -312,29 +274,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     }
     void poll();
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [taskid, retry, world, record]);
-
-  function selectImage(file: File | undefined) {
-    imageReader.current?.abort();
-    setImage(''); setImageError(''); setPrompt(''); setReadingImage(false);
-    if (!file) return;
-    if (!['image/png', 'image/jpeg'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) {
-      setImageError('请选择不超过 5 MB 的 PNG 或 JPEG 图片。');
-      return;
-    }
-    const reader = new FileReader();
-    imageReader.current = reader;
-    setReadingImage(true);
-    reader.onload = () => {
-      if (!mounted.current || imageReader.current !== reader) return;
-      setImage(String(reader.result)); setPrompt(file.name); setReadingImage(false);
-    };
-    reader.onerror = () => {
-      if (!mounted.current || imageReader.current !== reader) return;
-      setImageError('图片读取失败，请重新选择。'); setReadingImage(false);
-    };
-    reader.readAsDataURL(file);
-  }
+  }, [taskid, retry, record]);
 
   async function submit() {
     const text = prompt.trim();
@@ -342,10 +282,8 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     if (!validInput || submitLock.current || busy || (!dryRun && online !== true)) return;
     if (!dryRun && !creditConfirmed) return;
     submitLock.current = true;
-    placeGeneration.current += 1;
     const start = Date.now();
     setError(''); setDetail(null); setTaskid(''); setLastCheckedAt(0);
-    setPlacing(false); setPlaceNote(''); setPlaceError('');
     setPreviewing(false); setPreviewNote(''); setPreviewError(''); setMockHangNote('');
     setStartedAt(start); setElapsedSec(0); setSubmitting(true);
     remember(pendingKey, { prompt: text, startedAt: start });
@@ -379,9 +317,9 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
           body: JSON.stringify({ name: name.trim() || '场地重建', resources, scene: 'space', taskQuality: reconQuality }),
         });
       } else {
-        const payload = kind === 'image' ? { img: image } : world ? { name: name.trim(), prompt: text } : { prompt: text };
         taskidResponse = await request<{ taskid: string | number }>(config.path, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), prompt: text }),
         });
       }
       const { taskid: id } = taskidResponse;
@@ -403,35 +341,14 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     }
   }
 
-  /** 落盘 → 实测尺寸 → 交给布置场景摆放；同一任务号重复点只复用已存的本机文件。 */
-  async function place(url: string) {
-    if (!onPlace || !taskid || placeLock.current) return;
-    placeLock.current = true;
-    const generation = placeGeneration.current;
-    const description = prompt.trim();
-    setPlacing(true); setPlaceNote(''); setPlaceError('');
-    try {
-      const item = await loadAholoCatalogItem({ url, name: description, taskid });
-      if (!mounted.current || placeGeneration.current !== generation) return;
-      setPlaceNote(onPlace(item) ? '已放进场景，可直接拖动。' : '请点击场地中的其他位置放下它。');
-    } catch (failure) {
-      if (mounted.current && placeGeneration.current === generation) {
-        setPlaceError(failure instanceof Error ? failure.message : String(failure));
-      }
-    } finally {
-      placeLock.current = false;
-      if (mounted.current) setPlacing(false);
-    }
-  }
-
   /** 场景包先落盘再预览：那条签名链接不进渲染管线，重启后还能从「环境预览」再打开。lod-meta 一并带去换真实尺度。 */
   async function previewScene(url: string) {
     if (!onPreviewScene || !taskid || previewLock.current) return;
     previewLock.current = true;
     setPreviewing(true); setPreviewNote(''); setPreviewError('');
     try {
-      const metaUrl = world ? metaOutputOf(detail?.outputs ?? []) : undefined;
-      await onPreviewScene({ url, name: (world ? name : prompt).trim() || prompt.trim(), taskid, ...(metaUrl ? { metaUrl } : {}) });
+      const metaUrl = metaOutputOf(detail?.outputs ?? []);
+      await onPreviewScene({ url, name: name.trim() || prompt.trim(), taskid, ...(metaUrl ? { metaUrl } : {}) });
       if (mounted.current) {
         setPreviewNote(kind === 'recon' ? VENUE_PACKAGE_HUNG : '已铺成 3D 背景，画布上可随时退出。');
       }
@@ -443,8 +360,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     }
   }
 
-  const glbOutput = onPlace && !world && detail?.status === 3 ? glbOutputOf(detail.outputs) : undefined;
-  const splatOutput = onPreviewScene && world && detail?.status === 3 ? splatOutputOf(detail.outputs) : undefined;
+  const splatOutput = onPreviewScene && detail?.status === 3 ? splatOutputOf(detail.outputs) : undefined;
   const stage = submitting
     ? { title: '正在提交', text: '正在向 Aholo 申请任务号，请勿重复提交。' }
     : uncertain
@@ -453,16 +369,14 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
         ? { title: '查询已暂停', text: `查询中断不代表生成失败。${detail ? `上次确认：${STAGES[detail.status]?.title ?? detail.statusLabel}。` : ''}继续查询只查看原任务，不会再次扣生成额度。` }
         : detail ? STAGES[detail.status] ?? { title: '状态待确认', text: `Aholo 返回状态 ${detail.statusLabel}，正在继续查询。` }
           : { title: '已提交', text: '已取得任务号，正在查询 Aholo 当前状态。' };
-  const progress = world && typeof detail?.progress === 'number' && Number.isFinite(detail.progress) && detail.progress >= 0 && detail.progress <= 1 ? detail.progress : undefined;
+  const progress = typeof detail?.progress === 'number' && Number.isFinite(detail.progress) && detail.progress >= 0 && detail.progress <= 1 ? detail.progress : undefined;
   const prefix = `aholo-${kind}`;
 
   return <div className="sc-aholo-task">
-    <p className="sc-note">{kind === 'recon' ? 'World · 视频/照片重建真实场地 3DGS' : world ? 'World · 文字生成 3DGS 场景' : kind === 'image' ? 'Lux3D · 图片生成带材质物件' : 'Lux3D · 文字生成带材质物件'}</p>
-    <AholoGuideCard world={world} recon={kind === 'recon'} />
-    {world && <>
-      <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
-      <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || (kind === 'recon' ? (!mockRecon && online !== true) : online !== true)} onChange={event => setName(event.target.value)} />
-    </>}
+    <p className="sc-note">{kind === 'recon' ? 'World · 视频/照片重建真实场地 3DGS' : 'World · 文字生成 3DGS 场景'}</p>
+    <AholoGuideCard world recon={kind === 'recon'} />
+    <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
+    <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || (kind === 'recon' ? (!mockRecon && online !== true) : online !== true)} onChange={event => setName(event.target.value)} />
     {kind === 'recon' && <>
       <p className="sc-note" role="status">{mockRecon
         ? '本场包状态：仍缺本场包（干跑只挂宴会厅样例作观感演示）。'
@@ -498,23 +412,10 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
         <option value="low">极速预览</option>
       </select>
     </>}
-    {kind === 'image' ? <>
-      <label className="sc-field" htmlFor={`${prefix}-image`}>参考图片</label>
-      <input ref={imageInput} id={`${prefix}-image`} type="file" accept="image/png,image/jpeg" disabled={busy || online !== true}
-        onChange={event => selectImage(event.target.files?.[0])} />
-      <p className="sc-note">PNG / JPEG，最大 5 MB。提交后图片会发送给 Aholo。</p>
-      {readingImage && <p className="sc-note">正在读取图片…</p>}
-      {image && <>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="sc-aholo-image" src={image} alt="建模参考图片预览" />
-        <button type="button" className="sc-button" disabled={busy} onClick={() => { selectImage(undefined); if (imageInput.current) imageInput.current.value = ''; }}>移除图片</button>
-      </>}
-      {prompt && <p className="sc-note">图片：{prompt}</p>}
-      {imageError && <p className="sc-warning" role="alert">{imageError}</p>}
-    </> : kind !== 'recon' && <>
-      <label className="sc-field" htmlFor={`${prefix}-prompt`}>{world ? '场景描述' : '物件描述'}</label>
-      <textarea id={`${prefix}-prompt`} maxLength={world ? 2000 : 200} rows={3} value={prompt} disabled={busy || online !== true}
-        placeholder={world ? '例：温暖的木质咖啡馆，大窗户，午后阳光' : '例：一张白色圆桌，极简风格'} onChange={event => setPrompt(event.target.value)} />
+    {kind === 'world' && <>
+      <label className="sc-field" htmlFor={`${prefix}-prompt`}>场景描述</label>
+      <textarea id={`${prefix}-prompt`} maxLength={2000} rows={3} value={prompt} disabled={busy || online !== true}
+        placeholder="例：温暖的木质咖啡馆，大窗户，午后阳光" onChange={event => setPrompt(event.target.value)} />
     </>}
     {kind !== 'recon' && <p className="sc-note"><label>
       <input type="checkbox" checked={creditConfirmed} disabled={busy || online !== true}
@@ -542,11 +443,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     {error && <p className="sc-warning" role="alert">{error}</p>}
     {taskid && error && <button type="button" className="sc-button sc-full" disabled={checking}
       onClick={() => setRetry(value => value + 1)}>继续查询（不重复生成）</button>}
-    {detail?.status === 3 && <ResultLinks detail={detail} world={world} />}
-    {glbOutput && <button type="button" className="sc-button sc-full" disabled={placing}
-      onClick={() => void place(glbOutput)}>{placing ? '正在取回模型…' : '放进 3D 场景'}</button>}
-    {placeNote && <p className="sc-note">{placeNote}</p>}
-    {placeError && <p className="sc-warning" role="alert">{placeError}</p>}
+    {detail?.status === 3 && <ResultLinks detail={detail} world />}
     {splatOutput && <button type="button" className="sc-button sc-full" disabled={previewing}
       onClick={() => void previewScene(splatOutput)}>{previewing ? '正在取回场景…' : kind === 'recon' ? '挂本场环境预览（替换样例）' : '在 3D 场景预览'}</button>}
     {kind === 'recon' && detail?.status === 3 && isMockReconTask(taskid) && onHangMockScene && <button type="button" className="sc-button sc-full"
@@ -558,24 +455,20 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   </div>;
 }
 
-export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, onOpenCloudModels, reconPreset, openKind, group }: {
+export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPreviewShippedScene, reconPreset, openKind }: {
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => Promise<void>) | undefined;
   /** 干跑重建成功后挂环境：等同 D0 hangDemoEnvironment。 */
   onHangMockScene?: (() => void) | undefined;
   /** 线上挂已发布 SPZ 观感层（不打本机代理）。 */
   onPreviewShippedScene?: ((assetId: string) => void) | undefined;
-  /** 线上真生成走云：打开活动资料「物料工具」里的 Lux3D。 */
-  onOpenCloudModels?: (() => void) | undefined;
   /** 地图采集单「去上传现场素材」带过来的一块地：直接切到场地重建并填好名字。 */
   reconPreset?: { name: string; hint: string } | null;
-  /** 生成轨「物料生成 / 场地生成」带过来的落点：nonce 变一次就切一次标签。 */
-  openKind?: { kind: AholoDirectKind; nonce: number } | null;
-  /** 从生成条两张卡进来时只露一组：物料只出物件，场地只出场地。不传则仍是四档合一的观感面板。 */
-  group?: AholoGenGroup;
+  /** 生成轨「场地生成」带过来的落点：nonce 变一次就切一次卡。 */
+  openKind?: { kind: Kind; nonce: number } | null;
 }) {
-  const [kind, setKind] = useState<Kind>(group === 'venue' ? 'world' : 'text');
-  const [visited, setVisited] = useState<Kind[]>(group === 'venue' ? ['world'] : ['text']);
+  const [kind, setKind] = useState<Kind>('world');
+  const [visited, setVisited] = useState<Kind[]>(['world']);
   /** 默认干跑，避免误点真调扣额度；联调真 Aholo 时再关掉。 */
   const [mockRecon, setMockRecon] = useState(true);
   /** 真调扣额度确认闸：关干跑后须勾选；重新打开干跑时清零。 */
@@ -644,37 +537,20 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     try { localStorage.removeItem(HISTORY_KEY); } catch { /* 存储被禁用时列表保持原样。 */ }
     onHistory();
   }
-  const kinds = Object.keys(CAPABILITIES) as Kind[];
-  /** 拆开的弹窗只露本组两档；四档合一的观感面板仍按原分组摆。 */
-  const shownKinds = group ? GROUP_COPY[group].kinds : kinds;
-  /** 出物料的两档和出场景的两档分两组摆；键盘左右仍按 kinds 一条线走。 */
-  const tabGroups: { label: string; kinds: Kind[] }[] = [
-    { label: '物料生成', kinds: ['text', 'image'] },
-    { label: '场地生成', kinds: ['world', 'recon'] },
-  ];
-  const renderTab = (key: Kind) => {
-    const index = kinds.indexOf(key);
-    const Icon = KIND_ICONS[key];
-    return <button
-      key={key} id={`aholo-tab-${key}`} type="button" role="tab" aria-selected={kind === key} aria-controls={`aholo-panel-${key}`}
-      tabIndex={kind === key ? 0 : -1} onClick={() => select(key)} onKeyDown={event => {
-        const next = event.key === 'ArrowRight' ? kinds[(index + 1) % kinds.length] : event.key === 'ArrowLeft' ? kinds[(index + kinds.length - 1) % kinds.length] : event.key === 'Home' ? kinds[0] : event.key === 'End' ? kinds[kinds.length - 1] : undefined;
-        if (next) { event.preventDefault(); select(next); document.getElementById(`aholo-tab-${next}`)?.focus(); }
-      }}><Icon size={14} aria-hidden="true"/>{CAPABILITIES[key].label}</button>;
-  };
+  /** 物料生成已走独立面板；观感面板只留场地两档。 */
+  const shownKinds: Kind[] = ['world', 'recon'];
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>{group ? GROUP_COPY[group].title : '场地观感与物料'}</h2>
-      <p>{group ? GROUP_COPY[group].hint : '文字生成在左侧晴光「生成」，确认扣额度后才提交。这里分两组：「物料生成」出物件（文字建模、图片建模）；「场地生成」出场地（场景生成、场地重建）。观感层不进碰撞、不进落盘几何。'}</p></div>
+    <div className="sc-section-heading"><div><h2>场地观感</h2>
+      <p>这里只出场地：文字生成场景，或从采集单重建现场。物料生成在晴光的「物料生成」里。观感层不进碰撞、不进落盘几何。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
-    {!group && <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>}
+    <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
-      <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；真生成物件请用云端 Lux3D（活动资料 · 物料工具）。场地重建仍可干跑挂样例。</p>
+      <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；场地重建仍可干跑挂样例。物料生成在晴光的「物料生成」里。</p>
       <div className="sc-aholo-cloud-actions">
         <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂宴会厅观感</button>
         <button type="button" className="sc-button" onClick={() => { if (onPreviewShippedScene) onPreviewShippedScene(DEMO_WORLD_SCENE_ID); else onHangMockScene?.(); }}>挂样例环境预览</button>
-        {onOpenCloudModels && <button type="button" className="sc-button" onClick={onOpenCloudModels}>打开云端物料生成</button>}
       </div>
       <div className="sc-aholo-cloud-actions" role="group" aria-label="已发布物件">
         {listShippedAssets('glb').map(asset => (
@@ -701,33 +577,28 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
       </>}
     </div>
     {historyOpen && history.length > 0 && <p className="sc-note">记录只存描述与状态；产物链接会过期，点「查看」回 Aholo 取最新结果。</p>}
-    {group
-      ? <div className="sc-aholo-cards" role="radiogroup" aria-label={GROUP_COPY[group].title}>
-        {GROUP_COPY[group].kinds.map(key => {
-          const selected = kind === key;
-          const Icon = KIND_ICONS[key];
-          return <div key={key} className={`sc-aholo-card-wrap${selected ? ' is-on' : ''}`}>
-            <button type="button" role="radio" aria-checked={selected} className="sc-aholo-card" onClick={() => select(key)}>
-              <span className="sc-aholo-card-thumb" aria-hidden="true">
-                <img src={CARD_COPY[key].thumb} alt="" loading="lazy"/>
-              </span>
-              <span className="sc-aholo-card-title"><Icon size={14} aria-hidden="true"/>{CAPABILITIES[key].label}</span>
-              <span className="sc-aholo-card-meta">{CARD_COPY[key].meta}</span>
-            </button>
-            {selected && <span className="sc-aholo-card-check" aria-hidden="true"><Check size={12}/></span>}
-            <details className="sc-aholo-card-info">
-              <summary aria-label={`${CAPABILITIES[key].label}说明`} title="说明"><Info size={14} aria-hidden="true"/></summary>
-              <p>{CARD_COPY[key].info}</p>
-            </details>
-          </div>;
-        })}
-      </div>
-      : <div className="sc-aholo-tabs" role="tablist" aria-label="场地观感与物料方式">{tabGroups.map(tabGroup => <div key={tabGroup.label} className="sc-aholo-tab-group" role="presentation">
-        <span className="sc-aholo-tab-group-label" aria-hidden="true">{tabGroup.label}</span>
-        {tabGroup.kinds.map(renderTab)}
-      </div>)}</div>}
-    {shownKinds.map(key => <section key={key} id={`aholo-panel-${key}`} aria-label={CAPABILITIES[key].label} role={group ? 'region' : 'tabpanel'} hidden={kind !== key}>
-      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPlace={onPlace} onPreviewScene={onPreviewScene}
+    <div className="sc-aholo-cards" role="radiogroup" aria-label="场地生成方式">
+      {shownKinds.map(key => {
+        const selected = kind === key;
+        const Icon = KIND_ICONS[key];
+        return <div key={key} className={`sc-aholo-card-wrap${selected ? ' is-on' : ''}`}>
+          <button type="button" role="radio" aria-checked={selected} className="sc-aholo-card" onClick={() => select(key)}>
+            <span className="sc-aholo-card-thumb" aria-hidden="true">
+              <img src={CARD_COPY[key].thumb} alt="" loading="lazy"/>
+            </span>
+            <span className="sc-aholo-card-title"><Icon size={14} aria-hidden="true"/>{CAPABILITIES[key].label}</span>
+            <span className="sc-aholo-card-meta">{CARD_COPY[key].meta}</span>
+          </button>
+          {selected && <span className="sc-aholo-card-check" aria-hidden="true"><Check size={12}/></span>}
+          <details className="sc-aholo-card-info">
+            <summary aria-label={`${CAPABILITIES[key].label}说明`} title="说明"><Info size={14} aria-hidden="true"/></summary>
+            <p>{CARD_COPY[key].info}</p>
+          </details>
+        </div>;
+      })}
+    </div>
+    {shownKinds.map(key => <section key={key} id={`aholo-panel-${key}`} aria-label={CAPABILITIES[key].label} role="region" hidden={kind !== key}>
+      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPreviewScene={onPreviewScene}
         unresolved={history.find(item => item.kind === key && !TERMINAL.includes(item.status))} />}
     </section>)}
   </div>;
