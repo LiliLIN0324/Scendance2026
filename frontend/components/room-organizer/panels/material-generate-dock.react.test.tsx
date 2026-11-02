@@ -95,19 +95,21 @@ describe('物件生成条', () => {
     expect(screen.getByText(/不会提交，也不会扣额度/)).toBeTruthy();
   });
 
-  it('物料生成与场地生成在输入框上方，跟「布置」一样有「你可以做什么」，不再挂页脚细链接', () => {
-    const aholo = vi.fn();
-    render(<MaterialGenerateDock onBackToChat={vi.fn()} onOpenAholo={aholo}/>);
+  it('输入框上方只有物料生成与场地生成两条入口，物料生成直接进统一面板，不再有云端备用', () => {
+    const materials = vi.fn();
+    const venue = vi.fn();
+    render(<MaterialGenerateDock onBackToChat={vi.fn()} onOpenMaterials={materials} onOpenVenue={venue}/>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(screen.getByText('你可以做什么')).toBeTruthy();
+    expect(screen.queryByText('云端备用')).toBeNull();
     expect(screen.queryByText('图片和重建')).toBeNull();
     // 芯片在输入框之前（DOM 顺序），不是挂在页脚。
     const input = screen.getByLabelText('物件描述');
     expect(group.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // 两条能力各自落在观感面板对应那组标签上。
+    // 物料走独立面板；场地仍落观感面板。
     fireEvent.click(screen.getByRole('button', { name: '物料生成' }));
-    expect(aholo).toHaveBeenLastCalledWith('text');
+    expect(materials).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: '场地生成' }));
-    expect(aholo).toHaveBeenLastCalledWith('world');
+    expect(venue).toHaveBeenCalledOnce();
   });
 });

@@ -1,8 +1,8 @@
 'use client';
 
-import { ArrowUp, Cloud } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { DIRECT_BASE, isLux3dLocalProxy, type AholoDirectKind } from '../lib/aholo-assets';
+import { DIRECT_BASE, isLux3dLocalProxy } from '../lib/aholo-assets';
 import { CREDIT_CONFIRM_LABEL } from '../lib/site-recon-mock';
 import { ComposerPlus } from './composer-plus';
 import { KIND_ICONS } from './kind-icons';
@@ -89,12 +89,13 @@ export function LaneSwitch({ prop, onChange }: { prop: boolean; onChange(next: b
  * 晴光栏底部的物件生成条，贴着对话，不进布置提案。
  * 思考强度不放：文生没有质量档，扣额度确认已经挡住误点。
  */
-export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenAholo, onOpenCloud, forceProxy, seed }: {
+export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenMaterials, onOpenVenue, forceProxy, seed }: {
   onBackToChat(): void;
   onPlace?: ((item: CatalogItem) => boolean) | undefined;
-  /** 物料生成 / 场地生成：打开观感面板并落在对应那组标签上。 */
-  onOpenAholo?: ((kind: AholoDirectKind) => void) | undefined;
-  onOpenCloud?: (() => void) | undefined;
+  /** 物料生成：打开统一的物料面板（先选文字/图片，再选 HY-3D 或 Aholo）。 */
+  onOpenMaterials?: (() => void) | undefined;
+  /** 场地生成：打开观感面板并落在地场景那组标签上。 */
+  onOpenVenue?: (() => void) | undefined;
   /** 测试里强制走本机代理判断；正式界面不传，跟 isLux3dLocalProxy 走。 */
   forceProxy?: boolean;
   /** 晴光准备好的一句。只填进输入框，不提交。 */
@@ -326,11 +327,12 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenAholo, onOpe
   const expanded = hasThread || confirming;
   /** 出物料和出场地是两条能力，不挂页脚细链接，跟「布置」一样在输入框上方给一片「你可以做什么」。 */
   const offers: { id: string; label: string; title: string; icon: ReactNode; run(): void }[] = [];
-  if (onOpenAholo) {
-    offers.push({ id: 'materials', label: '物料生成', title: '文字建模、图片建模：出可摆放的物件与材质', icon: <KIND_ICONS.text size={14} aria-hidden="true"/>, run: () => { setPickedKind('text'); onOpenAholo('text'); } });
-    offers.push({ id: 'venue', label: '场地生成', title: '场景生成、场地重建：出可漫游的 3DGS 场地', icon: <KIND_ICONS.world size={14} aria-hidden="true"/>, run: () => { setPickedKind('world'); onOpenAholo('world'); } });
+  if (onOpenMaterials) {
+    offers.push({ id: 'materials', label: '物料生成', title: '先选文字或照片，再选模型：出可摆放的物件与材质', icon: <KIND_ICONS.text size={14} aria-hidden="true"/>, run: () => { setPickedKind('text'); onOpenMaterials(); } });
   }
-  if (!localProxy && onOpenCloud) offers.push({ id: 'cloud', label: '云端备用', title: '本机代理不在时走云端生成', icon: <Cloud size={14} aria-hidden="true"/>, run: onOpenCloud });
+  if (onOpenVenue) {
+    offers.push({ id: 'venue', label: '场地生成', title: '场景生成、场地重建：出可漫游的 3DGS 场地', icon: <KIND_ICONS.world size={14} aria-hidden="true"/>, run: () => { setPickedKind('world'); onOpenVenue(); } });
+  }
 
   return <div className="sc-gen-dock" data-lane="generate" data-online={online === true ? 'yes' : online === false ? 'no' : 'wait'}>
     {offers.length > 0 && <div className="ap-capabilities sc-gen-capabilities">

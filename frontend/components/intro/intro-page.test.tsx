@@ -231,3 +231,54 @@ it.each(['network', 'malformed'])('keeps guest entry retryable after a %s failur
   expect(onAuthenticated).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: '访客进入' }).hasAttribute('disabled')).toBe(false);
 });
+
+describe('demo credentials on the login page', () => {
+  const demo = { email: 'demo@scendance.example', password: 'demo-only-2026' };
+
+  it('shows the pair and fills the form with one tap', async () => {
+    const session = controller();
+    const onAuthenticated = vi.fn();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'demo-access', refresh_token: 'demo-refresh', expires_in: 3600, user: { id: 'demo-id', email: demo.email } })));
+    render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={onAuthenticated} demoAccount={demo} />);
+    const card = screen.getByRole('group', { name: '演示账号' });
+    expect(card.textContent).toContain(demo.email);
+    expect(card.textContent).toContain(demo.password);
+    fireEvent.click(screen.getByRole('button', { name: '填入' }));
+    expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe(demo.email);
+    expect((screen.getByLabelText('密码') as HTMLInputElement).value).toBe(demo.password);
+    fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
+    expect(JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))).toMatchObject({ email: demo.email, password: demo.password });
+  });
+
+  it('stays out of the page when the build has no demo account', () => {
+    render(<IntroPage controller={controller()} onEnter={vi.fn()} />);
+    expect(screen.queryByRole('group', { name: '演示账号' })).toBeNull();
+  });
+});
+
+describe('leaving a signed-in session from the login page', () => {
+  it('drops a guest session and shows the form again', async () => {
+    const session = controller();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'guest-access', refresh_token: 'guest-refresh', expires_in: 3600, user: { id: 'guest-id', is_anonymous: true } })));
+    render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '访客进入' }));
+    await waitFor(() => expect(screen.getByText('访客')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '退出访客，换一个账号' }));
+    await waitFor(() => expect(screen.getByRole('form', { name: '工作室登录' })).toBeTruthy());
+    expect(session.getSnapshot().user).toBeNull();
+    expect(screen.queryByRole('button', { name: '退出访客，换一个账号' })).toBeNull();
+  });
+
+  it('offers the plain sign-out wording for a named account', async () => {
+    const session = controller();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'a', refresh_token: 'r', expires_in: 3600, user: { id: 'u', email: 'demo@scendance.example' } })));
+    render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('邮箱'));
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'demo@scendance.example' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'demo-only-2026' } });
+    fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+    await waitFor(() => expect(screen.getByText('demo@scendance.example')).toBeTruthy());
+    expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
+  });
+});

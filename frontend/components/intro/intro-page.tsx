@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Box, ImagePlus, Layers3, LockKeyhole } from 'lucide-react';
+import { ArrowRight, Box, ImagePlus, KeyRound, Layers3, LockKeyhole } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useEmailCooldown } from '@/lib/auth-provider';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
@@ -13,6 +13,7 @@ interface IntroPageProps {
   onAuthenticated?: () => void;
   ready?: boolean;
   authError?: string;
+  demoAccount?: DemoAccount | undefined;
 }
 
 function EventIllustration(): JSX.Element {
@@ -93,7 +94,12 @@ function EventIllustration(): JSX.Element {
   );
 }
 
-export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, ready = true, authError = '' }: IntroPageProps): JSX.Element {
+export interface DemoAccount {
+  email: string;
+  password: string;
+}
+
+export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, ready = true, authError = '', demoAccount }: IntroPageProps): JSX.Element {
   const cloud = useBackendSession(controller);
   const [signUp, setSignUp] = useState(false);
   const [name, setName] = useState('');
@@ -137,6 +143,19 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
             : failure?.message ?? '暂时无法登录，请稍后再试。');
     } finally {
       setPassword('');
+      setBusy(false);
+    }
+  }
+
+  async function leaveAccount(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await controller.signOut();
+    } catch {
+      setError('暂时无法退出，请稍后重试。');
+    } finally {
       setBusy(false);
     }
   }
@@ -194,9 +213,18 @@ export function IntroPage({ controller, onEnter, onAuthenticated = onEnter, read
               <p className="sc-intro-account-caption">当前已登录</p>
               <p className="sc-intro-account">{cloud.user.is_anonymous ? '访客' : cloud.user.email ?? '工作室账号'}</p>
               <button className="sc-intro-primary" type="button" onClick={onAuthenticated}>进入工作台<ArrowRight size={16} aria-hidden="true" /></button>
+              <div className="sc-intro-auth-links"><button type="button" disabled={busy} onClick={() => { void leaveAccount(); }}>{cloud.user.is_anonymous ? '退出访客，换一个账号' : '退出登录'}</button></div>
             </div>
           ) : (
             <>
+              {demoAccount && !signUp && !verificationEmail && <div className="sc-intro-demo" role="group" aria-label="演示账号">
+                <KeyRound size={16} aria-hidden="true" />
+                <div className="sc-intro-demo-fields">
+                  <p><span>邮箱</span><code>{demoAccount.email}</code></p>
+                  <p><span>密码</span><code>{demoAccount.password}</code></p>
+                </div>
+                <button type="button" disabled={busy} onClick={() => { setEmail(demoAccount.email); setPassword(demoAccount.password); setError(null); }}>填入</button>
+              </div>}
               <form className="sc-intro-form" aria-label={verificationEmail ? '邮箱验证' : signUp ? '工作室注册' : '工作室登录'} onSubmit={(event) => { void submit(event); }} aria-busy={busy}>
                 {verificationEmail ? <>
                   <label htmlFor="sc-intro-code">六位验证码</label>

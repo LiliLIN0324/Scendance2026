@@ -40,7 +40,6 @@ import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
-import type { AholoDirectKind } from './lib/aholo-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -84,7 +83,6 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
-import type { AholoGenGroup } from './panels/lux3d-direct-test';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { PlanFlow } from './panels/plan-flow';
@@ -249,7 +247,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
   const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
   // 生成轨点「物料生成 / 场地生成」：观感面板落到对应那组标签；nonce 让同一入口连点也生效。
-  const [lux3dOpenKind, setLux3dOpenKind] = useState<{ kind: AholoDirectKind; nonce: number } | null>(null);
+  const [lux3dOpenKind, setLux3dOpenKind] = useState<{ kind: 'world' | 'recon'; nonce: number } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
@@ -1846,7 +1844,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {agentPanelVisible && <AgentPanel headerAvatarRef={qingguangHeaderAvatarRef} headerAvatarVisible={headerAvatarVisible} onClose={closeQingguang} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropFallback={(kind) => { noteVenueThreeIntent(); setLux3dOpenKind({ kind, nonce: Date.now() }); setLeftMode('lux3d'); setMaterialsOpen(false); setSpaceOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentClosing(false); setAgentCollapsed(false); }} onOpenPropCloud={() => businessToolsRef.current?.openModelTools()} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {agentPanelVisible && <AgentPanel headerAvatarRef={qingguangHeaderAvatarRef} headerAvatarVisible={headerAvatarVisible} onClose={closeQingguang} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropMaterials={() => businessToolsRef.current?.openModelTools()} onOpenPropVenue={() => { noteVenueThreeIntent(); setLux3dOpenKind({ kind: 'world', nonce: Date.now() }); setLeftMode('lux3d'); setMaterialsOpen(false); setSpaceOpen(false); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentClosing(false); setAgentCollapsed(false); }} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -1986,15 +1984,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
                 onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
             </div>}
-            {luxDirectVisible && leftMode === 'lux3d' && (() => {
-              /** 从生成条的两张卡进来，弹窗只留本组；从观感轨进来才是四档合一。 */
-              const group: AholoGenGroup | undefined = aholoReconPreset ? 'venue'
-                : lux3dOpenKind ? (lux3dOpenKind.kind === 'text' || lux3dOpenKind.kind === 'image' ? 'materials' : 'venue') : undefined;
-              return <div className="sc-canvas-share">
-                <div className="sc-canvas-share-bar"><strong>{group === 'materials' ? '物料生成' : group === 'venue' ? '场地生成' : '场地观感'}</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
-                <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} {...(group ? { group } : {})} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onOpenCloudModels={() => businessToolsRef.current?.openModelTools()} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
-              </div>;
-            })()}
+            {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
+              <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
+              <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
+            </div>}
             <PlanFlow onOpenAgent={() => { setSidePanel(null); setAgentCollapsed(false); }} onHomeChange={setPlanHome}/>
             <CanvasHeading view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}

@@ -31,6 +31,8 @@ Cloudflare Pages 已通过 GitHub 集成连接到仓库。推送到 `main` 会�
 
 `NEXT_PUBLIC_*`（含 Supabase 公开配置与高德 `NEXT_PUBLIC_AMAP_KEY` / `NEXT_PUBLIC_AMAP_SECURITY_CODE` / `NEXT_PUBLIC_AMAP_STATIC_KEY`）必须写进 Build command：本项目实测构建镜像不会把 Pages 项目里的环境变量注入构建过程（`NODE_VERSION=24.15.0` 已配置但构建仍使用默认的 Node 22.16.0，日志行为 `Detected the following tools from environment: nodejs@22.16.0`），因此 Node 版本改用 `.nvmrc` 文件、Supabase 公开配置改在 Build command 中内联。这些值都是浏览器公开配置；`service_role`、`sb_secret_`、AI 供应商密钥和 worker secret 不得内联在这里。
 
+登录页的演示账号由 `NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD` 提供，两个都有值时页面显示「演示账号」卡并可用「填入」一键登录；缺任何一个则整卡不渲染，仓库里不保存凭证。本地写在 `frontend/.env.local`（`.gitignore` 已排除）。当前云端演示账号 `demo@scendance.example` 由 Auth 管理员接口创建并置为已确认，进入自己的空工作室，不共享任何真实项目。**这两个值一旦内联进公开构建，任何打开站点的人都能登录该账号**：正式站点要放演示账号时先确认它只用于展示，且生成模型按次扣费，任何人登录后都能消耗额度；不对外分发时保持只在本地配置。
+
 `npm ci` 由构建镜像自带的 npm 10 执行，因此 `package-lock.json` 必须与 npm 10 兼容。依赖变动后重新生成锁文件：
 
 ```sh

@@ -1024,7 +1024,7 @@ export type GeneratedVariant = { sourceAssetId: string; variantAssetId: string; 
 export type GenerationContext = { sourceAssetId?: string; sourceObjectIds: string[]; onVariantReady(variant: GeneratedVariant): void };
 type ChatMode = 'plan'|'model';
 type BusinessMode = ChatMode|'delivery'|'review'|'commercial';
-const CHAT_MODES = {plan:'场景策划',model:'物料建模'} as const;
+const CHAT_MODES = {plan:'场景策划',model:'物料生成'} as const;
 /** 左栏工具轨可调用的入口集合（活动需求 / 图纸尺寸 / 执行资料 / 方案评审 / 场景模板 / 物料工具 / 合同约定）。 */
 export type BusinessToolsApi = {
   openBrief():void;
@@ -1403,11 +1403,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   function openDeliveryView(view:'operations'|'materials',event:React.MouseEvent<HTMLButtonElement>):void {
     setDeliveryViewRequest({serial:++deliveryViewSerial.current,view});openDelivery(event);
   }
-  function openModelTools(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;setBusinessMode('model');setModelOpened(true);setTemplatesOpen(false);resizeWorkspace(true);}
-  function chooseModelExample(label:string,prompt:string):void {
-    if(drafts.model.trim()&&drafts.model!==prompt&&!window.confirm(`是否用“${label}”示例替换当前建模输入？`))return;
-    setMode('model');setDrafts(current=>({...current,model:prompt}));openChat();
-  }
+  function openModelTools(event?:React.MouseEvent<HTMLButtonElement>):void{if(event)businessEntry.current=event.currentTarget;setModelTool('generate');setBusinessMode('model');setModelOpened(true);setTemplatesOpen(false);resizeWorkspace(true);}
   function openReview(event?:React.MouseEvent<HTMLButtonElement>):void {
     if(event)businessEntry.current=event.currentTarget;focusBrief.current=false;focusReference.current=false;focusDelivery.current=false;
     returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;returnToDeliveryEntry.current=false;
@@ -1449,9 +1445,9 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
         {leaseLost&&<p className="cr-agent-notice" role={projectsError?'alert':'status'}>{projectsError||'这个项目现在由别人编辑，你的改动只保留在本机。'}{!projectsError&&<button type="button" onClick={()=>void goProjects()}>去项目页接手编辑</button>}</p>}
         {businessMode==='commercial'&&workbenchMode==='layout'&&<p className="cr-hint" role="status">合同与约定已放入「更多」。深度商业档案仍保留，不占主流程。</p>}
         <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'||templatesOpen}><details ref={briefDetails} className="cr-agent-brief" open><summary>{planCategory==='reference'?'图纸与照片':planCategory==='rebuild'?'场地重建':'活动需求与场地资料'}</summary><CreativeBriefPanel view={planCategory} showNotice={false} forcePreview={docked&&suppressAgentLauncher} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel} referencePanel={referenceImagePanel} onSkip={()=>{resizeWorkspace(false);}} onBackToChat={()=>openChatRef.current()} onSwitchView={value=>{if(value==='rebuild')openRebuild();else if(value==='reference')openReference();else openBrief();}}/></details></section>
-        <section id="agent-panel-model" aria-label="物料建模" hidden={businessMode!=='model'||templatesOpen}>
-          <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料建模'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
-          <div hidden={modelTool!=='generate'}><p className="sc-note">选择物料类型，在聊天中填写尺寸与样式，发送后核对候选方案。</p><div className="cr-parametric-families">{[['桌','生成一张长 1.6 米、宽 0.8 米、高 0.75 米的矩形桌，先给预览'],['椅','生成一把有靠背的椅子，座面宽 0.5 米，先给预览'],['柜台','生成一个长 2 米、深 0.6 米、高 1 米的直柜台，先给预览'],['地台','生成一个长 3 米、宽 2 米、高 0.3 米的矩形地台，先给预览'],['背景板','生成一块宽 3 米、高 2.4 米并带底座的背景板，先给预览'],['柜体','生成一个宽 1.2 米、深 0.4 米、高 1.8 米的开放柜体，分 4 层，先给预览']].map(([label,prompt])=><button type="button" key={label} onClick={()=>chooseModelExample(label!,prompt!)}>{label}</button>)}</div>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
+        <section id="agent-panel-model" aria-label="物料生成" hidden={businessMode!=='model'||templatesOpen}>
+          <nav className="cr-model-tools" aria-label="3D 内容工具">{([['generate','物料生成'],['customize','材质调整']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={modelTool===key} onClick={()=>setModelTool(key)}>{label}</button>)}</nav>
+          <div hidden={modelTool!=='generate'}>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
           {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={(docked?workspaceExpanded:studio.expanded)&&!templatesOpen&&businessMode==='model'&&modelTool==='customize'}/></div>}
         </section>
         <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
@@ -1493,7 +1489,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           <details ref={settings} className="cr-agent-settings" onKeyDown={event=>{if(event.key==='Escape'&&event.currentTarget.open){event.preventDefault();event.stopPropagation();event.currentTarget.open=false;settingsToggle.current?.focus();}}}>
             <summary ref={settingsToggle} aria-label="助手设置"><SlidersHorizontal size={16}/><small>{studio.jevEnabled?'JEV 开 · 先比较':mode==='model'?'物料先预览':studio.directApply?'直接应用':'确认后应用'}</small></summary><div className="cr-settings-panel">
       {/* T-UI：演示路径下不暴露「直接应用」开关，统一先预览再确认。 */}
-      {!demoBackend&&<div className="cr-agent-mode"><label><input type="checkbox" checked={studio.directApply} disabled={studio.busy||studio.jevEnabled||mode==='model'} onChange={event=>studio.setDirectApply(event.target.checked)}/>明确指令直接应用</label><span>{mode==='model'?'仅用于场景策划；物料建模始终先预览':studio.directApply?'明确调整通过校验后应用，可撤销':'先预览，再确认布置'}</span></div>}
+      {!demoBackend&&<div className="cr-agent-mode"><label><input type="checkbox" checked={studio.directApply} disabled={studio.busy||studio.jevEnabled||mode==='model'} onChange={event=>studio.setDirectApply(event.target.checked)}/>明确指令直接应用</label><span>{mode==='model'?'仅用于场景策划；物料生成始终先预览':studio.directApply?'明确调整通过校验后应用，可撤销':'先预览，再确认布置'}</span></div>}
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.jevEnabled} disabled={studio.busy} onChange={event=>studio.setJevEnabled(event.target.checked)}/>JEV 决策模式</label><span>生成 3 个方案，由你最终选择</span></div>
       <p className="cr-hint">{demoHint}</p>
             </div></details><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy||studio.recoverable}><ArrowUp size={20}/></button>
