@@ -13,10 +13,10 @@ const VERSION_HEADING = /^## v(\d+)\.(\d+)\.(\d+) · (.+?) · (\d{4}-\d{2}-\d{2}
 const APPENDIX_HEADING = /^## 附录 · 过程记录/;
 const SECTION_LABELS = ['你能直接用到的', '改好了什么', '边界与未做'];
 const FORBIDDEN = ['若干', '优化了体验', '多项改进', '详见下文', '预计', '即将'];
-const MIN_BULLETS = 6;
-const MIN_BULLET_CHARS = 18;
-const MIN_SUMMARY_CHARS = 40;
-const MIN_TOTAL_CHARS = 260;
+const MIN_BULLETS = 10;
+const MIN_BULLET_CHARS = 45;
+const MIN_SUMMARY_CHARS = 80;
+const MIN_TOTAL_CHARS = 1200;
 
 /** 去掉 markdown 记法与空白后的字数（中文按字算，英文按词算，近似即可）。 */
 const chars = text => text
