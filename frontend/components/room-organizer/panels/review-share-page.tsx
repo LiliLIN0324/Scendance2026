@@ -1,7 +1,7 @@
 ﻿'use client';
 
 /**
- * 对方打开的方案壳：只读平面 + 评论。没有晴光，没有模式轨，没有布置工具。
+ * 对方打开的方案壳：只读平面 + 评论。没有Bingo，没有模式轨，没有布置工具。
  * 数据来自 review-share 的本机演示存储。
  */
 import { useEffect, useState } from 'react';

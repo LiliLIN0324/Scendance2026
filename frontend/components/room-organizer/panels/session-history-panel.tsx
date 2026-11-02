@@ -180,7 +180,7 @@ export interface SessionHistoryOverlayProps {
   onSelect(id: string): void;
 }
 
-/** History 浮层：挂在晴光对话区上方，约占 1/3 高。 */
+/** History 浮层：挂在Bingo对话区上方，约占 1/3 高。 */
 export function SessionHistoryOverlay({ open, onClose, onSelect }: SessionHistoryOverlayProps): JSX.Element | null {
   const sessions = useAssistantSessions();
   if (!open || !sessions.ready) return null;

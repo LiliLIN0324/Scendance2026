@@ -45,15 +45,15 @@ function NavHarness({ initial }: { initial: NavColumns }): JSX.Element {
         setAgentCollapsed(next.agentCollapsed);
         setSidebarCollapsed(next.sidebarCollapsed);
       }} />
-      <button type="button" onClick={() => setAgentCollapsed(true)}>收起晴光</button>
-      <button type="button" onClick={() => { setAgentCollapsed(false); setSidebarCollapsed(true); }}>打开晴光</button>
+      <button type="button" onClick={() => setAgentCollapsed(true)}>收起 Bingo</button>
+      <button type="button" onClick={() => { setAgentCollapsed(false); setSidebarCollapsed(true); }}>打开Bingo</button>
       <button type="button" onClick={() => setSidebarCollapsed(false)}>打开工具抽屉</button>
     </div>
   );
 }
 
 describe('logo mapped onto the two existing doors', () => {
-  it('collapses 晴光 from the logo and opens it again without a third flag', () => {
+  it('collapses Bingo from the logo and opens it again without a third flag', () => {
     render(<NavHarness initial={{ agentCollapsed: false, sidebarCollapsed: true }} />);
     expect(screen.getByRole('button', { name: '收起导航栏' }).textContent).not.toContain('幕景');
     fireEvent.click(screen.getByRole('button', { name: '收起导航栏' }));
@@ -69,9 +69,9 @@ describe('logo mapped onto the two existing doors', () => {
     expect(shell.dataset.drawer).toBe('true');
   });
 
-  it('follows 晴光 and the tool drawer when those controls move on their own', () => {
+  it('follows Bingo and the tool drawer when those controls move on their own', () => {
     render(<NavHarness initial={{ agentCollapsed: false, sidebarCollapsed: true }} />);
-    fireEvent.click(screen.getByRole('button', { name: '收起晴光' }));
+    fireEvent.click(screen.getByRole('button', { name: '收起 Bingo' }));
     const shell = document.querySelector('[data-nav]') as HTMLElement;
     expect(shell.dataset.nav).toBe('collapsed');
     expect(screen.getByRole('button', { name: '展开导航栏' })).toBeTruthy();
@@ -86,7 +86,7 @@ describe('logo mapped onto the two existing doors', () => {
     expect(shell.dataset.agent).toBe('true');
     expect(shell.dataset.drawer).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: '打开晴光' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开Bingo' }));
     expect(shell.dataset.nav).toBe('expanded');
     expect(shell.dataset.drawer).toBe('true');
   });

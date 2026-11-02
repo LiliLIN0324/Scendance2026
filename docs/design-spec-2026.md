@@ -102,17 +102,28 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 
 **图标（lucide-react 1.48）**：UI 图标唯一来源。网页端不小于 16px——16（行内下限：文字旁、列表内）、20（按钮、输入、面板头）、24（左轨、画布工具条、缺省图与空态）；32 是唯一上限档，只给整页空态与引导卡的主图标，不进工具条、表格与按钮；12 只允许出现在徽标内的非交互小标记，不进按钮、菜单与可点区域；不用 14 / 18 / 22 这类中间值。统一 stroke 1.75（24 网格下比默认 2 更轻更稳）、圆头圆角；单色继承 `currentColor`，禁用态换 `--faint` 而不降透明度；不混用填充风格。
 
-页面当前在用 **68 枚**，按语义分五组（逐枚样张见可视稿「五、图标索引」）：
+页面当前在用 **65 枚 lucide**，另加左轨三枚自定义形体（见下），按语义分五组（逐枚样张见可视稿「五、图标索引」）：
 
 | 组 | 枚数 | 图标（用途） |
 |---|---|---|
-| 导航与轨道 | 19 | `Boxes` 物料工具、`ClipboardList` 活动需求、`FileText` 合同约定、`Ruler` 图纸尺寸、`SquareStack` 布局模式（左轨「布置」，画布顶不再分段）、`ListChecks` 执行清单（左轨「执行」）、`Send` 评审模式、`PanelLeftClose` 收起面板、`FolderOpen` 项目与目录、`Building2` 当前工作室、`Users` 协作成员、`Map` 地图选址、`Scan` 场地重建、`Shapes` 场地观感、`Satellite` 卫星贴地、`LayoutTemplate` 场景模板、`Trees` 环境预览、`Package` 物料库、`SquareDashed` 空白场地 |
+| 导航与轨道 | 16 | `Boxes` 物料工具、`ClipboardList` 活动需求、`FileText` 合同约定、`Ruler` 图纸尺寸、`PanelLeftClose` 收起面板、`FolderOpen` 项目与目录、`Building2` 当前工作室、`Users` 协作成员、`Map` 地图选址、`Scan` 场地重建、`Shapes` 场地观感、`Satellite` 卫星贴地、`LayoutTemplate` 场景模板、`Trees` 环境预览、`Package` 物料库、`SquareDashed` 空白场地 |
 | 画布视图 | 16 | `MousePointer2` 选择、`Crosshair` 准星、`Grid` 吸附网格、`Eye` 显隐、`Camera` 导出图像、`Sun` 晴天光照、`CloudRain` 阴雨光照、`Footprints` 足迹漫游、`Axis3d` 平面/立体、`Cuboid` 整体视角、`Square` 俯视、`PersonStanding` 人视、`Undo2` 撤销、`Redo2` 重做、`ZoomIn` 放大、`ZoomOut` 缩小 |
 | Agent 与输入 | 8 | `ArrowUp` 发送、`Paperclip` 附图纸/照片、`FileImage` 图片文件、`MoreHorizontal` 更多、`Loader2` 加载、`RotateCw` 重试、`Sparkles` 生成·Agent、`X` 关闭 |
 | 编辑与操作 | 12 | `Copy` 复制、`Trash2` 删除、`Lock` 锁定、`Unlock` 解锁、`RotateCcw` 复位、`RefreshCw` 换一条、`Maximize2` 全屏、`Minimize2` 退出全屏、`SlidersHorizontal` 助手设置、`Plus` 新增、`Search` 搜索、`FlaskConical` 演示环境 |
 | 状态与通用 | 13 | `Check` 成功·选中、`ChevronDown` 展开、`ChevronUp` 收起、`ArrowLeft` 返回、`ArrowRight` 前进、`ArrowUpRight` 外链·打开、`LockKeyhole` 私有·只读、`Layers3` 图层、`Box` 物料·空间、`ImagePlus` 上传图片、`UserRound` 个人、`UsersRound` 团队、`Settings2` 设置 |
 
-**一义一标**：关闭只用 `X`，不用 `X` 表示删除（`Trash2` 专指删除）；成功/选中 `Check` · 加载 `Loader2`（唯一允许旋转的图标）· 新增 `Plus` · 搜索 `Search` · 更多 `MoreHorizontal` · 展开/收起 `ChevronDown`/`ChevronUp` · 全屏成对 `Maximize2`/`Minimize2` · 复位 `RotateCcw`、换一条 `RefreshCw`、重试 `RotateCw`（三者不混）· 撤销 `Undo2`、重做 `Redo2`（不与复位、重试混）· 放大/缩小 `ZoomIn`/`ZoomOut` · 锁定 `Lock`/`Unlock` · 发送 `ArrowUp` · 上传 `ImagePlus` · 外链 `ArrowUpRight`。左轨布置 / 执行分别用 `SquareStack` / `ListChecks`（评审 `Send`）；画布顶不再加「布置 / 物料 / 执行资料」分段。场地重建用 `Scan`；不要用 `Layers`，它在 lucide-react 1.48 里是 `Layers3`（图层）的别名。新增图标前先查表，同义不复用两枚。
+**一义一标**：关闭只用 `X`，不用 `X` 表示删除（`Trash2` 专指删除）；成功/选中 `Check` · 加载 `Loader2`（唯一允许旋转的图标）· 新增 `Plus` · 搜索 `Search` · 更多 `MoreHorizontal` · 展开/收起 `ChevronDown`/`ChevronUp` · 全屏成对 `Maximize2`/`Minimize2` · 复位 `RotateCcw`、换一条 `RefreshCw`、重试 `RotateCw`（三者不混）· 撤销 `Undo2`、重做 `Redo2`（不与复位、重试混）· 放大/缩小 `ZoomIn`/`ZoomOut` · 锁定 `Lock`/`Unlock` · 发送 `ArrowUp` · 上传 `ImagePlus` · 外链 `ArrowUpRight`。左轨四格用品牌标与三枚自定义形体（见下），不再用 lucide 表示阶段；画布顶不加「布置 / 物料 / 执行资料」分段。场地重建用 `Scan`；不要用 `Layers`，它在 lucide-react 1.48 里是 `Layers3`（图层）的别名。新增图标前先查表，同义不复用两枚。
+
+**左轨四形（唯一注册的自定义 UI 图标）**：左轨从上到下只有四格，读法是「几个形体」，与 Grok Bot 一类扁平几何标同路——不套圆罩、不加投影、不做双色。
+
+| 格 | 形体 | 文件 | 打开 |
+|---|---|---|---|
+| 1 | 幕景品牌标「门厅」：实心墨色圆角方 + 居中拱门洞 + 品牌绿圆点 | `frontend/components/brand-mark.tsx`（28px 档） | 展开 / 收起左侧导航 |
+| 2 | Bingo：开口圆环，缺口在正下方 | `frontend/components/room-organizer/panels/rail-glyphs.tsx` | Bingo 助手（右栏 conversation） |
+| 3 | 空间：三角屋顶 + 中柱 + 柱脚圆点 | 同上 | 空间抽屉（场地 / 场景模板 / 场地观感） |
+| 4 | 物料：等轴立方体 + 右侧圆点 | 同上 | 物料抽屉（拖入画布即成物件） |
+
+三枚自定义形体统一 24 网格、`stroke 1.7`、圆头圆角、`currentColor`，绘制 22px；按钮触达区 40×40、透明底，悬停 `--wk-plane`，选中只在左缘出 3px 品牌绿条。Bingo 右下 9px 状态点（空闲灰 / 就绪绿 / 待办赭 / 进行中蓝 / 退回红）是唯一允许的点缀，不随形体外扩。品牌标不是阶段钮，点击只开合左列。
 
 **领域符号（不进 UI 栅格）**：`frontend/components/room-organizer/plotcraft/icon.tsx` 是 PlotCraft 图标集（stroke 1.5、圆头圆角、`currentColor`）承担户型与家具语义（墙/窗/门/地面/楼梯/屋顶/家具/画布工具）；`frontend/components/room-organizer/panels/scendance-workspace.tsx:27` 的 `MaterialGlyph`（72×58、stroke 2.3–2.4、24–30% `currentColor` 填充）是物料缩略线稿。两者只出现在画布、物料卡与户型上下文；工具栏、按钮、菜单一律 lucide，两种风格不混在同一个图标钮里。
 
@@ -165,7 +176,7 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 
 **顶栏（48px，吸顶）**：左起 字标（Icon 28 + 幕景 15/600 + 绿点 + SCENDANCE 11）→ 1px 竖线 → 项目名 14/600 → 保存态胶囊（本地草稿 / 正在保存… / 已保存到本机）。右端只放两个入口：`项目`（FolderOpen）与头像（UserRound）；中部不放 tab。
 
-**左轨（64px）**：布置 / 评审 / 执行 三态单选，只切上下文、不弹面板；底部常驻 `设置`。
+**左轨（64px）**：从上到下四格——幕景品牌标「门厅」、Bingo、空间、物料。品牌标只开合左列；Bingo 开关右栏助手；空间、物料各开一个左侧抽屉，两者互斥且同时只开一个。底部常驻 `设置`。四格都不弹独立窗口，状态用左缘 3px 绿条表示。
 
 **入口分工（一个动作只留一个入口）**：
 
@@ -174,7 +185,10 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 | 顶栏「项目」 | 我的项目（projects）：新建、打开、另存为云项目 |
 | 顶栏头像 | 素材库（assets） |
 | 左轨「设置」 | 团队与权限演示（team / permissions） |
-| 左轨三阶段 | 换 workbench-mode，不弹窗 |
+| 左轨品牌标 | 展开 / 收起左侧导航，不切内容 |
+| 左轨 Bingo | Bingo 助手（conversation） |
+| 左轨 空间 | 空间抽屉：场地、场景模板、场地观感 |
+| 左轨 物料 | 物料抽屉：拖入画布即成物件 |
 | 右栏 Agent | 唯一生成入口：出方案、改尺寸、导出 |
 | 底部物料薄条 | 物料库，拖入画布即成物件 |
 
@@ -223,7 +237,7 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 | 场景 | 比例 | 尺寸 | 图标 | CAP 文案 |
 |---|---|---|---|---|
 | 物料卡预览 | 1:1 | 112 | Box · 24 | 暂无预览 |
-| 预设 / 模板封面 | 1.7:1 | 187×110 | SquareStack · 24 | 暂无封面 |
+| 预设 / 模板封面 | 1.7:1 | 187×110 | `LayoutTemplate` · 24 | 暂无封面 |
 | 图纸 / 分享缩略 | 16:9 | 196×110 | FileImage · 24 | 预览未载入 |
 | 成员头像 | 1:1 圆 | 40 / 32 | UserRound · 20 / 16 | 不写文案 |
 | 列表小方图 | 1:1 | 48 | Box · 20 | 不写文案 |

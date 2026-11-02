@@ -4,19 +4,19 @@ import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_MAX, LEFT_CARD_WIDTH_MIN } fro
  * 左侧导航的开合不单独记状态。
  *
  * 左列在不在，只看已经存在的两扇门：
- * - `agentCollapsed`：晴光列
+ * - `agentCollapsed`：Bingo 列
  * - `sidebarCollapsed`：工具抽屉（选中物料 / 观感）
- * - `sidePanel`：Bingo 或场地面板（与晴光列互斥，但同样撑开左卡）
+ * - `sidePanel`：场地面板（与 Bingo 列互斥，但同样撑开左卡）
  *
- * 两扇都关着且没有 sidePanel = 导航收起（64px 轨，只见 logo）。
- * 任一扇或 sidePanel 开着 = 导航展开（左卡在，顶上是晴光对话头，不再重复幕景品牌条）。
+ * 两扇都关着且没有 sidePanel = 导航收起（64px 轨，只剩四枚图形）。
+ * 任一扇或 sidePanel 开着 = 导航展开（左卡在，顶上是 Bingo 对话头，不再重复幕景品牌条）。
  *
- * logo 只写这两扇门：收起时两扇都关；展开时只开晴光，工具抽屉保持关着。
- * 晴光自己的收起、模式切换、打开评审/执行，以及以后同样去写这两扇门的场景回调
+ * 门厅标只写这两扇门：收起时两扇都关；展开时只开 Bingo，工具抽屉保持关着。
+ * Bingo 自己的收起、模式切换、打开评审/执行，以及以后同样去写这两扇门的场景回调
  * （包括尚未落地的 applySceneLayout）都会反映到 logo 上，不必再同步第三套布尔。
  */
-/** 左轨第三、四格打开的侧栏（Bingo / 场地），与晴光列互斥。 */
-export type RailSidePanel = 'bingo' | 'venue';
+/** 左栏侧栏（场地），与 Bingo 列互斥。 */
+export type RailSidePanel = 'venue';
 
 export interface NavColumns {
   agentCollapsed: boolean;

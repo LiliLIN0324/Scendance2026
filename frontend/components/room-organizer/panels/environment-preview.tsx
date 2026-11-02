@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -6,17 +6,20 @@ import { listAholoAssets } from '../lib/aholo-assets';
 import { DEMO_WORLD_SCENE_ID, listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { MaterialThumb } from './material-thumb';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
+import type { StoredEnvironment } from '../lib/environment-preference';
 
 type SceneCard = { assetId: string; name: string; image?: string };
 
 /**
- * 「环境预览」：先列仓库留档的 3DGS 场景，再列本机这次取回的，点一下把它铺成 3D 视图的背景。
- * 场地壳体只在预览那几帧让位，退出即复原；卡片认的是资产号或本站路径，不是那条会过期的云链接。
+ * 「环境」：先列仓库留档的 3DGS 场景，再列本机这次取回的。
+ * 点一张就把它设为本场环境并记住；同一个项目再打开时自动挂回，
+ * 不想用时按「不用环境」摘掉，壳体随即恢复。
  */
-export function EnvironmentPreview({ preview, onStart, onStop }: {
+export function EnvironmentPreview({ preview, current, onSelect, onClear }: {
   preview: SplatPreviewState;
-  onStart(assetId: string): void;
-  onStop(): void;
+  current: StoredEnvironment | null;
+  onSelect(assetId: string, name: string): void;
+  onClear(): void;
 }): JSX.Element {
   const scenes = useMemo<SceneCard[]>(() => {
     const shipped = listShippedAssets('spz').map(asset => {
@@ -30,20 +33,25 @@ export function EnvironmentPreview({ preview, onStart, onStop }: {
     return [...shipped, ...local];
   }, []);
   const busy = preview.status === 'loading';
-
+  const currentId = current?.assetId ?? '';
   return <>
-    {preview.status !== 'idle' && <p className="sc-note sc-material-note" role="status">
-      {preview.status === 'loading' && <>正在取回「{preview.name}」<Loader2 className="cr-spin" size={14}/>{preview.progress === undefined ? '…' : ` ${Math.round(preview.progress * 100)}%`}</>}
-      {preview.status === 'ready' && <>正在预览「{preview.name}」· {(preview.splats ?? 0).toLocaleString('zh-CN')} 个高斯点</>}
-      {preview.status === 'error' && <span className="sc-warning">「{preview.name}」预览失败：{preview.error}</span>}
-      {preview.status !== 'error' && <button type="button" className="sc-button" onClick={onStop}>退出预览</button>}
+    {preview.status === 'loading' && <p className="sc-note sc-material-note" role="status">
+      正在取回「{preview.name}」<Loader2 className="cr-spin" size={14}/>{preview.progress === undefined ? '…' : ` ${Math.round(preview.progress * 100)}%`}
+    </p>}
+    {preview.status === 'ready' && currentId && currentId === preview.assetId && <p className="sc-note sc-material-note" role="status">
+      当前环境：「{preview.name}」· {(preview.splats ?? 0).toLocaleString('zh-CN')} 个高斯点
+      <button type="button" className="sc-button" onClick={onClear}>不用环境</button>
+    </p>}
+    {preview.status === 'error' && <p className="sc-note sc-material-note" role="status">
+      <span className="sc-warning">「{preview.name}」没挂上：{preview.error}</span>
+      {currentId && currentId === preview.assetId && <button type="button" className="sc-button" onClick={onClear}>不用环境</button>}
     </p>}
     {scenes.length === 0
-      ? <p className="sc-note sc-material-empty">还没有本场观感包。从地图采集单完成重建并取回后会出现在这里；下方仓库项标「样例·非本场」，勿冒充本场。</p>
-      : <div className="sc-material-rail" role="group" aria-label="环境预览">
+      ? <p className="sc-note sc-material-empty">还没有本场环境包。从地图采集单完成重建并取回后会出现在这里；下方仓库项标「样例·非本场」，勿冒充本场。</p>
+      : <div className="sc-material-rail" role="group" aria-label="环境">
         {scenes.map(scene => <button type="button" key={scene.assetId} className="sc-material-card"
-          disabled={busy} aria-pressed={scene.assetId === preview.assetId && preview.status !== 'idle'}
-          onClick={() => onStart(scene.assetId)} aria-label={`预览${scene.name}`} title={`${scene.name}\n点击作为环境预览`}>
+          disabled={busy} aria-pressed={scene.assetId === currentId}
+          onClick={() => onSelect(scene.assetId, scene.name)} aria-label={`设为环境${scene.name}`} title={`${scene.name}\n设为本场环境，跟项目一起保留`}>
           <span className="sc-material-preview">
             {scene.image
               ? <MaterialThumb src={scene.image}/>

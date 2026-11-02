@@ -709,7 +709,7 @@ describe('T-ATTACH 图纸照片先进输入框', () => {
   }, 25000);
 });
 
-describe('晴光在左侧工作台', () => {
+describe('Bingo在左侧工作台', () => {
   it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
     expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
@@ -732,7 +732,7 @@ describe('晴光在左侧工作台', () => {
 });
 
 describe('右栏生成物件', () => {
-  it('生成和布置分开，切过去不再留着晴光的发送', () => {
+  it('生成和布置分开，切过去不再留着Bingo的发送', () => {
     const openMaterials = vi.fn();
     const openVenue = vi.fn();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel onOpenPropMaterials={openMaterials} onOpenPropVenue={openVenue}/></LayoutAgentProvider>);

@@ -133,7 +133,7 @@ describe('review share page', () => {
     expect(await screen.findByRole('heading', { name: '发布会' })).toBeTruthy();
     expect(screen.getByRole('img', { name: '发布会 的只读平面' })).toBeTruthy();
     expect(screen.getAllByText('签到桌').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('complementary', { name: '晴光' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Bingo' })).toBeNull();
     expect(screen.queryByRole('navigation', { name: '工具' })).toBeNull();
     expect(screen.queryByRole('navigation', { name: '工作流程' })).toBeNull();
     expect(document.querySelector('[data-storage="local-demo"]')).toBeTruthy();

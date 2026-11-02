@@ -9,9 +9,10 @@ import { isNavExpanded } from '../lib/nav-chrome';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('左轨主入口面板', () => {
-  it('keeps Bingo and venue panels in the left column, not canvas overlays', () => {
+  it('keeps the venue panel in the left column, not canvas overlays', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
-    expect(source).toContain("sidePanel === 'bingo' && <BingoPanel");
+    expect(source).not.toContain("sidePanel === 'bingo'");
+    expect(source).not.toContain('<BingoPanel');
     expect(source).toContain("sidePanel === 'venue' && <VenueLibraryPanel");
     expect(source).not.toContain('AgentReopenCard');
     expect(source).not.toMatch(/venueLibraryOpen\s*&&\s*<VenueLibraryPanel/);
@@ -24,16 +25,14 @@ describe('左轨主入口面板', () => {
     expect(agentSource).toContain('id="ap-capabilities"');
   });
 
-  it('expands the left card when a side panel is open without 晴光', () => {
-    expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true, sidePanel: 'bingo' })).toBe(true);
+  it('expands the left card when a side panel is open without Bingo', () => {
     expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true, sidePanel: 'venue' })).toBe(true);
   });
 
-  it('mutually excludes 晴光 dialogue from side panels in render guards', () => {
+  it('mutually excludes Bingo dialogue from side panels in render guards', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).toContain('agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel');
-    expect(source).toContain('qingguangPanelOpen = !agentCollapsed && !agentClosing && !sidePanel');
+    expect(source).toContain('bingoPanelOpen = !agentCollapsed && !agentClosing && !sidePanel');
     expect(source).toContain('agentPanelVisible && <AgentPanel');
-    expect(source).toContain('qingguangPanelOpen={qingguangPanelOpen}');
   });
 });

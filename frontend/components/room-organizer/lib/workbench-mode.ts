@@ -2,9 +2,9 @@
 export type WorkbenchMode = 'layout' | 'review' | 'delivery';
 
 /**
- * 模式轨不放布置 / 评审 / 执行图标。原布置槽换成晴光头像，只打开旁边的对话。
+ * 模式轨不放布置 / 评审 / 执行图标。原布置槽换成Bingo头像，只打开旁边的对话。
  * 评审走工具轨「分享」的方案链接，执行走分享菜单里的到场清单抽屉。
- * `review` / `delivery` 仍留在类型里，供旧调用把晴光暂时放到那一态；
+ * `review` / `delivery` 仍留在类型里，供旧调用把Bingo暂时放到那一态；
  * 若还被点到，走 `demoteLegacyMode`，不占常驻模式。
  */
 export const WORKBENCH_MODES: ReadonlyArray<{ id: WorkbenchMode; label: string; hint: string }> = [

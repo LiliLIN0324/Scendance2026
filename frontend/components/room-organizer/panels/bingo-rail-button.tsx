@@ -1,54 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import {
-  bingoBallLabel,
-  emptyBingoSnapshot,
-  readBingoSnapshot,
-  type BingoSnapshot,
-} from '../lib/bingo-status';
+import type { RefObject } from 'react';
+import { bingoHeaderStatus, useAgent } from './agent-panel';
+import { BingoGlyph } from './rail-glyphs';
+
+/** 对话顶栏与画布浮标共用的 Bingo 切图；左轨只放形体，不再放头像。 */
+export const BINGO_MASCOT = '/assets/assistant/qingguang-3d-40.png';
 
 /**
- * 窄轨第三格：Bingo / 评审收藏。点开左栏独立面板，不在轨上挂 popover。
+ * 左轨第二格：圆环形体，打开旁边的 Bingo 对话，不切换模式。
+ * 右下状态点与对话头同一套 tone。
  */
-export function BingoRailButton({ open, onToggle }: { open: boolean; onToggle(): void }): JSX.Element {
-  const [snapshot, setSnapshot] = useState<BingoSnapshot>(emptyBingoSnapshot);
-  const [ready, setReady] = useState(false);
-
-  const sync = useCallback(() => {
-    setSnapshot(readBingoSnapshot(window.localStorage));
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    sync();
-    const onStore = () => sync();
-    window.addEventListener('storage', onStore);
-    window.addEventListener('focus', onStore);
-    document.addEventListener('visibilitychange', onStore);
-    return () => {
-      window.removeEventListener('storage', onStore);
-      window.removeEventListener('focus', onStore);
-      document.removeEventListener('visibilitychange', onStore);
-    };
-  }, [sync]);
-
-  const phase = ready ? snapshot.phase : 'to-send';
-  const label = ready ? bingoBallLabel(snapshot) : '收反馈';
-  const count = ready && snapshot.phase === 'awaiting' ? String(snapshot.plans.length) : '';
-
+export function BingoRailButton({ open, onOpen, buttonRef }: {
+  open: boolean;
+  onOpen(): void;
+  buttonRef?: RefObject<HTMLButtonElement>;
+}): JSX.Element {
+  const agent = useAgent();
+  const mode = agent.callbacks.workbenchMode;
+  const status = bingoHeaderStatus(agent, mode);
   return (
     <button
+      ref={buttonRef}
       type="button"
-      className={`sc-bingo-ball sc-rail-bingo sc-rail-disc${open ? ' is-active' : ''}${phase === 'returned' ? ' is-returned' : ''}`}
-      data-status={phase}
-      {...(count ? { 'data-count': count } : {})}
-      aria-pressed={open}
-      aria-label={label}
+      className={`sc-rail-bingo sc-rail-disc${open ? ' is-active' : ''}`}
+      aria-expanded={open}
+      aria-label="Bingo"
       data-tip="Bingo"
-      onClick={onToggle}
+      onClick={onOpen}
     >
-      {count ? <span className="sc-bingo-count">{count}</span> : null}
+      <BingoGlyph />
+      <span className={`sc-rail-bingo-dot is-${status.tone}`} aria-hidden="true" />
     </button>
   );
 }

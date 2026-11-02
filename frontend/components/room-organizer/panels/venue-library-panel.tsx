@@ -10,7 +10,7 @@ import './bingo-panel.css';
 import './venue-library-panel.css';
 
 /**
- * 左栏场地面板。不进画布浮层，与晴光 / Bingo 互斥。
+ * 左栏场地面板。不进画布浮层，与Bingo / Bingo 互斥。
  */
 export function VenueLibraryPanel({ onClose }: { onClose(): void }): JSX.Element {
   const library = useVenueLibrary();

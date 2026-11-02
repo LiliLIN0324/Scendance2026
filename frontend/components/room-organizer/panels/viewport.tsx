@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { MAX_CUSTOM_SET_NAME_LENGTH } from '../lib/custom-sets';
 import { WALK_CANVAS_ID } from '../lib/walk-engage';
@@ -306,27 +306,46 @@ function StatusChip({
 
 function walkHint(phase: WalkthroughPhase | undefined, inEnvironment: boolean | undefined, metric?: boolean): string {
   const metricPrefix = metric ? '1:1 实景 · ' : '';
+  // 退出只在上方那颗胶囊里说一次，这里只教怎么走、怎么看。
   if (phase === 'locked') {
     return inEnvironment
-      ? `${metricPrefix}眼高走进环境 · WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出`
-      : 'WASD 走动 · 鼠标环顾 · Shift 加速 · Esc 退出';
+      ? `${metricPrefix}眼高走进环境 · WASD 走动 · 鼠标环顾 · Shift 加速`
+      : 'WASD 走动 · 鼠标环顾 · Shift 加速';
   }
   if (phase === 'unlocked') {
     return inEnvironment
-      ? '按住左键拖动转头 · WASD 走动 · 点一下画面上锁鼠标 · Esc 退出'
-      : '按住左键拖动转头 · WASD 走动 · Shift 加速 · 点一下画面上锁鼠标 · Esc 退出';
+      ? '按住左键拖动转头 · WASD 走动 · 点一下画面上锁鼠标'
+      : '按住左键拖动转头 · WASD 走动 · Shift 加速 · 点一下画面上锁鼠标';
   }
   if (phase === 'drag') {
     // The browser refused pointer lock in this environment, so the cursor
     // stays visible and looking is a drag — never promise a lock click (#351).
     return inEnvironment
-      ? '眼高走进环境 · 按住左键拖动转头 · WASD 走动 · Esc 退出'
-      : '按住左键拖动转头 · WASD 走动 · Shift 加速 · Esc 退出';
+      ? '眼高走进环境 · 按住左键拖动转头 · WASD 走动'
+      : '按住左键拖动转头 · WASD 走动 · Shift 加速';
   }
   return '正在进入第一人称…';
 }
 
+const WALK_HINT_VISIBLE_MS = 7000;
+
+/** 走动提示只在进入或换阶段时露一会儿，之后把画面还给场景。 */
+function useWalkHintVisible(active: boolean | undefined, phase: WalkthroughPhase | undefined): boolean {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setVisible(false);
+      return undefined;
+    }
+    setVisible(true);
+    const timer = window.setTimeout(() => setVisible(false), WALK_HINT_VISIBLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, phase]);
+  return visible;
+}
+
 function ViewportOverlays(props: ViewportProps): JSX.Element {
+  const walkHintVisible = useWalkHintVisible(props.walkthroughActive, props.walkthroughPhase);
   return (
     <>
       {!props.view2D && props.showMinimap && (
@@ -355,15 +374,17 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
               boxShadow: 'var(--pc-halo-cyan)',
             }}
           />
-          <div
-            className="pointer-events-none absolute bottom-4 left-1/2"
-            style={{ transform: 'translateX(-50%)' }}
-          >
-            <StatusChip intent="accent">
-              <Icon name="live" size={14} />
-              {walkHint(props.walkthroughPhase, props.walkthroughInEnvironment, props.walkthroughMetric)}
-            </StatusChip>
-          </div>
+          {walkHintVisible && (
+            <div
+              className="pointer-events-none absolute bottom-4 left-1/2"
+              style={{ transform: 'translateX(-50%)' }}
+            >
+              <StatusChip intent="accent">
+                <Icon name="live" size={14} />
+                {walkHint(props.walkthroughPhase, props.walkthroughInEnvironment, props.walkthroughMetric)}
+              </StatusChip>
+            </div>
+          )}
         </>
       )}
 

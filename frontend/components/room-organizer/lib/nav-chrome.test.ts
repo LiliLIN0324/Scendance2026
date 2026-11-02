@@ -16,16 +16,15 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('nav chrome state', () => {
-  it('treats the left column as expanded whenever 晴光 or the tool drawer is open', () => {
+  it('treats the left column as expanded whenever Bingo or the tool drawer is open', () => {
     expect(isNavExpanded({ agentCollapsed: false, sidebarCollapsed: true })).toBe(true);
     expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: false })).toBe(true);
     expect(isNavExpanded({ agentCollapsed: false, sidebarCollapsed: false })).toBe(true);
     expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true })).toBe(false);
-    expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true, sidePanel: 'bingo' })).toBe(true);
     expect(isNavExpanded({ agentCollapsed: true, sidebarCollapsed: true, sidePanel: 'venue' })).toBe(true);
   });
 
-  it('closes both doors from any open combination, and opens only 晴光 from fully closed', () => {
+  it('closes both doors from any open combination, and opens only Bingo from fully closed', () => {
     const closed = { agentCollapsed: true, sidebarCollapsed: true, sidePanel: null };
     expect(toggleNavColumns({ agentCollapsed: false, sidebarCollapsed: true })).toEqual(closed);
     expect(toggleNavColumns({ agentCollapsed: true, sidebarCollapsed: false })).toEqual(closed);
@@ -33,7 +32,7 @@ describe('nav chrome state', () => {
     expect(toggleNavColumns(closed)).toEqual({ agentCollapsed: false, sidebarCollapsed: true, sidePanel: null });
   });
 
-  it('round-trips the default 晴光 column without remembering a third flag', () => {
+  it('round-trips the default Bingo column without remembering a third flag', () => {
     const openAgent = { agentCollapsed: false, sidebarCollapsed: true, sidePanel: null };
     expect(toggleNavColumns(toggleNavColumns(openAgent))).toEqual(openAgent);
     expect(navToggleLabel(true)).toBe(NAV_COLLAPSE_LABEL);

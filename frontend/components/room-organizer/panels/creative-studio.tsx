@@ -83,7 +83,7 @@ export function useCreativeBriefState(): CreativeBriefState | null {
   return studio?{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}:null;
 }
 /** v2.4 AgentPanel：只取出方案需要的那几项（复用现有 AI 生成，不新增算法）。
- *  云端提案现在也要在晴光栏里「确认布置 / 撤回」，所以把预览与确认这几项一起放出来。 */
+ *  云端提案现在也要在Bingo栏里「确认布置 / 撤回」，所以把预览与确认这几项一起放出来。 */
 export function useStudioAgent(): Pick<StudioValue, 'generate'|'busy'|'run'|'connection'|'notice'|'controller'|'brief'|'setBrief'|'hasSavedBrief'
   |'preview'|'stale'|'expired'|'recoverable'|'applyPreview'|'discardPreview'|'cancelRun'|'exportActivity'>|null { return useContext(StudioContext); }
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
@@ -888,7 +888,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         submittedBriefValue.palette?.trim()&&`配色要求：${submittedBriefValue.palette.trim()}`,
         submittedBriefValue.atmosphere?.trim()&&`氛围要求：${submittedBriefValue.atmosphere.trim()}`,
       ].filter(Boolean).join('\n');
-      // 两个入口统一「先预览再确认」：晴光栏强制 requirePreview；
+      // 两个入口统一「先预览再确认」：Bingo栏强制 requirePreview；
       // 工作室自己的聊天默认也走预览，只有用户当场勾选「明确指令直接应用」才允许 direct。
       const allowDirect=!modelRequest&&!options?.requirePreview&&directApply;
       const scene=layoutToBackendScene(base),context=buildAgentContext({briefInstruction:modelRequest?modelBrief:message&&!submittedBriefValue.description.trim()?'':briefInstruction(submittedBriefValue,base.width,base.height),message:modelRequest?`仅创建或调整本次请求指定的物料，不重新设计整场。\n${message?.trim()??''}`:message?.trim()||'请按上述需求生成布置方案。',confirmedMaterialDecisions:acceptedDecisions,recentMessages:message?messages.filter(item=>item.id!=='welcome'):[],lastProposalExplanation:message?lastExplanation:''});
@@ -1017,7 +1017,7 @@ export function CreativeBriefPanel({ showNotice=true, descriptionRef, referenceO
 
 function AssistantMascot(): JSX.Element {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="cr-mascot" src="/assets/assistant/qingguang-3d-24@2x.png" alt="晴光" draggable={false} width={24} height={24}/>;
+  return <img className="cr-mascot" src="/assets/assistant/qingguang-3d-24@2x.png" alt="Bingo" draggable={false} width={24} height={24}/>;
 }
 
 export type GeneratedVariant = { sourceAssetId: string; variantAssetId: string; objectIds?: string[] };
@@ -1065,7 +1065,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   referenceOpenRequest?: number;
   referenceEntryRef?: RefObject<HTMLButtonElement>;
   docked?: boolean;
-  /** 工作台已挂 AgentPanel 时为 true：禁止再露旧晴光胶囊。 */
+  /** 工作台已挂 AgentPanel 时为 true：禁止再露旧Bingo胶囊。 */
   suppressAgentLauncher?: boolean;
   businessHostRef?: RefObject<HTMLDivElement>;
   onConversationVisibilityChange?: (open:boolean)=>void;
@@ -1424,7 +1424,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const primaryCategoryValue = businessCategory === 'commercial' ? 'more' : businessCategory;
   const hasConversation=studio.messages.some(message=>message.id!=='welcome');
   // docked workbench: AgentPanel owns Agent entry; hide legacy capsule.
-  const assistantLauncher=(!suppressAgentLauncher&&!studio.expanded)?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开晴光 Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>晴光</span></button>:null
+  const assistantLauncher=(!suppressAgentLauncher&&!studio.expanded)?<button ref={fallbackEntry} aria-controls="creative-assistant" className="cr-assistant-capsule" type="button" onClick={()=>{returnToDeliveryEntry.current=false;returnToWorkspaceEntry.current=false;returnToReferenceEntry.current=false;openChat();}} aria-expanded={false} aria-label="打开 Bingo Agent"><span className="cr-assistant-capsule-avatar" aria-hidden="true"><AssistantMascot/></span><span>Bingo</span></button>:null
   const suggestionsVisible=!suggestionsDismissed&&(!hasConversation||suggestionsOpen);
   const hasBrief=studio.briefReady&&!studio.briefError&&studio.hasSavedBrief&&!!studio.brief.description.trim();
   const resultSuggestions:Array<{label:string;open:(event:React.MouseEvent<HTMLButtonElement>)=>void}>=[];
@@ -1433,7 +1433,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   if(studio.layout.eventOperations?.tasks.length)resultSuggestions.push({label:'整理执行时间表',open:event=>openDeliveryView('operations',event)});
   if(sceneItems.length)resultSuggestions.push({label:'核对物料交接',open:event=>openDeliveryView('materials',event)});
   if(hasBrief)resultSuggestions.push({label:'准备客户方案',open:openReview});
-  function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'晴光':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸。不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
+  function renderMessage(m:Message):JSX.Element {return <div key={m.id} className={`cr-message is-${m.role}`}>{m.role==='assistant'&&<span className="cr-message-avatar" aria-hidden="true"><AssistantMascot/></span>}<div className="cr-message-body"><span className="sr-only">{m.role==='assistant'?'Bingo':'你'}</span><p>{m.text}</p>{m.modelSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><p>{suggestion.prompt}</p><small>可继续描述尺寸。不支持的造型会明确说明。</small></article>)}{m.materialSuggestions?.map((suggestion,index)=><article className="cr-model-suggestion" key={`${m.id}-material-${index}`}><strong>{suggestion.name}</strong><p>{suggestion.reason}</p><button type="button" onClick={()=>{const {scope:materialScope,...input}=suggestion;previewMaterial({...input,materialScope});}}>预览材质调整</button><small>仅调整指定的 {suggestion.objectIds.length} 件物料；原版本保留，确认后应用。</small></article>)}</div></div>;}
   const businessContent=(
       <div id="creative-business" tabIndex={-1} className={`cr-workspace-content ${docked?'cr-business-content':''}`} hidden={docked&&!workspaceExpanded} ref={content} onKeyDown={event=>{if(docked&&event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();const clicked=businessEntry.current;resizeWorkspace(false);if(clicked?.isConnected&&clicked.closest('[hidden]')&&!content.current?.contains(clicked)){setExpanded(true);queueMicrotask(()=>clicked.focus());}}}}>
         {(workbenchMode==='review'||workbenchMode==='delivery'||!hideCategorySelect||!onOpenTemplates)&&<header className="cr-business-heading">
@@ -1459,11 +1459,11 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   return <div className={`cr-assistant ${docked?'is-docked':''} ${studio.expanded?'is-open':''} ${!docked&&studio.expanded&&workspaceExpanded?'is-workspace-expanded':''} ${selectedItem?'has-properties':''}`}>
     {docked&&businessOpened&&businessHost&&createPortal(businessContent,businessHost,'creative-business')}
     {!(docked&&suppressAgentLauncher)&&(docked||opened||studio.expanded)&&<section hidden={!studio.expanded} id="creative-assistant" className={`cr-chat ${!docked&&workspaceExpanded?'is-expanded':''}`} aria-label="Agent" onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented){event.stopPropagation();closeChat();}}}>
-      <header><div className="cr-header-brand"><div><strong>晴光</strong><small title={localSaveError?undefined:studio.layout.name} role={localSaveError?'alert':undefined}>{localSaveError?'本机保存失败，请导出备份':`${operationScope} · ${studio.layout.name}`}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'关闭聊天':'关闭 Agent'} onClick={closeChat}><X size={20}/></button></div></header>
+      <header><div className="cr-header-brand"><div><strong>Bingo</strong><small title={localSaveError?undefined:studio.layout.name} role={localSaveError?'alert':undefined}>{localSaveError?'本机保存失败，请导出备份':`${operationScope} · ${studio.layout.name}`}</small></div></div><div className="cr-chat-header-actions"><button type="button" aria-label={docked?'关闭聊天':'关闭 Agent'} onClick={closeChat}><X size={20}/></button></div></header>
       {!docked&&<div className="cr-workspace-tools">{templatesOpen&&<button type="button" onClick={()=>setTemplatesOpen(false)}><ArrowLeft size={16}/>返回当前工作区</button>}<button className="cr-workspace-toggle" type="button" aria-pressed={workspaceExpanded} onMouseDown={event=>{if(event.button===0)event.preventDefault();}} onClick={()=>resizeWorkspace(!workspaceExpanded)}>{workspaceExpanded?<Minimize2 size={16}/>:<Maximize2 size={16}/>}<span>{workspaceExpanded?'恢复浮窗':'展开工作区'}</span></button><span>{studio.connection}</span><div className="cr-chat-toggle-wrap" hidden={!workspaceExpanded}><button ref={chatToggle} className="cr-chat-toggle" type="button" aria-label={chatHidden?'展开聊天':'收起聊天'} aria-controls="creative-conversation" aria-expanded={!chatHidden} aria-describedby={chatHidden&&chatPending?'creative-conversation-status':undefined} onClick={toggleChat}>{chatHidden?'展开聊天':'收起聊天'}</button>{chatHidden&&chatPending&&<span id="creative-conversation-status" className="cr-chat-pending" role="status" aria-live="polite">{chatPending} · 展开聊天查看</span>}</div></div>}
       <div className={`cr-plan-panel cr-workspace-body ${chatHidden?'is-chat-collapsed':''}`}>
       {!docked&&businessContent}
-      <section id="creative-conversation" className="cr-conversation" aria-label="晴光 聊天" hidden={chatHidden} ref={conversation} tabIndex={-1}>
+      <section id="creative-conversation" className="cr-conversation" aria-label="Bingo 聊天" hidden={chatHidden} ref={conversation} tabIndex={-1}>
 
       <div className="cr-chat-feed" ref={feed}>
         {studio.messages.filter(message=>message.id==='welcome').map(renderMessage)}
