@@ -81,24 +81,27 @@ git show v3.1.0:CHANGELOG.md | sed -n '1,60p'
 4. 提交（`release: vX.Y.Z — 短标题`）→ `git tag -a vX.Y.Z -m "vX.Y.Z 短标题"` → push main 与 tag。
 5. 部署后把「实机核对方式」写进该版本的「内部与验证」段。
 
-## 8. GitHub 上的发布会话（Release / tag 注释）
+## 8. GitHub 上的发布会话（tag 注释 / Release）
 
-仓库 Tags 页显示的「版本介绍」来自两种东西：annotated tag 的注释、以及同名 Release 的正文。
-**以 Release 为准**：每个版本都要有 Release，正文 = `CHANGELOG.md` 里该版本段落的原文（去掉 `## v…` 标题行），
-标题 = `vX.Y.Z 短标题`。这样 Tags 页会出现「Notes」、用户可以订阅，也不需要为了改文案去搬 tag。
+仓库 **Tags 页显示的「版本介绍」是 annotated tag 的注释文本**（有 Release 时只是多一个「Notes」链接，
+下拉那段仍是 tag 注释）。所以每个版本要把同一份文案写进两个地方，两边都由脚本从 `CHANGELOG.md` 同步，别再手写：
 
-- 同步命令（读 `CHANGELOG.md`，有则 `edit`、无则 `create`，不加 `--latest` 覆盖最近发布）：
+- **tag 注释** = `vX.Y.Z 短标题` + 空行 + 该版本段落正文 → `node scripts/sync-tag-notes.mjs`
+  （保留 tag 指向的提交不变，重建 annotated tag 后 `git push --force` 同一个 tag；tag 没签名，安全）
+- **Release 正文** = 同一份正文，标题 `vX.Y.Z 短标题` → `node scripts/sync-github-releases.mjs`
 
-  ```sh
-  node scripts/sync-github-releases.mjs            # 全部版本
-  node scripts/sync-github-releases.mjs v3.2.0     # 只同步一个
-  node scripts/sync-github-releases.mjs --dry-run  # 只打印将要执行的动作
-  ```
+```sh
+node scripts/sync-tag-notes.mjs            # 全部 tag 注释（含 --force 推送）
+node scripts/sync-tag-notes.mjs v3.2.0     # 单个
+node scripts/sync-tag-notes.mjs --dry-run  # 只打印
+node scripts/sync-tag-notes.mjs --no-push  # 只重建本地
+node scripts/sync-github-releases.mjs      # 全部 Release
+```
 
-- 发版时顺序：写 `CHANGELOG.md` → `npm run check:changelog` → commit/tag/push → `sync-github-releases.mjs`。
-- 已存在的 Release 会被覆盖成 CHANGELOG 内容；历史 tag 的注释不再作为正文来源，不要为了改文案重签 tag。
-- 不要在 Release 里写仓库内部路径、密钥、未上线能力；「内部与验证」段可以保留在 CHANGELOG，但同步脚本会原样带上，
-  因此写内部路径时默认它是可以公开的（这个仓库目前就是公开的）。
+- 发版顺序：写 `CHANGELOG.md` → `npm run check:changelog` → commit + `git tag -a vX.Y.Z -F <该段落>` + push
+  → `sync-tag-notes.mjs` → `sync-github-releases.mjs`。
+- 历史 tag 允许重建（内容以 `CHANGELOG.md` 为准）；重建后 tag 的创建时间会变成重建时间，这是预期。
+- Release 里不要写仓库内部路径、密钥、未上线能力；正文会原样公开（本仓库是公开仓库）。
 
 ## 9. 范例（v3.2.0 摘要，可照此扩写）
 
