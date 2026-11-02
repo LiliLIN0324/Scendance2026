@@ -100,21 +100,44 @@
 .sc-account-dialog .sc-cloud-heading h2{font-size:26px;margin:0 0 14px;letter-spacing:-.045em}.sc-account-dialog .sc-cloud-heading.is-settings h2{margin:0 0 16px}
 .sc-account-title{display:flex;align-items:center;gap:6px;min-width:0}
 .sc-account-title h2{min-width:0}
+/* 两栏：左栏只说"现在是谁、在哪个团队"，右栏放项目与素材。分隔线绝对定位画满两栏高度。 */
+.sc-account-shell{--acct-side:clamp(196px,21vw,248px);position:relative;display:grid;grid-template-columns:var(--acct-side) minmax(0,1fr);align-items:start;border-top:1px solid var(--sc-line)}
+.sc-account-shell::before{content:"";position:absolute;top:0;bottom:0;left:var(--acct-side);width:1px;background:var(--sc-line)}
+.sc-account-side{position:sticky;top:0;align-self:start;display:grid;align-content:start;gap:22px;min-width:0;padding:20px 18px 24px 24px}
+.sc-account-main{display:grid;align-content:start;min-width:0;padding-bottom:4px}
 /* 身份条只说两件事：现在是谁、草稿存在哪；登录是这一屏唯一的主动作，所以去掉卡片底再压成一行。 */
-.sc-account-profile{display:flex;align-items:center;gap:12px;margin:18px 32px 0;padding:0}
-.sc-account-avatar{display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:50%;background:var(--wk-plane);color:var(--wk-ink);font-size:17px;font-weight:600}
+.sc-account-profile{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;margin:0;padding:0}
+.sc-account-avatar{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:50%;background:var(--wk-plane);color:var(--wk-ink);font-size:15px;font-weight:600}
 .sc-account-avatar svg{color:var(--wk-muted)}
-.sc-account-profile>div{display:grid;gap:3px;flex:1;min-width:0}
-.sc-account-profile strong{font-size:14px;line-height:1.35;font-weight:600;overflow-wrap:anywhere}
-.sc-account-profile>div>span{font-size:12px;line-height:1.45;color:var(--sc-muted);overflow-wrap:anywhere}
+.sc-account-profile>div{display:grid;gap:2px;flex:1;min-width:0}
+.sc-account-profile strong{font-size:13px;line-height:1.35;font-weight:600;overflow-wrap:anywhere}
+.sc-account-profile>div>span{font-size:11px;line-height:1.45;color:var(--sc-muted);overflow-wrap:anywhere}
 .sc-account-profile .sc-account-draft.has-error{color:var(--err,#B4443C)}
-.sc-account-profile>a,.sc-account-profile>button{flex:none;height:32px;padding:0 14px;font-size:12px}
-.sc-account-profile>a.sc-cloud-primary{display:inline-flex;align-items:center;justify-content:center;padding:0 14px;color:var(--wk-paper);background:var(--sc-ink);border-color:var(--sc-ink);border-radius:var(--r-sm);box-shadow:inset 0 1px 0 #ffffff1f;font-weight:500;text-decoration:none}
-.sc-account-profile>a.sc-cloud-primary:hover{background:var(--wk-ink);border-color:var(--wk-ink)}
-.sc-account-nav{display:flex;gap:24px;padding:0 32px;border-bottom:1px solid var(--sc-line);overflow-x:auto}
-.sc-account-nav button{display:flex;align-items:center;gap:7px;background:none!important;border:0;border-bottom:2px solid transparent;border-radius:0;padding:13px 0;box-shadow:none;white-space:nowrap;color:var(--sc-muted);font-size:13px}
-.sc-account-nav button[aria-pressed=true]{border-bottom-color:var(--wk-ink);color:var(--wk-ink);font-weight:600}
-.sc-account-body{padding:24px 32px 28px;min-height:360px}
+.sc-account-profile .sc-account-profile-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.sc-account-profile-actions>button,.sc-account-profile-actions>a.sc-cloud-primary{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 10px;font-size:12px}
+.sc-account-profile-actions>a.sc-cloud-primary{color:var(--wk-paper);background:var(--sc-ink);border-color:var(--sc-ink);border-radius:var(--r-sm);box-shadow:inset 0 1px 0 #ffffff1f;font-weight:500;text-decoration:none}
+.sc-account-profile-actions>a.sc-cloud-primary:hover{background:var(--wk-ink);border-color:var(--wk-ink)}
+/* 团队切换：Figma 式行，选中项用淡绿底 + 2px 左侧色条，不做整块灰底侧栏。 */
+.sc-account-teams{display:grid;gap:4px;min-width:0}
+.sc-account-teams h3{margin:0;padding:0 8px 6px;font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--wk-muted)}
+.sc-account-teams ul{list-style:none;display:grid;gap:2px;margin:0;padding:0;min-width:0}
+.sc-cloud-dialog button.sc-account-team{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:6px 8px;border:1px solid transparent;border-radius:2px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:400;text-align:left;white-space:nowrap;transition:background var(--dur-1) var(--ease-spec),color var(--dur-1) var(--ease-spec)}
+.sc-cloud-dialog button.sc-account-team[aria-pressed=true]{background:var(--wk-green-pale);border-color:transparent;color:var(--wk-green-deep);font-weight:600;box-shadow:inset 2px 0 0 var(--wk-green)}
+.sc-account-team-mark{display:grid;place-items:center;flex:none;width:18px;height:18px;border-radius:3px;background:var(--wk-plane-deep);color:var(--wk-muted);font-size:10px;font-weight:600;line-height:1}
+.sc-cloud-dialog button.sc-account-team[aria-pressed=true] .sc-account-team-mark{background:var(--wk-paper);color:var(--wk-green-deep)}
+.sc-account-team-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sc-account-team-role{flex:none;font-size:10px;font-weight:400;color:var(--wk-muted)}
+.sc-account-team-single{display:flex;align-items:center;gap:8px;margin:0;padding:6px 8px;border-radius:2px;background:var(--wk-plane);font-size:12px;color:var(--sc-ink)}
+/* 团队与权限 / 返回账户：并进左栏的一个文字入口，不再单独占一颗左下按钮。 */
+.sc-cloud-dialog button.sc-account-team-manage{justify-self:start;margin-top:2px;padding:6px 8px;border:0;border-radius:2px;background:none;box-shadow:none;font:inherit;font-size:11px;color:var(--wk-muted);text-align:left;cursor:pointer;transition:background var(--dur-1) var(--ease-spec),color var(--dur-1) var(--ease-spec)}
+.sc-cloud-dialog button.sc-account-team-manage:hover{background:var(--wk-green-pale);color:var(--wk-green-deep)}
+/* 右栏顶部分段控件：两枚圆钮胶囊，替代原先带下划线的顶部导航。 */
+.sc-account-segments{display:flex;gap:2px;width:max-content;max-width:calc(100% - 64px);margin:16px 32px 0;padding:3px;border:1px solid var(--sc-line);border-radius:999px;background:var(--wk-plane);overflow-x:auto;scrollbar-width:none}
+.sc-account-segments::-webkit-scrollbar{display:none}
+.sc-cloud-dialog .sc-account-segments button{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:1px solid transparent;border-radius:999px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;white-space:nowrap}
+.sc-cloud-dialog .sc-account-segments button[aria-pressed=true]{background:var(--wk-paper);border-color:var(--wk-hair);color:var(--wk-ink);font-weight:600;box-shadow:0 1px 1px rgba(20,20,22,.06)}
+@media(hover:hover) and (pointer:fine){.sc-cloud-dialog .sc-account-segments button:not(:disabled):not([aria-pressed=true]):hover{background:var(--wk-paper);border-color:transparent;color:var(--sc-ink)}.sc-cloud-dialog button.sc-account-team[aria-pressed=true]:not(:disabled):hover{background:var(--wk-green-pale);border-color:transparent;color:var(--wk-green-deep)}}
+.sc-account-body{padding:20px 32px 28px;min-height:360px}
 .sc-account-body [hidden]{display:none!important}
 .sc-account-canvas{display:flex;gap:12px;align-items:center;padding:14px 16px;background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:10px;margin-bottom:16px}
 .sc-account-canvas>div{display:grid;gap:5px;flex:1;min-width:0}
@@ -135,7 +158,6 @@
 .sc-account-search{position:relative;flex:1;min-width:0}
 .sc-account-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--sc-muted)}
 .sc-account-search input{padding-left:36px}
-.sc-account-filters>select{width:40%;max-width:180px;font-size:12px}
 .sc-account-list-caption{display:flex;justify-content:space-between;font-size:10px;color:var(--sc-muted);font-variant-numeric:tabular-nums}
 .sc-account-project-icon{width:40px;height:40px;display:grid;place-items:center;flex:none;background:var(--wk-plane);border-radius:var(--r-sm);color:var(--wk-muted)}
 .sc-account-project-info{flex:1;min-width:0;overflow-wrap:anywhere}
@@ -209,5 +231,6 @@
 .sc-settings-preview li>span:last-child{display:flex;align-items:center;gap:4px;color:var(--sc-muted)}
 .sc-settings-preview li[data-allowed=true]>span:last-child{color:var(--wk-ink)}
 .sc-settings-preview>small{font-size:11px;color:var(--sc-muted);padding-top:2px}
-@media(max-width:800px){.sc-account-project-grid{grid-template-columns:1fr}.sc-account-project-grid>aside{border-left:0;border-top:1px solid var(--sc-line);padding:24px 0 0}.sc-settings-permissions{grid-template-columns:1fr}.sc-settings-group .sc-settings-input{width:220px}.sc-settings-invite{grid-template-columns:repeat(2,minmax(0,1fr))}.sc-settings-invite-icon{display:none}.sc-settings-add{grid-column:2;justify-self:end}.sc-account-dialog{width:calc(100vw - 24px)}.sc-account-body{padding:20px}.sc-account-dialog .sc-cloud-heading{padding:24px 20px 0}.sc-account-profile{margin:16px 20px 0}.sc-account-nav{padding:0 20px;gap:22px}.sc-account-dialog .sc-cloud-footer{padding:15px 20px}}
-@media(max-width:480px){.sc-account-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:14px}.sc-account-dialog .sc-cloud-heading h2{font-size:23px}.sc-account-profile{gap:10px;margin:12px 20px 0}.sc-account-profile>a,.sc-account-profile>button{height:30px;padding:0 12px}.sc-account-profile>a.sc-cloud-primary{padding:0 12px}.sc-account-avatar{width:34px;height:34px;font-size:15px}.sc-account-canvas{flex-wrap:wrap}.sc-account-section-heading{align-items:flex-start}.sc-settings-row{flex-wrap:wrap;padding:12px}.sc-settings-row-actions{flex:1 0 100%;justify-content:flex-end}.sc-settings-studio-row .sc-settings-input{width:100%}.sc-settings-group .sc-settings-select{width:104px}.sc-settings-invite{grid-template-columns:1fr;padding:12px}.sc-settings-invite-icon{display:none}.sc-settings-add{grid-column:auto;justify-self:stretch}.sc-settings-contact{white-space:normal;overflow-wrap:anywhere}.sc-settings-perms{grid-template-columns:1fr}.sc-settings-role{padding:12px}.sc-settings-preview{padding:12px}}
+@media(max-width:880px){.sc-account-shell{grid-template-columns:minmax(0,1fr);border-top:0}.sc-account-shell::before{display:none}.sc-account-side{position:static;display:block;padding:16px 32px 18px;border-bottom:1px solid var(--sc-line)}.sc-account-profile{max-width:460px}.sc-account-teams{margin-top:16px}.sc-account-teams ul{display:flex;flex-wrap:wrap;gap:6px}.sc-account-team-role{display:none}.sc-cloud-dialog button.sc-account-team{width:auto;padding:4px 10px;border-color:var(--sc-line);border-radius:999px}.sc-cloud-dialog button.sc-account-team[aria-pressed=true]{box-shadow:none;border-color:var(--wk-green-pale)}}
+@media(max-width:800px){.sc-account-project-grid{grid-template-columns:1fr}.sc-account-project-grid>aside{border-left:0;border-top:1px solid var(--sc-line);padding:24px 0 0}.sc-settings-permissions{grid-template-columns:1fr}.sc-settings-group .sc-settings-input{width:220px}.sc-settings-invite{grid-template-columns:repeat(2,minmax(0,1fr))}.sc-settings-invite-icon{display:none}.sc-settings-add{grid-column:2;justify-self:end}.sc-account-dialog{width:calc(100vw - 24px)}.sc-account-body{padding:20px}.sc-account-dialog .sc-cloud-heading{padding:24px 20px 0}.sc-account-side{padding:14px 20px 16px}.sc-account-segments{margin-inline:20px;max-width:calc(100% - 40px)}.sc-account-dialog .sc-cloud-footer{padding:15px 20px}}
+@media(max-width:480px){.sc-account-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:14px}.sc-account-dialog .sc-cloud-heading h2{font-size:23px}.sc-account-profile{gap:10px}.sc-account-profile-actions>button,.sc-account-profile-actions>a.sc-cloud-primary{height:30px;padding:0 12px}.sc-account-avatar{width:34px;height:34px;font-size:15px}.sc-account-canvas{flex-wrap:wrap}.sc-account-section-heading{align-items:flex-start}.sc-settings-row{flex-wrap:wrap;padding:12px}.sc-settings-row-actions{flex:1 0 100%;justify-content:flex-end}.sc-settings-studio-row .sc-settings-input{width:100%}.sc-settings-group .sc-settings-select{width:104px}.sc-settings-invite{grid-template-columns:1fr;padding:12px}.sc-settings-invite-icon{display:none}.sc-settings-add{grid-column:auto;justify-self:stretch}.sc-settings-contact{white-space:normal;overflow-wrap:anywhere}.sc-settings-perms{grid-template-columns:1fr}.sc-settings-role{padding:12px}.sc-settings-preview{padding:12px}}

@@ -2,6 +2,7 @@ import { isSatelliteGroundImage, parseSatelliteImageBounds, satelliteImageShellR
 import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '../lib/constants';
 import { rotatedHalfExtents } from '../lib/geometry';
 import { planDrawOrder } from '../lib/plan-order';
+import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
 import { entrancePlanOutline, planFloorIndex } from '../lib/street';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { zoneArea, type ZoneRect } from '../lib/zones';
@@ -132,6 +133,13 @@ export function addFloorPlanRepaintHandler(handler: () => void): () => void {
 function requestRepaint(): void {
   for (const handler of repaintHandlers) handler();
 }
+// 平面图的墨色与剖面填充。矮家具保留一点本色，高柜/隔断被切到则用中性灰。
+const PLAN_INK = '#5f655f';
+const PLAN_SOFT_INK = '#7d837d';
+const PLAN_CUT_FILL = '#c3c7c2';
+const PLAN_SELECT = '#2f7a4f';
+const PLAN_SELECT_SOFT = '#4a7c59';
+const PLAN_COLLISION = '#c0392b';
 const WIFI_RING_FILLS = ['rgba(0, 255, 0, 0.15)', 'rgba(255, 255, 0, 0.10)', 'rgba(255, 102, 0, 0.08)'];
 const WIFI_RING_STROKES = ['rgba(0, 255, 0, 0.4)', 'rgba(255, 255, 0, 0.3)', 'rgba(255, 102, 0, 0.2)'];
 const CCTV_RING_FILLS = ['rgba(0, 136, 255, 0.12)', 'rgba(0, 221, 255, 0.08)', 'rgba(136, 0, 255, 0.06)'];
@@ -609,7 +617,7 @@ function drawRoomOutline(
   for (const edge of edges) {
     const isHidden = hidden.has(edge.id);
     ctx.save();
-    ctx.strokeStyle = isHidden ? '#bbb' : '#666';
+    ctx.strokeStyle = isHidden ? '#bbb' : PLAN_INK;
     ctx.lineWidth = isHidden ? 1.5 : 3;
     if (isHidden) ctx.setLineDash([6, 4]);
     ctx.beginPath();
@@ -633,7 +641,7 @@ function drawInteriorWalls(
   const halfW = layout.width / 2;
   const halfD = layout.height / 2;
   ctx.save();
-  ctx.strokeStyle = '#555';
+  ctx.strokeStyle = PLAN_INK;
   ctx.lineCap = 'butt';
   ctx.lineWidth = Math.max(2, INTERIOR_WALL_THICKNESS_M * scale);
   for (const wall of walls) {
@@ -712,6 +720,85 @@ function drawVisionCones(
   }
 }
 
+/** 浅色平面底：保留一点物件本色，但不抢剖面线。 */
+function planTint(item: FurnitureItem, alpha = 0.14): string {
+  const tint = withAlpha(item.color, alpha);
+  return tint === item.color ? 'rgba(255, 255, 255, 0.72)' : tint;
+}
+
+/** 家具线符：桌椅、床、柜、植物在平面上的简单记号，替代原来的 emoji。 */
+function drawPlanSymbol(ctx: CanvasRenderingContext2D, kind: PlanSymbol, w: number, d: number, ink: string): void {
+  if (kind === 'none' || kind === 'rug' || kind === 'stairs') return;
+  if (w < 7 || d < 7) {
+    if (kind === 'equipment' || kind === 'person' || kind === 'plant') {
+      ctx.save();
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    return;
+  }
+  const halfW = w / 2;
+  const halfD = d / 2;
+  const inset = Math.min(4, Math.min(w, d) * 0.16);
+  ctx.save();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 1;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  switch (kind) {
+    case 'seat':
+      ctx.moveTo(-halfW + inset, -halfD + inset);
+      ctx.lineTo(halfW - inset, -halfD + inset);
+      ctx.moveTo(-halfW + inset, -halfD + inset * 2);
+      ctx.lineTo(halfW - inset, -halfD + inset * 2);
+      break;
+    case 'sofa':
+      ctx.moveTo(-halfW + inset, -halfD + inset);
+      ctx.lineTo(halfW - inset, -halfD + inset);
+      ctx.moveTo(-halfW + inset, -halfD + inset * 2);
+      ctx.lineTo(halfW - inset, -halfD + inset * 2);
+      ctx.moveTo(0, -halfD + inset * 2);
+      ctx.lineTo(0, halfD - inset);
+      break;
+    case 'table':
+      ctx.rect(-halfW + inset, -halfD + inset, w - inset * 2, d - inset * 2);
+      break;
+    case 'bed':
+      ctx.rect(-halfW + inset, -halfD + inset, w - inset * 2, d * 0.26);
+      ctx.moveTo(-halfW + inset, -halfD + d * 0.34);
+      ctx.lineTo(halfW - inset, -halfD + d * 0.34);
+      break;
+    case 'plant':
+      ctx.arc(0, 0, Math.min(w, d) * 0.3, 0, Math.PI * 2);
+      ctx.moveTo(-1.6, 0);
+      ctx.lineTo(1.6, 0);
+      ctx.moveTo(0, -1.6);
+      ctx.lineTo(0, 1.6);
+      break;
+    case 'storage':
+      ctx.moveTo(-halfW + inset, halfD - inset);
+      ctx.lineTo(halfW - inset, halfD - inset);
+      break;
+    case 'equipment':
+      ctx.arc(0, 0, Math.max(1.6, Math.min(w, d) * 0.2), 0, Math.PI * 2);
+      break;
+    case 'opening':
+      ctx.moveTo(-halfW, 0);
+      ctx.lineTo(halfW, 0);
+      break;
+    case 'person':
+      ctx.arc(0, 0, Math.max(1.8, Math.min(w, d) * 0.28), 0, Math.PI * 2);
+      break;
+    default:
+      break;
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFurniture(
   ctx: CanvasRenderingContext2D,
   options: Render2DOptions,
@@ -727,6 +814,8 @@ function drawFurniture(
   for (const item of planDrawOrder(options.floor.items)) {
     if (!item.position) continue;
     const collision = options.hasCollision(item);
+    const cut = isPlanCut(item);
+    const symbol = planSymbol(item);
     const cx = offsetX + (item.position.x + options.layout.width / 2) * scale;
     const cy = offsetY + (item.position.z + options.layout.height / 2) * scale;
     const w = item.width * scale;
@@ -738,32 +827,34 @@ function drawFurniture(
     // 2D footprint matches the 3D scene's orientation.
     ctx.rotate(-(item.rotation ?? 0));
 
-    ctx.fillStyle = collision ? 'rgba(255, 0, 0, 0.7)' : item.color;
-    ctx.fillRect(-w / 2, -d / 2, w, d);
+    // 1.5m 切面：切到的高家具用中性灰实心；矮家具只留浅色底和线。
+    if (symbol !== 'opening') {
+      ctx.fillStyle = collision
+        ? 'rgba(192, 57, 43, 0.22)'
+        : symbol === 'rug' ? planTint(item, 0.1) : cut ? PLAN_CUT_FILL : planTint(item);
+      ctx.fillRect(-w / 2, -d / 2, w, d);
+    }
 
     if (options.selectedItemId === item.id) {
-      ctx.strokeStyle = collision ? '#ff6666' : '#00ff00';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = collision ? PLAN_COLLISION : PLAN_SELECT;
+      ctx.lineWidth = 2.5;
     } else if (options.extraSelectedIds?.has(item.id)) {
       // Multi-select extras share the primary's green, slightly thinner.
-      ctx.strokeStyle = collision ? '#ff6666' : '#00cc00';
+      ctx.strokeStyle = collision ? PLAN_COLLISION : PLAN_SELECT_SOFT;
       ctx.lineWidth = 2;
     } else if (collision) {
-      ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = PLAN_COLLISION;
+      ctx.lineWidth = 1.8;
     } else {
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = cut ? PLAN_INK : PLAN_SOFT_INK;
+      ctx.lineWidth = cut ? 1.6 : 1.1;
     }
+    if (symbol === 'rug') ctx.setLineDash([5, 3]);
     ctx.strokeRect(-w / 2, -d / 2, w, d);
+    ctx.setLineDash([]);
 
-    ctx.font = `${Math.min(w, d) * 0.6}px Arial`;
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    // Stairs draw their treads and climb arrow in place of the icon (#290),
-    // in world space once the item's rotated frame is restored.
-    if (item.type !== 'stairs') ctx.fillText(item.icon, 0, 0);
+    // 楼梯保留踏步符号；其余家具画线符，不再往平面里塞 emoji。
+    if (item.type !== 'stairs') drawPlanSymbol(ctx, symbol, w, d, cut ? '#4f554f' : PLAN_SOFT_INK);
     ctx.restore();
     if (item.type === 'stairs') drawStairsSymbol(ctx, item, options.layout, { scale, offsetX, offsetY });
 
@@ -817,8 +908,8 @@ function drawSelectionOutlines(
       offsetY + (item.position.z + options.layout.height / 2) * scale
     );
     ctx.rotate(-(item.rotation ?? 0));
-    ctx.strokeStyle = collision ? '#ff6666' : primary ? '#00ff00' : '#00cc00';
-    ctx.lineWidth = primary ? 3 : 2;
+    ctx.strokeStyle = collision ? PLAN_COLLISION : primary ? PLAN_SELECT : PLAN_SELECT_SOFT;
+    ctx.lineWidth = primary ? 2.5 : 2;
     ctx.strokeRect(-w / 2, -d / 2, w, d);
     ctx.restore();
   }

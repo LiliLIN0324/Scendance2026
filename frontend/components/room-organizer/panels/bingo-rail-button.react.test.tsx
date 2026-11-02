@@ -26,8 +26,8 @@ describe('Bingo 左轨入口', () => {
     render(<BingoRailButton open onOpen={onOpen} />);
     const button = screen.getByRole('button', { name: 'Bingo' });
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(button.querySelector('svg')).toBeTruthy();
-    expect(button.querySelector('img')).toBeNull();
+    expect(button.querySelector('img')?.getAttribute('src')).toBe('/assets/rail/ball.png');
+    expect(button.querySelector('svg')).toBeNull();
     expect(button.querySelector('.sc-rail-bingo-dot.is-idle')).toBeTruthy();
     expect(button.className).toContain('sc-rail-disc');
     expect(button.className).toContain('is-active');

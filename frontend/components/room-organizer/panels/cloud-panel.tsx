@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { ArrowUpRight, FolderOpen, Images, Search, ShieldCheck, UserRound, UsersRound, X } from 'lucide-react';
 import Link from 'next/link';
@@ -112,7 +112,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     }).catch(() => { if (!cancelled) setNotice('项目加载失败，请点击刷新重试。'); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
-  // 多入口分区直达：左下「设置」只开团队/权限演示；头像开账户（项目、素材）。
+  // 多入口分区直达：头像开账户（项目、素材、团队）；团队与权限从账户左栏进。
   const openedOpenRequest = useRef(0);
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
@@ -270,6 +270,14 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const navItems: Array<[string, string, string, typeof FolderOpen]> = settingsSurface
     ? [['team', '团队', '团队演示', UsersRound], ['permissions', '权限', '权限演示', ShieldCheck]]
     : [['projects', '我的项目', '我的项目', FolderOpen], ['assets', '素材库', '素材库', Images]];
+  // Figma 式团队切换：记住的默认工作室由 preferredStudio 给出，左栏只负责把它摆出来并允许换一个。
+  const [singleTeam] = studios;
+  const teamNav = studios.length > 0 ? <nav className="sc-account-teams" aria-label="团队">
+    <h3>团队</h3>
+    {studios.length === 1 && singleTeam
+      ? <p className="sc-account-team-single"><span className="sc-account-team-mark" aria-hidden="true">{singleTeam.name.slice(0, 1).toUpperCase()}</span><span className="sc-account-team-name">{singleTeam.name}</span></p>
+      : <ul>{studios.map(studio => <li key={studio.id}><button type="button" className="sc-account-team" aria-label={studio.name} aria-pressed={studio.id === studioId} onClick={() => { setStudioId(studio.id); if (userId) rememberStudio(userId, studio.id); }}><span className="sc-account-team-mark" aria-hidden="true">{studio.name.slice(0, 1).toUpperCase()}</span><span className="sc-account-team-name">{studio.name}</span><span className="sc-account-team-role" aria-hidden="true">{studio.role === 'owner' ? '负责人' : '编辑'}</span></button></li>)}</ul>}
+  </nav> : null;
 
   return <>
     <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户与素材库" title="账户与素材库 · 项目与素材" aria-haspopup="dialog" onClick={() => { setSurface('account'); setSection('assets'); dialog.current?.showModal(); }}>
@@ -280,8 +288,21 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       <div className={`sc-cloud-heading${settingsSurface ? ' is-settings' : ''}`}>{settingsSurface
         ? <div><h2 id="cloud-title">团队与权限</h2></div>
         : <div className="sc-account-title"><h2 id="cloud-title">账户中心</h2></div>}<button className="sc-cloud-close" type="button" aria-label={settingsSurface ? '关闭设置面板' : '关闭账户面板'} autoFocus onClick={() => dialog.current?.close()}><X size={20}/></button></div>
-      <nav className="sc-account-nav" aria-label={settingsSurface ? '设置导航' : '账户导航'}>{navItems.map(([id, label, name, Icon]) => <button type="button" key={id} aria-label={name} aria-pressed={section === id} onClick={() => setSection(id)}><Icon size={15} aria-hidden="true"/>{label}</button>)}</nav>
-      {!settingsSurface && <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{cloud.user ? accountName.slice(0, 1).toUpperCase() : <UserRound size={20}/>}</span><div><strong>{accountName}</strong><span>{accountDetail}{accountDetail && draftStatus ? <span aria-hidden="true"> · </span> : null}{draftStatus ? <span className={`sc-account-draft${draftNote?.error ? ' has-error' : ''}`} title={draftNote?.title}>{draftStatus}</span> : null}</span></div>{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <>{isLocalMockBackend() && <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signIn('dev@mock.local', 'mock'); setNotice('已用本地测试账户登录。'); })}>本地测试登录</button>}{cloud.configured && <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>登录</Link>}</>}</div>}
+      <div className="sc-account-shell">
+      <aside className="sc-account-side" aria-label="账户与团队">
+      <div className="sc-account-profile"><span className="sc-account-avatar" aria-hidden="true">{cloud.user ? accountName.slice(0, 1).toUpperCase() : <UserRound size={20}/>}</span><div><strong>{accountName}</strong><span>{accountDetail}{accountDetail && draftStatus ? <span aria-hidden="true"> · </span> : null}{draftStatus ? <span className={`sc-account-draft${draftNote?.error ? ' has-error' : ''}`} title={draftNote?.title}>{draftStatus}</span> : null}</span></div>{!settingsSurface && <div className="sc-account-profile-actions">{cloud.user ? <button type="button" disabled={busy} onClick={() => void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); })}>退出登录</button> : <>{isLocalMockBackend() && <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signIn('dev@mock.local', 'mock'); setNotice('已用本地测试账户登录。'); })}>本地测试登录</button>}{cloud.configured && <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>登录</Link>}</>}</div>}</div>
+      {teamNav}
+      <button
+        type="button"
+        className="sc-account-team-manage"
+        onClick={() => {
+          if (settingsSurface) { setSurface('account'); setSection('projects'); return; }
+          setSurface('settings'); setSection('team');
+        }}
+      >{settingsSurface ? '返回账户' : '团队与权限'}</button>
+      </aside>
+      <div className="sc-account-main">
+      <nav className="sc-account-segments" aria-label={settingsSurface ? '设置导航' : '账户导航'}>{navItems.map(([id, label, name, Icon]) => <button type="button" key={id} aria-label={name} aria-pressed={section === id} onClick={() => setSection(id)}><Icon size={15} aria-hidden="true"/>{label}</button>)}</nav>
       <div className="sc-account-body">
       {settingsSurface ? (<div hidden={section !== 'team' && section !== 'permissions'}><AccountTeamDemo key={userId ?? 'local'} view={section === 'permissions' ? 'permissions' : 'team'} /></div>) : (<>
       <section hidden={section !== 'projects'} aria-label="我的项目">
@@ -301,7 +322,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       </div> : !cloud.user ? null : <div className="sc-cloud-content">
         <div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>文件</h3></div><button type="button" disabled={busy || loadingProjects} onClick={() => void run(refreshProjects)}>刷新</button></div>
         <div className="sc-account-project-grid"><section aria-label="项目列表">
-        {(loadingProjects || !!filteredProjects.length) && <div className="sc-account-filters"><label className="sc-account-search"><Search size={20} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索文件" value={query} onChange={event => setQuery(event.target.value)} /></label>{studios.length > 1 && <select aria-label="当前工作室" disabled={busy || loadingProjects} value={studioId} onChange={event => { setStudioId(event.target.value); if (userId) rememberStudio(userId, event.target.value); }}>{studios.map(studio => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select>}</div>}
+        {(loadingProjects || !!filteredProjects.length) && <div className="sc-account-filters"><label className="sc-account-search"><Search size={20} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索文件" value={query} onChange={event => setQuery(event.target.value)} /></label></div>}
         {loadingProjects && <p className="sc-account-empty" role="status">正在加载…</p>}
         <ul className="sc-file-grid">{filteredProjects.map(project => {
           const current = project.id === cloud.project?.id;
@@ -401,6 +422,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       {!settingsSurface && conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
       {!settingsSurface && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
       {!settingsSurface && (notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
+      </div>
+      </div>
       </div>
       </div>
     </dialog>, document.body)}

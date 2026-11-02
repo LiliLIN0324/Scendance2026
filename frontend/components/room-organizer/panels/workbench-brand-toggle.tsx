@@ -1,26 +1,30 @@
-import { BrandMark } from '../../brand-mark';
+import type { RefObject } from 'react';
 import { navToggleLabel } from '../lib/nav-chrome';
+import { RailAvatar } from './rail-avatar';
 
 /**
  * 工作台 logo。点一下收起或展开左侧导航。
- * 品牌只保留左窄轨锁标；展开左列时不再在对话顶重复「幕景」二字。
+ * 左轨四形与 Bingo / 空间 / 物料同一套手绘形体，门厅画成带拱形开口的门洞。
  */
-export function WorkbenchBrandToggle({ expanded, onToggle }: {
+export function WorkbenchBrandToggle({ expanded, active = false, onToggle, buttonRef }: {
   expanded: boolean;
+  active?: boolean;
   onToggle(): void;
+  buttonRef?: RefObject<HTMLButtonElement>;
 }): JSX.Element {
   const label = navToggleLabel(expanded);
   return (
     <button
+      ref={buttonRef}
       type="button"
-      className="sc-nav-brand is-mark"
+      className={`sc-nav-brand is-mark${active ? ' is-active' : ''}`}
       aria-expanded={expanded}
       aria-controls="workbench-nav-column"
       aria-label={label}
       data-tip={label}
       onClick={onToggle}
     >
-      <span className="sc-brand-mark"><BrandMark size={28} /></span>
+      <span className="sc-brand-mark"><RailAvatar form="door" size={28} /></span>
     </button>
   );
 }

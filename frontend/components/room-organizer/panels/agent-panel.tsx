@@ -15,7 +15,7 @@
  * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
 import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { useRoomEditor } from '../contexts';
@@ -53,7 +53,7 @@ import { SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
 import { useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay } from './session-history-panel';
-import { BINGO_MASCOT } from './bingo-rail-button';
+import { RailAvatar, type RailForm } from './rail-avatar';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
@@ -1600,7 +1600,39 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropMaterials, onOpenPropVenue, reviewSlot, deliverySlot }: {
+/** 左轨四格就是四个 agent：门洞总控、Bingo 布置、空间、物料。 */
+export type AgentId = 'door' | 'bingo' | 'space' | 'material';
+
+export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: string }> = {
+  door: { name: '总控', form: 'door', role: '这场活动的入口' },
+  bingo: { name: 'Bingo', form: 'ball', role: '布置与方案' },
+  space: { name: '空间', form: 'cube', role: '场地、模板与环境' },
+  material: { name: '物料', form: 'pyramid', role: '物料库与生成' },
+};
+
+/** 总控卡：这场活动的读数 + 三个 agent 的去处。 */
+function AgentControlCard({ onSelectAgent }: { onSelectAgent?: ((id: AgentId) => void) | undefined }): JSX.Element {
+  const { layout, activeFloor } = useRoomEditor();
+  const items = materialCount(activeFloor.items);
+  return <div className="ap-agent-card ap-agent-control">
+    <div className="ap-control-summary">
+      <p className="ap-control-kicker">这场活动</p>
+      <strong>{layout.name || '未命名活动'}</strong>
+      <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
+    </div>
+    <div className="ap-agent-links" role="group" aria-label="去找哪个 agent">
+      {(['bingo', 'space', 'material'] as const).map(id => {
+        const meta = AGENT_META[id];
+        return <button key={id} type="button" className="ap-agent-link" onClick={() => onSelectAgent?.(id)}>
+          <RailAvatar form={meta.form} size={28}/>
+          <span><strong>{meta.name}</strong><small>{meta.role}</small></span>
+        </button>;
+      })}
+    </div>
+  </div>;
+}
+
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropMaterials, onOpenPropVenue, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'bingo', onSelectAgent, spaceSlot, materialSlot, chatSlot }: {
   onClose?(): void;
   /** 右栏底部切到「生成物件」。不传则面板自己记。 */
   generateOpen?: boolean;
@@ -1612,6 +1644,19 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   reviewSlot?: ReactNode;
   /** 执行清单。挂在对话里，不替换整栏。 */
   deliverySlot?: ReactNode;
+  /** 顶栏头像位置：飞入动画从这里起飞/降落。 */
+  headerAvatarRef?: RefObject<HTMLSpanElement>;
+  /** 头像到位后再显形，飞行那 260ms 由固定层顶着。 */
+  headerAvatarVisible?: boolean;
+  /** 当前 agent。四格共用一个面板，切换只换身份和卡片。 */
+  activeAgent?: AgentId;
+  onSelectAgent?: ((id: AgentId) => void) | undefined;
+  /** 空间卡片：场地、模板、环境。 */
+  spaceSlot?: ReactNode;
+  /** 物料卡片：物料库与生成。 */
+  materialSlot?: ReactNode;
+  /** 总控/空间/物料各自的对话区（Bingo 用自带的真对话，不传）。 */
+  chatSlot?: ReactNode;
 } = {}): JSX.Element {
   const agent = useAgent();
   const assistantSessions = useAssistantSessions();
@@ -1653,20 +1698,23 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
   const sessionTitle = assistantSessions.activeSession?.title ?? ASSISTANT_SESSION_DEFAULT_TITLE;
+  const meta = AGENT_META[activeAgent];
+  const bingo = activeAgent === 'bingo';
 
   useEffect(() => {
     setShowHistory(false);
   }, [assistantSessions.activeId]);
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Bingo">
+  return <aside id="agent-panel" className="sc-agent-panel" data-state={bingo ? (mode === 'layout' ? agent.state : mode) : activeAgent} data-venue-io={agent.venueIO} aria-label={meta.name} tabIndex={-1}>
     <header className="ap-head ap-session-head">
       <div className="ap-session-identity">
-        <span className="ap-session-avatar-slot is-visible">
-          <img className="ap-session-avatar" src={BINGO_MASCOT} alt="" width={36} height={36} draggable={false} />
+        <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
+          <RailAvatar key={activeAgent} form={meta.form} size={36} />
         </span>
-        <h1 className="ap-session-title" title={sessionTitle}>{sessionTitle}</h1>
+        <h1 className="ap-session-title" title={bingo ? sessionTitle : meta.name}>{bingo ? sessionTitle : meta.name}</h1>
       </div>
       <div className="ap-session-actions">
+        {bingo && <>
         <button
           type="button"
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}
@@ -1686,16 +1734,17 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
         >
           <MessageCirclePlus size={18} aria-hidden="true" />
         </button>
+        </>}
         {onClose && (
-          <button type="button" className="ap-icon-btn ap-close" aria-label="收起 Bingo" title="收起 Bingo" onClick={onClose}>
+          <button type="button" className="ap-icon-btn ap-close" aria-label={`收起 ${meta.name}`} title={`收起 ${meta.name}`} onClick={onClose}>
             <X size={20} aria-hidden="true" />
           </button>
         )}
       </div>
     </header>
     <div className="ap-body">
-      <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* index-only for now */ }} />
-    <div className="ap-feed" ref={feed} aria-live="polite">
+      {bingo && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* index-only for now */ }} />}
+    {bingo ? <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {mode === 'layout' && agent.bubbles.length === 0 && agent.state !== 'generating' && <div className="ap-lead">
         <p className="ap-lead-title">先说一句，或从下面挑</p>
@@ -1752,8 +1801,14 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
         <p className="ap-small"><button type="button" className="ap-link" onClick={agent.dismissExport}>先不了</button></p>
       </div>}
     </div>
+    : <div className={`ap-agent-surface is-${activeAgent}`}>
+      {activeAgent === 'door' && <AgentControlCard onSelectAgent={onSelectAgent}/>}
+      {activeAgent === 'space' && spaceSlot}
+      {activeAgent === 'material' && materialSlot}
+    </div>}
+    {!bingo && chatSlot}
     </div>
-    {propLane
+    {bingo && (propLane
       ? <MaterialGenerateDock seed={propSeed} onBackToChat={() => setPropLane(false)} onPlace={onPlaceProp} onOpenMaterials={onOpenPropMaterials} onOpenVenue={onOpenPropVenue}/>
       : <>
         {mode === 'layout' && <AgentCapabilityPrompts/>}
@@ -1784,7 +1839,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim() && !agent.pendingFile}><ArrowUp size={18}/></button>
         </div>
       </form>
-      </>}
+      </>)}
   </aside>;
 }
 

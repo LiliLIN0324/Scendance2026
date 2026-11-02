@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-describe('左轨四形与共用抽屉', () => {
-  it('keeps 门厅 / Bingo / 空间 / 物料 as four rail controls over one shelf', () => {
+describe('左轨四形与共用 Agent 面板', () => {
+  it('keeps 门厅 / Bingo / 空间 / 物料 as four rail controls over one agent panel', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     const brand = source.indexOf('<WorkbenchBrandToggle');
     const primaryStart = source.indexOf('sc-mode-rail-primary');
@@ -24,8 +24,10 @@ describe('左轨四形与共用抽屉', () => {
     expect(space).toBeGreaterThan(-1);
     expect(material).toBeGreaterThan(space);
     expect(primary).not.toContain('aria-label="空间与物料"');
-    expect(primary).toContain('<SpaceGlyph');
-    expect(primary).toContain('<MaterialsGlyph');
+    const spaceBlock = source.slice(space, material);
+    const materialBlock = source.slice(material, primaryEnd);
+    expect(spaceBlock).toContain('<RailAvatar form="cube"');
+    expect(materialBlock).toContain('<RailAvatar form="pyramid"');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(2);
@@ -36,14 +38,9 @@ describe('左轨四形与共用抽屉', () => {
     expect(primary).not.toMatch(/>\s*物料\s*</);
     expect(primary).not.toContain('title="空间"');
     expect(primary).not.toContain('title="物料"');
-    const shelfStart = source.indexOf('id="workbench-library-shelf"');
-    const shelf = source.slice(shelfStart, source.indexOf('sc-assistant-entry-host', shelfStart));
-    expect(shelfStart).toBeGreaterThan(-1);
-    expect(shelf).not.toContain('sc-library-head');
-    expect(shelf).not.toMatch(/>\s*(空间|物料)\s*</);
-    expect(shelf).toContain('id="workbench-space-shelf"');
-    expect(shelf).toContain('id="workbench-material-shelf"');
-    expect(shelf).not.toContain('role="tab"');
+    expect(source).not.toContain('id="workbench-library-shelf"');
+    expect(source).not.toContain('id="workbench-space-shelf"');
+    expect(source).not.toContain('id="workbench-material-shelf"');
     expect(primary).not.toContain('场地');
     expect(primary).not.toContain('<VenueRailButton');
     expect(primary).not.toContain('Store');
@@ -53,25 +50,32 @@ describe('左轨四形与共用抽屉', () => {
     expect(source).not.toContain('RailAgentBrandSlot');
     expect(source).not.toContain('QingguangAvatarFlight');
     expect(source).not.toContain("sidePanel === 'bingo'");
-    expect(source).toContain('const toggleBingo = useCallback');
-    expect(source).toContain('onOpen={toggleBingo}');
+    expect(source).toContain('const toggleAgent = useCallback');
+    expect(source).toContain("onOpen={() => toggleAgent('bingo')}");
+    expect(source).toContain('activeAgent={activeAgent}');
     const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
     const bingoSource = readFileSync(join(here, 'bingo-rail-button.tsx'), 'utf8');
-    const glyphSource = readFileSync(join(here, 'rail-glyphs.tsx'), 'utf8');
+    const brandSource = readFileSync(join(here, 'workbench-brand-toggle.tsx'), 'utf8');
     expect(bingoSource).toContain('sc-rail-disc');
-    expect(bingoSource).toContain('<BingoGlyph');
-    expect(glyphSource).toContain('export function BingoGlyph');
-    expect(glyphSource).toContain('export function SpaceGlyph');
-    expect(glyphSource).toContain('export function MaterialsGlyph');
+    expect(bingoSource).toContain('<RailAvatar form="ball"');
+    expect(brandSource).toContain('<RailAvatar form="door"');
+    for (const icon of ['door', 'ball', 'pyramid', 'cube']) {
+      expect(existsSync(join(here, '../../../public/assets/rail', `${icon}.png`))).toBe(true);
+    }
     expect(css).not.toMatch(/span\.sc-rail-word\s*\{[^}]*display:\s*block/);
     expect(css).not.toMatch(/button\.is-active\[data-tip\]::after\s*\{\s*opacity:\s*1/);
     expect(css).toMatch(/button\.sc-rail-disc\s*\{[^}]*width:\s*40px[^}]*border:\s*0/);
+    expect(css).toMatch(/button\.sc-rail-disc > span\.sc-rail-avatar\s*\{[^}]*width:\s*28px[^}]*height:\s*28px/);
+    expect(css).toMatch(/\.sc-rail-avatar-tilt\s*\{[^}]*rotateX\(var\(--tilt-x/);
+    expect(css).toMatch(/\.sc-rail-eye\s*\{[^}]*background:\s*#fff/);
     expect(css).toMatch(/button\.sc-rail-disc\.is-active::before\s*\{[^}]*left:\s*-4px[^}]*top:\s*7px[^}]*bottom:\s*7px[^}]*width:\s*3px/);
     expect(css).not.toMatch(/button\.is-active::before\s*\{/);
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');
     expect(source).toContain("sidePanel === 'venue' && <VenueLibraryPanel");
-    expect(source).toContain('<SpacePanel');
+    expect(source).toContain('<SpacePanel variant="card"');
+    expect(source).toContain('<ScendanceLibrary variant="card"');
+    expect(source).toContain("onToggle={() => toggleAgent('door')}");
     expect(source).not.toContain('<MapRailButton');
     expect(source).not.toContain('AgentReopenCard');
   });

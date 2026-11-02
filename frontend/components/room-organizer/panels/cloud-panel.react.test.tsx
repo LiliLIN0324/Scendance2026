@@ -285,7 +285,7 @@ describe('CloudPanel delayed project replacement', () => {
     openProjects(rendered.container);
     await screen.findByText('另一个云项目');
     expect(screen.queryByText('其他工作室的项目')).toBeNull();
-    fireEvent.change(screen.getByLabelText('当前工作室'), { target: { value: 'studio-b' } });
+    fireEvent.click(screen.getByRole('button', { name: '另一工作室' }));
     expect(screen.queryByText('另一个云项目')).toBeNull();
     expect(screen.getByText('其他工作室的项目')).toBeTruthy();
 
@@ -452,7 +452,7 @@ it('filters projects by name and studio and clears an empty search', async () =>
   render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   openAccount();
   await waitFor(() => expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1));
-  fireEvent.change(screen.getByRole('combobox', { name: '当前工作室' }), { target: { value: secondStudio } });
+  fireEvent.click(screen.getByRole('button', { name: '二号工作室' }));
   expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
   expect(screen.getByText('另一个云项目')).toBeTruthy();
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '不存在' } });
