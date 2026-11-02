@@ -81,7 +81,26 @@ git show v3.1.0:CHANGELOG.md | sed -n '1,60p'
 4. 提交（`release: vX.Y.Z — 短标题`）→ `git tag -a vX.Y.Z -m "vX.Y.Z 短标题"` → push main 与 tag。
 5. 部署后把「实机核对方式」写进该版本的「内部与验证」段。
 
-## 8. 范例（v3.2.0 摘要，可照此扩写）
+## 8. GitHub 上的发布会话（Release / tag 注释）
+
+仓库 Tags 页显示的「版本介绍」来自两种东西：annotated tag 的注释、以及同名 Release 的正文。
+**以 Release 为准**：每个版本都要有 Release，正文 = `CHANGELOG.md` 里该版本段落的原文（去掉 `## v…` 标题行），
+标题 = `vX.Y.Z 短标题`。这样 Tags 页会出现「Notes」、用户可以订阅，也不需要为了改文案去搬 tag。
+
+- 同步命令（读 `CHANGELOG.md`，有则 `edit`、无则 `create`，不加 `--latest` 覆盖最近发布）：
+
+  ```sh
+  node scripts/sync-github-releases.mjs            # 全部版本
+  node scripts/sync-github-releases.mjs v3.2.0     # 只同步一个
+  node scripts/sync-github-releases.mjs --dry-run  # 只打印将要执行的动作
+  ```
+
+- 发版时顺序：写 `CHANGELOG.md` → `npm run check:changelog` → commit/tag/push → `sync-github-releases.mjs`。
+- 已存在的 Release 会被覆盖成 CHANGELOG 内容；历史 tag 的注释不再作为正文来源，不要为了改文案重签 tag。
+- 不要在 Release 里写仓库内部路径、密钥、未上线能力；「内部与验证」段可以保留在 CHANGELOG，但同步脚本会原样带上，
+  因此写内部路径时默认它是可以公开的（这个仓库目前就是公开的）。
+
+## 9. 范例（v3.2.0 摘要，可照此扩写）
 
 ```
 ## v3.2.0 · 右轨拍平 · 账户中心两栏 · 2026-11-02
