@@ -86,7 +86,7 @@ export function LaneSwitch({ prop, onChange }: { prop: boolean; onChange(next: b
 }
 
 /**
- * 晴光栏底部的物件生成条，贴着对话，不进布置提案。
+ * Bingo栏底部的物件生成条，贴着对话，不进布置提案。
  * 思考强度不放：文生没有质量档，扣额度确认已经挡住误点。
  */
 export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenMaterials, onOpenVenue, forceProxy, seed }: {
@@ -98,7 +98,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenMaterials, o
   onOpenVenue?: (() => void) | undefined;
   /** 测试里强制走本机代理判断；正式界面不传，跟 isLux3dLocalProxy 走。 */
   forceProxy?: boolean;
-  /** 晴光准备好的一句。只填进输入框，不提交。 */
+  /** Bingo准备好的一句。只填进输入框，不提交。 */
   seed?: { kind: GenerateKind; prompt: string; nonce: number } | null;
 }): JSX.Element {
   const localProxy = forceProxy ?? isLux3dLocalProxy();
@@ -187,7 +187,7 @@ export function MaterialGenerateDock({ onBackToChat, onPlace, onOpenMaterials, o
           setResult(url ? { url, taskid, name } : null);
           setPrompt('');
           setNote(kind === 'world'
-            ? '场景好了。到「空间 · 环境预览」取回，这里不再提交。'
+            ? '场景好了。到「空间 · 环境」取回，这里不再提交。'
             : url ? '生成好了，可以放进场景。' : '生成完成，但没有模型文件。');
         } else {
           setNote(body.status === 4 ? '生成失败。再点会再扣一次。' : '生成已取消，没有再提交。');

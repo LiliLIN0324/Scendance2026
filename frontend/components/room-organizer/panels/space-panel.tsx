@@ -8,22 +8,26 @@ import { ShelfGrip } from './scendance-workspace';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { StructuralPropertiesPanel } from './structural-properties-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
+import type { StoredEnvironment } from '../lib/environment-preference';
 import type { RoomLayout } from '../lib/types';
 
 /**
- * 空间是独立的一页：场景模板和环境预览从物料库搬到这里。
+ * 空间是独立的一页：场景模板和本场环境从物料库搬到这里。
  * 新建空间进这一页上的空白壳体；空间可以是一间房，也可以是一栋建筑。
  */
 export function SpacePanel({
   layout,
   onApply,
   environment,
-  onClose,
 }: {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
-  environment?: { preview: SplatPreviewState; onStart(assetId: string): void; onStop(): void };
-  onClose?(): void;
+  environment?: {
+    preview: SplatPreviewState;
+    current: StoredEnvironment | null;
+    onSelect(assetId: string, name: string): void;
+    onClear(): void;
+  };
 }): JSX.Element {
   const hostRef = useRef<HTMLElement>(null);
   const [confirm, setConfirm] = useState(false);
@@ -48,10 +52,9 @@ export function SpacePanel({
         <header className="sc-space-head">
           <div>
             <h2>空间</h2>
-            <p>一间房或一栋建筑都可以从这里开始。选场景模板，或新建一块空白空间。</p>
+            <p>一间房或一栋建筑都可以从这里开始。选场景模板、挂本场环境，或新建一块空白空间。</p>
           </div>
           <button type="button" className="sc-space-new" onClick={pressNew}>新建空间</button>
-          {onClose && <button type="button" className="sc-button" onClick={onClose}>关闭</button>}
         </header>
         {confirm && <div className="sc-preset-confirm sc-space-confirm" role="group" aria-label="确认新建空间">
           <p>会换成一块可改尺寸的空白空间。当前布置会被清掉。</p>
@@ -67,11 +70,11 @@ export function SpacePanel({
             <ScenePresetsPanel layout={layout} onApply={onApply}/>
           </div>
         </section>
-        <section className="sc-space-section" aria-label="环境预览">
-          <h3>环境预览</h3>
+        <section className="sc-space-section" aria-label="环境">
+          <h3>环境</h3>
           {environment
-            ? <EnvironmentPreview preview={environment.preview} onStart={environment.onStart} onStop={environment.onStop}/>
-            : <p className="sc-note">环境预览会列在这里。本场观感包取回之后可以铺成背景。</p>}
+            ? <EnvironmentPreview preview={environment.preview} current={environment.current} onSelect={environment.onSelect} onClear={environment.onClear}/>
+            : <p className="sc-note">环境会列在这里。本场观感包取回之后可以铺成背景。</p>}
         </section>
         {layout.backendSceneV2 && <div className="sc-preset-utilities">
           <details><summary>已建空间的结构微调</summary><StructuralPropertiesPanel/></details>

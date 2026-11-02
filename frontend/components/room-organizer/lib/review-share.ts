@@ -11,7 +11,7 @@
  * - 快照不含交接单、制作计划、模型地址和底图，避免把内部资料写进评审链接。
  * - **Bingo（收藏 + 状态球）后画界面。** 发评审链接时在本机记下
  *   `saved + needs-review`，供以后的状态球读取。本模块不渲染 Bingo，
- *   也不把晴光换成第二套评审 Agent。
+ *   也不把Bingo换成第二套评审 Agent。
  */
 import type { RoomLayout } from './types';
 

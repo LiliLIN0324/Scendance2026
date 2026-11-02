@@ -10,7 +10,7 @@
  * 第 1 步「读场地」先把确认过的尺度立成可布置壳体（四面外墙 + 主入口 + 层高，见 lib/venue-shell）。
  * 底图只收图片（复用 layout.floorPlanImage）：图纸只当参照，长宽要么说一句「12×9」、要么说「按图纸估」，
  * 未确认前不把米数说成事实（docs/AI-NATIVE-FOR-EXECUTORS.md 对话四步 ①）。
- * 布置方案的入口只有对话。尺寸表单与「让晴光出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
+ * 布置方案的入口只有对话。尺寸表单与「让Bingo出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 底部「生成」是另一条：文字生成物件，确认扣额度才提交，不写出方案、不进确认布置。
  */
@@ -53,7 +53,7 @@ import { SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
 import { useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay } from './session-history-panel';
-import { QINGGUANG_RAIL_MASCOT } from './qingguang-rail-button';
+import { BINGO_MASCOT } from './bingo-rail-button';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
@@ -167,7 +167,7 @@ export interface LayoutAgentCallbacks {
   onOpenRebuild?(): void;
   /** 左栏 / 画布上的场地观感（Lux3D） */
   onOpenLux3d?(): void;
-  /** 晴光栏底切到「生成物件」 */
+  /** Bingo栏底切到「生成物件」 */
   onOpenGenerate?(): void;
   /** 生成轨、观感、重建等 Aholo 能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
   luxToolsVisible?: boolean;
@@ -1320,8 +1320,8 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 
 /* ───────────────────────── 右栏 ───────────────────────── */
 
-/** 晴光形象对应的状态。点头像或这行字，回到这一态该做的事。 */
-export function qingguangHeaderStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
+/** Bingo形象对应的状态。点头像或这行字，回到这一态该做的事。 */
+export function bingoHeaderStatus(agent: AgentValue, mode: WorkbenchMode): { text: string; tone: 'idle' | 'busy' | 'ask' | 'ok' | 'warn'; hint: string } {
   if (mode === 'review') return { text: '评审', tone: 'ask', hint: '钉在画布上，对话还在' };
   if (mode === 'delivery') return { text: '执行', tone: 'idle', hint: '回到输入' };
   if (mode !== 'layout') return { text: '空闲', tone: 'idle', hint: '回到输入' };
@@ -1342,7 +1342,7 @@ export function qingguangHeaderStatus(agent: AgentValue, mode: WorkbenchMode): {
 }
 
 /**
- * 晴光头像按状态切独立切图（`qingguang-3d-40-{ask|done|issue}`）：
+ * Bingo头像按状态切独立切图（`qingguang-3d-40-{ask|done|issue}`）：
  * 禁把角标叠画在头像上，所以状态靠换图，不用徽标。
  */
 function mascotOf(agent: AgentValue, mode: WorkbenchMode): string {
@@ -1600,12 +1600,8 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropMaterials, onOpenPropVenue, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true }: {
+export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp, onOpenPropMaterials, onOpenPropVenue, reviewSlot, deliverySlot }: {
   onClose?(): void;
-  /** 晴光头像 DOM，供轨 ↔ 顶栏飞入动画测量。 */
-  headerAvatarRef?: React.RefObject<HTMLSpanElement>;
-  /** 飞入结束后才显示顶栏静态头像，避免与 FLIP 重影。 */
-  headerAvatarVisible?: boolean;
   /** 右栏底部切到「生成物件」。不传则面板自己记。 */
   generateOpen?: boolean;
   onGenerateOpen?(next: boolean): void;
@@ -1662,11 +1658,11 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
     setShowHistory(false);
   }, [assistantSessions.activeId]);
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="晴光">
+  return <aside id="agent-panel" className="sc-agent-panel" data-state={mode === 'layout' ? agent.state : mode} data-venue-io={agent.venueIO} aria-label="Bingo">
     <header className="ap-head ap-session-head">
       <div className="ap-session-identity">
-        <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
-          <img className="ap-session-avatar" src={QINGGUANG_RAIL_MASCOT} alt="" width={36} height={36} draggable={false} />
+        <span className="ap-session-avatar-slot is-visible">
+          <img className="ap-session-avatar" src={BINGO_MASCOT} alt="" width={36} height={36} draggable={false} />
         </span>
         <h1 className="ap-session-title" title={sessionTitle}>{sessionTitle}</h1>
       </div>
@@ -1691,7 +1687,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
           <MessageCirclePlus size={18} aria-hidden="true" />
         </button>
         {onClose && (
-          <button type="button" className="ap-icon-btn ap-close" aria-label="收起晴光" title="收起晴光" onClick={onClose}>
+          <button type="button" className="ap-icon-btn ap-close" aria-label="收起 Bingo" title="收起 Bingo" onClick={onClose}>
             <X size={20} aria-hidden="true" />
           </button>
         )}
@@ -1802,7 +1798,7 @@ export function AgentPanel({ onClose, generateOpen, onGenerateOpen, onPlaceProp,
 export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const agent = useAgent();
   const mode = agent.callbacks.workbenchMode;
-  const status = qingguangHeaderStatus(agent, mode);
+  const status = bingoHeaderStatus(agent, mode);
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   // 评审页「完成评审」的本机回执。有回执就给收起球加红环（旧称 Bingo 球）。
@@ -1872,8 +1868,8 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
       className={`sc-agent-reopen is-orb${isDragging ? ' is-dragging' : ''}${reviewOrbClass(reviewReturned)}`}
       data-tone={tone}
       data-review-return={reviewReturned ? '1' : '0'}
-      aria-label="打开晴光 Agent"
-      title={reviewReturned ? '晴光 · 评审已回 · 点开，按住可拖' : status ? `晴光 · ${status.text} · 点开，按住可拖` : '晴光 · 点开，按住可拖'}
+      aria-label="打开 Bingo Agent"
+      title={reviewReturned ? 'Bingo · 评审已回 · 点开，按住可拖' : status ? `Bingo · ${status.text} · 点开，按住可拖` : 'Bingo · 点开，按住可拖'}
       style={style}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1890,9 +1886,29 @@ export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
   const { activeFloor, collidingIds } = useRoomEditor();
   const { view, setView } = useRoomEditor();
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', sync);
+    sync();
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => {}); return; }
+    if (typeof document.documentElement.requestFullscreen !== 'function') return;
+    void document.documentElement.requestFullscreen().catch(() => {});
+  }, []);
+  // 全屏是走动借来的：走出第一人称时一起还回去，不留一个找不到出口的全屏页面。
+  useEffect(() => {
+    if (view.walkthroughMode || !fullscreen) return;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, [view.walkthroughMode, fullscreen]);
   const overlapNames = useMemo(() => Array.from(new Set(activeFloor.items.filter(item => collidingIds.has(item.id)).map(item => item.name))), [activeFloor.items, collidingIds]);
   // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
-  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><button id="walk-exit" type="button" className="ap-canvas-pill is-top" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>退出第一人称 · Esc</button></div>;
+  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><div className="ap-walk-controls">
+    <button id="walk-fullscreen" type="button" className="ap-canvas-pill" aria-pressed={fullscreen} title={fullscreen ? '退出全屏' : '全屏'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} aria-hidden="true"/> : <Maximize2 size={14} aria-hidden="true"/>}{fullscreen ? '退出全屏' : '全屏'}</button>
+    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={() => setView(current => ({ ...current, walkthroughMode: false }))}>退出第一人称 · Esc</button>
+  </div></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;
   return <div className="ap-canvas-layer" aria-live="polite">

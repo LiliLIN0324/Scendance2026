@@ -11,36 +11,39 @@ vi.mock('./agent-panel', () => ({
     callbacks: { workbenchMode: 'layout' },
     state: 'idle',
   }),
-  qingguangHeaderStatus: () => ({ text: '在线', tone: 'idle' as const, hint: '' }),
+  bingoHeaderStatus: () => ({ text: '在线', tone: 'idle' as const, hint: '' }),
 }));
 
-import { QINGGUANG_RAIL_MASCOT, QingguangRailButton } from './qingguang-rail-button';
+import { BingoRailButton } from './bingo-rail-button';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 afterEach(cleanup);
 
-describe('晴光模式轨入口', () => {
-  it('renders one avatar and wires the status dot tone', () => {
+describe('Bingo 左轨入口', () => {
+  it('renders the ring shape and wires the status dot tone', () => {
     const onOpen = vi.fn();
-    render(<QingguangRailButton open onOpen={onOpen} />);
-    const button = screen.getByRole('button', { name: '晴光' });
+    render(<BingoRailButton open onOpen={onOpen} />);
+    const button = screen.getByRole('button', { name: 'Bingo' });
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(button.querySelector('img')?.getAttribute('src')).toBe(QINGGUANG_RAIL_MASCOT);
-    expect(button.querySelector('.sc-rail-qingguang-dot.is-idle')).toBeTruthy();
+    expect(button.querySelector('svg')).toBeTruthy();
+    expect(button.querySelector('img')).toBeNull();
+    expect(button.querySelector('.sc-rail-bingo-dot.is-idle')).toBeTruthy();
     expect(button.className).toContain('sc-rail-disc');
-    expect(button.getAttribute('data-tip')).toBe('晴光');
+    expect(button.className).toContain('is-active');
+    expect(button.getAttribute('data-tip')).toBe('Bingo');
     expect(button.getAttribute('title')).toBeNull();
-    expect(button.textContent ?? '').not.toMatch(/晴光/);
+    expect(button.textContent ?? '').not.toMatch(/Bingo/);
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it('does not mount the three mode icons on the workbench rail', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
-    expect(source).toContain('<RailAgentBrandSlot');
+    expect(source).toContain('<WorkbenchBrandToggle');
     expect(source).toContain('<BingoRailButton');
     expect(source).toContain('aria-label="空间"');
+    expect(source).toContain('aria-label="物料"');
     expect(source).not.toContain('<VenueRailButton');
     expect(source).not.toContain('aria-label="场地"');
     expect(source).not.toContain('AgentReopenCard');

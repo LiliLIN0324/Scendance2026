@@ -62,7 +62,7 @@ describe('review share page', () => {
     await openSample();
     expect(screen.getByText(/示例场地/)).toBeTruthy();
     expect(screen.getByText(/共创桌/)).toBeTruthy();
-    expect(document.body.textContent).not.toMatch(/晴光|模式轨|执行页|到场清单/);
+    expect(document.body.textContent).not.toMatch(/Bingo|模式轨|执行页|到场清单/);
     expect(document.querySelector('.sc-mode-rail, .sc-agent-panel, #agent-panel, .sc-workbench')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'mock-plan-click' }));

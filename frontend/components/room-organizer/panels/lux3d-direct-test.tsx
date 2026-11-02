@@ -30,12 +30,12 @@ const CARD_COPY: Record<Kind, { meta: string; thumb: string; info: string }> = {
   world: {
     meta: '一句场景描述 → 可漫游 3DGS',
     thumb: '/showcase/assets/generated/scene/scendance-m3-mvp.panorama.jpg',
-    info: '走 Aholo World 文字生成：一句话交代场地气质与时间，生成结果挂进「环境预览」当观感层，可永远漫游。',
+    info: '走 Aholo World 文字生成：一句话交代场地气质与时间，生成结果挂进「空间 · 环境」当观感层，可永远漫游。',
   },
   recon: {
     meta: '现场照片 / 视频 → 真场地 3DGS',
     thumb: '/showcase/assets/generated/scene/cloud-e2e-banquet.panorama.jpg',
-    info: '主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
+    info: '主路径：地图圈画 → 采集单 → 场地重建 → 空间里的环境。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
   },
 };
 type TaskDetail = { status: number; statusLabel: string; outputs: string[]; progress?: number; panoUrl?: string };
@@ -150,7 +150,7 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
       <a href={url} target="_blank" rel="noreferrer">{label(url)}</a>
     </li>)}</ul>}
     {!outputs.length && !panorama && <p className="sc-warning">Aholo 返回成功，但没有提供下载链接。</p>}
-    {world && <p className="sc-note">3DGS 场景取回后按真实尺度铺成 3D 背景（场地跟高斯对齐），只作环境预览，不参与碰撞。</p>}
+    {world && <p className="sc-note">3DGS 场景取回后按真实尺度铺成 3D 背景（场地跟高斯对齐），只作环境观感层，不参与碰撞。</p>}
   </>;
 }
 
@@ -541,13 +541,13 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   const shownKinds: Kind[] = ['world', 'recon'];
   return <div className="sc-lux-direct">
     <div className="sc-section-heading"><div><h2>场地观感</h2>
-      <p>这里只出场地：文字生成场景，或从采集单重建现场。物料生成在晴光的「物料生成」里。观感层不进碰撞、不进落盘几何。</p></div>
+      <p>这里只出场地：文字生成场景，或从采集单重建现场。物料生成在 Bingo 的「物料生成」里。观感层不进碰撞、不进落盘几何。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
     <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
-      <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；场地重建仍可干跑挂样例。物料生成在晴光的「物料生成」里。</p>
+      <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；场地重建仍可干跑挂样例。物料生成在 Bingo 的「物料生成」里。</p>
       <div className="sc-aholo-cloud-actions">
         <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂宴会厅观感</button>
         <button type="button" className="sc-button" onClick={() => { if (onPreviewShippedScene) onPreviewShippedScene(DEMO_WORLD_SCENE_ID); else onHangMockScene?.(); }}>挂样例环境预览</button>

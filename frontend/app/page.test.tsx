@@ -131,7 +131,7 @@ function expandBriefSections(): void {
 }
 
 async function openAgent(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name:'打开晴光 Agent' }, { timeout:5000 }));
+  fireEvent.click(await screen.findByRole('button', { name:'打开 Bingo Agent' }, { timeout:5000 }));
   expandBriefSections();
 }
 
@@ -214,7 +214,7 @@ it('preserves a safe return destination for authenticated entry', () => {
 it('opens an anonymous workspace visit without requiring login or a local query parameter', async () => {
   window.history.replaceState(null, '', '/');
   render(<App />);
-  await screen.findByRole('button', { name: '打开晴光 Agent' });
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('密码')).toBeNull();
 });
@@ -224,7 +224,7 @@ it('opens the workspace directly after session restoration without another login
   const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
   vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
   render(<App />);
-  await screen.findByRole('button', { name: '打开晴光 Agent' });
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(screen.queryByLabelText('密码')).toBeNull();
   expect(navigation.replace).not.toHaveBeenCalled();
 });
@@ -233,7 +233,7 @@ it('opens the workspace directly after session restoration without another login
 it('keeps the project destination when entering the editor alias without a session', async () => {
   window.history.replaceState(null, '', `/editor/?project=${projectId}`);
   render(<App />);
-  await screen.findByRole('button', { name: '打开晴光 Agent' });
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
   expect(window.location.search).toBe(`?project=${projectId}`);
 });
@@ -243,6 +243,6 @@ it('opens the current workspace at the editor alias after session restoration', 
   const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
   vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
   render(<App />);
-  await screen.findByRole('button', { name: '打开晴光 Agent' });
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
 });

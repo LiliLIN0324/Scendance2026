@@ -999,9 +999,9 @@ body {
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
   overflow: visible;
 }
-/* 窄轨只留图标。名称不写在钮下；悬停或选中时只出右侧黑胶囊（data-tip），不另挂 title。 */
+/* 窄轨只留图标。名称不写在钮下；悬停或聚焦时只出右侧黑胶囊（data-tip），不另挂 title。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span { display: none; }
-/* 幕景锁标只在晴光展开时占轨顶格；收起时该格交给晴光头像（见 .sc-rail-agent-brand-slot）。 */
+/* 轨顶门厅标常驻；点它收起或展开左列。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand {
   flex-direction: row; justify-content: center; gap: 0; width: 100%; min-height: 44px;
   margin: 0 0 6px; padding: 4px 0; color: var(--wk-ink);
@@ -1030,12 +1030,6 @@ body {
 }
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:hover::after,
 .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]:focus-visible::after { opacity: 1; }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo img {
-  width: 28px; height: 28px; border-radius: 999px;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo.is-review-returned {
-  box-shadow: inset 0 0 0 2px #d4534a;
-}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button { position: relative; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 8px); top: 50%;
@@ -1044,8 +1038,7 @@ body {
   letter-spacing: 0; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 50;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:hover::after,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active[data-tip]::after { opacity: 1; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after { opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-top,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -1100,115 +1093,41 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
-/* 轨顶一格：收起 = 晴光头像；展开 = 交叉淡入幕景锁标（头像已飞到对话头）。 */
-.sc-rail-agent-brand-slot {
-  position: relative; flex: none; width: 40px; height: 40px; margin: 2px auto 4px;
+/* Bingo 那一格：圆环形体，右下小点是状态，不是模式选中条。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo {
+  position: relative;
 }
-.sc-rail-agent-brand-slot .sc-rail-slot-layer {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  opacity: 0; pointer-events: none; transition: opacity 220ms var(--ease-spec, ease);
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo > span.sc-rail-bingo-dot {
+  display: block; position: absolute; right: 3px; bottom: 3px; z-index: 1; width: 9px; height: 9px;
+  border-radius: 50%; box-sizing: border-box; background: var(--wk-ink-faint, #a8aba2);
+  border: 2px solid var(--wk-paper, #fff); pointer-events: none;
 }
-.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-on { opacity: 1; pointer-events: auto; }
-.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-brand button.sc-nav-brand {
-  width: 36px; min-height: 36px; height: 36px; margin: 0; padding: 0;
-}
-.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang .sc-mode-rail-top { margin: 0; padding: 0; }
-.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang button.sc-rail-qingguang { margin: 0; }
-/* 原布置图标的槽位：同样的轨钮尺寸，里面换成晴光圆头像。右下白点是状态，不是模式选中条。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang {
-  position: relative; width: 36px; height: 36px; margin: 2px auto 4px; padding: 0;
-  border-radius: 999px; background: transparent; font-weight: 400;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang img {
-  width: 28px; height: 28px; border-radius: 999px; object-fit: cover; display: block; pointer-events: none;
-  transition: opacity 180ms var(--ease-spec, ease), transform 180ms var(--ease-spec, ease);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang.is-panel-open img {
-  opacity: 0; transform: scale(0.88);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot {
-  display: block; position: absolute; right: 5px; bottom: 5px; z-index: 1; width: 10px; height: 10px; border-radius: 50%;
-  box-sizing: border-box; background: var(--wk-ink-soft, #71767e); border: 2px solid var(--wk-paper, #fff);
-  box-shadow: 0 0 0 1px rgba(20, 20, 22, .06); pointer-events: none;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot.is-ok { background: var(--green, #4A7C59); }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot.is-warn { background: var(--warn, #96651F); }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot.is-busy,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-qingguang > span.sc-rail-qingguang-dot.is-ask { background: #0668e5; }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo > span.sc-rail-bingo-dot.is-ok { background: var(--green, #4A7C59); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo > span.sc-rail-bingo-dot.is-warn { background: var(--warn, #96651F); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo > span.sc-rail-bingo-dot.is-busy,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo > span.sc-rail-bingo-dot.is-ask { background: #0668e5; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary {
   display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball {
-  background:
-    radial-gradient(circle at 50% 50%, transparent 0 5px, var(--faint) 5.5px 7px, transparent 7.5px),
-    var(--paper);
-  color: var(--ink-soft);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball:hover,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball:focus-visible {
-  background:
-    radial-gradient(circle at 50% 50%, transparent 0 5px, var(--ink-soft) 5.5px 7px, transparent 7.5px),
-    var(--paper);
-  color: var(--ink); transform: translateY(-1px);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball[data-status="awaiting"] {
-  border: 2px solid var(--warn);
-  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
-  background: var(--paper); color: var(--warn);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball > .sc-bingo-count {
-  display: block; position: static; opacity: 1; pointer-events: none;
-  padding: 0; border-radius: 0; background: transparent; color: var(--warn);
-  font-size: 13px; font-weight: 600; line-height: 1; letter-spacing: 0; white-space: nowrap;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.is-returned,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball[data-status="returned"] {
-  border: 3px solid var(--err);
-  box-shadow: 0 0 0 4px rgba(180, 68, 60, 0.22);
-  background:
-    radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
-    var(--paper);
-}
-/* Bingo / 空间 / 物料 / 晴光：同一枚细线圆罩。绿条跟圆罩走，不贴轨的左缘。 */
+/* 左轨图形钮：只给 40px 触达区，不套圆罩；悬停淡底，选中左侧绿条。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
   width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
-  border-radius: 999px; border: 1.5px solid var(--hair); background: var(--paper);
-  box-shadow: inset 0 1px 2px rgba(20, 20, 22, 0.10); color: var(--wk-ink);
+  border: 0; border-radius: 12px; background: transparent; box-shadow: none;
+  color: var(--wk-ink-soft);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > svg {
+  display: block; width: 22px; height: 22px;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:hover,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:focus-visible {
-  background: var(--paper); color: var(--wk-ink); transform: translateY(-1px);
+  background: var(--wk-plane); color: var(--wk-ink);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active {
-  background: var(--paper); color: var(--wk-ink); font-weight: 400;
+  background: transparent; color: var(--wk-ink); font-weight: 400;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before {
   content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
   border-radius: 0 2px 2px 0; background: var(--wk-green);
-}
-.sc-rail-agent-brand-slot .sc-rail-slot-layer.is-qingguang button.sc-rail-qingguang.sc-rail-disc {
-  margin: 0;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc:hover,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc:focus-visible,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc.is-active {
-  background:
-    radial-gradient(circle at 50% 50%, transparent 0 5px, var(--faint) 5.5px 7px, transparent 7.5px),
-    var(--paper);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc[data-status="awaiting"] {
-  border: 2px solid var(--warn);
-  box-shadow: 0 0 0 3px rgba(150, 101, 31, 0.16);
-  background: var(--paper); color: var(--warn);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc.is-returned,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-bingo-ball.sc-rail-disc[data-status="returned"] {
-  border: 3px solid var(--err);
-  box-shadow: 0 0 0 4px rgba(180, 68, 60, 0.22);
-  background:
-    radial-gradient(circle at 50% 50%, var(--err) 0 3px, transparent 3.5px),
-    var(--paper);
 }
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
@@ -1285,7 +1204,7 @@ body {
   display: flex; flex-direction: column; pointer-events: auto;
 }
 .sc-left-column.has-tool > .sc-agent-panel { flex: 1 1 auto; }
-/* 方案会话不再常驻左栏；History overlay 在晴光面板内（session-history-panel + agent-panel.css）。 */
+/* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。 */
 .sc-canvas-share {
   position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 28;
   width: min(380px, calc(100% - 80px));
@@ -1643,14 +1562,33 @@ body {
 .sc-workbench .sc-canvas-stage.has-space-shelf .sc-material-shelf.sc-bottom-drawer.is-space {
   height: min(70vh, 520px);
 }
+/* 空间与物料共用一个抽屉：左轨两个入口各自开关，抽屉不设标题条。 */
+.sc-workbench .sc-material-shelf.sc-library-shelf { display: flex; flex-direction: column; }
+.sc-workbench .sc-material-shelf.sc-library-shelf[hidden] { display: none; }
+.sc-workbench .sc-library-pane { flex: 1; min-height: 0; overflow: hidden; }
+.sc-workbench .sc-library-pane[hidden] { display: none; }
+.sc-workbench .sc-library-pane > .sc-library { height: 100%; }
 .sc-workbench .sc-canvas-column .sc-material-shelf.sc-bottom-drawer[hidden] { display: none; }
 .sc-workbench .sc-material-entry-bar,
 .sc-workbench .sc-tool-capsule-bar { display: none !important; }
 /* v2.4：评审也沿用暖色浅色主题（不再切深色壳）。 */
-/* 第一人称走动：抽屉与右栏收起，只留「退出第一人称 · Esc」。 */
+/* 第一人称走动：进入沉浸态——侧栏、工具、标题全部收起，画布铺满，只留顶部一组控件。 */
 .sc-workbench.is-walkthrough .sc-left-drawer,
 .sc-workbench.is-walkthrough .sc-agent-panel,
-.sc-workbench.is-walkthrough .cr-assistant { display: none !important; }
+.sc-workbench.is-walkthrough .cr-assistant,
+.sc-workbench.is-walkthrough .sc-mode-rail,
+.sc-workbench.is-walkthrough .sc-left-column,
+.sc-workbench.is-walkthrough .sc-view-tools,
+.sc-workbench.is-walkthrough .sc-canvas-heading { display: none !important; }
+.sc-workbench.is-walkthrough .sc-workspace.is-docked-layout.is-mode-rail,
+.sc-workbench.is-walkthrough .sc-workspace.is-docked-layout.is-mode-rail.has-left-column,
+.sc-workbench.is-walkthrough .sc-workspace.is-docked-layout.is-mode-rail.has-conversation {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.sc-workbench.is-walkthrough .sc-workspace.is-docked-layout.is-mode-rail > .sc-canvas-stage {
+  display: grid; grid-column: 1; grid-row: 1;
+}
 
 /* 整页错误 / 404：与画布错误同一语言——居中、单色、一句话说清，动作不超过两个。 */
 .sc-page-error { min-height: 100dvh; box-sizing: border-box; display: grid; place-items: center; padding: 24px; background: var(--sc-canvas, #f4f5f7); }

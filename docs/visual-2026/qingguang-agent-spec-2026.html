@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>晴光 · Agent 对话规范 — 幕景 Scendance</title>
+<title>Bingo · Agent 对话规范 — 幕景 Scendance</title>
 <style>
   :root{
     --ink:#141416; --ink-soft:#55585F; --muted:#71767E; --faint:#A6AAB2;
@@ -110,25 +110,25 @@
 
   <header class="hero">
     <div class="brand"><span class="dot"></span>幕景 · SCENDANCE</div>
-    <h1>晴光 · Agent 对话规范</h1>
-    <p class="sub">幕景的 AI-native 全部落在晴光这条对话链路上。这份说明改成一幕一幕的对话来写：你说了什么、晴光回什么、画布上看到什么。三行里出现的每一句晴光的话，都是从代码里逐字抄出来的，不是我编的台词。</p>
+    <h1>Bingo · Agent 对话规范</h1>
+    <p class="sub">幕景的 AI-native 全部落在Bingo这条对话链路上。这份说明改成一幕一幕的对话来写：你说了什么、Bingo回什么、画布上看到什么。三行里出现的每一句Bingo的话，都是从代码里逐字抄出来的，不是我编的台词。</p>
     <div class="meta">
       <span>真相源：本仓代码 2026-10-30</span>
       <span>范围：布置模式（对话四步 ①场地 ②布置 ③优化 ④交付）</span>
-      <span>命名：晴光 Qingguang · 3D 毛绒</span>
+      <span>命名：Bingo · 3D 毛绒（素材文件名沿用历史名 qingguang-*）</span>
       <span>上层依据：docs/ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md</span>
     </div>
   </header>
 
   <section>
     <h2>怎么读这份说明</h2>
-    <p class="lead">每一幕三段，固定是这个顺序。看任何一幕，只需要问三件事：话有没有被听懂、晴光有没有越权、画布上动没动。</p>
+    <p class="lead">每一幕三段，固定是这个顺序。看任何一幕，只需要问三件事：话有没有被听懂、Bingo有没有越权、画布上动没动。</p>
     <div class="dlg">
       <div class="line user"><u>你说</u>输入框里打出来的那句原话，或者拖进画布的文件、点到的文字链。</div>
-      <div class="line agent"><u>晴光说</u>右栏气泡里的话。底色变琥珀的那一行，是她把你拦下来了。</div>
+      <div class="line agent"><u>Bingo说</u>右栏气泡里的话。底色变琥珀的那一行，是她把你拦下来了。</div>
       <div class="line canvas"><u>画布上看到</u>这一句话之后，画布上真实发生的变化——没变就写「画布没动」。</div>
     </div>
-    <p class="note">文中出现的具体件数、座数后面一律标着「按画布实测」：这些数字是那一块地、那一版算法算出来的结果，换一块地就换一个数。晴光不会先报一个数再去凑它。</p>
+    <p class="note">文中出现的具体件数、座数后面一律标着「按画布实测」：这些数字是那一块地、那一版算法算出来的结果，换一块地就换一个数。Bingo不会先报一个数再去凑它。</p>
     <p class="src" style="margin-top:18px">三行都在 <b>panels/agent-panel.tsx</b> 里：<code>say()</code> 进气泡、<code>onPreview()</code> 进画布、<code>onApply()</code> 才落盘。</p>
   </section>
 
@@ -140,7 +140,7 @@
         <b>确认之前，画布一个字节都不改</b>
         <p>提案只活在内存里一个 <code>ref</code> 上，全程只推预览帧。撤销历史、自动存档、协作者的选中态，都看不见它。</p>
         <div class="dlg">
-          <div class="line agent"><u>晴光说</u>绿框是新摆的 42 件 · 按 80 人摆了 80 座<s>（卡上只有一颗「确认布置」，撤回和换一版是文字链）</s></div>
+          <div class="line agent"><u>Bingo说</u>绿框是新摆的 42 件 · 按 80 人摆了 80 座<s>（卡上只有一颗「确认布置」，撤回和换一版是文字链）</s></div>
           <div class="line canvas"><u>画布上看到</u>绿框挂着，但此刻按 Ctrl+Z 撤销不了任何东西——因为压根没写过。</div>
         </div>
       </div>
@@ -149,9 +149,9 @@
         <p>场地尺寸有五种来路，只有你说过或填过的才算确认。推出来的必须带着「折算／估算、待你确认」一起说。</p>
         <div class="dlg">
           <div class="line user"><u>你说</u>300 平米</div>
-          <div class="line agent"><u>晴光说</u>300 ㎡ 按 4:3 折算是 20 × 15 m，你改过我才当准</div>
+          <div class="line agent"><u>Bingo说</u>300 ㎡ 按 4:3 折算是 20 × 15 m，你改过我才当准</div>
           <div class="line user"><u>你说</u>改成 20×15</div>
-          <div class="line agent"><u>晴光说</u>20 × 15 m（300 ㎡）<s>这一句之后才当事实念</s></div>
+          <div class="line agent"><u>Bingo说</u>20 × 15 m（300 ㎡）<s>这一句之后才当事实念</s></div>
         </div>
       </div>
       <div class="nail">
@@ -159,7 +159,7 @@
         <p>算不出改法就说算不出；没有分区层就说没有；本机没连云就常驻一条「演示环境」。宁可不接这句话。</p>
         <div class="dlg">
           <div class="line user"><u>你说</u>换区</div>
-          <div class="line agent"><u>晴光说</u>换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。</div>
+          <div class="line agent"><u>Bingo说</u>换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。</div>
           <div class="line canvas"><u>画布上看到</u>画布没动，另给一条替代路径：要换布局就说「换一版」。</div>
         </div>
       </div>
@@ -183,7 +183,7 @@
 
   <section>
     <h2>对话全集</h2>
-    <p class="lead">这一节是主体：把晴光能接的话、会拦的话、答不上的话，一幕一幕摆出来。要验收产品，照着这些句子逐句打一遍就行。</p>
+    <p class="lead">这一节是主体：把Bingo能接的话、会拦的话、答不上的话，一幕一幕摆出来。要验收产品，照着这些句子逐句打一遍就行。</p>
 
     <h3>把需求一句说全</h3>
     <div class="act">
@@ -191,8 +191,8 @@
       <p class="why">七段全过，直接出方案。这是最短的一条路。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>80 人发布会，室内 12×9</div>
-        <div class="line agent"><u>晴光说</u>场地立起来了：12 × 9 m，室内壳子，四面外墙、正面留了一个主入口，门位标的是待确认，层高没听你说，先按默认 4 m。</div>
-        <div class="line agent"><u>晴光说</u>绿框是新摆的 42 件 · 按 80 人摆了 80 座<s>（件数按画布实测；顶部五步进度正在走：读场地 / 定舞台位置 / 摆桌椅 / 放绿植 / 检查重叠）</s></div>
+        <div class="line agent"><u>Bingo说</u>场地立起来了：12 × 9 m，室内壳子，四面外墙、正面留了一个主入口，门位标的是待确认，层高没听你说，先按默认 4 m。</div>
+        <div class="line agent"><u>Bingo说</u>绿框是新摆的 42 件 · 按 80 人摆了 80 座<s>（件数按画布实测；顶部五步进度正在走：读场地 / 定舞台位置 / 摆桌椅 / 放绿植 / 检查重叠）</s></div>
         <div class="line canvas"><u>画布上看到</u>四面墙和门洞立住，桌椅一帧一帧长出来，末帧停在预览；此刻还没落盘。</div>
       </div>
       <p class="src">壳体文案 <code>shellNote</code> · 读数文案 <code>planLines</code>（均在 panels/agent-panel.tsx）</p>
@@ -203,10 +203,10 @@
       <p class="why">缺场地尺寸就不能出方案——出等于猜。她先把接住的部分念回给你听，只催缺的那一格。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>80 人发布会</div>
-        <div class="line agent"><u>晴光说</u>记下了：80 人 · 发布会。还差场地多大：说一句 「室内 12×9」或「108 平米」。</div>
+        <div class="line agent"><u>Bingo说</u>记下了：80 人 · 发布会。还差场地多大：说一句 「室内 12×9」或「108 平米」。</div>
         <div class="line canvas"><u>画布上看到</u>画布没动。左栏简报上人数已经填成 80，尺寸还是空的。</div>
         <div class="line user"><u>你说</u>39×20</div>
-        <div class="line agent"><u>晴光说</u>场地立起来了：39 × 20 m……<s>裸长宽也接，不必重说人数——这是跨句记忆</s></div>
+        <div class="line agent"><u>Bingo说</u>场地立起来了：39 × 20 m……<s>裸长宽也接，不必重说人数——这是跨句记忆</s></div>
       </div>
       <p class="note">催第二次会换说法，不重复同一句开场白：「还差场地多大：直接报长宽（「39×20」）或面积（「300 平米」），我就能先出一版。」人数已经说过，示例里就不会再写「40 人」误导你。</p>
     </div>
@@ -215,11 +215,11 @@
       <h4>分三句说完，也算一版</h4>
       <div class="dlg">
         <div class="line user"><u>你说</u>发布会</div>
-        <div class="line agent"><u>晴光说</u>记下了：发布会。还差场地多大：说一句 「室内 12×9」或「108 平米」。</div>
+        <div class="line agent"><u>Bingo说</u>记下了：发布会。还差场地多大：说一句 「室内 12×9」或「108 平米」。</div>
         <div class="line user"><u>你说</u>大概 80 人</div>
-        <div class="line agent"><u>晴光说</u>记下了：80 人 · 发布会。还差场地多大……</div>
+        <div class="line agent"><u>Bingo说</u>记下了：80 人 · 发布会。还差场地多大……</div>
         <div class="line user"><u>你说</u>室内 12×9</div>
-        <div class="line agent"><u>晴光说</u>场地立起来了：12 × 9 m……<s>三句凑齐，出一版，不是三版</s></div>
+        <div class="line agent"><u>Bingo说</u>场地立起来了：12 × 9 m……<s>三句凑齐，出一版，不是三版</s></div>
       </div>
       <p class="src">记忆合并：<b>lib/brief-agent.ts</b> <code>parseBriefTurn</code>（<code>memory</code> 逐句累加）· 复述：<code>summarizeMemory</code></p>
     </div>
@@ -229,10 +229,10 @@
       <p class="why">这里分两种，措辞不一样：一个要素都没接到，和不接但记忆里本来就有东西。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>今天天气不错<s>（画布是空的，什么槽都没填上）</s></div>
-        <div class="line agent warn"><u>晴光说</u>这句我没接住。跟我说一句「80 人，室内 12×9」这样的需求，我就能先出一版预览。</div>
+        <div class="line agent warn"><u>Bingo说</u>这句我没接住。跟我说一句「80 人，室内 12×9」这样的需求，我就能先出一版预览。</div>
         <div class="line canvas"><u>画布上看到</u>画布没动，零颗绿钮。</div>
         <div class="line user"><u>你说</u>你叫什么名字<s>（前面已经记下 80 人 · 室内 · 12×9）</s></div>
-        <div class="line agent warn"><u>晴光说</u>这句我没接住。已记下：80 人 · 室内 · 12 × 9 m · 发布会。要调布置直接说，比如「加两把椅子」或「换个摆法」。</div>
+        <div class="line agent warn"><u>Bingo说</u>这句我没接住。已记下：80 人 · 室内 · 12 × 9 m · 发布会。要调布置直接说，比如「加两把椅子」或「换个摆法」。</div>
       </div>
       <p class="note">第二句里的 <b>12 × 9 m 是这次修订补上的</b> <span class="tag fix">本次修好</span>：以前只报「80 人 · 室内」，把你刚确认过的尺寸吞掉了——对着你确认过的事实装失忆。</p>
     </div>
@@ -243,7 +243,7 @@
       <p class="why">只动壳体边界，不是新开一轮布置提案。不把人从 2D 拽回 3D，也不要求再确认一遍布置。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>改成 15×10</div>
-        <div class="line agent"><u>晴光说</u>场地改成 15 × 10 m。</div>
+        <div class="line agent"><u>Bingo说</u>场地改成 15 × 10 m。</div>
         <div class="line canvas"><u>画布上看到</u>墙往外推了一圈，原有物料能放下的都留在原位；放不下的一并撤掉并报件数：「场地改成 8 × 6 m，3 件物料放不下先撤了」。</div>
       </div>
       <p class="src">判成 sizeOnly：<b>lib/workbench-agent.ts</b> <code>isVenueSizeOnly</code> · 文案：<code>sizeOnlyNote</code> · 落盘走同一条 <code>onApply</code>（撤销历史一步能整体退回）</p>
@@ -251,9 +251,9 @@
 
     <div class="act">
       <h4>同样的 12×9，五种来路，五种说法</h4>
-      <p class="why">来源不同，晴光能说的分量就不同。置信度决定墙体证据状态，也决定播报措辞——这就是「确认前不报假米数」的落地方式。</p>
+      <p class="why">来源不同，Bingo能说的分量就不同。置信度决定墙体证据状态，也决定播报措辞——这就是「确认前不报假米数」的落地方式。</p>
       <table>
-        <thead><tr><th>你怎么给的</th><th>晴光怎么说</th><th>墙的状态</th></tr></thead>
+        <thead><tr><th>你怎么给的</th><th>Bingo怎么说</th><th>墙的状态</th></tr></thead>
         <tbody>
           <tr><td>「12×9」说过长宽</td><td class="say">12 × 9 m（108 ㎡）——当成事实念</td><td><span class="tag ok">confirmed</span></td></tr>
           <tr><td>模板与云场景自带的固定尺寸</td><td class="say">同上，也当确认过</td><td><span class="tag ok">confirmed</span></td></tr>
@@ -270,10 +270,10 @@
       <p class="why">图片只当参照，读不出真实米数——本期不做 DXF 矢量层。唯一诚实的做法是给一个按图纸比例估的数，并且标着「估的」。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u><s>把 plan.png 拖到画布上</s></div>
-        <div class="line agent"><u>晴光说</u>底图铺好了，它只当参照，我读不出真实米数。要么说一句「12×9」，要么让我按图纸比例估一版。</div>
+        <div class="line agent"><u>Bingo说</u>底图铺好了，它只当参照，我读不出真实米数。要么说一句「12×9」，要么让我按图纸比例估一版。</div>
         <div class="line canvas"><u>画布上看到</u>右栏浮出一颗「按图纸估一版」；墙还没立。</div>
         <div class="line user"><u>你说</u>300平米，按图纸估</div>
-        <div class="line agent"><u>晴光说</u>按图纸比例和你说的 300 ㎡估的 24 × 12 m，先按它出一版。这是估的：不对就再说一句长宽。</div>
+        <div class="line agent"><u>Bingo说</u>按图纸比例和你说的 300 ㎡估的 24 × 12 m，先按它出一版。这是估的：不对就再说一句长宽。</div>
         <div class="line canvas"><u>画布上看到</u>24 × 12 m 的壳 + 一版候选；简报上尺寸档位标成「估的」。</div>
       </div>
       <p class="note">这一幕里「<b>和你说的 300 ㎡</b>」是这次修订补上的 <span class="tag fix">本次修好</span>。改之前，同一句话折的是<b>画布上那块旧空地</b>的面积——图纸比例 × 12×8，你打的「300 平米」白说了一场，报出来的米数还小得离谱。现在同一句话里两件事都算：面积先记进记忆，再拿去折。</p>
@@ -302,10 +302,10 @@
       </table>
       <div class="dlg" style="margin-top:18px">
         <div class="line user"><u>你说</u>改成 200×150</div>
-        <div class="line agent warn"><u>晴光说</u>这块场地最多立到 100 米——再大画布撑不住。先说一句 100 米以内的长宽，比如「80×60」，我按它出一版。</div>
+        <div class="line agent warn"><u>Bingo说</u>这块场地最多立到 100 米——再大画布撑不住。先说一句 100 米以内的长宽，比如「80×60」，我按它出一版。</div>
         <div class="line canvas"><u>画布上看到</u>画布没动，一帧都没写。简报读数还是 12 × 8 m。</div>
         <div class="line user"><u>你说</u>改成 0.4×9</div>
-        <div class="line agent warn"><u>晴光说</u>场地长宽至少 1 米。说一句新的长宽，比如「12×9」，我按它出一版。</div>
+        <div class="line agent warn"><u>Bingo说</u>场地长宽至少 1 米。说一句新的长宽，比如「12×9」，我按它出一版。</div>
       </div>
       <p class="src">上界与文案：<b>lib/venue-shell.ts</b> <code>VENUE_MAX_DIMENSION_M</code> = <code>MAX_ROOM_DIMENSION</code>（constants.ts:34）· 退回读数：<b>panels/agent-panel.tsx</b> <code>revertScaleToCanvas</code></p>
     </div>
@@ -314,7 +314,7 @@
       <h4>户外的场地</h4>
       <div class="dlg">
         <div class="line user"><u>你说</u>50 人户外市集，40×30</div>
-        <div class="line agent"><u>晴光说</u>场地立起来了：40 × 30 m，户外场地，这一版先不砌墙也不开门，层高没听你说，先按默认 4 m。</div>
+        <div class="line agent"><u>Bingo说</u>场地立起来了：40 × 30 m，户外场地，这一版先不砌墙也不开门，层高没听你说，先按默认 4 m。</div>
         <div class="line canvas"><u>画布上看到</u>零墙零门，只报范围；简报的室内外自动切成户外。</div>
       </div>
       <p class="note">为什么不假造一个入口：真相字段 <code>mainEntrance.openingId</code> 必须指向真实开口。宁可不报入口，也不编一个。</p>
@@ -327,7 +327,7 @@
       <p class="why">只加点名的那几件，仍然只出候选。放得下几件就报几件，不假装全放上了。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>加两把椅子</div>
-        <div class="line agent"><u>晴光说</u>在这版上又加了椅子：<s>下一行是同一张卡的读数</s> 绿框是新摆的 2 件</div>
+        <div class="line agent"><u>Bingo说</u>在这版上又加了椅子：<s>下一行是同一张卡的读数</s> 绿框是新摆的 2 件</div>
         <div class="line agent warn"><u>或者</u>按你说的加 2 件椅子，只放得下 1 件：</div>
         <div class="line canvas"><u>画布上看到</u>只有一把椅子的绿框；另一件没落点，<code>findAdditionSpot</code> 返回 null 就直说放不下。</div>
       </div>
@@ -359,9 +359,9 @@
       <div class="dlg">
         <div class="line user"><u>你说</u><s>点绿框上的「确认布置」</s></div>
         <div class="line canvas"><u>画布上看到</u>一次 <code>applyLayout</code> 全量落盘，件件可拖；撤销一步能整体退回这一版。</div>
-        <div class="line agent"><u>晴光说</u>这一版布置<s>卡上读数：件数、座数、重叠告警。绿钮收回。</s></div>
+        <div class="line agent"><u>Bingo说</u>这一版布置<s>卡上读数：件数、座数、重叠告警。绿钮收回。</s></div>
         <div class="line user"><u>你说</u><s>然后你在画布上按了 Ctrl+Z，或手动拖开了一件</s></div>
-        <div class="line agent"><u>晴光说</u>画布改过了（撤销或手动调整），「这一版布置」的卡我收了；要再出一版随时说。</div>
+        <div class="line agent"><u>Bingo说</u>画布改过了（撤销或手动调整），「这一版布置」的卡我收了；要再出一版随时说。</div>
         <div class="line canvas"><u>画布上看到</u>卡按内容比较收回，右栏不停在旧态。</div>
       </div>
       <p class="src">失效判定：<b>panels/agent-panel.tsx</b>（提案期间画布 identity 比较 / 确认后内容比较）</p>
@@ -372,7 +372,7 @@
       <div class="dlg">
         <div class="line agent"><u>正在出方案</u>正在摆桌椅 · <s>右侧一颗文字链「停一下」</s></div>
         <div class="line user"><u>你说</u>停一下</div>
-        <div class="line agent"><u>晴光说</u>先停在这儿了，预览收回、画布没动。要接着看就点「接着摆」。</div>
+        <div class="line agent"><u>Bingo说</u>先停在这儿了，预览收回、画布没动。要接着看就点「接着摆」。</div>
         <div class="line agent"><u>右栏</u>停在第 3 步 · 接着摆 · 不要了</div>
         <div class="line user"><u>你说</u>接着摆</div>
         <div class="line canvas"><u>画布上看到</u>从第 3 步的帧接着推，前面摆好的不重演。</div>
@@ -384,7 +384,7 @@
       <h4>「这次没出成」</h4>
       <div class="dlg">
         <div class="line canvas"><u>画布上看到</u>顶部一颗琥珀 pill「! 这次没出成，场地和设置都还在」</div>
-        <div class="line agent warn"><u>晴光说</u>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</div>
+        <div class="line agent warn"><u>Bingo说</u>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</div>
       </div>
       <p class="note">重试是重跑上一句，不另开一个生成入口——对话仍是唯一入口。</p>
     </div>
@@ -394,9 +394,9 @@
       <p class="why">六类几何问题按固定顺序排：重叠 · 压墙/柱 · 出界 · 门前留空 · 桌间距过近 · 座椅拉不开。阈值：起身 0.45 m · 通行 0.9 m · 聚簇 1.8 m · 最近桌 1.6 m。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>看看哪里有问题</div>
-        <div class="line agent"><u>晴光说</u>没有重叠，也没超出场地。<s>有问题就报件数并黄色标出：「3 件物料重叠或超出场地，画布上已用黄色标出。」</s></div>
+        <div class="line agent"><u>Bingo说</u>没有重叠，也没超出场地。<s>有问题就报件数并黄色标出：「3 件物料重叠或超出场地，画布上已用黄色标出。」</s></div>
         <div class="line user"><u>你说</u>挪一下第三件</div>
-        <div class="line agent"><u>晴光说</u>按这条改：主桌与背景板重叠（改完还剩 2 条要处理）。<s>蓝框是新位置，琥珀线框是原位</s></div>
+        <div class="line agent"><u>Bingo说</u>按这条改：主桌与背景板重叠（改完还剩 2 条要处理）。<s>蓝框是新位置，琥珀线框是原位</s></div>
         <div class="line agent warn"><u>算不出改法时</u>这条我算不出稳妥改法，先不硬挪。自己拖一下，或把周围腾一点空间再试。</div>
         <div class="line agent warn"><u>画布刚被改过</u>画布刚变过，这条现在不成立了。再说一句「看看哪里有问题」，我重新体检。</div>
       </div>
@@ -410,7 +410,7 @@
         <div class="line user"><u>你说</u>出物料清单</div>
         <div class="line agent warn"><u>画布还空着</u>画布上还没有物料，清单是空的。说一句「出方案」我先摆一版，或者说「加两把椅子」直接往上加。</div>
         <div class="line user"><u>你说</u>换区</div>
-        <div class="line agent warn"><u>晴光说</u>换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。要换布局就说「换一版」；单件位置在画布上直接拖。这条先记进暂留清单。</div>
+        <div class="line agent warn"><u>Bingo说</u>换区现在没有可点的控件：画布只有一整块场地，没有分区可切，按区域整组搬物料也还没有入口。要换布局就说「换一版」；单件位置在画布上直接拖。这条先记进暂留清单。</div>
       </div>
     </div>
 
@@ -419,10 +419,10 @@
       <div class="dlg">
         <div class="line user"><u>你说</u>导出给搭建方</div>
         <div class="line agent warn"><u>这一版还没确认</u>这一版还没稳，确认先不亮。等预览停住再说导出。</div>
-        <div class="line agent"><u>晴光说</u>好，我在本机生成完整活动交接。</div>
+        <div class="line agent"><u>Bingo说</u>好，我在本机生成完整活动交接。</div>
         <div class="line agent"><u>接着</u>交接文件已下载，可离线打开与打印；只在这台机器上生成，由你交给搭建方。</div>
         <div class="line user"><u>你说</u>先不用导</div>
-        <div class="line agent"><u>晴光说</u>好，先不导出。要导的时候说一声就行。</div>
+        <div class="line agent"><u>Bingo说</u>好，先不导出。要导的时候说一声就行。</div>
       </div>
       <p class="note">「完整活动交接包含需求、物料、制作和点验，只在这台机器上生成。」——她从不代发客户链接，也不擅自离开画布。</p>
     </div>
@@ -433,11 +433,11 @@
       <p class="why">连接四态：离线引导 → 正在准备工作台 → 功能已开放 → 项目已连接。只有第四态让「说话」直接驱动云端出方案；卡片、确认闸、播报与本地<b>完全同一套</b>。</p>
       <div class="dlg">
         <div class="line user"><u>你说</u>80 人发布会，室内 12×9</div>
-        <div class="line agent"><u>晴光说</u>发布会 · 80 人 · 室内 108 ㎡ · 请出布置方案<s>拼成一句可核对的条件发给云，并带 requirePreview:true——本次运行永不自动落盘</s></div>
+        <div class="line agent"><u>Bingo说</u>发布会 · 80 人 · 室内 108 ㎡ · 请出布置方案<s>拼成一句可核对的条件发给云，并带 requirePreview:true——本次运行永不自动落盘</s></div>
         <div class="line canvas"><u>画布上看到</u>POST /projects/{id}/agent-runs 之后逐帧轮询，仍是绿框预览、仍是一颗「确认布置」。</div>
         <div class="line agent warn"><u>这期间别人改了场地 / 编辑权换代</u>场地、需求或编辑权在这期间变了，这版先别确认，重新出一版。</div>
         <div class="line user"><u>你说</u>停一下</div>
-        <div class="line agent"><u>晴光说</u>停了，云端任务取消，画布没动。要再出一版就说一句。</div>
+        <div class="line agent"><u>Bingo说</u>停了，云端任务取消，画布没动。要再出一版就说一句。</div>
       </div>
       <table style="margin-top:18px">
         <thead><tr><th>云侧规格</th><th>约定</th></tr></thead>
@@ -462,7 +462,7 @@
         <li>不擅自跳 <code>/projects</code>、外链或离开画布；不代发客户链接。</li>
         <li>不做跨项目长期记忆；不把某场活动的资料带到另一场。</li>
         <li>不在按钮旁堆说明书；不常驻「下一步」；空闲态零绿钮；不同时两颗绿。</li>
-        <li>不把对话进度升格成左轨第四图标——左轨永远三图标。</li>
+        <li>不把对话进度升格成左轨图标——左轨固定四格：幕景品牌标、Bingo、空间、物料。</li>
         <li>把西湖清趣、幕景宇宙、个人站的需求写进本仓。</li>
       </ul>
     </div>
@@ -472,10 +472,10 @@
     <h2>可见状态：一屏只说一件事</h2>
     <p class="lead">抬头状态点<b>只许两种说法</b>：做好了 / 发现问题。等你确认、正在出方案由头像和卡片自己说话，不重复一遍。状态靠换切图，不把角标叠画在头像上。</p>
     <div class="faces">
-      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40.png" alt="晴光默认"/><b>在线 · 等一句话</b><p>empty / dragHover / baseReady 等前置态</p></div>
-      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-ask.png" alt="晴光等你确认"/><b>等你确认</b><p>planProposed · generatePaused</p></div>
-      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-done.png" alt="晴光做好了"/><b>做好了</b><p>planReady / planEdited 且无重叠</p></div>
-      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-issue.png" alt="晴光发现问题"/><b>发现问题</b><p>失败 · 尺寸非法 · 文件不收 · 有重叠或提案被按住</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40.png" alt="Bingo默认"/><b>在线 · 等一句话</b><p>empty / dragHover / baseReady 等前置态</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-ask.png" alt="Bingo等你确认"/><b>等你确认</b><p>planProposed · generatePaused</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-done.png" alt="Bingo做好了"/><b>做好了</b><p>planReady / planEdited 且无重叠</p></div>
+      <div class="face"><img src="../../frontend/public/assets/assistant/qingguang-3d-40-issue.png" alt="Bingo发现问题"/><b>发现问题</b><p>失败 · 尺寸非法 · 文件不收 · 有重叠或提案被按住</p></div>
     </div>
     <h3>预览框的四种线</h3>
     <div class="keys">
@@ -510,7 +510,7 @@
       <tbody>
         <tr><td>模型开关</td><td><code>NEXT_PUBLIC_AGENT_ENABLED=1</code> 没写进 <code>.env.example</code>，本机默认关——真实抽槽要显式打开，日常跑的是规则版兜底。</td><td><span class="tag ask">配置</span></td></tr>
         <tr><td>100 / 500 两档</td><td>对话输入与卡片口径认到 500 m（<code>DIM_MAX</code>，有测试钉着），立墙只认 100 m（编辑器全局硬闸）。本次把挡下时的话修顺了，两档本身是有意分工。</td><td><span class="tag ask">分工</span></td></tr>
-        <tr><td>换区</td><td>没有分区层，没有可点的换区控件，按区域整组搬物料还没入口。晴光如实说清并给替代路径。</td><td><span class="tag gap">未做</span></td></tr>
+        <tr><td>换区</td><td>没有分区层，没有可点的换区控件，按区域整组搬物料还没入口。Bingo如实说清并给替代路径。</td><td><span class="tag gap">未做</span></td></tr>
         <tr><td>图纸识别</td><td>DXF 矢量层 = 下一 MVP；DWG/PDF 本期不收。底图只当参照，尺寸要么说一句，要么明确标「估的」。</td><td><span class="tag gap">下期</span></td></tr>
         <tr><td>云端读数</td><td><code>keptLocked</code> 与 <code>dropped</code> 恒为 0——服务端只报「谁变了」，这两项本地才算得出。</td><td><span class="tag ask">差异</span></td></tr>
         <tr><td>体检覆盖面</td><td>只查画布几何六类；起身空间只在桌旁量，隔墙边没量；入口靠图上开口，认不出就不判门前留空。</td><td><span class="tag ask">覆盖面</span></td></tr>
@@ -521,14 +521,14 @@
 
   <section>
     <h2>地图支路硬钉：定场 ≠ 重建素材</h2>
-    <p class="lead">户外地图支路已接通采集单与左栏「场地观感」。晴光说话时必须把定场与重建分开，不许暗示卫星图能出 3D。</p>
+    <p class="lead">户外地图支路已接通采集单与左栏「场地观感」。Bingo说话时必须把定场与重建分开，不许暗示卫星图能出 3D。</p>
     <div class="nails">
       <div class="nail">
         <b>高德只定场 + 采集单</b>
         <p>圈画报真实米数、立壳体、给出沿边界站位。不说「用地图直接重建」。用户问卫星能不能当素材时，直接拒绝并指向现场视频/照片。</p>
         <div class="dlg">
           <div class="line user"><u>你说</u>能不能用卫星图重建这块地</div>
-          <div class="line agent"><u>晴光说</u>不能。卫星和高德图只用来圈范围；重建要你按采集单在现场拍视频或绕场照片，再进左轨「观感 · 场地重建」。</div>
+          <div class="line agent"><u>Bingo说</u>不能。卫星和高德图只用来圈范围；重建要你按采集单在现场拍视频或绕场照片，再进左轨「空间」里的「场地观感 · 场地重建」。</div>
         </div>
       </div>
       <div class="nail">
@@ -592,7 +592,7 @@
         <tr><td><span class="box"></span></td><td>「导出给搭建方」</td><td>未确认时绿钮不亮并给一句原因；确认后只在本机生成</td></tr>
         <tr><td><span class="box"></span></td><td>本机 mock 下打开右栏</td><td>常驻「演示环境 · 未连接真实 AI 模型」一条，不许摘</td></tr>
         <tr><td><span class="box"></span></td><td>看抬头状态点</td><td>只出现「做好了」/「发现问题」两种说法</td></tr>
-        <tr><td><span class="box"></span></td><td>数左轨图标</td><td>永远三图标；对话进度不升格成第四图标</td></tr>
+        <tr><td><span class="box"></span></td><td>数左轨图标</td><td>固定四格：幕景品牌标、Bingo、空间、物料；对话进度不再加图标</td></tr>
       </tbody>
     </table>
   </section>
@@ -616,8 +616,8 @@
   </section>
 
   <footer>
-    晴光 · Agent 对话规范 — 幕景 Scendance · 真相源为本仓代码 2026-10-30<br/>
-    所有「晴光说」逐字取自代码；所有件数与座数标注「按画布实测」，不作为固定承诺。
+    Bingo · Agent 对话规范 — 幕景 Scendance · 真相源为本仓代码 2026-10-30<br/>
+    所有「Bingo说」逐字取自代码；所有件数与座数标注「按画布实测」，不作为固定承诺。
   </footer>
 
 </div>

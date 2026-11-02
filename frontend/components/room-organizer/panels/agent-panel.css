@@ -199,7 +199,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-send { border: 1px solid transparent; width: 30px; height: 30px; border-radius: 50%; background: var(--ink, #141416); color: #fff; display: grid; place-items: center; transition: background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-send:hover:not(:disabled) { border-color: transparent; background: #2A2C31; transform: translateY(-1px); }
 .ap-send:disabled { color: var(--wk-ink-faint); background: var(--wk-plane); cursor: default; }
-/* 布置 / 生成：生成是蓝色字，和晴光的墨色发送分开。 */
+/* 布置 / 生成：生成是蓝色字，和Bingo的墨色发送分开。 */
 .ap-lane { display: inline-flex; align-items: center; border: 1px solid var(--wk-hair); border-radius: 999px; overflow: hidden; flex: none; }
 .ap-lane button { border: 0; background: transparent; padding: 2px 8px; font-size: var(--fs-p2); line-height: 20px; color: var(--wk-muted); cursor: pointer; transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec); }
 /* 选中的那一侧才是蓝色，布置 / 生成同一套；没选中的保持灰。 */
@@ -244,7 +244,11 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-workbench .is-docked-layout .sc-assistant-entry-host { display: none !important; }
 /* 琥珀警示回话：与新过程块同构（左竖线转警示色，不加底）。 */
 .ap-agent.is-amber { border-left: 2px solid var(--warn); color: var(--wk-ink); padding: 2px 0 2px 12px; border-radius: 0; background: transparent; border-top: 0; border-right: 0; border-bottom: 0; }
-#walk-exit { background: var(--wk-paper); border: 1px solid var(--wk-hair); color: var(--wk-ink); cursor: pointer; }
+/* 第一人称：顶部只留一组控件（全屏 + 退出），退出只说一次。 */
+.ap-walk-controls { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; }
+.ap-walk-controls .ap-canvas-pill { position: static; transform: none; padding: 4px 12px; }
+#walk-exit, #walk-fullscreen { background: var(--wk-paper); border: 1px solid var(--wk-hair); color: var(--wk-ink); cursor: pointer; }
+#walk-fullscreen[aria-pressed="true"] { background: var(--wk-ink); border-color: var(--wk-ink); color: var(--wk-paper); }
 .sc-workbench.is-walkthrough .sc-material-shelf { display: none !important; }
 
 .sc-agent-panel .btn-outline {

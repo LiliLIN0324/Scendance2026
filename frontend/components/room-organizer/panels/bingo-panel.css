@@ -1,4 +1,4 @@
-/* 左栏 Bingo / 场地等与晴光列同宽的侧栏壳 */
+/* 左栏 Bingo / 场地等与Bingo列同宽的侧栏壳 */
 .sc-workbench .sc-rail-side-panel {
   flex: 0 0 clamp(320px, 32vw, 400px);
   width: clamp(320px, 32vw, 400px);

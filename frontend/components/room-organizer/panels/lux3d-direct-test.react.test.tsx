@@ -98,7 +98,7 @@ describe('Aholo 产品化壳体', () => {
     offline();
     render(<Lux3dDirectTest/>);
     expect(screen.getByRole('heading', { name: '场地观感' })).toBeTruthy();
-    expect(screen.getAllByText(/物料生成在晴光的「物料生成」里/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/物料生成在 Bingo 的「物料生成」里/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/主路径：地图圈画/).length).toBeGreaterThan(0);
     expect(screen.getByText(/卫星不可作重建素材/)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Aholo 接口测试' })).toBeNull();

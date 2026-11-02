@@ -14,7 +14,7 @@ import { buildVenueShell, type ScaleOrigin } from './venue-shell';
 import type { PlanArtifact } from './plan-artifact';
 
 /**
- * 晴光出布置方案用的两块纯函数：先立场地（T-01 的真相），再在立好的壳体上算一份**没写进画布**的候选。
+ * Bingo出布置方案用的两块纯函数：先立场地（T-01 的真相），再在立好的壳体上算一份**没写进画布**的候选。
  *
  * 对话四步 ② 的硬钉是「建议 → 预览 → 确认」，所以布置这一层只算不写：每一步给一份快照，
  * 画布按快照画绿框（新摆）/ 红框（将被撤掉）预览，用户点「确认布置」才由调用方一次性 applyLayout。
