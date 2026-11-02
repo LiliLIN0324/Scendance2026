@@ -2,13 +2,10 @@
 
 import type { RefObject } from 'react';
 import { bingoHeaderStatus, useAgent } from './agent-panel';
-import { BingoGlyph } from './rail-glyphs';
-
-/** 对话顶栏与画布浮标共用的 Bingo 切图；左轨只放形体，不再放头像。 */
-export const BINGO_MASCOT = '/assets/assistant/qingguang-3d-40.png';
+import { RailAvatar } from './rail-avatar';
 
 /**
- * 左轨第二格：圆环形体，打开旁边的 Bingo 对话，不切换模式。
+ * 左轨第二格：球的形体，打开旁边的 Bingo 对话，不切换模式。
  * 右下状态点与对话头同一套 tone。
  */
 export function BingoRailButton({ open, onOpen, buttonRef }: {
@@ -29,7 +26,7 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
       data-tip="Bingo"
       onClick={onOpen}
     >
-      <BingoGlyph />
+      <RailAvatar form="ball" size={28} />
       <span className={`sc-rail-bingo-dot is-${status.tone}`} aria-hidden="true" />
     </button>
   );

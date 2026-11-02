@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * 画布左下角「设置」：只放新手指引、GitHub、隐私政策。
- * 团队与权限已经移到旁边的「团队」按钮，设置不再承载团队内容。
+ * 画布左下角「设置」：切回官网、新手指引、GitHub、隐私政策。
+ * 团队与权限已经并入账户中心左栏，设置这里只留切回官网、指引、隐私。
  */
-import { BookOpen, Settings, ShieldCheck } from 'lucide-react';
+import { BookOpen, Home, Settings, ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
+const HOME_URL = '/introduction';
 const GETTING_STARTED_URL = '/guide';
 const GITHUB_URL = 'https://github.com/LiliLIN0324/Scendance2026';
 // 隐私政策页面尚未上线；先用仓库地址占位，待真实链接就绪后替换。
@@ -39,6 +40,11 @@ export function SettingsMenu({ buttonRef }: { buttonRef?: RefObject<HTMLButtonEl
       <Settings size={22} aria-hidden="true"/>
     </button>
     {open && <div className="sc-tool-pop sc-settings-pop" role="dialog" aria-label="设置">
+      {/* 官网是站内页面，同页返回落地页；其余三条去外部网站，另开标签。 */}
+      <a className="sc-settings-link" href={HOME_URL}>
+        <Home size={15} aria-hidden="true"/><span>切回官网</span>
+      </a>
+      <span className="sc-more-sep" aria-hidden="true"/>
       <a className="sc-settings-link" href={GETTING_STARTED_URL} target="_blank" rel="noopener noreferrer">
         <BookOpen size={15} aria-hidden="true"/><span>新手指引</span>
       </a>

@@ -19,6 +19,7 @@ export function SpacePanel({
   layout,
   onApply,
   environment,
+  variant = 'shelf',
 }: {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
@@ -28,6 +29,8 @@ export function SpacePanel({
     onSelect(assetId: string, name: string): void;
     onClear(): void;
   };
+  /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
+  variant?: 'shelf' | 'card';
 }): JSX.Element {
   const hostRef = useRef<HTMLElement>(null);
   const [confirm, setConfirm] = useState(false);
@@ -45,9 +48,10 @@ export function SpacePanel({
     if (isUntouched(layout)) startBlank();
     else setConfirm(true);
   };
+  const card = variant === 'card';
   return (
-    <aside ref={hostRef} className="sc-library sc-compact-shelf sc-space-panel" aria-label="空间">
-      <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>
+    <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
+      {!card && <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>}
       <div className="sc-space-body">
         <header className="sc-space-head">
           <div>

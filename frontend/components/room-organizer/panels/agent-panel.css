@@ -26,7 +26,6 @@
 .ap-session-identity { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .ap-session-avatar-slot { position: relative; display: inline-flex; flex: 0 0 36px; width: 36px; height: 36px; opacity: 0; transition: opacity 120ms var(--ease-spec, ease); }
 .ap-session-avatar-slot.is-visible { opacity: 1; }
-.ap-session-avatar { width: 36px; height: 36px; display: block; object-fit: cover; border-radius: 50%; }
 .ap-session-title {
   margin: 0; flex: 1; min-width: 0;
   font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; color: var(--wk-ink);
@@ -420,3 +419,67 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
   .sc-gen-fold { transition: none; }
   .ap-menu, .sc-gen-confirm { animation: none; }
 }
+
+/* ── 四个 agent 共用一个面板：切到空间/物料/总控时，整栏变成对应卡片 ── */
+.sc-agent-panel:focus { outline: none; }
+.ap-agent-surface {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 12px;
+}
+.ap-agent-card { display: flex; flex-direction: column; gap: 14px; }
+.ap-agent-control {
+  border: 1px solid var(--wk-hair); border-radius: var(--r-md);
+  background: var(--wk-paper); padding: 16px;
+}
+.ap-control-summary { display: flex; flex-direction: column; gap: 4px; }
+.ap-control-kicker { margin: 0; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-muted); }
+.ap-control-summary strong { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; }
+.ap-control-summary p { margin: 0; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-muted); }
+.ap-agent-links { display: flex; flex-direction: column; gap: 6px; }
+.ap-agent-link {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-md);
+  background: var(--wk-paper); color: var(--wk-ink); text-align: left; cursor: pointer;
+}
+.ap-agent-link:hover { background: var(--wk-plane); }
+.ap-agent-link:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; }
+.ap-agent-link span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ap-agent-link strong { font-size: var(--fs-p1); line-height: var(--lh-p1); font-weight: 600; }
+.ap-agent-link small { font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-muted); }
+
+/* 嵌进面板的空间/物料卡：去掉抽屉外框和固定高度，内容跟面板一起滚。 */
+.sc-agent-panel .ap-agent-surface .sc-library.is-card {
+  display: block; height: auto; min-height: 0; overflow: visible;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0;
+}
+.sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-library-body,
+.sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-library-content,
+.sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-library-materials {
+  display: block; height: auto; min-height: 0; overflow: visible; padding: 0;
+}
+.sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-material-rail {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px; height: auto; flex: none; overflow: visible; mask-image: none;
+}
+.sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-material-rail > .sc-material-tile {
+  width: auto; height: 148px; flex: none;
+}
+.sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-material-rail > .sc-material-tile > .sc-material-card {
+  width: 100%; height: 100%;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-body {
+  height: auto; min-height: 0; overflow: visible; padding: 0;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-head h2 { display: none; }
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-library-presets,
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-board {
+  height: auto; min-height: 0; overflow: visible;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-rail {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px; height: auto; margin: 0; overflow: visible;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-tile {
+  flex: none; width: auto; height: 148px;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-card { height: 100%; }

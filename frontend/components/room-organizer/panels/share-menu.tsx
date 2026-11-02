@@ -9,8 +9,10 @@ import QRCode from 'qrcode';
 import { ClipboardCheck, FileDown, Link2, PackageOpen, QrCode, Share2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
+import { planDrawOrder } from '../lib/plan-order';
+import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
 import { isStructuralMarker } from '../lib/structural-layout';
-import type { RoomLayout } from '../lib/types';
+import type { FurnitureItem, RoomLayout } from '../lib/types';
 
 export interface PublishedLink {
   /** 手机扫码即可打开的只读方案页。 */
@@ -178,7 +180,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
 
   return <div className="sc-tool-menu" ref={rootRef}>
     <button type="button" id="tool-share" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
-      <Share2 size={24} aria-hidden="true"/>
+      <Share2 size={20} aria-hidden="true"/>
     </button>
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="发布">
       <section className="sc-publish-preview" aria-label="方案预览">
@@ -243,25 +245,88 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   </div>;
 }
 
-/** 按米缩放的平面缩略图；结构标记不画，物料按自身颜色。 */
+/**
+ * 按米缩放的平面缩略图，和画布同一套 1.5m 剖面：切到的高家具填灰，
+ * 矮家具只留浅色底和线，开洞不填。结构标记不画。
+ */
 function PlanPreview({ layout }: { layout: RoomLayout }): JSX.Element {
   const width = Math.max(layout.width || 0, 0.1);
   const depth = Math.max(layout.height || 0, 0.1);
   const floor = layout.floors?.[0];
-  const items = (floor?.items ?? []).filter(item => !isStructuralMarker(item));
+  const items = planDrawOrder((floor?.items ?? []).filter(item => !isStructuralMarker(item)));
+  // 1px ≈ 卡片宽度 260 上的描边，换算成米。
+  const unit = Math.max(width, depth) / 260;
   return <svg className="sc-publish-plan" viewBox={`0 0 ${width} ${depth}`} role="img" aria-label={`${titleOf(layout)} 的平面预览`} preserveAspectRatio="xMidYMid meet">
     <rect x={0} y={0} width={width} height={depth} className="sc-publish-plan-ground"/>
-    {(floor?.zones ?? []).map(zone => <rect key={zone.id} x={zone.x + width / 2} y={zone.z + depth / 2} width={Math.max(zone.w, 0.02)} height={Math.max(zone.d, 0.02)} fill={zone.color} opacity={0.16}/>)}
-    {items.map(item => {
-      const itemWidth = Math.max(item.width || 0, 0.02);
-      const itemDepth = Math.max(item.depth || 0, 0.02);
-      const x = (item.position?.x ?? 0) + width / 2 - itemWidth / 2;
-      const y = (item.position?.z ?? 0) + depth / 2 - itemDepth / 2;
-      const turn = Number.isFinite(item.rotation) ? (item.rotation ?? 0) * 180 / Math.PI : 0;
-      return <rect key={item.id} x={x} y={y} width={itemWidth} height={itemDepth} rx={Math.min(itemWidth, itemDepth) * 0.12}
-        fill={item.color || '#9aa39c'} opacity={0.92} transform={turn ? `rotate(${turn} ${x + itemWidth / 2} ${y + itemDepth / 2})` : undefined}/>;
-    })}
+    {(floor?.zones ?? []).map(zone => <rect key={zone.id} x={zone.x + width / 2} y={zone.z + depth / 2} width={Math.max(zone.w, 0.02)} height={Math.max(zone.d, 0.02)} fill={zone.color} opacity={0.12}/>)}
+    <rect x={unit} y={unit} width={Math.max(width - unit * 2, 0.01)} height={Math.max(depth - unit * 2, 0.01)} fill="none" stroke="#5f655f" strokeWidth={unit * 1.8}/>
+    {(floor?.interiorWalls ?? []).map(wall => <line key={wall.id}
+      x1={wall.x1 + width / 2} y1={wall.z1 + depth / 2}
+      x2={wall.x2 + width / 2} y2={wall.z2 + depth / 2}
+      stroke="#5f655f" strokeWidth={Math.max(unit * 2.2, wall.thickness ?? 0)} strokeLinecap="butt"/>)}
+    {items.map(item => <PlanPreviewItem key={item.id} item={item} width={width} depth={depth} unit={unit}/>)}
   </svg>;
+}
+
+function PlanPreviewItem({ item, width, depth, unit }: { item: FurnitureItem; width: number; depth: number; unit: number }): JSX.Element {
+  const w = Math.max(item.width || 0, 0.02);
+  const d = Math.max(item.depth || 0, 0.02);
+  const cx = (item.position?.x ?? 0) + width / 2;
+  const cy = (item.position?.z ?? 0) + depth / 2;
+  const turn = Number.isFinite(item.rotation) ? (item.rotation ?? 0) * 180 / Math.PI : 0;
+  const cut = isPlanCut(item);
+  const symbol = planSymbol(item);
+  const ink = cut ? '#4f554f' : '#7d837d';
+  return <g transform={turn ? `rotate(${-turn} ${cx} ${cy})` : undefined}>
+    {symbol !== 'opening' && <rect x={cx - w / 2} y={cy - d / 2} width={w} height={d}
+      fill={cut ? '#c3c7c2' : item.color || '#9aa39c'}
+      fillOpacity={cut ? 1 : symbol === 'rug' ? 0.1 : 0.14}/>}
+    <rect x={cx - w / 2} y={cy - d / 2} width={w} height={d} fill="none"
+      stroke={cut ? '#5f655f' : '#7d837d'} strokeWidth={cut ? unit * 1.4 : unit}
+      {...(symbol === 'rug' ? { strokeDasharray: `${unit * 5} ${unit * 3}` } : {})}/>
+    <g transform={`translate(${cx} ${cy})`}>
+      <PlanPreviewSymbol kind={symbol} w={w} d={d} unit={unit} ink={ink}/>
+    </g>
+  </g>;
+}
+
+function PlanPreviewSymbol({ kind, w, d, unit, ink }: { kind: PlanSymbol; w: number; d: number; unit: number; ink: string }): JSX.Element | null {
+  if (kind === 'none' || kind === 'rug' || kind === 'stairs') return null;
+  if (w < unit * 7 || d < unit * 7) {
+    if (kind === 'equipment' || kind === 'person' || kind === 'plant') {
+      return <circle cx={0} cy={0} r={unit * 1.4} fill={ink}/>;
+    }
+    return null;
+  }
+  const halfW = w / 2;
+  const halfD = d / 2;
+  const inset = Math.min(unit * 4, Math.min(w, d) * 0.16);
+  const stroke = { stroke: ink, strokeWidth: unit, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (kind) {
+    case 'seat':
+      return <path {...stroke} d={`M${-halfW + inset} ${-halfD + inset}H${halfW - inset}M${-halfW + inset} ${-halfD + inset * 2}H${halfW - inset}`}/>;
+    case 'sofa':
+      return <path {...stroke} d={`M${-halfW + inset} ${-halfD + inset}H${halfW - inset}M${-halfW + inset} ${-halfD + inset * 2}H${halfW - inset}M0 ${-halfD + inset * 2}V${halfD - inset}`}/>;
+    case 'table':
+      return <rect {...stroke} x={-halfW + inset} y={-halfD + inset} width={w - inset * 2} height={d - inset * 2}/>;
+    case 'bed':
+      return <path {...stroke} d={`M${-halfW + inset} ${-halfD + inset}h${w - inset * 2}v${d * 0.26}h${-(w - inset * 2)}zM${-halfW + inset} ${-halfD + d * 0.34}H${halfW - inset}`}/>;
+    case 'plant':
+      return <g {...stroke}>
+        <circle cx={0} cy={0} r={Math.min(w, d) * 0.3}/>
+        <path d={`M${-unit * 1.6} 0H${unit * 1.6}M0 ${-unit * 1.6}V${unit * 1.6}`}/>
+      </g>;
+    case 'storage':
+      return <path {...stroke} d={`M${-halfW + inset} ${halfD - inset}H${halfW - inset}`}/>;
+    case 'equipment':
+      return <circle {...stroke} cx={0} cy={0} r={Math.max(unit * 1.6, Math.min(w, d) * 0.2)}/>;
+    case 'opening':
+      return <path {...stroke} d={`M${-halfW} 0H${halfW}`}/>;
+    case 'person':
+      return <circle {...stroke} cx={0} cy={0} r={Math.max(unit * 1.8, Math.min(w, d) * 0.28)}/>;
+    default:
+      return null;
+  }
 }
 
 const LINK_KEY = 'scendance.publishedLink.v1.';

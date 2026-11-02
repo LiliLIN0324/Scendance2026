@@ -32,7 +32,7 @@ describe('左轨主入口面板', () => {
   it('mutually excludes Bingo dialogue from side panels in render guards', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).toContain('agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel');
-    expect(source).toContain('bingoPanelOpen = !agentCollapsed && !agentClosing && !sidePanel');
+    expect(source).toContain('agentPanelOpen = !agentCollapsed && !agentClosing && !sidePanel');
     expect(source).toContain('agentPanelVisible && <AgentPanel');
   });
 });

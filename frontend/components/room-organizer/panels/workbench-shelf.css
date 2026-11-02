@@ -516,6 +516,8 @@
 /* ── 导出效果图弹层 · 图纸白 ──────────────────────────────────────────
    设计稿：白纸浮层、描边选项、绿色只给主操作与选中态。 */
 .sc-workbench .sc-tool-pop.sc-export-pop {
+  /* 导出钮在右轨底部，弹层从按钮下沿向上展开，别掉出视口。 */
+  top: auto; bottom: 0;
   min-width: 216px; gap: 12px; padding: 14px;
   background:var(--wk-paper); border:1px solid var(--wk-hair); border-radius:var(--r-md);
   box-shadow:var(--e1);
