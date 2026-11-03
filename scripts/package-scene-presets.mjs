@@ -8,6 +8,23 @@ function readDocument(buffer) {
   return JSON.parse(buffer.subarray(20, 20 + buffer.readUInt32LE(12)).toString());
 }
 
+/**
+ * The workbench only reads `extras.displayName` on `Preset_Object_*` nodes.
+ * Everything else in `extras` is upstream authoring/viewer metadata (inventory,
+ * seat lists, current phase, people visibility) that the runtime never touches,
+ * so it is dropped at build time to keep the JSON chunk lean.
+ */
+function stripAuthoringExtras(document) {
+  for (const node of document.nodes ?? []) {
+    if (!node.extras) continue;
+    const displayName = node.extras.displayName;
+    const keep = /^Preset_Object_\d+$/.test(node.name) && typeof displayName === 'string';
+    if (keep) node.extras = { displayName };
+    else delete node.extras;
+  }
+  return document;
+}
+
 /** Replaces the JSON chunk; the binary chunk (geometry + textures) is copied verbatim. */
 function writeDocument(buffer, document) {
   const json = Buffer.from(JSON.stringify(document));
@@ -401,7 +418,7 @@ export function convertArchivePreset(buffer, key, plan) {
 
   root.children = [structureIndex, nodes.length - 1];
   SKIPPED_FIXTURES.set(key, skipped);
-  return writeDocument(buffer, document);
+  return writeDocument(buffer, stripAuthoringExtras(document));
 }
 
 /* ------------------------------------------------------------------------- *
@@ -471,7 +488,7 @@ export function convertGymOrPopup(buffer, key) {
   nodes.push({ name: 'Preset_Objects', children: objects });
   // Roof / overhead rig stay in the original archive; the editable view is open.
   root.children = [structureIndex, nodes.length - 1];
-  const json = Buffer.from(JSON.stringify(document));
+  const json = Buffer.from(JSON.stringify(stripAuthoringExtras(document)));
   const padded = Buffer.alloc(Math.ceil(json.length / 4) * 4, 0x20);
   json.copy(padded);
   const binary = buffer.subarray(20 + length);

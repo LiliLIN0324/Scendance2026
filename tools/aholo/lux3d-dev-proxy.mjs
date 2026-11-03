@@ -219,7 +219,7 @@ function fileAssetStore(dir) {
 
 // 注入 key / fetch 供测试使用；导入本模块不读取环境、不读 .env、不创建监听。
 export function createServer({
-  key = '', base = LUX_BASE, worldBase = WORLD_BASE, fetchImpl = globalThis.fetch,
+  key = '', base = LUX_BASE, worldBase = WORLD_BASE, fetchImpl = globalThis.fetch, amapSecurity = '',
   assets = fileAssetStore(fileURLToPath(new URL('../../.cache/aholo/', import.meta.url))),
 } = {}) {
   base = normalizeBase(base);
@@ -441,9 +441,12 @@ export function createServer({
     const cropTop = Math.max(0, Math.min(mosaicH - 1, Math.round(nw.y - y0 * tile)));
     const cropW = Math.max(1, Math.min(mosaicW - cropLeft, Math.round(srcW)));
     const cropH = Math.max(1, Math.min(mosaicH - cropTop, Math.round(srcH)));
-    const bytes = await sharp({
+    // 先拼图再另起一次 sharp 做 extract：同一管线里 extract 会再次走 composite，
+    // 单瓦片时触发 “Image to composite must have same dimensions or smaller”。
+    const mosaic = await sharp({
       create: { width: mosaicW, height: mosaicH, channels: 3, background: { r: 20, g: 30, b: 20 } },
-    }).composite(loaded).extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH }).resize(outW, outH).jpeg({ quality: 86 }).toBuffer();
+    }).composite(loaded).png().toBuffer();
+    const bytes = await sharp(mosaic).extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH }).resize(outW, outH).jpeg({ quality: 86 }).toBuffer();
     return { bytes, type: 'image/jpeg' };
   }
 
@@ -516,6 +519,51 @@ export function createServer({
     return { bytes, type: 'image/jpeg' };
   }
 
+  // 高德 JS Key 的域名白名单通常只放行线上域名，localhost 会回 10006（INVALID_USER_DOMAIN）并用 JSON 顶掉脚本。
+  // dev 代理带线上 Referer 回源，本机才能完整跑地图选址；只在本机监听，线上不经过这里。
+  const AMAP_REFERER = process.env.AMAP_REFERER || 'https://scendance.lilicoding.space/';
+
+  async function fetchAmapScript(searchParams) {
+    const target = new URL('https://webapi.amap.com/maps');
+    for (const name of ['v', 'key', 'plugin']) {
+      const value = searchParams.get(name);
+      if (value) target.searchParams.set(name, value);
+    }
+    if (!target.searchParams.get('key')) throw new HttpError(400, '缺 key');
+    const res = await fetch(target, {
+      headers: { Referer: AMAP_REFERER, 'User-Agent': 'Mozilla/5.0 ScendanceLocalProxy', Accept: '*/*' },
+      signal: AbortSignal.timeout(30000),
+    });
+    const type = (res.headers.get('content-type') ?? '').toLowerCase();
+    if (!res.ok || !type.includes('javascript')) {
+      const detail = (await res.text().catch(() => '')).slice(0, 200);
+      throw new HttpError(502, `高德脚本被拒（${res.status}）：${detail || '非 JS 响应'}`);
+    }
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
+  // 安全密钥只在真正有地图服务请求时才读，避免启动阶段多碰一个 env 文件。
+  let amapSecurityCode = amapSecurity;
+  async function resolveAmapSecurity() {
+    if (!amapSecurityCode) {
+      amapSecurityCode = await readEnvFile('NEXT_PUBLIC_AMAP_SECURITY_CODE', new URL('../../frontend/.env.local', import.meta.url));
+    }
+    return amapSecurityCode;
+  }
+
+  async function fetchAmapService(pathname, searchParams) {
+    const target = new URL(`https://restapi.amap.com${pathname.replace(/^\/_AMapService/, '')}`);
+    target.search = searchParams.toString();
+    // 本机不把安全密钥交给页面，由代理回源时补上，等价于线上页面的安全模式。
+    const security = await resolveAmapSecurity();
+    if (security && !target.searchParams.has('jscode')) target.searchParams.set('jscode', security);
+    const res = await fetch(target, {
+      headers: { Referer: AMAP_REFERER, 'User-Agent': 'Mozilla/5.0 ScendanceLocalProxy' },
+      signal: AbortSignal.timeout(30000),
+    });
+    return { status: res.status, type: res.headers.get('content-type') ?? 'application/json', body: await res.text() };
+  }
+
   return createHttpServer({ requestTimeout: 360000, headersTimeout: 10000 }, async (req, res) => {
     let origin = '';
     try {
@@ -548,7 +596,28 @@ export function createServer({
         return;
       }
       let result;
-      if (req.method === 'GET' && url.pathname === '/amap-static') {
+      if (req.method === 'GET' && url.pathname === '/amap-js') {
+        const bytes = await fetchAmapScript(url.searchParams);
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Content-Length': String(bytes.length),
+          'Cache-Control': 'no-store',
+          Vary: 'Origin',
+          'Access-Control-Allow-Origin': origin || '*',
+        });
+        res.end(Buffer.from(bytes));
+        return;
+      } else if (req.method === 'GET' && url.pathname.startsWith('/_AMapService/')) {
+        const { status, type, body } = await fetchAmapService(url.pathname, url.searchParams);
+        res.writeHead(status, {
+          'Content-Type': type,
+          'Content-Length': String(Buffer.byteLength(body)),
+          Vary: 'Origin',
+          'Access-Control-Allow-Origin': origin || '*',
+        });
+        res.end(body);
+        return;
+      } else if (req.method === 'GET' && url.pathname === '/amap-static') {
         const { bytes, type } = await fetchAmapStatic(url.searchParams);
         res.writeHead(200, {
           'Content-Type': type,
@@ -644,16 +713,18 @@ export function createServer({
   });
 }
 
-async function readKey() {
-  if (process.env.LUX3D_API_KEY !== undefined) return process.env.LUX3D_API_KEY.trim();
+async function readEnvFile(name, fileUrl) {
+  if (process.env[name] !== undefined) return process.env[name].trim();
   try {
-    const source = await readFile(new URL('../../.env.local', import.meta.url), 'utf8');
-    const value = source.split(/\r?\n/).find(line => /^\s*LUX3D_API_KEY\s*=/.test(line))?.split('=').slice(1).join('=').trim() ?? '';
+    const source = await readFile(fileUrl, 'utf8');
+    const value = source.split(/\r?\n/).find(line => new RegExp(`^\\s*${name}\\s*=`).test(line))?.split('=').slice(1).join('=').trim() ?? '';
     return value.replace(/^(['"])(.*)\1$/, '$2');
   } catch {
     return '';
   }
 }
+
+const readKey = () => readEnvFile('LUX3D_API_KEY', new URL('../../.env.local', import.meta.url));
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   const key = await readKey();

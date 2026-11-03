@@ -1,8 +1,8 @@
-import { GRID_SIZE_METERS } from '../lib/constants';
 import { FLOOR_HEIGHT_METERS } from '../lib/types';
 import { BASEBOARD_DEPTH, BASEBOARD_HEIGHT, BASEBOARD_WALL_GAP, baseboardRuns } from './baseboard';
 import { removeAndDispose } from './builder-utils';
 import { buildFloorMaterial } from './floor-patterns';
+import { buildGridPlane } from './grid';
 import { mergeHoleRects, openingsForWall, type FloorOpening, type WallOpening } from './wall-openings';
 import { buildWallMaterial } from './wall-patterns';
 import type { FloorPattern, FloorPlanFitMode, WallId, WallPattern } from '../lib/types';
@@ -530,18 +530,12 @@ function buildWalls(
   }
 
   if (yOffset === 0 && ghostOpacity === undefined) {
-    // Match the snap grid: `snapToGrid` rounds world coordinates to multiples of
-    // GRID_SIZE_METERS about the origin. A GridHelper centres its divisions on
-    // the origin, so as long as each cell is exactly GRID_SIZE_METERS the drawn
-    // lines coincide with the snap positions. Size up to a whole number of cells
-    // that covers the room (with a little margin), then derive the divisions.
-    const span = Math.max(width, depth) * 1.5;
-    const divisions = Math.max(2, Math.ceil(span / GRID_SIZE_METERS));
-    const size = divisions * GRID_SIZE_METERS;
-    // 2026 grid tones: hairline greys on the paper-white canvas, slightly darker centre line.
-    const grid = new THREE.GridHelper(size, divisions, 0xdcdedf, 0xe6e7e8);
+    // 与 2D 平面图共用一套网格语言：0.5 m 单元、#ddd 发丝线，单元对齐世界原点
+    // （snapToGrid 也按 0.5 m 取整），只铺房间范围，不分中心线/次线两档灰度。
+    // 用贴图平面而不是 GridHelper：线宽在透视下自然衰减，也不会和地板发生深度竞争。
+    const grid = buildGridPlane(THREE, width, depth);
     grid.userData.type = ROOM_OBJECT_TAGS.Wall;
-    makeStatic(grid);
+    grid.position.y = yOffset + 0.01;
     scene.add(grid);
   }
 }

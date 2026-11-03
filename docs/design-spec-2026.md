@@ -18,11 +18,11 @@
 
 | Token | 色 | 用途 |
 |---|---|---|
-| `--green` | `#4A7C59` | 选中指示、发送、确认勾选 |
+| `--green` | `#4A7C59` | 选中指示、发送 |
 | `--green-deep` | `#3A6247` | 品牌绿 hover / 选中文字 |
 | `--green-pale` | `#EEF3EF` | 选中底（仅小面积控件） |
 
-品牌色全产品只允许 3 处：选中指示、发送键、确认勾选。禁止大面积绿底、绿色标题、绿色链接。
+品牌色全产品只允许 2 处：选中指示、发送键。确认勾选改用墨色 `Check`；禁止大面积绿底、绿色标题、绿色链接。
 
 **中性色（Neutral，9 阶）**
 
@@ -93,7 +93,7 @@ font-variant-numeric: tabular-nums;
 
 **断点**：`≤640` 移动阅读态 · `641–1024` 窄桌面（右栏折叠）· `1025–1440` 标准工作台 · `>1440` 大屏（画布上限 1280 居中）。
 
-**工作台栅格**：左轨 64px + 画布弹性（约 55–70%）+ Agent 300px，区块间 16px 硬边界、全高发丝线分隔；底部 MATERIALS 通栏 40px。
+**工作台栅格**：左轨 64px + 画布弹性（约 55–70%）+ Agent 300px，区块间 16px 硬边界、全高发丝线分隔；底部物料条通栏，桌面 180px、窄屏 140px，条内工具栏 28px。
 
 **间距步进（4px 基准）**：`4 / 8 / 12 / 16 / 24 / 32 / 48 / 64`
 Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24，分区间距用 32/48。
@@ -102,7 +102,7 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 
 **图标（lucide-react 1.48）**：UI 图标唯一来源。网页端不小于 16px——16（行内下限：文字旁、列表内）、20（按钮、输入、面板头）、24（左轨、画布工具条、缺省图与空态）；32 是唯一上限档，只给整页空态与引导卡的主图标，不进工具条、表格与按钮；12 只允许出现在徽标内的非交互小标记，不进按钮、菜单与可点区域；不用 14 / 18 / 22 这类中间值。统一 stroke 1.75（24 网格下比默认 2 更轻更稳）、圆头圆角；单色继承 `currentColor`，禁用态换 `--faint` 而不降透明度；不混用填充风格。
 
-页面当前在用 **65 枚 lucide**，另加左轨三枚自定义形体（见下），按语义分五组（逐枚样张见可视稿「五、图标索引」）：
+页面当前在用 **65 枚 lucide**，另加左轨四枚自定义形体（见下），按语义分五组（逐枚样张见可视稿「五、图标索引」）：
 
 | 组 | 枚数 | 图标（用途） |
 |---|---|---|
@@ -112,18 +112,18 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 | 编辑与操作 | 12 | `Copy` 复制、`Trash2` 删除、`Lock` 锁定、`Unlock` 解锁、`RotateCcw` 复位、`RefreshCw` 换一条、`Maximize2` 全屏、`Minimize2` 退出全屏、`SlidersHorizontal` 助手设置、`Plus` 新增、`Search` 搜索、`FlaskConical` 演示环境 |
 | 状态与通用 | 13 | `Check` 成功·选中、`ChevronDown` 展开、`ChevronUp` 收起、`ArrowLeft` 返回、`ArrowRight` 前进、`ArrowUpRight` 外链·打开、`LockKeyhole` 私有·只读、`Layers3` 图层、`Box` 物料·空间、`ImagePlus` 上传图片、`UserRound` 个人、`UsersRound` 团队、`Settings2` 设置 |
 
-**一义一标**：关闭只用 `X`，不用 `X` 表示删除（`Trash2` 专指删除）；成功/选中 `Check` · 加载 `Loader2`（唯一允许旋转的图标）· 新增 `Plus` · 搜索 `Search` · 更多 `MoreHorizontal` · 展开/收起 `ChevronDown`/`ChevronUp` · 全屏成对 `Maximize2`/`Minimize2` · 复位 `RotateCcw`、换一条 `RefreshCw`、重试 `RotateCw`（三者不混）· 撤销 `Undo2`、重做 `Redo2`（不与复位、重试混）· 放大/缩小 `ZoomIn`/`ZoomOut` · 锁定 `Lock`/`Unlock` · 发送 `ArrowUp` · 上传 `ImagePlus` · 外链 `ArrowUpRight`。左轨四格用品牌标与三枚自定义形体（见下），不再用 lucide 表示阶段；画布顶不加「布置 / 物料 / 执行资料」分段。场地重建用 `Scan`；不要用 `Layers`，它在 lucide-react 1.48 里是 `Layers3`（图层）的别名。新增图标前先查表，同义不复用两枚。
+**一义一标**：关闭只用 `X`，不用 `X` 表示删除（`Trash2` 专指删除）；成功/选中 `Check` · 加载 `Loader2`（唯一允许旋转的图标）· 新增 `Plus` · 搜索 `Search` · 更多 `MoreHorizontal` · 展开/收起 `ChevronDown`/`ChevronUp` · 全屏成对 `Maximize2`/`Minimize2` · 复位 `RotateCcw`、换一条 `RefreshCw`、重试 `RotateCw`（三者不混）· 撤销 `Undo2`、重做 `Redo2`（不与复位、重试混）· 放大/缩小 `ZoomIn`/`ZoomOut` · 锁定 `Lock`/`Unlock` · 发送 `ArrowUp` · 上传 `ImagePlus` · 外链 `ArrowUpRight`。左轨四格含总控门厅与 Bingo、空间、物料三枚形体（见下），不再用 lucide 表示阶段；画布顶不加「布置 / 物料 / 执行资料」分段。场地重建用 `Scan`；不要用 `Layers`，它在 lucide-react 1.48 里是 `Layers3`（图层）的别名。新增图标前先查表，同义不复用两枚。
 
 **左轨四形（唯一注册的自定义 UI 图标）**：左轨从上到下只有四格，读法是「几个形体」，与 Grok Bot 一类扁平几何标同路——不套圆罩、不加投影、不做双色。
 
 | 格 | 形体 | 文件 | 打开 |
 |---|---|---|---|
-| 1 | 幕景品牌标「门厅」：实心墨色圆角方 + 居中拱门洞 + 品牌绿圆点 | `frontend/components/brand-mark.tsx`（28px 档） | 展开 / 收起左侧导航 |
-| 2 | Bingo：开口圆环，缺口在正下方 | `frontend/components/room-organizer/panels/rail-glyphs.tsx` | Bingo 助手（右栏 conversation） |
-| 3 | 空间：三角屋顶 + 中柱 + 柱脚圆点 | 同上 | 空间抽屉（场地 / 场景模板 / 场地观感） |
-| 4 | 物料：等轴立方体 + 右侧圆点 | 同上 | 物料抽屉（拖入画布即成物件） |
+| 1 | 总控「门厅」：实心墨色圆角方 + 居中拱门洞 + 品牌绿圆点 | `frontend/components/room-organizer/panels/rail-avatar.tsx`（`form="door"`，28px） | 展开 / 收起左列，并切总控 |
+| 2 | Bingo：圆球 + 眼睛跟随 | 同上（`form="ball"`） | Bingo 助手（右栏 conversation） |
+| 3 | 空间：等轴立方体 | 同上（`form="cube"`） | 空间卡片（场地 / 场景模板 / 环境 / 结构，平级） |
+| 4 | 物料：金字塔 | 同上（`form="pyramid"`） | 物料卡片（拖入画布即成物件） |
 
-三枚自定义形体统一 24 网格、`stroke 1.7`、圆头圆角、`currentColor`，绘制 22px；按钮触达区 40×40、透明底，悬停 `--wk-plane`，选中只在左缘出 3px 品牌绿条。Bingo 右下 9px 状态点（空闲灰 / 就绪绿 / 待办赭 / 进行中蓝 / 退回红）是唯一允许的点缀，不随形体外扩。品牌标不是阶段钮，点击只开合左列。
+四形由手绘 PNG 形体渲染，`RailAvatar` 统一 28px、眼睛跟随指针；按钮触达区 40×40、透明底，悬停 `--wk-plane`，选中只在左缘出 3px 品牌绿条。Bingo 右下 9px 状态点（空闲灰 / 就绪绿 / 待办赭 / 进行中蓝 / 退回红）是唯一允许的点缀，不随形体外扩。门厅兼总控与开合，不是独立阶段钮。
 
 **领域符号（不进 UI 栅格）**：`frontend/components/room-organizer/plotcraft/icon.tsx` 是 PlotCraft 图标集（stroke 1.5、圆头圆角、`currentColor`）承担户型与家具语义（墙/窗/门/地面/楼梯/屋顶/家具/画布工具）；`frontend/components/room-organizer/panels/scendance-workspace.tsx:27` 的 `MaterialGlyph`（72×58、stroke 2.3–2.4、24–30% `currentColor` 填充）是物料缩略线稿。两者只出现在画布、物料卡与户型上下文；工具栏、按钮、菜单一律 lucide，两种风格不混在同一个图标钮里。
 
@@ -174,23 +174,25 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 
 ### 2. 导航架构 ✅
 
-**顶栏（48px，吸顶）**：左起 字标（Icon 28 + 幕景 15/600 + 绿点 + SCENDANCE 11）→ 1px 竖线 → 项目名 14/600 → 保存态胶囊（本地草稿 / 正在保存… / 已保存到本机）。右端只放两个入口：`项目`（FolderOpen）与头像（UserRound）；中部不放 tab。
+**顶栏**：工作台不设独立顶栏（`sc-header` 为空）。品牌标、保存态、账户与素材库都收在左轨：轨首门厅兼开合，轨脚依次是保存态、设置、账户/素材库。项目入口收进账户面板，中部不放 tab。
 
-**左轨（64px）**：从上到下四格——幕景品牌标「门厅」、Bingo、空间、物料。品牌标只开合左列；Bingo 开关右栏助手；空间、物料各开一个左侧抽屉，两者互斥且同时只开一个。底部常驻 `设置`。四格都不弹独立窗口，状态用左缘 3px 绿条表示。
+**左轨（64px）**：从上到下四格——总控门厅、Bingo、空间、物料。门厅开合左列并切总控；Bingo 开关右栏助手；空间、物料打开同一右栏 AgentPanel 卡片，两者互斥且同时只开一个。轨脚常驻保存态、`设置` 与账户/素材库。四格都不弹独立窗口，状态用左缘 3px 绿条表示。
 
 **入口分工（一个动作只留一个入口）**：
 
 | 入口 | 打开 |
 | --- | --- |
-| 顶栏「项目」 | 我的项目（projects）：新建、打开、另存为云项目 |
-| 顶栏头像 | 素材库（assets） |
-| 左轨「设置」 | 团队与权限演示（team / permissions） |
-| 左轨品牌标 | 展开 / 收起左侧导航，不切内容 |
+| 轨脚账户/素材库 | 我的项目（新建、打开、另存为云项目）与素材库（assets） |
+| 轨脚「设置」 | 设置、团队与权限演示（team / permissions） |
+| 轨首门厅 | 展开 / 收起左列，并切总控 |
 | 左轨 Bingo | Bingo 助手（conversation） |
-| 左轨 空间 | 空间抽屉：场地、场景模板、场地观感 |
-| 左轨 物料 | 物料抽屉：拖入画布即成物件 |
+| 左轨 空间 | 空间卡片：场地、场景模板、环境、结构（平级） |
+| 左轨 物料 | 物料卡片：拖入画布即成物件 |
+| 左轨 Aholo | 场地重建：图纸、照片、地图圈画 |
 | 右栏 Agent | 唯一生成入口：出方案、改尺寸、导出 |
-| 底部物料薄条 | 物料库，拖入画布即成物件 |
+| 底部物料条 | 物料库，拖入画布即成物件 |
+| 聊天 `+` 菜单 | 新建空间、地图选址、图纸与照片 |
+| 画布右上 | 发布 / 分享卡片：二维码、预览、项目大纲 |
 
 **标签页（Tabs）**：只出现在面板内，下划线式——激活项 2px `--ink` 下划线 + 600 字重；未激活 P2 muted。
 
@@ -271,17 +273,17 @@ Token：`--sp-1`…`--sp-8`。组件内边距用 8/12/16，区块间距用 16/24
 
 ### 3. 品牌字标（Brand Lockup）✅
 
-品牌字标是 logo 右侧的「幕景 + SCENDANCE」联合排印。三页（workbench header / intro 登录页 / 官网 introduction）共用同一套排法——只换父级颜色控明暗，尺寸与字重绝不漂移。
+品牌字标是 logo 右侧的「幕景 + SCENDANCE」联合排印，只用于 intro 登录页与官网 introduction。工作台左轨只保留 28px 门厅形体图标，不排中英文；只换父级颜色控明暗，尺寸与字重绝不漂移。
 
 **几何与排版**
 
 | 元素 | 参数 | 说明 |
 |---|---|---|
-| BrandMark SVG | 28×28 | 所有页面统一，结构继承 `currentColor` |
+| BrandMark SVG | 28×28 | 登录/官网统一，结构继承 `currentColor`；工作台用 28px 门厅 PNG |
 | Icon 容器 | 29×31 | 居中放 SVG，`display:grid; place-items:center` |
 | Icon→中文 gap | 6px | 2px 步进 |
 | 中文「幕景」 | 15px / 600 / `letter-spacing: 0` | PingFang SC（Noto Sans SC 降级）；无额外字距，靠字重 600 撑住存在感 |
-| 英文「SCENDANCE」 | 10px / 500 / `letter-spacing: .01em` / `text-transform: uppercase` | Playfair Display 衬线西文（首字母 S 用 Italic 500 做锚点）；**必须全大写**，字距拉开到 .22em 形成"烙印式"品牌标记，颜色比中文浅一档 |
+| 英文「SCENDANCE」 | 10px / 500 / `letter-spacing: .01em` / `text-transform: uppercase` | Playfair Display 衬线西文（首字母 S 用 Italic 500 做锚点）；**必须全大写**，字距紧凑，颜色比中文浅一档 |
 | 英文→中文 gap | 0（紧排） | baseline 对齐，英文 `margin-left: 2px` 微调视觉呼吸 |
 | 英文文案 | 固定 `SCENDANCE` | 全大写；首字母 S 用 Italic 500 做锚点（Playfair 衬线定版）；禁止小写 |
 
@@ -298,7 +300,7 @@ font-family: "Playfair Display", Georgia, "Noto Sans SC", serif;
 
 | 场景 | 父级 color | 中文 color | 英文 color |
 |---|---|---|---|
-| 白底（工作台 / intro 登录） | `var(--ink)` = `#141416` | 继承父级 = `#141416` | `var(--ink-soft)` = `#55585F` |
+| 白底（intro 登录 / 官网） | `var(--ink)` = `#141416` | 继承父级 = `#141416` | `var(--ink-soft)` = `#55585F` |
 | 深底（官网 hero / 黑底卡片） | `#fff` | 继承父级 = `#fff` | `rgba(255,255,255,.55)` |
 
 **组件化**
@@ -306,7 +308,7 @@ font-family: "Playfair Display", Georgia, "Noto Sans SC", serif;
 BrandMark SVG 只放几何（`fill="currentColor"` + circle 固定 `#4A7C59`），颜色由父级控。推荐 DOM 结构：
 
 ```html
-<!-- workbench header -->
+<!-- intro 登录页 / 官网 hero -->
 <a class="sc-brand">
   <span class="sc-brand-mark"><BrandMark size={28} /></span>
   <strong class="sc-brand-cn">幕景</strong>
@@ -317,7 +319,7 @@ BrandMark SVG 只放几何（`fill="currentColor"` + circle 固定 `#4A7C59`）�
 CSS：
 
 ```css
-.sc-brand { display: flex; gap: 8px; align-items: center; color: var(--ink); }
+.sc-brand { display: flex; gap: 6px; align-items: center; color: var(--ink); }
 .sc-brand-mark { width: 29px; height: 31px; display: grid; place-items: center; }
 .sc-brand-cn { font-family: "Noto Sans SC", ...; font-size: 15px; font-weight: 600; letter-spacing: 0; color: inherit; }
 .sc-brand-en { font-family: "Playfair Display", Georgia, serif; font-size: 10px; font-weight: 500; letter-spacing: .01em; text-transform: uppercase; color: var(--ink-soft); margin-left: 2px; }
@@ -331,20 +333,20 @@ CSS：
 |---|---|---|
 | Icon 容器 | 29×31 | 26×28 |
 | 中文 | 15px / 600 | 13px / 600 / letter-spacing: -.01em |
-| 英文 | 10px / .22em | 9px / .01em |
-| gap | 10px | 6px |
+| 英文 | 10px / .01em | 9px / .01em |
+| gap | 6px | 4px |
 
 **禁则**
 
 - 英文必须全大写 `SCENDANCE`，首字母 S 用 Italic 500 做锚点（Playfair 衬线定版）；禁止小写
 - 英文不跟中文同等字号/同等字重/同等颜色——必须形成中文粗实、英文纤细的层级差
 - 不把品牌绿 `#4A7C59` 用作 logo path 或文字颜色（绿点除外）
-- 三页之间尺寸漂移（工作台 28、官网 23）——统一 28
+- 登录/官网之间尺寸漂移（28 / 23）——统一 28；工作台不排字标，单用 28px 门厅图标
 - BrandMark path 不硬编码 `fill="#141416"`——用 `currentColor` 继承父级控明暗
 
 ### 4. 标志与语气 ✅
 
-- 标志「门厅」：实心墨色圆角方（圆角 10/48）为场馆，下缘居中开 20 宽圆拱门洞（r10），品牌绿圆点（d10，位于 24,35）立在门洞内——方为空间、圆为人（Scendance = scene + attendance）。结构继承文字色（`fill="currentColor"`），绿点固定 `#4A7C59`。SVG 尺寸 28px（三页统一）、favicon 16px（`frontend/app/icon.svg`）。
+- 标志「门厅」：实心墨色圆角方（圆角 10/48）为场馆，下缘居中开 20 宽圆拱门洞（r10），品牌绿圆点（d10，位于 24,35）立在门洞内——方为空间、圆为人（Scendance = scene + attendance）。结构继承文字色（`fill="currentColor"`），绿点固定 `#4A7C59`。SVG 尺寸 28px（登录/官网统一），工作台门厅用 28px PNG，favicon 16px（`frontend/app/icon.svg`）。
 - Logo 安全区：四周留白 ≥ 字标高度的 1 倍；底色只允许 paper/plane。
 - 语气：说人话、给出路、不道歉不推责。❌「发生错误，代码 02」→ ✅「网络连接超时，请稍后再试」。
 - 系统动作前后同名：「发布」的按钮 → 成功 toast「已发布」。

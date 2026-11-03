@@ -15,30 +15,65 @@ export interface AmapNamespace {
   TileLayer?: { Satellite?: new () => { setMap(map: unknown): void; show(): void } };
 }
 
+// 高德 Key 的域名白名单只放行线上域名时，localhost 会被回 10006（INVALID_USER_DOMAIN）并用 JSON 顶掉脚本，
+// 浏览器按 ORB 直接拦掉。本机 dev 改走 3199 代理拉脚本 + 代理服务请求，线上仍直连。
+const AMAP_DEV_PROXY = 'http://127.0.0.1:3199';
+const AMAP_PLUGINS = 'AMap.PlaceSearch,AMap.MouseTool,AMap.ToolBar';
+
+/** 当前页面是否要用本机代理；只有 localhost / 127.0.0.1 才启用，线上域名保持直连。 */
+export function amapDevProxyOrigin(): string {
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' ? AMAP_DEV_PROXY : '';
+}
+
 declare global {
   interface Window {
-    _AMapSecurityConfig?: { securityJsCode: string };
+    _AMapSecurityConfig?: { securityJsCode?: string; serviceHost?: string };
     AMap?: AmapNamespace;
   }
 }
 
 let loaderPromise: Promise<void> | null = null;
 
+const PROXY_DOWN_HINT = '地图降级：本机地图代理未运行（127.0.0.1:3199）。请用 npm run dev 启动，代理会随 dev 自动拉起；若仍失败，检查 3199 端口是否被占用。';
+
+/** 代理的 /health 探活，避免把「代理没起」误报成 Key 被拒。 */
+async function assertDevProxy(proxy: string): Promise<void> {
+  try {
+    const res = await fetch(`${proxy}/health`, { signal: AbortSignal.timeout(1500) });
+    if (!res.ok) throw new Error(String(res.status));
+  } catch {
+    throw new Error(PROXY_DOWN_HINT);
+  }
+}
+
 export function loadAmapScript(key: string, security: string): Promise<void> {
   if (typeof window === 'undefined') return Promise.reject(new Error('高德脚本只能在浏览器里加载'));
   if (window.AMap) return Promise.resolve();
   if (loaderPromise) return loaderPromise;
-  window._AMapSecurityConfig = { securityJsCode: security };
-  loaderPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.id = SCRIPT_ID;
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.PlaceSearch,AMap.MouseTool,AMap.ToolBar`;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      loaderPromise = null;
-      reject(new Error('高德脚本加载失败，检查网络与 Key 域名白名单（需含 localhost:3000）。'));
-    };
-    document.head.appendChild(script);
+  const proxy = amapDevProxyOrigin();
+  window._AMapSecurityConfig = proxy
+    // 设了 securityJsCode 高德就不会走 serviceHost，所以本机只给 serviceHost，
+    // 安全密钥由 3199 代理在回源时补 jscode。
+    ? { serviceHost: `${proxy}/_AMapService` }
+    : { securityJsCode: security };
+  loaderPromise = (async () => {
+    if (proxy) await assertDevProxy(proxy);
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement('script');
+      script.id = SCRIPT_ID;
+      const query = `v=2.0&key=${encodeURIComponent(key)}&plugin=${AMAP_PLUGINS}`;
+      script.src = proxy ? `${proxy}/amap-js?${query}` : `https://webapi.amap.com/maps?${query}`;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(proxy
+        ? '地图降级：本机代理已启动，但脚本回源失败。请检查 Key 是否被高德放行（INVALID_USER_DOMAIN / 10006），或 3199 代理是否返回 200。'
+        : '地图降级：Key 没被高德放行，或网络不通。'));
+      document.head.appendChild(script);
+    });
+  })();
+  loaderPromise.catch(() => {
+    loaderPromise = null;
   });
   return loaderPromise;
 }

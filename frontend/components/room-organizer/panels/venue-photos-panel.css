@@ -1,5 +1,17 @@
 ﻿.vp-photos { min-width:0; }
 .vp-photos .cr-upload:disabled { background: var(--wk-plane); color: var(--faint); opacity: 1; cursor: not-allowed; }
+/* 上传收敛成一张卡片：图标 + 一行短标签 + 张数状态，说明收进 ⓘ。 */
+.vp-upload-row { display:flex; align-items:flex-start; gap:6px; min-width:0; }
+.vp-upload-row .vp-upload {
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:8px;
+  padding:8px 10px; margin:0; text-align:left;
+}
+.vp-upload-row .vp-upload strong { flex:1 1 auto; min-width:0; font-size:12.5px; font-weight:600; }
+.vp-upload-count { flex:0 0 auto; font-size:var(--fs-cap); color:var(--ink-soft); }
+.vp-info { position:relative; flex:0 0 auto; }
+.vp-info > summary { list-style:none; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; color:var(--ink-soft); cursor:pointer; }
+.vp-info > summary::-webkit-details-marker { display:none; }
+.vp-info > p { position:absolute; right:0; top:26px; z-index:3; width:220px; margin:0; padding:8px 10px; border:1px solid var(--wk-hair); border-radius:var(--r-sm); background:var(--wk-paper); box-shadow:var(--e1); font-size:var(--fs-cap); line-height:1.5; color:var(--ink-soft); }
 .vp-thumbnails { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-top:10px; }
 .vp-thumbnails figure { position:relative; min-width:0; margin:0; }
 .vp-thumbnail { display:block; width:100%; padding:0; border:0; border-radius:var(--r-sm); overflow:hidden; background:var(--plane); cursor:zoom-in; }

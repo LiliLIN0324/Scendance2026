@@ -2,6 +2,7 @@ import { useCallback, type MutableRefObject, type RefObject } from 'react';
 import { notify } from '../lib/editor-notices';
 import {
   downloadCanvasAsPng,
+  downloadDataUrlAsPng,
   downloadSceneAsGlb,
   readLayoutFromFile,
 } from '../lib/file-io';
@@ -44,6 +45,8 @@ export interface UseImportExportResult {
    * PNG. Resolves to whether the download was dispatched.
    */
   exportRenderImage(options: RenderExportOptions): Promise<boolean>;
+  /** 同一帧只编码一次：先给导出卡做预览，点确认后再下载这张，不重渲染。 */
+  captureRenderImage(options: RenderExportOptions): Promise<string | null>;
   handleExportGlb(): Promise<void>;
   handleShareLink(): Promise<void>;
   /** Resolves true when the file replaced the current house. */
@@ -81,31 +84,35 @@ export function useImportExport({
     }
   }, [view2D, layout.name, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef]);
 
-  const exportRenderImage = useCallback(
+  const captureRenderImage = useCallback(
     async ({ view, scale }: RenderExportOptions) => {
+      if (view2D) {
+        const flat = canvas2DRef.current;
+        if (!flat) return null;
+        try { return flat.toDataURL('image/png'); } catch { return null; }
+      }
       const canvas = canvasRef.current;
       const renderer = rendererRef.current;
       const scene = sceneRef.current;
       const camera = cameraRef.current;
-      if (!canvas || !renderer || !scene || !camera) return false;
+      if (!canvas || !renderer || !scene || !camera) return null;
       const factor = Math.min(3, Math.max(1, Math.round(scale)));
       const baseRatio = Math.min(window.devicePixelRatio || 1, 2);
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      if (width < 2 || height < 2) return false;
+      if (width < 2 || height < 2) return null;
       const controls = controlsRef?.current ?? null;
       const savedPosition = camera.position.clone();
       const savedQuaternion = camera.quaternion.clone();
       const savedTarget = controls ? controls.target.clone() : null;
-      const baseName = `${(layout.name || 'room-layout').replace(/\s+/g, '_')}-效果图`;
       try {
         if (view !== 'current') applyPreset?.(view);
         renderer.setPixelRatio(baseRatio * factor);
         renderer.setSize(width, height, false);
         renderer.render(scene, camera);
-        return await downloadCanvasAsPng(canvas, baseName);
+        return canvas.toDataURL('image/png');
       } catch {
-        return false;
+        return null;
       } finally {
         camera.position.copy(savedPosition);
         camera.quaternion.copy(savedQuaternion);
@@ -118,7 +125,17 @@ export function useImportExport({
         renderer.render(scene, camera);
       }
     },
-    [canvasRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset, layout.name]
+    [view2D, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset]
+  );
+
+  const exportRenderImage = useCallback(
+    async (options: RenderExportOptions) => {
+      const dataUrl = await captureRenderImage(options);
+      if (!dataUrl) return false;
+      const baseName = `${(layout.name || 'room-layout').replace(/\s+/g, '_')}-效果图`;
+      return downloadDataUrlAsPng(dataUrl, baseName);
+    },
+    [captureRenderImage, layout.name]
   );
 
   const handleExportGlb = useCallback(async () => {
@@ -170,5 +187,5 @@ export function useImportExport({
     [layout, actions, onImported]
   );
 
-  return { handleScreenshot, exportRenderImage, handleExportGlb, handleShareLink, handleImport };
+  return { handleScreenshot, exportRenderImage, captureRenderImage, handleExportGlb, handleShareLink, handleImport };
 }

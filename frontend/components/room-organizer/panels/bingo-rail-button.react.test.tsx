@@ -28,7 +28,7 @@ describe('Bingo 左轨入口', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(button.querySelector('img')?.getAttribute('src')).toBe('/assets/rail/ball.png');
     expect(button.querySelector('svg')).toBeNull();
-    expect(button.querySelector('.sc-rail-bingo-dot.is-idle')).toBeTruthy();
+    expect(button.querySelector('.sc-rail-dot.is-ok')).toBeTruthy();
     expect(button.className).toContain('sc-rail-disc');
     expect(button.className).toContain('is-active');
     expect(button.getAttribute('data-tip')).toBe('Bingo');

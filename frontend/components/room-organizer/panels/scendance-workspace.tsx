@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { Box, Boxes, Camera, ChevronUp, CloudRain, Cuboid, Focus, Footprints, Grid3x3, LogIn, Magnet, MousePointer2, Redo2, Ruler, RulerDimensionLine, Satellite, SatelliteDish, Square, SquareDashedMousePointer, Sun, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
+import { Box, Boxes, Camera, ChevronUp, CloudRain, Cuboid, Focus, Footprints, Grid3x3, Loader2, LogIn, Magnet, MousePointer2, Redo2, Ruler, RulerDimensionLine, Satellite, SatelliteDish, Square, SquareDashedMousePointer, Sun, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
@@ -22,7 +22,7 @@ import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
 import { PlanViewIcon } from './tool-icons';
 import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
-import type { CameraPreset, CatalogItem, RoomLayout, Weather } from '../lib/types';
+import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 import './workbench-shelf.css';
 
@@ -126,7 +126,7 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
 }): JSX.Element {
-  const { layout, activeFloor } = useRoomEditor();
+  const { layout, activeFloor, actions, history } = useRoomEditor();
   const { selectOnly } = useSelection();
   const hostRef = useRef<HTMLElement>(null);
   const atLimit = materialCount(activeFloor.items) >= editorItemLimit(layout);
@@ -139,17 +139,33 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
     if (id) selectOnly(id, { keepPanel: true });
   };
 
+  // 风格套整组一次落盘：一次提交、一次撤销，不按件走放置动画。
+  const addStyleSet = (items: FurnitureItem[]) => {
+    if (atLimit || items.length === 0) return;
+    if (materialCount(activeFloor.items) + items.length > editorItemLimit(layout)) return;
+    history.commitNow();
+    actions.addItems(items);
+    const first = items[0];
+    if (first) selectOnly(first.id, { keepPanel: true });
+  };
+
   return <aside ref={hostRef} className={`sc-library sc-compact-shelf${card ? ' is-card' : ''}`} aria-label="物料库">
     {!card && <div className="sc-shelf-top">
       <ShelfGrip shelfRef={hostRef}/>
       {onClose && <button type="button" className="sc-library-rail-close" aria-label="关闭物料库" title="关闭" onClick={onClose}><X size={16} aria-hidden="true"/></button>}
     </div>}
     <div className="sc-library-body">
-      <div className="sc-library-content">
-        <div className="sc-library-materials">
-          <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial}/>
+      {card
+        ? <div className="sc-library-content">
+          <div className="sc-library-materials">
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} roomSize={{ width: layout.width, depth: layout.height }}/>
+          </div>
         </div>
-      </div>
+        : <div className="sc-library-content">
+          <div className="sc-library-materials">
+            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial}/>
+          </div>
+        </div>}
     </div>
   </aside>;
 }
@@ -173,6 +189,8 @@ interface ViewToolsProps {
    * exported at its current resolution.
    */
   onExportImage?(options: { view: 'current' | CameraPreset; scale: number }): Promise<boolean> | void;
+  /** 导出前的同一帧预览；返回 PNG data URL，编码不出来给 null。 */
+  onCaptureImage?(options: { view: 'current' | CameraPreset; scale: number }): Promise<string | null>;
   /** 评审 / 执行不撤销、不重做布置。 */
   layoutLocked?: boolean;
   /** 工具轨唯一分享入口。不传时菜单仍可打开，动作提示未接入。 */
@@ -211,18 +229,18 @@ function presetAt(preset: CameraPreset) {
   const entry = ANGLE_PRESETS.find(candidate => candidate.id === preset) ?? ANGLE_PRESETS[0];
   return { current: entry, next: ANGLE_PRESETS[(ANGLE_PRESETS.indexOf(entry) + 1) % ANGLE_PRESETS.length] };
 }
-const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string }> = [
-  { id: 'current', label: '跟随当前' },
+const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string; Icon: LucideIcon }> = [
+  { id: 'current', label: '跟随当前', Icon: Camera },
   ...ANGLE_PRESETS,
 ];
 const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
-  { scale: 1, label: '标清 1×' },
-  { scale: 2, label: '高清 2×' },
-  { scale: 3, label: '超清 3×' },
+  { scale: 1, label: '标清' },
+  { scale: 2, label: '高清' },
+  { scale: 3, label: '超清' },
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showAtmosphere = true, onLighting, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, showAtmosphere = true, onLighting, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
   const { view, setView, toggle, history, layout, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [weatherOpen, setWeatherOpen] = useState(false);
@@ -232,6 +250,9 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showA
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
   const [exportScale, setExportScale] = useState(2);
   const [exporting, setExporting] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const previewToken = useRef(0);
   const [shareClose, setShareClose] = useState(0);
   const quietShare = () => setShareClose(value => value + 1);
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
@@ -310,7 +331,10 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showA
   };
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
-  const selectActive = !view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode;
+  const selectActive = view.selectMode && !view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode;
+  const selectTip = selectActive
+    ? '选择工具 · 激活中，再点一次退出'
+    : view.selectMode ? '选择工具 · 已启用，点一下切回' : '选择工具 · 未启用，点一下启用';
   const { current: angleNow, next: angleNext } = presetAt(preset);
   const choosePreset = (next: CameraPreset) => {
     setView(current => ({ ...current, view2D: false, walkthroughMode: false }));
@@ -318,9 +342,15 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showA
     setPreset(next);
   };
   const cyclePreset = () => choosePreset(angleNext.id);
-  // 选择是默认态：已经在选择里就禁用这颗钮，避免误点把工具切走。
-  const chooseSelect = () => {
-    setView(current => ({ ...current, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false }));
+  // 选择钮是真开关：第二次点击把 selectMode 关掉（画布只浏览、不抓物料）；
+  // 从别的工具点回来时，顺手把那件工具停掉。
+  const toggleSelect = () => {
+    setView(current => {
+      const active = current.selectMode && !current.measurementMode && !current.drawWallMode && !current.drawZoneMode && !current.walkthroughMode;
+      return active
+        ? { ...current, selectMode: false }
+        : { ...current, selectMode: true, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false };
+    });
   };
   const setWalkthrough = (on: boolean) => {
     setView(current => ({
@@ -333,6 +363,22 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showA
     if (on) requestWalkPointerLock();
   };
   const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6);
+  // 打开导出卡先抓同一帧做预览；换机位再抓一次。画质只影响确认后的成图，预览不重抓。
+  useEffect(() => {
+    if (!exportOpen || !onCaptureImage) {
+      setPreview(null);
+      setPreviewing(false);
+      return undefined;
+    }
+    const token = ++previewToken.current;
+    setPreviewing(true);
+    void onCaptureImage({ view: exportView, scale: 1 }).then(url => {
+      if (previewToken.current !== token) return;
+      setPreview(url);
+      setPreviewing(false);
+    });
+    return () => { if (previewToken.current === token) previewToken.current += 1; };
+  }, [exportOpen, exportView, onCaptureImage]);
   const runExport = async () => {
     if (!onExportImage || exporting) return;
     setExporting(true);
@@ -371,7 +417,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showA
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
       <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} openRequest={shareOpenRequest} closeSignal={shareClose}/>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-select" data-tip={selectActive ? '选择工具 · 已启用' : '选择'} aria-label={selectActive ? '选择工具 · 已启用' : '选择工具：单击选中物料，拖拽挪动'} aria-pressed={selectActive} disabled={selectActive} className={selectActive ? 'is-active' : ''} onClick={chooseSelect}>
+      <button type="button" id="tool-select" data-tip={selectTip} aria-label={selectTip} aria-pressed={selectActive} className={selectActive ? 'is-active' : view.selectMode ? '' : 'is-off'} onClick={toggleSelect}>
         {selectActive ? <SquareDashedMousePointer size={20}/> : <MousePointer2 size={20}/>}
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
@@ -415,17 +461,14 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, showA
         </button>
         {exportOpen && <div id="tool-export-panel" className="sc-tool-pop sc-export-pop" role="dialog" aria-label="导出效果图选项">
           <span className="sc-export-title">导出效果图</span>
-          <div className="sc-export-group" role="group" aria-label="导出视角">
-            <span>视角</span>
-            <div className="sc-export-options">
-              {EXPORT_VIEWS.map(entry => <button type="button" key={entry.id} className={exportView === entry.id ? 'is-active' : ''} aria-pressed={exportView === entry.id} onClick={() => setExportView(entry.id)}>{entry.label}</button>)}
-            </div>
+          <div className="sc-export-preview" role="img" aria-label={preview ? '效果图预览' : '效果图预览还没出来'}>
+            {previewing ? <Loader2 size={18} className="cr-spin" aria-hidden="true"/> : preview ? <img src={preview} alt=""/> : <Camera size={18} aria-hidden="true"/>}
           </div>
-          <div className="sc-export-group" role="group" aria-label="导出画质">
-            <span>画质</span>
-            <div className="sc-export-options">
-              {EXPORT_SCALES.map(entry => <button type="button" key={entry.scale} className={exportScale === entry.scale ? 'is-active' : ''} aria-pressed={exportScale === entry.scale} disabled={view.view2D} onClick={() => setExportScale(entry.scale)}>{entry.label}</button>)}
-            </div>
+          <div className="sc-export-options" role="group" aria-label="导出视角">
+            {EXPORT_VIEWS.map(entry => <button type="button" key={entry.id} className={exportView === entry.id ? 'is-active' : ''} aria-label={entry.label} title={entry.label} aria-pressed={exportView === entry.id} onClick={() => setExportView(entry.id)}><entry.Icon size={16} aria-hidden="true"/></button>)}
+          </div>
+          <div className="sc-export-options" role="group" aria-label="导出画质">
+            {EXPORT_SCALES.map(entry => <button type="button" key={entry.scale} className={exportScale === entry.scale ? 'is-active' : ''} aria-label={`${entry.label} ${entry.scale}×`} title={`${entry.label} ${entry.scale}×`} aria-pressed={exportScale === entry.scale} disabled={view.view2D && entry.scale !== 1} onClick={() => setExportScale(entry.scale)}>{entry.scale}×</button>)}
           </div>
           <button type="button" className="sc-export-cta" disabled={exporting} onClick={() => { void runExport(); }}>
             {exporting ? '正在导出…' : '导出 PNG'}

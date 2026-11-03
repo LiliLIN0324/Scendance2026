@@ -77,6 +77,7 @@ export function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSet
     showOutdoor: true,
     showAllFloors: false,
     wallDisplay: 'cutaway',
+    selectMode: true,
     measurementMode: false,
     soundsEnabled: false,
     drawWallMode: false,

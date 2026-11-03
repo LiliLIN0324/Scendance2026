@@ -731,48 +731,51 @@ describe('Bingo在左侧工作台', () => {
   });
 });
 
-describe('右栏生成物件', () => {
-  it('生成和布置分开，切过去不再留着Bingo的发送', () => {
-    const openMaterials = vi.fn();
-    const openVenue = vi.fn();
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel onOpenPropMaterials={openMaterials} onOpenPropVenue={openVenue}/></LayoutAgentProvider>);
-    expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '切换到生成物件' }));
-    expect(screen.queryByRole('button', { name: '发送' })).toBeNull();
-    expect(screen.getByRole('button', { name: '生成物件' })).toBeTruthy();
-    // 左下只有一颗「+」，选过种类之前不预设物料/场地。
-    expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-plus');
-    expect(screen.getByRole('button', { name: '生成种类' })).toBeTruthy();
-    expect(screen.getByLabelText('物件描述')).toBeTruthy();
-    // 生成模式不再把图片/重建压在页脚：输入框上方同样有一片「你可以做什么」，只放两条生成能力。
-    const genGroup = screen.getByRole('group', { name: '你可以做什么' });
-    expect(within(genGroup).getByRole('button', { name: /物料生成/ })).toBeTruthy();
-    expect(within(genGroup).getByRole('button', { name: /场地生成/ })).toBeTruthy();
-    expect(within(genGroup).queryByRole('button', { name: /地图选址/ })).toBeNull();
-    expect(within(genGroup).queryByRole('button', { name: /云端备用/ })).toBeNull();
-    expect(screen.queryByText('图片和重建')).toBeNull();
-    fireEvent.click(within(genGroup).getByRole('button', { name: /物料生成/ }));
-    expect(openMaterials).toHaveBeenCalledOnce();
-    fireEvent.click(within(genGroup).getByRole('button', { name: /场地生成/ }));
-    expect(openVenue).toHaveBeenCalledOnce();
-    // 选过场地之后，「+」自己换成场地图标。
-    expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-scan');
-    fireEvent.click(screen.getByRole('button', { name: '布置' }));
-    expect(screen.getByRole('button', { name: '发送' })).toBeTruthy();
-    expect(studioMock.generate).not.toHaveBeenCalled();
+describe('总控内点名 agent', () => {
+  it('keeps the 总控 panel and starts an inline dialogue instead of switching panels', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    const panel = document.getElementById('agent-panel');
+    expect(panel?.getAttribute('data-state')).toBe('door');
+    fireEvent.click(screen.getByRole('button', { name: /^空间/ }));
+    // 整栏不换身份：还是总控，只是这句话开始递给空间。
+    expect(panel?.getAttribute('data-state')).toBe('door');
+    expect(screen.getByLabelText('移除 空间')).toBeTruthy();
+    expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).placeholder).toBe('说一句，交给选中的 agent');
+    fireEvent.click(screen.getByLabelText('移除 空间'));
+    expect(screen.queryByLabelText('移除 空间')).toBeNull();
   });
 
-  it('生成场景只把句子填进生成条，不打接口', () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    render(ui(makeLayout()));
-    fireEvent.change(screen.getByLabelText('告诉 Agent 要改的'), { target: { value: '生成一个竹林场景' } });
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    expect(screen.getByText(/还没提交，不会扣额度/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '填到生成条' }));
-    expect((screen.getByLabelText('场景描述') as HTMLTextAreaElement).value).toBe('生成一个竹林场景');
-    expect(document.querySelector('.ap-plus-btn svg')?.getAttribute('class')).toContain('lucide-scan');
-    expect(fetchMock).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+  it('keeps several agents picked at once and routes one sentence to all of them', async () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    const panel = document.getElementById('agent-panel');
+    fireEvent.click(screen.getByRole('button', { name: /^空间/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^物料/ }));
+    // 多选不换栏，也不出现勾选框：选中只靠描边（.is-active），输入框里是一叠头像。
+    expect(panel?.getAttribute('data-state')).toBe('door');
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /^空间/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /^物料/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('移除 空间')).toBeTruthy();
+    expect(screen.getByLabelText('移除 物料')).toBeTruthy();
+    // 头像区不重复念名字，placeholder 保持中性。
+    expect(document.querySelector('.ap-talk-faces')?.textContent).toBe('');
+    expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).placeholder).toBe('说一句，交给选中的 agent');
+    // 一句发出去同时到两个 agent 的收发标签上。
+    send('看看哪里有问题');
+    expect(await screen.findByText('总控 → 空间、物料')).toBeTruthy();
+  });
+});
+
+describe('总控的汇总结果卡', () => {
+  it('记录一条点名分派：目标头像、原话与结果摘要，默认收起', async () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    const who = screen.getByRole('group', { name: '这场对话里找谁说' });
+    fireEvent.click(within(who).getByRole('button', { name: 'Bingo' }));
+    send('加两把椅子');
+    const block = (await screen.findByText('分派结果')).closest('details') as HTMLDetailsElement;
+    expect(block.open).toBe(false);
+    expect(within(block).getByText('加两把椅子')).toBeTruthy();
+    expect(within(block).getByText(/Bingo · /)).toBeTruthy();
+    expect(block.querySelectorAll('.sc-rail-avatar')).toHaveLength(1);
   });
 });

@@ -1,8 +1,67 @@
-﻿.sc-structure-editor { border-top: 1px solid var(--sc-line, var(--hair)); margin-top: 22px; padding-top: 18px; }
-.sc-structure-editor .sc-section-heading h3 { font-size: var(--fs-h3); margin: 0; }
-.sc-structure-editor .sc-section-heading span { color: var(--ink-soft); font-size: var(--fs-cap); }
-.sc-structure-editor select { width: 100%; min-width: 0; }
-.sc-structure-editor output { padding: 9px 0; font-variant-numeric: tabular-nums; }
-.sc-structure-save { width: 100%; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--ink); border-radius: var(--r-sm); background: var(--ink); color: var(--paper); font: inherit; cursor: pointer; }
-.sc-structure-save:hover { background: var(--ink); }
-.sc-structure-save:focus-visible { outline: 2px solid var(--ink-soft); outline-offset: 2px; }
+/* 普通壳体：入口是卡内一行，展开后仍用同一套结构表单。 */
+.sc-structure-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sc-structure-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sc-structure-editor .sc-space-section-head h3 { margin: 0; }
+.sc-structure-state { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex: none; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted); }
+.sc-structure-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--wk-ink-faint); }
+.sc-structure-state.is-confirmed { color: var(--wk-green-deep, #2f5b3e); }
+.sc-structure-state.is-confirmed .sc-structure-dot { background: var(--wk-green, #4a7c59); }
+.sc-structure-state.is-pending .sc-structure-dot { background: #c08a2e; }
+
+.sc-structure-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.sc-structure-chips button {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0;
+  min-height: 24px; padding: 2px 8px; border: 1px solid var(--wk-hair, #e4e4e7); border-radius: 999px;
+  background: var(--wk-paper, #fff); color: var(--wk-ink-soft, #52525b);
+  font: inherit; font-size: var(--fs-cap); white-space: nowrap; cursor: pointer;
+}
+.sc-structure-chips button:hover { border-color: var(--wk-ink-faint, #a1a1aa); color: var(--wk-ink, #141416); }
+.sc-structure-chips button.is-active {
+  border-color: var(--wk-green, #4a7c59); background: var(--wk-green-pale, #e8f0ea); color: var(--wk-green-deep, #2f5b3e); font-weight: 600;
+}
+.sc-structure-chips button:focus-visible { outline: 2px solid var(--wk-green, #4a7c59); outline-offset: 1px; }
+
+.sc-structure-editor form { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sc-structure-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 6px; min-width: 0; }
+.sc-structure-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.sc-structure-row-label {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--wk-muted);
+}
+.sc-structure-stepper {
+  display: inline-flex; align-items: center; flex: none; overflow: hidden;
+  border: 1px solid var(--wk-hair, #e4e4e7); border-radius: 8px; background: var(--wk-paper, #fff);
+}
+.sc-structure-stepper button {
+  display: grid; place-items: center; width: 20px; height: 24px; padding: 0;
+  border: 0; background: transparent; color: var(--wk-muted); cursor: pointer;
+}
+.sc-structure-stepper button:hover { background: var(--wk-plane, #f4f5f7); color: var(--wk-ink, #141416); }
+.sc-structure-stepper input {
+  width: 52px; height: 24px; min-width: 0; padding: 0; border: 0; background: transparent;
+  text-align: center; font: inherit; font-size: var(--fs-cap); font-variant-numeric: tabular-nums; color: var(--wk-ink, #141416);
+  appearance: textfield;
+}
+.sc-structure-stepper input::-webkit-outer-spin-button,
+.sc-structure-stepper input::-webkit-inner-spin-button { margin: 0; appearance: none; }
+.sc-structure-stepper input:focus-visible { outline: none; background: var(--wk-green-pale, #e8f0ea); }
+.sc-structure-unit { flex: none; width: 12px; font-size: var(--fs-cap); color: var(--wk-muted); }
+.sc-structure-row.is-static { grid-column: 1 / -1; gap: 6px; }
+/* 场地尺寸三行各占一整行：窄面板里「总宽 / m」才不被省略成「总…」。 */
+.sc-structure-row.is-wide { grid-column: 1 / -1; }
+.sc-structure-row.is-static .sc-structure-row-label { flex: 0 0 auto; width: 34px; }
+.sc-structure-row.is-static output {
+  flex: 1; min-width: 0; font-size: var(--fs-cap); font-variant-numeric: tabular-nums; color: var(--wk-ink, #141416);
+}
+
+.sc-structure-foot { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.sc-structure-apply {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; height: 26px; padding: 0 10px;
+  border: 1px solid var(--wk-green, #4a7c59); border-radius: 8px;
+  background: var(--wk-green-pale, #e8f0ea); color: var(--wk-green-deep, #2f5b3e);
+  font: inherit; font-size: var(--fs-cap); font-weight: 600; cursor: pointer;
+}
+.sc-structure-apply:hover { background: var(--wk-green, #4a7c59); color: #fff; }
+.sc-structure-apply:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; }
+.sc-structure-notice { flex: 1 1 120px; min-width: 0; margin: 0; font-size: var(--fs-cap); line-height: 1.45; color: var(--wk-ink-soft); }
+.sc-structure-notice.is-error { color: #a13d2f; }

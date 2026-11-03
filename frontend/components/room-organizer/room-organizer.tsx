@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { PanelLeftClose } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -77,6 +77,7 @@ import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVen
 import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
+import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
 import { CloudPanel } from './panels/cloud-panel';
 import { SettingsMenu } from './panels/settings-menu';
@@ -134,6 +135,7 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   soundsEnabled: false,
   drawWallMode: false,
   drawZoneMode: false,
+  selectMode: true,
   showHeatmap: false,
   showItemLabels: false,
   showNpcs: false,
@@ -218,7 +220,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     return () => window.clearTimeout(timer);
   }, [agentCollapsed, agentClosing, sidePanel]);
   /** Bingo 栏在左侧。关掉后再从画布上的 Bingo 浮标打开，回到布置对话。 */
-  const [composerGenerate, setComposerGenerate] = useState(false);
+  const spaceNewRef = useRef<((mode?: 'blank' | 'template') => void) | null>(null);
   const [planHome, setPlanHome] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
@@ -621,12 +623,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 双击画布里的物料才打开属性面板：先把这件设成唯一选中（双击落在多选里时，
   // 面板要显示的是被点的那一件），再掀左栏。两个视图的命中都由拾取层报上来。
   const openPropertiesForItem = useCallback((id: string) => {
+    if (!view.selectMode) return;
     selectOnly(id);
     setLeftMode('properties');
     setSidebarCollapsed(true);
     setSidePanel(null);
     setAgentCollapsed(false);
-  }, [selectOnly]);
+  }, [selectOnly, view.selectMode]);
 
   // A whole-layout replacement (import, share/local hydration, adopting
   // another tab's save) invalidates every piece of transient selection state,
@@ -650,6 +653,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // (Alt+click) is the escape hatch that picks one member on its own.
   const handleSelect = useCallback(
     (id: string, mode: 'replace' | 'toggle' | 'single') => {
+      // 选择工具被关掉时画布只浏览，不抓物料。
+      if (!view.selectMode) return;
       const members = mode === 'single' ? new Set([id]) : expandSelection(activeFloor.items, id);
       if (mode !== 'toggle') {
         if (members.size === 1) {
@@ -696,7 +701,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       }
       setExtraSelectedIds(next);
     },
-    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly]
+    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly, view.selectMode]
   );
 
   const allSelectedIds = useMemo(() => {
@@ -1359,7 +1364,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   });
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
-  const { handleScreenshot, exportRenderImage } = useImportExport({
+  const { captureRenderImage, exportRenderImage } = useImportExport({
     layout,
     actions,
     view2D: view.view2D,
@@ -1373,12 +1378,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     onImported: clearTransientSelection,
   });
 
-  // 效果图导出：3D 走高清重渲染；2D 平面按当前分辨率抓取。
+  // 效果图导出：先出预览，确认后下载同一帧；2D 平面按当前分辨率抓取。
   const handleExportImage = useCallback(async (options: { view: 'current' | 'iso' | 'top' | 'front' | 'corner'; scale: number }) => {
-    const ok = view.view2D ? (handleScreenshot(), true) : await exportRenderImage(options);
+    const ok = await exportRenderImage(options);
     notify(ok ? '效果图已开始下载。' : '效果图导出失败，请稍后重试。', ok ? 'success' : 'error');
     return ok;
-  }, [view.view2D, handleScreenshot, exportRenderImage]);
+  }, [exportRenderImage]);
 
   // Advance the time-of-day at roughly 1 in-game hour per second when on.
   useEffect(() => {
@@ -1785,16 +1790,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           setAgentClosing(false);
           setAgentCollapsed(false);
         },
-        onOpenGenerate: () => {
-          setComposerGenerate(true);
-          setWorkbenchMode('layout');
-          setLeftMode('brief');
-          setBusinessOpen(false);
-          setSidebarCollapsed(true);
-          setSidePanel(null);
-          setAgentClosing(false);
-          setAgentCollapsed(false);
-        },
         luxToolsVisible: luxDirectVisible,
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
@@ -1821,6 +1816,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   onClick={() => toggleAgent('space')}
                 >
                   <RailAvatar form="cube" size={28} />
+                  <RailLaneDot lane="space" open={agentPanelOpen && activeAgent === 'space'}/>
                 </button>
                 <button
                   type="button"
@@ -1834,6 +1830,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   onClick={() => toggleAgent('material')}
                 >
                   <RailAvatar form="pyramid" size={28} />
+                  <RailLaneDot lane="material" open={agentPanelOpen && activeAgent === 'material'}/>
                 </button>
               </nav>
             </div>
@@ -1852,7 +1849,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} onSelectAgent={showAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} environment={{ preview: splatState, current: environment, onSelect: selectEnvironment, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} generateOpen={composerGenerate} onGenerateOpen={setComposerGenerate} onPlaceProp={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onOpenPropMaterials={() => businessToolsRef.current?.openModelTools()} onOpenPropVenue={() => { noteVenueThreeIntent(); setLux3dOpenKind({ kind: 'world', nonce: Date.now() }); setLeftMode('lux3d'); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentClosing(false); setAgentCollapsed(false); }} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onRegisterNew={run => { spaceNewRef.current = run; }} environment={{ preview: splatState, current: environment, onSelect: selectEnvironment, onClear: dropEnvironment, onShowVector: stopSplat }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -2005,7 +2002,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
+            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

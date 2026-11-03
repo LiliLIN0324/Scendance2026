@@ -118,7 +118,7 @@ describe('manual editing of an applied venue',()=>{
   const applied=trial.apply.mock.calls[0]![0] as RoomLayout;
   trial.view.rerender(<Panel {...trial.props} layout={applied}/>);
   expect(await screen.findByText(/场地修改已应用，可撤销/)).toBeDefined();
-  expect(screen.getByText('进阶 · 当前场地 · 14 × 8 米')).toBeDefined();
+  expect(screen.getByText('当前场地 · 14 × 8 米')).toBeDefined();
   expect(screen.queryByText(/待提交生成尺寸与当前场地不同/)).toBeNull();
   trial.view.rerender(<Panel {...trial.props} layout={trial.base}/>);
   await waitFor(()=>expect(screen.queryByText(/场地修改已应用，可撤销/)).toBeNull());

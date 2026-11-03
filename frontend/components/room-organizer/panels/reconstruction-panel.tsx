@@ -3,7 +3,7 @@
 /* Source previews use private blob/signed URLs and preserve original image coordinates. */
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, Loader2, Sparkles, X } from 'lucide-react';
+import { Check, Info, Loader2, PencilLine, Ruler, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBackendSession, type BackendSession, type DimensionConstraint, type ReconstructionJob, type SceneProposal, type SceneV2, type SourceImage } from '@/lib/backend-session';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -70,6 +70,20 @@ function errorText(error:unknown):string{
 }
 function currentSceneKey(layout:RoomLayout):string { try{return canonical(layoutToBackendScene(layout));}catch{return '';}}
 function NumberField({label,value,onChange}:{label:string;value:number;onChange(value:number):void}):JSX.Element{return <label>{label}<input type="number" step="0.001" value={Number.isFinite(value)?value:''} onChange={event=>onChange(event.target.valueAsNumber)}/></label>;}
+/** 规则说明收进标题旁的 ⓘ，默认不占版面。 */
+function InfoTip({label,children}:{label:string;children:React.ReactNode}):JSX.Element{return <details className="rc-info"><summary aria-label={label}><Info size={13} aria-hidden="true"/></summary><p>{children}</p></details>;}
+/** 尺寸示意：宽、深、层高一眼可读，不再用三行文字罗列。 */
+function SizeDiagram({width,depth,height}:{width:string;depth:string;height:string}):JSX.Element{
+  const w=width||'—',d=depth||'—',h=height||'—';
+  return <svg className="rc-size-diagram" viewBox="0 0 220 106" role="img" aria-label={`场地宽 ${w} 米，深 ${d} 米，层高 ${h} 米`}>
+    <rect x="34" y="18" width="126" height="62" rx="2" fill="#F3F1EA" stroke="#4A504A" strokeWidth="1.6"/>
+    <path d="M34 80H160M34 74V86M160 74V86" stroke="#9AA198" strokeWidth="1"/>
+    <text x="97" y="99" fontSize="10" textAnchor="middle" fill="#5A615A">宽 {w} m</text>
+    <path d="M172 18V80M166 18H178M166 80H178" stroke="#9AA198" strokeWidth="1"/>
+    <text x="190" y="52" fontSize="10" fill="#5A615A" transform="rotate(90 190 52)" textAnchor="middle">深 {d} m</text>
+    <text x="97" y="52" fontSize="11" textAnchor="middle" fill="#3F453F" fontWeight="600">层高 {h} m</text>
+  </svg>;
+}
 
 interface VenueEditDraft {
   base: RoomLayout; scene: SceneV2; sceneKey: string; sourceKey: string; images: VenuePhoto[];
@@ -159,10 +173,11 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
     const current=()=>context.current===before;
     try{await onConfirm(next);if(current())setNotice(check.notice);}catch(error){if(current())setNotice(errorText(error));}finally{confirming.current=false;setBusy(false);}
   }
-  return <details className={`rc-calibration${applied?' is-applied-reference':''}`} ref={details}><summary>{applied?'原图对应（三点定标）':'将识别墙线叠加到原图核对'}</summary>
-    <p className="cr-hint">{applied
-      ?'选一张本机平面图，依次标出场地原点、X 轴终点、Z 轴终点。叠加位置对得上，再用于当前设计；不调用图片识别。'
-      :'选一张本机平面图，看识别出的墙线叠在原图上是否吻合。这里只做查看，不改当前设计。'}</p>
+  return <details className={`rc-calibration${applied?' is-applied-reference':''}`} ref={details}><summary>
+    <span>{applied?'原图对应':'将识别墙线叠加到原图核对'}</span>
+    {applied?<InfoTip label="怎么标三个对应点">依次标出场地原点 (0,0)、X 轴终点、Z 轴终点；叠加位置对得上再用于当前设计。不调用图片识别。</InfoTip>
+      :<InfoTip label="这一步做什么">只查看识别墙线是否贴合原图，不改当前设计。</InfoTip>}
+  </summary>
     <label className="cr-label">平面图<select aria-label="平面图" value={source?.id??''} disabled={busy} onChange={event=>{
       const value=event.target.value;
       if(value==='__upload__'){uploadInput.current?.click();return;}
@@ -172,12 +187,10 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
     {applied&&onAddImages&&<input ref={uploadInput} hidden type="file" aria-label="上传核对平面图" accept="image/png,image/jpeg,image/webp" multiple disabled={busy} onChange={event=>{const files=event.target.files;void onAddImages(files).catch(error=>setNotice(errorText(error)));event.target.value='';}}/>}
     {!source?<p className="cr-hint">{applied?`还没有平面图。${onAddImages?'先上传一张，或从照片里选一张；选中的照片会按平面图处理。':'从照片里选一张；选中的照片会按平面图处理。'}`:'还没有本机平面图。请先到《图纸与照片》上传或选一张。'}</p>:<>
       {applied&&<>
-        <p className="cr-hint">依次点击图上的场地原点 (0,0)、X 轴终点 ({scene.venue.width},0)、Z 轴终点 (0,{scene.venue.depth})。无法对应时，请使用独立结构图核对。照片不使用此平面映射。</p>
         {registration&&registration.sourceId===source.id&&!fixed&&<p className="cr-hint">原对应未绑定当前场地尺寸，已停用，请重新标记。</p>}
         {registration?.appliedBasis&&registration.appliedBasis!==basis&&<p className="cr-hint">项目或场地坐标范围已变化，原图对应已停用，请重新核对。</p>}
         {fixed&&drawnPoints.length===3&&!transform&&<p className="cr-hint">三个点无法稳定对应场地，请重新标记相距较远且不共线的对应点。</p>}
         <button type="button" className="rc-secondary" disabled={busy} onClick={()=>{session.current={scope,sourceId:source.id,basis,points:[]};onChange({sourceId:source.id,points:[],worldWidth:scene.venue.width,worldDepth:scene.venue.depth});setRegistering(true);setNotice('');setPixelPoint({x:'',z:''});setPointError('');}}>重新标记三个对应点</button>
-        <p className="cr-hint">也可输入原图像素坐标，左上角为 (0,0)。在图上按回车或空格进入坐标输入。</p>
         <div className="rc-measures rc-venue-measures" onKeyDown={event=>{if(event.key==='Enter'&&event.target instanceof HTMLInputElement){event.preventDefault();addTypedPoint();}}}>
           <label className="cr-label">对应点横向像素<input ref={pointInput} type="number" min="0" max={source.width} step="any" readOnly={!registering} disabled={busy} value={pixelPoint.x} onChange={event=>setPixelPoint({...pixelPoint,x:event.target.value})}/></label>
           <label className="cr-label">对应点纵向像素<input type="number" min="0" max={source.height} step="any" readOnly={!registering} disabled={busy} value={pixelPoint.z} onChange={event=>setPixelPoint({...pixelPoint,z:event.target.value})}/></label>
@@ -585,18 +598,21 @@ export function useReconstructionPanel({controller,layout,onApply,onPreview,imag
     <fieldset className="rc-existing-controls" aria-label="图纸与场地尺寸" disabled={!!venueEdit||!formReady}>
     {layout.backendSceneV2&&generationSizeDifferences.length>0&&<p className="cr-notice" aria-live="polite">待提交生成尺寸与当前场地不同：{generationSizeDifferences.map(([label,value,current])=>`${label}输入 ${value} 米，当前 ${current} 米`).join('；')}。输入已保留，生成前请重新核对。</p>}
     <details className="rc-manual-shell" open={!primaryFloorplan&&!layout.backendSceneV2}>
-      <summary>无平面图？手输长宽（旁路）</summary>
-      <p className="cr-hint">没有上传平面图时才需要手输；上传后请用上方两点标尺。</p>
-      <label className="cr-label">已知尺寸（米）<textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米"/></label>
+      <summary><Ruler size={14} aria-hidden="true"/><span>场地尺寸</span>
+        {(form.width||form.depth||form.height)&&<small>{form.width||'—'} × {form.depth||'—'} m · 层高 {form.height||'—'} m</small>}
+        <InfoTip label="什么时候手输尺寸">没有上传平面图时，用一句话写清总宽、总深、层高即可；上传后请用两点标尺。</InfoTip>
+      </summary>
+      <label className="cr-label"><textarea aria-label="场地尺寸" rows={2} value={form.text} onChange={e=>{const text=e.target.value;patch({text,...sizeFields(text,{width:form.width,depth:form.depth,height:form.height})});}} placeholder="总宽 12 米，总深 9 米，层高 3.6 米"/></label>
+      <SizeDiagram width={form.width||String(layout.width||'')} depth={form.depth||String(layout.height||'')} height={form.height||String(layout.floors[0]?.height||'')}/>
       {(form.width||form.depth||form.height)&&<p className="cr-hint" role="status">已识别：{[form.width&&`总宽 ${form.width} 米`,form.depth&&`总深 ${form.depth} 米`,form.height&&`层高 ${form.height} 米`].filter(Boolean).join(' · ')}</p>}
     </details>
     {form.constraints.length>0&&<div className="rc-constraints" aria-label="尺寸清单">{form.constraints.map(d=><div key={d.id}><input aria-label="尺寸说明" title={d.status==='confirmed'?'用户确认':'模型识别，待核对'} value={d.label} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,label:e.target.value}:v)})}/><input aria-label={`${d.label} 米数`} type="number" min="0.001" step="0.001" value={d.valueMeters} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,valueMeters:e.target.valueAsNumber,status:'confirmed'}:v)})}/><span>米</span><button type="button" aria-label={`删除尺寸 ${d.label}`} onClick={()=>patch({constraints:form.constraints.filter(v=>v.id!==d.id)})}><X size={16}/></button>{review&&(d.kind==='wall'||d.kind==='distance')&&<><select aria-label={`${d.label} 对应对象`} value={d.targetId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetId:e.target.value||undefined}:v)})}><option value="">关联墙、门窗或柱子</option>{review.structure.walls.map((w,index)=>({w,index})).filter(({w})=>!d.sourceAssetId||(w.evidence??[]).some(e=>e.sourceAssetId===(images.find(image=>image.id===d.sourceAssetId)?.assetId??d.sourceAssetId))).map(({w,index})=><option value={w.id} key={w.id}>墙 {index+1}</option>)}{review.structure.openings.map((o,index)=><option value={o.id} key={o.id}>{o.kind==='door'?'门':'窗'} {index+1}</option>)}{review.structure.columns.map((c,index)=><option value={c.id} key={c.id}>柱子 {index+1}</option>)}</select>{d.targetId&&<select aria-label={`${d.label} 测量方向`} value={d.measure??'length'} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,measure:e.target.value as 'width'|'depth'|'height'|'length'}:v)})}><option value="length">长度 / 两柱中心距</option><option value="width">宽度</option><option value="depth">深度</option><option value="height">高度</option></select>}{review.structure.columns.some(c=>c.id===d.targetId)&&<select aria-label={`${d.label} 另一根柱子`} value={d.targetEndId??''} onChange={e=>patch({constraints:form.constraints.map(v=>v.id===d.id?{...v,targetEndId:e.target.value||undefined}:v)})}><option value="">测量单柱尺寸</option>{review.structure.columns.filter(c=>c.id!==d.targetId).map((c,index)=><option value={c.id} key={c.id}>至柱子 {index+1}</option>)}</select>}</>}</div>)}</div>}
     </fieldset>
     {formReady&&currentStructure&&!(review&&job?.state==='needs_review')&&<ReferenceImageReview scene={currentStructure} layout={layout} images={images} registration={form.registration} onChange={value=>patch({registration:value})} onConfirm={confirmReference} updateImage={updateImage} onAddImages={onAddReferenceImages} applied openRequest={openReferenceRequest}/>}
     {layout.backendSceneV2&&<section className="rc-manual-venue" aria-label="人工编辑当前场地">
-      <h4>进阶 · 当前场地 · {layout.width} × {layout.height} 米</h4>
-      {!venueEdit?<><p className="cr-hint">主流程之外的人工微调：修改矩形场地的总宽、总深及现有门窗，先预览，核对后应用。</p><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
-        <p className="cr-hint">固定图中参考角 (0,0)，调整对边。物料、内墙和柱子的实际位置、尺寸保持；门窗距离从所属墙的起点计算。</p>
+      <h4><PencilLine size={14} aria-hidden="true"/><span>当前场地 · {layout.width} × {layout.height} 米</span><InfoTip label="编辑场地会影响什么">修改矩形场地的总宽、总深及现有门窗，先预览再应用；物料、内墙和柱子的实际位置与尺寸保持不变。</InfoTip></h4>
+      {!venueEdit?<><button type="button" className="rc-secondary" disabled={venueBlocked} onClick={startVenueEdit}>编辑当前场地</button></>:<>
+        <p className="cr-hint">固定图中参考角 (0,0)，调整对边；门窗距离从所属墙的起点计算。</p>
         <fieldset disabled={!!venueStale||venueBlocked} className="rc-venue-fields"><legend>场地编辑草稿 · 尚未应用</legend>
           <div className="rc-measures rc-venue-measures">{([['width','总宽'],['depth','总深']] as const).map(([key,label])=><label key={key}>{label}（米）<input type="number" step="0.001" min="0.02" max="200" aria-label={`编辑${label}（米）`} value={venueEdit[key]} onChange={event=>{const value=event.target.value;setVenueEdit(current=>current?{...current,[key]:value,confirmed:false}:null);notifyVenue('');}}/></label>)}</div>
           {venueEdit.openings.map((opening,index)=><details key={opening.id}><summary>{opening.kind==='door'?'门洞':'窗户'} {index+1} · 墙 {venueEdit.scene.structure.walls.findIndex(wall=>wall.id===opening.wallId)+1}</summary><div className="rc-measures rc-venue-measures">

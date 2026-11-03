@@ -1,12 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { ChatAgent } from './agent-chat-store';
 
 /** 系统开了「减少动效」就一次显示整句，不再逐字打。 */
 function prefersStill(): boolean {
   if (typeof window.matchMedia !== 'function') return true;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches !== false;
 }
+
+/**
+ * 四格输入框共用这一份引导句：总控、Bingo、空间、物料。
+ * 每格只说它自己那一层的事，句子短到一行放得下；生成条另有自己的清单。
+ */
+export const AGENT_INPUT_SUGGESTIONS: Record<ChatAgent, readonly string[]> = {
+  door: ['这场活动还缺什么', '检查一遍物料', '准备导出交接'],
+  bingo: ['80 人发布会，室内 12×9', '30 人圆桌晚宴，室内 15×10', '户外市集，6 个摊位，要遮阳'],
+  space: ['把场地改成 15×10', '这层加一堵隔墙', '换一块户外场地'],
+  material: ['加 20 把折叠椅', '把主桌换成圆桌', '按这个风格配一套'],
+};
 
 /**
  * 空输入时框里那句引导句：逐字打出来，轮换几条；按 Tab 一次填整句。
@@ -34,7 +46,13 @@ export function useSuggestion(list: readonly string[]): { full: string; shown: s
   return { full, shown: prefersStill() ? full : full.slice(0, count) };
 }
 
-/** 引导句本体：aria-hidden 的占位层，不挡点按，也不进无障碍树。 */
-export function SuggestionGhost({ full, shown, className }: { full: string; shown: string; className: string }): JSX.Element {
+/**
+ * 引导句本体：不挡无障碍树，也不出现在 Tab 序列里。
+ * 给了 onPick 就是可点的提示——点一下只把整句填进输入框，不替人发送。
+ */
+export function SuggestionGhost({ full, shown, className, onPick }: { full: string; shown: string; className: string; onPick?(text: string): void }): JSX.Element {
+  if (onPick) {
+    return <button type="button" className={`${className} is-pickable`} aria-hidden="true" tabIndex={-1} data-suggestion={full} onClick={() => onPick(full)}>{shown}</button>;
+  }
   return <span className={className} aria-hidden="true" data-suggestion={full}>{shown}</span>;
 }

@@ -35,7 +35,8 @@ export function renderItemLabels(
   for (const item of items) {
     if (!item.position) continue;
     const sprite = createLabelSprite(THREE, item.name);
-    sprite.position.set(item.position.x, yOffset + item.height + 0.4, item.position.z);
+    // 间距语义对齐 2D：标签贴在物件外缘 15px 处，这里取 0.3 m（约等于俯视 15px）。
+    sprite.position.set(item.position.x, yOffset + item.height + 0.3, item.position.z);
     sprite.userData.type = LABEL_TAG;
     sprite.userData.itemId = item.id;
     scene.add(sprite);
@@ -48,8 +49,15 @@ function createLabelSprite(THREE: ThreeModule, text: string): ThreeNS.Sprite {
   // canvas image. (`Texture.clone()` already flags needsUpdate.)
   const texture = master.clone();
 
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+  // 与 2D 区域/尺寸标注同一套语言：纸面留白 + 墨色字 + 白色描边光晕，不使用深色胶囊底。
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+  });
   const sprite = new THREE.Sprite(material);
+  sprite.renderOrder = 10;
   sprite.scale.set(1.2, 0.3, 1);
   return sprite;
 }
@@ -66,11 +74,6 @@ function getLabelTexture(THREE: ThreeModule, text: string): ThreeNS.CanvasTextur
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.roundRect(0, 0, canvas.width, canvas.height, 12);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
     ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -78,6 +81,12 @@ function getLabelTexture(THREE: ThreeModule, text: string): ThreeNS.CanvasTextur
     // Truncate over-long names with an ellipsis so the texture stays readable.
     const maxWidth = canvas.width - padding * 2;
     const display = fitText(ctx, text, maxWidth);
+    // 2D 的标签是「墨色字 + 3px 白色光晕」，3D 纹理按同比例放大到 6px。
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 6;
+    ctx.strokeText(display, canvas.width / 2, canvas.height / 2);
+    ctx.fillStyle = '#333';
     ctx.fillText(display, canvas.width / 2, canvas.height / 2);
   }
 

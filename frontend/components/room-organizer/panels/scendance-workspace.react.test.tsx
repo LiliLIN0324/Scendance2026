@@ -63,6 +63,13 @@ function contexts(layout = makeLayout(), view = makeViewSettings()) {
   return { editor, selection, actions, history, setView, toggle, selectOnly };
 }
 
+/** 取一次 setView 的 updater 返回值，用来断言工具开关切换后的 view。 */
+function applyView(values: ReturnType<typeof contexts>, base: ReturnType<typeof makeViewSettings>) {
+  expect(values.setView).toHaveBeenCalledTimes(1);
+  const updater = values.setView.mock.calls[0]![0] as (view: ReturnType<typeof makeViewSettings>) => ReturnType<typeof makeViewSettings>;
+  return updater(base);
+}
+
 function Providers({ values, children }: { values: ReturnType<typeof contexts>; children: ReactNode }): JSX.Element {
   return <RoomEditorProvider value={values.editor}><SelectionProvider value={values.selection}>{children}</SelectionProvider></RoomEditorProvider>;
 }
@@ -208,11 +215,13 @@ describe('ScendanceViewTools design column', () => {
     // 室内常驻：发布 / 选择 / 2D·3D / 第一人称走进场 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围。卫星只在户外。
     expect(within(rail).getAllByRole('button')).toHaveLength(13);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
-    for (const name of ['发布', '选择工具 · 已启用', '2D / 3D', '第一人称走进场', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图']) {
+    for (const name of ['发布', '选择工具 · 激活中，再点一次退出', '2D / 3D', '第一人称走进场', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
-    // 选择是默认态，所以那颗钮一开始就是禁用的，免得误点一下把工具切走。
-    expect((within(rail).getByRole('button', { name: '选择工具 · 已启用' }) as HTMLButtonElement).disabled).toBe(true);
+    // 选择是开关而不是禁用：默认激活，但按钮可点，再点一次退出。
+    const selectButton = within(rail).getByRole('button', { name: '选择工具 · 激活中，再点一次退出' }) as HTMLButtonElement;
+    expect(selectButton.disabled).toBe(false);
+    expect(selectButton.getAttribute('aria-pressed')).toBe('true');
     // 三个机位是同一层切换，右轨只留一颗「视角」钮，点一下按 整体 → 俯视 → 正面机位 轮换。
     expect(within(rail).getByRole('button', { name: '视角切换：当前整体，点击切到俯视' })).toBeTruthy();
     expect(rail.querySelector('#tool-satellite')).toBeNull();
@@ -251,16 +260,27 @@ describe('ScendanceViewTools design column', () => {
     expect(values.toggle).toHaveBeenCalledWith('view2D');
   });
 
-  it('disables 选择 while it is already the active tool', () => {
-    const { rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '选择工具 · 已启用' });
-    expect((select as HTMLButtonElement).disabled).toBe(true);
+  it('toggles 选择 as a real switch instead of disabling it', () => {
+    const { values, rail } = renderTools();
+    const select = within(rail).getByRole('button', { name: '选择工具 · 激活中，再点一次退出' }) as HTMLButtonElement;
+    expect(select.disabled).toBe(false);
     expect(select.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(select);
+    expect(applyView(values, makeViewSettings())).toMatchObject({ selectMode: false });
+    cleanup();
+    // 关掉之后是「未启用」：仍然可点，再点一下就是重新启用。
+    const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
+    render(<Providers values={off}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
+    const offSelect = screen.getByRole('button', { name: '选择工具 · 未启用，点一下启用' }) as HTMLButtonElement;
+    expect(offSelect.disabled).toBe(false);
+    expect(offSelect.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(offSelect);
+    expect(applyView(off, makeViewSettings({ selectMode: false }))).toMatchObject({ selectMode: true });
     cleanup();
     // 在走动里它不是当前工具：可点，点一下就是退出走动回到选择。
     const walking = contexts(makeLayout(), makeViewSettings({ walkthroughMode: true }));
     render(<Providers values={walking}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const walkingSelect = screen.getByRole('button', { name: '选择工具：单击选中物料，拖拽挪动' });
+    const walkingSelect = screen.getByRole('button', { name: '选择工具 · 已启用，点一下切回' });
     expect((walkingSelect as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(walkingSelect);
     expect(walking.setView).toHaveBeenCalledTimes(1);

@@ -417,6 +417,9 @@ function paintAlignedSatellite(
   }
   if (cached?.url !== url && typeof Image !== 'undefined') {
     const image = new Image();
+    // 卫星底图来自 3199 代理（跨源）。必须带 CORS 解码，否则这张图既会污染 2D
+    // canvas，又会在 3D 上传纹理时被 WebGL 以 “cross-origin data” 拒绝。
+    image.crossOrigin = 'anonymous';
     floorPlanImageCache = { url, image };
     image.onload = () => { if (floorPlanImageCache?.image === image) requestRepaint(); };
     image.src = url;
@@ -530,6 +533,7 @@ function drawFloor(
     // async onload painting over them.
     if (floorPlanImageCache?.url !== url) {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       floorPlanImageCache = { url, image: img };
       img.onload = () => {
         // Ignore stale loads if the plan changed again before this resolved.
@@ -1125,6 +1129,7 @@ export function ensureFloorPlanImageDecoded(url: string): Promise<void> {
   let entry = floorPlanImageCache;
   if (entry?.url !== url) {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     entry = { url, image: img };
     floorPlanImageCache = entry;
     img.onload = () => {

@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus, Info, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
@@ -30,9 +30,17 @@ export function VenuePhotosPanel({ images, addImages, removeImage, onKindChange 
 
   return <section ref={panel} className="vp-photos" aria-label="图纸与现场照片">
     <input type="file" ref={input} hidden accept="image/png,image/jpeg,image/webp" multiple onChange={event => { void addImages(event.target.files); event.target.value = ''; }}/>
-    <button className="cr-upload" type="button" onClick={() => input.current?.click()} disabled={images.length >= 12}>
-      <ImagePlus size={24}/><strong>{images.length >= 12 ? '已添加 12 张资料' : '上传图纸或现场照片'}</strong><span>PNG / JPG / WebP</span>
-    </button>
+    <div className="vp-upload-row">
+      <button className="cr-upload vp-upload" type="button" title="PNG / JPG / WebP，单次最多 12 张" onClick={() => input.current?.click()} disabled={images.length >= 12}>
+        <ImagePlus size={18} aria-hidden="true"/>
+        <strong>{images.length >= 12 ? '已达 12 张上限' : '添加图纸或照片'}</strong>
+        <span className="vp-upload-count">{images.length ? `${images.length}/12` : '旧图与新拍都行'}</span>
+      </button>
+      <details className="vp-info">
+        <summary aria-label="资料类型说明"><Info size={13} aria-hidden="true"/></summary>
+        <p>平面图用于标尺和结构识别，现场照片用于还原观感。PNG / JPG / WebP，单次最多 12 张；选中的照片可随时改为平面图。</p>
+      </details>
+    </div>
     {images.length > 0 && <div className="vp-thumbnails">{images.map(image => <figure key={image.id}>
       <button type="button" className="vp-thumbnail" aria-label={`放大 ${image.name}`} onClick={() => setExpandedId(image.id)}>
         {/* Blob URLs are decoded locally and cannot use Next's remote image optimization. */}
