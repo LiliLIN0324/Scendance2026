@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding,
+  geometryWorkbenchBindingKey, listGeometryWorkbenchBindings, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding,
   type GeometryWorkbenchBinding, type GeometryWorkbenchIdentity,
 } from './geometry-workbench-binding';
-import { readSourceRecord, updateSourceForm } from './source-storage';
+import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
 
-vi.mock('./source-storage', () => ({ readSourceRecord: vi.fn(), updateSourceForm: vi.fn() }));
+vi.mock('./source-storage', () => ({ listSourceRecords: vi.fn(), readSourceRecord: vi.fn(), updateSourceForm: vi.fn() }));
 const records = new Map<string, unknown>();
 const binding: GeometryWorkbenchBinding = {
   version: 1, localActivityId: 'house-local', cloudProjectId: 'ab900000-0000-4000-8000-000000000001',
@@ -14,6 +14,9 @@ const binding: GeometryWorkbenchBinding = {
 const address = (identity: GeometryWorkbenchIdentity) => JSON.stringify(geometryWorkbenchBindingKey(identity));
 beforeEach(() => {
   records.clear(); vi.resetAllMocks();
+  vi.mocked(listSourceRecords).mockImplementation(async namespace => [...records.entries()]
+    .filter(([key]) => (JSON.parse(key) as unknown[])[0] === namespace)
+    .map(([key, value]) => ({ key: JSON.parse(key) as [string, string], value: structuredClone(value) as unknown })));
   vi.mocked(readSourceRecord).mockImplementation(async key => structuredClone(records.get(JSON.stringify(key))) as never);
   vi.mocked(updateSourceForm).mockImplementation(async (key, update) => {
     const keyText = JSON.stringify(key), next = update(structuredClone(records.get(keyText)));
@@ -120,5 +123,19 @@ describe('geometry workbench binding storage', () => {
     expect(results[1]).toMatchObject({ status: 'rejected', reason: { code: 'GEOMETRY_BINDING_CONFLICT' } });
     expect(records.get(address(binding))).toEqual(binding);
     expect(readSourceRecord).not.toHaveBeenCalled();
+  });
+
+  it('lists only this account and service, and keeps going past a record it cannot read', async () => {
+    await writeGeometryWorkbenchBinding(binding);
+    await writeGeometryWorkbenchBinding({ ...binding, localActivityId: 'house-second',
+      cloudProjectId: 'ab900000-0000-4000-8000-000000000003' });
+    await writeGeometryWorkbenchBinding({ ...binding, userId: 'other' });
+    await writeGeometryWorkbenchBinding({ ...binding, apiUrl: 'https://elsewhere.example/functions/v1',
+      localActivityId: 'house-elsewhere' });
+    records.set(address({ ...binding, localActivityId: 'house-broken' }), { corrupt: true });
+    const listed = await listGeometryWorkbenchBindings({ userId: binding.userId, apiUrl: binding.apiUrl });
+    expect(listed.map(item => [item.localActivityId, item.cloudProjectId])).toEqual([
+      [binding.localActivityId, binding.cloudProjectId], ['house-second', 'ab900000-0000-4000-8000-000000000003'],
+    ]);
   });
 });

@@ -3,7 +3,7 @@
 /* Source previews use private blob/signed URLs and preserve original image coordinates. */
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, Info, Loader2, PencilLine, Ruler, Sparkles, X } from 'lucide-react';
+import { Check, Info, Loader2, PencilLine, Ruler, Sparkles, X } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBackendSession, type BackendSession, type DimensionConstraint, type ReconstructionJob, type SceneProposal, type SceneV2, type SourceImage } from '@/lib/backend-session';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';

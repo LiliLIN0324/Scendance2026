@@ -1,6 +1,6 @@
 'use client';
 
-import { BrickWall, Check, DoorOpen, Info, Minus, Plus, Ruler, Square } from 'lucide-react';
+import { BrickWall, Check, DoorOpen, Info, Minus, Plus, Ruler, Square } from '@/components/solid-icons';
 import { useState, type FormEvent } from 'react';
 import { sceneSchema, type SceneV2 } from '../../../../supabase/functions/_shared/domain';
 import { measurement } from '../../../../supabase/functions/_shared/structural-geometry';

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Box, ImagePlus, KeyRound, Layers3, LockKeyhole } from 'lucide-react';
+import { ArrowRight, Box, ImagePlus, KeyRound, Layers3, LockKeyhole } from '@/components/solid-icons';
 import { useState, type FormEvent } from 'react';
 import { useEmailCooldown } from '@/lib/auth-provider';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';

@@ -138,7 +138,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
 }
 
 export function layoutToBackendScene(layout: RoomLayout): Scene {
-  if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '云端首版只支持单层场地，请保留本地方案。');
+  if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '当前云端版暂不支持保存多层方案。这份方案和修改会保留在本机；请勿删除本地方案。');
   if (!layout.backendSceneV2 && (layout.floorPlanImage || layout.backendVenue?.floorplanAssetId)) {
     throw new SceneAdapterError('FLOORPLAN_NOT_SUPPORTED', '平面图尚未接入云保存，不能忽略底图后保存。');
   }

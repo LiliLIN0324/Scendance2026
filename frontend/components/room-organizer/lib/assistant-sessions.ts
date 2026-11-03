@@ -142,6 +142,17 @@ export function deleteAssistantSession(index: AssistantSessionIndex, id: string)
   return { version: ASSISTANT_SESSIONS_VERSION, activeId, sessions };
 }
 
+/** 对话有新气泡时只抬 updatedAt，不改 active、不改标题。 */
+export function touchAssistantSession(index: AssistantSessionIndex, id: string, now: number): AssistantSessionIndex {
+  const current = index.sessions.find(item => item.id === id);
+  if (!current || current.updatedAt === now) return index;
+  return {
+    version: ASSISTANT_SESSIONS_VERSION,
+    activeId: index.activeId,
+    sessions: index.sessions.map(item => item.id === id ? { ...item, updatedAt: now } : item),
+  };
+}
+
 export function parseAssistantSessionIndex(raw: string): AssistantSessionIndex | null {
   let value: unknown;
   try {

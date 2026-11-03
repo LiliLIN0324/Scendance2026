@@ -2,7 +2,7 @@
 
 /**
  * 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
- * 一句话开场：没有表单、没有起步卡——用户敲一句话，客户端解析（人数/场地/面积/类型/时段）铺进预填卡。
+ * 一句话开场：敲一句，或在对话里挑活动/场地/人数；客户端解析后铺进预填卡。
  * 出方案：已连接云项目时走现有 AI 生成；否则由 lib/agent-proposal 用现有本地物料组
  * （furniture-sets / surprise）在内存里算一份候选，再按步推给画布做预览。
  * 硬钉（对话四步 ②）：建议 → 画布预览（绿框 = 新位，虚线 = 原位）→「确认布置」/「撤回」。
@@ -12,9 +12,9 @@
  * 未确认前不把米数说成事实（docs/AI-NATIVE-FOR-EXECUTORS.md 对话四步 ①）。
  * 布置方案的入口只有对话。尺寸表单与「让Bingo出方案」那颗大绿钮按 2026-10-26 夜截图钉砍掉了，
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
- * 物件与场景生成不在这里：已迁到物料卡（我的生成 → ＋）与空间栏，Bingo 只谈布置与方案。
+ * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, ChevronDown, ClipboardList, Clock, FileImage, Inbox, Info, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, SquareDashed, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronDown, ClipboardList, Clock, FileImage, Inbox, Info, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
@@ -48,11 +48,24 @@ import {
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
 import { BingoAuditCard } from './bingo-audit-card';
-import { ComposerPlus } from './composer-plus';
+import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
+import { StyleBundlePanel } from './style-bundle-panel';
 import { AGENT_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { editorItemLimit } from '../lib/scene-presets';
+import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, type StyleBundle } from '../lib/style-bundles';
+import {
+  readSessionBubbles,
+  writeSessionBubbles,
+  type StoredAssistantBubble,
+} from '../lib/assistant-session-bodies';
 import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
-import { useAssistantSessions } from '../hooks/use-assistant-sessions';
+import {
+  assistantSessionExists,
+  getAssistantSessionBodies,
+  replaceAssistantSessionBodies,
+  useAssistantSessions,
+} from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay } from './session-history-panel';
 import { RailAvatar, type RailForm } from './rail-avatar';
 import type { SceneV2 } from '../../../../supabase/functions/_shared/domain';
@@ -82,6 +95,25 @@ type Bubble = {
   /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
   action?: { label: string; run(): void };
 };
+
+/** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
+function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
+  return bubbles.map(({ id, role, text, meta, warn, amber, to, long, image }) => {
+    return {
+      id, role, text,
+      ...(meta !== undefined ? { meta } : {}),
+      ...(warn !== undefined ? { warn } : {}),
+      ...(amber ? { amber: true } : {}),
+      ...(to?.length ? { to } : {}),
+      ...(long ? { long: true } : {}),
+      ...(image !== undefined ? { image } : {}),
+    } satisfies StoredAssistantBubble;
+  });
+}
+
+function fromStoredBubbles(rows: readonly StoredAssistantBubble[]): Bubble[] {
+  return rows.map(({ to, ...row }) => ({ ...row, ...(to ? { to: [...to] } : {}) }));
+}
 /** 这一版要按哪组尺度摆：origin 记下米数是谁定的，只有人说过的才敢当事实念出来。 */
 type Scale = { length: number; width: number; origin: ScaleOrigin };
 
@@ -164,7 +196,7 @@ export interface LayoutAgentCallbacks {
   /** 现场照片重建 3D 场地 */
   onOpenRebuild?(): void;
   /** 左栏 / 画布上的场地观感（Lux3D） */
-  onOpenLux3d?(): void;
+  onOpenLux3d?(kind?: 'world' | 'recon', prompt?: string): void;
   /** 生成轨、观感、重建等 Aholo 能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
   luxToolsVisible?: boolean;
 }
@@ -193,6 +225,11 @@ interface AgentValue {
   venuePickerOpen: boolean;
   startVenuePicker(): void;
   closeVenuePicker(): void;
+  /** 「按风格配一套」：从库挪到 Bingo 的成套放样入口。 */
+  stylePickerOpen: boolean;
+  startStylePicker(): void;
+  closeStylePicker(): void;
+  placeStyleBundle(bundle: StyleBundle): void;
   applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
@@ -218,8 +255,9 @@ const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? cry
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 
 export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
-  const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
+  const { layout, activeFloor, activeFloorIndex, actions, history, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
+  const assistantSessions = useAssistantSessions();
   // 确认/撤回都是异步云调用，回调里要读最新那一帧的预览状态，不能在闭包里快照。
   const studioRef = useRef(studio); studioRef.current = studio;
   /** 这一次出方案是谁算的：撤回、停一下、换一版都按它分流。 */
@@ -251,6 +289,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const [phase, setPhase] = useState<'idle' | 'generating' | 'paused' | 'failed' | 'proposed' | 'ready' | 'edited'>('idle');
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
+  const [stylePickerOpen, setStylePickerOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   // T-UI §4-5：导出预览卡只活在这里；确认前不触发任何下载。
   const [exportPreview, setExportPreview] = useState(false);
@@ -259,6 +298,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const proposalBase = useRef<RoomLayout | null>(null);
   const shownSteps = useRef(0);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const bubblesRef = useRef<Bubble[]>([]);
+  bubblesRef.current = bubbles;
+  /** 当前气泡所绑定的方案会话；切场时先把旧场正文落盘再换。 */
+  const boundSessionId = useRef<string | null>(null);
+  const touchActiveSessionRef = useRef(assistantSessions.touchActiveSession);
+  touchActiveSessionRef.current = assistantSessions.touchActiveSession;
   const lastFile = useRef<File | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
   /** 选进来、还没发出去的图纸/照片：先摆在输入框里，等一句需求再一起发。 */
@@ -275,7 +320,36 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   const dimsInvalid = (!lengthCheck.ok && !lengthCheck.empty) || (!widthCheck.ok && !widthCheck.empty);
   const hasBase = baseName !== null;
 
-  const say = useCallback((bubble: Omit<Bubble, 'id'>) => setBubbles(items => [...items.slice(-30), { id: uid(), ...bubble }]), []);
+  const persistBubbles = useCallback((sessionId: string | null, next: readonly Bubble[]) => {
+    if (!sessionId) return;
+    const written = writeSessionBubbles(getAssistantSessionBodies(), sessionId, toStoredBubbles(next));
+    replaceAssistantSessionBodies(written);
+  }, []);
+
+  const say = useCallback((bubble: Omit<Bubble, 'id'>) => {
+    setBubbles(items => {
+      const next = [...items.slice(-30), { id: uid(), ...bubble }];
+      bubblesRef.current = next;
+      persistBubbles(boundSessionId.current, next);
+      touchActiveSessionRef.current();
+      return next;
+    });
+  }, [persistBubbles]);
+
+  // 点历史 / 新开会话：换 activeId 时把气泡切到对应正文；新场没有正文就是空对话。
+  useEffect(() => {
+    if (!assistantSessions.ready) return;
+    const nextId = assistantSessions.activeId;
+    const prevId = boundSessionId.current;
+    if (prevId === nextId) return;
+    if (prevId && assistantSessionExists(prevId)) persistBubbles(prevId, bubblesRef.current);
+    boundSessionId.current = nextId;
+    const loaded = nextId
+      ? fromStoredBubbles(readSessionBubbles(getAssistantSessionBodies(), nextId))
+      : [];
+    bubblesRef.current = loaded;
+    setBubbles(loaded);
+  }, [assistantSessions.ready, assistantSessions.activeId, persistBubbles]);
 
   /** 对话记忆 → 右栏回放与生成条件共用的那份真相（人数/活动名/布置形态）。 */
   function syncMemory(memory: BriefMemory): void {
@@ -459,6 +533,33 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     lastSource.current = 'local';
     const rest = result.remaining.length ? `（改完还剩 ${result.remaining.length} 条要处理）` : '';
     void presentProposal(++runToken.current, `按这条改：${fresh.fix.label}${rest}。`);
+  }
+
+  /** 「按奶油会客配一套」：整组落盘，记进风格历史；与物料库旧入口共用 buildStyleBundleItems。 */
+  function placeStyleBundleNow(bundle: StyleBundle): void {
+    if (phase === 'generating') {
+      say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再配一套。' });
+      return;
+    }
+    if (proposal.current || studioRef.current?.preview) {
+      say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再配一套。' });
+      return;
+    }
+    const built = buildStyleBundleItems(bundle, { width: live.current.width, depth: live.current.height });
+    if (!built.ok) {
+      say({ role: 'agent', amber: true, text: built.message });
+      return;
+    }
+    const limit = editorItemLimit(live.current);
+    if (materialCount(activeFloor.items) + built.items.length > limit) {
+      say({ role: 'agent', amber: true, text: `再放这一套会超过 ${limit} 件上限，先收几件物料再试。` });
+      return;
+    }
+    history.commitNow();
+    actions.addItems(built.items);
+    saveStyleRun(bundle.key, window.localStorage);
+    setStylePickerOpen(false);
+    say({ role: 'agent', text: `按「${bundle.name}」放了一套：${bundle.note}。不满意可以说「换一版」，或再点别的风格。` });
   }
 
   /**
@@ -1158,12 +1259,24 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (aholo) {
       say({
         role: 'agent',
-        text: `要生成${aholo.title}，去「物料」面板的「我的生成」里点 ＋ 生成；这边只谈布置与方案。`,
+        text: aholo.kind === 'world'
+          ? '世界模型生成属于空间 Agent；切到「空间」后用 Aholo World 生成 3D 高斯空间。'
+          : `要生成${aholo.title}，请切到物料 Agent 的「生成物料」入口；Bingo 只负责布置与方案。`,
       });
       return;
     }
     const request = parseMaterialRequest(trimmed);
     if (request) { addMaterials(request); return; }
+    const styleCmd = matchStyleBundleCommand(trimmed, window.localStorage);
+    if (styleCmd === 'open') {
+      setStylePickerOpen(true);
+      say({ role: 'agent', text: '选一套风格：奶油会客、深木就餐或清透办公。' });
+      return;
+    }
+    if (styleCmd) {
+      placeStyleBundleNow(styleCmd);
+      return;
+    }
     if (isMaterialListCommand(trimmed)) { replyMaterialList(); return; }
     if (isGenericMaterialRequest(trimmed)) { say({ role: 'agent', text: MATERIAL_REQUEST_HINT }); return; }
     if (isCopyDraftCommand(trimmed)) { replyDraft(); return; }
@@ -1263,6 +1376,10 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
     venuePickerOpen, startVenuePicker: () => setVenuePickerOpen(true), closeVenuePicker: () => setVenuePickerOpen(false),
+    stylePickerOpen,
+    startStylePicker: () => { setStylePickerOpen(true); setMapPickerOpen(false); setVenuePickerOpen(false); },
+    closeStylePicker: () => setStylePickerOpen(false),
+    placeStyleBundle: placeStyleBundleNow,
     applyMapVenuePick: pick => {
       if (phase === 'generating') { const reason = '还在出这一版：先停一下，再圈场地。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
       runToken.current++;
@@ -1449,16 +1566,23 @@ type CapabilityChip = {
   active?: boolean;
 };
 
-function AgentCapabilityPrompts(): JSX.Element | null {
+function AgentCapabilityPrompts({ owner }: { owner: 'door' | 'bingo' }): JSX.Element | null {
   const agent = useAgent();
   if (agent.callbacks.workbenchMode !== 'layout') return null;
 
-  // 布置只放场地与需求这一层；生成为什么不在这里，跟「生成」条那片「你可以做什么」对得上。
+  // 总控：活动级选址。Bingo：从库挪来的「按风格配一套」。
   const chips: CapabilityChip[] = [
-    { id: 'venue', label: '新建/换场地', title: '空白场地、我的云项目，或只起个名字新建一个', icon: <MapPin size={14} aria-hidden="true"/>, run: agent.startVenuePicker, active: agent.venuePickerOpen },
-    { id: 'map', label: '地图选址', title: '搜地点 → 在卫星图上圈出边界', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen },
-    { id: 'reference', label: '图纸与照片', title: '图纸、照片与实测尺寸', icon: <Paperclip size={14} aria-hidden="true"/>, run: () => agent.callbacks.onOpenReference?.() },
+    ...(owner === 'door' ? [{ id: 'map', label: '地图选址', title: '确定地点并圈出真实场地范围', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen }] : []),
+    ...(owner === 'bingo' ? [{
+      id: 'style',
+      label: '按风格配一套',
+      title: '内置气质，或存一句风格提示词',
+      icon: <Palette size={14} aria-hidden="true"/>,
+      run: () => { if (agent.stylePickerOpen) agent.closeStylePicker(); else agent.startStylePicker(); },
+      active: agent.stylePickerOpen,
+    }] : []),
   ];
+  if (chips.length === 0) return null;
 
   return <div id="ap-capabilities" className="ap-capabilities">
     <p className="ap-capability-label">你可以做什么</p>
@@ -1607,10 +1731,10 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
 export type AgentId = 'door' | 'bingo' | 'space' | 'material';
 
 export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: string }> = {
-  door: { name: '总控', form: 'door', role: '这场活动的入口' },
-  bingo: { name: 'Bingo', form: 'ball', role: '布置与方案' },
-  space: { name: '空间', form: 'cube', role: '场地、模板与环境' },
-  material: { name: '物料', form: 'pyramid', role: '物料库与生成' },
+  door: { name: '总控', form: 'door', role: '活动目标、信息汇总与任务分派' },
+  bingo: { name: 'Bingo', form: 'ball', role: '现场布局、动线与布置方案' },
+  space: { name: '空间', form: 'cube', role: '选址后的场地结构、图纸与环境' },
+  material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
 };
 
 /** 总控台账：只读这场对话，一条点名 = 一条记录；点名记在气泡上，不另建分发表。 */
@@ -1646,9 +1770,9 @@ function AgentControlCard({ talkTo = [], onTalkTo, bubbles = [] }: { talkTo?: re
           <div>
             <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
             <dl>
-              <div><dt>Bingo</dt><dd>布置与方案</dd></div>
-              <div><dt>空间</dt><dd>场地、模板与环境</dd></div>
-              <div><dt>物料</dt><dd>物料库与生成</dd></div>
+              <div><dt>Bingo</dt><dd>现场布局、动线与布置方案</dd></div>
+              <div><dt>空间</dt><dd>场地结构、图纸与环境</dd></div>
+              <div><dt>物料</dt><dd>物件规格、模型与生成</dd></div>
             </dl>
           </div>
         </details>
@@ -1658,7 +1782,7 @@ function AgentControlCard({ talkTo = [], onTalkTo, bubbles = [] }: { talkTo?: re
       {(['bingo', 'space', 'material'] as const).map(id => {
         const meta = AGENT_META[id];
         const picked = talkTo.includes(id);
-        return <button key={id} type="button" className={`ap-agent-link${picked ? ' is-active' : ''}`} aria-pressed={picked} onClick={() => onTalkTo?.(id)}>
+        return <button key={id} type="button" className={`ap-agent-link${picked ? ' is-active' : ''}`} aria-label={`${meta.name}：${meta.role}`} title={meta.role} aria-pressed={picked} onClick={() => onTalkTo?.(id)}>
           <RailAvatar form={meta.form} size={28}/>
           <strong>{meta.name}</strong>
         </button>;
@@ -1801,14 +1925,21 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
       </div>
     </header>
     <div className="ap-body">
-      {bingo && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* index-only for now */ }} />}
+      {bingo && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {door && <AgentControlCard talkTo={talkTo} onTalkTo={startTalk} bubbles={agent.bubbles}/>}
       {mode === 'layout' && agent.bubbles.length === 0 && agent.state !== 'generating' && <div className="ap-lead">
-        <p className="ap-lead-title">{door ? '先说一句，我来分派' : '先说一句，或从下面挑'}</p>
-        {!door && <p className="ap-lead-body">选好活动、场地和人数，我会先给一版布置建议；你确认后才写进画布。</p>}
+        <p className="ap-lead-title">{door ? '先说一句，我来分派' : '先说一句就行'}</p>
+        {!door && <p className="ap-lead-body">点一句例子，或自己说；听懂了会回显，确认后才写进画布。</p>}
       </div>}
+      {bingo && mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null) && (
+        <PlanHome
+          draft={draft}
+          onPickExample={sentence => { setDraft(sentence); requestAnimationFrame(() => inputRef.current?.focus()); }}
+          onGenerate={sentence => { setDraft(''); void agent.send(sentence); }}
+        />
+      )}
       {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {mode === 'review' && <><p className="ap-divider">评审 · {layout.name || '未命名活动'}</p><p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p></>}
       {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}
@@ -1862,14 +1993,29 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
       </div>}
     </div>
     : <div className={`ap-agent-surface is-${activeAgent}`}>
+      {activeAgent === 'space' && <div className="ap-capabilities ap-space-actions" aria-label="空间工具">
+        <p className="ap-capability-label">空间工具</p>
+        <div className="ap-capability-chips" role="group" aria-label="空间工具">
+          <button type="button" className="chip ap-capability-chip" onClick={agent.startVenuePicker}><MapPin size={14} aria-hidden="true"/><span>新建/换场地</span></button>
+          <button type="button" className="chip ap-capability-chip" onClick={() => agent.callbacks.onOpenReference?.()}><Paperclip size={14} aria-hidden="true"/><span>图纸与照片</span></button>
+        </div>
+      </div>}
       {activeAgent === 'space' && spaceSlot}
       {activeAgent === 'material' && materialSlot}
     </div>}
     {!conversation && chatSlot}
     </div>
     {conversation && <>
-        {/* 场地/选址/图纸是 Bingo 的活；总控只分派与汇总，不再重复摆同一排能力入口。 */}
-        {mode === 'layout' && bingo && <AgentCapabilityPrompts/>}
+        {/* 总控管活动级选址；Bingo 管布置与风格套（从物料库挪来）。 */}
+        {mode === 'layout' && bingo && agent.stylePickerOpen && (
+          <StyleBundlePanel
+            disabled={generating}
+            onClose={agent.closeStylePicker}
+            onPick={bundle => agent.placeStyleBundle(bundle)}
+          />
+        )}
+        {mode === 'layout' && door && <AgentCapabilityPrompts owner="door"/>}
+        {mode === 'layout' && bingo && <AgentCapabilityPrompts owner="bingo"/>}
         <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft, talkTo.length ? talkTo : undefined); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         {agent.pendingFile && <div className="sc-chat-file">
@@ -1887,20 +2033,13 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
         </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : talkTo.length ? '说一句，交给选中的 agent' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : talkTo.length ? '说一句，交给选中的 agent' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : door ? '说活动目标、限制或需要协调的事情' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void agent.send(draft, talkTo.length ? talkTo : undefined); setDraft(''); }
         }}/>
         </div>
         <div className="ap-composer-bar">
-          <div className="ap-composer-left">
-            <ComposerPlus label="场地与附件" items={[
-              { id: 'venue', label: '新建/换场地', hint: '立壳体，或换一套场地尺度', icon: <MapPin size={16} aria-hidden="true"/>, disabled: generating, run: agent.startVenuePicker },
-              { id: 'locate', label: '地图选址', hint: '圈一块地，量出真实尺寸', icon: <MapIcon size={16} aria-hidden="true"/>, disabled: generating, run: agent.startMapVenuePicker },
-              { id: 'attach', label: '图纸与照片', hint: '平面图、效果图或现场照片', icon: <Paperclip size={16} aria-hidden="true"/>, disabled: mode !== 'layout' || generating, run: agent.pickFile },
-            ]}/>
-          </div>
           <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim() && !agent.pendingFile}><ArrowUp size={18}/></button>
         </div>
       </form>

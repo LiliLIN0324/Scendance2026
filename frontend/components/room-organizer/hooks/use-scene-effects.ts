@@ -274,7 +274,11 @@ export function useSceneEffects({
 
     removeTagged(scene, ROOM_OBJECT_TAGS.Floor, ROOM_OBJECT_TAGS.Wall);
     if (layout.backendSceneV2) {
-      buildStructureShell(THREE, scene, layout, { onTextureLoaded: invalidate });
+      buildStructureShell(THREE, scene, layout, {
+        onTextureLoaded: invalidate,
+        activeFloorIndex,
+        showAllFloors: view.showAllFloors,
+      });
       const camera = cameraRef.current;
       if (camera) applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
       requestShadowUpdate();

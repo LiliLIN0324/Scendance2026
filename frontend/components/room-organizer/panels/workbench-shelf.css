@@ -441,6 +441,31 @@
   padding:10px 12px; border:1px solid var(--wk-hair); border-radius:var(--r-md);
   background:var(--wk-paper);
 }
+.sc-space-workflow { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.sc-space-workflow-label { display:flex; align-items:center; gap:3px; margin:0; color:var(--wk-muted); font-size:var(--fs-cap); }
+.sc-space-workflow-switch { display:grid; grid-template-columns:1.15fr 1fr; gap:6px; }
+.sc-space-workflow-switch button {
+  display:grid; grid-template-columns:16px minmax(0,1fr); grid-template-rows:auto auto; align-items:center;
+  column-gap:6px; padding:7px 9px; min-width:0; text-align:left; cursor:pointer;
+  border:1px solid var(--wk-hair); border-radius:var(--r-md); background:var(--wk-paper); color:var(--wk-ink-soft);
+}
+.sc-space-workflow-switch button > svg { grid-row:1 / span 2; }
+.sc-space-workflow-switch button > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-cap); font-weight:600; }
+.sc-space-workflow-switch button > small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--wk-muted); font-size:10px; }
+.sc-space-workflow-switch button.is-active { border-color:var(--wk-green); box-shadow:inset 0 0 0 1px var(--wk-green); color:var(--wk-ink); }
+.sc-space-workflow-switch button:focus-visible { outline:2px solid var(--wk-green); outline-offset:2px; }
+.sc-space-card.is-aholo { min-height:0; max-height:none; overflow:visible; }
+.sc-space-aholo-main { display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-width:0; }
+.sc-space-aholo-main > p { margin:0; color:var(--wk-ink-soft); font-size:var(--fs-cap); line-height:1.5; }
+.sc-space-detail { align-items:center; gap:4px; }
+.sc-space-detail > summary { display:flex; width:auto; padding:0 4px; gap:4px; font-size:10px; }
+.sc-space-info > summary:hover { background:var(--wk-plane); color:var(--wk-ink); }
+.sc-space-detail > p { top:22px; }
+.sc-space-workflow-label > .sc-space-info > p { top:22px; }
+.sc-space-aholo-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.sc-space-aholo-actions .sc-button { min-height:32px; padding:5px 10px; font-size:var(--fs-cap) !important; }
+.sc-space-aholo-foot { display:flex; align-items:flex-start; gap:5px; color:var(--wk-muted) !important; font-size:10px !important; }
+.sc-space-aholo-foot svg { flex:none; margin-top:1px; }
 .sc-space-block { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .sc-space-block.sc-space-env { margin-top:8px; padding-top:8px; border-top:1px solid var(--wk-hair); }
 .sc-space-expand {
@@ -470,6 +495,7 @@
 .sc-space-info.is-up > p { top:auto; bottom:24px; }
 /* 环境卡的标题行：短标签靠右，ⓘ 收在标题行末尾，不再单独占一行。 */
 .sc-space-env .sc-space-section-head > small { margin-left:auto; }
+.sc-space-info.sc-space-detail > summary { display:inline-flex; place-items:initial; align-items:center; justify-content:center; width:20px; height:20px; padding:0; gap:0; white-space:nowrap; }
 /* 环境缩略图统一 4:3，contain 不裁主体；名称一行短标签。 */
 .sc-space-env .sc-material-rail { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; height:auto; margin:0; overflow:visible; mask-image:none; }
 .sc-space-env .sc-material-card { display:grid; grid-template-rows:auto 16px; gap:3px; width:100%; height:auto; padding:3px; }
@@ -794,6 +820,18 @@
 .sc-env-meta { display:flex; flex-direction:column; gap:1px; min-width:0; }
 .sc-env-meta strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; line-height:18px; }
 .sc-env-meta small { font-size:var(--fs-cap); line-height:16px; color:var(--wk-muted); }
+.sc-env-scenes { display:flex; flex-direction:column; gap:5px; margin:5px 0 0; padding:0; list-style:none; }
+.sc-env-scenes > li { display:flex; align-items:center; gap:5px; min-width:0; padding:4px; border:1px solid var(--wk-hair); border-radius:9px; background:var(--wk-paper); }
+.sc-env-scenes > li.is-current { border-color:var(--wk-green); background:var(--wk-green-pale); }
+.sc-env-scenes .sc-env-scene-pick { display:flex; align-items:center; gap:7px; flex:1; min-width:0; padding:0; border:0; background:transparent; color:var(--wk-ink); text-align:left; cursor:pointer; }
+.sc-env-scenes .sc-env-scene-pick:disabled { cursor:default; opacity:.65; }
+.sc-env-scenes .sc-env-preview { width:44px; height:34px; border-radius:5px; }
+.sc-env-scenes .sc-env-meta strong { font-size:12px; line-height:16px; }
+.sc-env-scenes .sc-env-meta small { font-size:10px; line-height:14px; }
+.sc-env-scenes select { max-width:54px; height:28px; padding:0 4px; border:1px solid var(--wk-hair); border-radius:6px; background:var(--wk-paper); color:var(--wk-ink-soft); font-size:11px; }
+.sc-env-scene-remove { display:grid; place-items:center; flex:none; width:25px; height:25px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--wk-muted); font-size:18px; cursor:pointer; }
+.sc-env-scene-remove:hover { background:#f9e9e7; color:#a63d32; }
+.sc-env-active-caption { margin-top:5px; color:var(--wk-muted); font-size:10px; line-height:14px; }
 
 /* ── 导出效果图弹层 · 图纸白 ──────────────────────────────────────────
    设计稿：白纸浮层、描边选项、绿色只给主操作与选中态。 */

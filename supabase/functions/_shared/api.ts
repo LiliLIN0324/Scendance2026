@@ -20,6 +20,7 @@ import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
 const displayName=z.string().trim().min(1).max(80);
+const messageBody=z.string().trim().min(1).max(2000);
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUntil?:(task:Promise<unknown>)=>void) {
@@ -97,6 +98,16 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       if(members) {
         const studioId=uuid.parse(members[1]);
         if(!members[2] && method==='GET') return respond(await backend.scene(actor,'studios.members.list',{studioId}));
+        // 按已注册邮箱加人：POST /studios/:id/members { email, displayName? }
+        if(!members[2] && method==='POST') {
+          const input=z.strictObject({
+            email:z.string().trim().email().max(254),
+            displayName:displayName.optional(),
+          }).parse(await json());
+          const email=input.email.toLowerCase();
+          const label=(input.displayName?.trim() || email.split('@')[0] || '成员').slice(0,80);
+          return respond(await backend.scene(actor,'studios.members.put',{studioId,email,displayName:label}),201);
+        }
         if(members[2]) {
           const userId=uuid.parse(members[2]);
           if(method==='PUT') {
@@ -104,6 +115,23 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             return respond(await backend.scene(actor,'studios.members.put',{...input,studioId,userId}));
           }
           if(method==='DELETE') return respond(await backend.scene(actor,'studios.members.remove',{studioId,userId}));
+        }
+      }
+      const messages=path.match(/^\/studios\/([^/]+)\/messages(\/(unread|read))?$/);
+      if(messages) {
+        const studioId=uuid.parse(messages[1]);
+        if(messages[2]==='/unread' && method==='GET') return respond(await backend.scene(actor,'studios.messages.unread',{studioId}));
+        if(messages[2]==='/read' && method==='POST') {
+          const input=z.strictObject({peerId:uuid}).parse(await json());
+          return respond(await backend.scene(actor,'studios.messages.read',{...input,studioId}));
+        }
+        if(!messages[2] && method==='GET') {
+          const peerId=uuid.parse(url.searchParams.get('peerId'));
+          return respond(await backend.scene(actor,'studios.messages.list',{peerId,studioId}));
+        }
+        if(!messages[2] && method==='POST') {
+          const input=z.strictObject({requestId:uuid,peerId:uuid,body:messageBody}).parse(await json());
+          return respond(await backend.scene(actor,'studios.messages.send',{...input,studioId}),201);
         }
       }
       if(path==='/catalog' && method==='GET') return respond(catalog);

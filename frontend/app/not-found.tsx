@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Compass } from 'lucide-react';
+import { Compass } from '@/components/solid-icons';
 
 // Static 404 (exported as 404.html). Design spec §三.2: one line of what
 // happened, one way back — no illustration, no error colour, no error code.

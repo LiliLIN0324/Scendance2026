@@ -1,10 +1,10 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 'use client';
 
-import { Satellite, Search } from 'lucide-react';
+import { AlertTriangle, Info, Satellite, Search } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from '../lib/amap-script';
-import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, SATELLITE_GROUND_LABEL, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
 import { defaultGuestFlow } from '../lib/site-capture';
 import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
 
@@ -13,6 +13,9 @@ function envOrStorage(envValue: string | undefined, storageKey: string): string 
   if (envValue) return envValue;
   try { return localStorage.getItem(storageKey) ?? ''; } catch { return ''; }
 }
+
+/** 说明收进标题旁的 ⓘ，默认不占版面。 */
+function InfoTip({label,children}:{label:string;children:React.ReactNode}):JSX.Element{return <details className="sc-satellite-info"><summary aria-label={label}><Info size={13} aria-hidden="true"/></summary><p>{children}</p></details>;}
 
 export interface VenuePickResult {
   name: string;
@@ -291,13 +294,18 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
       {flowMeters != null ? <> · 主客流线 <strong>{flowMeters} m</strong></> : <> · 未手画流线时用默认长轴</>}
       （立壳跟多边形真轮廓，不只外接矩形）
     </p>}
-    <label className="sc-note" style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative', zIndex: 2 }}>
-      <input type="checkbox" checked={satelliteGround} disabled={busy} onChange={event => setSatelliteGround(event.target.checked)}
-        aria-label="卫星贴地参考底图" />
-      <Satellite size={16} aria-hidden="true"/>
-      卫星贴地参考底图（默认开）· {SATELLITE_GROUND_LABEL}
-    </label>
-    {satelliteGround && <p className="sc-note" role="note">{RECON_MATERIAL_BAN}</p>}
-    {status && <p className="sc-note">{status}</p>}
+    <div className="sc-satellite-row">
+      <label className="sc-satellite-toggle">
+        <input type="checkbox" checked={satelliteGround} disabled={busy} onChange={event => setSatelliteGround(event.target.checked)} aria-label="卫星贴地参考底图" />
+        <Satellite size={15} aria-hidden="true"/>
+        <span>卫星贴地参考</span>
+        <em className="sc-badge is-quiet">默认开</em>
+      </label>
+      <span className="sc-badge is-quiet" title={RECON_MATERIAL_BAN}>仅参考</span>
+      <InfoTip label="卫星底图能不能做重建素材">{RECON_MATERIAL_BAN}</InfoTip>
+    </div>
+    {status && (/失败|未加载|不可用|降级|未运行|代理|拒绝了/.test(status)
+      ? <div className="sc-note sc-amap-error" role="status"><AlertTriangle size={13} aria-hidden="true"/><span>地图未加载</span><InfoTip label="地图加载排查">{status}；可在上方检查 Key 与安全密钥，或稍后重试。</InfoTip></div>
+      : <p className="sc-note">{status}</p>)}
   </div>;
 }

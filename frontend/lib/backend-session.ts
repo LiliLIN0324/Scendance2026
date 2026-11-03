@@ -190,7 +190,7 @@ function failure(error: unknown): BackendFailure {
     STUDIO_NOT_FOUND: "工作室已不存在，或你已没有访问权限，请刷新列表。",
     FORBIDDEN: "你没有执行此操作的权限，请联系工作室负责人。",
     OWNER_PROTECTED: "不能移除工作室负责人。",
-    USER_NOT_FOUND: "未找到该账号，请核对成员提供的账号 ID。",
+    USER_NOT_FOUND: "未找到该邮箱对应的账号，请确认对方已注册并用登录邮箱邀请。",
     INVALID_CREDENTIALS: "邮箱或密码不正确。",
     REVISION_CONFLICT: "云端版本已变化，草稿已保留；请核对后重新获取编辑权。",
     LEASE_LOST: "编辑权已到期或交接，草稿已保留。",
@@ -883,6 +883,14 @@ export class BackendSession {
       this.selectProject(project, binding);
       return project;
     } finally { this.operationPending = false; }
+  }
+  /**
+   * 只读拉项目 scene（卡片缩略等），不切换当前编辑会话、不抢编辑权。
+   * 打开/替换画布请用 getProject。
+   */
+  async peekProject(projectId: string): Promise<BackendProject> {
+    const project = await this.businessRequest<BackendProject>(`/projects/${encodeURIComponent(projectId)}`);
+    return { ...project, scene: sceneSchema.parse(project.scene) };
   }
   async getProject(projectId: string, validate?: (project: BackendProject) => void): Promise<BackendProject> {
     this.ensureCanSwitch();

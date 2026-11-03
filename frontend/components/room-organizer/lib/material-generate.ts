@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import { DIRECT_BASE, isLux3dLocalProxy } from './aholo-assets';
 
 /**
@@ -11,6 +12,27 @@ export type MaterialGenerateInput =
 export type MaterialGenerateResult =
   | { ok: true; taskid: string; kind: 'text' | 'image' }
   | { ok: false; stub: boolean; message: string };
+
+/** 提交成功的任务号：生成入口在底部对话里，物料卡要看得见同一份。 */
+export interface PendingMaterial { id: string; name: string; image?: string; shipped: false }
+
+let pendingMaterials: PendingMaterial[] = [];
+const pendingListeners = new Set<() => void>();
+
+export function addPendingMaterial(item: PendingMaterial): void {
+  if (pendingMaterials.some(current => current.id === item.id)) return;
+  pendingMaterials = [item, ...pendingMaterials];
+  for (const listener of [...pendingListeners]) listener();
+}
+
+function subscribePending(listener: () => void): () => void {
+  pendingListeners.add(listener);
+  return () => { pendingListeners.delete(listener); };
+}
+
+export function usePendingMaterials(): PendingMaterial[] {
+  return useSyncExternalStore(subscribePending, () => pendingMaterials, () => pendingMaterials);
+}
 
 const TEXT_STUB = '本机代理没开，描述生成不会提交，也不会扣额度。代理开了之后，同一条会打 /text-to-3d。';
 const IMAGE_STUB = '本机代理没开，图片生成不会提交，也不会扣额度。代理开了之后，同一条会打 /image-to-3d（Aholo Lux3D）。';

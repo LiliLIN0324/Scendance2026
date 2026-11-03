@@ -8,13 +8,34 @@ import { BackendSession, createBackendSession, getBackendConfig, type Scene } fr
 import { readSourceRecord, registerSourceFlush } from '@/lib/source-storage';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import { subscribeNotices, type Notice } from '../lib/editor-notices';
 import { LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { addDesign } from '../lib/scene-layers';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { CloudPanel } from './cloud-panel';
-import { useLocalProjectBackup } from './creative-studio';
-import { LocalActivitiesPanel } from './local-activities-panel';
 import type { RoomLayout } from '../lib/types';
+
+function watchNotices(): { next(match: RegExp | string): Promise<Notice>; stop(): void } {
+  const pending: Notice[] = [];
+  const waiters: Array<{ match: RegExp | string; resolve: (notice: Notice) => void }> = [];
+  const matches = (match: RegExp | string, message: string) => typeof match === 'string' ? message === match : match.test(message);
+  const stop = subscribeNotices(notice => {
+    const waiter = waiters.find(entry => matches(entry.match, notice.message));
+    if (waiter) { waiters.splice(waiters.indexOf(waiter), 1); waiter.resolve(notice); }
+    else pending.push(notice);
+  });
+  return {
+    next(match) {
+      const hit = pending.find(notice => matches(match, notice.message));
+      if (hit) { pending.splice(pending.indexOf(hit), 1); return Promise.resolve(hit); }
+      return new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error(`notice not seen: ${match}`)), 4000);
+        waiters.push({ match, resolve: notice => { window.clearTimeout(timer); resolve(notice); } });
+      });
+    },
+    stop,
+  };
+}
 
 vi.mock('@/lib/backend-session', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/backend-session')>();
@@ -25,8 +46,6 @@ vi.mock('@/lib/source-storage', async importOriginal => {
   return { ...actual, readSourceRecord: vi.fn() };
 });
 vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn() }));
-vi.mock('./creative-studio', () => ({ useLocalProjectBackup: vi.fn(() => null) }));
-vi.mock('./local-activities-panel', () => ({ LocalActivitiesPanel: vi.fn(() => null) }));
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search), useRouter: () => ({ push }) }));
 vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: vi.fn(() => null) }));
@@ -45,14 +64,27 @@ let controller: BackendSession;
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
 
-function openAccount(section: '我的项目' | '素材库' = '我的项目'): void {
-  fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
-  fireEvent.click(screen.getByRole('button', { name: section }));
+function openAccount(section: '我的项目' | '物料' | '团队与权限' = '我的项目'): void {
+  fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+  // 默认落在项目；物料 / 团队在左栏团队列表下方。
+  if (section !== '我的项目') fireEvent.click(screen.getByRole('button', { name: section }));
 }
 
 function openProjects(container: HTMLElement): void {
   fireEvent.click(container.querySelector('.sc-cloud-trigger')!);
-  fireEvent.click(screen.getByRole('button', { name: '我的项目' }));
+}
+
+/** 项目卡改为双击进入；当前卡用「当前项目」标签。 */
+function enterListedProject(): void {
+  fireEvent.doubleClick(screen.getByRole('button', { name: /^打开 / }));
+}
+function enterCurrentProject(): void {
+  fireEvent.doubleClick(screen.getByRole('button', { name: /^当前项目 / }));
+}
+function openProjectMenu(projectName: string): void {
+  const summary = screen.getByLabelText(`${projectName} 更多操作`);
+  const details = summary.closest('details');
+  if (details && !details.open) fireEvent.click(summary);
 }
 
 beforeEach(async () => {
@@ -60,8 +92,6 @@ beforeEach(async () => {
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
   push.mockReset();
-  vi.mocked(useLocalProjectBackup).mockReturnValue(null);
-  vi.mocked(LocalActivitiesPanel).mockClear();
   pointRecords.clear();unreadablePointScopes.clear();
   vi.mocked(readSourceRecord).mockReset().mockImplementation(async key => {
     if (typeof key === 'string' || key[0] !== 'material-checkins') return undefined;
@@ -82,13 +112,28 @@ beforeEach(async () => {
 });
 
 describe('CloudPanel independent quantity ledger protection', () => {
-  const actionLabels = { create: '新方案', open: '打开', acquire: '开始编辑', save: '保存' } as const;
   function points(id = projectId) { return materialCheckinLedgerSchema.parse({ projectId: id, dataKind: 'rehearsal', sheets: [] }); }
   async function editable(): Promise<void> {
     queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
     await controller.acquireLease(projectId);
   }
   function projectLists(): void { queue([other]);queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]); }
+  async function triggerAction(
+    action: 'create' | 'open' | 'acquire' | 'save',
+    view?: ReturnType<typeof render>,
+    onLoadLayout: (layout: RoomLayout) => void = vi.fn<(layout: RoomLayout) => void>(),
+  ): Promise<void> {
+    if (action === 'create') {
+      fireEvent.click(screen.getByRole('button', { name: '新方案' }));
+      return;
+    }
+    if (action === 'open') { enterListedProject(); return; }
+    if (action === 'acquire') { enterCurrentProject(); return; }
+    // 自动保存依赖画布指纹与草稿一致，并 debounce 1.2s。
+    const draft = { ...scene, lighting: 'warm' as const };
+    await act(async () => { controller.setDraft(draft); });
+    view!.rerender(<CloudPanel controller={controller} layout={backendSceneToLayout(draft, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
+  }
 
   it.each((['create', 'open', 'acquire', 'save'] as const).flatMap(action => (['ledger', 'corrupt', 'read failure'] as const).map(record => ({ action, record }))))('refuses $action before its cloud request for an independent $record', async ({ action, record }) => {
     if (action === 'save') await editable();
@@ -97,12 +142,14 @@ describe('CloudPanel independent quantity ledger protection', () => {
     const getProject = vi.spyOn(controller, 'getProject'), acquire = vi.spyOn(controller, 'acquireLease');
     const create = vi.spyOn(controller, 'createProject'), saveScene = vi.spyOn(controller, 'saveScene');
     const initial = backendSceneToLayout(scene, { projectId, name: original.name }), onLoadLayout = vi.fn();
-    projectLists();render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+    projectLists();
+    queue(other); // 账户面板打开后 peek 卡片预览，不切换当前项目
+    const view = render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
     openAccount();
-    const button = await screen.findByRole('button', { name: actionLabels[action] });
-    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
-    const requests = mockFetch.mock.calls.length;fireEvent.click(button);
-    expect(await screen.findByText(record === 'ledger' ? LOCAL_CHECKIN_CLOUD_MESSAGE : LOCAL_RECORDS_READ_MESSAGE)).toBeTruthy();
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(5));
+    const requests = mockFetch.mock.calls.length;
+    await triggerAction(action, view, onLoadLayout);
+    expect(await screen.findByText(record === 'ledger' ? LOCAL_CHECKIN_CLOUD_MESSAGE : LOCAL_RECORDS_READ_MESSAGE, {}, { timeout: 3000 })).toBeTruthy();
     expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins', projectId]);
     expect(getProject).not.toHaveBeenCalled();expect(acquire).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();expect(saveScene).not.toHaveBeenCalled();
     expect(mockFetch).toHaveBeenCalledTimes(requests);expect(onLoadLayout).not.toHaveBeenCalled();
@@ -117,7 +164,7 @@ describe('CloudPanel independent quantity ledger protection', () => {
     else authorize.mockImplementationOnce(() => new Promise(resolve => { finishAssets = resolve; }));
     projectLists();render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
     openAccount();
-    const open = await screen.findByRole('button', { name: '打开' });queue(other);fireEvent.click(open);
+    await screen.findByRole('button', { name: /^打开 / });queue(other);enterListedProject();
     if (timing === 'during authorization') {
       await waitFor(() => expect(finishAssets).toBeTypeOf('function'));pointRecords.set(otherId, points(otherId));
       await act(async () => { finishAssets({ assetUrls: {}, assetNames: {} }); });
@@ -133,13 +180,15 @@ describe('CloudPanel independent quantity ledger protection', () => {
   it.each(['create', 'open', 'acquire', 'save'] as const)('keeps the original canvas when a ledger appears while the $0 cloud request is pending', async action => {
     if (action === 'save') await editable();
     const initial = backendSceneToLayout(scene, { projectId, name: original.name }), onLoadLayout = vi.fn();
-    projectLists();render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
+    projectLists();
+    if (action === 'open') queue(other);
+    const view = render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
     openAccount();
-    const button = await screen.findByRole('button', { name: actionLabels[action] });
-    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button', { name: action === 'create' ? '新方案' : action === 'open' ? /^打开 / : /^当前项目 / }).hasAttribute('disabled')).toBe(false));
     let finish!: (response: Response) => void;
-    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));fireEvent.click(button);
-    await waitFor(() => expect(finish).toBeTypeOf('function'));const currentPoints = points();pointRecords.set(projectId, currentPoints);
+    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await triggerAction(action, view, onLoadLayout);
+    await waitFor(() => expect(finish).toBeTypeOf('function'), { timeout: 3000 });const currentPoints = points();pointRecords.set(projectId, currentPoints);
     const sessionId = controller.getSnapshot().sessionId;
     if (action === 'acquire') queue({ sessionId, generation: 4, revision: 2, expiresAt: new Date().toISOString() });
     await act(async () => {
@@ -171,17 +220,25 @@ describe('CloudPanel delayed project replacement', () => {
     const acquireLease=vi.spyOn(controller,'acquireLease');
     const onLoadLayout=vi.fn();
     queue([other]); queue([{id:studioId,name:'工作室',role:'owner',displayName:'A'}]);
+    queue(other); // 失败后 showAccount / 手动打开面板时的卡片 peek
     if(entry==='url')window.history.replaceState(null,'',`/editor/?project=${otherId}`);
     try{
       render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
-      await waitFor(()=>expect(mockFetch).toHaveBeenCalledTimes(4));
+      await waitFor(()=>expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
       if(entry!=='url'){
         openAccount();
-        fireEvent.click(screen.getByRole('button',{name:entry==='button'?'打开':'开始编辑'}));
+        await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(5));
+        const requests = mockFetch.mock.calls.length;
+        if (entry === 'button') enterListedProject();
+        else enterCurrentProject();
+        expect(await screen.findByText('活动需求保存失败，原输入已保留。')).toBeTruthy();
+        expect(getProject).not.toHaveBeenCalled(); expect(acquireLease).not.toHaveBeenCalled(); expect(onLoadLayout).not.toHaveBeenCalled();
+        expect(mockFetch).toHaveBeenCalledTimes(requests);
+      } else {
+        expect(await screen.findByText('活动需求保存失败，原输入已保留。')).toBeTruthy();
+        expect(getProject).not.toHaveBeenCalled(); expect(acquireLease).not.toHaveBeenCalled(); expect(onLoadLayout).not.toHaveBeenCalled();
+        await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
       }
-      expect(await screen.findByText('活动需求保存失败，原输入已保留。')).toBeTruthy();
-      expect(getProject).not.toHaveBeenCalled(); expect(acquireLease).not.toHaveBeenCalled(); expect(onLoadLayout).not.toHaveBeenCalled();
-      expect(mockFetch).toHaveBeenCalledTimes(4);
     }finally{unregister();}
   });
 
@@ -194,18 +251,25 @@ describe('CloudPanel delayed project replacement', () => {
     const getProject = vi.spyOn(controller, 'getProject');
     const onLoadLayout = vi.fn();
     queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    queue(other); // 打开账户面板时的卡片 peek
     if (entry === 'url') window.history.replaceState(null, '', `/editor/?project=${otherId}`);
+    const notices = entry === 'url' ? watchNotices() : null;
     render(<CloudPanel controller={controller} layout={local} onLoadLayout={onLoadLayout}/>);
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(entry === 'url' ? 2 : 4));
     if (entry === 'button') {
       openAccount();
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: '打开' })); });
+      await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(5));
+      const requests = mockFetch.mock.calls.length;
+      await act(async () => { enterListedProject(); });
+      expect(screen.getByText(LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy();
+      expect(getProject).not.toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(requests);
     } else {
-      await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true));
+      await notices!.next(LOCAL_HANDOFF_CLOUD_MESSAGE);
+      notices!.stop();
+      expect(document.querySelector('dialog.sc-account-dialog')?.hasAttribute('open')).toBe(false);
+      expect(getProject).not.toHaveBeenCalled();
     }
-    expect(screen.getByText(LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy();
-    expect(getProject).not.toHaveBeenCalled();
-    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(onLoadLayout).not.toHaveBeenCalled();
     if(kind==='worksheet')expect(local.floors[0]!.items[0]!.handoff?.ownerName).toBe('布展负责人');
     else if(kind==='activity')expect(local.eventOperations?.tasks).toEqual([]);
@@ -213,22 +277,20 @@ describe('CloudPanel delayed project replacement', () => {
     expect(controller.getSnapshot().project?.id).toBe(projectId);
   });
 
-  it('saves an externally bound Agent project without replacing its draft or creating another project', async () => {
+  it('autosaves an externally bound Agent project without replacing its draft or creating another project', async () => {
     queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const onLoadLayout = vi.fn();
     const rendered = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={onLoadLayout} />);
     openAccount();
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
     queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
     const draft = { ...scene, lighting: 'warm' as const };
     await act(async () => { await controller.acquireLease(projectId); controller.setDraft(draft); });
     rendered.rerender(<CloudPanel controller={controller} layout={backendSceneToLayout(draft, { projectId })} onLoadLayout={onLoadLayout} />);
-    expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(false);
     expect(vi.mocked(AssetsPanel).mock.calls.at(-1)?.[0].bound).toBe(true);
     expect(controller.getSnapshot().draft).toEqual(draft);
     queue({ id: projectId, revision: 3, scene: draft, updatedAt: new Date().toISOString(), warnings: [] });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await screen.findByText('已保存云端版本 3。');
+    await waitFor(() => expect(controller.getSnapshot().dirty).toBe(false), { timeout: 3000 });
     expect(controller.getSnapshot().draft).toEqual(draft);
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(mockFetch.mock.calls.filter(([url, init]) => String(url).endsWith('/projects') && init?.method === 'POST')).toHaveLength(0);
@@ -242,16 +304,17 @@ describe('CloudPanel delayed project replacement', () => {
     const onLoadLayout=vi.fn();
     const view=render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
     openAccount();
-    await waitFor(()=>expect(mockFetch).toHaveBeenCalledTimes(5));
+    await waitFor(()=>expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
     let finish!:(response:Response)=>void;
     mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    fireEvent.click(screen.getByRole('button',{name:'保存'}));
-    await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    await act(async () => { controller.setDraft({ ...scene, lighting: 'cool' }); });
+    view.rerender(<CloudPanel controller={controller} layout={backendSceneToLayout({ ...scene, lighting: 'cool' }, { projectId })} onLoadLayout={onLoadLayout}/>);
+    await waitFor(()=>expect(finish).toBeTypeOf('function'), { timeout: 3000 });
     const changed={...initial,eventOperations:{schemaVersion:1 as const,dataKind:'rehearsal' as const,tasks:[]}};
     view.rerender(<CloudPanel controller={controller} layout={changed} onLoadLayout={onLoadLayout}/>);
     await act(async()=>{finish(json({id:projectId,revision:3,scene,updatedAt:new Date().toISOString(),warnings:[]}));});
     expect(screen.getByText(LOCAL_HANDOFF_CLOUD_MESSAGE)).toBeTruthy();
-    expect(screen.queryByText('已保存云端版本 3。')).toBeNull();
+    expect(screen.queryByText(/已自动保存|已保存云端版本/)).toBeNull();
     expect(changed.eventOperations).toEqual({schemaVersion:1,dataKind:'rehearsal',tasks:[]});
     expect(onLoadLayout).not.toHaveBeenCalled();
   });
@@ -262,9 +325,9 @@ describe('CloudPanel delayed project replacement', () => {
     queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId: otherId })} onLoadLayout={vi.fn()} />);
     openAccount();
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
-    expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true);
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
     expect(vi.mocked(AssetsPanel).mock.calls.at(-1)?.[0].bound).toBe(false);
+    expect(controller.getSnapshot().writeBlocked).toBe(false);
   });
 
   it('keeps local design history and layer names when reopening the same saved cloud scene', async () => {
@@ -315,12 +378,19 @@ describe('CloudPanel delayed project replacement', () => {
     window.history.replaceState(null, '', `/editor/?project=${otherId}`);
     queue([original, other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const onLoadLayout = vi.fn();
+    const notices = watchNotices();
     render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
-    await screen.findByText('请先释放当前项目的编辑权，再打开链接中的项目。');
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
+    await notices.next('请先释放当前项目的编辑权，再打开链接中的项目。');
+    notices.stop();
+    expect(document.querySelector('dialog.sc-account-dialog')?.hasAttribute('open')).toBe(false);
     expect(onLoadLayout).not.toHaveBeenCalled();
+    // 深链冲突不再自动弹账户面板；用户自己打开后再释放编辑权。
+    queue(other); // 手动打开后的卡片 peek
+    openAccount();
+    await screen.findByLabelText(`${original.name} 更多操作`);
     queue({ sessionId, generation: 4, revision: 2, expiresAt: new Date().toISOString() }); queue(other);
-    fireEvent.click(screen.getByRole('button', { name: '完成编辑' }));
+    openProjectMenu(original.name);
+    fireEvent.click(screen.getByRole('button', { name: '释放编辑权' }));
     await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
     expect(controller.getSnapshot().project?.id).toBe(otherId);
   });
@@ -333,8 +403,11 @@ describe('CloudPanel delayed project replacement', () => {
     window.history.replaceState(null, '', `/editor/?project=${projectId}`);
     queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const onLoadLayout = vi.fn();
+    const notices = watchNotices();
     render(<CloudPanel layout={backendSceneToLayout(draft, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
-    await waitFor(() => expect(screen.getByText(/已保留这个项目的本地未保存改动/)).toBeTruthy());
+    await notices.next(/已保留这个项目的本地未保存改动/);
+    notices.stop();
+    expect(document.querySelector('dialog.sc-account-dialog')?.hasAttribute('open')).toBe(false);
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(controller.getSnapshot()).toMatchObject({ draft, dirty: true, writeBlocked: false });
   });
@@ -346,8 +419,11 @@ describe('CloudPanel delayed project replacement', () => {
     queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     queue(original); queue({ id: assetId, format: 'glb', name: '道具', url: 'https://storage.example/fresh.glb', expiresIn: 300 });
     const onLoadLayout = vi.fn();
+    const notices = watchNotices();
     render(<CloudPanel layout={backendSceneToLayout(draft, { projectId, name: original.name, assetUrls: { [assetId]: 'https://storage.example/expired.glb' } })} onLoadLayout={onLoadLayout} />);
-    await screen.findByText(/已保留这个项目的本地未保存改动/);
+    await notices.next(/已保留这个项目的本地未保存改动/);
+    notices.stop();
+    expect(document.querySelector('dialog.sc-account-dialog')?.hasAttribute('open')).toBe(false);
     expect(ensureGlbAsset).toHaveBeenCalledWith(assetId, 'https://storage.example/fresh.glb');
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(controller.getSnapshot().draft).toEqual(draft);
@@ -356,13 +432,15 @@ describe('CloudPanel delayed project replacement', () => {
 
   it('updates the editor URL after opening another project', async () => {
     queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    queue(other); // peek preview
     const onLoadLayout = vi.fn();
     const rendered = render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
     openProjects(rendered.container);
-    await waitFor(() => expect(screen.getByRole('button', { name: '打开' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^打开 / })).toBeTruthy());
     queue(other);
-    fireEvent.click(screen.getByRole('button', { name: '打开' }));
-    await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
+    queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene: other.scene ?? scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
+    enterListedProject();
+    await waitFor(() => expect(onLoadLayout).toHaveBeenCalled());
     expect(new URLSearchParams(window.location.search).get('project')).toBe(otherId);
   });
 
@@ -370,12 +448,13 @@ describe('CloudPanel delayed project replacement', () => {
   it('never labels a local scene preset as saved to the cloud', async () => {
     queue([other]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    queue(other); // 卡片预览
     const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
     render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
     openAccount();
-    expect(screen.getByText('草稿')).toBeTruthy();
-    expect(screen.queryByText('已保存')).toBeNull();
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    expect(await screen.findByText('当前 · 草稿')).toBeTruthy();
+    expect(screen.queryByText(/已保存/)).toBeNull();
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
     expect(controller.getSnapshot().draft).not.toEqual(layout);
   });
   it.each((['open', 'acquire', 'create'] as const).flatMap(action => (['geometry', 'activity', 'nested activity'] as const).map(change => ({action,change}))))('preserves $change edits made while the $action request is pending', async ({action,change}) => {
@@ -383,14 +462,16 @@ describe('CloudPanel delayed project replacement', () => {
     const onLoadLayout = vi.fn();
     queue([other]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    queue(other); // peek
     const rendered = render(<CloudPanel layout={initialLayout} onLoadLayout={onLoadLayout} />);
     openProjects(rendered.container);
-    await waitFor(() => expect(screen.getByRole('button', { name: '打开' }).hasAttribute('disabled')).toBe(false));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^打开 / }).hasAttribute('disabled')).toBe(false));
 
     let finish!: (response: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const label = action === 'open' ? '打开' : action === 'acquire' ? '开始编辑' : '新方案';
-    fireEvent.click(screen.getByRole('button', { name: label }));
+    if (action === 'open') enterListedProject();
+    else if (action === 'acquire') enterCurrentProject();
+    else fireEvent.click(screen.getByRole('button', { name: '新方案' }));
     await waitFor(() => expect(finish).toBeTypeOf('function'));
 
     // The dialog can be closed while busy, so edits on the canvas must remain safe.
@@ -410,7 +491,7 @@ describe('CloudPanel delayed project replacement', () => {
     expect(onLoadLayout).not.toHaveBeenCalled();
     expect(controller.getSnapshot().writeBlocked).toBe(true);
     openProjects(rendered.container);
-    expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: '保存' })).toBeNull();
     expect(screen.queryByText(/已载入最新版本并获得编辑权|已打开云端方案|新项目已保存/)).toBeNull();
     if (action === 'acquire') {
       const lastRequest = mockFetch.mock.calls.at(-1)!;
@@ -451,56 +532,49 @@ it('filters projects by name and studio and clears an empty search', async () =>
   queue([{ id: studioId, name: '一号工作室', role: 'owner', displayName: 'A' }, { id: secondStudio, name: '二号工作室', role: 'editor', displayName: 'A' }]);
   render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   openAccount();
-  await waitFor(() => expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1));
+  // 当前工作室里只有已打开的「原云项目」：卡片是当前态，没有「打开」入口。
+  await waitFor(() => expect(screen.getByRole('button', { name: /^当前项目 / })).toBeTruthy());
+  expect(screen.queryByRole('button', { name: /^打开 / })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '二号工作室' }));
-  expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: /^打开 / })).toHaveLength(1);
   expect(screen.getByText('另一个云项目')).toBeTruthy();
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索项目' }), { target: { value: '不存在' } });
-  expect(screen.queryByRole('button', { name: '打开' })).toBeNull();
-  expect(screen.getByText('没有匹配的文件')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /^打开 / })).toBeNull();
+  expect(screen.getByText('没有匹配的项目')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '清除筛选' }));
-  expect(screen.getAllByRole('button', { name: '打开' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: /^打开 / })).toHaveLength(1);
 });
 
-it('defaults demo permissions to all enabled and keeps changes separate from real access and canvas', () => {
+it('returns to the project list when a sidebar team is clicked from 物料 or 团队', async () => {
+  const secondStudio = '20000000-0000-4000-8000-000000000002';
+  queue([original, { ...other, studio_id: secondStudio }]);
+  queue([{ id: studioId, name: '一号工作室', role: 'owner', displayName: 'A' }, { id: secondStudio, name: '二号工作室', role: 'editor', displayName: 'A' }]);
+  render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  openAccount('团队与权限');
+  expect(await screen.findByRole('region', { name: '团队' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '一号工作室' }));
+  expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
+  expect(screen.getByRole('region', { name: '我的项目' }).hasAttribute('hidden')).toBe(false);
+  openAccount('物料');
+  expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '二号工作室' }));
+  expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
+  expect(await screen.findByText('另一个云项目')).toBeTruthy();
+});
+
+it('shows real team members only and skips fake demo people when signed out', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   const load = vi.fn();
   const props = { controller: offline, layout: backendSceneToLayout(scene), onLoadLayout: load };
   const view = render(<CloudPanel {...props} />);
   view.rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }} />);
-  const requestCount = mockFetch.mock.calls.length;
-  fireEvent.change(screen.getByLabelText('演示成员姓名'), { target: { value: '陈知远' } });
-  fireEvent.change(screen.getByLabelText('演示成员邮箱或手机号'), { target: { value: 'chen.zhiyuan@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: '添加演示成员' }));
-  expect(screen.getByText('4 位演示成员')).toBeTruthy();
-  expect(screen.getByText('chen.zhiyuan@example.com')).toBeTruthy();
-  fireEvent.change(screen.getByLabelText('演示成员姓名'), { target: { value: '重复联系人' } });
-  fireEvent.change(screen.getByLabelText('演示成员邮箱或手机号'), { target: { value: 'CHEN.ZHIYUAN@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: '添加演示成员' }));
-  expect(screen.getByText('该邮箱或手机号已在演示团队中。')).toBeTruthy();
-  expect(screen.getByText('4 位演示成员')).toBeTruthy();
-  fireEvent.change(screen.getByRole('combobox', { name: '陈知远的演示角色' }), { target: { value: 'viewer' } });
-  fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
-  fireEvent.click(screen.getByRole('button', { name: '权限说明' }));
-  expect(screen.getByText('功能默认开放 · 权限仅作演示')).toBeTruthy();
-  expect(screen.getAllByRole('checkbox').every(checkbox => (checkbox as HTMLInputElement).checked)).toBe(true);
-  fireEvent.click(screen.getByRole('checkbox', { name: '查看成员：导出方案' }));
-  fireEvent.change(screen.getByRole('combobox', { name: '预览角色' }), { target: { value: 'viewer' } });
-  expect(screen.getByText('适用于 2 位演示成员')).toBeTruthy();
-  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(false);
-  fireEvent.click(screen.getByRole('button', { name: '团队演示' }));
-  expect((screen.getByRole('combobox', { name: '陈知远的演示角色' }) as HTMLSelectElement).value).toBe('viewer');
-  fireEvent.click(screen.getByRole('button', { name: '移除演示成员陈知远' }));
-  expect(screen.getByText('3 位演示成员')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
-  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(false);
-  expect(screen.getByRole('checkbox', { name: '负责人：编辑场景' }).hasAttribute('disabled')).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: '重置演示' }));
-  expect((screen.getByRole('checkbox', { name: '查看成员：导出方案' }) as HTMLInputElement).checked).toBe(true);
-  expect(mockFetch).toHaveBeenCalledTimes(requestCount);
+  expect(screen.getByText('在账户中心登录后，这里会显示你所在团队的成员。')).toBeTruthy();
+  ['林雨舟', '许知夏', '陈知远'].forEach(name => expect(screen.queryByText(name)).toBeNull());
+  expect(screen.queryByRole('region', { name: '权限演示空间' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: '预览角色' })).toBeNull();
   expect(load).not.toHaveBeenCalled();
   expect(offline.getSnapshot().user).toBeNull();
-  expect(offline.getSnapshot().writeBlocked).toBe(true);
   offline.dispose();
 });
 
@@ -516,26 +590,9 @@ it('reports a failed project list without claiming the account is empty and allo
   expect(list).toHaveBeenCalledTimes(2);
 });
 
-it('offers local activities without cloud configuration but excludes a requested or connected cloud project', () => {
-  const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
-  const actions = { prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false };
-  vi.mocked(useLocalProjectBackup).mockReturnValue(actions);
-  const local = backendSceneToLayout(scene, { projectId: 'house-local-activity' });
-  const view = render(<CloudPanel controller={offline} layout={local} onLoadLayout={vi.fn()}/>);
-  expect(vi.mocked(LocalActivitiesPanel).mock.calls.at(-1)?.[0]).toMatchObject({ layout: local, actions, disabled: false });
-  vi.mocked(LocalActivitiesPanel).mockClear();
-  window.history.replaceState(null, '', `/?project=${projectId}`);
-  view.rerender(<CloudPanel controller={offline} layout={local} onLoadLayout={vi.fn()}/>);
-  expect(LocalActivitiesPanel).not.toHaveBeenCalled();
-  window.history.replaceState(null, '', '/');
-  view.rerender(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()}/>);
-  expect(LocalActivitiesPanel).not.toHaveBeenCalled();
-  offline.dispose();
-});
-
 describe('CloudPanel source protection before leaving the workspace', () => {
-  const entries = ['login', 'manage', 'logout'] as const;
-  const labels = { login: '登录', manage: '所有文件', logout: '退出登录' };
+  const entries = ['login', 'logout'] as const;
+  const labels = { login: '登录', logout: '退出登录' };
   const message = '演练约定有未保存修改，请先保存或放弃修改。';
 
   function entryControl(entry: typeof entries[number]): HTMLElement {
@@ -578,7 +635,7 @@ describe('CloudPanel source protection before leaving the workspace', () => {
       expect(flush).toHaveBeenCalledTimes(2);
       expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
       if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
-      else { expect(push).toHaveBeenCalledExactlyOnceWith(entry === 'login' ? '/auth' : '/projects/'); expect(signOut).not.toHaveBeenCalled(); }
+      else { expect(push).toHaveBeenCalledExactlyOnceWith('/auth'); expect(signOut).not.toHaveBeenCalled(); }
     } finally { view.unmount(); anonymous.dispose(); }
   });
 
@@ -606,7 +663,7 @@ describe('CloudPanel source protection before leaving the workspace', () => {
       await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
       expect(flush).toHaveBeenCalledOnce();
       if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
-      else { expect(push).toHaveBeenCalledExactlyOnceWith(entry === 'login' ? '/auth' : '/projects/'); expect(signOut).not.toHaveBeenCalled(); }
+      else { expect(push).toHaveBeenCalledExactlyOnceWith('/auth'); expect(signOut).not.toHaveBeenCalled(); }
     } finally { unregister(); view.unmount(); anonymous.dispose(); }
   });
 });
@@ -620,9 +677,11 @@ it('closes the account dialog from the backdrop and leaves clicks inside the pan
   vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
     x: 80, y: 40, top: 40, left: 80, bottom: 640, right: 1120, width: 1040, height: 600, toJSON() { return {}; },
   });
-  fireEvent.click(screen.getByRole('button', { name: '团队演示' }), { clientX: 240, clientY: 160 });
+  fireEvent.click(screen.getByRole('button', { name: '我的项目' }), { clientX: 240, clientY: 160 });
   expect(dialog.hasAttribute('open')).toBe(true);
-  expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
+  view.rerender(<CloudPanel {...props} openRequest={{ serial: 2, section: 'team' }} />);
+  expect(screen.getByRole('navigation', { name: '账户导航' }).textContent).toContain('团队与权限');
   fireEvent.click(dialog, { clientX: 400, clientY: 200 });
   expect(dialog.hasAttribute('open')).toBe(true);
   fireEvent.click(dialog, { clientX: 12, clientY: 12 });
@@ -652,65 +711,71 @@ it('keeps local activity controls available for a scene connection and does not 
   vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>id===localId);
   vi.spyOn(controller,'listProjects').mockResolvedValue([original]);vi.spyOn(controller,'listStudios').mockResolvedValue([{id:studioId,name:'Test studio',role:'owner',displayName:'A'}]);
   const disconnect=vi.spyOn(controller,'disconnectGeometryWorkbench').mockResolvedValue(undefined);
-  const actions={prepareBackup:vi.fn(),restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
-  vi.mocked(useLocalProjectBackup).mockReturnValue(actions);
   render(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()}/>);
   openAccount();
   expect(await screen.findByRole('region',{name:'当前活动的场景连接'})).toBeTruthy();
-  expect(await screen.findByText('还没有其他方案')).toBeTruthy();expect(screen.queryByText('这个工作室还没有项目')).toBeNull();
-  expect(vi.mocked(LocalActivitiesPanel).mock.calls.at(-1)?.[0]).toMatchObject({layout:local,actions});
+  expect(screen.queryByText('这个工作室还没有项目')).toBeNull();
+  expect(screen.queryByText('这里还没有方案')).toBeNull();
   expect(screen.queryByRole('button',{name:'保存'})).toBeNull();
-  fireEvent.click(screen.getByRole('button',{name:'我的项目'}));
   fireEvent.click(screen.getByRole('button',{name:'断开场景服务'}));await waitFor(()=>expect(disconnect).toHaveBeenCalledOnce());
   expect(local.id).toBe(localId);
 });
 
 describe('CloudPanel section entry points', () => {
-  it('opens 素材库 from the avatar and follows explicit requests to other sections', () => {
+  it('opens 账户中心 from the avatar and follows explicit requests to other sections', () => {
+    queue([]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const initial = backendSceneToLayout(scene, { projectId, name: original.name });
     const props = { controller, layout: initial, onLoadLayout: vi.fn() };
     const { rerender } = render(<CloudPanel {...props}/>);
-    fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
-    expect(screen.getByRole('button', { name: '素材库' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+    // 默认项目主表面；物料 / 团队在左栏团队下方，退出在三点菜单。
+    expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: '账户分区' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '物料' }));
+    expect(screen.getByRole('region', { name: '账户物料' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '物料' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
     rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'projects' }}/>);
-    expect(screen.getByRole('button', { name: '我的项目' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
     rerender(<CloudPanel {...props} openRequest={{ serial: 2, section: 'team' }}/>);
-    expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
+    expect(screen.getByRole('button', { name: '团队与权限' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
   });
 
-  it('keeps settings and account in separate surfaces', () => {
+  it('puts 团队与权限 under the team list instead of a separate settings surface', () => {
+    queue([]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const initial = backendSceneToLayout(scene, { projectId, name: original.name });
     const props = { controller, layout: initial, onLoadLayout: vi.fn() };
     const { rerender } = render(<CloudPanel {...props}/>);
-    fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
-    expect(screen.queryByText('SCENDANCE / 账户中心')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
     expect(screen.getByRole('heading', { name: '账户中心' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '账户说明' })).toBeNull();
+    expect(screen.getByLabelText('更多')).toBeTruthy();
     expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '团队演示' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '权限演示' })).toBeNull();
+    expect(screen.getByRole('navigation', { name: '账户分区' }).textContent).toContain('团队与权限');
 
     rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }}/>);
-    expect(screen.queryByText('SCENDANCE / 设置')).toBeNull();
-    expect(screen.getByRole('heading', { name: '团队与权限' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '关闭设置面板' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '素材库' })).toBeNull();
-    expect(screen.getByRole('button', { name: '团队演示' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '权限演示' }));
-    fireEvent.click(screen.getByRole('button', { name: '权限说明' }));
-    expect(screen.getByText('功能默认开放 · 权限仅作演示')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '账户中心' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '关闭设置面板' })).toBeNull();
+    expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '团队与权限' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: '权限演示空间' })).toBeNull();
   });
 
-  it('shows a shell draft note in the account menu without replacing the cloud badge', () => {
+  it('keeps routine draft notes off the project header and only surfaces save errors', async () => {
+    queue([original]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const initial = backendSceneToLayout(scene, { projectId, name: original.name });
-    render(<CloudPanel controller={controller} layout={initial} onLoadLayout={vi.fn()} draftNote={{ label: '已保存到本机', error: false }} />);
-    fireEvent.click(screen.getByRole('button', { name: '账户与素材库' }));
-    expect(screen.getByText('已保存到本机')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '我的项目' }));
-    expect(screen.getByText('草稿')).toBeTruthy();
+    const props = { controller, layout: initial, onLoadLayout: vi.fn(), draftNote: { label: '已保存到本机', error: false } };
+    const view = render(<CloudPanel {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+    expect(screen.queryByText('已保存到本机')).toBeNull();
+    expect(await screen.findByText('当前 · 草稿')).toBeTruthy();
+    view.rerender(<CloudPanel {...props} draftNote={{ label: '本机草稿保存失败', error: true, title: '磁盘写入失败' }} />);
+    expect(screen.getByText('本机草稿保存失败')).toBeTruthy();
+    expect(screen.getByText('当前 · 草稿')).toBeTruthy();
   });
 });

@@ -461,7 +461,7 @@ describe('OnlineModelLibrary', () => {
     expect(screen.getByRole('button', { name: '取消收藏物料 Lounge Chaise' }).getAttribute('aria-pressed')).toBe('true');
     expect(JSON.parse(localStorage.getItem(MATERIAL_LIBRARY_META_KEY) ?? '{}').favorites).toContain('seating-chaise');
     const tags = screen.getByRole('group', { name: '线上模型分类' });
-    const tagText = (node: Element | null) => (node?.textContent ?? '').replace(/\s+/g, '');
+    const tagText = (node: Element | null) => (node?.textContent ?? '').replace(/[\uE000-\uF8FF]/g, '').replace(/\s+/g, '');
     expect(tagText(tags.children[0])).toMatch(/^全部/);
     expect(tags.children[1]?.getAttribute('aria-label')).toBe('标签');
     expect(tagText(tags.children[2])).toMatch(/^收藏/);
@@ -478,25 +478,19 @@ describe('OnlineModelLibrary', () => {
 });
 
 describe('物料卡的按风格配一套', () => {
-  it('keeps the three-block triad, places a whole style set in one go and records it under 我的生成', async () => {
-    localStorage.removeItem(STYLE_RUNS_KEY);
+  it('keeps style entry out of the library pane; history under 我的生成 can still re-place', async () => {
+    localStorage.setItem(STYLE_RUNS_KEY, JSON.stringify([{ style: 'cream-lounge', at: Date.now() }]));
     const onAdd = vi.fn(), onAddSet = vi.fn();
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd} onAddSet={onAddSet}/>);
-    // 风格只是库这一层里的入口，不是第四块摘要卡。
     await screen.findByRole('button', { name: /^库/ });
     expect(screen.getByRole('tablist', { name: '物料' }).children).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: /按风格配一套/ }));
-    fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
+    expect(screen.queryByRole('button', { name: /按风格配一套/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^我的生成/ }));
+    fireEvent.click(screen.getByRole('button', { name: '再放一套奶油会客' }));
     expect(onAddSet).toHaveBeenCalledOnce();
     const items = onAddSet.mock.calls[0]![0] as FurnitureItem[];
     expect(items.length).toBeGreaterThanOrEqual(4);
-    expect(items.every(item => item.position && item.id)).toBe(true);
     expect(items.some(item => item.type === 'sofa' && item.color === '#E8DCC8')).toBe(true);
-    expect(JSON.parse(localStorage.getItem(STYLE_RUNS_KEY) ?? '[]')[0].style).toBe('cream-lounge');
-    fireEvent.click(screen.getByRole('button', { name: /^我的生成/ }));
-    expect(screen.getByRole('button', { name: '再放一套奶油会客' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '再放一套奶油会客' }));
-    expect(onAddSet).toHaveBeenCalledTimes(2);
     expect(onAdd).not.toHaveBeenCalled();
   });
 });

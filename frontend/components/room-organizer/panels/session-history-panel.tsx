@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { MessageCirclePlus, Pencil, Search, Star, Trash } from 'lucide-react';
+import { MessageCirclePlus, Pencil, Search, Star, Trash } from '@/components/solid-icons';
 import { useRef, useState } from 'react';
 import { formatAssistantSessionStamp, type AssistantSession } from '../lib/assistant-sessions';
 import { useAssistantSessions } from '../hooks/use-assistant-sessions';

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="预设头像 10 麦色 · 圆框">
+  <defs><clipPath id="face"><circle cx="128" cy="128" r="128"/></clipPath></defs>
+  <circle cx="128" cy="128" r="128" fill="#EFE7D9"/>
+  <g clip-path="url(#face)">
+    
+    <path d="M20 256c3-52 48-78 108-78s105 26 108 78z" fill="#7A6045"/>
+    <path d="M104 138h48v34c0 13-11 21-24 21s-24-8-24-21z" fill="#F2D3B4"/>
+    <path d="M105 183c7 10 16 15 23 15s16-5 23-15" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" opacity=".55"/>
+    <circle cx="84" cy="112" r="7.5" fill="#F2D3B4"/><circle cx="172" cy="112" r="7.5" fill="#F2D3B4"/>
+    <ellipse cx="128" cy="108" rx="43" ry="48" fill="#F2D3B4"/>
+    <path d="M85 106C84 68 105 51 128 51C153 51 172 68 171 106C165 88 154 79 139 76C121 72 105 79 96 92C92 99 88 103 85 106Z" fill="#6A4A33"/>
+    <path d="M101 99 Q109 95 117 99" fill="none" stroke="#2B2A26" stroke-width="2.6" stroke-linecap="round" opacity=".55"/><path d="M139 99 Q147 95 155 99" fill="none" stroke="#2B2A26" stroke-width="2.6" stroke-linecap="round" opacity=".55"/>
+    
+    <circle cx="109" cy="110" r="3.6" fill="#2B2A26"/>
+    <circle cx="147" cy="110" r="3.6" fill="#2B2A26"/>
+    <path d="M120 132 Q128 137 136 132" fill="none" stroke="#8A5C47" stroke-width="2.4" stroke-linecap="round" opacity=".85"/>
+    <g fill="none" stroke="#3B3630" stroke-width="2.6"><circle cx="109" cy="110" r="14"/><circle cx="147" cy="110" r="14"/><path d="M123 110h10"/><path d="M95 108l-8 2"/><path d="M161 108l8 2"/></g>
+  </g>
+</svg>

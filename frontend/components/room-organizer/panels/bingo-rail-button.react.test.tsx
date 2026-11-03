@@ -38,6 +38,12 @@ describe('Bingo 左轨入口', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
+  it('hides the status dot while a closed rail slot has nothing to report', () => {
+    render(<BingoRailButton open={false} onOpen={vi.fn()} />);
+    const button = screen.getByRole('button', { name: 'Bingo' });
+    expect(button.querySelector('.sc-rail-dot')).toBeNull();
+  });
+
   it('does not mount the three mode icons on the workbench rail', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).toContain('<WorkbenchBrandToggle');

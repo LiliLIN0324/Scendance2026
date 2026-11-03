@@ -1,10 +1,10 @@
 ﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { HelpCircle, Layers, MousePointerClick, PencilLine, Timer, Video, X, Globe } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { HelpCircle, Layers, MousePointerClick, PencilLine, Timer, Video, X, Globe } from '@/components/solid-icons';
+import type { SolidIconComponent } from '@/components/solid-icons';
 
-interface GuideStep { icon: LucideIcon; title: string; text: string; }
+interface GuideStep { icon: SolidIconComponent; title: string; text: string; }
 const LUX_STEPS: GuideStep[] = [
   { icon: PencilLine, title: '① 描述或传图', text: '文字建模：一句话描述物件；图片建模：传一张照片按图建模更还原，描述作为补充。' },
   { icon: Timer, title: '② 云端生成', text: '点「直连生成」提交给 Aholo Lux3D，通常约 3-5 分钟，期间可点「查看最新」跟踪进度。' },
@@ -46,7 +46,7 @@ export function AholoGuideCard({ world = false, recon = false, surface = 'direct
     </button>
     {open && <div className="sc-aholo-guide-card" role="dialog" aria-label="生成教程">
       <div className="sc-aholo-guide-head">
-        <strong>{recon ? '场地重建怎么用' : world ? '场景生成怎么用' : '生成物件怎么用'}</strong>
+        <strong>{recon ? '真实场地重建怎么用' : world ? 'World 世界模型怎么用' : '生成物件怎么用'}</strong>
         <button type="button" className="sc-aholo-guide-close" aria-label="关闭生成教程" onClick={() => setOpen(false)}>
           <X size={13} aria-hidden="true" />
         </button>

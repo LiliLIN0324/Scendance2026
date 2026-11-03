@@ -99,6 +99,23 @@ describe('local activity creation and switching', () => {
     expect(screen.getByRole('button', { name: `打开活动「${target.name}」` })).toBeTruthy();
   });
 
+  it('hides the archives that belong to another team and takes them out of the count', async () => {
+    const actions: LocalProjectBackupActions = {
+      prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
+    };
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [
+      { ...listedTarget(), preview: target },
+      { projectId: 'house-local-activity-other-team', name: '演练他队活动', archivedAt: '2026-10-08T03:00:00Z', itemCount: 1 },
+    ], unreadableProjectIds: [] });
+    const view = render(<LocalActivitiesPanel mode="list" layout={original} actions={actions}
+      isActivityVisible={projectId => projectId !== 'house-local-activity-other-team'}/>);
+    expect(await screen.findByText(target.name)).toBeTruthy();
+    expect(screen.queryByText('演练他队活动')).toBeNull();
+    // 当前画布是正在编辑的东西，不跟着团队筛掉。
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(view.container.querySelector('.sc-settings-count')?.textContent).toBe('2 个');
+  });
+
   it('takes a live 3D still for the current card once the panel is on screen', async () => {
     const stop = registerStageCover(() => 'data:image/jpeg;base64,BBBB');
     vi.stubGlobal('IntersectionObserver', class {

@@ -1,4 +1,4 @@
-import { Boxes, Camera, Image as ImageIcon, Scan } from 'lucide-react';
+import { Boxes, Camera, Image as ImageIcon, Scan } from '@/components/solid-icons';
 import type { AholoDirectKind } from '../lib/aholo-assets';
 
 /**

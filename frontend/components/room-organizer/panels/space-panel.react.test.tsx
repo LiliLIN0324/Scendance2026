@@ -23,7 +23,7 @@ vi.mock('../contexts', () => ({
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 function environment(preview: SplatPreviewState = { status: 'idle', assetId: '', name: '' }, current: StoredEnvironment | null = null) {
-  return { preview, current, onSelect: vi.fn(), onClear: vi.fn() };
+  return { preview, current, environments: current ? [current] : [], floors: [{ id: 'ground', name: '活动场地' }], onSelect: vi.fn(), onRemove: vi.fn(), onSetFloor: vi.fn(), onClear: vi.fn() };
 }
 
 describe('SpacePanel', () => {
@@ -45,20 +45,20 @@ describe('SpacePanel', () => {
     const preview = environment();
     rememberAholoAsset({ assetId: '00000000-0000-4000-8000-000000000000', kind: 'spz', name: '午后咖啡馆', bytes: 20_000_000, savedAt: 1 });
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview}/>);
-    expect(screen.getByLabelText('切换环境')).toBeTruthy();
-    const item = (await screen.findAllByRole('menuitemradio')).find(node => node.textContent?.includes('午后咖啡馆'));
+    expect(screen.getByLabelText('添加高斯场景')).toBeTruthy();
+    const item = (await screen.findAllByRole('menuitemcheckbox')).find(node => node.textContent?.includes('午后咖啡馆'));
     expect(item).toBeTruthy();
     fireEvent.click(item!);
     expect(preview.onSelect).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000000', '午后咖啡馆');
   });
 
-  it('marks the remembered environment as current and can drop it', () => {
+  it('marks the remembered environment as current and can remove it', () => {
     const current = { assetId: '00000000-0000-4000-8000-000000000000', name: '午后咖啡馆' };
     const preview = environment({ status: 'ready', assetId: current.assetId, name: current.name, splats: 1200 }, current);
     rememberAholoAsset({ assetId: current.assetId, kind: 'spz', name: current.name, bytes: 20_000_000, savedAt: 1 });
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview}/>);
-    expect(screen.getByRole('button', { name: '当前环境午后咖啡馆' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '不用环境' }));
-    expect(preview.onClear).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /午后咖啡馆/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '移除午后咖啡馆' }));
+    expect(preview.onRemove).toHaveBeenCalledWith(current.assetId);
   });
 });
