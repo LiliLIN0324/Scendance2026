@@ -5,8 +5,8 @@ import type { Env } from './http.ts';
 export const generationRequestSchema=z.strictObject({
   requestId:uuid,prompt:z.string().trim().min(1).max(1024),kind:z.enum(['text','image','texture']).default('text'),
   referenceImageAssetId:uuid.optional(),sourceAssetId:uuid.optional(),
-  /** Explicit cloud-vendor declaration. Only `aholo` (Lux3D) is accepted; default stays HY-3D. */
-  provider:z.enum(['aholo']).optional(),
+  /** Omit for the default metered lane (Aholo when configured, otherwise HY-3D). `hy3d` forces the fallback. */
+  provider:z.enum(['aholo','hy3d']).optional(),
 }).superRefine((input,ctx)=>{
   if(input.kind==='text'&&(input.referenceImageAssetId||input.sourceAssetId))ctx.addIssue({code:'custom',message:'文字生成不能附带图片或源模型'});
   if(input.kind!=='text'&&!input.referenceImageAssetId)ctx.addIssue({code:'custom',path:['referenceImageAssetId'],message:'请选择参考图片'});

@@ -25,7 +25,7 @@ describe('aholo lux3d lane (docs/AHOLO-INTEGRATION-PLAN.md M1)',()=>{
   });
   it('accepts an explicit provider declaration and pins lux3d on the job',async()=>{
     expect(generationRequestSchema.safeParse({requestId:crypto.randomUUID(),prompt:'vase',provider:'aholo'}).success).toBe(true);
-    expect(generationRequestSchema.safeParse({requestId:crypto.randomUUID(),prompt:'vase',provider:'hy3d'}).success).toBe(false);
+    expect(generationRequestSchema.safeParse({requestId:crypto.randomUUID(),prompt:'vase',provider:'hy3d'}).success).toBe(true);
     const input={requestId:crypto.randomUUID(),prompt:'vase',provider:'aholo' as const};
     await expect(prepareGenerationRequest(f.backend,owner,input,env())).rejects.toMatchObject({code:'SERVICE_NOT_CONFIGURED',status:503,details:{setting:'LUX3D_API_KEY',lane:'aholo'}});
     const prepared=await prepareGenerationRequest(f.backend,owner,input,env(baseEnv));
@@ -35,15 +35,25 @@ describe('aholo lux3d lane (docs/AHOLO-INTEGRATION-PLAN.md M1)',()=>{
     // Provider identity is pinned: later config changes must not re-vendor an old job.
     await expect(f.jobs(owner,'jobs.create',{...await prepareGenerationRequest(f.backend,owner,{...input,provider:undefined},env(baseEnv)),reserveCents:100})).resolves.toMatchObject({reused:true});
   });
-  it('keeps the default cloud lane on HY-3D even when aholo is configured',async()=>{
+  it('defaults the cloud text lane to Aholo Lux3D when both vendors are configured',async()=>{
     const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},env(baseEnv));
+    expect(prepared).toMatchObject({providerMode:'aholo',providerModel:'lux3d'});
+  });
+  it('keeps HY-3D as the text fallback when Aholo is not configured',async()=>{
+    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},env({HUNYUAN_API_KEY:'test',HUNYUAN_API_MODE:'tokenhub',HUNYUAN_TERMS_URL:'https://example.test/terms',HUNYUAN_TERMS_REVIEWED_AT:'2026-10-03'}));
     expect(prepared).toMatchObject({providerMode:'tokenhub',providerModel:'hy-3d-3.0'});
   });
-  it('retires HY-3D without taking the peer Aholo engine down',async()=>{
+  it('keeps an explicit HY-3D choice on the fallback lane while Aholo is configured',async()=>{
+    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',provider:'hy3d'},env(baseEnv));
+    expect(prepared).toMatchObject({providerMode:'tokenhub',providerModel:'hy-3d-3.0'});
+  });
+  it('retires HY-3D without taking the default Aholo lane down',async()=>{
     const retired=env({...baseEnv,HY3_RETIRED:'true'});
-    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},retired)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
-    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',provider:'aholo' as const},retired);
+    const prepared=await prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase'},retired);
     expect(prepared).toMatchObject({providerMode:'aholo',providerModel:'lux3d'});
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',provider:'aholo' as const},retired)).resolves.toMatchObject({providerMode:'aholo'});
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',provider:'hy3d'},retired)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
+    await expect(prepareGenerationRequest(f.backend,owner,{requestId:crypto.randomUUID(),prompt:'vase',kind:'texture',provider:'aholo'},retired)).rejects.toMatchObject({code:'HY3_RETIRED',status:410});
   });
   it('validates the Aholo reference image against the caller before reserving',async()=>{
     const register=async(actor:string)=>{const id=crypto.randomUUID();return f.rpc(actor,'assets.register',{id,name:'Reference',source:'upload',format:'png',storagePath:`${actor}/${crypto.randomUUID()}/reference.png`,byteSize:100,sha256:'a'.repeat(64),metadata:{width:512,height:512},license:{}});};
