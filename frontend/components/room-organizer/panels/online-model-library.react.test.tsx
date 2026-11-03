@@ -9,10 +9,12 @@ import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { MATERIAL_LIBRARY_META_KEY } from '../lib/material-library-meta';
+import { STYLE_RUNS_KEY } from '../lib/style-bundles';
 import { listShippedAssets } from '../lib/shipped-assets';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
 import type { OnlineModel } from '../lib/online-models';
+import type { FurnitureItem } from '../lib/types';
 
 // Only the network boundary is stubbed: `createGlbCatalogItem` stays real so these
 // specs pin the actual catalogue item the library hands to the scene. Vitest hoists
@@ -461,9 +463,9 @@ describe('OnlineModelLibrary', () => {
     const tags = screen.getByRole('group', { name: '线上模型分类' });
     const tagText = (node: Element | null) => (node?.textContent ?? '').replace(/\s+/g, '');
     expect(tagText(tags.children[0])).toMatch(/^全部/);
-    expect(tags.children[1]?.getAttribute('aria-label')).toBe('加标签');
+    expect(tags.children[1]?.getAttribute('aria-label')).toBe('标签');
     expect(tagText(tags.children[2])).toMatch(/^收藏/);
-    fireEvent.click(screen.getByRole('button', { name: '加标签' }));
+    fireEvent.click(screen.getByRole('button', { name: '标签' }));
     expect(tags.children[1]?.classList.contains('sc-bucket-add-form')).toBe(true);
     expect(tagText(tags.children[0])).toMatch(/^全部/);
     expect(tagText(tags.children[2])).toMatch(/^收藏/);
@@ -472,5 +474,29 @@ describe('OnlineModelLibrary', () => {
     expect(screen.getByRole('button', { name: /^沙滩/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '把Lounge Chaise挂上沙滩' }));
     expect(screen.getByRole('button', { name: '从沙滩卸下Lounge Chaise' }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('物料卡的按风格配一套', () => {
+  it('keeps the three-block triad, places a whole style set in one go and records it under 我的生成', async () => {
+    localStorage.removeItem(STYLE_RUNS_KEY);
+    const onAdd = vi.fn(), onAddSet = vi.fn();
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd} onAddSet={onAddSet}/>);
+    // 风格只是库这一层里的入口，不是第四块摘要卡。
+    await screen.findByRole('button', { name: /^库/ });
+    expect(screen.getByRole('tablist', { name: '物料' }).children).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: /按风格配一套/ }));
+    fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
+    expect(onAddSet).toHaveBeenCalledOnce();
+    const items = onAddSet.mock.calls[0]![0] as FurnitureItem[];
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    expect(items.every(item => item.position && item.id)).toBe(true);
+    expect(items.some(item => item.type === 'sofa' && item.color === '#E8DCC8')).toBe(true);
+    expect(JSON.parse(localStorage.getItem(STYLE_RUNS_KEY) ?? '[]')[0].style).toBe('cream-lounge');
+    fireEvent.click(screen.getByRole('button', { name: /^我的生成/ }));
+    expect(screen.getByRole('button', { name: '再放一套奶油会客' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '再放一套奶油会客' }));
+    expect(onAddSet).toHaveBeenCalledTimes(2);
+    expect(onAdd).not.toHaveBeenCalled();
   });
 });

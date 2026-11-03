@@ -443,6 +443,11 @@ export interface ViewSettings {
   drawWallMode: boolean;
   /** When true, dragging a rectangle on the 2D plan creates a room zone (#155). */
   drawZoneMode: boolean;
+  /**
+   * 选择工具是否启用（默认 true）。关掉后画布只浏览：相机照常移动，但点击不再
+   * 选中/双击打开属性。选择钮第二次点击就是关它。
+   */
+  selectMode: boolean;
   /** When true, the 2D view overlays a price-density heatmap. */
   showHeatmap: boolean;
   /** When true, every placed item has a name label hovering above it in 3D. */

@@ -277,3 +277,16 @@ export function downloadCanvasAsPng(canvas: HTMLCanvasElement, baseName: string)
     }
   });
 }
+
+/** 已经编码好的 PNG（导出预览那张）直接触发下载，不再重渲染一遍。 */
+export function downloadDataUrlAsPng(dataUrl: string, baseName: string): boolean {
+  try {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = `${(baseName || 'screenshot').replace(/\s+/g, '_')}.png`;
+    link.click();
+    return true;
+  } catch {
+    return false;
+  }
+}

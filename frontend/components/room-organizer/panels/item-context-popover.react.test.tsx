@@ -239,7 +239,7 @@ describe('manual selected item dimensions', () => {
       const input = screen.getByRole('spinbutton', { name }); expect((input as HTMLInputElement).disabled).toBe(true);
       fireEvent.change(input, { target: { value: '1.2' } }); fireEvent.blur(input);
     }
-    expect(screen.getByText(/结构微调|补充尺寸/)).toBeTruthy(); expect(editor.actions.resizeItem).not.toHaveBeenCalled();
+    expect(screen.getByText(/空间 → 结构|补充尺寸/)).toBeTruthy(); expect(editor.actions.resizeItem).not.toHaveBeenCalled();
   });
 
   it('does not commit a locked dimension even when an input event is simulated', () => {

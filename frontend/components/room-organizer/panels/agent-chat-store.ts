@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * 左轨四个 agent 的对话记录。
+ * 左轨 agent 的本机对话记录。
  *
- * 为什么放在本机：总控/空间/物料这三条线都还没有自己的后端会话，先把对话记在本机
- * （localStorage，按 agent 分线），Bingo 那条真实的布置对话仍走 AgentPanel 自己的
+ * 为什么放在本机：空间/物料这两条线还没有自己的后端会话，先把对话记在本机
+ * （localStorage，按 agent 分线）。总控与 Bingo 那一场真实的对话走 AgentPanel 自己的
  * agent.bubbles，不走这里。等后刀接上真接口，只需要把 appendMessage 换成服务端调用。
  */
 
@@ -84,9 +84,4 @@ export function appendAgentChatMessage(agent: ChatAgent, from: ChatFrom, text: s
 
 export function clearAgentChatThread(agent: ChatAgent): void {
   commit({ ...threads, [agent]: [] });
-}
-
-/** 总控要的是「全局」：四条线按时间排在一起。 */
-export function globalAgentChatFeed(all: AgentChatThreads): AgentChatMessage[] {
-  return [...all.door, ...all.bingo, ...all.space, ...all.material].sort((left, right) => left.at - right.at);
 }

@@ -1,7 +1,7 @@
 # Scendance（幕景）Taste & IA Memo — 2026-10-29
 
 > **Scope**: public product references + opinionated KEEP/KILL for first-screen / IA. **Not** implementation.  
-> **Owner nails (准)**: 「3D 活动方案全流程生成」· 结果=布置/物料/执行资料 · 主路径=选活动→定场地人数→生成→确认→导出 · 对话加速非必考 · 简如 tuijian · 气如 Viggle · 禁小碎乱 · scene/object/compose 仅内部层 · 冷石+品牌绿已定 · 深砍不三不四。  
+> **Owner nails (准)**: 「3D 活动方案全流程生成」· 结果=布置/物料/执行资料 · 主路径=对话或首屏卡片→选活动/场地→生成→确认→导出 · 对话是生成主入口 · 左轨四形（总控/Bingo/空间/物料）· 简如 tuijian · 气如 Viggle · 禁小碎乱 · scene/object/compose 仅内部层 · 冷石+品牌绿已定 · 深砍不三不四。  
 > **Sources fetched**: viggle.ai / pinoc / jst2 / docs scene · Spline docs+UI tour · Dora marketing · Luma Dream Machine · Meshy workspace tour · Hyper3D WorldGen · Polycam Scenes help · memory + `ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md`.  
 > **tuijian**: github.com/wustwyh/tuijian referenced by owner as「笨但好懂」card→pipeline；repo page thin/403 — pattern taken from owner nail, not reverse-engineered UI pixels.
 
@@ -46,12 +46,15 @@ User-facing outputs (three result plates, not three products):
 
 **One user-facing generate path**  
 `选活动 → 定场地·人数 → 生成 → 确认 → 导出`  
-Chat = accelerator / refine, **not** the entrance exam.
+Chat is the primary generate entrance; cards enter the same path. No second form.
+
+**Current layout (2026-11-03)**
+- Left rail: 4 forms only — 总控门厅 / Bingo / 空间 / 物料.
+- Space panel: 场地 · 场景模板 · 环境 · 结构 (parallel, no nesting).
+- Bingo lives in the right Agent column; chat is the main generate entry.
 
 **Internal layers (allowed, never marketed as tabs)**  
 `scene shell · object assets · compose/layout` — pipeline guts behind one Generate. User never chooses “Scene Gen vs Object Gen vs Composer.”
-
-Left rail stays **布置 / 评审 / 执行** only (never a fourth icon).
 
 Visual tokens already exist — **cold stone** (`#F4F5F7` family) + **brand green** (`#4A7C59` + soft) + near-black ink + hairline. **Do not invent a new color system.**
 
@@ -67,10 +70,10 @@ Visual tokens already exist — **cold stone** (`#F4F5F7` family) + **brand gree
 - **Big center canvas** as the emotional product (Viggle 大气); layout result owns the frame.
 - After generate: **three result plates** 布置 · 物料 · 执行 — same plan, different views; not three apps.
 - **建议 → 绿框预览 → 唯一确认** (确认布置 / 确认导出) — one decision per breath.
-- Left rail **布置 / 评审 / 执行** only.
-- 晴光 as living edge presence (not sticker card).
+- Left rail **总控 / Bingo / 空间 / 物料** only (4 forms; space and materials share one right-column card slot).
+- Bingo as right-column assistant (not sticker card).
 - Honest demo label when mock brain.
-- Quiet cold-stone chrome; green only for the one confirm / generate moment.
+- Quiet cold-stone chrome; green only for selected state and send.
 
 ### KILL (from user-facing IA / first screen)
 
@@ -100,6 +103,8 @@ Visual tokens already exist — **cold stone** (`#F4F5F7` family) + **brand gree
 ## 4. First-screen proposal (before any deep tool)
 
 **Goal**: tuijian-simple entry + Viggle-big room — user feels “this makes my event plan,” not “this is a 3D suite.”
+
+> **已作废**：下方 ASCII 草图是 2026-10-28 的三图标 + 顶栏方案，仅作历史对照；当前以「无顶栏、左轨四形、Bingo 在右栏」为准。
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -155,10 +160,10 @@ Aligns with / hardens `ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md`:
 
 | Keep from framework | Deepen / cut further |
 |---|---|
-| Left rail 三图标 | Unchanged |
+| Left rail 四形（总控/Bingo/空间/物料） | Unchanged |
 | 意图→预览→一确认 | Unchanged; make Generate the *pre*-plan twin of Confirm |
 | Ban button footnotes / idle green / six-tab default | **Also ban** any first-screen exposure of scene/object/compose |
-| Chat-first story | Soften: **card→generate first**; chat not mandatory to start (owner 2026-10-28 nail) |
+| Chat as generate entrance | Cards and chat share one path; chat is not an optional accelerator |
 | 3DGS / mood Out this phase | Still Out for surface; hide as future internal |
 | 卖方案不卖重建 | Surface copy must never say “重建/生成物件/WorldGen” |
 
@@ -201,7 +206,7 @@ Rewrite workbench **first breath + IA labels** so a stranger understands in 5 se
    - [ ] First screen: cards + chips + one green Generate; no mode rail.  
    - [ ] Idle: zero green primary.  
    - [ ] After generate: big layout + three plates visible without opening “tools.”  
-   - [ ] Left rail only 布置/评审/执行.  
+   - [ ] Left rail only 总控/Bingo/空间/物料 (4 forms).  
    - [ ] No six-tab shell, no footnote wall, no Scene/Object/Compose tabs.  
    - [ ] Preview → single Confirm still works.
 
@@ -235,6 +240,6 @@ Rewrite workbench **first breath + IA labels** so a stranger understands in 5 se
 
 ## 8. One-paragraph synthesis
 
-Scendance should feel like **tuijian taught you the path in one glance**, then **Viggle opened a quiet big room** where the plan lives — not like Spline/Meshy/Rodin/Polycam asking which 3D lab you want. Scene, object, and compose stay **internal machinery**. The only user-facing generate is **活动方案**; the only lasting structure is **布置 · 物料 · 执行** under **布置 / 评审 / 执行**. Cut everything else from the first screen hard.
+Scendance should feel like **tuijian taught you the path in one glance**, then **Viggle opened a quiet big room** where the plan lives — not like Spline/Meshy/Rodin/Polycam asking which 3D lab you want. Scene, object, and compose stay **internal machinery**. The only user-facing generate is **活动方案**; the lasting structure is the three result plates **布置 · 物料 · 执行**, reached through the four-form rail **总控 / Bingo / 空间 / 物料** — not stage tabs. Cut everything else from the first screen hard.
 
 — End memo —

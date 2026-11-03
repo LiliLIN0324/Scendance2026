@@ -6,7 +6,7 @@
  * 二维码算法用 qrcode（MIT），图标与卡片样式是自写的。
  */
 import QRCode from 'qrcode';
-import { ClipboardCheck, FileDown, Link2, PackageOpen, QrCode, Share2 } from 'lucide-react';
+import { ClipboardCheck, Copy, ExternalLink, FileDown, Info, Link2, PackageOpen, QrCode, Share2, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { planDrawOrder } from '../lib/plan-order';
@@ -183,64 +183,72 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
       <Share2 size={20} aria-hidden="true"/>
     </button>
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="发布">
-      <section className="sc-publish-preview" aria-label="方案预览">
-        <span className="sc-publish-kicker">方案预览</span>
+      <header className="sc-publish-head">
+        <span className="sc-publish-name">{titleOf(layout)}</span>
+        <span className={`sc-publish-chip${published ? ' is-live' : ''}`}>{published ? `已发布 v${published.revision}` : '未发布'}</span>
+        <details className="sc-publish-tip">
+          <summary aria-label="分享说明"><Info size={13} aria-hidden="true"/></summary>
+          <p>发布不会通知对方，链接由你自己发。后续编辑不改已发布的版本；评审评论写在打开页面的浏览器里。</p>
+        </details>
+      </header>
+
+      <section className="sc-publish-shot" aria-label="方案预览">
         {layout ? <PlanPreview layout={layout}/> : <p className="sc-publish-note">画布还没就绪。</p>}
-        <strong>{titleOf(layout)}</strong>
-        {outline && <small>{outline.size} · {outline.itemCount} 件物料 · {outline.floors.length} 层</small>}
+        <span className="sc-publish-shot-kicker">方案预览</span>
+        {outline && <span className="sc-publish-shot-meta">{outline.size} · {outline.itemCount} 件</span>}
       </section>
 
-      <button type="button" className="sc-publish-primary" disabled={busy} onClick={() => { void publish(); }}>{busy ? '正在发布…' : published ? `重新发布版本 ${published.revision + 1}` : '发布当前版本'}</button>
+      <div className="sc-publish-actions">
+        <button type="button" className="sc-publish-primary" disabled={busy} onClick={() => { void publish(); }}>
+          <Upload size={15} aria-hidden="true"/><span>{busy ? '正在发布…' : published ? `重新发布版本 ${published.revision + 1}` : '发布当前版本'}</span>
+        </button>
+        {published && <>
+          <button type="button" aria-label="复制链接" data-tip="复制链接" onClick={() => { void copyPublished(); }}><Copy size={15} aria-hidden="true"/></button>
+          <a href={published.url} target="_blank" rel="noopener noreferrer" aria-label="打开只读页" data-tip="打开只读页"><ExternalLink size={15} aria-hidden="true"/></a>
+        </>}
+      </div>
       {notice && <p className="sc-publish-note" role="status">{notice}</p>}
 
-      <section className="sc-publish-qr" aria-label="扫码看方案">
+      <section className="sc-publish-qr" aria-label="手机看方案">
         <span className="sc-publish-kicker">手机看方案</span>
-        {published
-          ? <>
-            {qrSvg
+        <div className="sc-publish-qr-body">
+          {published
+            ? (qrSvg
               ? <div className="sc-publish-qr-frame" role="img" aria-label="只读方案二维码" dangerouslySetInnerHTML={{ __html: qrSvg }}/>
-              : <div className="sc-publish-qr-frame is-pending" aria-hidden="true"><QrCode size={26}/></div>}
-            <p className="sc-publish-note">版本 {published.revision} · 只读，扫完即看</p>
-            <div className="sc-publish-row">
-              <button type="button" onClick={() => { void copyPublished(); }}>复制链接</button>
-              <a href={published.url} target="_blank" rel="noopener noreferrer">打开只读页</a>
-            </div>
-          </>
-          : <>
-            <div className="sc-publish-qr-frame is-empty" aria-hidden="true"><QrCode size={26}/></div>
-            <p className="sc-publish-note">发布后这里出二维码，手机扫码看到的就是同一版。</p>
-          </>}
+              : <div className="sc-publish-qr-frame is-pending" aria-hidden="true"><QrCode size={26}/></div>)
+            : <div className="sc-publish-qr-frame is-empty" aria-hidden="true"><QrCode size={26}/></div>}
+          <div className="sc-publish-qr-side">
+            <p>{published ? `版本 ${published.revision} · 只读，扫码即看` : '发布后这里出二维码，手机扫码看到的就是同一版。'}</p>
+          </div>
+        </div>
       </section>
 
-      {outline && <section className="sc-publish-outline" aria-label="项目大纲">
-        <span className="sc-publish-kicker">项目大纲</span>
-        <dl>
-          <div><dt>场地</dt><dd>{outline.size}</dd></div>
-          <div><dt>楼层</dt><dd>{outline.floors.join(' / ') || '还没分楼层'}</dd></div>
-          <div><dt>物料</dt><dd>{outline.itemCount} 件{outline.categories.length ? ` · ${outline.categories.map(entry => `${entry.label} ${entry.count}`).join(' / ')}` : ''}</dd></div>
-          <div><dt>分区</dt><dd>{outline.zones.length ? `${outline.zones.length} 个 · ${outline.zones.slice(0, 4).join(' / ')}` : '还没分区'}</dd></div>
-          {outline.variants.length > 0 && <div><dt>设计簿</dt><dd>{outline.variants.map(variant => variant.active ? `${variant.name}（当前）` : variant.name).join(' / ')}</dd></div>}
-        </dl>
-      </section>}
-
-      {reviewUrl && <>
+      {reviewUrl && <section className="sc-publish-review">
         <label>可留言的方案页
           <input readOnly value={reviewUrl} aria-label="评审链接" onFocus={event => event.currentTarget.select()}/>
         </label>
         <div className="sc-publish-row">
-          <button type="button" onClick={() => { void copyReview(); }}>复制链接</button>
-          <a href={reviewUrl} target="_blank" rel="noopener noreferrer">打开对方所见</a>
+          <button type="button" aria-label="复制评审链接" onClick={() => { void copyReview(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
+          <a href={reviewUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden="true"/><span>打开对方所见</span></a>
         </div>
-      </>}
+      </section>}
 
-      <span className="sc-more-sep" aria-hidden="true"/>
+      {outline && <details className="sc-publish-outline">
+        <summary><span>项目大纲</span><small>{outline.size} · {outline.itemCount} 件</small></summary>
+        <dl>
+          <div><dt>楼层</dt><dd>{outline.floors.join(' / ') || '还没分楼层'}</dd></div>
+          <div><dt>物料</dt><dd>{outline.categories.length ? outline.categories.map(entry => `${entry.label} ${entry.count}`).join(' / ') : '还没放物料'}</dd></div>
+          <div><dt>分区</dt><dd>{outline.zones.length ? `${outline.zones.length} 个 · ${outline.zones.slice(0, 4).join(' / ')}` : '还没分区'}</dd></div>
+          {outline.variants.length > 0 && <div><dt>设计簿</dt><dd>{outline.variants.map(variant => variant.active ? `${variant.name}（当前）` : variant.name).join(' / ')}</dd></div>}
+        </dl>
+      </details>}
+
       <div className="sc-publish-more">
         <button type="button" onClick={() => { void issue(); }}><Link2 size={15} aria-hidden="true"/><span>发评审链接</span></button>
         <button type="button" onClick={() => { actions?.onExportHandoff(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出交接</span></button>
         <button type="button" onClick={() => { actions?.onOpenMaterials(); setOpen(false); }}><PackageOpen size={15} aria-hidden="true"/><span>打开资料</span></button>
         <button type="button" onClick={() => { actions?.onOpenChecklist(); setOpen(false); }}><ClipboardCheck size={15} aria-hidden="true"/><span>到场清单</span></button>
       </div>
-      <p className="sc-publish-note">发布不会通知对方，链接由你自己发。后续编辑不改已发布的版本；评审评论写在打开页面的浏览器里。</p>
     </div>}
   </div>;
 }
@@ -256,14 +264,20 @@ function PlanPreview({ layout }: { layout: RoomLayout }): JSX.Element {
   const items = planDrawOrder((floor?.items ?? []).filter(item => !isStructuralMarker(item)));
   // 1px ≈ 卡片宽度 260 上的描边，换算成米。
   const unit = Math.max(width, depth) / 260;
+  const grid = Math.max(unit * 6, 0.5);
+  const cols = Math.max(Math.round(width / grid), 1);
+  const rows = Math.max(Math.round(depth / grid), 1);
   return <svg className="sc-publish-plan" viewBox={`0 0 ${width} ${depth}`} role="img" aria-label={`${titleOf(layout)} 的平面预览`} preserveAspectRatio="xMidYMid meet">
-    <rect x={0} y={0} width={width} height={depth} className="sc-publish-plan-ground"/>
-    {(floor?.zones ?? []).map(zone => <rect key={zone.id} x={zone.x + width / 2} y={zone.z + depth / 2} width={Math.max(zone.w, 0.02)} height={Math.max(zone.d, 0.02)} fill={zone.color} opacity={0.12}/>)}
-    <rect x={unit} y={unit} width={Math.max(width - unit * 2, 0.01)} height={Math.max(depth - unit * 2, 0.01)} fill="none" stroke="#5f655f" strokeWidth={unit * 1.8}/>
+    <rect x={0} y={0} width={width} height={depth} fill="#F7F5F0"/>
+    {Array.from({ length: cols }, (_, index) => <line key={`v${index}`} x1={(index + 1) * grid} y1={0} x2={(index + 1) * grid} y2={depth} stroke="#E7E3DA" strokeWidth={unit * 0.7}/>)}
+    {Array.from({ length: rows }, (_, index) => <line key={`h${index}`} x1={0} y1={(index + 1) * grid} x2={width} y2={(index + 1) * grid} stroke="#E7E3DA" strokeWidth={unit * 0.7}/>)}
+    {(floor?.zones ?? []).map(zone => <rect key={zone.id} x={zone.x + width / 2} y={zone.z + depth / 2} width={Math.max(zone.w, 0.02)} height={Math.max(zone.d, 0.02)} fill={zone.color} opacity={0.18}/>)}
+    <rect x={unit} y={unit} width={Math.max(width - unit * 2, 0.01)} height={Math.max(depth - unit * 2, 0.01)} fill="none" stroke="#3F453F" strokeWidth={unit * 2.4}/>
+    <rect x={unit * 2.4} y={unit * 2.4} width={Math.max(width - unit * 4.8, 0.01)} height={Math.max(depth - unit * 4.8, 0.01)} fill="none" stroke="#A9B0A6" strokeWidth={unit * 0.8}/>
     {(floor?.interiorWalls ?? []).map(wall => <line key={wall.id}
       x1={wall.x1 + width / 2} y1={wall.z1 + depth / 2}
       x2={wall.x2 + width / 2} y2={wall.z2 + depth / 2}
-      stroke="#5f655f" strokeWidth={Math.max(unit * 2.2, wall.thickness ?? 0)} strokeLinecap="butt"/>)}
+      stroke="#3F453F" strokeWidth={Math.max(unit * 2.2, wall.thickness ?? 0)} strokeLinecap="butt"/>)}
     {items.map(item => <PlanPreviewItem key={item.id} item={item} width={width} depth={depth} unit={unit}/>)}
   </svg>;
 }

@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { Loader2, Search, Star } from 'lucide-react';
+import { ChevronDown, ChevronUp, LayoutGrid, Loader2, Palette, Search, Sparkles, Star, Tag } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
@@ -13,12 +13,14 @@ import {
   type MaterialLibraryMeta,
 } from '../lib/material-library-meta';
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
-import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
+import { filterOnlineModels, loadOnlineModels, onlineBucketLabel } from '../lib/online-models';
+import { buildFurnitureSet, FURNITURE_SETS } from '../lib/furniture-sets';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
+import { loadStyleRuns, saveStyleRun, STYLE_BUNDLES, type StyleBundle, type StyleRun } from '../lib/style-bundles';
 import { MaterialCreateCell } from './material-create-cell';
 import { MaterialThumb } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
-import type { CatalogItem } from '../lib/types';
+import type { CatalogItem, FurnitureItem } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
 type GeneratedCard = { id: string; name: string; image?: string; shipped: boolean };
@@ -62,14 +64,25 @@ export interface OnlineModelLibraryProps {
   disabled?: boolean;
   limitMessage?: string;
   onAdd(item: CatalogItem): void;
+  /** 点一套风格：整组一次落进画布（位置与尺寸已算好，带 id/position/rotation）。 */
+  onAddSet?(items: FurnitureItem[]): void;
+  /** 画布场地尺寸：风格套按它缩放，小场地放不下就不放。 */
+  roomSize?: { width: number; depth: number };
+  /** 物料卡（三块并排）：我的生成 / 收藏 / 库。 */
+  cardMode?: boolean;
 }
 
-export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, controller, capturePlacement }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, cardMode = false }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
   const [placeError, setPlaceError] = useState('');
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  // 物料卡三块的当前页：我的生成 / 收藏 / 库。三块只是入口，结果都在下方同一块内容区。
+  const [pane, setPane] = useState<'mine' | 'fav' | 'lib'>('lib');
+  // 一张卡两种高度：收起只露一行素材，展开看完整网格；收起把高度还给下面 chat。
+  const [expanded, setExpanded] = useState(false);
   const [bucket, setBucket] = useState('');
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,19 +94,23 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
   const [tagDraft, setTagDraft] = useState(false);
   const [tagName, setTagName] = useState('');
   const [tagError, setTagError] = useState('');
+  // 库这一层里的风格视图：不占第四个 tab，点一行入口在库位里切换。
+  const [styleView, setStyleView] = useState(false);
+  const [styleRuns, setStyleRuns] = useState<StyleRun[]>([]);
   const [armedTag, setArmedTag] = useState('');
   const bucketRail = useRef<HTMLDivElement>(null);
   const placementIdentity = useRef({ controller, apiUrl: controller?.config.apiUrl, epoch: 0 });
   if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller?.config.apiUrl) {
     placementIdentity.current = { controller, apiUrl: controller?.config.apiUrl, epoch: placementIdentity.current.epoch + 1 };
   }
-  const latest = useRef({ disabled, onAdd, controller, capturePlacement, busy });
-  latest.current = { disabled, onAdd, controller, capturePlacement, busy };
+  const latest = useRef({ disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, busy });
+  latest.current = { disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, busy };
   const placements = useRef(new Set<CatalogPlacementGuard>());
   const alive = useRef(true);
   useEffect(() => {
     setMeta(loadMaterialLibraryMeta(window.localStorage));
     setGenerated(generatedMaterialCards());
+    setStyleRuns(loadStyleRuns(window.localStorage));
   }, []);
   useEffect(() => { const activePlacements = placements.current; alive.current = true; return () => {
     alive.current = false;
@@ -209,9 +226,11 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
     </div>;
   }
 
-  const chip = (key: string, label: string, count: number | string) => {
+  const chip = (key: string, label: string, count: number | string, Icon?: typeof Star, showCount = true) => {
     const active = !query.trim() && bucket === key;
-    return <button key={key || 'all'} type="button" aria-pressed={active} className={active ? 'is-active' : ''} onClick={() => { setQuery(''); setBucket(key); setArmedTag(''); }}>{label} <b>{count}</b></button>;
+    return <button key={key || 'all'} type="button" aria-label={showCount ? `${label} ${count}` : label} aria-pressed={active} className={`sc-bucket-chip${active ? ' is-active' : ''}`} onClick={() => { setQuery(''); setBucket(key); setArmedTag(''); }}>
+      {Icon && <Icon size={13} aria-hidden="true"/>}<span>{label}</span>{showCount && <b>{` ${count}`}</b>}
+    </button>;
   };
   const createTag = () => {
     const result = addCustomTag(meta, tagName, reservedTags);
@@ -225,24 +244,189 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, cont
     setQuery('');
   };
 
+  const placeGenerated = (card: GeneratedCard) => {
+    if (card.id.startsWith('pending:') || latest.current.disabled || latest.current.busy) return;
+    latest.current.busy = card.id;
+    setBusy(card.id);
+    setPlaceError('');
+    void loadStoredAholoCatalogItem(card.id).then(item => {
+      if (!alive.current) return;
+      latest.current.onAdd(item);
+    }).catch((error: unknown) => {
+      if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
+    }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
+  };
+
+  // 一句话配一整套：位置与缩放仍走家具套的放样逻辑，风格只负责换色与说明。
+  const placeStyleBundle = (bundle: StyleBundle) => {
+    if (latest.current.disabled || latest.current.busy) return;
+    const set = FURNITURE_SETS.find(entry => entry.key === bundle.setKey);
+    if (!set) return;
+    const room = latest.current.roomSize;
+    const built = buildFurnitureSet(set, room ? { roomWidth: room.width, roomDepth: room.depth } : {});
+    if (built.length === 0) { setPlaceError('这个场地放不下这一套，先换大一点的场地。'); return; }
+    const items = built.map(item => (bundle.colors[item.type] ? { ...item, color: bundle.colors[item.type]! } : item));
+    const place = latest.current.onAddSet;
+    if (!place) { setPlaceError('先在空间里打开物料库，再点这一套。'); return; }
+    setPlaceError('');
+    place(items);
+    // 记录落在「我的生成」：同一套只留最新一条，不做第二份清单。
+    setStyleRuns(saveStyleRun(bundle.key, window.localStorage));
+  };
+
+  // 物料卡三块并排：生成（去对话）/ 收藏 / 库。三块只是摘要入口，内容都在下面的结果区。
+  if (cardMode) {
+    const favoriteModels = index.models.filter(model => meta.favorites.includes(model.slug));
+    const favoriteGenerated = [...generated, ...pending].filter(card => meta.favorites.includes(card.id));
+    const favoriteRows = favoriteModels.length + favoriteGenerated.length;
+    const groups: { key: string; label: string; models: readonly OnlineModel[] }[] = [];
+    if (query.trim() || bucket) {
+      groups.push({ key: 'filtered', label: '', models: shown });
+    } else {
+      const byBucket = new Map<string, OnlineModel[]>();
+      for (const model of shown) {
+        const list = byBucket.get(model.bucket) ?? [];
+        list.push(model); byBucket.set(model.bucket, list);
+      }
+      for (const [key, models] of byBucket) groups.push({ key, label: onlineBucketLabel(key), models });
+    }
+    const tile = (model: OnlineModel, withFavorite = false) => {
+      const name = onlineModelDisplayName(model);
+      const favorited = meta.favorites.includes(model.slug);
+      return <li className="sc-lib-tile" key={model.slug}>
+        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null} onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={`${model.name}\n点击放入空间`}>
+          <span className="sc-lib-tile-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
+          <span className="sc-lib-tile-name">{name}</span>
+        </button>
+        {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, model.slug))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
+      </li>;
+    };
+    const generatedTile = (card: GeneratedCard, withFavorite = false) => {
+      const pendingCard = card.id.startsWith('pending:');
+      const favorited = meta.favorites.includes(card.id);
+      return <li className="sc-lib-tile" key={card.id}>
+        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null || pendingCard} onClick={() => placeGenerated(card)} aria-label={pendingCard ? `生成中 ${card.name}` : `添加${card.name}`} title={`${card.name}\n生成的物料`}>
+          <span className="sc-lib-tile-thumb">{card.image ? <MaterialThumb src={card.image}/> : <span className="sc-material-thumb-empty">{pendingCard ? <Loader2 className="cr-spin" size={12}/> : '生'}</span>}</span>
+          <span className="sc-lib-tile-name">{card.name}</span>
+        </button>
+        {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${card.name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, card.id))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
+      </li>;
+    };
+    const modelRow = (model: OnlineModel) => tile(model, true);
+    // 风格套的缩略图就是一格小色板：不生成图片，靠四块颜色认出这一套。
+    const styleThumb = (bundle: StyleBundle, small = false) => <span className={`sc-lib-style-thumb${small ? ' is-small' : ''}`} aria-hidden="true">
+      {bundle.swatches.map(color => <span className="sc-lib-style-swatch" key={color} style={{ background: color }}/>)}
+    </span>;
+    // 「我的生成」既放生成的单件，也放配过的整套：计数按两者之和。
+    const mineCount = generatedShown.length + styleRuns.length;
+    // 点哪一块就切到哪一页并展开：tabs 与素材同属一张卡，切换即看到完整内容。
+    const pickPane = (next: 'mine' | 'fav' | 'lib') => { setPane(next); setExpanded(true); if (next !== 'lib') setStyleView(false); };
+    return <div className={`sc-lib-wrap sc-lib-shell${expanded ? ' is-expanded' : ''}`}>
+      <div className="sc-lib-triad" role="tablist" aria-label="物料">
+        <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'mine' ? ' is-active' : ''}`} aria-pressed={pane === 'mine'} onClick={() => pickPane('mine')}>
+          <Sparkles size={15} aria-hidden="true"/><span>我的生成</span><small>{mineCount > 0 ? mineCount : '空'}</small>
+        </button>
+        <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'fav' ? ' is-active' : ''}`} aria-pressed={pane === 'fav'} onClick={() => pickPane('fav')}>
+          <Star size={15} aria-hidden="true"/><span>收藏</span><small>{favoriteRows > 0 ? favoriteRows : '空'}</small>
+        </button>
+        <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'lib' ? ' is-active' : ''}`} aria-pressed={pane === 'lib'} onClick={() => pickPane('lib')}>
+          <LayoutGrid size={15} aria-hidden="true"/><span>库</span><small>{index.models.length}</small>
+        </button>
+      </div>
+      <div className="sc-lib-results" aria-live="polite">
+        {pane === 'fav'
+          ? (favoriteRows === 0
+            ? <p className="sc-lib-empty"><Star size={14} aria-hidden="true"/><span>还没有收藏</span></p>
+            : <ul className="sc-lib-grid">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)
+          : pane === 'mine'
+            ? <>
+              {/* 生成入口落在物料这张卡里：Bingo 不再承担生成，这里保留同一份生成记录与入口。 */}
+              <div className="sc-lib-create-row">
+                <MaterialCreateCell disabled={disabled} onAccepted={item => setPending(current => current.some(card => card.id === item.id) ? current : [{ id: item.id, name: item.name, shipped: false }, ...current])}/>
+                {generatedShown.length === 0 && styleRuns.length === 0 && <p className="sc-lib-empty"><Sparkles size={14} aria-hidden="true"/><span>还没有生成过</span></p>}
+              </div>
+              {generatedShown.length > 0 && <ul className="sc-lib-grid">{generatedShown.map(card => generatedTile(card, true))}</ul>}
+              {/* 配过的整套也记在这里：一行一套，点一下再放一次。 */}
+              {styleRuns.length > 0 && <ul className="sc-lib-style-list" aria-label="配过的风格套">
+                {styleRuns.map(run => {
+                  const bundle = STYLE_BUNDLES.find(entry => entry.key === run.style);
+                  if (!bundle) return null;
+                  return <li className="sc-lib-style-row" key={run.style}>
+                    <button type="button" className="sc-lib-style-btn" disabled={disabled || busy !== null} onClick={() => placeStyleBundle(bundle)} aria-label={`再放一套${bundle.name}`} title={`${bundle.name}\n点一下再放一套`}>
+                      {styleThumb(bundle, true)}
+                      <span className="sc-lib-style-body"><strong>{bundle.name}</strong><small>整套 · {bundle.note}</small></span>
+                    </button>
+                  </li>;
+                })}
+              </ul>}
+            </>
+
+            : <>
+            {/* 库页里的一行入口：风格不另起第四块，点开就在这一层换成成套建议。 */}
+            <button type="button" className="sc-lib-style-entry" aria-pressed={styleView} onClick={() => setStyleView(current => !current)}>
+              <Palette size={13} aria-hidden="true"/><span>按风格配一套</span><small>{STYLE_BUNDLES.length} 套</small>
+              {styleView ? <ChevronUp size={13} aria-hidden="true"/> : <ChevronDown size={13} aria-hidden="true"/>}
+            </button>
+            {styleView
+              ? <ul className="sc-lib-style-list" aria-label="风格套">
+                {STYLE_BUNDLES.map(bundle => <li className="sc-lib-style-row" key={bundle.key}>
+                  <button type="button" className="sc-lib-style-btn" disabled={disabled || busy !== null} onClick={() => placeStyleBundle(bundle)} aria-label={`按${bundle.name}配一套`} title={`${bundle.name}\n${bundle.note}`}>
+                    {styleThumb(bundle)}
+                    <span className="sc-lib-style-body"><strong>{bundle.name}</strong><small>{bundle.note}</small></span>
+                  </button>
+                </li>)}
+              </ul>
+              : <>
+            {/* 库不再套「常用素材」这一层：直接按类目分组，加载更多只做一行轻提示。 */}
+            {(query.trim() || bucket) && <div className="sc-lib-tools">
+              <div className="sc-lib-chips" role="group" aria-label="物料分类">
+                {chip('', '全部', 0, LayoutGrid, false)}
+                {index.buckets.map(entry => chip(entry.key, entry.label, entry.count, undefined, false))}
+              </div>
+              <label className={`sc-search-mini${searchOpen ? ' is-open' : ''}`}>
+                <button type="button" aria-label={searchOpen ? '收起搜索' : '搜索全库模型'} aria-pressed={searchOpen} onClick={() => { setSearchOpen(current => !current); if (searchOpen) setQuery(''); }}><Search size={15} aria-hidden="true"/></button>
+                <input aria-label="搜索全库线上模型" placeholder="搜索" value={query} onChange={event => setQuery(event.target.value)} onFocus={() => setSearchOpen(true)}/>
+              </label>
+            </div>}
+            <ul className="sc-lib-list">
+              {!query.trim() && !bucket && generatedShown.length > 0 && <li className="sc-lib-group"><small>生成的</small><ul>{generatedShown.slice(0, 4).map(card => generatedTile(card, true))}</ul></li>}
+              {groups.map(group => <li className="sc-lib-group" key={group.key}>
+                {group.label && <small>{group.label}</small>}
+                <ul>{group.models.map(modelRow)}</ul>
+              </li>)}
+            </ul>
+            {groups.every(group => group.models.length === 0) && generatedShown.length === 0 && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>没有匹配的模型</span></p>}
+            {filtered.length > shown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
+              </>}
+            {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
+            {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
+          </>}
+      </div>
+      <button type="button" className="sc-lib-expand" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+        <span>{expanded ? '收起' : '展开'}</span>
+        {expanded ? <ChevronUp size={13} aria-hidden="true"/> : <ChevronDown size={13} aria-hidden="true"/>}
+      </button>
+    </div>;
+  }
+
   return <>
     <div className="sc-material-toolbar">
       <div ref={bucketRail} className="sc-bucket-rail" role="group" aria-label="线上模型分类" data-overflow={bucketMore ? 'more' : undefined}>
-        {chip('', '全部', index.models.length)}
+        {chip('', '全部', index.models.length, LayoutGrid, false)}
         {tagDraft
           ? <form className="sc-bucket-add-form" onSubmit={event => { event.preventDefault(); createTag(); }}>
             <input aria-label="新标签名称" value={tagName} maxLength={16} placeholder="新标签" onChange={event => setTagName(event.target.value)}/>
             <button type="submit" aria-label="确认新标签">添加</button>
           </form>
-          : <button type="button" className="sc-bucket-add" aria-label="加标签" title="加标签" onClick={() => { setTagDraft(true); setTagError(''); }}>+</button>}
-        {chip('__fav', '收藏', favoriteCount)}
-        {chip('__generated', '生成', generatedCount)}
+          : <button type="button" className="sc-bucket-add" aria-label="标签" title="标签" onClick={() => { setTagDraft(true); setTagError(''); }}><Tag size={13} aria-hidden="true"/></button>}
+        {chip('__fav', '收藏', favoriteCount, Star)}
+        {chip('__generated', '生成', generatedCount, Sparkles)}
         {index.buckets.map(entry => chip(entry.key, entry.label, entry.count))}
         {meta.customTags.map(tag => chip(`tag:${tag}`, tag, Object.values(meta.assignments).filter(tags => tags.includes(tag)).length))}
       </div>
-      <label className="sc-search-mini">
-        <Search size={20}/>
-        <input aria-label="搜索全库线上模型" placeholder="搜索全库模型" value={query} onChange={event => setQuery(event.target.value)}/>
+      <label className={`sc-search-mini${searchOpen ? ' is-open' : ''}`}>
+        <button type="button" aria-label={searchOpen ? '收起搜索' : '搜索全库模型'} aria-pressed={searchOpen} onClick={() => { setSearchOpen(current => !current); if (searchOpen) setQuery(''); }}><Search size={16} aria-hidden="true"/></button>
+        <input aria-label="搜索全库线上模型" placeholder="搜索全库模型" value={query} onChange={event => setQuery(event.target.value)} onFocus={() => setSearchOpen(true)}/>
       </label>
     </div>
     {tagError && <p className="sc-warning sc-material-note" role="alert">{tagError}</p>}

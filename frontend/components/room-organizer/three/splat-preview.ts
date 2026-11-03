@@ -158,6 +158,8 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
   let spark: SparkRenderer | null = null;
   let holder: THREE.Group | null = null;
   let mesh: SplatMesh | null = null;
+  // 高斯场地自己的地面（按点云实测 footprint，而不是矢量壳那 12×9 米）。
+  let ground: THREE.Group | null = null;
   // 点云摆好之后在世界里的占位，用来把相机框进场景内。
   let bounds: THREE.Box3 | null = null;
   let savedView: Readonly<{ position: THREE.Vector3; target: THREE.Vector3 }> | null = null;
@@ -172,6 +174,58 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     mesh?.dispose();
     holder = null;
     mesh = null;
+    releaseGround();
+  }
+
+  function releaseGround() {
+    if (!ground) return;
+    ground.removeFromParent();
+    ground.traverse(object => {
+      const line = object as THREE.LineSegments;
+      line.geometry?.dispose?.();
+      const material = line.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(material)) material.forEach(entry => entry.dispose());
+      else material?.dispose?.();
+    });
+    ground = null;
+  }
+
+  /** 高斯场景自带的地面：贴合落位盒的 footprint，1 m 网格，只做物理参照，不参与拾取。 */
+  function buildGround(box: THREE.Box3) {
+    releaseGround();
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    if (!(size.x > EPSILON) || !(size.z > EPSILON)) return;
+    const group = new THREE.Group();
+    group.userData.type = 'splat-ground';
+    const y = box.min.y + 0.002;
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(size.x, size.z),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.05, depthWrite: false })
+    );
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.set(center.x, y, center.z);
+    plane.renderOrder = -1;
+    group.add(plane);
+    const halfX = size.x / 2;
+    const halfZ = size.z / 2;
+    const points: number[] = [];
+    for (let x = -halfX; x <= halfX + EPSILON; x += 1) {
+      points.push(center.x + x, y, center.z - halfZ, center.x + x, y, center.z + halfZ);
+    }
+    for (let z = -halfZ; z <= halfZ + EPSILON; z += 1) {
+      points.push(center.x - halfX, y, center.z + z, center.x + halfX, y, center.z + z);
+    }
+    const gridGeometry = new THREE.BufferGeometry();
+    gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    const grid = new THREE.LineSegments(
+      gridGeometry,
+      new THREE.LineBasicMaterial({ color: 0x9aa0aa, transparent: true, opacity: 0.26, depthWrite: false })
+    );
+    grid.renderOrder = -1;
+    group.add(grid);
+    ground = group;
+    splatScene.add(group);
   }
 
   async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number; meters: SplatMeters; walkBounds: SplatWalkBounds | null }>> {
@@ -229,6 +283,7 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     );
     mesh = next;
     holder = group;
+    buildGround(bounds);
     // scale 1 下 bounds 就是真实米制：把实测宽深高带回去，场地校准与横幅都以它为准。
     const placed = bounds.getSize(new THREE.Vector3());
     return Object.freeze({

@@ -22,7 +22,7 @@ import {
 } from '../three/interior-walls';
 import { clearItemLabels, renderItemLabels } from '../three/item-labels';
 import { applyTimeOfDay } from '../three/lighting';
-import { clearMeasurement, renderMeasurement } from '../three/measurement';
+import { clearMeasurement, clearRoomDimensions, renderMeasurement, renderRoomDimensions } from '../three/measurement';
 import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
 import { buildRoof, removeRoof } from '../three/roof';
@@ -536,12 +536,13 @@ export function useSceneEffects({
 
       const isSelected = selectedItemId === id || extraSelectedIds.has(id);
       const collision = structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls });
+      // 与 2D 平面图的选中描边同色：主选 #2f7a4f、附加选中 #4a7c59、碰撞 #c0392b。
       const accent = isSelected
         ? selectedItemId === id
           ? collision
-            ? 0xff6666
-            : 0x00ff00
-          : 0x42a5f5
+            ? 0xc0392b
+            : 0x2f7a4f
+          : 0x4a7c59
         : 0xfacc15;
       // Around the built mesh, not floor-to-height: a painting hangs at 0.8 m
       // and a window starts at its sill (#376).
@@ -783,7 +784,8 @@ export function useSceneEffects({
 
     const edges = new THREE.EdgesGeometry(wallMesh.geometry);
     const material = new THREE.LineBasicMaterial({
-      color: 0x7ff3ff,
+      // 选中墙沿用 2D 的选中绿，不再用独立的青色，保证 2D/3D 同一套选中语言。
+      color: 0x2f7a4f,
       transparent: true,
       opacity: 0.95,
       depthTest: false,
@@ -832,6 +834,20 @@ export function useSceneEffects({
     }
     renderMeasurement(THREE, scene, measurementPoints, activeFloorY);
   }, [isReady, invalidate, threeModuleRef, sceneRef, view.measurementMode, measurementPoints, activeFloorY]);
+
+  // Room dimension labels — 与 2D 的 showMeasurements 同步开关
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!THREE || !scene) return;
+    if (!view.showMeasurements) {
+      clearRoomDimensions(scene);
+      return;
+    }
+    renderRoomDimensions(THREE, scene, layout.width, layout.height, activeFloorY);
+  }, [isReady, invalidate, threeModuleRef, sceneRef, view.showMeasurements, layout.width, layout.height, activeFloorY]);
 
   // Item labels
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { SATELLITE_GROUND_LABEL, frameForExistingShell, parseSatelliteImageBounds, satellitePadMeters, satellitePhotoShapeRect, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { layoutGeometryScene } from '../lib/structural-layout';
+import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
 import { buildWallMaterial } from './wall-patterns';
@@ -57,6 +58,9 @@ function writeGeographicUv(
 function loadSatelliteTexture(THREE: typeof import('three'), url: string): Promise<import('three').Texture> {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    // 卫星底图来自 3199 代理（跨源）。没有 CORS 许可的图片一旦上传到 WebGL，
+    // 会触发 texSubImage2D SecurityError；这里必须带 anonymous 解码，失败直接走占位纹理。
+    image.crossOrigin = 'anonymous';
     image.onload = () => {
       const texture = new THREE.Texture(image);
       texture.colorSpace = THREE.SRGBColorSpace;
@@ -212,6 +216,12 @@ export function buildStructureShell(
     });
   }
   scene.add(floorMesh);
+  // v2 壳体（「确认布置」后走这条分支）也要 2D 同款 0.5 m 网格：
+  // 单元对齐世界原点、只铺房间范围，id-less Wall 标签让 applyWallDisplay 任何模式都保留它。
+  const grid = buildGridPlane(THREE, layout.width, layout.height);
+  grid.userData.type = 'wall';
+  grid.position.y = 0.01;
+  scene.add(grid);
   const signedArea = points.reduce((total, p, i) => {
     const q = points[(i + 1) % points.length]; return total + p.x * q.z - q.x * p.z;
   }, 0);

@@ -12,6 +12,8 @@ import type { RoomLayout } from '../lib/types';
 interface Props {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
+  /** 当前画布正在用的模板：只在那一张上标「使用中」。 */
+  active?: ScenePresetKey | undefined;
 }
 
 type RailChoice = ScenePresetKey | 'blank';
@@ -21,7 +23,7 @@ function keepsExecution(layout: RoomLayout): boolean {
     || layout.floors.some(floor => floor.items.some(item => item.handoff));
 }
 
-export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
+export function ScenePresetsPanel({ layout, onApply, active }: Props): JSX.Element {
   const current = useRef(layout);
   current.current = layout;
   const loading = useRef(false);
@@ -86,12 +88,13 @@ export function ScenePresetsPanel({ layout, onApply }: Props): JSX.Element {
         </div>}
       </div>
       {(Object.keys(SCENE_PRESETS) as ScenePresetKey[]).map(key => <div className="sc-preset-tile" key={key}>
-        <button className="sc-preset-card" type="button" disabled={busy !== null} onClick={() => press(key)}
-          aria-label={`载入模板 ${SCENE_PRESETS[key].name}`} title={SCENE_PRESETS[key].description}>
+        <button className={`sc-preset-card${active === key ? ' is-current' : ''}`} type="button" disabled={busy !== null} onClick={() => press(key)}
+          aria-label={`载入模板 ${SCENE_PRESETS[key].name}`} aria-current={active === key ? 'true' : undefined} title={SCENE_PRESETS[key].description}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`/scene-presets/${key}/preview.jpg`} alt=""/>
           <strong>{SCENE_PRESETS[key].name}</strong>
         </button>
+        {active === key && <span className="sc-preset-now">使用中</span>}
         {pending === key && <div className="sc-preset-confirm" role="group" aria-label={`确认载入${SCENE_PRESETS[key].name}`}>
           <p>{confirmCopy(key)}</p>
           <div><button type="button" className="is-go" onClick={() => { void load(key); }}>确认载入</button>

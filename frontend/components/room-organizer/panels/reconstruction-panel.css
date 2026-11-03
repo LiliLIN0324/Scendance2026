@@ -10,3 +10,15 @@
 
 /* 旅程分区：输入 fieldset 只锁表单；进度核对与结果独立成区 */
 .rc-block{margin-top:14px}
+
+/* 图标优先：标题带图标，规则说明收进 ⓘ；尺寸用示意图，不再罗列文字。 */
+.rc-panel .rc-info{display:inline-flex;position:relative;margin:0!important}
+.rc-panel .rc-info>summary{list-style:none;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;color:var(--ink-soft);cursor:pointer}
+.rc-panel .rc-info>summary::-webkit-details-marker{display:none}
+.rc-panel .rc-info[open]>summary{background:var(--plane);color:var(--ink)}
+.rc-panel .rc-info>p{position:absolute;left:0;top:22px;z-index:4;width:min(240px,70vw);margin:0;padding:8px 10px;background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:var(--r-sm);box-shadow:var(--e1);font-size:var(--fs-cap);line-height:1.5;color:var(--ink-soft);font-weight:400}
+.rc-manual-shell>summary{display:flex;align-items:center;gap:6px;font-size:var(--fs-p2);color:var(--ink)}
+.rc-manual-shell>summary small{margin-left:auto;font-size:var(--fs-cap);color:var(--ink-soft);white-space:nowrap}
+.rc-size-diagram{display:block;width:100%;max-width:260px;height:auto;margin:8px auto 4px}
+.rc-manual-venue h4{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+

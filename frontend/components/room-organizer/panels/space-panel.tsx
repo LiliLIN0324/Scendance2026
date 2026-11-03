@@ -1,8 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { createBlankVenue } from '../lib/blank-venue';
+import { ChevronDown, ChevronUp, Info, LayoutTemplate, Mountain } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { isUntouched } from '../lib/restore-point';
+import { SCENE_PRESETS } from '../lib/scene-presets';
 import { EnvironmentPreview } from './environment-preview';
 import { ShelfGrip } from './scendance-workspace';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -20,6 +22,7 @@ export function SpacePanel({
   onApply,
   environment,
   variant = 'shelf',
+  onRegisterNew,
 }: {
   layout: RoomLayout;
   onApply(layout: RoomLayout): void;
@@ -28,13 +31,20 @@ export function SpacePanel({
     current: StoredEnvironment | null;
     onSelect(assetId: string, name: string): void;
     onClear(): void;
+    /** 高斯空间正在展示时，切回矢量空间（只换视图，不摘掉已存的环境）。 */
+    onShowVector?(): void;
   };
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
+  /** 新建空间收进输入框的 ＋ 菜单：blank 直接立空白壳，template 展开模板卡。 */
+  onRegisterNew?(run: (mode?: 'blank' | 'template') => void): void;
 }): JSX.Element {
   const hostRef = useRef<HTMLElement>(null);
   const [confirm, setConfirm] = useState(false);
   const [notice, setNotice] = useState('');
+  // 一张卡两种高度：收起只露模板一行与环境当前项，展开看完整模板列表与更大的环境预览。
+  const [expanded, setExpanded] = useState(false);
+  const blank = BLANK_VENUE;
   const startBlank = () => {
     setConfirm(false);
     setNotice('');
@@ -44,44 +54,59 @@ export function SpacePanel({
       setNotice(error instanceof Error ? error.message : '空白空间没立起来，请重试。');
     }
   };
-  const pressNew = () => {
+  const pressNew = (mode: 'blank' | 'template' = 'blank') => {
+    if (mode === 'template') {
+      setConfirm(false);
+      const templates = hostRef.current?.querySelector<HTMLElement>('.sc-space-templates');
+      templates?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     if (isUntouched(layout)) startBlank();
     else setConfirm(true);
   };
   const card = variant === 'card';
+  useEffect(() => { onRegisterNew?.(pressNew); });
   return (
     <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
       {!card && <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>}
       <div className="sc-space-body">
-        <header className="sc-space-head">
-          <div>
-            <h2>空间</h2>
-            <p>一间房或一栋建筑都可以从这里开始。选场景模板、挂本场环境，或新建一块空白空间。</p>
-          </div>
-          <button type="button" className="sc-space-new" onClick={pressNew}>新建空间</button>
-        </header>
-        {confirm && <div className="sc-preset-confirm sc-space-confirm" role="group" aria-label="确认新建空间">
-          <p>会换成一块可改尺寸的空白空间。当前布置会被清掉。</p>
-          <div>
-            <button type="button" className="is-go" onClick={startBlank}>确认新建</button>
-            <button type="button" onClick={() => setConfirm(false)}>取消</button>
-          </div>
-        </div>}
         {notice && <p className="sc-note" role="status">{notice}</p>}
-        <section className="sc-space-section" aria-label="场景模板">
-          <h3>场景模板</h3>
-          <div className="sc-library-presets">
-            <ScenePresetsPanel layout={layout} onApply={onApply}/>
-          </div>
-        </section>
-        <section className="sc-space-section" aria-label="环境">
-          <h3>环境</h3>
-          {environment
-            ? <EnvironmentPreview preview={environment.preview} current={environment.current} onSelect={environment.onSelect} onClear={environment.onClear}/>
-            : <p className="sc-note">环境会列在这里。本场观感包取回之后可以铺成背景。</p>}
-        </section>
-        {layout.backendSceneV2 && <div className="sc-preset-utilities">
-          <details><summary>已建空间的结构微调</summary><StructuralPropertiesPanel/></details>
+        <div className={`sc-space-card${expanded ? ' is-expanded' : ''}`}>
+          <section className="sc-space-block sc-space-templates" aria-label="场景模板">
+            <div className="sc-space-section-head">
+              <LayoutTemplate size={15} aria-hidden="true"/><h3>场景模板</h3>
+              <small>{layout.scenePreset ? `${SCENE_PRESETS[layout.scenePreset].name} · 使用中` : '挑一个开场'}</small>
+            </div>
+            <div className="sc-library-presets">
+              <ScenePresetsPanel layout={layout} onApply={onApply} active={layout.scenePreset}/>
+            </div>
+          </section>
+          <section className="sc-space-block sc-space-env" aria-label="环境">
+            {environment
+              ? <EnvironmentPreview preview={environment.preview} current={environment.current} onSelect={environment.onSelect} onClear={environment.onClear} {...(environment.onShowVector ? { onShowVector: environment.onShowVector } : {})}/>
+              : <>
+                <div className="sc-space-section-head"><Mountain size={15} aria-hidden="true"/><h3>环境</h3><small>本场观感</small></div>
+                <p className="sc-note">环境会列在这里。本场观感包取回之后可以铺成背景。</p>
+              </>}
+          </section>
+          <button type="button" className="sc-space-expand" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+            <span>{expanded ? '收起' : '展开'}</span>
+            {expanded ? <ChevronUp size={13} aria-hidden="true"/> : <ChevronDown size={13} aria-hidden="true"/>}
+          </button>
+        </div>
+        {/* 结构对所有壳体都开：普通壳体收成一行入口，云端结构仍是常驻区块。 */}
+        <StructuralPropertiesPanel/>
+        {confirm && <div className="sc-space-confirm" role="group" aria-label="确认新建空间">
+          <span className="sc-space-confirm-plan" aria-hidden="true"/>
+          <span className="sc-space-confirm-text"><strong>空白空间</strong><small>{blank.width} × {blank.depth} 米，可改尺寸</small></span>
+          <span className="sc-space-confirm-actions">
+            <button type="button" className="sc-button" onClick={startBlank}>新建</button>
+            <button type="button" className="sc-button" onClick={() => setConfirm(false)}>取消</button>
+            <details className="sc-space-info is-right is-up">
+              <summary aria-label="新建会清掉什么"><Info size={12} aria-hidden="true"/></summary>
+              <p>会换成一块可改尺寸的空白空间，当前布置会被清掉。</p>
+            </details>
+          </span>
         </div>}
       </div>
     </aside>

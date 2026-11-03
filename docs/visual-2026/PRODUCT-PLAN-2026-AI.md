@@ -10,6 +10,6 @@
 | keep-kill-2026.html | KEEP/KILL（禁第二工作台、卫星素材、样例冒充） |
 | index-product-2026.html | 索引入口 |
 
-已有：design-spec / user-journey / user-flow-map / qingguang-agent-spec / ahalo-product-gap。
+已有：design-spec / user-journey / user-flow-map / bingo-agent-spec / ahalo-product-gap。
 
 主路径钉：选活动 → 定场地·人数 → 生成 → 确认 → 导出。

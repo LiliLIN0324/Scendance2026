@@ -6,7 +6,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "node ../scripts/package-pages.mjs && next dev",
+    "dev": "node ../scripts/package-pages.mjs && node ../scripts/dev-with-amap-proxy.mjs",
     "build": "node ../scripts/package-pages.mjs && next build",
     "start": "next start",
     "lint": "eslint --ext .ts,.tsx app components lib",
@@ -51,6 +51,7 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.26",
     "jsdom": "^30.0.1",
+    "playwright": "^1.64.1",
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.13",
     "tailwindcss-animate": "^1.0.7",
