@@ -1,0 +1,191 @@
+# 三态文案审计：空 / 加载 / 错误（`frontend/`）
+
+> 范围：`frontend/` 下所有 `.tsx` / `.ts` 中面向用户的「空 / 加载 / 错误」三态文案（排除 `node_modules/`、`.next/`、`*.test.ts(x)`、`*.d.ts`）。
+>
+> 方法：只读静态扫描。先按状态关键词取候选，再逐行人工判读，只保留用户可见文案；每条都用「文件:行号」回查原文，并用脚本校验「当前文案」确实逐字出现在该行（108 条全部通过，0 条失败）。
+>
+> 基线：`origin/main @ 45381b1`（2026-11-03 拉取）。本文件为本次唯一新增文件；未修改任何代码或既有文档。
+
+## 问题分类（五类，单条单选）
+
+| 分类 | 定义 | 本次命中的典型症状 |
+| --- | --- | --- |
+| 术语 | 出现用户不需要知道的内部词、英文词、未定义简称，或同一概念换名 | 「本机」「钉」「高斯」「材质槽」「账号 ID」；`Failed to load 3D engine.`、`No roof` |
+| 含糊 | 状态说了，但对象／原因／结果没交代，用户无法判断发生了什么 | 「操作失败」「正在处理…」「暂不可用」「操作未完成」 |
+| 不一致 | 同一状态在不同页面用词、标点或句式不同 | 加载／载入／读取／准备／铺开／取回；「还没有／暂无／尚未／没有」混用 |
+| 缺行动 | 只给结论，不给下一步或可选动作 | 空态没有入口；错误没有重试、备份、返回入口 |
+| 语气 | 口吻过重、卖萌、责备或替用户猜原因，与工具型界面不匹配 | 「页面走丢了」「没立起来」「没出成」「请勿重复提交」 |
+
+## 扫描方法与口径
+
+扫描命令（WSL，工作目录 `frontend/`；`INC` 为 `--include='*.tsx' --include='*.ts' --exclude-dir=node_modules --exclude-dir=.next --exclude='*.test.ts' --exclude='*.test.tsx' --exclude='*.d.ts'`）：
+
+```
+grep -rl <INC> '' . | wc -l
+grep -rnP <INC> -e '暂无|没有|加载|正在|请稍后|失败|出错|错误|重试|未完成|无法|找不到|暂不|不可用|请选|尚未|等待|异常|重新' .
+grep -rnE <INC> -e 'Loading|Empty|Error|Failed|Retry|placeholder|aria-label|EmptyState|ErrorState|LoadingState|Spinner|Skeleton|Suspense' .
+grep -rnE <INC> 'placeholder=["'\''`]' .
+```
+
+- 覆盖 **339** 个 `.tsx` / `.ts` 文件；关键词两轮共 **3389** 行原始候选（去重后，含注释、代码标识符、内部错误常量）。
+- 另查 `placeholder=`、`title=`、`aria-label=` 属性值与 `EmptyState` / `ErrorState` / `Spinner` / `Skeleton` 组件：仓库没有独立的空／错／加载组件，状态文案都内联在各面板与 `app/*` 页面里。
+- 人工判读后收录 **108** 条用户可见文案，落在 **54** 个文件。
+- 收录口径：文案会在界面或导出文件里被用户看到，且属于空／加载／错误三态。未收录 `console.*` 日志、内部异常码、只给开发者看的校验错误、成功态提示。
+- 表内「位置」列的行号可用 `sed -n 'Np' frontend/<路径>` 复现原文。
+- 下表按场景分组（空 → 加载 → 错误），组内按文件路径升序（`LC_ALL=C`）。
+
+## 空状态
+
+| 位置（文件 · 组件） | 场景 | 当前文案（原文照抄） | 问题分类 | 建议文案 |
+| --- | --- | --- | --- | --- |
+| `app/not-found.tsx:14` · NotFound | 空 | 页面走丢了 | 语气 | 改成中性说明，如「没有这个页面」 |
+| `app/not-found.tsx:16` · NotFound | 空 | 这个地址没有对应的页面，可能是链接过期，或者内容已经被删除。 | 含糊 | 点明地址无效，并保留返回工作台入口 |
+| `app/projects/page.tsx:115` · ProjectsPage | 空 | 尚未加入工作室 | 不一致 | 统一为「还没有加入工作室」 |
+| `app/projects/page.tsx:136` · ProjectsPage | 空 | 从一个工作室开始 | 含糊 | 改成「还没有工作室，先创建一个」 |
+| `app/projects/page.tsx:136` · ProjectsPage | 空 | 创建工作室，或将你的账号 ID 提供给负责人以加入团队。 | 术语 | 用「让管理员邀请你」代替账号 ID 说法 |
+| `app/projects/page.tsx:142` · ProjectsPage | 空 | 本机画布还没有草稿。 | 术语 | 改成「这台设备上还没有草稿」 |
+| `app/projects/page.tsx:155` · ProjectsPage | 空 | 这个工作室还没有项目 | 缺行动 | 补一句「新建第一个项目」 |
+| `app/projects/page.tsx:173` · ProjectsPage | 空 | 此工作室没有项目。删除后，工作室及成员关系将被移除，成员账号不会被删除。 | 语气 | 先说当前是空工作室，再说删除影响 |
+| `app/view/page.tsx:56` · SharedViewPage | 空 | 此方案暂无物料。 | 不一致 | 统一为「这份方案还没有物料」 |
+| `components/business/assets-panel.tsx:134` · AssetsPanel | 空 | 还没有收藏。点条目右侧的星标收藏。 | 缺行动 | 改成「还没有收藏，点星标即可收藏」 |
+| `components/business/publication-panel.tsx:68` · PublicationPanel | 空 | 还没有发布过此项目。 | 缺行动 | 补「点下方按钮发布」 |
+| `components/review-share-page/load-plan.ts:21` · REVIEW_PLAN_NOTICES | 空 | 没有分享快照，也没有本机布置。先展示示例场地，方便试用落钉评审。 | 术语 | 改成「没有分享内容，先看示例场地」 |
+| `components/review-share-page/review-share-page.tsx:210` · ReviewSharePage | 空 | 还没有钉。在左侧平面上点选位置即可落钉。 | 术语 | 把「钉」改成「意见」 |
+| `components/review-share-page/review-share-page.tsx:248` · ReviewSharePage | 空 | 这份快照里没有楼层，平面没有展开。 | 术语 | 改成「这份快照没有楼层，无法显示平面」 |
+| `components/room-organizer/lib/bingo-feedback.ts:94` · feedbackSummaryLabel | 空 | 甲方已点完成，暂无钉评 | 术语 | 改成「甲方已确认完成，还没有意见」 |
+| `components/room-organizer/lib/bingo-feedback.ts:95` · feedbackSummaryLabel | 空 | 还没有甲方钉评 | 术语 | 改成「还没有甲方意见」 |
+| `components/room-organizer/panels/activity-task-suggestion-view.tsx:85` · ActivityTaskSuggestionView | 空 | 当前没有活动任务，可以只选需求或物件。 | 含糊 | 改成「还没有活动任务，可只选需求」 |
+| `components/room-organizer/panels/agent-panel.tsx:352` · LayoutAgentProvider | 空 | 画布上还没有物料，清单是空的。 | 语气 | 改成「画布还没有物料，可以说「出方案」」 |
+| `components/room-organizer/panels/cloud-panel.tsx:368` · CloudPanel | 空 | 还没有其他方案 | 不一致 | 统一为「没有其他方案」 |
+| `components/room-organizer/panels/cloud-panel.tsx:369` · CloudPanel | 空 | 没有匹配的文件 | 缺行动 | 补「可清除筛选」 |
+| `components/room-organizer/panels/commercial-dossier-panel.tsx:413` · CommercialDossierPanel | 空 | 尚未登记 | 不一致 | 统一为「还没有登记」 |
+| `components/room-organizer/panels/commercial-dossier-panel.tsx:528` · CommercialDossierPanel | 空 | 还没有固定版本。 | 缺行动 | 补「可固定当前草稿」 |
+| `components/room-organizer/panels/environment-preview.tsx:46` · EnvironmentPreview | 空 | 还没有别的环境 | 缺行动 | 改成「还没有其他环境可选」 |
+| `components/room-organizer/panels/environment-preview.tsx:70` · EnvironmentPreview | 空 | 还没有选择环境 | 缺行动 | 补「先选一个环境」 |
+| `components/room-organizer/panels/event-operations-panel.tsx:173` · OperationEditor | 空 | 当前场景暂无物料，可直接保存任务。 | 不一致 | 统一为「当前场景没有物料，可直接保存」 |
+| `components/room-organizer/panels/event-operations-panel.tsx:262` · OperationEditor | 空 | 活动需求尚未填写或未保存。 | 缺行动 | 改成「还没有活动需求，先填写需求」 |
+| `components/room-organizer/panels/generated-item-library.tsx:58` · GeneratedItemLibrary | 空 | 本机还没有生成好的物件。 | 术语 | 改成「这台设备还没有生成的物件」 |
+| `components/room-organizer/panels/generated-model-library.tsx:194` · GeneratedModelLibrary | 空 | 当前账号还没有开通可用的生成模型。 | 含糊 | 改成「这个账号还没有可用的生成模型」 |
+| `components/room-organizer/panels/generated-model-library.tsx:203` · GeneratedModelLibrary | 空 | 暂不可用 | 缺行动 | 补「稍后再试」 |
+| `components/room-organizer/panels/generated-model-library.tsx:275` · GeneratedModelLibrary | 空 | 暂无历史生成任务。 | 不一致 | 统一为「还没有生成记录」 |
+| `components/room-organizer/panels/lux3d-direct-test.tsx:568` · Lux3dDirectTest | 空 | 本机还没有生成记录。 | 术语 | 改成「还没有生成记录」 |
+| `components/room-organizer/panels/material-checkin-panel.tsx:165` · MaterialCheckinPanel | 空 | 暂无物料点验单。 | 缺行动 | 改成「还没有点验单，可新建一条」 |
+| `components/room-organizer/panels/material-checkin-panel.tsx:177` · MaterialCheckinPanel | 空 | 暂无有效收还记录。 | 不一致 | 统一为「还没有有效收还记录」 |
+| `components/room-organizer/panels/material-customization.tsx:231` · MaterialCustomization | 空 | 这个模型没有可调整的材质槽，暂不能创建材质版本。 | 术语 | 改成「这个模型没有可调的材质槽」 |
+| `components/room-organizer/panels/mode-shell.tsx:46` · ReviewIssuesCard | 空 | 没有未解决的 | 不一致 | 改成「没有待解决的意见」 |
+| `components/room-organizer/panels/mode-shell.tsx:53` · ReviewIssuesCard | 空 | 点物件或地面，钉一条意见 | 语气 | 改成「点物件或地面即可添加意见」 |
+| `components/room-organizer/panels/mode-shell.tsx:93` · DeliveryChecklistShell | 空 | 还没有到场物料 | 不一致 | 改成「还没有物料到场」 |
+| `components/room-organizer/panels/online-model-library.tsx:339` · OnlineModelLibrary | 空 | 还没有收藏 | 缺行动 | 补「点星标即可收藏」 |
+| `components/room-organizer/panels/online-model-library.tsx:398` · OnlineModelLibrary | 空 | 没有匹配的模型 | 缺行动 | 补「换个关键词试试」 |
+| `components/room-organizer/panels/online-model-library.tsx:438` · OnlineModelLibrary | 空 | 没有匹配的模型。 | 不一致 | 与同一组件内另两处统一，去掉句号 |
+| `components/room-organizer/panels/online-model-library.tsx:456` · OnlineModelLibrary | 空 | 暂无预览 | 不一致 | 改成「还没有预览图」 |
+| `components/room-organizer/panels/project-review-library.tsx:177` · ProjectReviewLibraryPanel | 空 | 尚无本机说明草稿。 | 不一致 | 改成「这台设备还没有说明草稿」 |
+| `components/room-organizer/panels/reconstruction-panel.tsx:188` · ReconstructionPanel | 空 | 还没有本机平面图。 | 术语 | 改成「还没有平面图」 |
+| `components/room-organizer/panels/scene-delivery-panel.tsx:254` · SceneDeliveryPanel | 空 | 云项目暂不支持此项记录。 | 术语 | 改成「云项目不支持数量点验」 |
+| `components/room-organizer/panels/session-history-panel.tsx:101` · SessionHistoryPanel | 空 | 还没有会话。点顶栏「新会话」开始。 | 语气 | 改成「还没有会话，点「新会话」开始」 |
+| `components/room-organizer/panels/session-history-panel.tsx:103` · SessionHistoryPanel | 空 | 没有匹配的会话 | 缺行动 | 补「换个关键词试试」 |
+| `components/room-organizer/panels/structural-properties-panel.tsx:44` · StructuralPropertiesPanel | 空 | 还没有结构 | 缺行动 | 补「先画墙或地面」 |
+| `components/room-organizer/panels/structural-properties-panel.tsx:194` · StructuralPropertiesPanel | 空 | 还没有墙和门窗，先用 2D 的墙工具画出墙体。 | 术语 | 改成「还没有墙，先用 2D 墙工具绘制」 |
+| `components/room-organizer/panels/venue-library-panel.tsx:40` · VenueLibraryPanel | 空 | 还没有收藏的经营地点。 | 缺行动 | 补「在场地库里点收藏」 |
+| `lib/production-plan-export.ts:233` · productionPlanHandoffHtml | 空 | 当前没有场景物件，逐件分工与摆位待确认。 | 术语 | 改成「当前没有场景物件，分工待确认」 |
+| `lib/production-plan-export.ts:384` · productionPlanHandoffHtml | 空 | 当前没有场景物件；实物安排与规格待确认。 | 术语 | 与同一文件另一处统一措辞 |
+| `lib/project-review.ts:492` · projectReviewHtml | 空 | 真实客户意见／确认：尚未记录，待补。 | 不一致 | 改成「客户意见：还没有记录」 |
+| `lib/project-review.ts:494` · projectReviewHtml | 空 | 独立待确认清单尚未记录。 | 不一致 | 改成「待确认清单：还没有记录」 |
+
+## 加载状态
+
+| 位置（文件 · 组件） | 场景 | 当前文案（原文照抄） | 问题分类 | 建议文案 |
+| --- | --- | --- | --- | --- |
+| `app/auth/callback/page.tsx:16` · CallbackPage | 加载 | 正在确认邮箱，准备你的工作室… | 术语 | 改成「正在确认邮箱…」 |
+| `app/projects/page.tsx:109` · ProjectsPage | 加载 | 正在打开你的工作室… | 不一致 | 统一为「正在打开工作室…」 |
+| `app/projects/page.tsx:115` · ProjectsPage | 加载 | 正在加载… | 含糊 | 补加载对象，如「正在加载工作室列表…」 |
+| `app/reset-password/page.tsx:54` · ResetPasswordPage | 加载 | 正在处理… | 含糊 | 补动作，如「正在保存新密码…」 |
+| `app/view/page.tsx:8` · SharedViewPage | 加载 | 正在准备三维预览… | 术语 | 改成「正在准备预览…」 |
+| `components/business/publication-panel.tsx:51` · PublicationPanel | 加载 | 正在处理… | 含糊 | 补动作，如「正在发布新版本…」 |
+| `components/intro/intro-page.tsx:243` · IntroPage | 加载 | 正在恢复会话… | 不一致 | 统一为「正在恢复登录状态…」 |
+| `components/room-organizer/panels/amap-venue-picker.tsx:191` · AmapVenuePicker | 加载 | 正在拉取卫星参考底图… | 术语 | 改成「正在加载卫星底图…」 |
+| `components/room-organizer/panels/cloud-panel.tsx:326` · CloudPanel | 加载 | 正在加载… | 含糊 | 补加载对象，如「正在加载方案列表…」 |
+| `components/room-organizer/panels/commercial-dossier-panel.tsx:456` · CommercialDossierPanel | 加载 | 正在处理，请等待本次操作完成… | 含糊 | 改成「正在处理，请稍候…」 |
+| `components/room-organizer/panels/environment-load.tsx:52` · EnvironmentLoad | 加载 | 正在铺开环境 | 语气 | 改成「正在加载环境预览…」 |
+| `components/room-organizer/panels/environment-load.tsx:67` · EnvironmentLoad | 加载 | 正在取回高斯 | 术语 | 改成「正在加载环境数据…」 |
+| `components/room-organizer/panels/generated-model-library.tsx:190` · GeneratedModelLibrary | 加载 | 正在读取可用的生成模型… | 不一致 | 统一为「正在加载可用模型…」 |
+| `components/room-organizer/panels/local-activities-panel.tsx:201` · LocalActivitiesPanel | 加载 | 正在读取活动列表… | 不一致 | 统一为「正在加载活动列表…」 |
+| `components/room-organizer/panels/local-project-backup-panel.tsx:144` · LocalProjectBackupPanel | 加载 | 正在读取并检查文件… | 不一致 | 改成「正在检查备份文件…」 |
+| `components/room-organizer/panels/lux3d-direct-test.tsx:365` · Lux3dDirectTest | 加载 | 请勿重复提交。 | 语气 | 改成「正在提交，请稍候」 |
+| `components/room-organizer/panels/online-model-library.tsx:219` · OnlineModelLibrary | 加载 | 正在载入线上模型库… | 不一致 | 统一为「正在加载模型库…」 |
+| `components/room-organizer/panels/project-review-library.tsx:187` · ProjectReviewLibraryPanel | 加载 | 正在读取本机评审资料… | 术语 | 改成「正在读取评审资料…」 |
+| `components/room-organizer/panels/project-review-panel.tsx:285` · ProjectReviewPanel | 加载 | 正在准备评审包… | 不一致 | 改成「正在生成评审包…」 |
+| `components/room-organizer/panels/reconstruction-panel.tsx:595` · ReconstructionPanel | 加载 | 正在读取本机图纸资料… | 术语 | 改成「正在读取图纸资料…」 |
+| `components/room-organizer/panels/scene-layers-panel.tsx:130` · SceneLayersPanel | 加载 | 正在载入方案模型，当前布置保持不变。 | 不一致 | 改成「正在加载方案模型，布置不变」 |
+| `components/room-organizer/panels/venue-picker.tsx:152` · VenuePicker | 加载 | 正在加载你的方案… | 不一致 | 统一为「正在加载方案…」 |
+| `components/room-organizer/panels/viewport.tsx:154` · LoadingOverlay | 加载 | 正在准备活动场地 | 术语 | 改成「正在准备场地…」 |
+| `components/room-organizer/panels/viewport.tsx:155` · LoadingOverlay | 加载 | 载入三维编辑器，请稍候。 | 不一致 | 改成「正在加载三维编辑器…」 |
+| `components/room-organizer/panels/viewport.tsx:327` · Viewport | 加载 | 正在进入第一人称… | 术语 | 改成「正在切换到第一人称…」 |
+| `components/workspace-shell.tsx:72` · BootSkeleton | 加载 | 正在打开幕景工作台 | 术语 | 改成「正在打开工作台…」 |
+
+## 错误状态
+
+| 位置（文件 · 组件） | 场景 | 当前文案（原文照抄） | 问题分类 | 建议文案 |
+| --- | --- | --- | --- | --- |
+| `app/error.tsx:88` · Error | 错误 | 工作台暂时无法打开，请重新加载。已保存的本地草稿不会被删除。 | 缺行动 | 补「可先下载草稿备份」入口 |
+| `app/error.tsx:98` · Error | 错误 | 工作台暂时遇到问题 | 含糊 | 说明失败范围与下一步 |
+| `app/error.tsx:105` · Error | 错误 | 浏览器存储失败，请在离开此页前下载当前草稿。 | 术语 | 改成「浏览器无法保存，请先下载草稿」 |
+| `app/global-error.tsx:91` · GlobalError | 错误 | 页面加载失败 | 不一致 | 与 error.tsx 统一为「工作台暂时遇到问题」 |
+| `components/business/scene-preview.tsx:80` · ScenePreview | 错误 | 此设备暂时无法显示三维预览，仍可查看下方物料清单。 | 术语 | 改成「这台设备无法预览三维画面」 |
+| `components/intro/intro-page.tsx:143` · IntroPage | 错误 | 暂时无法登录，请稍后再试。 | 含糊 | 区分网络、账号或服务问题 |
+| `components/review-share-page/load-plan.ts:25` · REVIEW_PLAN_ERRORS | 错误 | 这条评审链接太长，页面没有打开其中的方案。 | 术语 | 改成「链接过长，无法打开方案」 |
+| `components/room-organizer/hooks/use-import-export.ts:182` · useImportExport | 错误 | Failed to import layout. Please check the file format. | 不一致 | 改成中文并与全站错误文案统一 |
+| `components/room-organizer/hooks/use-three-scene.ts:106` · useThreeScene | 错误 | Failed to load 3D engine. | 不一致 | 改成「三维引擎加载失败，请刷新重试」 |
+| `components/room-organizer/hooks/use-three-scene.ts:307` · useThreeScene | 错误 | Failed to initialize WebGL renderer. | 不一致 | 改成「三维画面初始化失败，请换浏览器」 |
+| `components/room-organizer/lib/backend-adapter.ts:42` · assertSupportedVenue | 错误 | 此版编辑器暂不支持多边形场地，未打开项目；原云端场景保持不变。 | 术语 | 改成「当前版本不支持多边形场地」 |
+| `components/room-organizer/lib/street.ts:153` · ENTRANCE_PROBLEM_LABELS | 错误 | No storey at street level — lower the street or add a floor above it. | 不一致 | 改成中文，与场地面板文案统一 |
+| `components/room-organizer/panels/agent-panel.tsx:1822` · LayoutAgentProvider | 错误 | 这次没出成，场地和设置都还在。可能是网络断了，重试就好。 | 语气 | 不猜测原因，只给明确的重试动作 |
+| `components/room-organizer/panels/amap-venue-picker.tsx:156` · AmapVenuePicker | 错误 | 没有找到这个地点，试试更短的关键词。 | 语气 | 改成「没有找到这个地点，换个关键词试试」 |
+| `components/room-organizer/panels/cloud-panel.tsx:112` · CloudPanel | 错误 | 项目加载失败，请点击刷新重试。 | 不一致 | 统一为「方案加载失败，请重试」 |
+| `components/room-organizer/panels/cloud-panel.tsx:137` · CloudPanel | 错误 | 操作失败，请重试。 | 含糊 | 说明是哪一步操作失败 |
+| `components/room-organizer/panels/local-project-backup-panel.tsx:106` · LocalProjectBackupPanel | 错误 | 恢复未完成，请重试。 | 含糊 | 说明恢复停在哪一步 |
+| `components/room-organizer/panels/project-review-panel.tsx:114` · ProjectReviewPanel | 错误 | 暂时无法读取当前内容，请稍后重试。 | 含糊 | 说明读取失败的对象 |
+| `components/room-organizer/panels/reconstruction-panel.tsx:43` · ERROR_MESSAGES | 错误 | 请在 frontend/.env.local 中设置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY 后重启。 | 术语 | 面向用户隐藏环境变量配置细节 |
+| `components/room-organizer/panels/reconstruction-panel.tsx:69` · errorText | 错误 | 操作未完成，原场景已保留。 | 含糊 | 说明失败原因与可执行动作 |
+| `components/room-organizer/panels/scene-delivery-panel.tsx:226` · SceneDeliveryPanel | 错误 | 导出失败，请重试。 | 含糊 | 说明导出的是哪类文件 |
+| `components/room-organizer/panels/space-panel.tsx:54` · SpacePanel | 错误 | 空白空间没立起来，请重试。 | 语气 | 改成「空白场地创建失败，请重试」 |
+| `components/room-organizer/panels/viewport.tsx:167` · ErrorOverlay | 错误 | 三维画布未能初始化，未捕获到具体错误信息。 | 含糊 | 提示刷新页面或换浏览器 |
+| `lib/assets-api.ts:70` · assetError | 错误 | 请求失败，请稍后重试。 | 含糊 | 区分网络、权限与预算失败 |
+| `lib/backend-session.ts:200` · failure | 错误 | 连接失败，草稿已保留，云端写入已暂停。 | 术语 | 改成「连接失败，草稿仍在，暂不能云保存」 |
+| `lib/backend-session.ts:213` · failure | 错误 | AI 服务暂时不可用，请稍后手动重试。 | 语气 | 去掉「手动」，与其它超时文案统一 |
+| `lib/local-project-restore.ts:65` · commitLocalRestoreLayout | 错误 | 本机布局保存失败，恢复未完成。 | 术语 | 改成「这台设备的保存失败，恢复未完成」 |
+| `lib/reference-image.ts:39` · resolveReferenceImage | 错误 | 当前设计没有可核对的场地结构，请先按实测尺寸创建场地。 | 术语 | 改成「还没有场地结构，请先创建场地」 |
+| `lib/source-storage.ts:102` · openDatabase | 错误 | 本机资料存储无法打开。 | 术语 | 改成「这台设备的存储无法使用」 |
+
+## 统计
+
+- 收录文案条数：**108**（空 53 · 加载 26 · 错误 29）。
+- 覆盖文件数：**54** 个（同一文件多条按条计）。
+
+五类问题分布：
+
+| 问题分类 | 条数 | 占比 |
+| --- | --- | --- |
+| 术语 | 33 | 31% |
+| 含糊 | 18 | 17% |
+| 不一致 | 30 | 28% |
+| 缺行动 | 16 | 15% |
+| 语气 | 11 | 10% |
+
+频次最高的 3 条（按用词统计，同一条可命中多类；括号内为其中单独命中数）：
+
+| 用词 | 命中条数 | 说明 |
+| --- | --- | --- |
+| 没有 / 还没有 | 37（还没有 21） | 空态否定式至少有「没有／还没有／暂无／尚未」四种写法 |
+| 正在 | 24 | 加载态首选句式，但大量条目缺加载对象 |
+| 重试 | 9（请重试 4） | 错误态首选行动，句式在「请重试／请稍后重试／稍后再试」间摇摆 |
+
+完全相同的当前文案只出现 2 组重复，其余均为一次：`正在处理…` 2 条（`app/reset-password/page.tsx:54`、`components/business/publication-panel.tsx:51`）、`正在加载…` 2 条（`app/projects/page.tsx:115`、`components/room-organizer/panels/cloud-panel.tsx:326`）——重复本身不是问题，问题是它们都没说在加载／处理什么。
+
+## 建议的下一步（≤5 条）
+
+1. **先定句式，再改字面**：把三态句式写进设计规范——空态「还没有…＋一个入口」、加载态「正在＋动作…」、错误态「原因＋一个明确动作＋数据是否保留」。仓库里已经大量出现「…已保留」，把它固化成规则而不是逐句手感。
+2. **清术语与英文**：`components/room-organizer/hooks/use-three-scene.ts`、`hooks/use-import-export.ts`、`panels/recovery-entry.tsx`、`three/roof.ts`、`lib/street.ts` 统一改中文；面向用户隐藏 `.env.local`、`GLB`、`UV`、「本机」「高斯」这类内部词。
+3. **加载词收敛并补对象**：把「加载／载入／读取／准备／铺开／取回」收敛成一个动词，并补出加载对象（如「正在加载工作室列表…」），消除只有「正在处理…」「正在加载…」的空转提示。
+4. **空态补行动**：给「没有匹配的模型／文件／会话」补「换个关键词」「清除筛选」；给「还没有收藏」「还没有生成记录」补入口。
+5. **把检查固化下来**：错误文案必须说明「数据是否保留」并给一个可执行动作，纳入 PR 检查清单；另外建议在 `docs/INDEX.md` 登记本文件（本次受「只新增一个文件」约束未改）。
