@@ -5,7 +5,7 @@
  * 「从空白开始」走现有立壳链；项目卡带俯视缩略预览，选中同标签 router.push（认证在 sessionStorage，新标签会变访客）；
  * 新建只输名字——没有工作室时静默建「个人工作室」。「云」一词不面向用户（§二.4 默认在云上）。模板与导入在下一期。
  */
-import { Check, FolderOpen, Loader2, Plus, SquareDashed } from 'lucide-react';
+import { Check, FolderOpen, Loader2, Plus, SquareDashed } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../../../lib/auth-provider';

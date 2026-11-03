@@ -16,6 +16,7 @@ import {
   seedAssistantSessionIndex,
   selectAssistantSession,
   sortAssistantSessions,
+  touchAssistantSession,
   toggleAssistantSessionFavorite,
   writeAssistantSessionIndex,
   type AssistantSessionIndex,
@@ -45,6 +46,7 @@ describe('assistant session index', () => {
     expect(ASSISTANT_SESSIONS_STORAGE_KEY).not.toBe(STORAGE_KEY);
     const files = [
       'assistant-sessions.ts',
+      'assistant-session-bodies.ts',
       '../hooks/use-assistant-sessions.ts',
       '../panels/session-history-panel.tsx',
     ];
@@ -95,6 +97,11 @@ describe('assistant session index', () => {
     const selected = selectAssistantSession(stared, 'ses-1', 80);
     expect(selected.activeId).toBe('ses-1');
     expect(selectAssistantSession(selected, 'ses-1', 90)).toBe(selected);
+
+    const touched = touchAssistantSession(selected, 'ses-1', 120);
+    expect(touched.sessions.find(item => item.id === 'ses-1')?.updatedAt).toBe(120);
+    expect(touchAssistantSession(touched, 'ses-1', 120)).toBe(touched);
+    expect(touchAssistantSession(touched, 'missing', 130)).toBe(touched);
 
     const removed = deleteAssistantSession(selected, 'ses-1');
     expect(removed.activeId).toBe('ses-2');

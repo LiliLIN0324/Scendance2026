@@ -15,6 +15,7 @@ import {
   toggleAssistantSessionFavorite,
   type AssistantSessionIndex,
 } from '../lib/assistant-sessions';
+import { resetAssistantSessionsStoreForTests } from '../hooks/use-assistant-sessions';
 import { AssistantSessionDock, SessionHistoryPanel } from './session-history-panel';
 
 const NOW = Date.parse('2026-10-31T09:40:00');
@@ -55,11 +56,15 @@ function list(): HTMLElement {
 
 beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto);
+  localStorage.clear();
+  resetAssistantSessionsStoreForTests();
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  localStorage.clear();
+  resetAssistantSessionsStoreForTests();
 });
 
 describe('session history panel', () => {

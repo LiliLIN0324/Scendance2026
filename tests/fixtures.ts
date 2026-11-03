@@ -20,6 +20,8 @@ export async function database(dataDir?: string) {
     grant usage on schema auth,public to service_role; grant select on auth.users to service_role;
     grant usage on schema public to anon,authenticated;
     create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`);
+  // The team list reads the sign-up email through a definer helper, so the stand-in auth table needs the column too.
+  await db.exec('alter table auth.users add column if not exists email text');
   await db.exec('create table if not exists public.local_fixture_migrations(name text primary key, checksum text not null)');
   const migrations = new URL('../supabase/migrations/', import.meta.url);
   for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')).sort()) {
@@ -33,7 +35,7 @@ export async function database(dataDir?: string) {
     await db.exec(sql);
     await db.query('insert into public.local_fixture_migrations values ($1,$2)',[file,checksum]);
   }
-  await db.query('insert into auth.users values ($1),($2),($3) on conflict do nothing',[owner,editor,outsider]);
+  await db.query("insert into auth.users(id,email) values ($1,'owner@example.test'),($2,'editor@example.test'),($3,'outsider@example.test') on conflict (id) do update set email=excluded.email",[owner,editor,outsider]);
   await db.query('insert into scene_private.studios(id,name) values ($1,$2) on conflict do nothing',[studio,'Test studio']);
   await db.query("insert into scene_private.members values ($1,$2,'owner','Owner'),($1,$3,'editor','Editor') on conflict do nothing",[studio,owner,editor]);
   const call=(fn:string):Rpc=>async(actor,action,data={})=>{

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Box, FileImage, Type } from 'lucide-react';
+import { Box, FileImage, Type } from '@/components/solid-icons';
 import { assetError } from '@/lib/assets-api';
 import { useBackendSession, type BackendSession, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
 import { AholoGuideCard } from './aholo-guide-card';

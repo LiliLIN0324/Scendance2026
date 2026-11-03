@@ -3,8 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { STORAGE_KEY } from '../lib/constants';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
+import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { presetModelUrl } from '../lib/scene-presets';
+import { resetAssistantSessionsStoreForTests } from '../hooks/use-assistant-sessions';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider, MapVenueOverlay, type BriefTool } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
@@ -12,6 +15,8 @@ import type { WorkbenchMode } from '../lib/workbench-mode';
 const state = vi.hoisted(() => ({
   layout: null as unknown as RoomLayout,
   apply: vi.fn(),
+  addItems: vi.fn(),
+  commitNow: vi.fn(),
   view: null as unknown,
   setView: vi.fn(),
 }));
@@ -36,7 +41,8 @@ vi.mock('../contexts', () => ({
     layout: state.layout,
     activeFloor: state.layout.floors[0],
     activeFloorIndex: 0,
-    actions: { applyLayout: state.apply, setFloorPlan: vi.fn() },
+    actions: { applyLayout: state.apply, addItems: state.addItems, setFloorPlan: vi.fn() },
+    history: { commitNow: state.commitNow },
     view: state.view,
     setView: state.setView,
     collidingIds: new Set<string>(),
@@ -86,6 +92,11 @@ function cloudPreview(): unknown {
   };
 }
 
+/** Material Symbols 私用区字形会混进 textContent，断言只看可见文案。 */
+function visibleText(value: string | null | undefined): string {
+  return (value ?? '').replace(/[\uE000-\uF8FF]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function send(text: string): void {
   fireEvent.change(screen.getByLabelText('告诉 Agent 要改的'), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -100,6 +111,8 @@ beforeEach(() => {
   state.layout = seatLayout();
   state.view = makeViewSettings();
   state.apply = vi.fn();
+  state.addItems = vi.fn();
+  state.commitNow = vi.fn();
   state.setView = vi.fn();
   callbacks.workbenchMode = 'layout';
   for (const callback of Object.values(callbacks)) if (typeof callback === 'function') callback.mockClear();
@@ -112,6 +125,7 @@ beforeEach(() => {
   studioMock.recoverable = false;
   studioMock.connection = '离线引导';
   localStorage.clear();
+  resetAssistantSessionsStoreForTests();
 });
 
 afterEach(cleanup);
@@ -181,7 +195,7 @@ describe('T-03 review in the Agent panel', () => {
     expect(await screen.findByText(/入口通道我不猜/)).toBeTruthy();
     expect(await screen.findByText(/靠边的椅子拉不开/)).toBeTruthy();
     const before = JSON.stringify(state.layout);
-    const storageBefore = JSON.stringify({ ...localStorage });
+    const draftBefore = localStorage.getItem(STORAGE_KEY);
 
     fireEvent.click(screen.getByRole('button', { name: /按这条改：把靠边的桌椅往场中挪/ }));
     expect(await screen.findByText('改法预览')).toBeTruthy();
@@ -193,7 +207,8 @@ describe('T-03 review in the Agent panel', () => {
     expect(previewed.floors[0]!.items.find(item => item.id === 'seat')!.position!.x).toBeLessThan(3.35);
     expect(onApply).not.toHaveBeenCalled();
     expect(JSON.stringify(state.layout)).toBe(before);
-    expect(JSON.stringify({ ...localStorage })).toBe(storageBefore);
+    // 对话气泡可以写本机会话正文；预览本身不得动画布草稿键。
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(draftBefore);
 
     fireEvent.click(screen.getByRole('button', { name: '撤回' }));
     expect(await screen.findByText(/撤了：预览收回，物件都还在原位/)).toBeTruthy();
@@ -252,24 +267,65 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('shows venue capability chips under the composer', () => {
-    const onOpenReference = vi.fn();
-    render(<LayoutAgentProvider callbacks={{ ...callbacks, onOpenReference, luxToolsVisible: true }} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><MapVenueOverlay/></LayoutAgentProvider>);
+  it('puts speak-first examples in Bingo chat, with chips behind adjust', () => {
+    render(ui(INITIAL_LAYOUT));
+    const home = screen.getByLabelText('生成活动方案');
+    expect(home).toBeTruthy();
+    expect(within(home).getByRole('group', { name: '需求例句' })).toBeTruthy();
+    expect(within(home).getByRole('button', { name: '80 人发布会，室内 12×9' })).toBeTruthy();
+    expect(within(home).getByRole('button', { name: '生成方案' })).toBeTruthy();
+    expect(within(home).queryByRole('button', { name: '品牌快闪' })).toBeNull();
+    fireEvent.click(within(home).getByRole('button', { name: '改类型或人数' }));
+    expect(within(home).getByRole('button', { name: '品牌快闪' })).toBeTruthy();
+  });
+
+  it('restores Bingo bubbles when switching sessions and clears them on a new one', async () => {
+    render(ui(state.layout));
+    send('先记一句发布会需求');
+    expect(await screen.findByText('先记一句发布会需求')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '新开会话' }));
+    await waitFor(() => expect(screen.queryByText('先记一句发布会需求')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: '会话历史' }));
+    const rows = within(screen.getByRole('list', { name: '方案会话列表' })).getAllByRole('button', { name: /^新会话/ });
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    const previous = rows.find(button => button.getAttribute('aria-current') !== 'true');
+    expect(previous).toBeTruthy();
+    fireEvent.click(previous!);
+    expect(await screen.findByText('先记一句发布会需求')).toBeTruthy();
+  });
+
+  it('keeps the plan picker out of the door agent chat', () => {
+    state.layout = INITIAL_LAYOUT;
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    expect(screen.queryByLabelText('生成活动方案')).toBeNull();
+  });
+
+  it('puts 按风格配一套 on Bingo and opens the style panel', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
-    expect(screen.getByText('你可以做什么')).toBeTruthy();
-    expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
-    expect(within(group).getByRole('button', { name: /图纸与照片/ })).toBeTruthy();
-    expect(within(group).getByRole('button', { name: /新建\/换场地/ })).toBeTruthy();
-    expect(within(group).queryByRole('button', { name: /空白场地/ })).toBeNull();
-    // 生成类能力归「生成」条：布置的芯片里不再混生成物件 / 场地重建。
+    expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
+    expect(within(group).queryByRole('button', { name: /地图选址/ })).toBeNull();
     expect(within(group).queryByRole('button', { name: /生成物件/ })).toBeNull();
-    expect(within(group).queryByRole('button', { name: /场地重建/ })).toBeNull();
-    // 布置的「+」里只有场地与附件，生成不在这里。
-    fireEvent.click(screen.getByRole('button', { name: '场地与附件' }));
-    expect(screen.getAllByRole('menuitem').map(item => item.querySelector('.ap-menu-label')?.textContent)).toEqual(['新建/换场地', '地图选址', '图纸与照片']);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    fireEvent.click(within(group).getByRole('button', { name: /图纸与照片/ }));
-    expect(onOpenReference).toHaveBeenCalled();
+    fireEvent.click(within(group).getByRole('button', { name: /按风格配一套/ }));
+    expect(screen.getByRole('dialog', { name: '按风格配一套' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '按奶油会客配一套' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '按奶油会客配一套' }));
+    expect(state.commitNow).toHaveBeenCalledOnce();
+    expect(state.addItems).toHaveBeenCalledOnce();
+    const items = state.addItems.mock.calls[0]![0] as { type: string; color?: string }[];
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    expect(items.some(item => item.type === 'sofa' && item.color === '#E8DCC8')).toBe(true);
+    expect(screen.getByText(/按「奶油会客」放了一套/)).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: '按风格配一套' })).toBeNull();
+  });
+
+  it('keeps map选址 on the door agent, not Bingo', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
+    const group = screen.getByRole('group', { name: '你可以做什么' });
+    expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
+    expect(within(group).queryByRole('button', { name: /按风格配一套/ })).toBeNull();
     fireEvent.click(within(group).getByRole('button', { name: /地图选址/ }));
     expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
   });
@@ -291,7 +347,7 @@ describe('T-UI visible interaction', () => {
     expect(within(brief).queryByRole('textbox')).toBeNull();
     // 简报里能点的只有「这块场地从哪来」这一组。
     const actions = within(brief).getAllByRole('button');
-    expect(actions.map(button => button.textContent)).toEqual(['地图圈画', '空白空间 · 12 × 8 m']);
+    expect(actions.map(button => visibleText(button.textContent))).toEqual(['地图圈画', '空白空间 · 12 × 8 m']);
   });
 
   it('offers the map next to the drawings and opens it over the canvas', () => {
@@ -302,7 +358,7 @@ describe('T-UI visible interaction', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 量出同一块场地的两条路并列，不再一个在左栏一个在左轨。
-    expect(within(ways).getAllByRole('button').map(button => button.textContent)).toEqual(['图纸与照片', '地图圈画', '空白空间 · 12 × 8 m']);
+    expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['图纸与照片', '地图圈画', '空白空间 · 12 × 8 m']);
     expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
     fireEvent.click(within(ways).getByRole('button', { name: /地图圈画/ }));
     const overlay = screen.getByRole('dialog', { name: '地图选址' });
@@ -317,7 +373,7 @@ describe('T-UI visible interaction', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={[]}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 场地立起来后空地文字链退场，地图圈画留着。
-    expect(within(ways).getAllByRole('button').map(button => button.textContent)).toEqual(['地图圈画']);
+    expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['地图圈画']);
     fireEvent.click(within(ways).getByRole('button', { name: /地图圈画/ }));
     // 入口不消失，浮层里说清楚这一圈是替换。
     expect(within(screen.getByRole('dialog', { name: '地图选址' })).getByText('重新圈一块会替换现在的场地。')).toBeTruthy();
@@ -720,12 +776,12 @@ describe('Bingo在左侧工作台', () => {
 
   it('空输入时把引导句逐字打出来，Tab 一次填整句', () => {
     render(ui(makeLayout()));
-    expect(document.querySelector('.ap-ghost')?.textContent).toBe('80 人发布会，室内 12×9');
+    expect(document.querySelector('.ap-ghost')?.textContent).toBe('80 人发布会，室内 12×9，安排签到和主舞台');
     const input = screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;
     // 引导层出现时 placeholder 让位，不能再叠一层灰字。
     expect(input.getAttribute('placeholder')).toBe('');
     fireEvent.keyDown(input, { key: 'Tab' });
-    expect(input.value).toBe('80 人发布会，室内 12×9');
+    expect(input.value).toBe('80 人发布会，室内 12×9，安排签到和主舞台');
     // 填满之后引导层让开，不再压在真句子上。
     expect(document.querySelector('.ap-ghost')).toBeNull();
   });
@@ -758,7 +814,7 @@ describe('总控内点名 agent', () => {
     expect(screen.getByLabelText('移除 空间')).toBeTruthy();
     expect(screen.getByLabelText('移除 物料')).toBeTruthy();
     // 头像区不重复念名字，placeholder 保持中性。
-    expect(document.querySelector('.ap-talk-faces')?.textContent).toBe('');
+    expect(visibleText(document.querySelector('.ap-talk-faces')?.textContent)).toBe('');
     expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).placeholder).toBe('说一句，交给选中的 agent');
     // 一句发出去同时到两个 agent 的收发标签上。
     send('看看哪里有问题');
@@ -770,7 +826,7 @@ describe('总控的汇总结果卡', () => {
   it('记录一条点名分派：目标头像、原话与结果摘要，默认收起', async () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
     const who = screen.getByRole('group', { name: '这场对话里找谁说' });
-    fireEvent.click(within(who).getByRole('button', { name: 'Bingo' }));
+    fireEvent.click(within(who).getByRole('button', { name: /Bingo/ }));
     send('加两把椅子');
     const block = (await screen.findByText('分派结果')).closest('details') as HTMLDetailsElement;
     expect(block.open).toBe(false);

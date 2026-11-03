@@ -6,13 +6,14 @@
  * 二维码算法用 qrcode（MIT），图标与卡片样式是自写的。
  */
 import QRCode from 'qrcode';
-import { ClipboardCheck, Copy, ExternalLink, FileDown, Info, Link2, PackageOpen, QrCode, Share2, Upload } from 'lucide-react';
+import { ClipboardCheck, Copy, ExternalLink, FileDown, Info, Link2, PackageOpen, QrCode, Upload } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { planDrawOrder } from '../lib/plan-order';
 import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
 import { isStructuralMarker } from '../lib/structural-layout';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
+import { MaterialSymbol } from './material-symbol';
 
 export interface PublishedLink {
   /** 手机扫码即可打开的只读方案页。 */
@@ -180,7 +181,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
 
   return <div className="sc-tool-menu" ref={rootRef}>
     <button type="button" id="tool-share" data-tip="发布" aria-label="发布" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
-      <Share2 size={20} aria-hidden="true"/>
+      <MaterialSymbol name="ios_share" />
     </button>
     {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="发布">
       <header className="sc-publish-head">

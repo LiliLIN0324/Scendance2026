@@ -1,6 +1,6 @@
 'use client';
 
-import { Info } from 'lucide-react';
+import { Info } from '@/components/solid-icons';
 import { useState, type ReactNode } from 'react';
 
 export function InfoTip({ label, children }: { label: string; children: ReactNode }): JSX.Element {

@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import { PanelLeftClose } from 'lucide-react';
+import { PanelLeftClose } from '@/components/solid-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
@@ -36,6 +37,7 @@ import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useSplatPreview } from './hooks/use-splat-preview';
+import type { SplatPosition, SplatTransformMode } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
@@ -47,7 +49,7 @@ import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
 import { crowdHintsFromLayout } from './lib/crowd-route';
 import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
-import { clearEnvironment, environmentPreferenceKey, readEnvironment, writeEnvironment, type StoredEnvironment } from './lib/environment-preference';
+import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, writeEnvironments, type StoredEnvironment } from './lib/environment-preference';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import { randomId, randomSuffix } from './lib/ids';
@@ -79,6 +81,9 @@ import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailAvatar } from './panels/rail-avatar';
+import { RailTeamBlock } from './panels/rail-team-block';
+import { MemberChat } from './panels/member-chat';
+import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
 import { SettingsMenu } from './panels/settings-menu';
 import { CommercialWorkspace } from './panels/commercial-workspace';
@@ -89,7 +94,6 @@ import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
-import { PlanFlow } from './panels/plan-flow';
 import { VenueLibraryPanel } from './panels/venue-library-panel';
 import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
@@ -101,6 +105,8 @@ import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
+
+const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
 import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 import type { SplatPaint } from './three/splat-preview';
 
@@ -165,6 +171,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const frameViewportRef = useRef(() => {});
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  useEffect(() => { setSpaceWorkflow('aholo'); }, [layout.id]);
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
   const [captionEpoch, setCaptionEpoch] = useState(0);
@@ -208,6 +215,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const bingoHeaderAvatarRef = useRef<HTMLSpanElement>(null);
   const [bingoHeaderAvatarVisible, setBingoHeaderAvatarVisible] = useState(false);
   const [activeAgent, setActiveAgent] = useState<AgentId>('bingo');
+  const [spaceWorkflow, setSpaceWorkflow] = useState<'aholo' | 'traditional'>('aholo');
   const agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel;
   const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed, sidePanel });
   const agentPanelOpen = !agentCollapsed && !agentClosing && !sidePanel;
@@ -221,7 +229,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [agentCollapsed, agentClosing, sidePanel]);
   /** Bingo 栏在左侧。关掉后再从画布上的 Bingo 浮标打开，回到布置对话。 */
   const spaceNewRef = useRef<((mode?: 'blank' | 'template') => void) | null>(null);
-  const [planHome, setPlanHome] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [conversationOpenRequest, setConversationOpenRequest] = useState(0);
   const conversationEntryRef = useRef<HTMLButtonElement>(null);
@@ -245,7 +252,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 地图采集单拍完的素材要接进 Aholo 场地重建：带着这块地的名字和应拍张数过去，省得她再填一遍。
   const [aholoReconPreset, setAholoReconPreset] = useState<{ name: string; hint: string } | null>(null);
   // 生成轨点「物料生成 / 场地生成」：观感面板落到对应那组标签；nonce 让同一入口连点也生效。
-  const [lux3dOpenKind, setLux3dOpenKind] = useState<{ kind: 'world' | 'recon'; nonce: number } | null>(null);
+  const [lux3dOpenKind, setLux3dOpenKind] = useState<{ kind: 'world' | 'recon'; nonce: number; prompt?: string } | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(WORKBENCH_MODE_DEFAULT);
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
@@ -260,13 +267,27 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const openPinDraftRef = useRef<(pick: { itemId: string | null; x: number; y: number; z: number }) => void>(() => {});
   const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
-  const [environment, setEnvironment] = useState<StoredEnvironment | null>(null);
+  const [environments, setEnvironments] = useState<StoredEnvironment[]>([]);
+  const environment = environments[0] ?? null;
+  const environmentsRef = useRef(environments);
+  environmentsRef.current = environments;
+  const [splatTransformMode, setSplatTransformModeState] = useState<SplatTransformMode>('off');
   const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
   const [backupOpenRequest, setBackupOpenRequest] = useState(0);
   const [reviewOpenRequest, setReviewOpenRequest] = useState(0);
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
+  // 左轨成员位与「团队与权限」读同一份团队。
+  const team = useTeam(controller);
+  const [teamOpenRequest, setTeamOpenRequest] = useState<{ serial: number; section: string } | undefined>();
+  // 左轨点头像，左栏整栏换成那个人的私信；再点同一颗收起。换成员或换团队时窗子跟着换/关。
+  const [chatPeerId, setChatPeerId] = useState<string | null>(null);
+  const personChat = !!chatPeerId && team.members.some(member => member.userId === chatPeerId);
+  // 私信压在栏里的时候，四格不算开着：栏中此刻不是它们的卡，按压态与高亮跟着让开。
+  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat;
+  // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
+  const columnExpanded = navExpanded || personChat;
   const businessHostRef = useRef<HTMLDivElement>(null);
   const businessToolsRef = useRef<BusinessToolsApi | null>(null);
   const toolsEntryRef = useRef<HTMLButtonElement>(null);
@@ -315,6 +336,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   /** 左轨四格共用一个面板：切到哪一格，整栏就变成那个 agent 的卡。 */
   const showAgent = useCallback((id: AgentId) => {
     if (id === 'material') setWorkbenchMode('layout');
+    // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
+    setChatPeerId(null);
     setActiveAgent(id);
     setAgentClosing(false);
     setAgentCollapsed(false);
@@ -400,11 +423,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       rail.current?.focus();
     }, 280);
   }, [activeAgent]);
-  /** 点同一格收起，点别的格就地换成那个 agent 的卡。 */
+  /** 点同一格收起，点别的格就地换成那个 agent 的卡。私信开着时点格子 = 换回那一格，不是收起整栏。 */
   const toggleAgent = useCallback((id: AgentId) => {
-    if (agentPanelOpen && activeAgent === id) closeBingo();
+    if (agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
     else showAgent(id);
-  }, [agentPanelOpen, activeAgent, closeBingo, showAgent]);
+  }, [agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
   const closeSidePanel = useCallback(() => {
     setSidePanel(null);
     setAgentCollapsed(true);
@@ -1043,6 +1066,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   // 3DGS 环境预览的渲染入口；useThreeScene 每帧走它，预览关闭时它是空的。
   const splatPaintRef = useRef<SplatPaint | null>(null);
+  const environmentPickerRef = useRef<((ray: ThreeNS.Ray) => string | null) | null>(null);
+  const environmentSelectionRef = useRef<((assetId: string) => void) | null>(null);
 
   const { isReady, error, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef, worldPositionFromClient } =
     useThreeScene({
@@ -1066,6 +1091,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       onItemDragCancel: handleDragCancel,
       onItemHover: setHover,
       onEmptyClick: handleEmptyClick,
+      onEnvironmentPick: ray => {
+        const assetId = environmentPickerRef.current?.(ray);
+        if (!assetId || assetId === environmentsRef.current[0]?.assetId) return false;
+        environmentSelectionRef.current?.(assetId);
+        return true;
+      },
       editingLocked: workbenchMode !== 'layout',
       ...(workbenchMode === 'review' ? { onReviewAnchor: (anchor: { itemId: string | null; x: number; y: number; z: number }) => openPinDraftRef.current(anchor) } : {}),
       onWallSelect: ({ wallId, kind }) => {
@@ -1082,7 +1113,24 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const preserveSplatCameraRef = useRef(false);
   preserveSplatCameraRef.current = walkthroughActive;
-  const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat } = useSplatPreview({
+  const onSplatPositionChange = useCallback((position: SplatPosition) => {
+    setEnvironments(current => {
+      if (!current.length) return current;
+      const next = [{ ...current[0]!, position }, ...current.slice(1)];
+      environmentsRef.current = next;
+      writeEnvironments(layoutStore.getState().layout.id, next);
+      return next;
+    });
+  }, []);
+  const otherSplatScenes = useMemo(() => environments.slice(1).flatMap(entry => {
+    try {
+      return [{ id: entry.assetId, source: storedAholoSceneSource(entry.assetId), position: entry.position ?? ZERO_SPLAT_POSITION,
+        floorIndex: entry.floorIndex ?? 0, roofCutoffY: floorElevation(layout.floors, (entry.floorIndex ?? 0) + 1) + (entry.position?.y ?? 0) - floorElevation(layout.floors, entry.floorIndex ?? 0) }];
+    } catch { return []; }
+  }), [environments, layout.floors]);
+  const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat,
+    setPosition: setSplatPosition, displayMode: splatDisplayMode, setDisplayMode: setSplatDisplayMode,
+    setTransformMode: setSplatTransform, pickScene: pickSplatScene } = useSplatPreview({
     isReady,
     rendererRef,
     cameraRef,
@@ -1091,37 +1139,97 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     requestShadowUpdate,
     // 兜底缩放：场景没带真实尺度（lod-meta forwardBox）时，才按场地最长水平边等比塞。
     sizeMeters: Math.max(layout.width, layout.height),
+    // 1F exposes the scan by cutting away its roof at the top of 1F; 2F
+    // raises the same live cut plane to the top of 2F.
+    roofCutoffY: floorElevation(layout.floors, (environment?.floorIndex ?? 0) + 1) + (environment?.position?.y ?? 0) - floorElevation(layout.floors, environment?.floorIndex ?? 0),
+    position: environment?.position ?? ZERO_SPLAT_POSITION,
+    transformMode: splatTransformMode,
+    onPositionChange: onSplatPositionChange,
+    otherScenes: otherSplatScenes,
+    activeFloorIndex,
+    primaryVisible: (environment?.floorIndex ?? 0) === activeFloorIndex,
     preserveCameraRef: preserveSplatCameraRef,
   });
+  environmentPickerRef.current = pickSplatScene;
+  // The Gaussian venue and its editable room layout form one placed unit.
+  // Apply the venue offset to the main scene too, so walls, floors, furniture,
+  // and routes keep their relative positions while the venue is moved.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const position = environment?.position ?? ZERO_SPLAT_POSITION;
+    scene.position.set(position.x, position.y, position.z);
+    invalidate();
+  }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, isReady, sceneRef, invalidate]);
   splatPaintRef.current = paintSplatFrame;
+  const restoredEnvironmentRef = useRef('');
+  const selectEnvironment = useCallback((assetId: string, name: string) => {
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+    const current = environmentsRef.current;
+    if (current[0]?.assetId === assetId) return;
+    const liveLayout = layoutStore.getState().layout;
+    const currentItems = liveLayout.floors.map(floor => floor.items.map(item => ({
+      ...item,
+      ...(item.position ? { position: { ...item.position } } : {}),
+    })));
+    const activeAssetId = current[0]?.assetId;
+    const withSavedCurrent = current.map(entry => entry.assetId === activeAssetId
+      ? { ...entry, itemsByFloor: currentItems }
+      : entry);
+    const existing = withSavedCurrent.find(entry => entry.assetId === assetId);
+    const floorIndex = existing?.floorIndex ?? activeFloorIndex;
+    const sameFloorCount = current.filter(entry => (entry.floorIndex ?? 0) === floorIndex && entry.assetId !== assetId).length;
+    const stride = Math.max(layout.width, layout.height) + 4;
+    const value: StoredEnvironment = existing ?? {
+      assetId,
+      name,
+      floorIndex,
+      position: { x: sameFloorCount * stride, y: floorElevation(layout.floors, floorIndex), z: 0 },
+      itemsByFloor: currentItems,
+    };
+    if (existing?.itemsByFloor) {
+      actions.applyLayout({
+        ...liveLayout,
+        floors: liveLayout.floors.map((floor, index) => ({
+          ...floor,
+          items: existing.itemsByFloor?.[index] ? [...existing.itemsByFloor[index]!] : floor.items,
+        })),
+      });
+    }
+    const next = [value, ...withSavedCurrent.filter(entry => entry.assetId !== assetId)];
+    actions.setActiveFloorIndex(floorIndex);
+    environmentsRef.current = next;
+    setEnvironments(next);
+    writeEnvironments(liveLayout.id, next);
+    restoredEnvironmentRef.current = '';
+  }, [actions, activeFloorIndex, layout.floors, layout.height, layout.width, setView]);
   const startStoredScene = useCallback((assetId: string) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     try {
-      void startSplat(storedAholoSceneSource(assetId));
+      const source = storedAholoSceneSource(assetId);
+      selectEnvironment(assetId, source.name);
     } catch (failure) {
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
-  }, [setView, startSplat]);
+  }, [selectEnvironment, setView]);
+  environmentSelectionRef.current = startStoredScene;
   /** D0：地图立壳后自动挂历史 World .spz（只读 shipped，不扣额度）。 */
   const hangDemoEnvironment = useCallback(() => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     showAgent('space');
     try {
-      void startSplat(storedAholoSceneSource(DEMO_WORLD_SCENE_ID));
+      const source = storedAholoSceneSource(DEMO_WORLD_SCENE_ID);
+      selectEnvironment(DEMO_WORLD_SCENE_ID, source.name);
     } catch (failure) {
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
-  }, [setView, startSplat, showAgent]);
+  }, [selectEnvironment, setView, showAgent]);
 
-  // 本场环境按项目记住：换项目就换成那个项目上次选的环境；
+  // 本场环境按项目记住：新项目首次用 World 高斯样例起步，后续沿用项目选择；
   // 草稿刚绑上云项目时，把草稿里选的那条带过去，不让刚选完就丢。
   const environmentKey = environmentPreferenceKey(layout.id);
-  const environmentRef = useRef(environment);
-  environmentRef.current = environment;
-  const splatStateRef = useRef(splatState);
-  splatStateRef.current = splatState;
+  environmentsRef.current = environments;
   const environmentKeyRef = useRef<string | null>(null);
-  const restoredEnvironmentRef = useRef('');
   const restoreEnvironment = useCallback((value: StoredEnvironment) => {
     try {
       void startSplat(storedAholoSceneSource(value.assetId));
@@ -1133,23 +1241,27 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const previousKey = environmentKeyRef.current;
     environmentKeyRef.current = environmentKey;
     if (previousKey === environmentKey) return;
-    const carried = previousKey === 'draft' ? environmentRef.current : null;
-    const stored = readEnvironment(layout.id);
+    const carried = previousKey === 'draft' ? environmentsRef.current : [];
+    const hasPreference = hasEnvironmentPreference(layout.id);
     restoredEnvironmentRef.current = '';
-    if (stored) {
-      setEnvironment(stored);
+    if (hasPreference) {
+      const stored = readEnvironments(layout.id);
+      environmentsRef.current = stored;
+      setEnvironments(stored);
+      if (!stored.length) stopSplat();
       return;
     }
-    if (carried) {
-      writeEnvironment(layout.id, carried);
-      restoredEnvironmentRef.current = `${environmentKey}:${carried.assetId}`;
+    if (carried.length) {
+      writeEnvironments(layout.id, carried);
+      environmentsRef.current = carried;
+      setEnvironments(carried);
       return;
     }
-    const shown = splatStateRef.current;
-    const dropped = environmentRef.current;
-    setEnvironment(null);
-    // 上一个项目的环境不该继续盖在新项目的画布上。
-    if (dropped && shown.status !== 'idle' && shown.assetId === dropped.assetId) stopSplat();
+    const defaults: StoredEnvironment[] = [{ assetId: DEMO_WORLD_SCENE_ID, name: 'World 高斯空间 · 宴会厅 A', floorIndex: 0,
+      position: { x: 0, y: 0, z: 0 } }];
+    writeEnvironments(layout.id, defaults);
+    environmentsRef.current = defaults;
+    setEnvironments(defaults);
   }, [environmentKey, layout.id, stopSplat]);
   // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
   useEffect(() => {
@@ -1159,23 +1271,49 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     restoredEnvironmentRef.current = key;
     restoreEnvironment(environment);
   }, [environment, environmentKey, restoreEnvironment]);
-  const selectEnvironment = useCallback((assetId: string, name: string) => {
-    setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    const value: StoredEnvironment = { assetId, name };
-    const id = layoutStore.getState().layout.id;
-    restoredEnvironmentRef.current = `${environmentPreferenceKey(id)}:${assetId}`;
-    setEnvironment(value);
-    writeEnvironment(id, value);
-    restoreEnvironment(value);
-  }, [setView, restoreEnvironment]);
+  const removeEnvironment = useCallback((assetId: string) => {
+    const next = environmentsRef.current.filter(entry => entry.assetId !== assetId);
+    environmentsRef.current = next;
+    setEnvironments(next);
+    restoredEnvironmentRef.current = '';
+    if (next.length) writeEnvironments(layoutStore.getState().layout.id, next);
+    else {
+      clearEnvironment(layoutStore.getState().layout.id);
+      stopSplat();
+    }
+  }, [stopSplat]);
   const dropEnvironment = useCallback(() => {
-    const shown = splatStateRef.current;
-    const dropped = environmentRef.current;
+    environmentsRef.current = [];
+    setEnvironments([]);
     clearEnvironment(layoutStore.getState().layout.id);
     restoredEnvironmentRef.current = '';
-    setEnvironment(null);
-    if (dropped && shown.status !== 'idle' && shown.assetId === dropped.assetId) stopSplat();
+    stopSplat();
   }, [stopSplat]);
+  const setEnvironmentFloor = useCallback((assetId: string, floorIndex: number) => {
+    let current = environmentsRef.current;
+    let entry = current.find(value => value.assetId === assetId);
+    if (!entry) return;
+    if (current[0]?.assetId !== assetId) {
+      selectEnvironment(assetId, entry.name);
+      current = environmentsRef.current;
+      entry = current.find(value => value.assetId === assetId);
+      if (!entry) return;
+    }
+    const position = { ...(entry.position ?? ZERO_SPLAT_POSITION), y: floorElevation(layoutStore.getState().layout.floors, floorIndex) };
+    const updated = current.map(value => value.assetId === assetId ? { ...value, floorIndex, position } : value);
+    const next = [{ ...entry, floorIndex, position }, ...updated.filter(value => value.assetId !== assetId)];
+    environmentsRef.current = next;
+    setEnvironments(next);
+    writeEnvironments(layoutStore.getState().layout.id, next);
+    actions.setActiveFloorIndex(floorIndex);
+    if (current[0]?.assetId === assetId) setSplatPosition(position);
+  }, [actions, selectEnvironment, setSplatPosition]);
+  useEffect(() => {
+    if ((environment?.floorIndex ?? 0) === activeFloorIndex) return;
+    const match = environments.find(entry => (entry.floorIndex ?? 0) === activeFloorIndex);
+    if (!match) return;
+    selectEnvironment(match.assetId, match.name);
+  }, [activeFloorIndex, environment?.floorIndex, environments, selectEnvironment]);
 
   useEffect(() => {
     const focusObject = (event: Event) => {
@@ -1714,12 +1852,34 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const splatPlacement = splatState.status === 'ready'
     ? placeSplatPreview(layout, splatState.name, splatState.meters ?? null)
     : null;
-  const environmentShown = environment !== null && splatState.status === 'ready' && splatState.assetId === environment.assetId;
+  const environmentShown = environment !== null && (environment.floorIndex ?? 0) === activeFloorIndex && splatState.status === 'ready' && splatState.assetId === environment.assetId;
   const splatBanner = splatPlacement
     ? (splatShellKeptFor === splatState.assetId && splatPlacement.resize ? splatShellKeptNote(splatState.name) : splatPlacement.note)
     : null;
-  // 记住的环境是这处场地的观感层，不是一次临时预览：说明行与退出口都换说法。
+  // A selected venue is already represented by its space card and transform controls;
+  // only temporary previews and a failed shell resize need a canvas notice.
   const splatBannerText = splatBanner && environmentShown ? splatBanner.replace('环境预览：', '环境：') : splatBanner;
+  const showSplatBanner = !!splatBannerText && (!environmentShown || splatShellKeptFor === splatState.assetId);
+  const updateSplatPosition = (axis: keyof SplatPosition, value: number) => {
+    if (!Number.isFinite(value)) return;
+    const position = { ...(environment?.position ?? ZERO_SPLAT_POSITION), [axis]: value };
+    setSplatPosition(position);
+    if (!environment) return;
+    const next = [{ ...environment, position }, ...environmentsRef.current.slice(1)];
+    environmentsRef.current = next;
+    setEnvironments(next);
+    writeEnvironments(layout.id, next);
+  };
+  const setSplatTransformMode = useCallback((mode: SplatTransformMode) => {
+    setSplatTransformModeState(mode);
+    setSplatTransform(mode);
+    if (mode !== 'off') setView(current => ({ ...current, selectMode: false, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false }));
+  }, [setSplatTransform, setView]);
+  useEffect(() => {
+    if (environment) return;
+    setSplatTransformModeState('off');
+    setSplatTransform('off');
+  }, [environment, setSplatTransform]);
 
   const onBindProject = useCallback((projectId: string) => {
     actions.applyLayout({ ...layoutStore.getState().layout, id: projectId });
@@ -1730,6 +1890,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
     setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
     if (candidate) { setView(current => ({ ...current, view2D: false })); }
+  }, []);
+  const openAholoWorkflow = useCallback((kind: 'world' | 'recon' = 'world', prompt?: string) => {
+    noteVenueThreeIntent();
+    setSpaceWorkflow('aholo');
+    setLux3dOpenKind(current => ({ kind, nonce: (current?.nonce ?? 0) + 1, prompt: prompt ?? '' }));
+    setLeftMode('lux3d');
+    setBusinessOpen(false);
+    setSidebarCollapsed(true);
+    setSidePanel(null);
+    setAgentClosing(false);
+    setAgentCollapsed(false);
   }, []);
   const validAiPreview = aiPreview?.base === layout ? aiPreview.candidate : null;
   const previewCandidate = validAiPreview;
@@ -1781,64 +1952,57 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
-        onOpenLux3d: () => {
-          noteVenueThreeIntent();
-          setLeftMode('lux3d');
-          setBusinessOpen(false);
-          setSidebarCollapsed(true);
-          setSidePanel(null);
-          setAgentClosing(false);
-          setAgentCollapsed(false);
-        },
+        onOpenLux3d: openAholoWorkflow,
         luxToolsVisible: luxDirectVisible,
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
         </div>
-        <main data-nav={navExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${navExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px` }}>
+        <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
-              <WorkbenchBrandToggle expanded={navExpanded} active={agentPanelOpen && activeAgent === 'door'} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
+              <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
               <nav className="sc-mode-rail-primary" aria-label="总控、Bingo、空间、物料">
-                <BingoRailButton open={agentPanelOpen && activeAgent === 'bingo'} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
+                <BingoRailButton open={isLaneOpen('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
                 <button
                   type="button"
                   ref={spaceEntryRef}
-                  className={`sc-rail-tool sc-rail-disc${agentPanelOpen && activeAgent === 'space' ? ' is-active' : ''}`}
-                  aria-pressed={agentPanelOpen && activeAgent === 'space'}
-                  aria-expanded={agentPanelOpen && activeAgent === 'space'}
+                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('space') ? ' is-active' : ''}`}
+                  aria-pressed={isLaneOpen('space')}
+                  aria-expanded={isLaneOpen('space')}
                   aria-controls="agent-panel"
                   aria-label="空间"
                   data-tip="空间"
                   onClick={() => toggleAgent('space')}
                 >
                   <RailAvatar form="cube" size={28} />
-                  <RailLaneDot lane="space" open={agentPanelOpen && activeAgent === 'space'}/>
+                  <RailLaneDot lane="space" open={isLaneOpen('space')}/>
                 </button>
                 <button
                   type="button"
                   ref={toolsEntryRef}
-                  className={`sc-rail-tool sc-rail-disc${agentPanelOpen && activeAgent === 'material' ? ' is-active' : ''}`}
-                  aria-pressed={agentPanelOpen && activeAgent === 'material'}
-                  aria-expanded={agentPanelOpen && activeAgent === 'material'}
+                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('material') ? ' is-active' : ''}`}
+                  aria-pressed={isLaneOpen('material')}
+                  aria-expanded={isLaneOpen('material')}
                   aria-controls="agent-panel"
                   aria-label="物料"
                   data-tip="物料"
                   onClick={() => toggleAgent('material')}
                 >
                   <RailAvatar form="pyramid" size={28} />
-                  <RailLaneDot lane="material" open={agentPanelOpen && activeAgent === 'material'}/>
+                  <RailLaneDot lane="material" open={isLaneOpen('material')}/>
                 </button>
               </nav>
             </div>
+            <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
               {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
-              <CloudPanel controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
@@ -1849,7 +2013,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </nav><button type="button" className="sc-left-close sc-icon-button" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={20}/></button></div>
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
-          {agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onRegisterNew={run => { spaceNewRef.current = run; }} environment={{ preview: splatState, current: environment, onSelect: selectEnvironment, onClear: dropEnvironment, onShowVector: stopSplat }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
+          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -1875,7 +2040,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           {sidePanel === 'venue' && <VenueLibraryPanel onClose={closeSidePanel} />}
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
-          <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${planHome ? ' is-plan-home' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
+          <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
             if (workbenchMode !== 'layout' || !pendingCatalog || !(event.target instanceof HTMLCanvasElement)) return;
             event.preventDefault(); event.stopPropagation();
             const point = view.view2D ? clientToWorld2D(event.clientX,event.clientY) : worldPositionFromClient(event.clientX,event.clientY);
@@ -1969,6 +2134,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             />
             <MapVenueOverlay onHangDemoEnvironment={hangDemoEnvironment} onReconUpload={luxDirectVisible ? preset => {
               noteVenueThreeIntent();
+              setSpaceWorkflow('aholo');
               setAholoReconPreset(preset);
               setLeftMode('lux3d'); setBusinessOpen(false); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false);
             } : undefined}/>
@@ -1988,13 +2154,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
               <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
-            <PlanFlow onOpenAgent={() => { setSidePanel(null); setAgentCollapsed(false); }} onHomeChange={setPlanHome}/>
             <CanvasHeading view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
-            {splatBannerText && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
+            {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
               {environmentShown
-                ? <button type="button" onClick={dropEnvironment}>不用环境</button>
+                ? <button type="button" aria-label="收起场地提示" onClick={() => setSplatShellKeptFor('')}>收起</button>
                 : <button type="button" onClick={stopSplat}>退出预览</button>}
+            </div>}
+            {environmentShown && splatDisplayMode === 'gaussian' && !view.view2D && splatTransformMode !== 'off' && <div className="sc-splat-transform-tools is-active" role="group" aria-label="高斯场景坐标与移动">
+              <div className="sc-splat-transform-heading">
+                <strong>移动整体场景</strong>
+                <div className="sc-splat-transform-modes" role="group" aria-label="移动模式">
+                  <button type="button" aria-pressed={splatTransformMode === 'gizmo'} className={splatTransformMode === 'gizmo' ? 'is-active' : ''} onClick={() => setSplatTransformMode('gizmo')}>坐标轴</button>
+                  <button type="button" aria-pressed={splatTransformMode === 'numeric'} className={splatTransformMode === 'numeric' ? 'is-active' : ''} onClick={() => setSplatTransformMode('numeric')}>无轴</button>
+                  <button type="button" aria-label="完成移动整体场景" onClick={() => setSplatTransformMode('off')}>完成</button>
+                </div>
+              </div>
+              <div className="sc-splat-transform-fields">
+                {(['x', 'y', 'z'] as const).map(axis => <label key={axis}>
+                  <span>{axis.toUpperCase()}</span>
+                  <input aria-label={`高斯场景 ${axis.toUpperCase()} 坐标，米`} type="number" step="0.1" value={(environment?.position?.[axis] ?? 0).toFixed(1)} onChange={event => updateSplatPosition(axis, event.currentTarget.valueAsNumber)}/>
+                </label>)}
+                <button type="button" onClick={() => updateSplatPosition('y', floorElevation(layout.floors, activeFloorIndex))}>对齐 {activeFloorIndex + 1}F</button>
+              </div>
+              <span className="sc-splat-transform-hint">{splatTransformMode === 'gizmo' ? '拖动红 X、绿 Y、蓝 Z 轴调整位置' : '用上方数值调整位置，场景中不显示坐标轴'}</span>
             </div>}
             {pendingCatalog && <div className="sc-local-conflict" role="status"><span>待放置：{pendingCatalog.name} · 点击场地选择有效位置</span><button type="button" onClick={()=>setPendingCatalog(null)}>取消放置</button></div>}
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
@@ -2002,7 +2185,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
+            <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

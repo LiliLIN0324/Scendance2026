@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, Lock, RotateCcw, Trash2, Unlock, X } from 'lucide-react';
+import { Copy, Lock, RotateCcw, Trash2, Unlock, X } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { layoutReducer } from '../hooks/layout-reducer';

@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';

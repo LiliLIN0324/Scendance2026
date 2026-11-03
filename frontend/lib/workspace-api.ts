@@ -1,7 +1,7 @@
 import { sceneSchema, type Scene } from '../../supabase/functions/_shared/domain';
 import type { BackendSession, Studio, ProjectSummary } from './backend-session';
 
-export interface StudioMember { userId: string; role: 'owner' | 'editor'; displayName: string }
+export interface StudioMember { userId: string; role: 'owner' | 'editor'; displayName: string; email?: string }
 
 /** 一块能改尺寸的空地：新项目的默认壳体与编辑器「空白场地」共用这三个米数，真实尺寸留给对话①。 */
 export const BLANK_VENUE_SIZE = { width: 12, depth: 8, height: 3 } as const;
@@ -39,4 +39,32 @@ export function consumeSelfAttachedProject(userId: string, projectId: string): b
   const key = `${userId}:${projectId}`;
   const marked = selfAttachedProjects.delete(key);
   return marked;
+}
+
+/** 左轨头像点开的一对一私信。消息在云端，所以换台设备接着聊还在。 */
+export interface TeamMessage {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  body: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface TeamUnread { userId: string; count: number }
+
+export function listTeamMessages(controller: BackendSession, studioId: string, peerId: string): Promise<TeamMessage[]> {
+  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages?peerId=${encodeURIComponent(peerId)}`);
+}
+
+export function sendTeamMessage(controller: BackendSession, studioId: string, input: { requestId: string; peerId: string; body: string }): Promise<TeamMessage> {
+  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages`, 'POST', input);
+}
+
+export function markTeamMessagesRead(controller: BackendSession, studioId: string, peerId: string): Promise<{ marked: number }> {
+  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages/read`, 'POST', { peerId });
+}
+
+export function listTeamUnread(controller: BackendSession, studioId: string): Promise<TeamUnread[]> {
+  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages/unread`);
 }

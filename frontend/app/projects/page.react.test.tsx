@@ -52,12 +52,11 @@ describe('workspace management', () => {
   it('locks the studio selector while a member change is pending', async () => {
     render(<ProjectsPage />); await ready(); openPanel('成员');
     let complete!: (value: unknown) => void;
-    mocks.businessRequest.mockImplementation((path, method) => method === 'PUT' ? new Promise(resolve => { complete = resolve; }) : Promise.resolve(read(path)));
-    fireEvent.change(screen.getByLabelText('成员账号 ID'), { target: { value: 'account-b' } });
-    fireEvent.change(screen.getByLabelText('成员显示名'), { target: { value: '队友' } });
+    mocks.businessRequest.mockImplementation((path, method) => method === 'POST' && String(path).endsWith('/members') ? new Promise(resolve => { complete = resolve; }) : Promise.resolve(read(path)));
+    fireEvent.change(screen.getByLabelText('成员邮箱'), { target: { value: 'teammate@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: '添加编辑成员' }));
     await waitFor(() => expect((screen.getByLabelText('工作室') as HTMLSelectElement).disabled).toBe(true));
-    expect(mocks.businessRequest).toHaveBeenCalledWith('/studios/studio-a/members/account-b', 'PUT', { displayName: '队友' });
+    expect(mocks.businessRequest).toHaveBeenCalledWith('/studios/studio-a/members', 'POST', { email: 'teammate@example.com' });
     await act(async () => complete({}));
     await waitFor(() => expect((screen.getByLabelText('工作室') as HTMLSelectElement).disabled).toBe(false));
   });

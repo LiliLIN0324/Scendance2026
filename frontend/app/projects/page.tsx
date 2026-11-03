@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, FolderOpen, Users, Settings2, Plus, ArrowUpRight } from 'lucide-react';
+import { Building2, FolderOpen, Users, Settings2, Plus, ArrowUpRight } from '@/components/solid-icons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -37,8 +37,7 @@ export default function ProjectsPage(): JSX.Element {
   const [rename, setRename] = useState('');
   const [deleteName, setDeleteName] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [memberId, setMemberId] = useState('');
-  const [memberName, setMemberName] = useState('');
+  const [memberEmail, setMemberEmail] = useState('');
   const [removing, setRemoving] = useState('');
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -87,7 +86,7 @@ export default function ProjectsPage(): JSX.Element {
 
   function selectStudio(id: string): void {
     setStudioId(id); setProjectId(''); setCreatingStudio(false); setCreatingProject(false);
-    setDeleting(false); setDeleteName(''); setRemoving(''); setMemberId(''); setMemberName(''); setNotice('');
+    setDeleting(false); setDeleteName(''); setRemoving(''); setMemberEmail(''); setNotice('');
     if (userId) rememberStudio(userId, id);
   }
   async function run(action: () => Promise<void>): Promise<void> {
@@ -133,7 +132,7 @@ export default function ProjectsPage(): JSX.Element {
           setStudios(await controller.listStudios()); selectStudio(created.id); setPanel('projects'); setStudioName('');
           studioRequest.current = { requestId: crypto.randomUUID(), name: '' }; setNotice('新工作室已创建。');
         }); }}><h1>创建工作室</h1><p>为一个团队建立独立的项目空间，你将成为负责人。</p><label>工作室名称<input required maxLength={120} value={studioName} onChange={event => setStudioName(event.target.value)} placeholder="例如：拾光活动工作室" /></label><button className="sc-studio-manager-primary" disabled={busy || !studioName.trim()}>创建并进入</button></form>
-        : !selected ? <div className="sc-studio-manager-empty"><Building2 size={24} /><h1>{loadingStudios ? '正在加载工作室…' : '从一个工作室开始'}</h1><p>创建工作室，或将你的账号 ID 提供给负责人以加入团队。</p><label>我的账号 ID<input readOnly value={cloud.user.id} onFocus={event => event.target.select()} /></label></div>
+        : !selected ? <div className="sc-studio-manager-empty"><Building2 size={24} /><h1>{loadingStudios ? '正在加载工作室…' : '从一个工作室开始'}</h1><p>创建工作室，或把你的登录邮箱告诉负责人，让对方把你加进团队。</p>{cloud.user.email ? <label className="sc-studio-manager-account">我的邮箱<input readOnly value={cloud.user.email} onFocus={event => event.target.select()} /></label> : null}</div>
         : <>
           {loadError && <p className="sc-studio-manager-notice" role="alert">{loadError}</p>}
           {!loaded && !loadError && <p role="status">正在加载「{selected.name}」的项目与成员…</p>}
@@ -156,12 +155,12 @@ export default function ProjectsPage(): JSX.Element {
           </>}
           {panel === 'members' && <>
             <div className="sc-studio-manager-heading"><div><p className="sc-studio-manager-eyebrow">{selected.name}</p><h1>成员</h1><p>这些成员可访问工作室内的全部项目。负责人管理工作室，编辑成员参与方案编辑。</p></div></div>
-            <label className="sc-studio-manager-account">我的账号 ID<input readOnly value={cloud.user.id} onFocus={event => event.target.select()} /></label>
-            {loaded && <ul className="sc-studio-manager-members">{members.map(member => <li key={member.userId}><span className="sc-studio-manager-avatar">{member.displayName.slice(0, 1)}</span><div><strong>{member.displayName}</strong><small>{member.userId === userId ? '你' : member.userId}</small></div><span>{roleLabel(member.role)}</span>{isOwner && member.role !== 'owner' && <button disabled={busy} onClick={() => setRemoving(member.userId)}>移除</button>}{removing === member.userId && <div className="sc-studio-manager-confirm"><p>移除「{member.displayName}」后，对方将无法访问本工作室的任何项目，当前编辑权也会失效。</p><button disabled={busy} onClick={() => void run(async () => { await controller.businessRequest(`/studios/${studioId}/members/${member.userId}`, 'DELETE'); setRemoving(''); setRefreshKey(key => key + 1); setNotice('成员已移除。'); })}>确认移除</button><button disabled={busy} onClick={() => setRemoving('')}>取消</button></div>}</li>)}</ul>}
-            {isOwner && <form className="sc-studio-manager-form sc-studio-manager-inset" onSubmit={event => { event.preventDefault(); if (!memberName.trim() || !memberId.trim()) return; void run(async () => {
-              await controller.businessRequest(`/studios/${studioId}/members/${encodeURIComponent(memberId.trim())}`, 'PUT', { displayName: memberName.trim() });
-              setRefreshKey(key => key + 1); setMemberId(''); setMemberName(''); setNotice('编辑成员已加入工作室，可参与全部项目。');
-            }); }}><h2>添加编辑成员</h2><p>请对方提供已注册账号的 ID。</p><label>成员账号 ID<input required value={memberId} onChange={event => setMemberId(event.target.value)} placeholder="对方提供的账号 UUID" /></label><label>成员显示名<input required maxLength={80} value={memberName} onChange={event => setMemberName(event.target.value)} /></label><button disabled={busy || !loaded || !memberId.trim() || !memberName.trim()}>添加编辑成员</button></form>}
+            {cloud.user.email && <label className="sc-studio-manager-account">我的邮箱<input readOnly value={cloud.user.email} onFocus={event => event.target.select()} /></label>}
+            {loaded && <ul className="sc-studio-manager-members">{members.map(member => <li key={member.userId}><span className="sc-studio-manager-avatar">{member.displayName.slice(0, 1)}</span><div><strong>{member.displayName}{member.userId === userId ? ' · 你' : ''}</strong><small>{member.email || ''}</small></div><span>{roleLabel(member.role)}</span>{isOwner && member.role !== 'owner' && <button disabled={busy} onClick={() => setRemoving(member.userId)}>移除</button>}{removing === member.userId && <div className="sc-studio-manager-confirm"><p>移除「{member.displayName}」后，对方将无法访问本工作室的任何项目，当前编辑权也会失效。</p><button disabled={busy} onClick={() => void run(async () => { await controller.businessRequest(`/studios/${studioId}/members/${member.userId}`, 'DELETE'); setRemoving(''); setRefreshKey(key => key + 1); setNotice('成员已移除。'); })}>确认移除</button><button disabled={busy} onClick={() => setRemoving('')}>取消</button></div>}</li>)}</ul>}
+            {isOwner && <form className="sc-studio-manager-form sc-studio-manager-inset" onSubmit={event => { event.preventDefault(); const invite = memberEmail.trim().toLowerCase(); if (!invite.includes('@')) return; void run(async () => {
+              await controller.businessRequest(`/studios/${studioId}/members`, 'POST', { email: invite });
+              setRefreshKey(key => key + 1); setMemberEmail(''); setNotice('编辑成员已加入工作室，可参与全部项目。');
+            }); }}><h2>添加编辑成员</h2><p>填写对方已注册的登录邮箱即可。</p><label>成员邮箱<input type="email" required value={memberEmail} onChange={event => setMemberEmail(event.target.value)} placeholder="对方登录用的邮箱" autoComplete="email" /></label><button disabled={busy || !loaded || !memberEmail.trim().includes('@')}>添加编辑成员</button></form>}
           </>}
           {panel === 'settings' && <>
             <div className="sc-studio-manager-heading"><div><p className="sc-studio-manager-eyebrow">{selected.name}</p><h1>工作室设置</h1><p>管理当前工作室的名称与生命周期。</p></div></div>

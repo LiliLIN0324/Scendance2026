@@ -182,7 +182,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-composer:focus-within { border-top-color: var(--wk-ink-soft); }
 .ap-composer textarea { display: block; border: 0; resize: none; font-size: var(--fs-p1); outline: none; background: transparent; box-shadow: none; min-height: 44px; }
 .ap-composer textarea:focus, .ap-composer textarea:focus-visible { outline: none; box-shadow: none; }
-.ap-composer-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.ap-composer-bar { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 .ap-composer-left { display: flex; align-items: center; gap: 6px; min-width: 0; justify-self: start; }
 .ap-composer-bar > .ap-send { justify-self: end; }
 .ap-attach { border: 0; background: transparent; border-radius: var(--r-sm); padding: 3px; display: flex; align-items: center; color: var(--wk-ink-faint); }
@@ -538,6 +538,9 @@ button.ap-ghost {
   max-height: var(--sc-card-collapsed, 216px);
   overflow: hidden;
   transition: max-height 200ms ease-out;
+}
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-aholo {
+  min-height: 0; max-height: none; overflow: visible;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded {
   max-height: min(55vh, 420px);

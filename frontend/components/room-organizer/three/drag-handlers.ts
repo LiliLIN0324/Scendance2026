@@ -58,6 +58,8 @@ export interface SceneEventHandlers {
   onItemDragCancel?: (id: string, options?: { restore?: boolean }) => void;
   onItemHover?: (info: HoverInfo | null) => void;
   onEmptyClick?: (x: number, z: number) => void;
+  /** Click an otherwise-empty point inside a visible Gaussian scene to select that venue. */
+  onEnvironmentPick?: (ray: ThreeNS.Ray) => boolean;
   /**
    * Review / delivery keep the camera, but a press must not select, drag,
    * draw or open the property panel. Review still reports a click via
@@ -231,6 +233,10 @@ export function attachDragHandlers({
     const furniture = furnitureList();
     const hits = floorPickOnly ? [] : raycaster.intersectObjects(furniture, true);
     if (hits.length === 0) {
+      // A Gaussian scan is visually behind the editable shell but should still
+      // be selectable through it when the click targets a different venue.
+      // Current-venue walls keep their normal wall-selection behavior.
+      if (!floorPickOnly && handlersRef.current.onEnvironmentPick?.(raycaster.ray)) return;
       // Walls get a chance to claim the click before we fall through to the
       // floor's onEmptyClick handler. Required for "pick a wall to
       // paint it" interaction.

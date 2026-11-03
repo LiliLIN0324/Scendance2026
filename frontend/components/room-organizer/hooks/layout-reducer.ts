@@ -186,7 +186,7 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 
 function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): LayoutState {
   // A measured outline cannot be resized by the legacy rectangle sliders.
-  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'addFloor', 'duplicateFloor'].includes(action.type)) return state;
+  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'duplicateFloor'].includes(action.type)) return state;
   let next = reduceLayout(state, action);
   if (next !== state && state.layout.backendSceneV2 && STRUCTURAL_ACTIONS.has(action.type)) {
     // Keep marker meshes on their owned wall and aligned after any edit path.

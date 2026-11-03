@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from '@/components/solid-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
   feedbackSummaryLabel,

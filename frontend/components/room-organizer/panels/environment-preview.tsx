@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeftRight, Loader2, Mountain } from 'lucide-react';
+import { ArrowLeftRight, Loader2, Mountain } from '@/components/solid-icons';
 import { useMemo } from 'react';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { DEMO_WORLD_SCENE_ID, listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
@@ -10,16 +10,16 @@ import type { StoredEnvironment } from '../lib/environment-preference';
 
 type SceneCard = { assetId: string; name: string; image?: string; sample?: boolean };
 
-/**
- * 「环境」：卡片里只有当前的一张 + 名称 + 右上角切换，不再夹带对话气泡或状态说明。
- * 带「样例」角标的是仓库样例：缩略图只是目录示意，不代表本场实拍。
- */
-export function EnvironmentPreview({ preview, current, onSelect, onClear }: {
+/** Project-level collection of scanned spaces; each scan keeps its own floor and transform. */
+export function EnvironmentPreview({ preview, current, environments, floors, onSelect, onRemove, onSetFloor, onClear }: {
   preview: SplatPreviewState;
   current: StoredEnvironment | null;
+  environments: readonly StoredEnvironment[];
+  floors: readonly Readonly<{ id: string; name: string }>[];
   onSelect(assetId: string, name: string): void;
+  onRemove(assetId: string): void;
+  onSetFloor(assetId: string, floorIndex: number): void;
   onClear(): void;
-  onShowVector?(): void;
 }): JSX.Element {
   const scenes = useMemo<SceneCard[]>(() => {
     const shipped = listShippedAssets('spz').map(asset => {
@@ -35,38 +35,48 @@ export function EnvironmentPreview({ preview, current, onSelect, onClear }: {
   const currentId = current?.assetId ?? '';
   const currentScene = scenes.find(scene => scene.assetId === currentId);
   const currentName = currentScene?.name ?? current?.name ?? '';
-  const failed = preview.status === 'error' && currentId === preview.assetId;
   return <>
     <div className="sc-space-section-head">
-      <Mountain size={15} aria-hidden="true"/><h3>环境</h3><small>本场观感</small>
-      {/* 说明与切换收成一个控件：样例说明放进切换菜单底部，不再单独占一个 ⓘ。 */}
+      <Mountain size={15} aria-hidden="true"/><h3>空间场景</h3><small>{environments.length} 个</small>
       <details className="sc-env-switch">
-        <summary aria-label="切换环境" title="切换环境"><ArrowLeftRight size={14} aria-hidden="true"/></summary>
-        <ul className="sc-env-switch-menu" role="menu" aria-label="其它环境">
-          {scenes.length === 0 && <li><span className="sc-env-switch-empty">还没有别的环境</span></li>}
-          {scenes.map(scene => <li key={scene.assetId}>
-            <button type="button" role="menuitemradio" aria-checked={scene.assetId === currentId} disabled={busy} onClick={() => onSelect(scene.assetId, scene.name)}>
-              <span className="sc-env-switch-thumb">{scene.image ? <MaterialThumb src={scene.image}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
-              <span className="sc-env-switch-name">{scene.name}</span>
-              {scene.sample && <span className="sc-env-switch-tag">样例</span>}
-            </button>
-          </li>)}
-          {current && <li className="sc-env-switch-foot"><button type="button" onClick={onClear}>不用环境</button></li>}
-          <li className="sc-env-switch-note">带「样例」的是仓库样例，不是本场实拍。</li>
+        <summary aria-label="添加高斯场景" title="添加高斯场景"><ArrowLeftRight size={14} aria-hidden="true"/></summary>
+        <ul className="sc-env-switch-menu" role="menu" aria-label="可添加的高斯场景">
+          {scenes.map(scene => {
+            const placed = environments.some(entry => entry.assetId === scene.assetId);
+            return <li key={scene.assetId}>
+              <button type="button" role="menuitemcheckbox" aria-checked={placed} onClick={() => onSelect(scene.assetId, scene.name)}>
+                <span className="sc-env-switch-thumb">{scene.image ? <MaterialThumb src={scene.image}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
+                <span className="sc-env-switch-name">{scene.name}</span>
+                {placed ? <span className="sc-env-switch-tag">已加入</span> : scene.sample && <span className="sc-env-switch-tag">样例</span>}
+              </button>
+            </li>;
+          })}
+          {environments.length > 0 && <li className="sc-env-switch-foot"><button type="button" onClick={onClear}>清空项目中的场景</button></li>}
+          <li className="sc-env-switch-note">选择场景后会加入当前项目，可再指定楼层和位置。</li>
         </ul>
       </details>
     </div>
-    {currentId
-      ? <button type="button" className="sc-env-current" disabled={busy} onClick={() => currentScene && onSelect(currentScene.assetId, currentScene.name)} aria-label={`当前环境${currentName}`} title={`${currentName}\n当前环境`}>
-        <span className="sc-env-preview">
-          {currentScene?.image ? <MaterialThumb src={currentScene.image}/> : <span className="sc-material-thumb-empty">{busy ? <Loader2 className="cr-spin" size={14}/> : '▦'}</span>}
-          {currentScene?.sample && <span className="sc-material-sample">样例</span>}
-        </span>
-        <span className="sc-env-meta">
-          <strong title={currentName}>{currentName}</strong>
-          <small>{failed ? '没挂上，换个环境再试' : currentScene?.sample ? '样例 · 非本场实拍' : '当前环境'}</small>
-        </span>
-      </button>
-      : <div className="sc-lib-empty"><Mountain size={14} aria-hidden="true"/><span>还没有选择环境</span></div>}
+    {environments.length > 0 ? <ul className="sc-env-scenes" aria-label="项目中的空间场景">
+      {environments.map((environment, index) => {
+        const scene = scenes.find(entry => entry.assetId === environment.assetId);
+        const name = scene?.name ?? environment.name;
+        const floorIndex = Math.min(floors.length - 1, environment.floorIndex ?? 0);
+        const loading = busy && preview.assetId === environment.assetId;
+        const failed = preview.status === 'error' && preview.assetId === environment.assetId;
+        return <li key={environment.assetId} className={environment.assetId === currentId ? 'is-current' : ''}>
+          <button type="button" className="sc-env-scene-pick" aria-pressed={environment.assetId === currentId} onClick={() => onSelect(environment.assetId, name)}>
+            <span className="sc-env-preview">
+              {scene?.image ? <MaterialThumb src={scene.image}/> : <span className="sc-material-thumb-empty">{loading ? <Loader2 className="cr-spin" size={14}/> : '▦'}</span>}
+            </span>
+            <span className="sc-env-meta"><strong title={name}>{name}</strong><small>{loading ? `正在加载${preview.progress === undefined ? '' : ` ${Math.round(preview.progress * 100)}%`}` : failed ? '加载失败，可重新打开' : `${floorIndex + 1}F${index === 0 ? ' · 当前' : ''}`}</small></span>
+          </button>
+          <select aria-label={`${name}所在楼层`} value={floorIndex} onChange={event => onSetFloor(environment.assetId, Number(event.currentTarget.value))}>
+            {floors.map((floor, floorNumber) => <option key={floor.id} value={floorNumber}>{floorNumber + 1}F</option>)}
+          </select>
+          <button type="button" className="sc-env-scene-remove" aria-label={`移除${name}`} title="移除场景" onClick={() => onRemove(environment.assetId)}>×</button>
+        </li>;
+      })}
+    </ul> : <div className="sc-lib-empty"><Mountain size={14} aria-hidden="true"/><span>添加一个高斯场景开始布置</span></div>}
+    {current && <div className="sc-env-active-caption" role="status">正在编辑：{currentName}</div>}
   </>;
 }

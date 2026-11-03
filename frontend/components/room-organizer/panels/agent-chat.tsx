@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSyncExternalStore } from 'react';
-import { ArrowUp, LayoutTemplate, Plus, SquareDashed } from 'lucide-react';
+import { ArrowUp, Globe, LayoutTemplate, Plus, Scan, SquareDashed } from '@/components/solid-icons';
 import { useRoomEditor } from '../contexts';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { formatArea } from '../lib/workbench-agent';
@@ -11,6 +11,7 @@ import {
   type ChatAgent,
 } from './agent-chat-store';
 import { AGENT_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
+import { MaterialCreateCell } from './material-create-cell';
 import './agent-chat.css';
 
 /**
@@ -18,15 +19,15 @@ import './agent-chat.css';
  * 总控与 Bingo 走 AgentPanel 里那场真对话（同一个 agent、同一段气泡），这里不接管。
  */
 const AGENT_CHAT_META: Record<'space' | 'material', { name: string; placeholder: string }> = {
-  space: { name: '空间', placeholder: '说一句关于场地或观感的' },
-  material: { name: '物料', placeholder: '说一句要加或要换的物料' },
+  space: { name: '空间', placeholder: '描述场地结构、图纸或环境需求' },
+  material: { name: '物料', placeholder: '描述要找、调整或生成的物件' },
 };
 
 /** 千篇一律的寒暄没意义：回答直接用画布上的真实读数拼。 */
 function readout(agent: 'space' | 'material', facts: string[]): string {
   const hint = agent === 'space'
-    ? '换场地、套模板、调观感都在空间栏左边的面板里点。'
-    : '要新物件，点上面物料卡的「我的生成」→ ＋ 生成，生成完会落到画布上。';
+    ? '空间默认走 Aholo World 世界模型生成 Gaussian 高斯场景；传统壳体与模板可随时切换。'
+    : '物料负责物件规格和模型；生成后再交给 Bingo 纳入布置方案。';
   return `${facts.join('；')}。${hint}`;
 }
 
@@ -35,7 +36,7 @@ function readout(agent: 'space' | 'material', facts: string[]): string {
  * 刻意只用 Bingo 那套 `ap-feed` / `ap-user` / `ap-turn` / `ap-composer` 结构，
  * 不另起一套输入条——四格看起来必须是同一个聊天框。
  */
-export function AgentChat({ agent, onNewSpace }: { agent: ChatAgent; onNewSpace?(mode?: 'blank' | 'template'): void }): JSX.Element | null {
+export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflow }: { agent: ChatAgent; onNewSpace?: ((mode?: 'blank' | 'template') => void) | undefined; onOpenAholo?: ((kind: 'world' | 'recon', prompt?: string) => void) | undefined; onSelectSpaceWorkflow?: ((workflow: 'aholo' | 'traditional') => void) | undefined }): JSX.Element | null {
   const threads = useSyncExternalStore(subscribeAgentChat, getAgentChatThreads, getAgentChatThreads);
   const { layout, activeFloor } = useRoomEditor();
   const [draft, setDraft] = useState('');
@@ -73,6 +74,30 @@ export function AgentChat({ agent, onNewSpace }: { agent: ChatAgent; onNewSpace?
     const text = draft.trim();
     if (!text) return;
     appendAgentChatMessage(agent, 'you', text);
+    if (agent === 'space' && onSelectSpaceWorkflow && /传统.*(空间|模板)|切换.*传统|空白.*空间/.test(text)) {
+      onSelectSpaceWorkflow('traditional');
+      appendAgentChatMessage(agent, 'agent', '已切换到传统空间流程。可直接从空白壳或场景模板开始；需要世界模型时再切回 Aholo。');
+      setDraft('');
+      return;
+    }
+    if (agent === 'space' && onSelectSpaceWorkflow && /切回.*(Aholo|世界模型|高斯)|切换到.*(Aholo|世界模型|高斯)/i.test(text)) {
+      onSelectSpaceWorkflow('aholo');
+    }
+    if (agent === 'space' && onOpenAholo) {
+      const kind = /重建|真实场地|实景|现场照片|现场视频|照片重建|视频重建/.test(text)
+        ? 'recon'
+        : /Aholo|世界模型|高斯|生成.{0,8}(空间|场景)|创建.{0,8}(空间|场景)/i.test(text)
+          ? 'world'
+          : null;
+      if (kind) {
+        onOpenAholo(kind, kind === 'world' ? text : undefined);
+        appendAgentChatMessage(agent, 'agent', kind === 'world'
+          ? '已打开 Aholo World 世界模型，并带入你的场景描述。生成后可以把 3DGS 高斯场景挂成本场环境。'
+          : '已打开 Aholo 真实场地重建。请上传现场照片或视频；地图卫星图不能作为重建素材。');
+        setDraft('');
+        return;
+      }
+    }
     appendAgentChatMessage(agent, 'agent', readout(agent, facts));
     setDraft('');
   };
@@ -106,13 +131,21 @@ export function AgentChat({ agent, onNewSpace }: { agent: ChatAgent; onNewSpace?
         </div>
         <div className="ap-composer-bar">
           <div className="ap-composer-left">
-            {agent === 'space' && onNewSpace && <details className="sc-chat-plus">
+            {agent === 'space' && (onNewSpace || onOpenAholo) && <details className="sc-chat-plus">
               <summary aria-label="更多操作" data-tip="更多"><Plus size={16} aria-hidden="true"/></summary>
               <div className="sc-chat-plus-menu">
-                <button type="button" onClick={event => { onNewSpace('blank'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><SquareDashed size={13} aria-hidden="true"/><span>新建空白空间</span></button>
-                <button type="button" onClick={event => { onNewSpace('template'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><LayoutTemplate size={13} aria-hidden="true"/><span>从模板开始</span></button>
+                {onOpenAholo && <>
+                  <button type="button" onClick={event => { onSelectSpaceWorkflow?.('aholo'); onOpenAholo('world'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><Globe size={13} aria-hidden="true"/><span>Aholo 世界模型 · 高斯空间</span></button>
+                  <button type="button" onClick={event => { onOpenAholo('recon'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><Scan size={13} aria-hidden="true"/><span>Aholo 重建真实场地</span></button>
+                </>}
+                {onNewSpace && <>
+                  <button type="button" onClick={event => { onNewSpace('blank'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><SquareDashed size={13} aria-hidden="true"/><span>传统 · 新建空白空间</span></button>
+                  <button type="button" onClick={event => { onNewSpace('template'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><LayoutTemplate size={13} aria-hidden="true"/><span>传统 · 从模板开始</span></button>
+                </>}
               </div>
             </details>}
+            {/* 物料这一格的左下角就是那颗生成物料星，和总控那格同一个入口、同一颗钮。 */}
+            {agent === 'material' && <MaterialCreateCell/>}
           </div>
           <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={18}/></button>
         </div>

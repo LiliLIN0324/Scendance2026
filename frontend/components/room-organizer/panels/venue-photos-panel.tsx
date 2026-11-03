@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { ImagePlus, Info, X } from 'lucide-react';
+import { ImagePlus, Info, X } from '@/components/solid-icons';
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDialogFocus } from '../hooks/use-dialog-focus';

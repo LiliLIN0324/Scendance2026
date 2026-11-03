@@ -4,12 +4,15 @@ import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
 import { buildWallMaterial } from './wall-patterns';
+import { floorElevation } from '../lib/storeys';
 import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
 export interface StructureShellOptions {
   /** 卫星参考底图贴上后触发重绘（与 buildRoom.onTextureLoaded 同角色）。 */
   onTextureLoaded?: () => void;
+  activeFloorIndex?: number;
+  showAllFloors?: boolean;
 }
 
 /**
@@ -216,6 +219,30 @@ export function buildStructureShell(
     });
   }
   scene.add(floorMesh);
+  // Measured environments can still receive editable upper storeys. Keep
+  // their floor slabs on the measured footprint and at the same elevations
+  // used by furniture placement, while the scanned environment remains below.
+  for (let index = 1; index < layout.floors.length; index++) {
+    const upper = layout.floors[index];
+    if (!upper) continue;
+    const slabShape = new THREE.Shape();
+    points.forEach((p, pointIndex) => {
+      const x = p.x - layout.width / 2, y = -(p.z - layout.height / 2);
+      if (!pointIndex) slabShape.moveTo(x, y); else slabShape.lineTo(x, y);
+    });
+    slabShape.closePath();
+    const slab = new THREE.Mesh<ThreeNS.ShapeGeometry, ThreeNS.Material>(
+      new THREE.ShapeGeometry(slabShape),
+      buildFloorMaterial(THREE, { pattern: upper.floorPattern ?? 'solid', color: upper.floorColor, roomWidth: layout.width, roomDepth: layout.height })
+    );
+    slab.rotation.x = -Math.PI / 2;
+    slab.position.y = floorElevation(layout.floors, index);
+    slab.receiveShadow = true;
+    slab.userData.type = 'floor';
+    slab.userData.floorIndex = index;
+    slab.visible = options.showAllFloors === true || index === (options.activeFloorIndex ?? 0);
+    scene.add(slab);
+  }
   // v2 壳体（「确认布置」后走这条分支）也要 2D 同款 0.5 m 网格：
   // 单元对齐世界原点、只铺房间范围，id-less Wall 标签让 applyWallDisplay 任何模式都保留它。
   const grid = buildGridPlane(THREE, layout.width, layout.height);

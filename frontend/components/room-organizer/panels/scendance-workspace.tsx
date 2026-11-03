@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { Box, Boxes, Camera, ChevronUp, CloudRain, Cuboid, Focus, Footprints, Grid3x3, Loader2, LogIn, Magnet, MousePointer2, Redo2, Ruler, RulerDimensionLine, Satellite, SatelliteDish, Square, SquareDashedMousePointer, Sun, Undo2, Users, X, ZoomIn, ZoomOut, type LucideIcon } from 'lucide-react';
+import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import {
@@ -20,9 +20,11 @@ import { materialCount } from '../lib/structural-layout';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
-import { PlanViewIcon } from './tool-icons';
+import { MaterialSymbol } from './material-symbol';
 import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
 import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
+import { MAX_FLOORS } from '../lib/constants';
+import type { SplatDisplayMode } from '../three/splat-preview';
 import type { BackendSession } from '@/lib/backend-session';
 import './workbench-shelf.css';
 
@@ -181,6 +183,13 @@ interface ViewToolsProps {
   /** Layout mode only: 足迹 / 人群 / 天气 / 时间 / 现场灯光 (design group 4). */
   showAtmosphere?: boolean;
   onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
+  /** Gaussian scenes can be moved as one unit, separately from item selection. */
+  sceneMoveEnabled?: boolean;
+  sceneMoveMode?: 'off' | 'gizmo' | 'numeric';
+  onSceneMoveModeChange?(mode: 'off' | 'gizmo' | 'numeric'): void;
+  environmentView?: SplatDisplayMode;
+  environmentViewEnabled?: boolean;
+  onEnvironmentViewChange?(mode: SplatDisplayMode): void;
   onApplyPreset(preset: CameraPreset): void;
   onZoom(direction: '+' | '-'): void;
   /**
@@ -219,18 +228,29 @@ const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }
  * 三个机位是同一层切换，所以右轨只放一颗钮：图标就是当前机位，点一下换下一个。
  * 顺序按「先看整体、再看平面、最后看立面」排，初次点开落到俯视这种最常用的检查机位。
  */
-const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string; Icon: LucideIcon }> = [
-  { id: 'iso', label: '整体', Icon: Cuboid },
-  { id: 'top', label: '俯视', Icon: Square },
+const ANGLE_PRESETS: ReadonlyArray<{ id: CameraPreset; label: string; symbol: string }> = [
+  { id: 'iso', label: '整体', symbol: 'explore' },
+  { id: 'top', label: '俯视', symbol: 'grid_on' },
   // 正面机位是环绕预设，不是走进去。人视这个名字会让人以为已经是第一人称。
-  { id: 'front', label: '正面机位', Icon: Focus },
+  { id: 'front', label: '正面机位', symbol: 'crop_square' },
 ];
+function MoveSceneIcon(): JSX.Element {
+  return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v18M3 12h18M12 3l-2 2m2-2 2 2m-2 16-2-2m2 2 2-2M3 12l2-2m-2 2 2 2m16-2-2-2m2 2-2 2"/>
+  </svg>;
+}
+function FloorTriangle({ direction }: { direction: 'up' | 'down' }): JSX.Element {
+  const path = direction === 'up'
+    ? 'M12 3.2c-2.6 0-5.2 4.5-7.1 8.4-1.8 3.6-.2 6.2 3.5 6.2h7.2c3.7 0 5.3-2.6 3.5-6.2C17.2 7.7 14.6 3.2 12 3.2Z'
+    : 'M12 20.8c2.6 0 5.2-4.5 7.1-8.4 1.8-3.6.2-6.2-3.5-6.2H8.4c-3.7 0-5.3 2.6-3.5 6.2 1.9 3.9 4.5 8.4 7.1 8.4Z';
+  return <svg aria-hidden="true" className={`sc-floor-triangle is-${direction}`} viewBox="0 0 24 24" focusable="false"><path d={path}/></svg>;
+}
 function presetAt(preset: CameraPreset) {
   const entry = ANGLE_PRESETS.find(candidate => candidate.id === preset) ?? ANGLE_PRESETS[0];
   return { current: entry, next: ANGLE_PRESETS[(ANGLE_PRESETS.indexOf(entry) + 1) % ANGLE_PRESETS.length] };
 }
-const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string; Icon: LucideIcon }> = [
-  { id: 'current', label: '跟随当前', Icon: Camera },
+const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string; symbol: string }> = [
+  { id: 'current', label: '跟随当前', symbol: 'photo_camera' },
   ...ANGLE_PRESETS,
 ];
 const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
@@ -240,8 +260,9 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, showAtmosphere = true, onLighting, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
-  const { view, setView, toggle, history, layout, actions } = useRoomEditor();
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
+  const sceneMoveActive = sceneMoveMode !== 'off';
+  const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -333,8 +354,8 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   const selectActive = view.selectMode && !view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode;
   const selectTip = selectActive
-    ? '选择工具 · 激活中，再点一次退出'
-    : view.selectMode ? '选择工具 · 已启用，点一下切回' : '选择工具 · 未启用，点一下启用';
+    ? '移动局部物体 · 激活中，再点一次退出'
+    : view.selectMode ? '移动局部物体 · 已启用，点一下切回' : '移动局部物体 · 未启用，点一下启用';
   const { current: angleNow, next: angleNext } = presetAt(preset);
   const choosePreset = (next: CameraPreset) => {
     setView(current => ({ ...current, view2D: false, walkthroughMode: false }));
@@ -342,9 +363,26 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     setPreset(next);
   };
   const cyclePreset = () => choosePreset(angleNext.id);
+  const changeVisibleFloor = (delta: -1 | 1) => {
+    const next = activeFloorIndex + delta;
+    if (next < 0) return;
+    if (next >= layout.floors.length) {
+      if (delta !== 1 || layout.floors.length >= MAX_FLOORS) return;
+      // The up control doubles as “add next storey” at the top of the stack.
+      // addFloor creates a clean floor and makes it active in one history step.
+      actions.addFloor();
+    } else {
+      actions.setActiveFloorIndex(next);
+    }
+    // Inspect one storey at a time and cut the roof away so the selected level
+    // stays visible from the orbit camera.
+    setView(current => ({ ...current, showAllFloors: false, wallDisplay: 'cutaway' }));
+  };
   // 选择钮是真开关：第二次点击把 selectMode 关掉（画布只浏览、不抓物料）；
   // 从别的工具点回来时，顺手把那件工具停掉。
   const toggleSelect = () => {
+    // Object movement and whole-scene movement are exclusive modes.
+    onSceneMoveModeChange?.('off');
     setView(current => {
       const active = current.selectMode && !current.measurementMode && !current.drawWallMode && !current.drawZoneMode && !current.walkthroughMode;
       return active
@@ -353,6 +391,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     });
   };
   const setWalkthrough = (on: boolean) => {
+    if (on) onSceneMoveModeChange?.('off');
     setView(current => ({
       ...current,
       walkthroughMode: on,
@@ -415,57 +454,80 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   return (
     /* 圆钮贴在画布右上角。所有工具都是一级钮，没有省略号菜单；只有导出还带一层选项弹层。 */
     <nav id="tool-column" className="sc-view-tools sc-canvas-rail sc-tool-column" aria-label="工具" onWheel={event => event.stopPropagation()}>
+      <div className="sc-floor-switcher" role="group" aria-label={`楼层切换，当前第 ${activeFloorIndex + 1} 层`}>
+        <span className="sc-floor-switcher-label" aria-hidden="true">{activeFloorIndex + 1}F</span>
+        <div className="sc-floor-switcher-arrows">
+          <button type="button" aria-label={activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} title={activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} disabled={activeFloorIndex >= MAX_FLOORS - 1 || (activeFloorIndex >= layout.floors.length - 1 && layout.floors.length >= MAX_FLOORS)} onClick={() => changeVisibleFloor(1)}>
+            <FloorTriangle direction="up"/>
+          </button>
+          <button type="button" aria-label={activeFloorIndex > 0 ? `切换到第 ${activeFloorIndex} 层` : '已经是底层'} title={activeFloorIndex > 0 ? `切换到第 ${activeFloorIndex} 层` : '已经是底层'} disabled={activeFloorIndex <= 0} onClick={() => changeVisibleFloor(-1)}>
+            <FloorTriangle direction="down"/>
+          </button>
+        </div>
+      </div>
       <ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} openRequest={shareOpenRequest} closeSignal={shareClose}/>
       <span className="sc-tool-sep" aria-hidden="true"/>
+      {sceneMoveEnabled && <button type="button" id="tool-move-scene" data-tip={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '移动整体场景 · 坐标轴 · 再点切无轴' : '移动整体场景 · 无轴 · 再点完成'} aria-label={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '切换到无轴移动' : '完成移动整体场景'} aria-pressed={sceneMoveActive} className={sceneMoveActive ? 'is-active' : ''} onClick={() => onSceneMoveModeChange?.(sceneMoveMode === 'off' ? 'gizmo' : sceneMoveMode === 'gizmo' ? 'numeric' : 'off')}>
+        <MoveSceneIcon />
+      </button>}
       <button type="button" id="tool-select" data-tip={selectTip} aria-label={selectTip} aria-pressed={selectActive} className={selectActive ? 'is-active' : view.selectMode ? '' : 'is-off'} onClick={toggleSelect}>
-        {selectActive ? <SquareDashedMousePointer size={20}/> : <MousePointer2 size={20}/>}
+        <MaterialSymbol name="near_me" />
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
-      <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
-        {view.view2D ? <PlanViewIcon size={20}/> : <Box size={20} aria-hidden="true"/>}
+      <button type="button" id="tool-2d3d" data-tip="平面 / 立体" aria-label="2D / 3D" aria-pressed={!view.view2D} className={!view.view2D ? 'is-active' : ''} onClick={() => { onSceneMoveModeChange?.('off'); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
+        <MaterialSymbol name={view.view2D ? 'view_compact' : 'view_in_ar'} />
       </button>
-      <button type="button" id="tool-walk" aria-label="第一人称走进场" aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => setWalkthrough(!view.walkthroughMode)}>
-        {view.walkthroughMode ? <LogIn size={20} aria-hidden="true"/> : <Footprints size={20} aria-hidden="true"/>}
-        <span className="sc-walk-label" aria-hidden="true">第一人称走进场</span>
+      {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
+      {environmentViewEnabled && onEnvironmentViewChange && <button type="button" id="tool-environment-view" data-tip={environmentView === 'gaussian' ? '切换到识别轮廓' : '切换到高斯实景'} aria-label={environmentView === 'gaussian' ? '切换到识别轮廓' : '切换到高斯实景'} aria-pressed={environmentView === 'footprint'} className={environmentView === 'footprint' ? 'is-active' : ''} onClick={() => {
+        const next = environmentView === 'gaussian' ? 'footprint' : 'gaussian';
+        if (next === 'footprint') onSceneMoveModeChange?.('off');
+        onEnvironmentViewChange(next);
+      }}>
+        <MaterialSymbol name="layers" />
+      </button>}
+      {environmentViewEnabled && onEnvironmentViewChange && <span className="sc-tool-sep" aria-hidden="true"/>}
+      <button type="button" id="tool-walk" data-tip={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-label={view.walkthroughMode ? '退出漫游' : '进入漫游'} aria-pressed={view.walkthroughMode} className={view.walkthroughMode ? 'is-active is-walk' : 'is-walk'} onClick={() => setWalkthrough(!view.walkthroughMode)}>
+        <MaterialSymbol name="footprint" />
+        <span className="sc-walk-label" aria-hidden="true">{view.walkthroughMode ? '退出漫游' : '第一人称走进场'}</span>
       </button>
       <button type="button" id="tool-preset" data-tip={`视角：${angleNow.label} · 点一下切到${angleNext.label}`} aria-label={`视角切换：当前${angleNow.label}，点击切到${angleNext.label}`} onClick={cyclePreset}>
-        <angleNow.Icon size={20} aria-hidden="true"/>
+        <MaterialSymbol name={angleNow.symbol} />
       </button>
       <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
-        {view.showMeasurements ? <RulerDimensionLine size={20}/> : <Ruler size={20}/>}
+        <MaterialSymbol name="straighten" />
       </button>
       <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
-        {view.snapToGrid ? <Magnet size={20} aria-hidden="true"/> : <Grid3x3 size={20} aria-hidden="true"/>}
+        <MaterialSymbol name={view.snapToGrid ? 'center_focus_strong' : 'grid_3x3'} />
       </button>
       {/* 户外/地图圈画与 isMapOutdoorLayout 同一扇门；室内矩形不显示。人关掉后 satelliteGroundRef=false 仍留着这颗钮。 */}
       {satelliteVenue && <button type="button" id="tool-satellite" data-tip={satelliteTip} aria-label={satelliteOn ? `卫星贴地，已打开。${SATELLITE_GROUND_LABEL}` : `卫星贴地，已关闭。${SATELLITE_GROUND_LABEL}`} aria-pressed={satelliteOn} aria-busy={satelliteBusy} className={satelliteOn ? 'is-active' : ''} onClick={turnSatellite}>
-        {satelliteOn ? <SatelliteDish size={20} aria-hidden="true"/> : <Satellite size={20} aria-hidden="true"/>}
+        <MaterialSymbol name="satellite" />
       </button>}
       <span className="sc-tool-sep" aria-hidden="true"/>
       <button type="button" id="tool-undo" data-tip="撤销" aria-label="撤销" disabled={layoutLocked || !history.canUndo} onClick={history.undo}>
-        <Undo2 size={20} aria-hidden="true"/>
+        <MaterialSymbol name="undo" />
       </button>
       <button type="button" id="tool-redo" data-tip="重做" aria-label="重做" disabled={layoutLocked || !history.canRedo} onClick={history.redo}>
-        <Redo2 size={20} aria-hidden="true"/>
+        <MaterialSymbol name="redo" />
       </button>
       <span className="sc-tool-sep" aria-hidden="true"/>
       <button type="button" id="tool-zoom-out" data-tip="缩小" aria-label="缩小" disabled={view.view2D} onClick={() => onZoom('-')}>
-        <ZoomOut size={20} aria-hidden="true"/>
+        <MaterialSymbol name="iconpark_zoom_out_solid" />
       </button>
       <button type="button" id="tool-zoom-in" data-tip="放大" aria-label="放大" disabled={view.view2D} onClick={() => onZoom('+')}>
-        <ZoomIn size={20} aria-hidden="true"/>
+        <MaterialSymbol name="iconpark_zoom_in_solid" />
       </button>
       {onExportImage && <div className="sc-tool-menu" ref={exportMenuRef}>
         <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <Camera size={20} aria-hidden="true"/>
+          <MaterialSymbol name="photo_camera" />
         </button>
         {exportOpen && <div id="tool-export-panel" className="sc-tool-pop sc-export-pop" role="dialog" aria-label="导出效果图选项">
           <span className="sc-export-title">导出效果图</span>
           <div className="sc-export-preview" role="img" aria-label={preview ? '效果图预览' : '效果图预览还没出来'}>
-            {previewing ? <Loader2 size={18} className="cr-spin" aria-hidden="true"/> : preview ? <img src={preview} alt=""/> : <Camera size={18} aria-hidden="true"/>}
+            {previewing ? <Loader2 size={18} className="cr-spin" aria-hidden="true"/> : preview ? <img src={preview} alt=""/> : <MaterialSymbol name="photo_camera" size={18} />}
           </div>
           <div className="sc-export-options" role="group" aria-label="导出视角">
-            {EXPORT_VIEWS.map(entry => <button type="button" key={entry.id} className={exportView === entry.id ? 'is-active' : ''} aria-label={entry.label} title={entry.label} aria-pressed={exportView === entry.id} onClick={() => setExportView(entry.id)}><entry.Icon size={16} aria-hidden="true"/></button>)}
+            {EXPORT_VIEWS.map(entry => <button type="button" key={entry.id} className={exportView === entry.id ? 'is-active' : ''} aria-label={entry.label} title={entry.label} aria-pressed={exportView === entry.id} onClick={() => setExportView(entry.id)}><MaterialSymbol name={entry.symbol} size={16} /></button>)}
           </div>
           <div className="sc-export-options" role="group" aria-label="导出画质">
             {EXPORT_SCALES.map(entry => <button type="button" key={entry.scale} className={exportScale === entry.scale ? 'is-active' : ''} aria-label={`${entry.label} ${entry.scale}×`} title={`${entry.label} ${entry.scale}×`} aria-pressed={exportScale === entry.scale} disabled={view.view2D && entry.scale !== 1} onClick={() => setExportScale(entry.scale)}>{entry.scale}×</button>)}
@@ -478,21 +540,21 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       {showAtmosphere && <span className="sc-tool-sep" aria-hidden="true"/>}
       {showAtmosphere && <div className="sc-tool-menu" ref={atmosphereMenuRef}>
         <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { quietShare(); setAtmosphereOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <Sun size={20}/>
+          <MaterialSymbol name="sunny" />
         </button>
         {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">
           <span className="sc-tool-menu-label" role="presentation">氛围</span>
-          <button type="button" id="tool-crowd" role="menuitemcheckbox" title="约 3 人从主入口沿通道走进场，避开家具。不移动相机" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><Users size={16}/><span>人群</span></button>
+          <button type="button" id="tool-crowd" role="menuitemcheckbox" title="约 3 人从主入口沿通道走进场，避开家具。不移动相机" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><MaterialSymbol name="groups" size={16}/><span>人群</span></button>
           <span className="sc-more-sep" aria-hidden="true"/>
           <button type="button" id="tool-weather" role="menuitem" aria-haspopup="listbox" aria-expanded={weatherOpen} onClick={() => { setWeatherOpen(open => !open); setTimeOpen(false); }}>
-            {view.weather === 'clear' ? <Sun size={16}/> : <CloudRain size={16}/>}
+            <MaterialSymbol name={view.weather === 'clear' ? 'sunny' : 'rainy'} size={16}/>
             <span>{WEATHER_OPTIONS.find(option => option.id === view.weather)?.label ?? '天气'}</span>
           </button>
           {weatherOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外天气选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
             {WEATHER_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={view.weather === option.id} className={view.weather === option.id ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, weather: option.id })); setWeatherOpen(false); }}>{option.label}</button>)}
           </div>}
           <button type="button" id="tool-time" role="menuitem" aria-haspopup="listbox" aria-expanded={timeOpen} onClick={() => { setTimeOpen(open => !open); setWeatherOpen(false); }}>
-            <Sun size={16}/>
+            <MaterialSymbol name="light_mode" size={16}/>
             <span>{activeTime?.title ?? '时段'}</span>
           </button>
           {timeOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外时段选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
@@ -501,7 +563,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
 
           <span className="sc-more-sep" aria-hidden="true"/>
           <button type="button" id="tool-lighting" role="menuitem" aria-haspopup="listbox" aria-expanded={lightingOpen} onClick={() => { setLightingOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); }}>
-            <Sun size={16}/>
+            <MaterialSymbol name="wb_sunny" size={16}/>
             <span>{LIGHTING_OPTIONS.find(option => option.id === (layout.backendLighting ?? 'neutral'))?.label ?? '现场灯光'}</span>
           </button>
           {lightingOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="现场灯光选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>

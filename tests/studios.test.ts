@@ -79,10 +79,13 @@ describe('studio membership business API',()=>{
     expect((await req(`${path}/${outsider}`,'PUT',{displayName:'协作者'},outsider)).status).toBe(404);
     expect((await req(`${path}/${crypto.randomUUID()}`,'PUT',{displayName:'不存在'})).status).toBe(404);
     const added=await req(`${path}/${outsider}`,'PUT',{displayName:'协作者'});
-    expect(added.status).toBe(200);expect(await added.json()).toEqual({userId:outsider,role:'editor',displayName:'协作者'});
+    expect(added.status).toBe(200);expect(await added.json()).toEqual({userId:outsider,role:'editor',displayName:'协作者',email:'outsider@example.test'});
     expect((await req(`${path}/${outsider}`,'PUT',{displayName:'新展示名'})).status).toBe(200);
+    const byEmail=await req(path,'POST',{email:'Outsider@example.test'});
+    expect(byEmail.status).toBe(201);expect(await byEmail.json()).toMatchObject({userId:outsider,role:'editor',email:'outsider@example.test'});
+    expect((await req(path,'POST',{email:'nobody@example.test'})).status).toBe(404);
     const members=await (await req(path,'GET',undefined,outsider)).json();
-    expect(members).toHaveLength(3);expect(members).toContainEqual({userId:outsider,role:'editor',displayName:'新展示名'});
+    expect(members).toHaveLength(3);expect(members).toContainEqual({userId:outsider,role:'editor',displayName:'outsider',email:'outsider@example.test'});
     for(const method of ['PUT','DELETE']) {
       const result=await req(`${path}/${owner}`,method,method==='PUT'?{displayName:'changed'}:undefined);
       expect((await result.json()).error.code).toBe('OWNER_PROTECTED');

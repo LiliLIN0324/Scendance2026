@@ -2,16 +2,18 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { submitMaterialGenerate } from '../lib/material-generate';
+import { Sparkles } from '@/components/solid-icons';
+import { addPendingMaterial, submitMaterialGenerate } from '../lib/material-generate';
 import { CREDIT_CONFIRM_LABEL } from '../lib/site-recon-mock';
 
 /**
- * 物料横条最前面的大「＋」。菜单只有两条：描述生成、拍照/图片生成。
+ * 物料生成的「＋」。菜单只有两条：描述生成、拍照/图片生成。
  * 提交走现有 Aholo 文生和图生；代理没开时只说明，不提交。
+ * variant='composer' 是底部对话左下角的那一颗；'tile' 给旧的横条物料轨。
  */
-export function MaterialCreateCell({ disabled = false, onAccepted }: {
+export function MaterialCreateCell({ disabled = false, variant = 'composer' }: {
   disabled?: boolean;
-  onAccepted?(item: { id: string; name: string }): void;
+  variant?: 'tile' | 'composer';
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'menu' | 'text' | 'image'>('menu');
@@ -55,7 +57,7 @@ export function MaterialCreateCell({ disabled = false, onAccepted }: {
     const result = await submitMaterialGenerate({ kind: 'text', prompt: text });
     setBusy(false);
     if (!result.ok) { setNote(result.message); if (!result.stub) setCredit(false); return; }
-    onAccepted?.({ id: `pending:${result.taskid}`, name: text });
+    addPendingMaterial({ id: `pending:${result.taskid}`, name: text, shipped: false });
     setPrompt('');
     setCredit(false);
     setNote(`已提交描述生成（任务 ${result.taskid}）。完成后带「生成」标签留在这个物料库。`);
@@ -69,7 +71,7 @@ export function MaterialCreateCell({ disabled = false, onAccepted }: {
     const result = await submitMaterialGenerate({ kind: 'image', imageDataUrl: imageRef.current });
     setBusy(false);
     if (!result.ok) { setNote(result.message); if (!result.stub) setCredit(false); return; }
-    onAccepted?.({ id: `pending:${result.taskid}`, name: imageName || '图片物料' });
+    addPendingMaterial({ id: `pending:${result.taskid}`, name: imageName || '图片物料', shipped: false });
     imageRef.current = '';
     setImageName('');
     setCredit(false);
@@ -94,21 +96,24 @@ export function MaterialCreateCell({ disabled = false, onAccepted }: {
     reader.readAsDataURL(file);
   }
 
-  return <div className="sc-material-tile sc-material-create">
-    <button
-      type="button"
-      ref={buttonRef}
-      className="sc-material-card sc-material-plus"
-      aria-label="生成物料"
-      aria-haspopup="menu"
-      aria-expanded={open}
-      aria-controls={open ? menuId : undefined}
-      disabled={disabled}
-      onClick={() => { setOpen(value => !value); setMode('menu'); }}
-    >
-      <span className="sc-material-plus-mark" aria-hidden="true">＋</span>
-      <span className="sc-material-name">生成</span>
-    </button>
+  const trigger = <button
+    type="button"
+    ref={buttonRef}
+    className={variant === 'composer' ? 'ap-plus-btn ap-generate-btn' : 'sc-material-card sc-material-plus'}
+    aria-label="生成物料"
+    aria-haspopup="menu"
+    aria-expanded={open}
+    aria-controls={open ? menuId : undefined}
+    disabled={disabled}
+    onClick={() => { setOpen(value => !value); setMode('menu'); }}
+  >
+    {variant === 'composer'
+      ? <Sparkles size={15} aria-hidden="true"/>
+      : <><span className="sc-material-plus-mark" aria-hidden="true">＋</span><span className="sc-material-name">生成</span></>}
+  </button>;
+
+  return <div className={variant === 'composer' ? 'ap-generate' : 'sc-material-tile sc-material-create'}>
+    {trigger}
     {open && typeof document !== 'undefined' && createPortal(<div
       ref={panelRef}
       id={menuId}

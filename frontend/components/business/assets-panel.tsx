@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, Sparkles, Star } from 'lucide-react';
+import { Boxes, Sparkles, Star } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addAssetToLayout, assetError, assetPreviewScene, validAssetSize,
   type AssetSize, type AuthorizedAsset, type CloudAsset } from '@/lib/assets-api';

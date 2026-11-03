@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, MessageSquare, ShieldCheck, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, MessageSquare, ShieldCheck, Trash2 } from '@/components/solid-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
   feedbackSummaryLabel,

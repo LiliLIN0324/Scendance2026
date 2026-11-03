@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Plus } from 'lucide-react';
+import { Check, Plus } from '@/components/solid-icons';
 import { useEffect, useId, useRef, useState } from 'react';
 
 export type ComposerMenuItem = {

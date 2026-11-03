@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Upload } from 'lucide-react';
+import { Download, Upload } from '@/components/solid-icons';
 import { downloadTextFile } from '../lib/plan-export/download';
 import { capturePlanFileName, capturePlanSheetHtml, PHOTOS_PER_STOP_HINT, type CapturePlan } from '../lib/site-capture';
 import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';

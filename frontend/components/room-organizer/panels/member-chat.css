@@ -1,0 +1,87 @@
+/*
+ * 左栏里的那场私信。气泡、输入条、发送键全部沿用 Bingo 那套 .ap-feed / .ap-user / .ap-turn /
+ * .ap-agent / .ap-composer / .ap-send，这里只补「顶上是这个人，下面是聊天」这一层的容器。
+ */
+.sc-person-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--wk-paper, #fff);
+  color: var(--wk-ink, #141416);
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+}
+/* 和左栏里那格 agent 面板同一档宽度规则，不能自己撑破列。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-right: 1px solid var(--wk-hair, #e4e4e7);
+}
+.sc-person-chat:focus { outline: none; }
+.sc-person-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 10px 10px 10px 12px;
+  border-bottom: 1px solid var(--wk-hair, #e4e4e7);
+}
+.sc-person-chat-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--fs-h3, 16px);
+  line-height: var(--lh-h3, 24px);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-person-chat-role { color: var(--wk-ink-faint, #8a8a90); font-size: var(--fs-p2, 12px); font-weight: 400; }
+.sc-person-chat-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--r-sm, 10px);
+  background: transparent;
+  color: var(--wk-ink, #141416);
+  cursor: pointer;
+}
+.sc-person-chat-close:hover { background: var(--wk-plane, #f4f5f7); }
+/* 对方那一句直接用 .ap-agent（左侧发丝竖线），自己那一句用墨底气泡，不再另标名字：顶栏已经写了是谁。 */
+.sc-person-chat-hint {
+  margin: 4px 0;
+  font-size: var(--fs-p2, 12px);
+  line-height: 1.5;
+  color: var(--wk-ink-faint, #8a8a90);
+}
+.sc-person-chat-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  margin: 0 12px 6px;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 18px);
+  color: var(--err, #B4443C);
+}
+.sc-person-chat-status button { border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+/* 谁能看见这句话，写在发送键左边那一格，不再另起一行说明。 */
+.sc-person-chat-note {
+  justify-self: start;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  color: var(--wk-ink-faint, #8a8a90);
+}

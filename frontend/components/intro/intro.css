@@ -12,7 +12,7 @@
 /* width:100% keeps the auto margins from turning the flex items shrink-to-fit. */
 .sc-intro-header, .sc-intro-content, .sc-intro-footer { width: 100%; max-width: 1280px; margin-inline: auto; }
 .sc-intro-header { display: flex; justify-content: space-between; align-items: center; min-height: clamp(70px, 9.2vh, 94px); gap: 24px; border-bottom: 1px solid var(--hair); }
-/* Brand Lockup — 对齐设计规范（详见 docs/design-spec-2026.md §2）
+/* Brand Lockup — 对齐设计规范（详见 docs/design-spec-2026.md §3）
    显式 color: var(--ink) 覆盖 .sc-intro { color: var(--green-deep) } 的祖先继承污染 */
 .sc-intro-brand { display: flex; gap: 6px; align-items: center; flex-shrink: 0; color: var(--ink); }
 .sc-intro-brand-icon { width: 29px; height: 31px; display: grid; place-items: center; flex-shrink: 0; background: transparent; color: var(--ink); }

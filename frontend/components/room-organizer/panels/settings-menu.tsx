@@ -2,9 +2,9 @@
 
 /**
  * 画布左下角「设置」：切回官网、新手指引、GitHub、隐私政策。
- * 团队与权限已经并入账户中心左栏，设置这里只留切回官网、指引、隐私。
+ * 团队与权限已经并进账户中心顶部的第三格，设置这里只留切回官网、指引、隐私。
  */
-import { BookOpen, Home, Settings, ShieldCheck } from 'lucide-react';
+import { BookOpen, Home, Settings, ShieldCheck } from '@/components/solid-icons';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 const HOME_URL = '/introduction';

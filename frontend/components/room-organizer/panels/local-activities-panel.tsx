@@ -1,6 +1,6 @@
 'use client';
 
-import { FolderOpen, RefreshCw } from 'lucide-react';
+import { FolderOpen, RefreshCw } from '@/components/solid-icons';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ensureActivityCover, saveActivityCover } from '@/lib/activity-cover';
 import { archiveLocalActivity, createLocalActivityBackup, listLocalActivities, readLocalActivity, LOCAL_ACTIVITIES_NAMESPACE,
@@ -23,6 +23,8 @@ export interface LocalActivitiesPanelProps {
   mode?: 'all' | 'create' | 'list';
   /** Save state printed on the current-activity card, replacing the block that used to sit above the list. */
   currentStatus?: string;
+  /** Archive cards the caller wants to show; the account panel hides other teams' activities. Omitted = show every archive. */
+  isActivityVisible?: (projectId: string) => boolean;
   onComplete?: (() => void) | undefined;
 }
 type Working = 'prepare' | 'archive' | 'read' | 'restore';
@@ -35,7 +37,7 @@ function archivedStamp(value: string): string {
     { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-export function LocalActivitiesPanel({ layout, actions, disabled = false, mode = 'all', currentStatus = '', onComplete }: LocalActivitiesPanelProps): JSX.Element {
+export function LocalActivitiesPanel({ layout, actions, disabled = false, mode = 'all', currentStatus = '', isActivityVisible = () => true, onComplete }: LocalActivitiesPanelProps): JSX.Element {
   const showCreate = mode !== 'list', showList = mode !== 'create';
   const [name, setName] = useState(''), [activityMode, setActivityMode] = useState<NewLocalActivityMode>('empty');
   const [activities, setActivities] = useState<LocalActivityList>({ activities: [], unreadableProjectIds: [] });
@@ -169,7 +171,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   function create(event: FormEvent): void { event.preventDefault(); void switchActivity(); }
 
   // Current canvas and archives share one list: the open activity is its first card, archives follow.
-  const archives = activities.activities.filter(activity => activity.projectId !== layout.id);
+  const archives = activities.activities.filter(activity => activity.projectId !== layout.id && isActivityVisible(activity.projectId));
   // A live still always beats the cover stored when this activity was archived earlier.
   const currentStill = still && still.scope === (layout.id ?? '') ? still.dataUrl : null;
   const currentThumb = currentStill ?? activities.activities.find(activity => activity.projectId === layout.id)?.cover;

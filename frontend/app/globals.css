@@ -1,5 +1,13 @@
 @import "../components/room-organizer/plotcraft/tokens.css";
 
+@font-face {
+  font-family: "Material Symbols Rounded";
+  src: url("/fonts/material-symbols-rounded-vf.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -102,12 +110,6 @@
 body {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
-}
-
-/* 图标描边统一 1.75（docs/design-spec-2026.md §4）。CSS 覆盖 lucide 默认的 2；
-   圆头圆角沿用库默认，领域符号（plotcraft / MaterialGlyph）不带 .lucide，不受影响。 */
-.lucide {
-  stroke-width: 1.75;
 }
 
 /* ================================================================
@@ -600,7 +602,7 @@ body {
   color: var(--sc-ink); border: 0; border-bottom: 1px solid var(--sc-line);
   background: var(--sc-surface); box-shadow: none;
 }
-/* Brand Lockup — 三页统一排法（详见 docs/design-spec-2026.md §2） */
+/* Brand Lockup — 三页统一排法（详见 docs/design-spec-2026.md §3） */
 .sc-brand { display: flex; gap: 6px; align-items: center; flex-shrink: 0; color: var(--wk-ink); }
 .sc-brand-mark { width: 29px; height: 31px; display: grid; place-items: center; flex-shrink: 0; background: transparent; color: var(--wk-ink); }
 .sc-brand-cn { font-family: "PingFang SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0; line-height: 1.2; color: var(--wk-ink); }
@@ -806,6 +808,22 @@ body {
 .sc-delete-button { display: flex; justify-content: center; align-items: center; gap: 6px; color: var(--err); border: 1px solid var(--err); background: var(--paper); width: 100%; padding: 9px; margin-top: 8px; border-radius: var(--r-sm); font-size: var(--fs-cap) !important; }
 .sc-local-conflict { position: absolute; top: 60px; left: 20px; right: 20px; z-index: 32; background: var(--paper); border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); color: var(--warn); border-radius: var(--r-sm); padding: 10px 13px; display: flex; align-items: center; gap: 12px; font-size: var(--fs-p2); }
 .sc-local-conflict button { border: none; background: transparent; color: var(--wk-ink-soft); text-decoration: underline; font-size: var(--fs-p2); }
+.sc-splat-transform-tools { position: absolute; left: 18px; bottom: 18px; z-index: 31; display: grid; gap: 8px; min-width: 340px; padding: 11px 12px 9px; border: 1px solid var(--wk-hair); border-radius: 12px; background: rgba(255,255,255,.96); box-shadow: 0 5px 20px rgba(29,45,37,.14); color: var(--wk-ink); font-size: 12px; }
+.sc-splat-transform-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sc-splat-transform-heading strong { font-size: 13px; font-weight: 650; }
+.sc-splat-transform-modes { display: inline-flex; align-items: center; gap: 2px; }
+.sc-splat-transform-modes button { border: 0; padding: 3px 7px; border-radius: 5px; background: transparent; color: var(--wk-ink-soft); cursor: pointer; font-size: 12px; }
+.sc-splat-transform-modes button:hover { background: var(--wk-plane); color: var(--wk-ink); }
+.sc-splat-transform-modes button.is-active { background: var(--wk-plane); color: var(--wk-ink); font-weight: 650; }
+.sc-splat-transform-fields { display: flex; align-items: center; gap: 7px; }
+.sc-splat-transform-fields > button { min-height: 30px; padding: 0 9px; border: 1px solid var(--wk-hair); border-radius: 6px; background: #fff; color: var(--wk-ink); cursor: pointer; white-space: nowrap; }
+.sc-splat-transform-tools label { display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; }
+.sc-splat-transform-tools label:nth-of-type(1) > span { color: #c94d45; }
+.sc-splat-transform-tools label:nth-of-type(2) > span { color: #438659; }
+.sc-splat-transform-tools label:nth-of-type(3) > span { color: #4776bb; }
+.sc-splat-transform-tools input { width: 58px; height: 28px; border: 1px solid var(--wk-hair); border-radius: 5px; padding: 0 4px; color: var(--wk-ink); background: #fff; font-variant-numeric: tabular-nums; }
+.sc-splat-transform-hint { color: var(--wk-ink-soft); font-size: 11px; }
+@media (max-width: 720px) { .sc-splat-transform-tools { left: 10px; right: 68px; bottom: 10px; min-width: 0; } .sc-splat-transform-fields { flex-wrap: wrap; } .sc-splat-transform-tools input { width: min(54px, 15vw); } }
 .sc-workbench .pc-status-toasts { top: 68px !important; }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1042,6 +1060,26 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before {
   content: ""; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px;
   border-radius: 0 2px 2px 0; background: var(--wk-green);
+}
+/* 成员位：四个 bot 形体下面，圆片与「团队与权限」里的成员行同一个类，两处必然长得一样。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 0;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member {
+  display: grid; place-items: center; width: 100%; min-height: 32px; padding: 2px 0;
+  border: 0; border-radius: 0; background: transparent;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member > span.sc-settings-avatar { display: grid; }
+/* 悬停只压暗一档，不能换底色——那圈颜色是这个人的身份。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member:hover > span.sc-settings-avatar,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member:focus-visible > span.sc-settings-avatar { filter: brightness(.93); }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member.is-placeholder > span.sc-settings-avatar { color: var(--wk-ink-faint); }
+/* 未读的红数字只在真有新消息时出现，贴在圆片右上角；读完就没了。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-member-badge {
+  position: absolute; top: 1px; right: 3px; display: grid; place-items: center;
+  min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 999px; background: var(--err, #B4443C); color: #fff;
+  font-size: 10px; font-weight: 600; line-height: 1;
 }
 /* 展开：短品牌条铺满左卡当前宽度，不另写一列像素。 */
 .sc-workbench .sc-left-column > .sc-nav-brand.is-wordmark {
@@ -1371,6 +1409,30 @@ body {
 .sc-workbench .sc-tool-column .sc-tool-sep {
   display: block; width: 20px; height: 1px; background: var(--wk-hair); margin: 1px 0;
 }
+.sc-workbench .sc-tool-column > .sc-floor-switcher {
+  display: flex; align-items: center; align-self: flex-end; gap: 7px;
+  width: max-content; margin: 0; padding: 0; border: 0; background: transparent;
+}
+.sc-workbench .sc-floor-switcher-label {
+  padding: 5px 8px; border: 1px solid var(--wk-hair); border-radius: 8px;
+  background: var(--wk-paper); color: var(--wk-ink-soft); font-size: 14px; font-weight: 700; line-height: 1;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+.sc-workbench .sc-floor-switcher-arrows {
+  display: flex; flex-direction: column; align-items: center; overflow: hidden;
+  border: 1px solid #333733; border-radius: 999px; background: #383d39;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
+}
+.sc-workbench .sc-floor-switcher-arrows button {
+  display: grid; place-items: center; width: 30px; height: 25px; min-width: 30px; min-height: 25px;
+  padding: 0; border: 0; border-radius: 0; background: transparent; color: #fff; cursor: pointer;
+}
+.sc-workbench .sc-floor-triangle { display: block; width: 20px; height: 20px; overflow: visible; }
+.sc-workbench .sc-floor-triangle.is-up path { fill: #fff; }
+.sc-workbench .sc-floor-triangle.is-down path { fill: #919693; }
+.sc-workbench .sc-floor-switcher-arrows button:disabled .sc-floor-triangle.is-up path { fill: #919693; }
+.sc-workbench .sc-floor-switcher-arrows button:disabled { color: #a2a7a3; opacity: .55; cursor: not-allowed; }
+.sc-workbench .sc-floor-switcher-arrows button:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 .sc-workbench .sc-tool-column > button,
 .sc-workbench .sc-tool-column .sc-tool-menu > button {
   position: relative;

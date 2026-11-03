@@ -1,23 +1,42 @@
-/* 首屏贴在画布下缘，上面仍是场。墨色主动作，空闲不铺绿。画布顶不放分段。 */
+/* Bingo 冷启动：例句为主，chips 收在纠偏里。墨色主动作，空闲不铺绿。 */
+.ap-feed > .sc-plan-home { flex: none; }
 .sc-plan-home {
   background: var(--paper, #fff);
   border: 1px solid var(--wk-hair, #e4e4e7);
   border-radius: 12px;
   color: var(--wk-ink, #141416);
-}
-.sc-plan-home {
-  position: absolute;
-  left: 16px;
-  right: 72px;
-  bottom: 16px;
-  z-index: 24;
-  max-height: 38%;
-  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px 14px;
   box-sizing: border-box;
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+.sc-plan-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sc-plan-example {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--wk-hair, #e4e4e7);
+  background: var(--plane, #f4f5f7);
+  color: var(--wk-ink, #141416);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: var(--fs-c1, 13px);
+  line-height: 1.35;
+  cursor: pointer;
+}
+.sc-plan-example:hover,
+.sc-plan-example:focus-visible {
+  background: var(--wk-green-pale, #eef3ef);
+  border-color: var(--wk-green, #4a7c59);
+  outline: none;
 }
 .sc-plan-home fieldset {
   margin: 0;
@@ -69,6 +88,24 @@
   color: var(--faint, #a1a1aa);
   cursor: not-allowed;
 }
+.sc-plan-adjust {
+  align-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--wk-ink-soft, #71767e);
+  font: inherit;
+  font-size: var(--fs-cap, 12px);
+  padding: 2px 6px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sc-plan-adjust.is-open,
+.sc-plan-adjust:hover,
+.sc-plan-adjust:focus-visible {
+  color: var(--wk-ink, #141416);
+  outline: none;
+}
 .sc-plan-custom {
   display: flex;
   flex-wrap: wrap;
@@ -97,9 +134,11 @@
 }
 .sc-plan-need {
   margin: 0;
-  text-align: center;
+  text-align: left;
   color: var(--wk-ink-soft, #71767e);
   font-size: var(--fs-cap, 12px);
   line-height: 1.4;
 }
-.sc-canvas-stage.is-plan-home .sc-agent-reopen.is-orb { right: 14px; }
+.sc-plan-need.is-heard {
+  color: var(--wk-green-deep, #3a6247);
+}

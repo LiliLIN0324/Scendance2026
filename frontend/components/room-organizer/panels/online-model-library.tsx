@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { ChevronDown, ChevronUp, LayoutGrid, Loader2, Palette, Search, Sparkles, Star, Tag } from 'lucide-react';
+import { ChevronDown, ChevronUp, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
@@ -13,10 +13,10 @@ import {
   type MaterialLibraryMeta,
 } from '../lib/material-library-meta';
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
+import { usePendingMaterials } from '../lib/material-generate';
 import { filterOnlineModels, loadOnlineModels, onlineBucketLabel } from '../lib/online-models';
-import { buildFurnitureSet, FURNITURE_SETS } from '../lib/furniture-sets';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
-import { loadStyleRuns, saveStyleRun, STYLE_BUNDLES, type StyleBundle, type StyleRun } from '../lib/style-bundles';
+import { buildStyleBundleItems, findStyleBundle, loadStyleRuns, saveStyleRun, type StyleBundle, type StyleRun } from '../lib/style-bundles';
 import { MaterialCreateCell } from './material-create-cell';
 import { MaterialThumb } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
@@ -90,12 +90,10 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [attempt, setAttempt] = useState(0);
   const [meta, setMeta] = useState<MaterialLibraryMeta>(emptyMaterialLibraryMeta);
   const [generated, setGenerated] = useState<GeneratedCard[]>([]);
-  const [pending, setPending] = useState<GeneratedCard[]>([]);
+  const pending = usePendingMaterials();
   const [tagDraft, setTagDraft] = useState(false);
   const [tagName, setTagName] = useState('');
   const [tagError, setTagError] = useState('');
-  // 库这一层里的风格视图：不占第四个 tab，点一行入口在库位里切换。
-  const [styleView, setStyleView] = useState(false);
   const [styleRuns, setStyleRuns] = useState<StyleRun[]>([]);
   const [armedTag, setArmedTag] = useState('');
   const bucketRail = useRef<HTMLDivElement>(null);
@@ -257,20 +255,15 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
   };
 
-  // 一句话配一整套：位置与缩放仍走家具套的放样逻辑，风格只负责换色与说明。
+  // 再放一套：入口已挪到 Bingo；「我的生成」里仍可点历史记录重放。
   const placeStyleBundle = (bundle: StyleBundle) => {
     if (latest.current.disabled || latest.current.busy) return;
-    const set = FURNITURE_SETS.find(entry => entry.key === bundle.setKey);
-    if (!set) return;
-    const room = latest.current.roomSize;
-    const built = buildFurnitureSet(set, room ? { roomWidth: room.width, roomDepth: room.depth } : {});
-    if (built.length === 0) { setPlaceError('这个场地放不下这一套，先换大一点的场地。'); return; }
-    const items = built.map(item => (bundle.colors[item.type] ? { ...item, color: bundle.colors[item.type]! } : item));
+    const built = buildStyleBundleItems(bundle, latest.current.roomSize);
+    if (!built.ok) { setPlaceError(built.message); return; }
     const place = latest.current.onAddSet;
-    if (!place) { setPlaceError('先在空间里打开物料库，再点这一套。'); return; }
+    if (!place) { setPlaceError('先在 Bingo 里配一套，或打开物料卡再重放。'); return; }
     setPlaceError('');
-    place(items);
-    // 记录落在「我的生成」：同一套只留最新一条，不做第二份清单。
+    place(built.items);
     setStyleRuns(saveStyleRun(bundle.key, window.localStorage));
   };
 
@@ -320,7 +313,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     // 「我的生成」既放生成的单件，也放配过的整套：计数按两者之和。
     const mineCount = generatedShown.length + styleRuns.length;
     // 点哪一块就切到哪一页并展开：tabs 与素材同属一张卡，切换即看到完整内容。
-    const pickPane = (next: 'mine' | 'fav' | 'lib') => { setPane(next); setExpanded(true); if (next !== 'lib') setStyleView(false); };
+    const pickPane = (next: 'mine' | 'fav' | 'lib') => { setPane(next); setExpanded(true); };
     return <div className={`sc-lib-wrap sc-lib-shell${expanded ? ' is-expanded' : ''}`}>
       <div className="sc-lib-triad" role="tablist" aria-label="物料">
         <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'mine' ? ' is-active' : ''}`} aria-pressed={pane === 'mine'} onClick={() => pickPane('mine')}>
@@ -340,16 +333,12 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             : <ul className="sc-lib-grid">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)
           : pane === 'mine'
             ? <>
-              {/* 生成入口落在物料这张卡里：Bingo 不再承担生成，这里保留同一份生成记录与入口。 */}
-              <div className="sc-lib-create-row">
-                <MaterialCreateCell disabled={disabled} onAccepted={item => setPending(current => current.some(card => card.id === item.id) ? current : [{ id: item.id, name: item.name, shipped: false }, ...current])}/>
-                {generatedShown.length === 0 && styleRuns.length === 0 && <p className="sc-lib-empty"><Sparkles size={14} aria-hidden="true"/><span>还没有生成过</span></p>}
-              </div>
+              {generatedShown.length === 0 && styleRuns.length === 0 && <p className="sc-lib-empty"><Sparkles size={14} aria-hidden="true"/><span>还没有生成过</span></p>}
               {generatedShown.length > 0 && <ul className="sc-lib-grid">{generatedShown.map(card => generatedTile(card, true))}</ul>}
-              {/* 配过的整套也记在这里：一行一套，点一下再放一次。 */}
+              {/* Bingo 配过的整套记在这里：一行一套，点一下再放一次。 */}
               {styleRuns.length > 0 && <ul className="sc-lib-style-list" aria-label="配过的风格套">
                 {styleRuns.map(run => {
-                  const bundle = STYLE_BUNDLES.find(entry => entry.key === run.style);
+                  const bundle = findStyleBundle(run.style, window.localStorage);
                   if (!bundle) return null;
                   return <li className="sc-lib-style-row" key={run.style}>
                     <button type="button" className="sc-lib-style-btn" disabled={disabled || busy !== null} onClick={() => placeStyleBundle(bundle)} aria-label={`再放一套${bundle.name}`} title={`${bundle.name}\n点一下再放一套`}>
@@ -360,24 +349,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
                 })}
               </ul>}
             </>
-
             : <>
-            {/* 库页里的一行入口：风格不另起第四块，点开就在这一层换成成套建议。 */}
-            <button type="button" className="sc-lib-style-entry" aria-pressed={styleView} onClick={() => setStyleView(current => !current)}>
-              <Palette size={13} aria-hidden="true"/><span>按风格配一套</span><small>{STYLE_BUNDLES.length} 套</small>
-              {styleView ? <ChevronUp size={13} aria-hidden="true"/> : <ChevronDown size={13} aria-hidden="true"/>}
-            </button>
-            {styleView
-              ? <ul className="sc-lib-style-list" aria-label="风格套">
-                {STYLE_BUNDLES.map(bundle => <li className="sc-lib-style-row" key={bundle.key}>
-                  <button type="button" className="sc-lib-style-btn" disabled={disabled || busy !== null} onClick={() => placeStyleBundle(bundle)} aria-label={`按${bundle.name}配一套`} title={`${bundle.name}\n${bundle.note}`}>
-                    {styleThumb(bundle)}
-                    <span className="sc-lib-style-body"><strong>{bundle.name}</strong><small>{bundle.note}</small></span>
-                  </button>
-                </li>)}
-              </ul>
-              : <>
-            {/* 库不再套「常用素材」这一层：直接按类目分组，加载更多只做一行轻提示。 */}
+            {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。 */}
             {(query.trim() || bucket) && <div className="sc-lib-tools">
               <div className="sc-lib-chips" role="group" aria-label="物料分类">
                 {chip('', '全部', 0, LayoutGrid, false)}
@@ -397,7 +370,6 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             </ul>
             {groups.every(group => group.models.length === 0) && generatedShown.length === 0 && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>没有匹配的模型</span></p>}
             {filtered.length > shown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
-              </>}
             {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
             {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
           </>}
@@ -434,7 +406,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
     {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
     <div ref={cards.setRef} onKeyDown={cards.onKeyDown} className="sc-material-rail" role="group" aria-label="线上模型" tabIndex={0}>
-      <MaterialCreateCell disabled={disabled} onAccepted={item => setPending(current => current.some(card => card.id === item.id) ? current : [{ id: item.id, name: item.name, shipped: false }, ...current])}/>
+      <MaterialCreateCell disabled={disabled} variant="tile"/>
       {shown.length === 0 && generatedShown.length === 0 && <p className="sc-muted sc-material-empty">{bucket.startsWith('tag:') ? '还没有物料挂上这个标签。' : '没有匹配的模型。'}</p>}
       {shown.map(model => {
         const name = onlineModelDisplayName(model);

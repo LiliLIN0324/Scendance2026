@@ -12,10 +12,17 @@ export type SplatMeters = Readonly<{ width: number; depth: number; height: numbe
  */
 export type SplatWalkBounds = Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number; minY: number }>;
 export type SplatSource = Readonly<{ assetId: string; url: string; name: string; meters?: SplatMeters }>;
+export type SplatPosition = Readonly<{ x: number; y: number; z: number }>;
+export type SplatDisplayMode = 'gaussian' | 'footprint';
+/** Whole-scene move: gizmo shows XYZ axes; numeric keeps the panel only. */
+export type SplatTransformMode = 'off' | 'gizmo' | 'numeric';
 export type SplatLoadOptions = Readonly<{
   /** 场地最长水平边（米）：无真实尺度时的兜底——点云按它等比缩放。 */
   sizeMeters: number;
   upAxis?: SplatUpAxis;
+  /** Hide scanned splats above the active storey's ceiling (world metres). */
+  roofCutoffY?: number;
+  position?: SplatPosition;
   onProgress?(ratio: number | undefined): void;
 }>;
 export type SplatFit = Readonly<{ scale: number; position: THREE.Vector3 }>;
@@ -79,7 +86,7 @@ export function walkBoundsOf(box: THREE.Box3): SplatWalkBounds | null {
   return Object.freeze({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, minY: box.min.y });
 }
 
-export type SplatOrbit = { target: THREE.Vector3; update(): void };
+export type SplatOrbit = { target: THREE.Vector3; enabled: boolean; update(): void };
 
 /**
  * 预览机位：站在场景里、离地 1.6 m 看过去，而不是从场外看一块悬空的地板。
@@ -116,6 +123,191 @@ function sampleCenters(splat: SplatMesh, maxSamples = 20000): THREE.Vector3[] {
   return centers;
 }
 
+type FootprintLoop = Array<{ x: number; z: number }>;
+
+function footprintContains(outline: readonly { x: number; z: number }[], x: number, z: number): boolean {
+  let inside = false;
+  for (let index = 0, previous = outline.length - 1; index < outline.length; previous = index++) {
+    const a = outline[index]!, b = outline[previous]!;
+    if ((a.z > z) !== (b.z > z) && x < (b.x - a.x) * (z - a.z) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Infer the footprint by projecting the complete scanned volume vertically
+ * onto the floor plane. Using the whole volume keeps a missing floor patch
+ * from carving a false notch into the venue outline; raster closing bridges
+ * splat gaps while tracing still preserves diagonal and concave boundaries.
+ */
+function inferFloorOutline(box: THREE.Box3, projectedPoints: readonly THREE.Vector3[], cellSize = 0.25): FootprintLoop | null {
+  const size = box.getSize(new THREE.Vector3());
+  const columns = Math.ceil(size.x / cellSize);
+  const rows = Math.ceil(size.z / cellSize);
+  if (columns < 3 || rows < 3 || columns * rows > 200_000 || projectedPoints.length < 80) return null;
+  const indexOf = (x: number, z: number) => z * columns + x;
+  const mask = new Uint8Array(columns * rows);
+  for (const point of projectedPoints) {
+    const x = Math.floor((point.x - box.min.x) / cellSize);
+    const z = Math.floor((point.z - box.min.z) / cellSize);
+    if (x >= 0 && z >= 0 && x < columns && z < rows) mask[indexOf(x, z)] = 1;
+  }
+
+  // Dilate then erode with the same disk: bridge small scan gaps without
+  // systematically growing the whole footprint outward.
+  const expanded = new Uint8Array(mask.length);
+  for (let z = 0; z < rows; z++) for (let x = 0; x < columns; x++) {
+    if (!mask[indexOf(x, z)]) continue;
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      if (dx * dx + dz * dz > 5) continue;
+      const nx = x + dx, nz = z + dz;
+      if (nx >= 0 && nz >= 0 && nx < columns && nz < rows) expanded[indexOf(nx, nz)] = 1;
+    }
+  }
+  const closed = new Uint8Array(mask.length);
+  for (let z = 0; z < rows; z++) for (let x = 0; x < columns; x++) {
+    let all = true;
+    for (let dz = -2; dz <= 2 && all; dz++) for (let dx = -2; dx <= 2; dx++) {
+      if (dx * dx + dz * dz > 5) continue;
+      const nx = x + dx, nz = z + dz;
+      if (nx >= 0 && nz >= 0 && nx < columns && nz < rows && !expanded[indexOf(nx, nz)]) { all = false; break; }
+    }
+    if (all) closed[indexOf(x, z)] = 1;
+  }
+
+  // Discard isolated furniture footprints; keep the dominant connected floor region.
+  const seen = new Uint8Array(closed.length);
+  let largest: number[] = [];
+  for (let start = 0; start < closed.length; start++) {
+    if (!closed[start] || seen[start]) continue;
+    const component: number[] = [];
+    const queue = [start]; seen[start] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const current = queue[cursor]!; component.push(current);
+      const x = current % columns, z = Math.floor(current / columns);
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= columns || nz >= rows) continue;
+        const next = indexOf(nx, nz);
+        if (closed[next] && !seen[next]) { seen[next] = 1; queue.push(next); }
+      }
+    }
+    if (component.length > largest.length) largest = component;
+  }
+  if (largest.length < columns * rows * 0.03) return null;
+  const floorMask = new Uint8Array(closed.length);
+  for (const cell of largest) floorMask[cell] = 1;
+
+  // Fill enclosed holes so furniture-free floor areas remain walkable.
+  const outside = new Uint8Array(floorMask.length);
+  const queue: number[] = [];
+  const addOutside = (x: number, z: number) => {
+    const id = indexOf(x, z);
+    if (!floorMask[id] && !outside[id]) { outside[id] = 1; queue.push(id); }
+  };
+  for (let x = 0; x < columns; x++) { addOutside(x, 0); addOutside(x, rows - 1); }
+  for (let z = 0; z < rows; z++) { addOutside(0, z); addOutside(columns - 1, z); }
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const current = queue[cursor]!;
+    const x = current % columns, z = Math.floor(current / columns);
+    if (x > 0) addOutside(x - 1, z);
+    if (x + 1 < columns) addOutside(x + 1, z);
+    if (z > 0) addOutside(x, z - 1);
+    if (z + 1 < rows) addOutside(x, z + 1);
+  }
+  for (let id = 0; id < floorMask.length; id++) if (!outside[id]) floorMask[id] = 1;
+
+  // Trace the dominant component's exposed cell edges into one closed loop.
+  const edges: Array<{ a: number; b: number }> = [];
+  const vertexId = (x: number, z: number) => z * (columns + 1) + x;
+  for (let z = 0; z < rows; z++) for (let x = 0; x < columns; x++) {
+    if (!floorMask[indexOf(x, z)]) continue;
+    if (z === 0 || !floorMask[indexOf(x, z - 1)]) edges.push({ a: vertexId(x, z), b: vertexId(x + 1, z) });
+    if (x === columns - 1 || !floorMask[indexOf(x + 1, z)]) edges.push({ a: vertexId(x + 1, z), b: vertexId(x + 1, z + 1) });
+    if (z === rows - 1 || !floorMask[indexOf(x, z + 1)]) edges.push({ a: vertexId(x + 1, z + 1), b: vertexId(x, z + 1) });
+    if (x === 0 || !floorMask[indexOf(x - 1, z)]) edges.push({ a: vertexId(x, z + 1), b: vertexId(x, z) });
+  }
+  const outgoing = new Map<number, number[]>();
+  for (const edge of edges) outgoing.set(edge.a, [...(outgoing.get(edge.a) ?? []), edge.b]);
+  if (!edges.length) return null;
+  const first = edges[0]!.a;
+  const loop = [first];
+  let current = first;
+  for (let guard = 0; guard <= edges.length; guard++) {
+    const next = outgoing.get(current)?.pop();
+    if (next === undefined) return null;
+    if (next === first) break;
+    loop.push(next); current = next;
+  }
+  if (loop.length < 3 || current === first) return null;
+  // Remove collinear grid steps, then simplify the raster stair-steps into straight diagonal walls.
+  const corners = loop.filter((id, index) => {
+    const before = loop[(index + loop.length - 1) % loop.length]!;
+    const after = loop[(index + 1) % loop.length]!;
+    const ax = before % (columns + 1), az = Math.floor(before / (columns + 1));
+    const bx = id % (columns + 1), bz = Math.floor(id / (columns + 1));
+    const cx = after % (columns + 1), cz = Math.floor(after / (columns + 1));
+    return (bx - ax) * (cz - bz) !== (bz - az) * (cx - bx);
+  });
+  const points = corners.map(id => ({ x: (id % (columns + 1)) * cellSize, z: Math.floor(id / (columns + 1)) * cellSize }));
+  const pointToSegment = (point: { x: number; z: number }, a: { x: number; z: number }, b: { x: number; z: number }) => {
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const lengthSquared = dx * dx + dz * dz;
+    if (lengthSquared < EPSILON) return Math.hypot(point.x - a.x, point.z - a.z);
+    const t = THREE.MathUtils.clamp(((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSquared, 0, 1);
+    return Math.hypot(point.x - (a.x + t * dx), point.z - (a.z + t * dz));
+  };
+  // Remove scan-noise dents while retaining features larger than the local
+  // smoothing scale (about 0.4–0.8 m depending on venue size).
+  const smoothingTolerance = Math.min(0.8, Math.max(0.4, Math.max(size.x, size.z) * 0.018));
+  let changed = true;
+  while (changed && points.length > 4) {
+    changed = false;
+    for (let index = 0; index < points.length; index++) {
+      const previous = points[(index + points.length - 1) % points.length]!;
+      const current = points[index]!;
+      const next = points[(index + 1) % points.length]!;
+      if (pointToSegment(current, previous, next) <= smoothingTolerance) {
+        points.splice(index, 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return points;
+}
+
+/** Sparse scans can defeat the raster contour; fall back to the projected cloud's convex silhouette, never an AABB. */
+function projectedVolumeHull(box: THREE.Box3, projectedPoints: readonly THREE.Vector3[]): FootprintLoop | null {
+  if (projectedPoints.length < 3) return null;
+  const sortedX = projectedPoints.map(point => point.x - box.min.x).sort((a, b) => a - b);
+  const sortedZ = projectedPoints.map(point => point.z - box.min.z).sort((a, b) => a - b);
+  const low = Math.floor((projectedPoints.length - 1) * 0.002);
+  const high = Math.ceil((projectedPoints.length - 1) * 0.998);
+  const minX = sortedX[low]!, maxX = sortedX[high]!;
+  const minZ = sortedZ[low]!, maxZ = sortedZ[high]!;
+  const points = projectedPoints
+    .map(point => ({ x: point.x - box.min.x, z: point.z - box.min.z }))
+    .filter(point => point.x >= minX && point.x <= maxX && point.z >= minZ && point.z <= maxZ)
+    .sort((a, b) => a.x - b.x || a.z - b.z);
+  const cross = (origin: { x: number; z: number }, a: { x: number; z: number }, b: { x: number; z: number }) =>
+    (a.x - origin.x) * (b.z - origin.z) - (a.z - origin.z) * (b.x - origin.x);
+  const lower: Array<{ x: number; z: number }> = [];
+  for (const point of points) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, point) <= 0) lower.pop();
+    lower.push(point);
+  }
+  const upper: Array<{ x: number; z: number }> = [];
+  for (let index = points.length - 1; index >= 0; index--) {
+    const point = points[index]!;
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, point) <= 0) upper.pop();
+    upper.push(point);
+  }
+  lower.pop(); upper.pop();
+  const hull = [...lower, ...upper];
+  return hull.length >= 3 ? hull : null;
+}
+
 /**
  * 先画背景那条渲染栈，再把布置场景叠在同一次画布上：点云从此只是环境，不参与拾取，
  * 也不会被墙体剖切那种「每帧改 visible」的逻辑波及。场地壳体只在这两趟之间按原值藏起，
@@ -127,7 +319,18 @@ export function paintAsBackLayer(deps: {
   scene: THREE.Scene;
   camera: THREE.Camera;
 }): void {
-  const { renderer, back, scene, camera } = deps;
+  paintSplatLayers({ ...deps, backs: [deps.back] });
+}
+
+/** Draw each Gaussian back layer, then the shared editable layout once. */
+export function paintSplatLayers(deps: {
+  renderer: THREE.WebGLRenderer;
+  backs: readonly THREE.Scene[];
+  scene: THREE.Scene;
+  camera: THREE.Camera;
+}): void {
+  const { renderer, backs, scene, camera } = deps;
+  if (!backs.length) { renderer.render(scene, camera); return; }
   const hidden: Array<[THREE.Object3D, boolean]> = [];
   for (const child of scene.children) {
     if (child.userData.type !== ROOM_OBJECT_TAGS.Floor && child.userData.type !== ROOM_OBJECT_TAGS.Wall) continue;
@@ -137,13 +340,16 @@ export function paintAsBackLayer(deps: {
   // 天空属于背景那一层：临时挪到点云场景，免得点云没盖到的地方露出纯黑。
   const sky = scene.background;
   scene.background = null;
-  back.background = sky;
-  renderer.autoClear = true;
-  renderer.render(back, camera);
+  for (let index = 0; index < backs.length; index++) {
+    const back = backs[index]!;
+    back.background = index === 0 ? sky : null;
+    renderer.autoClear = index === 0;
+    renderer.render(back, camera);
+    back.background = null;
+  }
   renderer.autoClear = false;
   renderer.render(scene, camera);
   renderer.autoClear = true;
-  back.background = null;
   scene.background = sky;
   for (const [child, visible] of hidden) child.visible = visible;
 }
@@ -152,14 +358,29 @@ export function paintAsBackLayer(deps: {
  * 每帧用 paintAsBackLayer 把它铺在布置场景底下。相机、轨道控制器与拾取全部沿用现有的那套，
  * 所以转视角时点云和物料始终对得上，而点云本身一件都点不着。
  */
-export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invalidate(): void }) {
+export function createSplatPreview(deps: {
+  renderer: THREE.WebGLRenderer;
+  camera: THREE.PerspectiveCamera;
+  orbitControls: SplatOrbit;
+  invalidate(): void;
+  onPositionChange?(position: SplatPosition): void;
+}) {
   const sparkPromise = import('@sparkjsdev/spark');
   const splatScene = new THREE.Scene();
   let spark: SparkRenderer | null = null;
   let holder: THREE.Group | null = null;
   let mesh: SplatMesh | null = null;
+  let roofCutoff: { value: number; uniform: { value: number } } | null = null;
+  let basePosition = new THREE.Vector3();
+  const currentOffset = new THREE.Vector3();
+  let transformControls: import('three/addons/controls/TransformControls.js').TransformControls | null = null;
+  let transformHelper: THREE.Object3D | null = null;
+  let transformMode: SplatTransformMode = 'off';
+  let displayMode: SplatDisplayMode = 'gaussian';
+  let sceneVisible = true;
   // 高斯场地自己的地面（按点云实测 footprint，而不是矢量壳那 12×9 米）。
   let ground: THREE.Group | null = null;
+  let groundOutline: FootprintLoop | null = null;
   // 点云摆好之后在世界里的占位，用来把相机框进场景内。
   let bounds: THREE.Box3 | null = null;
   let savedView: Readonly<{ position: THREE.Vector3; target: THREE.Vector3 }> | null = null;
@@ -169,11 +390,23 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
   let generation = 0;
   let disposed = false;
 
+  function releaseTransformControls() {
+    if (!transformControls) return;
+    deps.orbitControls.enabled = true;
+    transformControls.detach();
+    transformControls.dispose();
+    transformHelper?.removeFromParent();
+    transformControls = null;
+    transformHelper = null;
+  }
+
   function releaseMesh() {
     holder?.removeFromParent();
     mesh?.dispose();
     holder = null;
     mesh = null;
+    roofCutoff = null;
+    transformControls?.detach();
     releaseGround();
   }
 
@@ -188,33 +421,47 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
       else material?.dispose?.();
     });
     ground = null;
+    groundOutline = null;
   }
 
-  /** 高斯场景自带的地面：贴合落位盒的 footprint，1 m 网格，只做物理参照，不参与拾取。 */
-  function buildGround(box: THREE.Box3) {
+  /** 高斯场景自带的地面：按整个扫描体积的俯视投影裁切，保留斜边与凹口。 */
+  function buildGround(box: THREE.Box3, projectedPoints: readonly THREE.Vector3[]) {
     releaseGround();
     const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
     if (!(size.x > EPSILON) || !(size.z > EPSILON)) return;
+    const outline = inferFloorOutline(box, projectedPoints) ?? projectedVolumeHull(box, projectedPoints);
+    // No rectangular bounds fallback: an unknown footprint must stay unknown
+    // instead of drawing a misleading box around the venue.
+    if (!outline) return;
     const group = new THREE.Group();
     group.userData.type = 'splat-ground';
-    const y = box.min.y + 0.002;
+    const contains = (x: number, z: number) => footprintContains(outline, x, z);
     const plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(size.x, size.z),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.05, depthWrite: false })
+      new THREE.ShapeGeometry((() => {
+        const shape = new THREE.Shape();
+        shape.moveTo(outline[0]!.x, -outline[0]!.z);
+        for (const point of outline.slice(1)) shape.lineTo(point.x, -point.z);
+        shape.closePath();
+        return shape;
+      })()),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide })
     );
     plane.rotation.x = -Math.PI / 2;
-    plane.position.set(center.x, y, center.z);
+    plane.position.set(0, 0.002, 0);
     plane.renderOrder = -1;
     group.add(plane);
-    const halfX = size.x / 2;
-    const halfZ = size.z / 2;
     const points: number[] = [];
-    for (let x = -halfX; x <= halfX + EPSILON; x += 1) {
-      points.push(center.x + x, y, center.z - halfZ, center.x + x, y, center.z + halfZ);
+    const gridStep = 1;
+    const sampleStep = 0.12;
+    for (let x = 0; x <= size.x + EPSILON; x += gridStep) {
+      for (let z = 0; z < size.z; z += sampleStep) if (contains(x, z) && contains(x, Math.min(size.z, z + sampleStep))) {
+        points.push(x, 0.004, z, x, 0.004, Math.min(size.z, z + sampleStep));
+      }
     }
-    for (let z = -halfZ; z <= halfZ + EPSILON; z += 1) {
-      points.push(center.x - halfX, y, center.z + z, center.x + halfX, y, center.z + z);
+    for (let z = 0; z <= size.z + EPSILON; z += gridStep) {
+      for (let x = 0; x < size.x; x += sampleStep) if (contains(x, z) && contains(Math.min(size.x, x + sampleStep), z)) {
+        points.push(x, 0.004, z, Math.min(size.x, x + sampleStep), 0.004, z);
+      }
     }
     const gridGeometry = new THREE.BufferGeometry();
     gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
@@ -224,7 +471,17 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     );
     grid.renderOrder = -1;
     group.add(grid);
+    const edgePoints: number[] = [];
+    for (let index = 0; index < outline.length; index++) {
+      const point = outline[index]!, next = outline[(index + 1) % outline.length]!;
+      edgePoints.push(point.x, 0.006, point.z, next.x, 0.006, next.z);
+    }
+    const edgeGeometry = new THREE.BufferGeometry();
+    edgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(edgePoints, 3));
+    group.add(new THREE.LineSegments(edgeGeometry, new THREE.LineBasicMaterial({ color: 0x665343, transparent: true, opacity: 0.88 })));
+    group.position.set(box.min.x, box.min.y, box.min.z);
     ground = group;
+    groundOutline = outline;
     splatScene.add(group);
   }
 
@@ -258,7 +515,27 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
       next.dispose();
       throw new Error('环境预览请求已过期，请重试。');
     }
-    const local = robustBox(sampleCenters(next));
+    // 3DGS scans include their real ceiling/roof. A Spark world modifier
+    // discards centers above the selected storey's ceiling in the GPU path.
+    // Keep the cutoff uniform live so changing floors never decodes the scan again.
+    const dyno = sparkModule.dyno;
+    const cutoffUniform = new dyno.DynoFloat({ key: 'storeyRoofCutoffY', value: options.roofCutoffY ?? 3 });
+    const cutModifier = dyno.dynoBlock(
+      { gsplat: dyno.Gsplat }, { gsplat: dyno.Gsplat },
+      inputs => {
+        const parts = new dyno.SplitGsplat({ gsplat: inputs.gsplat! }).outputs;
+        const opacity = dyno.select(
+          dyno.greaterThan(parts.y, cutoffUniform),
+          dyno.dynoConst('float', 0),
+          parts.opacity,
+        );
+        return { gsplat: dyno.combineGsplat({ gsplat: inputs.gsplat!, ...parts, opacity }) };
+      },
+    );
+    next.worldModifier = cutModifier;
+    roofCutoff = cutoffUniform;
+    const centers = sampleCenters(next);
+    const local = robustBox(centers);
     if (!local) {
       next.dispose();
       throw new Error('场景点云没有有效的包围盒，无法摆放。');
@@ -271,19 +548,25 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     // 点云里自带桌椅（真实米数），缩放反而会破坏与物料的比例。
     const center = rotated.getCenter(new THREE.Vector3());
     const fit = { scale: 1, position: new THREE.Vector3(-center.x, -rotated.min.y, -center.z) };
+    basePosition.copy(fit.position);
+    currentOffset.set(options.position?.x ?? 0, options.position?.y ?? 0, options.position?.z ?? 0);
     const group = new THREE.Group();
     group.scale.setScalar(fit.scale);
-    group.position.copy(fit.position);
+    group.position.copy(fit.position).add(currentOffset);
     group.add(next);
     splatScene.add(group);
     // 落位后的占位 = 旋转盒缩放再平移；相机就照它站进场内。
     bounds = new THREE.Box3(
-      rotated.min.clone().multiplyScalar(fit.scale).add(fit.position),
-      rotated.max.clone().multiplyScalar(fit.scale).add(fit.position)
+      rotated.min.clone().multiplyScalar(fit.scale).add(fit.position).add(currentOffset),
+      rotated.max.clone().multiplyScalar(fit.scale).add(fit.position).add(currentOffset)
     );
     mesh = next;
     holder = group;
-    buildGround(bounds);
+    if (transformMode === 'gizmo' && transformControls) transformControls.attach(group);
+    const projectedPoints = centers.map(point =>
+      point.clone().applyQuaternion(next.quaternion).multiplyScalar(fit.scale).add(fit.position).add(currentOffset)
+    );
+    buildGround(bounds, projectedPoints);
     // scale 1 下 bounds 就是真实米制：把实测宽深高带回去，场地校准与横幅都以它为准。
     const placed = bounds.getSize(new THREE.Vector3());
     return Object.freeze({
@@ -300,22 +583,93 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
 
   const renderFrame: SplatPaint = (renderer, scene, camera) => {
     if (!holder || !shownId) { renderer.render(scene, camera); return; }
+    if (mesh) mesh.visible = displayMode === 'gaussian';
     paintAsBackLayer({ renderer, back: splatScene, scene, camera });
   };
 
   return {
     get shownId(): string { return shownId; },
+    get renderScene(): THREE.Scene | null { return holder && shownId && sceneVisible ? splatScene : null; },
+    get worldBounds(): THREE.Box3 | null { return bounds?.clone() ?? null; },
+    pickFootprint(ray: THREE.Ray): number | null {
+      if (!ground || !groundOutline || !sceneVisible) return null;
+      const planeY = ground.position.y + 0.002;
+      const hit = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY), new THREE.Vector3());
+      if (!hit || !footprintContains(groundOutline, hit.x - ground.position.x, hit.z - ground.position.z)) return null;
+      return hit.distanceTo(ray.origin);
+    },
     async start(source: SplatSource, options: SplatLoadOptions) {
+      sceneVisible = true;
       const result = await load(source, options);
       shownId = source.assetId;
       deps.invalidate();
       return result;
     },
+    async setTransformMode(mode: SplatTransformMode) {
+      transformMode = mode;
+      const wantGizmo = mode === 'gizmo';
+      if (wantGizmo && !transformControls) {
+        const { TransformControls } = await import('three/addons/controls/TransformControls.js');
+        // The mode may have been switched off while the control module loaded.
+        if (transformMode !== 'gizmo' || disposed) return;
+        transformControls = new TransformControls(deps.camera, deps.renderer.domElement);
+        transformControls.setMode('translate');
+        transformControls.setSpace('world');
+        transformControls.setTranslationSnap(0.1);
+        transformHelper = transformControls.getHelper();
+        transformHelper.userData.type = 'splat-transform-gizmo';
+        splatScene.add(transformHelper);
+        transformControls.addEventListener('dragging-changed', event => {
+          deps.orbitControls.enabled = !event.value;
+        });
+        transformControls.addEventListener('mouseUp', () => {
+          if (!holder) return;
+          const offset = holder.position.clone().sub(basePosition);
+          const delta = offset.clone().sub(currentOffset);
+          bounds?.translate(delta);
+          ground?.position.add(delta);
+          currentOffset.copy(offset);
+          deps.onPositionChange?.({ x: Number(offset.x.toFixed(3)), y: Number(offset.y.toFixed(3)), z: Number(offset.z.toFixed(3)) });
+        });
+      }
+      if (transformControls) {
+        // Dynamic import can finish after the user has already switched away
+        // from the gizmo. Re-read the current mode instead of the stale
+        // argument so a late setup cannot re-enable the scene axes.
+        if (transformMode === 'gizmo' && holder) transformControls.attach(holder);
+        else transformControls.detach();
+      }
+      if (transformHelper) transformHelper.visible = transformMode === 'gizmo' && !!holder;
+      if (!wantGizmo) releaseTransformControls();
+      deps.invalidate();
+    },
+    setPosition(position: SplatPosition) {
+      if (!holder) return;
+      const nextOffset = new THREE.Vector3(position.x, position.y, position.z);
+      const delta = nextOffset.clone().sub(currentOffset);
+      bounds?.translate(delta);
+      ground?.position.add(delta);
+      currentOffset.copy(nextOffset);
+      holder.position.set(basePosition.x + position.x, basePosition.y + position.y, basePosition.z + position.z);
+      deps.invalidate();
+    },
+    setDisplayMode(mode: SplatDisplayMode) {
+      displayMode = mode;
+      if (mesh) mesh.visible = mode === 'gaussian';
+      deps.invalidate();
+    },
+    setVisible(visible: boolean) {
+      sceneVisible = visible;
+      deps.invalidate();
+    },
     /** 站进场景里看；第一次进预览时把原来的机位记下来，退出原样还回去。 */
     frame(camera: THREE.PerspectiveCamera, controls: SplatOrbit) {
       if (!bounds) return false;
+      return this.frameBounds(bounds, camera, controls);
+    },
+    frameBounds(frameBounds: THREE.Box3, camera: THREE.PerspectiveCamera, controls: SplatOrbit) {
       savedView ??= { position: camera.position.clone(), target: controls.target.clone() };
-      const view = frameSplatView(bounds);
+      const view = frameSplatView(frameBounds);
       camera.position.copy(view.position);
       controls.target.copy(view.target);
       controls.update();
@@ -338,6 +692,14 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
     /** 只停显示，点云还留在显存里：同一场景再点开不用重新解码。 */
     stop() {
       shownId = '';
+      displayMode = 'gaussian';
+      deps.invalidate();
+    },
+    setRoofCutoff(y: number) {
+      if (!roofCutoff || !mesh || !Number.isFinite(y)) return;
+      roofCutoff.value = y;
+      roofCutoff.uniform.value = y;
+      mesh.updateGenerator();
       deps.invalidate();
     },
     renderFrame,
@@ -348,6 +710,7 @@ export function createSplatPreview(deps: { renderer: THREE.WebGLRenderer; invali
       bounds = null;
       savedView = null;
       releaseMesh();
+      releaseTransformControls();
       spark?.dispose();
       spark = null;
     },

@@ -2,8 +2,8 @@
  * PlotCraft icon set — 1.5px stroke, currentColor, rounded caps/joins.
  * Mirrors .claude/skills/plotcraft-design/assets/icons/ with a handful of
  * additions (bed, bath, table, mirror, lock, unlock, copy, target, close,
- * delete-bin, save) authored in the same hand-drawn style. Anything outside
- * this set should fall back to lucide-react per the design system rules.
+ * delete-bin, save) authored in the same hand-drawn style. This set remains a domain-specific outline language; standard interface icons
+ * use the shared filled Material Symbols Rounded system.
  */
 
 import type { ReactNode, SVGProps } from 'react';

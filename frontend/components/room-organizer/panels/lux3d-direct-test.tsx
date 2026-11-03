@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Info } from 'lucide-react';
+import { Check, Info } from '@/components/solid-icons';
 import { DIRECT_BASE, isLux3dLocalProxy } from '../lib/aholo-assets';
 import { CLOUD_E2E_WORLD_SCENE_ID, DEMO_WORLD_SCENE_ID, listShippedAssets } from '../lib/shipped-assets';
 import {
@@ -21,21 +21,21 @@ import type { CatalogItem } from '../lib/types';
 
 const POLL_MS = 5000;
 const CAPABILITIES = {
-  world: { label: '场景生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
+  world: { label: '场景生成 · World 世界模型', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
   recon: { label: '场地重建', path: '/world-recon', storage: 'scendance:aholo-recon', id: /^[a-zA-Z0-9_-]{1,128}$/ },
 };
 type Kind = keyof typeof CAPABILITIES;
 /** 一张卡只留标题、一行交代和一张示意；长说明收进右上 info。 */
 const CARD_COPY: Record<Kind, { meta: string; thumb: string; info: string }> = {
   world: {
-    meta: '一句场景描述 → 可漫游 3DGS',
+    meta: '文字描述 → 可漫游 3DGS 高斯空间',
     thumb: '/showcase/assets/generated/scene/scendance-m3-mvp.panorama.jpg',
-    info: '走 Aholo World 文字生成：一句话交代场地气质与时间，生成结果挂进「空间 · 环境」当观感层，可永远漫游。',
+    info: '走 Aholo World 世界模型：用文字描述要创建的空间，生成可漫游的 3DGS 高斯场景，再挂入本场空间作为三维环境。',
   },
   recon: {
     meta: '现场照片 / 视频 → 真场地 3DGS',
     thumb: '/showcase/assets/generated/scene/cloud-e2e-banquet.panorama.jpg',
-    info: '主路径：地图圈画 → 采集单 → 场地重建 → 空间里的环境。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
+    info: '真实场地的另一条路径：地图圈画 → 采集单 → 场地重建 → 高斯环境预览。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
   },
 };
 type TaskDetail = { status: number; statusLabel: string; outputs: string[]; progress?: number; panoUrl?: string };
@@ -150,11 +150,11 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
       <a href={url} target="_blank" rel="noreferrer">{label(url)}</a>
     </li>)}</ul>}
     {!outputs.length && !panorama && <p className="sc-warning">Aholo 返回成功，但没有提供下载链接。</p>}
-    {world && <p className="sc-note">3DGS 场景取回后按真实尺度铺成 3D 背景（场地跟高斯对齐），只作环境观感层，不参与碰撞。</p>}
+    {world && <p className="sc-note">3DGS 高斯空间取回后按真实尺度铺进本场环境（场地跟高斯对齐）；尺寸与物料摆放由可编辑布局壳承接。</p>}
   </>;
 }
 
-function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPreviewScene }: {
+function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockRecon, creditConfirmed, onCreditConfirmed, onHangMockScene, onHistory, unresolved, onPreviewScene, initialPrompt }: {
   kind: Kind; online: boolean | null; onHistory: () => void;
   resume: { kind: Kind; taskid: string; prompt: string; startedAt: number } | null;
   /** 地图采集单带过来的这块地：名字填进场景名称，应拍数量贴在素材选择框下面。 */
@@ -169,6 +169,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   onHangMockScene?: (() => void) | undefined;
   unresolved: HistoryEntry | undefined;
   onPreviewScene?: ((source: { url: string; name?: string; taskid?: string }) => Promise<void>) | undefined;
+  initialPrompt?: { text: string; nonce: number } | undefined;
 }) {
   const config = CAPABILITIES[kind];
   const taskKey = `${config.storage}-task`;
@@ -177,7 +178,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
   const [reconQuality, setReconQuality] = useState('normal');
   const isVideoClip = (file: File) => /\.(mp4|mov|insv)$/i.test(file.name);
   const reconValid = reconFiles.length > 0 && (reconFiles.some(isVideoClip) || reconFiles.length >= 20);
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(initialPrompt?.text ?? '');
   const [name, setName] = useState('Scendance 场景测试');
   const [presetHint, setPresetHint] = useState('');
   const [taskid, setTaskid] = useState('');
@@ -213,6 +214,9 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     }
     return () => { mounted.current = false; };
   }, [kind, pendingKey, taskKey]);
+  useEffect(() => {
+    if (kind === 'world' && initialPrompt) setPrompt(initialPrompt.text);
+  }, [kind, initialPrompt?.nonce, initialPrompt?.text]);
 
   const resumed = useRef<typeof resume>(null);
   useEffect(() => {
@@ -465,7 +469,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   /** 地图采集单「去上传现场素材」带过来的一块地：直接切到场地重建并填好名字。 */
   reconPreset?: { name: string; hint: string } | null;
   /** 生成轨「场地生成」带过来的落点：nonce 变一次就切一次卡。 */
-  openKind?: { kind: Kind; nonce: number } | null;
+  openKind?: { kind: Kind; nonce: number; prompt?: string } | null;
 }) {
   const [kind, setKind] = useState<Kind>('world');
   const [visited, setVisited] = useState<Kind[]>(['world']);
@@ -540,12 +544,12 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   /** 物料生成已走独立面板；观感面板只留场地两档。 */
   const shownKinds: Kind[] = ['world', 'recon'];
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>场地观感</h2>
-      <p>这里只出场地：文字生成场景，或从采集单重建现场。物料生成在 Bingo 的「物料生成」里。观感层不进碰撞、不进落盘几何。</p></div>
+    <div className="sc-section-heading"><div><h2>Aholo 空间模型</h2>
+      <p>项目默认使用 Aholo World 世界模型生成 3DGS 高斯空间；真实场地可切换到照片/视频重建。高斯空间负责三维环境呈现，可编辑布局壳承接尺寸、碰撞与物料摆放。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
-    <p className="sc-aholo-path" role="note">主路径：地图圈画 → 采集单 → 场地重建 → 环境预览。高德只定场与出采集单；卫星不可作重建素材。</p>
+    <p className="sc-aholo-path" role="note">真实场地重建：地图圈画 → 采集单 → 现场照片/视频 → 高斯环境预览。地图只定场与出采集单；卫星不可作重建素材。</p>
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
       <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；场地重建仍可干跑挂样例。物料生成在 Bingo 的「物料生成」里。</p>
       <div className="sc-aholo-cloud-actions">
@@ -598,7 +602,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
       })}
     </div>
     {shownKinds.map(key => <section key={key} id={`aholo-panel-${key}`} aria-label={CAPABILITIES[key].label} role="region" hidden={kind !== key}>
-      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPreviewScene={onPreviewScene}
+      {visited.includes(key) && <DirectTaskPanel kind={key} online={online} resume={resume} reconPreset={reconPreset ?? null} mockRecon={mockRecon} onMockRecon={setMockRecon} creditConfirmed={creditConfirmed} onCreditConfirmed={setCreditConfirmed} onHangMockScene={onHangMockScene} onHistory={onHistory} onPreviewScene={onPreviewScene} initialPrompt={key === 'world' && openKind?.prompt !== undefined ? { text: openKind.prompt, nonce: openKind.nonce } : undefined}
         unresolved={history.find(item => item.kind === key && !TERMINAL.includes(item.status))} />}
     </section>)}
   </div>;
