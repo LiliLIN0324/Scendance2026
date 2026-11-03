@@ -196,7 +196,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     const off = render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     const hy3d = await screen.findByRole('radio', { name: /HY-3D/ }) as HTMLButtonElement;
     const aholo = screen.getByRole('radio', { name: /Aholo Lux3D/ }) as HTMLButtonElement;
-    expect(hy3d.getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(hy3d.getAttribute('aria-checked')).toBe('true'));
     expect(hy3d.disabled).toBe(false);
     expect(aholo.disabled).toBe(true);
     expect(aholo.textContent).toContain('未开通');
@@ -211,7 +211,9 @@ describe('Lux3D (Aholo) generation entry', () => {
   it('teaches the three-step flow only while Aholo is the selected model', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
-    await screen.findByRole('radio', { name: /HY-3D/ });
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Aholo Lux3D/ }).getAttribute('aria-checked')).toBe('true'));
+    expect(await screen.findByLabelText('生成教程')).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /HY-3D/ }));
     expect(screen.queryByLabelText('生成教程')).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: /Aholo Lux3D/ }));
     fireEvent.click(await screen.findByLabelText('生成教程'));
@@ -222,18 +224,19 @@ describe('Lux3D (Aholo) generation entry', () => {
     // 教程只随能力位出现，不随已退役 HY3 控件复活
     expect(screen.queryByLabelText('物料描述')).toBeNull();
   });
-  it('routes a HY-3D reference image without a provider override after choosing 图片生成', async () => {
+  it('routes a HY-3D reference image with an explicit fallback provider after choosing 图片生成', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock(), uploadGenerationReference: vi.fn().mockResolvedValue({ id: assetId }) });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.click(await screen.findByRole('button', { name: /图片生成/ }));
+    fireEvent.click(await screen.findByRole('radio', { name: /HY-3D/ }));
     const input = await screen.findByLabelText('参考图');
-    expect((screen.getByRole('button', { name: '生成物件' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '用 HY-3D 生成物件' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { files: [new File(['png'], 'venue.png', { type: 'image/png' })] } });
     await waitFor(() => expect(controller.uploadGenerationReference).toHaveBeenCalledOnce());
     fireEvent.change(screen.getByLabelText('补充描述'), { target: { value: '现场照片里的讲台' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 HY-3D 生成物件' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
-    expect(create.mock.calls[0]![2]).toEqual({ kind: 'image', referenceImageAssetId: assetId });
+    expect(create.mock.calls[0]![2]).toEqual({ kind: 'image', referenceImageAssetId: assetId, provider: 'hy3d' });
   });
   it('routes an uploaded reference image to Aholo when that model is selected and clears it after submit', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock(), uploadGenerationReference: vi.fn().mockResolvedValue({ id: assetId }) });
@@ -244,19 +247,19 @@ describe('Lux3D (Aholo) generation entry', () => {
     await waitFor(() => expect(controller.uploadGenerationReference).toHaveBeenCalledOnce());
     expect(screen.getByText(/已选参考图：venue.png/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('补充描述'), { target: { value: '现场照片里的讲台' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
     expect(create.mock.calls[0]![2]).toEqual({ kind: 'image', referenceImageAssetId: assetId, provider: 'aholo' });
     await waitFor(() => expect(screen.queryByText(/已选参考图/)).toBeNull());
   });
-  it('submits the default HY-3D choice without a vendor declaration and refreshes the task list', async () => {
+  it('submits the default Aholo choice and refreshes the task list', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(await screen.findByLabelText('物件描述'), { target: { value: '  一张白色圆桌  ' } });
-    expect(screen.getByRole('radio', { name: /HY-3D/ }).getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Aholo Lux3D/ }).getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
-    expect(create.mock.calls[0]![2]).toEqual({ kind: 'text' });
+    expect(create.mock.calls[0]![2]).toEqual({ kind: 'text', provider: 'aholo' });
     expect(create.mock.calls[0]![0]).toBe('一张白色圆桌');
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
   });
@@ -265,7 +268,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.click(await screen.findByRole('radio', { name: /Aholo Lux3D/ }));
     fireEvent.change(screen.getByLabelText('物件描述'), { target: { value: '  一张白色圆桌  ' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
     expect(create.mock.calls[0]![2]).toEqual({ kind: 'text', provider: 'aholo' });
     expect(create.mock.calls[0]![0]).toBe('一张白色圆桌');
@@ -278,7 +281,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     const aholo = screen.getByRole('radio', { name: /Aholo Lux3D/ }) as HTMLButtonElement;
     expect(aholo.disabled).toBe(true);
     expect(aholo.textContent).toContain('不支持此方式');
-    expect(screen.getByRole('radio', { name: /HY-3D/ }).getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(screen.getByRole('radio', { name: /HY-3D/ }).getAttribute('aria-checked')).toBe('true'));
   });
   it('disables 图片生成 when neither model supports it', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock({ imageToModel: false, aholoImageToModel: false }) });
@@ -290,8 +293,8 @@ describe('Lux3D (Aholo) generation entry', () => {
   it('rejects an empty prompt locally without calling the paid endpoint', async () => {
     Object.assign(controller, { getGenerationCapabilities: capabilityMock() });
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
-    await screen.findByRole('button', { name: '生成物件' });
-    expect((screen.getByRole('button', { name: '生成物件' }) as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByRole('button', { name: '用 Aholo 生成物件' });
+    expect((screen.getByRole('button', { name: '用 Aholo 生成物件' }) as HTMLButtonElement).disabled).toBe(true);
     expect(create).not.toHaveBeenCalled();
   });
   it('surfaces a provider rejection without clearing the draft prompt', async () => {
@@ -299,7 +302,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     create.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'SERVICE_NOT_CONFIGURED', status: 503 }));
     render(<GeneratedModelLibrary controller={controller} onAdd={vi.fn()}/>);
     fireEvent.change(await screen.findByLabelText('物件描述'), { target: { value: '一张白色圆桌' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成物件' }));
+    fireEvent.click(screen.getByRole('button', { name: '用 Aholo 生成物件' }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
     expect((screen.getByLabelText('物件描述') as HTMLInputElement).value).toBe('一张白色圆桌');
   });

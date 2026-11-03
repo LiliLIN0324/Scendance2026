@@ -66,7 +66,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
   const [genPending, setGenPending] = useState(false);
   const [genReference, setGenReference] = useState<{ id: string; name: string } | null>(null);
   const [mode, setMode] = useState<GenerationMode>('text');
-  const [engine, setEngine] = useState<GenerationEngine>('hy3d');
+  const [engine, setEngine] = useState<GenerationEngine>('aholo');
   const lock = useRef(false);
   const latest = useRef({ userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd });
   latest.current = { userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd };
@@ -155,8 +155,8 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     if (!engineSupports(capabilities, engine, mode)) return;
     lock.current = true; setGenPending(true); setError('');
     try {
-      // HY-3D is the server's default lane, so its choice is sent as no provider; Aholo is declared.
-      const provider = engine === 'aholo' ? { provider: 'aholo' as const } : {};
+      // Aholo is the default metered lane. HY-3D is sent explicitly so the picker fallback is not swallowed.
+      const provider = engine === 'aholo' ? { provider: 'aholo' as const } : { provider: 'hy3d' as const };
       await controller.createGenerationJob(prompt, crypto.randomUUID(), mode === 'image' && genReference
         ? { kind: 'image', referenceImageAssetId: genReference.id, ...provider }
         : { kind: 'text', ...provider });
@@ -213,7 +213,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
   };
   return <section className="sc-generated-models" aria-label="物料生成与历史模型">
     <div className="sc-generation-form" role="group" aria-label="物料生成">
-      <p className="sc-generation-intro">先选生成方式，再选模型。文字写描述，图片上传一张参考照片。</p>
+      <p className="sc-generation-intro">先选生成方式，再选模型。已开通时默认 Aholo Lux3D，HY-3D 仅作备用。文字写描述，图片上传一张参考照片。</p>
       {generationBlocked && <p className="sc-note" role="status">{generationBlocked}</p>}
       <p className="sc-generation-label">生成方式</p>
       <div className="sc-generation-modes" role="group" aria-label="生成方式">
@@ -224,7 +224,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       </div>
       <p className="sc-generation-label">模型</p>
       <div className="sc-generation-engines" role="radiogroup" aria-label="生成模型">
-        {(['hy3d', 'aholo'] as const).map(key => {
+        {(['aholo', 'hy3d'] as const).map(key => {
           const enabled = engineSupports(capabilities, key, mode);
           return <button type="button" role="radio" aria-checked={engine === key} key={key}
             className={`sc-engine${engine === key ? ' is-on' : ''}`} disabled={genPending || Boolean(generationBlocked) || !enabled}
@@ -234,7 +234,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
           </button>;
         })}
       </div>
-      {engine === 'aholo' && <AholoGuideCard surface="library" />}
+      {engine === 'aholo' && aholoConfigured && <AholoGuideCard surface="library" />}
       {capabilityState === 'ready' && !engineSupportsMode && <p className="sc-note">{engineLabel(engine)} 暂未开通{mode === 'image' ? '图片' : '文字'}生成。{modeSupports(capabilities, mode) ? '请换一个模型。' : ''}</p>}
       {mode === 'image' ? <>
         <label className="sc-field" htmlFor="generation-reference">参考图
@@ -253,7 +253,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
           onChange={event => setGenPrompt(event.target.value)} />
       </label>}
       <button type="button" className="sc-button" disabled={genPending || Boolean(generationBlocked) || !genPrompt.trim() || (mode === 'image' && !genReference) || !engineSupportsMode}
-        onClick={() => void submitGeneration()}>{genPending ? '已提交，生成中…' : '生成物件'}</button>
+        onClick={() => void submitGeneration()}>{genPending ? '已提交，生成中…' : engine === 'aholo' ? '用 Aholo 生成物件' : '用 HY-3D 生成物件'}</button>
     </div>
     <div className="sc-section-heading"><div><h2>历史模型</h2><p>已有模型与材质版本仍可使用。</p></div></div>
     {!userId ? <p className="sc-note">登录云项目后可以查看历史模型。</p> : <>

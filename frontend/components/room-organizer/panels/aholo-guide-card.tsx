@@ -12,7 +12,7 @@ const LUX_STEPS: GuideStep[] = [
 ];
 const LIBRARY_STEPS: GuideStep[] = [
   { icon: PencilLine, title: '① 描述或传图', text: '在下方输入一句话描述物件，或附一张参考图（现场照片、示意图均可，按图建模更还原）。' },
-  { icon: Timer, title: '② 云端生成', text: '点「生成物件」提交，由 Aholo Lux3D 云端生成，通常约 3-5 分钟，可先继续布置其他内容。' },
+  { icon: Timer, title: '② 云端生成', text: '点「用 Aholo 生成物件」提交，由 Aholo Lux3D 云端生成，通常约 3-5 分钟，可先继续布置其他内容。' },
   { icon: MousePointerClick, title: '③ 加入场地', text: '生成完成后在「历史模型」里点「加入场地预览」，设定摆放尺寸即可上场地；失败不会重复扣额度。' },
 ];
 const WORLD_STEPS: GuideStep[] = [
