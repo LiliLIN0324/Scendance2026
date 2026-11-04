@@ -1,0 +1,528 @@
+page {
+  height: 100%;
+  background: #0B0C0B;
+  overflow: hidden;
+}
+
+.screen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: #0B0C0B;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+
+.camera {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* camera 不吃 filter：这层 .38 黑把画面压到 brightness(.62)，pointer-events 必须 none。 */
+.dim {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.38);
+  pointer-events: none;
+}
+
+.placeholder {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: #0B0C0B;
+}
+
+.empty {
+  position: absolute;
+  top: 300px;
+  left: 24px;
+  right: 24px;
+  z-index: 3;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.empty__thumb {
+  width: 120px;
+  height: 90px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1A1B1A;
+}
+
+.empty__hint {
+  text-align: center;
+}
+
+.overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.info {
+  position: absolute;
+  left: 32px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  pointer-events: auto;
+}
+
+.cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 110rpx;
+  height: 110rpx;
+  transform: translate(-50%, -50%);
+}
+
+.cross__tl,
+.cross__tr,
+.cross__bl,
+.cross__br {
+  position: absolute;
+  width: 30rpx;
+  height: 30rpx;
+  border-color: rgba(255, 255, 255, 0.65);
+  border-style: solid;
+  border-width: 0;
+}
+
+.cross__tl {
+  top: 0;
+  left: 0;
+  border-top-width: 2rpx;
+  border-left-width: 2rpx;
+}
+
+.cross__tr {
+  top: 0;
+  right: 0;
+  border-top-width: 2rpx;
+  border-right-width: 2rpx;
+}
+
+.cross__bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 2rpx;
+  border-left-width: 2rpx;
+}
+
+.cross__br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 2rpx;
+  border-right-width: 2rpx;
+}
+
+.verdict {
+  position: absolute;
+  top: 65%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  height: 44px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--b-w1);
+  animation: verdict 1200ms ease both;
+}
+
+@keyframes verdict {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  74% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.arrow {
+  position: absolute;
+  top: 58%;
+  width: 54rpx;
+  height: 54rpx;
+  border-top: 4rpx solid rgba(255, 255, 255, 0.95);
+  border-right: 4rpx solid rgba(255, 255, 255, 0.95);
+  animation: arrow 180ms ease-out both;
+}
+
+.arrow--right {
+  right: 32rpx;
+  transform: rotate(45deg);
+}
+
+.arrow--left {
+  left: 32rpx;
+  transform: rotate(-135deg);
+}
+
+@keyframes arrow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 覆盖环：260 直径 / 24 段 / 15° / 5° 缺口 / 线宽 3 + 暗描边。 */
+.ring {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  width: 260px;
+  height: 260px;
+  margin-left: -130px;
+  margin-top: -130px;
+  border-radius: 50%;
+  transition: opacity 160ms ease-out;
+}
+
+.ring.is-pulse {
+  opacity: 0.45;
+}
+
+.ring__tick {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.ring__bar {
+  width: 22px;
+  height: 3px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.62), 0 0 10px rgba(0, 0, 0, 0.34);
+  transition: background 160ms ease-out;
+}
+
+.ring__tick.is-on .ring__bar {
+  background: var(--b-green);
+}
+
+.ring__tick.is-gap .ring__bar {
+  background: var(--b-amber);
+}
+
+/* 快门双环：外 90 / 内 66 / 描边 3 / 间距 9；按下 scale .94 内环 58。 */
+.dial {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  width: 90px;
+  height: 90px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.shutter {
+  width: 90px;
+  height: 90px;
+  box-sizing: border-box;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: var(--b-shadow-btn), inset 0 0 0 6px rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 120ms ease-out, opacity 160ms ease-out;
+}
+
+.shutter__core {
+  width: 66px;
+  height: 66px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  transition: width 120ms ease-out, height 120ms ease-out, background 160ms ease-out,
+    border-color 160ms ease-out, transform 120ms ease-out;
+}
+
+.shutter.is-down {
+  transform: scale(0.94);
+}
+
+.shutter.is-down .shutter__core {
+  width: 58px;
+  height: 58px;
+}
+
+.shutter.is-active .shutter__core {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.92);
+}
+
+.shutter.is-ready .shutter__core {
+  background: var(--b-green);
+  border-color: var(--b-green);
+}
+
+.shutter.is-busy {
+  opacity: 0.5;
+}
+
+.dial__ghost {
+  width: 90px;
+  height: 90px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+}
+
+.album {
+  position: absolute;
+  left: 48px;
+  bottom: calc(env(safe-area-inset-bottom) + 56px);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  pointer-events: auto;
+}
+
+.album.is-ghost {
+  opacity: 0.3;
+}
+
+.layers {
+  position: absolute;
+  right: 48px;
+  bottom: calc(env(safe-area-inset-bottom) + 56px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.wait {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 44px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--b-w1);
+  animation: wait 3s ease both;
+}
+
+@keyframes wait {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ⓘ 半屏：同一套玻璃 token，圆角只在顶部。 */
+.hint {
+  margin: 0 12px;
+  padding: 24px 24px calc(env(safe-area-inset-bottom) + 24px);
+  border-radius: 18px 18px 0 0;
+  border-bottom-width: 0;
+}
+
+.hint__text {
+  display: block;
+  white-space: pre-line;
+}
+
+.hint__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.hint__input {
+  flex: 1;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--b-w1);
+  font-size: 14px;
+}
+
+.hint__links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* 引导：全幅照片 + 底部玻璃卡；三点装进 28 高玻璃胶囊。 */
+.welcome {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  overflow: hidden;
+  background: #0B0C0B;
+}
+
+.welcome__bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.welcome__brand {
+  position: absolute;
+  left: 24px;
+  z-index: 3;
+}
+
+.welcome__skip {
+  position: absolute;
+  right: 24px;
+  z-index: 3;
+  padding: 6px;
+}
+
+.welcome__dots {
+  position: absolute;
+  left: 50%;
+  z-index: 3;
+  height: 28px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+.welcome__dot {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.26);
+  transition: width 160ms ease-out, background 160ms ease-out;
+}
+
+.welcome__dot.is-on {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.welcome__card {
+  position: absolute;
+  left: 24px;
+  right: 92px;
+  bottom: 76px;
+  z-index: 3;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.welcome__card--shot {
+  right: 24px;
+  bottom: auto;
+  top: 260px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.welcome__shot {
+  display: block;
+  width: 100%;
+  height: 190px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  background: #1A1B1A;
+}
+
+.welcome__card--shot .welcome__title,
+.welcome__card--shot .welcome__sub {
+  padding: 0 4px;
+}
+
+.welcome__title {
+  display: block;
+}
+
+.welcome__sub {
+  display: block;
+}
+
+.welcome__next {
+  position: absolute;
+  right: 24px;
+  bottom: 76px;
+  z-index: 3;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.welcome__cta {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 118px;
+  z-index: 3;
+}

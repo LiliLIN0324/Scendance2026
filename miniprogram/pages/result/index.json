@@ -1,0 +1,14 @@
+{
+  "navigationBarTitleText": "3D 结果",
+  "navigationBarBackgroundColor": "#0B0C0B",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#0B0C0B",
+  "usingComponents": {
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-progress": "tdesign-miniprogram/progress/progress"
+  }
+}

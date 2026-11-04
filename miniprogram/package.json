@@ -1,0 +1,9 @@
+{
+  "name": "scendance-miniprogram",
+  "private": true,
+  "type": "commonjs",
+  "description": "原生小程序骨架；UI 用 TDesign 小程序版，npm 依赖只用于生成 miniprogram_npm；commonjs 只为本地 Node 校验脚本可用。",
+  "dependencies": {
+    "tdesign-miniprogram": "^1.17.0"
+  }
+}

@@ -1,0 +1,189 @@
+/* B 景深拟物 token：数值照设计清单抄，不二次换算。 */
+page {
+  --b-green: #4A7C59;
+  --b-amber: #E8C36A;
+  --b-w1: rgba(255, 255, 255, 0.96);
+  --b-w2: rgba(255, 255, 255, 0.72);
+  --b-w3: rgba(255, 255, 255, 0.45);
+  --b-card: 18px;
+  --b-btn: 14px;
+  --b-pill: 22px;
+  --b-glass-bg: rgba(0, 0, 0, 0.42);
+  --b-glass-bg-fallback: rgba(0, 0, 0, 0.62);
+  --b-glass-line: rgba(255, 255, 255, 0.14);
+  --b-shadow-float: 0 16px 48px rgba(0, 0, 0, 0.48);
+  --b-shadow-btn: 0 8px 24px rgba(0, 0, 0, 0.38);
+  background: #0B0C0B;
+  color: var(--b-w1);
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: 28rpx;
+}
+
+/* 字号四档 / 不透明度三档：每屏只挑 ≤3 个字号、≤2 个字重。 */
+.t-cover {
+  font-size: 64rpx;
+  line-height: 1.28;
+  font-weight: 500;
+  color: var(--b-w1);
+}
+
+.t-title {
+  font-size: 48rpx;
+  line-height: 1.42;
+  font-weight: 500;
+  color: var(--b-w1);
+}
+
+.t-body {
+  font-size: 28rpx;
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--b-w2);
+}
+
+.t-aux {
+  font-size: 24rpx;
+  line-height: 1.7;
+  font-weight: 400;
+  color: var(--b-w3);
+}
+
+/* 浮层玻璃：不支持 backdrop-filter 时退化为 .62 黑底 + 顶部亮边。 */
+.b-glass {
+  background: var(--b-glass-bg-fallback);
+  border: 1px solid transparent;
+  border-top-color: var(--b-glass-line);
+  border-radius: var(--b-card);
+  box-shadow: var(--b-shadow-float);
+}
+
+.glass-on .b-glass {
+  background: var(--b-glass-bg);
+  border-color: var(--b-glass-line);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.b-pill {
+  border-radius: var(--b-pill);
+  box-shadow: var(--b-shadow-btn);
+}
+
+/* 压暗曲线：照 token 原值，封面 / 引导底部渐暗。 */
+.b-veil {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(6, 8, 6, 0.94) 0%, rgba(6, 8, 6, 0.7) 26%, rgba(6, 8, 6, 0.34) 46%, rgba(6, 8, 6, 0.04) 72%, rgba(6, 8, 6, 0) 100%);
+}
+
+.b-veil-hard {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(5, 7, 5, 0.97) 0%, rgba(5, 7, 5, 0.86) 24%, rgba(5, 7, 5, 0.52) 48%, rgba(5, 7, 5, 0.14) 74%, rgba(5, 7, 5, 0) 100%);
+}
+
+.b-top-scrim {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 260px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(6, 8, 6, 0.58) 0%, rgba(6, 8, 6, 0.26) 34%, transparent 100%);
+}
+
+/* 暗角：55% 压边，中心保持通透。 */
+.b-vig {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 140px 40px rgba(0, 0, 0, 0.55);
+}
+
+.b-vig-mid {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background: radial-gradient(118% 86% at 50% 44%, transparent 40%, rgba(3, 5, 4, 0.4) 78%, rgba(3, 5, 4, 0.64) 100%);
+}
+
+/* 细颗粒：SVG data URI，只在相机不可用 / 结果底图用。 */
+.b-noise {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='n' opacity='.55'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+.td-dark{--td-brand-color-1:#1b2f51;--td-brand-color-2:#173463;--td-brand-color-3:#143975;--td-brand-color-4:#103d88;--td-brand-color-5:#0d429a;--td-brand-color-6:#054bbe;--td-brand-color-7:#2667d4;--td-brand-color-8:#4582e6;--td-brand-color-9:#699ef5;--td-brand-color-10:#96bbf8;--td-primary-color-1:var(--td-brand-color-1);--td-primary-color-2:var(--td-brand-color-2);--td-primary-color-3:var(--td-brand-color-3);--td-primary-color-4:var(--td-brand-color-4);--td-primary-color-5:var(--td-brand-color-5);--td-primary-color-6:var(--td-brand-color-6);--td-primary-color-7:var(--td-brand-color-7);--td-primary-color-8:var(--td-brand-color-8);--td-primary-color-9:var(--td-brand-color-9);--td-primary-color-10:var(--td-brand-color-10);--td-warning-color-1:#4f2a1d;--td-warning-color-2:#582f21;--td-warning-color-3:#733c23;--td-warning-color-4:#a75d2b;--td-warning-color-5:#cf6e2d;--td-warning-color-6:#dc7633;--td-warning-color-7:#e8935c;--td-warning-color-8:#ecbf91;--td-warning-color-9:#eed7bf;--td-warning-color-10:#f3e9dc;--td-error-color-1:#472324;--td-error-color-2:#5e2a2d;--td-error-color-3:#703439;--td-error-color-4:#83383e;--td-error-color-5:#a03f46;--td-error-color-6:#c64751;--td-error-color-7:#de6670;--td-error-color-8:#ec888e;--td-error-color-9:#edb1b6;--td-error-color-10:#eeced0;--td-success-color-1:#193a2a;--td-success-color-2:#1a4230;--td-success-color-3:#17533d;--td-success-color-4:#0d7a55;--td-success-color-5:#059465;--td-success-color-6:#43af8a;--td-success-color-7:#46bf96;--td-success-color-8:#80d2b6;--td-success-color-9:#b4e1d3;--td-success-color-10:#deede8;--td-gray-color-1:#f3f3f3;--td-gray-color-2:#eee;--td-gray-color-3:#e8e8e8;--td-gray-color-4:#ddd;--td-gray-color-5:#c6c6c6;--td-gray-color-6:#a6a6a6;--td-gray-color-7:#8b8b8b;--td-gray-color-8:#777;--td-gray-color-9:#5e5e5e;--td-gray-color-10:#4b4b4b;--td-gray-color-11:#383838;--td-gray-color-12:#2c2c2c;--td-gray-color-13:#242424;--td-gray-color-14:#181818;--td-font-white-1:rgba(255, 255, 255, 0.9);--td-font-white-2:rgba(255, 255, 255, 0.55);--td-font-white-3:rgba(255, 255, 255, 0.35);--td-font-white-4:rgba(255, 255, 255, 0.22);--td-font-gray-1:rgba(0, 0, 0, 0.9);--td-font-gray-2:rgba(0, 0, 0, 0.6);--td-font-gray-3:rgba(0, 0, 0, 0.4);--td-font-gray-4:rgba(0, 0, 0, 0.26);--td-brand-color:var(--td-primary-color-8);--td-warning-color:var(--td-warning-color-5);--td-error-color:var(--td-error-color-6);--td-success-color:var(--td-success-color-5);--td-brand-color-focus:var(--td-primary-color-1);--td-brand-color-active:var(--td-primary-color-9);--td-brand-color-disabled:var(--td-primary-color-3);--td-brand-color-light:var(--td-primary-color-1);--td-brand-color-light-active:var(--td-primary-color-2);--td-warning-color-focus:var(--td-warning-color-2);--td-warning-color-active:var(--td-warning-color-4);--td-warning-color-disabled:var(--td-warning-color-3);--td-warning-color-light:var(--td-warning-color-1);--td-warning-color-light-active:var(--td-warning-color-2);--td-error-color-focus:var(--td-error-color-2);--td-error-color-active:var(--td-error-color-5);--td-error-color-disabled:var(--td-error-color-3);--td-error-color-light:var(--td-error-color-1);--td-error-color-light-active:var(--td-error-color-2);--td-success-color-focus:var(--td-success-color-2);--td-success-color-active:var(--td-success-color-4);--td-success-color-disabled:var(--td-success-color-3);--td-success-color-light:var(--td-success-color-1);--td-success-color-light-active:var(--td-success-color-2);--td-mask-active:rgba(0, 0, 0, 0.4);--td-mask-disabled:rgba(0, 0, 0, 0.6);--td-mask-background:rgba(36, 36, 36, 0.96);--td-bg-color-page:var(--td-gray-color-14);--td-bg-color-container:var(--td-gray-color-13);--td-bg-color-secondarycontainer:var(--td-gray-color-12);--td-bg-color-component:var(--td-gray-color-11);--td-bg-color-container-active:var(--td-gray-color-12);--td-bg-color-secondarycontainer-active:var(--td-gray-color-11);--td-bg-color-component-active:var(--td-gray-color-10);--td-bg-color-component-disabled:var(--td-gray-color-12);--td-bg-color-secondarycomponent:var(--td-gray-color-10);--td-bg-color-secondarycomponent-active:var(--td-gray-color-8);--td-bg-color-specialcomponent:transparent;--td-text-color-primary:var(--td-font-white-1);--td-text-color-secondary:var(--td-font-white-2);--td-text-color-placeholder:var(--td-font-white-3);--td-text-color-disabled:var(--td-font-white-4);--td-text-color-anti:var(--td-font-white-1);--td-text-color-brand:var(--td-primary-color-8);--td-text-color-link:var(--td-primary-color-8);--td-border-level-1-color:var(--td-gray-color-11);--td-component-stroke:var(--td-gray-color-11);--td-border-level-2-color:var(--td-gray-color-9);--td-component-border:var(--td-gray-color-9);--td-shadow-1:0 4px 6px rgba(0, 0, 0, 0.06),0 1px 10px rgba(0, 0, 0, 0.08),0 2px 4px rgba(0, 0, 0, 0.12);--td-shadow-2:0 8px 10px rgba(0, 0, 0, 0.12),0 3px 14px rgba(0, 0, 0, 0.1),0 5px 5px rgba(0, 0, 0, 0.16);--td-shadow-3:0 16px 24px rgba(0, 0, 0, 0.14),0 6px 30px rgba(0, 0, 0, 0.12),0 8px 10px rgba(0, 0, 0, 0.2);--td-shadow-inset-top:inset 0 0.5px 0 #5e5e5e;--td-shadow-inset-right:inset 0.5px 0 0 #5e5e5e;--td-shadow-inset-bottom:inset 0 -0.5px 0 #5e5e5e;--td-shadow-inset-left:inset -0.5px 0 0 #5e5e5e;--td-table-shadow-color:rgba(0, 0, 0, 0.55);--td-scrollbar-color:rgba(255, 255, 255, 0.1);--td-scroll-track-color:#333;}
+
+/* B 里品牌绿只出现在三处；TDesign 自身的 brand 退成中性灰，避免链接/加载/图标变绿。 */
+.td-dark {
+  --td-brand-color: #3F423F;
+  --td-brand-color-active: #4A4D4A;
+  --td-brand-color-disabled: #2E302E;
+  --td-brand-color-focus: #353835;
+  --td-brand-color-light: #2A2C2A;
+  --td-brand-color-light-active: #303330;
+  --td-primary-color-1: #2A2C2A;
+  --td-primary-color-2: #303330;
+  --td-primary-color-3: #2E302E;
+  --td-primary-color-8: #3F423F;
+  --td-primary-color-9: #4A4D4A;
+  --td-text-color-brand: var(--b-w2);
+  --td-text-color-link: var(--b-w2);
+  --td-button-border-radius: 28rpx;
+  --td-button-large-height: 112rpx;
+  --td-button-large-font: 500 28rpx / 44rpx -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  --td-popup-bg-color: transparent;
+}
+
+/* 唯一允许品牌绿的主按钮：圆角 14 / 高 56 / 字 14。 */
+.btn-green {
+  --td-button-primary-bg-color: var(--b-green);
+  --td-button-primary-border-color: var(--b-green);
+  --td-button-primary-active-bg-color: #406B4E;
+  --td-button-primary-active-border-color: #406B4E;
+  --td-button-primary-color: #FFFFFF;
+}
+
+/* 玻璃按钮：rgba(255,255,255,.16) 底 + .34 边 + 顶部内高光。 */
+.btn-glass.t-button {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.34);
+  color: var(--b-w1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), var(--b-shadow-btn);
+}
+
+.btn-glass.t-button::after {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+/* 支持模糊的机型，玻璃按钮也吃同一套 blur。 */
+.glass-on .btn-glass.t-button {
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.btn-glass.t-button--hover {
+  background-color: rgba(255, 255, 255, 0.22);
+}

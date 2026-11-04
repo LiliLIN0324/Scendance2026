@@ -1,0 +1,39 @@
+{
+  "description": "Scendance 现场采集器 · 小程序骨架",
+  "projectname": "scendance-capture",
+  "appid": "wxd16c2833f4591a29",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "libVersion": "3.0.0",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "coverView": true,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "useCompilerPlugins": false
+  },
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "scripts"
+      },
+      {
+        "type": "file",
+        "value": "README.md"
+      },
+      {
+        "type": "folder",
+        "value": "node_modules"
+      },
+      {
+        "type": "file",
+        "value": "package-lock.json"
+      }
+    ]
+  }
+}
