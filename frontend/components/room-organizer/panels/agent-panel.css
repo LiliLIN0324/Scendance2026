@@ -556,6 +556,31 @@ button.ap-ghost {
 .ap-audit-empty { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-pins ul { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 0; padding: 0 0 0 10px; list-style: none; border-left: 1px solid var(--wk-hair); }
 
+/* 第 7 批收尾：体检分 + Z8 完成卡 + 被拒件 + disclaimer。 */
+.ap-audit-scope { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-score { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: #F4F5F7; border-radius: 8px; }
+.ap-audit-score-total { display: flex; align-items: baseline; gap: 6px; }
+.ap-audit-score-num { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.ap-audit-score-label { font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-score-breakdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ap-audit-break { display: flex; flex-direction: column; gap: 3px; }
+.ap-audit-break-label { font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-break-bar { height: 4px; border-radius: 999px; background: #F4F5F7; overflow: hidden; }
+.ap-audit-break-fill { display: block; height: 100%; border-radius: 999px; transition: width .2s ease; }
+.ap-audit-break-num { font-size: var(--fs-cap); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ap-audit-score-summary { margin: 0; font-size: var(--fs-p2); color: var(--ink); line-height: 1.5; }
+.ap-audit-z8 { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--wk-hair); }
+.ap-audit-z8-row { display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-p2); }
+.ap-audit-z8-key { flex: 0 0 72px; color: var(--ap-grey); font-size: var(--fs-cap); }
+.ap-audit-z8-val { flex: 1 1 auto; color: var(--ink); word-break: break-word; }
+.ap-audit-refused { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--wk-hair); }
+.ap-audit-refused-title { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-refused ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.ap-audit-refused-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-p2); }
+.ap-audit-refused-id { padding: 1px 6px; border-radius: 4px; background: #F4F5F7; color: var(--ink); font-size: var(--fs-cap); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ap-audit-refused-reason { color: #C0392B; font-size: var(--fs-cap); }
+.ap-audit-disclaimer { margin: 4px 0 0; padding-top: 6px; border-top: 1px solid var(--wk-hair); font-size: var(--fs-cap); color: var(--ap-grey); line-height: 1.5; }
+
 /* 空间 / 物料对话：与 Bingo 同一条输入条，不再压内边距做“紧凑版”。 */
 .ap-chat .ap-composer-tool { display:grid; place-items:center; width:26px; height:26px; padding:0; border:none; border-radius:var(--r-sm); background:transparent; color:var(--wk-muted); }
 .ap-chat .ap-composer-tool:hover { background:var(--wk-plane); color:var(--wk-ink); }
