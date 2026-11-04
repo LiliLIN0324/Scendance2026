@@ -639,7 +639,7 @@
 .sc-space-confirm-actions .sc-button { height:24px; padding:0 8px; font-size:var(--fs-cap); }
 
 /* ── 物料：三块摘要 + 下方结果区，同属一张卡 ───────────────────────
-   与总控卡同一套容器：1px 细边、--r-md 圆角、paper 底、10px 12px 内边距。
+   与活动卡同一套容器：1px 细边、--r-md 圆角、paper 底、10px 12px 内边距。
    收起只露一行素材；展开内部滚动、上限面板约 55%，收起把高度还给 chat。 */
 .sc-lib-wrap {
   display:flex; flex-direction:column; gap:8px; min-width:0;

@@ -30,7 +30,9 @@
 .sc-activity-card-body>span{display:block;font-size:11px;line-height:1.5;color:var(--sc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 整卡可点：button 样式清零后铺满 li，hover/focus 只动底与内圈，不引新色。 */
 .sc-activity-card-clickable{display:flex;flex-direction:column;min-width:0;width:100%;padding:0;margin:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:10px;outline:none;transition:background-color .12s ease}
-.sc-activity-card-clickable:hover:not(:disabled){background:var(--wk-plane)}
+.sc-activity-card-clickable:disabled{cursor:default;opacity:.6}
+/* hover 反馈落在 li 上（按钮本体铺满且背景在部分自动化内核里不参与绘制，li 着色更稳）；:has 与 color-mix 同档平台基线。 */
+.sc-local-activities-list li:has(.sc-activity-card-clickable:hover:not(:disabled)){background:var(--wk-plane)}
 .sc-activity-card-clickable:focus-visible{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--wk-green) 45%,transparent)}
 .sc-activity-card-clickable:disabled{cursor:default;opacity:.6}
 /* 状态短词：齐用品牌绿，缺用弱灰，色值全部取自现有 token。 */
@@ -38,10 +40,10 @@
 .sc-activity-meta em{font-style:normal;display:inline-grid;place-items:center;min-width:20px;height:16px;padding:0 5px;border-radius:999px;font-size:10px;line-height:16px}
 .sc-activity-meta em.is-ready{background:color-mix(in srgb,var(--wk-green) 14%,var(--wk-paper));color:var(--wk-green)}
 .sc-activity-meta em.is-low{background:var(--wk-plane-deep);color:var(--sc-muted)}
-/* 末尾拼贴卡：虚线描边，内联命名表单复用面板字号体系。 */
-.sc-activity-tile{border:1px dashed var(--sc-line);border-radius:10px;background:transparent;min-height:96px;display:flex}
-.sc-activity-tile-add{width:100%;min-height:96px;border:0;background:none;box-shadow:none;color:var(--sc-muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:12px;cursor:pointer;border-radius:10px}
-.sc-activity-tile-add:hover:not(:disabled){color:var(--wk-green);background:var(--wk-plane)}
+/* 末尾拼贴卡：虚线描边，内联命名表单复用面板字号体系。选择器带 li 以压过上面列表 li 的通用实线规则。 */
+.sc-local-activities-list li.sc-activity-tile{border:1px dashed var(--sc-line);border-radius:10px;background:transparent;min-height:96px;display:flex;color:var(--sc-muted)}
+.sc-activity-tile-add{width:100%;min-height:96px;border:0;background:none;box-shadow:none;color:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:12px;cursor:pointer;border-radius:10px}
+.sc-local-activities-list li.sc-activity-tile:has(.sc-activity-tile-add:hover:not(:disabled)){background:var(--wk-plane);color:var(--wk-green)}
 .sc-activity-tile-add:disabled{cursor:default;opacity:.6}
 .sc-activity-tile-form{width:100%;display:grid;gap:8px;padding:12px}
 .sc-activity-tile-form input{width:100%;min-width:0;height:34px;padding:0 10px;font-size:12px}

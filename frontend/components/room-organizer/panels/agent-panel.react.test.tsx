@@ -58,6 +58,7 @@ const callbacks = {
   workbenchMode: 'layout' as WorkbenchMode,
   onOpenMaterials: vi.fn(), onSelectMode: vi.fn(), onOpenReview: vi.fn(),
   onOpenDelivery: vi.fn(), onFit: vi.fn(),
+  onIssueReviewLink: vi.fn(async () => 'https://scendance.example/review/#layout=abc123'),
 };
 
 function seatLayout(overrides: { locked?: boolean } = {}): RoomLayout {
@@ -135,17 +136,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('T-04 delivery narrative in the Agent panel', () => {
-  it('opens customer review from the panel without claiming a sent link', () => {
+  it('T3 封门：评审模式右栏不再渲染钉议卡槽，面板内没有「打开客户评审」', () => {
     callbacks.workbenchMode = 'review';
     render(ui(state.layout));
-    expect(screen.getByText(/评审 · /)).toBeTruthy();
-    const cta = screen.getByRole('button', { name: '打开客户评审' });
-    expect(cta.getAttribute('aria-disabled')).not.toBe('true');
-    fireEvent.click(cta);
-    expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
-    expect(document.body.textContent).not.toContain('生成评审链接');
-    expect(document.body.textContent).not.toContain('已发送');
-    expect(document.body.textContent).not.toContain('已通知');
+    // reviewSlot 死门已封死：评审只走分享链接，面板内不再有钉议卡 CTA。
+    expect(screen.queryByRole('button', { name: '打开客户评审' })).toBeNull();
+    expect(screen.queryByText('议题')).toBeNull();
+    expect(screen.queryByText('确认可进执行')).toBeNull();
   });
 
   it('opens customer review from an explicit chat sentence', async () => {
@@ -174,16 +171,13 @@ describe('T-04 delivery narrative in the Agent panel', () => {
     expect(document.querySelector('.ap-turn')?.textContent).toBeTruthy();
   });
 
-  it('labels execution exports as local internal material and never claims cloud collaboration', () => {
+  it('T3 封门：执行模式右栏不再渲染交付卡槽，导出交接入口已从面板拆除', () => {
     callbacks.workbenchMode = 'delivery';
     render(ui(state.layout));
-    expect(screen.getByText(/执行 · 本机内部资料/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '导出交接' }));
-    expect(screen.getByText('导出完整活动交接')).toBeTruthy();
-    expect(studioMock.exportActivity).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '先不了' }));
-    fireEvent.click(screen.getByRole('button', { name: '打开执行资料' }));
-    expect(callbacks.onOpenDelivery).toHaveBeenCalledOnce();
+    // deliverySlot 死门已封死：到场清单走分享菜单抽屉，面板内不再有交付卡。
+    expect(screen.queryByRole('button', { name: '导出交接' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '打开执行资料' })).toBeNull();
+    expect(screen.queryByText('导出完整活动交接')).toBeNull();
     expect(document.body.textContent).not.toContain('云端协作');
     expect(document.body.textContent).not.toContain('现场履约');
   });
@@ -808,17 +802,28 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     expect(document.getElementById('agent-panel')?.getAttribute('aria-label')).toBe('活动');
   });
 
-  it('Bingo 脸不挂任何布置生成入口，但中间态保留共用输入框', () => {
+  it('Bingo 脸是纯审校台：无输入框、无布置话术，空态只说审校的事', () => {
     state.layout = INITIAL_LAYOUT;
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.queryByLabelText('生成活动方案')).toBeNull();
     expect(screen.queryByRole('button', { name: '会话历史' })).toBeNull();
     expect(screen.queryByRole('button', { name: '新开会话' })).toBeNull();
     expect(screen.queryByRole('group', { name: '你可以做什么' })).toBeNull();
-    // S2 才把 Bingo 改成纯审校台；S1.0 中间态共用 composer 仍在，但不再有生成卡片。
-    expect(screen.getByLabelText('告诉 Agent 要改的')).toBeTruthy();
+    // T2：composer 已从 Bingo 脸摘除——输入框、布置空态话术都不在。
+    expect(screen.queryByLabelText('告诉 Agent 要改的')).toBeNull();
+    expect(screen.queryByText('先说一句就行')).toBeNull();
+    expect(screen.getByText('这边只管审校')).toBeTruthy();
     expect(document.getElementById('gen-progress')).toBeNull();
     expect(document.getElementById('plan-proposal')).toBeNull();
+    // 审校状态台三钮在位。
+    expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
+  });
+
+  it('Bingo 脸只回放审校气泡：体检回执出现在审校台', async () => {
+    state.layout = seatLayout();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
+    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
   });
 
   it('假分派控件与话术全部消失，空态改成统一的先说一句引导', () => {
@@ -841,5 +846,43 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     expect(view.container.querySelector('.sc-local-activities')).toBeNull();
     view.rerender(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(view.container.querySelector('.sc-local-activities')).toBeNull();
+  });
+});
+
+describe('S2 Bingo 审校台：三钮状态台直达', () => {
+  it('Bingo 脸渲染三钮状态台', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '准备客户评审' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '发送钉评链接' })).toBeTruthy();
+  });
+
+  it('活动脸不挂审校状态台三钮', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    expect(screen.queryByRole('button', { name: '立即体检' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '发送钉评链接' })).toBeNull();
+  });
+
+  it('点「立即体检」不打字即出几何体检回执', async () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
+    // 与 T-03 口令路径同引擎、同口径声明，只是入口从 send() 换成按钮。
+    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+  });
+
+  it('点「准备客户评审」直接回调，不落气泡', () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '准备客户评审' }));
+    expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
+  });
+
+  it('点「发送钉评链接」只指路到甲方评审记录卡，聊天不打链接', async () => {
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '发送钉评链接' }));
+    await waitFor(() => expect(callbacks.onIssueReviewLink).toHaveBeenCalled());
+    expect(screen.getByText(/下面「甲方评审记录」里点「复制甲方链接」/)).toBeTruthy();
+    // 长链接不进聊天框；复制动作住在审计卡上（复用既有「复制甲方链接」钮）。
+    expect(screen.queryByRole('button', { name: '复制评审链接' })).toBeNull();
   });
 });

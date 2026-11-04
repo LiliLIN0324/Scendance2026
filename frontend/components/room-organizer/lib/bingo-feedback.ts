@@ -60,6 +60,7 @@ export function readBingoPlanFeedback(
   const sharePins = new Map<string, BingoFeedbackPin>();
   for (const key of reviewPlanKeysForBingoPlan(plan)) {
     for (const pin of readReviewSharePins(key, storage)) {
+      // 去重键 `${key}:${pin.id}` 即未来跨表 join 键（Q4 云化注释）；读端聚合逻辑云化时换 repo 不改。
       sharePins.set(`${key}:${pin.id}`, mapSharePin(pin));
     }
   }

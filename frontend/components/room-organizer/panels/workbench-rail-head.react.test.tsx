@@ -72,7 +72,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(css).not.toMatch(/button\.is-active::before\s*\{/);
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');
-    expect(source).toContain("sidePanel === 'venue' && <VenueLibraryPanel");
+    expect(source).not.toContain('<VenueLibraryPanel');
     expect(source).toContain('<SpacePanel variant="card"');
     expect(source).toContain('<ScendanceLibrary variant="card"');
     expect(source).toContain("onToggle={() => toggleAgent('door')}");

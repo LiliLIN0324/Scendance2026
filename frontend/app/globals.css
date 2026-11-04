@@ -1053,7 +1053,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand:hover {
   background: var(--wk-plane); color: var(--wk-ink);
 }
-/* 门洞也是四个 agent 之一：切到总控时跟其他三格一样，左侧一条绿。 */
+/* 门洞也是四个 agent 之一：切到活动时跟其他三格一样，左侧一条绿。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active {
   position: relative; color: var(--wk-ink);
 }
@@ -1162,7 +1162,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
-/* 左轨四格的状态点：总控一直在线，下面三格有事才醒、没事休眠，出错爆红。它是左轨唯一允许的点缀。 */
+/* 左轨四格的状态点：活动一直在线，下面三格有事才醒、没事休眠，出错爆红。它是左轨唯一允许的点缀。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo {
   position: relative;
 }
@@ -1175,7 +1175,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-warn { background: var(--err, #B4443C); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-ask { background: var(--warn, #96651F); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-busy { background: #0668e5; }
-/* 总控那格是门厅标：点位跟着形体走，不贴着轨边。 */
+/* 活动那格是门厅标：点位跟着形体走，不贴着轨边。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > span.sc-rail-dot { right: -3px; bottom: -3px; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary {
   display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none;

@@ -72,7 +72,7 @@ describe('assistant session bodies', () => {
     }))).toEqual({
       version: 1,
       byId: {
-        'ses-ok': [{ id: 'good', role: 'agent', text: '在', to: ['bingo'] }],
+        'ses-ok': [{ id: 'good', role: 'agent', text: '在' }],
       },
     });
   });

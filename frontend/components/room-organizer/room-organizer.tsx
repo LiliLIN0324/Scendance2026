@@ -9,11 +9,9 @@ import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
-import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
-import { useCameraFly } from './hooks/use-camera-fly';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
@@ -52,7 +50,7 @@ import { notify } from './lib/editor-notices';
 import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, writeEnvironments, type StoredEnvironment } from './lib/environment-preference';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
-import { randomId, randomSuffix } from './lib/ids';
+import { randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
@@ -60,7 +58,6 @@ import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
-import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
 import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
 import { encodeShareUrl } from './lib/share';
@@ -92,12 +89,10 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
-import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
+import { DeliveryChecklistShell } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
-import { VenueLibraryPanel } from './panels/venue-library-panel';
 import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
-import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
 import { StatusToastHost } from './panels/status-toast';
@@ -257,14 +252,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
-  const [reviewPins, setReviewPins] = useState<ReviewPin[]>([]);
-  const [pinFilter, setPinFilter] = useState<ReviewPinFilter>('open');
-  const [activePinId, setActivePinId] = useState<string | null>(null);
-  const [pinDraft, setPinDraft] = useState<ReviewPinDraft | null>(null);
-  const [reviewCleared, setReviewCleared] = useState(false);
-  const reviewPinsRef = useRef(reviewPins);
-  reviewPinsRef.current = reviewPins;
-  const openPinDraftRef = useRef<(pick: { itemId: string | null; x: number; y: number; z: number }) => void>(() => {});
+  // T3 封堵：制作侧画布钉（reviewPins/pinFilter/pinDraft/reviewCleared）整簇删除——门已封死，评审只走分享链接。
   const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
   const [environments, setEnvironments] = useState<StoredEnvironment[]>([]);
@@ -428,11 +416,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
     else showAgent(id);
   }, [agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
-  const closeSidePanel = useCallback(() => {
-    setSidePanel(null);
-    setAgentCollapsed(true);
-    setAgentClosing(false);
-  }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单仍浮在画布上。不把Bingo切成评审或执行。
     setLeftMode('business');
@@ -1053,7 +1036,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     extraSelectedIds,
     allSelectedIds,
     editingLocked: workbenchMode !== 'layout',
-    ...(workbenchMode === 'review' ? { onReviewAnchor: ({ itemId, x, z }: { itemId: string | null; x: number; z: number }) => openPinDraftRef.current({ itemId, x, y: activeFloorY, z }) } : {}),
     onItemSelect: handleSelect,
     onItemDoubleClick: openPropertiesForItem,
     onDeselect: deselectAll,
@@ -1098,7 +1080,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         return true;
       },
       editingLocked: workbenchMode !== 'layout',
-      ...(workbenchMode === 'review' ? { onReviewAnchor: (anchor: { itemId: string | null; x: number; y: number; z: number }) => openPinDraftRef.current(anchor) } : {}),
       onWallSelect: ({ wallId, kind }) => {
         setSelectedWall({ id: wallId, kind });
       },
@@ -1423,73 +1404,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     sceneRef,
   });
 
-  const exitPlanView = useCallback(() => {
-    setView(current => (current.view2D ? { ...current, view2D: false } : current));
-  }, []);
-  const flyToPin = useCameraFly({ cameraRef, controlsRef, invalidate, onExit2D: exitPlanView });
-  const itemOrigin = useCallback((itemId: string | null) => {
-    if (!itemId) return null;
-    const item = activeFloor.items.find(entry => entry.id === itemId);
-    return item?.position ? { x: item.position.x, y: activeFloorY, z: item.position.z } : null;
-  }, [activeFloor.items, activeFloorY]);
-  openPinDraftRef.current = (pick) => {
-    if (workbenchMode !== 'review') return;
-    const camera = cameraRef.current;
-    if (!camera) return;
-    const origin = itemOrigin(pick.itemId);
-    const offset = origin ? [pick.x - origin.x, pick.y - origin.y, pick.z - origin.z] as const : null;
-    const cameraShot = view.view2D
-      ? { position: [pick.x + 2.4, pick.y + 2.8, pick.z + 2.4] as const, target: [pick.x, pick.y, pick.z] as const }
-      : { position: [camera.position.x, camera.position.y, camera.position.z] as const, target: [pick.x, pick.y, pick.z] as const };
-    setPinDraft({ itemId: pick.itemId, x: pick.x, y: pick.y, z: pick.z, offset, camera: cameraShot });
-  };
-  const focusReviewPin = useCallback((id: string) => {
-    const pin = reviewPinsRef.current.find(entry => entry.id === id);
-    if (!pin) return;
-    setActivePinId(id);
-    flyToPin(flyDestination(pin, itemOrigin(pin.itemId)));
-  }, [flyToPin, itemOrigin]);
-  const commitReviewPin = useCallback((text: string) => {
-    const current = pinDraft;
-    if (!current) return;
-    const pin = createReviewPin({ id: randomId('pin'), text, draft: current });
-    if (!pin) return;
-    setReviewPins(pins => [...pins, pin]);
-    setActivePinId(pin.id);
-    setPinFilter('open');
-    setPinDraft(null);
-  }, [pinDraft]);
-  const returnReviewPin = useCallback((id: string) => {
-    focusReviewPin(id);
-    selectWorkbenchMode('layout');
-    notify('回到布置。改完再进评审，标已解决。');
-  }, [focusReviewPin, selectWorkbenchMode]);
-  const confirmReview = useCallback(() => {
-    setReviewCleared(true);
-    selectWorkbenchMode('delivery');
-  }, [selectWorkbenchMode]);
-  const reviewMarks = useMemo<ReviewPinMark[]>(() => reviewPins.map((pin, index) => {
-    const point = pinAnchor(pin, itemOrigin(pin.itemId));
-    return { id: pin.id, n: index + 1, status: pin.status, x: point.x, y: point.y, z: point.z };
-  }), [reviewPins, itemOrigin]);
-  const toScreen = useCallback((point: { x: number; y: number; z: number }) => {
-    if (view.view2D) {
-      const canvas = canvas2DRef.current;
-      if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
-      return planPointToCanvas(point, layout, get2DViewTransform(canvas.clientWidth, canvas.clientHeight, layout));
-    }
-    const THREE = threeModuleRef.current;
-    const camera = cameraRef.current;
-    const canvas = canvasRef.current;
-    if (!THREE || !camera || !canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
-    const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
-    if (projected.z > 1) return null;
-    return {
-      x: (projected.x * 0.5 + 0.5) * canvas.clientWidth,
-      y: (-projected.y * 0.5 + 0.5) * canvas.clientHeight,
-    };
-  }, [view.view2D, layout, cameraRef, canvasRef, canvas2DRef, threeModuleRef]);
-
   const { applyPreset, focusOn, fitToRoom, ensureRoomInView } = useCameraPresets({
     cameraRef,
     controlsRef,
@@ -1718,15 +1632,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       ? { ...current, drawWallMode: false, drawZoneMode: false, measurementMode: false }
       : current);
   }, [workbenchMode, selectOnly, cancelPlacement, setView]);
-  useEffect(() => {
-    if (workbenchMode !== 'review') setPinDraft(null);
-  }, [workbenchMode]);
-  useEffect(() => {
-    setReviewPins([]);
-    setPinDraft(null);
-    setActivePinId(null);
-    setReviewCleared(false);
-  }, [layout.id]);
 
 
 
@@ -1949,6 +1854,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
+        onIssueReviewLink: async () => (await issueReviewLink()).url,
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
@@ -2014,30 +1920,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
-              pins={reviewPins}
-              items={activeFloor.items}
-              filter={pinFilter}
-              activeId={activePinId}
-              onFilter={setPinFilter}
-              onFocus={focusReviewPin}
-              onResolve={id => setReviewPins(pins => markPinResolved(pins, id))}
-              onReturn={returnReviewPin}
-              onConfirm={confirmReview}
-            /> : undefined} deliverySlot={workbenchMode === 'delivery' ? <WorkbenchModeCard
-              pins={reviewPins}
-              pinFilter={pinFilter}
-              activePinId={activePinId}
-              reviewCleared={reviewCleared}
-              onPinFilter={setPinFilter}
-              onFocusPin={focusReviewPin}
-              onResolvePin={id => setReviewPins(pins => markPinResolved(pins, id))}
-              onReturnPin={returnReviewPin}
-              onConfirmDelivery={confirmReview}
-              onExport={() => { setSidePanel(null); setAgentCollapsed(false); }}
-            /> : undefined}/>}
+          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
-          {sidePanel === 'venue' && <VenueLibraryPanel onClose={closeSidePanel} />}
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
@@ -2120,18 +2004,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       />
             <EnvironmentLoad active={splatState.status === 'loading'} name={splatState.name} {...(splatState.progress === undefined ? {} : { progress: splatState.progress })} />
             <AgentCanvasOverlay/>
-            <ReviewPinLayer
-              pins={reviewMarks}
-              activeId={activePinId}
-              draft={pinDraft}
-              draftLabel={pinDraft ? (pinDraft.itemId ? `钉在「${pinSubject(pinDraft.itemId, activeFloor.items)}」` : '钉在地面') : ''}
-              toScreen={toScreen}
-              controlsRef={controlsRef}
-              cameraReady={isReady}
-              onFocus={focusReviewPin}
-              onCommit={commitReviewPin}
-              onCancel={() => setPinDraft(null)}
-            />
             <MapVenueOverlay onHangDemoEnvironment={hangDemoEnvironment} onReconUpload={luxDirectVisible ? preset => {
               noteVenueThreeIntent();
               setSpaceWorkflow('aholo');
@@ -2143,7 +2015,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <button type="button" className="sc-checklist-dismiss" onClick={() => setChecklistOpen(false)}>关闭</button>
               <DeliveryChecklistShell items={activeFloor.items} onExport={exportHandoff}/>
             </aside>}
-            {workbenchMode === 'review' && !pinDraft && <p className="sc-review-hint" role="status">点物件或地面，钉一条意见</p>}
             <div ref={businessHostRef} className="sc-canvas-share sc-data-host" hidden={!businessOpen || leftMode !== 'business'}/>
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded

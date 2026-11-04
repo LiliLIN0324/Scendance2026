@@ -16,6 +16,12 @@ export interface ReviewReturn {
   at: string;
 }
 
+/** Q4 云化接口形状（仅声明，不实现）：现存储为单条记录，云化按 planKey 关联。 */
+export interface ReviewReturnRepository {
+  mark(planKey: string): Promise<{ ok: true }>;
+  read(planKey: string): Promise<ReviewReturn | null>;
+}
+
 export function markReviewReturned(
   storage: Pick<Storage, 'setItem'>,
   input: { planKey: string; now?: Date },
@@ -50,9 +56,15 @@ export function readReviewReturn(storage: Pick<Storage, 'getItem'> | null): Revi
   }
 }
 
-/** 后刀在这里按当前方案的 planKey 收窄。本刀只要有回执，创作者侧的球就变红。 */
-export function reviewOrbShouldTurnRed(record: ReviewReturn | null): boolean {
-  return record !== null;
+/**
+ * 红环口径 R2：只在回执属于「当前方案」时亮。
+ * currentPlanKey 缺省（旧调用方/测试）时兜底为任意回执即亮，保持向后兼容。
+ * sample demo 回执与其他方案的回执因此不再点亮本方案的球。
+ */
+export function reviewOrbShouldTurnRed(record: ReviewReturn | null, currentPlanKey?: string): boolean {
+  if (!record) return false;
+  if (!currentPlanKey) return true;
+  return record.planKey === currentPlanKey;
 }
 
 export function reviewOrbClass(returned: boolean): string {

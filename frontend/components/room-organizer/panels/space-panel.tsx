@@ -86,10 +86,10 @@ export function SpacePanel({
       <div className="sc-space-body">
         {notice && <p className="sc-note" role="status">{notice}</p>}
         <div className="sc-space-workflow" role="group" aria-label="空间生成方式">
-          <div className="sc-space-workflow-label"><span>空间生成</span><details className="sc-space-info"><summary aria-label="空间生成方式说明" title="空间生成方式说明"><Info size={12} aria-hidden="true"/></summary><p>项目可包含多个空间。World 用于生成或重建高斯场景；传统空间用于搭建可编辑的结构和模板。可按需要组合使用。</p></details></div>
+          <div className="sc-space-workflow-label"><span>空间生成</span><details className="sc-space-info"><summary aria-label="空间生成方式说明" title="空间生成方式说明"><Info size={12} aria-hidden="true"/></summary><p>项目可包含多个空间。生成可漫游的场地；传统空间用于搭建可编辑的结构和模板。可按需要组合使用。</p></details></div>
           <div className="sc-space-workflow-switch">
             <button type="button" className={workflow === 'aholo' ? 'is-active' : ''} aria-pressed={workflow === 'aholo'} onClick={() => selectWorkflow('aholo')}>
-              <Globe size={14} aria-hidden="true"/><span>World 世界模型</span><small>默认 · 高斯空间</small>
+              <Globe size={14} aria-hidden="true"/><span>World 世界模型</span><small>默认 · 生成场地</small>
             </button>
             <button type="button" className={workflow === 'traditional' ? 'is-active' : ''} aria-pressed={workflow === 'traditional'} onClick={() => selectWorkflow('traditional')}>
               <Layers size={14} aria-hidden="true"/><span>传统空间</span><small>空白壳 · 模板</small>
@@ -101,10 +101,10 @@ export function SpacePanel({
             <div className="sc-space-section-head">
               <Globe size={16} aria-hidden="true"/><h3>World 世界模型</h3><small>默认</small>
             </div>
-            <details className="sc-space-info sc-space-detail"><summary aria-label="World 世界模型说明" title="World 世界模型说明"><Info size={13} aria-hidden="true"/></summary><p>生成可漫游的 3D 高斯空间。Bingo 可在可编辑布局上规划物料与动线。</p></details>
+            <details className="sc-space-info sc-space-detail"><summary aria-label="World 世界模型说明" title="World 世界模型说明"><Info size={13} aria-hidden="true"/></summary><p>生成可漫游的 3D 场地。Bingo 可在可编辑布局上规划物料与动线。</p></details>
             <div className="sc-space-aholo-actions">
               <button type="button" className="sc-button is-primary" onClick={() => onOpenAholo?.('world')} disabled={!onOpenAholo}>
-                <Globe size={14} aria-hidden="true"/>生成高斯空间
+                <Globe size={14} aria-hidden="true"/>生成场地
               </button>
               <button type="button" className="sc-button" onClick={() => onOpenAholo?.('recon')} disabled={!onOpenAholo}>
                 <Scan size={14} aria-hidden="true"/>重建真实场地
@@ -113,12 +113,12 @@ export function SpacePanel({
             {!onOpenAholo && <p className="sc-note">Aholo 空间生成当前不可用。</p>}
             <details className="sc-space-info sc-space-detail"><summary aria-label="真实场地重建素材要求" title="真实场地重建素材要求"><Info size={13} aria-hidden="true"/></summary><p>真实场地重建使用现场照片或视频；卫星图只用于选址，不能作为重建素材。</p></details>
           </section>
-          <section className="sc-space-block sc-space-env" aria-label="当前高斯环境">
+          <section className="sc-space-block sc-space-env" aria-label="当前环境">
             {environment
               ? <EnvironmentPreview {...environment}/>
               : <>
                 <div className="sc-space-section-head"><Mountain size={15} aria-hidden="true"/><h3>当前环境</h3><small>生成后会显示在这里</small></div>
-                <p className="sc-note">生成或重建完成后，把产物挂为高斯环境；不会改动已摆物料。</p>
+                <p className="sc-note">生成或重建完成后，把产物挂为环境；不会改动已摆物料。</p>
               </>}
           </section>
         </div> : <div className={`sc-space-card${expanded ? ' is-expanded' : ''}`}>
