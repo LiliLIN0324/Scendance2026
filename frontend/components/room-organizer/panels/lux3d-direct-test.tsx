@@ -21,32 +21,32 @@ import type { CatalogItem } from '../lib/types';
 
 const POLL_MS = 5000;
 const CAPABILITIES = {
-  world: { label: '场景生成 · World 世界模型', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
+  world: { label: '场景生成 · 场地生成', path: '/world', storage: 'scendance:aholo-world', id: /^[a-zA-Z0-9_-]{1,128}$/ },
   recon: { label: '场地重建', path: '/world-recon', storage: 'scendance:aholo-recon', id: /^[a-zA-Z0-9_-]{1,128}$/ },
 };
 type Kind = keyof typeof CAPABILITIES;
 /** 一张卡只留标题、一行交代和一张示意；长说明收进右上 info。 */
 const CARD_COPY: Record<Kind, { meta: string; thumb: string; info: string }> = {
   world: {
-    meta: '文字描述 → 可漫游 3DGS 高斯空间',
+    meta: '文字描述 → 可漫游 3D 重建空间',
     thumb: '/showcase/assets/generated/scene/scendance-m3-mvp.panorama.jpg',
-    info: '走 Aholo World 世界模型：用文字描述要创建的空间，生成可漫游的 3DGS 高斯场景，再挂入本场空间作为三维环境。',
+    info: '走生成引擎场地生成：用文字描述要创建的空间，生成可漫游的 3D 重建场景，再挂入本场空间作为三维环境。',
   },
   recon: {
-    meta: '现场照片 / 视频 → 真场地 3DGS',
+    meta: '现场照片 / 视频 → 真场地 3D 重建',
     thumb: '/showcase/assets/generated/scene/cloud-e2e-banquet.panorama.jpg',
-    info: '真实场地的另一条路径：地图圈画 → 采集单 → 场地重建 → 高斯环境预览。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
+    info: '真实场地的另一条路径：地图圈画 → 采集单 → 场地重建 → 空间生成预览。素材用现场照片或视频，卫星图不能当重建素材；重建按次扣额度。',
   },
 };
 type TaskDetail = { status: number; statusLabel: string; outputs: string[]; progress?: number; panoUrl?: string };
 type SavedTask = { taskid?: string; prompt: string; startedAt: number };
 const TERMINAL = [3, 4, 6];
 const STAGES: Record<number, { title: string; text: string }> = {
-  0: { title: '排队中', text: 'Aholo 已接收任务，正在初始化或等待执行。' },
-  1: { title: '生成中', text: 'Aholo 正在生成，完成后会显示产物。' },
+  0: { title: '排队中', text: '生成引擎已接收任务，正在初始化或等待执行。' },
+  1: { title: '生成中', text: '生成引擎正在生成，完成后会显示产物。' },
   3: { title: '生成完成', text: '生成已完成，可查看下方结果。' },
-  4: { title: '生成失败', text: 'Aholo 返回任务失败，已停止查询。' },
-  6: { title: '已取消', text: 'Aholo 返回任务已取消，已停止查询。' },
+  4: { title: '生成失败', text: '生成引擎返回任务失败，已停止查询。' },
+  6: { title: '已取消', text: '生成引擎返回任务已取消，已停止查询。' },
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -98,7 +98,7 @@ function splatOutputOf(outputs: string[]): string | undefined {
     safe.find(url => new URL(url).pathname.toLowerCase().endsWith('.ply'));
 }
 
-/** lod-meta（json）只用来读 forwardBox 真实尺度，高斯优先时场地跟它对齐。 */
+/** lod-meta（json）只用来读 forwardBox 真实尺度，空间生成优先时场地跟它对齐。 */
 function metaOutputOf(outputs: string[]): string | undefined {
   return outputs.filter(safeResultUrl).find(url => new URL(url).pathname.toLowerCase().endsWith('.json'));
 }
@@ -143,14 +143,14 @@ function ResultLinks({ detail, world }: { detail: TaskDetail; world: boolean }) 
   return <>
     {panorama && <a className="sc-aholo-panorama" href={panorama} target="_blank" rel="noreferrer">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={panorama} alt="World 场景全景图" referrerPolicy="no-referrer" />
+      <img src={panorama} alt="场地全景图" referrerPolicy="no-referrer" />
       <span>打开全景原图</span>
     </a>}
     {outputs.length > 0 && <ul className="sc-lux-direct-results">{outputs.map(url => <li key={url}>
       <a href={url} target="_blank" rel="noreferrer">{label(url)}</a>
     </li>)}</ul>}
-    {!outputs.length && !panorama && <p className="sc-warning">Aholo 返回成功，但没有提供下载链接。</p>}
-    {world && <p className="sc-note">3DGS 高斯空间取回后按真实尺度铺进本场环境（场地跟高斯对齐）；尺寸与物料摆放由可编辑布局壳承接。</p>}
+    {!outputs.length && !panorama && <p className="sc-warning">生成引擎返回成功，但没有提供下载链接。</p>}
+    {world && <p className="sc-note">3D 重建空间取回后按真实尺度铺进本场环境（场地跟空间生成对齐）；尺寸与物料摆放由可编辑布局壳承接。</p>}
   </>;
 }
 
@@ -366,18 +366,18 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
 
   const splatOutput = onPreviewScene && detail?.status === 3 ? splatOutputOf(detail.outputs) : undefined;
   const stage = submitting
-    ? { title: '正在提交', text: '正在向 Aholo 申请任务号，请勿重复提交。' }
+    ? { title: '正在提交', text: '正在向生成引擎申请任务号，请勿重复提交。' }
     : uncertain
-      ? { title: '提交结果待确认', text: '这次没有取回任务号，无法确认这一条；请求可能已受理，请勿重复生成。Aholo 侧不列任务号，稍后可在用量页核对额度。' }
+      ? { title: '提交结果待确认', text: '这次没有取回任务号，无法确认这一条；请求可能已受理，请勿重复生成。生成引擎侧不列任务号，稍后可在用量页核对额度。' }
       : error && taskid
         ? { title: '查询已暂停', text: `查询中断不代表生成失败。${detail ? `上次确认：${STAGES[detail.status]?.title ?? detail.statusLabel}。` : ''}继续查询只查看原任务，不会再次扣生成额度。` }
-        : detail ? STAGES[detail.status] ?? { title: '状态待确认', text: `Aholo 返回状态 ${detail.statusLabel}，正在继续查询。` }
-          : { title: '已提交', text: '已取得任务号，正在查询 Aholo 当前状态。' };
+        : detail ? STAGES[detail.status] ?? { title: '状态待确认', text: `生成引擎返回状态 ${detail.statusLabel}，正在继续查询。` }
+          : { title: '已提交', text: '已取得任务号，正在查询生成引擎当前状态。' };
   const progress = typeof detail?.progress === 'number' && Number.isFinite(detail.progress) && detail.progress >= 0 && detail.progress <= 1 ? detail.progress : undefined;
   const prefix = `aholo-${kind}`;
 
   return <div className="sc-aholo-task">
-    <p className="sc-note">{kind === 'recon' ? 'World · 视频/照片重建真实场地 3DGS' : 'World · 文字生成 3DGS 场景'}</p>
+    <p className="sc-note">{kind === 'recon' ? '场地 · 视频/照片重建真实场地 3D 重建' : '场地 · 文字生成 3D 重建场景'}</p>
     <AholoGuideCard world recon={kind === 'recon'} />
     <label className="sc-field" htmlFor={`${prefix}-name`}>场景名称</label>
     <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || (kind === 'recon' ? (!mockRecon && online !== true) : online !== true)} onChange={event => setName(event.target.value)} />
@@ -395,7 +395,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
         }} />
         {' '}干跑模拟（不扣额度）
       </label></p>
-      {!mockRecon && <p className="sc-warning" role="status">已关掉干跑：提交会走本机代理真调，消耗 Aholo 额度。</p>}
+      {!mockRecon && <p className="sc-warning" role="status">已关掉干跑：提交会走本机代理真调，消耗生成引擎额度。</p>}
       {!mockRecon && <p className="sc-note"><label>
         <input type="checkbox" checked={creditConfirmed} disabled={busy || online !== true}
           onChange={event => onCreditConfirmed(event.target.checked)} />
@@ -405,7 +405,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
       <input id={`${prefix}-recon-files`} type="file" multiple
         accept="video/mp4,video/quicktime,.insv,image/jpeg,image/png,image/webp" disabled={busy || (!mockRecon && online !== true)}
         onChange={event => { setReconFiles([...event.target.files ?? []]); event.target.value = ''; }} />
-      <p className="sc-note">Insta360 全景或普通视频一段即可；用照片则至少 20 张、绕场地一圈多角度。{mockRecon ? '干跑只校验选文件形状，不上传。' : '素材经本机代理上传至 Aholo。'}</p>
+      <p className="sc-note">Insta360 全景或普通视频一段即可；用照片则至少 20 张、绕场地一圈多角度。{mockRecon ? '干跑只校验选文件形状，不上传。' : '素材经本机代理上传至生成引擎。'}</p>
       <p className="sc-warning" role="note">{RECON_MATERIAL_BAN}</p>
       {presetHint && <p className="sc-note">这块地的采集单：{presetHint}。按单子拍完再拖进来，重建出来的尺度才对得上圈画的范围。</p>}
       {reconFiles.length > 0 && <p className="sc-note">已选 {reconFiles.length} 个文件{reconFiles.some(file => file.size > 5 * 1024 * 1024) ? '（含较大文件，上传可能需要几分钟）' : ''}</p>}
@@ -437,11 +437,11 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, mockRecon, onMockR
     {(submitting || taskid || uncertain) && <>
       <div role="status" aria-live="polite" aria-atomic="true"><strong>{stage.title}</strong><p className="sc-note">{stage.text}</p></div>
       {!terminal && <p className="sc-note">已等 {elapsedSec}s</p>}
-      {progress !== undefined && <div className="sc-aholo-progress"><progress aria-label="Aholo 场景进度" max={1} value={progress} /><span>{Math.round(progress * 100)}%</span></div>}
+      {progress !== undefined && <div className="sc-aholo-progress"><progress aria-label="生成引擎场景进度" max={1} value={progress} /><span>{Math.round(progress * 100)}%</span></div>}
       {taskid && !terminal && !error && <p className="sc-note">
         {checking ? '正在查询最新状态…' : '每 5 秒自动查询一次。'}
         {lastCheckedAt > 0 && ` 最近更新 ${new Date(lastCheckedAt).toLocaleTimeString('zh-CN', { hour12: false })}。`}
-        {progress === undefined && 'Aholo 未提供百分比进度。'}
+        {progress === undefined && '生成引擎未提供百分比进度。'}
       </p>}
     </>}
     {error && <p className="sc-warning" role="alert">{error}</p>}
@@ -473,7 +473,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
 }) {
   const [kind, setKind] = useState<Kind>('world');
   const [visited, setVisited] = useState<Kind[]>(['world']);
-  /** 默认干跑，避免误点真调扣额度；联调真 Aholo 时再关掉。 */
+  /** 默认干跑，避免误点真调扣额度；联调真生成引擎时再关掉。 */
   const [mockRecon, setMockRecon] = useState(true);
   /** 真调扣额度确认闸：关干跑后须勾选；重新打开干跑时清零。 */
   const [creditConfirmed, setCreditConfirmed] = useState(false);
@@ -544,12 +544,12 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
   /** 物料生成已走独立面板；观感面板只留场地两档。 */
   const shownKinds: Kind[] = ['world', 'recon'];
   return <div className="sc-lux-direct">
-    <div className="sc-section-heading"><div><h2>Aholo 空间模型</h2>
-      <p>项目默认使用 Aholo World 世界模型生成 3DGS 高斯空间；真实场地可切换到照片/视频重建。高斯空间负责三维环境呈现，可编辑布局壳承接尺寸、碰撞与物料摆放。</p></div>
+    <div className="sc-section-heading"><div><h2>生成引擎空间模型</h2>
+      <p>项目默认使用生成引擎场地生成 3D 重建空间；真实场地可切换到照片/视频重建。空间生成负责三维环境呈现，可编辑布局壳承接尺寸、碰撞与物料摆放。</p></div>
       <button type="button" className="sc-button" aria-expanded={historyOpen} aria-controls="aholo-history"
         onClick={() => setHistoryOpen(value => !value)}>{historyOpen ? '收起历史' : `历史记录（${history.length}）`}</button>
     </div>
-    <p className="sc-aholo-path" role="note">真实场地重建：地图圈画 → 采集单 → 现场照片/视频 → 高斯环境预览。地图只定场与出采集单；卫星不可作重建素材。</p>
+    <p className="sc-aholo-path" role="note">真实场地重建：地图圈画 → 采集单 → 现场照片/视频 → 空间生成预览。地图只定场与出采集单；卫星不可作重建素材。</p>
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
       <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；场地重建仍可干跑挂样例。物料生成在 Bingo 的「物料生成」里。</p>
       <div className="sc-aholo-cloud-actions">
@@ -580,7 +580,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
         </li>)}</ul>
       </>}
     </div>
-    {historyOpen && history.length > 0 && <p className="sc-note">记录只存描述与状态；产物链接会过期，点「查看」回 Aholo 取最新结果。</p>}
+    {historyOpen && history.length > 0 && <p className="sc-note">记录只存描述与状态；产物链接会过期，点「查看」回生成引擎取最新结果。</p>}
     <div className="sc-aholo-cards" role="radiogroup" aria-label="场地生成方式">
       {shownKinds.map(key => {
         const selected = kind === key;

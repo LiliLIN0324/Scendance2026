@@ -1,0 +1,13 @@
+assets-panel.react.test
+lux3d-direct-test.react.test
+map-venue-overlay.react.test
+nav-chrome.test
+project-review-library.test
+project-review.test
+scendance-workspace.react.test
+scene-delivery.test
+scene-presets.test
+share.test
+structure-satellite.test
+structure-v2.test
+venue-picker.react.test

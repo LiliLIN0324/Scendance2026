@@ -209,7 +209,7 @@ export interface LayoutAgentCallbacks {
   onOpenRebuild?(): void;
   /** 左栏 / 画布上的场地观感（Lux3D） */
   onOpenLux3d?(kind?: 'world' | 'recon', prompt?: string): void;
-  /** 生成轨、观感、重建等 Aholo 能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
+  /** 生成轨、观感、重建等生成引擎能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
   luxToolsVisible?: boolean;
 }
 
@@ -1359,7 +1359,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({
         role: 'agent',
         text: aholo.kind === 'world'
-          ? '世界模型生成属于空间 Agent；切到「空间」后用 Aholo World 生成 3D 高斯空间。'
+          ? '空间生成属于空间 Agent；切到「空间」后用生成引擎生成 3D 重建空间。'
           : `要生成${aholo.title}，请切到物料 Agent 的「生成物料」入口；Bingo 只负责布置与方案。`,
       });
       return;
@@ -1507,7 +1507,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
         const satNote = pick.satelliteGround
           ? '；已开卫星贴地参考底图（仅观感，不可作重建素材）'
           : '';
-        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。历史宴会厅环境预览正在挂到画布背景（只读复用 World 样例，不新开额度）；浮层收起后就能看见。采集单还在——再点「地图」可导出或上传现场素材做本场重建。` });
+        say({ role: 'agent', text: `户外场地立好了：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。历史宴会厅环境预览正在挂到画布背景（只读复用场地样例，不新开额度）；浮层收起后就能看见。采集单还在——再点「地图」可导出或上传现场素材做本场重建。` });
         return null;
       } catch (error) {
         const reason = error instanceof Error ? error.message : '地图场地没立起来，再试一次。';
@@ -1700,9 +1700,9 @@ function AgentCapabilityPrompts(): JSX.Element | null {
  * 场地已经立起来时同样进这里重圈——替换走 raiseVenue 那条老规矩，放得下的物料留着，放不下才撤并报数。
  */
 export function MapVenueOverlay({ onReconUpload, onHangDemoEnvironment }: {
-  /** 采集单拍完的素材要交给 Aholo 重建；重建入口可达时才传，按钮不会指向打不开的面板。 */
+  /** 采集单拍完的素材要交给生成引擎重建；重建入口可达时才传，按钮不会指向打不开的面板。 */
   onReconUpload?: ((preset: { name: string; hint: string }) => void) | undefined;
-  /** D0：立壳成功后挂上历史 World .spz 背景；传入则自动收起浮层让画布可见。 */
+  /** D0：立壳成功后挂上历史场地 .spz 背景；传入则自动收起浮层让画布可见。 */
   onHangDemoEnvironment?: (() => void) | undefined;
 }): JSX.Element | null {
   const agent = useAgent();

@@ -218,7 +218,7 @@ describe('Lux3D (Aholo) generation entry', () => {
     const guide = await screen.findByRole('dialog', { name: '生成教程' });
     expect(guide.textContent).toContain('加入场地预览');
     expect(guide.textContent).toContain('3-5 分钟');
-    expect(guide.textContent).toContain('Aholo Lux3D');
+    expect(guide.textContent).toContain('描述或传图');
     // 教程只随能力位出现，不随已退役 HY3 控件复活
     expect(screen.queryByLabelText('物料描述')).toBeNull();
   });

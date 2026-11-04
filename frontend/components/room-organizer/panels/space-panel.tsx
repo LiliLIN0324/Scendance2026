@@ -42,7 +42,7 @@ export function SpacePanel({
     onSetFloor(assetId: string, floorIndex: number): void;
     onClear(): void;
   };
-  /** 直接打开既有 Aholo World / World Recon 流程。 */
+  /** 直接打开既有空间生成 / 真实场地重建流程。 */
   onOpenAholo?: ((kind: 'world' | 'recon') => void) | undefined;
   /** 当前正在使用的真实场地（扫描库 assetId），只用于列表里的「使用中」。 */
   currentScanId?: string;
@@ -59,7 +59,7 @@ export function SpacePanel({
   const hostRef = useRef<HTMLElement>(null);
   const [confirm, setConfirm] = useState(false);
   const [notice, setNotice] = useState('');
-  // 项目默认走 World 世界模型 + Gaussian Splatting；传统壳体与模板作为可切换路径。
+  // 项目默认走空间生成 + 3D 重建；传统壳体与模板作为可切换路径。
   const [localWorkflow, setLocalWorkflow] = useState<'aholo' | 'traditional'>('aholo');
   const workflow = controlledWorkflow ?? localWorkflow;
   const selectWorkflow = onWorkflowChange ?? setLocalWorkflow;
@@ -102,7 +102,7 @@ export function SpacePanel({
           <div className="sc-space-workflow-label"><span>空间生成</span><details className="sc-space-info"><summary aria-label="空间生成方式说明" title="空间生成方式说明"><Info size={12} aria-hidden="true"/></summary><p>项目可包含多个空间。生成可漫游的场地；传统空间用于搭建可编辑的结构和模板。可按需要组合使用。</p></details></div>
           <div className="sc-space-workflow-switch">
             <button type="button" className={workflow === 'aholo' ? 'is-active' : ''} aria-pressed={workflow === 'aholo'} onClick={() => selectWorkflow('aholo')}>
-              <Globe size={14} aria-hidden="true"/><span>World 世界模型</span><small>默认 · 生成场地</small>
+              <Globe size={14} aria-hidden="true"/><span>空间生成</span><small>默认 · 生成场地</small>
             </button>
             <button type="button" className={workflow === 'traditional' ? 'is-active' : ''} aria-pressed={workflow === 'traditional'} onClick={() => selectWorkflow('traditional')}>
               <Layers size={14} aria-hidden="true"/><span>传统空间</span><small>空白壳 · 模板</small>
@@ -110,11 +110,11 @@ export function SpacePanel({
           </div>
         </div>
         {workflow === 'aholo' ? <div className="sc-space-card is-aholo">
-          <section className="sc-space-aholo-main" aria-label="Aholo 世界模型空间生成">
+          <section className="sc-space-aholo-main" aria-label="空间生成入口">
             <div className="sc-space-section-head">
-              <Globe size={16} aria-hidden="true"/><h3>World 世界模型</h3><small>默认</small>
+              <Globe size={16} aria-hidden="true"/><h3>空间生成</h3><small>默认</small>
               <details className="sc-space-info is-right">
-                <summary aria-label="World 世界模型说明" title="World 世界模型说明"><Info size={12} aria-hidden="true"/></summary>
+                <summary aria-label="空间生成说明" title="空间生成说明"><Info size={12} aria-hidden="true"/></summary>
                 <p>生成可漫游的 3D 空间，Bingo 可在可编辑布局上规划物料与动线。重建真实场地请用现场照片或视频；卫星图只能选址，不能作为重建素材。</p>
               </details>
             </div>

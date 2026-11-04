@@ -767,7 +767,7 @@ export function CaptureGuide(): JSX.Element {
                   <Ruler size={18} aria-hidden="true" />
                   <span>录入一个已知长度</span>
                   <InfoNote label="为什么必须录尺度">
-                    <p>《拍摄指南 2026》面向高斯重建，本身不要求尺度；Scendance 要把场地放进真实尺寸的活动布置里，所以这一步必须做。</p>
+                    <p>《拍摄指南 2026》面向空间生成重建，本身不要求尺度；Scendance 要把场地放进真实尺寸的活动布置里，所以这一步必须做。</p>
                     <p>最稳的做法：第一张画面里放一把卷尺或 A4 纸，并在凭证里记录它的真实长度。也可以量场地里两点的实际距离。</p>
                   </InfoNote>
                 </div>
@@ -1109,7 +1109,7 @@ export function CaptureGuide(): JSX.Element {
                     </div>
                   </div>
                   <InfoNote label="扫描为什么也要尺度">
-                    <p>高斯 / 点云默认是无尺度的相对坐标。没有尺度，导进 Scendance 后桌椅和场地对不上。</p>
+                    <p>空间生成 / 点云默认是无尺度的相对坐标。没有尺度，导进 Scendance 后桌椅和场地对不上。</p>
                   </InfoNote>
                 </div>
                 <div className="cg-scale-input">
@@ -1266,7 +1266,7 @@ export function CaptureGuide(): JSX.Element {
                   title="站在原地，转了 102°"
                   items={[
                     '24 张全景来自同一点，GPS 位移 0m。',
-                    '高斯需要相机沿轨迹移动；单点全景只能得到一个薄壳。',
+                    '空间生成需要相机沿轨迹移动；单点全景只能得到一个薄壳。',
                     '《拍摄指南 2026》也明确：不要定点拍单张全景。',
                   ]}
                   fix="沿圆环走起来，每 10–15° 一张，三层各一圈。"
@@ -1309,7 +1309,7 @@ export function CaptureGuide(): JSX.Element {
                   <li><b>三层 × 24–36 机位</b><span>指南要求多高度与 70% 重叠；我们把它量化成 120–180 张最低可交付（72 张只是三层闭环底线），少于 120 张直接封顶。</span></li>
                   <li><b>GPS 位移与朝向跨度</b><span>指南只提醒「不要定点拍全景」；我们用 GPS 位移 &lt;1.5m + 朝向跨度 ≥90° 自动判原地旋转，直接重采。</span></li>
                   <li><b>过暗 / 过曝硬拦</b><span>指南说低光噪点影响重建；我们把「过暗或过曝帧 ≥50%」判重采，夜景直接不放过。</span></li>
-                  <li><b>真实尺度必须录入</b><span>指南面向高斯重建，本身不要求尺度；Scendance 要量真实场地，所以缺尺度最高只能 69 分。</span></li>
+                  <li><b>真实尺度必须录入</b><span>指南面向空间生成重建，本身不要求尺度；Scendance 要量真实场地，所以缺尺度最高只能 69 分。</span></li>
                   <li><b>GPS 覆盖率进入评分</b><span>指南不要求 GPS；我们把「有效定位覆盖 &lt;50%」压上限，0 GPS 视为高风险。</span></li>
                   <li><b>拍摄时长上限</b><span>指南建议强光 ≤30 分钟、阴天 ≤2 小时；我们直接写进评分，超 2 小时时长项为 0。</span></li>
                 </ul>
@@ -1321,7 +1321,7 @@ export function CaptureGuide(): JSX.Element {
                   <span>要点转述</span>
                 </summary>
                 <div className="cg-reading">
-                  <p>这份指南面向 Gaussian / 3DGS 重建，原文由用户提供。这里只归纳要点，不收录原文，也不把 PDF 放进 public 目录。</p>
+                  <p>这份指南面向生成式 3D 重建，原文由用户提供。这里只归纳要点，不收录原文，也不把 PDF 放进 public 目录。</p>
                   <ul>
                     <li>锁曝光、白平衡、对焦；快门 ≥1/240s，ISO 尽量低，分辨率 4K+。</li>
                     <li>每张与前一张至少 70% 重叠，移动不过快；推荐约 120° 广角，避免鱼眼低像素。</li>
@@ -1330,7 +1330,7 @@ export function CaptureGuide(): JSX.Element {
                     <li>玻璃、镜面、高反射、频闪灯是硬伤；水面与天空建议分区块或后期拼接。</li>
                     <li>360 相机效率高，但单面分辨率低；手持时靠身体转动，不要只手腕转。</li>
                   </ul>
-                  <p className="cg-source">来源：《拍摄指南 2026》（Gaussian 重建拍摄指南，用户提供）。仅作要点转述与对照，不替代原文。</p>
+                  <p className="cg-source">来源：《拍摄指南 2026》（生成式重建拍摄指南，用户提供）。仅作要点转述与对照，不替代原文。</p>
                 </div>
               </details>
 
@@ -1406,7 +1406,7 @@ export function CaptureGuide(): JSX.Element {
                 </div>
                 <ol className="cg-steps">
                   <li><b>回到工作台</b><span>打开幕景，进入当前项目。</span></li>
-                  <li><b>打开「场地重建」</b><span>选「Aholo 重建真实场地」，上传这次拍的原片。</span></li>
+                  <li><b>打开「场地重建」</b><span>选「生成引擎重建真实场地」，上传这次拍的原片。</span></li>
                   <li><b>把凭证放进项目备注</b><span>重建失败时，先对照扣分项，而不是盲猜。</span></li>
                 </ol>
                 <Link className="cg-btn cg-btn--primary" href="/">
