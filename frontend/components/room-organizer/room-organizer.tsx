@@ -83,6 +83,8 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
+import { GeoBasemapInput } from './panels/geo-basemap-input';
+import { createResearchArea, RESEARCH_SATELLITE_STYLE } from './lib/research-area';
 import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
 import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
@@ -2016,6 +2018,37 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
   /**
+   * docs/49 地理底图：只动 researchArea（和过期的圈画框架），走正式历史；输入与自动铺图共用这一条路。
+   * 硬规则：底图锚在当前场地的真实位置、真实米制，绝不缩放。残留的圈画框架若描述的是另一块地
+   * （比如旧演示留的北京壳），会把底图拽到几百公里外——判定为异地就连框架一起清掉；
+   * 圈画流程下次立壳会自己重建这套框架，同地的框架原样保留。
+   */
+  const applyResearchArea = useCallback((area: RoomLayout['researchArea'] | null) => {
+    const current = layoutStore.getState().layout;
+    const frame = current.mapGroundFrame;
+    const frameCenter = current.mapLngLat ?? (frame ? { lng: frame.lng0, lat: frame.lat0 } : null);
+    const foreignFrame = Boolean(area && frameCenter
+      && (Math.abs(area.center.lng - frameCenter.lng) > 0.05
+        || Math.abs(area.center.lat - frameCenter.lat) > 0.03));
+    const next: RoomLayout = (() => {
+      const stripped = foreignFrame
+        ? (() => { const { mapGroundFrame: _f, mapLngLat: _l, mapGroundPolygon: _p, ...rest } = current; return rest; })()
+        : current;
+      if (!area) {
+        const { researchArea: _dropped, ...rest } = stripped;
+        return rest as RoomLayout;
+      }
+      return { ...stripped, researchArea: area };
+    })();
+    try {
+      commitHistoryNow();
+      actions.applyLayout(next);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  }, [actions, commitHistoryNow, notify]);
+
+  /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
    * 尺寸与场地标记合成一步历史——撤销一次就回到上一套场地（画布与尺寸一起退）。
    * 注册表带米制尺寸就直接按它摆壳体；没带时才等高斯就绪校准。
@@ -2084,6 +2117,28 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       setSplatShellKeptFor(splatState.assetId);
     }
   }, [splatState, onApplyCreative]);
+  // docs/49 地理底图：场地扫描资产带 geo（拍摄位置）就自动铺卫星底图，重建物落在真实位置上；
+  // 手动/调研标的底图（无 scanAssetId 标记）永远不被自动逻辑覆盖；新场地没 geo 就撤掉自己铺的那张。
+  const scanBasemapAssetRef = useRef('');
+  useEffect(() => {
+    const assetId = environments[0]?.assetId ?? '';
+    if (!assetId || scanBasemapAssetRef.current === assetId) return;
+    scanBasemapAssetRef.current = assetId;
+    const asset = findAholoAsset(assetId);
+    const existing = layoutStore.getState().layout.researchArea;
+    if (existing && !existing.scanAssetId) return; // 手动底图优先，不覆盖
+    if (!asset?.geo) {
+      if (existing?.scanAssetId) applyResearchArea(null);
+      return;
+    }
+    if (existing?.scanAssetId === assetId) return;
+    const span = Math.max(asset.meters?.width ?? 0, asset.meters?.depth ?? 0);
+    const radius = asset.geo.radiusM ?? Math.round(Math.max(300, Math.min(1600, span * 12)));
+    applyResearchArea({
+      ...createResearchArea({ name: asset.name, address: '', lng: asset.geo.lng, lat: asset.geo.lat }, radius, RESEARCH_SATELLITE_STYLE),
+      scanAssetId: assetId,
+    });
+  }, [environments, applyResearchArea]);
   const splatPlacement = splatState.status === 'ready'
     ? placeSplatPreview(layout, splatState.name, splatState.meters ?? null)
     : null;
@@ -2233,6 +2288,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   <RailLaneDot lane="material" open={isLaneOpen('material')}/>
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
+                <a
+                  href="/guide/capture"
+                  className="sc-rail-tool sc-rail-disc sc-rail-capture"
+                  aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"
+                  data-tip="拍摄场地 · 出 3D"
+                >
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
+                    <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                  <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
+                </a>
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -2260,6 +2327,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </svg>
           </button>
           {!columnExpanded && <MobileAgentDock agentId={activeAgent} onOpen={() => toggleAgent(activeAgent)} />}
+          <a className="sc-mobile-capture-entry" href="/guide/capture" aria-label="拍摄场地：拍完出 3D">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
+            <span>拍摄场地</span>
+          </a>
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -2414,6 +2488,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
             <CanvasHeading view2D={view.view2D} />
+            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
               {environmentShown
