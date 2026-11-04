@@ -10,7 +10,7 @@
 | `door/door.svg` | `viewBox 0 0 1024 1024` | **矢量母版**：单条复合 path（外轮廓 4 个独立圆角 + 内联拱形缺口），447 B |
 | `door/door-128.svg` | `viewBox 0 0 128 128` | 同一 `d` 的等价版，坐标与原图完全同尺度 |
 | `door/door-eyes.svg` | 1024 | 母版 + `icon.svg` 那两只白眼睛（128 换算值 13.44×30.08 / `rx 6.72` / `rotate 12°`） |
-| `door/png/` | 16 / 24 / 28 / 32 / 48 / 64 / 128 / 256 / 512 | **全部由 `door.svg` 以 resvg 渲染** |
+| `door/png/` | 16 / 24 / 28 / 32 / 48 / 64 / 128 / 256 / 512 | **128 档 = 原件字节**（SHA256 `911D11FD…ADAF8F`）；其余 8 档由 `door.svg` 以 resvg 渲染 |
 | `door/png/door-eyes-128.png`、`door-eyes-512.png` | 128 / 512 | 由 `door-eyes.svg` 渲染 |
 | `door/compare-128.png` | 1180×384 | 原图 / SVG 渲回 128 / 差异高亮（灰=一致，红=PNG 有 SVG 无，蓝=SVG 多） |
 | `door/compare-eyes.png` | 782×384 | 带眼 / 不带眼并排 |
