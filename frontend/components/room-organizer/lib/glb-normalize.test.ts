@@ -1,6 +1,13 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { GLB_MAX_METERS, normalizeGlbRoot, planGlbNormalization } from './glb-normalize';
+import {
+  GLB_CENTIMETER_THRESHOLD,
+  GLB_MAX_METERS,
+  GLB_MIN_METERS,
+  GLB_Z_UP_RATIO,
+  normalizeGlbRoot,
+  planGlbNormalization,
+} from './glb-normalize';
 
 function box(width: number, height: number, depth: number): THREE.Mesh {
   return new THREE.Mesh(new THREE.BoxGeometry(width, height, depth));
@@ -85,5 +92,39 @@ describe('GLB 尺度归一化', () => {
 
   it('无网格的空节点没有包围盒，也会被拒绝', () => {
     expect(() => normalizeGlbRoot(new THREE.Group())).toThrow('模型包围盒无效');
+  });
+});
+
+describe('归一化参数边界', () => {
+  const bounds = (width: number, height: number, depth: number) => ({
+    min: { x: 0, y: 0, z: 0 },
+    max: { x: width, y: height, z: depth },
+  });
+
+  it('厘米阈值 20 是闭边界：19.999 仍按米，20 起按厘米', () => {
+    expect(GLB_CENTIMETER_THRESHOLD).toBe(20);
+    expect(planGlbNormalization(bounds(19.999, 1, 1)).unit).toBe('m');
+    expect(planGlbNormalization(bounds(20, 1, 1)).unit).toBe('cm');
+    expect(planGlbNormalization(bounds(20, 1, 1)).unitScale).toBe(0.01);
+  });
+
+  it('Z-up 判定只在 z 达到 x/y 最长值的 1.25 倍时成立', () => {
+    expect(GLB_Z_UP_RATIO).toBe(1.25);
+    expect(planGlbNormalization(bounds(1, 1, 1.25)).upAxis).toBe('z');
+    expect(planGlbNormalization(bounds(1, 1, 1.24)).upAxis).toBe('y');
+    // x 比 z 长时也按 Y-up，不会被 z 轴误转。
+    expect(planGlbNormalization(bounds(1.3, 1, 1.25)).upAxis).toBe('y');
+  });
+
+  it('尺寸上限 50 m 是闭边界，超一点就报错', () => {
+    expect(GLB_MAX_METERS).toBe(50);
+    expect(() => normalizeGlbRoot(box(50, 1, 1), { unit: 'm' })).not.toThrow();
+    expect(() => normalizeGlbRoot(box(50.001, 1, 1), { unit: 'm' })).toThrow(/模型尺寸异常（最长边 50\.0 米）/);
+  });
+
+  it('尺寸下限 0.005 m：5.1 mm 可导入，4 mm 拒绝', () => {
+    expect(GLB_MIN_METERS).toBe(0.005);
+    expect(() => normalizeGlbRoot(box(0.0051, 0.0051, 0.0051))).not.toThrow();
+    expect(() => normalizeGlbRoot(box(0.004, 0.004, 0.004))).toThrow('模型尺寸异常');
   });
 });
