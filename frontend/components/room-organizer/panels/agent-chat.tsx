@@ -60,6 +60,16 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
   return (
     <div className={`ap-chat is-${agent}`}>
       <form className="ap-composer ap-composer-compact" aria-label={`${meta.name}动作框`} onSubmit={submit}>
+        {agent === 'space' && onOpenAholo && (
+          <div className="ap-gen-chips" role="group" aria-label="生成方式">
+            <button type="button" className="ap-gen-chip" onClick={() => { onSelectSpaceWorkflow?.('aholo'); onOpenAholo('world'); }}>
+              <Globe size={13} aria-hidden="true"/><span>生成场地</span>
+            </button>
+            <button type="button" className="ap-gen-chip" onClick={() => { onOpenAholo('recon'); }}>
+              <Scan size={13} aria-hidden="true"/><span>照片重建</span>
+            </button>
+          </div>
+        )}
         <label className="sr-only" htmlFor={`ap-chat-${agent}`}>{meta.name}输入框</label>
         <div className="ap-composer-field">
           <textarea
@@ -77,13 +87,9 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
         </div>
         <div className="ap-composer-bar">
           <div className="ap-composer-left">
-            {agent === 'space' && (onNewSpace || onOpenAholo) && <details className="sc-chat-plus">
+            {agent === 'space' && (onNewSpace) && <details className="sc-chat-plus">
               <summary aria-label="更多操作" data-tip="更多"><Plus size={16} aria-hidden="true"/></summary>
               <div className="sc-chat-plus-menu">
-                {onOpenAholo && <>
-                  <button type="button" onClick={event => { onSelectSpaceWorkflow?.('aholo'); onOpenAholo('world'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><Globe size={13} aria-hidden="true"/><span>生成场地</span></button>
-                  <button type="button" onClick={event => { onOpenAholo('recon'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><Scan size={13} aria-hidden="true"/><span>上传照片重建场地</span></button>
-                </>}
                 {onNewSpace && <>
                   <button type="button" onClick={event => { onNewSpace('blank'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><SquareDashed size={13} aria-hidden="true"/><span>新建空白空间</span></button>
                   <button type="button" onClick={event => { onNewSpace('template'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><LayoutTemplate size={13} aria-hidden="true"/><span>从模板开始</span></button>
