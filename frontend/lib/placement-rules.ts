@@ -6,7 +6,8 @@ const EPS = 1e-6;
 /**
  * 违规码枚举。
  * - OUT_OF_BOUNDS / WALL_INTERSECTION / BBOX_OVERLAP：M3-A 已实现的硬伤判据。
- * - MAIN_AISLE_BLOCKED / CHAIR_ISLAND：M3-B 预留槽位，本文件不产出对应记录。
+ * - MAIN_AISLE_BLOCKED：大件压主通道带（椅子/低矮件/结构件豁免）。
+ * - CHAIR_ISLAND：椅子离通道过远且被家具围合，疑似孤岛椅。
  */
 export type ViolationCode =
   | 'OUT_OF_BOUNDS'
@@ -186,6 +187,20 @@ function isStructural(item: FurnitureItem): boolean {
 }
 
 /**
+ * 椅/凳/沙发类家具：允许临时压主通道（不算堵死），
+ * 但当它被推到离通道 >0.6m 且被一堆家具围合时，会被识别为孤岛椅。
+ */
+function isChairFamily(item: FurnitureItem): boolean {
+  return (
+    item.type === 'chair' ||
+    item.type === 'dining-chair' ||
+    item.type === 'armchair' ||
+    item.type === 'bench' ||
+    item.type === 'sofa'
+  );
+}
+
+/**
  * 核心判据：把 candidate 放到 floorIndex 这一层，对 floor.items（含 candidate 自身）跑全部硬伤。
  * 调用方负责决定是只看合法性，还是把违规清单透出。
  */
@@ -247,6 +262,61 @@ function checkAgainstFloor(
     }
   }
 
+  // 4. 主通道被堵：沿房间中线 x=0 的纵向通道带（宽 1.2m，贯穿全高）。
+  //    大件（桌/柜/舞台/背景等）压上去就报；椅子类、低矮件、结构件豁免。
+  if (!isStructural(candidate) && !isLowProfile(candidate) && !isChairFamily(candidate)) {
+    const aabb = aabbOf(poly);
+    const aisle = {
+      minX: -0.6,
+      maxX: 0.6,
+      minZ: -layout.height / 2,
+      maxZ: layout.height / 2,
+    };
+    const overlap =
+      aabb.minX < aisle.maxX - EPS &&
+      aabb.maxX > aisle.minX + EPS &&
+      aabb.minZ < aisle.maxZ - EPS &&
+      aabb.maxZ > aisle.minZ + EPS;
+    if (overlap) {
+      violations.push({
+        code: 'MAIN_AISLE_BLOCKED',
+        itemId: candidate.id,
+        itemName: candidate.name,
+        detail: `「${candidate.name}」堵住了主通道（预留 1.2m 宽纵向通道）`,
+      });
+    }
+  }
+
+  // 5. 孤岛椅：椅/凳/沙发离主通道带的最小水平距离 > 0.6m，
+  //    且 1.5m 半径内有 ≥3 件其他非结构、非低矮家具围合。
+  if (isChairFamily(candidate)) {
+    const aabb = aabbOf(poly);
+    let gap = 0;
+    if (aabb.maxX < -0.6) gap = -0.6 - aabb.maxX;
+    else if (aabb.minX > 0.6) gap = aabb.minX - 0.6;
+    if (gap > 0.6 + EPS) {
+      let neighbors = 0;
+      const cx = candidate.position?.x ?? 0;
+      const cz = candidate.position?.z ?? 0;
+      for (const other of floor.items) {
+        if (other.id === candidate.id) continue;
+        if (isStructural(other) || isLowProfile(other)) continue;
+        const ox = other.position?.x ?? 0;
+        const oz = other.position?.z ?? 0;
+        const d = Math.hypot(ox - cx, oz - cz);
+        if (d <= 1.5 + EPS) neighbors += 1;
+      }
+      if (neighbors >= 3) {
+        violations.push({
+          code: 'CHAIR_ISLAND',
+          itemId: candidate.id,
+          itemName: candidate.name,
+          detail: `「${candidate.name}」离主通道过远且被家具围合，可能是孤岛椅`,
+        });
+      }
+    }
+  }
+
   return violations;
 }
 
@@ -267,7 +337,8 @@ export function isPlacementLegal(
  * 扫一遍整份布局（或指定某一层）的所有 items，返回违规清单。
  * - options.floorIndex 缺省：扫所有 floor。
  * - OUT_OF_BOUNDS / WALL_INTERSECTION 对每件低矮件同样生效；BBOX_OVERLAP 对低矮件豁免。
- * TODO(M3-B)：MAIN_AISLE_BLOCKED / CHAIR_ISLAND 预留判据，本函数暂不产出。
+ * - MAIN_AISLE_BLOCKED 对大件生效，对椅子/低矮件/结构件豁免。
+ * - CHAIR_ISLAND 只对椅/凳/沙发类生效，且要求离通道 >0.6m 且被 ≥3 件家具围合。
  */
 export function collectViolations(
   layout: Pick<RoomLayout, 'width' | 'height' | 'floors'>,

@@ -10,7 +10,7 @@ import './agent-chat.css';
 /**
  * 空间 / 物料的底部动作条（S3 面板化后形态）。
  * 假聊天气泡已退役：这一格不再来回寒暄，只留一条短指令框 + 真动词钮。
- * 总控与 Bingo 走 AgentPanel 那场真对话，这里不接管。
+ * 活动与 Bingo 走 AgentPanel 那场真对话，这里不接管。
  */
 const AGENT_CHAT_META: Record<'space' | 'material', { name: string; placeholder: string }> = {
   space: { name: '空间', placeholder: '一句话描述场地，如：80 人发布会，室内' },
@@ -22,7 +22,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
   void layout;
   const [draft, setDraft] = useState('');
 
-  // 总控与 Bingo 是 AgentPanel 里那场真对话，这里不接管。
+  // 活动与 Bingo 是 AgentPanel 里那场真对话，这里不接管。
   if (agent === 'bingo' || agent === 'door') return null;
 
   const meta = AGENT_CHAT_META[agent];
@@ -96,7 +96,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
                 </>}
               </div>
             </details>}
-            {/* 物料这一格的左下角就是那颗生成物料星，和总控那格同一个入口、同一颗钮。 */}
+            {/* 物料这一格的左下角就是那颗生成物料星，和生成入口那格同一个入口、同一颗钮。 */}
             {agent === 'material' && <MaterialCreateCell/>}
           </div>
           <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={18}/></button>

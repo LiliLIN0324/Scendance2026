@@ -17,6 +17,7 @@ import {
   type BingoPlan,
   type BingoSnapshot,
 } from '../lib/bingo-status';
+import { useGenerationOutcome } from '../lib/use-generation-outcome';
 
 /**
  * Bingo 的审计位：3.0.0 左栏「收甲方反馈」并进对话后留下的只读记录。
@@ -24,6 +25,7 @@ import {
  */
 export function BingoAuditCard(): JSX.Element | null {
   const [snapshot, setSnapshot] = useState<BingoSnapshot>(emptyBingoSnapshot);
+  const { outcome, summary } = useGenerationOutcome();
 
   const sync = useCallback(() => {
     setSnapshot(readBingoSnapshot(typeof window === 'undefined' ? null : window.localStorage));
@@ -56,6 +58,7 @@ export function BingoAuditCard(): JSX.Element | null {
       {snapshot.receipt && <button type="button" className="ap-icon-btn ap-audit-clear" aria-label="清回执" title="清回执" onClick={onClearReceipt}><Trash2 size={14} aria-hidden="true"/></button>}
     </header>
     {snapshot.receipt && <p className="ap-audit-receipt"><Check size={14} aria-hidden="true"/><time dateTime={snapshot.receipt.at}>{formatBingoTime(snapshot.receipt.at) || snapshot.receipt.at}</time></p>}
+    {outcome && <p className="ap-audit-outcome" role="status"><strong>本次结果：</strong>{summary}</p>}
     {snapshot.plans.map((plan, index) => <AuditPlan key={`${plan.shareId}-${index}`} plan={plan}/>)}
   </section>;
 }

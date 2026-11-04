@@ -70,7 +70,7 @@ describe('collectViolations', () => {
           items: [
             makeItem({ id: 't1', name: '餐桌A', position: { x: -2, z: 0 } }),
             makeItem({ id: 't2', name: '餐桌B', position: { x: 2, z: 1 } }),
-            makeItem({ id: 't3', name: '餐桌C', position: { x: 0, z: -2 } }),
+            makeItem({ id: 't3', name: '餐桌C', position: { x: 1.5, z: -2 } }),
           ],
         },
       ],
@@ -125,7 +125,7 @@ describe('collectViolations', () => {
         {
           id: 'f0',
           items: [
-            makeItem({ id: 't1', name: '餐桌', position: { x: 0, z: 0 } }),
+            makeItem({ id: 't1', name: '餐桌', position: { x: 1.5, z: 0 } }),
             makeItem({
               id: 'r1',
               name: '地毯',
@@ -222,7 +222,7 @@ describe('collectViolations', () => {
 
 describe('isPlacementLegal', () => {
   it('自比：candidate 已在 floor.items 里，不把它自己当重叠对手', () => {
-    const item = makeItem({ id: 't1', name: '桌', position: { x: 0, z: 0 } });
+    const item = makeItem({ id: 't1', name: '桌', position: { x: 1.5, z: 0 } });
     const layout = makeLayout({
       width: 10,
       height: 8,
@@ -255,5 +255,125 @@ describe('isPlacementLegal', () => {
     });
     const candidate = makeItem({ id: 't-new', name: '边桌', position: { x: 5.5, z: 0 } });
     expect(isPlacementLegal(layout, 0, candidate)).toBe(false);
+  });
+});
+
+describe('M3-B 主通道与孤岛椅', () => {
+  it('桌子压在主通道带上（x=0，z=0，1m×1m 桌子）→ 报 MAIN_AISLE_BLOCKED', () => {
+    const layout = makeLayout({
+      width: 10,
+      height: 8,
+      floors: [
+        { id: 'f0', items: [makeItem({ id: 't1', name: '长桌', position: { x: 0, z: 0 } })] },
+      ],
+    });
+    const vs = collectViolations(layout);
+    const blocked = vs.filter((v) => v.code === 'MAIN_AISLE_BLOCKED');
+    expect(blocked.length).toBe(1);
+    expect(blocked[0]?.itemId).toBe('t1');
+  });
+
+  it('椅子摆在主通道带上（x=0，z=0，chair 0.5m×0.5m）→ 不报 MAIN_AISLE_BLOCKED（椅子豁免）', () => {
+    const chair = makeItem({
+      id: 'c1',
+      name: '椅子',
+      type: 'chair',
+      width: 0.5,
+      depth: 0.5,
+      position: { x: 0, z: 0 },
+    });
+    const layout = makeLayout({
+      width: 10,
+      height: 8,
+      floors: [{ id: 'f0', items: [chair] }],
+    });
+    const vs = collectViolations(layout);
+    expect(vs.filter((v) => v.code === 'MAIN_AISLE_BLOCKED')).toEqual([]);
+    // 椅子压在通道内，离通道距离为 0，也不应触发 CHAIR_ISLAND。
+    expect(vs.filter((v) => v.code === 'CHAIR_ISLAND')).toEqual([]);
+    expect(vs).toEqual([]);
+  });
+
+  it('大件（backdrop 3m×0.3m）压通道 → 报 MAIN_AISLE_BLOCKED', () => {
+    const backdrop = makeItem({
+      id: 'b1',
+      name: '背景板',
+      type: 'backdrop',
+      width: 3,
+      depth: 0.3,
+      position: { x: 0, z: 0 },
+    });
+    const layout = makeLayout({
+      width: 10,
+      height: 8,
+      floors: [{ id: 'f0', items: [backdrop] }],
+    });
+    const vs = collectViolations(layout);
+    const blocked = vs.filter((v) => v.code === 'MAIN_AISLE_BLOCKED');
+    expect(blocked.length).toBe(1);
+    expect(blocked[0]?.itemId).toBe('b1');
+  });
+
+  it('椅子被 3 件桌子围合在 1.5m 内、且离通道 >0.6m → 报 CHAIR_ISLAND', () => {
+    const chair = makeItem({
+      id: 'c1',
+      name: '孤椅',
+      type: 'chair',
+      width: 0.5,
+      depth: 0.5,
+      position: { x: 2.0, z: 0 },
+    });
+    const t1 = makeItem({ id: 't1', name: '桌A', width: 1, depth: 1, position: { x: 2.0, z: 1.2 } });
+    const t2 = makeItem({ id: 't2', name: '桌B', width: 1, depth: 1, position: { x: 2.0, z: -1.2 } });
+    const t3 = makeItem({ id: 't3', name: '桌C', width: 1, depth: 1, position: { x: 3.2, z: 0 } });
+    const layout = makeLayout({
+      width: 10,
+      height: 8,
+      floors: [{ id: 'f0', items: [chair, t1, t2, t3] }],
+    });
+    const vs = collectViolations(layout);
+    const islands = vs.filter((v) => v.code === 'CHAIR_ISLAND');
+    expect(islands.length).toBe(1);
+    expect(islands[0]?.itemId).toBe('c1');
+  });
+
+  it('椅子离通道近（x=1.0，即距通道边 0.4m）→ 不报 CHAIR_ISLAND', () => {
+    const chair = makeItem({
+      id: 'c1',
+      name: '椅子',
+      type: 'chair',
+      width: 0.5,
+      depth: 0.5,
+      position: { x: 1.0, z: 0 },
+    });
+    const layout = makeLayout({
+      width: 10,
+      height: 8,
+      floors: [{ id: 'f0', items: [chair] }],
+    });
+    const vs = collectViolations(layout);
+    expect(vs.filter((v) => v.code === 'CHAIR_ISLAND')).toEqual([]);
+    expect(vs.filter((v) => v.code === 'MAIN_AISLE_BLOCKED')).toEqual([]);
+    expect(vs).toEqual([]);
+  });
+
+  it('椅子周围只有 2 件家具（<3）→ 不报 CHAIR_ISLAND', () => {
+    const chair = makeItem({
+      id: 'c1',
+      name: '椅子',
+      type: 'chair',
+      width: 0.5,
+      depth: 0.5,
+      position: { x: 2.0, z: 0 },
+    });
+    const t1 = makeItem({ id: 't1', name: '桌A', width: 1, depth: 1, position: { x: 2.0, z: 1.2 } });
+    const t2 = makeItem({ id: 't2', name: '桌B', width: 1, depth: 1, position: { x: 2.0, z: -1.2 } });
+    const layout = makeLayout({
+      width: 10,
+      height: 8,
+      floors: [{ id: 'f0', items: [chair, t1, t2] }],
+    });
+    const vs = collectViolations(layout);
+    expect(vs.filter((v) => v.code === 'CHAIR_ISLAND')).toEqual([]);
   });
 });

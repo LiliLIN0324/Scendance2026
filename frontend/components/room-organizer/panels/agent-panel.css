@@ -535,6 +535,8 @@ button.ap-ghost {
 .ap-audit-phase.is-returned { color: var(--warn); border-color: currentColor; }
 .ap-audit-clear { margin-left: auto; }
 .ap-audit-receipt { display: flex; align-items: center; gap: 5px; margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-outcome { display: flex; align-items: center; gap: 5px; margin: 0; font-size: var(--fs-cap); color: var(--ink); }
+.ap-audit-outcome strong { font-weight: 600; }
 .ap-audit-plan { display: flex; flex-direction: column; gap: 5px; padding-top: 8px; border-top: 1px solid var(--wk-hair); }
 .ap-audit-toggle { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
 .ap-audit-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-p1); font-weight: 500; }
