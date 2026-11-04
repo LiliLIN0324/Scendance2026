@@ -100,8 +100,19 @@ export const SATELLITE_GROUND_NOTE =
 /** 可识别的卫星参考底图 data URL 前缀标记（占位图 / 截帧均带此注）。 */
 export const SATELLITE_GROUND_MARK = 'satellite-ground-ref';
 
+/** 调研底图（图层用路网）的地址标记。与卫星贴地同属「地图参考图」，同样不可作重建素材。 */
+export const MAP_BASEMAP_MARK = 'map-basemap';
+
 export function isSatelliteGroundImage(url: string | undefined | null): boolean {
   return !!url && url.includes(SATELLITE_GROUND_MARK);
+}
+
+/**
+ * 是不是「地图参考图」——卫星贴地与调研底图都算。
+ * 这类图只是观感参考，和 RECON_MATERIAL_BAN 同一条禁令：不得进入 Aholo 上传/重建素材。
+ */
+export function isMapReferenceImage(url: string | undefined | null): boolean {
+  return !!url && (url.includes(SATELLITE_GROUND_MARK) || url.includes(MAP_BASEMAP_MARK));
 }
 
 /**
@@ -383,8 +394,15 @@ export function parseSatelliteImageBounds(url: string): SatelliteImageBounds | n
 /**
  * 卫星参考图地址（Key 不进地址）。范围是圈画外接矩形加一圈 pad，不是任意 zoom 的方形瓦片。
  * 本机是 3199，生产是同源 /api/amap-static。
+ * style=6 是卫星；调研底图要路网时传 7，与坐标一起给回的是同一张图的两种瓦片。
  */
-export function satelliteProxyUrl(polygon: AmapPoint[], _key?: string, frame?: MapGroundFrame, shell?: { width: number; depth: number }): string | null {
+export function satelliteProxyUrl(
+  polygon: AmapPoint[],
+  _key?: string,
+  frame?: MapGroundFrame,
+  shell?: { width: number; depth: number },
+  style?: 6 | 7 | 8,
+): string | null {
   const registration = groundRegistration(polygon);
   if (!registration) return null;
   const used = frame ?? registration.frame;
@@ -396,6 +414,7 @@ export function satelliteProxyUrl(polygon: AmapPoint[], _key?: string, frame?: M
     north: bounds.north.toFixed(7),
     'x-ref': SATELLITE_GROUND_MARK,
   });
+  if (style !== undefined) params.set('style', String(style));
   const query = params.toString();
   return usesLocalAmapProxy()
     ? `http://127.0.0.1:3199/amap-static?${query}`
@@ -411,8 +430,9 @@ export async function fetchSatelliteGroundDataUrl(
   _key?: string,
   frame?: MapGroundFrame,
   shell?: { width: number; depth: number },
+  style?: 6 | 7 | 8,
 ): Promise<string | null> {
-  const proxy = satelliteProxyUrl(polygon, _key, frame, shell);
+  const proxy = satelliteProxyUrl(polygon, _key, frame, shell, style);
   if (!proxy || typeof window === 'undefined') return null;
   // 浏览器直连 restapi 常被掐；走本机代理。用代理 URL 直接贴地（勿嵌 data URL，避免 localStorage 爆）。
   try {
@@ -474,7 +494,8 @@ export function rectangleAroundMeters(center: AmapPoint, widthM: number, depthM:
 export function isMapOutdoorLayout(layout: RoomLayout): boolean {
   if ((layout.mapGroundPolygon?.length ?? 0) >= 3) return true;
   if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) return true;
-  if (isSatelliteGroundImage(layout.floorPlanImage)) return true;
+  if (isMapReferenceImage(layout.floorPlanImage)) return true;
+  if (layout.researchArea) return true;
   // 缺圈画点列也要露出钮：规划区 / 真实范围只会出现在地图立壳的名字里。
   if (/规划区|真实范围/.test(layout.name)) return true;
   const venue = layout.backendSceneV2?.venue ?? layout.backendVenue;
@@ -494,12 +515,12 @@ export function satelliteGroundWanted(layout: RoomLayout): boolean {
 }
 
 export function isPlaceholderSatellite(url: string | undefined | null): boolean {
-  return !!url && url.startsWith('data:image/svg') && isSatelliteGroundImage(url);
+  return !!url && url.startsWith('data:image/svg') && isMapReferenceImage(url);
 }
 
-/** 已经有可贴地的卫星图（代理或位图），占位 SVG 不算。生产上的 127.0.0.1 地址不算，否则会一直纯色。 */
+/** 已经有可贴地的地图图（代理或位图），占位 SVG 不算。生产上的 127.0.0.1 地址不算，否则会一直纯色。 */
 export function hasFetchedSatellite(url: string | undefined | null): boolean {
-  if (!isSatelliteGroundImage(url) || isPlaceholderSatellite(url)) return false;
+  if (!isMapReferenceImage(url) || isPlaceholderSatellite(url)) return false;
   if (!usesLocalAmapProxy() && !!url && (url.includes('127.0.0.1:3199') || url.includes('localhost:3199'))) return false;
   return true;
 }
@@ -704,7 +725,7 @@ export function createVenueFromPick(
       || raw.startsWith('http://127.0.0.1:3199/amap-static?')
       || raw.startsWith('http://localhost:3199/amap-static?')
       || raw.startsWith('/api/amap-static?')
-      || isSatelliteGroundImage(raw)
+      || isMapReferenceImage(raw)
     )
       ? raw
       : makeSatelliteGroundPlaceholder(safeWidth, safeDepth);
@@ -716,7 +737,7 @@ export function createVenueFromPick(
     };
   } else if (pick.satelliteGround === false) {
     const next = { ...layout, satelliteGroundRef: false as const };
-    if (isSatelliteGroundImage(next.floorPlanImage)) delete next.floorPlanImage;
+    if (isMapReferenceImage(next.floorPlanImage)) delete next.floorPlanImage;
     layout = next;
   }
   return { layout, cleared: plan.cleared };

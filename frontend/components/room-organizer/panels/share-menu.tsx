@@ -8,6 +8,7 @@
 import QRCode from 'qrcode';
 import { ClipboardCheck, Copy, ExternalLink, FileDown, Info, Link2, PackageOpen, QrCode, Upload } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { describeUnshareableAssets } from '../../../lib/share-snapshot';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { planDrawOrder } from '../lib/plan-order';
 import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
@@ -27,6 +28,8 @@ export interface ShareMenuActions {
   /** 把当前保存的版本发布成只读页，返回扫码链接。 */
   onPublish(): Promise<PublishedLink>;
   /** 打开既有的完整活动交接确认，不切执行模式。 */
+  /** 生成自带快照的只读 3D 查看链接（/view#s1=...），并复制到剪贴板。 */
+  onGenerateShareLink?(): Promise<{ url: string; name: string; objects: number; droppedAssets: number } | null>;
   onExportHandoff(): void;
   /** 打开既有的云项目 / 素材库，不新开路由。 */
   onOpenMaterials(): void;
@@ -80,6 +83,7 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
   const [published, setPublished] = useState<PublishedLink | null>(null);
   const [qrSvg, setQrSvg] = useState('');
   const [reviewUrl, setReviewUrl] = useState('');
+  const [viewerLink, setViewerLink] = useState<{ url: string; name: string; objects: number; droppedAssets: number } | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const seenOpen = useRef(openRequest);
@@ -167,6 +171,40 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
     }
   };
 
+  const generateViewer = async () => {
+    if (!actions?.onGenerateShareLink || busy) {
+      setNotice('3D 分享还没接到工作台。');
+      return;
+    }
+    const blocked = layout ? describeUnshareableAssets(layout) : null;
+    if (blocked && blocked.count > 0) {
+      setNotice(blocked.message);
+      return;
+    }
+    setBusy(true);
+    setNotice('');
+    try {
+      const result = await actions.onGenerateShareLink();
+      if (!result) return;
+      if (result.droppedAssets > 0) {
+        setNotice(`有 ${result.droppedAssets} 件资产没有随链接带走，这次链接未采用。请替换为公开素材后再生成。`);
+        return;
+      }
+      setViewerLink(result);
+      setNotice(`${result.name} · ${result.objects} 件物件。只读 3D 链接已复制，打开即可转角度查看。`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '只读 3D 链接没有生成。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyViewer = async () => {
+    if (!viewerLink) return;
+    const copied = await copyText(viewerLink.url);
+    setNotice(copied ? '3D 链接已复制。' : '复制没成功，请从地址栏手动复制。');
+  };
+
   const copyPublished = async () => {
     if (!published) return;
     const copied = await copyText(published.url);
@@ -209,6 +247,16 @@ export function ShareMenu({ actions, layout, openRequest = 0, closeSignal = 0 }:
         </>}
       </div>
       {notice && <p className="sc-publish-note" role="status">{notice}</p>}
+
+      <section className="sc-publish-row" aria-label="只读 3D 分享方案">
+        {viewerLink ? <>
+          <button type="button" aria-label="复制 3D 链接" onClick={() => { void copyViewer(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
+          <a href={viewerLink.url} target="_blank" rel="noopener noreferrer" aria-label="打开只读 3D 方案"><ExternalLink size={14} aria-hidden="true"/><span>打开</span></a>
+          <button type="button" aria-label="重新生成 3D 链接" disabled={busy} onClick={() => { void generateViewer(); }}><MaterialSymbol name="refresh"/><span>重新生成</span></button>
+        </> : <button type="button" disabled={busy} onClick={() => { void generateViewer(); }}>
+          <MaterialSymbol name="view_in_ar"/><span>{busy ? '正在生成…' : '生成只读 3D 分享方案'}</span>
+        </button>}
+      </section>
 
       <section className="sc-publish-qr" aria-label="手机看方案">
         <span className="sc-publish-kicker">手机看方案</span>

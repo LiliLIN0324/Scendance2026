@@ -1,15 +1,25 @@
 import { isGlbUrl } from './glb-url';
 
-/** 本机直连代理地址；密钥只留在代理侧，前端只谈路径。 */
+/**
+ * 直连生成通道地址：默认是本机 lux3d-dev-proxy，也可在构建时用
+ * `NEXT_PUBLIC_LUX3D_DIRECT_URL` 指向部署好的中转（HTTPS）。密钥只留在代理/中转侧。
+ */
 export const DIRECT_BASE = (process.env.NEXT_PUBLIC_LUX3D_DIRECT_URL ?? 'http://127.0.0.1:3199').replace(/\/+$/, '');
 
-/** 是否走本机 lux3d-dev-proxy（127/localhost）。生产默认不走，避免点了就打 127.0.0.1:3199。 */
+/**
+ * 直连通道是否可用：
+ * - 配了 `NEXT_PUBLIC_LUX3D_DIRECT_URL` → 任何构建都可用（本地代理或部署的中转）；
+ * - 没配 → 只有本地开发默认走 127.0.0.1:3199，线上不去猜一个连不上的本机地址。
+ * 线上没有直连通道时，生成与取回走云端任务队列（`/jobs`），不依赖本机脚本。
+ */
 export function isLux3dLocalProxy(): boolean {
-  try {
-    const host = new URL(DIRECT_BASE).hostname;
-    if (host !== '127.0.0.1' && host !== 'localhost') return false;
-  } catch {
-    return false;
+  if (process.env.NEXT_PUBLIC_LUX3D_DIRECT_URL) {
+    try {
+      new URL(DIRECT_BASE);
+      return true;
+    } catch {
+      return false;
+    }
   }
   return process.env.NODE_ENV === 'development';
 }

@@ -22,13 +22,13 @@
 | 内容 | 文档 |
 | --- | --- |
 | 前端启动、构建 | [前端 README](../../frontend/README.md) |
-| 后端入口 | [后端说明](../BACKEND.md) |
-| API 与共享协议 | [API](../API.md)、[客户端](../../client/scene-client.ts) |
-| 生产部署 | [部署步骤](../DEPLOYMENT.md)、[云端记录](CLOUD_DEPLOYMENT.md)、[Cloudflare](CLOUDFLARE_SETUP.md) |
-| 登录、注册与邮件边界 | [登录接入](../AUTH_SETUP.md) |
-| AI 前端与服务端 | [AI 助理](../AI_ASSISTANT.md)、[服务配置](AI_ASSISTANT_SETUP.md)、[提示词](../AI_SYSTEM_PROMPT.md) |
-| AI 额度与供应商 | [AI 使用额度](../AI_USAGE_LIMITS.md)、[供应商配置](../PROVIDER_SETUP.md) |
-| 验证记录 | [后端验证](VERIFICATION.md)、[前后端联调](../INTEGRATION.md)、[首次上线](FIRST_LAUNCH.md) |
+| 后端入口 | [后端说明](../32-后端设计.md) |
+| API 与共享协议 | [API](../31-HTTP-API与前端接入.md)、[客户端](../../client/scene-client.ts) |
+| 生产部署 | [部署步骤](../35-本地运行与云端维护.md)、[云端记录](CLOUD_DEPLOYMENT.md)、[Cloudflare](CLOUDFLARE_SETUP.md) |
+| 登录、注册与邮件边界 | [登录接入](../38-登录接入.md) |
+| AI 前端与服务端 | [AI 助理](../28-AI场景助理接入.md)、[服务配置](AI_ASSISTANT_SETUP.md)、[提示词](../29-AI系统提示词.md) |
+| AI 额度与供应商 | [AI 使用额度](../30-AI使用额度.md)、[供应商配置](../40-提供商配置.md) |
+| 验证记录 | [后端验证](VERIFICATION.md)、[前后端联调](../33-前后端联调.md)、[首次上线](FIRST_LAUNCH.md) |
 
 ## 本地验证
 

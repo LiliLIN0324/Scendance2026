@@ -3,9 +3,18 @@ import { canvasToWorld, get2DViewTransform, render2DTopDown } from '../canvas-2d
 import { requestZoneName } from '../lib/editor-notices';
 import { floorKeepOut } from '../lib/floor-keep-out';
 import { hasCollisions } from '../lib/geometry';
+import { expandSelection } from '../lib/groups';
 import { isWallMounted } from '../lib/opening-snap';
 import { planDrawOrder } from '../lib/plan-order';
 import { planFloorIndex } from '../lib/street';
+import {
+  advanceTransformSession,
+  createTransformSession,
+  itemInsideRect,
+  type GizmoMode,
+  type TransformResult,
+  type TransformSession,
+} from '../lib/transform';
 import { defaultZoneName, nextZoneColor, zoneFromCorners } from '../lib/zones';
 import { dragThresholdPx, keepsSelectionOnPress } from '../three/drag-handlers';
 import { useLayoutActions } from './use-layout-store';
@@ -75,14 +84,18 @@ export interface UseCanvas2DInteractionParams {
   onItemSelect(id: string, mode: 'replace' | 'toggle' | 'single'): void;
   /** 画布 `dblclick` 打在物料上时上报那一件。属性面板只由这一路打开，与 3D 视图同契约。 */
   onItemDoubleClick?(id: string): void;
-  /** Pointer went down on empty plan space — clear the selection (#219). */
+  /** Pointer went down on empty plan space and released without dragging (#219). */
   onDeselect(): void;
+  /** A marquee rectangle was dragged out; `additive` keeps the Shift press (#P0-3). */
+  onMarqueeSelect?(ids: string[], additive: boolean): void;
   /** The same snap pipeline the 3D drag applies per move (use-item-placement). */
   snapPosition(id: string, x: number, z: number): { x: number; z: number };
   onItemDragStart(id: string): void;
   onItemDrag(id: string, x: number, z: number): void;
   onItemDragEnd(id: string): void;
   onItemDragCancel(id: string, options?: DragCancelOptions): void;
+  /** 'move' drags; 'rotate'/'scale' dial the pressed item (#P0-3). */
+  gizmoMode?: GizmoMode;
   /** Review / delivery: no select, drag, or zone draw. */
   editingLocked?: boolean;
   /** Review click on an item or the plan. A drag past the threshold does not pin. */
@@ -164,8 +177,24 @@ export function useCanvas2DInteraction(
       origins: Map<string, { x: number; z: number }>;
       /** In-flight positions for the ghost repaint. */
       latest: Map<string, { x: number; z: number }>;
+      /** Rotate/scale sessions dial the pressed item instead of translating it. */
+      transform: TransformSession | null;
+      transformResult: TransformResult | null;
     }
     let gesture: Gesture | null = null;
+
+    /** Empty-space drag selecting everything it touches. */
+    interface MarqueeGesture {
+      pointerId: number;
+      downClientX: number;
+      downClientY: number;
+      threshold: number;
+      started: boolean;
+      additive: boolean;
+      start: { x: number; z: number };
+      latest: { x: number; z: number };
+    }
+    let marqueeGesture: MarqueeGesture | null = null;
     let rafId: number | null = null;
     let reviewPress: { pointerId: number; downClientX: number; downClientY: number; threshold: number; itemId: string | null; x: number; z: number } | null = null;
 
@@ -187,6 +216,10 @@ export function useCanvas2DInteraction(
       const session = gesture?.started ? gesture : null;
       const items = session
         ? activeFloor.items.map((item) => {
+            if (item.id === session.itemId && session.transformResult) {
+              const result = session.transformResult;
+              return { ...item, rotation: result.rotation, width: result.width, depth: result.depth };
+            }
             const moved = session.latest.get(item.id);
             return moved ? { ...item, position: moved } : item;
           })
@@ -194,6 +227,14 @@ export function useCanvas2DInteraction(
       const keepOut = floorKeepOut(layout, planFloorIndex(layout.floors, activeFloor));
       const draft = zoneGesture?.started
         ? zoneFromCorners(zoneGesture.start, zoneGesture.latest, layout.width, layout.height)
+        : null;
+      const marquee = marqueeGesture?.started
+        ? {
+            x: Math.min(marqueeGesture.start.x, marqueeGesture.latest.x),
+            z: Math.min(marqueeGesture.start.z, marqueeGesture.latest.z),
+            w: Math.abs(marqueeGesture.latest.x - marqueeGesture.start.x),
+            d: Math.abs(marqueeGesture.latest.z - marqueeGesture.start.z),
+          }
         : null;
       render2DTopDown({
         canvas,
@@ -208,6 +249,7 @@ export function useCanvas2DInteraction(
         showFloorPlan: view.showReferenceImage !== false,
         ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         zoneDraft: draft,
+        marqueeDraft: marquee,
         hasCollision: (item) =>
           hasCollisions(item, items, layout.width, layout.height, { keepOut, interiorWalls: activeFloor.interiorWalls }),
       });
@@ -258,8 +300,11 @@ export function useCanvas2DInteraction(
       }
       p.onItemDragStart(session.itemId);
       // Membership mirrors use-item-drag's session: the whole multi-select
-      // when >1, with locked co-selected members left in place (#115).
-      const ids = p.allSelectedIds.size > 1 ? p.allSelectedIds : new Set([session.itemId]);
+      // when >1, with locked co-selected members left in place (#115). A
+      // rotate/scale dial only touches the pressed item.
+      const ids = session.transform
+        ? new Set([session.itemId])
+        : p.allSelectedIds.size > 1 ? p.allSelectedIds : new Set([session.itemId]);
       for (const id of ids) {
         const item = p.activeFloor.items.find((entry) => entry.id === id);
         if (!item?.position) continue;
@@ -293,7 +338,7 @@ export function useCanvas2DInteraction(
     };
 
     const onPointerDown = (event: PointerEvent): void => {
-      if (event.button !== 0 || gesture !== null || zoneGesture !== null) return;
+      if (event.button !== 0 || gesture !== null || zoneGesture !== null || marqueeGesture !== null) return;
       const p = paramsRef.current;
       const world = clientToWorld2D(event.clientX, event.clientY);
       if (!world) return;
@@ -327,10 +372,23 @@ export function useCanvas2DInteraction(
       }
       const hit = hitTest2DItems(p.activeFloor.items, world.x, world.z, hitSlopWorld());
       if (!hit) {
-        p.onDeselect();
+        // Empty-space press arms a marquee; a release without crossing the
+        // threshold still behaves like the old click-to-deselect (#P0-3).
+        marqueeGesture = {
+          pointerId: event.pointerId,
+          downClientX: event.clientX,
+          downClientY: event.clientY,
+          threshold: dragThresholdPx(event.pointerType),
+          started: false,
+          additive: event.shiftKey,
+          start: world,
+          latest: world,
+        };
         return;
       }
-      const mode = event.altKey ? 'single' : event.ctrlKey || event.metaKey ? 'toggle' : 'replace';
+      // Shift joins ctrl/meta as the additive-selection modifier, matching
+      // every desktop editor (#P0-3).
+      const mode = event.altKey ? 'single' : event.ctrlKey || event.metaKey || event.shiftKey ? 'toggle' : 'replace';
       const locked = hit.locked === true;
       // A plain press on a member of a multi-selection keeps it, so the drag
       // moves the whole set (#291) — mirrors the 3D canvas (drag-handlers).
@@ -351,6 +409,8 @@ export function useCanvas2DInteraction(
         started: false,
         origins: new Map(),
         latest: new Map(),
+        transform: (p.gizmoMode ?? 'move') !== 'move' ? createTransformSession(hit) : null,
+        transformResult: null,
       };
     };
 
@@ -359,6 +419,25 @@ export function useCanvas2DInteraction(
         const dx = event.clientX - reviewPress.downClientX;
         const dy = event.clientY - reviewPress.downClientY;
         if (dx * dx + dy * dy >= reviewPress.threshold * reviewPress.threshold) reviewPress = null;
+        return;
+      }
+      const marquee = marqueeGesture;
+      if (marquee && event.pointerId === marquee.pointerId) {
+        if (!marquee.started) {
+          const dx = event.clientX - marquee.downClientX;
+          const dy = event.clientY - marquee.downClientY;
+          if (dx * dx + dy * dy < marquee.threshold * marquee.threshold) return;
+          marquee.started = true;
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch {
+            // Capture can throw if the pointer is already gone; safe to ignore.
+          }
+        }
+        const world = clientToWorld2D(event.clientX, event.clientY);
+        if (!world) return;
+        marquee.latest = world;
+        schedulePaint();
         return;
       }
       const zone = zoneGesture;
@@ -398,6 +477,20 @@ export function useCanvas2DInteraction(
       }
       const world = clientToWorld2D(event.clientX, event.clientY);
       if (!world) return;
+      if (session.transform) {
+        // No snapping here: the dial reads the raw pointer angle/radius.
+        // use-item-drag derives the same values from the same points, so the
+        // ghost repaint and the committed transform always agree.
+        session.transformResult = advanceTransformSession(
+          session.transform,
+          world.x,
+          world.z,
+          p.gizmoMode as 'rotate' | 'scale'
+        );
+        p.onItemDrag(session.itemId, world.x, world.z);
+        schedulePaint();
+        return;
+      }
       const snapped = p.snapPosition(
         session.itemId,
         world.x + session.grabOffset.x,
@@ -423,6 +516,43 @@ export function useCanvas2DInteraction(
         const press = reviewPress;
         reviewPress = null;
         if (event.type === 'pointerup') paramsRef.current.onReviewAnchor?.({ itemId: press.itemId, x: press.x, z: press.z });
+        return;
+      }
+      const marquee = marqueeGesture;
+      if (marquee && event.pointerId === marquee.pointerId) {
+        marqueeGesture = null;
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        const p = paramsRef.current;
+        if (marquee.started) releaseCapture(marquee.pointerId);
+        if (event.type !== 'pointerup') {
+          schedulePaint();
+          return;
+        }
+        if (marquee.started) {
+          const rect = {
+            x: Math.min(marquee.start.x, marquee.latest.x),
+            z: Math.min(marquee.start.z, marquee.latest.z),
+            w: Math.abs(marquee.latest.x - marquee.start.x),
+            d: Math.abs(marquee.latest.z - marquee.start.z),
+          };
+          if (rect.w > 0.05 || rect.d > 0.05) {
+            const ids = new Set<string>();
+            for (const item of p.activeFloor.items) {
+              if (!item.position || item.locked) continue;
+              if (!itemInsideRect(item, rect)) continue;
+              for (const member of expandSelection(p.activeFloor.items, item.id)) ids.add(member);
+            }
+            p.onMarqueeSelect?.(Array.from(ids), marquee.additive);
+          } else if (!marquee.additive) {
+            p.onDeselect();
+          }
+        } else if (!marquee.additive) {
+          p.onDeselect();
+        }
+        schedulePaint();
         return;
       }
       const zone = zoneGesture;
@@ -458,6 +588,10 @@ export function useCanvas2DInteraction(
     const onPointerCancel = (event: PointerEvent): void => {
       // A zone draft is discarded by endGesture (it checks the event type).
       if (zoneGesture && event.pointerId === zoneGesture.pointerId) {
+        endGesture(event);
+        return;
+      }
+      if (marqueeGesture && event.pointerId === marqueeGesture.pointerId) {
         endGesture(event);
         return;
       }

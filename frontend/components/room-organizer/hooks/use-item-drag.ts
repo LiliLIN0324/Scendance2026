@@ -2,6 +2,15 @@ import { useCallback, useRef, type MutableRefObject } from 'react';
 import { hasCollisions, type KeepOutRect } from '../lib/geometry';
 import { settleWallMountedItem, type WallGap } from '../lib/opening-snap';
 import { canApplyLayoutGeometry, structuralItemCollides } from '../lib/structural-layout';
+import {
+  advanceGroupScaleSession,
+  advanceTransformSession,
+  createGroupScaleSession,
+  createTransformSession,
+  type GizmoMode,
+  type GroupScaleSession,
+  type TransformSession,
+} from '../lib/transform';
 import type { LayoutActions } from './use-layout-state';
 import type { FloorLayout, RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
@@ -18,6 +27,13 @@ export interface UseItemDragParams {
   frontGap: WallGap | null;
   actions: LayoutActions;
   allSelectedIds: ReadonlySet<string>;
+  /** 'move' is the ground-plane drag; 'rotate'/'scale' dial the item instead (#P0-3). */
+  gizmoMode?: GizmoMode;
+  /**
+   * Fired once per gesture when the scale ratio hits the 0.2×/5× clamp, so the
+   * editor can surface a toast instead of silently stopping at the limit.
+   */
+  onScaleLimit?: (limit: 'min' | 'max') => void;
 }
 
 export interface DragCancelOptions {
@@ -84,15 +100,24 @@ export function useItemDrag({
   frontGap,
   actions,
   allSelectedIds,
+  gizmoMode = 'move',
+  onScaleLimit,
 }: UseItemDragParams): UseItemDragResult {
   const sceneBoxRef = useRef<MutableRefObject<ThreeNS.Scene | null> | null>(null);
   const invalidateBoxRef = useRef<() => void>(() => {});
+
+  /** A rotate/scale gesture dials either one item or (scale only) the whole selection. */
+  type TransformGesture =
+    | { kind: 'single'; session: TransformSession; noticedLimit: 'min' | 'max' | null }
+    | { kind: 'group-scale'; session: GroupScaleSession; noticedLimit: 'min' | 'max' | null };
 
   const dragSessionRef = useRef<{
     primaryId: string;
     origins: Map<string, { x: number; z: number }>;
     latest: Map<string, { x: number; z: number }>;
     valid: Map<string, { x: number; z: number }>;
+    /** Rotate/scale sessions dial the primary item instead of translating it. */
+    transform: TransformGesture | null;
   } | null>(null);
 
   const findFurnitureGroup = useCallback(
@@ -130,6 +155,36 @@ export function useItemDrag({
 
   const handleDragStart = useCallback(
     (primaryId: string) => {
+      // Rotate dials the primary item only; scale can dial a multi-selection as
+      // a group around its centroid (keyboard R still rotates groups).
+      if (gizmoMode !== 'move') {
+        if (gizmoMode === 'scale' && allSelectedIds.size > 1) {
+          const members = activeFloor.items.filter(
+            (entry) => allSelectedIds.has(entry.id) && !entry.locked && entry.position
+          );
+          const groupSession = members.length > 1 ? createGroupScaleSession(members) : null;
+          if (groupSession) {
+            dragSessionRef.current = {
+              primaryId,
+              origins: new Map(),
+              latest: new Map(),
+              valid: new Map(),
+              transform: { kind: 'group-scale', session: groupSession, noticedLimit: null },
+            };
+            return;
+          }
+        }
+        const item = activeFloor.items.find((entry) => entry.id === primaryId);
+        const transform = item ? createTransformSession(item) : null;
+        dragSessionRef.current = {
+          primaryId,
+          origins: new Map(),
+          latest: new Map(),
+          valid: new Map(),
+          transform: transform ? { kind: 'single', session: transform, noticedLimit: null } : null,
+        };
+        return;
+      }
       const ids = allSelectedIds.size > 1 ? allSelectedIds : new Set([primaryId]);
       const origins = new Map<string, { x: number; z: number }>();
       for (const id of ids) {
@@ -142,9 +197,15 @@ export function useItemDrag({
         if (item.locked && id !== primaryId) continue;
         origins.set(id, { x: item.position.x, z: item.position.z });
       }
-      dragSessionRef.current = { primaryId, origins, latest: new Map(origins), valid: new Map(origins) };
+      dragSessionRef.current = {
+        primaryId,
+        origins,
+        latest: new Map(origins),
+        valid: new Map(origins),
+        transform: null,
+      };
     },
-    [allSelectedIds, activeFloor.items]
+    [allSelectedIds, activeFloor.items, gizmoMode]
   );
 
   const handleDrag = useCallback(
@@ -153,6 +214,40 @@ export function useItemDrag({
       if (!session || session.primaryId !== id) {
         // No drag session (programmatic move) — dispatch directly.
         actions.moveItem(id, x, z);
+        return;
+      }
+      if (session.transform) {
+        const gesture = session.transform;
+        if (gesture.kind === 'group-scale') {
+          const t = advanceGroupScaleSession(gesture.session, x, z);
+          for (const member of t.members) {
+            const group = findFurnitureGroup(member.id);
+            if (!group) continue;
+            group.position.x = member.x;
+            group.position.z = member.z;
+            group.scale.set(member.scaleX, 1, member.scaleZ);
+          }
+          invalidateBoxRef.current();
+          if (t.limit && gesture.noticedLimit !== t.limit) {
+            gesture.noticedLimit = t.limit;
+            onScaleLimit?.(t.limit);
+          }
+          return;
+        }
+        const t = advanceTransformSession(gesture.session, x, z, gizmoMode as 'rotate' | 'scale');
+        const group = findFurnitureGroup(id);
+        if (group) {
+          if (gizmoMode === 'rotate') {
+            group.rotation.y = t.rotation;
+          } else {
+            group.scale.set(t.width / gesture.session.baseWidth, 1, t.depth / gesture.session.baseDepth);
+          }
+        }
+        invalidateBoxRef.current();
+        if (t.limit && gesture.noticedLimit !== t.limit) {
+          gesture.noticedLimit = t.limit;
+          onScaleLimit?.(t.limit);
+        }
         return;
       }
       session.latest.set(id, { x, z });
@@ -189,13 +284,70 @@ export function useItemDrag({
       }
       invalidateBoxRef.current();
     },
-    [actions, activeFloor, activeFloorIndex, layout, roomWidth, roomDepth, keepOut, findFurnitureGroup, setDragCollisionTint]
+    [actions, activeFloor, activeFloorIndex, layout, roomWidth, roomDepth, keepOut, findFurnitureGroup, setDragCollisionTint, gizmoMode, onScaleLimit]
   );
 
   const handleDragEnd = useCallback(
     (id: string) => {
       const session = dragSessionRef.current;
       dragSessionRef.current = null;
+      if (session?.transform) {
+        const gesture = session.transform;
+        if (gesture.kind === 'group-scale') {
+          for (const member of gesture.session.members) {
+            const group = findFurnitureGroup(member.id);
+            if (!group) continue;
+            group.position.x = member.baseX;
+            group.position.z = member.baseZ;
+            group.scale.set(1, 1, 1);
+          }
+          invalidateBoxRef.current();
+          if (!gesture.session.moved) return;
+          const positions = new Map<string, { x: number; z: number }>();
+          for (const member of gesture.session.result) {
+            const base = gesture.session.members.find((entry) => entry.id === member.id);
+            if (!base) continue;
+            if (Math.abs(member.x - base.baseX) > 1e-4 || Math.abs(member.z - base.baseZ) > 1e-4) {
+              positions.set(member.id, { x: member.x, z: member.z });
+            }
+            const item = activeFloor.items.find((entry) => entry.id === member.id);
+            if (!item) continue;
+            if (Math.abs(member.width - item.width) > 1e-4) actions.resizeItem(member.id, 'width', member.width);
+            if (Math.abs(member.depth - item.depth) > 1e-4) actions.resizeItem(member.id, 'depth', member.depth);
+          }
+          if (positions.size > 0) actions.bulkSetPositions(positions);
+          return;
+        }
+        const t = gesture.session;
+        const group = findFurnitureGroup(id);
+        // Hand the preview back to the rebuild before committing.
+        if (group) {
+          group.rotation.y = t.baseRotation;
+          group.scale.set(1, 1, 1);
+        }
+        invalidateBoxRef.current();
+        if (!t.moved) return;
+        if (gizmoMode === 'rotate') {
+          actions.setRotation(id, t.rotation);
+          // Wall-mounted pieces re-seat onto whichever wall they now face.
+          const item = activeFloor.items.find((entry) => entry.id === id);
+          if (item) {
+            const settled = settleWallMountedItem(
+              item,
+              item.position ?? { x: 0, z: 0 },
+              roomWidth,
+              roomDepth,
+              activeFloor.interiorWalls ?? [],
+              frontGap
+            );
+            if (settled) actions.updateItem(id, settled);
+          }
+        } else {
+          actions.resizeItem(id, 'width', t.width);
+          actions.resizeItem(id, 'depth', t.depth);
+        }
+        return;
+      }
       if (session) {
         session.latest = session.valid;
         for (const [memberId, position] of session.latest) {
@@ -241,7 +393,7 @@ export function useItemDrag({
         if (settled) actions.updateItem(movedId, settled);
       }
     },
-    [activeFloor.items, activeFloor.interiorWalls, roomWidth, roomDepth, frontGap, actions, findFurnitureGroup, setDragCollisionTint]
+    [activeFloor.items, activeFloor.interiorWalls, roomWidth, roomDepth, frontGap, actions, findFurnitureGroup, setDragCollisionTint, gizmoMode]
   );
 
   const handleDragCancel = useCallback(
@@ -252,6 +404,27 @@ export function useItemDrag({
       const session = dragSessionRef.current;
       dragSessionRef.current = null;
       if (!session || options?.restore !== true) return;
+      if (session.transform) {
+        const gesture = session.transform;
+        if (gesture.kind === 'group-scale') {
+          for (const member of gesture.session.members) {
+            const group = findFurnitureGroup(member.id);
+            if (!group) continue;
+            group.position.x = member.baseX;
+            group.position.z = member.baseZ;
+            group.scale.set(1, 1, 1);
+          }
+          invalidateBoxRef.current();
+          return;
+        }
+        const group = findFurnitureGroup(id);
+        if (group) {
+          group.rotation.y = gesture.session.baseRotation;
+          group.scale.set(1, 1, 1);
+        }
+        invalidateBoxRef.current();
+        return;
+      }
       // A pointercancel (OS gesture, palm rejection) undoes the drag: the
       // fast path moved the groups directly, so move them back (#292).
       for (const [memberId, origin] of session.origins) {

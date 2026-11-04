@@ -3,7 +3,7 @@ import { EVENT_CATALOG, FURNITURE_CATALOG } from './constants';
 import { backendSceneToLayout } from './backend-adapter';
 import { mergeDiagnostics, rejectedDiagnostics, type PlanDiagnostic } from './diagnostics';
 import { FURNITURE_SETS, buildFurnitureSet, setPlacementSlots } from './furniture-sets';
-import { hasCollisions, itemsOverlap } from './geometry';
+import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
 import { presetModelUrl } from './scene-presets';
@@ -520,5 +520,426 @@ export function proposeAddition(input: { base: RoomLayout; floorIndex: number; r
     layouts, added, removing: 0, keptLocked: floor.items.filter(item => item.locked && !isStructuralMarker(item)).length,
     dropped, overlapCount: overlaps.count, overlapNames: overlaps.names, blocked, accepted, guests: null, seats: 0,
     diagnostics,
+  };
+}
+
+/* ───────── plan.revise：按对象做增量修改，不清场重摆 ───────── */
+
+export type SiteSide = 'north' | 'south' | 'east' | 'west';
+
+/** 不许压的带状区域（湖侧景观带、保留带）。从对应边向内量，单位米。 */
+export interface SiteBand {
+  side: SiteSide;
+  depth: number;
+  label: string;
+}
+
+export type RevisionConflictCode =
+  | 'TARGET_NOT_FOUND'
+  | 'LOCKED'
+  | 'UNKNOWN_ASSET'
+  | 'BBOX_OVERLAP'
+  | 'KEEP_OUT_BAND'
+  | 'OUT_OF_BOUNDS'
+  | 'STRUCTURAL'
+  | 'NO_SPOT';
+
+export interface RevisionConflict {
+  code: RevisionConflictCode;
+  /** 被点名的物件（itemId 或 assetId）。 */
+  target: string;
+  message: string;
+  /** 命令算出来、但过不了约束的落点。 */
+  requested?: Vec2;
+  /** 冲突时建议挪到的最近可用落点；确实没有就省略。 */
+  alternative?: Vec2;
+}
+
+/** 按对象改的统一寻址：优先 itemId；否则按角色 + 序号 + 左右侧认。 */
+export interface PlanTargetHint {
+  itemId?: string;
+  /** 文本层还没拿到 itemId 时按名字/类型认（舞台 ≈ 背景板，桌子 ≈ table）。 */
+  role?: string;
+  /** 「左边第二张桌子」里的 2。 */
+  ordinal?: number;
+  /** 同角色多件时从哪头数：左边 = x 从小到大。 */
+  side?: 'left' | 'right';
+}
+
+export interface PlanMoveOp extends PlanTargetHint {
+  kind: 'move';
+  delta?: Vec2;
+  to?: Vec2;
+}
+
+export interface PlanRotateOp extends PlanTargetHint {
+  kind: 'rotate';
+  /** 顺时针为正，单位度。 */
+  deltaDeg: number;
+}
+
+export interface PlanScaleOp extends PlanTargetHint {
+  kind: 'scale';
+  factor: number;
+}
+
+export interface PlanRemoveOp extends PlanTargetHint {
+  kind: 'remove';
+}
+
+export interface PlanRecolorOp extends PlanTargetHint {
+  kind: 'recolor';
+  /** 十六进制颜色；只改材质色，不动几何。 */
+  color: string;
+}
+
+export interface PlanAddOp {
+  kind: 'add';
+  /** 物料目录 type（lamp / tree…）、活动物料 materialId，或外部 GLB 资产的 assetId。 */
+  assetId: string;
+  count?: number;
+  position?: Vec2;
+  /** 朝向，度；0 = 朝南（观众席方向）。与 facing 二选一。 */
+  rotation?: number;
+  facing?: SiteSide;
+  /** 相对某件（通常是舞台）左/右/两侧各放。 */
+  anchor?: { role: string; sides?: 'both' | 'left' | 'right'; gapM?: number };
+  /** 按 assetId 找不到目录时，用这组尺寸现场建一件（Lux3D 生成的 GLB 走这里）。 */
+  name?: string;
+  width?: number;
+  depth?: number;
+  height?: number;
+  glbUrl?: string;
+}
+
+export type PlanRevisionOp = PlanMoveOp | PlanRotateOp | PlanScaleOp | PlanRemoveOp | PlanRecolorOp | PlanAddOp;
+
+export interface RevisionProposal extends PlanProposal {
+  /** 真正落进候选的改动数（新增 + 删除 + 挪/转/缩放）。 */
+  applied: number;
+  /** 被约束挡下、没有落进候选的每次尝试，带建议替代位置。 */
+  conflicts: RevisionConflict[];
+}
+
+/** 文本里说的「舞台」在本项目就是贴北墙的背景板；灯按目录里的三种灯认。 */
+const ROLE_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  舞台: ['backdrop', 'stage', '舞台'],
+  背景板: ['backdrop', '背景板'],
+  背景墙: ['backdrop'],
+  灯: ['lamp', 'floor-lamp', 'pendant-light', 'lamppost', '灯'],
+  灯光: ['lamp', 'floor-lamp', 'pendant-light', 'lamppost', '灯', 'light'],
+  射灯: ['lamp', 'floor-lamp', 'pendant-light', '射灯'],
+  绿植: ['plant', 'flowerpot', '绿植'],
+  树: ['tree', 'pine-tree', '树'],
+  桌子: ['table', 'desk', 'dining-table', '桌子'],
+  桌: ['table', 'desk', '桌'],
+  椅子: ['chair', 'dining-chair', '椅子'],
+  椅: ['chair', '椅'],
+  签到台: ['checkin', 'reception', '签到台'],
+};
+
+function matchesRole(item: FurnitureItem, role: string): boolean {
+  const key = role.replace(/[（）()【】[\]·\s]/g, '');
+  if (!key) return false;
+  const aliases = ROLE_ALIASES[key] ?? [key];
+  const fields = [String(item.type), item.name, item.materialId ?? '', item.assetId ?? ''];
+  return aliases.some(alias => fields.some(field => field === alias || (alias.length > 1 && field.includes(alias))));
+}
+
+function resolveTarget(items: readonly FurnitureItem[], op: PlanTargetHint): FurnitureItem | null {
+  if (op.itemId) return items.find(item => item.id === op.itemId) ?? null;
+  if (!op.role) return null;
+  const matches = items.filter(item => !isStructuralMarker(item) && matchesRole(item, op.role!));
+  if (!matches.length) return null;
+  // 「左边第二张桌子」：同角色按 x 排，左边从最小 x 数，右边从最大 x 数。
+  const ordered = op.side === 'left'
+    ? [...matches].sort((left, right) => (left.position?.x ?? 0) - (right.position?.x ?? 0))
+    : op.side === 'right'
+      ? [...matches].sort((left, right) => (right.position?.x ?? 0) - (left.position?.x ?? 0))
+      : matches;
+  const index = Math.max(0, (op.ordinal ?? 1) - 1);
+  return ordered[index] ?? null;
+}
+
+/** 按 assetId 取一件可放的物料；目录里没有但带了尺寸，就按外部 GLB 资产现场建。 */
+function buildRevisionItem(op: PlanAddOp): { item: FurnitureItem; name: string } | null {
+  const furniture = FURNITURE_CATALOG.find(entry => entry.type === op.assetId);
+  if (furniture) {
+    return { item: { ...furniture, id: uid(), position: { x: 0, z: 0 }, rotation: 0 } as FurnitureItem, name: furniture.name };
+  }
+  const material = EVENT_CATALOG.find(entry => entry.materialId === op.assetId);
+  if (material) {
+    return { item: { ...material, id: uid(), position: { x: 0, z: 0 }, rotation: 0 } as FurnitureItem, name: material.name };
+  }
+  if (!(op.width && op.depth && op.width > 0 && op.depth > 0)) return null;
+  const height = op.height && op.height > 0 ? op.height : Math.max(op.width, op.depth);
+  const item: FurnitureItem = {
+    id: uid(), type: 'glb-asset', name: op.name ?? op.assetId,
+    width: op.width, depth: op.depth, height,
+    color: '#9aa3ad', icon: '📦', materialId: 'asset', assetId: op.assetId, source: 'generated',
+    ...(op.glbUrl ? { glbUrl: op.glbUrl } : {}),
+    position: { x: 0, z: 0 }, rotation: 0,
+  };
+  return { item, name: item.name };
+}
+
+/** rotation 0 朝 +z（南，观众席）；rotation 单位是弧度，操作契约里给人写度数。 */
+const FACE_RAD: Readonly<Record<SiteSide, number>> = {
+  south: 0, north: Math.PI, east: Math.PI / 2, west: -Math.PI / 2,
+};
+
+function facingRotation(op: PlanAddOp): number {
+  if (typeof op.rotation === 'number') return (op.rotation * Math.PI) / 180;
+  return op.facing ? FACE_RAD[op.facing] : 0;
+}
+
+interface XzRect { x0: number; x1: number; z0: number; z1: number }
+
+function bandRect(layout: RoomLayout, band: SiteBand): XzRect {
+  const halfW = layout.width / 2;
+  const halfD = layout.height / 2;
+  const depth = Math.max(0, band.depth);
+  if (band.side === 'west') return { x0: -halfW, x1: -halfW + depth, z0: -halfD, z1: halfD };
+  if (band.side === 'east') return { x0: halfW - depth, x1: halfW, z0: -halfD, z1: halfD };
+  if (band.side === 'north') return { x0: -halfW, x1: halfW, z0: -halfD, z1: -halfD + depth };
+  return { x0: -halfW, x1: halfW, z0: halfD - depth, z1: halfD };
+}
+
+function boundsOf(item: FurnitureItem): XzRect {
+  const { halfW, halfD } = rotatedHalfExtents(item);
+  const position = item.position ?? { x: 0, z: 0 };
+  return { x0: position.x - halfW, x1: position.x + halfW, z0: position.z - halfD, z1: position.z + halfD };
+}
+
+const rectsOverlap = (a: XzRect, b: XzRect): boolean =>
+  Math.min(a.x1, b.x1) > Math.max(a.x0, b.x0) && Math.min(a.z1, b.z1) > Math.max(a.z0, b.z0);
+
+/** 地毯、地垫这类低矮件允许被别的物件压着，不参与包围盒冲突。 */
+const isLowProfile = (item: FurnitureItem): boolean =>
+  item.type === 'rug' || item.type === 'carpet' || (item.height ?? 0) <= 0.05;
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+interface PlacementProblem { code: RevisionConflictCode; message: string }
+
+/**
+ * 一件候选落点的最小约束：景观带 → 既有物件包围盒 → 场地边界 → 墙柱 → 整场几何闸。
+ * 与编辑器同一套算法，只是跑在没落盘的候选上。
+ */
+function placementProblem(input: {
+  layout: RoomLayout;
+  floorIndex: number;
+  candidate: FurnitureItem;
+  others: readonly FurnitureItem[];
+  bands: readonly SiteBand[];
+}): PlacementProblem | null {
+  const { layout, floorIndex, candidate, others, bands } = input;
+  if (!candidate.position) return { code: 'NO_SPOT', message: '这件没有落点' };
+  if (isStructuralMarker(candidate)) return { code: 'STRUCTURAL', message: '不能改场地结构件' };
+  const bounds = boundsOf(candidate);
+  const band = bands.find(entry => rectsOverlap(bounds, bandRect(layout, entry)));
+  if (band) return { code: 'KEEP_OUT_BAND', message: `越过${band.label}` };
+  const overlapping = others.find(other => other.id !== candidate.id && !isStructuralMarker(other)
+    && !isLowProfile(other) && itemsOverlap(candidate, other));
+  if (overlapping) return { code: 'BBOX_OVERLAP', message: `压在「${overlapping.name}」的包围盒里` };
+  const halfW = layout.width / 2;
+  const halfD = layout.height / 2;
+  if (bounds.x0 < -halfW || bounds.x1 > halfW || bounds.z0 < -halfD || bounds.z1 > halfD) {
+    return { code: 'OUT_OF_BOUNDS', message: '超出场地边界' };
+  }
+  const floor = layout.floors[floorIndex];
+  if (!floor) return { code: 'NO_SPOT', message: '这层楼不存在' };
+  const keepOut = floorKeepOut(layout, floorIndex);
+  const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
+  if (hasCollisions(candidate, [...others], layout.width, layout.height, {
+    keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls,
+  })) {
+    return { code: 'STRUCTURAL', message: '压到墙体、立柱或保留区' };
+  }
+  const next = withItems(layout, floorIndex, [...others, candidate]);
+  if (!canApplyLayoutGeometry(layout, next)) return { code: 'STRUCTURAL', message: '过不了场地几何校验' };
+  return null;
+}
+
+/** 冲突时沿半径一圈圈找最近的可落点；找不到再退回全场地空位扫描。 */
+function nearbySpot(input: {
+  layout: RoomLayout;
+  floorIndex: number;
+  candidate: FurnitureItem;
+  others: readonly FurnitureItem[];
+  bands: readonly SiteBand[];
+  requested: Vec2;
+}): Vec2 | null {
+  const radii = [0.3, 0.5, 0.8, 1, 1.5, 2, 2.5, 3, 4, 5, 6];
+  const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+  for (const radius of radii) {
+    for (const angle of angles) {
+      const radians = (angle * Math.PI) / 180;
+      const position = { x: round2(input.requested.x + Math.cos(radians) * radius), z: round2(input.requested.z + Math.sin(radians) * radius) };
+      const candidate = { ...input.candidate, position };
+      if (!placementProblem({ ...input, candidate })) return position;
+    }
+  }
+  return findAdditionSpot(input.layout, input.floorIndex, input.candidate, [...input.others]);
+}
+
+/**
+ * `plan.revise` 的纯函数实现：按 itemId（或角色）挪/转/缩放/删单件，按 assetId 加件。
+ * 只换目标物件：其它物件的对象引用原样保留；每一步成功都长一帧候选，供预览逐帧走。
+ * 加灯这类显式落点过不了约束时，不硬放，改为记录冲突 + 建议替代位置。
+ */
+export function revisePlan(input: {
+  base: RoomLayout;
+  floorIndex: number;
+  ops: readonly PlanRevisionOp[];
+  /** 不许压的带状区域；湖侧景观带由调用方从这句话里解析出来。 */
+  bands?: readonly SiteBand[];
+}): RevisionProposal {
+  const base = input.base;
+  const floorIndex = Math.min(input.floorIndex, Math.max(0, base.floors.length - 1));
+  const floor = base.floors[floorIndex];
+  if (!floor) throw new Error('场地还没立起来，先说出长宽，我再改。');
+  const bands = input.bands ?? [];
+  let items = floor.items.slice();
+  const layouts: RoomLayout[] = [base];
+  const conflicts: RevisionConflict[] = [];
+  const skipped: string[] = [];
+  const diagnostics: PlanDiagnostic[] = [];
+  let added = 0;
+  let removed = 0;
+  let moved = 0;
+  let dropped = 0;
+
+  const note = (code: PlanDiagnostic['code'], count: number, names: string[], message: string): void => {
+    diagnostics.push({ severity: 'warning', code, count, names, message });
+  };
+  const commit = (next: FurnitureItem[]): void => {
+    items = next;
+    layouts.push(withItems(base, floorIndex, items));
+  };
+  const fail = (conflict: RevisionConflict, diagnostic: PlanDiagnostic['code'], message: string): void => {
+    conflicts.push(conflict);
+    note(diagnostic, 1, [conflict.target], message);
+    dropped += 1;
+    if (conflict.code === 'LOCKED' || conflict.code === 'TARGET_NOT_FOUND') skipped.push(conflict.target);
+  };
+
+  for (const op of input.ops) {
+    if (op.kind === 'add') {
+      const built = buildRevisionItem(op);
+      if (!built) {
+        fail({ code: 'UNKNOWN_ASSET', target: op.assetId, message: '按 assetId 找不到这件，也没给尺寸' }, 'UNKNOWN_MATERIAL', '按 assetId 找不到这件');
+        continue;
+      }
+      const asset = built.item;
+      const bothSides = op.anchor?.sides === 'both';
+      const wanted = bothSides ? 2 : Math.max(1, Math.min(20, op.count ?? 1));
+      const anchorItem = op.anchor ? resolveTarget(items, { role: op.anchor.role }) : null;
+      if (op.anchor && !anchorItem) {
+        fail({ code: 'TARGET_NOT_FOUND', target: op.anchor.role, message: `场地里没有「${op.anchor.role}」，没法按它两侧落灯` }, 'NO_SPOT', `找不到锚点「${op.anchor.role}」`);
+        continue;
+      }
+      let changed = false;
+      for (let index = 0; index < wanted; index++) {
+        let requested: Vec2 | null = null;
+        if (op.position) requested = { x: op.position.x, z: op.position.z };
+        else if (anchorItem) {
+          const center = anchorItem.position ?? { x: 0, z: 0 };
+          const gap = op.anchor?.gapM ?? 0.4;
+          const offset = anchorItem.width / 2 + asset.width / 2 + gap;
+          const side = bothSides ? (index === 0 ? 'left' : 'right') : (op.anchor?.sides === 'right' ? 'right' : 'left');
+          requested = { x: round2(center.x + (side === 'left' ? -offset : offset)), z: round2(center.z) };
+        } else {
+          requested = findAdditionSpot(base, floorIndex, asset, items);
+        }
+        if (!requested) {
+          fail({ code: 'NO_SPOT', target: built.name, message: '附近没有空位' }, 'NO_SPOT', '附近没有空位');
+          continue;
+        }
+        const candidate: FurnitureItem = { ...asset, id: uid(), position: requested, rotation: facingRotation(op) };
+        const problem = placementProblem({ layout: base, floorIndex, candidate, others: items, bands });
+        if (problem) {
+          const alternative = nearbySpot({ layout: base, floorIndex, candidate, others: items, bands, requested });
+          fail({
+            code: problem.code, target: built.name, message: problem.message,
+            requested, ...(alternative ? { alternative } : {}),
+          }, problem.code === 'KEEP_OUT_BAND' || problem.code === 'OUT_OF_BOUNDS' ? 'OUT_OF_BOUNDS' : 'NO_SPOT', problem.message);
+          continue;
+        }
+        items = [...items, candidate];
+        added += 1;
+        changed = true;
+      }
+      if (changed) commit(items);
+      continue;
+    }
+
+    const target = resolveTarget(items, op);
+    if (!target) {
+      fail({ code: 'TARGET_NOT_FOUND', target: op.itemId ?? op.role ?? '?', message: '场地里没有这件' }, 'UNKNOWN_MATERIAL', '场地里没有这件');
+      continue;
+    }
+    if (target.locked) {
+      fail({ code: 'LOCKED', target: target.name, message: `「${target.name}」锁着，我不动` }, 'NO_SPOT', '锁着没动');
+      continue;
+    }
+    if (op.kind === 'remove') {
+      commit(items.filter(item => item.id !== target.id));
+      removed += 1;
+      continue;
+    }
+    if (op.kind === 'recolor') {
+      if (!/^#[0-9a-f]{3,8}$/i.test(op.color)) {
+        fail({ code: 'TARGET_NOT_FOUND', target: target.name, message: '颜色值不合法' }, 'NO_SPOT', '颜色值不合法');
+        continue;
+      }
+      commit(items.map(item => (item.id === target.id ? { ...item, color: op.color } : item)));
+      moved += 1;
+      continue;
+    }
+
+    let candidate: FurnitureItem;
+    let requested: Vec2 | undefined;
+    if (op.kind === 'move') {
+      const before = target.position ?? { x: 0, z: 0 };
+      requested = op.to ?? { x: round2(before.x + (op.delta?.x ?? 0)), z: round2(before.z + (op.delta?.z ?? 0)) };
+      candidate = { ...target, position: requested };
+    } else if (op.kind === 'rotate') {
+      candidate = { ...target, rotation: (target.rotation ?? 0) + (op.deltaDeg * Math.PI) / 180 };
+    } else {
+      const factor = Math.max(0.2, Math.min(5, op.factor));
+      candidate = {
+        ...target,
+        width: round2(target.width * factor),
+        depth: round2(target.depth * factor),
+        height: round2(target.height * factor),
+      };
+    }
+    const others = items.filter(item => item.id !== target.id);
+    const problem = placementProblem({ layout: base, floorIndex, candidate, others, bands });
+    if (problem) {
+      const alternative = requested
+        ? nearbySpot({ layout: base, floorIndex, candidate, others, bands, requested })
+        : undefined;
+      fail({
+        code: problem.code, target: target.name, message: problem.message,
+        ...(requested ? { requested } : {}), ...(alternative ? { alternative } : {}),
+      }, problem.code === 'KEEP_OUT_BAND' || problem.code === 'OUT_OF_BOUNDS' ? 'OUT_OF_BOUNDS' : 'NO_SPOT', problem.message);
+      skipped.push(target.name);
+      continue;
+    }
+    commit(items.map(item => (item.id === target.id ? candidate : item)));
+    moved += 1;
+  }
+
+  const final = withItems(base, floorIndex, items);
+  const overlaps = countOverlaps(final, floorIndex);
+  const keptLocked = floor.items.filter(item => item.locked && !isStructuralMarker(item)).length;
+  const blocked = canApplyLayoutGeometry(base, final) ? null : '这版改完过不了几何闸，先挪开再加。';
+  return {
+    layouts, added, removing: removed, keptLocked, dropped,
+    overlapCount: overlaps.count, overlapNames: overlaps.names,
+    blocked, moved, skipped: [...new Set(skipped)], diagnostics, guests: null, seats: 0,
+    applied: added + removed + moved, conflicts,
   };
 }

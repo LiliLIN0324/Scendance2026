@@ -21,9 +21,10 @@ import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../
 import { localPlanKey } from '../../review-share-page/load-plan';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
-import { proposeAddition, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
+import { proposeAddition, raiseVenue, replaceVenueWithShell, revisePlan, type AdditionProposal, type PlanProposal, type RevisionProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
+import { createResearchArea, lookupPlace, matchResearchCommand } from '../lib/research-area';
 import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
@@ -39,14 +40,15 @@ import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../l
 import { clearLaneActivity, setLaneActivity } from '../lib/lane-status';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { isStructuralMarker, materialCount, venueArea } from '../lib/structural-layout';
+import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, isClientReviewCommand, isCopyDraftCommand, isDemoBackend, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
-  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, pendingPlanOf,
+  isMaterialListCommand, isReviewCommand, isStopCommand, isVenueSizeOnly, isZoneCommand, layoutAnchors, parseBriefSentence, parseMaterialRequest, parseRevisionRequest, pendingPlanOf,
   prepareAholoAsk, suggestDimsFromArea, suggestDimsFromImageRatio, workingScale,
-  type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type VenueIO,
+  type AgentState, type BriefExtraction, type MaterialRequest, type PendingPlan, type RevisionRequest, type VenueIO,
 } from '../lib/workbench-agent';
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
@@ -390,21 +392,22 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     return guests !== null && !inRange ? `人数超出左栏范围（1–${HEADCOUNT_MAX}），这个数先留在右栏，左边没改。` : null;
   }
 
-  /** 画布当前这一层的物料，按名字汇总：清单、文案都读这一份，不另存一份物料表。 */
+  /** 画布当前这一层的物料，按名字汇总：清单、文案都读同一份计数模型，不另存一份物料表。 */
   function floorRows(from: RoomLayout = live.current): { rows: Array<{ name: string; count: number }>; total: number; locked: number } {
     const index = Math.min(activeFloorIndex, Math.max(0, from.floors.length - 1));
-    const items = from.floors[index]?.items ?? [];
-    const map = new Map<string, number>();
-    let locked = 0;
-    for (const item of items) {
-      if (isStructuralMarker(item)) continue;
+    const floor = from.floors[index];
+    if (!floor) return { rows: [], total: 0, locked: 0 };
+    const summary = summarizeInventory(floorInventory(floor));
+    const rows = summary.map(row => ({
       // 现有家具库的默认名是英文：对话里只换掉这两个默认名，人改过的名字原样念。
-      const name = item.name === 'Dining Chair' ? '椅子' : item.name === 'Dining Table' ? '桌子' : item.name;
-      map.set(name, (map.get(name) ?? 0) + 1);
-      if (item.locked) locked += 1;
-    }
-    const rows = [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
-    return { rows, total: rows.reduce((sum, row) => sum + row.count, 0), locked };
+      name: row.name === 'Dining Chair' ? '椅子' : row.name === 'Dining Table' ? '桌子' : row.name,
+      count: row.quantity,
+    })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
+    return {
+      rows,
+      total: summary.reduce((sum, row) => sum + row.quantity, 0),
+      locked: summary.reduce((sum, row) => sum + row.lockedCount, 0),
+    };
   }
 
   function copyText(text: string, done: string): void {
@@ -620,6 +623,46 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     void presentProposal(++runToken.current, lead);
   }
 
+  /**
+   * `plan.revise` 的接缝：按 itemId/角色做增量修改，复用同一张预览卡；
+   * 确认前不写画布，确认后仍是一次 applyLayout（撤销一步整步退回）。
+   */
+  function reviseMaterials(request: RevisionRequest): void {
+    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再改。' }); return; }
+    if (proposal.current === null && studioRef.current?.preview) {
+      say({ role: 'agent', amber: true, text: '云端这一版还没确认：先点「确认布置」或「撤回」，我再改。' });
+      return;
+    }
+    const pending = proposal.current;
+    const base = pending ? pending.layouts[pending.layouts.length - 1]! : live.current;
+    let plan: RevisionProposal;
+    try { plan = revisePlan({ base, floorIndex: activeFloorIndex, ops: request.ops, bands: request.bands }); }
+    catch (error) {
+      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这版改不动，先说一下场地长宽或挪开锁着的物件。' });
+      return;
+    }
+    if (!plan.applied) {
+      const alternative = plan.conflicts.find(conflict => conflict.alternative);
+      const why = plan.conflicts[0]?.message ?? '没找到要改的物件';
+      const alt = alternative?.alternative
+        ? `可放到 (${alternative.alternative.x}, ${alternative.alternative.z})。`
+        : '';
+      say({ role: 'agent', amber: true, text: `这句没改成：${why}。${alt}` });
+      return;
+    }
+    if (!pending) proposalBase.current = live.current;
+    proposal.current = withPlanArtifact(plan, proposalBase.current ?? live.current);
+    // 画布本来就是「改之前」的样子：省掉基线那一帧，直接看改完的结果。
+    shownSteps.current = 1;
+    const bits = [
+      plan.moved ? `挪/转 ${plan.moved} 件` : '',
+      plan.added ? `加了 ${plan.added} 件` : '',
+      plan.removing ? `删了 ${plan.removing} 件` : '',
+    ].filter(Boolean);
+    const miss = plan.conflicts.length ? `；${plan.conflicts.length} 处没落：${plan.conflicts.map(conflict => conflict.message).join('、')}` : '';
+    void presentProposal(++runToken.current, `按你说的改了 ${bits.join('，')}${miss}，只动了这几件：`);
+  }
+
   // 长宽只在生成时由壳体那一步写进场地。以前这里还会跟着输入框把 layout 改一遍，
   // 表单砍掉后没人再改它，留着只会在出方案途中再动一次画布，把刚出的预览判成「被改过」作废。
 
@@ -687,6 +730,28 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   function estimateAndGenerate(): void {
     const scale = estimateFromPlan();
     if (scale) runGeneration(null, seed.current, '图纸比例估的尺寸', scale);
+  }
+
+  /** 「调研西湖」：地名查坐标 → 参考底图铺进 3D（researchArea），同一张图作为气泡图片回进对话。 */
+  async function runResearchCommand(query: string): Promise<void> {
+    if (query === 'ask') {
+      say({ role: 'agent', text: '调研哪一片？说个地名就行，比如「调研西湖」。' });
+      return;
+    }
+    say({ role: 'agent', text: `正在查「${query}」的位置…` });
+    const place = await lookupPlace(query);
+    if (!place) {
+      say({ role: 'agent', amber: true, text: `没查到「${query}」。换个更准的地名再试，或点「地图选址」手动圈一块。` });
+      return;
+    }
+    const area = createResearchArea(place);
+    onApply({ ...live.current, researchArea: area });
+    say({
+      role: 'agent',
+      image: area.imageUrl,
+      meta: '参考底图 · 不可作重建素材',
+      text: `调研底图铺好了：${area.name}${area.address ? `（${area.address}）` : ''}。中心 ${area.center.lng.toFixed(5)}, ${area.center.lat.toFixed(5)}，半径 ${area.radiusM} m、约 ${area.widthM}×${area.depthM} m。3D 地面上那张图和这里贴的是同一张，可以直接在上面定点圈场地。`,
+    });
   }
 
   // 画布上有墙体/场地真相 = 第 ① 步已经过了；撤回或作废不会把它拆掉，进度和尺寸读数都靠它。
@@ -1282,6 +1347,12 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       estimateAndGenerate();
       return;
     }
+    // 「调研西湖」：先把地名换成坐标，查到的参考底图铺进 3D，同一张图也贴进对话。
+    const researchQuery = matchResearchCommand(trimmed);
+    if (researchQuery) {
+      void runResearchCommand(researchQuery);
+      return;
+    }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。
     const aholo = prepareAholoAsk(trimmed);
     if (aholo) {
@@ -1293,6 +1364,9 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       });
       return;
     }
+    // 按对象改（挪舞台/加灯/删除）走增量命令；普通「加两把椅子」仍走下面的物料请求。
+    const revision = parseRevisionRequest(trimmed);
+    if (revision) { reviseMaterials(revision); return; }
     const request = parseMaterialRequest(trimmed);
     if (request) { addMaterials(request); return; }
     const styleCmd = matchStyleBundleCommand(trimmed, window.localStorage);

@@ -14,9 +14,11 @@ import {
 } from '../lib/material-library-meta';
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
 import { usePendingMaterials } from '../lib/material-generate';
+import { importLatestPendingMaterials, importPendingMaterial, LUX3D_TASK_POLL_MS } from '../lib/lux3d-import';
 import { filterOnlineModels, loadOnlineModels, onlineBucketLabel } from '../lib/online-models';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { buildStyleBundleItems, findStyleBundle, loadStyleRuns, saveStyleRun, type StyleBundle, type StyleRun } from '../lib/style-bundles';
+import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
 import { MaterialCreateCell } from './material-create-cell';
 import { MaterialThumb } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
@@ -91,6 +93,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [meta, setMeta] = useState<MaterialLibraryMeta>(emptyMaterialLibraryMeta);
   const [generated, setGenerated] = useState<GeneratedCard[]>([]);
   const pending = usePendingMaterials();
+  const cloudRecords = useAssetCloudRecords();
   const [tagDraft, setTagDraft] = useState(false);
   const [tagName, setTagName] = useState('');
   const [tagError, setTagError] = useState('');
@@ -105,6 +108,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   latest.current = { disabled, onAdd, onAddSet, roomSize, controller, capturePlacement, busy };
   const placements = useRef(new Set<CatalogPlacementGuard>());
   const alive = useRef(true);
+  /** 手动点「取回」和后台轮询不能同时下载同一个任务。 */
+  const importing = useRef(false);
   useEffect(() => {
     setMeta(loadMaterialLibraryMeta(window.localStorage));
     setGenerated(generatedMaterialCards());
@@ -155,6 +160,37 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       rail.removeEventListener('wheel', onWheel);
     };
   }, [loadState]);
+
+  // 生成任务在跑：每 15 秒取一次，完成的直接落盘入库并放进画布，用户不用下载再上传。
+  useEffect(() => {
+    if (!pending.length) return undefined;
+    let stopped = false;
+    let timer: number | undefined;
+    const tick = async () => {
+      if (importing.current) {
+        if (!stopped) timer = window.setTimeout(() => void tick(), LUX3D_TASK_POLL_MS);
+        return;
+      }
+      importing.current = true;
+      try {
+        const result = await importLatestPendingMaterials();
+        // 入库会先清掉待取卡片；本 effect 随之卸载重启，这里不能因为 stopped 丢掉已经下载好的模型。
+        if (result.state === 'imported') {
+          setGenerated(generatedMaterialCards());
+          if (latest.current.disabled) setPlaceError('场地已满：模型已存进「我的生成」，腾出位置后点它加入画布。');
+          else latest.current.onAdd(result.item);
+        } else if (result.state === 'failed' && !result.retryable) {
+          setGenerated(generatedMaterialCards());
+          setPlaceError(result.message);
+        }
+      } finally {
+        importing.current = false;
+      }
+      if (!stopped) timer = window.setTimeout(() => void tick(), LUX3D_TASK_POLL_MS);
+    };
+    void tick();
+    return () => { stopped = true; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [pending.length]);
 
   const catalogBucket = !query.trim() && bucket && bucket !== '__fav' && bucket !== '__generated' && !bucket.startsWith('tag:') ? bucket : '';
   const filtered = useMemo(() => {
@@ -243,16 +279,26 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   };
 
   const placeGenerated = (card: GeneratedCard) => {
-    if (card.id.startsWith('pending:') || latest.current.disabled || latest.current.busy) return;
+    if (latest.current.disabled || latest.current.busy || importing.current) return;
+    const pending = card.id.startsWith('pending:');
+    importing.current = true;
     latest.current.busy = card.id;
     setBusy(card.id);
     setPlaceError('');
-    void loadStoredAholoCatalogItem(card.id).then(item => {
+    const load = pending
+      ? importPendingMaterial(card.id)
+      : loadStoredAholoCatalogItem(card.id).then(item => ({ state: 'imported' as const, item }));
+    void load.then(result => {
       if (!alive.current) return;
-      latest.current.onAdd(item);
+      if (result.state === 'imported') {
+        latest.current.onAdd(result.item);
+        setGenerated(generatedMaterialCards());
+      } else {
+        setPlaceError(result.message);
+      }
     }).catch((error: unknown) => {
       if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
-    }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
+    }).finally(() => { importing.current = false; if (alive.current) { latest.current.busy = null; setBusy(null); } });
   };
 
   // 再放一套：入口已挪到 Bingo；「我的生成」里仍可点历史记录重放。
@@ -272,12 +318,24 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     const favoriteModels = index.models.filter(model => meta.favorites.includes(model.slug));
     const favoriteGenerated = [...generated, ...pending].filter(card => meta.favorites.includes(card.id));
     const favoriteRows = favoriteModels.length + favoriteGenerated.length;
+    // 「库」只装公共素材：收藏过的留给「收藏」，自己的生成物留给「我的生成」，三栏互斥。
+    const libraryModels = index.models.filter(model => !meta.favorites.includes(model.slug));
+    const libraryFiltered = (() => {
+      if (!query.trim() && bucket === '__fav') return [];
+      if (!query.trim() && bucket === '__generated') return [];
+      if (!query.trim() && bucket.startsWith('tag:')) {
+        const tag = bucket.slice(4);
+        return libraryModels.filter(model => (meta.assignments[model.slug] ?? []).includes(tag));
+      }
+      return filterOnlineModels(libraryModels, query, catalogBucket);
+    })();
+    const libraryShown = libraryFiltered.slice(0, visible);
     const groups: { key: string; label: string; models: readonly OnlineModel[] }[] = [];
     if (query.trim() || bucket) {
-      groups.push({ key: 'filtered', label: '', models: shown });
+      groups.push({ key: 'filtered', label: '', models: libraryShown });
     } else {
       const byBucket = new Map<string, OnlineModel[]>();
-      for (const model of shown) {
+      for (const model of libraryShown) {
         const list = byBucket.get(model.bucket) ?? [];
         list.push(model); byBucket.set(model.bucket, list);
       }
@@ -297,10 +355,13 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     const generatedTile = (card: GeneratedCard, withFavorite = false) => {
       const pendingCard = card.id.startsWith('pending:');
       const favorited = meta.favorites.includes(card.id);
+      // 本机生成的卡显示四态；云端队列产物（shipped）本来就有 asset_id，不重复标。
+      const cloudRecord = !pendingCard && !card.shipped ? cloudRecords[card.id] : undefined;
+      const cloudState = cloudRecord ? assetCloudLabel(cloudRecord.state, cloudRecord.progress) : '';
       return <li className="sc-lib-tile" key={card.id}>
-        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null || pendingCard} onClick={() => placeGenerated(card)} aria-label={pendingCard ? `生成中 ${card.name}` : `添加${card.name}`} title={`${card.name}\n生成的物料`}>
+        <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null} onClick={() => placeGenerated(card)} aria-label={`${pendingCard ? `取回${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={pendingCard ? `${card.name}\n生成中，点一下立即取回` : `${card.name}\n生成的物料${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
           <span className="sc-lib-tile-thumb">{card.image ? <MaterialThumb src={card.image}/> : <span className="sc-material-thumb-empty">{pendingCard ? <Loader2 className="cr-spin" size={12}/> : '生'}</span>}</span>
-          <span className="sc-lib-tile-name">{card.name}</span>
+          <span className="sc-lib-tile-name">{card.name}{cloudState && <small> · {cloudState}</small>}</span>
         </button>
         {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${card.name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, card.id))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
       </li>;
@@ -323,7 +384,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           <Star size={15} aria-hidden="true"/><span>收藏</span><small>{favoriteRows > 0 ? favoriteRows : '空'}</small>
         </button>
         <button type="button" className={`sc-space-section sc-lib-card sc-lib-sum${pane === 'lib' ? ' is-active' : ''}`} aria-pressed={pane === 'lib'} onClick={() => pickPane('lib')}>
-          <LayoutGrid size={15} aria-hidden="true"/><span>库</span><small>{index.models.length}</small>
+          <LayoutGrid size={15} aria-hidden="true"/><span>库</span><small>{libraryModels.length}</small>
         </button>
       </div>
       <div className="sc-lib-results" aria-live="polite">
@@ -362,14 +423,13 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               </label>
             </div>}
             <ul className="sc-lib-list">
-              {!query.trim() && !bucket && generatedShown.length > 0 && <li className="sc-lib-group"><small>生成的</small><ul>{generatedShown.slice(0, 4).map(card => generatedTile(card, true))}</ul></li>}
               {groups.map(group => <li className="sc-lib-group" key={group.key}>
                 {group.label && <small>{group.label}</small>}
                 <ul>{group.models.map(modelRow)}</ul>
               </li>)}
             </ul>
-            {groups.every(group => group.models.length === 0) && generatedShown.length === 0 && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>没有匹配的模型</span></p>}
-            {filtered.length > shown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
+            {groups.every(group => group.models.length === 0) && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>{!query.trim() && !bucket && libraryModels.length === 0 ? '库里没有可用的公共素材' : '没有匹配的模型'}</span></p>}
+            {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
             {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
             {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
           </>}
@@ -406,7 +466,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
     {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
     <div ref={cards.setRef} onKeyDown={cards.onKeyDown} className="sc-material-rail" role="group" aria-label="线上模型" tabIndex={0}>
-      <MaterialCreateCell disabled={disabled} variant="tile"/>
+      <MaterialCreateCell {...(controller ? { controller } : {})} disabled={disabled} variant="tile"/>
       {shown.length === 0 && generatedShown.length === 0 && <p className="sc-muted sc-material-empty">{bucket.startsWith('tag:') ? '还没有物料挂上这个标签。' : '没有匹配的模型。'}</p>}
       {shown.map(model => {
         const name = onlineModelDisplayName(model);
@@ -440,6 +500,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         const favorite = meta.favorites.includes(card.id);
         const tagged = armedTag ? (meta.assignments[card.id] ?? []).includes(armedTag) : false;
         const pendingCard = card.id.startsWith('pending:');
+        const cloudRecord = !pendingCard && !card.shipped ? cloudRecords[card.id] : undefined;
+        const cloudState = cloudRecord ? assetCloudLabel(cloudRecord.state, cloudRecord.progress) : '';
         return <div className="sc-material-tile" key={card.id}>
           <button type="button" className="sc-material-card" disabled={disabled || busy !== null || pendingCard}
             onClick={() => {
@@ -454,13 +516,13 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
                 if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
               }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
             }}
-            aria-label={pendingCard ? `生成中 ${card.name}` : `添加${card.name}`} title={`${card.name}\n生成`}>
+            aria-label={`${pendingCard ? `生成中 ${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={`${card.name}\n生成${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
             <span className="sc-material-preview">
               {card.image
                 ? <MaterialThumb src={card.image}/>
                 : <span className="sc-material-thumb-empty">{busy === card.id ? <Loader2 className="cr-spin" size={14}/> : '生成'}</span>}
             </span>
-            <span className="sc-material-name">{card.name}</span>
+            <span className="sc-material-name">{card.name}{cloudState && <small> · {cloudState}</small>}</span>
           </button>
           <button type="button" className={`sc-material-star${favorite ? ' is-on' : ''}`} aria-pressed={favorite} aria-label={favorite ? `取消收藏物料 ${card.name}` : `收藏物料 ${card.name}`} onClick={() => writeMeta(toggleFavorite(meta, card.id))}>
             <Star size={14} fill={favorite ? 'currentColor' : 'none'} aria-hidden="true"/>

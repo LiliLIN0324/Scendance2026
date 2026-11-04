@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="256" height="256" role="img" aria-label="幕景 Scendance · AI 的门" style="filter:drop-shadow(0 6px 12px rgba(53,98,74,.16))">
+<style>
+.frame{transform-box:fill-box;transform-origin:center;
+  transition:transform .12s cubic-bezier(.2,.7,.3,1)}
+.halo{opacity:0;transition:opacity .12s linear}
+svg:hover .frame{transform:translateY(-1px)}
+svg:hover .halo{opacity:.45}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<g class="frame"><path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/><g class="eyes"><g transform="rotate(12 40 41.92)"><rect class="eye" x="40" y="41.92" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g><g transform="rotate(12 68.48 39.36)"><rect class="eye" x="68.48" y="39.36" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g></g><path class="halo" fill="none" stroke="#FFFFFF" stroke-width=".9" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/></g>
+</svg>

@@ -74,7 +74,7 @@
         "role": "chair",
         "use": "离场休息区木椅",
         "slug": "bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7",
-        "localPath": "assets/models/chair.glb",
+        "localPath": "assets/library/model/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7.glb",
         "sourceUrl": "https://3dassets.dev/assets/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7",
         "cdnUrl": "https://cdn.3dassets.dev/assets/38784/v1/model.glb",
         "license": {
@@ -120,7 +120,7 @@
         "role": "plant",
         "use": "入口及休息区装饰盆栽",
         "slug": "street-food-market-and-food-trucks-planter-with-shrub-0eedba0e",
-        "localPath": "assets/models/plant.glb",
+        "localPath": "assets/library/model/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e.glb",
         "sourceUrl": "https://3dassets.dev/assets/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e",
         "cdnUrl": "https://cdn.3dassets.dev/assets/34303/v1/model.glb",
         "license": {

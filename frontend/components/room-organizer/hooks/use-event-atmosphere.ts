@@ -13,7 +13,7 @@ export interface UseEventAtmosphereParams extends EventAtmosphereOptions {
 /** Call AFTER useSceneEffects so saved scene lighting wins over its legacy sun. */
 export function useEventAtmosphere({
   isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
-  lighting, width, depth, ceilingHeight,
+  lighting, width, depth, ceilingHeight, sceneLighting,
 }: UseEventAtmosphereParams): void {
   const atmosphere = useRef<EventAtmosphere | null>(null);
 
@@ -35,6 +35,9 @@ export function useEventAtmosphere({
   // preset. apply() compares state and reuses resources, invalidating only
   // when the actual presentation changed.
   useEffect(() => {
-    if (atmosphere.current?.apply({ lighting, width, depth, ceilingHeight })) invalidate();
+    if (atmosphere.current?.apply({
+      lighting, width, depth, ceilingHeight,
+      ...(sceneLighting ? { sceneLighting } : {}),
+    })) invalidate();
   });
 }

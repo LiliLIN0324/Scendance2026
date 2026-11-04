@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { isGlbUrl } from '../lib/glb-url';
+import { normalizeGlbRoot } from '../lib/glb-normalize';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
 const MAX_GLB_BYTES = 10 * 1024 * 1024;
@@ -70,14 +71,11 @@ async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffe
   return bytes.buffer;
 }
 
-function dimensionsOf(source: THREE.Object3D): { width: number; depth: number; height: number } {
-  source.updateMatrixWorld(true);
-  const size = new THREE.Box3().setFromObject(source).getSize(new THREE.Vector3());
-  if (![size.x, size.y, size.z].every(n => Number.isFinite(n) && n > 0.000001)) throw new Error('模型包围盒无效，无法设定尺寸。');
+/** A GLB with only empty nodes renders as nothing; reject before measuring. */
+function assertRenderableGlb(source: THREE.Object3D): void {
   let meshCount = 0;
   source.traverse(node => { if ((node as THREE.Mesh).isMesh) meshCount += 1; });
   if (!meshCount) throw new Error('模型不含可显示网格。');
-  return { width: size.x, depth: size.z, height: size.y };
 }
 
 /** Cache is keyed by stable asset ID (or a local sample URL). A new URL supersedes a pending request. */
@@ -97,10 +95,12 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
       const buffer = await downloadGlb(url, controller.signal);
       const gltf = await new GLTFLoader().parseAsync(buffer, '');
       source = gltf.scene;
-      const dimensions = dimensionsOf(source);
+      assertRenderableGlb(source);
+      // 米制 / Y-up / 底面中心：加载时统一一次，实例只按目录尺寸缩放。
+      const normalized = normalizeGlbRoot(source);
       if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
-      entry.source = source;
-      entry.state = { status: 'ready', dimensions };
+      entry.source = normalized.root;
+      entry.state = { status: 'ready', dimensions: normalized.size };
       source = undefined; // The cache now owns the template.
       changed();
     } catch (error) {

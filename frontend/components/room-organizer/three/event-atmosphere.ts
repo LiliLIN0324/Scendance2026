@@ -1,7 +1,16 @@
-import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
+import type { SceneLighting } from './scene-lighting';
+import {
+  LOOK_PRESETS as PRESETS,
+  makeBackdropTexture,
+  placeAccentLight,
+  placeKeyLight,
+  placeWashLights,
+  resolveLook,
+  type EventLighting,
+} from './render-look';
 
-export type EventLighting = NonNullable<RoomLayout['backendLighting']>;
+export type { EventLighting };
 type ThreeModule = typeof import('three');
 type AtmosphereRenderer = Pick<ThreeNS.WebGLRenderer, 'toneMappingExposure' | 'shadowMap'>;
 
@@ -10,6 +19,8 @@ export interface EventAtmosphereOptions {
   width: number;
   depth: number;
   ceilingHeight: number;
+  /** 实拍场景匹配出来的光照：有值时压过预设的曝光与三盏主灯。 */
+  sceneLighting?: SceneLighting;
 }
 
 export interface EventAtmosphere {
@@ -20,69 +31,8 @@ export interface EventAtmosphere {
 
 export const EVENT_ATMOSPHERE_TAG = 'event-atmosphere';
 
-// Wire values are the backend's existing neutral / warm / cool enum. These
-// presets change actual scene illumination; no CSS filter or external HDR.
-// `background` is the horizon tone, `skyZenith` the top of the backdrop
-// gradient — a zenith deeper than the horizon is what makes the backdrop
-// read as projected 3D space instead of a flat wall of colour.
-const PRESETS = {
-  neutral: {
-    background: 0xe9edf0, skyZenith: 0xb9d2ea, sky: 0xe7f1ff, ground: 0xd8d7d2,
-    key: 0xfff4de, keyIntensity: 2.1, hemisphere: 1.35, ambient: 0.18,
-    spots: [0xffedda, 0xe2efff], spotStrength: 1.8,
-    accent: 0xffedd5, accentStrength: 0.5, environment: 0.7, exposure: 1.05,
-  },
-  warm: {
-    background: 0xf7f3e8, skyZenith: 0xc9dcf2, sky: 0xffdfb0, ground: 0xbfa383,
-    key: 0xffd09a, keyIntensity: 1.55, hemisphere: 1.05, ambient: 0.22,
-    spots: [0xffbc79, 0xffdfb5], spotStrength: 3.4,
-    accent: 0xffa767, accentStrength: 1.8, environment: 0.52, exposure: 1.1,
-  },
-  cool: {
-    background: 0x1d2440, skyZenith: 0x0e1226, sky: 0xa3bfff, ground: 0x947eac,
-    key: 0xd1ddff, keyIntensity: 0.72, hemisphere: 0.72, ambient: 0.28,
-    spots: [0x8496ff, 0xe894ff], spotStrength: 5.4,
-    accent: 0xffc38a, accentStrength: 2.6, environment: 0.35, exposure: 1.18,
-  },
-} as const satisfies Record<EventLighting, unknown>;
-
-/**
- * 1×256 vertical zenith→horizon gradient as a DataTexture — pure bytes, so it
- * builds identically in the browser and in node-run tests (no canvas/DOM).
- * Screen-space like the legacy sky backdrop. WebGL textures start at the
- * bottom (and flipY is ignored for buffer uploads), so byte row 0 is the
- * horizon and the zenith lands at the top of the screen.
- */
-function makeBackdropTexture(THREE: ThreeModule, zenith: number, horizon: number): ThreeNS.DataTexture {
-  const size = 256;
-  const data = new Uint8Array(size * 4);
-  for (let y = 0; y < size; y++) {
-    // Row 0 renders at the bottom of the screen: horizon there, zenith up top.
-    const t = 1 - y / (size - 1);
-    // Bias toward the horizon in its lower third so the glow sits at the
-    // ground line where depth is actually read.
-    const blend = t < 0.65 ? (t / 0.65) * 0.7 : 0.7 + ((t - 0.65) / 0.35) * 0.3;
-    const mixed = mixPresetHex(zenith, horizon, blend);
-    data[y * 4] = (mixed >> 16) & 0xff;
-    data[y * 4 + 1] = (mixed >> 8) & 0xff;
-    data[y * 4 + 2] = mixed & 0xff;
-    data[y * 4 + 3] = 255;
-  }
-  const texture = new THREE.DataTexture(data, 1, size, THREE.RGBAFormat);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
-  texture.generateMipmaps = false;
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function mixPresetHex(a: number, b: number, t: number): number {
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const ch = (x: number, y: number) => Math.round(x + (y - x) * t);
-  return (ch(ar, br) << 16) | (ch(ag, bg) << 8) | ch(ab, bb);
-}
+// 预设与背景渐变纹理都来自 render-look.ts：编辑器、查看器、导出共用一份，
+// 这里只负责把它们装进场景并处理遗留天空/灯具的隐藏与还原。
 
 function dimension(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.min(value, 100) : fallback;
@@ -137,16 +87,28 @@ export function createEventAtmosphere(
   const hidden = new Map<ThreeNS.Object3D, boolean>();
   let previousSignature = '';
   let previousPreset: (typeof PRESETS)[EventLighting] | null = null;
+  // 实际写进渲染器的曝光/环境强度：退出时要按这两个值判断还原，
+  // 不能用预设值，否则实拍匹配调过曝光后会还不了原。
+  let appliedExposure: number | null = null;
+  let appliedEnvironment: number | null = null;
   let disposed = false;
 
   function apply(options: EventAtmosphereOptions): boolean {
     if (disposed) return false;
     const { lighting } = options;
-    const preset = PRESETS[lighting];
+    const preset = PRESETS[lighting] ?? PRESETS.neutral;
+    const matched = options.sceneLighting;
     const width = dimension(options.width, 10);
     const depth = dimension(options.depth, 8);
     const height = Math.max(2, Math.min(dimension(options.ceilingHeight, 3), 12));
-    const signature = `${lighting}:${width}:${depth}:${height}`;
+    const look = resolveLook(lighting, matched);
+    const exposure = look.exposure;
+    const environment = look.environment;
+    // 实拍匹配参数也算进签名，否则改曝光/换场景不会触发重设。
+    const matchKey = matched
+      ? `${matched.exposure}/${matched.envIntensity}/${matched.ambient.color}/${matched.hemisphere.sky}/${matched.hemisphere.ground}/${matched.sun.color}`
+      : 'auto';
+    const signature = `${lighting}:${width}:${depth}:${height}:${matchKey}`;
     let changed = signature !== previousSignature;
 
     // The old lighting effect may install a new sky texture or lamp after
@@ -170,39 +132,33 @@ export function createEventAtmosphere(
     }
     // Drop objects removed by the legacy effect so moving lamps cannot make
     // this bookkeeping retain an unbounded collection of dead scene nodes.
-    for (const object of hidden.keys()) if (!object.parent) hidden.delete(object);
+    for (const node of hidden.keys()) if (!node.parent) hidden.delete(node);
 
-    if (scene.environmentIntensity !== preset.environment || renderer.toneMappingExposure !== preset.exposure) changed = true;
-    scene.environmentIntensity = preset.environment;
-    renderer.toneMappingExposure = preset.exposure;
+    if (scene.environmentIntensity !== environment || renderer.toneMappingExposure !== exposure) changed = true;
+    scene.environmentIntensity = environment;
+    renderer.toneMappingExposure = exposure;
+    appliedExposure = exposure;
+    appliedEnvironment = environment;
 
     if (signature !== previousSignature) {
-      hemisphere.color.setHex(preset.sky);
-      hemisphere.groundColor.setHex(preset.ground);
-      hemisphere.intensity = preset.hemisphere;
-      ambient.color.setHex(preset.sky);
-      ambient.intensity = preset.ambient;
-      key.color.setHex(preset.key);
-      key.intensity = preset.keyIntensity;
-      key.position.set(width * 0.4, Math.max(height * 2.4, width * 0.75), depth * 0.3);
-      key.target.position.set(0, 0, 0);
-      const extent = Math.max(width, depth) * 0.7 + 2;
-      Object.assign(key.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, far: Math.max(60, extent * 5) });
-      key.shadow.camera.updateProjectionMatrix();
+      hemisphere.color.setHex(look.sky);
+      hemisphere.groundColor.setHex(look.ground);
+      hemisphere.intensity = look.hemisphere;
+      ambient.color.setHex(look.ambientColor);
+      ambient.intensity = look.ambient;
+      key.color.setHex(look.keyColor);
+      key.intensity = look.key;
+      placeKeyLight(key, width, depth, height);
 
       for (const [index, light] of spots.entries()) {
-        const direction = index === 0 ? -1 : 1;
-        light.color.setHex(preset.spots[index]);
-        light.position.set(direction * width * 0.34, height * 0.94, -depth * 0.32);
-        light.target.position.set(direction * width * 0.16, 0, depth * 0.13);
-        light.distance = Math.max(width, depth, height) * 2;
-        light.intensity = preset.spotStrength * height * height;
+        light.color.setHex(look.spotColors[index] ?? look.spotColors[0]);
+        light.intensity = look.spotStrength * height * height;
       }
-      accent.color.setHex(preset.accent);
-      accent.position.set(0, height * 0.62, depth * 0.32);
-      accent.distance = Math.max(width, depth, height) * 1.5;
-      accent.intensity = preset.accentStrength * height * height;
+      placeWashLights(spots, width, depth, height);
+      accent.color.setHex(look.accentColor);
+      accent.intensity = look.accentStrength * height * height;
       accent.decay = 2;
+      placeAccentLight(accent, width, depth, height);
       previousSignature = signature;
       previousPreset = preset;
     }
@@ -221,8 +177,8 @@ export function createEventAtmosphere(
     // else between this rig's final apply and cleanup.
     if (scene.background === backgroundTexture) scene.background = restoreBackground;
     if (backgroundTexture) { backgroundTexture.dispose(); backgroundTexture = null; }
-    if (previousPreset && renderer.toneMappingExposure === previousPreset.exposure) renderer.toneMappingExposure = priorExposure;
-    if (previousPreset && scene.environmentIntensity === previousPreset.environment) scene.environmentIntensity = priorEnvironment;
+    if (appliedExposure !== null && renderer.toneMappingExposure === appliedExposure) renderer.toneMappingExposure = priorExposure;
+    if (appliedEnvironment !== null && scene.environmentIntensity === appliedEnvironment) scene.environmentIntensity = priorEnvironment;
     renderer.shadowMap.needsUpdate = true;
   }
 

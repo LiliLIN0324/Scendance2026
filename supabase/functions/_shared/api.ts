@@ -8,7 +8,8 @@ import { canApplyStructuralChange, structuralViolations, dimensionConflicts } fr
 import { reconstructionRequestSchema } from './reconstruction-contract.ts';
 import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
-import { assetRecord, importPublicModel, recommendations } from './assets.ts';
+import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
+import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import { CHAT_API_KEY_ENV, chatRequest, generateProposal } from './providers.ts';
 import { briefExtractRequestSchema, briefSlotSchema, BRIEF_EXTRACT_PROMPT } from './brief-extract-contract.ts';
 import { readSceneResources } from './scene-resources.ts';
@@ -23,10 +24,25 @@ const displayName=z.string().trim().min(1).max(80);
 const messageBody=z.string().trim().min(1).max(2000);
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
+// 数据库行是 snake_case，上传口对客户端固定成 camelCase；storage_path 永不出网。
+const uploadedAssetView=(row:Record<string,unknown>)=>{
+  const {storage_path,...rest}=row;
+  return {
+    id:rest.id,
+    name:rest.name,
+    source:rest.source,
+    ...(rest.source_id?{sourceId:rest.source_id}:{}),
+    ownerId:rest.owner_id,
+    byteSize:rest.byte_size,
+    sha256:rest.sha256,
+    createdAt:rest.created_at,
+    metadata:rest.metadata,
+  };
+};
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUntil?:(task:Promise<unknown>)=>void) {
   return async(request:Request):Promise<Response>=>{
     const origin=request.headers.get('origin');
-    const allowed=(env('ALLOWED_ORIGINS')??'http://localhost:3000').split(',').map(s=>s.trim());
+    const allowed=(env('ALLOWED_ORIGINS')??'http://localhost:3000,http://localhost:3210,http://localhost:3211,http://127.0.0.1:3210,http://127.0.0.1:3211').split(',').map(s=>s.trim());
     const headers=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});
     if(origin && allowed.includes(origin)) headers.set('Access-Control-Allow-Origin',origin);
     const respond=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
@@ -78,7 +94,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           return respond({enabled:true,extraction:null,reason});
         }
       }
-      if(['/assets/import','/assets/floorplan','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
+      if(['/assets/import','/assets/floorplan','/assets/glb','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
       if(path==='/studios' && method==='POST') {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
@@ -320,6 +336,63 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const record=await assetRecord(actor,bytes,{name:'场地平面图',source:'upload',format:mime==='image/png'?'png':'jpeg',metadata:{width:size[0],height:size[1]},license:{type:'user-upload'}});
         await backend.upload(record.storagePath,bytes,mime);
         return respond(await backend.scene(actor,'assets.register',record),201);
+      }
+      if(path==='/assets/glb' && method==='POST') {
+        const mime=request.headers.get('content-type')?.split(';')[0].trim();
+        if(mime!=='model/gltf-binary' && mime!=='application/octet-stream') throw new ApiError('UNSUPPORTED_MODEL',415);
+        const query=z.strictObject({
+          name:name.default('本地生成模型'),
+          source:z.enum(['aholo','upload']).default('upload'),
+          sourceId:z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).optional(),
+        }).parse({
+          name:url.searchParams.get('name') ?? undefined,
+          source:url.searchParams.get('source') ?? undefined,
+          sourceId:url.searchParams.get('sourceId') ?? undefined,
+        });
+        if(query.source==='aholo' && !query.sourceId) throw new ApiError('SOURCE_ID_REQUIRED',422);
+        const raw=await readBounded(request,MAX_GLB_BYTES);
+        if(raw.length<28) throw new ApiError('INVALID_GLB_SIZE',422);
+        // 去重键用上传原文件哈希；同一个账号同一份文件永远落同一个 asset_id（跨设备/重试都能命中），
+        // 不依赖 assets 表的额外唯一索引，也不用迁移。
+        const sourceSha256=await sha256(raw);
+        const digest=await sha256(`${actor}:${sourceSha256}`);
+        const assetId=`${digest.slice(0,8)}-${digest.slice(8,12)}-5${digest.slice(13,16)}-a${digest.slice(17,20)}-${digest.slice(20,32)}` as `${string}-${string}-${string}-${string}-${string}`;
+        try {
+          const existing=await backend.scene(actor,'assets.get',{assetId});
+          return respond({...uploadedAssetView(existing),reused:true});
+        } catch(error) {
+          if(!(error instanceof ApiError) || error.code!=='ASSET_NOT_FOUND') throw error;
+        }
+        let bytes=raw, validated;
+        try { validated=await validateModel(bytes); }
+        catch(error) {
+          // Lux3D 直连产物带 Khronos 校验级瑕疵，云端通道会先 repairGlb；这里保持同一条修复路径。
+          if(query.source!=='aholo' || !(error instanceof ApiError) || error.code!=='GLTF_VALIDATION_FAILED') throw error;
+          bytes=repairGlb(raw);
+          validated=await validateModel(bytes);
+        }
+        const normalization=normalizedAssetDimensions(validated.sourceSize);
+        const record=await assetRecord(actor,bytes,{
+          name:query.name,
+          source:query.source,
+          ...(query.sourceId?{sourceId:query.sourceId}:{}),
+          metadata:{
+            ...validated,
+            origin:query.source==='aholo'?'local-generation':'upload',
+            sourceSha256,
+            sourceByteSize:raw.length,
+            dimensions:normalization.dimensions,
+            normalization:{unit:normalization.unit,upAxis:normalization.upAxis,sourceSize:normalization.sourceSize},
+          },
+          license:{type:'user-upload'},
+        },assetId);
+        await backend.upload(record.storagePath,bytes,'model/gltf-binary');
+        try { return respond(uploadedAssetView(await backend.scene(actor,'assets.register',record)),201); }
+        catch(error) {
+          // 两个并发请求撞同一个确定性 id：先到的那条已经注册，回读它，绝不再插一条。
+          const existing=await backend.scene(actor,'assets.get',{assetId});
+          return respond({...uploadedAssetView(existing),reused:true});
+        }
       }
       if(path==='/generation/capabilities' && method==='GET') return respond(generationCapabilities(env));
       if(path==='/jobs' && method==='POST') {

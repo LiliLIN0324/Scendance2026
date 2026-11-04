@@ -1,6 +1,6 @@
 # 幕景 Scendance · 活动场地工作台
 
-1.0.1发布说明：[本次功能、验证与部署](../docs/RELEASE-1.0.1.md)。保留main既有自有Supabase、Tokendance网关和Cloudflare生产配置。
+1.0.1发布说明：[本次功能、验证与部署](../docs/42-1.0.1发布说明.md)。保留main既有自有Supabase、Tokendance网关和Cloudflare生产配置。
 
 2026-10-10工作台与执行资料更新：[功能与验证边界](../docs/DELIVERY-PROGRESS-2026-10-10-WORKBENCH.md)。活动任务建议已接选择摘要、人工确认、保存读回和原执行表；合同原件可从资料分类使用，底部素材架按需展开。公共模型恢复及保存故障已做本机演练，正式云与真实模型质量仍单列。标准构建使用 `npm run build`，其中的资源打包步骤不可跳过。
 
@@ -100,7 +100,7 @@ const href = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
 
 需求表单、照片与聊天记录仅在当前编辑器会话保留，刷新后不会恢复；介绍页往返保留，切换项目清空。实际场景仍按原有机制本地保存。
 
-当前后端只支持基础沙龙/交流布局与有限修改指令，完整创意方案、帐篷等扩展物料、图片理解、通用助手对话需要后端支持。具体改动见 [最新后端需求交接（v0.3）](../docs/FRONTEND_V0.2_BACKEND_REQUIREMENTS.md)，版本记录见 [CHANGELOG](CHANGELOG.md)，本轮验证见 [v0.3.0 验收记录](docs/VERIFICATION-v0.3.0.md)。
+当前后端只支持基础沙龙/交流布局与有限修改指令，完整创意方案、帐篷等扩展物料、图片理解、通用助手对话需要后端支持。具体改动见 [最新后端需求交接（v0.3）](../docs/34-前端协议与后端需求.md)，版本记录见 [CHANGELOG](CHANGELOG.md)，本轮验证见 [v0.3.0 验收记录](docs/VERIFICATION-v0.3.0.md)。
 
 ## 当前可用
 
@@ -114,9 +114,9 @@ const href = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
 
 本机未配置真实云端，因此本轮只证明本地编辑和接口契约通过测试，**没有证明真实云端、双账号交接、第三方生成或手机真机闭环**。
 
-后续合并联调已补充真实 HTTP + 后端处理器 + PostgreSQL 测试库验证，以及测试账号在浏览器中的保存、刷新重开与交接。Auth/Storage 在该环境使用显式测试实现，真实 Supabase 云端仍未验收。复现方法与结果见 [前后端联调报告](../docs/INTEGRATION.md)。
+后续合并联调已补充真实 HTTP + 后端处理器 + PostgreSQL 测试库验证，以及测试账号在浏览器中的保存、刷新重开与交接。Auth/Storage 在该环境使用显式测试实现，真实 Supabase 云端仍未验收。复现方法与结果见 [前后端联调报告](../docs/33-前后端联调.md)。
 
-GPT 接入由成员 2 按 [GPT 核心链路交接](../docs/FRONTEND_V0.2_BACKEND_REQUIREMENTS.md#gpt-handoff) 实施；前端沿用 proposals 接口，无供应商专属改动。模型切换不会解除现有模板与 1–40 人限制。
+GPT 接入由成员 2 按 [GPT 核心链路交接](../docs/34-前端协议与后端需求.md#gpt-handoff) 实施；前端沿用 proposals 接口，无供应商专属改动。模型切换不会解除现有模板与 1–40 人限制。
 
 ## 部署后配置
 
@@ -130,7 +130,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-public-publishable-key
 
 仅放公开 anon / publishable key；不要放 service-role、模型 API key、worker secret。公开配置在构建时写入前端，修改后要重启开发服务或重新构建。账号密码在登录框输入，Auth access/refresh token 只在内存，刷新后重新登录；本地草稿保留。
 
-B 按 [后端部署说明](../docs/DEPLOYMENT.md) 部署、迁移并准备工作室账号；将实际前端 Origin 加入后端 `ALLOWED_ORIGINS`。`http://localhost:3000` 与 `http://127.0.0.1:3018` 是不同 Origin，应按实际地址配置。
+B 按 [后端部署说明](../docs/35-本地运行与云端维护.md) 部署、迁移并准备工作室账号；将实际前端 Origin 加入后端 `ALLOWED_ORIGINS`。`http://localhost:3000` 与 `http://127.0.0.1:3018` 是不同 Origin，应按实际地址配置。
 
 验证顺序：登录 → 把当前画布创建为项目 → 获取编辑权 → 移动物件 → 保存 → 刷新、登录并打开项目 → 检查数据 → 释放编辑权 → 第二个账号接手。获取编辑权始终采用服务端最新场景并清空旧撤销历史；保存失败、断网或版本冲突不会丢弃当前草稿。
 

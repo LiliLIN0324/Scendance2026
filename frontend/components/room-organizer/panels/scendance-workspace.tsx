@@ -200,6 +200,8 @@ interface ViewToolsProps {
   onExportImage?(options: { view: 'current' | CameraPreset; scale: number }): Promise<boolean> | void;
   /** 导出前的同一帧预览；返回 PNG data URL，编码不出来给 null。 */
   onCaptureImage?(options: { view: 'current' | CameraPreset; scale: number }): Promise<string | null>;
+  /** 机位册：顺序导出全部预设机位与离线图册 HTML。2D 视图不提供。 */
+  onExportAlbum?(options: { scale: number }): Promise<{ ok: boolean; count: number } | void> | void;
   /** 评审 / 执行不撤销、不重做布置。 */
   layoutLocked?: boolean;
   /** 工具轨唯一分享入口。不传时菜单仍可打开，动作提示未接入。 */
@@ -260,7 +262,7 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, environmentView = 'gaussian', environmentViewEnabled = false, onEnvironmentViewChange, layoutLocked = false, shareActions, shareOpenRequest = 0 }: ViewToolsProps): JSX.Element {
   const sceneMoveActive = sceneMoveMode !== 'off';
   const { view, setView, toggle, history, layout, activeFloorIndex, actions } = useRoomEditor();
   const [preset, setPreset] = useState<CameraPreset>('iso');
@@ -270,6 +272,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const [exportOpen, setExportOpen] = useState(false);
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
   const [exportScale, setExportScale] = useState(2);
+  const [exportMode, setExportMode] = useState<'single' | 'album'>('single');
   const [exporting, setExporting] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -419,7 +422,19 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
     return () => { if (previewToken.current === token) previewToken.current += 1; };
   }, [exportOpen, exportView, onCaptureImage]);
   const runExport = async () => {
-    if (!onExportImage || exporting) return;
+    if (exporting) return;
+    if (exportMode === 'album') {
+      if (!onExportAlbum || view.view2D) return;
+      setExporting(true);
+      try {
+        await onExportAlbum({ scale: exportScale });
+      } finally {
+        setExporting(false);
+        setExportOpen(false);
+      }
+      return;
+    }
+    if (!onExportImage) return;
     setExporting(true);
     try {
       await onExportImage({ view: exportView, scale: exportScale });
@@ -493,7 +508,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
       <button type="button" id="tool-preset" data-tip={`视角：${angleNow.label} · 点一下切到${angleNext.label}`} aria-label={`视角切换：当前${angleNow.label}，点击切到${angleNext.label}`} onClick={cyclePreset}>
         <MaterialSymbol name={angleNow.symbol} />
       </button>
-      <button type="button" id="tool-dims" data-tip="尺寸" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
+      <button type="button" id="tool-dims" data-tip="尺寸（单位 m）" aria-label="尺寸标注" aria-pressed={view.showMeasurements} className={view.showMeasurements ? 'is-active' : ''} onClick={() => toggle('showMeasurements')}>
         <MaterialSymbol name="straighten" />
       </button>
       <button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
@@ -527,13 +542,14 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
             {previewing ? <Loader2 size={18} className="cr-spin" aria-hidden="true"/> : preview ? <img src={preview} alt=""/> : <MaterialSymbol name="photo_camera" size={18} />}
           </div>
           <div className="sc-export-options" role="group" aria-label="导出视角">
-            {EXPORT_VIEWS.map(entry => <button type="button" key={entry.id} className={exportView === entry.id ? 'is-active' : ''} aria-label={entry.label} title={entry.label} aria-pressed={exportView === entry.id} onClick={() => setExportView(entry.id)}><MaterialSymbol name={entry.symbol} size={16} /></button>)}
+            {EXPORT_VIEWS.map(entry => <button type="button" key={entry.id} className={exportMode === 'single' && exportView === entry.id ? 'is-active' : ''} aria-label={entry.label} title={entry.label} aria-pressed={exportMode === 'single' && exportView === entry.id} onClick={() => { setExportView(entry.id); setExportMode('single'); }}><MaterialSymbol name={entry.symbol} size={16} /></button>)}
+            {onExportAlbum && <button type="button" aria-label="机位册" title={view.view2D ? '机位册需在 3D 视图使用' : '机位册：整体、俯视、正面、对角，另附离线图册'} aria-pressed={exportMode === 'album'} className={exportMode === 'album' ? 'is-active' : ''} disabled={view.view2D} onClick={() => setExportMode(mode => mode === 'album' ? 'single' : 'album')}><MaterialSymbol name="photo_library" size={16} /></button>}
           </div>
           <div className="sc-export-options" role="group" aria-label="导出画质">
             {EXPORT_SCALES.map(entry => <button type="button" key={entry.scale} className={exportScale === entry.scale ? 'is-active' : ''} aria-label={`${entry.label} ${entry.scale}×`} title={`${entry.label} ${entry.scale}×`} aria-pressed={exportScale === entry.scale} disabled={view.view2D && entry.scale !== 1} onClick={() => setExportScale(entry.scale)}>{entry.scale}×</button>)}
           </div>
           <button type="button" className="sc-export-cta" disabled={exporting} onClick={() => { void runExport(); }}>
-            {exporting ? '正在导出…' : '导出 PNG'}
+            {exporting ? '正在导出…' : exportMode === 'album' ? '导出机位册' : '导出 PNG'}
           </button>
         </div>}
       </div>}

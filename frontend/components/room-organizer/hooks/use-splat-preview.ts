@@ -3,11 +3,86 @@ import { createSplatPreview, paintSplatLayers } from '../three/splat-preview';
 import type { SplatDisplayMode, SplatMeters, SplatPaint, SplatPosition, SplatPreview, SplatSource, SplatTransformMode, SplatUpAxis, SplatWalkBounds } from '../three/splat-preview';
 export type { SplatTransformMode };
 import * as ThreeNS from 'three';
+import {
+  calibrateScanScale,
+  calibrationSummary,
+  defaultSiteCalibration,
+  groundFromHeight,
+  groundFromThreePoints,
+  landingCorrections,
+  nextAnchorId,
+  readSiteCalibration,
+  writeSiteCalibration,
+  type AnchorKind,
+  type CalibrationConfidence,
+  type GroundAnchor,
+  type GroundPlane,
+  type LandingCorrection,
+  type LandableItem,
+  type ScanAxis,
+  type ScanExtent,
+  type ScanScaleCalibration,
+  type SiteCalibration,
+} from '../lib/site-capture';
+import { createCalibrationHud } from '../three/calibration-hud';
 
 export type SplatPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
-export type SplatPreviewState = Readonly<{ status: SplatPreviewStatus; assetId: string; name: string; progress?: number; splats?: number; error?: string; meters?: SplatMeters; walkBounds?: SplatWalkBounds }>;
+/** 当前场景的标定快照：比例、朝向、基准面、锚点与误差提示。 */
+export type SplatCalibrationState = Readonly<{
+  assetId: string;
+  scale: number;
+  yawDeg: number;
+  /** 扫描原点相对场地原点的水平平移（米）。 */
+  origin: { x: number; z: number };
+  ground: GroundPlane;
+  anchors: GroundAnchor[];
+  reference?: { axis: ScanAxis; knownMeters: number; measuredMeters: number };
+  deviationPct?: number;
+  confidence?: CalibrationConfidence;
+  note: string;
+  summary: string;
+}>;
+export type SplatPreviewState = Readonly<{
+  status: SplatPreviewStatus;
+  assetId: string;
+  name: string;
+  progress?: number;
+  splats?: number;
+  error?: string;
+  meters?: SplatMeters;
+  walkBounds?: SplatWalkBounds;
+  calibration?: SplatCalibrationState;
+}>;
 
 const IDLE: SplatPreviewState = { status: 'idle', assetId: '', name: '' };
+
+function roundPct(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/** 标定记录 → 界面快照。误差提示与 confidence 都从当前比例直接算出来。 */
+function calibrationViewOf(record: SiteCalibration | null): SplatCalibrationState | null {
+  if (!record) return null;
+  const deviationPct = roundPct((record.scale - 1) * 100);
+  const abs = Math.abs(deviationPct);
+  const confidence: CalibrationConfidence = abs > 40 ? 'suspect' : abs > 10 ? 'coarse' : 'ok';
+  const note = record.reference
+    ? `扫描${record.reference.axis.toUpperCase()} ${record.reference.measuredMeters} m ↔ 实测 ${record.reference.knownMeters} m：比例 ${record.scale}，偏差 ${deviationPct > 0 ? '+' : ''}${deviationPct}%`
+    : '未标定：按上游 1:1 米制放置。';
+  return {
+    assetId: record.assetId,
+    scale: record.scale,
+    yawDeg: record.yawDeg,
+    origin: { ...record.origin },
+    ground: record.ground,
+    anchors: record.anchors,
+    ...(record.reference ? { reference: { ...record.reference } } : {}),
+    deviationPct,
+    confidence,
+    note,
+    summary: calibrationSummary(record),
+  };
+}
 
 /**
  * 「环境预览」的 React 侧：把 3DGS 场景取回本机、按当前场地尺寸立好，
@@ -48,6 +123,17 @@ export function useSplatPreview(deps: {
   setDisplayMode(mode: SplatDisplayMode): void;
   setTransformMode(mode: SplatTransformMode): void;
   pickScene(ray: ThreeNS.Ray): string | null;
+  /** 用已知长标定比例：知道「场地宽 12 m」时直接给出轴和长度。 */
+  calibrate(input: { axis: ScanAxis; knownMeters: number }): ScanScaleCalibration | null;
+  /** 给定高度 / 法线的基准面；物件落地与锚点都跟着它。 */
+  setGround(ground: GroundPlane): void;
+  setYaw(yawDeg: number): void;
+  /** 原点标定：把扫描原点平移到场地原点的同一处（米）。 */
+  setOrigin(origin: { x: number; z: number }): void;
+  addAnchor(input: { label?: string; kind?: AnchorKind; x: number; z: number }): GroundAnchor | null;
+  removeAnchor(id: string): void;
+  /** 一次性落地清单：只算不动，应用仍走 onApply。 */
+  landingPlan(items: readonly LandableItem[], floorY?: number): LandingCorrection[];
 }> {
   const { isReady, rendererRef, cameraRef, controlsRef, invalidate, requestShadowUpdate } = deps;
   const controllerRef = useRef<SplatPreview | null>(null);
@@ -56,6 +142,11 @@ export function useSplatPreview(deps: {
   const [displayMode, setDisplayModeState] = useState<SplatDisplayMode>('gaussian');
   const displayModeRef = useRef(displayMode);
   displayModeRef.current = displayMode;
+  // 当前扫描的标定记录：按 assetId 持久化，刷新页面后原样恢复。
+  const recordRef = useRef<SiteCalibration | null>(null);
+  const assetIdRef = useRef('');
+  const metersRef = useRef<SplatMeters | null>(null);
+  const hudRef = useRef<ReturnType<typeof createCalibrationHud> | null>(null);
   // 换场景、退出、卸载都会推进它：迟到的回调只配丢掉，不能把界面带回旧场景。
   const attempt = useRef(0);
   const sizeRef = useRef(deps.sizeMeters);
@@ -98,6 +189,33 @@ export function useSplatPreview(deps: {
     invalidate();
   }, [cameraRef, controlsRef, invalidate]);
 
+  const persistCalibration = useCallback((mutate: (record: SiteCalibration) => void): SplatCalibrationState | null => {
+    const record = recordRef.current;
+    if (!record) return null;
+    mutate(record);
+    record.updatedAt = Date.now();
+    writeSiteCalibration(record);
+    const applied = controllerRef.current?.applyCalibration({
+      scale: record.scale,
+      yawDeg: record.yawDeg,
+      origin: record.origin,
+      ground: record.ground,
+      anchors: record.anchors,
+    });
+    if (applied) metersRef.current = applied.meters;
+    const view = calibrationViewOf(record);
+    setState(previous => previous.status === 'ready'
+      ? {
+          ...previous,
+          ...(metersRef.current ? { meters: metersRef.current } : {}),
+          ...(applied?.walkBounds ? { walkBounds: applied.walkBounds } : {}),
+          ...(view ? { calibration: view } : {}),
+        }
+      : previous);
+    invalidate();
+    return view;
+  }, [invalidate]);
+
   const start = useCallback(async (source: SplatSource) => {
     const controller = controllerRef.current;
     if (!controller) {
@@ -109,6 +227,11 @@ export function useSplatPreview(deps: {
     pending.current = null;
     const hasActiveScene = !!controller.shownId;
     const current = ++attempt.current;
+    // 标定随场景走：换回同一条扫描，比例 / 朝向 / 基准面 / 锚点原样复原。
+    const stored = readSiteCalibration(source.assetId) ?? defaultSiteCalibration(source.assetId);
+    recordRef.current = stored;
+    assetIdRef.current = source.assetId;
+    metersRef.current = null;
     // 进度回调只在还是这一条请求时才写状态，否则会把已经切走的场景又刷回来。
     setState({ status: 'loading', assetId: source.assetId, name: source.name, progress: 0 });
     try {
@@ -117,6 +240,13 @@ export function useSplatPreview(deps: {
         roofCutoffY: roofCutoffRef.current,
         position: positionRef.current,
         ...(upAxisRef.current ? { upAxis: upAxisRef.current } : {}),
+        calibration: {
+          scale: stored.scale,
+          yawDeg: stored.yawDeg,
+          origin: stored.origin,
+          ground: stored.ground,
+          anchors: stored.anchors,
+        },
         onProgress: ratio => {
           if (attempt.current !== current) return;
           setState(state => state.status === 'loading' ? { ...state, ...(ratio === undefined ? {} : { progress: ratio }) } : state);
@@ -130,9 +260,12 @@ export function useSplatPreview(deps: {
       if (!hasActiveScene && camera && controls && !preserveCamera()) frameLoadedScenes();
       // 壳体在预览里不投影，阴影图是静态的，进出都要补一次。
       requestShadowUpdate();
+      metersRef.current = result.meters;
+      const calibrationView = calibrationViewOf(recordRef.current);
       setState({ status: 'ready', assetId: source.assetId, name: source.name, splats: result.splats,
         ...(result.meters ? { meters: result.meters } : {}),
-        ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}) });
+        ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}),
+        ...(calibrationView ? { calibration: calibrationView } : {}) });
     } catch (failure) {
       if (attempt.current !== current) return;
       setState({
@@ -180,6 +313,12 @@ export function useSplatPreview(deps: {
           roofCutoffY: placement.roofCutoffY,
           position: placement.position,
           ...(upAxisRef.current ? { upAxis: upAxisRef.current } : {}),
+          calibration: (() => {
+            const stored = readSiteCalibration(placement.source.assetId);
+            return stored
+              ? { scale: stored.scale, yawDeg: stored.yawDeg, origin: stored.origin, ground: stored.ground, anchors: stored.anchors }
+              : {};
+          })(),
         }).then(() => {
           if (otherControllersRef.current.get(id) !== ownedController) return;
           const latestPlacement = otherScenesRef.current.find(scene => scene.id === id);
@@ -254,6 +393,11 @@ export function useSplatPreview(deps: {
     setState(IDLE);
   }, [cameraRef, controlsRef, requestShadowUpdate]);
 
+  useEffect(() => () => {
+    hudRef.current?.dispose();
+    hudRef.current = null;
+  }, []);
+
   const renderFrame = useCallback<SplatPaint>((renderer, scene, camera) => {
     const controller = controllerRef.current;
     const backs = [controller?.renderScene, ...[...otherControllersRef.current.values()].map(extra => extra.renderScene)]
@@ -277,6 +421,92 @@ export function useSplatPreview(deps: {
     transformModeRef.current = mode;
     void controllerRef.current?.setTransformMode(mode);
   }, []);
+
+  /**
+   * 标定比例 = 已知真实长度 / 扫描里的同一段长度。
+   * 扫描落位值本身可能已经含过一次标定，所以先除回 1:1 再重算，避免比例叠乘。
+   */
+  const calibrate = useCallback((input: { axis: ScanAxis; knownMeters: number }): ScanScaleCalibration | null => {
+    const record = recordRef.current;
+    const meters = metersRef.current;
+    if (!record || !meters) return null;
+    const currentScale = record.scale > 0 ? record.scale : 1;
+    const rawScan: ScanExtent = {
+      width: meters.width / currentScale,
+      depth: meters.depth / currentScale,
+      height: meters.height / currentScale,
+    };
+    const result = calibrateScanScale({ axis: input.axis, knownMeters: input.knownMeters, scan: rawScan });
+    if (!result) return null;
+    persistCalibration(next => {
+      next.scale = result.scale;
+      next.reference = { ...result.reference };
+    });
+    return result;
+  }, [persistCalibration]);
+
+  const setGround = useCallback((ground: GroundPlane) => {
+    persistCalibration(next => {
+      next.ground = groundFromHeight(ground.y, ground.normal);
+    });
+  }, [persistCalibration]);
+
+  const setYaw = useCallback((yawDeg: number) => {
+    if (!Number.isFinite(yawDeg)) return;
+    persistCalibration(next => {
+      next.yawDeg = Math.round((((yawDeg % 360) + 360) % 360) * 10) / 10;
+    });
+  }, [persistCalibration]);
+
+  /** 原点：扫描原点相对场地原点的水平平移，随场景持久化。 */
+  const setOrigin = useCallback((origin: { x: number; z: number }) => {
+    if (!Number.isFinite(origin.x) || !Number.isFinite(origin.z)) return;
+    persistCalibration(next => {
+      next.origin = {
+        x: Math.round(origin.x * 100) / 100,
+        z: Math.round(origin.z * 100) / 100,
+      };
+    });
+  }, [persistCalibration]);
+
+  const addAnchor = useCallback((input: { label?: string; kind?: AnchorKind; x: number; z: number }): GroundAnchor | null => {
+    const record = recordRef.current;
+    if (!record || !Number.isFinite(input.x) || !Number.isFinite(input.z)) return null;
+    if (record.anchors.length >= 24) return null;
+    const kind: AnchorKind = input.kind ?? 'custom';
+    const anchor: GroundAnchor = {
+      id: nextAnchorId(record.anchors),
+      label: (input.label?.trim() || (kind === 'stage' ? '舞台位' : kind === 'entrance' ? '入口' : '锚点')).slice(0, 24),
+      kind,
+      x: Math.round(input.x * 100) / 100,
+      z: Math.round(input.z * 100) / 100,
+    };
+    persistCalibration(next => {
+      next.anchors = [...next.anchors, anchor];
+    });
+    return anchor;
+  }, [persistCalibration]);
+
+  const removeAnchor = useCallback((id: string) => {
+    persistCalibration(next => {
+      next.anchors = next.anchors.filter(anchor => anchor.id !== id);
+    });
+  }, [persistCalibration]);
+
+  const resetCalibration = useCallback(() => {
+    persistCalibration(next => {
+      next.scale = 1;
+      next.yawDeg = 0;
+      next.origin = { x: 0, z: 0 };
+      next.ground = groundFromHeight(0);
+      next.anchors = [];
+      delete next.reference;
+    });
+  }, [persistCalibration]);
+
+  /** 悬空 / 穿地物件的一次性落地清单；应用归 onApply，避免绕过撤销历史。 */
+  const landingPlan = useCallback((items: readonly LandableItem[], floorY = 0): LandingCorrection[] =>
+    landingCorrections(items, recordRef.current?.ground, { floorY }), []);
 
   const pickScene = useCallback((ray: ThreeNS.Ray): string | null => {
     let picked: string | null = null;
@@ -303,5 +533,94 @@ export function useSplatPreview(deps: {
     return picked;
   }, []);
 
-  return { state, renderFrame, start, stop, setPosition, displayMode, setDisplayMode, setTransformMode, pickScene };
+  // 标定入口：角标常驻（未标定也可点开），展开就是比例 / 朝向 / 原点 / 基准面 / 锚点面板。
+  useEffect(() => {
+    if (!isReady) return;
+    const container = rendererRef.current?.domElement.parentElement;
+    if (!container) return;
+    hudRef.current ??= createCalibrationHud(container, {
+      calibrate: input => { calibrate(input); },
+      setYaw,
+      setGround: y => { setGround(groundFromHeight(y)); },
+      setOrigin,
+      addAnchor: input => { addAnchor(input); },
+      removeAnchor,
+      reset: resetCalibration,
+    });
+    const calibration = state.calibration;
+    if (!calibration || state.status !== 'ready') {
+      hudRef.current.update({ visible: false, summary: '', scale: 1, yawDeg: 0, groundY: 0, originX: 0, originZ: 0, anchors: [] });
+      return;
+    }
+    const custom = calibration.scale !== 1
+      || calibration.yawDeg !== 0
+      || calibration.origin.x !== 0
+      || calibration.origin.z !== 0
+      || calibration.anchors.length > 0
+      || !!calibration.reference
+      || Math.abs(calibration.ground.y) > 1e-6
+      || Math.abs(calibration.ground.normal.x) > 1e-6
+      || Math.abs(calibration.ground.normal.z) > 1e-6;
+    const deviation = calibration.deviationPct;
+    const summary = calibration.reference
+      ? `比例 ${calibration.scale}× · 偏差 ${deviation !== undefined && deviation > 0 ? '+' : ''}${deviation}%`
+      : custom
+        ? `空间标定 · 朝向 ${calibration.yawDeg}°${calibration.anchors.length ? ` · ${calibration.anchors.length} 锚点` : ''}`
+        : '空间标定 · 未标定（1:1）';
+    hudRef.current.update({
+      visible: true,
+      summary,
+      scale: calibration.scale,
+      yawDeg: calibration.yawDeg,
+      groundY: calibration.ground.y,
+      originX: calibration.origin.x,
+      originZ: calibration.origin.z,
+      ...(state.meters ? { meters: { ...state.meters } } : {}),
+      ...(calibration.reference ? { reference: { ...calibration.reference } } : {}),
+      ...(deviation !== undefined ? { deviationPct: deviation } : {}),
+      ...(calibration.confidence ? { confidence: calibration.confidence } : {}),
+      anchors: calibration.anchors,
+    });
+  }, [state.calibration, state.status, state.meters, isReady, rendererRef,
+    calibrate, setYaw, setGround, setOrigin, addAnchor, removeAnchor, resetCalibration]);
+
+  // 开发态桥：Agent / 测试可直接按语义标定，不必先长出一套表单 UI。
+  useEffect(() => {
+    if (!isReady || process.env.NODE_ENV === 'production') return undefined;
+    const api = {
+      state: () => ({
+        assetId: assetIdRef.current,
+        meters: metersRef.current,
+        position: positionRef.current,
+        calibration: calibrationViewOf(recordRef.current),
+        anchors: recordRef.current?.anchors ?? [],
+      }),
+      calibrate: (axis: ScanAxis, knownMeters: number) => calibrate({ axis, knownMeters }),
+      setGround: (y: number, normal?: { x: number; y: number; z: number }) => setGround(groundFromHeight(y, normal)),
+      setGroundFromPoints: (
+        a: { x: number; y: number; z: number },
+        b: { x: number; y: number; z: number },
+        c: { x: number; y: number; z: number },
+      ) => {
+        const plane = groundFromThreePoints(a, b, c);
+        if (plane) setGround(plane);
+        return plane;
+      },
+      setYaw,
+      setOrigin,
+      addAnchor,
+      removeAnchor,
+      landingPlan,
+      reset: resetCalibration,
+    };
+    (window as unknown as Record<string, unknown>).__scendanceSiteCalibration = api;
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__scendanceSiteCalibration;
+    };
+  }, [isReady, calibrate, setGround, setYaw, setOrigin, addAnchor, removeAnchor, landingPlan, resetCalibration, persistCalibration]);
+
+  return {
+    state, renderFrame, start, stop, setPosition, displayMode, setDisplayMode, setTransformMode, pickScene,
+    calibrate, setGround, setYaw, setOrigin, addAnchor, removeAnchor, landingPlan,
+  };
 }

@@ -131,7 +131,7 @@ function expandBriefSections(): void {
 }
 
 async function openAgent(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name:'打开 Bingo Agent' }, { timeout:5000 }));
+  fireEvent.click(await screen.findByRole('button', { name:'打开 Bingo Agent' }, { timeout:15000 }));
   expandBriefSections();
 }
 
@@ -140,12 +140,13 @@ function pickCategory(value: 'brief' | 'reference' | 'rebuild'): void {
   fireEvent.change(screen.getByRole('combobox', { name: '布置工具' }), { target: { value } });
 }
 
-describe('introduction round trips', () => {
-  it('defers the editor, then preserves the real brief, image, conversation and unsent message when returning', async () => {
+describe('workspace entry and draft round trips', () => {
+  it('loads the editor without a login gate and keeps the draft across the legacy /auth redirect', async () => {
+    window.history.replaceState(null, '', '/');
     const rendered = render(<App />);
-    expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
-    expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
+    expect(screen.queryByRole('heading', { name: '欢迎回来' })).toBeNull();
+    // 第一次冷启动要等懒加载编辑器落地，之后才能点开 Agent。
+    await waitFor(() => expect(screen.queryByText('正在加载测试工作台')).toBeNull(), { timeout: 10000 });
     // The editor chunk is loaded lazily through next/dynamic; the default 1s findBy budget
     // is not enough once the mock's own factory has a cold module graph to resolve.
     await openAgent();
@@ -158,14 +159,10 @@ describe('introduction round trips', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '这条还没有发送。' } });
 
     fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
-    expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: '客户需求' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Agent' })).toBeNull();
+    expect(navigation.replace).toHaveBeenCalledWith('/?login=1');
     expect(revokeObjectURL).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
-    // 测试替身没有左栏：返回时右侧还停在图纸面板，切回「客户需求」核对恢复。
+    // 旧登录入口现在只做重定向，编辑器不再卸载，草稿与未发送消息要原样还在。
     pickCategory('brief');
-
     expect((await screen.findByRole('textbox', { name: '客户需求' }, { timeout: 5000 }) as HTMLTextAreaElement).value).toBe('举办一场 24 人自然风聚会。');
     pickCategory('reference');
     expect(screen.getByRole('img', { name: '现场照片：venue.png' }).getAttribute('src')).toBe('blob:kept-reference');
@@ -174,25 +171,24 @@ describe('introduction round trips', () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
     rendered.unmount();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:kept-reference');
-  });
+  }, 15000);
 
   it('keeps a pending real proposal available for confirmation without regenerating it', async () => {
+    window.history.replaceState(null, '', '/');
     const snapshot = { ...activeController.getSnapshot(), configured: true, sessionId:proposal.session_id,lease:{projectId,sessionId:proposal.session_id,generation:1,revision:1,expiresAt:'2099-01-01T00:00:00Z'}, user: { id: 'user-test', email: 'editor@example.com' }, writeBlocked: false, status: 'editing' as const, revision: 1, project: { id: projectId, studio_id: 'studio-test', name: '客户方案', revision: 1, scene } };
     vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
     const generate = vi.spyOn(activeController, 'startAgentRun').mockImplementation(async input=>({id:'60000000-0000-4000-8000-000000000001',projectId,requestId:input.requestId,state:'complete',progress:'完成',callCount:1,candidates:[{label:'A',title:'方案',proposal}],evaluation:null,executionMode:'preview',jevEnabled:false,expiresAt:proposal.expires_at}));
     vi.spyOn(activeController, 'authorizeAssets').mockResolvedValue({ assetUrls: {}, assetNames: {} });
     const apply = vi.spyOn(activeController, 'applySceneProposal').mockResolvedValue({ id: projectId, revision: 2, scene: candidate, previousScene: scene, updatedAt: '2026-10-02T10:00:00Z', undoGroup: 'undo-test', acceptedLocally: true });
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
     await openAgent();
     fireEvent.change(await screen.findByRole('textbox', { name: '客户需求' }), { target: { value: '保留一处交流座位。' } });
     await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
     await screen.findByText('方案提案 · 尚未应用');
     fireEvent.click(screen.getByRole('button', { name: '返回登录页' }));
-    expect(screen.getByText('editor@example.com')).toBeTruthy();
+    expect(navigation.replace).toHaveBeenCalledWith('/?login=1');
     expect(apply).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
     fireEvent.click(await screen.findByRole('button', { name: '确认布置' }));
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     expect(generate).toHaveBeenCalledOnce();
@@ -201,13 +197,10 @@ describe('introduction round trips', () => {
 });
 
 
-it('preserves a safe return destination for authenticated entry', () => {
+it('passes a safe return destination through the legacy auth route', () => {
   window.history.replaceState(null, '', '/auth?next=%2Fprojects%3Fview%3Drecent%23saved');
-  const snapshot = { ...activeController.getSnapshot(), user: { id: 'user-test', email: 'editor@example.com' } };
-  vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
-  expect(navigation.replace).toHaveBeenCalledWith('/projects?view=recent#saved');
+  expect(navigation.replace).toHaveBeenCalledWith('/?login=1&next=%2Fprojects%3Fview%3Drecent%23saved');
 });
 
 

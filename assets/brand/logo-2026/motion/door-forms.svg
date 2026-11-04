@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="256" height="256" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.form{transform-box:fill-box;transform-origin:center;opacity:0}
+.f-door{animation:f-door 4.8s linear infinite}
+.f-ball{animation:f-ball 4.8s linear infinite}
+.f-pyr{animation:f-pyr 4.8s linear infinite}
+.f-cube{animation:f-cube 4.8s linear infinite}
+@keyframes f-door{0%{opacity:0}4%{opacity:1}23%{opacity:1}27%{opacity:0}100%{opacity:0}}
+@keyframes f-ball{0%{opacity:0}23%{opacity:0}27%{opacity:1}48%{opacity:1}52%{opacity:0}100%{opacity:0}}
+@keyframes f-pyr{0%{opacity:0}48%{opacity:0}52%{opacity:1}73%{opacity:1}77%{opacity:0}100%{opacity:0}}
+@keyframes f-cube{0%{opacity:0}73%{opacity:0}77%{opacity:1}96%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){
+  .f-ball,.f-pyr,.f-cube{opacity:0!important}
+  .f-door{opacity:1!important;animation:none!important}
+}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<g class="form f-door"><path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/></g><g class="form f-ball"><ellipse cx="63.5" cy="63.5" rx="55" ry="53.5" fill="#35624A"/></g><g class="form f-pyr"><path fill="#35624A" d="M 63.5 12.5 C 66.6 12.5 68.6 14.6 70.2 17.6 L 115.2 106 C 118.7 113.6 115.7 115.5 108.2 115.5 L 18.8 115.5 C 11.3 115.5 8.3 113.6 11.8 106 L 56.8 17.6 C 58.4 14.6 60.4 12.5 63.5 12.5 Z"/></g><g class="form f-cube"><rect x="8.6" y="11.4" width="110.2" height="104.6" rx="33.5" fill="#35624A"/></g>
+</svg>

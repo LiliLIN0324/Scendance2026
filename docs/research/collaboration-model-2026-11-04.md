@@ -1,0 +1,201 @@
+# 中国同类产品「项目管理与协作」调研及 Scendance 落地方案
+
+> 只读调研，未改代码。日期：2026-11-04。来源见文末，不确定处已标注。
+
+## 一、结论先行
+
+### 1. 对 Scendance 是刚需（按优先级）
+
+| 优先级 | 能力 | 一句话理由 |
+|---|---|---|
+| P0 | **工作室 → 活动项目 → 场地 → 发布版本** 四层 | 现在 `project` 就是一份场地场景，多场地无法聚合；这是本次要补的唯一结构性缺口 |
+| P0 | **发布即冻结版本，客户确认绑定到具体版本** | 设计工具行业（酷家乐/模袋云）的共识：确认必须指向一个不可变快照，而不是"最新" |
+| P0 | **单写锁 + 明确的占用提示** | 酷家乐至今不支持两人同时编辑；Scendance 已有 lease，方向正确，不要换赛道 |
+| P1 | **项目级状态机**（设计中 / 待确认 / 已确认 / 已归档） | 客户和搭建方只关心"这版能不能落地"，不需要任务树 |
+| P1 | **项目汇总只读链接**（场地清单 + 各自版本 + 确认状态） | 客户一次活动多个场地，逐个发链接不可用 |
+| P1 | **操作留痕**（谁发布、谁确认、改过哪个场地） | 酷家乐项目协作的核心卖点就是"操作记录一目了然" |
+| P2 | **交付包归档**（图纸 + 物料清单 + 确认记录） | 会展行业交接的真实凭证，但可以后置 |
+| P2 | 项目负责人（管理权，不是可见性） | 权限只加一层"负责人"，不引入项目成员体系 |
+
+### 2. 明确不要做（点名）
+
+| 不要做 | 谁在做 | 为什么对 Scendance 是堆功能 |
+|---|---|---|
+| 甘特图 / 工时 / 迭代 / 燃尽 | Teambition、飞书项目、Worktile | 一场活动的设计工作只有"出方案→改→确认→交底"四步，排期是伪需求 |
+| 多级任务树 / WBS 子流程 | 飞书项目 | 飞书项目为硬件长周期交付设计，Scendance 的拆解粒度就是"场地" |
+| 自定义工作项类型 / 自定义字段 | 飞书项目 | 需要专职管理员配置，小工作室不会用；固定字段才不会出现"每个项目字段都不一样" |
+| 通用审批流引擎（会签/或签/条件分支/金额阈值） | 飞书项目、钉钉项目、Worktile | 只需要一个「客户确认」闸门，不是企业内部报销 |
+| 实时多人同屏编辑（OT/CRDT） | —（酷家乐也没做） | 成本极高且与"方案要有唯一当前版本"冲突，单写锁足够 |
+| 内建 IM / 通知中心 | Teambition、钉钉 | 团队已在飞书/微信里，站内只保留与版本绑定的确认留言 |
+| 客户账号体系 / 客户门户 | 酷家乐（评论要登录） | 现有免登录只读链接已验证可用；让客户注册会直接杀死确认率 |
+| 部门-子部门-岗位组织树 | 明道云、钉钉 | 工作室就是一个扁平成员表，两级组织已经够用 |
+| 跨工作室共享项目 / 项目转交 | Worktile、飞书项目 | 现阶段没有真实场景，先不做迁移语义 |
+| 任意时点的历史版本列表 / 回滚 UI | 酷家乐（按时间恢复） | 现有 undo 栈 + revision 已覆盖编辑回退；只保留"发布版本"作为里程碑，避免存储与 UI 膨胀 |
+
+### 3. 一句话模型
+
+**工作室是权限边界，项目是客户/活动容器，场地是唯一可编辑的设计文档，发布版本是唯一可被确认的对象。** 权限只做三档（工作室负责人 / 工作室成员 / 链接访客），不引入项目成员体系。
+
+---
+
+## 二、对照表
+
+> 说明："—"= 公开资料未体现；"不确定"= 有资料但未能核实细节。
+
+| 产品 | 项目层级 | 成员与权限 | 版本与历史 | 客户确认 / 评审 | 审批流 | 交付物归档 |
+|---|---|---|---|---|---|---|
+| **飞书项目** | 空间 → 工作项类型 → 工作项实例；节点可下沉为 WBS 子流程（[基本概念](https://project.feishu.cn/b/helpcenter/1ykiuvvj/4s6lajl6)、[能力页](https://project.feishu.cn/b/helpcenter/1ykiuvvj/1afedyby)） | 角色是工作项类型的一部分（产品/开发/测试…），支持「授权角色」「限制为单人」（[角色管理](https://project.feishu.cn/b/helpcenter/1ykiuvvj/i47v47pc)）；权限按商业版/企业版/旗舰版分层（[权限管理](https://project.feishu.cn/b/helpcenter/1ykiuvvj/mage1r9o)） | 每个节点有负责人、准入准出与时间；"版本"是工作项类型之一，**不是文件快照** | 节点流中的评审节点；评审结论作为流转依据（不确定：基线对比的具体粒度） | 流程引擎即审批，支持节点会签/或签（不确定：飞书项目是否直接提供会签配置） | 节点交付物 + 附件；按空间沉淀 SOP |
+| **Teambition** | 企业 → 项目 → 任务（可加阶段/工作流） | 企业角色 + 项目角色，管理后台可复制角色（[帮助](https://support.teambition.com/help/folders/60c8648268465f00468fb2b8)）；任务级区分创建者/执行者权限（[学院](https://thoughts.teambition.com/sharespace/5d66918bf67433001589886b/docs/5e5e485ac3e466001a15ab56)） | — | 流程节点可发起评审；钉钉审批可作为项目应用接入（[帮助](https://support.teambition.com/help/docs/61615cba13f4fb00458efdda)） | 节点工作流，支持或签/会签（[官方介绍](https://page.dingtalk.com/wow/dingtalk/default/dingtalk/u4NVgZXQEEltSYxCNPmq7)） | 任务附件；无"交付物"专有对象 |
+| **钉钉项目** | 即 Teambition（钉钉应用中心同一产品，[应用中心](https://appcenter.dingtalk.com/detailNew.html?funnelsource=webAppStore&goodsCode=DT_GOODS_TB06180928&sig=e75fc105178655e207b997bdf1a32812)） | 继承 Teambition 企业/项目角色；绑定钉钉组织后可直接拉组织成员 | 同上 | 同上 | 与钉钉审批打通（强于独立版 Teambition） | 同上 |
+| **Worktile** | 企业 → 项目 → 阶段 → 任务；**阶段带准出条件与交付目标** | 细粒度权限点：阶段管理 / 阶段规划分开授权（[9.68](https://worktile.com/blog/v9-68-0-release)）；任务依赖关系可单独控权（[9.66](https://worktile.com/blog/v9-66-0-release)）；加成员时同选角色（[9.67](https://worktile.com/blog/v9-67-0-release)） | 阶段准出即"里程碑"，不做文件版本 | 交付目标 + 准出条件（偏内部） | 有审批，但主打阶段流转而非审批流 | **交付系统**：阶段交付物集中归档（同类里最接近"交底包"） |
+| **明道云** | 组织 → 部门/职位 → 应用 → 工作表记录；项目靠自建应用表达 | 组织角色 + 应用角色 + 记录权限（[组织角色](https://help.mingdao.com/org/roles/)、[权限实例](https://help.mingdao.com/zh-Hant/role/permission-configuration-example/)） | — | — | 强：审批人可按组织角色/分管部门动态确定（[组织角色](https://help.mingdao.com/org/roles/)） | 靠自建表与附件，无标准交付物模型 |
+| **酷家乐** | **我的项目 → 多个方案**；项目成员对项目内所有方案生效，并有项目操作记录（[项目与方案关系](https://www.kujiale.com/hc/article/3FO4K4WP9SUA)） | 项目角色 + 企业后台按权限点限制（如禁止改施工图）；企业内项目 / 跨企业项目（[协作权限](https://www.kujiale.com/hc/article/3FO4K4WMKSO6)） | 按时间段恢复历史版本、任意版本另存（[历史方案](https://www.kujiale.com/hc/article/3FO4K4WCWPF2)、[另存](https://www.kujiale.com/hc/article/3FO4K4WE3LIA)）；**不做无上限版本列表** | **三档：可编辑 / 可评论 / 仅查看**；评论可在 3D 内打点编号并 @ 人；未登录可看 3D，评论需登录 | 无内建审批 | 方案 + 施工图/清单输出物；以"方案"为单位交付 |
+| **模袋云** | 方案（与酷家乐同一帮助中心体系，账号/协作规则同源） | 企业成员权限管理；**APIC 用户不能邀请他人编辑**（[协作说明](https://www.modaiyun.com/mdy/help?kjl_campaign=40348&kjl_content=88773&kjl_source=hc#/help/detail/3FO4K4WGL4BG)） | 同酷家乐体系（不确定：是否完全复用） | 三档协作权限；移动端只能查看/评论，不能编辑（[移动端协作](https://app.modaiyun.com/mdy/help#/help/detail/3FO4K4WMTRYU)） | 无 | 方案 + 模型 |
+| **三维家** | 商家中心 → 子账号 → 方案；云订单贯穿设计到生产 | 主账号/子账号体系，按购买服务分配账号（[子账号](https://www.3vjia.com/study/tutorialList/1/0/0/0/rRTaeWeC.html)） | 不确定（公开资料未见方案版本机制） | 不确定（公开资料未见客户确认流程） | 不确定 | 前后端一体化：图纸/报价/CNC 加工文件（[官网](https://www.3vjia.com/)） |
+| **会展报审（广交会/进博会/场馆）** | 展会 → 展位 → 特装方案；以"报图"为单位 | 三方：参展商（委托）→ 搭建商（报图）→ 场馆/主办（审图）；场馆账号按搭建商注册（[进博会要求](https://www.ciie.org/resource/static/zbh/default/assets-2025/download/PDF/CIIE2026SpecialBoothConstructorsWorkRequirements(C).pdf)） | **每轮报审即一个冻结版本**；审核结果实时更新，未通过修改后重报（[广交会](https://cief.cantonfair.org.cn/cn/common/detail.aspx?oid=64719)） | 审图即"客户/场地方确认"；通过后才允许进场 | 强：报图→审图→整改→通过，带安全责任书（[青岛场馆](http://qingdao.qdicec.com.cn/Page/view/id/58.html)） | 报馆资料清单：平面/立面/电气/效果/天花/承重/施工图/营业执照，布展前 15 个工作日提交（[办展指引](https://boftec.zibo.gov.cn/cec/guide)） |
+| **Scendance 现状** | 工作室 → 项目（= 单场地场景） | 工作室 owner/editor；无项目级角色 | revision + 撤销栈；发布生成不可变分享快照 | 仅"只读链接"，无确认动作 | 无 | 无（分享页只读） |
+
+### 从对照表读出的三条规律
+
+1. **通用 PM 工具越做越重（角色/字段/流程/审批可配置），设计工具越做越轻（三档权限 + 单写锁 + 评论打点）。** Scendance 属于后者，抄酷家乐的"轻"，不要抄飞书项目的"全"。
+2. **"版本"在两界含义不同**：通用 PM 的版本是"迭代/里程碑"（工作项）；设计工具的版本是"方案快照"。Scendance 要的是后者，且只保留"发布版本"。
+3. **会展行业的真实交接不是任务流，是"报图—审图—整改"的冻结版本循环。** 这正好证明"确认必须绑版本"是行业硬约束。
+
+---
+
+## 三、Scendance 最小可用模型
+
+### 3.1 层级（四层，不再加）
+
+```
+工作室 Studio（权限与账号边界）
+  └─ 活动项目 EventProject（客户/一场活动，可含多个场地）
+       └─ 场地 Venue（= 现有 project 场景文档，唯一可编辑单元）
+            └─ 发布版本 Publication（不可变快照，唯一可被确认的对象）
+```
+
+关键映射（避免大改现有数据）：**现有 `projects` 表 = 场地文档**，不重命名；新增 `event_projects` 容器，给现有项目行加 `event_project_id`（可空，兼容存量单场地项目）。存量项目自动视为"单场地项目"。
+
+### 3.2 每层必带字段
+
+| 层级 | 必带字段 | 可选/后置 |
+|---|---|---|
+| **Studio**（沿用现有） | `id`、`name`、`owner_id`、`members[{userId, role: owner\|editor}]`、`created_at` | 计费套餐、品牌信息、默认交付模板 |
+| **EventProject**（新建） | `id`、`studio_id`、`name`（客户/活动名）、`status`（draft / designing / reviewing / confirmed / archived）、`lead_user_id`、`created_by`、`created_at`、`updated_at` | `client_name`、`event_date`、`venue_count`（派生）、`archived_at` |
+| **Venue**（现有 project 增量） | 沿用 `id`、`name`、`studio_id`、`revision`、`updated_at`、`current_editor`、`lease_expires`；新增 `event_project_id`、`venue_label`（如"主舞台/签到区"）、`venue_order` | 地址/经纬度、面积尺寸、场地类型、排序拖拽 |
+| **Publication**（沿用 share 机制） | `shareId`、`publicationId`、`venue_id`、`event_project_id`、`revision`、`created_at`、`created_by`、`revoked_at`、`token`（仅展示一次） | 发布说明、封面缩略图 |
+| **Confirmation**（新建） | `id`、`publication_id`、`confirmed_at`、`confirmer_email`、`decision`（confirmed / changes_requested）、`note` | 轻量证据：UA、IP 哈希（不作为法务凭证承诺） |
+| **AuditEvent**（新建，只追加） | `id`、`studio_id`、`event_project_id`、`actor_user_id`、`action`（publish / confirm / member_change / status_change / archive）、`target_id`、`created_at` | 变更摘要（哪个场地、哪个 revision） |
+
+### 3.3 谁能做什么
+
+权限只保留三档 + 一个项目负责人标记，**不做项目成员表、不做场地级权限**。
+
+| 动作 | 工作室 owner | 工作室 editor | 项目负责人（owner/editor 兼任） | 链接访客（免登录） |
+|---|---|---|---|---|
+| 创建/删除工作室、管理成员 | ✅ | ❌ | ❌ | ❌ |
+| 创建活动项目 | ✅ | ✅ | — | ❌ |
+| 编辑场地（受 lease 约束） | ✅ | ✅ | ✅ | ❌ |
+| 发布单个场地 | ✅ | ✅ | ✅ | ❌ |
+| 发布"项目汇总页" | ✅ | ✅ | ✅ | ❌ |
+| 推进项目状态（设计中→待确认→已确认→归档） | ✅ | ✅ | ✅（仅自己负责的项目） | ❌ |
+| 撤销分享链接 | ✅ | ✅ | ✅（本项目） | ❌ |
+| 删除项目 | ✅ | ❌（沿用现有 owner-only） | ❌ | ❌ |
+| 查看所有场地 | ✅ | ✅（沿用工作室全员可见） | ✅ | 仅已发布内容 |
+| 提交客户确认 | ❌ | ❌ | ❌ | ✅（填邮箱 + 表态） |
+| 提修改意见 | ✅ | ✅ | ✅ | ✅（文字，不做 3D 打点） |
+
+明确不做：项目成员邀请、场地级分配、客户账号、评论 @ 人、施工图权限点。
+
+### 3.4 客户确认流程（唯一闸门）
+
+```
+场地编辑 → 发布（冻结 revision N）
+        → 生成确认链接（绑定 publicationId）
+        → 客户打开（免登录，只读）→ 确认 / 提修改
+        → 记录 Confirmation（版本、邮箱、时间、意见）
+        → 若之后有改动：该场地标记「已变更，需重新确认」
+        → 全部场地确认 → 项目状态 = confirmed
+```
+
+规则：
+- **确认永远指向 publicationId**，不存在"确认最新版"。
+- 客户不登录；确认时填邮箱（唯一身份），不建账号（对齐现有免登录链接与酷家乐"查看免登录"）。
+- 站内不做聊天：意见就写在确认记录里，绑在版本上。
+- 撤销链接后，已下载内容不可收回（与现有 API 语义一致），需在 UI 明说。
+
+### 3.5 项目汇总页（多场地协作的落点）
+
+一个链接、一页列表：场地名 / 缩略图 / 当前发布版本时间 / 确认状态 / 入口。客户不需要逐个场地收链接。
+实现上新增"项目级发布"（`POST /event-projects/:id/publish`），聚合各场地**最近一次未撤销发布**，不改单个场地的 share 语义。
+
+---
+
+## 四、与已有能力的对齐
+
+### 4.1 可直接复用（不新建）
+
+| 已有能力 | 复用方式 |
+|---|---|
+| `Studio` 结构 + 成员 RPC（owner/editor、按 userId 添加、移除即废止租约） | 原样作为顶层；不需要"团队/部门"概念 |
+| `GET /studios/:id/projects`（工作室成员可读全部项目） | 作为"工作室全员可见"的权限依据，天然满足 MVP 可见性 |
+| 单写租约 `lease/acquire|renew|release` | 多人协作的安全底座；UI 显示"XX 正在编辑"即可，不做实时合并 |
+| `revision` + `expectedRevision` 乐观锁 | 发布与确认的版本基线，不用另造版本号 |
+| `POST /projects/:id/publish` + `share/read`（匿名、去内部备注、5 分钟资产 URL） | 场地级发布与客户查看；确认记录挂在返回的 `publicationId` 上 |
+| `GET /projects/:id/shares`、撤销幂等 | 项目页的"已发布/已撤销"状态直接读它 |
+| 账户中心工作室列表、团队聊天、头像 | 项目入口放在工作室卡片下展开，不新建一级导航 |
+| 四角色 Agent（总控/Bingo/空间/物料） | 它们工作在"当前场地"这个作用域内，天然对应 Venue；总控未来可读"项目全场地汇总"作为上下文，不改 Agent 协议 |
+
+### 4.2 需要新建
+
+| 缺口 | 最小实现 |
+|---|---|
+| 项目容器与状态机 | `event_projects` 表 + 存量项目挂载；状态四档 |
+| 多场地列表 UI | 账户中心工作室卡片 → 项目卡片 → 场地行（单层展开，不嵌套折叠） |
+| 项目汇总发布 | 新端点 + 汇总只读页；复用现有分享页渲染 |
+| 确认记录 | `confirmations` 表 + 免登录确认页（一个按钮 + 一个意见框 + 邮箱） |
+| 操作留痕 | `audit_events` 只追加表；项目页显示"谁在何时发布/确认" |
+| 交付归档（P2） | 按场地打包：PDF 图纸 + 物料 CSV + 确认记录 PDF；可后置 |
+
+### 4.3 衔接上的两个硬约束（务必遵守）
+
+1. **不改 `projects` 表的既有语义**：它仍是"一份可编辑场景 + 一个 revision"。多场地只是给多行加同一个 `event_project_id`，否则 lease、发布、Agent、撤销历史全部要重写。
+2. **客户确认不进入撤销栈**：确认是只追加的事实记录，不能被 undo；编辑撤销与确认状态相互独立。
+
+---
+
+## 五、落地顺序（建议）
+
+| 阶段 | 内容 | 验收 |
+|---|---|---|
+| P0 | `event_projects` 容器 + 存量挂载 + 多场地列表 | 一个项目下 3 个场地可并列打开、各自 lease 独立 |
+| P0 | 项目状态机 + 项目汇总只读页 | 客户一个链接看到 3 个场地及各自版本时间 |
+| P1 | 确认记录 + 「已变更需重新确认」标记 | 客户免登录确认后，再编辑该场地会出现待重确认提示 |
+| P1 | 操作留痕 | 项目页可看到发布/确认流水 |
+| P2 | 交付包归档 | 单场地可导出图纸+清单+确认记录 |
+
+---
+
+## 六、不确定与边界
+
+- **飞书项目的基线/评审粒度**：只确认了"节点有准入准出、评审节点可流转"，未核实是否有独立的基线对比对象；表中标"不确定"。
+- **三维家的方案版本与客户确认**：公开帮助中心未检索到明确机制，不做推断。
+- **模袋云与酷家乐**：帮助中心同源（同一套 `3FO4K4W…` 文章 ID、同一账号体系），协作规则大体一致，但未逐条核实差异。
+- **钉钉项目的角色细节**：产品即 Teambition，钉钉侧主要增量是组织绑定与审批；具体套餐差异未核实。
+- 本调研只基于公开帮助文档与产品页，未做账号内实测；价格、版本套餐可能变动。
+- 本文只给模型建议，不含代码改动；字段命名为建议值，落地时以现有 SQL snake_case 与 API camelCase 约定为准。
+
+---
+
+## 七、来源
+
+- 飞书项目： [基本概念](https://project.feishu.cn/b/helpcenter/1ykiuvvj/4s6lajl6)｜[核心能力](https://project.feishu.cn/b/helpcenter/1ykiuvvj/1afedyby)｜[角色管理](https://project.feishu.cn/b/helpcenter/1ykiuvvj/i47v47pc)｜[权限管理](https://project.feishu.cn/b/helpcenter/1ykiuvvj/mage1r9o)｜[从 0 搭建空间](https://project.feishu.cn/b/helpcenter/1ykiuvvj/y5ayxc6p)
+- Teambition： [帮助手册](https://support.teambition.com/help/folders/60c8648268465f00468fb2b8)｜[项目/任务权限](https://thoughts.teambition.com/sharespace/5d66918bf67433001589886b/docs/5e5e485ac3e466001a15ab56)｜[钉钉审批接入](https://support.teambition.com/help/docs/61615cba13f4fb00458efdda)｜[节点工作流](https://page.dingtalk.com/wow/dingtalk/default/dingtalk/u4NVgZXQEEltSYxCNPmq7)
+- 钉钉项目： [应用中心](https://appcenter.dingtalk.com/detailNew.html?funnelsource=webAppStore&goodsCode=DT_GOODS_TB06180928&sig=e75fc105178655e207b997bdf1a32812)
+- Worktile： [9.68 阶段&交付系统](https://worktile.com/blog/v9-68-0-release)｜[9.67 成员角色](https://worktile.com/blog/v9-67-0-release)｜[9.66 任务依赖权限](https://worktile.com/blog/v9-66-0-release)
+- 明道云： [组织角色](https://help.mingdao.com/org/roles/)｜[部门与职位](https://help.mingdao.com/en/org/department-position/)｜[权限配置实例](https://help.mingdao.com/zh-Hant/role/permission-configuration-example/)
+- 酷家乐： [协作权限说明](https://www.kujiale.com/hc/article/3FO4K4WMKSO6)｜[协作发起/管理](https://www.kujiale.com/hc/article/3FO4K4WMKPC5)｜[项目与方案协作关系](https://www.kujiale.com/hc/article/3FO4K4WP9SUA)｜[历史方案恢复](https://www.kujiale.com/hc/article/3FO4K4WCWPF2)｜[任意版本另存](https://www.kujiale.com/hc/article/3FO4K4WE3LIA)
+- 模袋云： [协作说明](https://www.modaiyun.com/mdy/help?kjl_campaign=40348&kjl_content=88773&kjl_source=hc#/help/detail/3FO4K4WGL4BG)｜[移动端协作](https://app.modaiyun.com/mdy/help#/help/detail/3FO4K4WMTRYU)｜[帮助中心](https://www.modaiyun.com/mdy/help)
+- 三维家： [官网](https://www.3vjia.com/)｜[子账号管理](https://www.3vjia.com/study/tutorialList/1/0/0/0/rRTaeWeC.html)｜[帮助中心](https://www.3vjia.com/helpcenter)
+- 会展/报审： [广交会报图流程](https://cief.cantonfair.org.cn/cn/common/detail.aspx?oid=64719)｜[进博会搭建商要求](https://www.ciie.org/resource/static/zbh/default/assets-2025/download/PDF/CIIE2026SpecialBoothConstructorsWorkRequirements(C).pdf)｜[淄博办展指引](https://boftec.zibo.gov.cn/cec/guide)｜[青岛国际会展中心审图](http://qingdao.qdicec.com.cn/Page/view/id/58.html)
+- Scendance 现状（本地代码/契约）： [backend-session.ts](file:///c:/Users/13266/.dsh/bot/workspace/Scendance2026/frontend/lib/backend-session.ts#L66-L71)｜[SUPABASE_BUSINESS.md](file:///c:/Users/13266/.dsh/bot/workspace/Scendance2026/docs/contracts/SUPABASE_BUSINESS.md)｜[31-HTTP-API与前端接入.md](file:///c:/Users/13266/.dsh/bot/workspace/Scendance2026/docs/31-HTTP-API与前端接入.md#L21-L41)

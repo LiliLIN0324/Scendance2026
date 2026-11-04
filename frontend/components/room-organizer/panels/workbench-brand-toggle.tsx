@@ -27,6 +27,7 @@ export function WorkbenchBrandToggle({ expanded, active = false, onToggle, butto
       onClick={onToggle}
     >
       <span className="sc-brand-mark"><RailAvatar form="door" size={28} /><RailLaneDot lane="door"/></span>
+      <span className="sc-rail-label" aria-hidden="true">总控</span>
     </button>
   );
 }

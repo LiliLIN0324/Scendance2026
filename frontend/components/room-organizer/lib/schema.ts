@@ -129,7 +129,7 @@ function isDataImageUrl(value: unknown): value is string {
 }
 
 /**
- * 卫星贴地只允许本机代理（与 amap-venue 的 SATELLITE_GROUND_MARK 一致）。
+ * 地图贴地只允许本机代理（与 amap-venue 的 SATELLITE_GROUND_MARK / MAP_BASEMAP_MARK 一致）。
  * 其它 http(s) 仍拒绝，避免存档在加载时去打任意外站。
  */
 function isSatelliteProxyUrl(value: string): boolean {
@@ -142,7 +142,8 @@ function isSatelliteProxyUrl(value: string): boolean {
     if (url.username || url.password || url.hash) return false;
     if (local && (url.port !== '3199' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') || url.protocol !== 'http:')) return false;
     if (sameOrigin && url.pathname !== '/api/amap-static') return false;
-    return url.searchParams.get('x-ref') === 'satellite-ground-ref';
+    const ref = url.searchParams.get('x-ref');
+    return ref === 'satellite-ground-ref' || ref === 'map-basemap';
   } catch {
     return false;
   }
@@ -166,6 +167,23 @@ function isLngLatPoint(value: unknown): boolean {
     && isFiniteNumber(value.lng) && isFiniteNumber(value.lat)
     && value.lng >= -180 && value.lng <= 180
     && value.lat >= -90 && value.lat <= 90;
+}
+
+/** 调研底图：地名、中心点、半径、经纬度范围与图地址。范围不对就不认这份底图。 */
+function isResearchArea(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  if (typeof value.name !== 'string' || typeof value.address !== 'string') return false;
+  if (!isLngLatPoint(value.center)) return false;
+  if (!isFiniteNumber(value.radiusM) || value.radiusM <= 0 || value.radiusM > 20000) return false;
+  if (!isFiniteNumber(value.widthM) || value.widthM <= 0 || value.widthM > 60000) return false;
+  if (!isFiniteNumber(value.depthM) || value.depthM <= 0 || value.depthM > 60000) return false;
+  if (value.style !== 6 && value.style !== 7 && value.style !== 8) return false;
+  if (!isPlainObject(value.bounds)) return false;
+  const bounds = value.bounds as Record<string, unknown>;
+  if (!isFiniteNumber(bounds.west) || !isFiniteNumber(bounds.south)) return false;
+  if (!isFiniteNumber(bounds.east) || !isFiniteNumber(bounds.north)) return false;
+  if (bounds.east <= bounds.west || bounds.north <= bounds.south) return false;
+  return typeof value.imageUrl === 'string' && isSatelliteProxyUrl(value.imageUrl);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -328,6 +346,9 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   }
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
   if (v.scenePreset !== undefined && !SCENE_PRESET_KEYS.includes(v.scenePreset as ScenePresetKey)) return false;
+  if (v.venueScan !== undefined && (!isPlainObject(v.venueScan) ||
+    typeof v.venueScan.assetId !== 'string' || v.venueScan.assetId.length === 0 || v.venueScan.assetId.length > MAX_ID_LENGTH ||
+    typeof v.venueScan.name !== 'string' || v.venueScan.name.length > MAX_NAME_LENGTH)) return false;
   if (v.backendVenue !== undefined && !venueSchema.safeParse(v.backendVenue).success) return false;
   if (v.backendCamera !== undefined && !['overview', 'top', 'customer'].includes(v.backendCamera as string)) return false;
   if (v.backendLighting !== undefined && !['neutral', 'warm', 'cool'].includes(v.backendLighting as string)) return false;
@@ -351,6 +372,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   )) return false;
   if (v.mapLngLat !== undefined && !isLngLatPoint(v.mapLngLat)) return false;
   if (v.mapGroundFrame !== undefined && !isMapGroundFrame(v.mapGroundFrame)) return false;
+  if (v.researchArea !== undefined && !isResearchArea(v.researchArea)) return false;
   // Opacity outside [0,1] is corruption, not preference — the UI slider only
   // produces this range and canvas globalAlpha silently misbehaves outside it.
   if (
@@ -515,6 +537,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   itemLayers: true,
   designBook: true,
   scenePreset: true,
+  venueScan: true,
   backendVenue: true,
   backendSceneV2: true,
   backendCamera: true,
@@ -532,6 +555,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   mapGroundPolygon: true,
   mapLngLat: true,
   mapGroundFrame: true,
+  researchArea: true,
   terrain: true,
   neighbours: true,
   entrance: true,

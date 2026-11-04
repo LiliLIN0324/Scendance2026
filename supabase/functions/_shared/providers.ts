@@ -52,7 +52,7 @@ export function hunyuan(env: Env, fetcher: Fetcher = fetch, pinned?:GenerationPr
   };
 }
 /**
- * Aholo Lux3D (docs/AHOLO-INTEGRATION-PLAN.md M1). Same submit/query shape as `hunyuan` so the
+ * Aholo Lux3D (docs/15-Aholo集成规划.md M1). Same submit/query shape as `hunyuan` so the
  * worker can consume either through the pinned job fields. Text/image only — Lux3D has no
  * re-texture lane in scope. Result URLs expire in ~2h, so the worker must archive immediately.
  */
