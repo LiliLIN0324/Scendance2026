@@ -23,6 +23,7 @@ import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
+import { ActivitiesGalleryMount } from './activities-gallery-mount';
 import { AmapVenuePicker } from './amap-venue-picker';
 import { VenuePicker } from './venue-picker';
 import { initialBriefMemory, memoryExtraction, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
@@ -1854,6 +1855,8 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
       {activity && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
+      {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
+      {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
       {mode === 'layout' && agent.bubbles.length === 0 && agent.state !== 'generating' && <div className="ap-lead">
         <p className="ap-lead-title">先说一句就行</p>
         <p className="ap-lead-body">点一句例子，或自己说；听懂了会回显，确认后才写进画布。</p>
