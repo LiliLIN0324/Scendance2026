@@ -901,3 +901,67 @@
 .sc-workbench .sc-export-pop .sc-export-note {
   font-size:var(--fs-cap); line-height:1.5; color:var(--wk-muted);
 }
+
+/* ── F4：物料库常驻搜索 + 最近用过 ────────────────────────────────
+   搜索不再折叠成图标；最近用过一行小卡，纯本地、不进后端。 */
+.sc-lib-search {
+  display:flex; align-items:center; gap:6px; box-sizing:border-box;
+  width:100%; min-width:0; height:28px; padding:3px 8px;
+  border:1px solid var(--wk-hair); border-radius:var(--r-sm);
+  background:var(--wk-paper); color:var(--wk-muted);
+}
+.sc-lib-search:focus-within { border-color:var(--wk-ink-soft); }
+.sc-lib-search > svg { flex:none; }
+.sc-lib-search > input {
+  flex:1; min-width:0; width:100%; padding:0; border:0; background:transparent;
+  font-size:var(--fs-p2); color:var(--wk-ink); opacity:1;
+}
+.sc-lib-search > input::placeholder { color:var(--wk-muted); }
+
+.sc-lib-group-head {
+  display:flex; align-items:center; gap:6px;
+}
+.sc-lib-group-head > span { flex:none; }
+.sc-lib-clear-recent {
+  margin-left:auto; padding:0 4px; border:0; background:transparent;
+  color:var(--wk-muted); font-size:10px; line-height:14px; cursor:pointer;
+}
+.sc-lib-clear-recent:hover { color:var(--wk-ink); text-decoration:underline; }
+
+/* 非卡态：最近用过 = 一行横滚小卡，贴在分类栏下、主轨道上。 */
+.sc-recent-strip {
+  display:flex; align-items:center; gap:8px; min-width:0;
+  margin:0 0 6px; padding:4px 6px;
+  border:1px solid var(--wk-hair-soft, var(--wk-hair)); border-radius:var(--r-sm);
+  background:var(--wk-paper);
+}
+.sc-recent-label {
+  flex:none; color:var(--wk-muted); font-size:var(--fs-cap); line-height:18px;
+}
+.sc-recent-list {
+  display:flex; flex:1; align-items:stretch; gap:6px; min-width:0; margin:0; padding:0;
+  list-style:none; overflow-x:auto; scrollbar-width:none;
+}
+.sc-recent-list::-webkit-scrollbar { display:none; }
+.sc-recent-item { flex:none; width:64px; }
+.sc-recent-tile {
+  display:flex; flex-direction:column; align-items:center; gap:2px; width:100%; min-width:0;
+  padding:3px; border:1px solid var(--wk-hair); border-radius:var(--r-sm);
+  background:var(--wk-paper); color:var(--wk-ink); cursor:pointer;
+}
+.sc-recent-tile:hover:not(:disabled) { border-color:var(--wk-ink-faint); }
+.sc-recent-tile:disabled { cursor:default; opacity:.6; }
+.sc-recent-thumb {
+  display:block; width:100%; aspect-ratio:1/1; overflow:hidden; border-radius:6px;
+  background:var(--wk-plane);
+}
+.sc-recent-thumb img { width:100%; height:100%; object-fit:contain; }
+.sc-recent-name {
+  display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:10px; line-height:14px; color:var(--wk-ink-soft); text-align:center;
+}
+.sc-recent-clear {
+  flex:none; padding:0 4px; border:0; background:transparent;
+  color:var(--wk-muted); font-size:10px; line-height:14px; cursor:pointer;
+}
+.sc-recent-clear:hover { color:var(--wk-ink); text-decoration:underline; }

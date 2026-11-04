@@ -115,18 +115,9 @@ export function SpacePanel({
               <Globe size={16} aria-hidden="true"/><h3>World 世界模型</h3><small>默认</small>
               <details className="sc-space-info is-right">
                 <summary aria-label="World 世界模型说明" title="World 世界模型说明"><Info size={12} aria-hidden="true"/></summary>
-                <p>生成可漫游的 3D 高斯空间，Bingo 可在可编辑布局上规划物料与动线。重建真实场地请用现场照片或视频；卫星图只能选址，不能作为重建素材。</p>
+                <p>生成可漫游的 3D 空间，Bingo 可在可编辑布局上规划物料与动线。重建真实场地请用现场照片或视频；卫星图只能选址，不能作为重建素材。</p>
               </details>
             </div>
-            <div className="sc-space-aholo-actions">
-              <button type="button" className="sc-button is-primary" onClick={() => onOpenAholo?.('world')} disabled={!onOpenAholo}>
-                <Globe size={14} aria-hidden="true"/>生成场地
-              </button>
-              <button type="button" className="sc-button" onClick={() => onOpenAholo?.('recon')} disabled={!onOpenAholo}>
-                <Scan size={14} aria-hidden="true"/>重建真实场地
-              </button>
-            </div>
-            {!onOpenAholo && <p className="sc-note">Aholo 空间生成当前不可用。</p>}
           </section>
           <section className="sc-space-block" aria-label="真实场地">
             <div className="sc-space-section-head">

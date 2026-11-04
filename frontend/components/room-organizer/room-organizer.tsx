@@ -45,6 +45,7 @@ import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
+import { suggestDropPoint } from './lib/drop-zone';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
@@ -2255,8 +2256,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             if (!dropActive.current) return;
             if (layoutStore.getState() !== base) throw new Error('下载期间画布已有变化，请重新拖入物料。');
             placement.assertCurrent();
-            const newId = placeDiscrete(item, world);
-            if (newId) selectOnly(newId, { keepPanel: true });
+            // F3 智能落点：拖到已有物件附近自动吸附到旁侧，避免重叠。
+            const anchors = activeFloor.items.filter(e => e.position).map(entry => ({ id: entry.id, name: entry.name, x: entry.position!.x, z: entry.position!.z, width: entry.width, depth: entry.depth }));
+            const suggested = suggestDropPoint(world, anchors, { width: item.width, depth: item.depth });
+            const newId = placeDiscrete(item, suggested.point);
+            if (newId) {
+              selectOnly(newId, { keepPanel: true });
+              if (suggested.anchor) notify(`已紧挨「${suggested.anchor.name}」摆放`, 'info');
+            }
           } catch (error) { notify(error instanceof Error ? error.message : '模型加载失败，请重试。', 'error'); }
           finally { placement.dispose(); }
         }}
