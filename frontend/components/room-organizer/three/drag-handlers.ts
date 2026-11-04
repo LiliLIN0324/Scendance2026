@@ -47,6 +47,12 @@ export interface SceneEventHandlers {
   selectedIds?: ReadonlySet<string>;
   onItemDragStart?: (id: string) => void;
   onItemDrag: (id: string, x: number, z: number) => void;
+  /**
+   * Rotate/scale dial the item under the pointer instead of translating it:
+   * the drag plane stays put (no position write), only the pointer point is
+   * forwarded so use-item-drag can derive the angle/radius (#P0-3).
+   */
+  transformMode?: 'move' | 'rotate' | 'scale';
   onItemDragEnd?: (id: string) => void;
   /**
    * The gesture was aborted without a commit — the furniture set was rebuilt
@@ -406,6 +412,15 @@ export function attachDragHandlers({
     if (!raycaster.ray.intersectPlane(dragPlane, intersection)) return;
 
     const itemId = dragTarget.userData.id as string;
+    const mode = handlersRef.current.transformMode ?? 'move';
+    if (mode === 'rotate' || mode === 'scale') {
+      // The item stays anchored while its rotation/size is dialed; the
+      // property panel remains the numeric fallback.
+      handlersRef.current.onItemDrag(itemId, intersection.x, intersection.z);
+      markDirty();
+      requestShadowUpdate?.();
+      return;
+    }
     const snapped = handlersRef.current.snapPosition(
       itemId,
       intersection.x + grabOffsetX,

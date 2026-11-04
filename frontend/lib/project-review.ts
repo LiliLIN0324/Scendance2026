@@ -4,6 +4,7 @@ import type { DeliverySnapshot } from '../components/room-organizer/lib/scene-de
 import { isRoomLayout } from '../components/room-organizer/lib/schema';
 import { layoutToSvg } from '../components/room-organizer/lib/plan-export/svg';
 import type { FloorLayout, FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
+import { customerInventory, groupInventory, type CustomerInventoryRow, type InventorySourceItem } from '../components/room-organizer/lib/deliverable-inventory';
 import type { BackupBrief, BackupBriefSnapshot } from './local-project-backup';
 
 const timestamp = z.iso.datetime({ offset: true });
@@ -350,7 +351,7 @@ const table = (headers: string[], rows: unknown[][]) => `<div class="table-wrap"
 
 // Display only: snapshot geometry and grouping keep their original precision.
 const number = (value: number) => String(Number(value.toFixed(2)));
-const size = (item: ReviewItem) => `${number(item.width)} × ${number(item.depth)} × ${number(item.height)} 米`;
+const size = (item: Pick<ReviewItem, 'width' | 'depth' | 'height'>) => `${number(item.width)} × ${number(item.depth)} × ${number(item.height)} 米`;
 const displayTime = (value: string) => new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 }).format(new Date(value));
@@ -372,7 +373,7 @@ const materialLabels: Record<string, string> = {
 };
 const sourceLabels = { builtin: '内置示意', public_library: '公共模型', generated: '生成模型', local_sample: '本地模型' };
 const requirementLabels = { satisfied: '设计记录为满足', partial: '设计记录为部分满足', unmet: '设计记录为未满足' };
-const materialLabel = (item: ReviewItem) => materialLabels[item.materialId ?? ''] ?? materialLabels[item.type] ?? '其他示意物料';
+const materialLabel = (item: Pick<ReviewItem, 'materialId' | 'type'>) => materialLabels[item.materialId ?? ''] ?? materialLabels[item.type] ?? '其他示意物料';
 const modelVersions = (layout: ReviewLayout) => [...new Set(layout.floors.flatMap(f => f.items.map(i => i.assetVersionId).filter((id): id is string => !!id)))];
 // The projection omits loading URLs; use its existing model limitation to retain that distinction.
 const unversionedModels = (layout: ReviewLayout) => new Set([
@@ -380,10 +381,10 @@ const unversionedModels = (layout: ReviewLayout) => new Set([
   ...layout.floors.flatMap(f => f.items.filter(i => !i.assetVersionId &&
     (i.type === 'glb-asset' || (i.source && i.source !== 'builtin'))).map(i => i.id)),
 ]);
-const modelLabel = (item: ReviewItem, versions: string[], unversioned: boolean) => item.assetVersionId
+const modelLabel = (item: { assetVersionId: string | null; source?: string }, versions: string[], unversioned: boolean) => item.assetVersionId
   ? `模型版本 ${versions.indexOf(item.assetVersionId) + 1}`
-  : unversioned ? `${item.source && item.source !== 'builtin' ? sourceLabels[item.source] : '模型物料'} · 版本未记录`
-  : item.source ? sourceLabels[item.source] : '示意物料';
+  : unversioned ? `${item.source && item.source !== 'builtin' ? (sourceLabels as Record<string, string>)[item.source] : '模型物料'} · 版本未记录`
+  : item.source ? (sourceLabels as Record<string, string>)[item.source] : '示意物料';
 const shapeLabel = (item: ReviewItem) => [
   item.sofaShape ? ({ standard: '标准沙发', 'L-shape': 'L形沙发', 'U-shape': 'U形沙发' })[item.sofaShape] : '',
   item.stairsShape ? ({ straight: '直梯', winder: '转角梯' })[item.stairsShape] : '',
@@ -391,24 +392,31 @@ const shapeLabel = (item: ReviewItem) => [
   item.mirrored ? '镜像形态' : '', item.sillHeight === undefined ? '' : `窗台高 ${number(item.sillHeight)} 米`,
 ].filter(Boolean).join(' · ');
 
-function renderMaterials(layout: ReviewLayout, heading: string): string {
-  const groups = new Map<string, { item: ReviewItem; count: number }>();
-  const all = layout.floors.flatMap(f => f.items);
+/** Map the review snapshot into the shared inventory model; counting is not done here. */
+function reviewInventory(layout: ReviewLayout): { rows: CustomerInventoryRow[]; versions: string[]; unversioned: Set<string> } {
   const unversioned = unversionedModels(layout);
-  for (const item of all.filter(i => i.role === 'material')) {
-    // A model without a version has no safe identity for grouping; keep each instance separate.
-    const key = JSON.stringify([item.materialId, item.type, item.source, item.assetVersionId,
-      item.width, item.depth, item.height, item.color, item.mirrored, item.sofaShape, item.stairsShape,
-      item.stairsLeadIn, item.sillHeight, unversioned.has(item.id) ? item.id : null]);
-    const group = groups.get(key);
-    if (group) group.count += 1;
-    else groups.set(key, { item, count: 1 });
-  }
-  const versions = modelVersions(layout);
+  const items: InventorySourceItem[] = layout.floors.flatMap(floor => floor.items
+    .filter(item => item.role === 'material')
+    .map(item => ({
+      id: item.id, floorId: floor.id, floorName: floor.name,
+      name: materialLabel(item), type: item.type, materialId: item.materialId || item.type,
+      assetVersionId: item.assetVersionId ?? null, source: item.source || 'builtin',
+      width: item.width, depth: item.depth, height: item.height, color: item.color,
+      zoneId: null, zoneName: null, locked: false,
+      variant: JSON.stringify([item.materialId, item.type, item.source, item.mirrored,
+        item.sofaShape, item.stairsShape, item.stairsLeadIn, item.sillHeight, unversioned.has(item.id) ? item.id : null]),
+      note: shapeLabel(item),
+    })));
+  return { rows: customerInventory(groupInventory(items, { acrossFloors: true })), versions: modelVersions(layout), unversioned };
+}
+
+function renderMaterials(layout: ReviewLayout, heading: string): string {
+  const all = layout.floors.flatMap(f => f.items);
+  const { rows, versions, unversioned } = reviewInventory(layout);
   return `<section class="materials"><h2>${escape(heading)}</h2><p class="fine">按本方案的类型、规格、颜色与模型版本汇总。数量仅供布局讨论，实际规格与可获得性待核；不作采购清单或报价。</p>
-${table(['物料', '数量', '示意规格（宽 × 深 × 高）', '颜色', '表现形式'], [...groups.values()].map(({ item, count }) => [
-      materialLabel(item), count, `${size(item)}${shapeLabel(item) ? `\n${shapeLabel(item)}` : ''}`,
-      /^#[\da-f]{6}$/i.test(item.color) ? `<span class="swatch" style="background:${escape(item.color)}"></span>${escape(item.color.toUpperCase())}` : '颜色待核', modelLabel(item, versions, unversioned.has(item.id)),
+${table(['物料', '数量', '示意规格（宽 × 深 × 高）', '颜色', '表现形式'], rows.map(row => [
+      row.name, row.quantity, `${size(row)}${row.note ? `\n${row.note}` : ''}`,
+      /^#[\da-f]{6}$/i.test(row.color) ? `<span class="swatch" style="background:${escape(row.color)}"></span>${escape(row.color.toUpperCase())}` : '颜色待核', modelLabel(row, versions, row.objectIds.some((id: string) => unversioned.has(id))),
     ]))}${all.some(i => i.role === 'fixed-structure') ? `<p class="fine">另有 ${all.filter(i => i.role === 'fixed-structure').length} 件固定结构标记，见附录；未计入上述物料。</p>` : ''}</section>`;
 }
 

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { ROOM_OBJECT_TAGS } from './room-builder';
+import { sampleSplatColors, rememberSceneSample } from './scene-lighting';
+import { DEFAULT_GROUND_PLANE, groundFromHeight, groundHeightAt, type GroundAnchor, type GroundPlane } from '../lib/site-capture';
 import type { SplatMesh, SparkRenderer } from '@sparkjsdev/spark';
 
 /** Aholo World 的 3DGS 竖直轴；上游不给时按它给的 Z-up 立起来。 */
@@ -16,6 +18,18 @@ export type SplatPosition = Readonly<{ x: number; y: number; z: number }>;
 export type SplatDisplayMode = 'gaussian' | 'footprint';
 /** Whole-scene move: gizmo shows XYZ axes; numeric keeps the panel only. */
 export type SplatTransformMode = 'off' | 'gizmo' | 'numeric';
+/**
+ * 手动标定结果：扫描米 → 真实米的倍数、绕世界 Y 的朝向，以及物件落地用的基准面与锚点。
+ * 默认比例 1、朝向 0，表示沿用上游的真实米制。
+ */
+export type SplatCalibration = Readonly<{
+  scale?: number;
+  yawDeg?: number;
+  /** 扫描原点相对场地原点的水平平移，米。 */
+  origin?: { x: number; z: number };
+  ground?: GroundPlane;
+  anchors?: readonly GroundAnchor[];
+}>;
 export type SplatLoadOptions = Readonly<{
   /** 场地最长水平边（米）：无真实尺度时的兜底——点云按它等比缩放。 */
   sizeMeters: number;
@@ -23,10 +37,13 @@ export type SplatLoadOptions = Readonly<{
   /** Hide scanned splats above the active storey's ceiling (world metres). */
   roofCutoffY?: number;
   position?: SplatPosition;
+  /** 手动标定：尺度 / 朝向 / 基准面 / 锚点；随场景持久化，重开直接复原。 */
+  calibration?: SplatCalibration;
   onProgress?(ratio: number | undefined): void;
 }>;
 export type SplatFit = Readonly<{ scale: number; position: THREE.Vector3 }>;
 export type SplatPaint = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) => void;
+
 
 const EPSILON = 0.000001;
 
@@ -381,8 +398,24 @@ export function createSplatPreview(deps: {
   // 高斯场地自己的地面（按点云实测 footprint，而不是矢量壳那 12×9 米）。
   let ground: THREE.Group | null = null;
   let groundOutline: FootprintLoop | null = null;
+  // 标定产生的极淡基准面 / 锚点 / 地面遮挡代理：与 footprint 一起随场景平移。
+  let referencePlane: THREE.Group | null = null;
+  let anchorMarkers: THREE.Group | null = null;
+  let occlusionProxy: THREE.Group | null = null;
   // 点云摆好之后在世界里的占位，用来把相机框进场景内。
   let bounds: THREE.Box3 | null = null;
+  // 原始局部盒 / 采样点 / 竖直轴修正：标定改比例或朝向时，就地重算，不重新解码点云。
+  let localBox: THREE.Box3 | null = null;
+  let localCenters: THREE.Vector3[] = [];
+  let upQuaternion = new THREE.Quaternion();
+  // 当前生效的标定：默认 1:1 米制、水平基准面、无锚点。
+  let calibration: Required<SplatCalibration> = {
+    scale: 1,
+    yawDeg: 0,
+    origin: { x: 0, z: 0 },
+    ground: { ...DEFAULT_GROUND_PLANE },
+    anchors: [],
+  };
   let savedView: Readonly<{ position: THREE.Vector3; target: THREE.Vector3 }> | null = null;
   // 正在显示的场景号：空字符串就是预览关闭，渲染循环每帧只认这一个判据。
   let shownId = '';
@@ -406,8 +439,11 @@ export function createSplatPreview(deps: {
     holder = null;
     mesh = null;
     roofCutoff = null;
+    localBox = null;
+    localCenters = [];
     transformControls?.detach();
     releaseGround();
+    releaseOverlays();
   }
 
   function releaseGround() {
@@ -422,6 +458,48 @@ export function createSplatPreview(deps: {
     });
     ground = null;
     groundOutline = null;
+  }
+
+  function disposeGroup(group: THREE.Group | null): null {
+    if (!group) return null;
+    group.removeFromParent();
+    group.traverse(object => {
+      const meshLike = object as THREE.Mesh;
+      meshLike.geometry?.dispose?.();
+      const material = meshLike.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(material)) material.forEach(entry => entry.dispose());
+      else material?.dispose?.();
+    });
+    return null;
+  }
+
+  function releaseOverlays() {
+    referencePlane = disposeGroup(referencePlane);
+    anchorMarkers = disposeGroup(anchorMarkers);
+    occlusionProxy = disposeGroup(occlusionProxy);
+  }
+
+  /** 标定输入只接受有限值，越界就退回默认，别让脏数据把场景撑飞。 */
+  function sanitizeCalibration(input: SplatCalibration | undefined): Required<SplatCalibration> {
+    const rawScale = input?.scale;
+    const scale = typeof rawScale === 'number' && Number.isFinite(rawScale) && rawScale >= 0.2 && rawScale <= 20
+      ? rawScale
+      : 1;
+    const rawYaw = input?.yawDeg;
+    const yawDeg = typeof rawYaw === 'number' && Number.isFinite(rawYaw) ? ((rawYaw % 360) + 360) % 360 : 0;
+    const origin = {
+      x: typeof input?.origin?.x === 'number' && Number.isFinite(input.origin.x) ? input.origin.x : 0,
+      z: typeof input?.origin?.z === 'number' && Number.isFinite(input.origin.z) ? input.origin.z : 0,
+    };
+    const rawGround = input?.ground;
+    const ground: GroundPlane = rawGround && Number.isFinite(rawGround.y)
+      ? groundFromHeight(rawGround.y, rawGround.normal ?? DEFAULT_GROUND_PLANE.normal)
+      : { y: DEFAULT_GROUND_PLANE.y, normal: { ...DEFAULT_GROUND_PLANE.normal }, definedBy: 'height' };
+    const anchors = (input?.anchors ?? [])
+      .filter(anchor => Number.isFinite(anchor.x) && Number.isFinite(anchor.z))
+      .slice(0, 24)
+      .map(anchor => ({ ...anchor }));
+    return { scale, yawDeg, origin, ground, anchors };
   }
 
   /** 高斯场景自带的地面：按整个扫描体积的俯视投影裁切，保留斜边与凹口。 */
@@ -485,6 +563,187 @@ export function createSplatPreview(deps: {
     splatScene.add(group);
   }
 
+  /** 基准面形状：有实测 footprint 就跟着它走，没有才退回包围盒矩形。 */
+  function groundShapeGeometry(box: THREE.Box3): THREE.BufferGeometry {
+    const size = box.getSize(new THREE.Vector3());
+    if (groundOutline) {
+      const shape = new THREE.Shape();
+      shape.moveTo(groundOutline[0]!.x, -groundOutline[0]!.z);
+      for (const point of groundOutline.slice(1)) shape.lineTo(point.x, -point.z);
+      shape.closePath();
+      return new THREE.ShapeGeometry(shape);
+    }
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(size.x, 0);
+    shape.lineTo(size.x, -size.z);
+    shape.lineTo(0, -size.z);
+    shape.closePath();
+    return new THREE.ShapeGeometry(shape);
+  }
+
+  /**
+   * 把一张 XZ 平面挂到基准面上：外壳负责位置与倾斜，内层负责把几何从 XY 转到 XZ。
+   * 水平面时外壳就是 y = 基准面高度；三点定面时外壳法线跟着走。
+   */
+  function groundPlaneGroup(box: THREE.Box3, lift: number): THREE.Group {
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const outer = new THREE.Group();
+    outer.position.set(center.x, groundHeightAt(calibration.ground, center.x, center.z), center.z);
+    outer.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(calibration.ground.normal.x, calibration.ground.normal.y, calibration.ground.normal.z).normalize(),
+    );
+    const inner = new THREE.Group();
+    inner.rotation.x = -Math.PI / 2;
+    inner.position.set(-size.x / 2, lift, -size.z / 2);
+    outer.add(inner);
+    return outer;
+  }
+
+  /**
+   * 极淡的基准面参考：只给“地在哪里”一个视觉锚，强度刻意低于 2D 网格，
+   * 不与点云里真实的桌面、舞台抢注意力。
+   */
+  function buildReference(box: THREE.Box3) {
+    referencePlane = disposeGroup(referencePlane);
+    const size = box.getSize(new THREE.Vector3());
+    if (!(size.x > EPSILON) || !(size.z > EPSILON)) return;
+    const group = groundPlaneGroup(box, 0.006);
+    group.userData.type = 'splat-reference-plane';
+    const inner = group.children[0] as THREE.Group;
+    const plane = new THREE.Mesh(
+      groundShapeGeometry(box),
+      new THREE.MeshBasicMaterial({ color: 0x7d8f7a, transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    plane.renderOrder = -3;
+    inner.add(plane);
+    const points: number[] = [];
+    const step = 2;
+    const sample = 0.2;
+    const contains = (x: number, z: number) => !groundOutline || footprintContains(groundOutline, x, z);
+    for (let x = 0; x <= size.x + EPSILON; x += step) {
+      for (let z = 0; z < size.z; z += sample) if (contains(x, z) && contains(x, Math.min(size.z, z + sample))) {
+        points.push(x, -z, 0.008, x, -Math.min(size.z, z + sample), 0.008);
+      }
+    }
+    for (let z = 0; z <= size.z + EPSILON; z += step) {
+      for (let x = 0; x < size.x; x += sample) if (contains(x, z) && contains(Math.min(size.x, x + sample), z)) {
+        points.push(x, -z, 0.008, Math.min(size.x, x + sample), -z, 0.008);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    const grid = new THREE.LineSegments(
+      geometry,
+      new THREE.LineBasicMaterial({ color: 0x8a9c86, transparent: true, opacity: 0.1, depthWrite: false }),
+    );
+    grid.renderOrder = -3;
+    inner.add(grid);
+    referencePlane = group;
+    splatScene.add(group);
+  }
+
+  /** 锚点：贴基准面的小圆环 + 一根短竖杆，给“舞台位 / 入口”一个可被看见的落点。 */
+  function buildAnchors(box: THREE.Box3) {
+    anchorMarkers = disposeGroup(anchorMarkers);
+    if (!calibration.anchors.length) return;
+    const group = new THREE.Group();
+    group.userData.type = 'splat-anchors';
+    group.position.set(box.min.x, box.min.y, box.min.z);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x4f7a5c, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const mastMaterial = new THREE.LineBasicMaterial({ color: 0x4f7a5c, transparent: true, opacity: 0.28, depthWrite: false });
+    for (const anchor of calibration.anchors) {
+      const y = groundHeightAt(calibration.ground, anchor.x, anchor.z) - box.min.y + 0.015;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.36, 24), ringMaterial.clone());
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(anchor.x - box.min.x, y, anchor.z - box.min.z);
+      ring.renderOrder = -2;
+      ring.userData.type = 'splat-anchor';
+      ring.userData.anchorId = anchor.id;
+      group.add(ring);
+      const mast = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(anchor.x - box.min.x, y, anchor.z - box.min.z),
+          new THREE.Vector3(anchor.x - box.min.x, y + 1.1, anchor.z - box.min.z),
+        ]),
+        mastMaterial.clone(),
+      );
+      mast.renderOrder = -2;
+      group.add(mast);
+    }
+    anchorMarkers = group;
+    splatScene.add(group);
+  }
+
+  /**
+   * 地面遮挡代理：3DGS 不写深度，物料一旦掉到地面以下就会“穿”进点云地板里。
+   * 用一张只写深度、不写颜色的水平面兜住：点云照常画（先画），
+   * 之后画的布置物件只要在面下方就会被深度测试挡掉。
+   */
+  function buildOcclusionProxy(box: THREE.Box3) {
+    occlusionProxy = disposeGroup(occlusionProxy);
+    const size = box.getSize(new THREE.Vector3());
+    if (!(size.x > EPSILON) || !(size.z > EPSILON)) return;
+    const group = groundPlaneGroup(box, 0);
+    group.userData.type = 'splat-occlusion-proxy';
+    const inner = group.children[0] as THREE.Group;
+    const proxy = new THREE.Mesh(groundShapeGeometry(box), new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: true,
+      depthTest: true,
+      transparent: false,
+      side: THREE.DoubleSide,
+    }));
+    proxy.renderOrder = 1000;
+    inner.add(proxy);
+    occlusionProxy = group;
+    splatScene.add(group);
+  }
+
+  /** 按当前标定重新落位点云，并重建地面 / 基准面 / 锚点 / 遮挡代理；不重新解码。 */
+  function placeSplat(): THREE.Box3 | null {
+    if (!holder || !mesh || !localBox) return null;
+    const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(calibration.yawDeg));
+    // 先按上游竖直轴立起来，再绕世界 Y 转朝向；两次旋转都作用在点云本身。
+    const quaternion = yaw.clone().multiply(upQuaternion);
+    mesh.quaternion.copy(quaternion);
+    const rotated = rotatedBox(localBox, quaternion);
+    const scale = calibration.scale;
+    const center = rotated.getCenter(new THREE.Vector3());
+    // 原点标定：扫描中心先落到场地原点，再按 origin 平移，让两张平面坐标系重合。
+    const fitPosition = new THREE.Vector3(
+      -center.x * scale + calibration.origin.x,
+      -rotated.min.y * scale + calibration.ground.y,
+      -center.z * scale + calibration.origin.z,
+    );
+    basePosition.copy(fitPosition);
+    holder.scale.setScalar(scale);
+    holder.position.copy(fitPosition).add(currentOffset);
+    bounds = new THREE.Box3(
+      rotated.min.clone().multiplyScalar(scale).add(fitPosition).add(currentOffset),
+      rotated.max.clone().multiplyScalar(scale).add(fitPosition).add(currentOffset),
+    );
+    const projectedPoints = localCenters.map(point =>
+      point.clone().applyQuaternion(quaternion).multiplyScalar(scale).add(fitPosition).add(currentOffset)
+    );
+    buildGround(bounds, projectedPoints);
+    buildReference(bounds);
+    buildAnchors(bounds);
+    buildOcclusionProxy(bounds);
+    return bounds;
+  }
+
+  function translateOverlays(delta: THREE.Vector3) {
+    ground?.position.add(delta);
+    referencePlane?.position.add(delta);
+    anchorMarkers?.position.add(delta);
+    occlusionProxy?.position.add(delta);
+  }
+
   async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number; meters: SplatMeters; walkBounds: SplatWalkBounds | null }>> {
     if (disposed) throw new Error('环境预览已关闭。');
     const sparkModule = await sparkPromise;
@@ -535,6 +794,8 @@ export function createSplatPreview(deps: {
     next.worldModifier = cutModifier;
     roofCutoff = cutoffUniform;
     const centers = sampleCenters(next);
+    // 点云颜色就是实拍光照本身：载入时顺手取样一次，供场景光照匹配复用。
+    if (source.assetId) rememberSceneSample(source.assetId, sampleSplatColors(next));
     const local = robustBox(centers);
     if (!local) {
       next.dispose();
@@ -542,32 +803,21 @@ export function createSplatPreview(deps: {
     }
     next.quaternion.copy(upAxisQuaternion(options.upAxis ?? 'Z'));
     // 缩放和落位挂在包装层上，点云本身只管朝向，换场地不必重算旋转。
-    const rotated = rotatedBox(local, next.quaternion);
-    // 米制假设：World 生成产物就是真实米制（forwardBox 只是局部子盒，tree 根盒 ~40×26m 对得上一座宴会厅），
-    // 不做任何缩放：底面贴 y=0、水平中心对到场地中心，场地只是大厅里的一块布置区。
-    // 点云里自带桌椅（真实米数），缩放反而会破坏与物料的比例。
-    const center = rotated.getCenter(new THREE.Vector3());
-    const fit = { scale: 1, position: new THREE.Vector3(-center.x, -rotated.min.y, -center.z) };
-    basePosition.copy(fit.position);
+    // 默认 1:1 米制；只有存在手动标定时才乘 sceneScale（扫描米 → 真实米）。
+    calibration = sanitizeCalibration(options.calibration);
+    localBox = local;
+    localCenters = centers;
+    upQuaternion = next.quaternion.clone();
     currentOffset.set(options.position?.x ?? 0, options.position?.y ?? 0, options.position?.z ?? 0);
     const group = new THREE.Group();
-    group.scale.setScalar(fit.scale);
-    group.position.copy(fit.position).add(currentOffset);
     group.add(next);
     splatScene.add(group);
-    // 落位后的占位 = 旋转盒缩放再平移；相机就照它站进场内。
-    bounds = new THREE.Box3(
-      rotated.min.clone().multiplyScalar(fit.scale).add(fit.position).add(currentOffset),
-      rotated.max.clone().multiplyScalar(fit.scale).add(fit.position).add(currentOffset)
-    );
     mesh = next;
     holder = group;
+    placeSplat();
     if (transformMode === 'gizmo' && transformControls) transformControls.attach(group);
-    const projectedPoints = centers.map(point =>
-      point.clone().applyQuaternion(next.quaternion).multiplyScalar(fit.scale).add(fit.position).add(currentOffset)
-    );
-    buildGround(bounds, projectedPoints);
-    // scale 1 下 bounds 就是真实米制：把实测宽深高带回去，场地校准与横幅都以它为准。
+    if (!bounds) throw new Error('场景点云没有有效的包围盒，无法摆放。');
+    // 标定后 bounds 仍是真实米制（比例已经乘进落位）：实测宽深高直接带回去。
     const placed = bounds.getSize(new THREE.Vector3());
     return Object.freeze({
       splats: next.numSplats ?? 0,
@@ -627,7 +877,7 @@ export function createSplatPreview(deps: {
           const offset = holder.position.clone().sub(basePosition);
           const delta = offset.clone().sub(currentOffset);
           bounds?.translate(delta);
-          ground?.position.add(delta);
+          translateOverlays(delta);
           currentOffset.copy(offset);
           deps.onPositionChange?.({ x: Number(offset.x.toFixed(3)), y: Number(offset.y.toFixed(3)), z: Number(offset.z.toFixed(3)) });
         });
@@ -648,10 +898,36 @@ export function createSplatPreview(deps: {
       const nextOffset = new THREE.Vector3(position.x, position.y, position.z);
       const delta = nextOffset.clone().sub(currentOffset);
       bounds?.translate(delta);
-      ground?.position.add(delta);
+      translateOverlays(delta);
       currentOffset.copy(nextOffset);
       holder.position.set(basePosition.x + position.x, basePosition.y + position.y, basePosition.z + position.z);
       deps.invalidate();
+    },
+    /** 手动标定：就地重算落位、基准面、锚点与遮挡代理，不重新解码点云。 */
+    applyCalibration(next: SplatCalibration): Readonly<{ meters: SplatMeters; walkBounds: SplatWalkBounds | null }> | null {
+      calibration = sanitizeCalibration({ ...calibration, ...next });
+      const placedBounds = placeSplat() ?? bounds;
+      if (transformMode === 'gizmo' && holder && transformControls) transformControls.attach(holder);
+      deps.invalidate();
+      if (!placedBounds) return null;
+      const size = placedBounds.getSize(new THREE.Vector3());
+      return Object.freeze({
+        meters: {
+          width: Math.round(size.x * 10) / 10,
+          depth: Math.round(size.z * 10) / 10,
+          height: Math.round(size.y * 10) / 10,
+        },
+        walkBounds: walkBoundsOf(placedBounds),
+      });
+    },
+    get calibration(): Required<SplatCalibration> {
+      return {
+        scale: calibration.scale,
+        yawDeg: calibration.yawDeg,
+        origin: { ...calibration.origin },
+        ground: { y: calibration.ground.y, normal: { ...calibration.ground.normal }, definedBy: calibration.ground.definedBy },
+        anchors: calibration.anchors.map(anchor => ({ ...anchor })),
+      };
     },
     setDisplayMode(mode: SplatDisplayMode) {
       displayMode = mode;

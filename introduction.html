@@ -83,7 +83,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
      这样它不会再参与左右分配（之前在流内，右侧按钮被推到中间而非贴边）。 */
   display:flex; align-items:center; justify-content:space-between; gap:16px;
 }
-/* Brand Lockup — 对齐设计规范（详见 docs/design-spec-2026.md §2）
+/* Brand Lockup — 对齐设计规范（详见 docs/05-设计规范.md §2）
    深底 hero 场景：父级 .brand { color:#fff } 控 path 和中文，英文单独调 rgba(.55) */
 .brand{display:flex;align-items:center;gap:6px;color:#fff;flex:none}
 .brand-cn{font-family:"PingFang SC","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;font-size:15px;font-weight:600;letter-spacing:0;line-height:1.2;color:#fff}
@@ -906,7 +906,7 @@ html{scroll-snap-type:y proximity}
         </span>
       </a>
       <a class="pill pill-light" href="/auth">
-        <span>进入场景</span>
+        <span>打开工作台</span>
         <span class="cta-arrows" aria-hidden="true">
           <span class="arw arw-1"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
           <span class="arw arw-2"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg></span>
@@ -932,7 +932,7 @@ html{scroll-snap-type:y proximity}
         </a>
       </div>
       <div class="hero-meta rv">
-        <span>AI 3D生成</span><i></i><span>多人协作</span><i></i><span>在线确认</span><i></i><span>实时呈现</span>
+        <span>一句话出方案</span><i></i><span>真实场地标定</span><i></i><span>AI 生成物料</span><i></i><span>手机看方案</span>
       </div>
     </div>
 
@@ -1054,10 +1054,10 @@ html{scroll-snap-type:y proximity}
     <h2 class="huge pin-title">Process</h2>
     <div class="pin-cover">
       <div class="process-grid" data-speed="0.96">
-        <div class="step"><span>01</span><div><p class="step-t">先看现场，再谈方案</p><p class="step-d">把场地照片和可用尺寸发过来，我们先确认边界、出入口和供电，再决定能摆什么。</p></div></div>
-        <div class="step"><span>02</span><div><p class="step-t">核对结构，再生成方案</p><p class="step-d">结合图纸、照片和实测尺寸生成空间候选，补充未知区域，再完善活动布置。</p></div></div>
-        <div class="step"><span>03</span><div><p class="step-t">一起改，不是来回传</p><p class="step-d">场地方、搭建方、客户看同一份场景，改动落在图上，不落在聊天记录里。</p></div></div>
-        <div class="step"><span>04</span><div><p class="step-t">带走能落地的方案</p><p class="step-d">导出 Markdown 方案与布置说明，交给搭建方即可执行，附材料与来源清单。</p></div></div>
+        <div class="step"><span>01</span><div><p class="step-t">说一句话，先出一版</p><p class="step-d">告诉 Bingo 活动类型、人数和场地大小，它先给一版能看的布置。确认之前，随时可以撤回。</p></div></div>
+        <div class="step"><span>02</span><div><p class="step-t">把场地换成真实的</p><p class="step-d">平面图两点标出真实比例，卫星图圈出边界，或用现场照片重建可漫游的场景——尺寸按你核对过的算。</p></div></div>
+        <div class="step"><span>03</span><div><p class="step-t">一起改，不是来回传</p><p class="step-d">场地方、搭建方、客户看同一份场景，改动落在图上，不落在聊天记录里。发一条只读链接，手机扫码就能看。</p></div></div>
+        <div class="step"><span>04</span><div><p class="step-t">带走能落地的方案</p><p class="step-d">导出完整活动交接：活动需求、物料工作单、制作计划、数量点验，交给搭建方即可执行。</p></div></div>
       </div>
       <a class="process-cta" href="#library">
         <span class="pc-top"><span>现在开始</span><span>幕景 ®</span></span>
@@ -1073,8 +1073,8 @@ html{scroll-snap-type:y proximity}
     <div class="pin-cover">
       <div class="tech-row" data-speed="0.95">
         <div>
-          <p class="tech-lead">照片进来，场景出去。</p>
-          <p class="tech-copy">图纸和照片结合用户提供的实测尺寸建立空间候选。生成时资料保存在项目私有来源中，并提交给识别服务；公开方案不包含原始照片。不可见结构和推断尺寸需要用户核对，浏览器中可继续编辑三维方案。</p>
+          <p class="tech-lead">场地进来，方案出去。</p>
+          <p class="tech-copy">场地有三条路进来：平面图上传后两点定出真实比例，卫星图上圈出边界生成户外场地，现场照片重建可漫游的三维场景。缺的物件用一句话生成，新模型自动落进画布；一个项目可以放多个场地，物料跟着所属场地走。生成时资料保存在项目私有来源中，公开方案不包含原始照片；推断的尺寸需要你核对后才算数。</p>
         </div>
         <a class="tech-link" href="#library">看看场景库 <span aria-hidden="true">↗</span></a>
       </div>

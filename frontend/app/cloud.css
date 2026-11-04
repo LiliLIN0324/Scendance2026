@@ -124,6 +124,11 @@
 .sc-account-title-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .sc-account-dialog{position:relative}
 .sc-cloud-dialog button.sc-account-close-float{position:absolute;top:10px;right:12px;z-index:8;padding:6px;border-radius:8px}
+/* 未登录：同一个账户浮窗收成 400px 窄卡渲染登录注册，登录成功后就地展开为已有的两栏账户中心。 */
+.sc-account-dialog.is-auth{width:min(400px,calc(100vw - 48px));height:fit-content;max-height:calc(100dvh - 48px);overflow:auto;padding:0}
+.sc-account-dialog.is-auth .sc-auth-card{display:block;width:auto;max-width:none;margin:0;padding:24px 28px 0;border:0;border-radius:0;background:transparent;box-shadow:none;text-align:left}
+.sc-account-dialog.is-auth .sc-auth-footer{margin-inline:-28px}
+@media(max-width:600px){.sc-account-dialog.is-auth{width:calc(100vw - 24px)}.sc-account-dialog.is-auth .sc-auth-card{padding-inline:22px}.sc-account-dialog.is-auth .sc-auth-footer{margin-inline:-22px}}
 .sc-account-title{display:flex;align-items:center;gap:6px;min-width:0}
 .sc-account-title h2{min-width:0}
 /* 两栏：左栏只说"现在是谁、在哪个团队"，右栏放项目与素材。分隔线绝对定位画满两栏高度。 */
@@ -199,7 +204,7 @@
 .sc-account-project-grid>aside{display:none}
 .sc-account-filters{display:flex;align-items:center;gap:8px;margin-bottom:20px}
 .sc-account-search{position:relative;flex:1;min-width:0}
-.sc-account-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--sc-muted)}
+.sc-account-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--sc-muted);pointer-events:none}
 .sc-account-search input{padding-left:36px}
 .sc-account-list-caption{display:flex;justify-content:space-between;font-size:10px;color:var(--sc-muted);font-variant-numeric:tabular-nums}
 .sc-account-project-info{flex:1;min-width:0;overflow-wrap:anywhere}

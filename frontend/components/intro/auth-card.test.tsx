@@ -3,7 +3,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
-import { IntroPage } from './intro-page';
+import { clearSupabaseBrowserCookies } from '@/lib/supabase/client';
+import { AuthCard } from './auth-card';
 
 const mockFetch = vi.fn<typeof fetch>();
 const sessions: BackendSession[] = [];
@@ -23,6 +24,10 @@ function submitCredentials(): void {
 }
 
 beforeEach(() => {
+  // @supabase/ssr 把会话落在 document.cookie 上：跨用例残留会让下一个 client 先走恢复流程，
+  // 打乱 mockFetch 的响应队列，所以每个用例都从干净的存储开始。
+  clearSupabaseBrowserCookies();
+  window.localStorage.clear();
   mockFetch.mockReset();
   vi.stubGlobal('fetch', mockFetch);
 });
@@ -33,37 +38,33 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('introduction and sign-in entry', () => {
+describe('account login card', () => {
   it('keeps the fields usable but the submit inert when the backend is unconfigured', () => {
     const session = controller(false);
-    const onEnter = vi.fn();
-    render(<IntroPage controller={session} onEnter={onEnter} />);
-    // Only the submit is gated. Disabling the inputs as well made the form look broken:
-    // nothing was focusable, so there was no way to tell an unconfigured build from a dead one.
+    render(<AuthCard controller={session} onAuthenticated={vi.fn()} />);
     expect((screen.getByRole('button', { name: '登录并进入工作台' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('邮箱') as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText('密码') as HTMLInputElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'editor@example.com' } });
     expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('editor@example.com');
     expect(screen.getByRole('status').textContent).toContain('登录服务尚未配置');
-    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
-    expect(onEnter).toHaveBeenCalledOnce();
-    expect(session.getSnapshot().user).toBeNull();
+    // 工作台已经在眼前，浮窗里不再需要「先体验本地工作台」。
+    expect(screen.queryByRole('button', { name: '先体验本地工作台' })).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('uses the actual Auth contract and only enters after successful authentication', async () => {
+  it('uses the actual Auth contract and only authenticates after success', async () => {
     const session = controller();
-    const onEnter = vi.fn();
+    const onAuthenticated = vi.fn();
     let complete!: (response: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
-    render(<IntroPage controller={session} onEnter={onEnter} />);
+    render(<AuthCard controller={session} onAuthenticated={onAuthenticated} />);
     submitCredentials();
-    expect(onEnter).not.toHaveBeenCalled();
+    expect(onAuthenticated).not.toHaveBeenCalled();
     expect((screen.getByRole('button', { name: '正在登录…' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('form', { name: '工作室登录' }).getAttribute('aria-busy')).toBe('true');
     expect((screen.getByLabelText('邮箱') as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: '先体验本地工作台' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '访客进入' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
     expect(mockFetch).toHaveBeenCalledOnce();
     expect(mockFetch.mock.calls[0]?.[0]).toBe('https://example.supabase.co/auth/v1/token?grant_type=password');
@@ -71,86 +72,54 @@ describe('introduction and sign-in entry', () => {
     await act(async () => {
       complete(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'editor-id', email: 'editor@example.com' } }), { status: 200 }));
     });
-    await waitFor(() => expect(onEnter).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
     expect(session.getSnapshot().user?.email).toBe('editor@example.com');
   });
 
-  it('keeps the user on the introduction and reports invalid credentials instead of entering', async () => {
+  it('reports invalid credentials and stays on the form', async () => {
     const session = controller();
-    const onEnter = vi.fn();
+    const onAuthenticated = vi.fn();
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 400 }));
-    render(<IntroPage controller={session} onEnter={onEnter} />);
+    render(<AuthCard controller={session} onAuthenticated={onAuthenticated} />);
     submitCredentials();
     expect((await screen.findByRole('alert')).textContent).toBe('邮箱或密码不正确。');
-    expect(onEnter).not.toHaveBeenCalled();
+    expect(onAuthenticated).not.toHaveBeenCalled();
     expect(session.getSnapshot().user).toBeNull();
     expect((screen.getByRole('button', { name: '登录并进入工作台' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('reuses the same authenticated session when returning from the editor', async () => {
+  it('allows a retry after a network failure without manufacturing a session', async () => {
     const session = controller();
-    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'editor-id', email: 'editor@example.com' } }), { status: 200 }));
-    await session.signIn('editor@example.com', 'test-password-only');
-    const onEnter = vi.fn();
-    const first = render(<IntroPage controller={session} onEnter={onEnter} />);
-    fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
-    first.unmount();
-    render(<IntroPage controller={session} onEnter={onEnter} />);
-    expect(screen.getByText('editor@example.com')).toBeTruthy();
-    expect(screen.queryByLabelText('密码')).toBeNull();
-    expect(mockFetch).toHaveBeenCalledOnce();
-  });
-
-  it('explains the scheme-first flow without running recognition on entry', () => {
-    render(<IntroPage controller={controller(false)} onEnter={vi.fn()} />);
-    expect(screen.getByText(/选活动、定场地和人数，先出一版布置建议/)).toBeTruthy();
-    expect(screen.getByText('01 / 定下活动')).toBeTruthy();
-    expect(screen.getByText('02 / 生成并确认')).toBeTruthy();
-    expect(screen.getByText('03 / 导出交付')).toBeTruthy();
-    expect(screen.getByRole('img', { name: /活动空间概念插画/ })).toBeTruthy();
-    expect(screen.getByText('活动空间概念示意 · 实际方案由你来布置')).toBeTruthy();
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('allows local entry after a network failure without manufacturing an authenticated session', async () => {
-    const session = controller();
-    const onEnter = vi.fn();
     mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    render(<IntroPage controller={session} onEnter={onEnter} />);
+    render(<AuthCard controller={session} onAuthenticated={vi.fn()} />);
     submitCredentials();
     expect((await screen.findByRole('alert')).textContent).toContain('暂时无法连接登录服务');
     expect(screen.getByRole('form', { name: '工作室登录' }).getAttribute('aria-busy')).toBe('false');
     expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('editor@example.com');
-    expect(onEnter).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
-    expect(onEnter).toHaveBeenCalledOnce();
     expect(session.getSnapshot().user).toBeNull();
-    expect(mockFetch).toHaveBeenCalledOnce();
   });
 
   it('recovers from a malformed login response and clears the error on a successful retry', async () => {
     const session = controller();
-    const onEnter = vi.fn();
+    const onAuthenticated = vi.fn();
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-    render(<IntroPage controller={session} onEnter={onEnter} />);
+    render(<AuthCard controller={session} onAuthenticated={onAuthenticated} />);
     submitCredentials();
     expect((await screen.findByRole('alert')).textContent).toBe('登录服务暂时无法完成验证，请稍后重试。');
     expect(session.getSnapshot().user).toBeNull();
-    expect(onEnter).not.toHaveBeenCalled();
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'editor-id', email: 'editor@example.com' } }), { status: 200 }));
     submitCredentials();
     expect(screen.queryByRole('alert')).toBeNull();
-    await waitFor(() => expect(onEnter).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
     expect(session.getSnapshot().user?.email).toBe('editor@example.com');
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
 
-
-it('registers and verifies an email inside the landing card before entering', async () => {
+it('registers and verifies an email inside the card before authenticating', async () => {
   const session = controller();
-  const onEnter = vi.fn();
-  render(<IntroPage controller={session} onEnter={onEnter} />);
+  const onAuthenticated = vi.fn();
+  render(<AuthCard controller={session} onAuthenticated={onAuthenticated} />);
   fireEvent.click(screen.getByRole('button', { name: 'Sign up · 注册' }));
   fireEvent.change(screen.getByLabelText('如何称呼你'), { target: { value: '测试创作者' } });
   fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'new@example.com' } });
@@ -158,22 +127,21 @@ it('registers and verifies an email inside the landing card before entering', as
   mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ id: 'new-user' })));
   fireEvent.click(screen.getByRole('button', { name: '创建账号' }));
   await screen.findByLabelText('六位验证码');
-  expect(onEnter).not.toHaveBeenCalled();
+  expect(onAuthenticated).not.toHaveBeenCalled();
   expect(screen.queryByLabelText('密码')).toBeNull();
   expect(screen.getByRole('button', { name: /秒后可重新发送/ }).hasAttribute('disabled')).toBe(true);
   mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'otp_expired' }), { status: 403 }));
   fireEvent.change(screen.getByLabelText('六位验证码'), { target: { value: '012345' } });
   fireEvent.click(screen.getByRole('button', { name: '验证并进入工作室' }));
   expect((await screen.findByRole('alert')).textContent).toContain('验证码已失效');
-  expect(onEnter).not.toHaveBeenCalled();
+  expect(onAuthenticated).not.toHaveBeenCalled();
   mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'new-user' } })));
   fireEvent.click(screen.getByRole('button', { name: '验证并进入工作室' }));
-  await waitFor(() => expect(onEnter).toHaveBeenCalledOnce());
+  await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
 });
 
-
 it('switches modes in place, preserves email and clears passwords and errors', async () => {
-  render(<IntroPage controller={controller()} onEnter={vi.fn()} />);
+  render(<AuthCard controller={controller()} onAuthenticated={vi.fn()} />);
   mockFetch.mockResolvedValueOnce(new Response('{}', { status: 400 }));
   submitCredentials();
   await screen.findByRole('alert');
@@ -191,21 +159,12 @@ it('switches modes in place, preserves email and clears passwords and errors', a
   expect(screen.getByRole('link', { name: '忘记密码？' }).getAttribute('href')).toBe('/reset-password');
 });
 
-it('waits for session restoration before allowing credentials to be submitted', () => {
-  render(<IntroPage controller={controller()} ready={false} onEnter={vi.fn()} />);
-  expect(screen.getByRole('button', { name: '正在恢复会话…' }).hasAttribute('disabled')).toBe(true);
-  fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
-  expect(mockFetch).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: '访客进入' }).hasAttribute('disabled')).toBe(true);
-});
-
-it('creates a real guest session before entering through the authenticated return path', async () => {
+it('creates a real guest session before reporting authentication', async () => {
   const session = controller();
-  const onEnter = vi.fn();
   const onAuthenticated = vi.fn();
   let complete!: (response: Response) => void;
   mockFetch.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
-  render(<IntroPage controller={session} onEnter={onEnter} onAuthenticated={onAuthenticated} />);
+  render(<AuthCard controller={session} onAuthenticated={onAuthenticated} />);
   fireEvent.click(screen.getByRole('button', { name: '访客进入' }));
   expect(screen.getByRole('button', { name: '正在进入…' }).hasAttribute('disabled')).toBe(true);
   expect(onAuthenticated).not.toHaveBeenCalled();
@@ -214,9 +173,7 @@ it('creates a real guest session before entering through the authenticated retur
   expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({ data: { display_name: '访客' } });
   await act(async () => complete(new Response(JSON.stringify({ access_token: 'guest-access', refresh_token: 'guest-refresh', expires_in: 3600, user: { id: 'guest-id', is_anonymous: true } }))));
   await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
-  expect(onEnter).not.toHaveBeenCalled();
   expect(session.getSnapshot().user).toMatchObject({ id: 'guest-id', is_anonymous: true });
-  expect(screen.getByText('访客')).toBeTruthy();
 });
 
 it.each(['network', 'malformed'])('keeps guest entry retryable after a %s failure without a fake login', async failure => {
@@ -224,7 +181,7 @@ it.each(['network', 'malformed'])('keeps guest entry retryable after a %s failur
   const onAuthenticated = vi.fn();
   if (failure === 'network') mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   else mockFetch.mockResolvedValueOnce(new Response('{}'));
-  render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={onAuthenticated} />);
+  render(<AuthCard controller={session} onAuthenticated={onAuthenticated} />);
   fireEvent.click(screen.getByRole('button', { name: '访客进入' }));
   expect((await screen.findByRole('alert')).textContent).toContain('暂时无法创建访客会话');
   expect(session.getSnapshot().user).toBeNull();
@@ -232,36 +189,54 @@ it.each(['network', 'malformed'])('keeps guest entry retryable after a %s failur
   expect(screen.getByRole('button', { name: '访客进入' }).hasAttribute('disabled')).toBe(false);
 });
 
-describe('demo credentials on the login page', () => {
+describe('demo credentials in the account card', () => {
   const demo = { email: 'demo@scendance.example', password: 'demo-only-2026' };
 
   it('shows the pair and fills the form with one tap', async () => {
     const session = controller();
     const onAuthenticated = vi.fn();
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'demo-access', refresh_token: 'demo-refresh', expires_in: 3600, user: { id: 'demo-id', email: demo.email } })));
-    render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={onAuthenticated} demoAccount={demo} />);
-    const card = screen.getByRole('group', { name: '演示账号' });
-    expect(card.textContent).toContain(demo.email);
-    expect(card.textContent).toContain(demo.password);
+    render(<AuthCard controller={session} onAuthenticated={onAuthenticated} demoAccount={demo} />);
+    expect(screen.getByRole('group', { name: '演示账号' }).textContent).toContain(demo.email);
     fireEvent.click(screen.getByRole('button', { name: '填入' }));
     expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe(demo.email);
     expect((screen.getByLabelText('密码') as HTMLInputElement).value).toBe(demo.password);
     fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
     await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
-    expect(JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))).toMatchObject({ email: demo.email, password: demo.password });
   });
 
-  it('stays out of the page when the build has no demo account', () => {
-    render(<IntroPage controller={controller()} onEnter={vi.fn()} />);
+  it('stays out of the card when the build has no demo account', () => {
+    render(<AuthCard controller={controller()} onAuthenticated={vi.fn()} />);
     expect(screen.queryByRole('group', { name: '演示账号' })).toBeNull();
   });
 });
 
-describe('leaving a signed-in session from the login page', () => {
+it('waits for session restoration before allowing credentials to be submitted', () => {
+  render(<AuthCard controller={controller()} onAuthenticated={vi.fn()} ready={false} />);
+  expect(screen.getByRole('button', { name: '正在恢复会话…' }).hasAttribute('disabled')).toBe(true);
+  fireEvent.submit(screen.getByRole('form', { name: '工作室登录' }));
+  expect(mockFetch).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '访客进入' }).hasAttribute('disabled')).toBe(true);
+});
+
+describe('already signed in', () => {
+  it('shows the restored account and enters the workspace without a password field', () => {
+    const session = controller();
+    const onEnter = vi.fn();
+    const live = session.getSnapshot();
+    vi.spyOn(session, 'getSnapshot').mockReturnValue({ ...live, user: { id: 'editor-id', email: 'editor@example.com' } as unknown as typeof live.user });
+    render(<AuthCard controller={session} onAuthenticated={vi.fn()} onEnter={onEnter} />);
+    expect(screen.queryByLabelText('密码')).toBeNull();
+    expect(screen.queryByLabelText('邮箱')).toBeNull();
+    expect(screen.getByText('editor@example.com')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '进入工作台' }));
+    expect(onEnter).toHaveBeenCalledOnce();
+  });
+
   it('drops a guest session and shows the form again', async () => {
     const session = controller();
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'guest-access', refresh_token: 'guest-refresh', expires_in: 3600, user: { id: 'guest-id', is_anonymous: true } })));
-    render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={vi.fn()} />);
+    render(<AuthCard controller={session} onAuthenticated={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '访客进入' }));
     await waitFor(() => expect(screen.getByText('访客')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '退出访客，换一个账号' }));
@@ -273,8 +248,7 @@ describe('leaving a signed-in session from the login page', () => {
   it('offers the plain sign-out wording for a named account', async () => {
     const session = controller();
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'a', refresh_token: 'r', expires_in: 3600, user: { id: 'u', email: 'demo@scendance.example' } })));
-    render(<IntroPage controller={session} onEnter={vi.fn()} onAuthenticated={vi.fn()} />);
-    fireEvent.click(screen.getByLabelText('邮箱'));
+    render(<AuthCard controller={session} onAuthenticated={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'demo@scendance.example' } });
     fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'demo-only-2026' } });
     fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));

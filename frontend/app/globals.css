@@ -14,7 +14,7 @@
 
 @layer base {
   :root {
-    /* shadcn hsl 三元组 → 2026 冷石规范（docs/design-spec-2026.md §一.1） */
+    /* shadcn hsl 三元组 → 2026 冷石规范（docs/05-设计规范.md §一.1） */
     --background: 0 0% 100%;
     --foreground: 240 5% 8%; /* ink #141416 */
     --card: 0 0% 100%;
@@ -46,7 +46,7 @@
 }
 
 /* ================================================================
-   Scendance 2026 设计规范 v2.2 全局 token —— docs/design-spec-2026.md
+   Scendance 2026 设计规范 v2.2 全局 token —— docs/05-设计规范.md
    冷石画廊白：纯白纸面、发丝线分区、近黑墨字、品牌绿仅点睛。
    注：--muted 裸名被上方 tailwind hsl 三元组占用，规范 muted 落 --wk-muted。
    ================================================================ */
@@ -602,7 +602,7 @@ body {
   color: var(--sc-ink); border: 0; border-bottom: 1px solid var(--sc-line);
   background: var(--sc-surface); box-shadow: none;
 }
-/* Brand Lockup — 三页统一排法（详见 docs/design-spec-2026.md §3） */
+/* Brand Lockup — 三页统一排法（详见 docs/05-设计规范.md §3） */
 .sc-brand { display: flex; gap: 6px; align-items: center; flex-shrink: 0; color: var(--wk-ink); }
 .sc-brand-mark { width: 29px; height: 31px; display: grid; place-items: center; flex-shrink: 0; background: transparent; color: var(--wk-ink); }
 .sc-brand-cn { font-family: "PingFang SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0; line-height: 1.2; color: var(--wk-ink); }
@@ -970,7 +970,7 @@ body {
    品牌绿 #4A7C59（仅选中+主操作）/ soft #E8F0EA。
    禁旧奶油 #F4F5F7、#4A7C59、#A58B69、靛蓝主色、毛玻璃。图标沿用现产品。 */
 .sc-workbench {
-  /* 色彩全部继承 :root 规范 token（docs/design-spec-2026.md）；此处只留工作台字号映射。 */
+  /* 色彩全部继承 :root 规范 token（docs/05-设计规范.md）；此处只留工作台字号映射。 */
   /* 收起后的模式轨。展开的短品牌条不另起一列，铺满左卡（--sc-left-card-width，240–480，默认 320）。 */
   --sc-nav-rail-width: 64px;
   --wk-muted: #71767E;
@@ -1368,12 +1368,14 @@ body {
 }
 /* 旧矩形卡选择器留空以免别处误用 */
 .sc-workbench .sc-agent-reopen-copy { display: none; }
-/* 画布抬头：白纸卡片浮在画布灰底上，发丝线描边 */
+/* 画布抬头：只作视图类型标注，直接用墨色字 + 白晕压在场景上，不再浮一张纸卡。 */
 .sc-workbench .sc-canvas-heading {
   display: inline-flex; align-items: baseline; gap: 8px;
-  padding: 4px 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm);
-  background: var(--paper);
-  color: var(--wk-muted); font-size: var(--fs-cap); line-height: var(--lh-cap);
+  padding: 2px 0; border: 0; border-radius: 0;
+  background: transparent;
+  color: var(--wk-ink-soft);
+  font-size: var(--fs-cap); line-height: var(--lh-cap);
+  text-shadow: 0 1px 0 rgb(255 255 255 / 85%), 0 0 3px rgb(255 255 255 / 70%);
 }
 .sc-workbench .sc-canvas-heading > span { white-space: nowrap; }
 .sc-workbench .sc-canvas-dot { display: none; }
@@ -1397,13 +1399,13 @@ body {
   transform: none !important; grid-area: unset !important;
   width: 44px; max-width: 44px; box-sizing: border-box;
   display: flex !important; flex-direction: column !important; align-items: center;
-  justify-content: flex-start; padding: 0; gap: 6px;
+  justify-content: flex-start; padding: 0; gap: 4px;
   border: 0; border-radius: 0; background: transparent;
   box-shadow: none; z-index: 35; overflow: visible;
   max-height: calc(100% - 24px);
 }
 .sc-workbench .sc-tool-column .sc-tool-group {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 0; border: 0;
 }
 .sc-workbench .sc-tool-column .sc-tool-sep {
@@ -1414,8 +1416,8 @@ body {
   width: max-content; margin: 0; padding: 0; border: 0; background: transparent;
 }
 .sc-workbench .sc-floor-switcher-label {
-  padding: 5px 8px; border: 1px solid var(--wk-hair); border-radius: 8px;
-  background: var(--wk-paper); color: var(--wk-ink-soft); font-size: 14px; font-weight: 700; line-height: 1;
+  padding: 4px 6px; border: 1px solid var(--wk-hair); border-radius: 7px;
+  background: var(--wk-paper); color: var(--wk-ink-soft); font-size: 12px; font-weight: 700; line-height: 1;
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
 }
 .sc-workbench .sc-floor-switcher-arrows {
@@ -1433,16 +1435,23 @@ body {
 .sc-workbench .sc-floor-switcher-arrows button:disabled .sc-floor-triangle.is-up path { fill: #919693; }
 .sc-workbench .sc-floor-switcher-arrows button:disabled { color: #a2a7a3; opacity: .55; cursor: not-allowed; }
 .sc-workbench .sc-floor-switcher-arrows button:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+/* 图标直接落在场景上：不再每个按钮一块纸面圆板，白晕保证在实景照片上也读得清。 */
 .sc-workbench .sc-tool-column > button,
 .sc-workbench .sc-tool-column .sc-tool-menu > button {
   position: relative;
-  width: 38px; height: 38px; min-width: 38px; min-height: 38px; padding: 0;
-  border-radius: 50%; background: var(--wk-paper); border: 1px solid var(--wk-hair);
+  width: 30px; height: 30px; min-width: 30px; min-height: 30px; padding: 0;
+  border-radius: 50%; background: transparent; border: 1px solid transparent;
   box-shadow: none; color: var(--wk-ink-soft, #71717a);
+  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 85%)) drop-shadow(0 0 2px rgb(255 255 255 / 60%));
   display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s ease, border-color .12s ease;
+}
+.sc-workbench .sc-tool-column > button:hover,
+.sc-workbench .sc-tool-column .sc-tool-menu > button:hover {
+  background: rgb(255 255 255 / 55%); border-color: var(--wk-hair);
 }
 .sc-workbench .sc-tool-column > button:disabled {
-  color: var(--wk-ink-faint); background: var(--wk-plane); box-shadow: none; opacity: 1;
+  color: var(--wk-ink-faint); background: transparent; box-shadow: none; opacity: .45;
 }
 .sc-workbench .sc-tool-column > button.is-active,
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
@@ -1454,9 +1463,9 @@ body {
   border-color: #b8b8b0;
   color: var(--wk-ink-soft, #71717a);
 }
-/* 第一人称是走进去，正面机位只是环绕。悬停纸条 + 石绿描边，避免和正面机位看混。 */
+/* 第一人称是走进去，正面机位只是环绕。用石绿图标色区分，不再套一圈描边。 */
 .sc-workbench .sc-tool-column > #tool-walk {
-  border-color: #4A7C59; color: #3a6247;
+  border-color: transparent; color: #3a6247;
 }
 .sc-workbench .sc-tool-column > #tool-walk.is-active {
   background: #eef3ef; border-color: #4A7C59; color: #3a6247;
@@ -1486,9 +1495,9 @@ body {
 }
 .sc-workbench .sc-tool-menu { position: relative; display: flex; flex-direction: column; align-items: center; }
 @media (max-height: 640px) {
-  .sc-workbench .sc-tool-column { gap: 4px; }
+  .sc-workbench .sc-tool-column { gap: 3px; }
   .sc-workbench .sc-tool-column > button,
-  .sc-workbench .sc-tool-column .sc-tool-menu > button { width: 32px; height: 32px; min-width: 32px; min-height: 32px; }
+  .sc-workbench .sc-tool-column .sc-tool-menu > button { width: 26px; height: 26px; min-width: 26px; min-height: 26px; }
   .sc-workbench .sc-tool-column .sc-tool-sep { margin: 0; }
 }
 .sc-workbench .sc-tool-pop {

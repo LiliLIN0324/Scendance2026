@@ -36,12 +36,16 @@ import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
+import { useSceneLighting } from './hooks/use-scene-lighting';
+import { researchBasemapPlacement } from './three/research-basemap';
+import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
 import { useSplatPreview } from './hooks/use-splat-preview';
 import type { SplatPosition, SplatTransformMode } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
+import { findAholoAsset } from './lib/aholo-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
@@ -50,8 +54,10 @@ import { crowdHintsFromLayout } from './lib/crowd-route';
 import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
 import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, writeEnvironments, type StoredEnvironment } from './lib/environment-preference';
+import { alignSelection, distributeSelection, type AlignEdge, type DistributeAxis } from './lib/alignment';
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
+import type { GizmoMode } from './lib/transform';
 import { randomId, randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
@@ -63,11 +69,13 @@ import { snapshotBeforeReplace } from './lib/restore-point';
 import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
 import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
+import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
 import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
 import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
+import type { ScannedVenue } from './lib/venue-scans';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
@@ -92,6 +100,7 @@ import { GeneratedModelLibrary } from './panels/generated-model-library';
 import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
+import { MobileAgentDock } from './panels/mobile-agent-dock';
 import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
 import { VenueLibraryPanel } from './panels/venue-library-panel';
@@ -215,6 +224,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const bingoHeaderAvatarRef = useRef<HTMLSpanElement>(null);
   const [bingoHeaderAvatarVisible, setBingoHeaderAvatarVisible] = useState(false);
   const [activeAgent, setActiveAgent] = useState<AgentId>('bingo');
+  // 手机端左轨收成一颗入口钮；点开后是四格弹层，选一个 agent 就收起。
+  const [mobileRailOpen, setMobileRailOpen] = useState(false);
   const [spaceWorkflow, setSpaceWorkflow] = useState<'aholo' | 'traditional'>('aholo');
   const agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel;
   const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed, sidePanel });
@@ -271,6 +282,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const environment = environments[0] ?? null;
   const environmentsRef = useRef(environments);
   environmentsRef.current = environments;
+  // 撤销/重做落回旧布局时，把布局里记着的真实场地也挂回去；具体切换逻辑在下面赋值。
+  const restoreVenueFromHistoryRef = useRef<(scan: { assetId: string; name: string }) => void>(() => {});
+  // 换场前那份布局没有 venueScan，撤销回到它时靠这份按对象身份的记录找回原场地。
+  const venueByLayoutRef = useRef(new WeakMap<RoomLayout, { assetId: string; name: string }>());
+  // 高斯校准只做一次；换场时若已按扫描自带尺寸设好壳体，预览就绪后不再二次改尺寸。
+  const calibratedSceneRef = useRef('');
   const [splatTransformMode, setSplatTransformModeState] = useState<SplatTransformMode>('off');
   const [deliveryOpenRequest, setDeliveryOpenRequest] = useState(0);
   const [backupOpenRequest, setBackupOpenRequest] = useState(0);
@@ -288,6 +305,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat;
   // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
   const columnExpanded = navExpanded || personChat;
+  // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
+  useEffect(() => {
+    if (columnExpanded) setMobileRailOpen(false);
+  }, [columnExpanded]);
+  // 手机端首屏先收起对话：画布吃满，底部只留一条最新消息 + 一行输入。
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia('(max-width: 768px)').matches) return;
+    setAgentCollapsed(true);
+    setSidebarCollapsed(true);
+  }, []);
   const businessHostRef = useRef<HTMLDivElement>(null);
   const businessToolsRef = useRef<BusinessToolsApi | null>(null);
   const toolsEntryRef = useRef<HTMLButtonElement>(null);
@@ -396,7 +423,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     const projectId = snapshot.project?.id ?? layoutStore.getState().layout.id;
     if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
     if (snapshot.writeBlocked) throw new Error('这个项目现在是只读，取回编辑权后再发布。');
-    if (snapshot.dirty || !Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再发布。');
+    if (!Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再发布。');
+    if (snapshot.dirty) {
+      const pendingLocal = [...localAssetIdsInLayout(layoutStore.getState().layout)]
+        .filter(id => assetCloudStateOf(id).state !== 'uploaded');
+      throw new Error(pendingLocal.length
+        ? '画布里的本机模型还没上云，保存成功后才能发布；本机副本还在，网络恢复后重试保存即可。'
+        : '还有改动没保存，保存后再发布。');
+    }
     try {
       const publication = publicationSchema.parse(await controller.businessRequest<unknown>(
         `/projects/${encodeURIComponent(projectId)}/publish`, 'POST', { expectedRevision: snapshot.revision },
@@ -457,6 +491,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [measurementPoints, setMeasurementPoints] = useState<ReadonlyArray<{ x: number; z: number }>>([]);
   const [wallDraft, setWallDraft] = useState<{ x: number; z: number } | null>(null);
   const [pointerWorld, setPointerWorld] = useState<{ x: number; z: number } | null>(null);
+  // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
+  const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
 
   const wallSnapResult = useMemo(() => {
     if (!view.drawWallMode || !pointerWorld) return null;
@@ -795,6 +831,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     frontGap,
     actions,
     allSelectedIds,
+    gizmoMode,
+    onScaleLimit: (limit) =>
+      notify(
+        limit === 'max'
+          ? '已到放大上限（5×），继续拖动不会再变大。'
+          : '已到缩小下限（0.2×），继续拖动不会再变小。'
+      ),
   });
 
   // Re-seat a wall-mounted camera against its wall. A flush camera's body moves
@@ -882,6 +925,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const history = useHistory(layout, useCallback(
     (snapshot: RoomLayout) => {
       actions.applyLayout(snapshot);
+      // 布局里的场地标记跟着撤销/重做走：一次撤销就把画布和真实场地一起退回上一套。
+      // 换场前的旧快照没有 venueScan，用换场时记下的对象映射补上。
+      const scan = venueByLayoutRef.current.get(snapshot) ?? snapshot.venueScan;
+      if (scan && scan.assetId !== environmentsRef.current[0]?.assetId) restoreVenueFromHistoryRef.current(scan);
     },
     [actions]
   ));
@@ -941,6 +988,103 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       setExtraSelectedIds(new Set(ids.slice(1)));
     },
     [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds, selectOnly]
+  );
+
+  // Align / distribute the current multi-select (#P0-3). Candidate geometry is
+  // checked first so an align that would push a piece out of bounds fails
+  // loudly instead of silently clipping it.
+  const applyAlignedPositions = useCallback(
+    (positions: Map<string, { x: number; z: number }>) => {
+      // Distribute only moves the in-between items, so a valid 3-item
+      // distribute yields a single entry; only an empty map means "nothing to
+      // do" (already evenly spaced).
+      if (positions.size === 0) return;
+      const candidate = {
+        ...layout,
+        floors: layout.floors.map((floor, index) =>
+          index === activeFloorIndex
+            ? {
+                ...floor,
+                items: floor.items.map((item) => {
+                  const next = positions.get(item.id);
+                  return next ? { ...item, position: next } : item;
+                }),
+              }
+            : floor
+        ),
+      };
+      if (!canApplyLayoutGeometry(layout, candidate)) {
+        notify('对齐后超出场地范围，已取消。', 'info');
+        return;
+      }
+      commitHistoryNow();
+      actions.bulkSetPositions(positions);
+    },
+    [layout, activeFloorIndex, commitHistoryNow, actions]
+  );
+
+  const alignSelected = useCallback(
+    (edge: AlignEdge) => {
+      const positions = alignSelection(activeFloor.items, allSelectedIds, edge);
+      applyAlignedPositions(positions);
+    },
+    [activeFloor.items, allSelectedIds, applyAlignedPositions]
+  );
+
+  const distributeSelected = useCallback(
+    (axis: DistributeAxis) => {
+      // The guard counts the selection, not the result: three items distribute
+      // to one moved (the middle), which used to be rejected as "too few".
+      const eligible = activeFloor.items.filter(
+        (item) => allSelectedIds.has(item.id) && item.position
+      ).length;
+      if (eligible < 3) {
+        notify('等距分布至少需要三件物料。', 'info');
+        return;
+      }
+      const positions = distributeSelection(activeFloor.items, allSelectedIds, axis);
+      // Already evenly spaced: don't open an undo entry that changes nothing.
+      if (positions.size === 0) return;
+      applyAlignedPositions(positions);
+    },
+    [activeFloor.items, allSelectedIds, applyAlignedPositions]
+  );
+
+  // 2D marquee: enters through one call so the selection state stays in one
+  // place (the same handleSelect path Shift-click uses).
+  const handleMarqueeSelect = useCallback(
+    (ids: string[], additive: boolean) => {
+      if (ids.length === 0) {
+        if (!additive) {
+          setSelectedItemId(null);
+          setExtraSelectedIds(new Set());
+        }
+        return;
+      }
+      if (additive && selectedItemId) {
+        if (ids.includes(selectedItemId)) return;
+        setExtraSelectedIds((extras) => {
+          const next = new Set(extras);
+          for (const id of ids) next.add(id);
+          return next;
+        });
+        return;
+      }
+      selectOnly(ids[0]!, { keepPanel: true });
+      setExtraSelectedIds(new Set(ids.slice(1)));
+    },
+    [selectedItemId, selectOnly]
+  );
+
+  // Every gesture ends with its own undo step: the pre-gesture snapshot is
+  // forced before the committed change lands. That keeps a quick drag right
+  // after placing from merging with the placement (#P0-3).
+  const handleDragEndWithHistory = useCallback(
+    (id: string) => {
+      commitHistoryNow();
+      handleDragEnd(id);
+    },
+    [commitHistoryNow, handleDragEnd]
   );
 
   const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout, acknowledgeRestoredLayout, ensurePersistentIdentity, persistVerifiedLayout } = useLayoutPersistence({
@@ -1060,8 +1204,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     snapPosition,
     onItemDragStart: handleDragStart,
     onItemDrag: handleDrag,
-    onItemDragEnd: handleDragEnd,
+    onItemDragEnd: handleDragEndWithHistory,
     onItemDragCancel: handleDragCancel,
+    gizmoMode,
+    onMarqueeSelect: handleMarqueeSelect,
   });
 
   // 3DGS 环境预览的渲染入口；useThreeScene 每帧走它，预览关闭时它是空的。
@@ -1087,7 +1233,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       selectedIds: allSelectedIds,
       onItemDragStart: handleDragStart,
       onItemDrag: handleDrag,
-      onItemDragEnd: handleDragEnd,
+      onItemDragEnd: handleDragEndWithHistory,
       onItemDragCancel: handleDragCancel,
       onItemHover: setHover,
       onEmptyClick: handleEmptyClick,
@@ -1109,6 +1255,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       onFloorPointerLeave: handleFloorPointerLeave,
       snapPosition,
       getDragPlaneY,
+      transformMode: gizmoMode,
     });
 
   const preserveSplatCameraRef = useRef(false);
@@ -1163,7 +1310,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, isReady, sceneRef, invalidate]);
   splatPaintRef.current = paintSplatFrame;
   const restoredEnvironmentRef = useRef('');
-  const selectEnvironment = useCallback((assetId: string, name: string) => {
+  const selectEnvironment = useCallback((assetId: string, name: string, options?: { restoreItems?: boolean }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     const current = environmentsRef.current;
     if (current[0]?.assetId === assetId) return;
@@ -1187,7 +1334,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       position: { x: sameFloorCount * stride, y: floorElevation(layout.floors, floorIndex), z: 0 },
       itemsByFloor: currentItems,
     };
-    if (existing?.itemsByFloor) {
+    if (existing?.itemsByFloor && options?.restoreItems !== false) {
       actions.applyLayout({
         ...liveLayout,
         floors: liveLayout.floors.map((floor, index) => ({
@@ -1224,6 +1371,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       notify(failure instanceof Error ? failure.message : String(failure), 'error');
     }
   }, [selectEnvironment, setView, showAgent]);
+  // 撤销/重做恢复场地：只换场地，物料已经在布局快照里一起退回去了，不再二次覆盖。
+  restoreVenueFromHistoryRef.current = (scan) => {
+    try {
+      selectEnvironment(scan.assetId, scan.name, { restoreItems: false });
+    } catch (failure) {
+      notify(failure instanceof Error ? failure.message : String(failure), 'error');
+    }
+  };
 
   // 本场环境按项目记住：新项目首次用 World 高斯样例起步，后续沿用项目选择；
   // 草稿刚绑上云项目时，把草稿里选的那条带过去，不让刚选完就丢。
@@ -1389,6 +1544,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     measurementPoints,
   });
 
+  // 只有点云就绪且当前展示的就是它时，才用实拍光照覆盖预设光照。
+  const sceneLightingAssetId = isReady && !view.view2D && environment !== null &&
+    splatState.status === 'ready' && splatState.assetId === environment.assetId
+    ? environment.assetId
+    : '';
+  const { sceneLighting } = useSceneLighting({
+    enabled: sceneLightingAssetId !== '',
+    assetId: sceneLightingAssetId,
+    isReady,
+    rendererRef,
+    invalidate,
+  });
+
   const crowdHints = crowdHintsFromLayout(layout);
   useNpcs({
     enabled: isReady && view.showNpcs && !view.view2D,
@@ -1490,6 +1658,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     };
   }, [view.view2D, layout, cameraRef, canvasRef, canvas2DRef, threeModuleRef]);
 
+  // 调研底图在场时，取景框换成底图那片区域：底图铺在哪，镜头就框哪。
+  const researchPlacement = researchBasemapPlacement(layout);
   const { applyPreset, focusOn, fitToRoom, ensureRoomInView } = useCameraPresets({
     cameraRef,
     controlsRef,
@@ -1497,12 +1667,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     roomSize: Math.max(layout.width, layout.height),
     roomWidth: layout.width,
     roomDepth: layout.height,
+    ...(researchPlacement ? {
+      overview: {
+        width: researchPlacement.widthM,
+        depth: researchPlacement.depthM,
+        centerX: researchPlacement.centerX,
+        centerZ: researchPlacement.centerZ,
+      },
+    } : {}),
     canvasRef,
     buildingHeight: buildingHeight(layout.floors),
   });
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
-  const { captureRenderImage, exportRenderImage } = useImportExport({
+  const { captureRenderImage, exportRenderImage, exportRenderAlbum, handleShareLink } = useImportExport({
     layout,
     actions,
     view2D: view.view2D,
@@ -1522,6 +1700,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     notify(ok ? '效果图已开始下载。' : '效果图导出失败，请稍后重试。', ok ? 'success' : 'error');
     return ok;
   }, [exportRenderImage]);
+
+  // 机位册：四张机位逐张下载，再落一份可离线打开的图册；2D 不提供。
+  const handleExportAlbum = useCallback(async (options: { scale: number }) => {
+    if (view.view2D) return { ok: false, count: 0 };
+    const result = await exportRenderAlbum(options);
+    notify(result.ok ? `已导出 ${result.count} 张机位效果图与图册。` : '机位册导出失败，请稍后重试。', result.ok ? 'success' : 'error');
+    return result;
+  }, [view.view2D, exportRenderAlbum]);
 
   // Advance the time-of-day at roughly 1 in-game hour per second when on.
   useEffect(() => {
@@ -1584,8 +1770,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       duplicateItem: duplicateSelected,
       copySelection: copySelectionToClipboard,
       pasteClipboard: pasteFromClipboard,
-      rotateItem: rotateItemHandler,
+      rotateItem: (id: string) => {
+        // Each keypress is a discrete edit: keep one undo step per press.
+        commitHistoryNow();
+        return rotateItemHandler(id);
+      },
       rotateItemBy: (id: string, radians: number) => {
+        commitHistoryNow();
         if (allSelectedIds.size > 1 && allSelectedIds.has(id)) {
           const unlocked = unlockedSelectedIds();
           if (unlocked.size > 0) actions.rotateSelection(unlocked, radians);
@@ -1651,6 +1842,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         actions.setActiveFloorIndex(next);
       },
       toggleSidebar: () => toggleAgent('material'),
+      setGizmoMode: (next: GizmoMode) => setGizmoMode(next),
       removeInteriorWall: (id: string) => {
         actions.removeInteriorWall(id);
         setSelectedWall(null);
@@ -1694,6 +1886,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       wallDraft,
       view.drawWallMode,
       view.measurementMode,
+      setGizmoMode,
     ]
   );
 
@@ -1822,6 +2015,42 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setView(current => ({ ...current, view2D: false }));
   }, [commitHistoryNow, layout, actions, clearTransientSelection]);
 
+  /**
+   * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
+   * 尺寸与场地标记合成一步历史——撤销一次就回到上一套场地（画布与尺寸一起退）。
+   * 注册表带米制尺寸就直接按它摆壳体；没带时才等高斯就绪校准。
+   */
+  const applyRealVenue = useCallback((venue: ScannedVenue) => {
+    if (venue.assetId === environmentsRef.current[0]?.assetId) return;
+    const active = environmentsRef.current[0];
+    const before = layoutStore.getState().layout;
+    // 换场前的这份布局就是撤销目标；记下它当时的场地，撤销时画布才能一起退回去。
+    if (active) venueByLayoutRef.current.set(before, { assetId: active.assetId, name: active.name });
+    // 只换场地，物料不在这里覆盖；下面会把场地自己的物料一起放进同一次布局变更。
+    selectEnvironment(venue.assetId, venue.name, { restoreItems: false });
+    const live = layoutStore.getState().layout;
+    const entry = environmentsRef.current.find(item => item.assetId === venue.assetId);
+    // 尺寸未知的扫描也先把场地挂上：尺寸一栏如实写「未标注」，不拿旧场地的数字冒充。
+    const size = venue.meters
+      ? { width: Math.round(venue.meters.width * 10) / 10, height: Math.round(venue.meters.depth * 10) / 10 }
+      : {};
+    try {
+      onApplyCreative({
+        ...live,
+        ...size,
+        venueScan: { assetId: venue.assetId, name: venue.name },
+        ...(entry?.itemsByFloor ? {
+          floors: live.floors.map((floor, index) => ({
+            ...floor,
+            items: entry.itemsByFloor?.[index] ? [...entry.itemsByFloor[index]!] : floor.items,
+          })),
+        } : {}),
+      });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  }, [notify, onApplyCreative, selectEnvironment]);
+
   /** 场景生成/真重建「取回并预览」：先落盘再切到 3D；真成功挂本场 .spz 时同步打开环境预览抽屉，替换当前观感层。 */
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
@@ -1830,7 +2059,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [setView, startSplat, showAgent]);
   // 高斯优先（用户裁决）：室内预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）。
   // 地图户外（盐官一类）和过不了几何闸的壳不改尺寸——以前直接 throw，整页工作台会塌。
-  const calibratedSceneRef = useRef('');
   const [splatShellKeptFor, setSplatShellKeptFor] = useState('');
   useEffect(() => {
     if (splatState.status !== 'ready') {
@@ -1840,10 +2068,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (calibratedSceneRef.current === splatState.assetId) return;
     calibratedSceneRef.current = splatState.assetId;
     const current = layoutStore.getState().layout;
+    // 壳体已经是按这套扫描登记的尺寸摆好；预览读数可能还是样例或旧缓存，不再覆盖，
+    // 否则会多出一条历史，撤销一次就退不回原场地。
+    if (current.venueScan?.assetId === splatState.assetId && findAholoAsset(splatState.assetId)?.meters) return;
     const placement = placeSplatPreview(current, splatState.name, splatState.meters ?? null);
     if (!placement.resize) return;
     try {
-      onApplyCreative({ ...current, width: placement.resize.width, height: placement.resize.height });
+      onApplyCreative({
+        ...current,
+        width: placement.resize.width,
+        height: placement.resize.height,
+      });
     } catch (error) {
       console.error('环境预览没有改场地尺寸', error);
       setSplatShellKeptFor(splatState.assetId);
@@ -1915,8 +2150,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
   useEventAtmosphere({ isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
-    lighting: previewCandidate?.backendLighting ?? layout.backendLighting ?? 'warm', width: previewCandidate?.width ?? layout.width, depth: previewCandidate?.height ?? layout.height,
-    ceilingHeight: previewCandidate?.floors[0]?.height ?? activeStoreyHeight });
+    lighting: previewCandidate?.backendLighting ?? layout.backendLighting ?? DEFAULT_EVENT_LIGHTING, width: previewCandidate?.width ?? layout.width, depth: previewCandidate?.height ?? layout.height,
+    ceilingHeight: previewCandidate?.floors[0]?.height ?? activeStoreyHeight,
+    ...(sceneLighting ? { sceneLighting } : {}) });
 
   const captureReview=useReviewCapture({layout,getLayout:()=>layoutStore.getState().layout,view,activeFloorIndex,
     ready:isReady||view.view2D,peopleReady:peopleModelReady,selectedItemId,extraSelectedIds,
@@ -1962,7 +2198,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
-          <div className="sc-mode-rail">
+          <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
             <div className="sc-rail-head">
               <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
               <nav className="sc-mode-rail-primary" aria-label="总控、Bingo、空间、物料">
@@ -1980,6 +2216,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 >
                   <RailAvatar form="cube" size={28} />
                   <RailLaneDot lane="space" open={isLaneOpen('space')}/>
+                  <span className="sc-rail-label" aria-hidden="true">空间</span>
                 </button>
                 <button
                   type="button"
@@ -1994,6 +2231,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 >
                   <RailAvatar form="pyramid" size={28} />
                   <RailLaneDot lane="material" open={isLaneOpen('material')}/>
+                  <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
               </nav>
             </div>
@@ -2005,6 +2243,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <CloudPanel controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
+          {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}
+          <button
+            type="button"
+            className="sc-mobile-agent-entry"
+            aria-label="Agent 菜单"
+            aria-expanded={mobileRailOpen}
+            aria-controls="sc-agent-rail"
+            onClick={() => setMobileRailOpen(value => !value)}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="6.6" height="6.6" rx="2" fill="currentColor" />
+              <rect x="10.4" y="1" width="6.6" height="6.6" rx="2" fill="currentColor" opacity=".45" />
+              <rect x="1" y="10.4" width="6.6" height="6.6" rx="2" fill="currentColor" opacity=".45" />
+              <rect x="10.4" y="10.4" width="6.6" height="6.6" rx="2" fill="currentColor" />
+            </svg>
+          </button>
+          {!columnExpanded && <MobileAgentDock agentId={activeAgent} onOpen={() => toggleAgent(activeAgent)} />}
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -2014,7 +2269,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
+          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
               pins={reviewPins}
               items={activeFloor.items}
               filter={pinFilter}
@@ -2061,6 +2316,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onGroupSelection={selectionIsGroup ? undefined : groupSelection}
         onUngroupSelection={selectionHasGroups ? ungroupSelection : undefined}
         onSaveSelectionAsSet={saveSelectionAsSet}
+        gizmoMode={gizmoMode}
+        onGizmoModeChange={setGizmoMode}
+        onAlignSelection={alignSelected}
+        onDistributeSelection={distributeSelected}
         showMeasurements={view.showMeasurements}
         showMinimap={view.showMinimap}
         walkthroughActive={walkthroughActive}
@@ -2148,7 +2407,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
                 hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
-                onRotate={id => { if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
+                onRotate={id => { commitHistoryNow(); if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
             </div>}
             {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
               <div className="sc-canvas-share-bar"><strong>场地观感</strong><button type="button" aria-label="收起观感" onClick={() => setLeftMode('brief')}>收起</button></div>
@@ -2185,7 +2444,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
           </div>
             <div className="sc-editor-dock">
-            <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
+            <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
               const camera = cameraRef.current;
               const controls = controlsRef.current;
               if (!camera || !controls) return;

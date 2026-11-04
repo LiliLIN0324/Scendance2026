@@ -54,3 +54,13 @@
 .sc-share-page .sc-share-masthead span:last-child,.sc-share-page .sc-share-footnote,.sc-share-page .sc-share-muted{color:var(--sc-share-muted)}
 .sc-share-page .sc-preview-tools button{background:#243029f0;color:var(--sc-share-ink);border-color:var(--sc-share-line)}
 .sc-share-page .sc-preview-help{background:#1b2420d9;color:var(--sc-share-muted)}
+
+/* /view 的 URL 快照：只读 3D 壳（同一套深色客户页骨架，仅补画布与工具岛） */
+.sc-preview-shell{position:relative;height:clamp(320px,58vw,600px);overflow:hidden;border:1px solid var(--sc-share-line,#2f3b34);border-radius:var(--r-md);background:#0d1311}
+.sc-preview-shell>canvas{display:block;width:100%;height:100%;touch-action:none}
+.sc-preview-shell .sc-preview-tools button{width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.sc-preview-tools-sep{width:1px;align-self:stretch;background:var(--sc-share-line,#2f3b34);margin:0 2px}
+.sc-preview-note{position:absolute;left:14px;right:56px;bottom:42px;margin:0;padding:7px 10px;border-radius:6px;background:#1b2420e6;color:var(--sc-share-ink,#e7eee4);font-size:11.5px;line-height:1.5}
+.sc-preview-note.is-warning{background:#3a2c1ce6;color:#f3d3a4}
+.sc-preview-hint{position:absolute;right:14px;bottom:12px;margin:0;font-size:11px;color:var(--sc-share-muted,#9aab9a);pointer-events:none}
+@media(max-width:600px){.sc-preview-shell{height:clamp(300px,72vw,460px)}.sc-preview-note{right:14px;bottom:38px}}

@@ -203,9 +203,9 @@ describe('ScendanceLibrary shelf lifecycle', () => {
 
 
 describe('ScendanceViewTools design column', () => {
-  function renderTools(view = makeViewSettings(), onExportImage = vi.fn()) {
+  function renderTools(view = makeViewSettings(), onExportImage = vi.fn(), onExportAlbum?: (options: { scale: number }) => Promise<{ ok: boolean; count: number }>) {
     const values = contexts(makeLayout(), view), onApplyPreset = vi.fn(), onZoom = vi.fn();
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onZoom={onZoom} onExportImage={onExportImage}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={onApplyPreset} onZoom={onZoom} onExportImage={onExportImage} {...(onExportAlbum ? { onExportAlbum } : {})}/></Providers>);
     return { values, onApplyPreset, onZoom, onExportImage, rail: screen.getByRole('navigation', { name: '工具' }) };
   }
 
@@ -339,6 +339,26 @@ describe('ScendanceViewTools design column', () => {
     expect((screen.getByRole('button', { name: '高清 2×' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
     await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'current', scale: 2 }));
+  });
+
+  it('exports the album of stable camera angles once and keeps it out of 2D', async () => {
+    const onExportAlbum = vi.fn().mockResolvedValue({ ok: true, count: 4 });
+    const { rail } = renderTools(makeViewSettings(), vi.fn(), onExportAlbum);
+    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
+    const album = screen.getByRole('button', { name: '机位册' });
+    expect(album.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(album);
+    expect(album.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: '导出机位册' }));
+    await waitFor(() => expect(onExportAlbum).toHaveBeenCalledWith({ scale: 2 }));
+  });
+
+  it('keeps the album out of the 2D plan', () => {
+    const onExportAlbum = vi.fn(async (_options: { scale: number }) => ({ ok: true, count: 0 }));
+    const { rail } = renderTools(makeViewSettings({ view2D: true }), vi.fn(), onExportAlbum);
+    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
+    expect((screen.getByRole('button', { name: '机位册' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onExportAlbum).not.toHaveBeenCalled();
   });
 
   it('disables zoom in 2D and hides atmosphere when requested', () => {

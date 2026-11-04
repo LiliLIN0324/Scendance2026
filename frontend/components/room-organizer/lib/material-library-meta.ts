@@ -23,6 +23,22 @@ function cleanTag(value: string): string {
   return value.trim().replace(/\s+/g, ' ').slice(0, TAG_MAX);
 }
 
+/** 收藏项是物料 slug / 资产号，长度远超标签上限，不能按标签截断，否则刷新后匹配不上。 */
+function idList(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const id = item.trim();
+    if (!id || id.length > 160 || seen.has(id)) continue;
+    seen.add(id);
+    next.push(id);
+    if (next.length >= limit) break;
+  }
+  return next;
+}
+
 function stringList(value: unknown, limit: number): string[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -54,7 +70,7 @@ export function parseMaterialLibraryMeta(raw: string | null): MaterialLibraryMet
         if (kept.length) assignments[id] = kept;
       }
     }
-    return { favorites: stringList(row.favorites, 400), customTags, assignments };
+    return { favorites: idList(row.favorites, 400), customTags, assignments };
   } catch {
     return emptyMaterialLibraryMeta();
   }

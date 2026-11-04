@@ -30,6 +30,7 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
     >
       <RailAvatar form="ball" size={28} />
       <RailLaneDot lane="bingo" open={open} tone={tone}/>
+      <span className="sc-rail-label" aria-hidden="true">Bingo</span>
     </button>
   );
 }

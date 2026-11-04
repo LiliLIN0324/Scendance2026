@@ -1,4 +1,5 @@
 /** v2.4 布置第 1–3 步：右栏 Agent 状态机的纯函数部分（无 schema 变更，全部是页面本地状态）。 */
+import type { PlanAddOp, PlanMoveOp, PlanRecolorOp, PlanRemoveOp, PlanRevisionOp, PlanRotateOp, PlanScaleOp, SiteBand, SiteSide } from './agent-proposal';
 import type { ScaleOrigin } from './venue-shell';
 
 export type AgentState =
@@ -186,6 +187,179 @@ export function isGenericMaterialRequest(text: string): boolean {
 }
 
 export const MATERIAL_REQUEST_HINT = '能直接用嘴加的是：椅子、桌子、签到台、背景板、展架、隔断、地毯、装饰道具。别的类型走左栏「物料工具」建模。';
+
+/* ───────── plan.revise：一句话里的增量修改（挪/转/缩放/删/加灯） ───────── */
+
+export interface RevisionRequest {
+  ops: PlanRevisionOp[];
+  /** 这句话里点到的硬保留带（例如「湖边西侧 3 米别压」）。 */
+  bands: SiteBand[];
+}
+
+const DIR_VEC: Readonly<Record<string, { x: number; z: number }>> = {
+  东: { x: 1, z: 0 }, 西: { x: -1, z: 0 }, 南: { x: 0, z: 1 }, 北: { x: 0, z: -1 },
+  左: { x: -1, z: 0 }, 右: { x: 1, z: 0 }, 前: { x: 0, z: 1 }, 后: { x: 0, z: -1 },
+};
+
+/** 能按 assetId 直接添的目录外/目录内物件；8 类活动物料仍走 parseMaterialRequest。 */
+const REVISE_ASSETS: ReadonlyArray<{ pattern: string; assetId: string; name: string }> = [
+  { pattern: '落地灯', assetId: 'floor-lamp', name: '落地灯' },
+  { pattern: '吊灯', assetId: 'pendant-light', name: '吊灯' },
+  { pattern: '路灯|庭院灯', assetId: 'lamppost', name: '路灯' },
+  { pattern: '灯|灯光|照明|射灯', assetId: 'lamp', name: '灯' },
+  { pattern: '树|绿树', assetId: 'tree', name: '树' },
+];
+
+const SIDE_OF: Readonly<Record<string, SiteSide>> = { 东: 'east', 西: 'west', 南: 'south', 北: 'north' };
+const SIDE_LABEL: Readonly<Record<SiteSide, string>> = { east: '东', west: '西', south: '南', north: '北' };
+
+function cleanRole(raw: string): string {
+  return raw.replace(/^(帮我|请|麻烦|把|将|给|在|贴着|靠|沿着)/, '').replace(/(的|上面|旁边|两侧|两边|左右)$/, '').trim();
+}
+
+/** 「左边第二张桌子」→ { role: 桌子, ordinal: 2, side: left }；普通「舞台」原样。 */
+function parseTarget(raw: string): { role: string; ordinal?: number; side?: 'left' | 'right' } {
+  let text = raw;
+  const ordinal = text.match(/(左边|左面|左侧|右边|右面|右侧)?第(\d+|[一二两三四五六七八九十]{1,2})(?:张|个|件|把|盏|棵|组|台|位)?/);
+  const side = ordinal?.[1] ? (/右/.test(ordinal[1]) ? 'right' : 'left') : undefined;
+  const index = ordinal?.[2] ? Math.max(1, parseCount(ordinal[2])) : undefined;
+  if (ordinal) text = text.replace(ordinal[0], '');
+  const sideOnly = text.match(/^(左边|左面|左侧|右边|右面|右侧)/);
+  return {
+    role: cleanRole(sideOnly ? text.replace(sideOnly[0], '') : text),
+    ...(index ? { ordinal: index } : {}),
+    ...(side ? { side } : sideOnly ? { side: /右/.test(sideOnly[0]) ? 'right' as const : 'left' as const } : {}),
+  };
+}
+
+const COLOR_WORDS: Readonly<Record<string, string>> = {
+  红: '#d94841', 蓝: '#3b6fd4', 绿: '#3f9d63', 黄: '#e0b23c',
+  白: '#f2f4f6', 黑: '#2b2f36', 灰: '#9aa3ad', 橙: '#e0863c', 原木: '#b98a5a',
+};
+
+function parseRecolorOp(clause: string): PlanRecolorOp | null {
+  const hit = clause.match(/(?:把|将)?(.+?)(?:换成|改成|变成|换为|改为|涂成|刷成)(红|蓝|绿|黄|白|黑|灰|橙|原木)色?/);
+  if (!hit) return null;
+  const color = COLOR_WORDS[hit[2]!];
+  return color ? { kind: 'recolor', ...parseTarget(hit[1]!), color } : null;
+}
+
+function parseSiteBands(text: string): SiteBand[] {
+  if (!/(湖|景观带|景观|保留带|保留区|视线带)/.test(text)) return [];
+  const hit = text.match(/(湖|景观|保留)[^，。；]{0,6}?(东|西|南|北)(?:侧|边)/)
+    ?? text.match(/(东|西|南|北)(?:侧|边)[^，。；]{0,6}?(湖|景观|保留)/);
+  const direction = hit ? (SIDE_OF[hit[1]!] ? hit[1]! : hit[2]!) : '西';
+  const side = SIDE_OF[direction] ?? 'west';
+  const depthHit = text.match(/(?:景观带|保留带|景观|保留区)(?:宽)?(\d+(?:\.\d+)?)米/);
+  const depth = depthHit ? Math.max(0.5, Math.min(12, Number(depthHit[1]))) : 3;
+  return [{ side, depth, label: `${SIDE_LABEL[side]}侧景观带` }];
+}
+
+function parseMoveOp(clause: string): PlanMoveOp | null {
+  const to = clause.match(/(?:把|将)?(.+?)(?:挪|移|移动|平移|搬)(?:到|至)(\()?(-?\d+(?:\.\d+)?)[,，](-?\d+(?:\.\d+)?)/);
+  if (to) return { kind: 'move', ...parseTarget(to[1]!), to: { x: Number(to[3]), z: Number(to[4]) } };
+  const dir = clause.match(/(?:把|将)?(.+?)(?:往|向|朝)(东|西|南|北|左|右|前|后)(?:边|侧|方)?(?:挪|移|移动|平移|搬|走)(?:动|了)?(\d+(?:\.\d+)?)?(?:米|m)?/);
+  if (dir) {
+    const vec = DIR_VEC[dir[2]!] ?? { x: 0, z: 0 };
+    const meters = dir[3] ? Number(dir[3]) : 1;
+    return { kind: 'move', ...parseTarget(dir[1]!), delta: { x: vec.x * meters, z: vec.z * meters } };
+  }
+  const dirAfter = clause.match(/(?:把|将)?(.+?)(?:挪|移|移动|平移|搬)(?:到|至)?(东|西|南|北|左|右|前|后)(?:边|侧|方)?(\d+(?:\.\d+)?)?(?:米|m)?/);
+  if (dirAfter) {
+    const vec = DIR_VEC[dirAfter[2]!] ?? { x: 0, z: 0 };
+    const meters = dirAfter[3] ? Number(dirAfter[3]) : 1;
+    return { kind: 'move', ...parseTarget(dirAfter[1]!), delta: { x: vec.x * meters, z: vec.z * meters } };
+  }
+  return null;
+}
+
+function parseRotateOp(clause: string): PlanRotateOp | null {
+  const hit = clause.match(/(?:把|将)?(.+?)(顺时针|逆时针)?(?:旋转|转动|转)(\d+(?:\.\d+)?)(?:度|°)/);
+  if (!hit) return null;
+  const degrees = Number(hit[3]);
+  return { kind: 'rotate', ...parseTarget(hit[1]!), deltaDeg: hit[2] === '逆时针' ? -degrees : degrees };
+}
+
+function parseScaleOp(clause: string): PlanScaleOp | null {
+  const hit = clause.match(/(?:把|将)?(.+?)(放大|缩小|缩放|变大|变小)(到)?\s*(\d+(?:\.\d+)?)\s*(倍|%)?/);
+  if (!hit || !hit[5]) return null;
+  const raw = Number(hit[4]);
+  const unit = hit[5];
+  const absolute = Boolean(hit[3]);
+  let factor: number;
+  if (unit === '%') {
+    if (absolute) factor = raw / 100;
+    else if (hit[2] === '缩小' || hit[2] === '变小') factor = 1 - raw / 100;
+    else factor = 1 + raw / 100;
+  } else {
+    factor = raw;
+  }
+  if (!(factor > 0)) return null;
+  return { kind: 'scale', ...parseTarget(hit[1]!), factor };
+}
+
+function parseRemoveOp(clause: string): PlanRemoveOp | null {
+  const before = clause.match(/(?:把|将)?(.+?)(?:删掉|删除|删去|去掉|移除|撤掉|拿走)/);
+  if (before) return { kind: 'remove', ...parseTarget(before[1]!) };
+  const after = clause.match(/(?:删掉|删除|移除|去掉|撤掉|拿走)(?:了)?(.+)/);
+  return after ? { kind: 'remove', ...parseTarget(after[1]!) } : null;
+}
+
+function parseAddOps(clause: string, full: string): PlanAddOp[] {
+  if (!/(加|添加|放|摆|补|来)/.test(clause)) return [];
+  const asset = REVISE_ASSETS.find(entry => new RegExp(entry.pattern).test(clause));
+  if (!asset) return [];
+  // Quantity may sit before a classifier and a short colour/size modifier: 「两盏暖色灯光」.
+  // Action verbs and digits are excluded from the gap so 「挪 2 米再加一盏灯」 still counts one.
+  const countHit = clause.match(new RegExp(`(\\d{1,3}|[一二两三四五六七八九十]{1,2})\\s*(?:盏|个|台|支|座|棵|把|张|件|组)?\\s*[^，。；、0-9加放摆补添来]{0,6}?(?:${asset.pattern})`));
+  const count = countHit ? Math.max(1, Math.min(20, parseCount(countHit[1]!))) : 1;
+  const anchorHit = clause.match(/(?:在|贴着|靠|沿着)?([^，。]{1,10}?)(两侧|两边|左右|左侧|左边|右侧|右边|旁边)/);
+  const anchorRole = anchorHit ? cleanRole(anchorHit[1]!) : null;
+  const sides = !anchorHit ? undefined
+    : /两侧|两边|左右/.test(anchorHit[2]!) ? 'both'
+    : /右侧|右边/.test(anchorHit[2]!) ? 'right' : 'left';
+  const position = clause.match(/(?:放在|放到|摆在|摆到|位于)(?:坐标)?(\()?(-?\d+(?:\.\d+)?)[,，](-?\d+(?:\.\d+)?)/);
+  const facing = /(?:朝向|面向|朝|向)(观众席|观众|台下|南侧|南面|南)/.test(full) || /朝南|面朝南/.test(full) ? 'south'
+    : /(?:朝向|面向|朝|向)(舞台|台上|北侧|北面|北)/.test(full) || /朝北|面朝北/.test(full) ? 'north'
+    : /朝东|面朝东|向东/.test(full) ? 'east'
+    : /朝西|面朝西|向西/.test(full) ? 'west'
+    : undefined;
+  return [{
+    kind: 'add', assetId: asset.assetId, name: asset.name, count,
+    ...(position ? { position: { x: Number(position[2]), z: Number(position[3]) } } : {}),
+    ...(anchorRole ? { anchor: { role: anchorRole, ...(sides ? { sides } : {}) } } : {}),
+    ...(facing ? { facing } : {}),
+  }];
+}
+
+function parseRevisionClause(clause: string, full: string): PlanRevisionOp[] {
+  const ops: PlanRevisionOp[] = [];
+  const move = parseMoveOp(clause);
+  if (move) ops.push(move);
+  const rotate = parseRotateOp(clause);
+  if (rotate) ops.push(rotate);
+  const scale = parseScaleOp(clause);
+  if (scale) ops.push(scale);
+  const recolor = parseRecolorOp(clause);
+  if (recolor) ops.push(recolor);
+  const remove = parseRemoveOp(clause);
+  if (remove) ops.push(remove);
+  ops.push(...parseAddOps(clause, full));
+  return ops;
+}
+
+/**
+ * 「把舞台往西挪 1.5 米」「在舞台两侧各加一盏灯，朝向观众席」→ 增量操作。
+ * 只认「按对象改」的说法：普通「加两把椅子」仍然走 parseMaterialRequest，不被抢走。
+ */
+export function parseRevisionRequest(text: string): RevisionRequest | null {
+  const clauses = text.split(/[，、。；;！!？?]/).map(part => normalizeDimInput(part)).filter(Boolean);
+  const full = normalizeDimInput(text);
+  const ops: PlanRevisionOp[] = [];
+  for (const clause of clauses) ops.push(...parseRevisionClause(clause, full));
+  if (!ops.length) return null;
+  return { ops, bands: parseSiteBands(full) };
+}
 
 /* ───────── 一句话开场：客户端解析（无新增后端） ───────── */
 

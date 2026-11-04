@@ -4,6 +4,12 @@ export interface RoomFrameBounds {
   width: number;
   depth: number;
   height: number;
+  /**
+   * 取景框中心的水平偏移（x 向东、z 向南）。默认 0，即以画布原点为中心。
+   * 调研底图不在原点上时用它把框挪过去。
+   */
+  centerX?: number;
+  centerZ?: number;
 }
 
 export interface ViewportPadding {
@@ -29,6 +35,8 @@ export function calculateRoomFraming(
   { viewport, padding = DEFAULT_VIEWPORT_PADDING, orbitTarget, minDistance = 0 }: RoomFramingOptions = {},
 ): { dollyOut: number; far: number } | null {
   const { width, depth, height } = room;
+  const centerX = Number.isFinite(room.centerX) ? (room.centerX as number) : 0;
+  const centerZ = Number.isFinite(room.centerZ) ? (room.centerZ as number) : 0;
   const p = camera.position;
   const q = camera.quaternion;
   const projection = camera.projectionMatrix.elements;
@@ -61,9 +69,9 @@ export function calculateRoomFraming(
   const backAxis = [2 * (q.x * q.z + q.y * q.w), 2 * (q.y * q.z - q.x * q.w), 1 - 2 * (q.x * q.x + q.y * q.y)];
   let dollyOut = 0;
   let farthestDepth = 0;
-  for (const x of [-width / 2, width / 2]) {
+  for (const x of [-width / 2 + centerX, width / 2 + centerX]) {
     for (const y of [0, height]) {
-      for (const z of [-depth / 2, depth / 2]) {
+      for (const z of [-depth / 2 + centerZ, depth / 2 + centerZ]) {
         const dx = x - p.x;
         const dy = y - p.y;
         const dz = z - p.z;

@@ -24,6 +24,8 @@ export interface KeyboardShortcutHandlers {
   advanceTime(deltaHours: number): void;
   changeFloor(delta: number): void;
   toggleSidebar(): void;
+  /** Transform tool for a single selection (#P0-3): Q / E / S switch modes. */
+  setGizmoMode?(mode: 'move' | 'rotate' | 'scale'): void;
   /**
    * Keyboard placement (#168): both are passed only while an item placed from
    * a catalog tile is still being positioned. Enter then locks it in place and
@@ -222,6 +224,14 @@ export function useKeyboardShortcuts({
         } else {
           handlers.rotateItem(selectedItem.id);
         }
+        return;
+      }
+
+      // Q / E / S pick the transform tool, so the whole move-rotate-scale loop
+      // works without reaching for the chip (#P0-3).
+      if (selectedItem && handlers.setGizmoMode && (key === 'q' || key === 'e' || key === 's')) {
+        event.preventDefault();
+        handlers.setGizmoMode(key === 'q' ? 'move' : key === 'e' ? 'rotate' : 'scale');
         return;
       }
 

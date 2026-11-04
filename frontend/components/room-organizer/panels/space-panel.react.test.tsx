@@ -27,12 +27,17 @@ function environment(preview: SplatPreviewState = { status: 'idle', assetId: '',
 }
 
 describe('SpacePanel', () => {
-  it('hosts scene templates and environment, and starts a blank space', () => {
+  it('shows the real-venue entry with an honest empty state, and hosts templates in traditional', () => {
     const onApply = vi.fn();
+    const onOpenAholo = vi.fn();
     let runNew: (() => void) | undefined;
-    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onRegisterNew={run => { runNew = run; }}/>);
+    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onOpenAholo={onOpenAholo} onRegisterNew={run => { runNew = run; }}/>);
+    expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
+    expect(screen.getByText('还没有已扫描的真实场地')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /去采集 \/ 重建/ }));
+    expect(onOpenAholo).toHaveBeenCalledWith('recon');
+    fireEvent.click(screen.getByRole('button', { name: /传统空间/ }));
     expect(screen.getByRole('heading', { name: '场景模板' })).toBeTruthy();
-    expect(screen.getByRole('group', { name: '场景模板' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: '环境' })).toBeTruthy();
     // 新建空间已收进输入框的 ＋ 菜单，由 chat 栏调用注册进来的动作。
     runNew?.();
@@ -41,23 +46,33 @@ describe('SpacePanel', () => {
     expect(next.height).toBe(8);
   });
 
-  it('sets a clicked environment item as this venue environment', async () => {
+  it('lists scanned venues with size and time, and applies one on click', () => {
     const preview = environment();
-    rememberAholoAsset({ assetId: '00000000-0000-4000-8000-000000000000', kind: 'spz', name: '午后咖啡馆', bytes: 20_000_000, savedAt: 1 });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview}/>);
-    expect(screen.getByLabelText('添加高斯场景')).toBeTruthy();
-    const item = (await screen.findAllByRole('menuitemcheckbox')).find(node => node.textContent?.includes('午后咖啡馆'));
-    expect(item).toBeTruthy();
-    fireEvent.click(item!);
-    expect(preview.onSelect).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000000', '午后咖啡馆');
+    const onPickScan = vi.fn();
+    rememberAholoAsset({
+      assetId: '00000000-0000-4000-8000-000000000000', kind: 'spz', name: '午后咖啡馆', bytes: 20_000_000,
+      savedAt: Date.UTC(2026, 10, 4), meters: { width: 12.4, depth: 8.6, height: 4.2 },
+    });
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} onPickScan={onPickScan}/>);
+    expect(screen.queryByText('还没有已扫描的真实场地')).toBeNull();
+    const item = screen.getByLabelText('应用真实场地 午后咖啡馆');
+    expect(screen.getByText(/12\.4 × 8\.6 m/)).toBeTruthy();
+    fireEvent.click(item);
+    expect(onPickScan).toHaveBeenCalledWith(expect.objectContaining({
+      assetId: '00000000-0000-4000-8000-000000000000',
+      name: '午后咖啡馆',
+      meters: { width: 12.4, depth: 8.6, height: 4.2 },
+    }));
+    // 演示场景仍留在环境切换里，不混进真实场地列表。
+    expect(screen.queryByLabelText(/应用真实场地 .*宴会厅 A/)).toBeNull();
   });
 
   it('marks the remembered environment as current and can remove it', () => {
     const current = { assetId: '00000000-0000-4000-8000-000000000000', name: '午后咖啡馆' };
     const preview = environment({ status: 'ready', assetId: current.assetId, name: current.name, splats: 1200 }, current);
     rememberAholoAsset({ assetId: current.assetId, kind: 'spz', name: current.name, bytes: 20_000_000, savedAt: 1 });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview}/>);
-    expect(screen.getByRole('button', { name: /午后咖啡馆/ })).toBeTruthy();
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} currentScanId={current.assetId}/>);
+    expect(screen.getByLabelText('应用真实场地 午后咖啡馆').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '移除午后咖啡馆' }));
     expect(preview.onRemove).toHaveBeenCalledWith(current.assetId);
   });

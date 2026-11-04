@@ -36,6 +36,18 @@ describe('the shared backend scene adapter', () => {
     delete item.glbNode;
     expect(() => layoutToBackendScene(layout)).toThrow('本地模型尚未归档到云端');
   });
+
+  it('swaps a local generated asset for its cloud asset id and stops with an explicit state until uploaded', () => {
+    const localAssetId = '00000000-0000-4000-8000-000000000009';
+    const cloudAssetId = '00000000-0000-4000-8000-00000000000a';
+    const input = scene();
+    input.objects[0] = { ...input.objects[0], materialId: 'asset', assetId: localAssetId };
+    const layout = backendSceneToLayout(input);
+    expect(() => layoutToBackendScene(layout, { localAssetIds: new Set([localAssetId]) })).toThrow('还在本机或上次上传失败');
+    expect(layoutToBackendScene(layout, { localAssetIds: new Set([localAssetId]), assetIdMap: { [localAssetId]: cloudAssetId } }).objects[0].assetId).toBe(cloudAssetId);
+    // 预览/指纹路径只传映射，不传本机集合，不应因为「还没上云」提前炸掉。
+    expect(layoutToBackendScene(layout, { assetIdMap: {} }).objects[0].assetId).toBe(localAssetId);
+  });
   it('maps a non-square 30 degree object to identical physical corners in Three.js', () => {
     const input = scene();
     const layout = backendSceneToLayout(input);
@@ -99,7 +111,7 @@ describe('the shared backend scene adapter', () => {
   it('rejects multistorey, missing entrances and local floorplans instead of dropping them', () => {
     const a = backendSceneToLayout(scene());
     a.floors.push(structuredClone(a.floors[0]));
-    expect(() => layoutToBackendScene(a)).toThrow('单层');
+    expect(() => layoutToBackendScene(a)).toThrow('多层');
     const b = backendSceneToLayout(scene());
     b.floors[0].items = b.floors[0].items.filter(i => !i.venueEntranceId);
     expect(() => layoutToBackendScene(b)).toThrow('出入口');

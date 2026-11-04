@@ -25,6 +25,7 @@ import { applyTimeOfDay } from '../three/lighting';
 import { clearMeasurement, clearRoomDimensions, renderMeasurement, renderRoomDimensions } from '../three/measurement';
 import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
+import { buildResearchBasemap, clearGeoCrosses, clearResearchBasemap, buildGeoCrosses, parseGeoCrossParam } from '../three/research-basemap';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
 import { createPresetStructure } from '../three/scene-presets';
@@ -399,6 +400,36 @@ export function useSceneEffects({
     view.showReferenceImage, view.referenceImageOpacity,
     activeFloorIndex,
   ]);
+
+  // 调研底图单独一层：壳体照旧按米建，底图是这一片区域的路网，铺在壳体下方。
+  // 换范围只重铺这张图，不动壳体与物料。
+  const researchKey = layout.researchArea
+    ? [
+      layout.researchArea.imageUrl,
+      layout.researchArea.bounds.west, layout.researchArea.bounds.south,
+      layout.researchArea.bounds.east, layout.researchArea.bounds.north,
+      layout.width, layout.height,
+      layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0,
+      layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale,
+    ].join('|')
+    : '';
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!THREE || !scene) return;
+    buildResearchBasemap(THREE, scene, layout, { onTextureLoaded: invalidate });
+    // 候选坐标十字核对：?geocross=lng,lat,名字;lng,lat,名字（肉眼读图不可靠，用十字压点核对投影）
+    const crosses = parseGeoCrossParam(window.location.search);
+    if (crosses.length > 0) buildGeoCrosses(THREE, scene, layout, crosses);
+    return () => {
+      clearResearchBasemap(scene);
+      clearGeoCrosses(scene);
+    };
+    // researchKey 已经盖住底图与定位要看的全部字段；layout 只是当期的内容。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, invalidate, threeModuleRef, sceneRef, researchKey]);
 
   // Separate from the shell: v2 walls/floors never depend on image visibility.
   const referenceImageKey = referenceImage
@@ -854,6 +885,15 @@ export function useSceneEffects({
   }, [isReady, invalidate, threeModuleRef, sceneRef, view.showMeasurements, layout.width, layout.height, activeFloorY]);
 
   // Item labels
+  // 物件多时标签降级成圆点，只有选中/高亮的那几件继续显示名字。
+  const emphasizedItemIds = useMemo(() => {
+    if (!selectedItemId && extraSelectedIds.size === 0 && highlightedIds.size === 0) return null;
+    const ids = new Set<string>(extraSelectedIds);
+    if (selectedItemId) ids.add(selectedItemId);
+    for (const id of highlightedIds) ids.add(id);
+    return ids;
+  }, [selectedItemId, extraSelectedIds, highlightedIds]);
+
   useEffect(() => {
     invalidate();
     if (!isReady) return;
@@ -864,8 +904,8 @@ export function useSceneEffects({
       clearItemLabels(scene);
       return;
     }
-    renderItemLabels(THREE, scene, activeFloor.items, activeFloorY);
-  }, [isReady, invalidate, threeModuleRef, sceneRef, view.showItemLabels, activeFloor.items, activeFloorY]);
+    renderItemLabels(THREE, scene, activeFloor.items, activeFloorY, { emphasis: emphasizedItemIds });
+  }, [isReady, invalidate, threeModuleRef, sceneRef, view.showItemLabels, activeFloor.items, activeFloorY, emphasizedItemIds]);
 
   // Roof
   useEffect(() => {

@@ -477,6 +477,39 @@ describe('OnlineModelLibrary', () => {
   });
 });
 
+describe('物料卡三栏互斥', () => {
+  it('收藏过的公共物料只留在收藏，库与我的生成都不再重复出现', async () => {
+    localStorage.setItem(MATERIAL_LIBRARY_META_KEY, JSON.stringify({ favorites: ['seating-chaise'] }));
+    const onAdd = vi.fn();
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd}/>);
+    await screen.findByRole('button', { name: /^库/ });
+    const tabButton = (label: string) => [...screen.getByRole('tablist', { name: '物料' }).querySelectorAll('button')]
+      .find(button => button.textContent?.includes(label))!;
+    expect(tabButton('库').textContent).toContain('2');
+    expect(tabButton('收藏').textContent).toContain('1');
+    // 收藏的 Lounge Chaise 不在库里；未收藏的仍在库。
+    expect(screen.queryByRole('button', { name: '添加Lounge Chaise' })).toBeNull();
+    expect(screen.getByRole('button', { name: '添加Lighting Tower' })).toBeTruthy();
+    // 自己生成/自带的历史物料也不能混进库。
+    for (const name of listShippedAssets('glb').map(asset => asset.name)) {
+      expect(screen.queryByRole('button', { name: `添加${name}` })).toBeNull();
+    }
+    fireEvent.click(tabButton('我的生成'));
+    expect(screen.getByRole('button', { name: `添加${listShippedAssets('glb')[0]!.name}` })).toBeTruthy();
+    fireEvent.click(tabButton('收藏'));
+    expect(screen.getByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
+  });
+
+  it('公共物料全被收藏时，库显示空态而不是空白', async () => {
+    localStorage.setItem(MATERIAL_LIBRARY_META_KEY, JSON.stringify({ favorites: CATALOGUE.map(item => item.slug) }));
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
+    await screen.findByRole('button', { name: /^库/ });
+    expect(screen.getByRole('button', { name: /^库/ }).textContent).toContain('0');
+    expect(screen.getByText('库里没有可用的公共素材')).toBeTruthy();
+  });
+});
+
 describe('物料卡的按风格配一套', () => {
   it('keeps style entry out of the library pane; history under 我的生成 can still re-place', async () => {
     localStorage.setItem(STYLE_RUNS_KEY, JSON.stringify([{ style: 'cream-lounge', at: Date.now() }]));

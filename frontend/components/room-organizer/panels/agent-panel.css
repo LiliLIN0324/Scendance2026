@@ -1,4 +1,4 @@
-/* v2.6 右栏 Agent。全部色彩/字号/圆角取自 docs/design-spec-2026.md（冷石画廊白 v2.2）。
+/* v2.6 右栏 Agent。全部色彩/字号/圆角取自 docs/05-设计规范.md（冷石画廊白 v2.2）。
    绿只出现在：选中 chip、发送键、成功状态点；警告/错误走语义 token。 */
 .sc-workbench .sc-agent-panel {
   --ap-green: var(--green);

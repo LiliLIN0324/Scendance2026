@@ -7,7 +7,8 @@
 import { useRoomEditor } from '../contexts';
 import { countOpenPins, pinSubject, pinsForFilter, type ReviewPin, type ReviewPinFilter } from '../lib/review-pins';
 import { useAgent } from './agent-panel';
-import { materialRows } from './plan-flow';
+import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
+import type { FurnitureItem } from '../lib/types';
 import './mode-shell.css';
 
 /** 有到场物料算齐，一场空的算缺。真点验下一刀再接。 */
@@ -74,12 +75,16 @@ export function ReviewIssuesCard({
   </section>;
 }
 
-export function DeliveryChecklistShell({ items, onExport, reviewCleared = false }: {
-  items: readonly { name: string }[];
+export function DeliveryChecklistShell({ items, floorName = '本层', onExport, reviewCleared = false }: {
+  items: readonly FurnitureItem[];
+  floorName?: string;
   onExport(): void;
   reviewCleared?: boolean;
 }): JSX.Element {
-  const rows = materialRows(items);
+  // Same counting model as the delivery CSV and the agent reply; this card only
+  // shows name + quantity for the active floor.
+  const rows = summarizeInventory(floorInventory({ id: 'checklist', name: floorName, items: [...items], floorColor: '' }))
+    .map(row => ({ name: row.name, count: row.quantity }));
   const status = dossierStatus(rows.length);
   return <section className="sc-mode-card" role="region" aria-label="执行清单">
     <header>

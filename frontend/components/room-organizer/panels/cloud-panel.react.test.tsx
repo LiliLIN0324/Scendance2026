@@ -46,8 +46,8 @@ vi.mock('@/lib/source-storage', async importOriginal => {
   return { ...actual, readSourceRecord: vi.fn() };
 });
 vi.mock('../three/glb-assets', () => ({ ensureGlbAsset: vi.fn() }));
-const { push } = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search), useRouter: () => ({ push }) }));
+const { push, replace } = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search), useRouter: () => ({ push, replace }) }));
 vi.mock('@/components/business/assets-panel', () => ({ AssetsPanel: vi.fn(() => null) }));
 
 const projectId = '10000000-0000-4000-8000-000000000001';
@@ -92,6 +92,7 @@ beforeEach(async () => {
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
   push.mockReset();
+  replace.mockReset();
   pointRecords.clear();unreadablePointScopes.clear();
   vi.mocked(readSourceRecord).mockReset().mockImplementation(async key => {
     if (typeof key === 'string' || key[0] !== 'material-checkins') return undefined;
@@ -501,19 +502,53 @@ describe('CloudPanel delayed project replacement', () => {
 });
 
 
-it('uses the canonical auth page instead of a second cloud login form', async () => {
+it('logs in inside the same account dialog and keeps the workspace behind it', async () => {
+  queue({ access_token: 'login-access', refresh_token: 'login-refresh', expires_in: 3600, user: { id: 'login-user', email: 'login@example.com' } });
+  queue([]);
+  queue([]);
   const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
   const rendered = render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   openProjects(rendered.container);
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: '登录' })).toBeNull();
+  expect(push).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'login@example.com' } });
+  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'a-long-password' } });
+  fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+  await waitFor(() => expect(anonymous.getSnapshot().user?.email).toBe('login@example.com'));
+  // 登录成功后浮窗就地变账户中心，不跳整页。
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
   expect(screen.queryByLabelText('密码')).toBeNull();
-  expect(screen.getByRole('link', { name: '登录' }).getAttribute('href')).toBe('/auth');
-  fireEvent.click(screen.getByRole('link', { name: '登录' }));
-  await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
-  expect(push).toHaveBeenCalledExactlyOnceWith('/auth');
+  expect(push).not.toHaveBeenCalled();
   anonymous.dispose();
 });
 
-it('closes the cloud dialog when signing out redirects to auth', async () => {
+it('opens the login card when the workspace URL asks for login', () => {
+  window.history.replaceState(null, '', '/?login=1');
+  const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+  render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+  anonymous.dispose();
+});
+
+it('follows a safe next destination after signing in from the modal', async () => {
+  window.history.replaceState(null, '', '/?login=1&next=%2Fprojects%3Fview%3Drecent%23saved');
+  queue({ access_token: 'next-access', refresh_token: 'next-refresh', expires_in: 3600, user: { id: 'next-user', email: 'next@example.com' } });
+  queue([]);
+  queue([]);
+  const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
+  render(<CloudPanel controller={anonymous} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'next@example.com' } });
+  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'a-long-password' } });
+  fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/projects?view=recent#saved'));
+  expect(push).not.toHaveBeenCalled();
+  anonymous.dispose();
+});
+
+it('closes the account dialog when signing out', async () => {
   queue([]);
   queue([]);
   const rendered = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
@@ -563,13 +598,14 @@ it('returns to the project list when a sidebar team is clicked from 物料 or �
   expect(await screen.findByText('另一个云项目')).toBeTruthy();
 });
 
-it('shows real team members only and skips fake demo people when signed out', () => {
+it('shows the login card instead of fake demo people when signed out', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   const load = vi.fn();
   const props = { controller: offline, layout: backendSceneToLayout(scene), onLoadLayout: load };
   const view = render(<CloudPanel {...props} />);
   view.rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }} />);
-  expect(screen.getByText('在账户中心登录后，这里会显示你所在团队的成员。')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '访客进入' })).toBeTruthy();
   ['林雨舟', '许知夏', '陈知远'].forEach(name => expect(screen.queryByText(name)).toBeNull());
   expect(screen.queryByRole('region', { name: '权限演示空间' })).toBeNull();
   expect(screen.queryByRole('combobox', { name: '预览角色' })).toBeNull();
@@ -591,15 +627,10 @@ it('reports a failed project list without claiming the account is empty and allo
 });
 
 describe('CloudPanel source protection before leaving the workspace', () => {
-  const entries = ['login', 'logout'] as const;
-  const labels = { login: '登录', logout: '退出登录' };
   const message = '演练约定有未保存修改，请先保存或放弃修改。';
+  const signOutControl = () => screen.getByRole('button', { name: '退出登录' });
 
-  function entryControl(entry: typeof entries[number]): HTMLElement {
-    return screen.getByRole(entry === 'logout' ? 'button' : 'link', { name: labels[entry] });
-  }
-
-  it.each(entries)('keeps the dialog and live draft when %s cannot flush, then proceeds once after saving', async entry => {
+  it('keeps the dialog and live draft when 退出登录 cannot flush, then proceeds once after saving', async () => {
     const scope = 'house-navigation-draft';
     const flush = vi.fn();
     function Draft(): JSX.Element {
@@ -611,64 +642,60 @@ describe('CloudPanel source protection before leaving the workspace', () => {
       }), [value, saved]);
       return <><input aria-label="演练约定名称" value={value} onChange={event => setValue(event.target.value)}/><button type="button" onClick={() => setSaved(value)}>保存演练输入</button></>;
     }
-    const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
-    const current = entry === 'login' ? anonymous : controller;
-    const signOut = vi.spyOn(current, 'signOut');
-    if (entry !== 'login') { queue([]); queue([]); }
-    const view = render(<><Draft/><CloudPanel controller={current} layout={backendSceneToLayout(scene, { projectId: scope })} onLoadLayout={vi.fn()}/></>);
+    const signOut = vi.spyOn(controller, 'signOut');
+    queue([]); queue([]);
+    const view = render(<><Draft/><CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId: scope })} onLoadLayout={vi.fn()}/></>);
     try {
-      if (entry !== 'login') await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
       fireEvent.change(screen.getByRole('textbox', { name: '演练约定名称' }), { target: { value: '演练：保留这份约定输入' } });
       openAccount();
-      expect(fireEvent.click(entryControl(entry))).toBe(entry === 'logout');
+      expect(fireEvent.click(signOutControl())).toBe(true);
       expect(await screen.findByText(message)).toBeTruthy();
       expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
       expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
-      expect(push).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
       expect(signOut).not.toHaveBeenCalled();
       expect(flush).toHaveBeenCalledOnce();
       fireEvent.click(screen.getByRole('button', { name: '保存演练输入' }));
-      if (entry === 'logout') queue({});
-      const control = entryControl(entry);
+      queue({});
+      const control = signOutControl();
       fireEvent.click(control); fireEvent.click(control);
       await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
       expect(flush).toHaveBeenCalledTimes(2);
       expect((screen.getByRole('textbox', { name: '演练约定名称' }) as HTMLInputElement).value).toBe('演练：保留这份约定输入');
-      if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
-      else { expect(push).toHaveBeenCalledExactlyOnceWith('/auth'); expect(signOut).not.toHaveBeenCalled(); }
-    } finally { view.unmount(); anonymous.dispose(); }
+      expect(signOut).toHaveBeenCalledOnce();
+      expect(push).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
+    } finally { view.unmount(); }
   });
 
-  it.each(entries)('waits for the actual %s flush and ignores repeated clicks', async entry => {
+  it('waits for the actual 退出登录 flush and ignores repeated clicks', async () => {
     const scope = 'house-navigation-pending';
     let finish!: () => void;
     const flush = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
     const unregister = registerSourceFlush(scope, flush);
-    const anonymous = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
-    const current = entry === 'login' ? anonymous : controller;
-    const signOut = vi.spyOn(current, 'signOut');
-    if (entry !== 'login') { queue([]); queue([]); }
-    const view = render(<CloudPanel controller={current} layout={backendSceneToLayout(scene, { projectId: scope })} onLoadLayout={vi.fn()}/>);
+    const signOut = vi.spyOn(controller, 'signOut');
+    queue([]); queue([]);
+    const view = render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId: scope })} onLoadLayout={vi.fn()}/>);
     try {
-      if (entry !== 'login') await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
       openAccount();
-      const control = entryControl(entry);
+      const control = signOutControl();
       fireEvent.click(control); fireEvent.click(control);
       await waitFor(() => expect(flush).toHaveBeenCalledOnce());
       expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
-      expect(entry === 'logout' ? control.hasAttribute('disabled') : control.getAttribute('aria-disabled') === 'true').toBe(true);
-      expect(push).not.toHaveBeenCalled(); expect(signOut).not.toHaveBeenCalled();
-      if (entry === 'logout') queue({});
+      expect(control.hasAttribute('disabled')).toBe(true);
+      expect(push).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled(); expect(signOut).not.toHaveBeenCalled();
+      queue({});
       await act(async () => { finish(); });
       await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false));
       expect(flush).toHaveBeenCalledOnce();
-      if (entry === 'logout') { expect(signOut).toHaveBeenCalledOnce(); expect(push).not.toHaveBeenCalled(); }
-      else { expect(push).toHaveBeenCalledExactlyOnceWith('/auth'); expect(signOut).not.toHaveBeenCalled(); }
-    } finally { unregister(); view.unmount(); anonymous.dispose(); }
+      expect(signOut).toHaveBeenCalledOnce();
+      expect(push).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
+    } finally { unregister(); view.unmount(); }
   });
 });
 
-it('closes the account dialog from the backdrop and leaves clicks inside the panel alone', () => {
+it('closes the login dialog from the backdrop and leaves clicks inside the card alone', () => {
   const offline = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   const props = { controller: offline, layout: backendSceneToLayout(scene), onLoadLayout: vi.fn() };
   const view = render(<CloudPanel {...props} />);
@@ -677,11 +704,8 @@ it('closes the account dialog from the backdrop and leaves clicks inside the pan
   vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
     x: 80, y: 40, top: 40, left: 80, bottom: 640, right: 1120, width: 1040, height: 600, toJSON() { return {}; },
   });
-  fireEvent.click(screen.getByRole('button', { name: '我的项目' }), { clientX: 240, clientY: 160 });
+  fireEvent.click(screen.getByRole('heading', { name: '欢迎回来' }), { clientX: 240, clientY: 160 });
   expect(dialog.hasAttribute('open')).toBe(true);
-  expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
-  view.rerender(<CloudPanel {...props} openRequest={{ serial: 2, section: 'team' }} />);
-  expect(screen.getByRole('navigation', { name: '账户导航' }).textContent).toContain('团队与权限');
   fireEvent.click(dialog, { clientX: 400, clientY: 200 });
   expect(dialog.hasAttribute('open')).toBe(true);
   fireEvent.click(dialog, { clientX: 12, clientY: 12 });

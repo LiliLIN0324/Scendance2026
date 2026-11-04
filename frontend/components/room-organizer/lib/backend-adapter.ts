@@ -35,6 +35,10 @@ export interface BackendAdapterOptions {
   /** Short-lived loading URLs only; these are never sent back in scene.save. */
   assetUrls?: Readonly<Record<string, string>>;
   assetNames?: Readonly<Record<string, string>>;
+  /** 本机资产号 → 云端资产号；上传成功后由 asset-cloud 维护，保存时替换掉本机号。 */
+  assetIdMap?: Readonly<Record<string, string>>;
+  /** 只给保存用：这些是本机资产号；没出现在 assetIdMap 里说明还没上云，保存要停下来说清状态。 */
+  localAssetIds?: ReadonlySet<string>;
 }
 
 function assertSupportedVenue(venue: Scene['venue'], version: number): void {
@@ -137,7 +141,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
   };
 }
 
-export function layoutToBackendScene(layout: RoomLayout): Scene {
+export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAdapterOptions,'assetIdMap'|'localAssetIds'> = {}): Scene {
   if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '当前云端版暂不支持保存多层方案。这份方案和修改会保留在本机；请勿删除本地方案。');
   if (!layout.backendSceneV2 && (layout.floorPlanImage || layout.backendVenue?.floorplanAssetId)) {
     throw new SceneAdapterError('FLOORPLAN_NOT_SUPPORTED', '平面图尚未接入云保存，不能忽略底图后保存。');
@@ -162,7 +166,14 @@ export function layoutToBackendScene(layout: RoomLayout): Scene {
   const objects = floor.items.filter(i => !i.venueEntranceId && !i.structuralOpeningId && !i.structuralColumnId).map(item => {
     if (!item.position) throw new SceneAdapterError('POSITION_MISSING', `物件“${item.name}”缺少位置，无法保存。`);
     if (item.mirrored) throw new SceneAdapterError('MIRROR_NOT_SUPPORTED', '云端暂不支持镜像物件，不能丢失镜像状态。');
-    const assetId = item.assetId ?? (libraryAssetIds as Record<string,string>)[item.glbUrl ?? ''];
+    const localAssetId = item.assetId ?? (libraryAssetIds as Record<string,string>)[item.glbUrl ?? ''];
+    // 本机生成的 GLB 先上传换云端资产号；没换到就明确停下，不把本机 UUID 当成云资产发给后端。
+    const assetId = localAssetId && options.localAssetIds?.has(localAssetId)
+      ? options.assetIdMap?.[localAssetId]
+      : localAssetId;
+    if (localAssetId && options.localAssetIds?.has(localAssetId) && !assetId) {
+      throw new SceneAdapterError('LOCAL_ASSET_NOT_UPLOADED', `“${item.name}”还在本机或上次上传失败，尚未上云；本机副本保留着，网络恢复后会自动重试。`);
+    }
     const presetNode = item.glbNode?.match(/^Preset_Object_(\d+)$/)?.[1];
     if (item.glbNode && (!layout.scenePreset || item.glbUrl !== presetModelUrl(layout.scenePreset) || presetNode === undefined || !presetManifest[layout.scenePreset][Number(presetNode)])) {
       throw new SceneAdapterError('UNKNOWN_PRESET_NODE', '场景预设节点不在已归档的模型中，未保存。');

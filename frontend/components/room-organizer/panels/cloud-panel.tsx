@@ -1,16 +1,18 @@
 'use client';
 
-import { DoorOpen, FolderOpen, Images, MoreHorizontal, RefreshCw, Search, UserRound, UsersRound, X } from '@/components/solid-icons';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
+import { AuthCard } from '@/components/intro/auth-card';
+import { DoorOpen, FolderOpen, Images, MoreHorizontal, RefreshCw, UserRound, UsersRound, X } from '@/components/solid-icons';
+import { safeReturnPath } from '@/lib/auth-provider';
 import { createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
+import { assetCloudLabel, cloudAssetIdMap, prepareLayoutAssetsForCloud, useAssetCloudRecords } from '../lib/asset-cloud';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
@@ -29,10 +31,6 @@ export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): voi
   const inside = event.clientX >= box.left && event.clientX <= box.right
     && event.clientY >= box.top && event.clientY <= box.bottom;
   if (!inside) event.currentTarget.close();
-}
-
-function isLocalMockBackend(): boolean {
-  return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').includes('localhost:3099');
 }
 
 const PREVIEW_LIMIT = 12;
@@ -93,10 +91,12 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   const previewRequested = useRef(new Set<string>());
   const [accountOpen, setAccountOpen] = useState(false);
   const autosavePending = useRef(false);
+  // 上传状态变化要触发重算 fingerprint；本机资产换到云端号后，草稿才算真正可保存。
+  useAssetCloudRecords();
 
   let fingerprint: string | null = null;
   let conversionError = '';
-  try { fingerprint = JSON.stringify(layoutToBackendScene(layout)); }
+  try { fingerprint = JSON.stringify(layoutToBackendScene(layout, { assetIdMap: cloudAssetIdMap() })); }
   catch (error) { conversionError = error instanceof Error ? error.message : '当前场景暂不能保存到云端。'; }
   const localHandoff = hasLocalHandoff(layout);
   const localWorkspace = isLocalActivityWorkspace(controller);
@@ -141,10 +141,17 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
   }, [userId, requestedProjectId, busy, cloud.writeBlocked, cloud.project?.id]);
   useEffect(() => { if (section === 'team') setTeamMounted(true); }, [section]);
 
+  // /auth 已改成「进工作台 + 自动弹登录浮窗」；标记只在 ?login=1 时置位。
+  const loginRequested = useRef(false);
   useEffect(() => {
     setProjects([]); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
     setScenePreviews({}); previewRequested.current = new Set();
-    if (!userId) { openedRequest.current = ''; setNotice(''); setLoadingProjects(false); setAccountOpen(false); dialog.current?.close(); return; }
+    if (!userId) {
+      openedRequest.current = ''; setNotice(''); setLoadingProjects(false);
+      // 会话从「未恢复」变成「匿名」也会走这里；?login=1 要求开着登录浮窗，别把它关掉。
+      if (!loginRequested.current) { setAccountOpen(false); dialog.current?.close(); }
+      return;
+    }
     let cancelled = false;
     setLoadingProjects(true);
     void Promise.all([controller.listProjects(), controller.listStudios()]).then(([nextProjects, nextStudios]) => {
@@ -176,12 +183,27 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       setNotice(error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。');
     } finally { actionPending.current = false; setBusy(false); }
   }
-  async function navigateFromWorkspace(path: '/auth'): Promise<void> {
-    await run(async () => {
-      await flushSourceScope(layoutRef.current.id ?? 'local');
-      router.push(path);
-      setAccountOpen(false); dialog.current?.close();
-    });
+  // 一次性：/auth 跳过来时把浮窗打开，后续交给账户中心自己管开关。
+  useEffect(() => {
+    if (loginRequested.current) return;
+    if (new URLSearchParams(window.location.search).get('login') !== '1') return;
+    loginRequested.current = true;
+    setSection('projects');
+    setAccountOpen(true);
+    if (!dialog.current?.open) dialog.current?.showModal();
+  }, []);
+  /** 登录成功后浮窗就地变账户中心；带 ?next 才跳转，否则只清掉 login 标记。 */
+  function handleAuthenticated(): void {
+    loginRequested.current = false;
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next');
+    if (next) { router.replace(safeReturnPath(next)); return; }
+    if (params.get('login') === '1') {
+      params.delete('login');
+      const search = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
+    }
+    setNotice('已登录。');
   }
   async function refreshProjects(): Promise<void> {
     const [nextProjects, nextStudios] = await Promise.all([controller.listProjects(), controller.listStudios()]);
@@ -299,7 +321,13 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     await assertCloudTransition(currentLayout);
     assertNoLocalHandoffCloudTransition(layoutRef.current);
     if (layoutRef.current !== currentLayout) throw new Error('保存前画布有新改动，当前草稿已保留。请稍后再试。');
-    const scene = layoutToBackendScene(currentLayout);
+    // 先让本机生成的 GLB 上云并拿到 asset_id，再把本机号换成云端号；失败就停下来报状态，不只报「不能做什么」。
+    const prepared = await prepareLayoutAssetsForCloud(currentLayout, (file, meta, onProgress) => controller.uploadLocalAsset(file, meta, onProgress));
+    if (prepared.failures.length) {
+      const names = prepared.failures.map(failure => `“${failure.name}”（${assetCloudLabel(failure.state)}）`).join('、');
+      throw new Error(`本机模型还没上传成功：${names}。${prepared.failures[0]?.message ?? ''} 本机副本保留着，下次保存会继续重试。`);
+    }
+    const scene = layoutToBackendScene(currentLayout, { assetIdMap: prepared.assetIdMap, localAssetIds: prepared.localAssetIds });
     const submitted = JSON.stringify(scene);
     const saved = await controller.saveScene(scene);
     await assertCloudTransition(currentLayout);
@@ -469,8 +497,8 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
     <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户中心" title="账户中心 · 身份、团队与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); setAccountOpen(true); dialog.current?.showModal(); }}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><img src={avatar.src} alt=""/></span>
     </button>
-    {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className="sc-cloud-dialog sc-account-dialog" aria-labelledby="cloud-title" onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
-      <div className="sc-account-scroll">
+    {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className={`sc-cloud-dialog sc-account-dialog${cloud.user ? '' : ' is-auth'}`} aria-labelledby="cloud-title" onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
+      {cloud.user ? <div className="sc-account-scroll">
       <h2 id="cloud-title" className="sc-account-title-hidden">账户中心</h2>
       <button className="sc-cloud-close sc-account-close-float" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={18}/></button>
       <div className="sc-account-shell">
@@ -494,7 +522,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
           <span className="sc-account-avatar-picker-title">选择头像</span>
           {AVATAR_PRESETS.map(item => <button key={item.id} type="button" title={item.name} aria-label={item.name} aria-pressed={avatar.id === item.id} onClick={() => { setAvatar(item); saveAvatar(userId, item.id); setAvatarPickerOpen(false); }}><img src={item.src} alt=""/></button>)}
         </div>}
-        {!cloud.user && <div className="sc-account-profile-actions">{isLocalMockBackend() && <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.signIn('dev@mock.local', 'mock'); setNotice('已用本地测试账户登录。'); })}>本地测试登录</button>}{cloud.configured && <Link className="sc-cloud-primary" href="/auth" aria-disabled={busy} onClick={event => { event.preventDefault(); void navigateFromWorkspace('/auth'); }}>登录</Link>}</div>}
+        {/* 未登录时浮窗整块是 AuthCard，这里不再放第二套登录入口。 */}
       </div>
       {teamNav}
       {cloud.user && <nav className="sc-account-side-links" aria-label="账户分区">
@@ -531,7 +559,7 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
         {/* 草稿保存失败才在列表上方提醒；日常「草稿 / 已保存到本机」看项目卡状态，别跟关闭按钮挤在一起。 */}
         {draftNote?.error && <p className="sc-account-draft-note has-error" role="status" title={draftNote.title}>{draftNote.label}</p>}
         <section aria-label="项目列表">
-        {(loadingProjects || !!studioProjects.length || draftOnCanvas) && <div className="sc-account-filters"><label className="sc-account-search"><Search size={20} aria-hidden="true"/><input aria-label="搜索项目" type="search" placeholder="搜索项目" value={query} onChange={event => setQuery(event.target.value)} /></label></div>}
+        {(loadingProjects || !!studioProjects.length || draftOnCanvas) && <div className="sc-account-filters"><label className="sc-account-search"><svg className="sc-account-search-icon" viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.25" /><path d="M15.2 15.2 20 20" /></svg><input aria-label="搜索项目" type="search" placeholder="搜索项目" value={query} onChange={event => setQuery(event.target.value)} /></label></div>}
         {loadingProjects && <p className="sc-account-empty" role="status">正在加载…</p>}
         <ul className="sc-file-grid">
           {showDraftCard && <li className="sc-file-card is-current is-draft">
@@ -642,7 +670,11 @@ export function CloudPanel({ layout, onLoadLayout, controller: providedControlle
       </div>
       </div>
       </div>
-      </div>
+      </div> : <>
+        <h2 id="cloud-title" className="sc-account-title-hidden">账户中心</h2>
+        <button className="sc-cloud-close sc-account-close-float" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={18}/></button>
+        <AuthCard controller={controller} onAuthenticated={handleAuthenticated} />
+      </>}
     </dialog>, document.body)}
   </>;
 }
