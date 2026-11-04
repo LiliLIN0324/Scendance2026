@@ -6,6 +6,7 @@ import { useBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
+import { provenanceBreakdown } from '../lib/deliverable-inventory';
 import { downloadTextFile } from '../lib/plan-export/download';
 import { layoutToDxf } from '../lib/plan-export/dxf';
 import { openPlanPrintWindow } from '../lib/plan-export/print';
@@ -289,6 +290,15 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         <HandoffEditor layout={layout} item={item} status={status} disabled={!editable || busy || status === 'checking'} onUpdate={onUpdateItem ?? (() => undefined)}/>
       </details>; })}</div>
       <details className="sc-procurement-summary"><summary>采购汇总 · {preview.materials.length} 类</summary><ul>{preview.materials.map(row => <li key={row.objectIds[0]}>{row.name} × {row.quantity}<small>{row.width} × {row.depth} × {row.height} m · {row.procurement}</small></li>)}</ul></details>
+      {(() => { const p = provenanceBreakdown(preview.items); return (
+        <details className="sc-procurement-summary" data-testid="provenance-summary"><summary>布置来源分桶 · AI 占比 {p.aiPct}%</summary>
+          <ul>
+            <li>AI 生成 {p.ai} 件</li>
+            <li>手动放置 {p.human} 件</li>
+            <li>场地自带 {p.procedural} 件（不计入布置）</li>
+            {p.unknown > 0 && <li>无法识别 {p.unknown} 件（请在清单末尾核对）</li>}
+          </ul>
+        </details> ); })()}
     </>}
     </div>
     <div role="tabpanel" id="delivery-export" aria-labelledby="delivery-export-tab" hidden={view !== 'export'}>
