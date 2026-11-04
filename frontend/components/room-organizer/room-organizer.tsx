@@ -214,7 +214,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 对话顶栏那颗门洞头像：飞行层从它起飞，落地后再显形。
   const bingoHeaderAvatarRef = useRef<HTMLSpanElement>(null);
   const [bingoHeaderAvatarVisible, setBingoHeaderAvatarVisible] = useState(false);
-  const [activeAgent, setActiveAgent] = useState<AgentId>('bingo');
+  const [activeAgent, setActiveAgent] = useState<AgentId>('door');
   const [spaceWorkflow, setSpaceWorkflow] = useState<'aholo' | 'traditional'>('aholo');
   const agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel;
   const navExpanded = isNavExpanded({ agentCollapsed, sidebarCollapsed, sidePanel });
@@ -1965,7 +1965,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-mode-rail">
             <div className="sc-rail-head">
               <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
-              <nav className="sc-mode-rail-primary" aria-label="总控、Bingo、空间、物料">
+              <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、空间、物料">
                 <BingoRailButton open={isLaneOpen('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
                 <button
                   type="button"

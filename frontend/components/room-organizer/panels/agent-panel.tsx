@@ -14,7 +14,7 @@
  * 卡片退回只读回显，画布上唯一的绿钮是「确认布置」。
  * 物件与场景生成不在这里：物料生成属于物料对话，场景属于空间栏，Bingo 只谈布置与方案。
  */
-import { ArrowUp, Check, ChevronDown, ClipboardList, Clock, FileImage, Inbox, Info, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
+import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
@@ -87,7 +87,7 @@ const forceFail = () => process.env.NODE_ENV !== 'production' && typeof window !
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
 type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
-  /** 总控点名分派的那一句记下当时点了谁：汇总卡按这个出记录，不另存一份分发表。 */
+  /** 旧总控假分派留下的历史字段：S1 起不再写入，仅为兼容旧会话回放而保留。 */
   to?: AgentId[];
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
@@ -252,6 +252,7 @@ interface AgentValue {
   /** 选进来、还没发出去的图纸/照片：挂在输入框上，点发送才读进场地。 */
   pendingFile: { name: string; url: string } | null;
   removePendingFile(): void;
+  /** to 为旧假分派参数：UI 已不再传入，仅保留签名兼容历史回放，S4 随类型清理一并移除。 */
   send(text: string, to?: AgentId[]): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
 }
 
@@ -1576,23 +1577,22 @@ type CapabilityChip = {
   active?: boolean;
 };
 
-function AgentCapabilityPrompts({ owner }: { owner: 'door' | 'bingo' }): JSX.Element | null {
+/** 活动脸的快捷能力：活动级选址 + 风格套。S1 后这里是唯一的布置生成对话入口。 */
+function AgentCapabilityPrompts(): JSX.Element | null {
   const agent = useAgent();
   if (agent.callbacks.workbenchMode !== 'layout') return null;
 
-  // 总控：活动级选址。Bingo：从库挪来的「按风格配一套」。
   const chips: CapabilityChip[] = [
-    ...(owner === 'door' ? [{ id: 'map', label: '地图选址', title: '确定地点并圈出真实场地范围', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen }] : []),
-    ...(owner === 'bingo' ? [{
+    { id: 'map', label: '地图选址', title: '确定地点并圈出真实场地范围', icon: <MapIcon size={14} aria-hidden="true"/>, run: agent.startMapVenuePicker, active: agent.mapPickerOpen },
+    {
       id: 'style',
       label: '按风格配一套',
       title: '内置气质，或存一句风格提示词',
       icon: <Palette size={14} aria-hidden="true"/>,
       run: () => { if (agent.stylePickerOpen) agent.closeStylePicker(); else agent.startStylePicker(); },
       active: agent.stylePickerOpen,
-    }] : []),
+    },
   ];
-  if (chips.length === 0) return null;
 
   return <div id="ap-capabilities" className="ap-capabilities">
     <p className="ap-capability-label">你可以做什么</p>
@@ -1679,12 +1679,11 @@ export function VenuePickerOverlay(): JSX.Element | null {
   </div>;
 }
 
-function Bubbles({ agent, via, since = 0 }: { agent: AgentValue; via?: string | null; since?: number }): JSX.Element {
-  return <>{agent.bubbles.map((bubble, index) => {
-    const tag = via && index >= since ? (bubble.role === 'user' ? `总控 → ${via}` : `${via} → 总控`) : null;
+function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
+  return <>{agent.bubbles.map(bubble => {
     return bubble.role === 'user'
-    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div>{tag && <small className="ap-via">{tag}</small>}<strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
-    : <div key={bubble.id} className="ap-turn">{tag && <small className="ap-via">{tag}</small>}<p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
+    ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
+    : <div key={bubble.id} className="ap-turn"><p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
       {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
     </div>;
   })}</>;
@@ -1738,93 +1737,20 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
   </div>;
 }
 
-/** 左轨四格就是四个 agent：门洞总控、Bingo 布置、空间、物料。 */
+/**
+ * 左轨四格就是四个 agent：活动（内部 id 沿用 'door'，计划 S4 统一重命名）、Bingo 审校、空间、物料。
+ * S1 起「活动」是唯一对话与布置生成入口；旧的总控假分派已拆除，不做真多智能体调度台。
+ */
 export type AgentId = 'door' | 'bingo' | 'space' | 'material';
 
 export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: string }> = {
-  door: { name: '总控', form: 'door', role: '活动目标、信息汇总与任务分派' },
-  bingo: { name: 'Bingo', form: 'ball', role: '现场布局、动线与布置方案' },
+  door: { name: '活动', form: 'door', role: '活动需求、布置生成与方案确认' },
+  bingo: { name: 'Bingo', form: 'ball', role: '方案审校、问题钉与客户评审' },
   space: { name: '空间', form: 'cube', role: '选址后的场地结构、图纸与环境' },
   material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
 };
 
-/** 总控台账：只读这场对话，一条点名 = 一条记录；点名记在气泡上，不另建分发表。 */
-function dispatchRecords(bubbles: readonly Bubble[]): { id: string; text: string; to: AgentId[]; result: string | null }[] {
-  const records: { id: string; text: string; to: AgentId[]; result: string | null }[] = [];
-  bubbles.forEach((bubble, index) => {
-    if (bubble.role !== 'user' || !bubble.to?.length) return;
-    // 结果摘要只取这条分派之后、下一条用户消息之前的第一句回话。
-    let result: string | null = null;
-    for (const next of bubbles.slice(index + 1)) {
-      if (next.role === 'user') break;
-      if (next.text.trim()) { result = next.text.replace(/\s+/g, ' ').trim(); break; }
-    }
-    records.push({
-      id: bubble.id, text: bubble.text, to: [...new Set(bubble.to)],
-      result: result ? (result.length > 48 ? `${result.slice(0, 48)}…` : result) : null,
-    });
-  });
-  return records.slice(-8).reverse();
-}
-
-/** 总控卡：这场活动的读数 + 三个 agent 的去处。可以同时点好几个：这句就同时递给它们，不换栏。 */
-function AgentControlCard({ talkTo = [], onTalkTo, bubbles = [] }: { talkTo?: readonly AgentId[]; onTalkTo?(id: AgentId): void; bubbles?: readonly Bubble[] }): JSX.Element {
-  const { layout, activeFloor } = useRoomEditor();
-  const items = materialCount(activeFloor.items);
-  const dispatched = dispatchRecords(bubbles);
-  return <div className="ap-agent-card ap-agent-control">
-    <div className="ap-control-summary">
-      <div className="ap-control-name">
-        <strong>{layout.name || '未命名活动'}</strong>
-        <details className="ap-control-info">
-          <summary aria-label="活动信息"><Info size={13} aria-hidden="true"/></summary>
-          <div>
-            <p>{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p>
-            <dl>
-              <div><dt>Bingo</dt><dd>现场布局、动线与布置方案</dd></div>
-              <div><dt>空间</dt><dd>场地结构、图纸与环境</dd></div>
-              <div><dt>物料</dt><dd>物件规格、模型与生成</dd></div>
-            </dl>
-          </div>
-        </details>
-      </div>
-    </div>
-    <div className="ap-agent-links" role="group" aria-label="这场对话里找谁说">
-      {(['bingo', 'space', 'material'] as const).map(id => {
-        const meta = AGENT_META[id];
-        const picked = talkTo.includes(id);
-        return <button key={id} type="button" className={`ap-agent-link${picked ? ' is-active' : ''}`} aria-label={`${meta.name}：${meta.role}`} title={meta.role} aria-pressed={picked} onClick={() => onTalkTo?.(id)}>
-          <RailAvatar form={meta.form} size={28}/>
-          <strong>{meta.name}</strong>
-        </button>;
-      })}
-    </div>
-    {/* 汇总结果：谁被点名、说了什么、回没回。默认收起，点一行标题才展开。 */}
-    <details className="ap-dispatch">
-      <summary>
-        <ClipboardList size={13} aria-hidden="true"/>
-        <span className="ap-dispatch-label">分派结果</span>
-        {dispatched.length > 0 && <span className="ap-dispatch-count">{dispatched.length}</span>}
-        <ChevronDown size={13} className="ap-dispatch-caret" aria-hidden="true"/>
-      </summary>
-      {dispatched.length === 0
-        ? <p className="ap-dispatch-empty"><Inbox size={13} aria-hidden="true"/><span>还没分派过。点上面的人名，再说一句要它做的事。</span></p>
-        : <ol className="ap-dispatch-list">
-          {dispatched.map(record => <li key={record.id} className="ap-dispatch-row">
-            <span className="ap-dispatch-faces" aria-hidden="true">
-              {record.to.map(id => <RailAvatar key={id} form={AGENT_META[id].form} size={20}/>)}
-            </span>
-            <span className="ap-dispatch-body">
-              <strong>{record.text}</strong>
-              <small>{record.to.map(id => AGENT_META[id].name).join('、')} · {record.result ?? '已发出，等回话'}</small>
-            </span>
-          </li>)}
-        </ol>}
-    </details>
-  </div>;
-}
-
-export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'bingo', spaceSlot, materialSlot, chatSlot }: {
+export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, chatSlot }: {
   onClose?(): void;
   /** 评审议题。挂在对话里，不替换整栏。 */
   reviewSlot?: ReactNode;
@@ -1859,22 +1785,10 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
   const generating = agent.state === 'generating';
-  /** 总控里点 agent = 在这条总控对话里点名它，不换栏；可以多选，下一句同时递给点名的那几个。 */
-  const [talkTo, setTalkTo] = useState<AgentId[]>([]);
-  const talkSince = useRef(0);
-  const startTalk = useCallback((id: AgentId) => {
-    // 只在从「没点名」进入点名时开新的一段：多选增删时，已标过收发方的旧气泡不该掉标签。
-    if (talkTo.length === 0) talkSince.current = agent.bubbles.length;
-    setTalkTo(current => (current.includes(id) ? current.filter(item => item !== id) : [...current, id]));
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [talkTo.length, agent.bubbles.length]);
-  useEffect(() => { setTalkTo([]); }, [activeAgent]);
-  // 每格只说它自己那一层的事：总控、Bingo、空间、物料共用同一份配置。
+  // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   const suggestion = useSuggestion(AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
-  const ghostVisible = mode === 'layout' && !talkTo.length && !draft.trim() && !generating;
-  /** 点名语音：一个就「对谁说」，多个就是同一句同时分发。 */
-  const talkNames = talkTo.map(id => AGENT_META[id].name).join('、');
+  const ghostVisible = mode === 'layout' && !draft.trim() && !generating;
   const proposed = agent.state === 'planProposed';
   const paused = agent.state === 'generatePaused';
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
@@ -1884,11 +1798,12 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
   const sessionTitle = assistantSessions.activeSession?.title ?? ASSISTANT_SESSION_DEFAULT_TITLE;
   const meta = AGENT_META[activeAgent];
   const bingo = activeAgent === 'bingo';
-  const door = activeAgent === 'door';
-  /** 总控与 Bingo 是同一场对话：同一个 agent、同一段气泡、同一套引导句与底部。 */
-  const conversation = bingo || door;
+  // 内部 id 仍是 'door'：这里用语义别名，S4 再做标识符级重命名。
+  const activity = activeAgent === 'door';
+  /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
+  const conversation = bingo || activity;
 
-  // 总控那格常亮；这场对话出问题就爆红，别让人以为它还好好活着。
+  // 活动那格常亮；这场对话出问题就爆红，别让人以为它还好好活着。（lane id 仍为内部字面量 'door'）
   useEffect(() => {
     if (FAILED_STATES.includes(agent.state)) setLaneActivity('door', 'workbench-agent', 'warn', '这一单没出成');
     else clearLaneActivity('door', 'workbench-agent');
@@ -1898,16 +1813,16 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
     setShowHistory(false);
   }, [assistantSessions.activeId]);
 
-  return <aside id="agent-panel" className="sc-agent-panel" data-state={bingo ? (mode === 'layout' ? agent.state : mode) : activeAgent} data-venue-io={agent.venueIO} aria-label={meta.name} tabIndex={-1}>
+  return <aside id="agent-panel" className="sc-agent-panel" data-state={activity ? (mode === 'layout' ? agent.state : mode) : activeAgent} data-venue-io={agent.venueIO} aria-label={meta.name} tabIndex={-1}>
     <header className="ap-head ap-session-head">
       <div className="ap-session-identity">
         <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
           <RailAvatar key={activeAgent} form={meta.form} size={36} />
         </span>
-        <h1 className="ap-session-title" title={bingo ? sessionTitle : meta.name}>{bingo ? sessionTitle : meta.name}</h1>
+        <h1 className="ap-session-title" title={activity ? sessionTitle : meta.name}>{activity ? sessionTitle : meta.name}</h1>
       </div>
       <div className="ap-session-actions">
-        {bingo && <>
+        {activity && <>
         <button
           type="button"
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}
@@ -1936,15 +1851,14 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
       </div>
     </header>
     <div className="ap-body">
-      {bingo && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
+      {activity && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
-      {door && <AgentControlCard talkTo={talkTo} onTalkTo={startTalk} bubbles={agent.bubbles}/>}
       {mode === 'layout' && agent.bubbles.length === 0 && agent.state !== 'generating' && <div className="ap-lead">
-        <p className="ap-lead-title">{door ? '先说一句，我来分派' : '先说一句就行'}</p>
-        {!door && <p className="ap-lead-body">点一句例子，或自己说；听懂了会回显，确认后才写进画布。</p>}
+        <p className="ap-lead-title">先说一句就行</p>
+        <p className="ap-lead-body">点一句例子，或自己说；听懂了会回显，确认后才写进画布。</p>
       </div>}
-      {bingo && mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null) && (
+      {activity && mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null) && (
         <PlanHome
           draft={draft}
           onPickExample={sentence => { setDraft(sentence); requestAnimationFrame(() => inputRef.current?.focus()); }}
@@ -1955,9 +1869,10 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
       {mode === 'review' && <><p className="ap-divider">评审 · {layout.name || '未命名活动'}</p><p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p></>}
       {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}
       {/* 对话记录三种模式共用：评审/执行里说过的话也得看得见，不然输入框就成了摆设。 */}
-      <Bubbles agent={agent} via={talkTo.length ? talkNames : null} since={talkSince.current}/>
+      <Bubbles agent={agent}/>
       {bingo && <BingoAuditCard/>}
-      {mode === 'layout' && <>
+      {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}
+      {activity && mode === 'layout' && <>
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
         {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
@@ -2017,37 +1932,28 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
     {!conversation && chatSlot}
     </div>
     {conversation && <>
-        {/* 总控管活动级选址；Bingo 管布置与风格套（从物料库挪来）。 */}
-        {mode === 'layout' && bingo && agent.stylePickerOpen && (
+        {/* 活动脸统管活动级选址与布置风格套；Bingo 不再保留布置生成入口。 */}
+        {mode === 'layout' && activity && agent.stylePickerOpen && (
           <StyleBundlePanel
             disabled={generating}
             onClose={agent.closeStylePicker}
             onPick={bundle => agent.placeStyleBundle(bundle)}
           />
         )}
-        {mode === 'layout' && door && <AgentCapabilityPrompts owner="door"/>}
-        {mode === 'layout' && bingo && <AgentCapabilityPrompts owner="bingo"/>}
-        <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft, talkTo.length ? talkTo : undefined); setDraft(''); }}>
+        {mode === 'layout' && activity && <AgentCapabilityPrompts/>}
+        <form id="composer" className="ap-composer" onSubmit={event => { event.preventDefault(); void agent.send(draft); setDraft(''); }}>
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         {agent.pendingFile && <div className="sc-chat-file">
           <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
           <span className="sc-chat-file-name">{agent.pendingFile.name}</span>
           <button type="button" className="sc-chat-file-remove" aria-label="移除附件" onClick={agent.removePendingFile}><X size={14} aria-hidden="true"/></button>
         </div>}
-        {/* 一起说：选中的 agent 用头像叠在输入框里，点一下移除；不另起一行把它们念一遍。 */}
-        {talkTo.length > 0 && <div className="ap-talk-faces" role="group" aria-label="一起说的 agent">
-          {talkTo.slice(0, 3).map(id => <button key={id} type="button" className="ap-talk-face" title={`移除 ${AGENT_META[id].name}`} aria-label={`移除 ${AGENT_META[id].name}`} onClick={() => startTalk(id)}>
-            <RailAvatar form={AGENT_META[id].form} size={24}/>
-            <span className="ap-talk-face-x" aria-hidden="true"><X size={10}/></span>
-          </button>)}
-          {talkTo.length > 3 && <span className="ap-talk-face-more" aria-label={`还有 ${talkTo.length - 3} 个`}>+{talkTo.length - 3}</span>}
-        </div>}
         <div className="ap-composer-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : talkTo.length ? '说一句，交给选中的 agent' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : door ? '说活动目标、限制或需要协调的事情' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" ref={inputRef} rows={2} value={draft} maxLength={600} placeholder={ghostVisible ? '' : generating ? '说「停一下」我就先停' : mode === 'review' ? '说一句，比如「准备客户评审」' : mode === 'delivery' ? '说一句，比如「导出给搭建方」' : '说一句，比如「80 人发布会，室内 12×9」'} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
-          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void agent.send(draft, talkTo.length ? talkTo : undefined); setDraft(''); }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void agent.send(draft); setDraft(''); }
         }}/>
         </div>
         <div className="ap-composer-bar">
