@@ -1,129 +1,84 @@
 # 幕景 Scendance
 
-**3D 活动方案全流程生成**
+面向活动的真实场景 3D 空间设计工作台：从已扫描或生成的真实场地出发，在 2D/3D 里摆物料、改结构，再把同一份方案分享给客户、导出给执行团队。
 
-一场活动走完一条路：选活动，定场地和人数，生成一版方案，确认，再导出。布置、物料、执行资料是同一份方案的三块视图，不是三件产品。
+## 现在能做什么
 
-**在线试用：<https://scendance-scene-planner-ewz.pages.dev>**
+路径缩写：下文 `lib/`、`hooks/`、`panels/` 均相对 `frontend/components/room-organizer/`，另注明的除外。
 
-![工作台预览](preview.jpg)
+**编辑**
+- 2D 平面与 3D 场景双视图，同一份布局来回切，状态不丢 — `panels/scendance-workspace.tsx`
+- 拖动、旋转、缩放、复制、框选、对齐、锁定；撤销/重做按编辑动作成组记录 — `lib/alignment.ts`、`hooks/use-history.ts`
+- 10 套场景模板（bar / cafe / conference / gym / lawn / market / museum / office / popup / studio）与环境切换 — `panels/space-panel.tsx`
+- 真实场地：空间面板列出扫描库中已重建的场地，选中即应用并把尺寸同步到画布 — `panels/space-panel.tsx`、`lib/venue-scans.ts`
+- Lux3D 文本生成 3D：GLB 归一化后自动落到画布；本地走 3199 代理，线上走云端任务队列 — `lib/material-generate.ts`、`lib/lux3d-import.ts`
 
-2026 年学军黑客松作品。当前仓库是 2026-10 的静态导出版本。
+**Agent**
+- 总控 / Bingo / 空间 / 物料四个 Agent 面板，自然语言下指令
+- 提案先预览、人工确认后才写画布；确认、驳回、作废都记入复核台账 — `lib/agent-proposal.ts`、`lib/review-ledger.ts`
 
----
+**分享与交付**
+- 只读分享：`/view#s1=` URL 内嵌快照，无需后端；云项目方案走分享 token（需后端已部署） — `frontend/lib/share-snapshot.ts`、`frontend/app/view/page.tsx`
+- 交付导出：机位册图册（4 机位 + 离线 HTML）、物料清单 CSV、DXF 平面、按比例打印/PDF — `lib/plan-export/`、`lib/deliverable-inventory.ts`
 
-## 活动流程
+## 跑起来
 
-```mermaid
-flowchart LR
-  A[选活动] --> B[定场地 · 人数]
-  B --> C[生成方案]
-  C --> D[预览确认]
-  D --> E[导出]
-```
-
-| 步 | 你做的 | 系统做的 |
-| --- | --- | --- |
-| 选活动 | 点一张活动卡 | 记下这场是什么 |
-| 定场地 · 人数 | 点场地和人数 | 立起可布置的场地 |
-| 生成方案 | 只点一颗「生成方案」 | 出一版建议，先停在预览 |
-| 预览确认 | 只点一颗确认 | 写入画布；不确认就不落盘 |
-| 导出 | 从执行资料发起 | 再预览一次，确认后才在本机生成文件 |
-
-对话是生成主入口。没选完也可以直接跟右栏的 Bingo 说一句，效果与点选相同：先建议，再预览，唯一确认之后才写入。
-
-### 三块视图，一份方案
-
-生成之后，画布上的三块是同一份方案的看法，可以来回切，不另开产品：
-
-| 视图 | 看什么 |
-| --- | --- |
-| 布置 | 三维场地里这一版怎么摆 |
-| 物料 | 这一版用了哪些东西、各多少 |
-| 执行资料 | 件数与场地，以及导出交接 |
-
-### 左轨
-
-左轨只有四格：**总控门厅 / Bingo / 空间 / 物料**。
-
-- 门厅：展开或收起左列，并切总控
-- Bingo：开关右栏助手
-- 空间：场地、场景模板、环境、结构，四类平级
-- 物料：物料库，拖入画布即成物件
-
-没有第五枚图标。阶段不升成向导，也不把场景 / 物件 / 合成摆成首页并列入口。
-
-### 留在面上 / 收进内部
-
-| 留在面上 | 收进内部，不当首页 |
-| --- | --- |
-| 一颗动词「生成方案」 | 场景、物件、合成、动画、打印、氛围、3DGS、世界生成 |
-| 空闲时没有绿色主按钮 | 六页执行台、n/4 向导、两颗确认、空闲绿色导出 |
-| 活动卡，场地与人数 | 按钮旁的说明书、厂商名、模式轨、工具坞 |
-| 画布占画面大约六成以上 | 第五枚左轨图标 |
-| 预览之后只确认一次 | |
-| 左轨四格，Bingo 在右栏 | |
-
----
-
-## 能做什么
-
-- **活动方案**：选活动、定场地和人数、生成、确认、导出
-- **3D 编排**：确认后的布置可以选中、旋转、缩放、复制、锁定，支持撤销重做
-- **模型库**：550 个 GLB 家具与装置模型，带中文标签与授权信息
-- **方案生成**：一句话或首屏选择都能出预览；确认前不写入场地（云端路径最多 6 次工具调用 / 90 秒）
-- **模板**：10 套预设场地布局，可直接改
-- **协作**：邮箱登录；工作室 → 项目；编辑租约与版本校验，避免多人互相覆盖；可生成只读分享链接
-- **重建与建模**：平面图预览、参数化模型脚本留在内部工具，不占活动方案首页
-
-## 技术栈
-
-前端 Next.js 15（静态导出）· React 18 · three.js · zustand · Tailwind / Radix
-后端 Supabase（Postgres + Auth + Edge Functions）· Deno
-AI DeepSeek · 测试 Vitest + PGlite
-
-## 目录
-
-```
-frontend/            应用主体（工作台）
-client/              分享客户端
-supabase/
-  functions/         scene-api、generation-worker、reconstruction-worker
-  migrations/        19 个数据库迁移
-assets/library/model 模型库（550 个 .glb）
-scene/templates/     10 套模板
-tools/               Blender 与平面图工具
-docs/                设计与契约文档
-introduction.html    介绍页
-```
-
-## 本地开发
+Node.js ≥ 24.15（或 ≥ 26）。
 
 ```bash
-cd frontend
-npm install
-npm run dev
+npm ci
+npm --prefix frontend ci
+npm --prefix frontend run dev
 ```
 
-需要复制根目录 `.env.example` 为 `.env.local` 并填写 Supabase 地址与匿名 key。数据库结构用 `supabase/migrations/` 初始化。
+- 工作台：<http://localhost:3000>
+- 高德 / Lux3D 本机代理：`127.0.0.1:3199`，随 `dev` 自动拉起，单例复用 — `scripts/dev-with-amap-proxy.mjs`
+- 官网 / 新手指引：`/introduction`、`/guide`（构建时由 `scripts/package-pages.mjs` 复制进 `public/`）
 
-## 构建、检查、发布
+环境变量分两处：根 `.env.local` 供脚本与 Edge Functions，`frontend/.env.local` 只放公开配置。键名见根 `.env.example` 与 `frontend/.env.example`：
+
+| 组 | 键名 |
+| --- | --- |
+| Supabase | `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`（旧名 `NEXT_PUBLIC_SUPABASE_ANON_KEY`）、`SUPABASE_SERVICE_ROLE_KEY` |
+| Lux3D | `LUX3D_API_KEY`、`LUX3D_BASE_URL`、`LUX3D_TERMS_URL`、`LUX3D_TERMS_REVIEWED_AT`、`NEXT_PUBLIC_LUX3D_DIRECT_URL`（可选直连中转） |
+| AMap | `NEXT_PUBLIC_AMAP_KEY`、`NEXT_PUBLIC_AMAP_SECURITY_CODE`、`NEXT_PUBLIC_AMAP_STATIC_KEY` |
+| 对话模型 | `SILICONFLOW_API_KEY`、`AGENT_CHAT_BASE_URL`、`AGENT_CHAT_KEY`、`AGENT_CHAT_MODEL`、`TOKENDANCE_API_KEY` |
+
+检查与构建：
 
 ```bash
-cd frontend
-npm run build          # 静态导出到 frontend/out
-npm run test           # Vitest
+npm --prefix frontend run typecheck
+npm test                            # 根目录：后端 tests/
+npm --prefix frontend run test      # 前端 Vitest
+npm --prefix frontend run build     # 静态导出到 frontend/out
 ```
 
-部署在 Cloudflare Pages，监听 `main` 自动构建，输出目录 `frontend/out`；Supabase Edge Functions 单独部署。
+## 结构
 
-## 边界与现状
+```
+frontend/                  Next.js 工作台（静态导出）
+  app/view/                只读分享查看器
+  components/room-organizer/  编辑器：2D/3D 画布、面板、Agent、导出
+  lib/share-snapshot.ts    分享快照编解码
+client/scene-client.ts     前后端契约客户端
+supabase/functions/        scene-api / generation-worker / reconstruction-worker
+supabase/migrations/       25 个数据库迁移
+assets/library/            529 个 GLB 物料
+scene/templates/           10 套场景模板
+scripts/                   打包、dev 代理、配置校验
+docs/                      文档，入口见 docs/README.md
+introduction.html          官网（构建时复制进 public/）
+```
 
-- HY-3D 生成服务已下线，相关入口返回 410
-- 模板目前只能本地使用，不支持云保存与 AI 改模板
-- AI 规划有调用次数与时长上限，不是无限额度的免费服务
-- 自动化测试覆盖的是关键路径，不等于生产环境验证
+## 文档
 
-## 许可
+唯一入口：[docs/README.md](docs/README.md)。
 
-模型库中部分资产来自第三方，授权信息记录在模型元数据中；使用前请逐个确认。
+## 已知边界
+
+- **照片/视频不是点一下就出可编辑几何。** 必须现场按采集导引满足数量、层数、重叠与尺度基准；未达标的素材实测无法重建，现有西湖 24 张素材为 0/32 坐标、覆盖 102.6°，判定不可用 — `docs/01-素材与3D重建.md`
+- **3DGS 只提供观感，不提供精确几何。** 不能当量尺或碰撞体用，摆位精度由 GLB / 矢量壳承担 — `docs/01-素材与3D重建.md`
+- **云端资产链路需要迁移与函数部署。** 仓库内有 25 个迁移和 3 个 Edge Function 源码，各环境是否已部署需自行确认；未上云的本地资产会阻止云端保存 — `lib/backend-adapter.ts`（`LOCAL_ASSET_NOT_UPLOADED`）
+- **本机扫描/生成物默认只登记在当前浏览器。** 跨设备打开依赖云端资产链路 — `lib/aholo-assets.ts`
+- **移动端是紧凑版。** ≤ 768px 走窄屏 HUD 与抽屉，部分桌面面板能力受限 — `frontend/app/globals.css`
+- **交付导出不支持完整场景预设与建筑入口扩展**，这两类方案会明确拒绝导出而不是降级 — `lib/scene-delivery.ts`

@@ -31,6 +31,6 @@
 
 ## 交付材料
 
-- [最新后端支持说明（文件名保留 v0.2，内容为 v0.3）](../../docs/FRONTEND_V0.2_BACKEND_REQUIREMENTS.md)
+- [最新后端支持说明（文件名保留 v0.2，内容为 v0.3）](../../docs/34-前端协议与后端需求.md)
 - [桌面截图](evidence/v0.3.0-workspace.png)
 - [390px截图](evidence/v0.3.0-mobile.png)

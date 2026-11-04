@@ -1,8 +1,8 @@
 # 晴光 Qingguang — IP 角色还原锚（Phase 0）
 
 > 来源（本机，勿再到 /workspace 找）：
-> - `_refs/head_3d_master.png`（**主锚**，透明底 675×675，3D 渲染毛绒，色准最接近设计稿）
-> - `_refs/head_plush_sq.png`（**辅锚**，方形裁切 840×840，浅灰绿背景，正面略俯视 ~15°，整体偏暖黄、带投影）
+> - `head_3d_master.png`（**主锚**，透明底 675×675，3D 渲染毛绒，色准最接近设计稿；原图曾存于 `_refs/head_3d_master.png`，已随参考素材清理）
+> - `head_plush_sq.png`（**辅锚**，方形裁切 840×840，浅灰绿背景，正面略俯视 ~15°，整体偏暖黄、带投影；原图曾存于 `_refs/head_plush_sq.png`，已随参考素材清理）
 >
 > 视觉语义：qwen3-vl-plus；像素事实：`.scratch/qingguang/lead/{refascii,regions,glow}.cjs` + `tools/analyze.py`。
 > 本页是 Phase 1/2 重烘的唯一依据。

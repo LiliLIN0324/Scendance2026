@@ -1,0 +1,191 @@
+# HTTP API 与前端接入
+
+Base URL：`https://<project-ref>.supabase.co/functions/v1/scene-api`。
+本地：`http://127.0.0.1:54321/functions/v1/scene-api`。
+
+除 health 和分享读取外，所有请求发送 `Authorization: Bearer <Supabase Auth access_token>`。JSON 正文需 `Content-Type: application/json`，最多 256 KB。返回 `Cache-Control: no-store`。仅允许配置的 CORS origins；没有 Cookie 会话。不要把 service role key 或 worker secret 放入前端。
+
+## 接口清单
+
+路径中 `:id` 为项目 UUID，`:assetId/:jobId/:shareId` 同理。下表的对象均为严格字段校验，多余字段会被拒绝。数据库实体字段遵循 SQL 的 snake_case；请求、租约和发布结果使用下表 camelCase。客户端可直接导入 `client/scene-client.ts` 与 `_shared/domain.ts` 的类型/校验器。
+
+| Method / 路径 | 正文 | 返回 |
+|---|---|---|
+| GET `/health` | 无 | `{ok:true,schemaVersion:1}` |
+| GET `/studios` | 无 | 当前成员的工作室、角色、展示名 |
+| POST `/studios` | `{requestId,name,displayName}` | 201，新增工作室 `{id,name,role:"owner",displayName}`；相同请求可重放 |
+| GET `/studios/:studioId/members` | 无 | 当前工作室成员 `[{userId,role,displayName}]` |
+| PUT `/studios/:studioId/members/:userId` | `{displayName}` | 负责人添加/更新已存在账号的编辑成员，返回 `{userId,role:"editor",displayName}` |
+| DELETE `/studios/:studioId/members/:userId` | 无 | 负责人移除编辑成员，返回 `{removed:true}`；重复删除幂等 |
+| GET `/catalog` | 无 | 8 种内置物料的 id/name/size |
+| GET `/projects` | 无 | 最近 100 个可访问项目；id/name/studio_id/revision/updated_at/current_editor/lease_expires |
+| POST `/projects` | `{studioId,name,scene}` | 201，项目（revision=0） |
+| GET `/projects/:id` | 无 | 项目完整当前场景、物料表、编辑者 |
+| PATCH `/projects/:id` | `{sessionId,generation,expectedRevision,name}` | 名称与 revision 更新后的项目 |
+| DELETE `/projects/:id` | `{expectedRevision}` | 工作室 owner 删除空闲项目，返回 `{deleted:true}`；同时撤销客户分享 |
+| POST `/projects/:id/lease/acquire` | `{sessionId}` | `{sessionId,generation,expiresAt,revision,scene}` |
+| POST `/projects/:id/lease/renew` | `{sessionId,generation}` | 当前租约、revision |
+| POST `/projects/:id/lease/release` | `{sessionId,generation}` | 已到期租约；不会自动保存 |
+| PUT `/projects/:id/scene` | `{sessionId,generation,expectedRevision,scene}` | `{id,revision,scene,updatedAt,warnings}` |
+| GET `/projects/:id/materials` | 无 | 当前保存快照的物料汇总 |
+| POST `/projects/:id/proposals` | 见 AI 请求 | 201，提案；重复成功请求重放相同提案 |
+| POST `/projects/:id/proposals/apply` | `{proposalId,sessionId,generation,expectedRevision,localRevision,currentScene}` | `{id,revision,scene,updatedAt,previousScene,undoGroup}` |
+| POST `/projects/:id/publish` | `{expectedRevision}` | 201，`{shareId,publicationId,revision,createdAt,url,token}` |
+| GET `/projects/:id/shares` | 无 | 分享 ID、发布版本和撤销状态；不返回明文 token |
+| DELETE `/projects/:id/shares/:shareId` | 无 | `{revoked:true}`，重复撤销幂等 |
+| POST `/share/read` | `{token}`，匿名 | 发布名称、时间、场景、去除内部备注的物料表和带短期 URL 的资产 |
+| GET `/assets` | 无 | 最近 100 个本人资产；不返回存储路径 |
+| POST `/assets/:assetId/url` | 无 | 已授权资产信息 + `url/expiresIn:300` |
+| GET `/assets/:assetId/materials` | 无 | 已授权 GLB 的真实材质槽、SHA、UV 摘要与可选父版本 |
+| POST `/assets/:assetId/customize` | `{requestId,sourceSha256,materialIndices,baseColor?,metallic?,roughness?,removeBaseColorTexture?:true}` | 201，新独立材质版本；幂等重放200，原资产不变 |
+| POST `/projects/:id/material-variants` | `{requestId,sessionId,generation,expectedRevision,localRevision,scene,objectIds,sourceAssetId,variantAssetId}` | 201，选定实例的版本替换提案；确认仍走原 proposals/apply |
+| POST `/assets/floorplan` | PNG/JPEG 二进制，Content-Type 对应图片 | 201，私有图片资产；<=5MB、4096像素 |
+| POST `/catalog/recommendations` | `{theme,scene}` | 最多 8 条真实公共素材（名称、缩略图、来源、许可、导入体积预检） |
+| POST `/assets/import` | `{modelId}` | 201，打包并归档后的 Poly Haven GLB 资产 |
+| GET `/generation/capabilities` | 无 | 配置允许的文字／图片／纹理能力与模型标识；不代表账号实际供应商验收 |
+| POST `/jobs` | `{requestId,prompt,kind?:"text"\|"image"\|"texture",referenceImageAssetId?,sourceAssetId?}` | 202，持久化生成任务；幂等重放为200，原文字请求兼容 |
+| GET `/jobs` | 无 | 最近 100 个本人任务 |
+| GET `/jobs/:jobId` | 无 | 任务真实状态、provider_job_id、asset_id、错误与 usage；不暴露 worker token |
+| POST `/jobs/:jobId/added` | `{projectId}` | 确认资产已存在于保存的项目后标记 added |
+
+`GET /projects` 和 `/assets` 当前固定返回最近 100 项，尚无分页 UI；演示账号范围下足够，扩大团队规模前增加游标分页。
+
+删除项目要求版本一致且没有有效编辑租约或正在执行的图纸重建任务，分别返回 `REVISION_CONFLICT`、`PROJECT_BUSY`、`RECONSTRUCTION_BUSY`。无成员权限返回 `PROJECT_NOT_FOUND`，编辑成员返回 `FORBIDDEN`。同一 owner 重复删除幂等；删除后的项目、租约、图纸任务读取和旧分享均不可再使用。数据库用 `deleted_at` 保留发布、账单和服务调用证据，个人素材不随项目删除。上线需先应用 `20261003120000_project_deletion.sql`，再发布 API 与前端。
+
+编辑器 `RoomLayout.itemLayers/designBook` 是本机编组与方案历史，不属于 v1/v2 场景协议。云端保存/发布当前选中的场景；本机方案切换保留每个方案最新编辑状态，最多 20 个方案，可移除非当前方案并撤销恢复。
+
+v0.4.1 公共模型目录随前端完整提供，不依赖 `/assets` 的本人最近 100 项列表。管理员用 `register_library_asset(p_owner,p_model_id,p_record)` RPC 批量登记后，工作室成员通过原 `/assets/:assetId/url` 和场景保存接口使用这些模型。RPC 仅 service_role 可调用；原 `/assets/import` 仍只导入 Poly Haven。登记、授权范围与上线顺序见 [v0.4.1 兼容记录](archive/V041_COMPATIBILITY.md)。
+
+## 场景契约
+
+```json
+{
+  "schemaVersion": 1,
+  "venue": {
+    "shape": "rectangle",
+    "width": 12,
+    "depth": 10,
+    "height": 3,
+    "entrances": [
+      {"id":"40000000-0000-4000-8000-000000000001","position":{"x":0,"z":5},"width":1.2}
+    ]
+  },
+  "objects": [
+    {
+      "id":"50000000-0000-4000-8000-000000000001",
+      "materialId":"chair",
+      "position":{"x":3,"z":3},
+      "rotation":0,
+      "size":{"width":0.5,"depth":0.5,"height":0.85},
+      "color":"#ffffff",
+      "locked":false,
+      "notes":"内部准备备注"
+    }
+  ],
+  "camera":"overview",
+  "lighting":"neutral"
+}
+```
+
+- 全部米制；地面为 XZ，Y 竖直，落点在地面；rotation 是绕 Y 轴的角度（-360 至 360）。平面原点为场地包围矩形的左下角，x 在 `[0,width]`、z 在 `[0,depth]`。
+- `shape=polygon` 增加 `polygon:[{x,z},...]`，3–32 个不重复、不自交顶点，范围不能超出 width/depth。矩形不附 polygon。出入口点必须在边界上。
+- 图片上传后可在 venue 添加 `floorplanAssetId`，作为参考图保存，不自动识图重建；客户发布不含此私人图片。
+- 物件尺寸上限 width/depth=200m、height=30m；场景最多50个对象。UUID 稳定且不能重复。
+- 内置 materialId：`chair/table/reception/backdrop/display/partition/carpet/decoration`。
+- 外部资源使用 `materialId:"asset"`，必须携带 `assetId`；内置物料不得携带 assetId。
+- `camera`: overview/top/customer；`lighting`: neutral/warm/cool。
+- 客户只读场景刻意不含内部 `notes`；客户端如需用统一 schema 解析，notes 会被补为空字符串。
+- 上传物料/项目名称没有任意 HTML 语义，前端用文本节点展示。
+
+## 前端最小接法
+
+使用发布密钥创建 Supabase 客户端，调用 `auth.signInWithPassword`，再把当前 access token 交给业务辅助客户端：
+
+```ts
+const api = createSceneClient(
+  `${SUPABASE_URL}/functions/v1/scene-api`,
+  async () => (await supabase.auth.getSession()).data.session?.access_token ?? null,
+);
+// getSession 仅用于取本地 token；服务端会独立调用 getUser 验证。
+const studios = await api.request('/studios');
+```
+
+### 工作室与成员
+
+个人工作室由账号确认流程自动创建；`POST /studios` 用于用户明确新增工作室，不能在每次页面加载时调用。创建前生成一次 `requestId=crypto.randomUUID()`，网络失败重试时复用同一个 ID 和正文；改名或修改展示名后重用该 ID 会返回 `409 IDEMPOTENCY_CONFLICT`。工作室名称最多 120 字，成员展示名最多 80 字，均会去除前后空白。
+
+任一成员可查看本工作室的成员列表；只有负责人可按对方已有账号的 UUID 添加或移除编辑成员。账号 ID 可由前端当前 Auth session 展示给本人复制；这里不搜索邮箱、不创建 Auth 账号、不发送邀请邮件。不能通过此接口提升角色、变更或移除负责人；返回 `OWNER_PROTECTED`。不存在的账号返回 `404 USER_NOT_FOUND`；非成员读取/管理工作室返回 `404 STUDIO_NOT_FOUND`。
+
+移除成员会立即作废该成员在工作室项目中的编辑租约；保存的项目、发布分享及已授予项目的资产引用保留。成员本人资产仍归本人，负责人若需停止客户访问应另行撤销相应分享。重新添加成员不会恢复旧租约代次，需要重新获取编辑权。
+
+进入一次编辑会话生成 `crypto.randomUUID()`。不要用账号 UUID 代替 sessionId，也不要把同一个编辑会话 ID 复制到多个标签页。获取租约后使用返回场景/云端 revision，清空旧历史；每30秒续期。保存成功只更新返回的新 revision，不凭前端加一推测。失去租约/断网时保留当前草稿和未保存提示。
+
+### AI 请求和应用
+
+```json
+{
+  "requestId":"60000000-0000-4000-8000-000000000001",
+  "sessionId":"30000000-0000-4000-8000-000000000001",
+  "generation":1,
+  "expectedRevision":0,
+  "localRevision":7,
+  "scene":{},
+  "instruction":"安排20人的暖色坐席沙龙",
+  "mode":"layout",
+  "selectedIds":[]
+}
+```
+
+此处 `scene` 必须替换为上述完整场景，不是空对象。`mode` 为 layout 或 modify。每次本地操作（包括撤销/重做、颜色、锁定、场地调整）递增 localRevision。等待 AI 时可编辑；发生变化则旧提案不能应用。用户选择直接应用或确认提案后调用 `api.applyProposal(proposal,currentState)`。文字策划统一使用 `modify`，以当前场景为起点；`layout` 保留给兼容客户端。
+
+应用发起后短暂冻结编辑，直到返回结果；将 `previousScene → scene` 作为一个历史条目。撤销时恢复 previousScene，再正常保存（会产生新的云端 revision，不回退计数器）。前端不能把提案解释文本当作已完成保存。
+
+### Binggo 资源 Agent
+
+服务器读取当前场景、选中实例、公共资源库以及当前用户有权访问的个人/场景素材，发送紧凑的资源索引和 `sceneResourceRefs`（实例 ID → 本轮资源引用）。提供商不接收下载地址、存储路径或密钥。公共资源使用与前端资源库相同的目标尺寸；私人素材没有可靠尺寸时，必须补充尺寸。
+
+DeepSeek 通过 `add_resource` / `replace_resource` 命令引用索引中的 `resourceId`。Agent 将其解析为已知资产，检查尺寸、边界、结构及锁定状态；提案存储、模型预加载和应用分别重查权限。宽深支持 0.02–50 m，高支持 0.01–30 m；不支持直接改 GLB 内材质。未通过检查的结果最多修复一次，不扩大既有预算。
+
+提案响应增加可选 `modelSuggestions: [{name,reason,prompt}]`（最多 3 项），同 requestId 重放保留建议。没有适合资源时，返回缺项及单件模型描述，前端“前往 HY3 生成”切换现有生成页签；不会自动提交收费生成，也不覆盖已有未确认请求或草稿。生成完成后沿用授权预览、确认尺寸和加入场地流程，后续策划可读取该素材。
+
+如果提案场景与当前场景相同，前端只展示回答/模型建议，不保存或新增撤销记录。建议并非已生成资产；解释文本并非执行成功的依据。
+
+### 模型预览/加入
+
+生成任务 ready 或公共素材导入成功后，请求 `/assets/:id/url` 加载 GLB。预览确认后由用户设定整体 width/depth/height，按资产 metadata 中的包围盒归一化，构造新的 `materialId:"asset"` 实例。通过普通场景保存提交，再标记任务 added。预览/复制/删除实例不删除共享文件。
+
+### 分享
+
+发布只接受云端已保存 revision。返回的 token 仅此时展示；在前端保存/复制链接。丢失后重新发布生成新链接，不能从哈希恢复。查看页从 `location.hash` 读 token，调用 POST `/share/read`，不要把 token 放到 query、日志或第三方分析服务。
+
+资源 URL 有效5分钟；需要刷新时重新请求 share/read，由服务器重新检查撤销。撤销不能收回已下载内容或立即使已签发资源 URL 失效。只读页不要加载工作台编辑能力，也不要显示内部备注。
+
+## 错误语义
+
+统一返回 `{"error":{"code":"...","details":...}}`，无原始数据库/提供商异常堆栈。
+
+| 状态 | 典型 code | 客户端行为 |
+|---|---|---|
+| 400 | VALIDATION_ERROR / INVALID_JSON | 展示字段问题，不自动提交 |
+| 401 | UNAUTHENTICATED | 重新登录，保留本地草稿 |
+| 403 | FORBIDDEN / ORIGIN_FORBIDDEN | 不允许对应操作 |
+| 404 | PROJECT_NOT_FOUND / ASSET_NOT_FOUND / SHARE_NOT_FOUND | 同时用于无访问权和资源不存在，避免枚举 |
+| 409 | LEASE_LOST / REVISION_CONFLICT / STALE_PROPOSAL / IDEMPOTENCY_CONFLICT | 保留草稿、停止自动保存，重新获得租约/更新提案 |
+| 413 | FILE_TOO_LARGE | 更换或优化模型 |
+| 422 | AI_INVALID_PROPOSAL / OUT_OF_BOUNDS / MODEL_TOO_COMPLEX | 显示具体问题；不能当作成功 |
+| 429 | GENERATION_BUSY / AI_BUSY / RECONSTRUCTION_BUSY | 等任务结束，不更换幂等键重试付费提交 |
+| 502/503 | PROVIDER_HTTP_ERROR / SERVICE_NOT_CONFIGURED / BILLING_NOT_CONFIGURED | 保留现有场景，报告服务不可用 |
+
+数据库业务冲突主要为409；AI 校验问题为422。提交付费任务必须在一次用户意图内复用同一个 requestId，网络重试不能生成新 UUID。
+
+## AI 用量与额度
+
+2026-10-03 起应用内不再限制 DeepSeek/HY3 的每日及累计额度：迁移 `20261003180000_unlimited_ai_usage.sql` 将 `scene_private.budgets.limit_cents` 置空，并去除日预留上限的判断，因此不再返回 `429 DAILY_BUDGET_EXCEEDED` / `BUDGET_EXCEEDED`。用量预留与记账、幂等键、并发互斥（`429 AI_BUSY` / `GENERATION_BUSY` / `RECONSTRUCTION_BUSY`）和供应商配置校验仍然生效；供应商账户余额与限流由供应商决定，输入过大仍返回 `413 AI_INPUT_TOO_LARGE`。现有场景/提案 JSON 契约不变，客户端不能指定限额、费用或日期。当前语义见 [AI 使用额度](30-AI使用额度.md)。
+
+### 工作室管理
+
+- `GET /studios/:id/projects`：返回当前工作室的完整项目列表（含当前编辑人），工作室成员可读。
+- `PATCH /studios/:id`：输入 `{name}`，仅负责人可重命名；返回 `{id,name,role,displayName}`。
+- `DELETE /studios/:id`：仅负责人可删除没有任何项目的工作室；成功返回 `{removed:true}`，保留成员账号。非空返回 `STUDIO_NOT_EMPTY`，无权限或不存在返回 `STUDIO_NOT_FOUND`，非负责人返回 `FORBIDDEN`。
+
+以上接口通过 `studio_rpc` 执行，浏览器不能直接调用 RPC。部署需要先应用 `20261003094500_studio_management.sql`，再更新 Edge Function。已有全局 `/projects` 协议保持兼容。

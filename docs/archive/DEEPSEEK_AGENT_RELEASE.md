@@ -1,6 +1,6 @@
 # DeepSeek Agent 上线与回退记录
 
-> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../37-自建Supabase教程.md)。
 
 2026-10-03 已发布到 https://scendance.charlestech.org 。所选改造基线为 `codex/website-latest@188fd9c`。代码仅提交专属 `codex/ds-flash-agent` 分支，没有合并 main/dev。
 

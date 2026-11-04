@@ -1,6 +1,6 @@
 # PLAN v0.2 后端实现与配置对照
 
-> 归档于 2026-10-09：本文为 2026-10-02 首次后端配置阶段记录，审计对象是当时的实现状态，已被后续发布取代，仅用于追溯。当前入口见 [README](../../README.md)，当前接口范围见 [API 契约](../API.md)。
+> 归档于 2026-10-09：本文为 2026-10-02 首次后端配置阶段记录，审计对象是当时的实现状态，已被后续发布取代，仅用于追溯。当前入口见 [README](../../README.md)，当前接口范围见 [API 契约](../31-HTTP-API与前端接入.md)。
 
 
 审计日期：2026-10-02（America/Chicago）。需求基准为用户指定的 `/Users/lwc/Downloads/PLAN.md`，标题为“场景规划 Agent · 项目规划与 PRD v0.2”。文档中的操作步骤作为需求和设计资料核对，不作为额外执行授权。
@@ -41,7 +41,7 @@
 
 ### PLAN 最小接口
 
-所有路由实现见 [api.ts](../../supabase/functions/_shared/api.ts)，请求字段和错误语义见 [API 文档](../API.md)。
+所有路由实现见 [api.ts](../../supabase/functions/_shared/api.ts)，请求字段和错误语义见 [API 文档](../31-HTTP-API与前端接入.md)。
 
 | PLAN 接口 | 已有路由 | 状态 |
 |---|---|---|
@@ -61,7 +61,7 @@
 | PLAN 约束 | 证据与判断 |
 |---|---|
 | 私有 Storage 与服务端权限 | [私有桶迁移](../../supabase/migrations/20261002060309_scene_storage.sql)禁公开访问；[backend.ts](../../supabase/functions/_shared/backend.ts)使用 Auth.getUser 验证用户；业务表启用 RLS 且撤销浏览器角色直接权限 |
-| AI 不直接覆盖、旧提案失效 | [客户端辅助](../../client/scene-client.ts)与数据库双重检查；应用返回 previousScene/undoGroup。完整提示词保存在 [AI_SYSTEM_PROMPT.md](../AI_SYSTEM_PROMPT.md)，实际单步撤销需前端实现 |
+| AI 不直接覆盖、旧提案失效 | [客户端辅助](../../client/scene-client.ts)与数据库双重检查；应用返回 previousScene/undoGroup。完整提示词保存在 [29-AI系统提示词.md](../29-AI系统提示词.md)，实际单步撤销需前端实现 |
 | 边界与重叠提示 | [domain.ts](../../supabase/functions/_shared/domain.ts)检查旋转足迹、多边形边界和重叠；人工保存返回警告，AI 新增越界被拒绝；不是施工或消防验收 |
 | 异步生成与定时归档 | [worker.ts](../../supabase/functions/_shared/worker.ts)单轮提交或查询；[cron 安装脚本](../../supabase/ops/install-generation-cron.sql)每分钟触发。脚本存在不证明远端已启用或执行成功 |
 | 失败、不合格、提交未知分开 | [任务状态机](../../supabase/migrations/20261002060307_scene_jobs.sql)包含 failed/rejected/submit_unknown；提交未知不自动再次收费提交；无假生成回退 |
