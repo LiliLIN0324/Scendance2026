@@ -28,6 +28,8 @@ export interface Render2DOptions {
   referenceImage?: ReferenceImageLayer;
   /** The zone rectangle being dragged out, drawn over everything as a dashed outline (#155). */
   zoneDraft?: ZoneRect | null;
+  /** The 2D marquee being dragged out — a light green selection rectangle (#P0-3). */
+  marqueeDraft?: ZoneRect | null;
   hasCollision: (item: FurnitureItem) => boolean;
   /**
    * Margin (CSS px) around the room. The default suits the full-screen 2D
@@ -215,6 +217,30 @@ export function render2DTopDown(options: Render2DOptions): void {
   if (options.zoneDraft) {
     drawZoneDraft(ctx, layout, options.zoneDraft, offsetX, offsetY, scale);
   }
+  if (options.marqueeDraft) {
+    drawMarqueeDraft(ctx, layout, options.marqueeDraft, offsetX, offsetY, scale);
+  }
+}
+
+/** Selection marquee: brand green, no label, 1.5 px hairline dashed outline. */
+function drawMarqueeDraft(
+  ctx: CanvasRenderingContext2D,
+  layout: RoomLayout,
+  draft: ZoneRect,
+  offsetX: number,
+  offsetY: number,
+  scale: number
+): void {
+  const { x, y, w, h } = zoneCanvasRect(draft, layout, offsetX, offsetY, scale);
+  ctx.save();
+  ctx.fillStyle = 'rgba(74, 124, 89, 0.10)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#4A7C59';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 3]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+  ctx.restore();
 }
 
 /** Fill / outline alpha of a zone's tint, on top of the floor colour or tracing image. */

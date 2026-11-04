@@ -1,13 +1,10 @@
 import { useCallback, type MutableRefObject, type RefObject } from 'react';
 import { notify } from '../lib/editor-notices';
-import {
-  downloadCanvasAsPng,
-  downloadDataUrlAsPng,
-  downloadSceneAsGlb,
-  readLayoutFromFile,
-} from '../lib/file-io';
+import { downloadDataUrlAsPng, readLayoutFromFile } from '../lib/file-io';
+import { downloadTextFile } from '../lib/plan-export/download';
+import { ALBUM_SHOTS, albumBaseName, renderAlbumHtml } from '../lib/shot-list';
 import { confirmReplace, snapshotBeforeReplace } from '../lib/restore-point';
-import { encodeShareUrl, isShareUrlReasonablySized } from '../lib/share';
+import { encodeShareSnapshot, ShareSnapshotError } from '../../../lib/share-snapshot';
 import type { LayoutActions } from './use-layout-state';
 import type { CameraPreset, RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
@@ -37,8 +34,20 @@ export interface RenderExportOptions {
   scale: number;
 }
 
+export interface ShareViewerLink {
+  url: string;
+  name: string;
+  objects: number;
+  /** Objects whose signed model URL could not travel in the link. */
+  droppedAssets: number;
+}
+
+export interface RenderAlbumResult {
+  ok: boolean;
+  count: number;
+}
+
 export interface UseImportExportResult {
-  handleScreenshot(): void;
   /**
    * Renders a fresh frame at a higher pixel ratio (the WebGL buffer is read in
    * the same task, so no preserveDrawingBuffer is needed) and downloads it as a
@@ -47,8 +56,17 @@ export interface UseImportExportResult {
   exportRenderImage(options: RenderExportOptions): Promise<boolean>;
   /** 同一帧只编码一次：先给导出卡做预览，点确认后再下载这张，不重渲染。 */
   captureRenderImage(options: RenderExportOptions): Promise<string | null>;
-  handleExportGlb(): Promise<void>;
-  handleShareLink(): Promise<void>;
+  /**
+   * 顺序抓取机位册的全部机位：每张单独命名下载，再出一份内联图册 HTML。
+   * 顺序执行，避免同时抬高 pixelRatio 把显存打满。
+   */
+  exportRenderAlbum(options: { scale: number }): Promise<RenderAlbumResult>;
+  /**
+   * Encodes the live layout into a self-contained read-only viewer link and
+   * copies it. The payload lives in the URL hash, so the link works offline
+   * and needs no backend. Returns null when the link could not be produced.
+   */
+  handleShareLink(): Promise<ShareViewerLink | null>;
   /** Resolves true when the file replaced the current house. */
   handleImport(file: File): Promise<boolean>;
 }
@@ -66,24 +84,6 @@ export function useImportExport({
   applyPreset,
   onImported,
 }: UseImportExportParams): UseImportExportResult {
-  const handleScreenshot = useCallback(() => {
-    const canvas = view2D ? canvas2DRef.current : canvasRef.current;
-    if (!canvas) return;
-    const failed = () => { notify('画面导出失败，请稍后重试。', 'error'); };
-    try {
-      // The renderer runs without preserveDrawingBuffer, so render a fresh
-      // frame synchronously — the buffer is valid within the same task.
-      if (!view2D && rendererRef.current && sceneRef.current && cameraRef.current) {
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
-      }
-      void downloadCanvasAsPng(canvas, layout.name || 'room-layout').then((ok) => {
-        if (!ok) failed();
-      }, failed);
-    } catch {
-      failed();
-    }
-  }, [view2D, layout.name, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef]);
-
   const captureRenderImage = useCallback(
     async ({ view, scale }: RenderExportOptions) => {
       if (view2D) {
@@ -138,31 +138,46 @@ export function useImportExport({
     [captureRenderImage, layout.name]
   );
 
-  const handleExportGlb = useCallback(async () => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    try {
-      await downloadSceneAsGlb(scene, layout.name || 'room-layout');
-    } catch (exportError) {
-      notify(exportError instanceof Error ? exportError.message : 'GLB 导出失败，请稍后重试。', 'error');
+  const exportRenderAlbum = useCallback(async ({ scale }: { scale: number }): Promise<RenderAlbumResult> => {
+    const base = albumBaseName(layout.name);
+    const shots: { label: string; dataUrl: string }[] = [];
+    for (const shot of ALBUM_SHOTS) {
+      const dataUrl = await captureRenderImage({ view: shot.id, scale });
+      if (!dataUrl) return { ok: false, count: shots.length };
+      shots.push({ label: shot.label, dataUrl });
+      downloadDataUrlAsPng(dataUrl, `${base}_${shot.filePart}`);
+      // 连续下载之间留一拍，让浏览器把上一张真正落下。
+      await new Promise(resolve => setTimeout(resolve, 60));
     }
-  }, [sceneRef, layout.name]);
+    downloadTextFile(`${base}册.html`, 'text/html;charset=utf-8', renderAlbumHtml({
+      projectName: layout.name,
+      generatedAt: new Date().toISOString(),
+      shots,
+    }));
+    return { ok: true, count: shots.length };
+  }, [captureRenderImage, layout.name]);
 
-  const handleShareLink = useCallback(async () => {
-    const origin = window.location.origin + window.location.pathname;
-    const { url, strippedFloorPlan } = await encodeShareUrl(layout, origin);
-
-    if (!isShareUrlReasonablySized(url)) {
-      notify('这份布置太大，装不进分享链接。请改用导出 JSON 后发送文件。', 'error');
-      return;
-    }
-
+  const handleShareLink = useCallback(async (): Promise<ShareViewerLink | null> => {
     try {
-      await navigator.clipboard.writeText(url);
-      notify(strippedFloorPlan ? '分享链接已复制，为控制长度未包含平面图。' : '分享链接已复制。', 'success');
-    } catch {
-      // Clipboard refused (permissions, insecure context): hand the link over to copy by hand.
-      notify('浏览器不允许写入剪贴板，请手动复制分享链接。', 'info', { copyText: url });
+      const { url, snapshot, droppedAssets } = await encodeShareSnapshot(layout, `${window.location.origin}/view`);
+      const link = { url, name: snapshot.name, objects: snapshot.scene.objects, droppedAssets };
+      try {
+        await navigator.clipboard.writeText(url);
+        notify(droppedAssets > 0
+          ? `只读 3D 链接已复制；${droppedAssets} 个外部模型未能带走，查看器会显示占位。`
+          : '只读 3D 链接已复制，打开即可在浏览器里查看方案。', 'success');
+      } catch {
+        // Clipboard refused (permissions, insecure context): hand the link over to copy by hand.
+        notify('浏览器不允许写入剪贴板，请手动复制只读 3D 链接。', 'info', { copyText: url });
+      }
+      return link;
+    } catch (shareError) {
+      if (shareError instanceof ShareSnapshotError) {
+        notify(shareError.message, 'error');
+      } else {
+        notify('生成只读 3D 链接失败，请稍后重试。', 'error');
+      }
+      return null;
     }
   }, [layout]);
 
@@ -187,5 +202,5 @@ export function useImportExport({
     [layout, actions, onImported]
   );
 
-  return { handleScreenshot, exportRenderImage, captureRenderImage, handleExportGlb, handleShareLink, handleImport };
+  return { exportRenderImage, captureRenderImage, exportRenderAlbum, handleShareLink, handleImport };
 }

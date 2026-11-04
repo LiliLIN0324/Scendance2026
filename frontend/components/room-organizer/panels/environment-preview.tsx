@@ -2,8 +2,7 @@
 
 import { ArrowLeftRight, Loader2, Mountain } from '@/components/solid-icons';
 import { useMemo } from 'react';
-import { listAholoAssets } from '../lib/aholo-assets';
-import { DEMO_WORLD_SCENE_ID, listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
+import { listShippedAssets, DEMO_WORLD_SCENE_ID, shippedImageUrl } from '../lib/shipped-assets';
 import { MaterialThumb } from './material-thumb';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
@@ -22,14 +21,12 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
   onClear(): void;
 }): JSX.Element {
   const scenes = useMemo<SceneCard[]>(() => {
-    const shipped = listShippedAssets('spz').map(asset => {
+    // 这里只放演示场景：用户自己的实景扫描统一在空间卡的「真实场地」里选，避免两处重复。
+    return listShippedAssets('spz').map(asset => {
       const image = shippedImageUrl(asset);
       const sample = asset.assetId === DEMO_WORLD_SCENE_ID || asset.assetId === 'shipped-small-launch-hall';
       return { assetId: asset.assetId, name: asset.name, ...(image ? { image } : {}), ...(sample ? { sample: true } : {}) };
     });
-    const local = listAholoAssets().filter(asset => asset.kind !== 'glb')
-      .map(asset => ({ assetId: asset.assetId, name: asset.name }));
-    return [...shipped, ...local];
   }, []);
   const busy = preview.status === 'loading';
   const currentId = current?.assetId ?? '';
@@ -52,7 +49,7 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
             </li>;
           })}
           {environments.length > 0 && <li className="sc-env-switch-foot"><button type="button" onClick={onClear}>清空项目中的场景</button></li>}
-          <li className="sc-env-switch-note">选择场景后会加入当前项目，可再指定楼层和位置。</li>
+          <li className="sc-env-switch-note">这里只列演示场景；自己的实景扫描在下方「真实场地」里选。</li>
         </ul>
       </details>
     </div>

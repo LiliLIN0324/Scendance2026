@@ -426,6 +426,9 @@
   padding:8px; border:1px solid var(--wk-hair); border-radius:var(--r-md); background:var(--wk-paper);
 }
 .sc-space-section-head { display:flex; align-items:center; gap:6px; min-width:0; }
+/* World 卡的唯一说明入口收在标题行最右侧，不再单独占行。 */
+.sc-space-aholo-main .sc-space-section-head { align-self:stretch; }
+.sc-space-aholo-main .sc-space-section-head > .sc-space-info { margin-left:auto; }
 .sc-space-section-head > svg { flex:none; color:var(--wk-muted); }
 .sc-space-section-head h3 { margin:0; font-size:13px; line-height:18px; }
 /* 场景模板默认折起，与环境、结构齐平，不再一进面板就铺满模板大卡。 */
@@ -449,9 +452,15 @@
   column-gap:6px; padding:7px 9px; min-width:0; text-align:left; cursor:pointer;
   border:1px solid var(--wk-hair); border-radius:var(--r-md); background:var(--wk-paper); color:var(--wk-ink-soft);
 }
-.sc-space-workflow-switch button > svg { grid-row:1 / span 2; }
-.sc-space-workflow-switch button > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-cap); font-weight:600; }
-.sc-space-workflow-switch button > small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--wk-muted); font-size:10px; }
+/* 图标是 span.sc-material-symbol（并非 svg），要显式占满左列，否则描述会被排进 16px 图标列截成一个字。 */
+.sc-space-workflow-switch button > svg,
+.sc-space-workflow-switch button > .sc-material-symbol { grid-column:1; grid-row:1 / span 2; }
+.sc-space-workflow-switch button > span:not(.sc-material-symbol) { grid-column:2; grid-row:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-cap); font-weight:600; }
+.sc-space-workflow-switch button > small {
+  grid-column:2; grid-row:2;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; white-space:normal; color:var(--wk-muted); font-size:10px; line-height:1.35;
+}
 .sc-space-workflow-switch button.is-active { border-color:var(--wk-green); box-shadow:inset 0 0 0 1px var(--wk-green); color:var(--wk-ink); }
 .sc-space-workflow-switch button:focus-visible { outline:2px solid var(--wk-green); outline-offset:2px; }
 .sc-space-card.is-aholo { min-height:0; max-height:none; overflow:visible; }

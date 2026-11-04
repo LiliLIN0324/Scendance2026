@@ -1,5 +1,6 @@
 import { removeAndDispose } from './builder-utils';
 import { applyOutdoorWeather } from './outdoor';
+import { BASE_ENVIRONMENT_INTENSITY, LOOK_PRESETS, makeBackdropTexture } from './render-look';
 import type { Weather } from '../lib/types';
 import type * as ThreeNS from 'three';
 
@@ -88,15 +89,16 @@ export function applyTimeOfDay(
 
   // Vertical sky gradient (zenith → horizon) instead of a flat colour. The
   // texture is screen-space, so it reads as atmosphere without a sky dome.
+  // 用共享档案里的渐变：编辑器、查看器、导出三处的背景必须是同一张。
   const previousBackground = scene.background;
-  scene.background = makeSkyGradientTexture(THREE, profile.backgroundTop, profile.background);
+  scene.background = makeBackdropTexture(THREE, LOOK_PRESETS.neutral.skyZenith, LOOK_PRESETS.neutral.background);
   updateNightSky(THREE, scene, computeNightSky(time));
   if (previousBackground && (previousBackground as ThreeNS.Texture).isTexture) {
     (previousBackground as ThreeNS.Texture).dispose();
   }
-  // Scale image-based lighting with the ambient profile so the environment
-  // map brightens days without washing out nights (0.18 night .. 0.65 noon).
-  scene.environmentIntensity = profile.ambient.intensity * 0.9;
+  // 环境强度也走共享档案，不再按小时档位单独缩放；否则同一套家具在
+  // 编辑器里和环境贴图更亮的查看器里会差一档。
+  scene.environmentIntensity = BASE_ENVIRONMENT_INTENSITY;
 
   for (const obj of scene.children) {
     const tag = obj.userData.type as string | undefined;
@@ -274,31 +276,9 @@ export function computeNightSky(hour: number): NightSky {
 }
 
 /**
- * 1×256 vertical-gradient CanvasTexture used as the screen-space scene
- * background. Rebuilt on every time-of-day change; the previous texture is
- * disposed by the caller.
+ * 背景渐变已迁到 three/render-look.ts（makeBackdropTexture），与查看器、
+ * 导出共用同一张；这里不再保留旧的 canvas 版本。
  */
-function makeSkyGradientTexture(
-  THREE: ThreeModule,
-  top: number,
-  bottom: number
-): ThreeNS.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, hexToCss(top));
-  // Bias the blend toward the horizon colour in the lower third so the
-  // horizon glow sits where the ground line actually is on screen.
-  gradient.addColorStop(0.65, hexToCss(mixHex(top, bottom, 0.7)));
-  gradient.addColorStop(1, hexToCss(bottom));
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
 
 const STAR_COUNT = 350;
 const STAR_SEED = 20260918;
@@ -476,10 +456,6 @@ function makeMoonTexture(THREE: ThreeModule): ThreeNS.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
-}
-
-function hexToCss(hex: number): string {
-  return `#${hex.toString(16).padStart(6, '0')}`;
 }
 
 function nightIntensity(hour: number): number {

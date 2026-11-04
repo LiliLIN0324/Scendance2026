@@ -38,14 +38,22 @@ let loaderPromise: Promise<void> | null = null;
 
 const PROXY_DOWN_HINT = '地图降级：本机地图代理未运行（127.0.0.1:3199）。请用 npm run dev 启动，代理会随 dev 自动拉起；若仍失败，检查 3199 端口是否被占用。';
 
-/** 代理的 /health 探活，避免把「代理没起」误报成 Key 被拒。 */
+/**
+ * 代理的 /health 探活，避免把「代理没起」误报成 Key 被拒。
+ * dev 刚启动时代理可能还在回源预热，单次 1.5s 会误判降级，这里给约 4s 的短重试窗口。
+ */
 async function assertDevProxy(proxy: string): Promise<void> {
-  try {
-    const res = await fetch(`${proxy}/health`, { signal: AbortSignal.timeout(1500) });
-    if (!res.ok) throw new Error(String(res.status));
-  } catch {
-    throw new Error(PROXY_DOWN_HINT);
+  const attempts = 5;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const res = await fetch(`${proxy}/health`, { signal: AbortSignal.timeout(1500) });
+      if (res.ok) return;
+    } catch {
+      // 继续重试
+    }
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500));
   }
+  throw new Error(PROXY_DOWN_HINT);
 }
 
 export function loadAmapScript(key: string, security: string): Promise<void> {

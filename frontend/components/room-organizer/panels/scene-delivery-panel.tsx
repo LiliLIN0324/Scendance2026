@@ -6,6 +6,9 @@ import { useBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { handoffLimits, handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { deliveryScene, deliveryMaterials, type DeliverySnapshot } from '../lib/scene-delivery';
+import { downloadTextFile } from '../lib/plan-export/download';
+import { layoutToDxf } from '../lib/plan-export/dxf';
+import { openPlanPrintWindow } from '../lib/plan-export/print';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABELS } from '../lib/scene-handoff';
 import { EventOperationsPanel } from './event-operations-panel';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
@@ -170,7 +173,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   const checking = reviews?.layout !== layout && preview.items.some(item => item.handoff?.status === 'review' || item.handoff?.status === 'accepted');
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setNotice(''); exportSnapshot.current = null; }, [layout.id, cloud.user?.id, cloud.project?.id]);
-  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production' | 'activity' | 'timetable'): Promise<void> {
+  async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production' | 'activity' | 'timetable' | 'print' | 'dxf' | 'manifest'): Promise<void> {
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice('');
     const before = latest.current;
@@ -182,7 +185,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     const metadata = snapshot.metadata;
     try {
       if((kind==='operations'||kind==='json'||kind==='production'||kind==='activity'||kind==='timetable')&&!before.checkinsReady)throw new Error('点验资料尚未读取完成，请重新读取后导出。');
-      const { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } = await import('../lib/scene-delivery');
+      const { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv, deliveryManifestCsv } = await import('../lib/scene-delivery');
       if (!stillCurrent()) return;
       if (kind === 'activity' || kind === 'timetable') {
         if (!backupActions) throw new Error('当前工作台尚未准备完整活动资料，未生成交接文件。');
@@ -211,6 +214,26 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         if (!stillCurrent()) return;
         downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部制作交接_${metadata.id}`, 'html');
         setNotice('内部制作交接单已导出，可在浏览器打开并打印。请核对未确定的人员、供应方和费用。');
+      } else if (kind === 'print' || kind === 'dxf' || kind === 'manifest') {
+        const floor = layout.floors[0];
+        if (!floor) throw new Error('当前没有楼层，无法导出图纸。');
+        const part = (value: string, fallback: string) => (value || fallback).replace(/[\\/:*?"<>|\s]+/g, '_');
+        const base = part(layout.name, 'Scendance');
+        if (kind === 'print') {
+          if (!stillCurrent()) return;
+          openPlanPrintWindow(layout, floor);
+          setNotice('已打开按比例打印窗口；在打印对话框选择「另存为 PDF」即可交付。');
+        } else if (kind === 'dxf') {
+          const text = layoutToDxf(layout, floor);
+          if (!stillCurrent()) return;
+          downloadTextFile(`${base}_平面_${part(floor.name, '1F')}.dxf`, 'application/dxf;charset=utf-8', text);
+          setNotice('平面 DXF 已导出，可在 CAD 中按真实比例量取。');
+        } else {
+          const text = await deliveryManifestCsv(layout, metadata);
+          if (!stillCurrent()) return;
+          downloadSceneDelivery(text, 'text/csv;charset=utf-8', `${layout.name}_交付清单_${metadata.id}`, 'csv');
+          setNotice('交付清单已导出，逐行列出了可带走文件、件数与缺失原因。');
+        }
       } else if (kind === 'glb') {
         const result = await exportDeliveryGlb(layout, controller);
         if (!stillCurrent()) throw new Error('场景或账号已变化，请按当前方案重新导出。');
@@ -277,6 +300,11 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
         {briefUnavailable && <p className="sc-note">活动需求尚未准备好，请在活动需求中重试读取。</p>}
       </>}
       <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || !layout.eventOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>
+      <h3>图纸与交付清单</h3>
+      <button className="sc-button sc-full" type="button" disabled={busy} onClick={() => void download('print')}>打开按比例打印（另存 PDF）</button>
+      <button className="sc-button sc-full" type="button" disabled={busy} onClick={() => void download('dxf')}>导出平面 DXF</button>
+      <button className="sc-button sc-full" type="button" disabled={busy} onClick={() => void download('manifest')}>导出交付清单 CSV</button>
+      <p className="sc-note">图纸按当前第一层生成；交付清单说明本页能带走哪些文件、各有多少件、缺什么。不支持的类型会写明原因，不隐藏。</p>
       <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('glb')}>{busy ? '正在准备交付…' : '导出场景 GLB'}</button>
       <button className="sc-button sc-full" type="button" disabled={busy || checking || checkinsUnavailable || !!preview.error} onClick={() => void download('json')}>导出场景 JSON</button>
       <button className="sc-button sc-full" type="button" disabled={busy || checking || !!preview.error} onClick={() => void download('execution')}>导出执行清单 CSV</button>

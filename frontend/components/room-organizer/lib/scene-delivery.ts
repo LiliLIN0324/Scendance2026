@@ -2,8 +2,6 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ensureRecoverableGlbAsset, publicAssetLocalUrl } from '@/lib/public-asset-recovery';
-import assetIds from '../../../../assets/library/asset-ids.json';
-import catalogue from '../../../../assets/library/catalogue.json';
 import { handoffSchema, type Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import { eventOperationsSchema, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { createFurnitureModel } from '../three/furniture-builders';
@@ -12,6 +10,7 @@ import { buildRoom } from '../three/room-builder';
 import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
+import { deliverableInventory } from './deliverable-inventory';
 import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
 import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
 import type { RoomLayout } from './types';
@@ -26,7 +25,6 @@ export function deliveryScene(layout: RoomLayout) {
   return layoutToBackendScene(layout);
 }
 const materialItems = (layout: RoomLayout) => layout.floors.flatMap(floor => floor.items.filter(item => !item.venueEntranceId && !item.structuralOpeningId && !item.structuralColumnId));
-const publicModels = new Map(catalogue.models.map(model => [(assetIds as Record<string,string>)[model.cdnUrl], model]));
 export interface DeliveryMaterial {
   name: string; materialId: string; assetVersionId: string | null; source: string;
   width: number; depth: number; height: number; color: string; quantity: number; objectIds: string[];
@@ -36,22 +34,15 @@ export interface DeliveryMaterial {
 
 /** A version reference is the archived immutable asset ID, never an expiring URL. */
 export function deliveryMaterials(layout: RoomLayout): DeliveryMaterial[] {
-  const scene = deliveryScene(layout);
-  const names = new Map(materialItems(layout).map(item => [item.id, item]));
-  const groups = new Map<string, DeliveryMaterial>();
-  for (const object of scene.objects) {
-    const item = names.get(object.id)!;
-    const publicModel = object.assetId ? publicModels.get(object.assetId) : undefined;
-    const source = publicModel ? 'public_library' : item.source ?? (object.assetId ? 'cloud_asset' : 'builtin');
-    const key = JSON.stringify([object.assetId ?? object.materialId, object.size, object.color, source]);
-    const prior = groups.get(key);
-    if (prior) { prior.quantity++; prior.objectIds.push(object.id); continue; }
-    groups.set(key, { name: item.name, materialId: object.materialId, assetVersionId: object.assetId ?? null, source,
-      ...object.size, color: object.color, quantity: 1, objectIds: [object.id],
-      procurement: source === 'generated' ? '概念物料，采购待确认' : '规格与采购待确认',
-      sourceUrl: publicModel?.pageUrl ?? null, license: publicModel ? catalogue.license : null, sha256: publicModel?.sha256 ?? null });
-  }
-  return [...groups.values()];
+  // Keep the existing delivery gate (single floor, no preset/entrance extension).
+  deliveryScene(layout);
+  // Counting lives in one place; this outlet only re-shapes rows for CSV/JSON.
+  return deliverableInventory(layout).map(row => ({
+    name: row.name, materialId: row.materialId, assetVersionId: row.assetVersionId,
+    source: row.source, width: row.width, depth: row.depth, height: row.height, color: row.color,
+    quantity: row.quantity, objectIds: row.objectIds, procurement: row.procurement,
+    sourceUrl: row.sourceUrl ?? null, license: row.license ?? null, sha256: row.sha256 ?? null,
+  }));
 }
 
 export interface DeliverySnapshot { id: string; generatedAt: string }
@@ -123,6 +114,43 @@ export async function sceneExecutionCsv(layout: RoomLayout, snapshot?: DeliveryS
     1,item.ownerName,item.dueDate,item.acceptance,HANDOFF_STATUS_LABELS[item.status],
     item.hasHandoff ? HANDOFF_STATUS_LABELS[item.effectiveStatus] : '未分配',item.evidenceUrls.join('\n'),item.evidenceNote,
     snapshot?.id,snapshot?.generatedAt]);
+  return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
+}
+
+/**
+ * 交付清单：一页列清「本次能带走什么、文件名、件数、缺什么」。
+ * 和物料/执行清单共用 deliveryMaterials / deliveryExecution，不另算一套口径。
+ * 某类不支持时仍出一行并写明原因，不把失败藏起来。
+ */
+export async function deliveryManifestCsv(layout: RoomLayout, snapshot?: DeliverySnapshot): Promise<string> {
+  let gate = '';
+  let materials: DeliveryMaterial[] = [];
+  let execution: DeliveryExecution[] = [];
+  try {
+    deliveryScene(layout);
+    materials = deliveryMaterials(layout);
+    execution = await deliveryExecution(layout);
+  } catch (error) {
+    gate = error instanceof Error ? error.message : '当前场景暂不支持交付导出。';
+  }
+  const floorName = layout.floors[0]?.name ?? '1F';
+  const id = snapshot?.id ?? '';
+  const when = snapshot?.generatedAt ?? '';
+  const tasks = layout.eventOperations?.tasks.length ?? 0;
+  const status = gate ? '不支持' : '可导出';
+  const blank = (value: string, fallback: string) => (value || fallback).replace(/\s+/g, '_');
+  const rows: unknown[][] = [['类别','建议文件名','状态','件数','说明','交付编号','生成时间']];
+  rows.push(['交付清单 CSV', `${layout.name}_交付清单_${id}.csv`, '可导出', rows.length, '本清单：逐行说明可带走的文件、件数与缺失原因。', id, when]);
+  rows.push(['平面图 DXF', `${blank(layout.name, 'Scendance')}_平面_${blank(floorName, '1F')}.dxf`, '可导出', 1, '按真实比例导出，含墙体、门窗、固定结构与尺寸图层；可在 CAD 中量取。', id, when]);
+  rows.push(['平面图打印', `${blank(layout.name, 'Scendance')}_平面_${blank(floorName, '1F')}.pdf`, '可导出', 1, '在浏览器打印窗口按 A4 比例输出；选择「另存为 PDF」即可交付。', id, when]);
+  rows.push(['物料清单 CSV', `${layout.name}_物料清单_${id}.csv`, status, materials.length, gate || '每类名称、尺寸、颜色、数量、资产版本、来源许可与采购状态。', id, when]);
+  rows.push(['执行清单 CSV', `${layout.name}_执行清单_${id}.csv`, status, execution.length, gate || '每件工作单负责人、期限、验收条件、证据链接与有效状态。', id, when]);
+  rows.push(['场景 JSON', `${layout.name}_场景_${id}.json`, status, 1, gate || '场景、执行记录、物料与活动安排同一份快照，便于复核。', id, when]);
+  rows.push(['场景 GLB', `${layout.name}_${id}.glb`, status, execution.length, gate || '重新加载复检通过后导出；不含环境光与后处理，私有模型重开仍需授权。', id, when]);
+  rows.push(['活动安排 CSV', `${layout.name}_活动安排_${id}.csv`, tasks ? '可导出' : '需先补资料', tasks, tasks ? '任务阶段、负责人、计划与实际时间、关联物件。' : '先在活动安排中保存任务。', id, when]);
+  rows.push(['完整活动交接 HTML', `${layout.name}_内部活动交接_${id}.html`, tasks ? '可导出' : '需先补资料', 1, tasks ? '含需求、任务、工作单、制作计划与点验；内部资料，请核对后交付。' : '先在活动安排中保存任务并补齐需求与点验。', id, when]);
+  rows.push(['执行时间表 HTML', `${layout.name}_执行时间表_${id}.html`, tasks ? '可导出' : '需先补资料', 1, tasks ? '计划与实际分别保留；未定项保持待确认。' : '先在活动安排中保存任务。', id, when]);
+  rows.push(['制作交接 HTML', `${layout.name}_内部制作交接_${id}.html`, '可导出', 1, '未确定的人员、供应方与费用会明确标出，不填默认值。', id, when]);
   return '\uFEFF' + rows.map(row => row.map(csvField).join(',')).join('\r\n');
 }
 

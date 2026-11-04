@@ -23,26 +23,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); controller.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-it('registers, clears the password, handles an invalid OTP, then enters the workspace', async () => {
+it('sends the legacy login route into the workspace with a login hint', async () => {
   render(<AuthProvider><AuthPage /></AuthProvider>);
-  fireEvent.click(screen.getByRole('button', { name: 'Sign up · 注册' }));
-  fireEvent.change(screen.getByLabelText('如何称呼你'), { target: { value: '测试创作者' } });
-  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'new@example.com' } });
-  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-long-password' } });
-  await waitFor(() => expect(screen.getByRole('button', { name: /创建账号/ }).hasAttribute('disabled')).toBe(false));
-  fetchMock.mockResolvedValueOnce(response({ id: 'user-test' }));
-  fireEvent.click(screen.getByRole('button', { name: /创建账号/ }));
-  await screen.findByLabelText('六位验证码');
-  expect(screen.queryByLabelText('密码')).toBeNull();
-  expect(screen.getByRole('button', { name: /秒后可重新发送/ }).hasAttribute('disabled')).toBe(true);
-  fetchMock.mockResolvedValueOnce(response({ code: 'otp_expired' }, 403));
-  fireEvent.change(screen.getByLabelText('六位验证码'), { target: { value: '012345' } });
-  fireEvent.click(screen.getByRole('button', { name: /验证并进入工作室/ }));
-  expect((await screen.findByRole('alert')).textContent).toContain('验证码已失效');
-  expect(navigation.replace).not.toHaveBeenCalled();
-  fetchMock.mockResolvedValueOnce(response(auth));
-  fireEvent.click(screen.getByRole('button', { name: /验证并进入工作室/ }));
-  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/'));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/?login=1'));
 });
 
 it('completes recovery without redirecting to the editor and checks password confirmation', async () => {
@@ -98,28 +81,14 @@ it('strips recovery credentials from the URL before routing the old callback to 
 
 
 it.each([
-  ['/auth', '/'],
-  ['/auth?next=%2F', '/'],
-  ['/auth?next=%2Fprojects%3Fview%3Drecent%23saved', '/projects?view=recent#saved'],
-  ['/auth?next=https%3A%2F%2Fevil.example', '/'],
-  ['/auth?next=%2Fauth', '/'],
-])('keeps %s as the login page and only follows its safe destination after login', async (path, target) => {
+  ['/auth', '/?login=1'],
+  ['/auth?next=%2F', '/?login=1&next=%2F'],
+  ['/auth?next=%2Fprojects%3Fview%3Drecent%23saved', '/?login=1&next=%2Fprojects%3Fview%3Drecent%23saved'],
+  ['/auth?next=https%3A%2F%2Fevil.example', '/?login=1&next=https%3A%2F%2Fevil.example'],
+  ['/auth?next=%2Fauth', '/?login=1&next=%2Fauth'],
+])('forwards %s to the workspace login hint, leaving the destination to the login gate', async (path, target) => {
   window.history.replaceState(null, '', path);
   render(<AuthProvider><AuthPage /></AuthProvider>);
-  await waitFor(() => expect(screen.getByRole('button', { name: '登录并进入工作台' }).hasAttribute('disabled')).toBe(false));
-  expect(navigation.replace).not.toHaveBeenCalled();
-  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeTruthy();
-  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'test@example.com' } });
-  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-long-password' } });
-  fetchMock.mockResolvedValueOnce(response(auth));
-  fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(target));
-});
-
-
-it('enters the local workspace without signing in', async () => {
-  render(<AuthProvider><AuthPage /></AuthProvider>);
-  fireEvent.click(screen.getByRole('button', { name: '先体验本地工作台' }));
-  expect(navigation.push).toHaveBeenCalledWith('/?local=1');
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(navigation.push).not.toHaveBeenCalled();
 });

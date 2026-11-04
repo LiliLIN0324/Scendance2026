@@ -1282,6 +1282,80 @@ export class BackendSession {
       throw error;
     }
   }
+  /** 本机 GLB 上传口：原始二进制直传，带进度；服务端按文件哈希去重并登记资产。本机副本不在这里处理。 */
+  async uploadLocalAsset(
+    file: Blob,
+    meta: { name: string; source: 'aholo' | 'upload'; sourceId?: string },
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<{ id: string; byteSize: number; sha256: string; reused?: boolean; metadata?: Record<string, unknown> }> {
+    if (!file.size) throw new SceneApiError('EMPTY_ASSET', 422, null);
+    if (file.size > 10 * 1024 * 1024) throw new SceneApiError('ASSET_TOO_LARGE', 413, { limit: 10 * 1024 * 1024 });
+    if (!meta.name.trim()) throw new SceneApiError('ASSET_NAME_REQUIRED', 422, null);
+    if (meta.source === 'aholo' && !meta.sourceId) throw new SceneApiError('SOURCE_ID_REQUIRED', 422, null);
+    this.requireConfig();
+    const scope = this.captureRequestScope(), epoch = this.epoch, token = await this.accessToken();
+    const credentials = this.tokens;
+    if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
+    const query = new URLSearchParams({ name: meta.name.trim().slice(0, 120), source: meta.source, ...(meta.sourceId ? { sourceId: meta.sourceId } : {}) });
+    try {
+      const result = await this.sendAssetBlob(`${this.config.apiUrl}/assets/glb?${query.toString()}`, token, file, onProgress);
+      if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
+      const parsed = z.object({
+        id: uuid,
+        byteSize: z.number().int().positive(),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        reused: z.boolean().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      }).parse(result);
+      return {
+        id: parsed.id,
+        byteSize: parsed.byteSize,
+        sha256: parsed.sha256,
+        ...(parsed.reused !== undefined ? { reused: parsed.reused } : {}),
+        ...(parsed.metadata !== undefined ? { metadata: parsed.metadata } : {}),
+      };
+    } catch (error) {
+      if (epoch === this.epoch && this.isCurrentRequestScope(scope)) {
+        if (error instanceof SceneApiError && error.status === 401) {
+          if (!this.tokens || this.tokens === credentials) { this.tokens = null; this.persistTokens(credentials); this.update({ user: null }); }
+          this.block(error);
+        } else this.update({ error: failure(error) });
+      }
+      throw error;
+    }
+  }
+  /** 浏览器有 XHR 时用它拿上传进度；没有（单测 / SSR）退回 fetch。两条路径的错误形状保持一致。 */
+  private sendAssetBlob(url: string, token: string, file: Blob, onProgress?: (loaded: number, total: number) => void): Promise<unknown> {
+    if (typeof XMLHttpRequest === 'undefined') {
+      return fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'model/gltf-binary' }, body: file, cache: 'no-store' })
+        .then(async response => {
+          const result = await response.json().catch(() => null);
+          if (!response.ok) throw new SceneApiError(result?.error?.code ?? 'ASSET_UPLOAD_FAILED', response.status, result?.error?.details);
+          return result;
+        });
+    }
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.timeout = 180_000;
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.setRequestHeader('Content-Type', 'model/gltf-binary');
+      xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(event.loaded, event.total); };
+      xhr.onload = () => {
+        let result: { error?: { code?: string; details?: unknown } } | null = null;
+        try { result = JSON.parse(xhr.responseText); } catch { /* 非 JSON 错误体按状态码处理 */ }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new SceneApiError(result?.error?.code ?? 'ASSET_UPLOAD_FAILED', xhr.status, result?.error?.details));
+          return;
+        }
+        resolve(result);
+      };
+      xhr.onerror = () => reject(new SceneApiError('NETWORK_ERROR', 0, null));
+      xhr.ontimeout = () => reject(new SceneApiError('ASSET_UPLOAD_TIMEOUT', 408, null));
+      xhr.onabort = () => reject(new SceneApiError('ASSET_UPLOAD_ABORTED', 499, null));
+      xhr.send(file);
+    });
+  }
   async createGenerationJob(prompt: string, requestId: string, options?: Partial<Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId' | 'provider'>>): Promise<GenerationJob> {
     const parsed = generationRequestSchema.parse({ prompt: prompt.trim(), requestId, ...options });
     // Preserve the existing text request body and identity across reloads and upgrades; the

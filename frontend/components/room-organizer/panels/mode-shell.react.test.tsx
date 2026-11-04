@@ -70,7 +70,8 @@ describe('review issues card', () => {
 describe('delivery checklist shell', () => {
   it('shows the arrival list, an export entry, and complete-or-missing status without the layout brief', () => {
     const onExport = vi.fn();
-    const { rerender } = render(<DeliveryChecklistShell items={[{ name: '签到桌' }, { name: '签到桌' }]} onExport={onExport} />);
+    const signIn = { id: 'desk-1', type: 'reception', name: '签到桌', width: 1.4, depth: 0.6, height: 0.75, color: '#ffffff', icon: '' };
+    const { rerender } = render(<DeliveryChecklistShell items={[signIn, { ...signIn, id: 'desk-2' }]} onExport={onExport} />);
     const shell = screen.getByRole('region', { name: '执行清单' });
     expect(shell.textContent).toContain('到场清单');
     expect(shell.textContent).toContain('签到桌');

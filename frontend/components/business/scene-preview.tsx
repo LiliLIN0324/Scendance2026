@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { buildExtrudedWallGeometry } from '../room-organizer/three/interior-walls';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createCachedGlbModel, disposeOwnedModel, ensureGlbAsset } from '../room-organizer/three/glb-assets';
+import { applyRendererLook, DEFAULT_EVENT_LIGHTING, makeBackdropTexture, resolveLook } from '../room-organizer/three/render-look';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Scene, SceneObject } from '../../../supabase/functions/_shared/domain';
 import '@/app/share.css';
 
@@ -79,13 +81,16 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
     catch { setProblem('此设备暂时无法显示三维预览，仍可查看下方物料清单。'); return; }
     let disposed = false;
+    const look = resolveLook(scene.lighting ?? DEFAULT_EVENT_LIGHTING);
     const world = new THREE.Scene();
-    world.background = new THREE.Color('#eef0e4');
+    const backdrop = makeBackdropTexture(THREE, look.skyZenith, look.background);
+    world.background = backdrop;
     const { width, depth, height } = scene.venue;
     const extent = Math.max(width, depth, height, 1);
     const camera = new THREE.PerspectiveCamera(42, 1, .01, extent * 40);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    applyRendererLook(THREE, renderer);
+    renderer.toneMappingExposure = look.exposure;
     renderer.domElement.setAttribute('aria-label', '只读三维场景，可拖动旋转和滚轮缩放');
     renderer.domElement.tabIndex = 0;
     element.appendChild(renderer.domElement);
@@ -97,9 +102,18 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     controls.listenToKeyEvents(renderer.domElement);
     const render = () => { if (!disposed) renderer.render(world, camera); };
     controls.addEventListener('change', render);
-    world.add(new THREE.HemisphereLight(scene.lighting === 'warm' ? '#fff3df' : scene.lighting === 'cool' ? '#dfeaff' : '#ffffff', '#9caca3', 2.4));
-    const sun = new THREE.DirectionalLight('#ffffff', 2.3);
-    sun.position.set(-extent, extent * 2, extent); world.add(sun);
+    const hemi = new THREE.HemisphereLight(look.sky, look.ground, look.hemisphere);
+    const ambient = new THREE.AmbientLight(look.ambientColor, look.ambient);
+    const sun = new THREE.DirectionalLight(look.keyColor, look.key);
+    // 与编辑器同一光向（相对房间中心 +x / 高 +y / +z），只是这里的原点在房间角上。
+    sun.position.set(width / 2 + width * .4, Math.max(height * 2.4, width * .75), depth / 2 + depth * .3);
+    sun.target.position.set(width / 2, 0, depth / 2);
+    world.add(hemi, ambient, sun, sun.target);
+    const envGenerator = new THREE.PMREMGenerator(renderer);
+    const envTexture = envGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    envGenerator.dispose();
+    world.environment = envTexture;
+    world.environmentIntensity = look.environment;
     const points = scene.venue.polygon ?? [{ x: 0, z: 0 }, { x: width, z: 0 }, { x: width, z: depth }, { x: 0, z: depth }];
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(points.map(point => new THREE.Vector2(point.x, -point.z)))), new THREE.MeshStandardMaterial({ color: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? '#deded5' : '#deded5', side: THREE.DoubleSide }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = -.005; world.add(floor);
@@ -149,6 +163,7 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     return () => {
       disposed = true; changeView.current = () => {}; observer.disconnect(); controls.dispose();
       disposeOwnedModel(world); outline.geometry.dispose(); (outline.material as THREE.Material).dispose();
+      world.background = null; backdrop.dispose(); world.environment = null; envTexture.dispose();
       renderer.dispose(); renderer.domElement.remove();
     };
   }, [scene, assetUrls, assetNames]);

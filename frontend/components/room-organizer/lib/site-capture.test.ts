@@ -1,13 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { metersPerDegreeLng, METERS_PER_DEGREE_LAT, type AmapPoint } from './amap-venue';
 import {
+  applyLanding,
+  calibrateScanScale,
   capturePlan,
   capturePlanAlongFlow,
   capturePlanFileName,
   capturePlanForVenue,
   capturePlanSheetHtml,
+  clearSiteCalibration,
   defaultGuestFlow,
+  groundFromHeight,
+  groundFromThreePoints,
+  groundHeightAt,
+  inspectScanAgainstSite,
+  landingCorrections,
+  nearestAnchor,
+  readSiteCalibration,
+  snapToAnchor,
+  writeSiteCalibration,
   VIDEO_SPACING,
+  type GroundAnchor,
 } from './site-capture';
 
 /** 从 (0,0) 起、宽 w 米深 d 米的矩形，换成高德经纬度（盐官一带纬度）。 */
@@ -145,5 +158,134 @@ describe('D1 flow-line densify', () => {
     expect(html).toContain('polyline class="flow"');
     expect(html).toContain('流线长');
     expect(html).toContain('禁止把高德瓦片、卫星截图当重建素材');
+  });
+});
+
+describe('scan scale calibration', () => {
+  it('turns 「场地宽 12 m」 into a real-metre multiplier and flags the deviation', () => {
+    const result = calibrateScanScale({ axis: 'x', knownMeters: 12, scan: { width: 30, depth: 20, height: 6 } });
+    expect(result).not.toBeNull();
+    expect(result!.scale).toBeCloseTo(0.4, 3);
+    expect(result!.deviationPct).toBe(-60);
+    expect(result!.confidence).toBe('suspect');
+    expect(result!.note).toContain('偏差 −60%');
+    expect(result!.reference).toEqual({ axis: 'x', knownMeters: 12, measuredMeters: 30 });
+  });
+
+  it('treats a near-1:1 scan as trustworthy and a small mismatch as coarse', () => {
+    expect(calibrateScanScale({ axis: 'z', knownMeters: 22, scan: { width: 30, depth: 20, height: 6 } })!.confidence).toBe('ok');
+    const coarse = calibrateScanScale({ axis: 'z', knownMeters: 25, scan: { width: 30, depth: 20, height: 6 } });
+    expect(coarse!.scale).toBeCloseTo(1.25, 3);
+    expect(coarse!.confidence).toBe('coarse');
+  });
+
+  it('refuses unusable input instead of silently scaling by garbage', () => {
+    expect(calibrateScanScale({ axis: 'x', knownMeters: 0, scan: { width: 30, depth: 20, height: 6 } })).toBeNull();
+    expect(calibrateScanScale({ axis: 'y', knownMeters: 3, scan: { width: 30, depth: 20, height: 0 } })).toBeNull();
+  });
+
+  it('inspects scan vs shell and only warns when they clearly disagree', () => {
+    expect(inspectScanAgainstSite({ width: 12, depth: 8, height: 4 }, { width: 12, depth: 8 }).status).toBe('ok');
+    expect(inspectScanAgainstSite({ width: 30, depth: 8, height: 4 }, { width: 12, depth: 8 }).status).toBe('error');
+  });
+});
+
+describe('ground plane', () => {
+  it('restores a flat plane at a given height', () => {
+    expect(groundHeightAt(groundFromHeight(0.15), 3, -2)).toBe(0.15);
+    expect(groundFromHeight(1.2).definedBy).toBe('height');
+  });
+
+  it('builds a tilted plane from three points and evaluates height per position', () => {
+    const plane = groundFromThreePoints(
+      { x: 0, y: 0, z: 0 },
+      { x: 10, y: 1, z: 0 },
+      { x: 0, y: 0, z: 10 },
+    );
+    expect(plane).not.toBeNull();
+    // 沿 +X 每米抬 0.1 m。
+    expect(groundHeightAt(plane, 10, 0)).toBeCloseTo(1, 5);
+    expect(groundHeightAt(plane, 5, 5)).toBeCloseTo(0.5, 5);
+    expect(plane!.definedBy).toBe('points');
+  });
+
+  it('rejects collinear points', () => {
+    expect(groundFromThreePoints(
+      { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 2, y: 0, z: 0 },
+    )).toBeNull();
+  });
+});
+
+describe('anchors and landing', () => {
+  const anchors: GroundAnchor[] = [
+    { id: 'anchor-1', label: '舞台位', kind: 'stage', x: 2, z: 0 },
+    { id: 'anchor-2', label: '入口', kind: 'entrance', x: -4, z: 3 },
+  ];
+
+  it('snaps only inside the radius and keeps the nearest anchor', () => {
+    expect(nearestAnchor(anchors, 1.2, 0, 1.2)?.anchor.id).toBe('anchor-1');
+    expect(nearestAnchor(anchors, 3.5, 0, 1.2)).toBeNull();
+    expect(snapToAnchor(anchors, 2.2, 0)?.label).toBe('舞台位');
+  });
+
+  it('lands floating / sunk items on the ground plane and respects centre-origin offsets', () => {
+    const corrections = landingCorrections([
+      { id: 'stage', position: { x: 0, z: 0 }, elevation: 0.8 },
+      { id: 'lamp', position: { x: 5, z: 0 }, elevation: 0.4, baseOffsetM: 0.5 },
+      { id: 'sunk', position: { x: 0, z: 0 }, elevation: 0 },
+    ], groundFromHeight(0.15), { floorY: 0 });
+    expect(corrections.map(item => item.id)).toEqual(['stage', 'lamp', 'sunk']);
+    expect(corrections[0]!.afterY).toBeCloseTo(0.15, 5);
+    expect(corrections[0]!.deltaY).toBeCloseTo(-0.65, 5);
+    expect(corrections[1]!.afterY).toBeCloseTo(0.65, 5);
+    expect(corrections[2]!.afterY).toBeCloseTo(0.15, 5);
+  });
+
+  it('folds the plan back into elevations for onApply', () => {
+    const items = [{ id: 'stage', position: { x: 0, z: 0 }, elevation: 0.8 }];
+    const corrections = landingCorrections(items, groundFromHeight(0.15));
+    const next = applyLanding(items, corrections);
+    expect(next[0]!.elevation).toBeCloseTo(0.15, 5);
+  });
+});
+
+describe('scene calibration persistence', () => {
+  it('round-trips scale, yaw, ground and anchors, and clears per asset', () => {
+    const values = new Map<string, string>();
+    const fakeWindow = {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => { values.set(key, value); },
+        removeItem: (key: string) => { values.delete(key); },
+      },
+    };
+    const original = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = fakeWindow;
+    try {
+      writeSiteCalibration({
+        version: 1,
+        assetId: 'asset-lake',
+        scale: 0.4,
+        yawDeg: 12.5,
+        origin: { x: 1.2, z: -0.8 },
+        ground: groundFromHeight(0.15),
+        anchors: [{ id: 'anchor-1', label: '舞台位', kind: 'stage', x: 2, z: 0 }],
+        reference: { axis: 'x', knownMeters: 12, measuredMeters: 30 },
+        updatedAt: 0,
+      });
+      const restored = readSiteCalibration('asset-lake');
+      expect(restored).not.toBeNull();
+      expect(restored!.scale).toBeCloseTo(0.4, 5);
+      expect(restored!.yawDeg).toBeCloseTo(12.5, 5);
+      expect(restored!.origin).toEqual({ x: 1.2, z: -0.8 });
+      expect(restored!.ground.y).toBeCloseTo(0.15, 5);
+      expect(restored!.anchors).toHaveLength(1);
+      expect(restored!.reference).toEqual({ axis: 'x', knownMeters: 12, measuredMeters: 30 });
+      expect(readSiteCalibration('asset-other')).toBeNull();
+      clearSiteCalibration('asset-lake');
+      expect(readSiteCalibration('asset-lake')).toBeNull();
+    } finally {
+      (globalThis as { window?: unknown }).window = original;
+    }
   });
 });

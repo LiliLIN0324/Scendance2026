@@ -3,193 +3,344 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#f7f5ed">
+<meta name="theme-color" content="#FFFFFF">
 <title>新手指引 · 幕景 Scendance</title>
-<meta name="description" content="幕景新手指引：从一块场地开始，学会布置、生成与交付一场活动方案。">
+<meta name="description" content="幕景新手指引：认四格、说一句出提案；判断要不要重建，拍完自查；场地、物料、交付各几步，最后把方案交出去。">
 <script>document.documentElement.className = 'js';</script>
 <noscript><style>.chapter{display:block!important}</style></noscript>
 <style>
 /* ============================================================
-   新手指引 · 与官网共用一套令牌，但按文档阅读重新排版：
-   左章节 / 中正文 / 右本页目录；窄屏收成一条横向章节条。
+   新手指引 · 按 docs/05-设计规范.md v2.5.12 重建视觉：
+   纯白纸面、发丝线分区、近黑墨字；鼠尾草绿只做当前章节指示。
+   字阶只取规范七档，圆角只取 10 / 14 / 18，默认无阴影。
    ============================================================ */
 :root{
-  --ink:#26392f; --muted:#6a7268; --line:rgba(56,74,48,.16);
-  --paper:#f7f5ed; --canvas:#eef0e4;
-  --accent:#6f8f52; --accent-ink:#465c33; --accent-soft:#e7ecd7;
-  --font:'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;
-  --serif:Georgia,'Times New Roman','Noto Sans SC',serif;
-  --head-h:60px;
+  /* 色彩 · L1 语义层 */
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+  --hair-soft:#EFEFF1; --hair:#E4E4E7;
+  --faint:#A6AAB2; --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59;
+  --warn:#96651F; --err:#B4443C;
+
+  /* 圆角 / 间距 / 动效 */
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+  --sp-5:24px; --sp-6:32px; --sp-7:48px; --sp-8:64px;
+  --ease:cubic-bezier(.2,0,0,1);
+
+  /* 字体 */
+  --font:"Inter",Arial,"Noto Sans SC","Source Han Sans SC","Source Han Sans CN","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono","Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+  --head-h:56px;
 }
+
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{transition:none!important;animation:none!important}
+}
 body{
   margin:0; background:var(--paper); color:var(--ink);
-  font-family:var(--font); font-size:15px; line-height:1.6;
+  font-family:var(--font); font-size:14px; line-height:22px;
   -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
 }
 a{color:inherit;text-decoration:none}
-h1,h2,p,figure,blockquote{margin:0}
+h1,h2,h3,p,figure,blockquote,ul,ol{margin:0}
 img{max-width:100%}
-:is(a,button):focus-visible{outline:2px solid var(--accent-ink);outline-offset:4px}
+:is(a,button):focus-visible{outline:2px solid var(--ink-soft);outline-offset:2px}
 
 /* ---------- 顶栏 ---------- */
 .doc-head{
-  position:fixed; inset:0 0 auto; z-index:20; height:var(--head-h);
-  display:flex; align-items:center; gap:18px;
-  padding:0 clamp(16px,4vw,40px);
-  background:rgba(247,245,237,.88); border-bottom:1px solid var(--line);
-  -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  position:fixed; inset:0 0 auto; z-index:30; height:var(--head-h);
+  display:flex; align-items:center; gap:var(--sp-4);
+  padding:0 var(--sp-6);
+  background:var(--paper); border-bottom:1px solid var(--hair);
 }
-.brand{display:flex;align-items:center;gap:6px;flex:none;color:var(--ink)}
-.brand-mark{width:26px;height:28px;display:grid;place-items:center;flex:none}
-.brand-cn{font-family:'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;font-size:15px;font-weight:600;line-height:1.2}
-.brand-dot{width:4px;height:4px;border-radius:50%;background:#4A7C59;flex:none}
-.brand-en{font-family:var(--serif);font-size:10px;font-weight:500;letter-spacing:.02em;text-transform:uppercase;color:var(--muted)}
-.doc-name{margin-left:8px;padding-left:15px;border-left:1px solid var(--line);font-size:12.5px;color:var(--muted);white-space:nowrap}
-.head-actions{margin-left:auto;display:flex;align-items:center;gap:4px}
-.head-link{font-size:12.5px;color:var(--muted);padding:8px 10px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{position:relative;display:block;width:28px;height:28px;flex:none}
+.brand-mark img{display:block;width:28px;height:28px}
+.brand-mark::before,.brand-mark::after{
+  content:"";position:absolute;background:var(--paper);border-radius:50%;
+}
+.brand-mark::before{left:42.8%;top:36.2%;width:8.5%;height:16.5%}
+.brand-mark::after{left:61.6%;top:34.2%;width:9%;height:18%}
+.brand-cn{font-family:"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;font-size:15px;line-height:20px;font-weight:600;white-space:nowrap}
+.brand-divider{width:1px;height:14px;background:var(--hair);flex:none}
+.brand-doc{font-size:12px;line-height:20px;color:var(--muted);white-space:nowrap}
+.head-actions{margin-left:auto;display:flex;align-items:center;gap:var(--sp-1)}
+.head-link{font-size:12px;line-height:20px;color:var(--muted);padding:var(--sp-2)}
 .head-link:hover{color:var(--ink)}
 .head-cta{
-  display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;
-  border-radius:999px;background:var(--accent);color:#fff;
-  font-size:12.5px;font-weight:600;white-space:nowrap;transition:background .18s;
+  display:inline-flex;align-items:center;gap:var(--sp-2);
+  height:36px;padding:0 var(--sp-4);
+  border-radius:var(--r-sm);background:var(--ink);color:var(--paper);
+  font-size:14px;line-height:22px;font-weight:500;white-space:nowrap;
+  transition:background 160ms var(--ease);
 }
-.head-cta:hover{background:var(--accent-ink)}
+.head-cta:hover{background:#2A2C31}
 .head-cta svg{flex:none}
 
 /* ---------- 三栏骨架 ---------- */
 .doc-shell{
-  max-width:1240px; margin:0 auto;
-  padding:calc(var(--head-h) + 52px) clamp(16px,4vw,40px) 88px;
-  display:grid; grid-template-columns:196px minmax(0,1fr) 188px;
-  gap:clamp(26px,4.6vw,64px); align-items:start;
+  max-width:1200px;margin:0 auto;
+  padding:calc(var(--head-h) + var(--sp-7)) var(--sp-6) var(--sp-8);
+  display:grid;grid-template-columns:200px minmax(0,1fr) 196px;
+  gap:var(--sp-7);align-items:start;
 }
 
 /* 左：章节 */
-.doc-rail{position:sticky;top:calc(var(--head-h) + 30px);display:flex;flex-direction:column;gap:1px}
-.rail-group{margin:22px 0 8px 14px;font-size:11px;letter-spacing:.08em;color:var(--muted)}
+.doc-rail{
+  position:sticky;top:calc(var(--head-h) + var(--sp-5));
+  display:flex;flex-direction:column;
+  max-height:calc(100vh - var(--head-h) - var(--sp-5) - var(--sp-4));
+  overflow-y:auto;scrollbar-width:none;padding-right:2px;
+}
+.doc-rail::-webkit-scrollbar{display:none}
+.rail-group{
+  margin:var(--sp-5) 0 var(--sp-1) var(--sp-3);
+  font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);
+}
 .rail-group:first-child{margin-top:0}
-.rail-link{display:block;padding:7px 0 7px 14px;border-left:2px solid transparent;color:var(--muted);font-size:13.5px;line-height:1.4;transition:color .16s,border-color .16s}
+.rail-link{
+  display:block;padding:7px 0 7px var(--sp-3);
+  border-left:2px solid transparent;color:var(--muted);
+  font-size:14px;line-height:22px;
+  transition:color 160ms var(--ease),border-color 160ms var(--ease);
+}
 .rail-link:hover{color:var(--ink)}
-.rail-link[aria-current="page"]{border-left-color:var(--accent);color:var(--ink);font-weight:600}
+.rail-link[aria-current="page"]{border-left-color:var(--green);color:var(--ink);font-weight:600}
 
 /* 中：正文 */
 .doc-main{min-width:0}
+.chapter{scroll-margin-top:calc(var(--head-h) + var(--sp-7))}
 .js .chapter{display:none}
 .js .chapter.is-active{display:block}
 
+.chapter-head{padding-bottom:var(--sp-5);border-bottom:1px solid var(--hair)}
+.eyebrow{
+  margin:0 0 var(--sp-2);
+  font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);
+}
 .chapter h1{
-  font-size:clamp(34px,4.2vw,54px); line-height:1.1; letter-spacing:-.035em;
-  font-weight:600; max-width:14em;
+  font-size:24px;line-height:34px;font-weight:600;letter-spacing:-.01em;
+  max-width:24em;
 }
-.lead{
-  margin-top:20px; max-width:36em;
-  font-size:clamp(16px,1.34vw,18.5px); line-height:1.75; color:var(--muted);
-}
-.doc-sec{scroll-margin-top:calc(var(--head-h) + 32px)}
-.doc-sec:first-of-type{margin-top:52px}
-.doc-sec + .doc-sec{margin-top:46px}
-.doc-sec h2{
-  font-size:clamp(19px,1.6vw,23px); line-height:1.35; letter-spacing:-.015em;
-  font-weight:600; margin-bottom:14px;
-}
-.doc-sec p{margin-bottom:14px;max-width:38em;font-size:15.5px;line-height:1.85;color:#3c4a40}
-.doc-sec p:last-child{margin-bottom:0}
-.doc-sec a{color:var(--accent-ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
-.doc-sec a:hover{text-decoration-thickness:2px}
+.lead{margin-top:var(--sp-3);max-width:40em;font-size:14px;line-height:22px;color:var(--ink-soft)}
 
-/* 条目：名称 + 一句说明，用细线分隔，不做卡片 */
-.rows{list-style:none;margin:20px 0 0;padding:0;border-top:1px solid var(--line)}
-.rows li{display:grid;grid-template-columns:132px minmax(0,1fr);gap:20px;padding:15px 0;border-bottom:1px solid var(--line)}
-.rows strong{font-size:14.5px;font-weight:600;color:var(--ink)}
-.rows span{font-size:14.5px;line-height:1.75;color:var(--muted)}
-.rows span code{font-family:'SFMono-Regular',Consolas,monospace;font-size:.92em;color:var(--ink)}
+.doc-sec{scroll-margin-top:calc(var(--head-h) + var(--sp-5))}
+.doc-sec:first-of-type{margin-top:var(--sp-6)}
+.doc-sec + .doc-sec{margin-top:var(--sp-6)}
+.doc-sec h2{font-size:20px;line-height:28px;font-weight:600;margin-bottom:var(--sp-3)}
+.doc-sec h3{font-size:16px;line-height:24px;font-weight:600;margin:var(--sp-5) 0 var(--sp-2)}
+.doc-sec h3:first-child{margin-top:0}
+.doc-sec p{margin:0 0 var(--sp-3);max-width:40em;font-size:14px;line-height:22px;color:var(--ink)}
+.doc-sec p:last-child{margin-bottom:0}
+.doc-sec a{color:var(--ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
+.doc-sec a:hover{text-decoration-thickness:2px}
+.doc-sec .p2,.muted{color:var(--muted);font-size:12px;line-height:20px}
+.doc-sec strong{font-weight:600}
+
+/* 条目：名称 + 一句说明，用发丝线分隔 */
+.rows{list-style:none;margin:var(--sp-4) 0 0;padding:0;border-top:1px solid var(--hair)}
+.rows li{
+  display:grid;grid-template-columns:140px minmax(0,1fr);gap:var(--sp-4);
+  padding:var(--sp-3) 0;border-bottom:1px solid var(--hair-soft);
+}
+.rows strong{font-size:14px;line-height:22px;font-weight:500;color:var(--ink)}
+.rows span{font-size:14px;line-height:22px;color:var(--ink-soft)}
+.rows span code{
+  font-family:var(--mono);font-size:12px;color:var(--ink);
+  background:var(--plane);padding:1px 4px;border-radius:4px;
+}
 
 /* 可以直接说的话 */
 .say{
-  margin:20px 0; padding:15px 20px; border-left:2px solid var(--accent);
-  border-radius:0 8px 8px 0; background:var(--accent-soft);
-  color:var(--accent-ink); font-size:15px; line-height:1.75;
+  margin:var(--sp-3) 0;
+  padding:var(--sp-3) var(--sp-4);
+  border:1px solid var(--hair);border-left:3px solid var(--ink-soft);
+  border-radius:var(--r-sm);background:var(--paper);
+  color:var(--ink);font-size:14px;line-height:22px;
 }
 .say p{margin:0;max-width:none;color:inherit;font-size:inherit;line-height:inherit}
+.say-label{
+  display:block;margin-bottom:var(--sp-1);
+  font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);
+}
 
-/* 图片 */
-.doc-figure{margin:28px 0 8px}
-.doc-figure img{display:block;width:100%;height:auto;aspect-ratio:1587/991;border-radius:10px;background:var(--canvas)}
-.doc-figure figcaption{margin-top:10px;font-size:12px;line-height:1.6;color:var(--muted)}
+/* 提示：白底 + 发丝线 + 左侧语义竖条 */
+.note{
+  margin:var(--sp-4) 0;padding:var(--sp-3) var(--sp-4);
+  border:1px solid var(--hair);border-left:3px solid var(--warn);
+  border-radius:var(--r-sm);background:var(--paper);
+}
+.note strong{display:block;margin-bottom:2px;font-size:14px;line-height:20px;font-weight:500;color:var(--ink)}
+.note p{max-width:none;margin:0;font-size:12px;line-height:20px;color:var(--ink-soft)}
+.note--quiet{border-left-color:var(--ink-soft)}
+.note--err{border-left-color:var(--err)}
+
+/* 图 */
+.doc-figure{margin:var(--sp-5) 0 var(--sp-2)}
+.doc-figure--panel{
+  background:var(--plane);border:1px solid var(--hair-soft);
+  border-radius:var(--r-md);padding:var(--sp-4);
+}
+.doc-figure--panel img,.doc-figure--panel svg{display:block;width:100%;height:auto}
+.doc-figure--photo{
+  background:var(--plane);border:1px solid var(--hair-soft);
+  border-radius:var(--r-md);padding:0;overflow:hidden;
+}
+.doc-figure--photo img{display:block;width:100%;height:auto}
+.doc-figure--photo figcaption{padding:var(--sp-3) var(--sp-4);margin:0}
+.doc-figure figcaption{margin-top:10px;font-size:12px;line-height:20px;color:var(--muted);max-width:52em}
+.figure-scroll{overflow-x:auto}
+.figure-scroll svg{min-width:620px}
+.fig-hint{display:none}
+.doc-sec .fig-hint{margin-top:var(--sp-1);font-size:11px;line-height:16px;color:var(--faint);text-align:right;max-width:none}
+
+/* 待补空位：保留位置，等实拍图与录屏 */
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);margin:var(--sp-4) 0 0}
+.slots--one{grid-template-columns:1fr}
+.slot{
+  min-height:104px;padding:var(--sp-4);
+  border:1px dashed var(--hair);border-radius:var(--r-md);background:var(--paper);
+  display:flex;flex-direction:column;gap:var(--sp-1);
+}
+.slot--tall{min-height:176px}
+.slot span{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted)}
+.slot p{max-width:none;margin:0;font-size:12px;line-height:20px;color:var(--faint)}
+
+/* 示意图内的文字与线条 */
+.diagram text{font-family:var(--font);fill:var(--ink)}
+.diagram .d-title{font-size:14px;font-weight:600}
+.diagram .d-body{font-size:12px;fill:var(--ink-soft)}
+.diagram .d-cap{font-size:11px;font-weight:500;fill:var(--muted);letter-spacing:.03em}
+.diagram .d-muted{font-size:11px;fill:var(--muted)}
+.diagram .d-line{stroke:var(--hair);fill:none}
+.diagram .d-line-strong{stroke:var(--ink-soft);fill:none}
+.diagram .d-dash{stroke:var(--faint);fill:none;stroke-dasharray:4 4}
+.diagram .d-panel{fill:var(--paper);stroke:var(--hair)}
+.diagram .d-plane{fill:var(--plane);stroke:var(--hair-soft)}
+.diagram .d-grid{stroke:var(--hair-soft);fill:none}
+.diagram .d-green{fill:var(--green)}
+.diagram .d-warn{fill:var(--warn)}
+
+/* 三列卡片 */
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3);margin:var(--sp-4) 0 0}
+.card{border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-4);background:var(--paper)}
+.card h3{font-size:16px;line-height:24px;font-weight:600;margin:0 0 var(--sp-1)}
+.card p{font-size:12px;line-height:20px;color:var(--muted);margin:0;max-width:none}
+
+/* 表格 */
+.table-wrap{overflow-x:auto;margin:var(--sp-4) 0 0}
+.table-wrap table{width:100%;border-collapse:collapse;font-size:14px;line-height:22px}
+.table-wrap th{
+  padding:var(--sp-2) var(--sp-3);
+  border-bottom:1px solid var(--hair);
+  font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;
+  color:var(--muted);text-align:left;white-space:nowrap;
+}
+.table-wrap td{
+  padding:10px var(--sp-3);
+  border-bottom:1px solid var(--hair-soft);
+  vertical-align:top;color:var(--ink-soft);
+}
+.table-wrap td:first-child{color:var(--ink);font-weight:500}
+.table-wrap tr:hover td{background:var(--plane)}
+.table-wrap .num{text-align:right}
+.table-wrap .nowrap{white-space:nowrap}
+
+/* 照片组 */
+.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);margin:var(--sp-4) 0 0}
+.photo-grid figure{margin:0}
+.photo-grid img{
+  display:block;width:100%;height:auto;
+  border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--plane);
+}
+.photo-grid figcaption{margin-top:6px;font-size:12px;line-height:20px;color:var(--muted)}
+.photo-grid .is-wide{grid-column:1/-1}
 
 /* 章节翻页 */
 .chapter-nav{
-  display:flex; justify-content:space-between; gap:28px;
-  margin-top:64px; padding-top:22px; border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;gap:var(--sp-5);
+  margin-top:var(--sp-7);padding-top:var(--sp-4);border-top:1px solid var(--hair);
 }
-.chapter-nav a{display:flex;flex-direction:column;gap:4px;min-width:0}
-.chapter-nav a span{font-size:11px;color:var(--muted)}
-.chapter-nav a strong{font-size:14.5px;font-weight:600;transition:color .16s}
-.chapter-nav a:hover strong{color:var(--accent-ink)}
+.chapter-nav a{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chapter-nav a span{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted)}
+.chapter-nav a strong{font-size:14px;line-height:22px;font-weight:500;color:var(--ink)}
+.chapter-nav a:hover strong{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
 .chapter-nav .is-next{text-align:right;margin-left:auto}
-.chapter-nav .is-cta strong{color:var(--accent-ink)}
-.chapter-nav .is-cta strong::after{content:" ↗"}
+.chapter-nav .is-cta strong::after{content:" →"}
 
 /* 右：本页目录 */
-.doc-toc{position:sticky;top:calc(var(--head-h) + 30px);font-size:12.5px;line-height:1.5}
+.doc-toc{position:sticky;top:calc(var(--head-h) + var(--sp-5));font-size:12px;line-height:20px}
 .doc-toc:empty{display:none}
-.toc-label{margin:0 0 12px;font-size:11px;letter-spacing:.08em;color:var(--muted)}
-.toc-links{display:flex;flex-direction:column;gap:9px;border-left:1px solid var(--line);padding-left:14px}
-.toc-links a{color:var(--muted);transition:color .16s}
+.toc-label{margin:0 0 var(--sp-3);font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted)}
+.toc-links{display:flex;flex-direction:column;gap:var(--sp-2);border-left:1px solid var(--hair);padding-left:var(--sp-3)}
+.toc-links a{color:var(--muted);transition:color 160ms var(--ease)}
 .toc-links a:hover{color:var(--ink)}
 .toc-links a[aria-current="true"]{color:var(--ink);font-weight:600}
 
 /* ---------- 页脚 ---------- */
-.doc-foot{border-top:1px solid var(--line)}
+.doc-foot{border-top:1px solid var(--hair);margin-top:var(--sp-6)}
 .doc-foot-inner{
-  max-width:1240px;margin:0 auto;
-  padding:26px clamp(16px,4vw,40px) 38px;
-  display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;
-  font-size:12px;color:var(--muted);
+  max-width:1200px;margin:0 auto;
+  padding:var(--sp-5) var(--sp-6) var(--sp-6);
+  display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-5);
+  font-size:12px;line-height:20px;color:var(--muted);
 }
-.doc-foot-inner strong{font-size:12.5px;font-weight:600;color:var(--ink)}
-.doc-foot nav{margin-left:auto;display:flex;flex-wrap:wrap;gap:18px}
+.doc-foot-inner strong{font-weight:500;color:var(--ink)}
+.doc-foot nav{margin-left:auto;display:flex;flex-wrap:wrap;gap:var(--sp-4)}
 .doc-foot a:hover{color:var(--ink)}
 
 /* ---------- 窄屏 ---------- */
-@media (max-width:1040px){
-  .doc-shell{grid-template-columns:184px minmax(0,1fr);gap:36px}
+@media (max-width:1024px){
+  .doc-shell{grid-template-columns:176px minmax(0,1fr);gap:var(--sp-6)}
   .doc-toc{display:none}
 }
 @media (max-width:820px){
-  .doc-shell{display:block;padding-top:calc(var(--head-h) + 24px)}
+  .doc-head{padding:0 var(--sp-4)}
+  .doc-shell{display:block;padding:calc(var(--head-h) + var(--sp-5)) var(--sp-4) var(--sp-7)}
   .doc-rail{
-    position:sticky; top:var(--head-h); z-index:10;
-    display:flex; flex-direction:row; align-items:center; gap:4px;
-    margin:0 calc(-1 * clamp(16px,4vw,40px)) 30px;
-    padding:10px clamp(16px,4vw,40px);
-    overflow-x:auto; scrollbar-width:none;
-    background:rgba(247,245,237,.94); border-bottom:1px solid var(--line);
-    -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+    position:sticky;top:var(--head-h);z-index:20;
+    display:flex;flex-direction:row;align-items:center;gap:var(--sp-1);
+    margin:0 calc(-1 * var(--sp-4)) var(--sp-5);
+    padding:var(--sp-2) var(--sp-4);
+    max-height:none;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
+    background:var(--paper);border-bottom:1px solid var(--hair);
   }
   .doc-rail::-webkit-scrollbar{display:none}
   .rail-group{display:none}
   .rail-link{
-    flex:none;padding:6px 11px;border-left:0;border-bottom:2px solid transparent;
-    border-radius:999px;font-size:12.5px;white-space:nowrap;
+    flex:none;padding:6px 10px;
+    border-left:0;border-bottom:2px solid transparent;border-radius:var(--r-sm);
+    font-size:12px;line-height:20px;white-space:nowrap;
   }
-  .rail-link[aria-current="page"]{border-bottom-color:var(--accent);background:var(--accent-soft)}
-  .doc-sec{scroll-margin-top:calc(var(--head-h) + 68px)}
-  .doc-sec:first-of-type{margin-top:40px}
+  .rail-link[aria-current="page"]{border-bottom-color:var(--green);color:var(--ink);font-weight:600}
+  .doc-sec{scroll-margin-top:calc(var(--head-h) + 56px)}
+  .chapter{scroll-margin-top:calc(var(--head-h) + var(--sp-5))}
+  .doc-sec:first-of-type{margin-top:var(--sp-5)}
+  .chapter h1{font-size:20px;line-height:28px}
+  .doc-sec h2{font-size:18px;line-height:26px}
+  .doc-sec h3{font-size:15px;line-height:22px}
 }
-@media (max-width:600px){
-  .doc-name{display:none}
-  .head-link{display:none}
-  .head-actions{gap:0}
-  .brand-en,.brand-dot{display:none}
-  .doc-shell{padding-bottom:64px}
-  .rows li{grid-template-columns:1fr;gap:4px;padding:13px 0}
-  .chapter-nav{flex-direction:column;gap:18px}
+@media (max-width:640px){
+  .brand-divider,.brand-doc,.head-link{display:none}
+  .head-cta{height:36px;padding:0 var(--sp-3);font-size:13px}
+  .doc-shell{padding-bottom:var(--sp-7)}
+  .rows li{grid-template-columns:1fr;gap:2px;padding:10px 0}
+  .cards{grid-template-columns:1fr}
+  .photo-grid{grid-template-columns:1fr}
+  .photo-grid .is-wide{grid-column:auto}
+  .chapter-nav{flex-direction:column;gap:var(--sp-4)}
   .chapter-nav .is-next{text-align:left;margin-left:0}
+  .doc-foot-inner{padding:var(--sp-4) var(--sp-4) var(--sp-5)}
   .doc-foot nav{margin-left:0}
+  .figure-scroll svg{min-width:560px}
+  .fig-hint{display:block}
+  .table-wrap table{min-width:560px}
+  .slots{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -197,14 +348,15 @@ img{max-width:100%}
 
 <header class="doc-head">
   <a class="brand" href="/introduction" aria-label="幕景官网">
-    <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48" width="26" height="26" fill="none" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M14,4 H34 A10,10 0 0 1 44,14 V34 A10,10 0 0 1 34,44 H14 A10,10 0 0 1 4,34 V14 A10,10 0 0 1 14,4 Z M14,44 V34 A10,10 0 0 1 34,34 V44 Z"/><circle cx="24" cy="35" r="5" fill="#4A7C59"/></svg></span>
-    <strong class="brand-cn">幕景</strong><span class="brand-dot" aria-hidden="true"></span><span class="brand-en"><i aria-hidden="true">S</i>CENDANCE</span>
+    <span class="brand-mark" aria-hidden="true"><img src="/showcase/assets/rail/door.png" alt="" width="28" height="28"></span>
+    <strong class="brand-cn">幕景</strong>
+    <span class="brand-divider" aria-hidden="true"></span>
+    <span class="brand-doc">新手指引</span>
   </a>
-  <span class="doc-name">新手指引</span>
   <div class="head-actions">
     <a class="head-link" href="/introduction">返回官网</a>
     <a class="head-cta" href="/">打开工作台
-      <svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 10.5 10.5 3.5M5 3.5h5.5V9"/></svg>
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 12.5 12.5 3.5M5 3.5h7.5V11"/></svg>
     </a>
   </div>
 </header>
@@ -214,223 +366,1452 @@ img{max-width:100%}
   <aside class="doc-rail" aria-label="教程章节">
     <p class="rail-group">开始</p>
     <a class="rail-link" href="#start" data-chapter-link="start" aria-current="page">开始之前</a>
-    <a class="rail-link" href="#space" data-chapter-link="space">布置第一个空间</a>
-    <p class="rail-group">生成</p>
-    <a class="rail-link" href="#generate" data-chapter-link="generate">物料与场地</a>
+    <a class="rail-link" href="#tools" data-chapter-link="tools">工具列</a>
+    <a class="rail-link" href="#first-open" data-chapter-link="first-open">打开与保存</a>
+    <p class="rail-group">Bingo</p>
+    <a class="rail-link" href="#first-plan" data-chapter-link="first-plan">一句话出提案</a>
+    <a class="rail-link" href="#confirm" data-chapter-link="confirm">确认提案</a>
+    <a class="rail-link" href="#bingo-limits" data-chapter-link="bingo-limits">Bingo 的边界</a>
+    <p class="rail-group">现场</p>
+    <a class="rail-link" href="#capture" data-chapter-link="capture">去现场前</a>
+    <a class="rail-link" href="#capture-layers" data-chapter-link="capture-layers">三层怎么拍</a>
+    <a class="rail-link" href="#capture-check" data-chapter-link="capture-check">拍完自查</a>
+    <a class="rail-link" href="#capture-cases" data-chapter-link="capture-cases">实拍案例</a>
+    <p class="rail-group">场地</p>
+    <a class="rail-link" href="#real-venue" data-chapter-link="real-venue">场地从哪来</a>
+    <a class="rail-link" href="#venue-drawings" data-chapter-link="venue-drawings">图纸与尺寸</a>
+    <a class="rail-link" href="#venue-map" data-chapter-link="venue-map">地图选址</a>
+    <a class="rail-link" href="#venue-reconstruct" data-chapter-link="venue-reconstruct">Aholo 重建</a>
+    <a class="rail-link" href="#venue-ready" data-chapter-link="venue-ready">现成空间</a>
+    <a class="rail-link" href="#venue-multi" data-chapter-link="venue-multi">多场地与楼层</a>
+    <p class="rail-group">物料</p>
+    <a class="rail-link" href="#materials" data-chapter-link="materials">摆现成的</a>
+    <a class="rail-link" href="#materials-voice" data-chapter-link="materials-voice">嘴上加物料</a>
+    <a class="rail-link" href="#materials-generate" data-chapter-link="materials-generate">生成物料</a>
     <p class="rail-group">交付</p>
-    <a class="rail-link" href="#deliver" data-chapter-link="deliver">分享与导出</a>
+    <a class="rail-link" href="#deliver" data-chapter-link="deliver">选交付方式</a>
+    <a class="rail-link" href="#deliver-publish" data-chapter-link="deliver-publish">发布与链接</a>
+    <a class="rail-link" href="#deliver-review" data-chapter-link="deliver-review">评审与评审包</a>
+    <a class="rail-link" href="#deliver-handoff" data-chapter-link="deliver-handoff">交给执行</a>
+    <a class="rail-link" href="#deliver-export" data-chapter-link="deliver-export">导出一览</a>
+    <a class="rail-link" href="#deliver-version" data-chapter-link="deliver-version">版本与备份</a>
     <p class="rail-group">参考</p>
     <a class="rail-link" href="#faq" data-chapter-link="faq">常见问题</a>
+    <a class="rail-link" href="#glossary" data-chapter-link="glossary">术语表</a>
   </aside>
 
   <main class="doc-main" id="doc-main">
 
     <!-- ================= 开始之前 ================= -->
     <article class="chapter is-active" id="start" data-chapter="start" data-title="开始之前">
-      <h1>先在屏幕上，<br>把场地摆一遍。</h1>
-      <p class="lead">幕景是一个在浏览器里布置活动现场的工具。选一套场地，或者上传一张平面图，就能开始摆桌椅、试通道，再把方案发出去给人看。不需要会建模。</p>
+      <header class="chapter-head">
+        <p class="eyebrow">开始</p>
+        <h1>先认四格，<br>再动手。</h1>
+        <p class="lead">幕景是在浏览器里布置活动现场的工具。左边四个格子各管一条线，中间是画布，右缘一列管视角和量度。跟格子说话就能干活；没确认之前，画布上的都不是最终结果。</p>
+      </header>
 
-      <section class="doc-sec" id="welcome">
+      <section class="doc-sec" id="how-to-read">
         <h2>这份指引怎么用</h2>
-        <p>下面几章按一次真实的准备顺序写：先认场地，再摆物件，然后补上缺的模型，最后把方案交出去。不用一次读完，做到哪一步就看哪一章。</p>
-        <p>章节随时可以跳；每章末尾的「下一篇」会接着往下走。</p>
+        <p>按一次真实的准备顺序写：先认工具、知道东西存在哪，再说一句出提案；接着判断要不要重建、拍完怎么自查；最后把场地、物料和交付一步步走完。做到哪一步就看哪一章；每章末尾的「下一篇」接着往下走。</p>
       </section>
 
-      <section class="doc-sec" id="what-is">
-        <h2>幕景是什么</h2>
-        <p>一句话说，它把活动现场搬进屏幕：左边是工具，右边是对话，中间是场地的三维画布。你摆的每一件东西都按真实尺寸记录，平面视图和三维视图看到的是同一份布置。</p>
-        <p>画布上的改动先是草稿。你跟右栏的 Bingo 改完一版，觉得可以了，再点「确认布置」。确认之前的任何一步都可以撤回。</p>
+      <section class="doc-sec" id="workspace">
+        <h2>一张图认完工作台</h2>
+        <p>桌面端从左到右分四块：左轨四格、画布、右缘工具列、底部物料条。手机端左轨收成一条横向入口，画布仍是主体。</p>
+        <figure class="doc-figure doc-figure--panel">
+          <div class="figure-scroll">
+            <svg class="diagram" viewBox="0 0 760 430" role="img" aria-labelledby="fig-shell-t fig-shell-d">
+              <title id="fig-shell-t">工作台四区示意图</title>
+              <desc id="fig-shell-d">左侧竖排四个入口：总控、Bingo、空间、物料；中间是画布；右缘竖排工具；底部是物料条。</desc>
+              <defs>
+                <pattern id="grid16" width="16" height="16" patternUnits="userSpaceOnUse">
+                  <path d="M16 0H0V16" class="d-grid"/>
+                </pattern>
+              </defs>
+              <rect x="12" y="12" width="736" height="404" rx="14" class="d-panel"/>
+              <rect x="76" y="12" width="584" height="344" fill="url(#grid16)"/>
+              <line x1="76" y1="12" x2="76" y2="416" class="d-line"/>
+              <line x1="660" y1="12" x2="660" y2="416" class="d-line"/>
+
+              <!-- 左轨四格 -->
+              <rect x="18" y="98" width="2" height="36" class="d-green"/>
+              <image href="/showcase/assets/rail/door.png" x="34" y="36" width="28" height="28"/>
+              <ellipse cx="46" cy="46.1" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <ellipse cx="51.2" cy="45.6" rx="1.2" ry="2.5" fill="var(--paper)"/>
+              <text x="48" y="80" text-anchor="middle" class="d-cap">总控</text>
+
+              <image href="/showcase/assets/rail/ball.png" x="34" y="102" width="28" height="28"/>
+              <ellipse cx="44.6" cy="112.8" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <ellipse cx="51.4" cy="112.8" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <text x="48" y="146" text-anchor="middle" class="d-cap">Bingo</text>
+
+              <image href="/showcase/assets/rail/cube.png" x="34" y="168" width="28" height="28"/>
+              <ellipse cx="44.2" cy="180" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <ellipse cx="51.8" cy="179.4" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <text x="48" y="212" text-anchor="middle" class="d-cap">空间</text>
+
+              <image href="/showcase/assets/rail/pyramid.png" x="34" y="234" width="28" height="28"/>
+              <ellipse cx="44.6" cy="247.2" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <ellipse cx="51.4" cy="246.6" rx="1.2" ry="2.4" fill="var(--paper)"/>
+              <text x="48" y="278" text-anchor="middle" class="d-cap">物料</text>
+
+              <text x="48" y="374" text-anchor="middle" class="d-cap">设置</text>
+              <text x="48" y="396" text-anchor="middle" class="d-cap">账户</text>
+
+              <!-- 画布 -->
+              <text x="94" y="36" class="d-cap">画布</text>
+              <rect x="140" y="86" width="380" height="216" rx="6" class="d-panel"/>
+              <rect x="158" y="100" width="120" height="32" rx="4" class="d-plane"/>
+              <text x="218" y="121" text-anchor="middle" class="d-muted">主背景</text>
+
+              <circle cx="210" cy="176" r="12" class="d-plane"/>
+              <circle cx="256" cy="176" r="12" class="d-plane"/>
+              <circle cx="302" cy="176" r="12" class="d-plane"/>
+              <circle cx="348" cy="176" r="12" class="d-plane"/>
+              <circle cx="394" cy="176" r="12" class="d-plane"/>
+              <circle cx="210" cy="230" r="12" class="d-plane"/>
+              <circle cx="256" cy="230" r="12" class="d-plane"/>
+              <circle cx="302" cy="230" r="12" class="d-plane"/>
+              <circle cx="348" cy="230" r="12" class="d-plane"/>
+              <circle cx="394" cy="230" r="12" class="d-plane"/>
+
+              <path d="M330 300V136" class="d-dash"/>
+              <line x1="310" y1="302" x2="350" y2="302" stroke="var(--paper)" stroke-width="2.5"/>
+              <line x1="310" y1="297" x2="310" y2="307" class="d-line-strong"/>
+              <line x1="350" y1="297" x2="350" y2="307" class="d-line-strong"/>
+              <text x="330" y="324" text-anchor="middle" class="d-muted">入口</text>
+
+              <!-- 右缘工具 -->
+              <rect x="688" y="42" width="24" height="24" rx="6" class="d-panel"/>
+              <path d="M700 57V49M696 53l4-4 4 4" class="d-line-strong" stroke-width="1.4"/>
+              <rect x="688" y="90" width="24" height="24" rx="6" class="d-panel"/>
+              <ellipse cx="700" cy="102" rx="6" ry="3.6" class="d-line-strong" stroke-width="1.4"/>
+              <circle cx="700" cy="102" r="1.6" class="d-line-strong" stroke-width="1.4"/>
+              <rect x="688" y="138" width="24" height="24" rx="6" class="d-panel"/>
+              <ellipse cx="697" cy="148" rx="2.2" ry="3.4" class="d-line-strong" stroke-width="1.4"/>
+              <ellipse cx="704" cy="153" rx="2.2" ry="3.4" class="d-line-strong" stroke-width="1.4"/>
+              <rect x="688" y="186" width="24" height="24" rx="6" class="d-panel"/>
+              <path d="M692 198h16M695 195v6M700 196v4M705 195v6" class="d-line-strong" stroke-width="1.2"/>
+              <rect x="688" y="234" width="24" height="24" rx="6" class="d-panel"/>
+              <circle cx="700" cy="246" r="3.6" class="d-line-strong" stroke-width="1.4"/>
+              <path d="M700 238v2M700 252v2M692 246h2M706 246h2M694.3 240.3l1.4 1.4M704.3 250.3l1.4 1.4M705.7 240.3l-1.4 1.4M695.7 250.3l-1.4 1.4" class="d-line-strong" stroke-width="1.2"/>
+              <rect x="688" y="282" width="24" height="24" rx="6" class="d-panel"/>
+              <rect x="692" y="287" width="16" height="13" rx="2" class="d-line-strong" stroke-width="1.4"/>
+              <circle cx="700" cy="293.5" r="3" class="d-line-strong" stroke-width="1.4"/>
+              <text x="700" y="330" text-anchor="middle" class="d-cap">工具</text>
+
+              <!-- 底部物料条 -->
+              <rect x="76" y="356" width="584" height="60" class="d-plane"/>
+              <text x="92" y="380" class="d-cap">物料条</text>
+              <text x="92" y="398" class="d-muted">拖进画布即成物件</text>
+              <rect x="236" y="368" width="60" height="32" rx="6" class="d-panel"/>
+              <rect x="312" y="368" width="60" height="32" rx="6" class="d-panel"/>
+              <rect x="388" y="368" width="60" height="32" rx="6" class="d-panel"/>
+              <rect x="464" y="368" width="60" height="32" rx="6" class="d-panel"/>
+              <rect x="540" y="368" width="60" height="32" rx="6" class="d-panel"/>
+            </svg>
+          </div>
+          <p class="fig-hint">左右滑动看全图</p>
+          <figcaption>示意图：左轨四格管对话，中间是画布，右缘一列管视角与量度，底部是物料条。左缘绿条只标当前这一格。</figcaption>
+        </figure>
       </section>
 
-      <section class="doc-sec" id="abilities">
-        <h2>你能用它做什么</h2>
+      <section class="doc-sec" id="four-lanes">
+        <h2>四格各管什么</h2>
+        <p>点哪格，右栏就换成哪条线的对话；四格的记录都会汇总到总控，每条标着来源，不用来回找刚说过的话。</p>
         <ul class="rows">
-          <li><strong>按真实尺寸搭场地</strong><span>用场景模板、平面图或地图圈画得到一块场地；没有图纸时，也可以直接输入长宽。</span></li>
-          <li><strong>在三维里摆物料</strong><span>从物料库取桌椅、灯具、绿植，移动、旋转、改尺寸，边摆边看通道和视线。</span></li>
-          <li><strong>用一句话改布置</strong><span>告诉右栏的 Bingo 你想怎么改，它会把改动做成新的一版，等你确认。</span></li>
-          <li><strong>生成缺的模型和场地</strong><span>一句话或一张参考图生成物料；没有图纸的现场，可以生成能走进去的三维场地。</span></li>
-          <li><strong>把方案交出去</strong><span>发一条只读的评审链接收集意见，或导出完整的活动交接给搭建方。</span></li>
+          <li><strong>门厅 · 总控</strong><span>看全局，也负责展开和收起左栏。Bingo、空间、物料的对话都在这里汇总。</span></li>
+          <li><strong>Bingo</strong><span>布置方案。说一句活动类型、人数、场地尺寸，它出提案；改一句话，它改一版。确认之后才写进画布。</span></li>
+          <li><strong>空间</strong><span>场地从哪来：空白空间、图纸与照片、地图选址、场景模板、高斯场地生成与真实场地重建。</span></li>
+          <li><strong>物料</strong><span>物件：从物料库挑桌椅灯具绿植，或生成库里没有的模型；底部物料条拖进画布也能摆。</span></li>
         </ul>
-      </section>
-
-      <section class="doc-sec" id="first-open">
-        <h2>第一次打开</h2>
-        <p>不登录也能先在本机布置。每次新建或切换活动，当前画布会自动收进「我的项目 → 最近活动」，随时可以点「打开」回去。</p>
-        <p>登录之后，可以把当前方案存成云端项目，换一台设备也能接着改。云端项目同一时间只有一个人有编辑权，其他人打开是只读的；改完保存、点「完成编辑」，队友就能接手。</p>
-      </section>
-
-      <section class="doc-sec" id="begin">
-        <h2>开始学习</h2>
-        <p>准备好了就从「布置第一个空间」开始。如果你已经有一个真实场地，先把平面图放在手边，后面会用到。</p>
+        <p>左轨最下面是保存状态、设置和账户。设置里只有切回官网、这份指引和隐私政策；团队、项目、素材库都在账户里，两个入口不混。</p>
       </section>
 
       <nav class="chapter-nav" aria-label="章节翻页">
         <span aria-hidden="true"></span>
-        <a class="is-next" href="#space" data-chapter-link="space"><span>下一篇</span><strong>布置第一个空间</strong></a>
+        <a class="is-next" href="#tools" data-chapter-link="tools"><span>下一篇</span><strong>工具列怎么用</strong></a>
       </nav>
     </article>
 
-    <!-- ================= 布置第一个空间 ================= -->
-    <article class="chapter" id="space" data-chapter="space" data-title="布置第一个空间">
-      <h1>布置第一个空间</h1>
-      <p class="lead">先让场地立起来，再往里放东西。这一章只做一件事：把一个空场地摆到能看。</p>
+    <!-- ================= 工具列 ================= -->
+    <article class="chapter" id="tools" data-chapter="tools" data-title="工具列怎么用">
+      <header class="chapter-head">
+        <p class="eyebrow">开始</p>
+        <h1>右缘一列，<br>分四组。</h1>
+        <p class="lead">这列钮只管两件事：怎么看，怎么量。先认清分组，后面摆场才不会到处找。</p>
+      </header>
 
-      <section class="doc-sec" id="venue-source">
-        <h2>场地从哪来</h2>
-        <p>四条路，按你手上有什么来选。选完都可以再改尺寸和结构。</p>
+      <section class="doc-sec" id="toolbar">
+        <h2>右缘工具列</h2>
+        <p>画布右缘一列钮，管「怎么看」和「怎么量」。按用途分四组：</p>
         <ul class="rows">
-          <li><strong>场景模板</strong><span>在左侧「空间」里选一套已经建好的场地，尺寸和门窗都在，适合先试手。</span></li>
-          <li><strong>平面图</strong><span>在左侧「空间」的「图纸与照片」里上传图纸，用两点标尺标出一段已知长度，墙线会叠在原图上供你核对。</span></li>
-          <li><strong>地图圈画</strong><span>在布置对话的「你可以做什么」里点「地图圈画」，搜索地点，在卫星图上圈出边界。</span></li>
-          <li><strong>手输长宽</strong><span>没有平面图时，在左侧「空间」里直接填总宽和总深。上传图纸之后，请改用两点标尺。</span></li>
+          <li><strong>看</strong><span>「平面 / 立体」切换俯视与三维；「视角」按 整体 → 俯视 → 正面机位 循环；「进入漫游」站到地面高度，看客人真正看到的视线。</span></li>
+          <li><strong>摆</strong><span>「选择」移动局部物体；「移动整体场景」挪整块高斯场地；「尺寸」量两点；「网格吸附」摆整齐；「撤销 / 重做」兜底。</span></li>
+          <li><strong>氛围</strong><span>人群、天气、时段、现场灯光。只改观感，不动摆好的布置。现场灯光只有明亮自然、温暖聚会、冷调展览三档，不加灯具。</span></li>
+          <li><strong>交付</strong><span>「导出效果图」出一张图或一套机位册；「发布」把方案交出去，交付几章细讲。</span></li>
         </ul>
-        <figure class="doc-figure">
-          <img src="/showcase/assets/scenes/01体育馆.png" alt="场景模板「体育馆」的三维预览" width="1587" height="991" loading="lazy" decoding="async">
-          <figcaption>场景模板「体育馆」。现成的场地可以继续改尺寸、门窗和布置。</figcaption>
-        </figure>
+        <p>最上面还有楼层切换和「发布」。楼层最多 4 层；户外场地还会多一颗「卫星贴地」。</p>
       </section>
 
-      <section class="doc-sec" id="camera">
-        <h2>在三维里看清场地</h2>
-        <p>画布边上的工具条决定你怎么看这块场地：</p>
-        <ul class="rows">
-          <li><strong>平面 / 立体</strong><span>在俯视平面和三维之间切换。对位置看平面，看效果看立体。</span></li>
-          <li><strong>视角</strong><span>工具条上那一颗按钮在「整体 / 俯视 / 正面机位」之间轮着切：整体看全貌，俯视看通道，正面机位看立面。图标就是当前机位。</span></li>
-          <li><strong>第一人称走进场</strong><span>站到地面高度往里走，看客人真正看到的视线。</span></li>
-        </ul>
-        <p>需要量两点之间的距离，打开「尺寸标注」；想让物件落在整齐的网格上，打开「网格吸附」。</p>
-      </section>
-
-      <section class="doc-sec" id="place-items">
-        <h2>把物件放进场地</h2>
-        <p>从左侧「物料」里挑模型，点击或拖进画布。选中之后可以移动、旋转和改尺寸；每一步都可以撤销和重做。</p>
-        <p>摆的时候多看俯视和漫游：俯视看通道够不够宽，走进去看标牌有没有被挡住、主桌有没有挡住入口。</p>
-      </section>
-
-      <section class="doc-sec" id="ask">
-        <h2>跟 Bingo 说要什么</h2>
-        <p>右栏的 Bingo 可以直接听懂人话。描述你想要的改动，它会把结果做成新的一版，不会立刻覆盖你手上的布置。</p>
-        <blockquote class="say"><p>“把签到桌移到入口右侧，留出两米通道。”</p></blockquote>
-        <p>改得不对就点「撤回」；觉得可以，再点「确认布置」。确认之前，画布上的这一版仍然是草稿。</p>
-      </section>
-
-      <section class="doc-sec" id="check">
-        <h2>交给自己检查</h2>
-        <p>结束之前，用三个视角各看一遍：俯视看通道，走进去看视线，正面机位看背景。再打开「尺寸标注」核对主桌和通道的关键尺寸。没有问题，就可以进入下一章。</p>
-      </section>
+      <p>工具列只改「看」和「量」，不动你已经摆好的东西。真正改布置，还是在画布上选物件、拖手柄。</p>
+      <div class="slots">
+        <div class="slot"><span>待补 · 录屏</span><p>一段 10 秒演示：平面 / 立体切换，再按一次「视角」循环到正面机位。</p></div>
+        <div class="slot"><span>待补 · 截图</span><p>「尺寸」量两点后的读数，和「网格吸附」打开时的对齐提示。</p></div>
+      </div>
 
       <nav class="chapter-nav" aria-label="章节翻页">
         <a class="is-prev" href="#start" data-chapter-link="start"><span>上一篇</span><strong>开始之前</strong></a>
-        <a class="is-next" href="#generate" data-chapter-link="generate"><span>下一篇</span><strong>物料与场地</strong></a>
+        <a class="is-next" href="#first-open" data-chapter-link="first-open"><span>下一篇</span><strong>第一次打开与保存</strong></a>
       </nav>
     </article>
 
-    <!-- ================= 物料与场地 ================= -->
-    <article class="chapter" id="generate" data-chapter="generate" data-title="物料与场地">
-      <h1>生成物料与场地</h1>
-      <p class="lead">模型库里没有的东西，可以生成。生成会消耗额度，提交之前会让你再确认一次。</p>
+    <!-- ================= 第一次打开与保存 ================= -->
+    <article class="chapter" id="first-open" data-chapter="first-open" data-title="第一次打开与保存">
+      <header class="chapter-head">
+        <p class="eyebrow">开始</p>
+        <h1>第一次打开，<br>先知道自己存在哪。</h1>
+        <p class="lead">新项目从一块空地开始，默认 12 × 8 米。摆之前先弄清保存：不登录只跟着这台浏览器，登录了才跟着账号走。</p>
+      </header>
+
+      <section class="doc-sec" id="open-blank">
+        <h2>从空白、模板或旧项目开始</h2>
+        <p>新建项目选「从空白开始」，默认 12 × 8 米，起个名字就能摆。也可以打开现成模板，或从「我的项目」里接着上次。</p>
+        <p>不登录也能先摆，保存状态写在左轨下方；登录后方案跟着账号走，换一台设备打开还能接着改。</p>
+        <div class="note">
+          <strong>还没登录时</strong>
+          <p>方案只在这台设备的浏览器里，换设备看不到。清空浏览器数据之前，先导出完整活动交接，或登录后把方案存进账号。</p>
+        </div>
+      </section>
+
+      <section class="doc-sec" id="account-center">
+        <h2>账户里有什么</h2>
+        <p>左轨最下面是设置和账户，两个入口不混：设置只放切回官网、这份指引和隐私政策；团队、项目、素材库都在账户里。</p>
+        <ul class="rows">
+          <li><strong>团队</strong><span>点左轨账户打开账户中心，左栏是团队。邀请按邮箱添加；成员和直接消息在团队面板里。</span></li>
+          <li><strong>项目</strong><span>账户中心右栏是项目，接着上次的项目从这里进。</span></li>
+          <li><strong>素材库</strong><span>右栏还有素材库；上传过的图纸、照片和生成过的物料都留在这里，能再次放进空间。</span></li>
+        </ul>
+        <p>团队消息需要登录并连接后才能用；没登录时，先把方案存在这台设备上。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>账户中心的左右两栏：团队、项目与素材库。</p></div>
+          <div class="slot"><span>待补 · 截图</span><p>左轨下方的保存状态：本地保存与已登录两种状态。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#tools" data-chapter-link="tools"><span>上一篇</span><strong>工具列怎么用</strong></a>
+        <a class="is-next" href="#first-plan" data-chapter-link="first-plan"><span>下一篇</span><strong>说一句，出提案</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 说一句，出提案 ================= -->
+    <article class="chapter" id="first-plan" data-chapter="first-plan" data-title="说一句，出提案">
+      <header class="chapter-head">
+        <p class="eyebrow">Bingo</p>
+        <h1>说一句，<br>出提案。</h1>
+        <p class="lead">这一章只做两件事：把人数、活动、场地尺寸说清，然后看懂它给你的提案卡。确认之前，画布上的都只是预览。</p>
+      </header>
+
+      <section class="doc-sec" id="one-sentence">
+        <h2>从一句话开始</h2>
+        <p>点开 Bingo，对话卡上有三句现成例句，点一句就能用：</p>
+        <blockquote class="say"><span class="say-label">可以直接点</span><p>80 人发布会，室内 12×9</p></blockquote>
+        <p>另两句是「30 人圆桌晚宴，室内 15×10」和「120 人市集，户外 20×14」。想换活动类型或人数，点「改类型或人数」展开选项；都不合适，就直接打一句。写清三件事就够了：多少人、什么活动、场地多大。</p>
+        <p>点「生成方案」。</p>
+      </section>
+
+      <section class="doc-sec" id="proposal">
+        <h2>提案不是结果</h2>
+        <p>生成完，Bingo 给一张提案卡：摆了什么、座位够不够、还差什么，都写在卡上。这时画布上是预览，还没有写进方案。</p>
+        <figure class="doc-figure doc-figure--panel">
+          <div class="figure-scroll">
+            <svg class="diagram" viewBox="0 0 760 240" role="img" aria-labelledby="fig-flow-t fig-flow-d">
+              <title id="fig-flow-t">从一句话到落盘的四个状态</title>
+              <desc id="fig-flow-d">说一句、看提案、确认布置、落到画布。确认之前画布只是预览，撤回或换一版会回到第一步。</desc>
+              <defs>
+                <marker id="arrow-flow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0 0L8 4L0 8Z" fill="var(--ink-soft)"/>
+                </marker>
+              </defs>
+
+              <circle cx="40" cy="56" r="18" class="d-panel"/>
+              <text x="40" y="61" text-anchor="middle" class="d-title">1</text>
+              <text x="70" y="50" class="d-title">说一句</text>
+              <text x="70" y="72" class="d-body">人数 · 活动 · 场地尺寸</text>
+
+              <line x1="190" y1="56" x2="208" y2="56" class="d-line-strong" marker-end="url(#arrow-flow)"/>
+
+              <circle cx="232" cy="56" r="18" class="d-panel"/>
+              <text x="232" y="61" text-anchor="middle" class="d-title">2</text>
+              <text x="262" y="50" class="d-title">看提案</text>
+              <text x="262" y="72" class="d-body">预览，还没落盘</text>
+
+              <line x1="382" y1="56" x2="400" y2="56" class="d-line-strong" marker-end="url(#arrow-flow)"/>
+
+              <rect x="416" y="22" width="140" height="92" rx="12" fill="var(--plane)" stroke="var(--ink-soft)"/>
+              <circle cx="450" cy="52" r="18" class="d-panel"/>
+              <text x="450" y="57" text-anchor="middle" class="d-title">3</text>
+              <text x="478" y="46" class="d-title">确认布置</text>
+              <text x="478" y="68" class="d-body">唯一落盘动作</text>
+              <text x="486" y="98" text-anchor="middle" class="d-cap">只有这一步会写进画布</text>
+
+              <line x1="556" y1="56" x2="596" y2="56" class="d-line-strong" marker-end="url(#arrow-flow)"/>
+
+              <circle cx="638" cy="56" r="18" class="d-panel"/>
+              <text x="638" y="61" text-anchor="middle" class="d-title">4</text>
+              <text x="668" y="50" class="d-title">落到画布</text>
+              <text x="668" y="72" class="d-body">进入撤销历史</text>
+
+              <path d="M22 142V152H380V142" class="d-line"/>
+              <text x="201" y="174" text-anchor="middle" class="d-body">确认前：画布只是预览</text>
+              <path d="M416 142V152H738V142" class="d-line"/>
+              <text x="577" y="174" text-anchor="middle" class="d-body">确认后：写进画布，可撤销</text>
+
+              <path d="M250 96V210H40V80" class="d-dash" marker-end="url(#arrow-flow)"/>
+              <text x="250" y="228" class="d-muted">撤回 / 换一版，回到这一版之前</text>
+            </svg>
+          </div>
+          <p class="fig-hint">左右滑动看全图</p>
+          <figcaption>示意图：提案卡上的「确认布置」是唯一落盘动作；确认之前，画布上的都只是预览。</figcaption>
+        </figure>
+        <p>一次只能有一版没确认的提案。想改，直接说下一句；它会在这一版上改，不会悄悄覆盖你已经确认的布置。</p>
+        <div class="note note--quiet">
+          <strong>提案卡上的数字可以核对</strong>
+          <p>人数、面积、座位数都带来源行，写清是按哪句要求算的；缺信息时它会列「还差什么」，不会用默认值填满后再道歉。</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#first-open" data-chapter-link="first-open"><span>上一篇</span><strong>第一次打开与保存</strong></a>
+        <a class="is-next" href="#confirm" data-chapter-link="confirm"><span>下一篇</span><strong>看懂提案，再确认</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 看懂提案，再确认 ================= -->
+    <article class="chapter" id="confirm" data-chapter="confirm" data-title="看懂提案，再确认">
+      <header class="chapter-head">
+        <p class="eyebrow">Bingo</p>
+        <h1>看懂提案，<br>再确认。</h1>
+        <p class="lead">提案卡是 Bingo 给你的草稿，不是最终结果。先看三眼、量关键距离，再决定落不落盘。</p>
+      </header>
+
+      <section class="doc-sec" id="proposal-read">
+        <h2>确认与撤回</h2>
+        <p>看没问题，点「确认布置」，这一版才落到画布，并进入撤销历史。</p>
+        <ul class="rows">
+          <li><strong>确认布置</strong><span>写进画布，成为当前方案。确认完还能撤销，8 秒内底部也会再给一次「撤销」。</span></li>
+          <li><strong>撤回</strong><span>丢掉这版提案，画布保持原样。</span></li>
+          <li><strong>换一版</strong><span>按同一句要求再出一版，仍然等你确认。</span></li>
+        </ul>
+        <p>不对就撤回；想再看一版就换一版。它每改一版都会等你确认，不会趁你切走时自动覆盖。</p>
+      </section>
+
+      <section class="doc-sec" id="three-looks">
+        <h2>先看三眼</h2>
+        <p>确认之前，用三种视角各看一遍：</p>
+        <ul class="rows">
+          <li><strong>俯视</strong><span>通道够不够宽，桌椅有没有挡门，座位是不是都朝向主背景。</span></li>
+          <li><strong>正面机位</strong><span>主背景和舞台在不在画面里，前排会不会挡住后排。</span></li>
+          <li><strong>走进场</strong><span>站到地面高度，看客人进门第一眼看到什么，转身时会不会撞到东西。</span></li>
+        </ul>
+        <p>要核对关键距离，打开「尺寸」量两点。量完再确认。</p>
+      </section>
+
+      <div class="slots">
+        <div class="slot"><span>待补 · 对照</span><p>提案卡上的「座位够不够」和画布座位数，对着看一遍。</p></div>
+        <div class="slot"><span>待补 · 录屏</span><p>一次「换一版」：旧提案还在，新提案等你再确认。</p></div>
+      </div>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#first-plan" data-chapter-link="first-plan"><span>上一篇</span><strong>说一句，出提案</strong></a>
+        <a class="is-next" href="#bingo-limits" data-chapter-link="bingo-limits"><span>下一篇</span><strong>Bingo 的边界</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= Bingo 的边界 ================= -->
+    <article class="chapter" id="bingo-limits" data-chapter="bingo-limits" data-title="Bingo 的边界">
+      <header class="chapter-head">
+        <p class="eyebrow">Bingo</p>
+        <h1>它能改到哪一步，<br>先心里有数。</h1>
+        <p class="lead">Bingo 擅长出整版和改一处；精确挪单件、删指定物件、加库外品类，交给画布和物料库更稳。</p>
+      </header>
+
+      <section class="doc-sec" id="what-bingo-can">
+        <h2>Bingo 能改到哪一步</h2>
+        <p>这几件事它做得稳：</p>
+        <ul class="rows">
+          <li><strong>出整版</strong><span>按人数、活动类型、场地尺寸出一版布局，并给出座位数与面积。</span></li>
+          <li><strong>改一处</strong><span>按一句话改一个位置，比如把签到桌移到入口右侧，留出两米通道。</span></li>
+          <li><strong>做体检</strong><span>检查动线、拥挤和碰撞，列出哪里有问题、为什么。</span></li>
+          <li><strong>加常见物料</strong><span>嘴上能加 8 类：椅子、桌子、签到台、背景板、展架、隔断、地毯、装饰道具。</span></li>
+          <li><strong>换与退</strong><span>换一版、撤回、确认，都按你的动作来。</span></li>
+        </ul>
+        <p>这几件事它现在还做不了，别在对话里耗：</p>
+        <ul class="rows">
+          <li><strong>精确挪单件</strong><span>「往左移两米」这类要求，用画布上的手柄更稳；它给的是整版调整。</span></li>
+          <li><strong>加库外品类</strong><span>舞台灯、音响、花艺装置不在嘴上能加的范围；先用物料库或生成物料。</span></li>
+          <li><strong>删改指定物件</strong><span>删掉或替换某一件指定物件，在画布上选中后删，或在物料里换。</span></li>
+        </ul>
+        <p>说清要求，比说得好听有用。它听不懂时，会在提案卡上写「还差什么」，按那行补一句就行。</p>
+      </section>
+
+      <section class="doc-sec" id="next-step">
+        <h2>下一步</h2>
+        <p>现在这块地是按例句尺寸开的。下一步通常去现场拍素材；如果手里已经有图纸、知道场地在哪，也可以直接跳到「场地从哪来」。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 示例</span><p>一句「把签到桌移到入口右侧，留出两米通道」的前后对照。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>提案卡上「还差什么」那一行的写法，以及补一句后的结果。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#confirm" data-chapter-link="confirm"><span>上一篇</span><strong>看懂提案，再确认</strong></a>
+        <a class="is-next" href="#capture" data-chapter-link="capture"><span>下一篇</span><strong>去现场前</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 去现场前 ================= -->
+    <article class="chapter" id="capture" data-chapter="capture" data-title="去现场前">
+      <header class="chapter-head">
+        <p class="eyebrow">现场</p>
+        <h1>去现场前，<br>先定拍法。</h1>
+        <p class="lead">采集不是随手拍一圈；站位、重叠、曝光、定位，缺一项都可能白跑。先判断这次到底需不需要重建。</p>
+      </header>
+
+      <section class="doc-sec" id="why-capture">
+        <h2>先判断：这次要不要重建</h2>
+        <p>场地重建吃的是连续、重叠、带比例的照片或视频。素材合格，重建出来的场地才能按真实米数铺在画布上；素材不合格，重建会糊、会缺面，甚至直接失败。</p>
+        <ul class="rows">
+          <li><strong>只要尺寸和布局</strong><span>有平面图就用「图纸与照片」，比例更准；不必专门去现场重建。</span></li>
+          <li><strong>只要大致位置</strong><span>户外场地用「地图选址」先圈一块地，够用就不拍。</span></li>
+          <li><strong>要真实观感</strong><span>客户要看现场氛围、材质和光线，才值得去拍、去重建。</span></li>
+          <li><strong>时间与额度</strong><span>重建通常 15–30 分钟并消耗额度；当天就要交方案时，先评估等不等得起。</span></li>
+        </ul>
+        <p>决定要拍，再往下看采集方式。这一步不需要建模基础，需要的是走位。</p>
+      </section>
+
+      <section class="doc-sec" id="three-methods">
+        <h2>三种采集方式</h2>
+        <div class="cards">
+          <article class="card">
+            <h3>拍照采集</h3>
+            <p>适合室内、小场地、单件物体。三层环绕，一层一层走完，最稳。</p>
+          </article>
+          <article class="card">
+            <h3>视频采集</h3>
+            <p>适合大空间、想快速覆盖。沿闭环慢慢走，用三脚架更稳。</p>
+          </article>
+          <article class="card">
+            <h3>已有扫描结果</h3>
+            <p>已经有 360 全景或专业设备扫描，直接拿来用，不用重拍。</p>
+          </article>
+        </div>
+        <p>第一次做，建议先找一块小场地练手：走完三层、导出、评分，再上真实项目。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 示例</span><p>室内小场地的照片采集：三层各一张，标出站位与朝向。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>户外大场地的视频采集：闭环路线与转角过渡。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#bingo-limits" data-chapter-link="bingo-limits"><span>上一篇</span><strong>Bingo 的边界</strong></a>
+        <a class="is-next" href="#capture-layers" data-chapter-link="capture-layers"><span>下一篇</span><strong>三层怎么拍</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 三层怎么拍 ================= -->
+    <article class="chapter" id="capture-layers" data-chapter="capture-layers" data-title="三层怎么拍">
+      <header class="chapter-head">
+        <p class="eyebrow">现场</p>
+        <h1>三层走完，<br>数量才够。</h1>
+        <p class="lead">三层是三个高度，不是绕三圈。每一层沿同一个环走完，再换下一个高度；数量、重叠、曝光都在这一步决定。</p>
+      </header>
+
+      <section class="doc-sec" id="three-layers">
+        <h2>三层怎么走</h2>
+        <p>三层是三个高度，不是绕三圈：</p>
+        <ul class="rows">
+          <li><strong>0.6 米</strong><span>仰拍 35°，拍到桌面下、墙角、低处结构。</span></li>
+          <li><strong>1.7 米</strong><span>平视，拍到人眼高度的大部分画面。</span></li>
+          <li><strong>1.9 米</strong><span>俯拍 35°，拍到桌面、地面和高处结构。</span></li>
+        </ul>
+        <p>每一层沿同一个环走完，每拍一张向前走半步，让相邻两张至少 70% 画面重合。别站在原地转一圈。转角用 30° 过渡，路径要闭环。</p>
+        <figure class="doc-figure doc-figure--panel">
+          <div class="figure-scroll">
+            <svg class="diagram" viewBox="0 0 760 390" role="img" aria-labelledby="fig-capture-t fig-capture-d">
+              <title id="fig-capture-t">三层采集的侧视与俯视示意</title>
+              <desc id="fig-capture-d">侧视显示 0.6 米仰拍、1.7 米平视、1.9 米俯拍三个高度；俯视显示沿场地内环走动，每张向前半步，相邻重叠至少 70%。</desc>
+              <defs>
+                <marker id="arrow-capture" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0 0L8 4L0 8Z" fill="var(--ink-soft)"/>
+                </marker>
+              </defs>
+
+              <text x="20" y="28" class="d-title">侧视 · 三个高度</text>
+              <line x1="20" y1="290" x2="350" y2="290" class="d-line-strong"/>
+              <rect x="310" y="70" width="24" height="220" fill="var(--plane)" stroke="var(--hair)"/>
+              <line x1="316" y1="70" x2="316" y2="290" class="d-line"/>
+              <line x1="322" y1="70" x2="322" y2="290" class="d-line"/>
+              <line x1="328" y1="70" x2="328" y2="290" class="d-line"/>
+              <text x="322" y="60" text-anchor="middle" class="d-muted">墙</text>
+
+              <line x1="24" y1="100" x2="24" y2="290" class="d-line"/>
+              <line x1="20" y1="240" x2="28" y2="240" class="d-line-strong"/>
+              <line x1="20" y1="130" x2="28" y2="130" class="d-line-strong"/>
+              <line x1="20" y1="110" x2="28" y2="110" class="d-line-strong"/>
+              <text x="32" y="244" class="d-muted">0.6 m</text>
+              <text x="32" y="134" class="d-muted">1.7 m</text>
+              <text x="32" y="114" class="d-muted">1.9 m</text>
+
+              <rect x="94" y="235" width="18" height="10" rx="2" class="d-panel"/>
+              <path d="M112 236l10 4-10 4Z" class="d-panel"/>
+              <text x="130" y="230" class="d-muted">仰拍 35°</text>
+              <path d="M120 240L310 108" class="d-dash"/>
+
+              <rect x="94" y="125" width="18" height="10" rx="2" class="d-panel"/>
+              <path d="M112 126l10 4-10 4Z" class="d-panel"/>
+              <text x="130" y="120" class="d-muted">平视</text>
+              <path d="M120 130H310" class="d-dash"/>
+
+              <rect x="94" y="105" width="18" height="10" rx="2" class="d-panel"/>
+              <path d="M112 106l10 4-10 4Z" class="d-panel"/>
+              <text x="130" y="100" class="d-muted">俯拍 35°</text>
+              <path d="M120 110L310 242" class="d-dash"/>
+
+              <text x="20" y="326" class="d-body">每层 24–36 张；走完再换下一个高度。</text>
+
+              <text x="400" y="28" class="d-title">俯视 · 沿环走</text>
+              <rect x="430" y="60" width="280" height="210" rx="8" class="d-panel"/>
+              <rect x="460" y="90" width="220" height="150" rx="28" fill="none" stroke="var(--ink-soft)" stroke-dasharray="6 5"/>
+              <circle cx="500" cy="90" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="570" cy="90" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="640" cy="90" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="680" cy="130" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="680" cy="200" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="640" cy="240" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="570" cy="240" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="500" cy="240" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="460" cy="200" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <circle cx="460" cy="130" r="4" fill="var(--paper)" stroke="var(--ink-soft)"/>
+              <path d="M535 90H605" class="d-line-strong" marker-end="url(#arrow-capture)"/>
+              <path d="M680 155V185" class="d-line-strong" marker-end="url(#arrow-capture)"/>
+              <path d="M605 240H535" class="d-line-strong" marker-end="url(#arrow-capture)"/>
+              <path d="M460 185V155" class="d-line-strong" marker-end="url(#arrow-capture)"/>
+              <text x="570" y="162" text-anchor="middle" class="d-title">沿环走</text>
+              <text x="570" y="182" text-anchor="middle" class="d-body">每张向前半步</text>
+              <text x="570" y="202" text-anchor="middle" class="d-muted">别站定转身</text>
+
+              <rect x="460" y="286" width="72" height="26" rx="4" class="d-plane"/>
+              <rect x="486" y="286" width="72" height="26" rx="4" class="d-plane"/>
+              <text x="560" y="305" class="d-body">相邻重叠 ≥ 70%</text>
+
+              <rect x="20" y="345" width="720" height="32" rx="8" class="d-panel"/>
+              <text x="40" y="366" class="d-body">72 张 · 三层闭环底线</text>
+              <text x="300" y="366" class="d-body">120–180 张 · 可交付</text>
+              <text x="560" y="366" class="d-body">少于 120 张 · 评分封顶</text>
+            </svg>
+          </div>
+          <p class="fig-hint">左右滑动看全图</p>
+          <figcaption>示意图：三层是三个高度，每一层都要沿环走完；相邻两张至少 70% 画面重合，路径要闭环。</figcaption>
+        </figure>
+      </section>
+
+      <section class="doc-sec" id="capture-numbers">
+        <h2>拍多少，怎么算够</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>项目</th><th>要求</th><th>为什么</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>每层机位</td><td class="num">24–36 张</td><td>少于 24 张，环不完整。</td></tr>
+              <tr><td>三层底线</td><td class="num">72 张</td><td>只是三层闭环底线，不是可交付数量。</td></tr>
+              <tr><td>可交付</td><td class="num">120–180 张</td><td>少于 120 张，评分直接封顶。</td></tr>
+              <tr><td>相邻重叠</td><td class="num">≥ 70%</td><td>匹配点才够，接缝才不会糊。</td></tr>
+              <tr><td>视角</td><td class="num">约 120° 广角</td><td>太广会畸变，太窄拍不全。</td></tr>
+              <tr><td>分辨率</td><td class="num">4K 以上</td><td>细节不够，重建会糊。</td></tr>
+              <tr><td>曝光</td><td class="nowrap">同一区域锁定</td><td>每张都变，拼接会花。</td></tr>
+              <tr><td>定位</td><td class="nowrap">尽量开 GPS</td><td>覆盖率低于 50% 会压分。</td></tr>
+              <tr><td>比例</td><td class="nowrap">量一段真实长度</td><td>否则场地没有真实米数。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fig-hint" aria-hidden="true">左右滑动看全表</p>
+        <p class="p2">拍摄时长也有上限：强光下建议不超过 30 分钟，阴天不超过 2 小时；超 2 小时，时长项直接为 0。</p>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#capture" data-chapter-link="capture"><span>上一篇</span><strong>去现场前</strong></a>
+        <a class="is-next" href="#capture-check" data-chapter-link="capture-check"><span>下一篇</span><strong>拍完怎么判断</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 拍完怎么判断 ================= -->
+    <article class="chapter" id="capture-check" data-chapter="capture-check" data-title="拍完怎么判断">
+      <header class="chapter-head">
+        <p class="eyebrow">现场</p>
+        <h1>拍完先自查，<br>再上传。</h1>
+        <p class="lead">评分是现场拦截，不是成功保证。先看废片类型，再看分数，最后对着清单确认素材已经带走。</p>
+      </header>
+
+      <section class="doc-sec" id="bad-examples">
+        <h2>三种常见废片</h2>
+        <p>下面三张来自我们 2026-11-04 的西湖夜间采集：32 个文件，0 个带 GPS，原地转了 102°。不是设备不好，是拍法不对。</p>
+        <div class="photo-grid">
+          <figure class="is-wide">
+            <img src="/showcase/assets/capture/spin.jpg" alt="西湖夜间采集的原地旋转画面，茶亭与湖面在画面两侧" width="800" height="300" loading="lazy" decoding="async">
+            <figcaption>原地转了 102°：相邻画面重叠不够，接不起来。《拍摄指南 2026》也明确：不要定点拍单张全景。</figcaption>
+          </figure>
+          <figure>
+            <img src="/showcase/assets/capture/night.jpg" alt="夜间手持拍摄的茶亭，暗部噪点明显" width="800" height="768" loading="lazy" decoding="async">
+            <figcaption>夜景手持：暗部噪点多，同一区域曝光还在变。低光噪点会直接影响重建。</figcaption>
+          </figure>
+          <figure>
+            <img src="/showcase/assets/capture/nogps.jpg" alt="夜间茶亭画面，缺少定位信息" width="800" height="800" loading="lazy" decoding="async">
+            <figcaption>0 个文件带 GPS：定位覆盖进评分，缺失会压低上限，0 GPS 视为高风险。</figcaption>
+          </figure>
+        </div>
+        <p>对应的改法：</p>
+        <ul class="rows">
+          <li><strong>夜景</strong><span>换到白天，或补光；同一区域锁定曝光，别每张都重测。</span></li>
+          <li><strong>水面 / 反光</strong><span>避开大面积水面和镜面，或从侧面拍；反光会让匹配点漂。</span></li>
+          <li><strong>原地转</strong><span>沿环走，每张向前半步，保证 70% 重叠。</span></li>
+          <li><strong>没 GPS</strong><span>打开定位；至少量一段真实长度做比例，别让场地没有米数。</span></li>
+        </ul>
+      </section>
+
+      <section class="doc-sec" id="score">
+        <h2>现场评分怎么看</h2>
+        <p>采集页会给 0–100 分：</p>
+        <ul class="rows">
+          <li><strong>≥ 75</strong><span>可以直接跑重建。</span></li>
+          <li><strong>50–74</strong><span>建议补拍，先补低分项，再重新评分。</span></li>
+          <li><strong>&lt; 50</strong><span>重采，别急着提交。</span></li>
+        </ul>
+        <p>评分会逐项列「定位缺失 / 精度差 / 重复 / 过暗」。硬门槛不过会直接判重采。手机快检只抽样亮度直方图与感知哈希，判断不了模糊、反光和动态物体；评分是现场拦截，不替代重建试跑。</p>
+        <div class="note">
+          <strong>评分高不等于一次成功</strong>
+          <p>评分只说明素材具备可重建条件，不保证重建结果。最终还要看云端试跑；重建失败时，先对照扣分项补拍，再重试。</p>
+        </div>
+      </section>
+
+      <section class="doc-sec" id="capture-checklist">
+        <h2>带走前的清单</h2>
+        <p>离开现场前，确认这几件事：</p>
+        <ul class="rows">
+          <li><strong>三层走完</strong><span>每层 24–36 张，总数不少于 120 张。</span></li>
+          <li><strong>重叠够</strong><span>相邻两张至少 70%，没有原地转。</span></li>
+          <li><strong>曝光稳</strong><span>同一区域锁定曝光，没有一半过暗一半过曝。</span></li>
+          <li><strong>有定位或比例</strong><span>打开 GPS，或量一段真实长度。</span></li>
+          <li><strong>避开难重建的表面</strong><span>没有大面积水面、镜面反光、快速走动的人。</span></li>
+          <li><strong>素材已带走</strong><span>导出到能带走的设备，不只在手机相册里。</span></li>
+        </ul>
+        <p>完整参数和更多示例，看 <a href="/guide/capture">拍摄指南</a>。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>一份 78 分的采集评分：哪一项扣分、扣了多少。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一场地补拍前后：定位从 0 到 100%，分数从 62 到 84。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#capture-layers" data-chapter-link="capture-layers"><span>上一篇</span><strong>三层怎么拍</strong></a>
+        <a class="is-next" href="#capture-cases" data-chapter-link="capture-cases"><span>下一篇</span><strong>实拍案例</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 实拍案例 ================= -->
+    <article class="chapter" id="capture-cases" data-chapter="capture-cases" data-title="实拍案例">
+      <header class="chapter-head">
+        <p class="eyebrow">现场</p>
+        <h1>别人的现场，<br>是怎么拍的。</h1>
+        <p class="lead">同样的规则，落到不同场地会长得不一样。这一章按场地类型拆开，每个案例都写清楚站位、数量、耗时和最后的评分。</p>
+      </header>
+
+      <section class="doc-sec" id="cases-indoor">
+        <h2>室内小场地</h2>
+        <p>茶室、展厅、单间店铺。场地小，一圈走完很快，难点在低处和桌下：蹲下仰拍时容易漏掉墙角，站着平视又拍不到桌面下方。先把家具挪开一条能走人的通道，再开始三层。</p>
+        <ul class="rows">
+          <li><strong>典型规模</strong><span>30–80 平方米，三层合计 120 张左右。</span></li>
+          <li><strong>耗时</strong><span>20–30 分钟，含挪家具和量比例。</span></li>
+          <li><strong>最容易丢分</strong><span>桌下暗部、玻璃反光、同一区域曝光不一致。</span></li>
+        </ul>
+        <div class="slots slots--one">
+          <div class="slot slot--tall"><span>待补 · 案例</span><p>一间 60 平方米茶室：三层站位图、实际张数、评分截图，以及重建后的高斯实景。</p></div>
+        </div>
+      </section>
+
+      <section class="doc-sec" id="cases-outdoor">
+        <h2>户外大场地</h2>
+        <p>草坪、广场、营地。面积大，靠照片容易拍不全，通常改用视频沿闭环慢走。户外没有墙可以做参照，比例要在现场量一段真实长度，否则重建出来没有米数。</p>
+        <ul class="rows">
+          <li><strong>典型规模</strong><span>几百到上千平方米，视频 8–15 分钟一圈。</span></li>
+          <li><strong>耗时</strong><span>40–90 分钟，含找机位和避开人流。</span></li>
+          <li><strong>最容易丢分</strong><span>天空过曝、地面纹理重复、走动的人。</span></li>
+        </ul>
+        <div class="slots slots--one">
+          <div class="slot slot--tall"><span>待补 · 案例</span><p>一块户外草坪婚礼场地：视频路线、转角处理、比例尺摆放，以及重建后的效果。</p></div>
+        </div>
+      </section>
+
+      <section class="doc-sec" id="cases-night">
+        <h2>夜景与低光</h2>
+        <p>夜景不是不能拍，是要求更高。暗部噪点会让匹配点漂移，同一区域曝光还在变，重建就会花。要么换到白天，要么补光并把曝光锁死，并且接受多跑一次的准备。</p>
+        <ul class="rows">
+          <li><strong>能拍的前提</strong><span>有稳定补光，或场地本身照明均匀。</span></li>
+          <li><strong>必须做</strong><span>锁定曝光与白平衡，用三脚架，降低快门速度换低噪点。</span></li>
+          <li><strong>不建议</strong><span>手持、自动曝光、大面积水面和镜面。</span></li>
+        </ul>
+        <div class="slots slots--one">
+          <div class="slot slot--tall"><span>待补 · 案例</span><p>西湖夜间采集的完整复盘：32 个文件、0 个 GPS、原地转 102°，以及如果重来一遍该怎么拍。</p></div>
+        </div>
+      </section>
+
+      <section class="doc-sec" id="cases-failure">
+        <h2>一次失败的重建</h2>
+        <p>评分过线也可能重建失败。失败时先看云端返回的原因，再决定补拍还是换方式；不要在原素材上反复重试，问题通常不会自己消失。</p>
+        <ul class="rows">
+          <li><strong>缺面</strong><span>某个方向没有覆盖到，回现场补那个角。</span></li>
+          <li><strong>糊</strong><span>分辨率不够或运动模糊，换 4K 以上、站稳再按。</span></li>
+          <li><strong>比例不对</strong><span>没有量真实长度，补一段尺寸后重新提交。</span></li>
+        </ul>
+        <div class="slots">
+          <div class="slot slot--tall"><span>待补 · 案例</span><p>一次缺面的重建：失败截图、原因对照、补拍清单。</p></div>
+          <div class="slot slot--tall"><span>待补 · 案例</span><p>一次比例错误的重建：重建结果与真实尺寸的偏差，以及修正后的对比。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#capture-check" data-chapter-link="capture-check"><span>上一篇</span><strong>拍完怎么判断</strong></a>
+        <a class="is-next" href="#real-venue" data-chapter-link="real-venue"><span>下一篇</span><strong>场地从哪来</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 场地从哪来 ================= -->
+    <article class="chapter" id="real-venue" data-chapter="real-venue" data-title="场地从哪来">
+      <header class="chapter-head">
+        <p class="eyebrow">场地</p>
+        <h1>场地从哪来，<br>先看手上有什么。</h1>
+        <p class="lead">图纸、地图、现场素材、现成模板，四条路都能得到一块能摆的场地。先分清场地层和布置层，再选一条最省事的路。</p>
+      </header>
+
+      <section class="doc-sec" id="two-layers">
+        <h2>先分清两层</h2>
+        <figure class="doc-figure doc-figure--panel">
+          <div class="figure-scroll">
+            <svg class="diagram" viewBox="0 0 760 310" role="img" aria-labelledby="fig-layers-t fig-layers-d">
+              <title id="fig-layers-t">场地层与布置层的示意</title>
+              <desc id="fig-layers-d">上层是布置层，放桌椅、物料和动线，随时可改；下层是场地层，放高斯实景或传统空间，可替换。换场地不会改动布置。</desc>
+              <defs>
+                <marker id="arrow-layers" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0 0L8 4L0 8Z" fill="var(--ink-soft)"/>
+                </marker>
+              </defs>
+              <rect x="170" y="45" width="420" height="80" rx="12" class="d-panel"/>
+              <text x="190" y="75" class="d-title">布置层</text>
+              <text x="190" y="97" class="d-body">桌椅 · 物料 · 动线</text>
+              <circle cx="430" cy="80" r="10" class="d-plane"/>
+              <circle cx="468" cy="80" r="10" class="d-plane"/>
+              <rect x="500" y="70" width="34" height="20" rx="4" class="d-plane"/>
+              <path d="M430 108H534" class="d-dash"/>
+
+              <rect x="170" y="195" width="420" height="80" rx="12" class="d-plane"/>
+              <text x="190" y="225" class="d-title">场地层</text>
+              <text x="190" y="247" class="d-body">高斯实景 · 传统空间</text>
+              <path d="M430 210h110M430 230h110M430 250h110M450 205v50M490 205v50M530 205v50" class="d-line"/>
+
+              <text x="130" y="90" text-anchor="end" class="d-cap">上层</text>
+              <text x="130" y="240" text-anchor="end" class="d-cap">下层</text>
+              <path d="M145 70V110M145 220V260" class="d-line"/>
+              <text x="610" y="90" class="d-body">随时可改</text>
+              <text x="610" y="240" class="d-body">可替换</text>
+
+              <line x1="380" y1="130" x2="380" y2="188" class="d-line-strong" marker-end="url(#arrow-layers)"/>
+              <text x="400" y="165" class="d-body">换场地不动布置</text>
+              <text x="20" y="300" class="d-muted d-warn">新建空白空间会清掉当前布置</text>
+            </svg>
+          </div>
+          <p class="fig-hint">左右滑动看全图</p>
+          <figcaption>示意图：场地是背景层，布置是内容层。换场地、换环境不会重摆桌椅；新建空白空间才会清掉当前布置。</figcaption>
+        </figure>
+      </section>
+
+      <section class="doc-sec" id="venue-ways">
+        <h2>四条路，按你手上有什么选</h2>
+        <ul class="rows">
+          <li><strong>手里有平面图</strong><span>空间 → 图纸与照片。上传平面图，用「两点定标尺」量一段真实长度，核对墙段，确认应用并保存。</span></li>
+          <li><strong>知道场地在哪</strong><span>Bingo 对话里的「你可以做什么」→ 地图选址。搜地点，在卫星图上圈画场地，可选画一条主客流线，生成户外场地。</span></li>
+          <li><strong>刚拍完现场</strong><span>空间 → 真实场地 → Aholo 重建真实场地。上传照片或视频，通常 15–30 分钟。</span></li>
+          <li><strong>什么都没有</strong><span>新建空白空间（默认 12 × 8 米，可改尺寸），或从场景模板里挑一个现成的继续改。</span></li>
+        </ul>
+        <p>四条路可以组合：先用地图选址定大致位置，再用现场素材重建；也可以先摆一版，再换场地。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>空间面板里的四类入口：图纸与照片、地图选址、真实场地、新建空白。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一项目里两种来源的对比：地图选址的户外场地 vs 重建的室内实景。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#capture-cases" data-chapter-link="capture-cases"><span>上一篇</span><strong>实拍案例</strong></a>
+        <a class="is-next" href="#venue-drawings" data-chapter-link="venue-drawings"><span>下一篇</span><strong>图纸与尺寸</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 图纸与尺寸 ================= -->
+    <article class="chapter" id="venue-drawings" data-chapter="venue-drawings" data-title="图纸与尺寸">
+      <header class="chapter-head">
+        <p class="eyebrow">场地</p>
+        <h1>有图纸，<br>就把米数量准。</h1>
+        <p class="lead">图纸决定场地的真实尺寸。比例定错，后面摆得再好看，落地时都对不上。这一章只做一件事：让画布上的每一米都是真的一米。</p>
+      </header>
+
+      <section class="doc-sec" id="drawings">
+        <h2>图纸与照片</h2>
+        <p>第一次用，先点「连接场景服务」——只建立安全通道，不动你的场景。上传平面图后，按三步走：</p>
+        <ul class="rows">
+          <li><strong>两点定标尺</strong><span>在图上点两个端点，填这段的真实米数。之后整张图按这个比例换算。</span></li>
+          <li><strong>核对墙段</strong><span>识别错的墙可以删、可以补；先核对，再应用。</span></li>
+          <li><strong>确认应用并保存</strong><span>场地按真实米数铺进画布，尺寸和结构还能再改。</span></li>
+        </ul>
+        <p>尺寸任何时候都能改：没上传图纸就改数字；上传图纸后，以定标尺量出的为准。</p>
+        <h3>定标尺时最容易犯的错</h3>
+        <ul class="rows">
+          <li><strong>点在对角线</strong><span>两点要落在同一条墙线或同一段标尺上，斜着量会把比例放大。</span></li>
+          <li><strong>拿估算的米数</strong><span>用卷尺或激光测距实测一段，差 10 厘米，整张图都会偏。</span></li>
+          <li><strong>墙段没核对就应用</strong><span>识别错的墙先删掉再补，应用后虽然还能改，但返工更慢。</span></li>
+        </ul>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>「两点定标尺」的取点位置：两条线都落在同一面墙上。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一张平面图：比例正确与比例偏大 10% 时，桌椅排布的差别。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#real-venue" data-chapter-link="real-venue"><span>上一篇</span><strong>场地从哪来</strong></a>
+        <a class="is-next" href="#venue-map" data-chapter-link="venue-map"><span>下一篇</span><strong>地图选址</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 地图选址 ================= -->
+    <article class="chapter" id="venue-map" data-chapter="venue-map" data-title="地图选址">
+      <header class="chapter-head">
+        <p class="eyebrow">场地</p>
+        <h1>场地在户外，<br>先从地图上圈。</h1>
+        <p class="lead">市集、草坪、露营地这类户外场地，用地图选址最快：圈一块地，标出主客流线，就能开始摆。它给的是位置和范围，不是现场观感。</p>
+      </header>
+
+      <section class="doc-sec" id="map">
+        <h2>地图选址</h2>
+        <p>在 Bingo 对话的「你可以做什么」里点「地图选址」，按三步走：</p>
+        <ul class="rows">
+          <li><strong>搜索地点</strong><span>输入场地名称或地址，定位到卫星图上的大致位置。</span></li>
+          <li><strong>圈画范围</strong><span>沿实际边界点出多边形，围出要用的那块地。</span></li>
+          <li><strong>画主客流线（可选）</strong><span>标出入口到主舞台的走向，便于后面排动线和物料。</span></li>
+        </ul>
+        <p>生成的是户外场地，适合市集、户外发布会、露营一类。地图选址需要先填高德 Key 和安全密钥；密钥只留在这台机器上，换设备要重新填。</p>
+        <div class="note note--quiet">
+          <strong>卫星图只用于选址</strong>
+          <p>卫星图不能作为场地重建的素材。要真实观感，还是得去现场拍照片或视频。</p>
+        </div>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>卫星图上圈出场地边界，并画出入口到舞台的主客流线。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一块空地从地图选址到摆完物料的俯视图。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#venue-drawings" data-chapter-link="venue-drawings"><span>上一篇</span><strong>图纸与尺寸</strong></a>
+        <a class="is-next" href="#venue-reconstruct" data-chapter-link="venue-reconstruct"><span>下一篇</span><strong>Aholo 重建</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= Aholo 重建 ================= -->
+    <article class="chapter" id="venue-reconstruct" data-chapter="venue-reconstruct" data-title="Aholo 重建">
+      <header class="chapter-head">
+        <p class="eyebrow">场地</p>
+        <h1>拍回来之后，<br>把场地重建出来。</h1>
+        <p class="lead">重建把现场照片或视频变成可漫游的高斯空间。它通常 15–30 分钟、消耗额度，所以提交前值得再确认一次：素材、范围、比例。</p>
+      </header>
+
+      <section class="doc-sec" id="reconstruct">
+        <h2>Aholo 重建真实场地</h2>
+        <p>空间 → 真实场地 → Aholo 重建真实场地，上传现场照片或视频。重建通常 15–30 分钟，消耗额度；提交前界面会写明这次要生成什么，你确认了才开始。</p>
+        <ul class="rows">
+          <li><strong>提交前</strong><span>确认素材是这次要重建的那块场地，张数和评分过线，比例尺已经量过。</span></li>
+          <li><strong>完成后</strong><span>产物挂在「当前环境」里，铺在场地层；已经摆好的布置不会被改掉。</span></li>
+        </ul>
+        <p>重建失败不会弄丢布置。先对照采集评分里的扣分项补拍，再重试；不要在原素材上反复重跑，问题通常不会自己消失。</p>
+        <div class="note">
+          <strong>重建不是越久越好</strong>
+          <p>素材合格比时长更重要。三层走完、重叠够、曝光稳，比多拍几十张零散照片更有用。</p>
+        </div>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>提交重建前的确认页：素材张数、预计耗时与额度。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>重建完成后的「当前环境」列表，以及切换回原场地的操作。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#venue-map" data-chapter-link="venue-map"><span>上一篇</span><strong>地图选址</strong></a>
+        <a class="is-next" href="#venue-ready" data-chapter-link="venue-ready"><span>下一篇</span><strong>现成空间</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 现成空间 ================= -->
+    <article class="chapter" id="venue-ready" data-chapter="venue-ready" data-title="现成空间">
+      <header class="chapter-head">
+        <p class="eyebrow">场地</p>
+        <h1>不想从零开始，<br>就用现成的。</h1>
+        <p class="lead">没有图纸、来不及拍摄，也可以用空白空间或场景模板先摆起来。它们适合试手、提案和结构明确的场地。</p>
+      </header>
+
+      <section class="doc-sec" id="world-and-traditional">
+        <h2>World 世界模型与传统空间</h2>
+        <p>「空间」面板顶部有两类，按需要选：</p>
+        <ul class="rows">
+          <li><strong>World 世界模型</strong><span>默认。生成或重建可漫游的高斯空间，适合真实场地和真实观感。</span></li>
+          <li><strong>传统空间</strong><span>空白壳与场景模板。适合先搭结构、改尺寸、做可编辑的墙和门。</span></li>
+        </ul>
+        <p>传统空间里有现成场景模板，挑一个就能继续改尺寸和布置，适合先试手，也适合结构规整的场地。</p>
+        <figure class="doc-figure doc-figure--photo">
+          <img src="/showcase/assets/scenes/01体育馆.png" alt="场景模板里的体育馆三维预览" width="1587" height="991" loading="lazy" decoding="async">
+          <figcaption>场景模板里的体育馆。现成的场地可以继续改尺寸和布置，适合先试手。</figcaption>
+        </figure>
+        <div class="note">
+          <strong>新建空白空间前先看一眼</strong>
+          <p>新建会换成一块可改尺寸的空地（默认 12 × 8 米），当前布置会被清掉。想保留，先导出或另存。</p>
+        </div>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>空间面板顶部：World 世界模型与传统空间的切换。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>从空白 12 × 8 米空间改尺寸到 20 × 12 米，再摆满桌椅的过程。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#venue-reconstruct" data-chapter-link="venue-reconstruct"><span>上一篇</span><strong>Aholo 重建</strong></a>
+        <a class="is-next" href="#venue-multi" data-chapter-link="venue-multi"><span>下一篇</span><strong>多场地与楼层</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 多场地与楼层 ================= -->
+    <article class="chapter" id="venue-multi" data-chapter="venue-multi" data-title="多场地与楼层">
+      <header class="chapter-head">
+        <p class="eyebrow">场地</p>
+        <h1>一个项目，<br>放得下几块场地。</h1>
+        <p class="lead">主会场、签到区、户外草坪可以放在同一个项目里，也可以最多叠 4 层。切场地和切楼层都不改视角，方便对照。</p>
+      </header>
+
+      <section class="doc-sec" id="multi-venue">
+        <h2>多块场地</h2>
+        <p>一个项目可以放多块场地，在「当前环境 / 环境」列表里点一下就能切换；切换不改当前视角。每块场地各自有自己的布置，物件归属所在的场地：场地整体移动，物件跟着走。</p>
+        <ul class="rows">
+          <li><strong>适合拆开</strong><span>室内主会场 + 户外签到区 + 独立展区，各自摆各自的。</span></li>
+          <li><strong>适合合并</strong><span>同一空间的不同方案版本，用楼层或复制项目区分，别混在一块场地里。</span></li>
+          <li><strong>切换前</strong><span>确认当前改动已经保存；切场地不会自动帮你另存。</span></li>
+        </ul>
+      </section>
+
+      <section class="doc-sec" id="floors">
+        <h2>楼层</h2>
+        <p>一个项目最多 4 层。画布左上角的楼层切换器上下切换；到顶层再往上会新建一层。</p>
+        <p>「移动整体场景」挪的是整块高斯场地，「选择」挪的是单个物件，两者互不干扰。楼层之间各自独立布置，适合做上下层对照或分层交付。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>楼层切换器：当前第 2 层，向上新建第 3 层。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一活动的一层平面与二层平面，以及各自的物料清单。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#venue-ready" data-chapter-link="venue-ready"><span>上一篇</span><strong>现成空间</strong></a>
+        <a class="is-next" href="#materials" data-chapter-link="materials"><span>下一篇</span><strong>摆现成的</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 摆现成的 ================= -->
+    <article class="chapter" id="materials" data-chapter="materials" data-title="摆现成的">
+      <header class="chapter-head">
+        <p class="eyebrow">物料</p>
+        <h1>先从库里，<br>把东西摆上。</h1>
+        <p class="lead">桌椅、灯具、绿植这些常用物料，库里都有。先把大件摆到位，再补细节；顺序对了，后面改起来才不累。</p>
+      </header>
+
+      <section class="doc-sec" id="place">
+        <h2>摆现成的</h2>
+        <p>打开物料格，从物料库里挑，点添加就进画布；也可以把底部物料条里的物件直接拖进画布。</p>
+        <p>选中之后能移动、旋转、改尺寸。摆整齐打开「网格吸附」，核对距离打开「尺寸」。摆错了点「撤销」，撤销多了点「重做」。</p>
+        <ul class="rows">
+          <li><strong>先大后小</strong><span>先摆桌椅、隔断、背景板，再补桌面摆件和地面装饰。</span></li>
+          <li><strong>先主后次</strong><span>先把入口、主通道、舞台定下来，再往两侧铺。</span></li>
+          <li><strong>对齐用吸附</strong><span>成排桌椅打开网格吸附；需要精确间距时再开尺寸标注。</span></li>
+        </ul>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>物料库面板：分类、缩略图与「添加」按钮。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一间空场：先摆大件、再补细节的两张对比俯视图。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#venue-multi" data-chapter-link="venue-multi"><span>上一篇</span><strong>多场地与楼层</strong></a>
+        <a class="is-next" href="#materials-voice" data-chapter-link="materials-voice"><span>下一篇</span><strong>嘴上加物料</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 嘴上加物料 ================= -->
+    <article class="chapter" id="materials-voice" data-chapter="materials-voice" data-title="嘴上加物料">
+      <header class="chapter-head">
+        <p class="eyebrow">物料</p>
+        <h1>一句话，<br>往提案里加东西。</h1>
+        <p class="lead">加常见物料不必翻半天库。说清楚加什么、加几件、放在哪，Bingo 会直接在当前提案里加。</p>
+      </header>
+
+      <section class="doc-sec" id="voice-add">
+        <h2>嘴上能加什么</h2>
+        <p>在 Bingo 对话里直接说「加四把椅子」「入口放一张签到台」，它会在当前提案里加。能直接用嘴加的是这 8 类：</p>
+        <blockquote class="say"><span class="say-label">8 类常见物料</span><p>椅子 · 桌子 · 签到台 · 背景板 · 展架 · 隔断 · 地毯 · 装饰道具</p></blockquote>
+        <p>别的类型，比如舞台灯、音响、花艺装置，先走物料库或「生成物料」。精确移动、旋转、改尺寸，用画布手柄更稳。</p>
+        <h3>一句话怎么说得更准</h3>
+        <ul class="rows">
+          <li><strong>带数量</strong><span>「加四把椅子」比「加椅子」好，省一轮追问。</span></li>
+          <li><strong>带位置</strong><span>「入口右侧」「主桌左边」比「那边」好，它会按参照物摆。</span></li>
+          <li><strong>一次一件事</strong><span>「加四把椅子，再把签到台移到入口」拆成两句，结果更可控。</span></li>
+        </ul>
+        <p>它加完先显示在提案里，确认布置后才落盘；加错了在 8 秒内点撤销。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 示例</span><p>三句不同说法：「加椅子」「加四把椅子」「在入口右侧加四把木椅」，看提案差在哪。</p></div>
+          <div class="slot"><span>待补 · 截图</span><p>加物料后提案卡的「已添加」列表与撤销按钮。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#materials" data-chapter-link="materials"><span>上一篇</span><strong>摆现成的</strong></a>
+        <a class="is-next" href="#materials-generate" data-chapter-link="materials-generate"><span>下一篇</span><strong>生成物料</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 生成物料 ================= -->
+    <article class="chapter" id="materials-generate" data-chapter="materials-generate" data-title="生成物料">
+      <header class="chapter-head">
+        <p class="eyebrow">物料</p>
+        <h1>库里没有的，<br>生成一个。</h1>
+        <p class="lead">用一句描述或一张照片生成物料。它会留在物料库里，能反复使用；生成要花几分钟和额度，提交前先想清楚。</p>
+      </header>
 
       <section class="doc-sec" id="generate-material">
-        <h2>物料生成</h2>
-        <p>在左侧对话栏的底部，把「布置」切成「生成」。用一段描述说出你要的物件：它是什么、多大、什么材质和颜色。也可以附一张参考图。</p>
-        <blockquote class="say"><p>“一张 1.8 米长的原木签到桌，桌下留空，暖色。”</p></blockquote>
-        <p>确认之后才提交。生成好的物件会出现在结果里，点「放进场景」就能像普通模型一样摆进场地。</p>
+        <h2>生成缺的</h2>
+        <p>物料对话左下角点「＋生成物料」，两条路：</p>
+        <ul class="rows">
+          <li><strong>通过描述生成物料</strong><span>写清它是什么、多大、什么材质颜色。描述越具体，结果越接近。</span></li>
+          <li><strong>拍照 / 图片生成物料</strong><span>上传一张 PNG 或 JPEG，不超过 5 MB。</span></li>
+        </ul>
+        <blockquote class="say"><span class="say-label">一句描述的例子</span><p>一张 1.8 米长的原木签到桌，桌下留空，暖色。</p></blockquote>
+        <p>描述里最值得写清的是三件事：是什么、多大、什么材质和颜色。尺寸写成米或厘米都可以，但别只写「大一点」「现代一点」这种没法量的话。</p>
+        <figure class="doc-figure doc-figure--panel">
+          <div class="figure-scroll">
+            <svg class="diagram" viewBox="0 0 760 340" role="img" aria-labelledby="fig-material-t fig-material-d">
+              <title id="fig-material-t">物料从哪来的三条路</title>
+              <desc id="fig-material-d">物料库、一句描述、一张照片都能得到物料，再放进画布。生成通常 3–5 分钟，扣额度前要确认。</desc>
+              <defs>
+                <marker id="arrow-material" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0 0L8 4L0 8Z" fill="var(--ink-soft)"/>
+                </marker>
+              </defs>
+
+              <rect x="30" y="50" width="190" height="56" rx="10" class="d-panel"/>
+              <text x="48" y="76" class="d-title">物料库</text>
+              <text x="48" y="96" class="d-body">现成的桌椅灯具绿植</text>
+
+              <rect x="30" y="130" width="190" height="56" rx="10" class="d-panel"/>
+              <text x="48" y="156" class="d-title">一句描述</text>
+              <text x="48" y="176" class="d-body">形状 · 尺寸 · 材质颜色</text>
+
+              <rect x="30" y="210" width="190" height="56" rx="10" class="d-panel"/>
+              <text x="48" y="236" class="d-title">一张照片</text>
+              <text x="48" y="256" class="d-body">PNG / JPEG，≤ 5 MB</text>
+
+              <path d="M220 78C260 78 270 140 300 146" class="d-line-strong" marker-end="url(#arrow-material)"/>
+              <path d="M220 158H300" class="d-line-strong" marker-end="url(#arrow-material)"/>
+              <path d="M220 238C260 238 270 176 300 170" class="d-line-strong" marker-end="url(#arrow-material)"/>
+
+              <rect x="300" y="122" width="110" height="64" rx="14" class="d-panel"/>
+              <text x="355" y="149" text-anchor="middle" class="d-title">物料</text>
+              <text x="355" y="169" text-anchor="middle" class="d-body">已就位</text>
+
+              <path d="M410 154H494" class="d-line-strong" marker-end="url(#arrow-material)"/>
+
+              <rect x="500" y="122" width="150" height="64" rx="14" class="d-panel"/>
+              <text x="575" y="149" text-anchor="middle" class="d-title">画布</text>
+              <text x="575" y="169" text-anchor="middle" class="d-body">点添加 / 拖入</text>
+
+              <text x="500" y="222" class="d-body">生成通常 3–5 分钟</text>
+              <text x="500" y="244" class="d-body">扣额度前要确认</text>
+              <text x="500" y="266" class="d-body">完成后带「生成」标签</text>
+
+              <rect x="30" y="292" width="700" height="34" rx="8" class="d-plane"/>
+              <text x="48" y="314" class="d-body">嘴上能加：椅子 · 桌子 · 签到台 · 背景板 · 展架 · 隔断 · 地毯 · 装饰道具</text>
+            </svg>
+          </div>
+          <p class="fig-hint">左右滑动看全图</p>
+          <figcaption>示意图：库里有的直接摆；库里没有的，用描述或照片生成。生成任务会留在物料库里，能再次放入空间。</figcaption>
+        </figure>
+        <p>提交前要勾「确认扣额度」，确认后才开始。生成走 Aholo 云额度，通常 3–5 分钟；期间可以接着摆别的。</p>
+        <p>完成后新物件带「生成」标签，留在物料库里；在库里点「点击放入空间」也能再放一次。</p>
       </section>
 
-      <section class="doc-sec" id="generate-venue">
-        <h2>场地生成</h2>
-        <p>手上只有现场照片、没有图纸时，可以让场地生成给出一个能走进去的三维场地。在「生成」里把物件切成「场地」，写清现场的样子。</p>
-        <p>生成需要等一会儿。完成之后到「空间 → 环境预览」取回，先看预览是不是这块场地，再铺成当前的场地观感。已经摆好的布置不会被悄悄改掉。</p>
-      </section>
-
-      <section class="doc-sec" id="generate-care">
-        <h2>提交之前</h2>
-        <p>生成不是即时的，也不是免费的。写清楚用途和尺寸能少跑几趟；提交前界面会写明这次要生成什么，你确认了才会真正开始。</p>
-        <p>结果不满意可以重跑上一句，也可以回到物料库换一个现成模型。一次生成失败，不会弄丢已经摆好的布置。</p>
+      <section class="doc-sec" id="quota">
+        <h2>额度与失败</h2>
+        <p>生成和重建都消耗 Aholo 云额度；提交前界面会写明这次要生成什么、会扣多少。应用内不设每日次数限制。</p>
+        <p>没连上生成服务时，提交不了，也不会扣额度，界面会说明原因。已经摆好的布置不受影响；服务恢复后，把同一句重新提交即可。</p>
+        <p>结果不满意，可以重跑上一句，也可以回物料库换一个现成模型。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>「确认扣额度」的提交前确认：预计耗时与本次扣减。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>同一句描述重跑两次的结果差异，以及生成物在库里的「生成」标签。</p></div>
+        </div>
       </section>
 
       <nav class="chapter-nav" aria-label="章节翻页">
-        <a class="is-prev" href="#space" data-chapter-link="space"><span>上一篇</span><strong>布置第一个空间</strong></a>
-        <a class="is-next" href="#deliver" data-chapter-link="deliver"><span>下一篇</span><strong>分享与导出</strong></a>
+        <a class="is-prev" href="#materials-voice" data-chapter-link="materials-voice"><span>上一篇</span><strong>嘴上加物料</strong></a>
+        <a class="is-next" href="#deliver" data-chapter-link="deliver"><span>下一篇</span><strong>选交付方式</strong></a>
       </nav>
     </article>
 
-    <!-- ================= 分享与导出 ================= -->
-    <article class="chapter" id="deliver" data-chapter="deliver" data-title="分享与导出">
-      <h1>分享与导出</h1>
-      <p class="lead">方案摆好之后，要让人看见，也要让人能接着做。</p>
+    <!-- ================= 选交付方式 ================= -->
+    <article class="chapter" id="deliver" data-chapter="deliver" data-title="选交付方式">
+      <header class="chapter-head">
+        <p class="eyebrow">交付</p>
+        <h1>先想清楚，<br>交给谁。</h1>
+        <p class="lead">客户看方案、执行团队照着搭、软件要接着用，三种人要的东西不一样。选错方式，后面会反复补发。</p>
+      </header>
 
-      <section class="doc-sec" id="review-link">
-        <h2>发评审链接</h2>
-        <p>在左侧工具条点「发布」，再点「发评审链接」。对方打开的是一个只读页面：能看平面、能在画面上落钉留言，不能改你的布置。</p>
-        <p>同一份评审最多放 6 张画面。换一个视角截一张，就能把不同角度的现场一起发过去。</p>
-      </section>
-
-      <section class="doc-sec" id="bingo">
-        <h2>收起意见</h2>
-        <p>对方落下的钉会汇总到左侧的 Bingo。这里只读，不在这里改图：先看汇总，再回画布逐条改，改完重新发一版。</p>
-      </section>
-
-      <section class="doc-sec" id="handoff">
-        <h2>导出完整活动交接</h2>
-        <p>在「发布」菜单里点「导出交接」，确认后会在本机生成一份完整活动交接，包含需求、物料、制作和点验。下载后可以离线打开、打印，交给搭建方。</p>
-        <p>完整活动交接目前只支持本机活动；云端项目请先回到对应的本机活动再导出。</p>
-      </section>
-
-      <section class="doc-sec" id="local-activities">
-        <h2>回到上一版</h2>
-        <p>新建或切换活动时，当前画布会自动归档到「我的项目 → 最近活动」。想回到之前那一版，点卡片上的「打开」；当前这一版会先自动存好，不会被覆盖。</p>
-      </section>
-
-      <section class="doc-sec" id="cloud">
-        <h2>存到云端</h2>
-        <p>登录后点头像打开账户中心，在「我的项目」里点「新方案」，当前布置就会成为一份云端项目。换设备登录后，打开这份项目就能接着改。</p>
-        <p>同一份云端项目同一时间只有一个人能编辑。打开后拿到编辑权的人可以保存；其他人是只读的。改完点「完成编辑」释放编辑权，队友再接。</p>
+      <section class="doc-sec" id="four-ways">
+        <h2>先分清四条路</h2>
+        <p>交出去的东西不一样，对方拿到的东西也不一样：</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>交出去</th><th>给谁</th><th>对方看到什么</th><th>会不会回来</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>发布版本 + 二维码</td><td>客户、同事</td><td>只读方案，手机扫码可看</td><td>不回传；后续编辑不改这一版</td></tr>
+              <tr><td>评审链接</td><td>客户</td><td>只读平面，可在画面上落钉</td><td>钉留在对方浏览器，不自动回传</td></tr>
+              <tr><td>客户评审包</td><td>不方便开链接的人</td><td>最多 6 张定稿画面，HTML 离线可看</td><td>文件带走，不回传</td></tr>
+              <tr><td>完整活动交接</td><td>搭建方、执行团队</td><td>需求、工作单、制作计划、数量点验</td><td>文件带走，不回传</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fig-hint" aria-hidden="true">左右滑动看全表</p>
+        <p>只给人看，用发布或评审；要别人照着做，用交接；要自己换设备接着改，用本机备份。下面几章一条一条讲。</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 示例</span><p>同一个方案，四种交付方式分别长什么样。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>「只给人看」和「要人照着做」两种场景的交付清单对比。</p></div>
+        </div>
       </section>
 
       <nav class="chapter-nav" aria-label="章节翻页">
-        <a class="is-prev" href="#generate" data-chapter-link="generate"><span>上一篇</span><strong>物料与场地</strong></a>
+        <a class="is-prev" href="#materials-generate" data-chapter-link="materials-generate"><span>上一篇</span><strong>生成物料</strong></a>
+        <a class="is-next" href="#deliver-publish" data-chapter-link="deliver-publish"><span>下一篇</span><strong>发布与链接</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 发布与链接 ================= -->
+    <article class="chapter" id="deliver-publish" data-chapter="deliver-publish" data-title="发布与链接">
+      <header class="chapter-head">
+        <p class="eyebrow">交付</p>
+        <h1>发出去，<br>这一版就定住了。</h1>
+        <p class="lead">发布得到一条只读链接和一张二维码。链接看的是发布那一刻的版本，后续怎么改，都不影响已经发出去的这一版。</p>
+      </header>
+
+      <section class="doc-sec" id="publish">
+        <h2>发布当前版本</h2>
+        <p>点「发布当前版本」，得到一条只读链接和「手机看方案」的二维码。手机扫码看到的就是这一版。</p>
+        <p>版本锁定：后续编辑不改已发布的版本；改完点「重新发布版本 N」，再发一次链接。</p>
+        <p>发布不会通知对方，链接要你自己发出去。发布页还能生成只读 3D 链接，对方可以转角度看；如果方案里有私有素材，链接不会带走这些素材，会提示你先替换成公开素材。</p>
+        <ul class="rows">
+          <li><strong>发之前</strong><span>先把视角转到最能说明方案的角度，再发布。</span></li>
+          <li><strong>发之后</strong><span>把链接和二维码一起发；对方打开就能看这一版。</span></li>
+          <li><strong>改完再发</strong><span>同一份方案会递增版本号，旧链接仍然对应旧版本。</span></li>
+        </ul>
+        <div class="slots slots--one">
+          <div class="slot"><span>待补 · 截图</span><p>发布面板：只读链接、二维码与「重新发布版本 N」。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#deliver" data-chapter-link="deliver"><span>上一篇</span><strong>选交付方式</strong></a>
+        <a class="is-next" href="#deliver-review" data-chapter-link="deliver-review"><span>下一篇</span><strong>评审与评审包</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 评审与评审包 ================= -->
+    <article class="chapter" id="deliver-review" data-chapter="deliver-review" data-title="评审与评审包">
+      <header class="chapter-head">
+        <p class="eyebrow">交付</p>
+        <h1>要客户提意见，<br>给他一个能落钉的页面。</h1>
+        <p class="lead">评审链接适合当场一起看：对方能在画面上落钉留言。需要留档或对方不方便开链接时，改用客户评审包。</p>
+      </header>
+
+      <section class="doc-sec" id="review-link">
+        <h2>评审链接</h2>
+        <p>「发布」菜单里点「发评审链接」。对方打开的是只读平面：能看布置，能在画面上落钉留言，不用注册，也看不到你的编辑工具。</p>
+        <p>钉留在他打开的那台浏览器里，刷新还在，但不会同步到其他设备，也不会自动回到你这边。要收口，让对方把钉截图或复述给你，或者用下面的评审包。</p>
+        <div class="note">
+          <strong>这是目前的限制</strong>
+          <p>评审链接适合当场一起看，不适合当任务系统。需要留档，优先用客户评审包或完整活动交接。</p>
+        </div>
+      </section>
+
+      <section class="doc-sec" id="review-pack">
+        <h2>客户评审包</h2>
+        <p>要发给不方便开链接的人，用「客户评审包」：切换视角截取画面，最多 6 张，逐张核对后点「下载评审文件（HTML）」。文件离线也能打开。</p>
+        <p>同一份评审最多 6 张；内容改了要重新生成评审包。评审包是定稿画面，不含可旋转的 3D 场景。</p>
+        <ul class="rows">
+          <li><strong>6 张选哪 6 张</strong><span>整体一张、俯视一张、正面一张、关键局部两三张、动线一张。</span></li>
+          <li><strong>什么时候用</strong><span>对方不方便开链接、需要留档、或者要打印出来开会。</span></li>
+          <li><strong>什么时候不用</strong><span>需要转角度看 3D，用只读链接；需要执行细节，用完整活动交接。</span></li>
+        </ul>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>评审链接里落钉留言的样子，以及钉在浏览器里保留的状态。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>一份 6 张的客户评审包：页面顺序与每张的说明文字。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#deliver-publish" data-chapter-link="deliver-publish"><span>上一篇</span><strong>发布与链接</strong></a>
+        <a class="is-next" href="#deliver-handoff" data-chapter-link="deliver-handoff"><span>下一篇</span><strong>交给执行</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 交给执行 ================= -->
+    <article class="chapter" id="deliver-handoff" data-chapter="deliver-handoff" data-title="交给执行">
+      <header class="chapter-head">
+        <p class="eyebrow">交付</p>
+        <h1>让搭建方，<br>照着就能做。</h1>
+        <p class="lead">客户确认之后，交付对象换成执行团队。他们要的不是效果图，而是物料清单、数量、时间点和验收条件。</p>
+      </header>
+
+      <section class="doc-sec" id="handoff">
+        <h2>完整活动交接</h2>
+        <p>「发布」菜单里点「导出交接」，在本机生成一份完整活动交接 HTML：活动需求、物料工作单、制作计划、数量点验。可以离线打开、打印，直接交给搭建方。</p>
+        <p>执行工作单要在它所属的场景里填写；从另一台设备打开时，页面会提示这份工作单不能在这里填。照片和模型文件需要另行提供。</p>
+        <ul class="rows">
+          <li><strong>先填完再导出</strong><span>工作单、制作计划、数量点验没填完，导出的就是空表。</span></li>
+          <li><strong>在原场景填写</strong><span>换设备打开交接文件，工作单不能补填；要改就回原场景。</span></li>
+          <li><strong>照片和模型另给</strong><span>交接 HTML 不含大文件，另行打包发送。</span></li>
+        </ul>
+        <div class="slots slots--one">
+          <div class="slot slot--tall"><span>待补 · 示例</span><p>一份完整活动交接：活动需求、物料工作单、制作计划、数量点验四部分的目录与一页样例。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#deliver-review" data-chapter-link="deliver-review"><span>上一篇</span><strong>评审与评审包</strong></a>
+        <a class="is-next" href="#deliver-export" data-chapter-link="deliver-export"><span>下一篇</span><strong>导出一览</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 导出一览 ================= -->
+    <article class="chapter" id="deliver-export" data-chapter="deliver-export" data-title="导出一览">
+      <header class="chapter-head">
+        <p class="eyebrow">交付</p>
+        <h1>能带走什么，<br>一次看清。</h1>
+        <p class="lead">图、链接、表格、模型，各有各的用途。这一章把导出项按「给谁用」分成三组，选之前先对一眼。</p>
+      </header>
+
+      <section class="doc-sec" id="exports">
+        <h2>导出一览</h2>
+        <h3>图与链接</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>导出项</th><th>能带走什么</th><th>注意</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>导出效果图</td><td>当前视角 / 整体 / 俯视 / 正面机位，1× / 2× / 3×</td><td>平面视图只能 1×</td></tr>
+              <tr><td>机位册</td><td>整体、俯视、正面、对角四张，另附离线图册</td><td>只在 3D 视图可用</td></tr>
+              <tr><td>只读 3D 链接</td><td>可转角度查看的分享链接</td><td>私有素材不会随链接带走</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fig-hint" aria-hidden="true">左右滑动看全表</p>
+
+        <h3>给搭建方与执行团队</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>导出项</th><th>能带走什么</th><th>注意</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>完整活动交接 HTML</td><td>需求、工作单、制作计划、数量点验</td><td>先保存各表单再导出</td></tr>
+              <tr><td>执行时间表 HTML</td><td>每项任务的计划与实际时间、负责人、复核信息</td><td>先保存任务；未定项保持待确认</td></tr>
+              <tr><td>活动安排 CSV</td><td>活动安排表</td><td>计划与实际分别保留</td></tr>
+              <tr><td>按比例打印</td><td>打开打印页，可另存 PDF</td><td>按当前第一层生成</td></tr>
+              <tr><td>平面 DXF</td><td>CAD 可打开、可按真实比例量取</td><td>按当前第一层生成</td></tr>
+              <tr><td>交付清单 CSV</td><td>能带走哪些文件、各有多少件、缺什么</td><td>不支持的类型写明原因，不隐藏</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fig-hint" aria-hidden="true">左右滑动看全表</p>
+
+        <h3>给软件与备份</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>导出项</th><th>能带走什么</th><th>注意</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>场景 GLB</td><td>物件节点与场地结构</td><td>完整场馆预设需保留原文件；环境光与后处理不随 GLB 交付</td></tr>
+              <tr><td>场景 JSON</td><td>场景与执行记录</td><td>私有模型重开时仍需授权</td></tr>
+              <tr><td>执行清单 CSV</td><td>执行项与验收条件</td><td>导出后按验收条件核对</td></tr>
+              <tr><td>物料清单 CSV</td><td>物料、件数与规格</td><td>尺寸与采购规格仍需确认</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fig-hint" aria-hidden="true">左右滑动看全表</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>导出面板：按「图与链接 / 搭建方 / 软件与备份」分组的入口。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>机位册的四张定稿画面，以及配套的离线图册。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#deliver-handoff" data-chapter-link="deliver-handoff"><span>上一篇</span><strong>交给执行</strong></a>
+        <a class="is-next" href="#deliver-version" data-chapter-link="deliver-version"><span>下一篇</span><strong>版本与备份</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 版本与备份 ================= -->
+    <article class="chapter" id="deliver-version" data-chapter="deliver-version" data-title="版本与备份">
+      <header class="chapter-head">
+        <p class="eyebrow">交付</p>
+        <h1>改坏了，<br>要能回得去。</h1>
+        <p class="lead">版本和备份解决两件不同的事：版本让你回到之前那一版方案，备份让你换设备或清浏览器时还能接着改。</p>
+      </header>
+
+      <section class="doc-sec" id="back">
+        <h2>回到上一版</h2>
+        <p>新建或切换活动时，当前画布会自动收进「我的项目」。想回到之前那一版，点卡片上的「打开」；当前这一版会先自动存好，不会被覆盖。</p>
+        <ul class="rows">
+          <li><strong>什么时候用</strong><span>想对比两版方案，或者改到一半发现方向错了。</span></li>
+          <li><strong>不会丢当前版</strong><span>打开旧版前，当前画布先自动收进项目列表。</span></li>
+          <li><strong>不是版本管理</strong><span>它保存的是项目，不是同一份方案的每次发布。</span></li>
+        </ul>
+      </section>
+
+      <section class="doc-sec" id="backup">
+        <h2>本机备份</h2>
+        <p>交付面板里还有「本机备份」。换设备或清浏览器之前，先备份一次；到新设备再从备份恢复。备份和完整活动交接是两件事：备份用来恢复工作，交接文件用来给执行团队。</p>
+        <div class="note">
+          <strong>清浏览器之前先备份</strong>
+          <p>不登录时方案存在这台设备的浏览器里，清数据会一起清掉。先登录，或先做本机备份。</p>
+        </div>
+        <div class="slots">
+          <div class="slot"><span>待补 · 截图</span><p>「我的项目」列表：自动存档的卡片与「打开」按钮。</p></div>
+          <div class="slot"><span>待补 · 示例</span><p>本机备份文件与完整活动交接文件的区别：一个用来恢复，一个用来交付。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#deliver-export" data-chapter-link="deliver-export"><span>上一篇</span><strong>导出一览</strong></a>
         <a class="is-next" href="#faq" data-chapter-link="faq"><span>下一篇</span><strong>常见问题</strong></a>
       </nav>
     </article>
 
     <!-- ================= 常见问题 ================= -->
     <article class="chapter" id="faq" data-chapter="faq" data-title="常见问题">
-      <h1>常见问题</h1>
-      <p class="lead">开始用之前，最常被问到的几件事。</p>
+      <header class="chapter-head">
+        <p class="eyebrow">参考</p>
+        <h1>先在这里找，<br>找不到再问。</h1>
+        <p class="lead">下面是最常被问到的几件事。每条只给一句结论，细节都在对应章节里。</p>
+      </header>
 
-      <section class="doc-sec" id="faq-login">
-        <h2>一定要登录吗？</h2>
-        <p>不。可以先在本机布置，活动会留在「我的项目 → 最近活动」里。登录后才能使用云端项目，把方案带到另一台设备。</p>
+      <section class="doc-sec" id="faq-account">
+        <h2>账号与保存</h2>
+        <ul class="rows">
+          <li><strong>不登录能用吗</strong><span>能。方案存在这台设备的浏览器里；登录后跟着账号走。<a href="#first-open">看打开与保存</a></span></li>
+          <li><strong>换设备怎么接着改</strong><span>先登录，或在本机做一次备份，到新设备恢复。<a href="#deliver-version">看版本与备份</a></span></li>
+          <li><strong>团队怎么协作</strong><span>点左轨账户打开账户中心，邀请按邮箱添加，消息要登录并连接后才能用。<a href="#first-open">看账户中心</a></span></li>
+        </ul>
       </section>
 
-      <section class="doc-sec" id="faq-storage">
-        <h2>我的东西存在哪？</h2>
-        <p>本机活动保存在这台设备的浏览器里；云端项目存在账号下。换浏览器、换设备或清空站点数据之前，先把当前方案存成云端项目，或导出完整活动交接。</p>
+      <section class="doc-sec" id="faq-capability">
+        <h2>Bingo 与生成</h2>
+        <ul class="rows">
+          <li><strong>为什么 Bingo 不听我的</strong><span>先看要求是否落在它的范围里；精确移动、删改单件、库外品类用画布和物料库更稳。<a href="#bingo-limits">看 Bingo 的边界</a></span></li>
+          <li><strong>生成会扣钱吗</strong><span>生成和重建消耗 Aholo 云额度，提交前写明扣多少，确认后才开始；应用内不设每日次数。<a href="#materials-generate">看生成物料</a></span></li>
+          <li><strong>生成失败会怎样</strong><span>布置不受影响；服务恢复后把同一句重新提交即可。<a href="#materials-generate">看额度与失败</a></span></li>
+        </ul>
       </section>
 
-      <section class="doc-sec" id="faq-quota">
-        <h2>生成会扣额度吗？</h2>
-        <p>会。物料生成和场地生成都会消耗额度；提交之前界面会写明这次要生成什么，你确认了才会开始。</p>
+      <section class="doc-sec" id="faq-venue">
+        <h2>采集与场地</h2>
+        <ul class="rows">
+          <li><strong>拍多少张才够</strong><span>可交付 120–180 张；少于 120 张评分封顶。<a href="#capture-layers">看拍多少</a></span></li>
+          <li><strong>多少分能重建</strong><span>75 分以上可以直接跑；50–74 建议补拍；低于 50 重采。<a href="#capture-check">看现场评分</a></span></li>
+          <li><strong>重建要多久</strong><span>通常 15–30 分钟，消耗额度，产物铺在场地层。<a href="#venue-reconstruct">看 Aholo 重建</a></span></li>
+        </ul>
       </section>
 
-      <section class="doc-sec" id="faq-client">
-        <h2>甲方需要账号吗？</h2>
-        <p>不需要。评审链接打开就能看平面、落钉留言，不用注册，也看不到你的编辑工具。</p>
-      </section>
-
-      <section class="doc-sec" id="faq-team">
-        <h2>团队与权限现在能用吗？</h2>
-        <p>目前「设置 → 团队」里的成员和权限是演示数据，用来预览界面，不会真的发出邀请。真实协作先在云端项目里用编辑权交接。</p>
+      <section class="doc-sec" id="faq-delivery">
+        <h2>交付</h2>
+        <ul class="rows">
+          <li><strong>客户要账号吗</strong><span>不要。评审链接打开就能看平面、落钉，不用注册。<a href="#deliver-review">看评审链接</a></span></li>
+          <li><strong>钉会回到我这里吗</strong><span>不会。钉留在对方浏览器，要留档用评审包或交接文件。<a href="#deliver-review">看评审包</a></span></li>
+          <li><strong>发布后还能改吗</strong><span>能。已发布的版本不变，改完重新发布一个新版本。<a href="#deliver-publish">看发布</a></span></li>
+        </ul>
       </section>
 
       <section class="doc-sec" id="faq-contact">
         <h2>还有问题</h2>
-        <p>写信给 <a href="mailto:lily1326685527@gmail.com">lily1326685527@gmail.com</a>，或者回到 <a href="/introduction">官网</a> 看看场景与流程。准备好了，就直接打开工作台开始摆。</p>
+        <p>写信给 <a href="mailto:lily1326685527@gmail.com">lily1326685527@gmail.com</a>，或者回到 <a href="/introduction">官网</a> 看看场景与流程。</p>
       </section>
 
       <nav class="chapter-nav" aria-label="章节翻页">
-        <a class="is-prev" href="#deliver" data-chapter-link="deliver"><span>上一篇</span><strong>分享与导出</strong></a>
+        <a class="is-prev" href="#deliver-version" data-chapter-link="deliver-version"><span>上一篇</span><strong>版本与备份</strong></a>
+        <a class="is-next" href="#glossary" data-chapter-link="glossary"><span>下一篇</span><strong>术语表</strong></a>
+      </nav>
+    </article>
+
+    <!-- ================= 术语表 ================= -->
+    <article class="chapter" id="glossary" data-chapter="glossary" data-title="术语表">
+      <header class="chapter-head">
+        <p class="eyebrow">参考</p>
+        <h1>这些词，<br>各自指什么。</h1>
+        <p class="lead">界面上的叫法和日常说法不完全一样。下面这些词，看方案、对接执行时都会用到。</p>
+      </header>
+
+      <section class="doc-sec" id="terms">
+        <h2>常用词</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>词</th><th>指什么</th><th>在哪遇到</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="nowrap">Bingo</td><td>右侧的对话助手，能整案生成、单点修改、加常见物料。</td><td>布置、物料</td></tr>
+              <tr><td class="nowrap">提案卡</td><td>Bingo 给出的草稿卡片，确认前只是预览。</td><td>Bingo</td></tr>
+              <tr><td class="nowrap">确认布置</td><td>把提案落成正式布置，也叫落盘；之后才算项目内容。</td><td>Bingo</td></tr>
+              <tr><td class="nowrap">Aholo</td><td>云端的生成与重建服务，消耗额度。</td><td>场地、物料</td></tr>
+              <tr><td class="nowrap">高斯实景</td><td>由照片或视频重建出的可漫游真实场景。</td><td>场地</td></tr>
+              <tr><td class="nowrap">World 世界模型</td><td>空间面板里的默认类型，存放高斯空间。</td><td>场地</td></tr>
+              <tr><td class="nowrap">传统空间</td><td>空白壳与场景模板，墙和门可编辑、尺寸可改。</td><td>场地</td></tr>
+              <tr><td class="nowrap">场地层</td><td>背景层，放高斯实景或传统空间，可替换。</td><td>场地</td></tr>
+              <tr><td class="nowrap">布置层</td><td>内容层，放桌椅、物料与动线，随时可改。</td><td>布置</td></tr>
+              <tr><td class="nowrap">落钉</td><td>在评审画面上点一个位置留言。</td><td>交付</td></tr>
+              <tr><td class="nowrap">工作单</td><td>给执行团队的物料与任务清单，要在原场景填写。</td><td>交付</td></tr>
+              <tr><td class="nowrap">机位册</td><td>四张定稿机位图加离线图册，只在 3D 视图可用。</td><td>交付</td></tr>
+              <tr><td class="nowrap">楼层</td><td>同一项目里的上下层，最多 4 层。</td><td>场地</td></tr>
+              <tr><td class="nowrap">额度</td><td>调用 Aholo 生成或重建的计量单位，提交前会写明扣多少。</td><td>物料、场地</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fig-hint" aria-hidden="true">左右滑动看全表</p>
+        <div class="slots">
+          <div class="slot"><span>待补 · 示例</span><p>提案卡、确认布置、落盘三个状态在界面上的样子。</p></div>
+          <div class="slot"><span>待补 · 截图</span><p>「当前环境 / 环境」列表里场地层与布置层的对照。</p></div>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="章节翻页">
+        <a class="is-prev" href="#faq" data-chapter-link="faq"><span>上一篇</span><strong>常见问题</strong></a>
         <a class="is-next is-cta" href="/"><span>下一步</span><strong>打开工作台</strong></a>
       </nav>
     </article>
@@ -446,6 +1827,7 @@ img{max-width:100%}
     <span>新手指引</span>
     <nav aria-label="页脚链接">
       <a href="/introduction">官网</a>
+      <a href="/guide/capture">拍摄指南</a>
       <a href="/">打开工作台</a>
       <a href="mailto:lily1326685527@gmail.com">联系我们</a>
     </nav>
@@ -500,17 +1882,22 @@ img{max-width:100%}
           else link.removeAttribute('aria-current');
         });
       });
-    }, { rootMargin: '-92px 0px -62% 0px', threshold: 0 });
+    }, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
     sections.forEach(function (section) { observer.observe(section); });
   }
 
   function centerRailLink() {
     var rail = document.querySelector('.doc-rail');
     var current = rail && rail.querySelector('[aria-current="page"]');
-    if (!rail || !current || rail.scrollWidth <= rail.clientWidth + 1) return;
+    if (!rail || !current) return;
     var railRect = rail.getBoundingClientRect();
     var linkRect = current.getBoundingClientRect();
-    rail.scrollLeft += (linkRect.left + linkRect.width / 2) - (railRect.left + railRect.width / 2);
+    var vertical = window.getComputedStyle(rail).flexDirection === 'column';
+    if (vertical && rail.scrollHeight > rail.clientHeight + 1) {
+      rail.scrollTop += (linkRect.top + linkRect.height / 2) - (railRect.top + railRect.height / 2);
+    } else if (!vertical && rail.scrollWidth > rail.clientWidth + 1) {
+      rail.scrollLeft += (linkRect.left + linkRect.width / 2) - (railRect.left + railRect.width / 2);
+    }
   }
 
   function show(chapter, anchorId) {

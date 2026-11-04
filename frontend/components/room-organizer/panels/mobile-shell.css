@@ -1,0 +1,261 @@
+/* ── 移动端外壳（仅 ≤768px 生效，桌面三栏一字不动） ─────────────────────
+   桌面：左轨 + 左卡 + 画布 + 对话列。
+   手机：画布吃满，左轨收成一个入口按钮 / 一张四格弹层，
+        对话收成底部抽屉（收起态 = 一条最新消息 + 一行输入），
+        视图工具从右侧竖排圆钮改成画布顶部横向滑动条（触控 ≥44px）；
+        画布结构：顶部工具条 → 中间画布 → 底部对话条。
+   2D 标注工具不在本次移动化范围内，桌面行为原样保留。 */
+
+/* 入口按钮只在手机出现，桌面为零影响。 */
+.sc-mobile-agent-entry,
+.sc-mobile-dock { display: none; }
+
+@media (max-width: 768px) {
+  .sc-workbench {
+    --sc-mobile-dock-h: 96px;
+    --sc-mobile-safe-b: env(safe-area-inset-bottom, 0px);
+    --sc-mobile-strip-h: 54px;
+    /* 顶部安全区：viewport 未开 cover，浏览器本身已避开刘海；开 cover 后这行会自动加高 */
+    --sc-mobile-safe-t: env(safe-area-inset-top, 0px);
+    --sc-mobile-strip-top: calc(var(--sc-mobile-safe-t) + 8px);
+    --sc-mobile-bottom: calc(var(--sc-mobile-dock-h) + var(--sc-mobile-safe-b));
+    --sc-mobile-fab-bottom: calc(var(--sc-mobile-bottom) + 14px);
+  }
+
+  /* 工作区：单列全屏，不再把桌面三栏硬塞进来 */
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-conversation {
+    display: block !important;
+    position: fixed !important; inset: 0 !important;
+    grid-template-columns: none !important; grid-template-rows: none !important;
+    gap: 0 !important;
+    background: var(--wk-canvas);
+  }
+
+  /* 画布：占满对话栏上方剩余空间，全出血无圆角 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage,
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage {
+    position: absolute !important;
+    inset: 0 0 var(--sc-mobile-bottom) 0 !important;
+    display: block !important;
+    grid-area: unset !important;
+    padding: 0 !important;
+    overflow: hidden;
+    container: canvas-stage / size;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-scene-viewport {
+    position: absolute !important; inset: 0 !important;
+    border-radius: 0; box-shadow: none;
+  }
+  /* 桌面画布抬头只写 3D/2D；手机上这个状态由工具条的 2D/3D 按钮承担，抬头整块收起。
+     场地名不在这里重复，只出现在空间面板的「正在编辑」。 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage .sc-canvas-heading { display: none !important; }
+
+  /* ── 视图工具：右侧竖排圆钮 → 画布顶部一条横向可滑工具条 ── */
+  .sc-workbench .sc-tool-column.sc-canvas-rail {
+    position: absolute !important;
+    left: 8px !important; right: 8px !important;
+    top: var(--sc-mobile-strip-top) !important; bottom: auto !important;
+    width: auto !important; max-width: none !important; max-height: none !important;
+    height: var(--sc-mobile-strip-h) !important;
+    display: flex !important; flex-direction: row !important; align-items: center !important;
+    gap: 4px !important; padding: 5px 8px !important; box-sizing: border-box;
+    border: 1px solid var(--wk-hair) !important; border-radius: 16px;
+    background: var(--wk-paper);
+    box-shadow: 0 6px 20px rgb(20 20 22 / 10%);
+    overflow-x: auto; overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    z-index: 36;
+  }
+  .sc-workbench .sc-tool-column.sc-canvas-rail::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  /* 触控区：44×44，圆钮改成 12px 圆角方钮，间距由工具条统一给 */
+  .sc-workbench .sc-tool-column > button,
+  .sc-workbench .sc-tool-column .sc-tool-menu > button {
+    flex: 0 0 44px;
+    width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+    border-radius: 12px;
+  }
+  .sc-workbench .sc-tool-column .sc-tool-menu { flex: 0 0 44px; width: 44px; height: 44px; }
+  .sc-workbench .sc-tool-column .sc-tool-sep {
+    flex: 0 0 1px; width: 1px; min-width: 1px; height: 24px; margin: 0;
+  }
+  .sc-workbench .sc-tool-column > .sc-floor-switcher {
+    flex: 0 0 auto; flex-direction: row; align-items: center; gap: 6px; align-self: auto;
+  }
+  .sc-workbench .sc-floor-switcher-label,
+  .sc-workbench .sc-tool-column > .sc-floor-switcher .sc-floor-switcher-label {
+    display: grid; place-items: center; box-sizing: border-box; height: 44px; padding: 0 10px;
+  }
+  .sc-workbench .sc-floor-switcher-arrows { flex-direction: row; }
+  .sc-workbench .sc-floor-switcher-arrows button {
+    width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  }
+  /* 漫游按钮去掉长文案，只留脚印图标 */
+  .sc-workbench .sc-tool-column #tool-walk .sc-walk-label { display: none; }
+  /* 触屏没有 hover，黑胶囊提示全部关掉 */
+  .sc-workbench .sc-tool-column [data-tip]::after { display: none !important; }
+  /* 工具弹层：工具条在顶部，弹层改为向下展开；锚到工具条右端，
+     不再钉在被点的按钮上（按钮一旦靠近行尾，弹层会横向溢出屏外） */
+  .sc-workbench .sc-tool-column .sc-tool-pop {
+    position: fixed !important;
+    left: auto !important; right: 8px !important; bottom: auto !important;
+    top: calc(var(--sc-mobile-strip-top) + var(--sc-mobile-strip-h) + 6px) !important;
+    max-width: min(340px, calc(100vw - 16px)); max-height: 58vh; overflow-y: auto; z-index: 80;
+  }
+  /* 画布左下角的空间标定角标：手机上让位给入口钮与工具条，同一条信息由对话输入区承接 */
+  .sc-workbench .is-docked-layout.is-mode-rail [data-testid="site-calibration-hud"] { display: none !important; }
+  /* 光照 ⓘ 同样是左下角 24px 小钮，会压住工具条第一格；手机端收起，光照仍在桌面端可调 */
+  .sc-workbench .is-docked-layout.is-mode-rail [data-testid="scene-lighting-hud"] { display: none !important; }
+
+  /* ── 左轨入口：默认只露一颗 48px 圆钮，展开成四格弹层 ── */
+  .sc-mobile-agent-entry {
+    position: fixed;
+    left: 12px; bottom: var(--sc-mobile-fab-bottom);
+    display: grid; place-items: center;
+    width: 48px; height: 48px; padding: 0;
+    border: 1px solid var(--wk-hair); border-radius: 50%;
+    background: var(--wk-paper); color: var(--wk-ink);
+    box-shadow: 0 6px 18px rgb(20 20 22 / 14%);
+    cursor: pointer; z-index: 77;
+    will-change: transform;
+  }
+  .sc-mobile-agent-entry[aria-expanded="true"] {
+    background: var(--wk-green-pale); border-color: #c8d8cc; color: var(--wk-green-deep);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail {
+    position: fixed !important;
+    left: 12px; right: 12px;
+    bottom: calc(var(--sc-mobile-fab-bottom) + 56px);
+    width: auto !important; max-width: none !important;
+    flex: none !important; height: auto !important;
+    display: flex !important; flex-direction: row !important; align-items: center; gap: 10px;
+    padding: 6px; box-sizing: border-box;
+    background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: 18px;
+    box-shadow: 0 12px 32px rgb(20 20 22 / 14%);
+    z-index: 78; overflow: visible;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transform: translateY(8px) scale(.98);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s;
+    will-change: transform;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail[data-mobile-open="true"] {
+    opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  }
+  /* 四格同宽：把 nav 摊平，品牌钮与三个 agent 钮都成为同一行的网格项 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px;
+    flex: 1 1 auto; min-width: 0; align-items: stretch;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary { display: contents; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team { display: none; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft { display: none; }
+  /* 四格：图标 28 + 标签 16，格高 64，整格即触控区 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
+    display: flex !important; flex-direction: column !important; align-items: center; justify-content: center; gap: 4px;
+    width: auto; min-width: 0; height: 64px; min-height: 64px;
+    margin: 0; padding: 4px; border: 0; border-radius: 12px; background: transparent;
+  }
+  /* 图标槽统一 28×28，四个形体在同一基线上 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-avatar {
+    display: grid; flex: none; width: 28px; height: 28px; margin: 0;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-label {
+    display: block; flex: none; color: var(--wk-ink-soft); font-size: 12px; line-height: 16px; white-space: nowrap;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active > span.sc-rail-label { color: var(--wk-green-deep); }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before { display: none; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after { display: none !important; }
+  /* 工具行：设置与账号只留 44×44 图标钮，靠右对齐，不与四格分隔 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
+    display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 4px;
+    flex: 0 0 auto; width: auto; margin-top: 0; padding-top: 0; border-top: 0 !important; min-height: 44px;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > .sc-tool-menu {
+    flex: 0 0 44px; width: 44px !important; height: 44px; margin: 0;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > .sc-tool-menu > button,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > .sc-cloud-trigger {
+    display: grid; place-items: center;
+    width: 44px !important; height: 44px !important; min-width: 44px; min-height: 44px; padding: 0;
+  }
+
+  /* ── 对话抽屉：展开态为全高 72vh 的底部卡；收起态由 .sc-mobile-dock 承接 ── */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
+    display: none !important;
+    position: fixed !important;
+    inset: auto 8px calc(var(--sc-mobile-bottom) + 8px) 8px !important;
+    width: auto !important; max-width: none !important; height: min(72vh, 620px);
+    z-index: 79; overflow: hidden;
+    border: 1px solid var(--wk-hair); border-radius: 18px;
+    background: var(--wk-paper);
+    box-shadow: 0 16px 44px rgb(20 20 22 / 20%);
+    /* 单独提层：否则与 WebGL 画布共层时，抽屉上方的画布会漏出一块底色 */
+    will-change: transform;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-left-column { display: flex !important; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel {
+    border: 0 !important; border-radius: 0 !important; width: 100% !important;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-heading { display: none !important; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-head { padding: 10px 14px; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-feed { padding: 12px 14px 16px; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-body { flex: 1 1 auto; min-height: 0; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer {
+    padding: 8px 12px calc(10px + var(--sc-mobile-safe-b));
+  }
+  /* 发送键回到输入区右下角，不再单独掉到左侧一行 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-bar {
+    display: flex; justify-content: flex-end; width: 100%;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field { min-height: 44px; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field + .ap-composer-bar { padding-top: 2px; }
+  /* iOS 聚焦时 16px 起才不自动放大整页 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-composer-field textarea,
+  .sc-workbench .sc-mobile-dock-field { font-size: 16px; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-send {
+    width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-icon-btn {
+    width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+  }
+
+  /* ── 收起态对话条：一条最新消息 + 一行输入（点一下展开抽屉）── */
+  .sc-mobile-dock {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: grid; grid-template-rows: auto auto; gap: 6px;
+    height: var(--sc-mobile-bottom);
+    padding: 8px 12px calc(8px + var(--sc-mobile-safe-b));
+    box-sizing: border-box; text-align: left;
+    background: var(--wk-paper); border: 0; border-top: 1px solid var(--wk-hair);
+    color: var(--wk-ink); font: inherit;
+    z-index: 76; cursor: pointer;
+    will-change: transform;
+  }
+  .sc-mobile-dock-msg {
+    display: flex; align-items: center; gap: 8px; min-width: 0; height: 26px;
+    font-size: 13px; line-height: 18px;
+  }
+  .sc-mobile-dock-msg > span:nth-child(2) {
+    flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    color: var(--wk-ink-soft);
+  }
+  .sc-mobile-dock-msg > svg { flex: none; color: var(--wk-ink-faint); }
+  .sc-mobile-dock-field {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    height: 44px; padding: 0 6px 0 12px;
+    border: 1px solid var(--wk-hair); border-radius: 12px;
+    background: var(--wk-plane); color: var(--wk-muted);
+  }
+  .sc-mobile-dock-field > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .sc-mobile-dock-send {
+    display: grid; place-items: center; flex: none;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--wk-green); color: #fff;
+  }
+}

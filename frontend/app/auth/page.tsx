@@ -1,20 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { IntroPage } from '@/components/intro/intro-page';
-import { safeReturnPath, useAuth } from '@/lib/auth-provider';
+import { useEffect } from 'react';
 
-export default function AuthPage(): JSX.Element {
-  const { controller, ready, error } = useAuth()!;
+/** 登录注册已搬进工作台账户浮窗：旧入口保留，只负责带着安全返回目标跳过去。 */
+export default function AuthPage(): null {
   const router = useRouter();
 
-  function enterWorkspace(): void {
-    router.replace(safeReturnPath(new URLSearchParams(window.location.search).get('next')));
-  }
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get('next');
+    router.replace(`/?login=1${next ? `&next=${encodeURIComponent(next)}` : ''}`);
+  }, [router]);
 
-  const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL?.trim() ?? '';
-  const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '';
-  const demoAccount = demoEmail && demoPassword ? { email: demoEmail, password: demoPassword } : undefined;
-
-  return <IntroPage controller={controller} ready={ready} authError={error} demoAccount={demoAccount} onEnter={() => router.push('/?local=1')} onAuthenticated={enterWorkspace} />;
+  return null;
 }
