@@ -1,0 +1,9 @@
+{
+  "desc": "sitemap 配置，工具页不索引",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}

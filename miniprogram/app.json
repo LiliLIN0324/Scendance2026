@@ -1,0 +1,29 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/capture/index",
+    "pages/result/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "现场采集 · 一键成景",
+    "navigationBarBackgroundColor": "#0B0C0B",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0B0C0B",
+    "backgroundTextStyle": "light",
+    "pageOrientation": "portrait"
+  },
+  "permission": {
+    "scope.camera": {
+      "desc": "拍摄现场照片与视频，用于重建 3D"
+    },
+    "scope.userLocation": {
+      "desc": "用于核验机位定位覆盖与原地旋转判定，不上传位置以外的信息"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

@@ -1,0 +1,90 @@
+<view class="page td-dark {{glassClass}} {{state === 'failed' ? 'page--fail' : ''}}">
+  <!-- 09 底图：场地照片虚化压暗，只在重建中露出。 -->
+  <image
+    wx:if="{{state === 'queued' || state === 'processing'}}"
+    class="backdrop"
+    src="/assets/guide/bg-a.jpg"
+    mode="aspectFill"
+  />
+  <view class="b-vig-mid layer"></view>
+  <view class="b-noise layer"></view>
+
+  <view class="head">
+    <text class="state t-title">{{stateLabel}}</text>
+  </view>
+
+  <!-- 处理中：毛玻璃卡 + 缩略 + 进度 + 约 X 分 -->
+  <view
+    class="card progress-card b-glass"
+    wx:if="{{state === 'queued' || state === 'processing'}}"
+    bindlongpress="onDebugFail"
+  >
+    <image class="progress-thumb" src="/assets/guide/album-thumb.jpg" mode="aspectFill" />
+    <view class="progress-head">
+      <view class="progress-left">
+        <t-loading theme="circular" size="40rpx" />
+        <text class="progress-num">{{progress}}<text class="progress-pct">%</text></text>
+      </view>
+      <text class="note">约 {{etaMinutes}} 分</text>
+    </view>
+    <t-progress
+      percentage="{{progress}}"
+      color="rgba(255,255,255,0.72)"
+      track-color="rgba(255,255,255,0.12)"
+      label="{{false}}"
+    />
+    <text class="note">可以切后台，回来接着看进度。</text>
+  </view>
+
+  <!-- 成功：4 张预览 + 尺寸 + 产物单元格 -->
+  <block wx:if="{{state === 'done'}}">
+    <view class="preview-grid" wx:if="{{previewUrls.length}}">
+      <image class="preview" wx:for="{{previewUrls}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
+    </view>
+
+    <view class="card b-glass">
+      <view class="size" wx:if="{{size}}">
+        <text class="size__num">{{size.w}} × {{size.d}} × {{size.h}}</text>
+        <text class="size__unit">{{size.unit}}</text>
+      </view>
+      <text class="note" wx:if="{{upAxis}}">{{upAxis}} 轴向上 · {{normalized ? '已归一化' : '未归一化'}}</text>
+
+      <t-cell-group>
+        <t-cell
+          title="导出模型到聊天"
+          left-icon="view-module"
+          right-icon="download"
+          bordered
+          hover
+          bind:click="onShareModelFile"
+        />
+        <t-cell
+          title="预览图存相册"
+          left-icon="image"
+          right-icon="download"
+          bordered
+          hover
+          bind:click="onSavePreviews"
+        />
+        <t-cell
+          wx:if="{{rawUrl}}"
+          title="原始文件"
+          left-icon="file-copy"
+          right-icon="download"
+          hover
+          bind:click="onCopyRaw"
+        />
+      </t-cell-group>
+    </view>
+
+    <view class="link">
+      <t-button theme="primary" size="large" block t-class="btn-green" bind:tap="onCopyLink">复制链接</t-button>
+    </view>
+  </block>
+
+  <!-- 失败：一句原因 + 一个动作 -->
+  <view class="fail b-glass" wx:if="{{state === 'failed'}}">
+    <text class="fail__title">{{message || '重建失败'}}</text>
+    <t-button theme="primary" size="large" block t-class="btn-green" bind:tap="onFailAction">回去重拍</t-button>
+  </view>
+</view>

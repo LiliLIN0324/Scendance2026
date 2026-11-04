@@ -1,0 +1,40 @@
+<view class="page td-dark {{glassClass}}">
+  <image class="cover" src="/assets/brand/cover.jpg" mode="aspectFill" />
+  <view class="b-veil"></view>
+  <view class="b-vig"></view>
+  <view class="b-noise"></view>
+
+  <image class="brand" style="margin-top:{{topPad}}px;" src="/assets/brand/door.png" mode="aspectFit" />
+
+  <view class="stage">
+    <text class="tagline t-cover">把场地拍成 3D</text>
+    <view class="cta-wrap">
+      <t-button theme="default" size="large" block t-class="btn-glass" bind:tap="onStart">开始扫描</t-button>
+    </view>
+    <text class="resume t-aux" wx:if="{{resumeLabel}}" bindtap="onResume">{{resumeLabel}}</text>
+  </view>
+
+  <view class="foot">
+    <text class="foot__time t-aux">约 3 分钟</text>
+    <view class="foot__info" hover-class="foot__info--press" bindtap="onInfo">
+      <t-icon name="info-circle" size="32rpx" color="rgba(255,255,255,0.45)" />
+    </view>
+  </view>
+
+  <t-popup
+    visible="{{infoOpen}}"
+    placement="bottom"
+    close-btn
+    bind:visible-change="onInfoVisibleChange"
+  >
+    <view class="sheet b-glass">
+      <text class="sheet__title t-title">拍摄说明</text>
+      <text class="sheet__body t-body">三层：低 60cm、视线 170cm、高 190cm。
+每层至少 24 张，55–65 张更稳，全程约 160–200 张。
+步长 0.3–0.5 m，转角 8°–10°，距墙 1.2–1.8 m；停 1–2 秒再按，绕回起点闭合。</text>
+      <view class="sheet__btn">
+        <t-button theme="primary" size="large" block bind:tap="onInfoClose">知道了</t-button>
+      </view>
+    </view>
+  </t-popup>
+</view>

@@ -1,0 +1,103 @@
+page {
+  height: 100%;
+  background: #0B0C0B;
+}
+
+.page {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  background: #0B0C0B;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+
+.cover {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.brand {
+  position: relative;
+  z-index: 3;
+  display: block;
+  width: 120rpx;
+  height: 34rpx;
+  margin-left: 24px;
+}
+
+.stage {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: calc(env(safe-area-inset-bottom) + 110px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.tagline {
+  max-width: 320px;
+}
+
+.cta-wrap {
+  width: 216px;
+  margin-top: 24px;
+}
+
+.resume {
+  margin-top: 16px;
+  text-decoration: underline;
+}
+
+.foot {
+  position: absolute;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.foot__info {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 160ms ease-out;
+}
+
+.foot__info--press {
+  opacity: 0.6;
+}
+
+.sheet {
+  margin: 0 12px;
+  padding: 24px 24px calc(env(safe-area-inset-bottom) + 24px);
+  border-radius: 18px 18px 0 0;
+  border-bottom-width: 0;
+}
+
+.sheet__title {
+  display: block;
+}
+
+.sheet__body {
+  display: block;
+  margin-top: 12px;
+  white-space: pre-line;
+}
+
+.sheet__btn {
+  margin-top: 24px;
+}
