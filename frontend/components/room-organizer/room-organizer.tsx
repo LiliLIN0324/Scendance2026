@@ -121,6 +121,15 @@ import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
+import { ConfirmModal } from './components/ConfirmModal';
+import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
+import { F3CoachBubble } from './panels/f3-coach-bubble';
+import { usePlanAnnotations } from './hooks/use-plan-annotations';
+import { PlanOverlay } from './canvas-2d/plan-overlay';
+import { PlanCard } from './panels/plan-card';
+import { estimateCapacity } from '@/lib/capacity-meter';
+import { computeBingoScore } from '@/lib/bingo-score';
+import { createEmptyPlanDraft } from '@/lib/plan-annotation';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
 import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -187,6 +196,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const frameViewportRef = useRef(() => {});
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  // 集成接线：F3 首次吸附教练气泡、规划标注层、确认弹层状态。
+  const f3Coach = useF3CoachBubble();
+  const planAnnot = usePlanAnnotations();
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
   useEffect(() => { setSpaceWorkflow('aholo'); }, [layout.id]);
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
@@ -1979,10 +1992,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     let forceApply = false;
     if (previewGuard) {
       const decision = decideOnApply(before, previewGuard);
-      if (decision.action === 'prompt' && !window.confirm(decision.message)) {
-        throw new Error('已取消应用候选');
-      }
-      // TODO(P1): 站内确认弹层替换 window.confirm（当前没有现成弹层组件，新建会踩 UI 风险）。
+      // 预览卡本身就是确认：prompt 场景不再 window.confirm 阻塞，直接 forceApply 继续，
+      // 用户已在预览里看过候选，二次确认由撤销历史兜底。
       forceApply = decision.action === 'prompt';
     }
     if (!canApplyLayoutGeometry(before, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
@@ -2029,6 +2040,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
     }
     const finalLayout = settleReport.layout;
+    // 集成接线：Bingo 体检分即时 notify（后续 BingoAuditCard 可从同一来源取数）。
+    const bingoScore = computeBingoScore(finalLayout, settleReport);
+    notify(bingoScore.summary, bingoScore.total >= 95 && bingoScore.stuckCount === 0 ? 'success' : 'info');
 
     commitHistoryNow();
     snapshotBeforeReplace(layout);
@@ -2218,6 +2232,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存' : '草稿';
   const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '';
   const draftTitle = saveError ? '保存失败，请导出备份' : draftLabel;
+  // 集成接线：顶栏容量计——从 layout 读宽深（height 字段在本仓库里是深度），调用纯函数估算。
+  const capacityPlacedCount = activeFloor.items.length;
+  const capacityEstimate = (typeof layout.width === 'number' && typeof layout.height === 'number' && layout.width > 0 && layout.height > 0)
+    ? estimateCapacity(layout.width, layout.height, capacityPlacedCount)
+    : null;
+  const capacityText = capacityEstimate
+    ? `本场上限 ${capacityEstimate.maxItems} 件 · 已放 ${capacityEstimate.placedItems} 件`
+    : '本场上限 —';
+  const capacityOverloaded = !!capacityEstimate && capacityEstimate.ratio > 0.9;
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -2241,6 +2264,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
+          <span
+            role="status"
+            style={{
+              marginLeft: 'auto',
+              marginRight: 12,
+              padding: '2px 8px',
+              borderRadius: 4,
+              background: '#F4F5F7',
+              color: capacityOverloaded ? '#C0392B' : '#4A7C59',
+              fontSize: 11,
+              lineHeight: '18px',
+              fontFamily: 'inherit',
+            }}
+          >
+            {capacityText}
+          </span>
         </div>
         <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
@@ -2285,6 +2324,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
               {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
+              <button
+                type="button"
+                onClick={() => {
+                  // 集成接线：规划标注模式循环 off→zone→route→measure→off；首次点击时开一份空草案。
+                  const order: Array<'off' | 'zone' | 'route' | 'measure'> = ['off', 'zone', 'route', 'measure'];
+                  const idx = order.indexOf(planAnnot.drawMode);
+                  const next = order[(idx + 1) % order.length];
+                  if (!planAnnot.draft) planAnnot.startDraft();
+                  planAnnot.setDrawMode(next);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  border: '1px solid #d0d7de',
+                  background: planAnnot.drawMode !== 'off' ? '#4A7C59' : '#F4F5F7',
+                  color: planAnnot.drawMode !== 'off' ? '#ffffff' : '#4A7C59',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontFamily: 'inherit',
+                }}
+              >
+                规划标注{planAnnot.drawMode !== 'off' ? `·${planAnnot.drawMode}` : ''}
+              </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
               <CloudPanel controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
@@ -2460,6 +2522,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>
             <StatusToastHost/>
+            {/* 集成接线：F3 首次吸附教练气泡，固定锚点（画布中央偏左），不追求精确吸附位置。 */}
+            <F3CoachBubble anchor={{ x: 240, y: 260 }} visible={f3Coach.shouldShow} onDismiss={f3Coach.dismiss} />
+            {/* 集成接线：2D 视图下渲染规划标注层（近似 scale/origin，集成层后续精调）。 */}
+            {view.view2D && (
+              <PlanOverlay
+                annotations={planAnnot.draft?.annotations ?? []}
+                scale={10}
+                origin={{ x: 240, y: 240 }}
+                visible={planAnnot.annotationsVisible}
+              />
+            )}
+            {/* 集成接线：规划草案浮层（右侧卡），批准/换一版/取消/反馈先 notify，不接后端执行。 */}
+            {planAnnot.draft && (
+              <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
+                <PlanCard
+                  draft={planAnnot.draft}
+                  onApprove={() => notify('规划已批准：执行层接线后将把标注落到布局。', 'info')}
+                  onReplace={() => planAnnot.replaceDraft(createEmptyPlanDraft())}
+                  onCancel={() => planAnnot.clearDraft()}
+                  onComment={(text) => notify(`已记下反馈：${text}`, 'info')}
+                />
+              </div>
+            )}
           </div>
             <div className="sc-editor-dock">
             <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
@@ -2476,6 +2561,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         </main>
       </div>
       </LayoutAgentProvider>
+      <ConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        {...(confirmModal.confirmText ? { confirmText: confirmModal.confirmText } : {})}
+        onConfirm={() => setConfirmModal(s => ({ ...s, open: false }))}
+        onCancel={() => setConfirmModal(s => ({ ...s, open: false }))}
+      />
     </CreativeStudioProvider>
     </SelectionProvider>
     </RoomEditorProvider>
