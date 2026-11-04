@@ -55,16 +55,11 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
   void layout;
   const [draft, setDraft] = useState('');
 
-  // 活动与 Bingo 是 AgentPanel 里那场真对话，这里不接管。
-  if (agent === 'bingo' || agent === 'door') return null;
-
-  const meta = AGENT_CHAT_META[agent];
-
   // 订阅运行时账本（真步骤时间线 / 三控件状态）。
+  // 注意：所有 hooks 必须在 early return 之前调用（React rules of hooks）。
   const [run, setRun] = useState(getAgentRun);
   useEffect(() => subscribeAgentRun(() => setRun(getAgentRun())), []);
   const now = useNowMs(run.isRunning);
-
   const [mode, setMode] = useSupervisionMode();
   const [expandedAll, setExpandedAll] = useState(false);
   const [openThought, setOpenThought] = useState<number | null>(null);
@@ -113,6 +108,12 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
     if (expandedAll) return run.stepLog;
     return run.stepLog.slice(-3);
   }, [run.stepLog, expandedAll]);
+
+  // 活动与 Bingo 是 AgentPanel 里那场真对话，这里不接管。
+  // 放在所有 hooks 之后（React rules of hooks）。
+  if (agent === 'bingo' || agent === 'door') return null;
+
+  const meta = AGENT_CHAT_META[agent];
 
   return (
     <div className={`ap-chat is-${agent}`}>
