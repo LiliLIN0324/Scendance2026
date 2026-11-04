@@ -183,6 +183,7 @@
 | `docs/plans/chat-interaction-review.md` | 助手开关与对话状态检查 | 2026-10-08 | 当前 |
 | `docs/plans/delivery-contract.md` | 幕景最小交付契约 | 2026-10-07 | 当前 |
 | `docs/plans/event-operations-contract.md` | 活动执行安排：最小契约建议 | 2026-10-07 | 当前 |
+| `docs/plans/ia-role-rework-ledger-2026-11-04.md` | 四角色 IA 重划导演台账：活动/审校 Bingo/空间/物料，含活枝事实更正与 S1-S4 挂载点 | 2026-11-04 | 当前 |
 | `docs/plans/local-activity-scene-connection.md` | 本地活动与场景服务连接 | 2026-10-09 | 当前 |
 | `docs/plans/local-delivery-loop-audit.md` | 本地执行与恢复链路核查 | 2026-10-07 | 当前 |
 | `docs/plans/local-project-backup.md` | 场景与活动备份 | 2026-10-09 | 当前 |

@@ -5,6 +5,8 @@
 > **Sources fetched**: viggle.ai / pinoc / jst2 / docs scene · Spline docs+UI tour · Dora marketing · Luma Dream Machine · Meshy workspace tour · Hyper3D WorldGen · Polycam Scenes help · memory + `ACTIVITY-FLOW-AI-NATIVE-FRAMEWORK-2026-10-27.md`.  
 > **tuijian**: github.com/wustwyh/tuijian referenced by owner as「笨但好懂」card→pipeline；repo page thin/403 — pattern taken from owner nail, not reverse-engineered UI pixels.
 
+> **2026-11-04 取代声明（owner 已拍板，下文冲突处以此为准；全文保留作历史）**：左轨仍四形、不加第五图标，但角色语义重划为 **活动 / 审校 Bingo / 空间 / 物料**。① 原「总控」改为**活动**，是唯一接 LLM 的主对话与生成入口（开场为活动画廊，成员沉底）；本备忘录第 2/3 节「Bingo 是唯一生成入口、Bingo as right-column assistant」的表述同步作废，生成主对话归活动脸。② **Bingo 回归审校本意**（画面钉点→线程→标记解决→回流台账，对标 Figma/Frame.io），不承担布置生成。③ 空间/物料是工具面板而非人格，不维持对称式聊天窗。④ 不建真多智能体调度台，现有「总控分派」按假分派拆除。挂载点、证据与切片任务书见 [`docs/plans/ia-role-rework-ledger-2026-11-04.md`](plans/ia-role-rework-ledger-2026-11-04.md)。
+
 ---
 
 ## 1. Reference scorecards
