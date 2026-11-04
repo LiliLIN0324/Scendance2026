@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { isUntouched } from '../lib/restore-point';
 import { SCENE_PRESETS } from '../lib/scene-presets';
+import { describeScannedVenue, listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
 import { EnvironmentPreview } from './environment-preview';
 import { ShelfGrip } from './scendance-workspace';
 import { ScenePresetsPanel } from './scene-presets-panel';
@@ -22,6 +23,8 @@ export function SpacePanel({
   onApply,
   environment,
   onOpenAholo,
+  currentScanId,
+  onPickScan,
   workflow: controlledWorkflow,
   onWorkflowChange,
   variant = 'shelf',
@@ -41,6 +44,10 @@ export function SpacePanel({
   };
   /** 直接打开既有 Aholo World / World Recon 流程。 */
   onOpenAholo?: ((kind: 'world' | 'recon') => void) | undefined;
+  /** 当前正在使用的真实场地（扫描库 assetId），只用于列表里的「使用中」。 */
+  currentScanId?: string;
+  /** 选中一套已扫描场地；不传时退回环境切换，保证面板单独渲染也能用。 */
+  onPickScan?(venue: ScannedVenue): void;
   /** 可由工作台托管，切换到其他 Agent 后也记住本次选择。 */
   workflow?: 'aholo' | 'traditional';
   onWorkflowChange?(workflow: 'aholo' | 'traditional'): void;
@@ -79,6 +86,12 @@ export function SpacePanel({
     else setConfirm(true);
   };
   const card = variant === 'card';
+  // 真实场地 = 扫描库里已重建好的这一场；每次渲染重读，刚重建完的场立刻出现。
+  const scans = listScannedVenues();
+  const pickScan = (venue: ScannedVenue) => {
+    if (onPickScan) onPickScan(venue);
+    else environment?.onSelect(venue.assetId, venue.name);
+  };
   useEffect(() => { onRegisterNew?.(pressNew); });
   return (
     <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
@@ -100,8 +113,11 @@ export function SpacePanel({
           <section className="sc-space-aholo-main" aria-label="Aholo 世界模型空间生成">
             <div className="sc-space-section-head">
               <Globe size={16} aria-hidden="true"/><h3>World 世界模型</h3><small>默认</small>
+              <details className="sc-space-info is-right">
+                <summary aria-label="World 世界模型说明" title="World 世界模型说明"><Info size={12} aria-hidden="true"/></summary>
+                <p>生成可漫游的 3D 高斯空间，Bingo 可在可编辑布局上规划物料与动线。重建真实场地请用现场照片或视频；卫星图只能选址，不能作为重建素材。</p>
+              </details>
             </div>
-            <details className="sc-space-info sc-space-detail"><summary aria-label="World 世界模型说明" title="World 世界模型说明"><Info size={13} aria-hidden="true"/></summary><p>生成可漫游的 3D 场地。Bingo 可在可编辑布局上规划物料与动线。</p></details>
             <div className="sc-space-aholo-actions">
               <button type="button" className="sc-button is-primary" onClick={() => onOpenAholo?.('world')} disabled={!onOpenAholo}>
                 <Globe size={14} aria-hidden="true"/>生成场地
@@ -111,7 +127,30 @@ export function SpacePanel({
               </button>
             </div>
             {!onOpenAholo && <p className="sc-note">Aholo 空间生成当前不可用。</p>}
-            <details className="sc-space-info sc-space-detail"><summary aria-label="真实场地重建素材要求" title="真实场地重建素材要求"><Info size={13} aria-hidden="true"/></summary><p>真实场地重建使用现场照片或视频；卫星图只用于选址，不能作为重建素材。</p></details>
+          </section>
+          <section className="sc-space-block" aria-label="真实场地">
+            <div className="sc-space-section-head">
+              <Scan size={15} aria-hidden="true"/><h3 title="现场拍完并重建出的这一场，尺寸来自扫描；场景模板是通用馆型。">真实场地</h3>
+              <small>{scans.length ? `${scans.length} 套已扫描` : '实拍重建'}</small>
+            </div>
+            {scans.length > 0
+              ? <ul className="sc-env-scenes" aria-label="可用的真实场地扫描">
+                {scans.map(venue => {
+                  const active = venue.assetId === currentScanId;
+                  return <li key={venue.assetId} className={active ? 'is-current' : ''}>
+                    <button type="button" className="sc-env-scene-pick" aria-label={`应用真实场地 ${venue.name}`} aria-pressed={active} onClick={() => pickScan(venue)}>
+                      <span className="sc-env-preview"><span className="sc-material-thumb-empty" aria-hidden="true">▦</span></span>
+                      <span className="sc-env-meta"><strong title={venue.name}>{venue.name}</strong><small>{describeScannedVenue(venue)}</small></span>
+                    </button>
+                  </li>;
+                })}
+              </ul>
+              : <>
+                <div className="sc-lib-empty" role="note"><Scan size={14} aria-hidden="true"/><span>还没有已扫描的真实场地</span></div>
+                <button type="button" className="sc-button" onClick={() => onOpenAholo?.('recon')} disabled={!onOpenAholo}>
+                  <Scan size={14} aria-hidden="true"/>去采集 / 重建
+                </button>
+              </>}
           </section>
           <section className="sc-space-block sc-space-env" aria-label="当前环境">
             {environment

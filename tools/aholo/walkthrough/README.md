@@ -3,7 +3,8 @@
 在浏览器里直接走进 Aholo World 生成的 3DGS 场景：不登录、不调接口、不扣额度，只读
 `frontend/public/showcase/assets/generated/scene/` 那三个随包的 `.spz`。
 
-- 三个场景来自 `docs/evidence/aholo/`（`3FO4K4QI6N4V` / `3FO4K4RHLLV9` / `3FO4K4RI3SQE`），
+- 三个场景来自 `docs/evidence/aholo/`（`3FO4K4QI6N4V` / `3FO4K4RI3SQE`）与同批 `3FO4K4RHLLV9`
+  （该源目录于 2026-11-04 裁剪，产物已随包复制为 `small-launch-hall.spz`，运行不依赖它），
   米制口径和 `frontend/components/room-organizer/three/splat-preview.ts` 一致：Z-up 转 Y-up，
   底面贴 `y=0`、水平中心归零、不缩放。
 - 渲染用 `three` + `@sparkjsdev/spark`，直接以 ESM 从仓库 `frontend/node_modules` 引用，

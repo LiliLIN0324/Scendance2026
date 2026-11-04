@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { flushSourceScope } from '@/lib/source-storage';
@@ -29,6 +29,10 @@ function renderUi() {
 }
 function upload(container: HTMLElement, files: File[]): void {
   fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files } });
+}
+/** Scoped to the photo list: the reference view also renders a size diagram as role="img". */
+function photos() {
+  return within(screen.getByRole('region', { name: '图纸与现场照片' }));
 }
 
 beforeEach(() => {
@@ -87,7 +91,7 @@ describe('venue photo input lifecycle', () => {
     expect(decode).toHaveBeenCalledOnce();
     await act(async () => { finish(bitmap()); });
     await screen.findByRole('img', { name: '现场照片：second.png' });
-    expect(screen.getAllByRole('img').map(image => image.getAttribute('alt'))).toEqual(['现场照片：first.png', '现场照片：second.png']);
+    expect(photos().getAllByRole('img').map(image => image.getAttribute('alt'))).toEqual(['现场照片：first.png', '现场照片：second.png']);
     expect(revokeObjectURL).not.toHaveBeenCalled();
   });
 
@@ -113,11 +117,12 @@ describe('venue photo input lifecycle', () => {
     rendered.rerender(ui(layout.id, false, 'brief'));
     expect(await screen.findByText('最多添加 12 张图纸或现场照片。')).toBeTruthy();
     rendered.rerender(ui(layout.id, false, 'reference'));
-    expect(screen.getAllByRole('img')).toHaveLength(11);
+    expect(photos().getAllByRole('img')).toHaveLength(11);
     expect(decode).toHaveBeenCalledTimes(11);
     upload(rendered.container, [file('three.png')]);
     await screen.findByRole('img', { name: '现场照片：three.png' });
-    expect(screen.getByRole('button', { name: /已添加 12 张资料/ }).hasAttribute('disabled')).toBe(true);
+    expect(photos().getByRole('button', { name: /已达 12 张上限/ }).hasAttribute('disabled')).toBe(true);
+    expect(photos().getAllByRole('img')).toHaveLength(12);
   });
 
   it('rolls back a partially decoded invalid batch and accepts the next queued valid selection', async () => {
@@ -126,7 +131,7 @@ describe('venue photo input lifecycle', () => {
     rendered.rerender(ui(layout.id, false, 'brief'));
     await screen.findByText('请选择 PNG、JPEG 或 WebP 图片。');
     rendered.rerender(ui(layout.id, false, 'reference'));
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(photos().queryAllByRole('img')).toHaveLength(0);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:temporary.png');
     upload(rendered.container, [file('valid.png')]);
     expect(await screen.findByRole('img', { name: '现场照片：valid.png' })).toBeTruthy();
@@ -141,7 +146,7 @@ describe('venue photo input lifecycle', () => {
     upload(rendered.container, [file('pending-old.png')]);
     await waitFor(() => expect(finish).toBeTypeOf('function'));
     rendered.rerender(ui('20000000-0000-4000-8000-000000000002'));
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(photos().queryAllByRole('img')).toHaveLength(0);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:saved.png');
     upload(rendered.container, [file('new-project.png')]);
     await screen.findByRole('img', { name: '现场照片：new-project.png' });
@@ -149,7 +154,7 @@ describe('venue photo input lifecycle', () => {
     await act(async () => { finish(oldBitmap); });
     expect(oldBitmap.close).toHaveBeenCalledOnce();
     expect(createObjectURL.mock.calls.map(call => call[0].name)).not.toContain('pending-old.png');
-    expect(screen.getAllByRole('img')).toHaveLength(1);
+    expect(photos().getAllByRole('img')).toHaveLength(1);
   });
 
   it('preserves provider photos when returning from the introduction without changing project', async () => {

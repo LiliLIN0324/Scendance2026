@@ -1,6 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignLeft,
+  AlignRight,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
+  Info,
+  Maximize2,
+  Move,
+  RotateCw,
+} from 'lucide-react';
+import type { AlignEdge, DistributeAxis } from '../lib/alignment';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { MAX_CUSTOM_SET_NAME_LENGTH } from '../lib/custom-sets';
 import { WALK_CANVAS_ID } from '../lib/walk-engage';
@@ -8,6 +23,7 @@ import { Icon, iconForItem } from '../plotcraft/icon';
 import { ChipButton, ChipNameField } from './chip-controls';
 import { Minimap } from './minimap';
 import type { WalkthroughPhase } from '../hooks/use-walkthrough';
+import type { GizmoMode } from '../lib/transform';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type { FloorLayout } from '../lib/types';
 
@@ -35,6 +51,12 @@ export interface ViewportProps {
   onUngroupSelection?: (() => void) | undefined;
   /** Save the selection as a reusable custom set under `name` (#302); true when saved. */
   onSaveSelectionAsSet?(name: string): boolean;
+  /** Active transform tool for a single selection (#P0-3). */
+  gizmoMode?: GizmoMode;
+  onGizmoModeChange?(mode: GizmoMode): void;
+  /** Align / distribute a multi-selection (#P0-3). */
+  onAlignSelection?(edge: AlignEdge): void;
+  onDistributeSelection?(axis: DistributeAxis): void;
   showMeasurements: boolean;
   showMinimap: boolean;
   walkthroughActive?: boolean;
@@ -360,6 +382,13 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
         <SelectionChip {...props} selectionCount={props.selectionCount} />
       )}
 
+      {props.selectedItem && !props.walkthroughActive && props.onGizmoModeChange && (
+        <TransformChip
+          mode={props.gizmoMode ?? 'move'}
+          onChange={props.onGizmoModeChange}
+        />
+      )}
+
       {props.walkthroughActive && (
         <>
           <div
@@ -515,6 +544,158 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
 }
 
 /**
+ * Single-selection transform tool (#P0-3): move / rotate / scale icons plus
+ * one ⓘ button that holds the whole shortcut table. Nothing else is written
+ * on screen — the panel stays a three-icon chip.
+ */
+const GIZMO_MODES: Array<{ mode: GizmoMode; label: string; Icon: typeof Move }> = [
+  { mode: 'move', label: '移动：拖动物料', Icon: Move },
+  { mode: 'rotate', label: '旋转：拖动转盘，R 键转 90°', Icon: RotateCw },
+  { mode: 'scale', label: '缩放：拖动放大缩小', Icon: Maximize2 },
+];
+
+const SHORTCUT_ROWS: Array<[string, string]> = [
+  ['变换模式', 'Q 移动 · E 旋转 · S 缩放'],
+  ['移动', '拖动物料 · 方向键微调 0.1 m'],
+  ['旋转', '拖动转盘 · R 90° · Shift+R 15°'],
+  ['缩放', '拖动放大缩小 · 属性面板输入尺寸'],
+  ['多选', 'Shift/Ctrl 点选 · 空白处框选'],
+  ['复制 / 删除', 'Ctrl+D · Ctrl+C/V · Delete'],
+  ['撤销 / 重做', 'Ctrl+Z · Ctrl+Y'],
+  ['吸附', '网格与物件边缘 · G 切换'],
+];
+
+function TransformChip({ mode, onChange }: { mode: GizmoMode; onChange(mode: GizmoMode): void }): JSX.Element {
+  const [hintOpen, setHintOpen] = useState(false);
+  return (
+    <div
+      className="pc-top-chip absolute left-1/2"
+      style={{ top: 104, transform: 'translateX(-50%)', zIndex: 31 }}
+      onMouseLeave={() => setHintOpen(false)}
+    >
+      <StatusChip intent={mode === 'move' ? 'normal' : 'success'}>
+        {GIZMO_MODES.map(({ mode: value, label, Icon: Glyph }) => (
+          <button
+            key={value}
+            type="button"
+            aria-label={label}
+            aria-pressed={mode === value}
+            title={label}
+            onClick={() => onChange(value)}
+            style={{
+              width: 22,
+              height: 22,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 7,
+              background: 'transparent',
+              color: 'inherit',
+              border: mode === value ? '1.5px solid var(--pc-confirm-green)' : '1.5px solid transparent',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            <Glyph size={14} strokeWidth={1.75} aria-hidden />
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-label="快捷键说明"
+          aria-expanded={hintOpen}
+          title="快捷键说明"
+          onClick={() => setHintOpen(open => !open)}
+          style={{
+            width: 22,
+            height: 22,
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: 7,
+            background: 'transparent',
+            color: 'inherit',
+            border: '1.5px solid transparent',
+            cursor: 'pointer',
+            padding: 0,
+            opacity: 0.7,
+          }}
+        >
+          <Info size={14} strokeWidth={1.75} aria-hidden />
+        </button>
+      </StatusChip>
+      {hintOpen && (
+        <div
+          className="pc-glass pc-glass--dark"
+          role="dialog"
+          aria-label="快捷键"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 250,
+            padding: '8px 10px',
+            borderRadius: 'var(--r-md)',
+            display: 'grid',
+            gap: 4,
+            fontSize: 10.5,
+            color: 'var(--pc-paper)',
+            fontFamily: 'var(--pc-font-display)',
+            zIndex: 40,
+          }}
+        >
+          {SHORTCUT_ROWS.map(([key, value]) => (
+            <div key={key} style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <strong style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{key}</strong>
+              <span style={{ opacity: 0.72, textAlign: 'right' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Compact icon control inside the dark chips (1.5 px green ring when on). */
+function ChipIconButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?(): void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: 22,
+        height: 22,
+        display: 'grid',
+        placeItems: 'center',
+        borderRadius: 7,
+        background: 'transparent',
+        color: 'inherit',
+        border: active ? '1.5px solid var(--pc-confirm-green)' : '1.5px solid transparent',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.35 : 0.9,
+        padding: 0,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
  * The multi-select chip. Save as set names the set right here (#374): the
  * button turns into a name field, in place of a blocking prompt.
  */
@@ -528,6 +709,7 @@ function SelectionChip(props: ViewportProps & { selectionCount: number }): JSX.E
       // narrow desktop widths and covered a top-16 chip (#299, #154).
       style={{ top: 104, transform: 'translateX(-50%)', zIndex: 31, maxWidth: 'calc(100vw - 32px)' }}
     >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
       <StatusChip intent="accent">
         <Icon name="copy" size={14} />
         {namingSet && onSaveSet ? (
@@ -582,6 +764,44 @@ function SelectionChip(props: ViewportProps & { selectionCount: number }): JSX.E
           </>
         )}
       </StatusChip>
+      {!namingSet && props.onAlignSelection && (
+        <StatusChip intent="normal">
+          <ChipIconButton label="左对齐" onClick={() => props.onAlignSelection?.('min-x')}>
+            <AlignLeft size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <ChipIconButton label="水平居中" onClick={() => props.onAlignSelection?.('center-x')}>
+            <AlignCenterHorizontal size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <ChipIconButton label="右对齐" onClick={() => props.onAlignSelection?.('max-x')}>
+            <AlignRight size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <ChipIconButton
+            label={props.selectionCount < 3 ? '水平等距（至少三件）' : '水平等距分布'}
+            disabled={props.selectionCount < 3}
+            onClick={() => props.onDistributeSelection?.('x')}
+          >
+            <AlignHorizontalDistributeCenter size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <span aria-hidden style={{ width: 1, height: 14, background: 'currentColor', opacity: 0.25 }} />
+          <ChipIconButton label="上对齐" onClick={() => props.onAlignSelection?.('min-z')}>
+            <AlignStartVertical size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <ChipIconButton label="垂直居中" onClick={() => props.onAlignSelection?.('center-z')}>
+            <AlignCenterVertical size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <ChipIconButton label="下对齐" onClick={() => props.onAlignSelection?.('max-z')}>
+            <AlignEndVertical size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+          <ChipIconButton
+            label={props.selectionCount < 3 ? '垂直等距（至少三件）' : '垂直等距分布'}
+            disabled={props.selectionCount < 3}
+            onClick={() => props.onDistributeSelection?.('z')}
+          >
+            <AlignVerticalDistributeCenter size={13} strokeWidth={1.75} aria-hidden />
+          </ChipIconButton>
+        </StatusChip>
+      )}
+      </div>
     </div>
   );
 }

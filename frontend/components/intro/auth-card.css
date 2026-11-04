@@ -1,0 +1,162 @@
+/* 登录注册卡：从 intro.css 的登录卡样式迁出，统一收在 .sc-auth-card 作用域。
+   选择器都带 .sc-auth-card 前缀，优先级高于 cloud.css 里的通用弹窗按钮 / 输入框规则，
+   所以同一张卡可以放进账户 <dialog>，也可独立使用。 */
+.sc-auth-card {
+  padding: 24px 30px 0;
+  border: 1px solid var(--plane);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  overflow: hidden;
+}
+.sc-auth-card h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -.7px;
+}
+.sc-auth-card .sc-auth-copy {
+  margin: 10px 0 20px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.sc-auth-card button { font-family: inherit; cursor: pointer; }
+.sc-auth-card button:disabled { cursor: not-allowed; }
+.sc-auth-card button:focus-visible,
+.sc-auth-card input:focus-visible,
+.sc-auth-card a:focus-visible { outline: 2px solid var(--ink-soft); outline-offset: 2px; }
+
+/* 演示账号：只在构建时提供凭据才出现，点「填入」一键补全表单。 */
+.sc-auth-card .sc-auth-demo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--wk-hair);
+  border-radius: var(--r-sm);
+  background: var(--plane);
+}
+.sc-auth-card .sc-auth-demo > svg { flex: none; color: var(--faint); }
+.sc-auth-card .sc-auth-demo-fields { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.sc-auth-card .sc-auth-demo p { display: flex; align-items: baseline; gap: 8px; margin: 0; min-width: 0; }
+.sc-auth-card .sc-auth-demo span { flex: none; font-size: var(--fs-cap); color: var(--faint); }
+.sc-auth-card .sc-auth-demo code { font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+.sc-auth-card .sc-auth-demo button { flex: none; padding: 7px 12px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--paper); color: var(--ink); font-size: var(--fs-cap); }
+.sc-auth-card .sc-auth-demo button:hover:not(:disabled) { border-color: var(--ink); }
+.sc-auth-card .sc-auth-demo button:disabled { background: var(--plane); color: var(--faint); opacity: 1; }
+
+/* 登录 / 注册共用一张卡：切换只换字段，绝不换页面。 */
+.sc-auth-card .sc-auth-tabs { display: flex; gap: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--wk-hair); }
+.sc-auth-card .sc-auth-tabs button {
+  margin: 0;
+  padding: 0 0 13px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-soft);
+  font-size: var(--fs-p1);
+  font-weight: 500;
+}
+.sc-auth-card .sc-auth-tabs button[aria-pressed='true'] { color: var(--ink); border-bottom-color: var(--ink); }
+.sc-auth-card .sc-auth-tabs button:disabled { background: none; color: var(--faint); opacity: 1; }
+
+.sc-auth-card .sc-auth-form { display: grid; }
+.sc-auth-card .sc-auth-form label { display: block; margin-bottom: 7px; font-size: 12px; color: var(--ink); }
+.sc-auth-card .sc-auth-form input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  margin: 0 0 14px;
+  padding: 0 12px;
+  border: 1px solid var(--wk-hair);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-p1);
+}
+.sc-auth-card .sc-auth-form input::placeholder { color: var(--faint); }
+.sc-auth-card .sc-auth-form input:disabled { background: var(--plane); color: var(--faint); }
+
+.sc-auth-card .sc-auth-primary,
+.sc-auth-card .sc-auth-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-p1);
+  font-weight: 600;
+  transition: background .15s;
+}
+.sc-auth-card .sc-auth-primary { background: var(--ink); border: 1px solid var(--ink); color: var(--paper); }
+.sc-auth-card .sc-auth-primary:disabled { background: var(--plane); border-color: var(--plane); color: var(--faint); opacity: 1; }
+.sc-auth-card .sc-auth-secondary { background: var(--paper); border: 1px solid var(--wk-hair); color: var(--ink); }
+.sc-auth-card .sc-auth-secondary:hover:not(:disabled) { background: var(--plane); }
+.sc-auth-card .sc-auth-secondary:disabled { background: var(--plane); color: var(--faint); opacity: 1; }
+
+.sc-auth-card .sc-auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 16px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.sc-auth-card .sc-auth-links button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 400;
+}
+.sc-auth-card .sc-auth-links button:disabled { background: none; color: var(--faint); opacity: 1; }
+.sc-auth-card .sc-auth-links button:hover:not(:disabled),
+.sc-auth-card .sc-auth-links a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sc-auth-card .sc-auth-links a { display: inline; margin: 0; color: var(--ink); font-size: inherit; text-decoration: none; }
+
+.sc-auth-card .sc-auth-error,
+.sc-auth-card .sc-auth-notice {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.sc-auth-card .sc-auth-error { color: var(--err); }
+.sc-auth-card .sc-auth-notice { color: var(--ink); }
+.sc-auth-card .sc-auth-offline { margin: 0 0 10px; font-size: var(--fs-cap); line-height: 1.7; color: var(--faint); }
+
+.sc-auth-card .sc-auth-separator { display: flex; align-items: center; gap: 14px; margin: 12px 0; font-size: var(--fs-cap); color: var(--faint); }
+.sc-auth-card .sc-auth-separator::before,
+.sc-auth-card .sc-auth-separator::after { content: ''; flex: 1; height: 1px; background: var(--hair); }
+.sc-auth-card .sc-auth-note { margin: 12px 0 18px; font-size: var(--fs-cap); line-height: 1.8; color: var(--faint); }
+
+/* 已登录态：同一张卡换成账号与「进入工作台」，不另开页面。 */
+.sc-auth-card .sc-auth-signed-in { margin: 28px 0; }
+.sc-auth-card .sc-auth-account-caption { margin: 0 0 6px; font-size: var(--fs-cap); color: var(--ink-soft); }
+.sc-auth-card .sc-auth-account { margin: 0 0 24px; font-size: var(--fs-p1); color: var(--ink); overflow-wrap: anywhere; }
+
+.sc-auth-card .sc-auth-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 -30px;
+  padding: 12px;
+  border-top: 1px solid var(--plane);
+  background: var(--plane);
+  color: var(--faint);
+  font-size: var(--fs-cap);
+}

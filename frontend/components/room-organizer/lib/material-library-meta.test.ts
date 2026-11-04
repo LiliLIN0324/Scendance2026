@@ -19,6 +19,14 @@ describe('material library meta', () => {
     expect(created.meta.customTags).toEqual(['沙滩']);
   });
 
+  it('keeps a long catalogue slug or asset id when reloading favourites', () => {
+    const slug = 'beach-surf-and-paddle-kit-folding-beach-chair-68794f97';
+    const stored = toggleFavorite(emptyMaterialLibraryMeta(), slug);
+    expect(parseMaterialLibraryMeta(JSON.stringify(stored)).favorites).toEqual([slug]);
+    expect(parseMaterialLibraryMeta(JSON.stringify(toggleFavorite(emptyMaterialLibraryMeta(), 'ac5b62b3-cd8f-4638-a0d1-26bf4ffafb6b'))).favorites)
+      .toEqual(['ac5b62b3-cd8f-4638-a0d1-26bf4ffafb6b']);
+  });
+
   it('assigns a custom tag onto a material and round-trips through JSON', () => {
     const created = addCustomTag(emptyMaterialLibraryMeta(), '我的');
     const tagged = toggleAssignment(created.meta, 'seating-chaise', '我的');

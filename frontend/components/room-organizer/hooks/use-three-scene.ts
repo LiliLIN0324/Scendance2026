@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { reloadOnceForChunkError } from '../lib/chunk-reload';
 import { attachDragHandlers } from '../three/drag-handlers';
 import { addLights } from '../three/lighting';
+import { applyRendererLook, BASE_ENVIRONMENT_INTENSITY } from '../three/render-look';
 import { setMaxAnisotropy } from '../three/texture-settings';
 import type { SceneEventHandlers } from '../three/drag-handlers';
 import type * as ThreeNS from 'three';
@@ -165,21 +166,14 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
       if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
         renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
       }
-      renderer.shadowMap.enabled = true;
-      // PCFSoftShadowMap was removed in r186: WebGLShadowMap warns and rewrites
-      // the type to PCFShadowMap on the first shadow pass. Setting it directly
-      // keeps the result identical while avoiding a stale program-cache key on
-      // the first frame.
-      renderer.shadowMap.type = THREE.PCFShadowMap;
+      // 色彩管线与只读查看器、导出 PNG 共用一份（three/render-look.ts）：
+      // ACES 色调映射 + sRGB 输出 + PCF 阴影，避免三处各自的观感漂移。
+      applyRendererLook(THREE, renderer);
       // The 2048² directional shadow is expensive; keep it static and only
       // recompute it when a caster or the sun actually moves (via
       // requestShadowUpdate). Frame 1 needs the initial pass, so start dirty.
       renderer.shadowMap.autoUpdate = false;
       renderer.shadowMap.needsUpdate = true;
-      // Filmic colour pipeline: ACES tone mapping + explicit sRGB output.
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.15;
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
       setMaxAnisotropy(renderer.capabilities.getMaxAnisotropy());
       rendererRef.current = renderer;
       cleanup.push(() => renderer.dispose());
@@ -194,7 +188,7 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
         pmrem.dispose();
         scene.environment = envTexture;
-        scene.environmentIntensity = 0.5;
+        scene.environmentIntensity = BASE_ENVIRONMENT_INTENSITY;
         cleanup.push(() => {
           scene.environment = null;
           envTexture.dispose();

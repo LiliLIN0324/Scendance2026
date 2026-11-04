@@ -361,6 +361,11 @@ export interface RoomLayout {
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
   /** Local complete-scene preset; its architecture is separate from editable items. */
   scenePreset?: ScenePresetKey;
+  /**
+   * 当前场地对应的实景扫描。只为「撤销一次回上一套场地」与刷新后认回同一场；
+   * 本地编辑元数据，不进云端场景、不进分享。
+   */
+  venueScan?: { assetId: string; name: string };
   /** Preserves backend fields until explicitly edited through supported controls. */
   backendVenue?: Scene['venue'];
   backendCamera?: Scene['camera'];
@@ -393,6 +398,23 @@ export interface RoomLayout {
    * lng0 是西缘，lat0 是壳体 z=0 的纬度。latSign 为 -1 时 z 向南（北在平面图上沿）。
    */
   mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
+  /**
+   * 调研底图：这一片区域的路网，尺度到公里。正北朝上、真实米制，
+   * 场地壳体立在它上面，两者共用同一套地理换算。
+   * 只是参考底图，与卫星贴地同一条禁令：不可作重建素材。本地编辑元数据，不进场景线。
+   */
+  researchArea?: {
+    name: string;
+    address: string;
+    center: { lng: number; lat: number };
+    radiusM: number;
+    bounds: { west: number; south: number; east: number; north: number };
+    widthM: number;
+    depthM: number;
+    imageUrl: string;
+    /** 高德瓦片样式：6 卫星、7 路网、8 路网加注记。 */
+    style: 6 | 7 | 8;
+  };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
   neighbours?: NeighbourSpec;

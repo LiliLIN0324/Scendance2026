@@ -177,13 +177,6 @@ export function planHeardStatus(heardParts: string[], missing: string[]): string
   return `${heardParts.join(' · ')} · 还差${missing.join('、')}`;
 }
 
-/** 执行清单按物件名归并件数。画布顶不再为此单开分段。 */
-export function materialRows(items: readonly { name: string }[]): { name: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const item of items) counts.set(item.name, (counts.get(item.name) ?? 0) + 1);
-  return [...counts.entries()].map(([name, count]) => ({ name, count }));
-}
-
 export function PlanHome({ draft = '', onGenerate, onPickExample }: {
   draft?: string;
   onGenerate(sentence: string): void;

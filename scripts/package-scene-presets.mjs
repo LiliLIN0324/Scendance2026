@@ -25,6 +25,11 @@ function stripAuthoringExtras(document) {
   return document;
 }
 
+/** 官网场景库直接复制源 GLB，同样只需要这条路：剥离 extras、保留 Preset_Object_* 的中文名。 */
+export function stripGlbExtras(buffer) {
+  return writeDocument(buffer, stripAuthoringExtras(readDocument(buffer)));
+}
+
 /** Replaces the JSON chunk; the binary chunk (geometry + textures) is copied verbatim. */
 function writeDocument(buffer, document) {
   const json = Buffer.from(JSON.stringify(document));

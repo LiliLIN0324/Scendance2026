@@ -5,7 +5,7 @@ import { Box, FileImage, Type } from '@/components/solid-icons';
 import { assetError } from '@/lib/assets-api';
 import { useBackendSession, type BackendSession, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
 import { AholoGuideCard } from './aholo-guide-card';
-import { createGlbCatalogItem, ensureGlbAsset } from '../three/glb-assets';
+import { createGlbCatalogItem, ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import type { CatalogItem } from '../lib/types';
 
 const labels: Record<GenerationJob['state'], string> = {
@@ -79,6 +79,8 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
   const [mode, setMode] = useState<GenerationMode>('text');
   const [engine, setEngine] = useState<GenerationEngine>('hy3d');
   const lock = useRef(false);
+  /** 这次在面板里提交的任务：一旦 ready 就自动进画布，不再让用户点「加入场地预览」。 */
+  const autoAdd = useRef<string | null>(null);
   const latest = useRef({ userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd });
   latest.current = { userId, projectId, disabled, writeBlocked: cloud.writeBlocked, onAdd };
   const mounted = useRef(true), marked = useRef(new Set<string>());
@@ -145,7 +147,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     onVariantReady({sourceAssetId:job.source_asset_id,variantAssetId:job.asset_id,...(sourceAssetId===job.source_asset_id&&sourceObjectIds?{objectIds:[...sourceObjectIds]}:{})});
   }
 
-  async function add(job: GenerationJob) {
+  async function add(job: GenerationJob, measured = false) {
     if (!userId || !projectId || disabled || cloud.writeBlocked || !job.asset_id || lock.current) return;
     lock.current = true; setAdding(job.id); setError('');
     const size = { ...dimensions };
@@ -154,10 +156,28 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       await ensureGlbAsset(job.asset_id, asset.url);
       if (!mounted.current) return;
       if (latest.current.userId !== userId || latest.current.projectId !== projectId || latest.current.writeBlocked || latest.current.disabled) throw new Error('项目或编辑状态已变化，请重新添加模型。');
-      latest.current.onAdd(createGlbCatalogItem({ name: asset.name, url: asset.url, assetId: job.asset_id, ...size, source: 'generated' }));
+      // 自动进场景时用 GLB 归一化后的真实尺寸，表单里那套默认 1×1×1 只给手动摆放用。
+      const state = measured ? getGlbAssetState(job.asset_id) : null;
+      const placement = state?.status === 'ready' && state.dimensions ? state.dimensions : size;
+      latest.current.onAdd(createGlbCatalogItem({ name: asset.name, url: asset.url, assetId: job.asset_id, ...placement, source: 'generated' }));
     } catch (failure) { if (mounted.current && latest.current.userId === userId) setError(plainFailure(failure)); }
     finally { lock.current = false; if (mounted.current) setAdding(null); }
   }
+
+  // 刚提交的任务变成 ready 就自动落进画布；历史任务仍保留手动按钮。
+  useEffect(() => {
+    const id = autoAdd.current;
+    if (!id) return;
+    const job = jobs.find(value => value.id === id);
+    if (!job) return;
+    if (job.state === 'ready' && job.kind !== 'texture' && job.asset_id) {
+      if (disabled || cloud.writeBlocked) return; // 等拿到编辑权再落进画布
+      autoAdd.current = null;
+      void add(job, true);
+    } else if (job.state === 'failed' || job.state === 'rejected' || job.state === 'submit_unknown') {
+      autoAdd.current = null;
+    }
+  }, [jobs, disabled, cloud.writeBlocked]);
 
   async function submitGeneration() {
     const prompt = genPrompt.trim();
@@ -168,9 +188,10 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     try {
       // HY-3D is the server's default lane, so its choice is sent as no provider; Aholo is declared.
       const provider = engine === 'aholo' ? { provider: 'aholo' as const } : {};
-      await controller.createGenerationJob(prompt, crypto.randomUUID(), mode === 'image' && genReference
+      const job = await controller.createGenerationJob(prompt, crypto.randomUUID(), mode === 'image' && genReference
         ? { kind: 'image', referenceImageAssetId: genReference.id, ...provider }
         : { kind: 'text', ...provider });
+      if (job.kind !== 'texture') autoAdd.current = job.id;
       setGenPrompt(''); setGenReference(null); setRefresh(value => value + 1);
     } catch (failure) { if (mounted.current) setError(plainFailure(failure)); }
     finally { lock.current = false; if (mounted.current) setGenPending(false); }
@@ -202,7 +223,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       : capabilityState === 'failed'
         ? '暂时连不上云端，没读到可用的生成模型。'
         : !anyConfigured
-          ? '当前账号还没有开通可用的生成模型。'
+          ? '云端还没配可用的生成模型：需要服务端设置 LUX3D_API_KEY（及 LUX3D_TERMS_URL / LUX3D_TERMS_REVIEWED_AT）或 HY3D_API_KEY。'
           : disabled
             ? '当前有其他操作在进行，暂时不能提交生成。'
             : cloud.writeBlocked

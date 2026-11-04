@@ -80,7 +80,21 @@ function SelectedPreview({ item }: { item: FurnitureItem }): JSX.Element {
 export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element {
   const { layout, actions, pushColor, activeFloor, activeFloorIndex, history } = useRoomEditor();
   const { selectedItem: item } = useSelection();
+  // 名称草稿：与尺寸草稿同一套「回车/失焦才提交」的习惯（#P0-3）
+  const [nameDraft, setNameDraft] = useState(item?.name ?? '');
+  useEffect(() => {
+    setNameDraft(item?.name ?? '');
+  }, [item?.id, item?.name]);
   if (!item) return <></>;
+  const commitName = (): void => {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === item.name) {
+      setNameDraft(item.name);
+      return;
+    }
+    history.commitNow();
+    actions.updateItem(item.id, { name: trimmed });
+  };
   const locked = item.locked === true;
   const structuralSize = !!item.structuralOpeningId || !!item.structuralColumnId;
   const entranceSize = !!item.venueEntranceId || item.id === ENTRANCE_DOOR_ID;
@@ -89,7 +103,27 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
     <header><div><h2>物料属性</h2></div><button type="button" className="sc-icon-button" onClick={props.onClose} aria-label="关闭物料属性"><X size={20}/></button></header>
     <div className="sc-properties-content">
-      <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><strong>{item.name}</strong><span>{catalogItemOrigin(item)}</span>{item.category && <span>分类 · {catalogGroupLabel(item.category)}</span>}</div>
+      <div className="sc-selected-summary"><div><SelectedPreview item={item}/></div><input
+          aria-label="物料名称"
+          value={nameDraft}
+          maxLength={40}
+          disabled={locked}
+          style={{
+            display: 'block', width: '100%', padding: '4px 8px', textAlign: 'center',
+            fontSize: 'var(--fs-p1)', fontWeight: 500, fontFamily: 'inherit', color: 'var(--sc-ink)',
+            background: 'var(--paper)', border: '1px solid var(--sc-line)',
+            borderRadius: 'var(--r-md)', opacity: locked ? 0.6 : 1,
+          }}
+          onChange={event => setNameDraft(event.target.value)}
+          onBlur={commitName}
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              commitName();
+              event.currentTarget.blur();
+            }
+          }}
+        /><span>{catalogItemOrigin(item)}</span>{item.category && <span>分类 · {catalogGroupLabel(item.category)}</span>}</div>
       <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={16}/> : <Unlock size={16}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
       {props.hasCollision && <p className="sc-warning">物料可能重叠或超出场地，请检查位置。</p>}
       <section><h3>物料尺寸</h3><div className="sc-dimension-grid">

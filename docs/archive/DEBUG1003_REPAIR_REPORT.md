@@ -1,6 +1,6 @@
 # debug1003 修复与验收
 
-> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../OWN_SUPABASE_TUTORIAL.md)。
+> 归档于 2026-10-09：本文是 1.0 之前的发布或验收记录，内容以记录当日为准，仅用于追溯。当前入口见 [README](../../README.md)，当前部署见 [自有 Supabase 部署](../37-自建Supabase教程.md)。
 
 本次按用户提供的 debug1003 文档修复，并接入用户提供的小狗形象。代码下载、修改、测试均在专属工作树与 `codex/debug1003-repairs` 分支进行。未合并、未发布线上，也未删除任何真实云项目。
 
@@ -83,6 +83,6 @@ SCENDANCE_DEV_API_PORT=54347 SCENDANCE_DEV_WEB_PORT=3037 SCENDANCE_DEV_DATA=.loc
 
 ## 发布边界
 
-新增接口及约束见 [API](../API.md) 与 [业务契约](../contracts/SUPABASE_BUSINESS.md)。数据库使用 tombstone 保留不可变发布、账单与调用证据，同时撤销客户分享和过期提案。任何发布都应按迁移 `20261003120000_project_deletion.sql` → API → 前端的顺序进行。本次仅准备可审查分支与本地验收结果。
+新增接口及约束见 [API](../31-HTTP-API与前端接入.md) 与 [业务契约](../contracts/SUPABASE_BUSINESS.md)。数据库使用 tombstone 保留不可变发布、账单与调用证据，同时撤销客户分享和过期提案。任何发布都应按迁移 `20261003120000_project_deletion.sql` → API → 前端的顺序进行。本次仅准备可审查分支与本地验收结果。
 
 小狗素材及编辑说明见 [素材来源](../../frontend/ASSET-SOURCES.md)。动画由 CSS 驱动，没有新增视频播放依赖。

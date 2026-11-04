@@ -3,17 +3,20 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles } from '@/components/solid-icons';
-import { addPendingMaterial, submitMaterialGenerate } from '../lib/material-generate';
+import { addPendingMaterial, submitMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
 import { CREDIT_CONFIRM_LABEL } from '../lib/site-recon-mock';
+import type { BackendSession } from '@/lib/backend-session';
 
 /**
  * 物料生成的「＋」。菜单只有两条：描述生成、拍照/图片生成。
- * 提交走现有 Aholo 文生和图生；代理没开时只说明，不提交。
+ * 直连代理在就优先走它（本机加速）；不在就走云端任务队列，GLB 由服务端归档后自动进画布。
  * variant='composer' 是底部对话左下角的那一颗；'tile' 给旧的横条物料轨。
  */
-export function MaterialCreateCell({ disabled = false, variant = 'composer' }: {
+export function MaterialCreateCell({ disabled = false, variant = 'composer', controller }: {
   disabled?: boolean;
   variant?: 'tile' | 'composer';
+  /** 登录云项目后的会话：生成走服务端队列，不依赖本机脚本。 */
+  controller?: BackendSession;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'menu' | 'text' | 'image'>('menu');
@@ -48,18 +51,28 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer' }: {
   const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;
   const close = () => { setOpen(false); setMode('menu'); setNote(''); setNeedCredit(false); };
 
+  /** 云端队列：登录后走服务端，GLB 归档完由生成面板自动放进画布。 */
+  const cloud: MaterialCloudLane | undefined = controller ? {
+    createJob: (text, options) => controller.createGenerationJob(text, crypto.randomUUID(), { ...options, provider: 'aholo' }),
+    uploadReference: file => controller.uploadGenerationReference(file),
+  } : undefined;
+
   async function submitText() {
     const text = prompt.trim();
     if (!text || busy) return;
     if (!credit) { setNeedCredit(true); return; }
     setBusy(true);
     setNote('');
-    const result = await submitMaterialGenerate({ kind: 'text', prompt: text });
+    const result = await submitMaterialGenerate({ kind: 'text', prompt: text }, cloud ? { cloud } : {});
     setBusy(false);
     if (!result.ok) { setNote(result.message); if (!result.stub) setCredit(false); return; }
-    addPendingMaterial({ id: `pending:${result.taskid}`, name: text, shipped: false });
     setPrompt('');
     setCredit(false);
+    if (result.lane === 'cloud') {
+      setNote(`已提交云端生成（任务 ${result.taskid}）。完成后自动进入画布。`);
+      return;
+    }
+    addPendingMaterial({ id: `pending:${result.taskid}`, name: text, shipped: false });
     setNote(`已提交描述生成（任务 ${result.taskid}）。完成后带「生成」标签留在这个物料库。`);
   }
 
@@ -68,13 +81,17 @@ export function MaterialCreateCell({ disabled = false, variant = 'composer' }: {
     if (!credit) { setNeedCredit(true); return; }
     setBusy(true);
     setNote('');
-    const result = await submitMaterialGenerate({ kind: 'image', imageDataUrl: imageRef.current });
+    const result = await submitMaterialGenerate({ kind: 'image', imageDataUrl: imageRef.current, prompt: imageName || '图片物料' }, cloud ? { cloud } : {});
     setBusy(false);
     if (!result.ok) { setNote(result.message); if (!result.stub) setCredit(false); return; }
-    addPendingMaterial({ id: `pending:${result.taskid}`, name: imageName || '图片物料', shipped: false });
     imageRef.current = '';
     setImageName('');
     setCredit(false);
+    if (result.lane === 'cloud') {
+      setNote(`已提交云端图片生成（任务 ${result.taskid}）。完成后自动进入画布。`);
+      return;
+    }
+    addPendingMaterial({ id: `pending:${result.taskid}`, name: imageName || '图片物料', shipped: false });
     setNote(`已提交图片生成（任务 ${result.taskid}，Aholo /image-to-3d）。完成后带「生成」标签留在这个物料库。`);
   }
 

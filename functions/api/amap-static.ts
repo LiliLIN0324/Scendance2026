@@ -2,15 +2,35 @@ import { amapKeyFromEnv, clampZoom, parseLocation, satelliteTileUrl, type AmapSe
 
 type Context = { request: Request; env: AmapServerEnv };
 
+/** 允许的地图参考图标记：卫星贴地与路网调研底图共用同一套「不可作重建素材」语义。 */
+export const MAP_REFERENCE_MARKS = ['satellite-ground-ref', 'map-basemap'] as const;
+
+/** 高德瓦片样式：6 卫星影像、7 路网、8 路网加注记。 */
+export const MAP_TILE_STYLES = [6, 7, 8] as const;
+export type MapTileStyle = typeof MAP_TILE_STYLES[number];
+
+/** 认得的 x-ref 标记才给图，避免这个地址被当成通用图片代理。 */
+export function isMapReferenceMark(raw: string | null): boolean {
+  return !!raw && (MAP_REFERENCE_MARKS as readonly string[]).includes(raw);
+}
+
+/** style 参数只认 6/7/8；缺省按 x-ref 猜：调研底图出路网，其余仍走卫星。 */
+export function resolveTileStyle(params: URLSearchParams): MapTileStyle {
+  const raw = Number(params.get('style'));
+  if (Number.isInteger(raw) && (MAP_TILE_STYLES as readonly number[]).includes(raw)) return raw as MapTileStyle;
+  return params.get('x-ref') === 'map-basemap' ? 7 : 6;
+}
+
 /**
- * 生产同源卫星图：GET /api/amap-static?location=lng,lat&zoom=&x-ref=satellite-ground-ref
- * Key 只留在 Pages 环境变量。有 Key 时先试官方静态图，不行就回 style=6 卫星瓦片。
+ * 生产同源地图图：GET /api/amap-static?west=&south=&east=&north=&style=7&x-ref=map-basemap
+ * Key 只留在 Pages 环境变量。调研底图走 style=7 路网，卫星贴地仍是 style=6。
  * 本机开发不走这里，浏览器直接打 127.0.0.1:3199。
  */
 export async function handleAmapStatic(request: Request, env: AmapServerEnv, fetchImpl: typeof fetch = fetch): Promise<Response> {
   const url = new URL(request.url);
-  if (url.searchParams.get('x-ref') !== 'satellite-ground-ref') return new Response('ref invalid', { status: 400 });
-  const bounded = await renderLngLatBounds(url.searchParams, fetchImpl);
+  if (!isMapReferenceMark(url.searchParams.get('x-ref'))) return new Response('ref invalid', { status: 400 });
+  const style = resolveTileStyle(url.searchParams);
+  const bounded = await renderLngLatBounds(url.searchParams, fetchImpl, style);
   if (bounded === 'invalid') return new Response('bounds invalid', { status: 400 });
   if (bounded) return imageResponse(bounded.bytes, bounded.type);
   if (url.searchParams.has('west')) return new Response('bounds render unavailable', { status: 502 });
@@ -83,6 +103,7 @@ function chooseZoom(west: number, south: number, east: number, north: number): n
 async function renderLngLatBounds(
   params: URLSearchParams,
   fetchImpl: typeof fetch,
+  style: MapTileStyle = 6,
 ): Promise<{ bytes: ArrayBuffer; type: string } | 'invalid' | null> {
   const west = Number(params.get('west'));
   const south = Number(params.get('south'));
@@ -117,7 +138,7 @@ async function renderLngLatBounds(
       for (let tx = x0; tx <= x1; tx++) {
         if (tx < 0 || ty < 0 || tx >= limit || ty >= limit) continue;
         const host = 1 + ((tx + ty) % 4);
-        const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=6&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
+        const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
         if (!response.ok) return null;
         const bitmap = await createImageBitmap(await response.blob());
         context.drawImage(bitmap, (tx * TILE - nw.x) * scaleX, (ty * TILE - nw.y) * scaleY, TILE * scaleX, TILE * scaleY);

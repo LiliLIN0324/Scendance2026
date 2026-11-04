@@ -25,6 +25,11 @@ export interface UseCameraPresetsOptions {
   roomSize: number;
   roomWidth?: number;
   roomDepth?: number;
+  /**
+   * 取景框：有调研底图时用它框整片区域，否则框场地本身。
+   * 中心可以不在原点上——底图是按地理偏移摆的。
+   */
+  overview?: { width: number; depth: number; centerX: number; centerZ: number };
   /** Total stacked building height in metres. */
   buildingHeight?: number;
   viewportPadding?: Partial<ViewportPadding>;
@@ -32,7 +37,7 @@ export interface UseCameraPresetsOptions {
   invalidate?: () => void;
 }
 
-export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, roomWidth, roomDepth, buildingHeight = 3, viewportPadding, invalidate }: UseCameraPresetsOptions): {
+export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, roomWidth, roomDepth, overview, buildingHeight = 3, viewportPadding, invalidate }: UseCameraPresetsOptions): {
   applyPreset(preset: CameraPreset): void;
   focusOn(target: { x: number; z: number }, distance?: number, floorY?: number): void;
   fitToRoom(): void;
@@ -43,13 +48,19 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
   const safeHeight = Number.isFinite(buildingHeight) && buildingHeight > 0 ? buildingHeight : 3;
   const width = roomWidth !== undefined && Number.isFinite(roomWidth) && roomWidth > 0 ? roomWidth : safeSize;
   const depth = roomDepth !== undefined && Number.isFinite(roomDepth) && roomDepth > 0 ? roomDepth : safeSize;
+  // 有底图就框底图：它的范围更大，也才是人此刻想看的。
+  const frameWidth = overview && overview.width > 0 ? overview.width : width;
+  const frameDepth = overview && overview.depth > 0 ? overview.depth : depth;
+  const frameCenterX = overview ? overview.centerX : 0;
+  const frameCenterZ = overview ? overview.centerZ : 0;
+  const frameSize = Math.max(frameWidth, frameDepth, safeHeight);
 
   const frameCurrentView = useCallback(() => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera) return;
     const canvas = canvasRef?.current ?? controls?.domElement;
-    const frame = calculateRoomFraming(camera, { width, depth, height: safeHeight }, {
+    const frame = calculateRoomFraming(camera, { width: frameWidth, depth: frameDepth, height: safeHeight, centerX: frameCenterX, centerZ: frameCenterZ }, {
       ...(canvas ? { viewport: { width: canvas.clientWidth, height: canvas.clientHeight } } : {}),
       ...(viewportPadding ? { padding: viewportPadding } : {}),
       ...(controls ? { orbitTarget: controls.target, minDistance: controls.minDistance } : {}),
@@ -66,7 +77,7 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
       camera.updateProjectionMatrix();
     }
     if (frame.dollyOut > 0 || farChanged) invalidate?.();
-  }, [cameraRef, controlsRef, canvasRef, width, depth, safeHeight, viewportPadding, invalidate]);
+  }, [cameraRef, controlsRef, canvasRef, frameWidth, frameDepth, frameCenterX, frameCenterZ, safeHeight, viewportPadding, invalidate]);
 
   const ensureRoomInView = useCallback(() => {
     if (roomFramingActive.current) frameCurrentView();
@@ -79,18 +90,18 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
       if (!camera) return;
 
       roomFramingActive.current = true;
-      const view = PRESETS[preset](safeSize);
-      camera.position.set(view.position[0], view.position[1], view.position[2]);
-      camera.lookAt(view.target[0], view.target[1], view.target[2]);
+      const view = PRESETS[preset](frameSize);
+      camera.position.set(view.position[0] + frameCenterX, view.position[1], view.position[2] + frameCenterZ);
+      camera.lookAt(frameCenterX, view.target[1], frameCenterZ);
 
       if (controls) {
-        controls.target.set(view.target[0], view.target[1], view.target[2]);
+        controls.target.set(frameCenterX, view.target[1], frameCenterZ);
         controls.update();
       }
       frameCurrentView();
       invalidate?.();
     },
-    [cameraRef, controlsRef, safeSize, frameCurrentView, invalidate]
+    [cameraRef, controlsRef, frameSize, frameCenterX, frameCenterZ, frameCurrentView, invalidate]
   );
 
   const focusOn = useCallback(
@@ -121,19 +132,19 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
     if (!camera) return;
 
     roomFramingActive.current = true;
-    const distance = Math.max(safeSize, safeHeight);
+    const distance = Math.max(frameSize, safeHeight);
     const targetY = safeHeight / 2;
 
-    camera.position.set(distance * 0.6, distance * 0.7 + targetY, distance * 0.6);
-    camera.lookAt(0, targetY, 0);
+    camera.position.set(distance * 0.6 + frameCenterX, distance * 0.7 + targetY, distance * 0.6 + frameCenterZ);
+    camera.lookAt(frameCenterX, targetY, frameCenterZ);
 
     if (controls) {
-      controls.target.set(0, targetY, 0);
+      controls.target.set(frameCenterX, targetY, frameCenterZ);
       controls.update();
     }
     frameCurrentView();
     invalidate?.();
-  }, [cameraRef, controlsRef, safeSize, safeHeight, frameCurrentView, invalidate]);
+  }, [cameraRef, controlsRef, frameSize, frameCenterX, frameCenterZ, safeHeight, frameCurrentView, invalidate]);
 
   return { applyPreset, focusOn, fitToRoom, ensureRoomInView };
 }

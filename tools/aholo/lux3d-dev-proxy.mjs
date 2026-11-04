@@ -320,7 +320,7 @@ export function createServer({
     try { return JSON.parse(text); } catch { throw new HttpError(502, 'lod-meta 不是合法 JSON'); }
   }
 
-  // —— World 重建：素材先经 OUS 上传成公网 URL，再创建重建任务（docs/AHOLO-INTEGRATION-PLAN.md 二梯队）——
+  // —— World 重建：素材先经 OUS 上传成公网 URL，再创建重建任务（docs/15-Aholo集成规划.md 二梯队）——
   let ousCredentials;
   async function ous() {
     if (ousCredentials) return ousCredentials;
@@ -399,7 +399,14 @@ export function createServer({
     };
   }
 
-  async function fetchAmapBounds(sharp, west, south, east, north) {
+  // 高德瓦片样式：6 卫星、7 路网、8 路网加注记。调研底图走 7 路网，读路更清楚。
+  function resolveAmapTileStyle(searchParams) {
+    const raw = Number(searchParams.get('style'));
+    if (Number.isInteger(raw) && raw >= 6 && raw <= 8) return raw;
+    return searchParams.get('x-ref') === 'map-basemap' ? 7 : 6;
+  }
+
+  async function fetchAmapBounds(sharp, west, south, east, north, style = 6) {
     let zoom = 18;
     while (zoom > 3) {
       const nw = mercatorPixel(west, north, zoom);
@@ -427,7 +434,7 @@ export function createServer({
       for (let tx = x0; tx <= x1; tx++) {
         if (tx < 0 || ty < 0 || tx >= limit || ty >= limit) continue;
         const host = 1 + ((tx + ty) % 4);
-        const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=6&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
+        const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
         if (!res.ok) throw new HttpError(502, 'tile HTTP ' + res.status);
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.length < 100) throw new HttpError(502, 'empty tile');
@@ -455,13 +462,14 @@ export function createServer({
     const south = Number(searchParams.get('south'));
     const east = Number(searchParams.get('east'));
     const north = Number(searchParams.get('north'));
+    const style = resolveAmapTileStyle(searchParams);
     if ([searchParams.get('west'), searchParams.get('south'), searchParams.get('east'), searchParams.get('north')].some(value => value != null)) {
       if (![west, south, east, north].every(Number.isFinite) || !(east > west) || !(north > south)) throw new HttpError(400, 'bounds invalid');
       const require = createRequire(import.meta.url);
       let sharp;
       try { sharp = require('../../frontend/node_modules/sharp'); }
       catch { throw new HttpError(500, 'sharp unavailable for satellite stitch'); }
-      return fetchAmapBounds(sharp, west, south, east, north);
+      return fetchAmapBounds(sharp, west, south, east, north, style);
     }
     const location = searchParams.get('location') ?? '';
     if (!/^\d{1,3}(?:\.\d+)?,\d{1,3}(?:\.\d+)?$/.test(location)) throw new HttpError(400, 'location invalid');
@@ -551,6 +559,48 @@ export function createServer({
     return amapSecurityCode;
   }
 
+  // 地点检索要 Web 服务 Key；它只留在本机代理里，浏览器拿不到明文。
+  let amapPlaceKey = '';
+  async function resolveAmapPlaceKey() {
+    if (!amapPlaceKey) {
+      amapPlaceKey = await readEnvFile('NEXT_PUBLIC_AMAP_STATIC_KEY', new URL('../../frontend/.env.local', import.meta.url));
+    }
+    return amapPlaceKey;
+  }
+
+  /** 本机地点检索：回地点名、地址与经纬度，Key 不进响应。 */
+  async function fetchAmapPlace(searchParams) {
+    const keywords = (searchParams.get('keywords') ?? '').trim();
+    if (keywords.length < 2 || keywords.length > 80) throw new HttpError(400, 'keywords invalid');
+    const key = await resolveAmapPlaceKey();
+    if (!key) throw new HttpError(503, '本机缺少 NEXT_PUBLIC_AMAP_STATIC_KEY');
+    const limitRaw = Number(searchParams.get('limit') ?? 5);
+    const limit = Number.isInteger(limitRaw) ? Math.min(10, Math.max(1, limitRaw)) : 5;
+    const target = new URL('https://restapi.amap.com/v3/place/text');
+    target.searchParams.set('keywords', keywords);
+    target.searchParams.set('offset', String(limit));
+    target.searchParams.set('page', '1');
+    target.searchParams.set('extensions', 'all');
+    target.searchParams.set('key', key);
+    const res = await fetch(target, {
+      headers: { Referer: AMAP_REFERER, 'User-Agent': 'Mozilla/5.0 ScendanceLocalProxy' },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new HttpError(502, 'place HTTP ' + res.status);
+    const body = await res.json();
+    const pois = Array.isArray(body?.pois) ? body.pois : [];
+    const places = pois.flatMap(poi => {
+      const [lngRaw, latRaw] = String(poi?.location ?? '').split(',');
+      const lng = Number(lngRaw);
+      const lat = Number(latRaw);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return [];
+      const address = Array.isArray(poi.address) ? poi.address.join('') : (poi.address ?? '');
+      return [{ id: String(poi.id ?? `${lng},${lat}`), name: String(poi.name ?? '').trim() || keywords, address: String(address), lng, lat }];
+    });
+    if (!places.length) throw new HttpError(404, 'no place');
+    return { places };
+  }
+
   async function fetchAmapService(pathname, searchParams) {
     const target = new URL(`https://restapi.amap.com${pathname.replace(/^\/_AMapService/, '')}`);
     target.search = searchParams.toString();
@@ -617,6 +667,8 @@ export function createServer({
         });
         res.end(body);
         return;
+      } else if (req.method === 'GET' && url.pathname === '/amap-place') {
+        result = await fetchAmapPlace(url.searchParams);
       } else if (req.method === 'GET' && url.pathname === '/amap-static') {
         const { bytes, type } = await fetchAmapStatic(url.searchParams);
         res.writeHead(200, {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Aholo World(3DGS 世界生成)MVP — docs/AHOLO-INTEGRATION-PLAN.md M3 验证脚本。
+// Aholo World(3DGS 世界生成)MVP — docs/15-Aholo集成规划.md M3 验证脚本。
 // 用法: node tools/aholo/world-mvp.mjs "<室内场景描述>"  (key 自动读仓库根 .env.local 的 LUX3D_API_KEY)
 // 注意:world 服务走国内网关 api.aholo3d.cn(国际网关对该 key 返回 BIZ_14001 user not exists)。
 // 产物: docs/evidence/aholo/world-<worldId>/ 下存 PLY/SPZ 与 report.json
