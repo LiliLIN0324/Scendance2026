@@ -831,6 +831,14 @@
 .sc-env-scenes select { max-width:54px; height:28px; padding:0 4px; border:1px solid var(--wk-hair); border-radius:6px; background:var(--wk-paper); color:var(--wk-ink-soft); font-size:11px; }
 .sc-env-scene-remove { display:grid; place-items:center; flex:none; width:25px; height:25px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--wk-muted); font-size:18px; cursor:pointer; }
 .sc-env-scene-remove:hover { background:#f9e9e7; color:#a63d32; }
+/* 显隐/Solo：行内动作钮，纯本地查看状态（SuperSplat 行语言）。 */
+.sc-env-scene-eye { display:grid; place-items:center; flex:none; width:25px; height:25px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--wk-muted); cursor:pointer; }
+.sc-env-scene-eye:hover { background:var(--wk-plane); color:var(--wk-ink); }
+.sc-env-scene-eye[aria-pressed="false"] { color:var(--wk-ink-faint, #a1a1aa); }
+.sc-env-scene-solo { flex:none; height:25px; padding:0 6px; border:1px solid var(--wk-hair); border-radius:6px; background:var(--wk-paper); color:var(--wk-muted); font-size:10px; cursor:pointer; }
+.sc-env-scene-solo:hover { color:var(--wk-ink); }
+.sc-env-scene-solo.is-on { border-color:var(--wk-green); color:var(--wk-green); background:var(--wk-green-pale); }
+.sc-env-scenes > li.is-dimmed { opacity:.45; }
 .sc-env-active-caption { margin-top:5px; color:var(--wk-muted); font-size:10px; line-height:14px; }
 
 /* ── 导出效果图弹层 · 图纸白 ──────────────────────────────────────────

@@ -707,6 +707,7 @@ body {
 .sc-generated-thumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: var(--r-sm); background: var(--wk-plane-deep, #ececef); color: var(--wk-ink-faint, #a1a1aa); }
 .sc-generated-body { display: grid; gap: 2px; min-width: 0; }
 .sc-generated-body > span { font-size: var(--fs-cap); color: var(--sc-muted); line-height: 1.4; }
+.sc-generated-meta { font-size: var(--fs-cap); color: var(--wk-muted); line-height: 1.4; }
 .sc-generated-tasks strong { overflow-wrap: anywhere; }
 .sc-material-card { display: grid; grid-template-rows: auto 40px 34px 18px; gap: var(--sc-space-sm); align-content: start; text-align: left; border: 1px solid var(--wk-hair-soft); background: var(--paper); border-radius: var(--r-md); padding: var(--sc-space-sm); min-width: 0; transition: transform var(--sc-fast) var(--sc-ease), border-color var(--sc-fast) var(--sc-ease), background-color var(--sc-fast) var(--sc-ease) !important; }
 .sc-material-preview { position: relative; aspect-ratio: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: var(--wk-plane-deep, #ececef); border-radius: var(--r-sm); overflow: hidden; }
