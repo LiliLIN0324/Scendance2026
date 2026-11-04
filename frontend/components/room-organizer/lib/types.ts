@@ -2,6 +2,7 @@ import type { Handoff } from '../../../../supabase/functions/_shared/delivery-co
 import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import type { Provenance } from '../../../lib/rng';
 
 export type Vec2 = Readonly<{ x: number; z: number }>;
 
@@ -187,6 +188,11 @@ export interface FurnitureItem {
    * unchanged for layouts that never used groups.
    */
   groupId?: string;
+  /**
+   * M6 溯源标记：谁、用哪个 opId / seed / recipeId 把这张家具放进来的。
+   * 纯可选字段，缺省时与既有布局完全兼容；不进必填面。
+   */
+  provenance?: Provenance;
 }
 
 export type CameraPreset = 'iso' | 'top' | 'front' | 'corner';

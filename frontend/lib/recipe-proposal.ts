@@ -6,7 +6,8 @@
  * 纯函数模块，仅依赖同目录的 recipe.ts，不接 UI、不碰 room-organizer。
  */
 
-import { nextVariant, recipeHash, type Recipe } from './recipe';
+import { nextVariant, recipeHash as recipeHashOfRecipe, type Recipe } from './recipe';
+import { seedAvalanche } from './rng';
 
 /** 从 AI 对话/brief 解析出的原始输入（还没打包成 Recipe）。 */
 export interface RecipeBrief {
@@ -61,14 +62,77 @@ export function buildRecipeProposal(brief: RecipeBrief): RecipeProposal {
   if (brief.region !== undefined) base.region = brief.region;
 
   const variants = deriveVariants(base, 2);
-  const variantHashes = variants.map((v) => recipeHash(v));
+  const variantHashes = variants.map((v) => recipeHashOfRecipe(v));
 
   return {
     base,
-    baseHash: recipeHash(base),
+    baseHash: recipeHashOfRecipe(base),
     variants,
     variantHashes,
   };
+}
+
+/**
+ * M6 扩展输入：把「seed + prompt + 可选 density + 可选 fingerprint」打成
+ * 一个 10 位 hex 的 prompt 级 hash，用于在对话/brief 层识别「同一意图」。
+ *
+ * 与 recipe.ts 的 recipeHash(Recipe) 不同：后者 hash 一份结构化 Recipe，
+ * 本函数 hash 一段原始 prompt 字符串 + 旋钮值，供上层在还没构造 Recipe
+ * 之前就先算一个稳定指纹。
+ */
+export interface PromptHashInput {
+  seed: number;
+  prompt: string;
+  density?: number;
+  fingerprint?: string;
+}
+
+/** 内部 FNV-1a 32 位。 */
+function fnv1aOf(input: string): number {
+  let h = 2166136261;
+  const bytes = new TextEncoder().encode(input);
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * prompt 级 recipeHash：同输入两次必同 hash；任何一字段改变 → hash 变。
+ * 返回 10 位 hex（前 2 位取自第二个 salt 通道的高 8 位，后 8 位取自主通道）。
+ */
+export function recipeHash(input: PromptHashInput): string {
+  const parts: string[] = [
+    `seed=${input.seed | 0}`,
+    `prompt=${input.prompt}`,
+  ];
+  if (input.density !== undefined) parts.push(`d=${input.density}`);
+  if (input.fingerprint !== undefined) parts.push(`fp=${input.fingerprint}`);
+  const joined = parts.join('|');
+  const h1 = fnv1aOf(joined);
+  const h2 = fnv1aOf(joined + '::prompt-salt');
+  const top2 = ((h2 >>> 24) & 0xff).toString(16).padStart(2, '0');
+  const low8 = h1.toString(16).padStart(8, '0');
+  return (top2 + low8).slice(0, 10);
+}
+
+/**
+ * 以 seed 为根派生 count 个互不相似的 rng 起点。
+ *  - 第 0 个恒为 seed 本身；
+ *  - 第 i 个（i>=1）= seedAvalanche(seed, 'v'+(i+1))。
+ * 相邻 seed 用不同 salt 打散，保证产出的 rng 流不会「长得像」。
+ */
+export function deriveSeededVariants(seed: number, count: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (i === 0) {
+      out.push(seed);
+    } else {
+      out.push(seedAvalanche(seed, `v${i + 1}`));
+    }
+  }
+  return out;
 }
 
 /**

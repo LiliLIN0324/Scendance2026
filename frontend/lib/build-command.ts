@@ -401,3 +401,192 @@ export function swapAssetCommand(p: Omit<SwapAssetCommand, 'kind'>): SwapAssetCo
 export function applyLayoutCommand(p: Omit<ApplyLayoutCommand, 'kind'>): ApplyLayoutCommand {
   return { ...p, kind: 'apply-layout' };
 }
+
+/* ---------- M2-B 执行器：形状 + 前置都过之后，不可变地产出 nextLayout。 ---------- */
+
+/** 执行结果。ok=false 时 nextLayout 原样返回 ctx.layout（引用相等）。 */
+export interface CommandExecutionResult {
+  ok: boolean;
+  /** ok=true 时是应用后的新 layout（不可变更新）；ok=false 时原样返回 ctx.layout。 */
+  nextLayout: RoomLayout;
+  /** 形状问题；非空时 ok 必为 false。 */
+  shapeIssues: ShapeIssue[];
+  /** 前置问题；ok=false 时非空（apply-layout 走逐件分流时由调用方填）。 */
+  preconditions: PreconditionIssue[];
+  /** 本次被拒/跳过的具名物件记录。 */
+  refused: Array<{ itemId: string; code: PreconditionIssue['code']; message: string }>;
+}
+
+/** 把 floors 里第 targetFloorIndex 这一层的 items 替换成新数组，其它层保持引用。 */
+function replaceFloorItems(
+  layout: RoomLayout,
+  targetFloorIndex: number,
+  nextItems: FurnitureItem[],
+): RoomLayout {
+  return {
+    ...layout,
+    floors: layout.floors.map((f, i) => (i === targetFloorIndex ? { ...f, items: nextItems } : f)),
+  };
+}
+
+/**
+ * 阶段三：执行命令。
+ *
+ * - 形状非法 → 直接返回 ok=false、nextLayout = ctx.layout（引用相等），不抛异常。
+ * - 前置失败 → 返回 ok=false、nextLayout = ctx.layout；place-item 失败时把那条具名 issue 抄进 refused。
+ * - 全过 → 按 kind 不可变地产出 nextLayout，原 layout / floors / items 一律不改。
+ */
+export function executeSceneCommand(cmd: BuildCommand, ctx: CommandContext): CommandExecutionResult {
+  const shapeIssues = validateCommandShape(cmd);
+  if (shapeIssues.length > 0) {
+    return { ok: false, nextLayout: ctx.layout, shapeIssues, preconditions: [], refused: [] };
+  }
+
+  const preconditions = validateCommandPreconditions(cmd, ctx);
+  if (preconditions.length > 0) {
+    let refused: CommandExecutionResult['refused'] = [];
+    if (cmd.kind === 'place-item') {
+      const hit = preconditions.find((p) => p.itemId === cmd.item.id);
+      if (hit) {
+        refused = [{ itemId: cmd.item.id, code: hit.code, message: hit.message }];
+      }
+    }
+    return { ok: false, nextLayout: ctx.layout, shapeIssues: [], preconditions, refused };
+  }
+
+  const { layout } = ctx;
+  let nextLayout: RoomLayout;
+
+  switch (cmd.kind) {
+    case 'place-item': {
+      // 同 id 先去重，再追加。
+      const currentFloorItems = layout.floors[cmd.floorIndex]?.items ?? [];
+      const nextItems = [...currentFloorItems.filter((it) => it.id !== cmd.item.id), cmd.item];
+      nextLayout = replaceFloorItems(layout, cmd.floorIndex, nextItems);
+      break;
+    }
+    case 'move-item': {
+      const currentFloorItems = layout.floors[cmd.floorIndex]?.items ?? [];
+      const nextItems = currentFloorItems.map((it) => {
+        if (it.id !== cmd.itemId) return it;
+        const updated: FurnitureItem = {
+          ...it,
+          position: { x: cmd.position.x, z: cmd.position.z },
+        };
+        if (cmd.rotation !== undefined) updated.rotation = cmd.rotation;
+        return updated;
+      });
+      nextLayout = replaceFloorItems(layout, cmd.floorIndex, nextItems);
+      break;
+    }
+    case 'update-item': {
+      // 不允许通过 update-item 改 id / position。
+      const { id: _ignoredId, position: _ignoredPos, ...safePatch } = cmd.patch;
+      nextLayout = {
+        ...layout,
+        floors: layout.floors.map((f) => ({
+          ...f,
+          items: f.items.map((it) => (it.id === cmd.itemId ? { ...it, ...safePatch } : it)),
+        })),
+      };
+      break;
+    }
+    case 'remove-item': {
+      nextLayout = {
+        ...layout,
+        floors: layout.floors.map((f) => ({
+          ...f,
+          items: f.items.filter((it) => it.id !== cmd.itemId),
+        })),
+      };
+      break;
+    }
+    case 'swap-asset': {
+      nextLayout = {
+        ...layout,
+        floors: layout.floors.map((f) => ({
+          ...f,
+          items: f.items.map((it): FurnitureItem => {
+            if (it.id !== cmd.itemId) return it;
+            // 用展开：assetId / glbUrl 在 FurnitureItem 与 nextAsset 里都是可选，
+            // 展开可以避开 exactOptionalPropertyTypes 下"显式赋 undefined"报错。
+            return { ...it, ...cmd.nextAsset };
+          }),
+        })),
+      };
+      break;
+    }
+    case 'apply-layout': {
+      // baseFingerprint 已在前置门校验过；这里直接整份替换。
+      nextLayout = cmd.layout;
+      break;
+    }
+  }
+
+  return { ok: true, nextLayout, shapeIssues: [], preconditions: [], refused: [] };
+}
+
+/**
+ * 给 apply-layout 场景用的"拒绝真记账"执行器。
+ *
+ * 语义：候选整份布局不是整体盖下去，而是逐件尝试 place-item：
+ * - 先做整体 shape 校验 + baseFingerprint 前置门（任一失败 → ok=false、refused=[]）。
+ * - 然后按 floors[*].items 的顺序，把每件当作 place-item 候选，
+ *   在"已经被接受的件累积出来的临时画布"上跑形状 + 前置校验。
+ * - 合法件进入 nextLayout；非法件进 refused（具名 itemId/code/message）。
+ *
+ * 这正是第 6 批要还的欠债：AI 预览确认时，越界/重叠的件不再被静默吞掉，
+ * 而是被记账到 Outcome.refused，让 UI 能逐条提示。
+ */
+export function applyLayoutCommandWithRefusals(
+  cmd: ApplyLayoutCommand,
+  ctx: CommandContext,
+): CommandExecutionResult {
+  const shapeIssues = validateCommandShape(cmd);
+  if (shapeIssues.length > 0) {
+    return { ok: false, nextLayout: ctx.layout, shapeIssues, preconditions: [], refused: [] };
+  }
+
+  const preconditions = validateCommandPreconditions(cmd, ctx);
+  if (preconditions.length > 0) {
+    return { ok: false, nextLayout: ctx.layout, shapeIssues: [], preconditions, refused: [] };
+  }
+
+  const refused: CommandExecutionResult['refused'] = [];
+  // 候选 floors 骨架：保留 id/name/floorColor，items 重新累积。
+  const nextFloors = cmd.layout.floors.map((f) => ({ ...f, items: [] as FurnitureItem[] }));
+
+  for (let fi = 0; fi < cmd.layout.floors.length; fi++) {
+    const sourceItems = cmd.layout.floors[fi]!.items;
+    for (const item of sourceItems) {
+      const trialLayout: RoomLayout = {
+        ...cmd.layout,
+        floors: nextFloors.map((f, i) => (i === fi ? { ...f, items: f.items } : f)),
+      };
+      const trialCtx: CommandContext = { layout: trialLayout };
+      const placeCmd = placeItemCommand({ floorIndex: fi, item });
+
+      const shape = validateCommandShape(placeCmd);
+      if (shape.length > 0) {
+        refused.push({
+          itemId: item.id,
+          code: 'OUT_OF_BOUNDS',
+          message: shape.map((s) => s.message).join('；'),
+        });
+        continue;
+      }
+
+      const pres = validateCommandPreconditions(placeCmd, trialCtx);
+      if (pres.length > 0) {
+        const hit = pres.find((p) => p.itemId === item.id) ?? pres[0]!;
+        refused.push({ itemId: item.id, code: hit.code, message: hit.message });
+        continue;
+      }
+
+      nextFloors[fi]!.items.push(item);
+    }
+  }
+
+  const nextLayout: RoomLayout = { ...cmd.layout, floors: nextFloors };
+  return { ok: true, nextLayout, shapeIssues: [], preconditions: [], refused };
+}

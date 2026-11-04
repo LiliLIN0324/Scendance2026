@@ -9,6 +9,15 @@ import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
+import {
+  executeSceneCommand,
+  applyLayoutCommandWithRefusals,
+  placeItemCommand,
+  applyLayoutCommand,
+} from '@/lib/build-command';
+import { settlePlacement } from '@/lib/settle-placement';
+import { combineOutcomes, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
+import { isOpening } from './lib/opening-snap';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
@@ -114,7 +123,7 @@ import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
-import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 import type { SplatPaint } from './three/splat-preview';
 
 function zoomCamera(
@@ -182,6 +191,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
   const [previewGuard, setPreviewGuard] = useState<PreviewContext | null>(null);
+  // M5 欠债②：Outcome.refused 之前恒空。这里在组件侧镜像最近一次 Outcome，
+  // 让手动拖放被拒的单件也能合并进同一份账本，而不是把上一份 AI 账本直接覆盖掉。
+  const lastOutcomeRef = useRef<GenerationOutcome<FurnitureItem> | null>(null);
+  const applyOutcome = useCallback((outcome: GenerationOutcome<FurnitureItem>) => {
+    lastOutcomeRef.current = outcome;
+    setGenerationOutcome(outcome);
+  }, []);
   const [captionEpoch, setCaptionEpoch] = useState(0);
   const [previewCaptionVisible, setPreviewCaptionVisible] = useState(false);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
@@ -1145,13 +1161,57 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const placeDiscrete = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }): string => {
       if (materialCount(activeFloor.items) >= editorItemLimit(layout)) { notify(`当前场景最多支持 ${editorItemLimit(layout)} 件物料。`, 'info'); return ''; }
+      // M2 命令门（P0-1）：普通家具在落盘前过一次几何判据；门洞 / 窗 / 摄像机 / 户外件
+      // 在 useItemPlacement 内部有自己的 snap 与 canApplyLayoutGeometry 兜底，这里不重复预判。
+      const bypassCommandGate = isOpening(catalogItem.type)
+        || catalogItem.type === 'security-camera'
+        || catalogItem.category === 'outdoor';
+      if (!bypassCommandGate) {
+        const trialItem: FurnitureItem = {
+          ...catalogItem,
+          id: `__trial_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          position: position ?? { x: 0, z: 0 },
+          rotation: 0,
+        } as FurnitureItem;
+        const trialResult = executeSceneCommand(
+          placeItemCommand({ floorIndex: activeFloorIndex, item: trialItem }),
+          { layout },
+        );
+        if (!trialResult.ok) {
+          const entry: OutcomeEntry<FurnitureItem> = {
+            item: trialItem,
+            reason:
+              trialResult.refused[0]?.message
+              ?? trialResult.preconditions[0]?.message
+              ?? trialResult.shapeIssues.map(s => s.message).join('；')
+              ?? '落点不合法',
+            code:
+              trialResult.refused[0]?.code
+              ?? trialResult.preconditions[0]?.code
+              ?? 'SHAPE_INVALID',
+          };
+          notify(`「${catalogItem.name}」没放成：${entry.reason}`, 'info');
+          applyOutcome(combineOutcomes(
+            lastOutcomeRef.current ?? { placed: [], refused: [], skipped: [] },
+            { placed: [], refused: [entry], skipped: [] },
+          ));
+          setPendingCatalog(catalogItem);
+          return '';
+        }
+      }
       commitHistoryNow();
       const id = placeCatalogItem(catalogItem, position);
       if (!id) { setPendingCatalog(catalogItem); notify('此处与结构相交，请点击场地中的其他位置放置。', 'info'); }
-      else setPendingCatalog(null);
+      else {
+        setPendingCatalog(null);
+        // M6 provenance：手动放的件打上 human 标签，方便 handoff / 审校卡区分 AI 与人工。
+        actions.updateItem(id, {
+          provenance: { source: 'human', opId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` },
+        });
+      }
       return id;
     },
-    [commitHistoryNow, placeCatalogItem, activeFloor.items, layout]
+    [commitHistoryNow, placeCatalogItem, activeFloor.items, layout, activeFloorIndex, actions, applyOutcome]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -1916,32 +1976,85 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const onApplyCreative = useCallback((next: RoomLayout) => {
     const before = layoutStore.getState().layout;
+    let forceApply = false;
     if (previewGuard) {
       const decision = decideOnApply(before, previewGuard);
       if (decision.action === 'prompt' && !window.confirm(decision.message)) {
         throw new Error('已取消应用候选');
       }
+      // TODO(P1): 站内确认弹层替换 window.confirm（当前没有现成弹层组件，新建会踩 UI 风险）。
+      forceApply = decision.action === 'prompt';
     }
     if (!canApplyLayoutGeometry(before, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
+
+    // M6 provenance：给 AI 候选里每件打上 ai 标签（map 新数组，不 mutation 原候选）。
+    const aiOpId = `ai-${Date.now()}`;
+    const provenanceNext: RoomLayout = {
+      ...next,
+      floors: next.floors.map(f => ({
+        ...f,
+        items: f.items.map(item => ({
+          ...item,
+          provenance: {
+            source: 'ai' as const,
+            opId: aiOpId,
+            ...(previewGuard?.recipeId ? { recipeId: previewGuard.recipeId } : {}),
+          },
+        })),
+      })),
+    };
+
+    // M2 命令门（P0-2）：逐件分流——合法件进 nextLayout，越界/重叠件进 refused（真记账）。
+    // 用户已经在 decideOnApply 里 confirm 过的话，本次跳过 baseFingerprint 再校验。
+    const cmd = applyLayoutCommand({
+      layout: provenanceNext,
+      ...(forceApply || !previewGuard?.baselineFingerprint
+        ? {}
+        : { baseFingerprint: previewGuard.baselineFingerprint }),
+    });
+    const result = applyLayoutCommandWithRefusals(cmd, { layout: before });
+    if (!result.ok) {
+      const msg = result.shapeIssues.map(s => s.message).join('；')
+        || result.preconditions.map(p => p.message).join('；')
+        || '候选方案无法应用';
+      throw new Error(msg);
+    }
+
+    // M3 settle 自动体检（P0-2 接线）：AI 摆完立刻跑一遍 BFS 可达性 + 最小平移收敛器，
+    // 把堵主通道 / 孤立刻直接挪开；挪不动的留给 UI 标红。
+    const settleReport = settlePlacement(result.nextLayout, activeFloorIndex);
+    const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
+    const stillBad = settleReport.remainingViolations.length;
+    if (movedCount > 0 || stillBad > 0) {
+      notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
+    }
+    const finalLayout = settleReport.layout;
+
     commitHistoryNow();
     snapshotBeforeReplace(layout);
-    actions.applyLayout({ ...next, ...(layout.designBook && !next.designBook ? { designBook: layout.designBook } : {}) });
-    // M5：按 id 差分，把本次 AI 候选应用写成 Outcome 账本，喂给 Bingo 审校卡。
+    actions.applyLayout({ ...finalLayout, ...(layout.designBook && !finalLayout.designBook ? { designBook: layout.designBook } : {}) });
+
+    // M5：按 id 差分写 Outcome 账本；refused 不再硬编码空数组。
     const beforeIds = new Set(before.floors.flatMap(f => f.items.map(i => i.id)));
-    const nextFloors = next.floors;
-    const placedItems = nextFloors.flatMap(f => f.items).filter(i => !beforeIds.has(i.id));
-    const placedIds = new Set(nextFloors.flatMap(f => f.items.map(i => i.id)));
-    const removedItems = before.floors.flatMap(f => f.items).filter(i => !placedIds.has(i.id));
-    setGenerationOutcome({
+    const placedItems = finalLayout.floors.flatMap(f => f.items).filter(i => !beforeIds.has(i.id));
+    const finalIds = new Set(finalLayout.floors.flatMap(f => f.items.map(i => i.id)));
+    const removedItems = before.floors.flatMap(f => f.items).filter(i => !finalIds.has(i.id));
+    const candidateById = new Map(provenanceNext.floors.flatMap(f => f.items.map(i => [i.id, i])));
+    const refusedEntries: OutcomeEntry<FurnitureItem>[] = result.refused.map(r => ({
+      item: candidateById.get(r.itemId) ?? ({ id: r.itemId, name: r.itemId } as unknown as FurnitureItem),
+      reason: r.message,
+      code: r.code,
+    }));
+    applyOutcome({
       placed: placedItems,
-      refused: [],
+      refused: refusedEntries,
       skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
     });
     setPreviewGuard(null);
     clearTransientSelection();
     initiallyFramed.current = false;
     setView(current => ({ ...current, view2D: false }));
-  }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard]);
+  }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome]);
 
   /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
