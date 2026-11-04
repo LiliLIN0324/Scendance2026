@@ -1,4 +1,4 @@
--- Aholo Lux3D joins as a second cloud vendor (docs/AHOLO-INTEGRATION-PLAN.md M1).
+-- Aholo Lux3D joins as a second cloud vendor (docs/15-Aholo集成规划.md M1).
 -- Provider identity stays pinned per job: a job created for Lux3D must never be
 -- polled or archived through HY-3D configuration, and vice versa.
 alter table scene_private.assets drop constraint assets_source_check;

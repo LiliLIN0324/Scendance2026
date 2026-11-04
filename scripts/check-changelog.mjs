@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CHANGELOG.md 规范检查（规范见 docs/RELEASE-NOTES-STANDARD.md）。
+ * CHANGELOG.md 规范检查（规范见 docs/43-版本更新文案规范.md）。
  * 用法：node scripts/check-changelog.mjs [--file CHANGELOG.md]
  * 退出码 1 = 有版本没达标；0 = 全部达标。
  */
@@ -120,7 +120,7 @@ for (const item of versions) {
 }
 
 if (problems.length > 0) {
-  console.error(`\n✗ ${file} 有 ${problems.length} 处不符合 docs/RELEASE-NOTES-STANDARD.md：`);
+  console.error(`\n✗ ${file} 有 ${problems.length} 处不符合 docs/43-版本更新文案规范.md：`);
   for (const problem of problems) console.error(`- ${problem}`);
   process.exit(1);
 }

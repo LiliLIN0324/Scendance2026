@@ -8,7 +8,7 @@
  *   node scripts/sync-tag-notes.mjs --no-push    # 只重建本地 tag，不推送
  *
  * 做法：保留 tag 指向的提交不变，用 CHANGELOG 段落重建 annotated tag，然后 --force 推同一路径。
- * 规范见 docs/RELEASE-NOTES-STANDARD.md 第 8 节。
+ * 规范见 docs/43-版本更新文案规范.md 第 8 节。
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 把 CHANGELOG.md 的版本段落同步成 GitHub Release（规范见 docs/RELEASE-NOTES-STANDARD.md 第 8 节）。
+ * 把 CHANGELOG.md 的版本段落同步成 GitHub Release（规范见 docs/43-版本更新文案规范.md 第 8 节）。
  * 用法：
  *   node scripts/sync-github-releases.mjs              # 同步全部版本
  *   node scripts/sync-github-releases.mjs v3.2.0 v3.1.0

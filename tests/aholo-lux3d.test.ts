@@ -13,7 +13,7 @@ const response=(body:unknown)=>new Response(JSON.stringify(body));
 const glb=()=>new Uint8Array(packGltf(tetrahedron().json,tetrahedron().resources));
 const shell=(d:unknown,c='0')=>response({c,d,m:c==='0'?'':'err'});
 
-describe('aholo lux3d lane (docs/AHOLO-INTEGRATION-PLAN.md M1)',()=>{
+describe('aholo lux3d lane (docs/15-Aholo集成规划.md M1)',()=>{
   let f:Awaited<ReturnType<typeof database>>;
   beforeAll(async()=>{f=await database();},30000);afterAll(async()=>{await f?.db.close();});
   beforeEach(async()=>{await f.db.exec('delete from scene_private.generation_jobs;delete from scene_private.requests;update scene_private.budgets set committed_cents=0;');});
