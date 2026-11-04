@@ -27,6 +27,7 @@
     "@gltf-transform/core": "4.5.1",
     "@supabase/supabase-js": "2.117.2",
     "gltf-validator": "2.0.0-dev.3.10",
+    "miniprogram-automator": "^0.13.0",
     "zod": "4.6.5"
   },
   "devDependencies": {

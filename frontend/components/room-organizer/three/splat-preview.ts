@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ROOM_OBJECT_TAGS } from './room-builder';
 import { sampleSplatColors, rememberSceneSample } from './scene-lighting';
 import { DEFAULT_GROUND_PLANE, groundFromHeight, groundHeightAt, type GroundAnchor, type GroundPlane } from '../lib/site-capture';
+import { computeScanFit, rotatedBox } from './scan-placement';
 import type { SplatMesh, SparkRenderer } from '@sparkjsdev/spark';
 
 /** Aholo World 的 3DGS 竖直轴；上游不给时按它给的 Z-up 立起来。 */
@@ -73,19 +74,7 @@ export function upAxisQuaternion(upAxis: SplatUpAxis): THREE.Quaternion {
   return new THREE.Quaternion().setFromEuler(euler);
 }
 
-/** 旋转后的轴对齐盒：八个角各自转一遍再取并集。 */
-export function rotatedBox(box: THREE.Box3, quaternion: THREE.Quaternion): THREE.Box3 {
-  const result = new THREE.Box3();
-  const point = new THREE.Vector3();
-  for (const x of [box.min.x, box.max.x]) {
-    for (const y of [box.min.y, box.max.y]) {
-      for (const z of [box.min.z, box.max.z]) {
-        result.expandByPoint(point.set(x, y, z).applyQuaternion(quaternion));
-      }
-    }
-  }
-  return result;
-}
+export { rotatedBox } from './scan-placement';
 
 /** 把旋转后的点云按场地最长水平边等比缩放，底面贴到 y=0、水平中心对到原点。 */
 export function fitSplatBox(box: THREE.Box3, sizeMeters: number): SplatFit {
@@ -707,19 +696,12 @@ export function createSplatPreview(deps: {
   /** 按当前标定重新落位点云，并重建地面 / 基准面 / 锚点 / 遮挡代理；不重新解码。 */
   function placeSplat(): THREE.Box3 | null {
     if (!holder || !mesh || !localBox) return null;
-    const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(calibration.yawDeg));
-    // 先按上游竖直轴立起来，再绕世界 Y 转朝向；两次旋转都作用在点云本身。
-    const quaternion = yaw.clone().multiply(upQuaternion);
-    mesh.quaternion.copy(quaternion);
+    // 竖直轴校正 → 朝向 → 基准面倾斜；旋转作用在点云本身。
+    const fit = computeScanFit(localBox, upQuaternion, calibration);
+    const { quaternion, scale } = fit;
+    const fitPosition = fit.position;
     const rotated = rotatedBox(localBox, quaternion);
-    const scale = calibration.scale;
-    const center = rotated.getCenter(new THREE.Vector3());
-    // 原点标定：扫描中心先落到场地原点，再按 origin 平移，让两张平面坐标系重合。
-    const fitPosition = new THREE.Vector3(
-      -center.x * scale + calibration.origin.x,
-      -rotated.min.y * scale + calibration.ground.y,
-      -center.z * scale + calibration.origin.z,
-    );
+    mesh.quaternion.copy(quaternion);
     basePosition.copy(fitPosition);
     holder.scale.setScalar(scale);
     holder.position.copy(fitPosition).add(currentOffset);

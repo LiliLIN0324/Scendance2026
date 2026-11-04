@@ -14,7 +14,8 @@
     "coverView": true,
     "autoAudits": false,
     "showShadowRootInWxmlPanel": true,
-    "useCompilerPlugins": false
+    "useCompilerPlugins": false,
+    "condition": true
   },
   "packOptions": {
     "ignore": [
@@ -35,5 +36,9 @@
         "value": "package-lock.json"
       }
     ]
-  }
+  },
+  "simulatorPluginLibVersion": {
+    "wxext14566970e7e9f62": "2.27.3"
+  },
+  "projectArchitecture": "multiPlatform"
 }

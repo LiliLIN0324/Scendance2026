@@ -138,22 +138,44 @@ page {
   border-right-width: 2rpx;
 }
 
+/* 判定胶囊占「状态行」的位置：出现时暂时顶替缺口卡，1.8 秒后自动让回。 */
 .verdict {
   position: absolute;
-  top: 65%;
   left: 50%;
-  transform: translate(-50%, -50%);
-  height: 44px;
-  padding: 0 18px;
+  bottom: calc(env(safe-area-inset-bottom) + 244px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 300px;
+  min-height: 44px;
+  padding: 8px 18px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+  animation: verdict 1200ms ease both;
+}
+
+.verdict.is-bad {
+  animation-duration: 1800ms;
+}
+
+.verdict__text {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.4;
   font-weight: 400;
   letter-spacing: 0.5px;
   color: var(--b-w1);
-  animation: verdict 1200ms ease both;
+}
+
+.verdict__hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--b-w2);
+}
+
+.verdict.is-bad .verdict__hint {
+  color: var(--b-amber);
 }
 
 @keyframes verdict {
@@ -293,11 +315,6 @@ page {
   border-color: rgba(255, 255, 255, 0.92);
 }
 
-.shutter.is-ready .shutter__core {
-  background: var(--b-green);
-  border-color: var(--b-green);
-}
-
 .shutter.is-busy {
   opacity: 0.5;
 }
@@ -327,15 +344,147 @@ page {
   opacity: 0.3;
 }
 
+/* 快门上方：缺口说明 + 达标后才出现的提交钮。 */
+.actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom) + 224px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.actions.is-ready {
+  bottom: calc(env(safe-area-inset-bottom) + 188px);
+}
+
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  max-width: 300px;
+  padding: 8px 16px;
+  border-radius: 14px;
+}
+
+/* 只取 token 的 24（页面标题档）与 14（正文档），不夹中间的 20。 */
+.gate__text {
+  font-size: 48rpx;
+  line-height: 1.42;
+  font-weight: 500;
+  color: var(--b-w1);
+  text-align: center;
+}
+
+.gate--error .gate__text,
+.gate--good .gate__text {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.gate__hint {
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--b-w2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.gate--error .gate__text {
+  color: var(--b-amber);
+}
+
+.gate--good .gate__text {
+  color: var(--b-green);
+}
+
+.submit {
+  pointer-events: auto;
+  width: 200px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--b-green);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: transform 120ms ease-out, opacity 160ms ease-out;
+}
+
+.submit.is-down {
+  transform: scale(0.98);
+}
+
+.submit.is-busy {
+  opacity: 0.6;
+}
+
+.submit__label {
+  font-size: 28rpx;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: #0B0C0B;
+}
+
 .layers {
   position: absolute;
-  right: 48px;
-  bottom: calc(env(safe-area-inset-bottom) + 56px);
+  right: 32px;
+  bottom: calc(env(safe-area-inset-bottom) + 64px);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
   pointer-events: auto;
+}
+
+/* 层进度：44 触控高度，读作「低 3/24」；不达标的层靠圆点颜色提示。 */
+.layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 14, 0.74);
+  box-shadow: var(--b-shadow-sm);
+}
+
+.layer.is-on {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.layer__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.layer.is-on .layer__dot {
+  background: var(--b-green);
+}
+
+.layer__label {
+  font-size: 28rpx;
+  line-height: 1;
+  color: var(--b-w1);
+}
+
+.layer__count {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--b-w2);
+  font-variant-numeric: tabular-nums;
+}
+
+.layer.is-done .layer__count {
+  color: var(--b-w1);
 }
 
 .wait {
@@ -388,6 +537,24 @@ page {
   align-items: center;
   gap: 12px;
   margin-top: 20px;
+}
+
+.hint__pay {
+  display: block;
+  margin-top: 12px;
+  color: var(--b-w2);
+}
+
+.hint__save {
+  width: 56px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--b-w1);
+  font-size: 14px;
 }
 
 .hint__input {

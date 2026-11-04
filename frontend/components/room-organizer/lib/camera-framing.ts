@@ -102,3 +102,26 @@ export function calculateRoomFraming(
   const far = requiredFar >= camera.far ? requiredFar * (1 + 1e-6) : camera.far;
   return Number.isFinite(dollyOut) && Number.isFinite(far) ? { dollyOut, far } : null;
 }
+
+/* ---------------- 相机距离钳制（跟随当前焦点，docs/49） ---------------- */
+
+/**
+ * 轨道最小距离 2m：小于最小场地特征（西湖茶亭进深 3.7m），能贴近看细节又不穿模。
+ * OrbitControls 默认 0 会把相机怼进模型里。
+ */
+export const CAMERA_MIN_DISTANCE_M = 2;
+/**
+ * 轨道最大距离 = 焦点框对角线 ×3。依据：fov 75° 下装下对角线 D 的取景距离
+ * 约 0.65D–1.3D（随视口宽高比），×3 留足环绕与留白余量，又不会像「只看最远
+ * 包围盒」那样被 12km 底图把场地尺度的操作撑死。
+ */
+export const CAMERA_MAX_DISTANCE_DIAGONAL_RATIO = 3;
+
+/** 焦点框（场地/场景/全湖底图）→ 轨道距离钳制。焦点切换时成对应用。 */
+export function cameraDistanceClamp(width: number, depth: number): { minDistance: number; maxDistance: number } {
+  const diagonal = Math.hypot(width, depth);
+  return {
+    minDistance: CAMERA_MIN_DISTANCE_M,
+    maxDistance: Math.max(8, diagonal * CAMERA_MAX_DISTANCE_DIAGONAL_RATIO),
+  };
+}

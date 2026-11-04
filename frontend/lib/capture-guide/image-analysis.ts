@@ -23,6 +23,8 @@ export interface AnalyseMeta {
 export interface AnalyzedImage extends FrameSample {
   name: string;
   thumb: string;
+  /** 256×256 灰度上的拉普拉斯方差；越低越糊，用于逐张判定。 */
+  sharpness: number;
 }
 
 /** 取所有像素的亮度直方图摘要（0–255）。 */
@@ -85,6 +87,34 @@ export function averageHashFromGrid(gray: ArrayLike<number>): string {
     }
   }
   return averageHashFromGray(cells);
+}
+
+/**
+ * 4 邻域拉普拉斯方差：判断是否糊片。
+ * 平坦图接近 0，纹理清晰的图通常 > 60；阈值放在 shot-rules 里。
+ */
+export function laplacianVarianceFromGray(gray: ArrayLike<number>, width: number, height: number): number {
+  if (width < 3 || height < 3 || gray.length < width * height) return 0;
+  let sum = 0;
+  let sumSq = 0;
+  let count = 0;
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const index = y * width + x;
+      const value =
+        (gray[index - width] ?? 0) +
+        (gray[index + width] ?? 0) +
+        (gray[index - 1] ?? 0) +
+        (gray[index + 1] ?? 0) -
+        4 * (gray[index] ?? 0);
+      sum += value;
+      sumSq += value * value;
+      count += 1;
+    }
+  }
+  if (count === 0) return 0;
+  const mean = sum / count;
+  return Math.round((sumSq / count - mean * mean) * 10) / 10;
 }
 
 /** 64 个灰度值 → 16 位十六进制感知哈希。 */
@@ -194,6 +224,7 @@ export async function analyseImageFile(file: File, meta: AnalyseMeta): Promise<A
   try {
     const statsGray = drawSource(source, 64);
     const stats = lumaStatsFromGray(statsGray);
+    const sharpGray = drawSource(source, 256);
     return {
       id: `${file.name}-${file.lastModified}-${meta.at}`,
       name: file.name,
@@ -208,6 +239,7 @@ export async function analyseImageFile(file: File, meta: AnalyseMeta): Promise<A
       gps: meta.gps,
       at: meta.at,
       thumb: drawThumb(source),
+      sharpness: laplacianVarianceFromGray(sharpGray, 256, 256),
     };
   } finally {
     release();
@@ -248,6 +280,7 @@ async function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
 function analyseDrawable(source: Drawable, meta: AnalyseMeta, name: string, index: number): AnalyzedImage {
   const statsGray = drawSource(source, 64);
   const stats = lumaStatsFromGray(statsGray);
+  const sharpGray = drawSource(source, 256);
   return {
     id: `${name}-frame-${index}-${meta.at}`,
     name: `${name} · ${index + 1}`,
@@ -262,6 +295,7 @@ function analyseDrawable(source: Drawable, meta: AnalyseMeta, name: string, inde
     gps: meta.gps,
     at: meta.at + index * 1000,
     thumb: drawThumb(source, 180),
+    sharpness: laplacianVarianceFromGray(sharpGray, 256, 256),
   };
 }
 

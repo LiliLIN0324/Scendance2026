@@ -1,0 +1,47 @@
+/* 购买页：单列窄容器，卡片是唯一主体；说明文字压到 12px 以下不抢视觉。 */
+.sc-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 28px 16px 48px;
+}
+
+.sc-pricing-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, #7d807b);
+  text-decoration: none;
+}
+
+.sc-pricing-head h1 {
+  margin: 10px 0 6px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  color: var(--ink, #1f2320);
+}
+
+.sc-pricing-head p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted, #7d807b);
+}
+
+.sc-pricing-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted, #7d807b);
+}
+
+.sc-pricing-note a {
+  color: var(--brand, #35624a);
+}
