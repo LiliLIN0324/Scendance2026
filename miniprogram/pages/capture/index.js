@@ -5,6 +5,7 @@ const analysis = require('../../utils/analysis');
 const recon = require('../../services/recon');
 const account = require('../../services/account');
 const glass = require('../../utils/glass');
+const pay = require('../../utils/pay');
 const T = require('../../lib/thresholds');
 
 const GATE_COVERAGE_DEG = 300;
@@ -13,6 +14,8 @@ const LAYER_SHORT = { low: '低', eye: '视线', high: '高' };
 const WELCOME_KEY = 'welcomeDone';
 const ARROW_IDLE_MS = 1600;
 const ARROW_COVERAGE_LIMIT = 0.85;
+const DUPLICATE_LOOKBACK = 10;
+const SUBMIT_HINT = pay.copy.submitHint;
 const WELCOME_PAGES = [
   { title: '两种拍法', sub: '录视频绕一圈（推荐）· 逐张拍照也可以', bg: '/assets/guide/bg-a.jpg' },
   { title: '视频 20-60 秒', sub: '站中央缓慢转完一整圈 · 别走太快', bg: '/assets/guide/bg-b.jpg' },
@@ -29,6 +32,7 @@ const HINTS = {
     '停 1–2 秒再按；每层绕回起点补一张闭合环。\n' +
     '找门框、接缝、转角当地标，别对空墙。',
   gate: `最低：每层 ${GATES.required.perLayer} 张、共 ${GATES.required.total} 张、环向 ${GATES.required.coverageDeg}°。\n推荐：每层 ${GATES.recommended.perLayerMin}–${GATES.recommended.perLayerMax} 张、共 ${GATES.recommended.totalMin}–${GATES.recommended.totalMax} 张，注册率更高。`,
+  pay: pay.copy.hint,
   sim: '模拟器没有后置相机，用相册导入，或点右上「预览」用真机拍摄。',
 };
 
@@ -126,15 +130,22 @@ Page({
     brandTop: 28,
     waitHint: true,
     layerBars: [
-      { id: 'low', label: LAYER_SHORT.low, on: false },
-      { id: 'eye', label: LAYER_SHORT.eye, on: true },
-      { id: 'high', label: LAYER_SHORT.high, on: false },
+      { id: 'low', label: LAYER_SHORT.low, on: false, count: 0, target: T.targets.perLayer },
+      { id: 'eye', label: LAYER_SHORT.eye, on: true, count: 0, target: T.targets.perLayer },
+      { id: 'high', label: LAYER_SHORT.high, on: false, count: 0, target: T.targets.perLayer },
     ],
     ringTicks: buildRingTicks(0),
     ringPulse: false,
     arrowShow: false,
     arrowSide: 'right',
     verdictText: '',
+    verdictHint: '',
+    verdictBad: false,
+    rejectCount: 0,
+    gateText: '',
+    gateHint: '',
+    gateKind: '',
+    hintPay: '',
     layerIndex: 1,
     frameCount: 0,
     shutterActive: false,
@@ -153,6 +164,7 @@ Page({
 
   onLoad(options) {
     this.frames = [];
+    this.rejectCount = 0;
     this.startedAt = Date.now();
     this.lastFrameAt = Date.now();
     this.heading = null;
@@ -161,6 +173,7 @@ Page({
     this.arrowHeading = null;
     this.verdictTimer = null;
     this.pulseTimer = null;
+    this.gateTimer = null;
 
     let seen = false;
     try {
@@ -301,30 +314,19 @@ Page({
     return scoring.CAPTURE_LAYERS[this.data.layerIndex];
   },
 
-  nextIncompleteLayer() {
-    const counts = this.lastScore ? this.lastScore.metrics.layerCounts : { low: 0, eye: 0, high: 0 };
-    const incomplete = scoring.CAPTURE_LAYERS.filter(layer => counts[layer] < T.targets.perLayer);
-    if (incomplete.length === 0) {
-      return scoring.CAPTURE_LAYERS[(this.data.layerIndex + 1) % scoring.CAPTURE_LAYERS.length];
-    }
-    const preferred = ['low', 'high', 'eye'].filter(layer => incomplete.indexOf(layer) !== -1);
-    return preferred[0];
-  },
-
-  onLayerTap() {
-    const layer = this.nextIncompleteLayer();
-    this.setData({ layerIndex: scoring.CAPTURE_LAYERS.indexOf(layer) });
+  onLayerTap(event) {
+    const id = (event && event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.id) || '';
+    const index = scoring.CAPTURE_LAYERS.indexOf(id);
+    if (index < 0 || index === this.data.layerIndex) return;
+    this.setData({ layerIndex: index });
     this.recompute();
     buzz('light');
   },
 
   // —— 快门 / 相册 ——
+  // 快门只负责拍。提交是快门上方那颗绿钮，达标才出现，避免「绿了按一下就扣次」。
   onShutter() {
     buzz('light');
-    if (this.data.canSubmit) {
-      this.onSubmit();
-      return;
-    }
     if (this.data.devtools || this.data.cameraError) {
       this.onChooseMedia();
       return;
@@ -337,7 +339,7 @@ Page({
       },
       fail: error => {
         this.checkCameraPermission();
-        this.showVerdict('失败');
+        this.showVerdict('失败', '再按一次', false);
       },
     });
   },
@@ -389,22 +391,26 @@ Page({
       size: file.size || 0,
     };
     this.recompute();
-    this.showVerdict(duration >= 15 ? '可以了' : '太短');
     if (duration >= 15) {
+      this.showVerdict('整段收到', '可以交', false);
       if (this.lastConfirmAt === undefined || Date.now() - this.lastConfirmAt >= 400) {
         this.lastConfirmAt = Date.now();
         buzz('light');
         setTimeout(() => buzz('light'), 40);
       }
-      this.setData({ ringPulse: true });
-      if (this.pulseTimer) clearTimeout(this.pulseTimer);
-      this.pulseTimer = setTimeout(() => this.setData({ ringPulse: false }), 180);
+      this.pulseRing();
+      return;
     }
+    this.showVerdict('太短', '至少 15 秒', true);
   },
 
+  /**
+   * 拍一张 → 快检 → 只有合格才记账。
+   * 关键：不合格的片子不进 frames，否则糊片/重复片会虚增张数和覆盖度，
+   * 用户看到「环满了」但后端注册不了（实测 130 张只有 26 张进模型，一半是这么来的）。
+   */
   addFrame(path) {
     this.refreshGps();
-    const previous = this.frames.length ? this.frames[this.frames.length - 1] : null;
     const meta = {
       layer: this.currentLayer(),
       gps: this.gpsFix,
@@ -414,56 +420,106 @@ Page({
     analysis
       .analyseImagePath(path, meta)
       .then(sample => {
+        console.log('[capture] width/height/sharpness =', sample.width, sample.height, sample.sharpness);
+        const verdict = this.judge(sample);
+        if (!verdict.ok) {
+          this.rejectCount += 1;
+          this.setData({ rejectCount: this.rejectCount });
+          this.showVerdict(verdict.text, verdict.hint, true);
+          return;
+        }
         sample.thumb = path;
         this.frames.push(sample);
         this.lastFrameAt = Date.now();
         if (this.data.arrowShow && this.frames.length - this.arrowFrames >= 2) this.hideArrow();
         this.recompute();
-        this.judge(sample, previous);
+        this.confirmShot();
+        // 软提示不拦：这张已经进 frames、已经推过覆盖环，只是画面上一句 2 秒建议。
+        if (verdict.soft) this.showVerdict(verdict.text, verdict.hint, false, 2000);
       })
       .catch(() => {
-        this.showVerdict('失败');
+        this.rejectCount += 1;
+        this.setData({ rejectCount: this.rejectCount });
+        this.showVerdict('读不出来', '重拍一张试试', true);
       });
   },
 
-  /** 不合格只出 ≤4 字胶囊，不震动；合格双轻 tick + 环脉冲。 */
-  judge(sample, previous) {
-    if (sample.meanLuma < T.exposure.meanLumaMin || sample.darkRatio > T.exposure.darkRatioMax) {
-      this.showVerdict('太暗');
-      return;
-    }
-    if (sample.meanLuma > T.exposure.meanLumaMax || sample.brightRatio > T.exposure.brightRatioMax) {
-      this.showVerdict('太亮');
-      return;
-    }
+  /** 与最近 10 张比哈希：比只和上一张比，能挡住「站原地连按快门」。 */
+  isDuplicateOfRecent(sample) {
+    const recent = this.frames.slice(-DUPLICATE_LOOKBACK);
+    return recent.some(
+      frame => scoring.hammingDistanceHex(frame.hash || '', sample.hash || '') <= T.distinct.hammingThreshold,
+    );
+  },
+
+  /**
+   * 逐张判定，分两级：
+   * 硬拦截（糊 / 重复）——特征点提不出来、等于同一张拍两遍，不进 frames，不计数。
+   * 软提示（暗 / 亮 / 照片偏小）——构图与曝光建议，照常计数、照常推覆盖环，只给一句 2 秒文案。
+   */
+  judge(sample) {
+    const hard = (text, hint) => ({ ok: false, text, hint, soft: false });
+
     // 256×256 拉普拉斯方差；阈值来自 shot-rules.ts，实测见 README。
     if (typeof sample.sharpness === 'number' && sample.sharpness < T.blur.varianceMin) {
-      this.showVerdict('糊了');
-      return;
+      return hard('糊了', '停稳 1 秒再按');
     }
-    if (Math.min(sample.width, sample.height) < T.resolution.minShortEdge) {
-      this.showVerdict('太远');
-      return;
+    if (this.isDuplicateOfRecent(sample)) {
+      return hard('重复', '转向下一个角度');
     }
-    if (previous && scoring.hammingDistanceHex(previous.hash, sample.hash) <= T.distinct.hammingThreshold) {
-      this.showVerdict('重复');
-      return;
+
+    let softText = '';
+    let softHint = '';
+    if (sample.meanLuma < T.exposure.meanLumaMin || sample.darkRatio > T.exposure.darkRatioMax) {
+      softText = '偏暗';
+      softHint = '开灯或转个方向';
+    } else if (sample.meanLuma > T.exposure.meanLumaMax || sample.brightRatio > T.exposure.brightRatioMax) {
+      softText = '偏亮';
+      softHint = '避开灯和反光';
+    } else if (this.isFrameTooSmall(sample)) {
+      softText = '照片偏小';
+      softHint = '走近一点，或换原图';
     }
+    return { ok: true, text: softText, hint: softHint, soft: Boolean(softText) };
+  },
+
+  /**
+   * 「太远」原来是拿照片短边和绝对 1080 比 —— 那是分辨率，不是距离：
+   * 真机 takePhoto 常见 1280×720（短边 720），人走近了像素也不会变，所以恒判「太远」。
+   * 现在只和「本机第一张的短边」比，低于其 70% 才提示，1080 仅作上限，规避低端机恒定误报。
+   */
+  isFrameTooSmall(sample) {
+    const shortEdge = Math.min(sample.width || 0, sample.height || 0);
+    if (!shortEdge) return false;
+    if (!this.shortEdgeBase) this.shortEdgeBase = shortEdge;
+    return shortEdge < Math.min(T.resolution.minShortEdge, this.shortEdgeBase * 0.7);
+  },
+
+  /** 合格：双轻 tick + 覆盖环脉冲，不需要读文字也知道「这张记下了」。 */
+  confirmShot() {
     const now = Date.now();
     if (now - (this.lastConfirmAt || 0) >= 400) {
       this.lastConfirmAt = now;
       buzz('light');
       setTimeout(() => buzz('light'), 40);
     }
+    this.pulseRing();
+  },
+
+  pulseRing() {
     this.setData({ ringPulse: true });
     if (this.pulseTimer) clearTimeout(this.pulseTimer);
     this.pulseTimer = setTimeout(() => this.setData({ ringPulse: false }), 180);
   },
 
-  showVerdict(text) {
+  /** 硬拦截留 1.8 秒、带一句改法；软提示留 2 秒；其余（如「记下了」）1.2 秒不打扰。 */
+  showVerdict(text, hint, bad, ms) {
     if (this.verdictTimer) clearTimeout(this.verdictTimer);
-    this.setData({ verdictText: text });
-    this.verdictTimer = setTimeout(() => this.setData({ verdictText: '' }), 1200);
+    this.setData({ verdictText: text, verdictHint: hint || '', verdictBad: Boolean(bad) });
+    this.verdictTimer = setTimeout(
+      () => this.setData({ verdictText: '', verdictHint: '', verdictBad: false }),
+      ms || (bad ? 1800 : 1200),
+    );
   },
 
   // —— 指路箭头：1.6s 无新帧且覆盖 <85% ——
@@ -513,9 +569,12 @@ Page({
 
   // —— ⓘ / 尺度 ——
   onHintTap() {
+    const rejected = this.data.rejectCount ? `\n\n本次已作废 ${this.data.rejectCount} 张（不计数）。` : '';
     this.setData({
       hintOpen: !this.data.hintOpen,
-      hintBody: HINTS.base + '\n\n' + HINTS.gate + (this.data.devtools ? '\n\n' + HINTS.sim : ''),
+      hintPay: HINTS.pay,
+      hintBody:
+        HINTS.base + '\n\n' + HINTS.gate + rejected + (this.data.devtools ? '\n\n' + HINTS.sim : ''),
     });
   },
 
@@ -533,8 +592,12 @@ Page({
 
   onScaleConfirm() {
     this.recompute();
-    if (scoring.isValidScale(scoring.parseScaleMeters(this.data.scaleText))) {
-      wx.showToast({ title: '已记录', icon: 'none' });
+    const meters = scoring.parseScaleMeters(this.data.scaleText);
+    if (scoring.isValidScale(meters)) {
+      this.showGateFlash(`长度记下：${scoring.formatMeters(meters)}`, 'good');
+      this.setData({ hintOpen: false });
+    } else {
+      this.showGateFlash('长度看不懂，写成「3.5」或「350cm」', 'error');
     }
   },
 
@@ -554,17 +617,19 @@ Page({
     const coverageOk = metrics.coverageDeg >= GATE_COVERAGE_DEG;
     // 视频模式：>=15s 的片段直接过门（照片门控对视频不适用）。
     const videoOk = Boolean(this.videoClip && this.videoClip.duration >= 15);
-    const gatePass =
-      videoOk || (this.frames.length >= TOTAL_GATE && layersOk && coverageOk && scaleOk);
+    const gatePass = videoOk || (this.frames.length >= TOTAL_GATE && layersOk && coverageOk && scaleOk);
 
     this.coverageRatio = Math.min(1, metrics.coverageDeg / 360);
     if (this.coverageRatio >= ARROW_COVERAGE_LIMIT) this.hideArrow();
 
+    const started = this.frames.length > 0 || Boolean(this.videoClip);
     this.setData({
       layerBars: scoring.CAPTURE_LAYERS.map((layer, index) => ({
         id: layer,
         label: LAYER_SHORT[layer],
         on: index === this.data.layerIndex,
+        count: counts[layer],
+        target: T.targets.perLayer,
       })),
       ringTicks: buildRingTicks(
         metrics.coverageDeg,
@@ -573,25 +638,49 @@ Page({
       frameCount: this.frames.length,
       shutterActive: this.frames.length > 0,
       canSubmit: gatePass,
+      gateText: gatePass ? pay.copy.gate : started ? this.buildGateMain(metrics, scaleOk) : '',
+      gateHint: gatePass ? SUBMIT_HINT : started ? this.buildGateDetail(scaleOk, metrics) : '',
+      gateKind: gatePass ? 'ready' : started ? 'need' : '',
     });
     this.lastScore = score;
     this.gatePass = gatePass;
-    this.gateShort = videoOk ? '' : this.buildGateShort(scaleOk, counts, metrics);
+    this.gateShort = videoOk ? '' : this.buildGateMain(metrics, scaleOk);
   },
 
-  buildGateShort(scaleOk, counts, metrics) {
-    if (this.frames.length < TOTAL_GATE) return '还差张数';
-    const short = scoring.CAPTURE_LAYERS.find(layer => counts[layer] < T.targets.perLayer);
-    if (short) return `${LAYER_SHORT[short]}层不够`;
-    if (metrics.coverageDeg < GATE_COVERAGE_DEG) return '环没转满';
-    if (!scaleOk) return '填个长度';
+  /**
+   * 不达标时先说最要紧的一件（还差几张 / 环差多少度 / 没填长度），
+   * 第二行再说清每层进度，回去补拍时知道该补哪层。
+   */
+  buildGateMain(metrics, scaleOk) {
+    const missing = TOTAL_GATE - this.frames.length;
+    if (missing > 0) return `缺 ${missing} 张`;
+    const degShort = GATE_COVERAGE_DEG - Math.round(metrics.coverageDeg);
+    if (degShort > 0) return `环差 ${Math.round(degShort / 10) * 10}°`;
+    if (!scaleOk) return '没填长度';
     return '';
+  },
+
+  /** 第二行只说「张数之外还缺什么」：环没转满、长度没填；层数已由右侧计数常驻显示。 */
+  buildGateDetail(scaleOk, metrics) {
+    const parts = [];
+    const degShort = Math.round((GATE_COVERAGE_DEG - metrics.coverageDeg) / 10) * 10;
+    if (degShort > 0) parts.push(`环差 ${degShort}°`);
+    if (!scaleOk) parts.push('长度未填');
+    return parts.join(' · ');
+  },
+
+  /** 门槛/提交的临时反馈走取景页内的玻璃条，不用系统 toast（默认组件样子且盖住画面）。 */
+  showGateFlash(text, kind) {
+    if (this.gateTimer) clearTimeout(this.gateTimer);
+    this.setData({ gateText: text, gateHint: '', gateKind: kind || 'error' });
+    this.gateTimer = setTimeout(() => this.recompute(), 2600);
   },
 
   // —— 提交 ——
   onSubmit() {
-    if (!this.data.canSubmit || this.data.submitting) {
-      wx.showToast({ title: this.gateShort || '还差一点', icon: 'none' });
+    if (this.data.submitting) return;
+    if (!this.data.canSubmit) {
+      this.showGateFlash(this.gateShort || '还差一点', 'need');
       return;
     }
     this.startSubmit();
@@ -601,8 +690,9 @@ Page({
     this.setData({ submitting: true });
     try {
       // 额度预扣（docs/45/46）：后端未接时 account 全部 no-op，行为不变。
-      // 402 INSUFFICIENT_CREDITS 时提示免费额度用完（广告加量/次数包 UI 待后端就绪后接）。
+      // 402 INSUFFICIENT_CREDITS 时明说「今天免费额度用完」，不给假的重试按钮。
       const reservation = await account.reserveJob();
+      const reservationId = reservation ? reservation.reservationId || '' : '';
       const scaleMeters = scoring.parseScaleMeters(this.data.scaleText);
       const jobId = await recon.submit({
         frames: this.frames.map(sample => ({
@@ -618,20 +708,21 @@ Page({
           ? { path: this.videoClip.path, duration: this.videoClip.duration, size: this.videoClip.size }
           : null,
         scaleMeters,
+        reservationId,
         durationMinutes: Math.round((Date.now() - this.startedAt) / 60000),
         score: this.lastScore ? this.lastScore.total : null,
       });
-      this.setData({ submitting: false, reservationId: reservation ? reservation.reservationId || jobId : '' });
+      this.setData({ submitting: false, reservationId });
       wx.navigateTo({
         url: `/pages/result/index?jobId=${encodeURIComponent(jobId)}&count=${this.frames.length}`,
       });
     } catch (error) {
       this.setData({ submitting: false });
       if (error && error.code === 'INSUFFICIENT_CREDITS') {
-        wx.showToast({ title: '今天的免费次数用完了，明天再来或换设备前先完成提交', icon: 'none', duration: 2500 });
+        this.showGateFlash(pay.copy.exhausted, 'need');
         return;
       }
-      wx.showToast({ title: (error && error.message) || '提交失败', icon: 'none' });
+      this.showGateFlash('提交没成功，检查网络再按一次', 'error');
     }
   },
 

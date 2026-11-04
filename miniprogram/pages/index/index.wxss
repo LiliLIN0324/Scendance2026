@@ -53,6 +53,13 @@ page {
   margin-top: 24px;
 }
 
+/* CTA 下方一行 12px：扣几次 / 多久 / 失败怎么算，不塞进条款。 */
+.quote {
+  display: block;
+  margin-top: 12px;
+  color: var(--b-w3);
+}
+
 .resume {
   margin-top: 16px;
   text-decoration: underline;
@@ -96,6 +103,10 @@ page {
   display: block;
   margin-top: 12px;
   white-space: pre-line;
+}
+
+.sheet__pay {
+  color: var(--b-w2);
 }
 
 .sheet__btn {

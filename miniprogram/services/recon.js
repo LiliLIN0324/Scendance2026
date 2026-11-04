@@ -9,11 +9,13 @@
  *
  * 返回契约（real 实现必须逐字满足）：
  *   {
- *     status: 'queued' | 'processing' | 'done' | 'failed',
+ *     status: 'preparing' | 'queued' | 'processing' | 'done' | 'failed',
  *     progress: 0–100 的整数,
  *     etaMinutes?: number,             // 剩余分钟，用于「约 X 分」
- *     code?: 'LOW_COVERAGE' | 'LOW_LIGHT' | 'TIMEOUT' | 'CANCELLED',
+ *     code?: 'UPLOAD_FAILED' | 'LOW_COVERAGE' | 'LOW_LIGHT' | 'REJECTED'
+ *          | 'TIMEOUT' | 'SERVER_ERROR' | 'NETWORK' | 'CANCELLED',
  *     message?: string,                // 失败时一句中文原因
+ *     info?: { title, cause, eta, action, retryable },  // 失败态三段文案
  *     modelUrl?: string,               // 成功：GLB
  *     rawUrl?: string,                 // 成功：原始文件
  *     size?: { w, d, h, unit },        // 成功：场地尺寸
@@ -25,13 +27,86 @@
 const STORAGE_KEY = 'reconJob';
 const MIN_SECONDS = 25;
 const MAX_SECONDS = 40;
-const QUEUED_SECONDS = 0.8;
+const QUEUED_SECONDS = 3;
+// 预处理（上传 + 校验）阶段：任务已建立但还没开始算，用户必须看到这一段，
+// 否则「点了没反应」的三秒就是最容易被当成卡死的地方。
+const PREPARE_SECONDS = 1.6;
 
-const FAIL_REASONS = {
-  LOW_COVERAGE: '素材覆盖不足：环向缺口太大，回去把没拍到的扇区补齐再交。',
-  LOW_LIGHT: '现场太暗：多数照片缺纹理，换到亮处或开灯后重拍。',
-  TIMEOUT: '重建超时：素材过多或服务繁忙，稍后重新提交。',
+/**
+ * 失败必须交代三件事：卡在哪（cause）、还要多久（eta）、现在能做什么（action）。
+ * 八种原因（上传 / 素材 / 服务 / 网络 / 取消），页面不自己拼文案，一律读这张表。
+ */
+const FAIL_INFO = {
+  UPLOAD_FAILED: {
+    title: '照片没传完',
+    cause: '网络在中途断了，素材没送到服务器。',
+    eta: '重传一次约 1 分钟，素材不用重拍。',
+    action: '重新提交',
+    retryable: true,
+  },
+  LOW_COVERAGE: {
+    title: '素材不合格',
+    cause: '一圈没拍满，服务器拼不出完整的场地边界。',
+    eta: '补齐缺口约 2–3 分钟，再交一次。',
+    action: '去补拍',
+    retryable: true,
+  },
+  LOW_LIGHT: {
+    title: '素材不合格',
+    cause: '多数照片没有纹理，太暗或逆光，算不出深度。',
+    eta: '开灯重拍约 5–8 分钟，再交一次。',
+    action: '去补拍',
+    retryable: true,
+  },
+  REJECTED: {
+    title: '素材不合格',
+    cause: '张数不够或糊片太多，没达到重建门槛。',
+    eta: '按覆盖环补齐约 5 分钟，再交一次。',
+    action: '去补拍',
+    retryable: true,
+  },
+  TIMEOUT: {
+    title: '服务超时',
+    cause: '服务器 20 分钟内没算完，任务被回收。',
+    eta: '稍后重试通常更快；连续超时换个时段。',
+    action: '重新提交',
+    retryable: true,
+  },
+  SERVER_ERROR: {
+    title: '服务端出错',
+    cause: '重建服务返回错误，不是你素材的问题。',
+    eta: '重试即可，本次不扣次数。',
+    action: '重新提交',
+    retryable: true,
+  },
+  NETWORK: {
+    title: '查不到进度',
+    cause: '手机和服务器的连接断了，任务本身可能还在跑。',
+    eta: '重新打开本页再查一次。',
+    action: '再查一次',
+    retryable: true,
+  },
+  CANCELLED: {
+    title: '已取消',
+    cause: '这次任务被你取消了，没有产物。',
+    eta: '想再出模型就重新提交。',
+    action: '重新提交',
+    retryable: true,
+  },
 };
+
+function failPayload(code, extra) {
+  const info = FAIL_INFO[code] || FAIL_INFO.SERVER_ERROR;
+  return {
+    status: 'failed',
+    progress: (extra && extra.progress) || 0,
+    code,
+    message: info.cause,
+    info,
+    retryable: info.retryable,
+    refunded: true,
+  };
+}
 
 function readRecord() {
   try {
@@ -106,7 +181,7 @@ function buildResult(jobId) {
   };
 }
 
-/** 提交任务：创建 id 并落 storage，返回 jobId。 */
+/** 提交任务：创建 id 并落 storage，返回 jobId。reservationId 用于失败返还。 */
 function submit(job) {
   const jobId = makeId();
   const durationSeconds = MIN_SECONDS + Math.random() * (MAX_SECONDS - MIN_SECONDS);
@@ -116,6 +191,7 @@ function submit(job) {
     durationSeconds,
     failCode: '',
     cancelled: false,
+    reservationId: (job && job.reservationId) || '',
     frameCount: job && job.frames ? job.frames.length : 0,
     video: job && job.video ? job.video : null,
     scaleMeters: job && job.scaleMeters !== undefined ? job.scaleMeters : null,
@@ -127,36 +203,31 @@ function submit(job) {
 function poll(jobId) {
   const record = readRecord();
   if (!record || record.jobId !== jobId) {
-    return Promise.resolve({
-      status: 'failed',
-      progress: 0,
-      code: 'TIMEOUT',
-      message: '任务不存在或已过期，回去重新提交。',
-    });
+    return Promise.resolve(failPayload('NETWORK', { progress: 0 }));
   }
   if (record.cancelled) {
-    return Promise.resolve({
-      status: 'failed',
-      progress: 0,
-      code: 'CANCELLED',
-      message: '任务已取消。',
-    });
+    return Promise.resolve(failPayload('CANCELLED'));
   }
   if (record.failCode) {
-    return Promise.resolve({
-      status: 'failed',
-      progress: progressFor((Date.now() - record.startedAt) / 1000, record.durationSeconds),
-      code: record.failCode,
-      message: FAIL_REASONS[record.failCode] || '重建失败，请重试。',
-    });
+    return Promise.resolve(
+      failPayload(record.failCode, {
+        progress: progressFor((Date.now() - record.startedAt) / 1000, record.durationSeconds),
+      }),
+    );
   }
   const elapsedSeconds = (Date.now() - record.startedAt) / 1000;
   if (elapsedSeconds >= record.durationSeconds) {
     const result = buildResult(jobId);
-    // 保留 frameCount / scaleMeters / video：结果页重进、首页续跑都要用，
-    // 只写 result 会让这仨字段丢失。
+    // 保留 frameCount / scaleMeters / video / reservationId：结果页重进、首页续跑、失败返还都要用。
     writeRecord({ ...record, result });
     return Promise.resolve(result);
+  }
+  if (elapsedSeconds < PREPARE_SECONDS) {
+    return Promise.resolve({
+      status: 'preparing',
+      progress: Math.round((elapsedSeconds / PREPARE_SECONDS) * 8),
+      etaMinutes: Math.max(1, Math.ceil((record.durationSeconds - elapsedSeconds) / 60)),
+    });
   }
   return Promise.resolve({
     status: elapsedSeconds < QUEUED_SECONDS ? 'queued' : 'processing',
@@ -174,11 +245,11 @@ function cancel(jobId) {
   return Promise.resolve(true);
 }
 
-/** 供调试：立刻把当前任务标记为某类失败（LOW_COVERAGE / LOW_LIGHT / TIMEOUT）。 */
+/** 供调试：立刻把当前任务标记为某类失败（UPLOAD_FAILED / LOW_COVERAGE / TIMEOUT 等）。 */
 function forceFail(jobId, code) {
   const record = readRecord();
   if (!record || record.jobId !== jobId) return Promise.resolve(false);
-  writeRecord({ ...record, failCode: FAIL_REASONS[code] ? code : 'LOW_COVERAGE' });
+  writeRecord({ ...record, failCode: FAIL_INFO[code] ? code : 'LOW_COVERAGE' });
   return Promise.resolve(true);
 }
 
@@ -190,8 +261,19 @@ function resume() {
     jobId: record.jobId,
     startedAt: record.startedAt,
     frameCount: record.frameCount || 0,
+    reservationId: record.reservationId || '',
     done: Boolean(record.result),
   };
 }
 
-module.exports = { submit, poll, cancel, forceFail, resume };
+/** 清掉当前记录：重试前调用，避免封面「继续上次重建」指向已经失败的任务。 */
+function clear() {
+  try {
+    wx.removeStorageSync(STORAGE_KEY);
+  } catch (error) {
+    // 清不掉也不影响本次重试。
+  }
+  return Promise.resolve(true);
+}
+
+module.exports = { submit, poll, cancel, forceFail, resume, clear, FAIL_INFO };

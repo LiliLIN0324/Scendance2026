@@ -259,10 +259,11 @@ const EXPORT_VIEWS: ReadonlyArray<{ id: 'current' | CameraPreset; label: string;
   { id: 'current', label: '跟随当前', symbol: 'photo_camera' },
   ...ANGLE_PRESETS,
 ];
-const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string }> = [
-  { scale: 1, label: '标清' },
-  { scale: 2, label: '高清' },
-  { scale: 3, label: '超清' },
+// 成图尺寸固定从 1920×1080 起算（不再跟着窗口大小走），1× 就是交付默认值。
+const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string }> = [
+  { scale: 1, label: '1080p', hint: '1920×1080' },
+  { scale: 2, label: '4K', hint: '3840×2160' },
+  { scale: 3, label: '6K', hint: '5760×3240' },
 ];
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
@@ -275,7 +276,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
   const [lightingOpen, setLightingOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
-  const [exportScale, setExportScale] = useState(2);
+  const [exportScale, setExportScale] = useState(1);
   const [exportMode, setExportMode] = useState<'single' | 'album'>('single');
   const [exporting, setExporting] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -550,7 +551,7 @@ export function ScendanceViewTools({ onApplyPreset, onZoom, onExportImage, onCap
             {onExportAlbum && <button type="button" aria-label="机位册" title={view.view2D ? '机位册需在 3D 视图使用' : '机位册：整体、俯视、正面、对角，另附离线图册'} aria-pressed={exportMode === 'album'} className={exportMode === 'album' ? 'is-active' : ''} disabled={view.view2D} onClick={() => setExportMode(mode => mode === 'album' ? 'single' : 'album')}><MaterialSymbol name="photo_library" size={16} /></button>}
           </div>
           <div className="sc-export-options" role="group" aria-label="导出画质">
-            {EXPORT_SCALES.map(entry => <button type="button" key={entry.scale} className={exportScale === entry.scale ? 'is-active' : ''} aria-label={`${entry.label} ${entry.scale}×`} title={`${entry.label} ${entry.scale}×`} aria-pressed={exportScale === entry.scale} disabled={view.view2D && entry.scale !== 1} onClick={() => setExportScale(entry.scale)}>{entry.scale}×</button>)}
+            {EXPORT_SCALES.map(entry => <button type="button" key={entry.scale} className={exportScale === entry.scale ? 'is-active' : ''} aria-label={`${entry.hint}（${entry.label}）`} title={`${entry.hint}（${entry.label}）`} aria-pressed={exportScale === entry.scale} disabled={view.view2D && entry.scale !== 1} onClick={() => setExportScale(entry.scale)}>{entry.label}</button>)}
           </div>
           <button type="button" className="sc-export-cta" disabled={exporting} onClick={() => { void runExport(); }}>
             {exporting ? '正在导出…' : exportMode === 'album' ? '导出机位册' : '导出 PNG'}

@@ -18,11 +18,13 @@ import type { RoomLayout } from '../lib/types';
  * 重建出来的场地就落在它的真实位置上。不输入也不影响——虚拟场地照常布置。
  * 底图与卫星贴地同一条禁令：仅观感，不可作重建素材。
  */
-export function GeoBasemapInput({ area, onApply, view2D }: {
+export function GeoBasemapInput({ area, onApply, view2D, onFrameOverview }: {
   area?: RoomLayout['researchArea'];
   /** 应用或清除底图；null 表示撤掉。 */
   onApply(area: RoomLayout['researchArea'] | null): void;
   view2D: boolean;
+  /** 点芯片名：把相机焦点切回整片底图（全湖视角）。 */
+  onFrameOverview?(): void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -58,7 +60,11 @@ export function GeoBasemapInput({ area, onApply, view2D }: {
     {area && <>
       <span className="sc-geo-chip" role="status">
         <MapPin size={12} aria-hidden="true"/>
-        <strong>底图 · {area.name}</strong>
+        {onFrameOverview
+          ? <button type="button" data-testid="geo-basemap-frame" title="回看整片底图"
+              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', cursor: 'pointer', fontWeight: 'inherit' }}
+              onClick={onFrameOverview}><strong>底图 · {area.name}</strong></button>
+          : <strong>底图 · {area.name}</strong>}
         <small>仅作参照</small>
         <button type="button" aria-label={`清除底图 ${area.name}`} data-testid="geo-basemap-clear"
           onClick={() => { onApply(null); setNotice(''); }}>×</button>

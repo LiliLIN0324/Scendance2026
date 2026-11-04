@@ -231,25 +231,27 @@ export function createServer({
       const response = await fetchImpl(url, {
         ...init,
         method: init.method ?? 'GET',
-        headers: { Authorization: key, 'Content-Type': 'application/json' },
+        headers: { Authorization: key, 'Content-Type': 'application/json', ...(world ? { 'x-source': 'openapi' } : {}) },
         redirect: 'error',
         signal: AbortSignal.timeout(30000),
       });
       if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error('upstream HTTP error');
+        // 失败要带真实上游状态与报文，不能只给一句「上游请求失败」。
+        const errText = await response.text().catch(() => '');
+        throw new Error(`upstream HTTP ${response.status}: ${errText.slice(0, 300)}`);
       }
       const body = await response.json();
       if (!isRecord(body)) throw new Error('invalid upstream body');
       if (!world) {
-        if (body.c !== '0') throw new Error('Lux rejected request');
+        if (body.c !== '0') throw new Error(`Lux rejected request: ${JSON.stringify(body).slice(0, 300)}`);
         return body.d;
       }
-      if (Object.hasOwn(body, 'c') && body.c !== '0' && body.c !== 0) throw new Error('World rejected request');
+      if (Object.hasOwn(body, 'c') && body.c !== '0' && body.c !== 0) throw new Error(`World rejected request: ${JSON.stringify(body).slice(0, 300)}`);
       return body.d ?? body.data ?? body;
     } catch (failure) {
       const timeout = failure?.name === 'TimeoutError' || failure?.name === 'AbortError';
-      throw new HttpError(timeout ? 504 : 502, timeout ? 'Aholo 上游请求超时' : 'Aholo 上游请求失败');
+      const reason = failure instanceof HttpError ? failure.message : failure?.message ?? 'unknown';
+      throw new HttpError(timeout ? 504 : 502, timeout ? 'Aholo 上游请求超时' : `Aholo 上游请求失败：${reason}`);
     }
   }
 
@@ -322,10 +324,13 @@ export function createServer({
 
   // —— World 重建：素材先经 OUS 上传成公网 URL，再创建重建任务（docs/15-Aholo集成规划.md 二梯队）——
   let ousCredentials;
-  async function ous() {
-    if (ousCredentials) return ousCredentials;
+  async function ous(fresh = false) {
+    // ousToken 是一次性上传会话凭证：一次上传（含其状态轮询）内必须同 token，跨文件复用会报「Token已被使用」。
+    if (!fresh && ousCredentials) return ousCredentials;
+    // 重建素材的 token 必须与 World 服务同区（国内网关）：国际网关签发的 token 上传的文件，
+    // 国内重建端点查不到归属，会报「文件链接不对，请使用 资产 模块相关接口上传文件」（SDK 也是 region:'cn'）。
     // token 接口返回裸 JSON（无 c/d 壳），不走 aholo() 包装器。
-    const tokenResponse = await fetchImpl(`${base}/asset/v1/token`, { headers: { Authorization: key }, signal: AbortSignal.timeout(30000) });
+    const tokenResponse = await fetchImpl(`${worldBase}/asset/v1/token`, { headers: { Authorization: key }, signal: AbortSignal.timeout(30000) });
     if (!tokenResponse.ok) { await tokenResponse.body?.cancel?.(); throw new HttpError(502, `OUS 凭证获取失败：上游 HTTP ${tokenResponse.status}`); }
     const d = await tokenResponse.json();
     if (!isRecord(d) || typeof d.ousToken !== 'string' || typeof d.globalDomain !== 'string') throw new HttpError(502, 'OUS 凭证无效');
@@ -355,7 +360,7 @@ export function createServer({
     }
   }
   async function ousUpload(bytes, name) {
-    const { token, domain, blockSize } = await ous();
+    const { token, domain, blockSize } = await ous(true);
     const md5 = createHash('md5').update(bytes).digest('hex');
     let payload;
     if (bytes.length <= Math.max(blockSize - 256 * 1024, 1024)) {
@@ -411,7 +416,7 @@ export function createServer({
     while (zoom > 3) {
       const nw = mercatorPixel(west, north, zoom);
       const se = mercatorPixel(east, south, zoom);
-      if (Math.max(se.x - nw.x, se.y - nw.y) <= 1024) break;
+      if (Math.max(se.x - nw.x, se.y - nw.y) <= 2048) break;
       zoom -= 1;
     }
     const nw = mercatorPixel(west, north, zoom);
@@ -420,7 +425,7 @@ export function createServer({
     const srcH = se.y - nw.y;
     if (srcW < 1 || srcH < 1) throw new HttpError(400, 'bounds invalid');
     const longEdge = Math.max(srcW, srcH);
-    const fit = longEdge > 768 ? 768 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
+    const fit = longEdge > 1024 ? 1024 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
     const outW = Math.max(2, Math.round(srcW * fit));
     const outH = Math.max(2, Math.round(srcH * fit));
     const tile = 256;
@@ -429,19 +434,34 @@ export function createServer({
     const y0 = Math.floor(nw.y / tile);
     const y1 = Math.floor((se.y - 1e-6) / tile);
     const limit = 2 ** zoom;
-    const loaded = [];
+    const coords = [];
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         if (tx < 0 || ty < 0 || tx >= limit || ty >= limit) continue;
-        const host = 1 + ((tx + ty) % 4);
-        const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
+        coords.push({ tx, ty });
+      }
+    }
+    async function grabTile(styleId, tx, ty, optional) {
+      const host = 1 + ((tx + ty) % 4);
+      try {
+        const res = await fetch(`https://webst0${host}.is.autonavi.com/appmaptile?style=${styleId}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'ScendanceLocalProxy/1.0' } });
         if (!res.ok) throw new HttpError(502, 'tile HTTP ' + res.status);
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.length < 100) throw new HttpError(502, 'empty tile');
-        loaded.push({ input: buf, left: (tx - x0) * tile, top: (ty - y0) * tile });
+        return { input: buf, left: (tx - x0) * tile, top: (ty - y0) * tile };
+      } catch (failure) {
+        // 路网注记层缺一块只少一块路，不让整张底图失败；卫星层是本体，缺了就报错。
+        if (optional) return null;
+        throw failure;
       }
     }
-    if (!loaded.length) throw new HttpError(502, 'no satellite tiles');
+    const satelliteTiles = (await Promise.all(coords.map(({ tx, ty }) => grabTile(style, tx, ty, false)))).filter(Boolean);
+    // 底图带道路信息（用户拍板）：卫星(6)之上叠路网注记(8)透明 PNG；矢量路网(7)本身带路，不叠。
+    const roadTiles = style === 6
+      ? (await Promise.all(coords.map(({ tx, ty }) => grabTile(8, tx, ty, true)))).filter(Boolean)
+      : [];
+    const loaded = [...satelliteTiles, ...roadTiles];
+    if (!satelliteTiles.length) throw new HttpError(502, 'no satellite tiles');
     const mosaicW = (x1 - x0 + 1) * tile;
     const mosaicH = (y1 - y0 + 1) * tile;
     const cropLeft = Math.max(0, Math.min(mosaicW - 1, Math.round(nw.x - x0 * tile)));

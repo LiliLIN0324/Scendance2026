@@ -23,6 +23,11 @@ export interface UseImportExportParams {
   controlsRef?: MutableRefObject<OrbitControlsType | null>;
   /** Frames the given preset before capture; the live camera is restored after. */
   applyPreset?: (preset: CameraPreset) => void;
+  /**
+   * 与实时画面同一条渲染路径：开着 3DGS 环境预览时先铺点云再叠布置，
+   * 关掉时退回普通渲染。导出必须走它，否则成图里没有真实场地。
+   */
+  paintFrame?: (renderer: ThreeNS.WebGLRenderer, scene: ThreeNS.Scene, camera: ThreeNS.Camera) => void;
   /** Runs after a successful JSON import (e.g. clear the selection). */
   onImported(): void;
 }
@@ -30,8 +35,10 @@ export interface UseImportExportParams {
 export interface RenderExportOptions {
   /** 'current' keeps the live camera; a preset frame is applied only for the capture. */
   view: 'current' | CameraPreset;
-  /** Resolution multiplier (1–3) over the canvas CSS size and device pixel ratio. */
+  /** Resolution multiplier (1–3) over the 1920×1080 delivery frame. */
   scale: number;
+  /** 成图尺寸；缺省 1920×1080 × scale（交付尺寸，不再跟着画布大小走）。 */
+  resolution?: { width: number; height: number };
 }
 
 export interface ShareViewerLink {
@@ -82,10 +89,11 @@ export function useImportExport({
   cameraRef,
   controlsRef,
   applyPreset,
+  paintFrame,
   onImported,
 }: UseImportExportParams): UseImportExportResult {
   const captureRenderImage = useCallback(
-    async ({ view, scale }: RenderExportOptions) => {
+    async ({ view, scale, resolution }: RenderExportOptions) => {
       if (view2D) {
         const flat = canvas2DRef.current;
         if (!flat) return null;
@@ -97,35 +105,47 @@ export function useImportExport({
       const camera = cameraRef.current;
       if (!canvas || !renderer || !scene || !camera) return null;
       const factor = Math.min(3, Math.max(1, Math.round(scale)));
-      const baseRatio = Math.min(window.devicePixelRatio || 1, 2);
+      // 交付尺寸固定从 1920×1080 起算，不再跟着画布 CSS 大小走：
+      // 同一个方案不管谁的窗口多大，导出都是同一张构图。
+      const targetWidth = resolution?.width ?? 1920 * factor;
+      const targetHeight = resolution?.height ?? 1080 * factor;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       if (width < 2 || height < 2) return null;
+      const paint = paintFrame ?? ((target: ThreeNS.WebGLRenderer, paintScene: ThreeNS.Scene, paintCamera: ThreeNS.Camera) => target.render(paintScene, paintCamera));
       const controls = controlsRef?.current ?? null;
       const savedPosition = camera.position.clone();
       const savedQuaternion = camera.quaternion.clone();
+      const savedAspect = camera.aspect;
+      const savedPixelRatio = renderer.getPixelRatio();
       const savedTarget = controls ? controls.target.clone() : null;
       try {
         if (view !== 'current') applyPreset?.(view);
-        renderer.setPixelRatio(baseRatio * factor);
-        renderer.setSize(width, height, false);
-        renderer.render(scene, camera);
+        // 16:9 的竖向 FOV 保持不动，只放宽横向，画面不拉伸。
+        camera.aspect = targetWidth / targetHeight;
+        camera.updateProjectionMatrix();
+        // 1:1 像素比 + 目标尺寸，toDataURL 出来的就是这一张的原始像素。
+        renderer.setPixelRatio(1);
+        renderer.setSize(targetWidth, targetHeight, false);
+        paint(renderer, scene, camera);
         return canvas.toDataURL('image/png');
       } catch {
         return null;
       } finally {
         camera.position.copy(savedPosition);
         camera.quaternion.copy(savedQuaternion);
+        camera.aspect = savedAspect;
+        camera.updateProjectionMatrix();
         if (controls && savedTarget) {
           controls.target.copy(savedTarget);
           controls.update();
         }
-        renderer.setPixelRatio(baseRatio);
+        renderer.setPixelRatio(savedPixelRatio);
         renderer.setSize(width, height, false);
-        renderer.render(scene, camera);
+        paint(renderer, scene, camera);
       }
     },
-    [view2D, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset]
+    [view2D, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset, paintFrame]
   );
 
   const exportRenderImage = useCallback(

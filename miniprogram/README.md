@@ -187,7 +187,7 @@ failed:              { status, progress, code: LOW_COVERAGE|LOW_LIGHT|TIMEOUT, m
 
 ## 身份与额度契约（预接线，`services/account.js`）
 
-变现预接线见 `docs/46`：静默登录（`wx.login` 换 openid，无登录 UI）+ 额度三栏 + 预扣/返还 + 广告发券 + 虚拟支付包装。`config.API_BASE` 为空时全部 no-op，行为与 mock 版完全一致。免费额度沿用 docs/45 的 `PAY_DAILY_JOB_LIMIT = 3 次/天`，付费 SKU 复用 `scan_1/3/10`。
+变现预接线见 `docs/46`：静默登录（`wx.login` 换 openid，无登录 UI）+ 额度三栏 + 预扣/返还 + 广告发券 + 虚拟支付包装。`config.API_BASE` 为空时全部 no-op，行为与 mock 版完全一致。金额与免费额度只写在一处：`utils/pay.js`（`PRICE`、`FREE_PLAN` 两个开关）。当前 `FREE_PLAN = 'beta'`（docs/45 §六：图片通道未通，免费照片额度先不上线，文案只说「内测期免费」）；通道恢复后改 `'daily'`（每天 1 次、每月 1 次、全站 2000 次/月）。价格按 docs/45 §五 为 `scan_1 = ¥9.99`，SKU 仍复用 `scan_1/3/10`。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|

@@ -2,6 +2,7 @@
 // 封面：只做入口，不放营销内容。首访带引导，复访直达取景。
 const recon = require('../../services/recon');
 const glass = require('../../utils/glass');
+const pay = require('../../utils/pay');
 const WELCOME_KEY = 'welcomeDone';
 
 function welcomeDone() {
@@ -19,6 +20,9 @@ Page({
     resumeJobId: '',
     infoOpen: false,
     glassClass: glass.glassClass(),
+    // 付款口径统一走 utils/pay.js，换 A/B 案只改那边的 FREE_PLAN。
+    payQuote: pay.copy.quote,
+    paySheet: pay.copy.sheet,
   },
 
   onShow() {
