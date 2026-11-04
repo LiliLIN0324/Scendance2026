@@ -183,6 +183,8 @@ function isResearchArea(value: unknown): boolean {
   if (!isFiniteNumber(bounds.west) || !isFiniteNumber(bounds.south)) return false;
   if (!isFiniteNumber(bounds.east) || !isFiniteNumber(bounds.north)) return false;
   if (bounds.east <= bounds.west || bounds.north <= bounds.south) return false;
+  // scanAssetId：底图跟哪套场地扫描走（docs/49）；没有或不是字符串都按手动底图处理。
+  if (value.scanAssetId !== undefined && (typeof value.scanAssetId !== 'string' || value.scanAssetId.length === 0 || value.scanAssetId.length > MAX_ID_LENGTH)) return false;
   return typeof value.imageUrl === 'string' && isSatelliteProxyUrl(value.imageUrl);
 }
 

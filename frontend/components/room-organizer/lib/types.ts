@@ -414,6 +414,12 @@ export interface RoomLayout {
     imageUrl: string;
     /** 高德瓦片样式：6 卫星、7 路网、8 路网加注记。 */
     style: 6 | 7 | 8;
+    /** 场地脚下那片 z18 级高清卫星贴片；没有就没有贴片层。 */
+    detailRadiusM?: number;
+    detailBounds?: { west: number; south: number; east: number; north: number };
+    detailImageUrl?: string;
+    /** 这张底图跟着哪套场地扫描走（docs/49）；没有就是用户手动标的，自动逻辑不动它。 */
+    scanAssetId?: string;
   };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;

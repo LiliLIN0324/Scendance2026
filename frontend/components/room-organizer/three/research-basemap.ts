@@ -1,4 +1,5 @@
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '../lib/amap-venue';
+import { boundsSizeMeters } from '../lib/research-area';
 import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
@@ -137,6 +138,36 @@ export function buildResearchBasemap(
     // 图没拉下来时留一张素底，别让地面变成一块说不清的颜色。
     if (mesh.material === material) material.color.setHex(0xe8e4da);
   });
+
+  // 场地脚下那块 z18 级高清贴片：同锚点、略高于全景底图，走近时地面是真实的树/路/岸线。
+  // 真实比例不变——尺寸就是 detailBounds 换算出来的真实米数，不缩放。
+  const detailSize = area.detailBounds ? boundsSizeMeters(area.detailBounds) : null;
+  if (area.detailImageUrl && detailSize && [detailSize.widthM, detailSize.depthM].every(value => Number.isFinite(value) && value > 0)) {
+    const detailGeometry = new THREE.PlaneGeometry(detailSize.widthM, detailSize.depthM, 1, 1);
+    const detailMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    });
+    const detailMesh = new THREE.Mesh(detailGeometry, detailMaterial);
+    detailMesh.rotation.x = -Math.PI / 2;
+    detailMesh.position.set(placement.centerX, RESEARCH_BASEMAP_Y + 0.01, placement.centerZ);
+    detailMesh.renderOrder = 1;
+    detailMesh.receiveShadow = false;
+    detailMesh.castShadow = false;
+    detailMesh.userData.type = RESEARCH_BASEMAP_TAG;
+    detailMesh.userData.mapReference = true;
+    detailMesh.userData.mapReferenceLabel = '参考底图·不可作重建素材';
+    scene.add(detailMesh);
+    void loadBasemapTexture(THREE, area.detailImageUrl).then(texture => {
+      if (detailMesh.material !== detailMaterial) { texture.dispose(); return; }
+      detailMaterial.map = texture;
+      detailMaterial.needsUpdate = true;
+      options.onTextureLoaded?.();
+    }).catch(() => {
+      // 贴片没拉下来就整层隐掉，让全景底图露出来，不留一块白板。
+      if (detailMesh.material === detailMaterial) detailMaterial.visible = false;
+    });
+  }
   return mesh;
 }
 

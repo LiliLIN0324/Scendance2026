@@ -29,8 +29,8 @@ export type ResearchMapStyle = 6 | 7 | 8;
 export const RESEARCH_ROAD_STYLE: ResearchMapStyle = 7;
 export const RESEARCH_SATELLITE_STYLE: ResearchMapStyle = 6;
 
-/** 调研半径档位（米）。西湖这种水面开阔的地方，1600 m 差不多能看全一圈。 */
-export const RESEARCH_RADIUS_CHOICES = [800, 1600, 3000] as const;
+/** 调研半径档位（米）。西湖这种水面开阔的地方，1600 m 看一圈，6000 m 能罩住整个西湖风景区。 */
+export const RESEARCH_RADIUS_CHOICES = [800, 1600, 3000, 6000] as const;
 export const DEFAULT_RESEARCH_RADIUS_M = 1600;
 
 export interface GeoBounds {
@@ -56,6 +56,10 @@ export interface ResearchArea {
   /** 底图地址。带 west/south/east/north，3D 与 2D 靠这几个值对齐。 */
   imageUrl: string;
   style: ResearchMapStyle;
+  /** 场地脚下那片高清卫星贴片的半径（米，z18 级分辨率）；没有就没有贴片。 */
+  detailRadiusM?: number;
+  detailBounds?: GeoBounds;
+  detailImageUrl?: string;
 }
 
 const round7 = (value: number): number => Math.round(value * 1e7) / 1e7;
@@ -160,7 +164,10 @@ export async function lookupPlace(keywords: string, signal?: AbortSignal): Promi
   });
 }
 
-/** 地点 + 半径 → 一片可铺进 3D 的调研底图。 */
+/** 场地脚下高清贴片的默认半径：正好罩住重建场地与它周围一圈实景（约 0.5 m/px）。 */
+export const DETAIL_BASEMAP_RADIUS_M = 250;
+
+/** 地点 + 半径 → 一片可铺进 3D 的调研底图；脚下再垫一块 z18 级高清贴片，走近也看得出真实地物。 */
 export function createResearchArea(
   place: ResearchPlace,
   radiusM: number = DEFAULT_RESEARCH_RADIUS_M,
@@ -169,6 +176,7 @@ export function createResearchArea(
   const center = { lng: place.lng, lat: place.lat };
   const bounds = boundsAround(center, radiusM);
   const size = boundsSizeMeters(bounds);
+  const detailBounds = boundsAround(center, DETAIL_BASEMAP_RADIUS_M);
   return {
     name: place.name,
     address: place.address,
@@ -179,15 +187,20 @@ export function createResearchArea(
     depthM: Math.round(size.depthM),
     imageUrl: researchImageUrl(bounds, style),
     style,
+    detailRadiusM: DETAIL_BASEMAP_RADIUS_M,
+    detailBounds,
+    detailImageUrl: researchImageUrl(detailBounds, style),
   };
 }
 
-/** 换半径或换样式时重算底图，地名与地址不动。 */
+/** 换半径或换样式时重算底图，地名与地址不动；高清贴片跟着中心与样式一起换。 */
 export function researchAreaWith(area: ResearchArea, changes: { radiusM?: number; style?: ResearchMapStyle }): ResearchArea {
   const radiusM = changes.radiusM ?? area.radiusM;
   const style = changes.style ?? area.style;
   const bounds = boundsAround(area.center, radiusM);
   const size = boundsSizeMeters(bounds);
+  const detailRadiusM = area.detailRadiusM ?? DETAIL_BASEMAP_RADIUS_M;
+  const detailBounds = boundsAround(area.center, detailRadiusM);
   return {
     ...area,
     radiusM: Math.max(50, Math.min(20000, Math.round(radiusM))),
@@ -196,6 +209,9 @@ export function researchAreaWith(area: ResearchArea, changes: { radiusM?: number
     depthM: Math.round(size.depthM),
     imageUrl: researchImageUrl(bounds, style),
     style,
+    detailRadiusM,
+    detailBounds,
+    detailImageUrl: researchImageUrl(detailBounds, style),
   };
 }
 
