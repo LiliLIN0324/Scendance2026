@@ -20,7 +20,7 @@ import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
-import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
+import { proposeAddition, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
 import { AmapVenuePicker } from './amap-venue-picker';
@@ -30,6 +30,7 @@ import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { type PlanDiagnostic } from '../lib/diagnostics';
 import { readImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
+import { localPlan } from '../lib/local-plan';
 import { sameLayoutContent } from '../lib/persistence';
 import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicable } from '../lib/plan-artifact';
 import { buildOutcome, outcomeLines, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
@@ -133,7 +134,7 @@ interface ProposalView extends PendingPlan {
   guests?: number | null;
   /** 实际摆出的座位数（餐桌一组 4 座 + 散椅）。 */
   seats?: number;
-  /** 这版已经按「加座」重排过：仍不够就直接报场地最多能坐多少。 */
+  /** 这版已经按「加座」重排过：仍不够就直接报这一版排到几座。 */
   seatPriority?: boolean;
   /** 确认按钮点不动的原因；null = 可以确认。 */
   blocked: string | null;
@@ -154,6 +155,12 @@ function viewOfLocalPlan(plan: PlanProposal): ProposalView {
     guests: plan.guests ?? null, seats: plan.seats ?? 0, seatPriority: !!plan.seatPriority,
     review: plan.kind === 'review', skipped: plan.skipped ?? [], diagnostics: plan.diagnostics ?? [],
   };
+}
+
+/** 脚本那一路会带上「计划读白」：先让人核对计划，再看绿框；旧路径没有计划可念。 */
+function scriptSummaryOf(plan: PlanProposal): string {
+  const summary = (plan as PlanProposal & { summary?: string[] }).summary;
+  return Array.isArray(summary) && summary.length ? `${summary.join(' · ')}。` : '';
 }
 
 /** 给这一版钉上内容身份：确认时比内容指纹，不再比对象引用。 */
@@ -876,10 +883,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     setPhase('proposed');
     const planView = viewOfLocalPlan(plan);
     const tail = planView.review ? '还没落盘：点「确认布置」才挪，撤回就回原位。' : '还没落盘，点确认才写进画布。';
-    // 件数与原因只在下面那张卡的「本次结果」里说一遍，气泡不再复读数字。
+    // 脚本那一路先把计划念一遍（哪些区、各多大、几座），再报件数与原因；两件都摆不下时
+    // 原因跟着共享账本来，不再只留一个数字。明细仍完整留在下面那张卡。
+    const planned = scriptSummaryOf(plan);
+    const counted = outcomeLines(planView.outcome).filter(line => line.length > 0).join('；');
     say({ role: 'agent', amber: !!planView.blocked, text: planView.blocked
       ? `这版先给你看着改，结果明细在下面。确认按钮暂时点不动，改好场地或解锁再出一版。`
-      : `${intro}结果写在下面那张卡上。${tail}` });
+      : `${intro}${planned}${counted ? `${counted}。` : ''}${tail}` });
   }
 
   /**
@@ -992,7 +1002,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     }
     let plan: PlanProposal;
     const anchors = anchorsRef.current;
-    try { plan = proposePlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, stage: anchors.stage, checkin: anchors.checkin }); }
+    try { plan = localPlan({ base: live.current, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, variant, guests: briefRef.current.guests, seatPriority, layoutMode: briefRef.current.layoutMode, stage: anchors.stage, checkin: anchors.checkin }); }
     catch (error) {
       say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '这个尺度我摆不出来，说一句「12×9」这样告诉我新的长宽。' });
       setPhase('failed'); return;
@@ -1714,8 +1724,9 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
       {outcomeLines(plan.outcome).map((line, index) => <p key={index} className={index === 0 ? 'ap-outcome-line' : 'ap-small'}>{line}</p>)}
     </div>
     {guests > 0 && <p className="ap-seats" id="plan-seats">{short ? `座位 ${seats} / ${guests} · 还差 ${guests - seats}` : `按 ${guests} 人摆了 ${seats} 座`}</p>}
+    {/* 座位缺口先给改法：点「加座」才换更密的排法。两条排法都到顶了才下结论，说的是这一版排到几座，不是这块地最多几座。 */}
     {short && !plan.seatPriority && <p className="ap-small ap-seat-fix"><button type="button" className="ap-link" onClick={agent.addSeats}>加座，再排一版</button></p>}
-    {short && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">场地最多摆得下 {seats} 座；要再多人，得换更大的场地或按站立留空。</p>}
+    {short && plan.seatPriority && <p className="ap-small" id="plan-seat-cap">这一版排到 {seats} 座就是头；要再多人，得换更大的场地或按站立留空。</p>}
     {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {hold

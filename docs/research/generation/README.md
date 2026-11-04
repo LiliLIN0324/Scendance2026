@@ -1,6 +1,6 @@
 # 生成链路调研（2026-11-01）
 
-一句话 → 计划工件 → 确定性校验 → 一次终态提交。结论与规格见各篇；本仓只文档，场景脚本代码不在本仓。
+一句话 → 计划工件 → 确定性校验 → 一次终态提交。结论与规格见各篇；2026-11-01 六篇成文时场景脚本还只是设计，自 `feat/smart-build-scene-script` 枝起编译器已在 `frontend/components/room-organizer/lib/` 落地，文档与代码同枝演进。
 
 ## 阅读顺序
 
@@ -10,8 +10,9 @@
 4. [`parallel-systems-generation-2026-11-01.md`](parallel-systems-generation-2026-11-01.md) — 五个外部系统交叉验证共性，定位幕景缺的三件：计划工件、逐条诊断、生成前可行域。
 5. [`scendance-generation-synthesis-2026-11-01.md`](scendance-generation-synthesis-2026-11-01.md) — 收口：七条同构机制、场景脚本落地设计、验证证据、下一步排序。
 6. [`scene-script-code-review-2026-11-01.md`](scene-script-code-review-2026-11-01.md) — 对抗式评审（P0 1 / P1 4 / P2 9 / P3 8），每条带复现与最小修复。
+7. [`scendance-smart-build-p4-2026-11-04.md`](scendance-smart-build-p4-2026-11-04.md) — P4 收尾：生成前可行域逐格探测、读白只承诺可达座位、件/座单位收口、加座两扇门比对，附浏览器冒烟与三道门证据。
 
-前四篇是证据，第五篇是结论，第六篇是对第五篇落地代码的独立复核；以评审快照的 `file:line` 为准，后续代码变动可能使行号漂移。
+前四篇是证据，第五篇是结论，第六篇是对第五篇落地代码的独立复核，第七篇记录评审后 P4 阶段的增量决定与验证；均以成文时工作树的 `file:line` 为准，后续代码变动可能使行号漂移。
 
 ## 边界
 

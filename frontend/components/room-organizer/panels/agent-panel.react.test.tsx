@@ -199,7 +199,8 @@ describe('T-03 review in the Agent panel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /按这条改：把靠边的桌椅往场中挪/ }));
     expect(await screen.findByText('改法预览')).toBeTruthy();
-    expect(screen.getByText(/只挪位置，其他没动 · 挪了 2 件/)).toBeTruthy();
+    // 气泡先念一遍结果、卡片再给完整账单：这句在两张脸上都有，断言钉的是卡片那份。
+    expect(within(screen.getByLabelText('本次结果')).getByText(/只挪位置，其他没动 · 挪了 2 件/)).toBeTruthy();
     // T-UI：n/4 向导进度条已隐藏，右栏不再出现「第几步/共四步」的读数。
     expect(screen.queryByText(/\d\/4/)).toBeNull();
     await waitFor(() => expect(onPreview).toHaveBeenCalled());
