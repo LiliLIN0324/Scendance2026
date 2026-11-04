@@ -48,7 +48,11 @@ vi.mock('../contexts', () => ({
     collidingIds: new Set<string>(),
   }),
 }));
-vi.mock('./creative-studio', () => ({ useStudioAgent: () => studioMock }));
+vi.mock('./creative-studio', () => ({
+  useStudioAgent: () => studioMock,
+  // 测试壳没有 CreativeStudioProvider：画廊桥拿到 null 动作集后整体不渲染（与真实 Context 缺省行为一致）。
+  useLocalProjectBackup: () => null,
+}));
 
 const callbacks = {
   workbenchMode: 'layout' as WorkbenchMode,
@@ -828,5 +832,14 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     // 输入框不再有点名分支的中性 placeholder 话术。
     const input = screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;
     expect(input.placeholder).not.toContain('选中的 agent');
+  });
+
+  it('S1.1 画廊桥缺 Provider 时安静不渲染，活动脸与 Bingo 脸都不炸', () => {
+    state.layout = INITIAL_LAYOUT;
+    const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    // 本壳没有 CreativeStudioProvider，useLocalProjectBackup() 为 null：画廊整块缺席而非抛错。
+    expect(view.container.querySelector('.sc-local-activities')).toBeNull();
+    view.rerender(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    expect(view.container.querySelector('.sc-local-activities')).toBeNull();
   });
 });
