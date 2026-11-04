@@ -18,9 +18,10 @@ import {
 import { editorItemLimit } from '../lib/scene-presets';
 import { materialCount } from '../lib/structural-layout';
 import { requestWalkPointerLock } from '../lib/walk-engage';
+import { LocalGlbImport } from './local-glb-import';
+import { MaterialSymbol } from './material-symbol';
 import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
-import { MaterialSymbol } from './material-symbol';
 import type { CatalogPlacementGuard } from '../lib/catalog-placement-guard';
 import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
 import { MAX_FLOORS } from '../lib/constants';
@@ -151,6 +152,9 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
     if (first) selectOnly(first.id, { keepPanel: true });
   };
 
+  // 本机 GLB：桌面上能拖到这一格，手机上点同一格选文件；导入后自动选中并落进画布。
+  const importSlot = <LocalGlbImport variant={card ? 'card' : 'tile'} disabled={atLimit} onAdd={addMaterial}/>;
+
   return <aside ref={hostRef} className={`sc-library sc-compact-shelf${card ? ' is-card' : ''}`} aria-label="物料库">
     {!card && <div className="sc-shelf-top">
       <ShelfGrip shelfRef={hostRef}/>
@@ -160,12 +164,12 @@ export function ScendanceLibrary({ placeCatalogItem, controller, onClose, captur
       {card
         ? <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} roomSize={{ width: layout.width, depth: layout.height }}/>
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} importSlot={importSlot} roomSize={{ width: layout.width, depth: layout.height }}/>
           </div>
         </div>
         : <div className="sc-library-content">
           <div className="sc-library-materials">
-            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial}/>
+            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot}/>
           </div>
         </div>}
     </div>
