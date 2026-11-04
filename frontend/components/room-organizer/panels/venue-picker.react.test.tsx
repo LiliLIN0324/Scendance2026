@@ -46,7 +46,7 @@ vi.mock('../contexts', () => ({
     collidingIds: new Set<string>(),
   }),
 }));
-vi.mock('./creative-studio', () => ({ useStudioAgent: () => studioMock }));
+vi.mock('./creative-studio', () => ({ useStudioAgent: () => studioMock, useLocalProjectBackup: () => null }));
 
 const studio = { id: 'studio-1', name: '个人工作室', role: 'owner', displayName: '负责人' };
 const project = { id: 'p-1', name: '云端验证', studio_id: 'studio-1', revision: 3 };
