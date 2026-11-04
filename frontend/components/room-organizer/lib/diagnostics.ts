@@ -9,7 +9,11 @@ export type DiagnosticCode =
   | 'STRUCTURAL_COLLISION'
   | 'NO_SPOT'
   | 'CAPACITY_EXCEEDED'
-  | 'UNKNOWN_MATERIAL';
+  | 'UNKNOWN_MATERIAL'
+  /** 这一块区按尺寸连一组家具都摆不下（脚本路径：座位区太窄、舞台横不下）。 */
+  | 'ROLE_UNFIT'
+  /** 落点压在通道或预留区上：丢掉，不挪。 */
+  | 'KEEP_OUT';
 
 export interface PlanDiagnostic {
   severity: 'error' | 'warning';
@@ -20,14 +24,24 @@ export interface PlanDiagnostic {
   names: string[];
   /** 一句原因，接在「N 件没放进去：…（原因）」的括号里。 */
   message: string;
+  /**
+   * 座位口径的缺口：一件物料都没被拒（count 为 0），但这块地给不起要的那几个人。
+   * 有了它，同一件事只按座说一次，不再换算成「没放进去 75 件」这种没人会数的件数。
+   */
+  seats?: number;
+  /** 这块座位区给得起的座位上限，只在带 seats 的那条上出现。 */
+  capacity?: number;
 }
 
-const REASON: Record<DiagnosticCode, string> = {
+/** 每条原因的短说法：卡片和气泡都照这一句念，编译器也用它写 message。 */
+export const DIAGNOSTIC_REASON: Record<DiagnosticCode, string> = {
   OUT_OF_BOUNDS: '超出场地边界',
   STRUCTURAL_COLLISION: '压墙或立柱',
   NO_SPOT: '附近没有空位',
   CAPACITY_EXCEEDED: '超出场地容量',
   UNKNOWN_MATERIAL: '物料目录里没有这件',
+  ROLE_UNFIT: '这一区按尺寸摆不下这一组',
+  KEEP_OUT: '压在通道或预留区上',
 };
 
 export interface RejectedPiece {
@@ -49,7 +63,7 @@ export function rejectedDiagnostics(rejected: readonly RejectedPiece[]): PlanDia
     code,
     count: group.count,
     names: [...group.names],
-    message: REASON[code],
+    message: DIAGNOSTIC_REASON[code],
   }));
 }
 
@@ -64,6 +78,9 @@ export function mergeDiagnostics(
     const existing = merged.get(key);
     if (!existing) { merged.set(key, { ...diagnostic, names: [...diagnostic.names] }); continue; }
     existing.count += diagnostic.count;
+    // 座位缺口跟着同一条原因累加；上限取两次里更大的那个，同一区的两次合并不会变。
+    if (diagnostic.seats !== undefined) existing.seats = (existing.seats ?? 0) + diagnostic.seats;
+    if (diagnostic.capacity !== undefined) existing.capacity = Math.max(existing.capacity ?? 0, diagnostic.capacity);
     existing.severity = existing.severity === 'error' || diagnostic.severity === 'error' ? 'error' : 'warning';
     for (const name of diagnostic.names) if (!existing.names.includes(name)) existing.names.push(name);
   }
