@@ -62,3 +62,29 @@ export async function assetRecord(owner: string, bytes: Uint8Array, properties: 
   const hash=await sha256(bytes), format=(properties.format as string|undefined)??'glb';
   return { ...properties,id,format,byteSize:bytes.length,sha256:hash,storagePath:`${owner}/${id}/${hash}.${format}` };
 }
+
+/**
+ * 服务端尺寸归一化：与前端 `glb-normalize.ts` 同一套规则（最长边 ≥20 按厘米、z 轴明显最长才当 Z-up），
+ * 但服务端只收 `validateModel` 的原始包围盒，不引入 three。
+ * `sourceSize` 是 glTF 轴序：width=x、height=y、depth=z；输出为场景里用的宽 / 深 / 高（米）。
+ */
+export function normalizedAssetDimensions(sourceSize: { width: number; height: number; depth: number }) {
+  const longest = Math.max(sourceSize.width, sourceSize.height, sourceSize.depth);
+  const unit = longest >= 20 ? 'cm' : 'm';
+  const scale = unit === 'cm' ? 0.01 : 1;
+  const zUp = sourceSize.depth >= Math.max(sourceSize.width, sourceSize.height) * 1.25;
+  const oriented = zUp
+    ? { width: sourceSize.width, depth: sourceSize.height, height: sourceSize.depth }
+    : { width: sourceSize.width, depth: sourceSize.depth, height: sourceSize.height };
+  const round = (value: number) => Math.round(value * scale * 10000) / 10000;
+  return {
+    unit,
+    upAxis: zUp ? 'z' as const : 'y' as const,
+    sourceSize,
+    dimensions: {
+      width: round(oriented.width),
+      depth: round(oriented.depth),
+      height: round(oriented.height),
+    },
+  };
+}

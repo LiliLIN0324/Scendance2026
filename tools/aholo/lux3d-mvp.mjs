@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lux3D MVP — Aholo 集成 M0 验证脚本(docs/AHOLO-INTEGRATION-PLAN.md)
+// Lux3D MVP — Aholo 集成 M0 验证脚本(docs/15-Aholo集成规划.md)
 // 走通 text-to-3D / image-to-3D 全链路:创建任务 → 轮询 → 下载 ZIP → 解包 GLB → 报告。
 // 用法:
 //   set LUX3D_API_KEY=xxx

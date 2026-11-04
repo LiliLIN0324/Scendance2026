@@ -81,42 +81,42 @@
     "assets": [
       {
         "role": "table",
-        "file": "assets/models/table.glb",
+        "file": "assets/library/model/medieval-monastery-and-scriptorium-trestle-table-2a0801e0.glb",
         "sourceUrl": "https://3dassets.dev/assets/medieval-monastery-and-scriptorium-trestle-table-2a0801e0",
         "license": "CC0 1.0 Universal (archived declaration)",
         "sha256": "774b974756875549fd608e72f11cd24c6c1fdcb0d1c9f18381845591c2f446fc"
       },
       {
         "role": "chair",
-        "file": "assets/models/chair.glb",
+        "file": "assets/library/model/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7.glb",
         "sourceUrl": "https://3dassets.dev/assets/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7",
         "license": "CC0 1.0 Universal (archived declaration)",
         "sha256": "41ceb2de779a5f237bc4b77101199362e36a9526b3d8a64003d4404746cb7380"
       },
       {
         "role": "planter",
-        "file": "assets/models/planter.glb",
+        "file": "assets/library/model/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e.glb",
         "sourceUrl": "https://3dassets.dev/assets/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e",
         "license": "CC0 1.0 Universal (archived declaration)",
         "sha256": "5ff09e626c231efe65a4c163caea4b5fd84d002da304749161e472c666454f20"
       },
       {
         "role": "bin",
-        "file": "assets/models/bin.glb",
+        "file": "assets/library/model/bunker-shelter-construction-waste-bin-foot-pedal-f50124e7.glb",
         "sourceUrl": "https://3dassets.dev/assets/bunker-shelter-construction-waste-bin-foot-pedal-f50124e7",
         "license": "CC0 1.0 Universal (archived declaration)",
         "sha256": "3138813599ae643bae98c0d1c0765b5d9e2c47172a892df095e1fe41eddc74e6"
       },
       {
         "role": "parasol",
-        "file": "assets/models/parasol.glb",
+        "file": "assets/library/model/hero-shooter-harbour-payload-cafe-parasol-3af84c9f.glb",
         "sourceUrl": "https://3dassets.dev/assets/hero-shooter-harbour-payload-cafe-parasol-3af84c9f",
         "license": "CC0 1.0 Universal (archived declaration)",
         "sha256": "5711e4a9ea8f34e54f9c945109c3964a8b7654aed97fcb396e056fc814522d43"
       },
       {
         "role": "microphone",
-        "file": "assets/models/microphone.glb",
+        "file": "assets/library/model/live-music-venue-and-festival-stage-microphone-on-boom-b553a46d.glb",
         "sourceUrl": "https://3dassets.dev/assets/live-music-venue-and-festival-stage-microphone-on-boom-b553a46d",
         "license": "CC0 1.0 Universal (archived declaration)",
         "sha256": "ce4e75c881e8186395ec196ea4bbd6a747b4904f2c0811ba7e4beadf5b7dcfa0"

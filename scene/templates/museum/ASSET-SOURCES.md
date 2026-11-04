@@ -8,8 +8,8 @@
 
 | 本地文件 | 来源页面 | 归档许可 | 原文件 SHA-256 |
 |---|---|---|---|
-| `assets/models/chair.glb` | [Dining Chair Timber](https://3dassets.dev/assets/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7) | CC0 1.0 Universal | `41ceb2de779a5f237bc4b77101199362e36a9526b3d8a64003d4404746cb7380` |
-| `assets/models/plant.glb` | [Planter with Shrub](https://3dassets.dev/assets/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e) | CC0 1.0 Universal | `5ff09e626c231efe65a4c163caea4b5fd84d002da304749161e472c666454f20` |
+| `assets/library/model/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7.glb` | [Dining Chair Timber](https://3dassets.dev/assets/bedroom-and-living-room-furniture-dining-chair-timber-b8b614f7) | CC0 1.0 Universal | `41ceb2de779a5f237bc4b77101199362e36a9526b3d8a64003d4404746cb7380` |
+| `assets/library/model/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e.glb` | [Planter with Shrub](https://3dassets.dev/assets/street-food-market-and-food-trucks-planter-with-shrub-0eedba0e) | CC0 1.0 Universal | `5ff09e626c231efe65a4c163caea4b5fd84d002da304749161e472c666454f20` |
 
 完整来源地址、CDN 地址、字节数、三角形数、许可依据和哈希保存在 `assets/catalogue.json`。两件资产共 45,516 字节、948 个源三角形，不含外部图片。布局时可作等比例缩放与转向；合并导出可能把原始量化顶点解码为普通浮点属性，因此合并模型的哈希不与原道具相同。
 
