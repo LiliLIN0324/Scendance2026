@@ -615,6 +615,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   stairsLeadIn: true,
   sillHeight: true,
   groupId: true,
+  provenance: true,
 });
 const VEC2_KEYS = ['x', 'z'] as const;
 const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true, thickness: true, height: true, kind: true, status: true });

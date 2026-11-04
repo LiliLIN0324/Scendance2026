@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { recipeHash } from './recipe';
+import { recipeHash as recipeHashOfRecipe } from './recipe';
 import {
   buildRecipeProposal,
   deriveVariants,
+  recipeHash,
+  deriveSeededVariants,
   type RecipeBrief,
 } from './recipe-proposal';
 
@@ -97,7 +99,7 @@ describe('buildRecipeProposal', () => {
   it('variantHashes 与 variants 顺序一一对应（与独立 recipeHash 一致）', () => {
     const proposal = buildRecipeProposal(baseBrief);
     proposal.variants.forEach((v, i) => {
-      expect(proposal.variantHashes[i]).toBe(recipeHash(v));
+      expect(proposal.variantHashes[i]).toBe(recipeHashOfRecipe(v));
     });
   });
 
@@ -105,5 +107,42 @@ describe('buildRecipeProposal', () => {
     const proposal = buildRecipeProposal(baseBrief);
     const defaultVariants = deriveVariants(proposal.base);
     expect(defaultVariants).toHaveLength(2);
+  });
+});
+
+describe('recipeHash (prompt 级)', () => {
+  it('8. 同输入两次完全相等（确定性），且输出为 10 位 hex', () => {
+    const a = recipeHash({ seed: 7, prompt: 'banquet for 80' });
+    const b = recipeHash({ seed: 7, prompt: 'banquet for 80' });
+    expect(a).toBe(b);
+    expect(a).toMatch(/^[0-9a-f]{10}$/);
+  });
+
+  it('9. 改 prompt 一个字 → hash 不同；改 density / fingerprint 同样不同', () => {
+    const base = recipeHash({ seed: 7, prompt: 'banquet for 80' });
+    expect(recipeHash({ seed: 7, prompt: 'banquet for 81' })).not.toBe(base);
+    expect(recipeHash({ seed: 7, prompt: 'banquet for 80', density: 0.5 })).not.toBe(base);
+    expect(recipeHash({ seed: 7, prompt: 'banquet for 80', fingerprint: 'fp-x' })).not.toBe(base);
+    expect(recipeHash({ seed: 8, prompt: 'banquet for 80' })).not.toBe(base);
+  });
+});
+
+describe('deriveSeededVariants', () => {
+  it('10. deriveSeededVariants(7, 3) 返回 3 个数，第 0 个是 7，其余互不相等且 ≠ 7', () => {
+    const out = deriveSeededVariants(7, 3);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toBe(7);
+    expect(out[1]).not.toBe(7);
+    expect(out[2]).not.toBe(7);
+    expect(out[1]).not.toBe(out[2]);
+    for (const v of out) {
+      expect(Number.isInteger(v)).toBe(true);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(2 ** 31);
+    }
+  });
+
+  it('11. count=1 时只返回 [seed] 本身', () => {
+    expect(deriveSeededVariants(42, 1)).toEqual([42]);
   });
 });
