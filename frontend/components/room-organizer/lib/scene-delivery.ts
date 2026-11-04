@@ -10,7 +10,7 @@ import { buildRoom } from '../three/room-builder';
 import { buildStructureShell } from '../three/structure-builder';
 import { computeWallOpenings } from '../three/wall-openings';
 import { layoutToBackendScene } from './backend-adapter';
-import { deliverableInventory } from './deliverable-inventory';
+import { deliverableInventory, layoutProvenanceBreakdown } from './deliverable-inventory';
 import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS } from './event-operations';
 import { blankHandoff, effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from './scene-handoff';
 import type { RoomLayout } from './types';
@@ -93,6 +93,8 @@ export async function sceneDeliveryJson(layout: RoomLayout, snapshot?: DeliveryS
     execution: await deliveryExecution(layout), materials: deliveryMaterials(layout),
     operations: await deliveryOperations(layout, checkins), operationsTimeZone: 'Asia/Shanghai',
     source: { kind: 'editor-snapshot', layoutId: layout.id ?? null },
+    // 第9批 UI：按 provenance.source 分桶计数；场地自带件不计入布置件。
+    provenance: layoutProvenanceBreakdown(layout),
     note: 'assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。' }, null, 2);
 }
 

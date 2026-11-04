@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 IA 重划 · 对标灵感调研总览</title>
+<style>
+  :root{
+    --stone:#F4F5F7;
+    --paper:#FFFFFF;
+    --ink:#20242A;
+    --ink-soft:#5A616B;
+    --ink-faint:#8A919C;
+    --hairline:#E2E5E9;
+    --green:#4A7C59;
+    --green-deep:#3A6347;
+    --green-soft:#EAF0EC;
+    --amber-bg:#F4F1EA;
+    --amber-bd:#E4DCC8;
+    --amber-tx:#7A6A3F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--stone);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:48px 28px 80px}
+  header.masthead{border-bottom:1px solid var(--hairline);padding-bottom:28px;margin-bottom:30px}
+  h1{font-size:26px;font-weight:650;letter-spacing:.01em}
+  .sub{margin-top:10px;color:var(--ink-soft);font-size:14px;max-width:820px}
+  .meta{margin-top:14px;font-size:13px;color:var(--ink-faint)}
+  .meta strong{color:var(--green-deep);font-weight:600}
+
+  h2.sec{font-size:19px;font-weight:650;margin:44px 0 6px}
+  p.sec-note{font-size:13px;color:var(--ink-faint);margin-bottom:18px;max-width:820px}
+
+  .shard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+  .card{
+    background:var(--paper);
+    border:1px solid var(--hairline);
+    border-radius:10px;
+    padding:22px 22px 20px;
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .card h3{font-size:16px;font-weight:650}
+  .shard-role{font-size:13px;color:var(--ink-soft)}
+  .shard-count{font-size:12.5px;color:var(--ink-faint)}
+  .shard-count b{color:var(--ink);font-weight:600}
+  .shard-sugg{list-style:none;font-size:13px;color:var(--ink-soft)}
+  .shard-sugg li{padding-left:16px;position:relative;margin-bottom:6px}
+  .shard-sugg li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:1px;background:var(--green)}
+  .shard-links{display:flex;gap:14px;margin-top:auto;padding-top:12px;border-top:1px solid var(--hairline);font-size:13px}
+  .shard-links a{color:var(--green-deep);text-decoration:none;border-bottom:1px solid var(--hairline)}
+  .shard-links a:hover{border-bottom-color:var(--green-deep)}
+  .shard-links a.md{color:var(--ink-soft)}
+
+  .filters{display:flex;flex-wrap:wrap;gap:22px;margin:6px 0 14px}
+  .filter-group{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .filter-label{font-size:12px;color:var(--ink-faint);margin-right:6px;letter-spacing:.08em}
+  button.fbtn{
+    font:inherit;font-size:13px;cursor:pointer;
+    background:var(--paper);color:var(--ink-soft);
+    border:1px solid var(--hairline);border-radius:999px;
+    padding:5px 14px;
+  }
+  button.fbtn:hover{border-color:var(--ink-faint)}
+  button.fbtn.active{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+  .count-line{font-size:13px;color:var(--ink-faint);margin-bottom:12px}
+  .empty-hint{display:none;background:var(--paper);border:1px dashed var(--hairline);border-radius:10px;padding:18px 20px;font-size:13.5px;color:var(--ink-soft);margin-bottom:14px}
+
+  .table-scroll{overflow-x:auto;border:1px solid var(--hairline);border-radius:10px;background:var(--paper)}
+  table{border-collapse:collapse;width:100%;min-width:860px;font-size:13px}
+  th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--hairline)}
+  th{background:var(--stone);font-size:12px;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr.hidden{display:none}
+  td.insp a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--hairline);font-weight:600}
+  td.insp a:hover{color:var(--green-deep);border-bottom-color:var(--green-deep)}
+  td.insp .mul{display:block;font-size:12px;color:var(--ink-faint);font-weight:400;margin-top:2px}
+  .badge{
+    display:inline-block;font-size:11.5px;padding:3px 10px;border-radius:999px;
+    border:1px solid var(--hairline);color:var(--ink-soft);white-space:nowrap;
+  }
+  .b-直接复用{background:var(--green-soft);border-color:var(--green-soft);color:var(--green-deep)}
+  .b-需改造{background:var(--amber-bg);border-color:var(--amber-bd);color:var(--amber-tx)}
+  .b-新增{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .b-后置{background:transparent;color:var(--ink-faint)}
+  .stat-note{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:4px}
+  .shard-tag{font-size:12px;color:var(--ink-faint)}
+  .slice-tag{font-weight:600;white-space:nowrap}
+  .anchor{font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:11.5px;color:var(--ink-soft)}
+  .open-q{font-size:12.5px;color:var(--green-deep);font-weight:600;white-space:nowrap}
+  .open-dash{color:var(--ink-faint)}
+
+  .q-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px}
+  .q-card{background:var(--paper);border:1px solid var(--hairline);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:10px}
+  .q-card h3{font-size:15.5px;font-weight:650}
+  .q-card .ledger-q{font-size:12.5px;color:var(--ink-soft);background:var(--stone);border-radius:6px;padding:8px 10px}
+  .q-card .ev{font-size:13px;color:var(--ink-soft)}
+  .q-card .ev b{color:var(--ink);font-weight:600}
+  .owner-pending{
+    margin-top:auto;display:inline-block;width:max-content;
+    font-size:12px;color:var(--amber-tx);background:var(--amber-bg);
+    border:1px solid var(--amber-bd);border-radius:999px;padding:3px 12px;
+  }
+
+  .s4-note{
+    background:var(--paper);border:1px solid var(--hairline);border-left:3px solid var(--green);
+    border-radius:10px;padding:20px 22px;font-size:13.5px;color:var(--ink-soft);
+  }
+  .s4-note b{color:var(--ink)}
+  .s4-note ul{margin:8px 0 0 18px}
+  .s4-note li{margin-bottom:4px}
+
+  footer{margin-top:52px;border-top:1px solid var(--hairline);padding-top:18px;font-size:12.5px;color:var(--ink-faint)}
+
+  @media (max-width:640px){
+    .wrap{padding:32px 16px 60px}
+    h1{font-size:22px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>幕景 IA 重划 · 对标灵感调研总览</h1>
+    <p class="sub">本页把「活动 / 审校 Bingo / 空间物料」三块灵感板的对标产品与模式逐行映射到 S1 / S2 / S3 切片与导演台账锚点，并汇总 Q1–Q4 待拍板开放项。本页只做通读与综合，不做新的联网调研；所有产品事实以三块板已核实的官方 URL 为准，代码锚点以导演台账为准。</p>
+    <p class="meta">日期 <strong>2026-11-04</strong> · 基线分支 <strong>feat/smart-build-scene-script</strong>（基线提交 a87c156）· 冷石 #F4F5F7 + 品牌绿 #4A7C59</p>
+  </header>
+
+  <!-- ================= 三分片入口卡 ================= -->
+  <h2 class="sec">三分片入口</h2>
+  <p class="sec-note">每片一张板（HTML 可筛选阅读）+ 一份底稿（MD 含核实记录与放弃清单）。</p>
+  <div class="shard-grid">
+
+    <div class="card">
+      <h3>分片 A · 活动</h3>
+      <p class="shard-role">负责角色：<b>活动</b> —— 左轨四形中唯一真对话与生成入口；开场画廊、AI 主对话工作台、进度表达、成员条沉底。</p>
+      <p class="shard-count"><b>12</b> 张卡 · <b>12</b> 个产品/模式</p>
+      <ul class="shard-sugg">
+        <li>开场画廊＝卡片冷启动入口：以本机活动面板为底座升级（S1.1），卡面＝画布快照封面＋活动名＋状态短词，选卡直接进生成，不弹配置向导。</li>
+        <li>空态从「分派话术」换成「动作建议短清单＋活动卡行」：拆除旧空态与假分派整块。</li>
+        <li>对话与画布同屏共生：对话是细化通道、3D 画布是结果本体；选中即上下文、每任务一会话；生成三道门接线不动。</li>
+        <li>进度按状态分线流转（进行中/已完成），不学分步向导；台账暂无进度 UI 锚点，列开放设计项，不进 S1 回归面。</li>
+        <li>成员条沉底＝真人在线状态小点：现有消息底座复用，在线状态点为新增小项；严守真人与 agent 的边界，成员条不挂 agent。</li>
+      </ul>
+      <div class="shard-links">
+        <a href="activity-ai-workbench-gallery-2026-11-04.html">灵感板 HTML</a>
+        <a class="md" href="activity-ai-workbench-gallery-2026-11-04.md">调研底稿 MD</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>分片 B · 审校 Bingo</h3>
+      <p class="shard-role">负责角色：<b>审校 Bingo</b> —— 画面钉点 → 意见线程 → 标记解决 → 回流制作者台账；不承担布置生成对话。</p>
+      <p class="shard-count"><b>7</b> 张卡 · <b>7</b> 个产品/模式</p>
+      <ul class="shard-sugg">
+        <li>钉点状态机不新增第三态：open / resolved 足够；补「解决即隐藏＋未读排序＋只看我的线程＋点击跳回画布」四件事。</li>
+        <li>客户分享页做无编辑只读页：view / comment 两档起步，默认禁下载，本地演示边界在页面诚实标注。</li>
+        <li>新增 internal / public 评论分层：制作者侧内部备注对客户不可见；本地先落地、云端后置。</li>
+        <li>一键修复长成「待确认建议」：体检 issue → 预览 → 唯一确认，全程过三道门，客户侧不见修复按钮。</li>
+        <li>Bingo 脸做纯状态台＋「准备客户评审 / 导出评审包」两口令，不保留自由对话输入条（Q3 待 owner 拍板）。</li>
+      </ul>
+      <div class="shard-links">
+        <a href="review-bingo-canvas-annotation-2026-11-04.html">灵感板 HTML</a>
+        <a class="md" href="review-bingo-canvas-annotation-2026-11-04.md">调研底稿 MD</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>分片 C · 空间 / 物料</h3>
+      <p class="shard-role">负责角色：<b>空间</b>（场与壳的工具面板）＋ <b>物料</b>（道具库与生成工具面板）—— 两者不是人格，不维持对称式聊天窗。</p>
+      <p class="shard-count"><b>20</b> 张卡 · <b>8</b> 个产品（同产品多卡已在下表合并）</p>
+      <ul class="shard-sugg">
+        <li>空间脸改「环境行列表」范式（一行＝一个场地；active / 显隐 / 可隔离 / 双击改名），承接现有环境槽与建场面板，只收入口不重写管线。</li>
+        <li>物料脸按统一资产库解剖重构：搜索框＋类型子标签＋网格卡＋右侧「来源/时间/版本」详情列。</li>
+        <li>生成收为面板内「＋ 一框」：一个生成框＋输入类型芯片，内部模式名不上界面；生成结果落回库网格。</li>
+        <li>拖入落点规则显式化：道具拖到选中物附近＝关联摆放；拖到空画布＝新放一件；材质拖到已放物料上＝换材质。</li>
+        <li>面板去人格化：单位是「行」和「卡」不是「话」；选中驱动整换；状态只给短词；空态一句诚实话；默认落点是库/列表，不是 AI。</li>
+      </ul>
+      <div class="shard-links">
+        <a href="space-materials-tool-panels-2026-11-04.html">灵感板 HTML</a>
+        <a class="md" href="space-materials-tool-panels-2026-11-04.md">调研底稿 MD</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= 灵感 → 切片落点总表 ================= -->
+  <h2 class="sec">灵感 → 切片落点总表</h2>
+  <p class="sec-note">覆盖三块板全部对标产品/模式：A 12 ＋ B 7 ＋ C 8（同产品多卡合并为一行并注明卡数），共 27 行。处置态以各板卡片标注为准；C 组合并行写主态并注明其余处置态分布。锚点照抄分片底稿，行号仅在导演台账中可查到的保留，查不到的只写文件名。</p>
+
+  <div class="filters">
+    <div class="filter-group" id="sliceFilter">
+      <span class="filter-label">切片</span>
+      <button class="fbtn active" data-f="all">全部</button>
+      <button class="fbtn" data-f="S1">S1 活动</button>
+      <button class="fbtn" data-f="S2">S2 审校</button>
+      <button class="fbtn" data-f="S3">S3 面板化</button>
+      <button class="fbtn" data-f="S4">S4 清理回归</button>
+    </div>
+    <div class="filter-group" id="statusFilter">
+      <span class="filter-label">处置态</span>
+      <button class="fbtn active" data-f="all">全部</button>
+      <button class="fbtn" data-f="直接复用">直接复用</button>
+      <button class="fbtn" data-f="需改造">需改造</button>
+      <button class="fbtn" data-f="新增">新增</button>
+      <button class="fbtn" data-f="后置">后置</button>
+    </div>
+  </div>
+  <p class="count-line" id="countLine">共 27 行</p>
+  <div class="empty-hint" id="emptyHint">该切片无外部产品灵感可映射——S4 是代码清理与全量回归切片，见下方 S4 区块说明。</div>
+
+  <div class="table-scroll">
+    <table id="mainTable">
+      <thead>
+        <tr>
+          <th>灵感（产品 / 模式）</th>
+          <th>来源分片</th>
+          <th>处置态</th>
+          <th>落点切片</th>
+          <th>台账锚点（照抄底稿）</th>
+          <th>关联开放项</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- 分片 A · S1 -->
+        <tr data-slice="S1" data-status="直接复用">
+          <td class="insp"><a href="https://github.com/wustwyh/tuijian" target="_blank" rel="noopener">tuijian 推鉴</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-直接复用">直接复用</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">agent-panel.tsx:1944 · PlanHome:1947 · ProposalCard:1967 · 计划卡:1968-1979 · LayoutAgentProvider:264</td>
+          <td><span class="open-q">Q2</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="需改造">
+          <td class="insp"><a href="https://www.notion.so/templates" target="_blank" rel="noopener">Notion Templates</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">local-activities-panel.tsx（台账锚定「升级为画廊卡片入口」，无行号）</td>
+          <td><span class="open-q">Q2</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="需改造">
+          <td class="insp"><a href="https://www.airtable.com" target="_blank" rel="noopener">Airtable Gallery View</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">local-activities-panel.tsx（画廊卡片解剖：封面＋标题＋关键字段）</td>
+          <td><span class="open-q">Q2</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="需改造">
+          <td class="insp"><a href="https://help.figma.com/hc/en-us/articles/30926159906967" target="_blank" rel="noopener">Figma File Browser</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">local-activities-panel.tsx（最近网格＋草稿/已归档分区）</td>
+          <td><span class="open-q">Q2</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="直接复用">
+          <td class="insp"><a href="https://help.miro.com/hc/en-us/articles/360017571294" target="_blank" rel="noopener">Miro Dashboard</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-直接复用">直接复用</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">local-activities-panel.tsx（工具栏：搜索＋默认按最近打开排序；操作收进溢出菜单）</td>
+          <td><span class="open-q">Q2</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="直接复用">
+          <td class="insp"><a href="https://www.framer.com/ai/" target="_blank" rel="noopener">Framer AI</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-直接复用">直接复用</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">agent-panel.tsx:1910-1930,1939 · :1827 · LayoutAgentProvider:264</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="需改造">
+          <td class="insp"><a href="https://www.notion.com/en-gb/help/notion-agent" target="_blank" rel="noopener">Notion Agent</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">agent-panel.tsx:1944（空态＝动作建议短清单，非空白输入框）</td>
+          <td><span class="open-q">Q1</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="需改造">
+          <td class="insp"><a href="https://www.dora.run/" target="_blank" rel="noopener">Dora AI</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">PlanHome:1947 · GenProgress:1962（生成前不出工具坞）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="直接复用">
+          <td class="insp"><a href="https://viggle.ai" target="_blank" rel="noopener">Viggle PINOC</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-直接复用">直接复用</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">room-organizer.tsx:2017（结果态画布充满画面，工具不进活动脸空态）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="需改造">
+          <td class="insp"><a href="https://linear.app/changelog" target="_blank" rel="noopener">Linear 进度图（Projects / Cycles）</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">计划卡 agent-panel.tsx:1968-1979（台账暂无进度 UI 现成锚点，开放设计项，不进 S1 回归面）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="新增">
+          <td class="insp"><a href="https://slack.com/intl/zh-cn/help/articles/201864558" target="_blank" rel="noopener">Slack Presence</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-新增">新增</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">member-chat.tsx · team-messages.ts · account-team-panel.tsx · team-data.ts（底座复用，在线状态点为新增小项）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S1" data-status="后置">
+          <td class="insp"><a href="https://linear.app/docs/agents-in-linear" target="_blank" rel="noopener">Linear Agents（反向边界教材）</a></td>
+          <td><span class="shard-tag">A · 活动</span></td>
+          <td><span class="badge b-后置">后置</span></td>
+          <td class="slice-tag">S1</td>
+          <td class="anchor">member-chat.tsx（守 D5/D6 边界：成员条不接 agent 路由；真多智能体后置）</td>
+          <td><span class="open-q">Q1</span></td>
+        </tr>
+
+        <!-- 分片 B · S2 -->
+        <tr data-slice="S2" data-status="需改造">
+          <td class="insp"><a href="https://help.figma.com/hc/en-us/articles/360041547593-View-and-manage-comments" target="_blank" rel="noopener">Figma 评论（Design / FigJam）</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">review-pins.ts:8 · review-pin-layer.tsx · bingo-audit-card.tsx:22-25</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S2" data-status="新增">
+          <td class="insp"><a href="https://help.frame.io/en/articles/9105251-commenting-on-your-media" target="_blank" rel="noopener">Frame.io 锚点评审</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-新增">新增</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">review-share.ts:18,59,71,177 · review-share-page.tsx:146-152（internal / public 分层形状预留）</td>
+          <td><span class="open-q">Q4</span></td>
+        </tr>
+        <tr data-slice="S2" data-status="需改造">
+          <td class="insp"><a href="https://help.dropbox.com/zh-cn/view-edit/dropbox-replay-live-review" target="_blank" rel="noopener">Dropbox Replay 分享评审</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">review-share.ts:18,177 · app/review/[id]/ · review-share-page.tsx:146-152（权限分档＋默认禁下载）</td>
+          <td><span class="open-q">Q4</span></td>
+        </tr>
+        <tr data-slice="S2" data-status="需改造">
+          <td class="insp"><a href="https://developers.google.cn/workspace/docs/api/how-tos/suggestions?hl=zh-cn" target="_blank" rel="noopener">Google Docs 建议模式（Suggesting）</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">layout-review.ts:26-27,240,583 · review-pins.ts:8（修复＝待确认建议，过三道门）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S2" data-status="新增">
+          <td class="insp"><a href="https://help.pitch.com/en/articles/8575905-invite-guests-to-collaborate-on-presentations" target="_blank" rel="noopener">Pitch 幻灯片评审</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-新增">新增</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">review-share-page.tsx:146-152 · bingo-audit-card.tsx:22-25（view / comment / edit 三档枚举预留）</td>
+          <td><span class="open-q">Q4</span></td>
+        </tr>
+        <tr data-slice="S2" data-status="直接复用">
+          <td class="insp"><a href="https://www.markup.io/" target="_blank" rel="noopener">Markup.io 访客钉评</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-直接复用">直接复用</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">review-share.ts:177 · review-share-page.tsx:146-152（免注册留评＝本地演示现状，线程钉在钉点旁）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S2" data-status="后置">
+          <td class="insp"><a href="https://help.miro.com/hc/en-us/articles/360017730873-Comments" target="_blank" rel="noopener">Miro 通知与线程</a></td>
+          <td><span class="shard-tag">B · 审校</span></td>
+          <td><span class="badge b-后置">后置</span></td>
+          <td class="slice-tag">S2</td>
+          <td class="anchor">bingo-feedback.ts · bingo-audit-card.tsx:22-25（云端通知留接口注释，本地先承接回流）</td>
+          <td><span class="open-q">Q4</span></td>
+        </tr>
+
+        <!-- 分片 C · S3 -->
+        <tr data-slice="S3" data-status="需改造">
+          <td class="insp"><a href="https://developer.playcanvas.com/user-manual/supersplat/editor/scene-management/" target="_blank" rel="noopener">SuperSplat</a><span class="mul">4 张卡：行列表主范本 · 选中态属性段 · 零聊天纯动作条 · 删除分级语义</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-需改造">需改造</span><span class="stat-note">另 新增 2 · 直接复用 1</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">agent-panel.tsx:2006-2014 · room-organizer.tsx:2017 环境槽 · reconstruction-panel.tsx</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="需改造">
+          <td class="insp"><a href="https://docs.spline.design/basics/understanding-splines-ui" target="_blank" rel="noopener">Spline</a><span class="mul">3 张卡：侧栏三标签（场景树/资产库佐证）· 选中驱动属性整换 · 工具坞「＋」清单</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-需改造">需改造</span><span class="stat-note">另 新增 1</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">materialSlot room-organizer.tsx:2017 · 共用输入框 agent-panel.tsx:2030-2056（空间/物料脸收为工具动作）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="需改造">
+          <td class="insp"><a href="https://meshy.cn/id/blog/workspace3" target="_blank" rel="noopener">Meshy Workspace 3.0</a><span class="mul">3 张卡：My Assets 统一资产库 · 创建条＋短指令预设 · 左模式侧栏（反面教材）</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-需改造">需改造</span><span class="stat-note">另 新增 1 · 后置 1</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">generated-model-library.tsx · material-customization.tsx · material-checkin-panel.tsx</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="后置">
+          <td class="insp"><a href="https://docs.omniverse.nvidia.com/extensions/latest/ext_core/ext_layers.html" target="_blank" rel="noopener">NVIDIA Omniverse</a><span class="mul">2 张卡：资产层/布局层分离 · 资产浏览器按需开启（理念佐证，不抄结构）</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-后置">后置</span><span class="stat-note">2 卡均为后置佐证</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">materialSlot room-organizer.tsx:2017（佐证「库＝仓库、画布＝摆放」分层）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="新增">
+          <td class="insp"><a href="https://worldlabs.mintlify.app/" target="_blank" rel="noopener">World Labs Marble</a><span class="mul">3 张卡：omnibox 单框收所有输入 · 作品库与生成区分离 · prompt 范例句占位</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-新增">新增</span><span class="stat-note">另 需改造 1 · 直接复用 1</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">room-organizer.tsx（生成场地入口；行号以 S3 实测为准）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="需改造">
+          <td class="insp"><a href="https://learn.poly.cam/hc/en-us/articles/35174492720404-How-to-Create-a-Scene" target="_blank" rel="noopener">Polycam Scenes</a><span class="mul">1 张卡：layers 面板内 Add 钮（加捕获动作在列表面板里）</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-需改造">需改造</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">room-organizer.tsx:2017 环境槽（吸附对齐收为后置）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="新增">
+          <td class="insp"><a href="https://developer.playcanvas.com/en/tutorials/importing-first-model-and-animation/" target="_blank" rel="noopener">PlayCanvas Editor</a><span class="mul">2 张卡：拖入落点三档 · 资产面板「＋」New Asset 菜单</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-新增">新增</span><span class="stat-note">另 需改造 1</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">room-organizer.tsx:2017（placeCatalogItem 放置动作，落点规则显式化）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+        <tr data-slice="S3" data-status="需改造">
+          <td class="insp"><a href="https://docs.blender.org/manual/en/latest/editors/asset_browser.html" target="_blank" rel="noopener">Blender Asset Browser</a><span class="mul">2 张卡：左目录树/中预览网格/右详情 · 资产类型决定拖入落点</span></td>
+          <td><span class="shard-tag">C · 空间/物料</span></td>
+          <td><span class="badge b-需改造">需改造</span><span class="stat-note">另 新增 1</span></td>
+          <td class="slice-tag">S3</td>
+          <td class="anchor">material-customization.tsx（目录式筛选＝库分类，非模式切换）</td>
+          <td><span class="open-dash">—</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================= Q1-Q4 决策桌 ================= -->
+  <h2 class="sec">开放项 Q1–Q4 决策桌</h2>
+  <p class="sec-note">台账 §6 原文问题照录；证据与倾向来自分片底稿。以下均为研究建议，不替 owner 拍板。</p>
+  <div class="q-grid">
+
+    <div class="q-card">
+      <h3>Q1 · 活动显示名与毛绒头像</h3>
+      <p class="ledger-q">台账原文：活动脸显示名确定就叫「活动」？door 形态的毛绒头像是否保留。</p>
+      <p class="ev"><b>分片 A 证据与倾向</b>（Linear Agents 卡旁证）：Figma / Miro / Framer 的导航都用缩略图＋文字、不用吉祥物；Notion 的拟人脸在右下角而不在导航轨。倾向：活动脸用简洁标识；毛绒头像如保留，仅作开场画廊的品牌氛围，不承担左轨导航语义。</p>
+      <span class="owner-pending">待 owner 拍板</span>
+    </div>
+
+    <div class="q-card">
+      <h3>Q2 · 画廊是否同刀 S1</h3>
+      <p class="ledger-q">台账原文：活动画廊是否挤进 S1 同一刀，还是拆 S1.1 紧随其后（台账建议拆，降低主刀回归面）。</p>
+      <p class="ev"><b>分片 A 证据与倾向</b>：画廊以本机活动面板为底座升级，涉及冷启动卡、草稿/归档分区、工具栏搜索与排序等多个新件——tuijian / Notion Templates / Airtable Gallery / Figma File Browser / Miro Dashboard 五张卡全部落在 S1.1。分片 A 明确支持拆刀。</p>
+      <span class="owner-pending">待 owner 拍板</span>
+    </div>
+
+    <div class="q-card">
+      <h3>Q3 · Bingo 脸输入条去留</h3>
+      <p class="ledger-q">台账原文：Bingo 审校脸是否保留输入条（只允许「准备客户评审 / 导出评审包」类口令），还是做成无对话的纯状态台。</p>
+      <p class="ev"><b>分片 B 证据与倾向</b>（§9-Q3）：Figma / Frame.io / Markup.io / Pitch 四方证据一致——审阅侧核心动作是钉点、解决、看计数，没有一个把审阅工作台做成自由对话框。建议纯状态台＋两口令；若 owner 希望保留「帮写评审话术」，退化方案＝状态台＋单口令输入条（仅预设意图）。</p>
+      <span class="owner-pending">待 owner 拍板</span>
+    </div>
+
+    <div class="q-card">
+      <h3>Q4 · 评审云端化排期</h3>
+      <p class="ledger-q">台账原文：评审云端化的排期窗口（决定 S2 预留接口的形状，但不允许在 S2 偷偷实现）。</p>
+      <p class="ev"><b>分片 B 证据与倾向</b>（§9-Q4）：预留形状参照——public / internal 评论分层（Frame.io）、view / comment / edit 三档（Pitch）、只看 / 看并评论＋口令＋默认禁下载（Replay）、未读排序 / 只看我的线程 / 邮件跳回落点（Figma）、@提及与通知中心（Miro）。S2 动作＝类型注释与本地演示边界注释里写明上述枚举，本轮不写云端调用。</p>
+      <span class="owner-pending">待 owner 拍板</span>
+    </div>
+
+  </div>
+
+  <!-- ================= S4 区块 ================= -->
+  <h2 class="sec">S4 · 清理与全量回归</h2>
+  <div class="s4-note">
+    <b>S4（任务板 #9）是代码清理与回归切片，没有任何外部产品灵感可映射，总表不为它硬凑产品行。</b>
+    台账口径：
+    <ul>
+      <li>修 agent-panel.tsx:341 的 setState-in-render 报错（不在 P4 diff 内，单列修复，不顺手在 S1/S2 夹带）；</li>
+      <li>处理门洞钮「品牌 / 展开 / 进总控」三意问题；</li>
+      <li>全量过回归门：7 个 lib 套件＋react 套件全绿、tsc 与构建 exit 0、浏览器冒烟（生成三道门、评审评论/钉解决回流、四脸切换各一条主路径）；</li>
+      <li>更新 docs/research/ 与本台账的行号漂移。</li>
+    </ul>
+  </div>
+
+  <!-- ================= 放弃候选 ================= -->
+  <h2 class="sec">未能核实而放弃的候选</h2>
+  <p class="sec-note">从三份底稿各自的放弃清单汇总：A 4 条 · B 5 条 · C 5 条，共 14 条。这些候选不进三块灵感板，也不进上表。</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>候选</th><th>所属分片</th><th>放弃原因</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>会议 networking bingo 类模式</td><td><span class="shard-tag">A</span></td><td>未联网核实；判断它是活动运营玩法而非工作台 IA 参考，与「成员条＝真人在线状态」目标距离远，不取。如需要可下一轮单独补。</td></tr>
+        <tr><td>Spline V2 / Meshy / Hyper3D Rodin / Polycam Scenes</td><td><span class="shard-tag">A</span></td><td>备忘录已逐家打分并判「工具箱目录反模式」，本分片引用其结论即可，不重复取材。</td></tr>
+        <tr><td>FigJam frame 级 UX 单独取材</td><td><span class="shard-tag">A</span></td><td>FigJam 看板与 Figma 设计文件在同一文件浏览器同库陈列（已核实），frame 级交互对幕景开场画廊无直接借鉴价值。</td></tr>
+        <tr><td>Canva 模板库</td><td><span class="shard-tag">A</span></td><td>未联网核实；与 Notion Templates 结论高度重叠，不为增量而取材。</td></tr>
+        <tr><td>Pastel（usepastel.io）</td><td><span class="shard-tag">B</span></td><td>本轮未联网打开其产品/功能页，交互细节无法核实，不进灵感板。</td></tr>
+        <tr><td>Notion 评论</td><td><span class="shard-tag">B</span></td><td>本轮未联网核实其钉点/线程细节，不进灵感板。</td></tr>
+        <tr><td>Vimeo 评审（含其 review 流程）</td><td><span class="shard-tag">B</span></td><td>本轮未联网核实，不进灵感板。</td></tr>
+        <tr><td>Frame.io「最终核准 / Approve vs Changes requested」完整审批流</td><td><span class="shard-tag">B</span></td><td>官方帮助仅证实评论体系；审批状态机细节本轮只有第三方转述，不进卡片事实，留待下轮核实。</td></tr>
+        <tr><td>Figma Slack / Teams 通知集成</td><td><span class="shard-tag">B</span></td><td>仅帮助页一行事实，作通知回流佐证，不单列候选。</td></tr>
+        <tr><td>Hyper3D Rodin</td><td><span class="shard-tag">C</span></td><td>备忘录已判「物件列表＋新建/添加/移除作主面板」为反模式，沿用备忘录评分（Fit 2/5），本分片不重复调研。</td></tr>
+        <tr><td>Viggle PINOC Scene</td><td><span class="shard-tag">C</span></td><td>备忘录已覆盖其「世界优先大气」氛围参考；它是「描述→进入空间」的生成产品而非工具面板，对面板化主题增益有限。</td></tr>
+        <tr><td>Dora AI / Luma</td><td><span class="shard-tag">C</span></td><td>属「一句话生成整包」的生成主路径参照，不是空间/物料面板参照；归活动分片，不重复。</td></tr>
+        <tr><td>Unity / Unreal 内容浏览器</td><td><span class="shard-tag">C</span></td><td>本轮未联网核到可引用的官方文档页；重型引擎与幕景轻量 Web 工作台距离远。</td></tr>
+        <tr><td>Twinmotion / Enscape</td><td><span class="shard-tag">C</span></td><td>未核实；属建筑渲染工具而非活动方案面板。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    所有产品事实经 2026-11-04 联网核实（官方 URL 见各灵感板卡片与本表链接）；代码锚点以导演台账 docs/plans/ia-role-rework-ledger-2026-11-04.md 为准。本页单文件、零外部依赖，可 file:// 直开，不依赖网络。
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var sliceSel = 'all', statSel = 'all';
+  var rows = document.querySelectorAll('#mainTable tbody tr');
+  var countLine = document.getElementById('countLine');
+  var emptyHint = document.getElementById('emptyHint');
+
+  function apply(){
+    var visible = 0;
+    rows.forEach(function(r){
+      var okS = (sliceSel === 'all' || r.getAttribute('data-slice') === sliceSel);
+      var okT = (statSel === 'all' || r.getAttribute('data-status') === statSel);
+      var show = okS && okT;
+      r.classList.toggle('hidden', !show);
+      if (show) visible++;
+    });
+    countLine.textContent = '共 ' + visible + ' 行（总表 27 行）';
+    emptyHint.style.display = (visible === 0 && sliceSel === 'S4') ? 'block' : 'none';
+  }
+
+  function bindGroup(id, setter){
+    var group = document.getElementById(id);
+    var btns = group.querySelectorAll('button.fbtn');
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        btns.forEach(function(x){ x.classList.remove('active'); });
+        b.classList.add('active');
+        setter(b.getAttribute('data-f'));
+        apply();
+      });
+    });
+  }
+
+  bindGroup('sliceFilter', function(v){ sliceSel = v; });
+  bindGroup('statusFilter', function(v){ statSel = v; });
+})();
+</script>
+</body>
+</html>

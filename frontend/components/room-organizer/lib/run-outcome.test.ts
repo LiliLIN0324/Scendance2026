@@ -48,6 +48,27 @@ describe('run-outcome — 一次运行的账单', () => {
       blocked: '这版动了 2 件锁着的物料：我不改锁着的东西，先解锁或换一版。',
     });
     expect(outcome.refused).toEqual([{ code: 'LOCKED', count: 2, message: '改到了锁定的物料' }]);
-    expect(outcomeLines(outcome)[1]).toBe('没放进去 2 件：改到了锁定的物料 2 件');
+    // 只有一条原因时不再把同一个数字念两遍（老的写法是「没放进去 2 件：改到了锁定的物料 2 件」）。
+    expect(outcomeLines(outcome)[1]).toBe('没放进去 2 件：改到了锁定的物料');
+  });
+
+  it('座位缺口按「座」记：不再冒出一句按件的「没放进去」', () => {
+    const outcome = outcomeOfPlan(plan({
+      added: 18, guests: 80, seats: 24,
+      diagnostics: [{ severity: 'warning', code: 'CAPACITY_EXCEEDED', count: 0, seats: 56, capacity: 24, names: ['座位'], message: '按这套排法这块座位区排到 24 座就是头' }],
+    }));
+    expect(outcomeLines(outcome)).toEqual(['放进 18 件']);
+    expect(outcome.refused[0]?.seats).toBe(56);
+  });
+
+  it('同一版里既有物料被拒又有座位缺口：两句各说各的单位', () => {
+    const outcome = outcomeOfPlan(plan({
+      added: 18, guests: 80, seats: 24, dropped: 3,
+      diagnostics: [
+        { severity: 'warning', code: 'CAPACITY_EXCEEDED', count: 0, seats: 56, capacity: 24, names: ['座位'], message: '按这套排法这块座位区排到 24 座就是头' },
+        { severity: 'warning', code: 'KEEP_OUT', count: 3, names: ['绿植'], message: '压在通道或预留区上' },
+      ],
+    }));
+    expect(outcomeLines(outcome)).toEqual(['放进 18 件', '没放进去 3 件：压在通道或预留区上']);
   });
 });

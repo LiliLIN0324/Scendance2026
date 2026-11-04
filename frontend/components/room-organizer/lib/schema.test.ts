@@ -719,6 +719,7 @@ describe('persisted-field whitelist and bounds (#350)', () => {
       stairsLeadIn: 1,
       sillHeight: 0.9,
       groupId: 'group-1',
+      provenance: { source: 'procedural', opId: 'op-schema-1', seed: 7, recipeId: 'ab12cd34ef' },
     };
     const layout = makeLayout({ floors: [makeFloor({ items: [item] })] });
     expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);

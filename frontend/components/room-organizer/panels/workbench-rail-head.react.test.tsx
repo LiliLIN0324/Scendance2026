@@ -35,7 +35,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(primary).toContain('data-tip="物料"');
     expect(primary).not.toContain('sc-space-chevron');
     expect(primary).not.toContain('sc-rail-word');
-    expect(primary).not.toMatch(/>\s*物料\s*</);
+    expect(primary).toContain('sc-rail-label');
     expect(primary).not.toContain('title="空间"');
     expect(primary).not.toContain('title="物料"');
     expect(source).not.toContain('id="workbench-library-shelf"');
@@ -72,7 +72,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(css).not.toMatch(/button\.is-active::before\s*\{/);
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');
-    expect(source).toContain("sidePanel === 'venue' && <VenueLibraryPanel");
+    expect(source).not.toContain('<VenueLibraryPanel');
     expect(source).toContain('<SpacePanel variant="card"');
     expect(source).toContain('<ScendanceLibrary variant="card"');
     expect(source).toContain("onToggle={() => toggleAgent('door')}");

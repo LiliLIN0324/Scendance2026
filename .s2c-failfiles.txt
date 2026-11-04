@@ -1,0 +1,15 @@
+agent-chat.react.test
+assets-panel.react.test
+backend-adapter.test
+creative-venue-photos.react.test
+lux3d-direct-test.react.test
+map-venue-overlay.react.test
+nav-chrome.test
+project-review.test
+scendance-workspace.react.test
+scene-delivery.test
+scene-presets.test
+space-panel.react.test
+structure-satellite.test
+structure-v2.test
+venue-picker.react.test

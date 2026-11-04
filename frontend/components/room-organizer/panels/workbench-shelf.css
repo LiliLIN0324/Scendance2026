@@ -648,7 +648,7 @@
 .sc-space-confirm-actions .sc-button { height:24px; padding:0 8px; font-size:var(--fs-cap); }
 
 /* ── 物料：三块摘要 + 下方结果区，同属一张卡 ───────────────────────
-   与总控卡同一套容器：1px 细边、--r-md 圆角、paper 底、10px 12px 内边距。
+   与活动卡同一套容器：1px 细边、--r-md 圆角、paper 底、10px 12px 内边距。
    收起只露一行素材；展开内部滚动、上限面板约 55%，收起把高度还给 chat。 */
 .sc-lib-wrap {
   display:flex; flex-direction:column; gap:8px; min-width:0;
@@ -840,6 +840,14 @@
 .sc-env-scenes select { max-width:54px; height:28px; padding:0 4px; border:1px solid var(--wk-hair); border-radius:6px; background:var(--wk-paper); color:var(--wk-ink-soft); font-size:11px; }
 .sc-env-scene-remove { display:grid; place-items:center; flex:none; width:25px; height:25px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--wk-muted); font-size:18px; cursor:pointer; }
 .sc-env-scene-remove:hover { background:#f9e9e7; color:#a63d32; }
+/* 显隐/Solo：行内动作钮，纯本地查看状态（SuperSplat 行语言）。 */
+.sc-env-scene-eye { display:grid; place-items:center; flex:none; width:25px; height:25px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--wk-muted); cursor:pointer; }
+.sc-env-scene-eye:hover { background:var(--wk-plane); color:var(--wk-ink); }
+.sc-env-scene-eye[aria-pressed="false"] { color:var(--wk-ink-faint, #a1a1aa); }
+.sc-env-scene-solo { flex:none; height:25px; padding:0 6px; border:1px solid var(--wk-hair); border-radius:6px; background:var(--wk-paper); color:var(--wk-muted); font-size:10px; cursor:pointer; }
+.sc-env-scene-solo:hover { color:var(--wk-ink); }
+.sc-env-scene-solo.is-on { border-color:var(--wk-green); color:var(--wk-green); background:var(--wk-green-pale); }
+.sc-env-scenes > li.is-dimmed { opacity:.45; }
 .sc-env-active-caption { margin-top:5px; color:var(--wk-muted); font-size:10px; line-height:14px; }
 
 /* ── 导出效果图弹层 · 图纸白 ──────────────────────────────────────────
@@ -893,3 +901,67 @@
 .sc-workbench .sc-export-pop .sc-export-note {
   font-size:var(--fs-cap); line-height:1.5; color:var(--wk-muted);
 }
+
+/* ── F4：物料库常驻搜索 + 最近用过 ────────────────────────────────
+   搜索不再折叠成图标；最近用过一行小卡，纯本地、不进后端。 */
+.sc-lib-search {
+  display:flex; align-items:center; gap:6px; box-sizing:border-box;
+  width:100%; min-width:0; height:28px; padding:3px 8px;
+  border:1px solid var(--wk-hair); border-radius:var(--r-sm);
+  background:var(--wk-paper); color:var(--wk-muted);
+}
+.sc-lib-search:focus-within { border-color:var(--wk-ink-soft); }
+.sc-lib-search > svg { flex:none; }
+.sc-lib-search > input {
+  flex:1; min-width:0; width:100%; padding:0; border:0; background:transparent;
+  font-size:var(--fs-p2); color:var(--wk-ink); opacity:1;
+}
+.sc-lib-search > input::placeholder { color:var(--wk-muted); }
+
+.sc-lib-group-head {
+  display:flex; align-items:center; gap:6px;
+}
+.sc-lib-group-head > span { flex:none; }
+.sc-lib-clear-recent {
+  margin-left:auto; padding:0 4px; border:0; background:transparent;
+  color:var(--wk-muted); font-size:10px; line-height:14px; cursor:pointer;
+}
+.sc-lib-clear-recent:hover { color:var(--wk-ink); text-decoration:underline; }
+
+/* 非卡态：最近用过 = 一行横滚小卡，贴在分类栏下、主轨道上。 */
+.sc-recent-strip {
+  display:flex; align-items:center; gap:8px; min-width:0;
+  margin:0 0 6px; padding:4px 6px;
+  border:1px solid var(--wk-hair-soft, var(--wk-hair)); border-radius:var(--r-sm);
+  background:var(--wk-paper);
+}
+.sc-recent-label {
+  flex:none; color:var(--wk-muted); font-size:var(--fs-cap); line-height:18px;
+}
+.sc-recent-list {
+  display:flex; flex:1; align-items:stretch; gap:6px; min-width:0; margin:0; padding:0;
+  list-style:none; overflow-x:auto; scrollbar-width:none;
+}
+.sc-recent-list::-webkit-scrollbar { display:none; }
+.sc-recent-item { flex:none; width:64px; }
+.sc-recent-tile {
+  display:flex; flex-direction:column; align-items:center; gap:2px; width:100%; min-width:0;
+  padding:3px; border:1px solid var(--wk-hair); border-radius:var(--r-sm);
+  background:var(--wk-paper); color:var(--wk-ink); cursor:pointer;
+}
+.sc-recent-tile:hover:not(:disabled) { border-color:var(--wk-ink-faint); }
+.sc-recent-tile:disabled { cursor:default; opacity:.6; }
+.sc-recent-thumb {
+  display:block; width:100%; aspect-ratio:1/1; overflow:hidden; border-radius:6px;
+  background:var(--wk-plane);
+}
+.sc-recent-thumb img { width:100%; height:100%; object-fit:contain; }
+.sc-recent-name {
+  display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:10px; line-height:14px; color:var(--wk-ink-soft); text-align:center;
+}
+.sc-recent-clear {
+  flex:none; padding:0 4px; border:0; background:transparent;
+  color:var(--wk-muted); font-size:10px; line-height:14px; cursor:pointer;
+}
+.sc-recent-clear:hover { color:var(--wk-ink); text-decoration:underline; }

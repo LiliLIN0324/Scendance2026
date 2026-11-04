@@ -1,0 +1,15 @@
+components/business/assets-panel.react.test.ts
+components/room-organizer/lib/backend-adapter.test.ts
+components/room-organizer/lib/nav-chrome.test.ts
+components/room-organizer/lib/scene-delivery.test.ts
+components/room-organizer/lib/structure-v2.test.ts
+components/room-organizer/panels/agent-chat.react.test.ts
+components/room-organizer/panels/creative-venue-photos.react.test.ts
+components/room-organizer/panels/lux3d-direct-test.react.test.ts
+components/room-organizer/panels/map-venue-overlay.react.test.ts
+components/room-organizer/panels/scendance-workspace.react.test.ts
+components/room-organizer/panels/space-panel.react.test.ts
+components/room-organizer/panels/venue-picker.react.test.ts
+components/room-organizer/three/scene-presets.test.ts
+components/room-organizer/three/structure-satellite.test.ts
+lib/project-review.test.ts

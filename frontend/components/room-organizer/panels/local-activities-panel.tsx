@@ -1,6 +1,6 @@
 'use client';
 
-import { FolderOpen, RefreshCw } from '@/components/solid-icons';
+import { FolderOpen, Plus, RefreshCw } from '@/components/solid-icons';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ensureActivityCover, saveActivityCover } from '@/lib/activity-cover';
 import { archiveLocalActivity, createLocalActivityBackup, listLocalActivities, readLocalActivity, LOCAL_ACTIVITIES_NAMESPACE,
@@ -9,6 +9,7 @@ import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
 import { subscribeSourceNamespace } from '@/lib/source-storage';
 import { captureStageCover } from '@/lib/stage-cover';
 import { MAX_NAME_LENGTH } from '../lib/schema';
+import { dossierStatus } from './mode-shell';
 import { InfoTip } from './info-tip';
 import { PlanThumb } from './plan-thumb';
 import type { LocalProjectBackupActions } from './creative-studio';
@@ -30,16 +31,22 @@ export interface LocalActivitiesPanelProps {
 type Working = 'prepare' | 'archive' | 'read' | 'restore';
 interface Token { id: number; epoch: number; scope: string; permissionEpoch: number }
 
-/** Cards are narrow: seconds never fit beside the item count. */
-function archivedStamp(value: string): string {
+/** 画廊卡只放相对时间：今天/昨天/N 天前；超过 29 天退回短日期，坏值原样返回。 */
+function relativeStamp(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN',
-    { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  if (Number.isNaN(date.getTime())) return value;
+  const diffDays = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (diffDays <= 0) return '今天';
+  if (diffDays === 1) return '昨天';
+  if (diffDays < 30) return `${diffDays} 天前`;
+  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
 export function LocalActivitiesPanel({ layout, actions, disabled = false, mode = 'all', currentStatus = '', isActivityVisible = () => true, onComplete }: LocalActivitiesPanelProps): JSX.Element {
   const showCreate = mode !== 'list', showList = mode !== 'create';
   const [name, setName] = useState(''), [activityMode, setActivityMode] = useState<NewLocalActivityMode>('empty');
+  // 画廊末尾的「＋新建活动」拼贴卡：就地展开极简命名，不走 create 表单/wizard。
+  const [tileOpen, setTileOpen] = useState(false), [tileName, setTileName] = useState('');
   const [activities, setActivities] = useState<LocalActivityList>({ activities: [], unreadableProjectIds: [] });
   const [listLoading, setListLoading] = useState(false), [listError, setListError] = useState('');
   const [working, setWorking] = useState<Working | null>(null), [error, setError] = useState('');
@@ -126,10 +133,12 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   function stage(token: Token, value: Working): void {
     assertCurrent(token); operation.current.stage = value; setWorking(value);
   }
-  async function switchActivity(targetId?: string): Promise<void> {
-    if (!targetId && !name.trim()) { if (!locked) setError('请填写新活动名称。'); return; }
+  async function switchActivity(targetId?: string, override?: { name?: string; mode?: NewLocalActivityMode }): Promise<void> {
+    // 画廊拼贴卡走 override 传名，避免 setName 同帧闭包取旧值；老 create 表单仍读组件 state。
+    const nextName = override?.name ?? name;
+    const nextMode = override?.mode ?? activityMode;
+    if (!targetId && !nextName.trim()) { if (!locked) setError('请填写新活动名称。'); return; }
     const token = begin(); if (!token) return;
-    const nextName = name, nextMode = activityMode;
     try {
       const text = await actions.prepareBackup();
       stage(token, 'archive');
@@ -155,7 +164,9 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
       if (active(token) && !baseline.current.disabled && baseline.current.permissionEpoch === token.permissionEpoch &&
           (baseline.current.epoch === token.epoch || baseline.current.scope === targetScope)) {
         setNotice({ scope: targetScope, text: `已打开「${candidate.layout.name}」。` });
-        setError(''); if (!targetId) setName(''); onComplete?.();
+        setError('');
+        if (!targetId) { setName(''); setTileName(''); setTileOpen(false); }
+        onComplete?.();
       }
     } catch (caught) {
       if (active(token) && !baseline.current.disabled && baseline.current.permissionEpoch === token.permissionEpoch &&
@@ -211,22 +222,46 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
               : <PlanThumb layout={layout} width={320} height={190} className="sc-activity-thumb-canvas" style={{ width: '100%', height: 'auto' }}/>}
             <span className="sc-activity-current">当前</span>
           </div>
-          <div className="sc-activity-card-body"><strong title={currentName}>{currentName}</strong><span>{currentItems} 个物件{currentStatus ? ` · ${currentStatus}` : ''}</span></div>
+          <div className="sc-activity-card-body">
+            <strong title={currentName}>{currentName}</strong>
+            <span className="sc-activity-meta"><em className={dossierStatus(currentItems) === '齐' ? 'is-ready' : 'is-low'}>{dossierStatus(currentItems)}</em>{currentItems} 件{currentStatus ? ` · ${currentStatus}` : ''}</span>
+          </div>
         </li>
         {archives.map(activity => <li key={activity.projectId}>
-          <div className="sc-activity-thumb">
-            {activity.cover
-              ? <img className="sc-activity-thumb-image" src={activity.cover} alt="" loading="lazy"/>
-              : activity.preview
-                ? <PlanThumb layout={activity.preview} width={320} height={190} className="sc-activity-thumb-canvas" style={{ width: '100%', height: 'auto' }}/>
-                : <span className="sc-activity-thumb-empty" aria-hidden="true"><FolderOpen size={20}/></span>}
-          </div>
-          <div className="sc-activity-card-body"><strong title={activity.name}>{activity.name}</strong><span>{activity.itemCount} 个物件 · {archivedStamp(activity.archivedAt)}</span>
-            <button type="button" className="sc-activity-open" disabled={locked} aria-label={`打开活动「${activity.name}」`} onClick={() => void switchActivity(activity.projectId)}>打开</button>
-          </div>
+          {/* 整卡就是一颗原生 button：键盘 Enter/Space 与禁用态走浏览器原生行为，li 保留 listitem 语义。 */}
+          <button type="button" className="sc-activity-card-clickable" disabled={locked} aria-label={`打开活动「${activity.name}」`}
+            onClick={() => void switchActivity(activity.projectId)}>
+            <div className="sc-activity-thumb">
+              {activity.cover
+                ? <img className="sc-activity-thumb-image" src={activity.cover} alt="" loading="lazy"/>
+                : activity.preview
+                  ? <PlanThumb layout={activity.preview} width={320} height={190} className="sc-activity-thumb-canvas" style={{ width: '100%', height: 'auto' }}/>
+                  : <span className="sc-activity-thumb-empty" aria-hidden="true"><FolderOpen size={20}/></span>}
+            </div>
+            <div className="sc-activity-card-body">
+              <strong title={activity.name}>{activity.name}</strong>
+              <span className="sc-activity-meta"><em className={dossierStatus(activity.itemCount) === '齐' ? 'is-ready' : 'is-low'}>{dossierStatus(activity.itemCount)}</em>{activity.itemCount} 件 · {relativeStamp(activity.archivedAt)}</span>
+            </div>
+          </button>
         </li>)}
+        <li className="sc-activity-tile">
+          {tileOpen ? (
+            <form className="sc-activity-tile-form" aria-label="画廊内联新建活动" onSubmit={event => { event.preventDefault(); void switchActivity(undefined, { name: tileName, mode: 'empty' }); }}>
+              <input value={tileName} maxLength={MAX_NAME_LENGTH} aria-label="画廊新活动名称" placeholder="给新活动起个名" autoFocus
+                onChange={event => { if (!locked) setTileName(event.currentTarget.value); }}/>
+              <div className="sc-activity-tile-actions">
+                <button type="submit" className="sc-cloud-primary" disabled={locked}>创建并打开</button>
+                <button type="button" disabled={locked} onClick={() => { setTileOpen(false); setTileName(''); }}>取消</button>
+              </div>
+            </form>
+          ) : (
+            <button type="button" className="sc-activity-tile-add" disabled={locked} aria-label="新建活动，空白画布直接进入工作台" onClick={() => setTileOpen(true)}>
+              <Plus size={18} aria-hidden="true"/><span>新建活动</span>
+            </button>
+          )}
+        </li>
       </ul>
-      {!listLoading && !archives.length && !listError && <p className="sc-activity-status">新建或切换活动时，当前画布会自动归档到这里。</p>}
+      {!listLoading && !archives.length && !listError && <p className="sc-activity-status">还没有其他归档；点「新建活动」开一张空白画布，当前画布会自动存档。</p>}
     </div>}
     {working && <p className="sc-activity-status" role="status">{working === 'prepare' ? '正在准备当前活动…' : working === 'archive' ? '正在归档并核对当前活动…' : working === 'read' ? '正在读取待打开活动…' : '正在打开并核实保存…'}</p>}
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}

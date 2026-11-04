@@ -10,8 +10,6 @@ export const ASSISTANT_SESSION_BODIES_VERSION = 1;
 /** 单场会话最多留这么多条，与对话区 slice(-30) 对齐。 */
 export const ASSISTANT_SESSION_BODY_BUBBLE_MAX = 30;
 
-const AGENT_IDS = new Set(['door', 'bingo', 'space', 'material']);
-
 export type StoredAssistantBubble = {
   readonly id: string;
   readonly role: 'user' | 'agent';
@@ -19,7 +17,6 @@ export type StoredAssistantBubble = {
   readonly meta?: string;
   readonly warn?: string;
   readonly amber?: boolean;
-  readonly to?: readonly ('door' | 'bingo' | 'space' | 'material')[];
   readonly long?: boolean;
   readonly image?: string;
 };
@@ -133,11 +130,5 @@ function normalizeStoredBubble(row: unknown): StoredAssistantBubble | null {
     ...(record.long === true ? { long: true } : {}),
     ...(typeof record.image === 'string' ? { image: record.image } : {}),
   } satisfies StoredAssistantBubble;
-  if (Array.isArray(record.to)) {
-    const to = record.to.filter((item): item is 'door' | 'bingo' | 'space' | 'material' => (
-      typeof item === 'string' && AGENT_IDS.has(item)
-    ));
-    if (to.length) return { ...bubble, to };
-  }
   return bubble;
 }

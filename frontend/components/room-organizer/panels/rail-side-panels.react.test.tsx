@@ -13,7 +13,8 @@ describe('左轨主入口面板', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).not.toContain("sidePanel === 'bingo'");
     expect(source).not.toContain('<BingoPanel');
-    expect(source).toContain("sidePanel === 'venue' && <VenueLibraryPanel");
+    // S3：VenueLibraryPanel 生产零入口已删除。
+    expect(source).not.toContain('<VenueLibraryPanel');
     expect(source).not.toContain('AgentReopenCard');
     expect(source).not.toMatch(/venueLibraryOpen\s*&&\s*<VenueLibraryPanel/);
     expect(source).not.toContain('<MapRailButton');

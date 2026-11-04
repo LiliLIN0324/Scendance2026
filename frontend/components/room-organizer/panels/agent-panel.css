@@ -393,104 +393,12 @@ button.ap-ghost {
   .ap-menu { animation: none; }
 }
 
-/* ── 四个 agent 共用一个面板：切到空间/物料/总控时，整栏变成对应卡片 ── */
+/* ── 四个 agent 共用一个面板：切到空间/物料/活动时，整栏变成对应卡片 ── */
 .sc-agent-panel:focus { outline: none; }
 .ap-agent-surface {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 12px;
 }
-.ap-agent-card { display: flex; flex-direction: column; gap: 8px; }
-.ap-agent-control {
-  border: 1px solid var(--wk-hair); border-radius: var(--r-md);
-  background: var(--wk-paper); padding: 10px 12px;
-}
-/* 总控卡住进对话流之后跟气泡同在一个 .ap-feed 里：列向 flex 会压扁它，得钉住高度。 */
-.ap-feed > .ap-agent-control { flex: none; }
-/* 只有名字是主信息：面积/数量与各栏职责收进标题旁的 ⓘ。 */
-.ap-control-summary { display: flex; flex-direction: column; gap: 0; }
-.ap-control-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.ap-control-name strong { flex: 1; min-width: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ap-control-info { position: relative; flex: none; display: inline-flex; }
-.ap-control-info > summary { list-style: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--wk-muted); cursor: pointer; }
-.ap-control-info > summary::-webkit-details-marker { display: none; }
-.ap-control-info > div {
-  position: absolute; right: 0; top: 24px; z-index: var(--z-panel-pop, 30); width: 216px; padding: 8px 10px;
-  border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); box-shadow: var(--e1);
-}
-.ap-control-info p { margin: 0 0 6px; font-size: var(--fs-cap); line-height: 1.5; color: var(--wk-muted); }
-.ap-control-info dl { display: grid; gap: 3px; margin: 0; }
-.ap-control-info dl > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 6px; font-size: var(--fs-cap); line-height: 1.45; }
-.ap-control-info dt { color: var(--wk-ink); font-weight: 600; }
-.ap-control-info dd { margin: 0; color: var(--wk-muted); }
-.ap-agent-links { display: flex; flex-direction: column; gap: 2px; }
-.ap-agent-link {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 3px 2px; border: 1px solid transparent; border-radius: var(--r-md);
-  /* 多选只靠描边：近黑 1.5px 内描边，未选中不占边框；不画勾选框、不换底色。
-     描边用 --wk-ink #141416，错误红是 --err #B4443C（只落在状态点与告警文字上），两套色不会混。 */
-  outline: 1.5px solid transparent; outline-offset: -1.5px;
-  background: var(--wk-paper); color: var(--wk-ink); text-align: left; cursor: pointer;
-  transition: background var(--dur-1) var(--ease-spec);
-}
-.ap-agent-link:hover { background: var(--wk-plane); }
-.ap-agent-link.is-active { outline-color: var(--wk-ink); }
-/* 总控内点名：只标对话的收发双方，不另开一栏。 */
-.ap-via { display: block; margin-bottom: 2px; font-size: var(--fs-cap); color: var(--ap-grey); }
-/* 一起说：选中的 agent 头像叠在输入框里，点一下移除；不念名字、不加勾选框。 */
-.ap-talk-faces { display: flex; align-items: center; height: 26px; margin: -2px 0 -2px 2px; }
-.ap-composer:has(.ap-talk-faces) { gap: 4px; padding-top: 10px; }
-.ap-talk-face {
-  position: relative; display: grid; place-items: center; width: 26px; height: 26px;
-  padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer;
-}
-.ap-talk-face + .ap-talk-face { margin-left: -7px; }
-.ap-talk-face .sc-rail-avatar { border-radius: 50%; background: var(--wk-paper); box-shadow: 0 0 0 2px var(--wk-paper); transition: transform var(--dur-1) var(--ease-spec); }
-.ap-talk-face:hover, .ap-talk-face:focus-visible { z-index: 3; }
-.ap-talk-face:hover .sc-rail-avatar { transform: translateY(-1px); }
-.ap-talk-face-x {
-  position: absolute; right: -2px; bottom: -2px; display: none; place-items: center;
-  width: 13px; height: 13px; border-radius: 50%; background: var(--wk-paper);
-  color: var(--wk-ink-soft); box-shadow: 0 0 0 1px var(--wk-hair);
-}
-.ap-talk-face:hover .ap-talk-face-x, .ap-talk-face:focus-visible .ap-talk-face-x { display: grid; }
-.ap-talk-face:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
-.ap-talk-face-more {
-  display: grid; place-items: center; width: 26px; height: 26px; margin-left: -7px;
-  border-radius: 50%; background: var(--wk-paper); box-shadow: 0 0 0 1px var(--wk-hair);
-  font-size: var(--fs-cap); color: var(--wk-muted);
-}
-.ap-agent-link:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; }
-.ap-agent-link span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.ap-agent-link strong { font-size: var(--fs-p1); line-height: var(--lh-p1); font-weight: 600; }
-.ap-agent-link small { font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-muted); }
-/* 汇总结果：总控卡里的一行台账，默认收起；展开就是一条点名一条记录，不另起卡片/表单。 */
-.ap-dispatch { border-top: 1px solid var(--wk-hair); padding-top: 7px; }
-.ap-dispatch > summary {
-  display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer;
-  padding: 1px 2px; border-radius: var(--r-sm); color: var(--wk-muted);
-  font-size: var(--fs-cap); line-height: 1.4;
-}
-.ap-dispatch > summary::-webkit-details-marker { display: none; }
-.ap-dispatch > summary:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 2px; }
-.ap-dispatch-label { font-weight: 600; color: var(--wk-ink-soft); }
-.ap-dispatch-count {
-  display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px;
-  border-radius: 8px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap);
-}
-.ap-dispatch-caret { margin-left: auto; transition: transform var(--dur-1) var(--ease-spec); }
-.ap-dispatch[open] .ap-dispatch-caret { transform: rotate(180deg); }
-.ap-dispatch-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 1px; }
-.ap-dispatch-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 2px; border-radius: var(--r-sm); }
-.ap-dispatch-row:hover { background: var(--wk-plane); }
-.ap-dispatch-faces { display: flex; flex: none; }
-.ap-dispatch-faces .sc-rail-avatar + .sc-rail-avatar { margin-left: -6px; }
-.ap-dispatch-body { min-width: 0; display: grid; gap: 1px; }
-.ap-dispatch-body strong,
-.ap-dispatch-body small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ap-dispatch-body strong { font-size: var(--fs-p2); line-height: var(--lh-p2); font-weight: 600; color: var(--wk-ink); }
-.ap-dispatch-body small { font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
-.ap-dispatch-empty { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
-.ap-dispatch-empty svg { flex: none; }
 
 /* 物料 / 空间：卡片自己定高度（收起 216px / 展开 ≤55%），剩下的全给下面 chat。
    卡片收起时对话自动变高，不留固定高度的死白。 */
@@ -627,6 +535,8 @@ button.ap-ghost {
 .ap-audit-phase.is-returned { color: var(--warn); border-color: currentColor; }
 .ap-audit-clear { margin-left: auto; }
 .ap-audit-receipt { display: flex; align-items: center; gap: 5px; margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-outcome { display: flex; align-items: center; gap: 5px; margin: 0; font-size: var(--fs-cap); color: var(--ink); }
+.ap-audit-outcome strong { font-weight: 600; }
 .ap-audit-plan { display: flex; flex-direction: column; gap: 5px; padding-top: 8px; border-top: 1px solid var(--wk-hair); }
 .ap-audit-toggle { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
 .ap-audit-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-p1); font-weight: 500; }
@@ -645,6 +555,31 @@ button.ap-ghost {
 .ap-audit-place { color: var(--ap-grey); font-size: var(--fs-cap); }
 .ap-audit-empty { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-pins ul { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 0; padding: 0 0 0 10px; list-style: none; border-left: 1px solid var(--wk-hair); }
+
+/* 第 7 批收尾：体检分 + Z8 完成卡 + 被拒件 + disclaimer。 */
+.ap-audit-scope { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-score { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: #F4F5F7; border-radius: 8px; }
+.ap-audit-score-total { display: flex; align-items: baseline; gap: 6px; }
+.ap-audit-score-num { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.ap-audit-score-label { font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-score-breakdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ap-audit-break { display: flex; flex-direction: column; gap: 3px; }
+.ap-audit-break-label { font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-break-bar { height: 4px; border-radius: 999px; background: #F4F5F7; overflow: hidden; }
+.ap-audit-break-fill { display: block; height: 100%; border-radius: 999px; transition: width .2s ease; }
+.ap-audit-break-num { font-size: var(--fs-cap); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ap-audit-score-summary { margin: 0; font-size: var(--fs-p2); color: var(--ink); line-height: 1.5; }
+.ap-audit-z8 { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--wk-hair); }
+.ap-audit-z8-row { display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-p2); }
+.ap-audit-z8-key { flex: 0 0 72px; color: var(--ap-grey); font-size: var(--fs-cap); }
+.ap-audit-z8-val { flex: 1 1 auto; color: var(--ink); word-break: break-word; }
+.ap-audit-refused { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--wk-hair); }
+.ap-audit-refused-title { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
+.ap-audit-refused ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.ap-audit-refused-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-p2); }
+.ap-audit-refused-id { padding: 1px 6px; border-radius: 4px; background: #F4F5F7; color: var(--ink); font-size: var(--fs-cap); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ap-audit-refused-reason { color: #C0392B; font-size: var(--fs-cap); }
+.ap-audit-disclaimer { margin: 4px 0 0; padding-top: 6px; border-top: 1px solid var(--wk-hair); font-size: var(--fs-cap); color: var(--ap-grey); line-height: 1.5; }
 
 /* 空间 / 物料对话：与 Bingo 同一条输入条，不再压内边距做“紧凑版”。 */
 .ap-chat .ap-composer-tool { display:grid; place-items:center; width:26px; height:26px; padding:0; border:none; border-radius:var(--r-sm); background:transparent; color:var(--wk-muted); }

@@ -1,6 +1,12 @@
 /**
  * 可评论方案页的存储。
  *
+ * ★ 冻结（S2 T5，2026-11-04）：issueReviewShare/readReviewShare/listReviewComments/
+ * addReviewComment 这串 UUID 孤儿链**生产无调用方**（评审链接已走 `/review/#layout=` hash 快照链）。
+ * 保留本文件作为 **Q4 云化接口的 local-demo 实现演示**，禁止新增生产调用方；
+ * 云化时由 ReviewShareRepository（见 §三 接口形状注释）替换实现，调用方签名不动。
+ * MARK_KEY（rememberReviewLinkMark）是活链 A 在写，不在冻结范围。
+ *
  * 真链 vs 本机演示（本文件就是边界）：
  * - **本机演示**：`issueReviewShare` 把当时的平面摘要写入 `localStorage`
  *   （键 `scendance.reviewShare.v1.<id>`）。评论在 `scendance.reviewComments.v1.<id>`。
@@ -15,7 +21,21 @@
  */
 import type { RoomLayout } from './types';
 
+/** @deprecated local-demo frozen：生产无入口，仅测试与 Q4 云化预留接口读取，禁止新增调用方。 */
 export const REVIEW_SHARE_STORAGE = 'local-demo' as const;
+
+/** Q4 云化接口形状（仅声明，不实现）：冻结函数的云化替身；issue/layout 见 ReviewShareSnapshot。 */
+export interface ReviewShareRepository {
+  issue(layout: unknown, origin: string): Promise<{ snapshot: unknown; url: string }>;
+  comments(shareId: string): Promise<unknown[]>;
+  addComment(shareId: string, input: { parentId: string | null; author: string; body: string }): Promise<unknown>;
+}
+
+/** Q4 云化接口形状（仅声明，不实现）：Bingo 评审标记的云化替身。 */
+export interface BingoMarkRepository {
+  remember(mark: unknown): Promise<void>;
+  list(): Promise<unknown[]>;
+}
 
 const SHARE_PREFIX = 'scendance.reviewShare.v1.';
 const COMMENT_PREFIX = 'scendance.reviewComments.v1.';
@@ -116,6 +136,7 @@ export function snapshotFromLayout(layout: RoomLayout): Omit<ReviewShareSnapshot
   return { title: clip(layout.name, MAX_TITLE) || '未命名活动', width, depth, items };
 }
 
+/** @deprecated local-demo frozen（S2 T5）：生产无调用方，仅测试/Q4 云化接口演示，禁止新增调用。 */
 export function issueReviewShare(layout: RoomLayout, origin: string): { snapshot: ReviewShareSnapshot; url: string } {
   const id = crypto.randomUUID();
   if (!isReviewShareId(id)) throw new Error('评审链接编号无效。');
@@ -155,12 +176,14 @@ export function readReviewMarks(): ReviewBingoMark[] {
   return marks;
 }
 
+/** @deprecated local-demo frozen（S2 T5）：见 issueReviewShare。 */
 export function readReviewShare(id: string): ReviewShareSnapshot | null {
   if (!isReviewShareId(id)) return null;
   const parsed = readJson(SHARE_PREFIX + id);
   return parsed ? parseSnapshot(id, parsed) : null;
 }
 
+/** @deprecated local-demo frozen（S2 T5）：见 issueReviewShare。 */
 export function listReviewComments(shareId: string): ReviewComment[] {
   if (!isReviewShareId(shareId)) return [];
   const parsed = readJson(COMMENT_PREFIX + shareId);
@@ -174,6 +197,7 @@ export function listReviewComments(shareId: string): ReviewComment[] {
   return comments.filter(comment => comment.parentId === null || comments.some(parent => parent.id === comment.parentId && parent.parentId === null));
 }
 
+/** @deprecated local-demo frozen（S2 T5）：见 issueReviewShare。 */
 export function addReviewComment(shareId: string, input: { parentId: string | null; author: string; body: string }): ReviewComment {
   if (!readReviewShare(shareId)) throw new Error('这份方案不在本机，评论没有写下。');
   const body = clip(input.body, MAX_BODY);

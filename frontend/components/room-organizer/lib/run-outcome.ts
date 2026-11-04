@@ -29,6 +29,9 @@ export interface OutcomeRefusal {
   code: PlanDiagnostic['code'] | 'LOCKED';
   count: number;
   message: string;
+  /** 座位口径的缺口：这一条不是「物料被拒」，是「这块地给不起这么多人」。 */
+  seats?: number;
+  capacity?: number;
 }
 
 export interface RunOutcome {
@@ -59,6 +62,8 @@ export function outcomeOfPlan(plan: PlanProposal): RunOutcome {
 export function buildOutcome(input: OutcomeInput): RunOutcome {
   const refused: OutcomeRefusal[] = (input.diagnostics ?? []).map(diagnostic => ({
     code: diagnostic.code, count: diagnostic.count, message: diagnostic.message,
+    ...(diagnostic.seats !== undefined ? { seats: diagnostic.seats } : {}),
+    ...(diagnostic.capacity !== undefined ? { capacity: diagnostic.capacity } : {}),
   }));
   if (input.lockedTouched) refused.push({ code: 'LOCKED', count: input.lockedTouched, message: '改到了锁定的物料' });
   const placed = input.added, moved = input.changed, removed = input.removing;
@@ -88,9 +93,15 @@ export function outcomeLines(outcome: RunOutcome): string[] {
     if (outcome.removed) parts.push(`撤掉 ${outcome.removed} 件`);
     if (parts.length) lines.push(parts.join(' · '));
   }
-  if (outcome.refused.length) {
-    const pieces = outcome.refused.reduce((sum, refusal) => sum + refusal.count, 0);
-    const reasons = outcome.refused.map(refusal => `${refusal.message} ${refusal.count} 件`);
+  // 座位缺口不按件说：卡片下面那行「座位 K / N」已经按座说过一次。把同一件事再换算成
+  // 「没放进去 75 件」，读的人只会以为被拒的是物料，而不是这块地给不起这么多人。
+  const material = outcome.refused.filter(refusal => refusal.count > 0);
+  if (material.length) {
+    const pieces = material.reduce((sum, refusal) => sum + refusal.count, 0);
+    // 只有一条原因时数字不再重复一遍：「没放进去 75 件：超出场地容量 75 件」是我自己写出来的口吃。
+    const reasons = material.map(refusal => (material.length === 1
+      ? refusal.message
+      : `${refusal.message} ${refusal.count} 件`));
     lines.push(`没放进去 ${pieces} 件：${reasons.join('、')}`);
   }
   if (outcome.kept) lines.push(`锁定 ${outcome.kept} 件我没动`);
