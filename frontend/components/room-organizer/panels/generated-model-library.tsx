@@ -223,7 +223,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       : capabilityState === 'failed'
         ? '暂时连不上云端，没读到可用的生成模型。'
         : !anyConfigured
-          ? '云端还没配可用的生成模型：需要服务端设置 LUX3D_API_KEY（及 LUX3D_TERMS_URL / LUX3D_TERMS_REVIEWED_AT）或 HY3D_API_KEY。'
+          ? '生成能力尚未连接服务商。在设置里填入自定义服务商地址和密钥后即可开始。'
           : disabled
             ? '当前有其他操作在进行，暂时不能提交生成。'
             : cloud.writeBlocked

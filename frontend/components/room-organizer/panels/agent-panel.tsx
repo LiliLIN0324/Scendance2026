@@ -1941,7 +1941,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     <div className="ap-body">
       {activity && <SessionHistoryOverlay open={showHistory} onClose={() => setShowHistory(false)} onSelect={() => { /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
-      {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
+      {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成；生成能力尚未连接服务商，在设置里填入自定义服务商地址和密钥后即可开始。</p>}
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
       {/* T2：空态话术按脸分——活动脸是布置引导，Bingo 脸是审校引导，不再共用「先说一句」。 */}
