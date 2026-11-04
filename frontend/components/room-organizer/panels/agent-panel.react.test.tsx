@@ -268,7 +268,7 @@ describe('T-UI visible interaction', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('puts speak-first examples in Bingo chat, with chips behind adjust', () => {
+  it('puts speak-first examples in the 活动 chat, with chips behind adjust', () => {
     render(ui(INITIAL_LAYOUT));
     const home = screen.getByLabelText('生成活动方案');
     expect(home).toBeTruthy();
@@ -280,7 +280,7 @@ describe('T-UI visible interaction', () => {
     expect(within(home).getByRole('button', { name: '品牌快闪' })).toBeTruthy();
   });
 
-  it('restores Bingo bubbles when switching sessions and clears them on a new one', async () => {
+  it('restores 活动 bubbles when switching sessions and clears them on a new one', async () => {
     render(ui(state.layout));
     send('先记一句发布会需求');
     expect(await screen.findByText('先记一句发布会需求')).toBeTruthy();
@@ -297,17 +297,17 @@ describe('T-UI visible interaction', () => {
     expect(await screen.findByText('先记一句发布会需求')).toBeTruthy();
   });
 
-  it('keeps the plan picker out of the door agent chat', () => {
+  it('keeps the plan picker out of the Bingo review face', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.queryByLabelText('生成活动方案')).toBeNull();
   });
 
-  it('puts 按风格配一套 on Bingo and opens the style panel', () => {
+  it('puts 按风格配一套 on 活动 alongside 地图选址 and opens the style panel', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
-    expect(within(group).queryByRole('button', { name: /地图选址/ })).toBeNull();
+    expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
     expect(within(group).queryByRole('button', { name: /生成物件/ })).toBeNull();
     fireEvent.click(within(group).getByRole('button', { name: /按风格配一套/ }));
     expect(screen.getByRole('dialog', { name: '按风格配一套' })).toBeTruthy();
@@ -322,11 +322,11 @@ describe('T-UI visible interaction', () => {
     expect(screen.queryByRole('dialog', { name: '按风格配一套' })).toBeNull();
   });
 
-  it('keeps map选址 on the door agent, not Bingo', () => {
+  it('keeps map选址 on the 活动 face together with the style chip', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
-    expect(within(group).queryByRole('button', { name: /按风格配一套/ })).toBeNull();
+    expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
     fireEvent.click(within(group).getByRole('button', { name: /地图选址/ }));
     expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
   });
@@ -766,7 +766,7 @@ describe('T-ATTACH 图纸照片先进输入框', () => {
   }, 25000);
 });
 
-describe('Bingo在左侧工作台', () => {
+describe('活动在左侧工作台（S1 后默认脸）', () => {
   it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
     expect(screen.getByRole('group', { name: '你可以做什么' })).toBeTruthy();
@@ -788,51 +788,45 @@ describe('Bingo在左侧工作台', () => {
   });
 });
 
-describe('总控内点名 agent', () => {
-  it('keeps the 总控 panel and starts an inline dialogue instead of switching panels', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
-    const panel = document.getElementById('agent-panel');
-    expect(panel?.getAttribute('data-state')).toBe('door');
-    fireEvent.click(screen.getByRole('button', { name: /^空间/ }));
-    // 整栏不换身份：还是总控，只是这句话开始递给空间。
-    expect(panel?.getAttribute('data-state')).toBe('door');
-    expect(screen.getByLabelText('移除 空间')).toBeTruthy();
-    expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).placeholder).toBe('说一句，交给选中的 agent');
-    fireEvent.click(screen.getByLabelText('移除 空间'));
-    expect(screen.queryByLabelText('移除 空间')).toBeNull();
+describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除', () => {
+  it('活动脸集齐例句卡、会话操作与两枚能力芯片', () => {
+    state.layout = INITIAL_LAYOUT;
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    // 默认脸即活动：布置生成例句卡归活动脸。
+    expect(screen.getByLabelText('生成活动方案')).toBeTruthy();
+    // 会话历史与新开随生成主对话一起归活动脸。
+    expect(screen.getByRole('button', { name: '会话历史' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '新开会话' })).toBeTruthy();
+    const group = screen.getByRole('group', { name: '你可以做什么' });
+    expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
+    // 面板身份文案已改名「活动」（标题显示会话名，名字落在 aside aria-label）。
+    expect(document.getElementById('agent-panel')?.getAttribute('aria-label')).toBe('活动');
   });
 
-  it('keeps several agents picked at once and routes one sentence to all of them', async () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
-    const panel = document.getElementById('agent-panel');
-    fireEvent.click(screen.getByRole('button', { name: /^空间/ }));
-    fireEvent.click(screen.getByRole('button', { name: /^物料/ }));
-    // 多选不换栏，也不出现勾选框：选中只靠描边（.is-active），输入框里是一叠头像。
-    expect(panel?.getAttribute('data-state')).toBe('door');
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
-    expect(screen.getByRole('button', { name: /^空间/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: /^物料/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByLabelText('移除 空间')).toBeTruthy();
-    expect(screen.getByLabelText('移除 物料')).toBeTruthy();
-    // 头像区不重复念名字，placeholder 保持中性。
-    expect(visibleText(document.querySelector('.ap-talk-faces')?.textContent)).toBe('');
-    expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).placeholder).toBe('说一句，交给选中的 agent');
-    // 一句发出去同时到两个 agent 的收发标签上。
-    send('看看哪里有问题');
-    expect(await screen.findByText('总控 → 空间、物料')).toBeTruthy();
+  it('Bingo 脸不挂任何布置生成入口，但中间态保留共用输入框', () => {
+    state.layout = INITIAL_LAYOUT;
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    expect(screen.queryByLabelText('生成活动方案')).toBeNull();
+    expect(screen.queryByRole('button', { name: '会话历史' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '新开会话' })).toBeNull();
+    expect(screen.queryByRole('group', { name: '你可以做什么' })).toBeNull();
+    // S2 才把 Bingo 改成纯审校台；S1.0 中间态共用 composer 仍在，但不再有生成卡片。
+    expect(screen.getByLabelText('告诉 Agent 要改的')).toBeTruthy();
+    expect(document.getElementById('gen-progress')).toBeNull();
+    expect(document.getElementById('plan-proposal')).toBeNull();
   });
-});
 
-describe('总控的汇总结果卡', () => {
-  it('记录一条点名分派：目标头像、原话与结果摘要，默认收起', async () => {
+  it('假分派控件与话术全部消失，空态改成统一的先说一句引导', () => {
+    state.layout = INITIAL_LAYOUT;
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
-    const who = screen.getByRole('group', { name: '这场对话里找谁说' });
-    fireEvent.click(within(who).getByRole('button', { name: /Bingo/ }));
-    send('加两把椅子');
-    const block = (await screen.findByText('分派结果')).closest('details') as HTMLDetailsElement;
-    expect(block.open).toBe(false);
-    expect(within(block).getByText('加两把椅子')).toBeTruthy();
-    expect(within(block).getByText(/Bingo · /)).toBeTruthy();
-    expect(block.querySelectorAll('.sc-rail-avatar')).toHaveLength(1);
+    expect(screen.queryByRole('group', { name: '这场对话里找谁说' })).toBeNull();
+    expect(screen.queryByRole('group', { name: '一起说的 agent' })).toBeNull();
+    expect(screen.queryByText('分派结果')).toBeNull();
+    expect(screen.queryByText('先说一句，我来分派')).toBeNull();
+    expect(screen.getByText('先说一句就行')).toBeTruthy();
+    // 输入框不再有点名分支的中性 placeholder 话术。
+    const input = screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement;
+    expect(input.placeholder).not.toContain('选中的 agent');
   });
 });
