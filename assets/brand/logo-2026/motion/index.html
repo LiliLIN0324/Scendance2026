@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>幕景 · 「AI 的门」动效预览</title>
+<style>
+  :root{--ink:#1b1f1d;--muted:#6b746f;--line:#e2e1dc;--paper:#fbfaf7;--green:#35624A}
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px 32px 64px;background:#f2f1ec;color:var(--ink);
+       font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  header,main,footer{max-width:1180px;margin-left:auto;margin-right:auto}
+  h1{margin:0 0 6px;font-size:22px;letter-spacing:.01em}
+  h2{margin:34px 0 6px;font-size:14px;font-weight:600;color:#39443e;letter-spacing:.03em}
+  h2 small{font-weight:400;color:var(--muted);letter-spacing:0;margin-left:8px}
+  header p{margin:0;color:var(--muted);font-size:13px;max-width:78ch}
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(264px,1fr));margin-top:12px}
+  .tile{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px 16px 13px;
+        display:flex;flex-direction:column;gap:10px}
+  .stage{display:flex;align-items:center;justify-content:center;height:180px;
+         background:#fff;border-radius:12px;border:1px solid #eeede8}
+  .stage svg{width:138px;height:138px}
+  .name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .badge{font-size:11px;font-weight:500;color:#4b5a51;background:#eceae4;border:1px solid #dedbd2;
+         border-radius:999px;padding:1px 8px}
+  .meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .use{font-size:12px;color:#4b5a51;margin-top:auto}
+  .palette{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--paper);
+           border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-top:12px}
+  .sw{width:44px;height:44px;border-radius:10px;border:1px solid #dedbd2}
+  .sw span{display:block;font-size:11px;color:var(--muted);margin-top:4px;text-align:center;
+           font-variant-numeric:tabular-nums}
+  .palette b{font-size:13px}
+  .palette em{font-style:normal;color:var(--muted);font-size:12px}
+  footer{margin-top:36px;color:var(--muted);font-size:12px;line-height:1.9}
+  code{background:#eceae4;border-radius:4px;padding:1px 5px;font-size:12px}
+  .rule{color:#8a2f2f}
+</style>
+</head>
+<body>
+<header>
+  <h1>「AI 的门」· 动效变体</h1>
+  <p><b>主干动作是「门洞」在变，绿色外框一动不动。</b> 外框的轮廓、圆角、位置、尺寸全部固定；
+     只有拱形白色负空间的宽、高、拱顶弧度在演化。全部为矢量 + CSS/SVG 动画，零依赖、零位图。
+     已内置 <code>prefers-reduced-motion</code> 静态退化。</p>
+  <div class="palette">
+    <b>全程仅 2 色</b>
+    <div><div class="sw" style="background:#35624A"></div><span>#35624A</span></div>
+    <div><div class="sw" style="background:#FFFFFF"></div><span>#FFFFFF</span></div>
+    <em>白色只以不同不透明度出现（.08 / .16 / .45 / .95 …）；没有任何第三色、没有暖光、
+        没有渐变夹色相、门身不上色。</em>
+  </div>
+</header>
+<h2>核心 · 门洞变形<small>收窄 / 常态 / 张开 三帧静帧 + 三个循环；外框零位移、零缩放</small></h2><main class="grid"><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 75.603 118.1 L 75.603 90 A 11.5 18.5 0 0 0 52.603 90 L 52.603 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">收窄<span class="badge">静帧</span></div><div class="meta">门洞 halfw 11.5 · 拱高 18.5</div><div class="use">静帧 · 对比组左</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">常态<span class="badge">静帧</span></div><div class="meta">门洞 halfw 16.273 · 拱高 16.273（原图实测）</div><div class="use">静帧 · 对比组中</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 86.103 118.1 L 86.103 91 A 22 21 0 0 0 42.103 91 L 42.103 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">张开<span class="badge">静帧</span></div><div class="meta">门洞 halfw 22 · 拱高 21</div><div class="use">静帧 · 对比组右</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.hole{animation:breathe 1.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes breathe{
+  0%,100%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 75.603 118.1 L 75.603 90 A 11.5 18.5 0 0 0 52.603 90 L 52.603 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+  38%,58%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 86.103 118.1 L 86.103 91 A 22 21 0 0 0 42.103 91 L 42.103 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">呼吸 · 收窄↔张开<span class="badge">1.6s ∞</span></div><div class="meta">1.6s 一轮 · 呼吸曲线 cubic-bezier(.45,0,.55,1)</div><div class="use">首屏点题、空状态；外框零位移</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.hole{animation:grow 1.8s cubic-bezier(.3,.7,.35,1) infinite}
+@keyframes grow{
+  0%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 70.103 118.1 L 70.103 108 A 6 6.5 0 0 0 58.103 108 L 58.103 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+  45%,55%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 86.103 118.1 L 86.103 91 A 22 21 0 0 0 42.103 91 L 42.103 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+  100%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 70.103 118.1 L 70.103 108 A 6 6.5 0 0 0 58.103 108 L 58.103 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">开合 · 从小洞到大洞<span class="badge">1.8s ∞</span></div><div class="meta">1.8s 一轮 · 极小洞→张开→回落</div><div class="use">「门开了」的一次性叙事</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.hole{animation:corridor 2s cubic-bezier(.4,.1,.2,1) infinite}
+@keyframes corridor{
+  0%,14%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+  40%,62%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 73.303 118.1 L 73.303 96.5 A 9.2 40.5 0 0 0 54.903 96.5 L 54.903 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+  88%,100%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}
+}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">纵深 · 门洞拉长<span class="badge">2s ∞</span></div><div class="meta">2s 一轮 · 洞高 34→62 · 宽 32.5→18.4</div><div class="use">走廊/光通道意象（仅概念演示）</div></div></main><h2>辅助 · 状态反馈<small>眨眼 / 悬停 / 入场 / 加载；同样只有两色</small></h2><main class="grid"><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">静态 · 无眼<span class="badge">静态</span></div><div class="meta">无动画 · 只有 #35624A 与白</div><div class="use">favicon / 兜底 / 印刷</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.eye{transform-box:fill-box;transform-origin:center;animation:blink 3.8s infinite}
+@keyframes blink{0%,88%,100%{transform:scaleY(1)}91%{transform:scaleY(.08)}94%{transform:scaleY(1)}}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/><g class="eyes"><g transform="rotate(12 40 41.92)"><rect class="eye" x="40" y="41.92" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g><g transform="rotate(12 68.48 39.36)"><rect class="eye" x="68.48" y="39.36" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g></g>
+</svg>
+</div><div class="name">眨眼<span class="badge">114ms</span></div><div class="meta">带眼 · 闭合 114ms · 周期 3.8s</div><div class="use">头像 / 待机反馈（全站只出现一处）</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.frame{transform-box:fill-box;transform-origin:center;
+  transition:transform .12s cubic-bezier(.2,.7,.3,1)}
+.halo{opacity:0;transition:opacity .12s linear}
+svg:hover .frame{transform:translateY(-1px)}
+svg:hover .halo{opacity:.45}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<g class="frame"><path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/><g class="eyes"><g transform="rotate(12 40 41.92)"><rect class="eye" x="40" y="41.92" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g><g transform="rotate(12 68.48 39.36)"><rect class="eye" x="68.48" y="39.36" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g></g><path class="halo" fill="none" stroke="#FFFFFF" stroke-width=".9" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/></g>
+</svg>
+</div><div class="name">悬停 · 白描边 + 1px<span class="badge">120ms</span></div><div class="meta">带眼 · 白色描边淡入 .45 · 120ms</div><div class="use">页头 BrandMark hover（交互态，不属于门洞变形）</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.frame{animation:enter .2s cubic-bezier(.22,.61,.36,1) both}
+@keyframes enter{from{opacity:0}to{opacity:1}}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<g class="frame"><path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/><g class="eyes"><g transform="rotate(12 40 41.92)"><rect class="eye" x="40" y="41.92" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g><g transform="rotate(12 68.48 39.36)"><rect class="eye" x="68.48" y="39.36" width="13.44" height="30.08" rx="6.72" fill="#FFFFFF"/></g></g></g>
+</svg>
+</div><div class="name">入场 · 淡入<span class="badge">200ms</span></div><div class="meta">带眼 · opacity 0→1 · 200ms（不做缩放，外框不动）</div><div class="use">首屏第一次出现</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.hole{animation:pulse 1.2s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes pulse{0%,100%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 75.603 118.1 L 75.603 90 A 11.5 18.5 0 0 0 52.603 90 L 52.603 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}50%{d:path("M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z")}}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<path class="hole" fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/>
+</svg>
+</div><div class="name">加载 · 门洞呼吸<span class="badge">1.2s ∞</span></div><div class="meta">1.2s 一轮 · 收窄↔常态 · 无文字</div><div class="use">替代转圈；洞本身就是进度感</div></div><div class="tile"><div class="stage"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="138" height="138" role="img" aria-label="幕景 Scendance · AI 的门">
+<style>
+.form{transform-box:fill-box;transform-origin:center;opacity:0}
+.f-door{animation:f-door 4.8s linear infinite}
+.f-ball{animation:f-ball 4.8s linear infinite}
+.f-pyr{animation:f-pyr 4.8s linear infinite}
+.f-cube{animation:f-cube 4.8s linear infinite}
+@keyframes f-door{0%{opacity:0}4%{opacity:1}23%{opacity:1}27%{opacity:0}100%{opacity:0}}
+@keyframes f-ball{0%{opacity:0}23%{opacity:0}27%{opacity:1}48%{opacity:1}52%{opacity:0}100%{opacity:0}}
+@keyframes f-pyr{0%{opacity:0}48%{opacity:0}52%{opacity:1}73%{opacity:1}77%{opacity:0}100%{opacity:0}}
+@keyframes f-cube{0%{opacity:0}73%{opacity:0}77%{opacity:1}96%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){
+  .f-ball,.f-pyr,.f-cube{opacity:0!important}
+  .f-door{opacity:1!important;animation:none!important}
+}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} .frame{transform:none!important;opacity:1!important;filter:none!important} .eye{transform:none!important}}</style>
+<g class="form f-door"><path fill-rule="evenodd" fill="#35624A" d="M 43.405 9.135 L 84.378 9.135 A 34.359 34.359 0 0 1 118.737 43.494 L 118.737 83.36 A 34.74 34.74 0 0 1 83.997 118.1 L 80.376 118.1 L 80.376 89.148 A 16.273 16.273 0 0 0 47.83 89.148 L 47.83 118.1 L 44.909 118.1 A 36.381 36.381 0 0 1 8.528 81.719 L 8.528 44.012 A 34.877 34.877 0 0 1 43.405 9.135 Z"/></g><g class="form f-ball"><ellipse cx="63.5" cy="63.5" rx="55" ry="53.5" fill="#35624A"/></g><g class="form f-pyr"><path fill="#35624A" d="M 63.5 12.5 C 66.6 12.5 68.6 14.6 70.2 17.6 L 115.2 106 C 118.7 113.6 115.7 115.5 108.2 115.5 L 18.8 115.5 C 11.3 115.5 8.3 113.6 11.8 106 L 56.8 17.6 C 58.4 14.6 60.4 12.5 63.5 12.5 Z"/></g><g class="form f-cube"><rect x="8.6" y="11.4" width="110.2" height="104.6" rx="33.5" fill="#35624A"/></g>
+</svg>
+</div><div class="name">形态 · 四形体<span class="badge">仅概念演示</span></div><div class="meta">4.8s 一轮 · door→ball→pyramid→cube→door（同为 #35624A）</div><div class="use">仅概念演示</div></div></main>
+<footer>
+  参数：门洞三态 —— 收窄 halfw 11.5 / 拱高 18.5；常态 halfw 16.273 / 拱高 16.273（原图实测）；
+  张开 halfw 22 / 拱高 21。循环 —— 呼吸 1.6s、开合 1.8s、纵深 2s、加载 1.2s；
+  眼睛闭合 114ms / 周期 3.8s；悬停 120ms；入场 200ms。所有动效只改 <code>d</code>、
+  <code>transform</code>、<code>opacity</code>，不碰外框几何。<br>
+  接入建议：favicon 用 <code>door-static.svg</code>（永不加动画）；<code>brand-mark.tsx</code> 用
+  <code>door-hover.svg</code> 的描边；首屏用 <code>door-enter.svg</code> + 一次
+  <code>door-hole-grow.svg</code>；等待态用 <code>door-loading.svg</code> 替代转圈；
+  呼吸/纵深/四形体属于点题素材，不建议常驻页头。<br>
+  <span class="rule">红线：本轮只出素材与预览页，未改
+  <code>frontend/public/assets/rail/door.png</code>、<code>frontend/app/icon.svg</code>、
+  <code>components/brand-mark.tsx</code>；未 commit / 未 push。</span>
+  四形体使用同一支绿 #35624A（不沿用 rail 三张位图里的另外三档绿），因此只靠轮廓区分；
+  它是「形态序列」示意，不是真实路径变形。
+</footer>
+</body>
+</html>
