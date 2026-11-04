@@ -71,7 +71,7 @@
 - 新增右下角助手及提案确认，建议不会自动写入场景；场景变化后拒绝旧提案。
 - 三维场景使用真实氛围灯光与阴影，兼容既有 neutral/warm/cool 字段。
 - 明确图片目前只在本机预览；扩展物料、完整创意生成和通用问答等待后端支持。
-- 后端交接：[FRONTEND_V0.2_BACKEND_REQUIREMENTS](../docs/FRONTEND_V0.2_BACKEND_REQUIREMENTS.md)。
+- 后端交接：[FRONTEND_V0.2_BACKEND_REQUIREMENTS](../docs/34-前端协议与后端需求.md)。
 
 ## v0.1.0
 

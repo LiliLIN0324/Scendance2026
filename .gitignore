@@ -41,7 +41,6 @@ output/model-library/
 .cache/
 .temp-cloud.txt
 frontend/.preview/
-_refs/
 docs/evidence/aholo/
 
 # ZCode scratch dumps
@@ -57,4 +56,9 @@ _patch*.py
 
 # local scratch (screenshots/decks; do not ship)
 _work/
+
+# Local isolated workspaces and heavy source captures (2026-11-04)
+.vm/
+frontend-gp/
+scene-3d/
 
