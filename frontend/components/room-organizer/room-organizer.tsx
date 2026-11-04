@@ -7,6 +7,8 @@ import { createBackendSession, type BackendSession } from '@/lib/backend-session
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
+import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
+import { setGenerationOutcome } from './lib/use-generation-outcome';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
@@ -179,6 +181,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   useEffect(() => { setSpaceWorkflow('aholo'); }, [layout.id]);
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
+  const [previewGuard, setPreviewGuard] = useState<PreviewContext | null>(null);
   const [captionEpoch, setCaptionEpoch] = useState(0);
   const [previewCaptionVisible, setPreviewCaptionVisible] = useState(false);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
@@ -1912,14 +1915,33 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory]);
 
   const onApplyCreative = useCallback((next: RoomLayout) => {
-    if (!canApplyLayoutGeometry(layoutStore.getState().layout, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
+    const before = layoutStore.getState().layout;
+    if (previewGuard) {
+      const decision = decideOnApply(before, previewGuard);
+      if (decision.action === 'prompt' && !window.confirm(decision.message)) {
+        throw new Error('已取消应用候选');
+      }
+    }
+    if (!canApplyLayoutGeometry(before, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
     commitHistoryNow();
     snapshotBeforeReplace(layout);
     actions.applyLayout({ ...next, ...(layout.designBook && !next.designBook ? { designBook: layout.designBook } : {}) });
+    // M5：按 id 差分，把本次 AI 候选应用写成 Outcome 账本，喂给 Bingo 审校卡。
+    const beforeIds = new Set(before.floors.flatMap(f => f.items.map(i => i.id)));
+    const nextFloors = next.floors;
+    const placedItems = nextFloors.flatMap(f => f.items).filter(i => !beforeIds.has(i.id));
+    const placedIds = new Set(nextFloors.flatMap(f => f.items.map(i => i.id)));
+    const removedItems = before.floors.flatMap(f => f.items).filter(i => !placedIds.has(i.id));
+    setGenerationOutcome({
+      placed: placedItems,
+      refused: [],
+      skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
+    });
+    setPreviewGuard(null);
     clearTransientSelection();
     initiallyFramed.current = false;
     setView(current => ({ ...current, view2D: false }));
-  }, [commitHistoryNow, layout, actions, clearTransientSelection]);
+  }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard]);
 
   /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
@@ -2030,7 +2052,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
     setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
-    if (candidate) { setView(current => ({ ...current, view2D: false })); }
+    if (candidate) {
+      setView(current => ({ ...current, view2D: false }));
+      setPreviewGuard(snapshotPreviewContext(liveLayout.current, candidate));
+    } else {
+      setPreviewGuard(null);
+    }
   }, []);
   const openAholoWorkflow = useCallback((kind: 'world' | 'recon' = 'world', prompt?: string) => {
     noteVenueThreeIntent();
