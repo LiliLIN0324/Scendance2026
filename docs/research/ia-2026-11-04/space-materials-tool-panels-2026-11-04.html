@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>空间 / 物料工具面板灵感板 · 2026-11-04</title>
+<style>
+  :root{
+    --bg:#F4F5F7;
+    --card:#FFFFFF;
+    --ink:#1C211E;
+    --muted:#5F6A63;
+    --hairline:#DDE1E3;
+    --green:#4A7C59;
+    --green-soft:#E8F0EA;
+    --amber:#8A6D3B;
+    --amber-soft:#F3EDE0;
+    --slate:#6A7370;
+    --slate-soft:#ECEFEE;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--ink)}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.65;
+    padding:48px 24px 96px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{border-bottom:1px solid var(--hairline);padding-bottom:28px;margin-bottom:28px}
+  .back{font-size:13px;color:var(--muted);text-decoration:none;letter-spacing:.05em}
+  .back:hover{color:var(--green)}
+  h1{font-size:30px;font-weight:600;letter-spacing:.01em;margin:18px 0 10px}
+  .sub{color:var(--muted);font-size:14px;max-width:680px}
+  .meta{margin-top:14px;font-size:13px;color:var(--muted)}
+  .meta strong{color:var(--ink);font-weight:600}
+
+  /* ---------- filter bar ---------- */
+  .filters{
+    display:flex;flex-wrap:wrap;gap:22px;
+    padding:18px 0 22px;margin-bottom:10px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .filter-group{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .filter-label{font-size:12px;letter-spacing:.12em;color:var(--muted);margin-right:4px}
+  button.fbtn{
+    font:inherit;font-size:13px;cursor:pointer;
+    padding:5px 13px;border-radius:999px;
+    border:1px solid var(--hairline);background:transparent;color:var(--muted);
+    transition:all .15s ease;
+  }
+  button.fbtn:hover{border-color:var(--slate);color:var(--ink)}
+  button.fbtn.active{background:var(--ink);border-color:var(--ink);color:#fff}
+  .count{font-size:13px;color:var(--muted);margin-left:auto;align-self:center}
+
+  /* ---------- cards grid ---------- */
+  .grid{
+    display:grid;gap:20px;margin-top:26px;
+    grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--hairline);
+    border-radius:10px;
+    padding:24px 24px 20px;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .card-top{display:flex;align-items:center;gap:8px}
+  .badge{
+    font-size:11.5px;letter-spacing:.08em;
+    padding:3px 10px;border-radius:999px;font-weight:600;
+  }
+  .b-直接复用{background:var(--green-soft);color:var(--green)}
+  .b-需改造{background:var(--amber-soft);color:var(--amber)}
+  .b-新增{background:var(--ink);color:#fff}
+  .b-后置{background:var(--slate-soft);color:var(--slate)}
+  .theme-tag{font-size:11.5px;color:var(--muted);letter-spacing:.06em}
+  .card h2{font-size:16.5px;font-weight:600;line-height:1.45}
+  .card h2 a{color:var(--ink);text-decoration:none;border-bottom:1px solid transparent}
+  .card h2 a:hover{color:var(--green);border-bottom-color:var(--green)}
+  .value{font-size:13.5px;color:var(--ink)}
+  .skeleton{font-size:12.5px;color:var(--muted);padding-left:18px}
+  .skeleton li{margin-bottom:4px}
+  .row{font-size:12.5px;border-top:1px solid var(--hairline);padding-top:9px}
+  .row .k{
+    display:inline-block;font-size:11px;letter-spacing:.1em;
+    color:var(--green);font-weight:600;margin-right:6px;
+  }
+  .row.avoid .k{color:var(--amber)}
+  .row.landing{color:var(--ink)}
+  .row.landing .k{color:var(--ink)}
+  .poster{
+    display:inline-block;font-size:11px;letter-spacing:.06em;
+    color:#fff;background:var(--slate);border-radius:4px;padding:1px 6px;margin-left:6px;
+  }
+  footer{margin-top:56px;border-top:1px solid var(--hairline);padding-top:18px;font-size:12.5px;color:var(--muted)}
+
+  @media (max-width:640px){
+    body{padding:28px 14px 64px}
+    h1{font-size:23px}
+    .grid{grid-template-columns:1fr}
+    .count{margin-left:0;width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="back" href="index.html">← 返回调研索引</a>
+    <h1>空间 / 物料工具面板 · 灵感板</h1>
+    <p class="sub">幕景（Scendance）IA 重划 S3 · 分片 C：空间 / 物料。命题——工具面板如何不人格化、生成动作如何收进库面板。场＝行列表，物＝网格卡；生成是「＋」与一条短指令框，不是一张脸。</p>
+    <p class="meta">日期 <strong>2026-11-04</strong> ｜ 基线分支 feat/smart-build-scene-script ｜ 代码锚点均回台账 §3-C / §3-D 核对</p>
+  </header>
+
+  <div class="filters">
+    <div class="filter-group">
+      <span class="filter-label">处置态</span>
+      <button class="fbtn active" data-f="status" data-v="全部">全部</button>
+      <button class="fbtn" data-f="status" data-v="直接复用">直接复用</button>
+      <button class="fbtn" data-f="status" data-v="需改造">需改造</button>
+      <button class="fbtn" data-f="status" data-v="新增">新增</button>
+      <button class="fbtn" data-f="status" data-v="后置">后置</button>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">主题</span>
+      <button class="fbtn active" data-f="theme" data-v="全部">全部</button>
+      <button class="fbtn" data-f="theme" data-v="场景面板">场景面板</button>
+      <button class="fbtn" data-f="theme" data-v="资产库">资产库</button>
+      <button class="fbtn" data-f="theme" data-v="拖入舞台">拖入舞台</button>
+      <button class="fbtn" data-f="theme" data-v="生成入口收纳">生成入口收纳</button>
+      <button class="fbtn" data-f="theme" data-v="去人格化模式">去人格化模式</button>
+    </div>
+    <span class="count" id="count"></span>
+  </div>
+
+  <main class="grid">
+
+    <!-- 1 -->
+    <article class="card" data-status="需改造" data-theme="场景面板">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">场景面板</span></div>
+      <h2><a href="https://developer.playcanvas.com/user-manual/supersplat/editor/scene-management/" target="_blank" rel="noopener">SuperSplat · Scene Manager 行列表</a></h2>
+      <p class="value">一行＝一个场景捕获；active 行是唯一操作目标，显隐与导出绑定。</p>
+      <ul class="skeleton">
+        <li>点行＝设为 active；行首眼睛＝显隐；头部 Solo 隔离查看</li>
+        <li>双击行名改名；trash 删行（不可撤销，与删内容的撤销语义分开）</li>
+        <li>头部 import 钮 / File&gt;Import / 拖文件进视口，三条等价路径</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>行列表＋active＋显隐＋Solo 的环境管理语言</p>
+      <p class="row avoid"><span class="k">避什么</span>点级编辑面板（直方图/编辑模式）不上幕景</p>
+      <p class="row landing"><span class="k">幕景落点</span>空间脸 environment 槽（room-organizer.tsx:2017）改造为行列表</p>
+    </article>
+
+    <!-- 2 -->
+    <article class="card" data-status="新增" data-theme="去人格化模式">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">去人格化模式</span></div>
+      <h2><a href="https://developer.playcanvas.com/user-manual/supersplat/editor/scene-management/" target="_blank" rel="noopener">SuperSplat · 选中态可折叠属性段</a></h2>
+      <p class="value">Transform / Colors 是「选中 active 行之后」才出现在列表下方的折叠段，改完有 Apply。</p>
+      <ul class="skeleton">
+        <li>无选中＝只给列表；有选中＝列表下方展开数值段</li>
+        <li>Position / Rotation / Scale 数值直编；颜色调整显式 Apply 烘焙</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>「选中才出现属性」的面板语法</p>
+      <p class="row avoid"><span class="k">避什么</span>无选中时铺满属性墙</p>
+      <p class="row landing"><span class="k">幕景落点</span>空间脸选中场地后才展开变换/环境段（S3 新增）</p>
+    </article>
+
+    <!-- 3 -->
+    <article class="card" data-status="直接复用" data-theme="去人格化模式">
+      <div class="card-top"><span class="badge b-直接复用">直接复用</span><span class="theme-tag">去人格化模式</span></div>
+      <h2><a href="https://github.com/playcanvas/supersplat" target="_blank" rel="noopener">SuperSplat · 零聊天纯动作条</a></h2>
+      <p class="value">整器没有一句对话；底部是动作图标条，模式状态只给右上角短词。</p>
+      <ul class="skeleton">
+        <li>撤销/重做/选择模式/对齐/导出＝图标钮</li>
+        <li>「Centers Mode」式状态＝右上角短词，无情绪话术</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>工具面板的语言基准：动词按钮＋名词属性＋短词状态</p>
+      <p class="row avoid"><span class="k">避什么</span>任何「我来帮你」式人格话术</p>
+      <p class="row landing"><span class="k">幕景落点</span>空间/物料脸全部文案按此基准过一遍（agent-panel.tsx:2006-2014）</p>
+    </article>
+
+    <!-- 4 -->
+    <article class="card" data-status="需改造" data-theme="生成入口收纳">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">生成入口收纳</span></div>
+      <h2><a href="https://docs.spline.design/basics/understanding-splines-ui" target="_blank" rel="noopener">Spline · 侧栏三标签 Agent / Objects / Assets</a></h2>
+      <p class="value">AI 只是侧栏三个标签之一；Objects＝场景树，Assets＝资产库。</p>
+      <ul class="skeleton">
+        <li>同一左栏三标签切换；上方 Scenes 列表管同文件多场景</li>
+        <li>Outliner 可嵌套、可搜索；Assets 标签＝资产浏览器＋团队库</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>「标签内收纳」——库与树是标签，不是人格</p>
+      <p class="row avoid"><span class="k">避什么</span>编辑器默认打开落在 Agent 标签——幕景空间/物料脸默认落点必须是库/列表</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料脸库为主体（room-organizer.tsx:2017 materialSlot）</p>
+    </article>
+
+    <!-- 5 -->
+    <article class="card" data-status="新增" data-theme="去人格化模式">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">去人格化模式</span></div>
+      <h2><a href="https://docs.spline.design/basics/understanding-splines-ui" target="_blank" rel="noopener">Spline · 选中驱动右侧属性整换</a></h2>
+      <p class="value">无选中＝场景级设置（背景/灯光/雾/天空）；选中对象＝整套换成对象属性。</p>
+      <ul class="skeleton">
+        <li>同一面板位置，内容随选中态整体换</li>
+        <li>属性分组用名词：Frame / Scene / Light / Fog / Sky</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>「一个面板两种状态」的去人格化核心语法</p>
+      <p class="row avoid"><span class="k">避什么</span>场景设置与对象属性分两个常驻面板占空间</p>
+      <p class="row landing"><span class="k">幕景落点</span>空间脸无选中＝环境/场景短词开关；有选中＝该项属性（S3 新增）</p>
+    </article>
+
+    <!-- 6 -->
+    <article class="card" data-status="需改造" data-theme="生成入口收纳">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">生成入口收纳</span></div>
+      <h2><a href="https://docs.spline.design/basics/understanding-splines-ui" target="_blank" rel="noopener">Spline · 工具坞「＋」展开对象清单</a></h2>
+      <p class="value">「＋」打开完整对象清单（primitive/文字/路径/导入模型），箭头钮＝Transform。</p>
+      <ul class="skeleton">
+        <li>加件＝从清单选，不是对话说一句</li>
+        <li>侧栏底 Library 钮快速开免费 3D 库</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>「＋」是库内动作入口，不是人格召唤</p>
+      <p class="row avoid"><span class="k">避什么</span>深色工具坞密度；Objects/Assets/Code 并列首屏</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料脸「＋」加件菜单（generated-model-library.tsx 为主体）</p>
+    </article>
+
+    <!-- 7 -->
+    <article class="card" data-status="需改造" data-theme="资产库">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">资产库</span></div>
+      <h2><a href="https://meshy.cn/id/blog/workspace3" target="_blank" rel="noopener">Meshy Workspace 3.0 · My Assets 统一资产库</a></h2>
+      <p class="value">Images/Models 子标签＋搜索框＋网格卡＋右侧详情列（prompt/时间/模型版本）。</p>
+      <ul class="skeleton">
+        <li>「Search my generation」置顶搜索</li>
+        <li>右侧详情列＝来源 prompt 全文＋时间戳＋模型版本＋参考图</li>
+        <li>底部网格/列表切换与分页</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>生成件必须带来源上下文的库解剖</p>
+      <p class="row avoid"><span class="k">避什么</span>六模式侧栏（Assets/Image/Model/Print/Animate）作产品地图</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料库补搜索＋类型子标签＋来源详情列（material-customization.tsx）</p>
+    </article>
+
+    <!-- 8 -->
+    <article class="card" data-status="新增" data-theme="生成入口收纳">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">生成入口收纳</span></div>
+      <h2><a href="https://meshy.cn/id/blog/workspace3" target="_blank" rel="noopener">Meshy · 创建条＋curated prompt preset</a></h2>
+      <p class="value">生成条常驻在 Discover 页；不给空框，给 curated 短指令预设，左下角标耗时/消耗。</p>
+      <ul class="skeleton">
+        <li>上传图＋prompt 合一，一键切 3D Model / Image</li>
+        <li>preset 让第一次生成结果就够好</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>生成是库面板内一条常驻条＋预设卡</p>
+      <p class="row avoid"><span class="k">避什么</span>生成条做成独立页或人格对话框</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料脸「＋生成」＋短指令 preset（共用 composer 收为短指令框，agent-panel.tsx:2030-2056）</p>
+    </article>
+
+    <!-- 9 -->
+    <article class="card" data-status="后置" data-theme="生成入口收纳">
+      <div class="card-top"><span class="badge b-后置">后置</span><span class="theme-tag">生成入口收纳</span></div>
+      <h2><a href="https://meshy.cn/id/blog/workspace3" target="_blank" rel="noopener">Meshy · 左模式侧栏（反面教材）</a></h2>
+      <p class="value">Image/Model/Print/Animate 并排图标轨＝工具箱 catalog，备忘录已判为避法。</p>
+      <ul class="skeleton">
+        <li>每个模式一进一屏，资产与生成被拆散</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>——（不抄）</p>
+      <p class="row avoid"><span class="k">避什么</span>幕景物料脸绝不能长成模式侧栏；左轨四形不加第五图标</p>
+      <p class="row landing"><span class="k">幕景落点</span>避法对照写进 S3 验收清单<span class="poster">后置</span></p>
+    </article>
+
+    <!-- 10 -->
+    <article class="card" data-status="后置" data-theme="场景面板">
+      <div class="card-top"><span class="badge b-后置">后置</span><span class="theme-tag">场景面板</span></div>
+      <h2><a href="https://docs.omniverse.nvidia.com/extensions/latest/ext_core/ext_layers.html" target="_blank" rel="noopener">Omniverse · 资产层 / 布局层分离</a></h2>
+      <p class="value">USD 分层：资产层是静态件仓库，布局层管摆放朝向，动画层管意见。</p>
+      <ul class="skeleton">
+        <li>「仓库」与「摆放」是两件事的重型版本佐证</li>
+        <li>Layout Tab 并列 Layers / Bookmarks / Selection History / Selection</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>概念分离：库＝仓库，画布＝摆放，不混进同一聊天</p>
+      <p class="row avoid"><span class="k">避什么</span>USD 层叠、Bookmarks、工程面板密度</p>
+      <p class="row landing"><span class="k">幕景落点</span>理念佐证 §3-D「库为主体」；Selection History 类「最近用过」后置<span class="poster">后置</span></p>
+    </article>
+
+    <!-- 11 -->
+    <article class="card" data-status="后置" data-theme="资产库">
+      <div class="card-top"><span class="badge b-后置">后置</span><span class="theme-tag">资产库</span></div>
+      <h2><a href="https://docs.nvidia.com/learning/physical-ai/assembling-digital-twins/latest/optimization-data/adding-props-stage.html" target="_blank" rel="noopener">Omniverse · Asset Browser 按需开启</a></h2>
+      <p class="value">资产浏览器是扩展，非常驻左栏；官方注明只在需要时开启。</p>
+      <ul class="skeleton">
+        <li>库面板的常驻/按需取舍参照</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>高级筛选/批量视图可以按需展开，非常驻</p>
+      <p class="row avoid"><span class="k">避什么</span>重型扩展管理器界面</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料脸常驻，但批量/高级视图后置展开<span class="poster">后置</span></p>
+    </article>
+
+    <!-- 12 -->
+    <article class="card" data-status="新增" data-theme="生成入口收纳">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">生成入口收纳</span></div>
+      <h2><a href="https://worldlabs.mintlify.app/" target="_blank" rel="noopener">Marble · omnibox 单框收所有输入</a></h2>
+      <p class="value">文本/单图/多图/全景/视频/粗排 3D 结构，全部进同一个 prompt 框；拖图进框自动切模式。</p>
+      <ul class="skeleton">
+        <li>一个框＋输入类型芯片，不做多模式 Tab</li>
+        <li>生成后 Pano edit / Click &amp; expand / Variation 在结果上续写</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>空间脸「生成场地」＝一个生成框＋类型芯片</p>
+      <p class="row avoid"><span class="k">避什么</span>Chisel 粗排建模、Studio Compose 多世界拼接的重型流</p>
+      <p class="row landing"><span class="k">幕景落点</span>openAholoWorkflow 两模式统一为一框（room-organizer.tsx:1894，内部模式不上界面）</p>
+    </article>
+
+    <!-- 13 -->
+    <article class="card" data-status="需改造" data-theme="资产库">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">资产库</span></div>
+      <h2><a href="https://worldlabs.mintlify.app/" target="_blank" rel="noopener">Marble · Gallery / Create / Studio 三区</a></h2>
+      <p class="value">作品库＝Gallery，生成工作区＝Create，高级编辑＝Studio；生成与作品分区不分工格。</p>
+      <ul class="skeleton">
+        <li>Gallery 是作品网格（含自己的世界）</li>
+        <li>Studio 才放 Compose / Record 这类高级工具</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>库面板内「作品区」与「生成区」分区</p>
+      <p class="row avoid"><span class="k">避什么</span>生成弹窗独立成人格化对话窗</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料脸网格卡区（作品）＋「＋生成」条（工作区）同屏分区</p>
+    </article>
+
+    <!-- 14 -->
+    <article class="card" data-status="直接复用" data-theme="生成入口收纳">
+      <div class="card-top"><span class="badge b-直接复用">直接复用</span><span class="theme-tag">生成入口收纳</span></div>
+      <h2><a href="https://docs.worldlabs.ai/marble/create/prompt-guides/index" target="_blank" rel="noopener">Marble · prompt 范例句占位</a></h2>
+      <p class="value">输入框不给功能名词，直接给「A warm, rustic cabin living room with…」式范例句。</p>
+      <ul class="skeleton">
+        <li>占位符＝一句话范例，不是「请输入」</li>
+        <li>文本上限（2000 字符）写进指南，不堆在输入框旁</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>placeholder 给范例句的文案纪律</p>
+      <p class="row avoid"><span class="k">避什么</span>「智能生成」「AI 助手」式空泛占位</p>
+      <p class="row landing"><span class="k">幕景落点</span>空间/物料脸短指令框 placeholder 统一按范例句写</p>
+    </article>
+
+    <!-- 15 -->
+    <article class="card" data-status="需改造" data-theme="场景面板">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">场景面板</span></div>
+      <h2><a href="https://learn.poly.cam/hc/en-us/articles/35174492720404-How-to-Create-a-Scene" target="_blank" rel="noopener">Polycam Scenes · layers 面板内 Add 钮</a></h2>
+      <p class="value">加捕获＝在左侧 layers 面板里点 Add；每个捕获是一层，可移动/旋转/缩放对齐。</p>
+      <ul class="skeleton">
+        <li>「加层」动作就在列表面板头部，不跳别处</li>
+        <li>与 Extend 连续扫描互补：Scenes 是把完成的多个捕获并置一个空间</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>「＋加场地/捕获」在环境行列表面板内头部</p>
+      <p class="row avoid"><span class="k">避什么</span>snap/swap 吸附对齐作默认＝技术人 UI（备忘录已判）</p>
+      <p class="row landing"><span class="k">幕景落点</span>空间脸环境列表头部「＋加场地」（agent-panel.tsx:2010-2011 入口收束）</p>
+    </article>
+
+    <!-- 16 -->
+    <article class="card" data-status="新增" data-theme="拖入舞台">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">拖入舞台</span></div>
+      <h2><a href="https://developer.playcanvas.com/en/tutorials/importing-first-model-and-animation/" target="_blank" rel="noopener">PlayCanvas Editor · 拖入落点三档</a></h2>
+      <p class="value">资产拖进视口＝当前选中的子级；拖进树某节点＝挂其下；拖进树空区＝挂顶层。</p>
+      <ul class="skeleton">
+        <li>落点语义随松手位置变化，规则显式</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>库→画布的落点三档规则</p>
+      <p class="row avoid"><span class="k">避什么</span>落点含糊、每次行为不一致</p>
+      <p class="row landing"><span class="k">幕景落点</span>placeCatalogItem 落点规则显式化：拖选中物附近＝关联摆放；拖空画布＝新放一件（room-organizer.tsx:2017）</p>
+    </article>
+
+    <!-- 17 -->
+    <article class="card" data-status="需改造" data-theme="资产库">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">资产库</span></div>
+      <h2><a href="https://developer.playcanvas.com/user-manual/faq/" target="_blank" rel="noopener">PlayCanvas Editor · 资产面板「＋」New Asset 菜单</a></h2>
+      <p class="value">「＋」展开 New Asset 菜单（Upload / 新建类型）；电脑文件直接拖进面板完成上传。</p>
+      <ul class="skeleton">
+        <li>资产可在面板内拖文件夹归档</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>库面板内「＋」菜单结构（上传 / 生成 / 从方案来）</p>
+      <p class="row avoid"><span class="k">避什么</span>底部大资产面板的密度（幕景库是右栏卡片槽）</p>
+      <p class="row landing"><span class="k">幕景落点</span>ScendanceLibrary「＋」菜单（scendance-workspace.tsx:127）</p>
+    </article>
+
+    <!-- 18 -->
+    <article class="card" data-status="需改造" data-theme="资产库">
+      <div class="card-top"><span class="badge b-需改造">需改造</span><span class="theme-tag">资产库</span></div>
+      <h2><a href="https://docs.blender.org/manual/en/latest/editors/asset_browser.html" target="_blank" rel="noopener">Blender Asset Browser · 左目录树 / 中预览网格 / 右详情</a></h2>
+      <p class="value">catalog＝分组筛选（不是模式 Tab）；每项带预览图，框选多选，右键上下文菜单。</p>
+      <ul class="skeleton">
+        <li>左＝catalog 树（只列该目录及子目录）；中央＝Thumbnails 网格；右＝元数据/预览/Tags</li>
+        <li>头部按资产类型 Filter＋来源筛选</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>物料分类用 catalog 式筛选＋预览卡</p>
+      <p class="row avoid"><span class="k">避什么</span>手动生成预览图（幕景由生成管线自动产出）</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料库分类改为目录筛选（material-symbol.tsx 体系）</p>
+    </article>
+
+    <!-- 19 -->
+    <article class="card" data-status="新增" data-theme="拖入舞台">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">拖入舞台</span></div>
+      <h2><a href="https://docs.blender.org/manual/en/latest/editors/asset_browser.html" target="_blank" rel="noopener">Blender · 资产类型决定落点</a></h2>
+      <p class="value">对象拖进场景；材质直接拖到对象上；几何节点拖到对象上加修改器——类型即落点。</p>
+      <ul class="skeleton">
+        <li>道具拖进画布＝新摆放；材质拖到已放道具上＝换材质</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>「类型决定落点」的拖入语义</p>
+      <p class="row avoid"><span class="k">避什么</span>所有资产都用同一种落点行为</p>
+      <p class="row landing"><span class="k">幕景落点</span>材质类拖到已放物料＝换材质（material-customization.tsx 已有材质能力）</p>
+    </article>
+
+    <!-- 20 -->
+    <article class="card" data-status="新增" data-theme="去人格化模式">
+      <div class="card-top"><span class="badge b-新增">新增</span><span class="theme-tag">去人格化模式</span></div>
+      <h2><a href="https://developer.playcanvas.com/user-manual/supersplat/editor/scene-management/" target="_blank" rel="noopener">SuperSplat · 删除分级语义</a></h2>
+      <p class="value">删整个文件＝不可撤销（先存项目副本）；删内容＝进编辑历史可撤销。两种动作两种文案。</p>
+      <ul class="skeleton">
+        <li>「移除」与「删除」在面板文案上分开</li>
+      </ul>
+      <p class="row steal"><span class="k">偷什么</span>删除分级文案纪律</p>
+      <p class="row avoid"><span class="k">避什么</span>一个「删除」钮同时删文件和删内容</p>
+      <p class="row landing"><span class="k">幕景落点</span>物料库/环境槽删除动作分级（material-checkin-panel.tsx 点验流程对齐）</p>
+    </article>
+
+  </main>
+
+  <footer>
+    分片 C · 空间 / 物料 · 2026-11-04 ｜ 底稿见同目录 space-materials-tool-panels-2026-11-04.md ｜ 所有对标链接均已实际打开核实；未核实候选（Unity / Unreal / Twinmotion / Enscape）已放弃，不入板。
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var status='全部', theme='全部';
+  var cards=Array.prototype.slice.call(document.querySelectorAll('.card'));
+  function apply(){
+    var shown=0;
+    cards.forEach(function(c){
+      var okS=(status==='全部')||(c.dataset.status===status);
+      var okT=(theme==='全部')||(c.dataset.theme===theme);
+      var ok=okS&&okT;
+      c.style.display=ok?'':'none';
+      if(ok) shown++;
+    });
+    document.getElementById('count').textContent=''+shown+' / '+cards.length+' 张';
+  }
+  document.querySelectorAll('button.fbtn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var f=btn.dataset.f, v=btn.dataset.v;
+      if(f==='status'){status=v;}else{theme=v;}
+      document.querySelectorAll('button.fbtn[data-f="'+f+'"]').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      apply();
+    });
+  });
+  apply();
+})();
+</script>
+</body>
+</html>
