@@ -1,6 +1,6 @@
 # docs/ 文档索引
 
-本索引覆盖 `docs/` 下全部 `.md` 文件（含子目录），共 **162** 条，每条一行。
+本索引覆盖 `docs/` 下全部 `.md` 文件（含子目录），共 **163** 条，每条一行。
 
 **状态判定规则**
 
@@ -61,6 +61,7 @@
 | `docs/T-AHOLO-ENTRY.md` | T-AHOLO-ENTRY：物料建模入口修复 | 2026-10-29 | 当前 |
 | `docs/T-MAP-ALIGN-OFFSET-2026-10-31.md` | T-MAP-ALIGN-OFFSET：圈画与渲染偏移 | 2026-10-31 | 当前 |
 | `docs/design-spec-2026.md` | Scendance 2026 设计规范 v2.5.2 | 2026-11-02 | 当前 |
+| `docs/ux-state-copy-audit.md` | 三态文案审计（空/加载/错误） | 2026-11-03 | 当前 |
 
 ## `archive/`
 
