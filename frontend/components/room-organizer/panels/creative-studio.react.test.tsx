@@ -1354,7 +1354,7 @@ describe('creative brief and assistant interaction', () => {
     enterBrief();
     fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
     expect(await screen.findByRole('region', { name: 'Agent' })).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toContain('当前尚未连接 AI 服务');
+    expect(screen.getByRole('status').textContent).toContain('生成能力尚未连接服务商');
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
     expect(prepareProposal).not.toHaveBeenCalled();
