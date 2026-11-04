@@ -91,6 +91,8 @@ function setup({ disabled = false } = {}) {
 const tiles = (): HTMLElement[] => screen.getAllByRole('button', { name: /^添加/ });
 
 beforeEach(() => {
+  // 最近用过 / 收藏 / 风格套都走 localStorage；每个用例从干净状态起，避免上一条用例的落盘记录串到下一条。
+  localStorage.clear();
   layoutStore.setState({ layout: makeLayout({ id: 'rehearsal-activity-a' }), activeFloorIndex: 0 });
   vi.mocked(loadOnlineModels).mockResolvedValue(INDEX);
   vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
@@ -207,7 +209,10 @@ describe('OnlineModelLibrary', () => {
     await act(async () => { release(); });
     expect(oldAdd).not.toHaveBeenCalled();
     expect(newAdd).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: '添加Lounge Chaise' }));
+    // 成功添加后「最近用过」条带会出现同名钮，点库内那个（非 recent-item）。
+    const libraryTile = screen.getAllByRole('button', { name: '添加Lounge Chaise' })
+      .find(btn => !btn.closest('.sc-recent-item'));
+    fireEvent.click(libraryTile!);
     page.rerender(<OnlineModelLibrary onAdd={newAdd} disabled/>);
     await act(async () => { release(); });
     expect(newAdd).toHaveBeenCalledOnce();
@@ -525,5 +530,35 @@ describe('物料卡的按风格配一套', () => {
     expect(items.length).toBeGreaterThanOrEqual(4);
     expect(items.some(item => item.type === 'sofa' && item.color === '#E8DCC8')).toBe(true);
     expect(onAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('最近用过', () => {
+  it('records a model only after it actually lands on the floor, then clears on demand', async () => {
+    const onAdd = vi.fn();
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd}/>);
+    await screen.findByRole('button', { name: /^库/ });
+    // 落盘之前：没有「最近用过」分组，localStorage 也是空的。
+    expect(screen.queryByRole('list', { name: '最近用过' })).toBeNull();
+    expect(screen.queryByText('最近用过')).toBeNull();
+    expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();
+    // 点一张卡 → 下载成功 → onAdd 被调用 → slug 进最近用过。
+    fireEvent.click(await screen.findByRole('button', { name: '添加Lighting Tower' }));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByText('最近用过')).toBeTruthy());
+    expect(JSON.parse(localStorage.getItem('scendance.online-model.recent') ?? '[]')).toEqual(['stage-tower']);
+    // 最近用过里同一张卡可再点一次；清空按钮把本地记录抹掉。
+    fireEvent.click(screen.getByRole('button', { name: '清空最近用过' }));
+    expect(screen.queryByText('最近用过')).toBeNull();
+    expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();
+  });
+
+  it('does not record when the download fails or the floor is full', async () => {
+    vi.mocked(ensureGlbAsset).mockRejectedValueOnce(new Error('网络不可达'));
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
+    await screen.findByRole('button', { name: /^库/ });
+    fireEvent.click(await screen.findByRole('button', { name: '添加Lighting Tower' }));
+    await screen.findByRole('alert');
+    expect(localStorage.getItem('scendance.online-model.recent')).toBeNull();
   });
 });

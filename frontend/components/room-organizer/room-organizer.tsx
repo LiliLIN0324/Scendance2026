@@ -7,13 +7,22 @@ import { createBackendSession, type BackendSession } from '@/lib/backend-session
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
+import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
+import { setGenerationOutcome } from './lib/use-generation-outcome';
+import {
+  executeSceneCommand,
+  applyLayoutCommandWithRefusals,
+  placeItemCommand,
+  applyLayoutCommand,
+} from '@/lib/build-command';
+import { settlePlacement } from '@/lib/settle-placement';
+import { combineOutcomes, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
+import { isOpening } from './lib/opening-snap';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
-import { get2DViewTransform } from './canvas-2d/render';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
-import { useCameraFly } from './hooks/use-camera-fly';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
@@ -47,6 +56,7 @@ import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { findCatalogEntry } from './lib/catalog-drag';
+import { suggestDropPoint } from './lib/drop-zone';
 import { captureCatalogPlacement } from './lib/catalog-placement-guard';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
@@ -58,7 +68,7 @@ import { alignSelection, distributeSelection, type AlignEdge, type DistributeAxi
 import { hasCollisions, totalCost } from './lib/geometry';
 import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
 import type { GizmoMode } from './lib/transform';
-import { randomId, randomSuffix } from './lib/ids';
+import { randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
@@ -66,7 +76,6 @@ import { loadOnlineCatalogItem } from './lib/online-model-placement';
 import { loadOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
-import { createReviewPin, flyDestination, markPinResolved, pinAnchor, pinSubject, planPointToCanvas, type ReviewPin, type ReviewPinDraft, type ReviewPinFilter } from './lib/review-pins';
 import { editorItemLimit } from './lib/scene-presets';
 import { parseLayoutEventOperations } from './lib/schema';
 import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
@@ -101,12 +110,10 @@ import { ItemContextPopover } from './panels/item-context-popover';
 import { LeftCardResizer } from './panels/left-card-resizer';
 import { Lux3dDirectTest } from './panels/lux3d-direct-test';
 import { MobileAgentDock } from './panels/mobile-agent-dock';
-import { DeliveryChecklistShell, ReviewIssuesCard, WorkbenchModeCard } from './panels/mode-shell';
+import { DeliveryChecklistShell } from './panels/mode-shell';
 import { PlacementHint } from './panels/placement-hint';
-import { VenueLibraryPanel } from './panels/venue-library-panel';
 import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
-import { ReviewPinLayer, type ReviewPinMark } from './panels/review-pin-layer';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { SpacePanel } from './panels/space-panel';
 import { StatusToastHost } from './panels/status-toast';
@@ -114,9 +121,18 @@ import { EnvironmentLoad } from './panels/environment-load';
 import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
+import { ConfirmModal } from './components/ConfirmModal';
+import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
+import { F3CoachBubble } from './panels/f3-coach-bubble';
+import { usePlanAnnotations } from './hooks/use-plan-annotations';
+import { PlanOverlay } from './canvas-2d/plan-overlay';
+import { PlanCard } from './panels/plan-card';
+import { estimateCapacity } from '@/lib/capacity-meter';
+import { computeBingoScore } from '@/lib/bingo-score';
+import { createEmptyPlanDraft } from '@/lib/plan-annotation';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
-import type { CatalogItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 import type { SplatPaint } from './three/splat-preview';
 
 function zoomCamera(
@@ -180,9 +196,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const frameViewportRef = useRef(() => {});
 
   const { layout, activeFloor, activeFloorIndex, actions } = useLayoutState();
+  // 集成接线：F3 首次吸附教练气泡、规划标注层、确认弹层状态。
+  const f3Coach = useF3CoachBubble();
+  const planAnnot = usePlanAnnotations();
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
   useEffect(() => { setSpaceWorkflow('aholo'); }, [layout.id]);
   const liveLayout = useRef(layout); liveLayout.current = layout;
   const [aiPreview, setAiPreview] = useState<{base: RoomLayout; candidate: RoomLayout} | null>(null);
+  const [previewGuard, setPreviewGuard] = useState<PreviewContext | null>(null);
+  // M5 欠债②：Outcome.refused 之前恒空。这里在组件侧镜像最近一次 Outcome，
+  // 让手动拖放被拒的单件也能合并进同一份账本，而不是把上一份 AI 账本直接覆盖掉。
+  const lastOutcomeRef = useRef<GenerationOutcome<FurnitureItem> | null>(null);
+  const applyOutcome = useCallback((outcome: GenerationOutcome<FurnitureItem>) => {
+    lastOutcomeRef.current = outcome;
+    setGenerationOutcome(outcome);
+  }, []);
   const [captionEpoch, setCaptionEpoch] = useState(0);
   const [previewCaptionVisible, setPreviewCaptionVisible] = useState(false);
   const activeFloorY = floorElevation(layout.floors, activeFloorIndex);
@@ -223,7 +251,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 对话顶栏那颗门洞头像：飞行层从它起飞，落地后再显形。
   const bingoHeaderAvatarRef = useRef<HTMLSpanElement>(null);
   const [bingoHeaderAvatarVisible, setBingoHeaderAvatarVisible] = useState(false);
-  const [activeAgent, setActiveAgent] = useState<AgentId>('bingo');
+  const [activeAgent, setActiveAgent] = useState<AgentId>('door');
   // 手机端左轨收成一颗入口钮；点开后是四格弹层，选一个 agent 就收起。
   const [mobileRailOpen, setMobileRailOpen] = useState(false);
   const [spaceWorkflow, setSpaceWorkflow] = useState<'aholo' | 'traditional'>('aholo');
@@ -268,14 +296,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
-  const [reviewPins, setReviewPins] = useState<ReviewPin[]>([]);
-  const [pinFilter, setPinFilter] = useState<ReviewPinFilter>('open');
-  const [activePinId, setActivePinId] = useState<string | null>(null);
-  const [pinDraft, setPinDraft] = useState<ReviewPinDraft | null>(null);
-  const [reviewCleared, setReviewCleared] = useState(false);
-  const reviewPinsRef = useRef(reviewPins);
-  reviewPinsRef.current = reviewPins;
-  const openPinDraftRef = useRef<(pick: { itemId: string | null; x: number; y: number; z: number }) => void>(() => {});
+  // T3 封堵：制作侧画布钉（reviewPins/pinFilter/pinDraft/reviewCleared）整簇删除——门已封死，评审只走分享链接。
   const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
   const [environments, setEnvironments] = useState<StoredEnvironment[]>([]);
@@ -462,11 +483,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     if (agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
     else showAgent(id);
   }, [agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
-  const closeSidePanel = useCallback(() => {
-    setSidePanel(null);
-    setAgentCollapsed(true);
-    setAgentClosing(false);
-  }, []);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单仍浮在画布上。不把Bingo切成评审或执行。
     setLeftMode('business');
@@ -1158,13 +1174,57 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const placeDiscrete = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }): string => {
       if (materialCount(activeFloor.items) >= editorItemLimit(layout)) { notify(`当前场景最多支持 ${editorItemLimit(layout)} 件物料。`, 'info'); return ''; }
+      // M2 命令门（P0-1）：普通家具在落盘前过一次几何判据；门洞 / 窗 / 摄像机 / 户外件
+      // 在 useItemPlacement 内部有自己的 snap 与 canApplyLayoutGeometry 兜底，这里不重复预判。
+      const bypassCommandGate = isOpening(catalogItem.type)
+        || catalogItem.type === 'security-camera'
+        || catalogItem.category === 'outdoor';
+      if (!bypassCommandGate) {
+        const trialItem: FurnitureItem = {
+          ...catalogItem,
+          id: `__trial_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          position: position ?? { x: 0, z: 0 },
+          rotation: 0,
+        } as FurnitureItem;
+        const trialResult = executeSceneCommand(
+          placeItemCommand({ floorIndex: activeFloorIndex, item: trialItem }),
+          { layout },
+        );
+        if (!trialResult.ok) {
+          const entry: OutcomeEntry<FurnitureItem> = {
+            item: trialItem,
+            reason:
+              trialResult.refused[0]?.message
+              ?? trialResult.preconditions[0]?.message
+              ?? trialResult.shapeIssues.map(s => s.message).join('；')
+              ?? '落点不合法',
+            code:
+              trialResult.refused[0]?.code
+              ?? trialResult.preconditions[0]?.code
+              ?? 'SHAPE_INVALID',
+          };
+          notify(`「${catalogItem.name}」没放成：${entry.reason}`, 'info');
+          applyOutcome(combineOutcomes(
+            lastOutcomeRef.current ?? { placed: [], refused: [], skipped: [] },
+            { placed: [], refused: [entry], skipped: [] },
+          ));
+          setPendingCatalog(catalogItem);
+          return '';
+        }
+      }
       commitHistoryNow();
       const id = placeCatalogItem(catalogItem, position);
       if (!id) { setPendingCatalog(catalogItem); notify('此处与结构相交，请点击场地中的其他位置放置。', 'info'); }
-      else setPendingCatalog(null);
+      else {
+        setPendingCatalog(null);
+        // M6 provenance：手动放的件打上 human 标签，方便 handoff / 审校卡区分 AI 与人工。
+        actions.updateItem(id, {
+          provenance: { source: 'human', opId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` },
+        });
+      }
       return id;
     },
-    [commitHistoryNow, placeCatalogItem, activeFloor.items, layout]
+    [commitHistoryNow, placeCatalogItem, activeFloor.items, layout, activeFloorIndex, actions, applyOutcome]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -1197,7 +1257,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     extraSelectedIds,
     allSelectedIds,
     editingLocked: workbenchMode !== 'layout',
-    ...(workbenchMode === 'review' ? { onReviewAnchor: ({ itemId, x, z }: { itemId: string | null; x: number; z: number }) => openPinDraftRef.current({ itemId, x, y: activeFloorY, z }) } : {}),
     onItemSelect: handleSelect,
     onItemDoubleClick: openPropertiesForItem,
     onDeselect: deselectAll,
@@ -1244,7 +1303,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         return true;
       },
       editingLocked: workbenchMode !== 'layout',
-      ...(workbenchMode === 'review' ? { onReviewAnchor: (anchor: { itemId: string | null; x: number; y: number; z: number }) => openPinDraftRef.current(anchor) } : {}),
       onWallSelect: ({ wallId, kind }) => {
         setSelectedWall({ id: wallId, kind });
       },
@@ -1591,73 +1649,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     sceneRef,
   });
 
-  const exitPlanView = useCallback(() => {
-    setView(current => (current.view2D ? { ...current, view2D: false } : current));
-  }, []);
-  const flyToPin = useCameraFly({ cameraRef, controlsRef, invalidate, onExit2D: exitPlanView });
-  const itemOrigin = useCallback((itemId: string | null) => {
-    if (!itemId) return null;
-    const item = activeFloor.items.find(entry => entry.id === itemId);
-    return item?.position ? { x: item.position.x, y: activeFloorY, z: item.position.z } : null;
-  }, [activeFloor.items, activeFloorY]);
-  openPinDraftRef.current = (pick) => {
-    if (workbenchMode !== 'review') return;
-    const camera = cameraRef.current;
-    if (!camera) return;
-    const origin = itemOrigin(pick.itemId);
-    const offset = origin ? [pick.x - origin.x, pick.y - origin.y, pick.z - origin.z] as const : null;
-    const cameraShot = view.view2D
-      ? { position: [pick.x + 2.4, pick.y + 2.8, pick.z + 2.4] as const, target: [pick.x, pick.y, pick.z] as const }
-      : { position: [camera.position.x, camera.position.y, camera.position.z] as const, target: [pick.x, pick.y, pick.z] as const };
-    setPinDraft({ itemId: pick.itemId, x: pick.x, y: pick.y, z: pick.z, offset, camera: cameraShot });
-  };
-  const focusReviewPin = useCallback((id: string) => {
-    const pin = reviewPinsRef.current.find(entry => entry.id === id);
-    if (!pin) return;
-    setActivePinId(id);
-    flyToPin(flyDestination(pin, itemOrigin(pin.itemId)));
-  }, [flyToPin, itemOrigin]);
-  const commitReviewPin = useCallback((text: string) => {
-    const current = pinDraft;
-    if (!current) return;
-    const pin = createReviewPin({ id: randomId('pin'), text, draft: current });
-    if (!pin) return;
-    setReviewPins(pins => [...pins, pin]);
-    setActivePinId(pin.id);
-    setPinFilter('open');
-    setPinDraft(null);
-  }, [pinDraft]);
-  const returnReviewPin = useCallback((id: string) => {
-    focusReviewPin(id);
-    selectWorkbenchMode('layout');
-    notify('回到布置。改完再进评审，标已解决。');
-  }, [focusReviewPin, selectWorkbenchMode]);
-  const confirmReview = useCallback(() => {
-    setReviewCleared(true);
-    selectWorkbenchMode('delivery');
-  }, [selectWorkbenchMode]);
-  const reviewMarks = useMemo<ReviewPinMark[]>(() => reviewPins.map((pin, index) => {
-    const point = pinAnchor(pin, itemOrigin(pin.itemId));
-    return { id: pin.id, n: index + 1, status: pin.status, x: point.x, y: point.y, z: point.z };
-  }), [reviewPins, itemOrigin]);
-  const toScreen = useCallback((point: { x: number; y: number; z: number }) => {
-    if (view.view2D) {
-      const canvas = canvas2DRef.current;
-      if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
-      return planPointToCanvas(point, layout, get2DViewTransform(canvas.clientWidth, canvas.clientHeight, layout));
-    }
-    const THREE = threeModuleRef.current;
-    const camera = cameraRef.current;
-    const canvas = canvasRef.current;
-    if (!THREE || !camera || !canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
-    const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
-    if (projected.z > 1) return null;
-    return {
-      x: (projected.x * 0.5 + 0.5) * canvas.clientWidth,
-      y: (-projected.y * 0.5 + 0.5) * canvas.clientHeight,
-    };
-  }, [view.view2D, layout, cameraRef, canvasRef, canvas2DRef, threeModuleRef]);
-
   // 调研底图在场时，取景框换成底图那片区域：底图铺在哪，镜头就框哪。
   const researchPlacement = researchBasemapPlacement(layout);
   const { applyPreset, focusOn, fitToRoom, ensureRoomInView } = useCameraPresets({
@@ -1911,15 +1902,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       ? { ...current, drawWallMode: false, drawZoneMode: false, measurementMode: false }
       : current);
   }, [workbenchMode, selectOnly, cancelPlacement, setView]);
-  useEffect(() => {
-    if (workbenchMode !== 'review') setPinDraft(null);
-  }, [workbenchMode]);
-  useEffect(() => {
-    setReviewPins([]);
-    setPinDraft(null);
-    setActivePinId(null);
-    setReviewCleared(false);
-  }, [layout.id]);
 
 
 
@@ -2006,14 +1988,87 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory]);
 
   const onApplyCreative = useCallback((next: RoomLayout) => {
-    if (!canApplyLayoutGeometry(layoutStore.getState().layout, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
+    const before = layoutStore.getState().layout;
+    let forceApply = false;
+    if (previewGuard) {
+      const decision = decideOnApply(before, previewGuard);
+      // 预览卡本身就是确认：prompt 场景不再 window.confirm 阻塞，直接 forceApply 继续，
+      // 用户已在预览里看过候选，二次确认由撤销历史兜底。
+      forceApply = decision.action === 'prompt';
+    }
+    if (!canApplyLayoutGeometry(before, next)) throw new Error('候选方案包含新的墙体、柱子或边界冲突，请先修正。');
+
+    // M6 provenance：给 AI 候选里每件打上 ai 标签（map 新数组，不 mutation 原候选）。
+    const aiOpId = `ai-${Date.now()}`;
+    const provenanceNext: RoomLayout = {
+      ...next,
+      floors: next.floors.map(f => ({
+        ...f,
+        items: f.items.map(item => ({
+          ...item,
+          provenance: {
+            source: 'ai' as const,
+            opId: aiOpId,
+            ...(previewGuard?.recipeId ? { recipeId: previewGuard.recipeId } : {}),
+          },
+        })),
+      })),
+    };
+
+    // M2 命令门（P0-2）：逐件分流——合法件进 nextLayout，越界/重叠件进 refused（真记账）。
+    // 用户已经在 decideOnApply 里 confirm 过的话，本次跳过 baseFingerprint 再校验。
+    const cmd = applyLayoutCommand({
+      layout: provenanceNext,
+      ...(forceApply || !previewGuard?.baselineFingerprint
+        ? {}
+        : { baseFingerprint: previewGuard.baselineFingerprint }),
+    });
+    const result = applyLayoutCommandWithRefusals(cmd, { layout: before });
+    if (!result.ok) {
+      const msg = result.shapeIssues.map(s => s.message).join('；')
+        || result.preconditions.map(p => p.message).join('；')
+        || '候选方案无法应用';
+      throw new Error(msg);
+    }
+
+    // M3 settle 自动体检（P0-2 接线）：AI 摆完立刻跑一遍 BFS 可达性 + 最小平移收敛器，
+    // 把堵主通道 / 孤立刻直接挪开；挪不动的留给 UI 标红。
+    const settleReport = settlePlacement(result.nextLayout, activeFloorIndex);
+    const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
+    const stillBad = settleReport.remainingViolations.length;
+    if (movedCount > 0 || stillBad > 0) {
+      notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
+    }
+    const finalLayout = settleReport.layout;
+    // 集成接线：Bingo 体检分即时 notify（后续 BingoAuditCard 可从同一来源取数）。
+    const bingoScore = computeBingoScore(finalLayout, settleReport);
+    notify(bingoScore.summary, bingoScore.total >= 95 && bingoScore.stuckCount === 0 ? 'success' : 'info');
+
     commitHistoryNow();
     snapshotBeforeReplace(layout);
-    actions.applyLayout({ ...next, ...(layout.designBook && !next.designBook ? { designBook: layout.designBook } : {}) });
+    actions.applyLayout({ ...finalLayout, ...(layout.designBook && !finalLayout.designBook ? { designBook: layout.designBook } : {}) });
+
+    // M5：按 id 差分写 Outcome 账本；refused 不再硬编码空数组。
+    const beforeIds = new Set(before.floors.flatMap(f => f.items.map(i => i.id)));
+    const placedItems = finalLayout.floors.flatMap(f => f.items).filter(i => !beforeIds.has(i.id));
+    const finalIds = new Set(finalLayout.floors.flatMap(f => f.items.map(i => i.id)));
+    const removedItems = before.floors.flatMap(f => f.items).filter(i => !finalIds.has(i.id));
+    const candidateById = new Map(provenanceNext.floors.flatMap(f => f.items.map(i => [i.id, i])));
+    const refusedEntries: OutcomeEntry<FurnitureItem>[] = result.refused.map(r => ({
+      item: candidateById.get(r.itemId) ?? ({ id: r.itemId, name: r.itemId } as unknown as FurnitureItem),
+      reason: r.message,
+      code: r.code,
+    }));
+    applyOutcome({
+      placed: placedItems,
+      refused: refusedEntries,
+      skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
+    });
+    setPreviewGuard(null);
     clearTransientSelection();
     initiallyFramed.current = false;
     setView(current => ({ ...current, view2D: false }));
-  }, [commitHistoryNow, layout, actions, clearTransientSelection]);
+  }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome]);
 
   /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
@@ -2124,7 +2179,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const onPreviewAi = useCallback((candidate: RoomLayout | null) => {
     setAiPreview(candidate ? { base: liveLayout.current, candidate } : null);
-    if (candidate) { setView(current => ({ ...current, view2D: false })); }
+    if (candidate) {
+      setView(current => ({ ...current, view2D: false }));
+      setPreviewGuard(snapshotPreviewContext(liveLayout.current, candidate));
+    } else {
+      setPreviewGuard(null);
+    }
   }, []);
   const openAholoWorkflow = useCallback((kind: 'world' | 'recon' = 'world', prompt?: string) => {
     noteVenueThreeIntent();
@@ -2172,6 +2232,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存' : '草稿';
   const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '';
   const draftTitle = saveError ? '保存失败，请导出备份' : draftLabel;
+  // 集成接线：顶栏容量计——从 layout 读宽深（height 字段在本仓库里是深度），调用纯函数估算。
+  const capacityPlacedCount = activeFloor.items.length;
+  const capacityEstimate = (typeof layout.width === 'number' && typeof layout.height === 'number' && layout.width > 0 && layout.height > 0)
+    ? estimateCapacity(layout.width, layout.height, capacityPlacedCount)
+    : null;
+  const capacityText = capacityEstimate
+    ? `本场上限 ${capacityEstimate.maxItems} 件 · 已放 ${capacityEstimate.placedItems} 件`
+    : '本场上限 —';
+  const capacityOverloaded = !!capacityEstimate && capacityEstimate.ratio > 0.9;
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -2185,6 +2254,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
+        onIssueReviewLink: async () => (await issueReviewLink()).url,
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
@@ -2194,6 +2264,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive ? ' is-walkthrough' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
+          <span
+            role="status"
+            style={{
+              marginLeft: 'auto',
+              marginRight: 12,
+              padding: '2px 8px',
+              borderRadius: 4,
+              background: '#F4F5F7',
+              color: capacityOverloaded ? '#C0392B' : '#4A7C59',
+              fontSize: 11,
+              lineHeight: '18px',
+              fontFamily: 'inherit',
+            }}
+          >
+            {capacityText}
+          </span>
         </div>
         <main data-nav={columnExpanded ? 'expanded' : 'collapsed'} className={`sc-workspace is-docked-layout is-mode-rail${columnExpanded ? ' has-left-column' : ''}${agentCollapsed?' is-agent-collapsed':''}${conversationOpen?' has-conversation':''}`} style={{ ['--sc-left-card-width' as string]: `${leftColumnWidth}px` }}>
           <button ref={reviewEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
@@ -2201,7 +2287,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
             <div className="sc-rail-head">
               <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
-              <nav className="sc-mode-rail-primary" aria-label="总控、Bingo、空间、物料">
+              <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、空间、物料">
                 <BingoRailButton open={isLaneOpen('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
                 <button
                   type="button"
@@ -2238,6 +2324,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
               {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
+              <button
+                type="button"
+                onClick={() => {
+                  // 集成接线：规划标注模式循环 off→zone→route→measure→off；首次点击时开一份空草案。
+                  const order: Array<'off' | 'zone' | 'route' | 'measure'> = ['off', 'zone', 'route', 'measure'];
+                  const idx = order.indexOf(planAnnot.drawMode);
+                  const next = order[(idx + 1) % order.length];
+                  if (!planAnnot.draft) planAnnot.startDraft();
+                  planAnnot.setDrawMode(next);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  border: '1px solid #d0d7de',
+                  background: planAnnot.drawMode !== 'off' ? '#4A7C59' : '#F4F5F7',
+                  color: planAnnot.drawMode !== 'off' ? '#ffffff' : '#4A7C59',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontFamily: 'inherit',
+                }}
+              >
+                规划标注{planAnnot.drawMode !== 'off' ? `·${planAnnot.drawMode}` : ''}
+              </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
               <CloudPanel controller={controller} layout={layout} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
@@ -2269,30 +2378,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <div className="sc-left-content sc-mode-card-host" hidden/>
           </div>
           {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
-          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible} reviewSlot={workbenchMode === 'review' ? <ReviewIssuesCard
-              pins={reviewPins}
-              items={activeFloor.items}
-              filter={pinFilter}
-              activeId={activePinId}
-              onFilter={setPinFilter}
-              onFocus={focusReviewPin}
-              onResolve={id => setReviewPins(pins => markPinResolved(pins, id))}
-              onReturn={returnReviewPin}
-              onConfirm={confirmReview}
-            /> : undefined} deliverySlot={workbenchMode === 'delivery' ? <WorkbenchModeCard
-              pins={reviewPins}
-              pinFilter={pinFilter}
-              activePinId={activePinId}
-              reviewCleared={reviewCleared}
-              onPinFilter={setPinFilter}
-              onFocusPin={focusReviewPin}
-              onResolvePin={id => setReviewPins(pins => markPinResolved(pins, id))}
-              onReturnPin={returnReviewPin}
-              onConfirmDelivery={confirmReview}
-              onExport={() => { setSidePanel(null); setAgentCollapsed(false); }}
-            /> : undefined}/>}
+          {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
-          {sidePanel === 'venue' && <VenueLibraryPanel onClose={closeSidePanel} />}
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {
@@ -2371,26 +2458,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             if (!dropActive.current) return;
             if (layoutStore.getState() !== base) throw new Error('下载期间画布已有变化，请重新拖入物料。');
             placement.assertCurrent();
-            const newId = placeDiscrete(item, world);
-            if (newId) selectOnly(newId, { keepPanel: true });
+            // F3 智能落点：拖到已有物件附近自动吸附到旁侧，避免重叠。
+            const anchors = activeFloor.items.filter(e => e.position).map(entry => ({ id: entry.id, name: entry.name, x: entry.position!.x, z: entry.position!.z, width: entry.width, depth: entry.depth }));
+            const suggested = suggestDropPoint(world, anchors, { width: item.width, depth: item.depth });
+            const newId = placeDiscrete(item, suggested.point);
+            if (newId) {
+              selectOnly(newId, { keepPanel: true });
+              if (suggested.anchor) notify(`已紧挨「${suggested.anchor.name}」摆放`, 'info');
+            }
           } catch (error) { notify(error instanceof Error ? error.message : '模型加载失败，请重试。', 'error'); }
           finally { placement.dispose(); }
         }}
       />
             <EnvironmentLoad active={splatState.status === 'loading'} name={splatState.name} {...(splatState.progress === undefined ? {} : { progress: splatState.progress })} />
             <AgentCanvasOverlay/>
-            <ReviewPinLayer
-              pins={reviewMarks}
-              activeId={activePinId}
-              draft={pinDraft}
-              draftLabel={pinDraft ? (pinDraft.itemId ? `钉在「${pinSubject(pinDraft.itemId, activeFloor.items)}」` : '钉在地面') : ''}
-              toScreen={toScreen}
-              controlsRef={controlsRef}
-              cameraReady={isReady}
-              onFocus={focusReviewPin}
-              onCommit={commitReviewPin}
-              onCancel={() => setPinDraft(null)}
-            />
             <MapVenueOverlay onHangDemoEnvironment={hangDemoEnvironment} onReconUpload={luxDirectVisible ? preset => {
               noteVenueThreeIntent();
               setSpaceWorkflow('aholo');
@@ -2402,7 +2483,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <button type="button" className="sc-checklist-dismiss" onClick={() => setChecklistOpen(false)}>关闭</button>
               <DeliveryChecklistShell items={activeFloor.items} onExport={exportHandoff}/>
             </aside>}
-            {workbenchMode === 'review' && !pinDraft && <p className="sc-review-hint" role="status">点物件或地面，钉一条意见</p>}
             <div ref={businessHostRef} className="sc-canvas-share sc-data-host" hidden={!businessOpen || leftMode !== 'business'}/>
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
@@ -2442,6 +2522,29 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             {remoteLayout && <div className="sc-local-conflict"><span>另一标签页更新了本地副本</span><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>保留当前</button></div>}
             <PlacementHint active={placingId !== null}/>
             <StatusToastHost/>
+            {/* 集成接线：F3 首次吸附教练气泡，固定锚点（画布中央偏左），不追求精确吸附位置。 */}
+            <F3CoachBubble anchor={{ x: 240, y: 260 }} visible={f3Coach.shouldShow} onDismiss={f3Coach.dismiss} />
+            {/* 集成接线：2D 视图下渲染规划标注层（近似 scale/origin，集成层后续精调）。 */}
+            {view.view2D && (
+              <PlanOverlay
+                annotations={planAnnot.draft?.annotations ?? []}
+                scale={10}
+                origin={{ x: 240, y: 240 }}
+                visible={planAnnot.annotationsVisible}
+              />
+            )}
+            {/* 集成接线：规划草案浮层（右侧卡），批准/换一版/取消/反馈先 notify，不接后端执行。 */}
+            {planAnnot.draft && (
+              <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
+                <PlanCard
+                  draft={planAnnot.draft}
+                  onApprove={() => notify('规划已批准：执行层接线后将把标注落到布局。', 'info')}
+                  onReplace={() => planAnnot.replaceDraft(createEmptyPlanDraft())}
+                  onCancel={() => planAnnot.clearDraft()}
+                  onComment={(text) => notify(`已记下反馈：${text}`, 'info')}
+                />
+              </div>
+            )}
           </div>
             <div className="sc-editor-dock">
             <ScendanceViewTools environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={{ onIssueReviewLink: issueReviewLink, onPublish: publishVersion, onExportHandoff: exportHandoff, onGenerateShareLink: handleShareLink, onOpenMaterials: openMaterialsFromShare, onOpenChecklist: () => setChecklistOpen(true) }} onExportImage={handleExportImage} onCaptureImage={captureRenderImage} onExportAlbum={handleExportAlbum} onApplyPreset={applyPreset} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onZoom={direction => {
@@ -2458,6 +2561,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         </main>
       </div>
       </LayoutAgentProvider>
+      <ConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        {...(confirmModal.confirmText ? { confirmText: confirmModal.confirmText } : {})}
+        onConfirm={() => setConfirmModal(s => ({ ...s, open: false }))}
+        onCancel={() => setConfirmModal(s => ({ ...s, open: false }))}
+      />
     </CreativeStudioProvider>
     </SelectionProvider>
     </RoomEditorProvider>

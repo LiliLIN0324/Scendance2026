@@ -38,7 +38,7 @@ export const MOCK_HANG_DONE_NOTE =
   '已挂干跑环境预览（历史宴会厅样例 .spz，非本场包），未扣额度。splat 只作观感层。';
 
 /** 真调提交前必须勾选的扣额度确认闸。 */
-export const CREDIT_CONFIRM_LABEL = '我确认本次提交将消耗 Aholo 额度';
+export const CREDIT_CONFIRM_LABEL = '我确认本次提交将消耗生成额度';
 
 /** 真成功挂本场后的状态。 */
 export const VENUE_PACKAGE_HUNG =

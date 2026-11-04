@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分片 A · 活动 — AI 主对话工作台 / 活动画廊灵感板</title>
+<style>
+  :root{
+    --stone:#F4F5F7;
+    --paper:#FFFFFF;
+    --ink:#1B1E1C;
+    --ink-soft:#4A514D;
+    --ink-faint:#7A827D;
+    --hairline:#E2E4E7;
+    --green:#4A7C59;
+    --green-soft:#E7EFEA;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--stone);
+    color:var(--ink);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:48px 28px 80px}
+  header.masthead{border-bottom:1px solid var(--hairline);padding-bottom:28px;margin-bottom:28px}
+  .backlink{display:inline-block;font-size:13px;color:var(--ink-faint);text-decoration:none;margin-bottom:18px}
+  .backlink:hover{color:var(--green)}
+  h1{font-size:26px;font-weight:650;letter-spacing:.01em}
+  .sub{margin-top:10px;color:var(--ink-soft);font-size:14px;max-width:760px}
+  .meta{margin-top:14px;font-size:13px;color:var(--ink-faint)}
+  .meta strong{color:var(--green);font-weight:600}
+
+  .filters{display:flex;flex-wrap:wrap;gap:22px;margin:26px 0 30px}
+  .filter-group{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .filter-label{font-size:12px;color:var(--ink-faint);margin-right:6px;letter-spacing:.08em}
+  button.fbtn{
+    font:inherit;font-size:13px;cursor:pointer;
+    background:var(--paper);color:var(--ink-soft);
+    border:1px solid var(--hairline);border-radius:999px;
+    padding:5px 14px;
+  }
+  button.fbtn:hover{border-color:var(--ink-faint)}
+  button.fbtn.active{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+  .count{font-size:13px;color:var(--ink-faint);margin-bottom:18px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+  .card{
+    background:var(--paper);
+    border:1px solid var(--hairline);
+    border-radius:10px;
+    padding:22px 22px 20px;
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .card.hidden{display:none}
+  .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .card h2{font-size:16px;font-weight:650}
+  .card h2 a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--hairline)}
+  .card h2 a:hover{color:var(--green);border-bottom-color:var(--green)}
+  .badge{
+    flex:none;font-size:11.5px;padding:3px 10px;border-radius:999px;
+    border:1px solid var(--hairline);color:var(--ink-soft);white-space:nowrap;
+  }
+  .badge.直接复用{background:var(--green-soft);border-color:var(--green-soft);color:var(--green)}
+  .badge.需改造{background:#F4F1EA;border-color:#E4DCC8;color:#7A6A3F}
+  .badge.新增{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .badge.后置{background:transparent;color:var(--ink-faint)}
+  .value{font-size:13.5px;color:var(--ink-soft)}
+  .block{font-size:13px}
+  .block .t{
+    font-size:11.5px;letter-spacing:.1em;color:var(--ink-faint);
+    text-transform:none;margin-bottom:4px;
+  }
+  .block.steal .t{color:var(--green);font-weight:600}
+  .block ul{list-style:none}
+  .block li{padding-left:14px;position:relative;margin-bottom:4px;color:var(--ink-soft)}
+  .block li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:1px;background:var(--ink-faint)}
+  .block.steal li::before{background:var(--green)}
+  .anchor{
+    margin-top:auto;padding-top:12px;border-top:1px solid var(--hairline);
+    font-size:12.5px;color:var(--ink-soft);
+  }
+  .anchor code{
+    font-family:ui-monospace,"SF Mono",Consolas,monospace;
+    font-size:11.5px;background:var(--stone);padding:1px 5px;border-radius:4px;
+  }
+  footer{margin-top:48px;border-top:1px solid var(--hairline);padding-top:18px;font-size:12.5px;color:var(--ink-faint)}
+  @media (max-width:640px){
+    .wrap{padding:32px 16px 60px}
+    .grid{grid-template-columns:1fr}
+    h1{font-size:22px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <a class="backlink" href="index.html">← 返回分片总览 index.html</a>
+    <h1>分片 A · 活动 — AI 主对话工作台 / 开场画廊 · 灵感板</h1>
+    <p class="sub">左轨四角色重划后，「活动」是唯一真对话与生成入口：开场活动画廊、AI-native 主对话工作台、非线性填格进度、真人成员条沉底。竞品事实均于 2026-11-04 联网核实（官方 URL 见各卡链接），代码落点只引用导演台账已核实锚点。</p>
+    <p class="meta">日期 <strong>2026-11-04</strong> · 幕景 Scendance IA 重划调研 · 冷石 #F4F5F7 + 品牌绿 #4A7C59</p>
+  </header>
+
+  <div class="filters">
+    <div class="filter-group" id="statusFilter">
+      <span class="filter-label">处置态</span>
+      <button class="fbtn active" data-f="all">全部</button>
+      <button class="fbtn" data-f="直接复用">直接复用</button>
+      <button class="fbtn" data-f="需改造">需改造</button>
+      <button class="fbtn" data-f="新增">新增</button>
+      <button class="fbtn" data-f="后置">后置</button>
+    </div>
+    <div class="filter-group" id="themeFilter">
+      <span class="filter-label">主题</span>
+      <button class="fbtn active" data-f="all">全部主题</button>
+      <button class="fbtn" data-f="冷启动卡片">冷启动卡片</button>
+      <button class="fbtn" data-f="画廊与列表">画廊与列表</button>
+      <button class="fbtn" data-f="主对话布局">主对话布局</button>
+      <button class="fbtn" data-f="非线性进度">非线性进度</button>
+      <button class="fbtn" data-f="成员协作">成员协作</button>
+    </div>
+  </div>
+  <p class="count" id="count"></p>
+
+  <main class="grid" id="grid">
+
+    <article class="card" data-status="直接复用" data-theme="冷启动卡片">
+      <div class="card-head">
+        <h2><a href="https://github.com/wustwyh/tuijian" target="_blank" rel="noopener">tuijian 推鉴</a></h2>
+        <span class="badge 直接复用">直接复用</span>
+      </div>
+      <p class="value">「不写一个字，点三张卡，拿到能直接发出的成品」——卡片点选代替空白输入框的冷启动老板模式。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>产品卡 / 客户卡 / 平台卡全程点选，零表单</li>
+        <li>AI 追问一次一题、全是可点选项，最多 7 轮，收成要求摘要再生成</li>
+        <li>输出=结构化结果页；核验回查为只读后置环节</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>选卡→追问摘要→一次生成→结构化交付</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>营销数字（组合数）不上界面；7 轮问卷对活动筹备过重，chips 先行</li>
+      </ul></div>
+      <p class="anchor">落点：S1 空态 <code>agent-panel.tsx:1944</code> 拆除后换活动卡行；生成 chrome <code>PlanHome:1947</code> 挂活动脸；引擎 <code>LayoutAgentProvider:264</code> 红线不动</p>
+    </article>
+
+    <article class="card" data-status="需改造" data-theme="冷启动卡片">
+      <div class="card-head">
+        <h2><a href="https://www.notion.so/templates" target="_blank" rel="noopener">Notion Templates</a></h2>
+        <span class="badge 需改造">需改造</span>
+      </div>
+      <p class="value">选一张模板卡 → 选工作区 → 一个 Duplicate 按钮，模板立刻变成「我的文档」。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>模板卡带缩略图 + 一句话用途</li>
+        <li>唯一动作按钮，无中间配置表单</li>
+        <li>复制后是你的可编辑副本，不再绑定「模板」概念</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>点活动卡=一键进活动工作台，不弹 wizard</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>上万张的模板市场与类目墙不上开场</li>
+      </ul></div>
+      <p class="anchor">落点：S1.1 开场画廊 <code>local-activities-panel.tsx</code>（台账：本机活动列表面板升级为画廊入口）</p>
+    </article>
+
+    <article class="card" data-status="需改造" data-theme="画廊与列表">
+      <div class="card-head">
+        <h2><a href="https://www.airtable.com" target="_blank" rel="noopener">Airtable Gallery View</a></h2>
+        <span class="badge 需改造">需改造</span>
+      </div>
+      <p class="value">每条记录=一张卡：顶部封面图 + 下方少量关键字段；同一份数据可换 Grid/Kanban/Timeline 多视图。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>Cover Field 指定封面；卡面只放标题 + 2~3 个字段</li>
+        <li>视图切换不动底层数据；筛选按钮带可见计数</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>「一份数据多视图」= 布置/物料/执行资料是同一方案的三张视图</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>「自定义卡字段」配置器不上开场画廊</li>
+      </ul></div>
+      <p class="anchor">落点：S1.1 卡面解剖=封面（现有画布快照机制）+ 活动名 + 状态短词</p>
+    </article>
+
+    <article class="card" data-status="需改造" data-theme="画廊与列表">
+      <div class="card-head">
+        <h2><a href="https://help.figma.com/hc/en-us/articles/30926159906967" target="_blank" rel="noopener">Figma File Browser</a></h2>
+        <span class="badge 需改造">需改造</span>
+      </div>
+      <p class="value">Recents=最近看过的文件网格；Drafts=只有自己能看的草稿箱；星标置顶；删除有垃圾箱。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>缩略图网格陈列，跨文件/看板同库</li>
+        <li>Drafts 未归档不进正式列表，可随时移出</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>草稿/归档分区：没做完的活动不混进正式画廊</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>team/projects 两层文件夹导航对单机本地库过重</li>
+      </ul></div>
+      <p class="anchor">落点：S1.1 画廊分区=最近网格 + 草稿/已归档（现有归档恢复能力为底座）</p>
+    </article>
+
+    <article class="card" data-status="直接复用" data-theme="画廊与列表">
+      <div class="card-head">
+        <h2><a href="https://help.miro.com/hc/en-us/articles/360017571294" target="_blank" rel="noopener">Miro Dashboard</a></h2>
+        <span class="badge 直接复用">直接复用</span>
+      </div>
+      <p class="value">Recent 区 + Starred 视图 + 搜索/排序/过滤，每张卡的操作全收进「…」溢出菜单。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>排序 created / last opened / last modified；grid/list 切换</li>
+        <li>卡「…」=分享/重命名/移动/复制/删除/换缩略图</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>卡面不堆按钮；默认按「最近打开」排序=接着上次干</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>Spaces/Projects 两层组织、团队切换、模板市场都不上</li>
+      </ul></div>
+      <p class="anchor">落点：S1.1 工具栏=搜索框 + 最近打开排序；网格/列表切换可选后置</p>
+    </article>
+
+    <article class="card" data-status="直接复用" data-theme="主对话布局">
+      <div class="card-head">
+        <h2><a href="https://www.framer.com/ai/" target="_blank" rel="noopener">Framer AI</a></h2>
+        <span class="badge 直接复用">直接复用</span>
+      </div>
+      <p class="value">agent 对你的真实项目直接动手：生成就是主画布上的可编辑图层，对话是 refine 通道。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>生成≠第二预览窗：结果长在主画布，可微调/撤销/手改</li>
+        <li>画布选中即 chat 上下文；@ 引用页面/素材</li>
+        <li>每任务开一个新会话，保持 agent 专注</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>对话与 3D 画布同屏共生；选中区域再说话</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>模型选择器、分支迭代、外部 agent 连接，全不上界面</li>
+      </ul></div>
+      <p class="anchor">落点：S1 会话历史/新建 <code>agent-panel.tsx:1910-1930,1939</code>；默认脸 <code>:1827</code> 与 <code>room-organizer.tsx:2017</code> 同步改活动脸</p>
+    </article>
+
+    <article class="card" data-status="需改造" data-theme="主对话布局">
+      <div class="card-head">
+        <h2><a href="https://www.notion.com/en-gb/help/notion-agent" target="_blank" rel="noopener">Notion Agent</a></h2>
+        <span class="badge 需改造">需改造</span>
+      </div>
+      <p class="value">右下角一个友好的脸；打开先给「基于当前页面你能做的动作」短清单，结果块内嵌对话。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>空态=动作建议清单，不是空白输入框</li>
+        <li>chat 可侧栏可浮窗；结果表格长在对话流里</li>
+        <li>写操作先要求确认，且以你的名义发出</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>活动脸第一屏=动作短清单 + 活动卡行；写动作前唯一确认</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>给 agent 起名/换配饰的拟人玩法；跨应用代操作后置</li>
+      </ul></div>
+      <p class="anchor">落点：S1 空态 <code>:1944</code> 改造；确认门文案对齐（<code>onApplyCreative</code> 只调文案不调接线）</p>
+    </article>
+
+    <article class="card" data-status="需改造" data-theme="主对话布局">
+      <div class="card-head">
+        <h2><a href="https://www.dora.run/" target="_blank" rel="noopener">Dora AI</a></h2>
+        <span class="badge 需改造">需改造</span>
+      </div>
+      <p class="value">一个提示框 → 直接生成完整可交付初稿；编辑器在结果之后才出现，工具不喧宾夺主。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>首屏=提示框，承诺「一句话出完整东西」</li>
+        <li>生成后才出现可视化编辑器</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>「一卡/一句话 → 完整方案」的首屏承诺感</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>编辑器坞（3D 物件/动画面板）绝不成首屏</li>
+      </ul></div>
+      <p class="anchor">落点：S1 生成中 chrome <code>PlanHome:1947</code> / <code>GenProgress:1962</code> 只出进度与预览，不出工具</p>
+    </article>
+
+    <article class="card" data-status="直接复用" data-theme="主对话布局">
+      <div class="card-head">
+        <h2><a href="https://viggle.ai" target="_blank" rel="noopener">Viggle PINOC</a></h2>
+        <span class="badge 直接复用">直接复用</span>
+      </div>
+      <p class="value">描述一个场景或丢一张图，一两分钟后在生成的世界里漫游——画布是情绪主体，对话框小而安静。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>Agent 一个入口；手工编辑器后置分件</li>
+        <li>生成后状态=可漫游的世界，不是工具面板</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>「World eats chrome」：结果态 3D 画布充满画面</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>角色/动捕/MCP 与主产品并列；三编辑器=工具箱</li>
+      </ul></div>
+      <p class="anchor">落点：结果态画布≥60% 工作区；空间/物料工具不进活动脸空态（呼应 S3 面板化）</p>
+    </article>
+
+    <article class="card" data-status="需改造" data-theme="非线性进度">
+      <div class="card-head">
+        <h2><a href="https://linear.app/changelog" target="_blank" rel="noopener">Linear Projects / Cycles</a></h2>
+        <span class="badge 需改造">需改造</span>
+      </div>
+      <p class="value">进度按状态分线计数（进行中/已完成），issue 在状态间自由流转——没有 wizard 步骤。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>Started 与 Completed 分两条线；曾因混算改版</li>
+        <li>cycle 分 current / upcoming / previous</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>各板块状态自己驱动，自由流转不强制顺序</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>Insights 管理向图表不上幕景</li>
+      </ul></div>
+      <p class="anchor">落点：台账暂无进度 UI 锚点（待决策）；候选宿主=计划卡 <code>:1968-1979</code> 或 S1.1 卡面状态短词，不进 S1 回归面</p>
+    </article>
+
+    <article class="card" data-status="新增" data-theme="成员协作">
+      <div class="card-head">
+        <h2><a href="https://slack.com/intl/zh-cn/help/articles/201864558" target="_blank" rel="noopener">Slack Presence</a></h2>
+        <span class="badge 新增">新增</span>
+      </div>
+      <p class="value">在线状态=名字旁一个点（实心绿/空心离开/灰离线），自动切换零管理；点成员直达私聊。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>在线自动点亮，10 分钟无操作转离开</li>
+        <li>自定义状态=一句短文案 + emoji；成员点击弹出通话/私信</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>presence 点极小、自动；成员条只是沉底一条</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>侧栏频道列表/DM 列表不上——不是第二聊天产品</li>
+      </ul></div>
+      <p class="anchor">落点：底座复用 <code>member-chat.tsx</code> / <code>team-messages.ts</code> / <code>account-team-panel.tsx</code> / <code>team-data.ts</code>；presence 点为新增小项</p>
+    </article>
+
+    <article class="card" data-status="后置" data-theme="成员协作">
+      <div class="card-head">
+        <h2><a href="https://linear.app/docs/agents-in-linear" target="_blank" rel="noopener">Linear Agents</a></h2>
+        <span class="badge 后置">后置</span>
+      </div>
+      <p class="value">反向教材：agent 与真人是可区分的两类实体——靠指派委派和 @mention 触发，活动像队友一样可追踪。</p>
+      <div class="block"><div class="t">交互骨架</div><ul>
+        <li>委派 issue 给 agent / 评论里 @触发</li>
+        <li>agent 有独立活动页，人始终可见可控；不计席位</li>
+      </ul></div>
+      <div class="block steal"><div class="t">偷什么</div><ul>
+        <li>边界原则：真人沉底成员条，agent 左轨切换，绝不混</li>
+      </ul></div>
+      <div class="block"><div class="t">避什么</div><ul>
+        <li>把 agent 做成常驻人格房间；真多智能体编排后置（D6）</li>
+      </ul></div>
+      <p class="anchor">落点：守边界——<code>member-chat.tsx</code> 不接 agent 路由；Q1 毛绒头像去留见底稿决策点</p>
+    </article>
+
+  </main>
+
+  <footer>
+    分片 A · 活动｜竞品事实 2026-11-04 联网核实（官方 URL 见卡片链接）｜代码锚点引自导演台账 ia-role-rework-ledger-2026-11-04.md｜视觉：冷石 + 品牌绿，绿只用于选中态与关键强调。
+  </footer>
+</div>
+
+<script>
+(function(){
+  var statusSel='all', themeSel='all';
+  var groups={status:document.getElementById('statusFilter'), theme:document.getElementById('themeFilter')};
+  function bind(group,key){
+    group.addEventListener('click',function(e){
+      var btn=e.target.closest('button.fbtn'); if(!btn) return;
+      group.querySelectorAll('button.fbtn').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      if(key==='status'){statusSel=btn.dataset.f;}else{themeSel=btn.dataset.f;}
+      apply();
+    });
+  }
+  bind(groups.status,'status'); bind(groups.theme,'theme');
+  function apply(){
+    var cards=document.querySelectorAll('#grid .card');
+    var shown=0;
+    cards.forEach(function(c){
+      var okS=(statusSel==='all'||c.dataset.status===statusSel);
+      var okT=(themeSel==='all'||c.dataset.theme===themeSel);
+      var show=okS&&okT;
+      c.classList.toggle('hidden',!show);
+      if(show){shown++;}
+    });
+    document.getElementById('count').textContent='显示 '+shown+' / '+cards.length+' 张灵感卡';
+  }
+  apply();
+})();
+</script>
+</body>
+</html>

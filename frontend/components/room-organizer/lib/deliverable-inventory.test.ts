@@ -4,6 +4,7 @@ import {
   deliverableInventory,
   floorInventory,
   inventoryTotal,
+  provenanceBreakdown,
   summarizeInventory,
 } from './deliverable-inventory';
 import type { FloorLayout, FurnitureItem, RoomLayout, RoomZone } from './types';
@@ -87,5 +88,44 @@ describe('deliverable inventory', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.quantity).toBe(2);
     expect(rows[0]!.lockedCount).toBe(1);
+  });
+});
+
+describe('provenance breakdown (第9批 UI)', () => {
+  it('按 provenance.source 分桶：ai / human / procedural / unknown 分开计数', () => {
+    const items = [
+      item({ id: '1', name: 'AI椅', provenance: { source: 'ai', opId: 'op-1', recipeId: 'a3f9c2e1' } }),
+      item({ id: '2', name: 'AI桌', provenance: { source: 'ai', opId: 'op-2' } }),
+      item({ id: '3', name: '手动桌', provenance: { source: 'human', opId: 'op-3' } }),
+      item({ id: '4', name: '无provenance旧椅' }), // 旧布局默认 human
+      item({ id: '5', name: '墙挂结构', wallId: 'north' }), // 壳体 → procedural
+      item({ id: '6', name: '结构柱', structuralColumnId: 'col-1' }), // 壳体
+    ];
+    const p = provenanceBreakdown(items);
+    expect(p.ai).toBe(2);
+    expect(p.human).toBe(2);
+    expect(p.procedural).toBe(2);
+    expect(p.unknown).toBe(0);
+    // deployable 不含场地自带
+    expect(p.deployable).toBe(4);
+    // AI 占比 = round(2/4*100) = 50
+    expect(p.aiPct).toBe(50);
+  });
+
+  it('provenance.source 未识别值归入 unknown（兜底），且不进 AI 占比分母', () => {
+    const items = [
+      item({ id: '1', name: 'AI', provenance: { source: 'ai', opId: 'op-1' } }),
+      // @ts-expect-error 故意喂一个未识别 source 值，验证前向兼容兜底
+      item({ id: '2', name: '怪异', provenance: { source: 'weird', opId: 'op-2' } }),
+    ];
+    const p = provenanceBreakdown(items);
+    expect(p.ai).toBe(1);
+    expect(p.unknown).toBe(1);
+    expect(p.deployable).toBe(2);
+    expect(p.aiPct).toBe(50);
+  });
+
+  it('空布局：全 0，AI 占比 0（不除零）', () => {
+    expect(provenanceBreakdown([])).toEqual({ ai: 0, human: 0, procedural: 0, unknown: 0, deployable: 0, aiPct: 0 });
   });
 });

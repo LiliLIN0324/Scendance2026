@@ -25,6 +25,17 @@ const message = assetError;
 type GenerationMode = 'text' | 'image';
 type GenerationEngine = 'hy3d' | 'aholo';
 const engineLabel = (engine: GenerationEngine) => engine === 'aholo' ? 'Aholo Lux3D' : 'HY-3D';
+/** 历史任务行的模型版本：provider_mode 定主线，provider_model 是云端给的具体版本号。 */
+const jobEngineLabel = (job: GenerationJob): string => {
+  const lane = job.provider_mode === 'aholo' ? 'Aholo Lux3D' : 'HY-3D';
+  return job.provider_model ? `${lane} · ${job.provider_model}` : lane;
+};
+/** 行内时间：任务更新时间，只到分钟，不展示秒与年份噪音。 */
+const jobTime = (iso: string): string => {
+  try {
+    return new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+};
 /** 网络失败不把“Failed to fetch”原样甩给用户。 */
 function plainFailure(failure: unknown): string {
   const raw = failure instanceof Error ? failure.message : '';
@@ -212,7 +223,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       : capabilityState === 'failed'
         ? '暂时连不上云端，没读到可用的生成模型。'
         : !anyConfigured
-          ? '云端还没配可用的生成模型：需要服务端设置 LUX3D_API_KEY（及 LUX3D_TERMS_URL / LUX3D_TERMS_REVIEWED_AT）或 HY3D_API_KEY。'
+          ? '生成能力尚未连接服务商。在设置里填入自定义服务商地址和密钥后即可开始。'
           : disabled
             ? '当前有其他操作在进行，暂时不能提交生成。'
             : cloud.writeBlocked
@@ -287,7 +298,8 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
         <p className="sc-note">尺寸为你设定的场地摆放尺寸，请按实际物料核对。加入后使用云端保存。</p>
         <ul className="sc-generated-tasks">{jobs.map(job => <li className="sc-generated-card" key={job.id}>
           <span className="sc-generated-thumb" aria-hidden="true"><Box size={18}/></span>
-          <span className="sc-generated-body"><strong>{job.prompt}</strong><span role="status">{labels[job.state]}</span></span>
+          <span className="sc-generated-body"><strong>{job.prompt}</strong><span role="status">{labels[job.state]}</span>
+            <span className="sc-generated-meta">{jobEngineLabel(job)} · {jobTime(job.updated_at)}</span></span>
           {['ready','added'].includes(job.state)&&job.kind==='texture'&&<button type="button" className="sc-button" disabled={!projectId||cloud.writeBlocked||!onVariantReady} onClick={()=>previewVariant(job)}>预览纹理版本</button>}
           {['ready', 'added'].includes(job.state) && job.kind!=='texture' && <button type="button" className="sc-button" disabled={!projectId || cloud.writeBlocked || disabled || adding !== null || !validSize}
             onClick={() => void add(job)}>{adding === job.id ? '正在加载…' : '加入场地预览'}</button>}

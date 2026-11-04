@@ -7,21 +7,21 @@ import type { SolidIconComponent } from '@/components/solid-icons';
 interface GuideStep { icon: SolidIconComponent; title: string; text: string; }
 const LUX_STEPS: GuideStep[] = [
   { icon: PencilLine, title: '① 描述或传图', text: '文字建模：一句话描述物件；图片建模：传一张照片按图建模更还原，描述作为补充。' },
-  { icon: Timer, title: '② 云端生成', text: '点「直连生成」提交给 Aholo Lux3D，通常约 3-5 分钟，期间可点「查看最新」跟踪进度。' },
+  { icon: Timer, title: '② 云端生成', text: '点「直连生成」提交给生成引擎，通常约 3-5 分钟，期间可点「查看最新」跟踪进度。' },
   { icon: MousePointerClick, title: '③ 取回上场地', text: '完成后取回产物放入场地。描述越具体（材质、颜色、风格）效果越好；每次生成消耗云额度。' },
 ];
 const LIBRARY_STEPS: GuideStep[] = [
   { icon: PencilLine, title: '① 描述或传图', text: '在下方输入一句话描述物件，或附一张参考图（现场照片、示意图均可，按图建模更还原）。' },
-  { icon: Timer, title: '② 云端生成', text: '点「生成物件」提交，由 Aholo Lux3D 云端生成，通常约 3-5 分钟，可先继续布置其他内容。' },
+  { icon: Timer, title: '② 云端生成', text: '点「生成物件」提交，由生成引擎云端生成，通常约 3-5 分钟，可先继续布置其他内容。' },
   { icon: MousePointerClick, title: '③ 加入场地', text: '生成完成后在「历史模型」里点「加入场地预览」，设定摆放尺寸即可上场地；失败不会重复扣额度。' },
 ];
 const WORLD_STEPS: GuideStep[] = [
-  { icon: Globe, title: '① 描述场景', text: '填场景名称与描述，室内场景效果最佳；提交后由 Aholo World 生成 3DGS 场景，通常约 10-20 分钟。' },
+  { icon: Globe, title: '① 描述场景', text: '填场景名称与描述，室内场景效果最佳；提交后由生成引擎生成 3D 重建场景，通常约 10-20 分钟。' },
   { icon: Layers, title: '② 铺成 3D 背景', text: '完成后取回产物，按真实尺度铺在场地里；仅用于环境氛围展示，不参与布置与碰撞计算。' },
 ];
 const RECON_STEPS: GuideStep[] = [
   { icon: Video, title: '① 绕场拍摄', text: '用手机绕真实场地拍一段视频（或 Insta360 全景；用照片则至少 20 张、多角度覆盖）。禁止高德瓦片/卫星截图当素材。' },
-  { icon: Timer, title: '② 上传重建', text: '素材经本机代理上传至 Aholo World 重建 3DGS，通常约 15-30 分钟，可先去布置其他内容。' },
+  { icon: Timer, title: '② 上传重建', text: '素材经本机代理上传至生成引擎做 3D 重建，通常约 15-30 分钟，可先去布置其他内容。' },
   { icon: Layers, title: '③ 真实场地进幕景', text: '重建出的就是你的真实场地：铺成 3D 背景后，物料照常摆；仅作环境展示，不参与布置与碰撞计算。' },
 ];
 /** 图文并茂的浮窗教程卡：触发钮 + 浮层步骤卡，Esc/点击外部关闭。 */
@@ -46,7 +46,7 @@ export function AholoGuideCard({ world = false, recon = false, surface = 'direct
     </button>
     {open && <div className="sc-aholo-guide-card" role="dialog" aria-label="生成教程">
       <div className="sc-aholo-guide-head">
-        <strong>{recon ? '真实场地重建怎么用' : world ? 'World 世界模型怎么用' : '生成物件怎么用'}</strong>
+        <strong>{recon ? '真实场地重建怎么用' : world ? '空间生成怎么用' : '生成物件怎么用'}</strong>
         <button type="button" className="sc-aholo-guide-close" aria-label="关闭生成教程" onClick={() => setOpen(false)}>
           <X size={13} aria-hidden="true" />
         </button>

@@ -9,7 +9,6 @@ import assetIds from '../../../../assets/library/asset-ids.json';
 import catalogue from '../../../../assets/library/catalogue.json';
 import type { FloorLayout, FurnitureItem, RoomLayout } from './types';
 import { isStructuralMarker } from './structural-layout';
-
 export type InventoryProcurement = '概念物料，采购待确认' | '规格与采购待确认';
 
 /** One normalised line input. Floor review snapshots can map into this too. */
@@ -195,4 +194,69 @@ export function summarizeInventory(entries: readonly InventoryEntry[]): Inventor
 
 export function inventoryTotal(entries: readonly InventoryEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.quantity, 0);
+}
+
+/**
+ * 第9批 UI：按 provenance.source 把一件家具归到「AI / 手动 / 场地自带 / 无法识别」四类之一。
+ *
+ * 归类优先级（从上到下，命中即停）：
+ *  1. provenance.source === 'ai'                              → AI 生成件
+ *  2. 壳体/结构件（structural marker、墙挂载、structure 类）   → 场地自带（不计入布置）
+ *  3. provenance.source === 'procedural'                       → 场地自带
+ *  4. provenance.source === 'human'                            → 手动放置
+ *  5. 无 provenance 且非壳体                                   → 手动放置（旧布局默认值）
+ *  6. provenance.source 出现未识别值                            → 无法识别（兜底，单列末尾）
+ *
+ * 注意：opId 是技术标识符，不进任何面向用户的计数标签。
+ */
+export type ProvenanceBucket = 'ai' | 'human' | 'procedural' | 'unknown';
+
+export function isVenueShellItem(item: Pick<FurnitureItem, 'structuralOpeningId' | 'structuralColumnId' | 'venueEntranceId' | 'wallId' | 'category' | 'type'>): boolean {
+  if (isStructuralMarker(item)) return true;
+  if (item.wallId) return true;
+  if (item.category === 'structure') return true;
+  return item.type === 'wall' || item.type === 'column' || item.type === 'shell';
+}
+
+export function bucketProvenance(item: Pick<FurnitureItem, 'provenance' | 'structuralOpeningId' | 'structuralColumnId' | 'venueEntranceId' | 'wallId' | 'category' | 'type'>): ProvenanceBucket {
+  const source = item.provenance?.source;
+  if (source === 'ai') return 'ai';
+  if (isVenueShellItem(item)) return 'procedural';
+  if (source === 'procedural') return 'procedural';
+  if (source === 'human') return 'human';
+  if (source === undefined || source === null) return 'human'; // 旧布局默认：用户拖放
+  return 'unknown'; // provenance 字段存在但 source 未识别（前向兼容兜底）
+}
+
+export interface ProvenanceBreakdown {
+  /** AI 生成件数。 */
+  ai: number;
+  /** 手动放置件数（含旧布局无 provenance 的普通家具）。 */
+  human: number;
+  /** 场地自带/壳体件数（不计入布置）。 */
+  procedural: number;
+  /** 无法识别件数（单列末尾，需复核）。 */
+  unknown: number;
+  /** 布置件总数 = ai + human + unknown（不含场地自带）。 */
+  deployable: number;
+  /** AI 占比 = round(ai / deployable * 100)；deployable 为 0 时为 0。 */
+  aiPct: number;
+}
+
+/**
+ * 对一整层或整份布局的全部家具按 provenance 分桶计数。
+ * structural marker（门窗洞口、结构柱、出入口）本身已在 inventoryItemOf 里被过滤，
+ * 这里仍按 bucketProvenance 兜底一次，保证调用方直接传 floors[].items 也安全。
+ */
+export function provenanceBreakdown(items: readonly Pick<FurnitureItem, 'provenance' | 'structuralOpeningId' | 'structuralColumnId' | 'venueEntranceId' | 'wallId' | 'category' | 'type'>[]): ProvenanceBreakdown {
+  const counts: Record<ProvenanceBucket, number> = { ai: 0, human: 0, procedural: 0, unknown: 0 };
+  for (const item of items) counts[bucketProvenance(item)] += 1;
+  const deployable = counts.ai + counts.human + counts.unknown;
+  const aiPct = deployable > 0 ? Math.round((counts.ai / deployable) * 100) : 0;
+  return { ai: counts.ai, human: counts.human, procedural: counts.procedural, unknown: counts.unknown, deployable, aiPct };
+}
+
+/** 便捷入口：整份布局的 provenance 分桶（跨楼层合并）。 */
+export function layoutProvenanceBreakdown(layout: RoomLayout): ProvenanceBreakdown {
+  return provenanceBreakdown(layout.floors.flatMap(floor => floor.items));
 }

@@ -1,0 +1,16 @@
+FAIL  components/business/assets-panel.react.test.tsx
+FAIL  components/room-organizer/lib/backend-adapter.test.ts
+FAIL  components/room-organizer/lib/nav-chrome.test.ts
+FAIL  components/room-organizer/lib/scene-delivery.test.ts
+FAIL  components/room-organizer/lib/share.test.ts
+FAIL  components/room-organizer/lib/structure-v2.test.ts
+FAIL  components/room-organizer/panels/agent-chat.react.test.tsx
+FAIL  components/room-organizer/panels/creative-venue-photos.react.test.tsx
+FAIL  components/room-organizer/panels/lux3d-direct-test.react.test.tsx
+FAIL  components/room-organizer/panels/map-venue-overlay.react.test.tsx
+FAIL  components/room-organizer/panels/scendance-workspace.react.test.tsx
+FAIL  components/room-organizer/panels/space-panel.react.test.tsx
+FAIL  components/room-organizer/panels/venue-picker.react.test.tsx
+FAIL  components/room-organizer/three/scene-presets.test.ts
+FAIL  components/room-organizer/three/structure-satellite.test.ts
+FAIL  lib/project-review.test.ts

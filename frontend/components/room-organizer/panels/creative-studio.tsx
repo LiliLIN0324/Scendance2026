@@ -2,10 +2,12 @@
 
 import { ArrowLeft, ArrowUp, Check, Loader2, Maximize2, Minimize2, RefreshCw, SlidersHorizontal, Sparkles, Trash2, X } from '@/components/solid-icons';
 import { useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun } from '@/lib/backend-session';
+import { humanRecipeId } from '@/lib/recipe-display';
+import { deriveSeededVariants, recipeHash as promptRecipeHash } from '@/lib/recipe-proposal';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
 import { readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from '@/lib/material-checkin-storage';
@@ -824,7 +826,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     setExpanded(true);setNotice('');
     if(message?.trim())setMessages(items=>[...items.slice(-38),{id:crypto.randomUUID(),role:'user',text:message.trim()}]);
     if(!cloud.configured){
-      const text='需求入口已经准备好。当前尚未连接 AI 服务，暂时不能生成真实方案。你可以完善需求、添加现场照片，并使用物料库手动布置。';
+      const text='生成能力尚未连接服务商。在设置里填入自定义服务商地址和密钥后即可开始；在此之前，你可以完善需求、添加现场照片，并使用物料库手动布置。';
       setNotice(text);say(text);return;
     }
     let base=layoutRef.current,submittedScope=agentScopeRef.current;
@@ -1100,6 +1102,10 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const [planCategory,setPlanCategory]=useState<'brief'|'reference'|'rebuild'>('brief');
   const [suggestionsOpen,setSuggestionsOpen]=useState(false);
   const [suggestionsDismissed,setSuggestionsDismissed]=useState(false);
+  // 第9批 UI：三候选横排（seed 派生）。纯本地态，不进撤销栈、不触发生成管线。
+  const [variantRowOpen,setVariantRowOpen]=useState(false);
+  const [selectedVariantIdx,setSelectedVariantIdx]=useState(0);
+  useEffect(()=>{ setVariantRowOpen(false); setSelectedVariantIdx(0); },[studio.preview?.proposal.id, studio.preview?.briefKey]);
   const [localReferenceRequest,setLocalReferenceRequest]=useState(0);
   const latestScopeRef=useRef(studio.scope);latestScopeRef.current=studio.scope;
   const lastResetScopeRef=useRef<string|null>(null);
@@ -1319,6 +1325,17 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const submit=()=>{if(!draft.trim()||studio.busy||studio.recoverable)return;const text=draft;setDraft('');setSuggestionsOpen(false);const lock=docked&&suppressAgentLauncher?{requirePreview:true as const}:{};void studio.generate(text,mode==='model'?{intent:'model',...lock}:lock);};
   const summary=studio.preview?proposalSummary(studio.preview.base,studio.preview.layout):null;
   const differences=studio.preview?proposalDifferences(studio.preview.base,studio.preview.layout):[];
+  // 第9批 UI：预览卡 5 位人话配方编号。base_hash 是提案自带的 64 位 sha256 hex，
+  // 直接取前 5 个 hex 字符映射；真实 Recipe seed 没从管线暴露，所以旁注「seed：本机生成」。
+  const previewBaseHash=studio.preview?.proposal.base_hash??'';
+  const previewRecipeId=previewBaseHash?humanRecipeId(previewBaseHash):'';
+  const variantIds=useMemo(()=>{
+    if(!variantRowOpen||!previewBaseHash)return [] as string[];
+    // 从 base_hash 前 8 位 hex 派生一个本地 base seed（确定性，不硬造随机值）。
+    const localBaseSeed=parseInt(previewBaseHash.slice(0,8),16)>>>0;
+    const seeds=deriveSeededVariants(localBaseSeed,3);
+    return seeds.map(seed=>humanRecipeId(promptRecipeHash({seed,prompt:studio.preview?.briefKey??'scene'})));
+  },[variantRowOpen,previewBaseHash,studio.preview?.briefKey]);
   const chatPending=studio.busy?studio.run?.progress||'正在提交任务…':studio.recoverable?'原任务结果待核对':studio.preview||studio.candidates.length>0?studio.stale?'候选需重新生成':'有方案待确认':studio.notice?'有助手提示待查看':'';
   function resizeWorkspace(next:boolean):void {
     const current={content:content.current?.scrollTop??0,conversation:feed.current?.scrollTop??0};
@@ -1478,7 +1495,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           <div>{studio.candidates.map(item=><button type="button" key={item.label} aria-pressed={studio.preview===item.preview} disabled={studio.busy||studio.stale} onClick={()=>studio.selectCandidate(item.label)}><strong>方案 {item.label} · {item.title}</strong>{studio.run?.evaluation?.status==='complete'&&studio.run.evaluation.probabilities&&<span>模型推荐概率 {(studio.run.evaluation.probabilities[item.label]*100).toFixed(1)}%</span>}</button>)}</div>
           {studio.run.evaluation?.status==='complete'&&studio.run.evaluation.probabilities&&<p>均不推荐：{(studio.run.evaluation.probabilities.NONE*100).toFixed(1)}%{studio.run.evaluation.choice==='NONE'?' · 建议调整需求后重试。':''}</p>}
         </div>}
-        {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span><strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>{studio.preview.proposal.explanation}</p>{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=>{const names=warning.ids.map(id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件');return <li key={`${warning.code}-${index}`}>{warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项'}：{names.join('、')}</li>;})}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul><p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:studio.busy||studio.recoverable?<p role="status">{studio.recoverable&&!studio.busy?'上一版还在恢复，确认先不亮。':'正在整理这一版…'}</p>:<div><button type="button" onClick={()=>void studio.applyPreview()}><Check size={16}/>确认布置</button><button type="button" onClick={studio.discardPreview}><Trash2 size={16}/>放弃</button></div>}</div>}
+        {studio.preview&&summary&&<div className="cr-proposal"><span>方案提案 · 尚未应用</span>{previewRecipeId&&<span className="cr-recipe-badge" data-testid="recipe-id" style={{marginLeft:8,padding:'2px 6px',borderRadius:4,background:'#F4F5F7',fontSize:12,color:'#4A7C59',fontWeight:600,letterSpacing:0.5}}>{`方案 #${previewRecipeId}`}</span>}{previewRecipeId&&<span data-testid="seed-origin" style={{marginLeft:6,fontSize:11,opacity:0.7}}>seed：本机生成</span>}<strong>新增 {summary.added} · 移除 {summary.removed} · 共 {summary.total} 件</strong><p>{studio.preview.proposal.explanation}</p>{previewRecipeId&&<div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0 8px',flexWrap:'wrap'}}><button type="button" data-testid="variants-toggle" onClick={()=>setVariantRowOpen(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'3px 8px',border:'1px solid var(--sc-line,#ccc)',borderRadius:4,background:'transparent',cursor:'pointer'}}><RefreshCw size={12}/>换一批</button>{variantRowOpen&&variantIds.length>0&&<div style={{display:'flex',gap:6}}>{variantIds.map((id,idx)=>{const active=idx===selectedVariantIdx;return <button key={id} type="button" data-testid={`variant-${idx}`} aria-pressed={active} onClick={()=>setSelectedVariantIdx(idx)} style={{padding:'4px 8px',fontSize:12,fontFamily:'monospace',borderRadius:4,cursor:'pointer',border:`1.5px solid ${active?'#4A7C59':'var(--sc-line,#ccc)'}`,background:active?'#F4F5F7':'transparent',color:active?'#4A7C59':'inherit'}}>#{id}</button>;})}</div>}</div>}{studio.preview.proposal.warnings.length>0&&<div role="status"><p>提案包含 {studio.preview.proposal.warnings.length} 项场地检查提示：</p><ul>{studio.preview.proposal.warnings.map((warning,index)=>{const names=warning.ids.map(id=>studio.preview!.layout.floors.flatMap(floor=>floor.items).find(item=>item.id===id)?.name??'物件');return <li key={`${warning.code}-${index}`}>{warning.code==='OVERLAP'?'物件重叠':warning.code==='OUT_OF_BOUNDS'?'超出场地边界':'待检查事项'}：{names.join('、')}</li>;})}</ul></div>}<ul>{differences.map(change=><li key={change.id}>{({added:'新增',removed:'移除',changed:'调整'} as const)[change.kind]} · {change.after?.item.name ?? change.before?.item.name}<small>{change.after ? ` · ${change.after.item.width} × ${change.after.item.depth} m` : ''}</small></li>)}</ul><p>画布中的半透明模型是候选方案。绿色框为新增，蓝色框为改动，橙色框为原位置，红色框为移除；确认前不会保存。</p>{studio.stale?<p role="status">{studio.expired?'提案已过期，请重新生成。':'场景、需求或编辑权已变化，请重新生成。'}</p>:studio.busy||studio.recoverable?<p role="status">{studio.recoverable&&!studio.busy?'上一版还在恢复，确认先不亮。':'正在整理这一版…'}</p>:<div><button type="button" onClick={()=>void studio.applyPreview()}><Check size={16}/>确认布置</button><button type="button" onClick={studio.discardPreview}><Trash2 size={16}/>放弃</button></div>}</div>}
         {studio.preview&&workspaceExpanded&&!studio.stale&&<button className="cr-return-canvas" type="button" onClick={()=>resizeWorkspace(false)}><Minimize2 size={16}/>回到画布预览</button>}
         </div>
       {studio.notice&&<p className="cr-agent-notice" role="status">{studio.notice}</p>}

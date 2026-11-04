@@ -23,6 +23,15 @@ export type AppendReviewSharePinResult =
   | { ok: true; pins: ReviewPin[]; pin: ReviewPin }
   | { ok: false; reason: ReviewSharePinFailure };
 
+/**
+ * Q4 云化接口形状（仅声明，不实现）：local-demo 实现包一层 async 即 LocalReviewPinRepository。
+ * byPlan 即天然 planKey 分区表键；云化换 repo 不换调用方签名。
+ */
+export interface ReviewPinRepository {
+  list(planKey: string): Promise<ReviewPin[]>;
+  append(planKey: string, draft: ReviewPinDraft): Promise<AppendReviewSharePinResult>;
+}
+
 interface PinFile {
   version: 1;
   byPlan: Record<string, ReviewPin[]>;

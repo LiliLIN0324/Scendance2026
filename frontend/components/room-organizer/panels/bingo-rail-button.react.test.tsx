@@ -33,7 +33,8 @@ describe('Bingo 左轨入口', () => {
     expect(button.className).toContain('is-active');
     expect(button.getAttribute('data-tip')).toBe('Bingo');
     expect(button.getAttribute('title')).toBeNull();
-    expect(button.textContent ?? '').not.toMatch(/Bingo/);
+    // v3.4.0 起 rail 按钮带可见文本标签（aria-hidden，a11y 名仍走 aria-label）。
+    expect(button.textContent ?? '').toMatch(/Bingo/);
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledOnce();
   });

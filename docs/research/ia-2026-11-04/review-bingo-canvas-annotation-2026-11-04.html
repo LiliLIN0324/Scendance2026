@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分片 B · 审校 Bingo — 画布钉点评审灵感板 · 2026-11-04</title>
+<style>
+  :root{
+    --stone:#F4F5F7;
+    --paper:#FFFFFF;
+    --ink:#20242A;
+    --ink-soft:#5A616B;
+    --ink-faint:#8A919C;
+    --hair:#E2E5E9;
+    --green:#4A7C59;
+    --green-deep:#3A6347;
+    --green-tint:#EAF0EC;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--stone);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 96px;}
+
+  /* ---------- header ---------- */
+  header{border-bottom:1px solid var(--hair);padding-bottom:24px;margin-bottom:28px;}
+  .back{display:inline-block;font-size:13px;color:var(--ink-soft);text-decoration:none;margin-bottom:18px;}
+  .back:hover{color:var(--green-deep);}
+  h1{font-size:26px;font-weight:650;margin:0 0 8px;letter-spacing:.01em;}
+  .meta{font-size:13px;color:var(--ink-soft);margin:0;}
+  .meta strong{color:var(--ink);font-weight:600;}
+  .lede{margin:14px 0 0;font-size:14px;color:var(--ink-soft);max-width:760px;}
+
+  /* ---------- filter bar ---------- */
+  .filters{
+    display:flex;flex-wrap:wrap;gap:14px 32px;
+    background:var(--paper);border:1px solid var(--hair);border-radius:var(--radius);
+    padding:16px 20px;margin:0 0 28px;
+  }
+  .fgroup{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .flabel{font-size:12px;color:var(--ink-faint);margin-right:4px;letter-spacing:.06em;}
+  .pill{
+    appearance:none;border:1px solid var(--hair);background:var(--paper);color:var(--ink-soft);
+    font-size:13px;padding:5px 13px;border-radius:999px;cursor:pointer;
+    font-family:inherit;transition:background .15s,color .15s,border-color .15s;
+  }
+  .pill:hover{border-color:var(--ink-faint);}
+  .pill.active{background:var(--green);border-color:var(--green);color:#fff;}
+  .result-count{font-size:12px;color:var(--ink-faint);margin-left:auto;align-self:center;}
+
+  /* ---------- card grid ---------- */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+    gap:20px;
+  }
+  .card{
+    background:var(--paper);border:1px solid var(--hair);border-radius:var(--radius);
+    padding:22px 22px 18px;display:flex;flex-direction:column;gap:12px;
+  }
+  .card.hidden{display:none;}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card h2{font-size:16.5px;margin:0;font-weight:650;}
+  .card h2 a{color:var(--ink);text-decoration:none;}
+  .card h2 a:hover{color:var(--green-deep);}
+  .badge{
+    flex:none;font-size:11.5px;padding:3px 10px;border-radius:999px;letter-spacing:.03em;
+    border:1px solid var(--hair);color:var(--ink-soft);white-space:nowrap;
+  }
+  .badge.reuse{background:var(--green-tint);border-color:var(--green-tint);color:var(--green-deep);}
+  .badge.adapt{background:var(--ink);border-color:var(--ink);color:#fff;}
+  .badge.new{background:var(--green);border-color:var(--green);color:#fff;}
+  .badge.later{background:transparent;border-color:var(--hair);color:var(--ink-faint);}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;}
+  .tag{font-size:11.5px;color:var(--ink-soft);background:var(--stone);border:1px solid var(--hair);border-radius:5px;padding:1.5px 8px;}
+  .tag.resolved-dot::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:1.5px;}
+
+  .value{font-size:13.5px;color:var(--ink);margin:0;padding-left:12px;border-left:2px solid var(--green-tint);}
+  section.block{font-size:13px;}
+  section.block h3{
+    margin:0 0 5px;font-size:11.5px;font-weight:600;letter-spacing:.08em;color:var(--ink-faint);
+    text-transform:uppercase;
+  }
+  section.block ul{margin:0;padding-left:18px;}
+  section.block li{margin:2px 0;color:var(--ink);}
+  .steal li::marker{color:var(--green);}
+  .avoid li::marker{color:var(--ink-faint);}
+  .anchor{
+    font-size:12.5px;background:var(--stone);border:1px solid var(--hair);border-radius:7px;
+    padding:9px 12px;color:var(--ink-soft);
+  }
+  .anchor code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--green-deep);}
+  a.ext{color:var(--green-deep);word-break:break-all;}
+
+  footer{margin-top:44px;border-top:1px solid var(--hair);padding-top:18px;font-size:12.5px;color:var(--ink-faint);}
+
+  @media (max-width:640px){
+    .wrap{padding:24px 16px 64px;}
+    .grid{grid-template-columns:1fr;}
+    .filters{gap:10px 16px;}
+    .result-count{margin-left:0;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <a class="back" href="index.html">← 返回研究索引（index.html）</a>
+  <h1>分片 B · 审校 Bingo：画布钉点评审灵感板</h1>
+  <p class="meta">幕景 Scendance IA 重划 · 分片 B（审校 Bingo） · <strong>2026-11-04</strong> · 基线 <code>feat/smart-build-scene-script</code></p>
+  <p class="lede">Bingo 回归审校本意：画面钉点 → 意见线程 → 标记解决 → 回流制作者台账。本板对标 Figma / Frame.io / Dropbox Replay / Google Docs / Pitch / Markup.io / Miro 的已核实交互，只回答「偷什么、避什么、幕景落在哪一行」。对标底稿见同目录 MD。</p>
+</header>
+
+<div class="filters">
+  <div class="fgroup" id="statusFilter">
+    <span class="flabel">处置态</span>
+    <button class="pill active" data-status="all">全部</button>
+    <button class="pill" data-status="reuse">直接复用</button>
+    <button class="pill" data-status="adapt">需改造</button>
+    <button class="pill" data-status="new">新增</button>
+    <button class="pill" data-status="later">后置</button>
+  </div>
+  <div class="fgroup" id="themeFilter">
+    <span class="flabel">主题</span>
+    <button class="pill active" data-theme="all">全部</button>
+    <button class="pill" data-theme="pin">钉点交互</button>
+    <button class="pill" data-theme="thread">线程生命周期</button>
+    <button class="pill" data-theme="share">客户只读与分享</button>
+    <button class="pill" data-theme="ledger">台账与回流通知</button>
+    <button class="pill" data-theme="suggest">自动体检与建议模式</button>
+  </div>
+  <span class="result-count" id="resultCount"></span>
+</div>
+
+<main class="grid" id="cardGrid">
+
+  <!-- 1. Figma -->
+  <article class="card" data-status="adapt" data-theme="pin thread ledger">
+    <div class="card-top">
+      <h2><a href="https://help.figma.com/hc/en-us/articles/360041547593-View-and-manage-comments">Figma 评论（Design / FigJam）</a></h2>
+      <span class="badge adapt">需改造</span>
+    </div>
+    <div class="tags"><span class="tag resolved-dot">resolve 即隐藏</span><span class="tag">缩放聚类</span><span class="tag">未读排序</span><span class="tag">只看我的线程</span></div>
+    <p class="value">画布上「点哪说哪」的钉点评审范式本身，及其「解决即归档」的状态语义。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>钉在点或框选区域；低缩放时邻近钉点合并为 cluster，点击聚焦；钉可拖动换位。</li>
+        <li>线程内回复、emoji、@提及；右侧栏可搜索 / 按未读排序 / 只看与我相关的线程。</li>
+        <li>Resolve 后评论同时从画布与列表隐藏；误解决可在「显示已解决」筛选里 Unresolve。</li>
+        <li>点列表条目会跳回画布对应位置；邮件通知链接直达画布落点。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li>open/resolved 不加第三态；解决即从画布隐藏，而不是变灰常驻。</li>
+        <li>制作者侧补「未读排序 / 只看我的线程 / 显示已解决」三轴。</li>
+        <li>点台账条目 → 相机飞回画布钉位；低缩放钉点聚类。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>不要「进入评论模式」开关——客户页天然纯审阅。</li>
+        <li>不抄删除确认弹窗（评论上限 80 条策略已存在）。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：<code>lib/review-pins.ts:8,118-127</code>（open/resolved · 筛选计数）· <code>panels/review-pin-layer.tsx</code>（钉层）· <code>bingo-audit-card.tsx:22-25</code> → S2 收口。</div>
+  </article>
+
+  <!-- 2. Frame.io -->
+  <article class="card" data-status="new" data-theme="pin thread share">
+    <div class="card-top">
+      <h2><a href="https://help.frame.io/en/articles/9105251-commenting-on-your-media">Frame.io 锚点评审</a></h2>
+      <span class="badge new">新增</span>
+    </div>
+    <div class="tags"><span class="tag">锚钉+框选</span><span class="tag">public/internal</span><span class="tag">批注附件</span><span class="tag">@提及</span></div>
+    <p class="value">意见精确锚在媒体的某个时空点上；内部团队与外部客户看到两套评论。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>播放中直接点画面留锚钉（Anchored）；可框选区域；点卡视角跳回锚点。</li>
+        <li>发送前切换 Public / Internal——Internal 带锁，<strong>分享链接评审者永远看不到</strong>。</li>
+        <li>评论可挂附件（每帖上限 6）、@提及通知、#标签筛选；按角色锁定分享链接。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li><strong>internal / public 分层</strong>——本轮最重要新增：制作者内部备注对客户页不可见。</li>
+        <li>点评论 → 视角飞到锚点坐标（与 Figma 跳转互证）。</li>
+        <li>钉点支持「点 + 可选框选」，画线涂鸦后置。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>不引 hashtag 体系（评审包规模小）。</li>
+        <li>附件、区间评论是视频语义，后置 / 不抄。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：<code>lib/review-share.ts:59,71,177</code>（ReviewComment / BingoMark / parentId 线程）→ 预留 <code>visibility: public|internal</code> 形状；<code>review-share-page.tsx:146-152</code> 客户侧只渲染 public；D7 云端同步后置。</div>
+  </article>
+
+  <!-- 3. Dropbox Replay -->
+  <article class="card" data-status="adapt" data-theme="share ledger">
+    <div class="card-top">
+      <h2><a href="https://help.dropbox.com/zh-cn/view-edit/dropbox-replay-live-review">Dropbox Replay 分享评审</a></h2>
+      <span class="badge adapt">需改造</span>
+    </div>
+    <div class="tags"><span class="tag">两档权限</span><span class="tag">口令</span><span class="tag">默认禁下载</span><span class="tag">免账号</span></div>
+    <p class="value">一条分享链接上「只看 vs 看并评论」的权限分档、口令与禁下载——客户只读页的权限模板。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>分享链接两档：仅限查看 / 查看并评论；可加口令；<strong>默认禁止下载</strong>。</li>
+        <li>评审者无需账号即可留评；意见锚在具体帧/像素上。</li>
+        <li>评审以「最终核准」动作收束（产品页主张）。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li>权限枚举 <code>view-only / comment</code> 预留进分享形状。</li>
+        <li>默认禁下载——方案是核心交付物，公开链接风险面先堵。</li>
+        <li>页面诚实标注「本地演示链接、不上云端」（对齐 S2 local-demo 边界文案）。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>不抄同步放映室（幕景评审是异步的）。</li>
+        <li>不做多资产文件夹体系；一个评审包 = 一个方案版本。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：<code>lib/review-share.ts:18</code>（local-demo 边界）· 路由 <code>app/review/[id]/</code> + <code>review-link-client.tsx</code> · <code>bingo-audit-card.tsx:22-25</code>（clientHref / pinCount / returned）。</div>
+  </article>
+
+  <!-- 4. Google Docs 建议模式 -->
+  <article class="card" data-status="adapt" data-theme="suggest thread">
+    <div class="card-top">
+      <h2><a href="https://developers.google.cn/workspace/docs/api/how-tos/suggestions?hl=zh-cn">Google Docs 建议模式（Suggesting）</a></h2>
+      <span class="badge adapt">需改造</span>
+    </div>
+    <div class="tags"><span class="tag">待批编辑</span><span class="tag">accept / reject</span><span class="tag">RESOLVE / REOPEN</span><span class="tag">指派</span></div>
+    <p class="value">把「修改」本身变成一条可批准 / 可拒绝的意见线程——审校侧「自动体检 → 一键修复」的正确形态。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>建议 = 待批准的延迟编辑：改动不直接落盘，内嵌标注等待批准。</li>
+        <li>接受需编辑权限；拒绝需编辑权限或建议作者；线程可 RESOLVE / REOPEN 重开。</li>
+        <li>评论线程可指派给指定人（assignee）变成行动项。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li>体检 issue → 待确认建议 → 绿框预览 → 唯一确认落盘 / 拒绝丢弃——与三道门同构。</li>
+        <li>REOPEN 语义：resolved 可重开，open/resolved 两态足够，不加第三态。</li>
+        <li>体检结果自动生成带坐标锚的钉点，与人工钉点共用同一状态机与计数。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>不把多人同时改稿的编辑协作引来——客户只留评，不改布置。</li>
+        <li>不做批量接受/拒绝（一次一个决策）。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：<code>lib/layout-review.ts:26-27,240,583</code>（6 类 issue/fix · reviewLayout · proposeReviewFix）→ 建议化包装，全程过 onApplyCreative 三道门；客户侧不见修复按钮。</div>
+  </article>
+
+  <!-- 5. Pitch -->
+  <article class="card" data-status="new" data-theme="share thread">
+    <div class="card-top">
+      <h2><a href="https://help.pitch.com/en/articles/8575905-invite-guests-to-collaborate-on-presentations">Pitch 幻灯片评审</a></h2>
+      <span class="badge new">新增</span>
+    </div>
+    <div class="tags"><span class="tag">三档访客权限</span><span class="tag">对象级状态</span><span class="tag">移动端只读</span></div>
+    <p class="value">把评论、状态、指派挂在单个对象（幻灯片）上的工作流——评审包（方案版本）状态的参照。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>访客三档：Can edit / Can comment（看 + 评论）/ Can view（看，连评论都不可见）。</li>
+        <li>每张幻灯片可设状态、可指派、可收评论；移动端只能评审、不能创建编辑。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li>三档枚举预留 <code>view / comment / edit</code>：纯汇报档（给领导）真实存在。</li>
+        <li>评审包级状态：待评审 / 意见回流中 / 已解决，落在只读台账卡上。</li>
+        <li>客户页浏览器打开 = 移动端心智：只能看、只能留评。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>reactions、邮件通知后置（云端依赖）。</li>
+        <li>团队指派社交层后置（D5/D7）；本地版只能是自己的标记。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：<code>review-share-page.tsx:146-152</code>（view 档不渲染输入条）· <code>lib/bingo-feedback.ts</code> + <code>bingo-audit-card.tsx:22-25</code>（评审包状态与计数）。</div>
+  </article>
+
+  <!-- 6. Markup.io -->
+  <article class="card" data-status="reuse" data-theme="pin share">
+    <div class="card-top">
+      <h2><a href="https://www.markup.io/">Markup.io 访客钉评</a></h2>
+      <span class="badge reuse">直接复用</span>
+    </div>
+    <div class="tags"><span class="tag">免注册</span><span class="tag">随处钉点</span><span class="tag">线程钉在原地</span></div>
+    <p class="value">证明「免注册、随处钉点、线程钉在原地」是最低门槛的客户评审形态——幕景 local-demo 分享页就是这个档。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>「Drop a pin anywhere on the content and the conversation stays exactly where it belongs」。</li>
+        <li>支持网站 / 图片 / PDF / 视频 30+ 类型；访客免注册留评。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li>现状即对：parentId 线程（<code>review-share.ts:177</code>）保证线程挂在钉点旁、不漂移。</li>
+        <li>保留访客昵称输入条——零成本，意见可分辨是谁说的。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>不抄代理截图模式（幕景评审页就是本体）。</li>
+        <li>不追 30+ 文件类型通用性——评审载体只有当前方案画布一种。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：<code>lib/review-share.ts:177</code>（addReviewComment + parentId）· <code>review-share-page.tsx:146-152</code> → 直接复用，不改造。</div>
+  </article>
+
+  <!-- 7. Miro -->
+  <article class="card" data-status="later" data-theme="thread ledger">
+    <div class="card-top">
+      <h2><a href="https://help.miro.com/hc/en-us/articles/360017730873-Comments">Miro 通知与线程</a></h2>
+      <span class="badge later">后置</span>
+    </div>
+    <div class="tags"><span class="tag">@提及</span><span class="tag">Feed 通知中心</span><span class="tag">钉住线程</span></div>
+    <p class="value">团队协作层的通知范式——也恰好标出幕景本轮的后置边界。</p>
+    <section class="block"><h3>交互骨架（已核实）</h3>
+      <ul>
+        <li>@提及触发通知；线程可 Pin 在板上同时展开多条讨论。</li>
+        <li>Feed 为产品内通知中心，汇总各板更新。</li>
+      </ul>
+    </section>
+    <section class="block steal"><h3>偷什么</h3>
+      <ul>
+        <li>唯一可本地化的：制作者台账「置顶未解决钉」视图（自己置顶自己的待办）。</li>
+      </ul>
+    </section>
+    <section class="block avoid"><h3>避什么</h3>
+      <ul>
+        <li>@提及、Feed 中心、跨板汇总全部云端多用户能力，按 D7 后置，只留接口注释。</li>
+      </ul>
+    </section>
+    <div class="anchor">幕景落点：纯后置——<code>lib/bingo-feedback.ts</code> + <code>bingo-audit-card.tsx:22-25</code>（returned）本地先承接回流语义；云端通知进 Q4 接口形状备注。</div>
+  </article>
+
+</main>
+
+<footer>
+  分片 B · 审校 Bingo 灵感板 · 2026-11-04 · 冷石 #F4F5F7 + 品牌绿 #4A7C59 · 官方事实均经联网核实，放弃候选（Pastel / Notion 评论 / Vimeo 评审 / Frame.io 审批状态机）见同目录 MD 底稿第 12 节。
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var statusBtn = document.querySelectorAll('#statusFilter .pill');
+  var themeBtn  = document.querySelectorAll('#themeFilter .pill');
+  var cards    = document.querySelectorAll('#cardGrid .card');
+  var countEl  = document.getElementById('resultCount');
+  var curStatus = 'all';
+  var curTheme  = 'all';
+
+  function apply(){
+    var shown = 0;
+    cards.forEach(function(c){
+      var okS = (curStatus === 'all') || c.dataset.status === curStatus;
+      var okT = (curTheme  === 'all') || (c.dataset.theme || '').indexOf(curTheme) !== -1;
+      var show = okS && okT;
+      c.classList.toggle('hidden', !show);
+      if (show) shown++;
+    });
+    countEl.textContent = '当前显示 ' + shown + ' / ' + cards.length + ' 张';
+  }
+  function bind(btns, key){
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        btns.forEach(function(x){ x.classList.remove('active'); });
+        b.classList.add('active');
+        if (key === 'status') curStatus = b.dataset.status;
+        if (key === 'theme')  curTheme  = b.dataset.theme;
+        apply();
+      });
+    });
+  }
+  bind(statusBtn, 'status');
+  bind(themeBtn, 'theme');
+  apply();
+})();
+</script>
+</body>
+</html>

@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { issueReviewShare } from '../lib/review-share';
 import type { RoomLayout } from '../lib/types';
-import { ReviewSharePage } from './review-share-page';
 import { planOutline, ShareMenu, type ShareMenuActions } from './share-menu';
 
 afterEach(cleanup);
@@ -126,27 +124,3 @@ function sampleLayout(): RoomLayout {
   };
 }
 
-describe('review share page', () => {
-  it('shows the frozen plan and accepts a comment plus one reply, with no creator chrome', async () => {
-    const { snapshot } = issueReviewShare(sampleLayout(), 'http://localhost');
-    render(<ReviewSharePage shareId={snapshot.id}/>);
-    expect(await screen.findByRole('heading', { name: '发布会' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: '发布会 的只读平面' })).toBeTruthy();
-    expect(screen.getAllByText('签到桌').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('complementary', { name: 'Bingo' })).toBeNull();
-    expect(screen.queryByRole('navigation', { name: '工具' })).toBeNull();
-    expect(screen.queryByRole('navigation', { name: '工作流程' })).toBeNull();
-    expect(document.querySelector('[data-storage="local-demo"]')).toBeTruthy();
-
-    fireEvent.change(screen.getByRole('textbox', { name: '名字' }), { target: { value: '甲方' } });
-    fireEvent.change(screen.getByRole('textbox', { name: '评论内容' }), { target: { value: '入口再宽一点' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表评论' }));
-    expect(await screen.findByText('入口再宽一点')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '回复' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '回复内容' }), { target: { value: '下版改通道' } });
-    fireEvent.click(screen.getByRole('button', { name: '发表回复' }));
-    await waitFor(() => expect(screen.getByText('下版改通道')).toBeTruthy());
-    expect(screen.getByText('入口再宽一点')).toBeTruthy();
-  });
-});

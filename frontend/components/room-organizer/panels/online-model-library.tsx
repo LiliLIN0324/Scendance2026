@@ -27,6 +27,34 @@ import type { BackendSession } from '@/lib/backend-session';
 
 type GeneratedCard = { id: string; name: string; image?: string; shipped: boolean };
 
+/**
+ * 最近用过：纯本地 localStorage，不上后端、不进项目文件。
+ * 真正"用了"= addOnline 成功落盘（点击或拖拽都会走 loadOnlineCatalogItem；
+ * 拖拽落盘在 room-organizer 三道门内，这里只钩子点击成功这一路径）。
+ */
+const ONLINE_RECENT_KEY = 'scendance.online-model.recent';
+const ONLINE_RECENT_MAX = 14;
+function loadRecentSlugs(store: Storage): string[] {
+  try {
+    const raw = store.getItem(ONLINE_RECENT_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === 'string').slice(0, ONLINE_RECENT_MAX);
+  } catch {
+    return [];
+  }
+}
+function pushRecentSlug(store: Storage, slug: string): string[] {
+  const next = [slug, ...loadRecentSlugs(store).filter(s => s !== slug)].slice(0, ONLINE_RECENT_MAX);
+  try { store.setItem(ONLINE_RECENT_KEY, JSON.stringify(next)); } catch { /* 隐私模式下静默 */ }
+  return next;
+}
+function clearRecentSlugs(store: Storage): string[] {
+  try { store.removeItem(ONLINE_RECENT_KEY); } catch { /* 隐私模式下静默 */ }
+  return [];
+}
+
 function generatedMaterialCards(): GeneratedCard[] {
   const shipped = listShippedAssets('glb').map(asset => {
     const image = shippedImageUrl(asset);
@@ -80,7 +108,6 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [loadError, setLoadError] = useState('');
   const [placeError, setPlaceError] = useState('');
   const [query, setQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   // 物料卡三块的当前页：我的生成 / 收藏 / 库。三块只是入口，结果都在下方同一块内容区。
   const [pane, setPane] = useState<'mine' | 'fav' | 'lib'>('lib');
   // 一张卡两种高度：收起只露一行素材，展开看完整网格；收起把高度还给下面 chat。
@@ -99,6 +126,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [tagError, setTagError] = useState('');
   const [styleRuns, setStyleRuns] = useState<StyleRun[]>([]);
   const [armedTag, setArmedTag] = useState('');
+  const [recent, setRecent] = useState<string[]>([]);
   const bucketRail = useRef<HTMLDivElement>(null);
   const placementIdentity = useRef({ controller, apiUrl: controller?.config.apiUrl, epoch: 0 });
   if (placementIdentity.current.controller !== controller || placementIdentity.current.apiUrl !== controller?.config.apiUrl) {
@@ -114,6 +142,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     setMeta(loadMaterialLibraryMeta(window.localStorage));
     setGenerated(generatedMaterialCards());
     setStyleRuns(loadStyleRuns(window.localStorage));
+    setRecent(loadRecentSlugs(window.localStorage));
   }, []);
   useEffect(() => { const activePlacements = placements.current; alive.current = true; return () => {
     alive.current = false;
@@ -217,6 +246,13 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   }, [generated, pending, query, bucket, meta.favorites, meta.assignments]);
   const cards = useHorizontalRail<HTMLDivElement>();
   const reservedTags = CATALOG_GROUPS.map(group => group.label);
+  // 最近用过：把 slug 解析回 OnlineModel；库里已下架的条目直接丢。
+  const recentModels = useMemo<OnlineModel[]>(() => {
+    if (!index) return [];
+    return recent
+      .map(slug => index.models.find(model => model.slug === slug))
+      .filter((model): model is OnlineModel => Boolean(model));
+  }, [index, recent]);
   const writeMeta = (next: MaterialLibraryMeta) => {
     setMeta(next);
     saveMaterialLibraryMeta(window.localStorage, next);
@@ -239,6 +275,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       guard.assertCurrent();
       if (latest.current.disabled) throw new Error('当前场景物料已满，请腾出位置后重新添加。');
       latest.current.onAdd(item);
+      // 真正落盘成功才记最近用过；下载失败/被三道门拦下都不进。
+      setRecent(pushRecentSlug(window.localStorage, model.slug));
     } catch (error) {
       if (alive.current) {
         setPlaceError(error instanceof Error ? error.message : '该模型未能下载，请重试或换一个。');
@@ -334,6 +372,9 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     if (query.trim() || bucket) {
       groups.push({ key: 'filtered', label: '', models: libraryShown });
     } else {
+      // 最近用过：收藏过的留给「收藏」页，不在库里重复；下架的条目由 recentModels 自动丢。
+      const recentInLib = recentModels.filter(model => !meta.favorites.includes(model.slug));
+      if (recentInLib.length > 0) groups.push({ key: 'recent', label: '最近用过', models: recentInLib });
       const byBucket = new Map<string, OnlineModel[]>();
       for (const model of libraryShown) {
         const list = byBucket.get(model.bucket) ?? [];
@@ -412,19 +453,23 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             </>
             : <>
             {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。 */}
+            {/* 搜索框常驻顶部，不再藏在折叠/筛选里；对齐 shelf 形态。 */}
+            <label className="sc-search-mini sc-lib-search">
+              <Search size={14} aria-hidden="true"/>
+              <input aria-label="搜索全库线上模型" placeholder="搜索库内素材" value={query} onChange={event => setQuery(event.target.value)}/>
+            </label>
             {(query.trim() || bucket) && <div className="sc-lib-tools">
               <div className="sc-lib-chips" role="group" aria-label="物料分类">
                 {chip('', '全部', 0, LayoutGrid, false)}
                 {index.buckets.map(entry => chip(entry.key, entry.label, entry.count, undefined, false))}
               </div>
-              <label className={`sc-search-mini${searchOpen ? ' is-open' : ''}`}>
-                <button type="button" aria-label={searchOpen ? '收起搜索' : '搜索全库模型'} aria-pressed={searchOpen} onClick={() => { setSearchOpen(current => !current); if (searchOpen) setQuery(''); }}><Search size={15} aria-hidden="true"/></button>
-                <input aria-label="搜索全库线上模型" placeholder="搜索" value={query} onChange={event => setQuery(event.target.value)} onFocus={() => setSearchOpen(true)}/>
-              </label>
             </div>}
             <ul className="sc-lib-list">
               {groups.map(group => <li className="sc-lib-group" key={group.key}>
-                {group.label && <small>{group.label}</small>}
+                {group.label && <small className={group.key === 'recent' ? 'sc-lib-group-head' : ''}>
+                  <span>{group.label}</span>
+                  {group.key === 'recent' && <button type="button" className="sc-lib-clear-recent" aria-label="清空最近用过" onClick={() => setRecent(clearRecentSlugs(window.localStorage))}>清空</button>}
+                </small>}
                 <ul>{group.models.map(modelRow)}</ul>
               </li>)}
             </ul>
@@ -456,15 +501,34 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         {index.buckets.map(entry => chip(entry.key, entry.label, entry.count))}
         {meta.customTags.map(tag => chip(`tag:${tag}`, tag, Object.values(meta.assignments).filter(tags => tags.includes(tag)).length))}
       </div>
-      <label className={`sc-search-mini${searchOpen ? ' is-open' : ''}`}>
-        <button type="button" aria-label={searchOpen ? '收起搜索' : '搜索全库模型'} aria-pressed={searchOpen} onClick={() => { setSearchOpen(current => !current); if (searchOpen) setQuery(''); }}><Search size={16} aria-hidden="true"/></button>
-        <input aria-label="搜索全库线上模型" placeholder="搜索全库模型" value={query} onChange={event => setQuery(event.target.value)} onFocus={() => setSearchOpen(true)}/>
+      {/* 搜索框常驻：不再折叠成图标，也不依赖 focus 展开；对齐 shelf 形态。 */}
+      <label className="sc-search-mini is-open">
+        <Search size={16} aria-hidden="true"/>
+        <input aria-label="搜索全库线上模型" placeholder="搜索" value={query} onChange={event => setQuery(event.target.value)}/>
       </label>
     </div>
     {tagError && <p className="sc-warning sc-material-note" role="alert">{tagError}</p>}
     {armedTag && <p className="sc-note sc-material-note" role="status">点物料角上的标签，把它挂到「{armedTag}」。<button type="button" className="sc-button" onClick={() => setArmedTag('')}>完成挂标签</button></p>}
     {placeError && <p className="sc-warning sc-material-note" role="alert">{placeError}</p>}
     {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
+    {/* 最近用过：纯本地，浏览态才挂；搜索/选分类时让位给结果。 */}
+    {recentModels.length > 0 && !query.trim() && !bucket && (
+      <div className="sc-recent-strip" aria-label="最近用过">
+        <span className="sc-recent-label">最近用过</span>
+        <ul className="sc-recent-list">
+          {recentModels.map(model => {
+            const name = onlineModelDisplayName(model);
+            return <li className="sc-recent-item" key={model.slug}>
+              <button type="button" className="sc-recent-tile" disabled={disabled || busy !== null} onClick={() => void addOnline(model)} aria-label={`添加${name}`} title={model.name}>
+                <span className="sc-recent-thumb">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span>
+                <span className="sc-recent-name">{name}</span>
+              </button>
+            </li>;
+          })}
+        </ul>
+        <button type="button" className="sc-recent-clear" aria-label="清空最近用过" onClick={() => setRecent(clearRecentSlugs(window.localStorage))}>清空</button>
+      </div>
+    )}
     <div ref={cards.setRef} onKeyDown={cards.onKeyDown} className="sc-material-rail" role="group" aria-label="线上模型" tabIndex={0}>
       <MaterialCreateCell {...(controller ? { controller } : {})} disabled={disabled} variant="tile"/>
       {shown.length === 0 && generatedShown.length === 0 && <p className="sc-muted sc-material-empty">{bucket.startsWith('tag:') ? '还没有物料挂上这个标签。' : '没有匹配的模型。'}</p>}

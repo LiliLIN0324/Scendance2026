@@ -142,6 +142,7 @@ function parsePlan(value: unknown, receipt: BingoReceipt | null): BingoPlan | nu
   const projectKey = clip(record.projectKey, MAX_KEY);
   if (!projectKey || !record.markedAt) return null;
   const clientUrl = typeof record.clientUrl === 'string' ? clip(record.clientUrl, 512) : '';
+  // UUID 分支为 T5 冻结的旧 /review/<id> 链遗留兼容；新链全部走 /review/#layout= hash 快照。
   const clientHref = clientUrl || (SHARE_ID.test(shareId) ? reviewPlanHref(shareId) : '/review/');
   const storedReviewKey = typeof record.reviewPlanKey === 'string' ? clip(record.reviewPlanKey, MAX_KEY) : '';
   const reviewPlanKey = storedReviewKey || reviewPlanKeyForClientUrl(clientHref) || projectKey;
