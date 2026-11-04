@@ -39,8 +39,8 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
     <div className="sc-space-section-head">
       <Mountain size={15} aria-hidden="true"/><h3>空间场景</h3><small>{environments.length} 个</small>
       <details className="sc-env-switch">
-        <summary aria-label="添加高斯场景" title="添加高斯场景"><ArrowLeftRight size={14} aria-hidden="true"/></summary>
-        <ul className="sc-env-switch-menu" role="menu" aria-label="可添加的高斯场景">
+        <summary aria-label="添加场景" title="添加场景"><ArrowLeftRight size={14} aria-hidden="true"/></summary>
+        <ul className="sc-env-switch-menu" role="menu" aria-label="可添加的场景">
           {scenes.map(scene => {
             const placed = environments.some(entry => entry.assetId === scene.assetId);
             return <li key={scene.assetId}>
@@ -76,7 +76,7 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
           <button type="button" className="sc-env-scene-remove" aria-label={`移除${name}`} title="移除场景" onClick={() => onRemove(environment.assetId)}>×</button>
         </li>;
       })}
-    </ul> : <div className="sc-lib-empty"><Mountain size={14} aria-hidden="true"/><span>添加一个高斯场景开始布置</span></div>}
+    </ul> : <div className="sc-lib-empty"><Mountain size={14} aria-hidden="true"/><span>添加一个场景开始布置</span></div>}
     {current && <div className="sc-env-active-caption" role="status">正在编辑：{currentName}</div>}
   </>;
 }

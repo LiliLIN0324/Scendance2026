@@ -8,7 +8,7 @@ export type RailTone = 'idle' | 'ok' | 'busy' | 'ask' | 'warn';
 
 /**
  * 醒着 = 有活儿，或者这一格正开着；没事干就是休眠，休眠不给颜色。
- * 总控例外：它一直在线，只有出错才爆红。
+ * 活动例外：它一直在线，只有出错才爆红。
  */
 export function railTone(lane: LaneId, activity: LaneActivity, open: boolean): RailTone {
   if (activity !== 'idle') return activity;

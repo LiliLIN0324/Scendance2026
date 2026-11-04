@@ -4,7 +4,7 @@
  * 左轨 agent 的本机对话记录。
  *
  * 为什么放在本机：空间/物料这两条线还没有自己的后端会话，先把对话记在本机
- * （localStorage，按 agent 分线）。总控与 Bingo 那一场真实的对话走 AgentPanel 自己的
+ * （localStorage，按 agent 分线）。活动与 Bingo 那一场真实的对话走 AgentPanel 自己的
  * agent.bubbles，不走这里。等后刀接上真接口，只需要把 appendMessage 换成服务端调用。
  */
 

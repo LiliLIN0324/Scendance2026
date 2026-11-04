@@ -18,6 +18,7 @@ import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maxi
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
+import { localPlanKey } from '../../review-share-page/load-plan';
 import { useRoomEditor } from '../contexts';
 import { useDialogFocus } from '../hooks/use-dialog-focus';
 import { proposeAddition, raiseVenue, replaceVenueWithShell, type AdditionProposal, type PlanProposal, type VenuePlan } from '../lib/agent-proposal';
@@ -88,25 +89,24 @@ const forceFail = () => process.env.NODE_ENV !== 'production' && typeof window !
 type FileIssue = { kind: 'nonImage' | 'unsupported' | 'tooLarge' | 'readFailed'; name: string; size: number };
 type Bubble = {
   id: string; role: 'user' | 'agent'; text: string; meta?: string; warn?: string; amber?: boolean;
-  /** 旧总控假分派留下的历史字段：S1 起不再写入，仅为兼容旧会话回放而保留。 */
-  to?: AgentId[];
   /** 清单/文案这种多行回话：不做两行截断，保留换行。 */
   long?: boolean;
   /** 选进来的图纸/照片：跟这条消息一起留在聊天区，不是只把文件名当一行字。 */
   image?: string;
   /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
   action?: { label: string; run(): void };
+  /** S2 T2：审校台专属气泡（体检回执/钉评指路）。Bingo 脸只回放这类，活动脸回放全部。 */
+  review?: boolean;
 };
 
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
-  return bubbles.map(({ id, role, text, meta, warn, amber, to, long, image }) => {
+  return bubbles.map(({ id, role, text, meta, warn, amber, long, image }) => {
     return {
       id, role, text,
       ...(meta !== undefined ? { meta } : {}),
       ...(warn !== undefined ? { warn } : {}),
       ...(amber ? { amber: true } : {}),
-      ...(to?.length ? { to } : {}),
       ...(long ? { long: true } : {}),
       ...(image !== undefined ? { image } : {}),
     } satisfies StoredAssistantBubble;
@@ -114,7 +114,7 @@ function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
 }
 
 function fromStoredBubbles(rows: readonly StoredAssistantBubble[]): Bubble[] {
-  return rows.map(({ to, ...row }) => ({ ...row, ...(to ? { to: [...to] } : {}) }));
+  return rows.map(row => ({ ...row }));
 }
 /** 这一版要按哪组尺度摆：origin 记下米数是谁定的，只有人说过的才敢当事实念出来。 */
 type Scale = { length: number; width: number; origin: ScaleOrigin };
@@ -196,6 +196,8 @@ export interface LayoutAgentCallbacks {
   onSelectMode(mode: WorkbenchMode): void;
   onOpenReview(): void;
   onOpenDelivery(): void;
+  /** S2-2 发送钉评链接：生成 /review/#layout= 评审链接，URL 回给面板气泡。 */
+  onIssueReviewLink?(): Promise<string | null>;
   onFit(): void;
   /** 活动简报（完善需求） */
   onOpenBrief?(): void;
@@ -249,12 +251,15 @@ interface AgentValue {
   addSeats(): void;
   /** T-UI §4-5：导出预览卡。确认前只是卡，点「确认导出」才触发既有导出。 */
   exportPreview: boolean; previewExport(): void; confirmExport(): void; dismissExport(): void;
+  /** S2-1：几何体检按钮直达（此前唯一入口是口令）。 */
+  reviewNow(): void;
+  /** S2-2：一键生成钉评链接，气泡回链。离线导出降级为分享菜单次选项。 */
+  issueReviewLink(): void;
   acceptFile(file: File): void; retryFile(): void; pickFile(): void;
   /** 选进来、还没发出去的图纸/照片：挂在输入框上，点发送才读进场地。 */
   pendingFile: { name: string; url: string } | null;
   removePendingFile(): void;
-  /** to 为旧假分派参数：UI 已不再传入，仅保留签名兼容历史回放，S4 随类型清理一并移除。 */
-  send(text: string, to?: AgentId[]): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
+  send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
 }
 
 const AgentContext = createContext<AgentValue | null>(null);
@@ -336,13 +341,13 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
   }, []);
 
   const say = useCallback((bubble: Omit<Bubble, 'id'>) => {
-    setBubbles(items => {
-      const next = [...items.slice(-30), { id: uid(), ...bubble }];
-      bubblesRef.current = next;
-      persistBubbles(boundSessionId.current, next);
-      touchActiveSessionRef.current();
-      return next;
-    });
+    // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
+    const prev = bubblesRef.current;
+    const next = [...prev.slice(-30), { id: uid(), ...bubble }];
+    bubblesRef.current = next;
+    setBubbles(next);
+    persistBubbles(boundSessionId.current, next);
+    touchActiveSessionRef.current();
   }, [persistBubbles]);
 
   // 点历史 / 新开会话：换 activeId 时把气泡切到对应正文；新场没有正文就是空对话。
@@ -480,25 +485,36 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
    * 这不是合规审查——没有消防、疏散、无障碍这些依据，也不下那种结论。
    */
   function reviewNow(): void {
-    if (phaseRef.current === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再体检。' }); return; }
-    if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再按落盘后的画布体检。' }); return; }
+    if (phaseRef.current === 'generating') { say({ role: 'agent', review: true, amber: true, text: '还在出这一版：等它出来，或先说「停一下」，我再体检。' }); return; }
+    if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', review: true, amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，我再按落盘后的画布体检。' }); return; }
     const report = reviewLayout(live.current, floorIndexRef.current);
     if (report.checked === 0) {
-      say({ role: 'agent', long: true, text: '这一层还没有物料可看。先说一句「出方案」摆一版，或者说「加两把椅子」，我再体检。' });
+      say({ role: 'agent', review: true, long: true, text: '这一层还没有物料可看。先说一句「出方案」摆一版，或者说「加两把椅子」，我再体检。' });
       return;
     }
     const notes = report.notes.length ? `\n${report.notes.join('\n')}` : '';
     if (report.clean) {
-      say({ role: 'agent', long: true, text: `看完了 ${report.checked} 件：没有互相挤、压墙柱、出界或拉不开的地方。这是几何体检，不是合规审查。${notes}` });
+      say({ role: 'agent', review: true, long: true, text: `看完了 ${report.checked} 件：没有互相挤、压墙柱、出界或拉不开的地方。这是几何体检，不是合规审查。${notes}` });
       return;
     }
-    say({ role: 'agent', long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
+    say({ role: 'agent', review: true, long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
     const actionable = report.issues.filter(issue => !!issue.fix);
     for (const issue of actionable.slice(0, 3)) {
-      say({ role: 'agent', text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
+      say({ role: 'agent', review: true, text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
     }
     const rest = actionable.length - Math.min(3, actionable.length);
-    if (rest > 0) say({ role: 'agent', amber: true, text: `还有 ${rest} 条没展开：先把上面这几条改了，再说一句「看看哪里有问题」，我接着看。` });
+    if (rest > 0) say({ role: 'agent', review: true, amber: true, text: `还有 ${rest} 条没展开：先把上面这几条改了，再说一句「看看哪里有问题」，我接着看。` });
+  }
+
+  /** S2-2：审校台「发送钉评链接」。生成 /review/#layout= 链接并由气泡回链，甲方钉评与回执沿既有 share-pins/review-return 回到审校台。 */
+  async function issueReviewLink(): Promise<void> {
+    if (proposal.current || studioRef.current?.preview) { say({ role: 'agent', amber: true, text: '还有一版没确认：先点「确认布置」或「撤回」，链接要冻结落盘后的这一版。' }); return; }
+    try {
+      const url = await callbacks.onIssueReviewLink?.() ?? null;
+      if (!url) { say({ role: 'agent', amber: true, text: '钉评链接没生成出来，先开分享菜单手动发一次。' }); return; }
+      // 链接是 1.6KB 压缩快照：成熟做法是链接住独立分享卡、不进聊天。已有「甲方评审记录」卡带复制钮，这里只留一句指路。
+      say({ role: 'agent', review: true, text: '钉评链接已准备好。下面「甲方评审记录」里点「复制甲方链接」发给客户就行；客户在 3D 画布上钉的评和回执会回到这张审校台。' });
+    } catch { say({ role: 'agent', amber: true, text: '钉评链接没生成出来，先开分享菜单手动发一次。' }); }
   }
 
   /**
@@ -1230,7 +1246,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
     if (handoffExportRequest > 0) proposeExport();
   }, [handoffExportRequest]);
 
-  async function send(text: string, to?: AgentId[]): Promise<void> {
+  async function send(text: string): Promise<void> {
     // 图纸/照片先在输入框里等：这一句发出去时才算读过、才铺底图；纯发文件也算一步。
     const attachment = pendingFile;
     if (attachment) setPendingFile(null);
@@ -1246,7 +1262,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       if (phase === 'generating') stop(); else withdrawProposal();
       return;
     }
-    say({ role: 'user', text: trimmed, ...(to?.length ? { to } : {}) });
+    say({ role: 'user', text: trimmed });
     if (callbacks.workbenchMode !== 'layout') {
       if (isClientReviewCommand(trimmed)) {
         callbacks.onOpenReview();
@@ -1425,7 +1441,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
         return reason;
       }
     },
-    exportPreview, previewExport: proposeExport, confirmExport, dismissExport,
+    exportPreview, previewExport: proposeExport, confirmExport, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); }, pickFile: () => fileInput.current?.click(),
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
     removePendingFile: () => setPendingFile(null),
@@ -1445,7 +1461,7 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
 /* ───────────────────────── 右栏 ───────────────────────── */
 
 /**
- * 这些状态算「出了问题」。Bingo 那颗点与总控那格都靠它爆红。
+ * 这些状态算「出了问题」。Bingo 那颗点与活动那格都靠它爆红。
  * 同一个列表只写一份，别一边改了另一边忘了。
  */
 const FAILED_STATES: readonly AgentState[] = ['generateFailed', 'dimsInvalid', 'nonImageRejected', 'fileUnsupported', 'fileTooLarge', 'fileReadFailed'];
@@ -1680,8 +1696,9 @@ export function VenuePickerOverlay(): JSX.Element | null {
   </div>;
 }
 
-function Bubbles({ agent }: { agent: AgentValue }): JSX.Element {
-  return <>{agent.bubbles.map(bubble => {
+function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?: boolean }): JSX.Element {
+  const list = reviewOnly ? agent.bubbles.filter(bubble => bubble.review) : agent.bubbles;
+  return <>{list.map(bubble => {
     return bubble.role === 'user'
     ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
     : <div key={bubble.id} className="ap-turn"><p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
@@ -1740,7 +1757,7 @@ function ProposalCard({ agent }: { agent: AgentValue }): JSX.Element | null {
 
 /**
  * 左轨四格就是四个 agent：活动（内部 id 沿用 'door'，计划 S4 统一重命名）、Bingo 审校、空间、物料。
- * S1 起「活动」是唯一对话与布置生成入口；旧的总控假分派已拆除，不做真多智能体调度台。
+ * S1 起「活动」是唯一对话与布置生成入口；旧的活动假分派已拆除，不做真多智能体调度台。
  */
 export type AgentId = 'door' | 'bingo' | 'space' | 'material';
 
@@ -1751,12 +1768,8 @@ export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: s
   material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
 };
 
-export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, chatSlot }: {
+export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = true, activeAgent = 'door', spaceSlot, materialSlot, chatSlot }: {
   onClose?(): void;
-  /** 评审议题。挂在对话里，不替换整栏。 */
-  reviewSlot?: ReactNode;
-  /** 执行清单。挂在对话里，不替换整栏。 */
-  deliverySlot?: ReactNode;
   /** 顶栏头像位置：飞入动画从这里起飞/降落。 */
   headerAvatarRef?: RefObject<HTMLSpanElement>;
   /** 头像到位后再显形，飞行那 260ms 由固定层顶着。 */
@@ -1767,7 +1780,7 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
   spaceSlot?: ReactNode;
   /** 物料卡片：物料库与生成。 */
   materialSlot?: ReactNode;
-  /** 总控/空间/物料各自的对话区（Bingo 用自带的真对话，不传）。 */
+  /** 活动/空间/物料各自的对话区（Bingo 用自带的真对话，不传）。 */
   chatSlot?: ReactNode;
 } = {}): JSX.Element {
   const agent = useAgent();
@@ -1857,9 +1870,10 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
       {demo && <p className="ap-demo-note" role="note">演示环境 · 方案由本机规则生成，未连接真实 AI 模型</p>}
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
-      {mode === 'layout' && agent.bubbles.length === 0 && agent.state !== 'generating' && <div className="ap-lead">
-        <p className="ap-lead-title">先说一句就行</p>
-        <p className="ap-lead-body">点一句例子，或自己说；听懂了会回显，确认后才写进画布。</p>
+      {/* T2：空态话术按脸分——活动脸是布置引导，Bingo 脸是审校引导，不再共用「先说一句」。 */}
+      {mode === 'layout' && agent.state !== 'generating' && (bingo ? agent.bubbles.filter(b => b.review).length === 0 : agent.bubbles.length === 0) && <div className="ap-lead">
+        <p className="ap-lead-title">{bingo ? '这边只管审校' : '先说一句就行'}</p>
+        <p className="ap-lead-body">{bingo ? '点上面「立即体检」查一遍，或「发送钉评链接」叫客户看。客户在图上留的话，会回到这里。' : '点一句例子，或自己说；听懂了会回显，确认后才写进画布。'}</p>
       </div>}
       {activity && mode === 'layout' && isPlanHome(agent.state, layout, agent.proposal !== null) && (
         <PlanHome
@@ -1868,11 +1882,19 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
           onGenerate={sentence => { setDraft(''); void agent.send(sentence); }}
         />
       )}
-      {mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
-      {mode === 'review' && <><p className="ap-divider">评审 · {layout.name || '未命名活动'}</p><p className="ap-agent">{formatArea(venueArea(layout))} ㎡ · {items} 件物料</p></>}
-      {mode === 'delivery' && <p className="ap-divider">执行 · 本机内部资料 · {layout.name || '未命名活动'}</p>}
-      {/* 对话记录三种模式共用：评审/执行里说过的话也得看得见，不然输入框就成了摆设。 */}
-      <Bubbles agent={agent}/>
+      {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
+      {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
+      {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
+      <Bubbles agent={agent} reviewOnly={bingo}/>
+      {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
+      {bingo && <div className="ap-card" aria-label="审校状态台">
+        <p className="ap-small">审校状态</p>
+        <div className="ap-chips">
+          <button type="button" className="chip btn-outline" onClick={() => agent.reviewNow()}>立即体检</button>
+          <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>准备客户评审</button>
+          <button type="button" className="chip btn-outline" onClick={() => agent.issueReviewLink()}>发送钉评链接</button>
+        </div>
+      </div>}
       {bingo && <BingoAuditCard/>}
       {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}
       {activity && mode === 'layout' && <>
@@ -1896,22 +1918,6 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
           </div>
         </>}
       </>}
-      {mode === 'review' && reviewSlot}
-      {mode === 'review' && <div className="ap-card">
-        <div className="ap-chips">
-          <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>打开客户评审</button>
-          <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>走一遍给客户看</button>
-          {agent.venueIO === 'outdoor' && <button type="button" className={`chip${agent.rainOn ? ' is-on' : ''}`} onClick={agent.previewRain}>看看下雨天</button>}
-        </div>
-      </div>}
-      {mode === 'delivery' && deliverySlot}
-      {mode === 'delivery' && <div className="ap-card">
-        <p className="ap-small">{items} 件物料 · {formatArea(venueArea(layout))} ㎡</p>
-        <div className="ap-chips">
-          <button type="button" className="chip btn-outline" onClick={agent.previewExport}>导出交接</button>
-          <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>打开执行资料</button>
-        </div>
-      </div>}
       {agent.exportPreview && <div className="ap-card" id="export-preview">
         <strong>导出完整活动交接</strong>
         <p className="ap-small">活动需求、物料工作单、制作计划、数量点验 · 本机生成</p>
@@ -1934,7 +1940,8 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
     </div>}
     {!conversation && chatSlot}
     </div>
-    {conversation && <>
+    {/* T2：输入条、风格套与能力提示只属于活动脸；Bingo 脸纯审校台，无输入框。 */}
+    {activity && <>
         {/* 活动脸统管活动级选址与布置风格套；Bingo 不再保留布置生成入口。 */}
         {mode === 'layout' && activity && agent.stylePickerOpen && (
           <StyleBundlePanel
@@ -1976,18 +1983,18 @@ export function AgentPanel({ onClose, reviewSlot, deliverySlot, headerAvatarRef,
  */
 export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
   const agent = useAgent();
+  const { layout } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const status = bingoHeaderStatus(agent, mode);
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  // 评审页「完成评审」的本机回执。有回执就给收起球加红环（旧称 Bingo 球）。
-  // 后刀再按 planKey 对齐当前布置，并换成跨设备真状态。见 review-return.ts。
+  // 评审页「完成评审」的本机回执。R2：红环只认当前方案（localPlanKey）的回执，跨方案/sample 不亮。
   const [reviewReturned, setReviewReturned] = useState(false);
   const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
   useEffect(() => {
     const sync = () => {
       try {
-        setReviewReturned(reviewOrbShouldTurnRed(readReviewReturn(window.localStorage)));
+        setReviewReturned(reviewOrbShouldTurnRed(readReviewReturn(window.localStorage), localPlanKey(layout)));
       } catch {
         setReviewReturned(false);
       }
@@ -1995,7 +2002,7 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
     sync();
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
-  }, []);
+  }, [layout]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;

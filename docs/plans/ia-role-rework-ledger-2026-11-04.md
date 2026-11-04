@@ -174,3 +174,33 @@
 - 落地内容：① 画廊桥从 `useRoomEditor`/`useLocalProjectBackup` 取数，Provider 缺席返回 null，以 `mode='list'` 挂在活动脸 `ap-feed` 顶部，门控 `activity && mode==='layout'`，Bingo/空间/物料三脸不渲染；② 归档卡删除内嵌小「打开」按钮，整卡是一颗原生 button（同名 aria-label 保留、键盘与禁用态走浏览器原生）；③ 列表末尾虚线拼贴卡「新建活动」，就地内联命名（固定空场地模式），`switchActivity` 增加可选 override 参数承接拼贴名，空名沿用原校验；④ 副行改「齐/缺 chip + N 件 + 相对时间（今天/昨天/N 天前/30 天外短日期）」，复用 `mode-shell` 的 `dossierStatus` 口径与现有 token（绿色仅用 `--wk-green`，无新色）；⑤ 空态文案瘦身，当前卡保留。
 - 测试：面板用例 15→18（整卡原生 button 直入事务、拼贴新建含空名拒与成功后收起、齐/缺短词），既有 2 处 listitem 计数随拼贴卡改 2→3、副行断言随 chip 改写；agent-panel 用例 46→47（画廊桥缺 Provider 安静不渲染）；两个含 creative-studio 部分 mock 的测试壳补 `useLocalProjectBackup: () => null`。
 - 回归证据（node24 本机口径）：`tsc --noEmit` exit 0；定向三组 72 用例仅 venue-picker 基线固有 2 失败（与冻结基线同行同例）；全量 vitest 44 失败/15 文件，与 S1.0 结果**逐文件逐用例计数完全一致**（`.s11-full.out.log`/`.s11-full-failfiles.txt`）；`next build` 首次因 dev 并发占用 `.next` 报 JSON EOF，停 dev 树清目录重跑后 Compiled successfully in 17.0s、13/13 静态页、`out/index.html` 新鲜导出；:3001 bu 实拍：画廊仅活动脸可见、拼贴空名拒提示正确、真实新建走完整归档事务（旧活动自动入档、空白画布直入无 wizard）、整卡点按往返切回成功、三脸画廊全缺席、console 仅余浏览器扩展注入 `data-inspector-id` 的水合噪声、零应用错误（截图 `s11-gallery-face.png`）。
+- 成熟案例对照走查（Airtable/Figma/Miro/Notion Agent 口径，2026-11-04 补）：用系统 Chrome + Playwright 1.64.1 独立 profile 复验真实引擎表现，修掉两处 CSS——① 拼贴卡虚线规则被列表 `li` 通用实线规则以更高特异性覆盖（实测渲染成实线白底），选择器提级为 `.sc-local-activities-list li.sc-activity-tile`；② hover 反馈统一落在 `li:has(...)` 层级（卡片底纹与拼贴卡绿色文案，按钮 color 改 inherit），规避自动化内核下 hover 目标节点自身样式不重算的问题；真实 Chrome 实测：拼贴虚线、卡 hover `--wk-plane` 底纹、拼贴 hover 品牌绿文字（rgb 74,124,89）、键盘 `:focus-visible` 绿色内圈、封面 data-URL 640px 正常栅格化、零 console 错误（截图 `s11-pw-realchrome.png`）。Miro 式搜索/排序/「…」溢出菜单、Figma 式垃圾箱、Linear 式状态流转均确认不在 S1.1 范围，留后续切片。
+
+### S2-1 Bingo 脸三钮状态台（2026-11-04 完工，任务 #14）
+- 改动仅两处文件：`agent-panel.tsx` 在 `{bingo && <BingoAuditCard/>}` 上方插入「审校状态」卡（三钮：立即体检=`agent.reviewNow()`、准备客户评审=`agent.callbacks.onOpenReview()`、导出评审包=`agent.previewExport()`，复用 `.ap-card`/`.ap-chips` 既有样式零新 CSS）；为让面板组件拿到体检函数，`AgentValue` 类型与 provider 暴露对象各加一行 `reviewNow`。composer 本刀不摘（T2 待决门控反转），send() 一行未动、三道门未碰、零新依赖新色。
+- 测试：`agent-panel.react.test.tsx` 新增 describe「S2 Bingo 审校台：三钮状态台直达」5 用例（三钮渲染/活动脸不挂/按钮直达体检回执/onOpenReview 回调/导出先弹卡且只有确认导出触发 exportActivity）。踩坑一记：RTL 同测双 render 时 auto-bound 查询按 document.body 检索，跨树误命中——拆成两个独立 it 解决。
+- 五道回归门全过：tsc exit 0；定向 52/52（原 47+新 5）；全量 44 失败/15 文件，与 `.s11-full-failfiles.txt` 归一化后 diff=0；next build 停 dev→清 `.next`→Compiled successfully 27.2s、Exporting 2/2 exit 0；bu 冒烟 :3001 Bingo 脸三钮在位、立即体检真出「不是合规审查」气泡回执、导出评审包弹 `#export-preview` 确认卡、「先不了」正常收起、console 零错误（截图 `s21-bingo-state-station.png`）。
+- 后续待拍板（进入 T2 前）：T2 composer 门控 `conversation→activity` 与 :807-819 断言反转；T3 reviewSlot 开门/封堵；T4 双 ReviewSharePage 三案、T5 UUID 孤儿链（与 T4 同刀）；T6 红环 R1/R2；T7 Q4 接口形状注释。
+
+### S2-2 第三钮改「发送钉评链接」（2026-11-04，owner 口述定调）
+- owner 指认语义错位：客户侧主体验是钉评（/review 富钉页），不是离线 HTML 导出包。遂将审校台第三钮从 `previewExport`（离线导出确认卡）改为「发送钉评链接」：复用 room-organizer 既有 `issueReviewLink()`（encodeShareUrl→`reviewShareHref` 拼 `/review/#layout=`→`rememberReviewLinkMark`），经新增可选回调 `callbacks.onIssueReviewLink` 注入 provider，`issueReviewLink()` 在 provider 内先拦「有未确认预览」，再气泡回链（文案：链接+甲方钉评/回执回到审校台）。离线导出包原功能不动，降级为分享菜单次选项。AgentValue/接口各加一行，room-organizer callbacks 加一行接线。
+- 测试：mock 加 `onIssueReviewLink`；三钮渲染断言改名；原「导出确认卡」用例换为「点钮→onIssueReviewLink 被调→气泡含 /review/ 链接与甲方钉评说明」。
+- 回归：tsc exit 0；定向 52/52；全量 44 失败/15 文件 vs 基线 diff=0；bu 冒烟 Bingo 脸点钮真出 `http://localhost:3001/review/#layout=…` 完整链接气泡、零 console 错误（截图 `s22-pin-link-bubble.png`）。探针里手工转录长链截断导致 /review 报「读不出来」——属探针操作事故，非产品缺陷（该错误文案本身就是 REVIEW_PLAN_ERRORS.unreadable 的预期行为）。
+- 现状闭环边界：同机/同浏览器下钉评与回执经 share-pins/review-return 真回审校台；**跨机甲方钉评回流仍需 Q4 云端化**（localStorage 各端隔离），本刀不实现。T5 UUID 孤儿链决策随 owner 定调转为「不删、留作云化接口形状」倾向，待正式拍板。
+- 补丁（同晚 owner 指「崩坏」）：1.6KB 压缩快照链接裸打进气泡会包成 18 行刷屏。改为短文案气泡 + 气泡行动钮「复制评审链接」（clipboard.writeText，失败兜底才念出链接），零新 CSS；测试断言从「气泡含 URL」改为「出复制钮」。tsc 0、定向 52/52 复绿，DOM 复验短气泡+按钮在位（截图 `s22-compact-bubble.png`；bu 截图偶发白屏属已知 WebGL PaintPreview 抓拍假象，DOM 读取为证）。
+- 二补丁（owner 再指「直接写对话框很蠢」）：对齐 Frame.io/Figma 成熟做法——链接不进聊天。点击只生成链接，聊天留一句指路「下面甲方评审记录里点复制甲方链接」，复制动作住 BingoAuditCard 既有「复制甲方链接」钮（同卡还有「打开评审页」）。长链因快照压缩进 URL 片段（本地无服务端），短 id 待 Q4 云端化。tsc 0、定向 52/52 复绿、DOM 复验指路气泡+复制钮在位。
+- **T2 完工（owner 指「两个对话内容一样」）**：① Bubble 类型加 `review?: boolean`；② reviewNow 全部 7 处 say 与钉评指路 say 标 review:true；③ Bubbles 组件加 `reviewOnly` prop，Bingo 脸只回放审校气泡（体检回执/钉评指路），布置生成故事不再进审校台；④ composer 门控 conversation→activity，Bingo 脸摘输入框、风格套、能力提示；⑤ ap-lead 按脸分话术（活动「先说一句就行」/Bingo「这边只管审校」），recap 门控加 activity。测试：:811 用例反转（Bingo 输入框为 null、空态为审校文案、三钮在位），新增「Bingo 脸体检回执出现在审校台」。tsc 0、定向 53/53、全量 44 失败/15 文件 diff=0，3001 bu 复验 Bingo 脸 feed 只剩体检回执、活动脸输入框未动。
+
+---
+
+## 7.3 T3-T7 + S3/S4 完工记录（2026-11-04 收尾刀）
+
+- **T3 reviewSlot 死门封堵（#16 completed）**：路径乙整簇删除——agent-panel reviewSlot/deliverySlot prop 与挂载、room-organizer reviewPins/pinFilter/activePinId/pinDraft/reviewCleared 五 state + openPinDraftRef/focusReviewPin/commitReviewPin/returnReviewPin/confirmReview/reviewMarks/toScreen/flyToPin/itemOrigin 整簇 + ReviewPinLayer 画布挂载 + sc-review-hint；mode-shell.tsx 重写只留 DeliveryChecklistShell（分享菜单「到场清单」抽屉活链）；agent-panel.react 两条旧用例反转为「面板内不再有钉议卡/交付卡」断言。tsc=0、定向 59/59、全量 diff=0。
+- **T4 双评审页合并（#17）**：删 app/review/[id]/ 整目录 + review-share-page.tsx 孤儿；share-menu 测试删孤儿 describe。
+- **T5 UUID 孤儿链冻结（#18）**：review-share.ts 五函数 + REVIEW_SHARE_STORAGE 加 @deprecated frozen 注释；bingo-status.ts UUID 分支加遗留兼容注释。
+- **T6 红环口径 R2（#19）**：reviewOrbShouldTurnRed(record, currentPlanKey?) 加参，传 key 时只在 planKey 相等亮；AgentReopenCard 内传 localPlanKey(layout)。
+- **T7 Q4 云化接口形状（#20）**：share-pins.ts ReviewPinRepository、review-return.ts ReviewReturnRepository、review-share.ts ReviewShareRepository+BingoMarkRepository、bingo-feedback.ts 去重键注释——只声明零实现。
+- **S3 空间/物料面板化（#21）**：AgentChat 假聊天气泡整段退役（feed 删除、物料脸 100% 假回执不再拼 readout），space 4 条真口令保留直通；VenueLibraryPanel 生产零入口孤儿整组件删除；高斯禁词 12 处 UI 文案清洗（生成场地/环境/场景）。
+- **S4 清理冻结（#22）**：say 按 A 档剥 updater 副作用（渲染期不再双跑落盘/emit）；Bubble.to 硬删（类型/序列化/迁移块/接口签名）；agent-panel.css 54 条死规则整段删除（保留 .sc-agent-panel:focus + .ap-agent-surface 存活块）；21 条「总控」注释口径统一为「活动」；build=0（清 .next 后重跑）、3001 冒烟正常、全量 44 失败/14 文件（agent-chat 转绿，零新增）。
+- **回归基线**：`.s11-full-failfiles.txt` 15 文件 → 本轮 14 文件（agent-chat.react.test 转绿）；share.test 偶发 flake 独立复验 25/25 通过，属环境性白名单。
+- **未 commit**：S1.1+S2+T2-T7+S3+S4 全部改动仍在工作树；提交时按纪律显式逐路径 add，避开 4 项禁入未跟踪文件。
