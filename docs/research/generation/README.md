@@ -4,12 +4,12 @@
 
 ## 阅读顺序
 
-1. [`scendance-generation-baseline-2026-11-01.md`](scendance-generation-baseline-2026-11-01.md) — 幕景 3.0.0 现状审计：两条链路、两套 IR、四层校验、唯一落盘通道，附基线测试结果。
-2. [`petitmaker-construction-logic-2026-11-01.md`](petitmaker-construction-logic-2026-11-01.md) — 智能建造项目的 12 张机制卡；Apache-2.0，只借机制与形状。
-3. [`oddenova-music-generation-2026-11-01.md`](oddenova-music-generation-2026-11-01.md) — 音乐生成项目的 12 个机制；AGPL-3.0，未复制源码、prompt 或名单。
-4. [`parallel-systems-generation-2026-11-01.md`](parallel-systems-generation-2026-11-01.md) — 五个外部系统交叉验证共性，定位幕景缺的三件：计划工件、逐条诊断、生成前可行域。
-5. [`scendance-generation-synthesis-2026-11-01.md`](scendance-generation-synthesis-2026-11-01.md) — 收口：七条同构机制、场景脚本落地设计、验证证据、下一步排序。
-6. [`scene-script-code-review-2026-11-01.md`](scene-script-code-review-2026-11-01.md) — 对抗式评审（P0 1 / P1 4 / P2 9 / P3 8），每条带复现与最小修复。
+1. [`2026-11-01-生成链路基线.md`](../../archive/research/2026-11-01-生成链路基线.md) — 幕景 3.0.0 现状审计：两条链路、两套 IR、四层校验、唯一落盘通道，附基线测试结果。
+2. [`2026-11-01-智能建造链路.md`](../../archive/research/2026-11-01-智能建造链路.md) — 智能建造项目的 12 张机制卡；Apache-2.0，只借机制与形状。
+3. [`2026-11-01-音乐生成链路.md`](../../archive/research/2026-11-01-音乐生成链路.md) — 音乐生成项目的 12 个机制；AGPL-3.0，未复制源码、prompt 或名单。
+4. [`2026-11-01-五系统交叉验证.md`](../../archive/research/2026-11-01-五系统交叉验证.md) — 五个外部系统交叉验证共性，定位幕景缺的三件：计划工件、逐条诊断、生成前可行域。
+5. [`2026-11-01-生成机制收口.md`](../../archive/research/2026-11-01-生成机制收口.md) — 收口：七条同构机制、场景脚本落地设计、验证证据、下一步排序。
+6. [`2026-11-01-场景脚本评审.md`](../../archive/research/2026-11-01-场景脚本评审.md) — 对抗式评审（P0 1 / P1 4 / P2 9 / P3 8），每条带复现与最小修复。
 7. [`scendance-smart-build-p4-2026-11-04.md`](scendance-smart-build-p4-2026-11-04.md) — P4 收尾：生成前可行域逐格探测、读白只承诺可达座位、件/座单位收口、加座两扇门比对，附浏览器冒烟与三道门证据。
 
 前四篇是证据，第五篇是结论，第六篇是对第五篇落地代码的独立复核，第七篇记录评审后 P4 阶段的增量决定与验证；均以成文时工作树的 `file:line` 为准，后续代码变动可能使行号漂移。
