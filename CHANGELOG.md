@@ -295,7 +295,7 @@
 - **改动范围**：`use-glb-assets.ts`、`use-splat-preview.ts`、`use-three-scene.ts`、`aholo-assets.ts`、`aholo-model-placement.ts`、`glb-url.ts`、`persistence.ts`、`shipped-assets.ts`、`environment-preview.tsx`、`generated-item-library.tsx`、`splat-preview.ts`、`workbench-shelf.css`、`room-organizer.tsx`、`tools/aholo/lux3d-dev-proxy.mjs`。
 - **代理限制**：物件 GLB 上限 10 MiB、3DGS 上限 150 MiB，产物下载超时从 60 秒放到 300 秒；朝向按 Z-up，判据是历史 PLY 三轴 x 23.38 / y 15.51 / z 3.57。
 - **渲染栈与格式**：环境预览走 Spark 2.4.0，取单包 `.spz`（没有才退 `.ply`），不解析 LOD 元数据；点云单独一条渲染栈，壳体让位与复原都在这一层做。
-- **文档**：`docs/16-Aholo资产与3DGS预览.md` 记落盘、留档与预览的完整口径，`docs/AHOLO-LIVE-RUN-2026-10-29.md` 记真调结果；提交 `390d2cc`，`package.json` 与 `frontend/package.json` 同为 2.1.0。
+- **文档**：`docs/08-Aholo资产与3DGS预览.md` 记落盘、留档与预览的完整口径，`docs/AHOLO-LIVE-RUN-2026-10-29.md` 记真调结果；提交 `390d2cc`，`package.json` 与 `frontend/package.json` 同为 2.1.0。
 
 
 
@@ -586,7 +586,7 @@ Aholo 那条两小时就失效的链接不再进图纸；场景生成也能真�
 - **代理侧**：物件 GLB 仍守 10 MiB，3DGS 场景包收到 150 MiB；产物下载超时 60 秒放到 300 秒。
 - **生成素材留档**：本机产物按内容去重存进 `assets/generated/`（2 个物件 GLB、2 个 3DGS 场景 SPZ、接口全景图与缩略图，约 20 MB），`manifest.json` 记中文名、真实尺寸、校验值与来源；`.cache/aholo/` 那些重复副本继续不入库。
 - 已知待收：本机那条落盘记录和留档的同一件物件会排成两张卡；「退出预览」在画布和货架各挂了一份，而卡片本身还不是开关。
-- 未做：LOD 根块截断降级、场景包从界面删除、云端发布带本机资产。详见 `docs/16-Aholo资产与3DGS预览.md`。
+- 未做：LOD 根块截断降级、场景包从界面删除、云端发布带本机资产。详见 `docs/08-Aholo资产与3DGS预览.md`。
 
 ## 活动主路径收口：一确认、三轨、简报跟聊天 — 2026-10-28
 
@@ -845,18 +845,18 @@ Aholo 那条两小时就失效的链接不再进图纸；场景生成也能真�
 - 顶层模式：`布置 | 评审 | 执行`（左窄流程轨 + 画布优先浮层）；策划 brief 嵌在布置，无独立策划模式。
 - 执行壳：交付面板 tabs 含导出 / 本机备份；评审模式浮层「发给客户」。
 - 降级：合同、重建、场地照片、流程指南进「更多」或一次性教练；代码保留。
-- 氛围：布置工具条「漫游｜人群｜天气｜时段」；保留 weather/NPC/walkthrough 引擎；与「现场灯光」文案分离。详见 [docs/EDITOR_IA_PHASE1.md](docs/EDITOR_IA_PHASE1.md)。
+- 氛围：布置工具条「漫游｜人群｜天气｜时段」；保留 weather/NPC/walkthrough 引擎；与「现场灯光」文案分离。详见 （已失效：`docs/EDITOR_IA_PHASE1.md`）。
 
 ## Phase 1.5 — 氛围内联修正 — 2026-10-16
 
 - 氛围从左浮层 `AtmospherePanel` 改为底栏胶囊内联：**漫游｜人群｜天气▾｜时段**（默认全关；人群旁注「约 3 人」）。
-- 不再与素材架抢白板；引擎 hooks 未改。详见 [docs/EDITOR_IA_PHASE1.md](docs/EDITOR_IA_PHASE1.md)。
+- 不再与素材架抢白板；引擎 hooks 未改。详见 （已失效：`docs/EDITOR_IA_PHASE1.md`）。
 
 ## 1.0.1 — 2026-10-10
 
 活动场地与执行工作台合入main：紧凑单排素材、侧边工具和助手共享画布，按剩余比例完整取景；资料关闭与未发送草稿保留。任务候选、合同原件、执行时间表、项目成果及可信公共模型恢复沿用已核流程。保留main的自有Supabase、Tokendance网关、匿名登录、域名及标准资源打包配置，根与前端版本同步1.0.1。
 
-具体功能和验证边界见[1.0.1发布说明](docs/42-1.0.1发布说明.md)。Pages自动部署前端；新后台任务接口和数据库、真实模型与现场效果分别验收。
+具体功能和验证边界见（已失效：`docs/42-1.0.1发布说明.md`）。Pages自动部署前端；新后台任务接口和数据库、真实模型与现场效果分别验收。
 
 ## 1.0.0 — 2026-10-09
 
@@ -870,7 +870,7 @@ Aholo 那条两小时就失效的链接不再进图纸；场景生成也能真�
 
 活动任务建议接入人工选择、摘要确认、稳定提案、保存读回及原执行表；合同原件可在资料分类管理。底部素材按需展开，Agent异常持久化停止继续执行，修改已有物件遵守选中范围。公共模型在可信编号和来源核对后恢复，保存失败及新几何继续编辑保持可核对。
 
-本机演练、真实模型与正式云分别记录，包版本仍为0.6.0。详见[功能与验证边界](docs/DELIVERY-PROGRESS-2026-10-10-WORKBENCH.md)。
+本机演练、真实模型与正式云分别记录，包版本仍为0.6.0。详见（已失效：`docs/DELIVERY-PROGRESS-2026-10-10-WORKBENCH.md`）。
 
 ## 0.6.0 — 2026-10-03
 
@@ -881,7 +881,7 @@ Aholo 那条两小时就失效的链接不再进图纸；场景生成也能真�
 - 接入独立重建队列、识别与规划调用、待核对状态、候选预览和确认应用，包含预算、去重、编辑租约及版本检查。
 - 前后端共用放置校验，覆盖移动、旋转、缩放、复制、批量操作及 AI 应用；无效拖放回到有效位置。
 - 支持结构编辑、保存恢复及撤销重做；保留原版默认墙面、地板和材质参数。
-- 提供独立持久化本地预览：`npm run dev:floorplan`。详细验证见 [验收记录](docs/archive/floorplan-verification.md)。
+- 提供独立持久化本地预览：`npm run dev:floorplan`。详细验证见 [验收记录](docs/archive/report/2026-10-09-图纸重建验收.md)。
 - **验证边界**：本地测试与构建通过；真实 DeepSeek／混元调用、识别精度及独立 Supabase 云环境仍待配置和验收。本版本不代表真实识别已验收。
 
 ## 0.5.0 — 2026-10-03
@@ -933,6 +933,6 @@ Aholo 那条两小时就失效的链接不再进图纸；场景生成也能真�
 
 ### 验证与边界
 
-本轮视觉改版已通过前端 TypeScript、生产构建（含 lint）、171 项相关测试及桌面 / 手机宽度浏览器检查，详见 [视觉验收](docs/FOUNDATION_DESIGN_REFERENCE.md)。既有联调证据见 [前后端联调](docs/33-前后端联调.md)。
+本轮视觉改版已通过前端 TypeScript、生产构建（含 lint）、171 项相关测试及桌面 / 手机宽度浏览器检查，详见 （已失效：`docs/FOUNDATION_DESIGN_REFERENCE.md`）。既有联调证据见 （已失效：`docs/33-前后端联调.md`）。
 
 此版本不代表生产部署或真实 Supabase 云端完整验收。真实账号交接、第三方生成与客户发布仍需按部署文档继续验收；本地测试与云端能力分别记录。
