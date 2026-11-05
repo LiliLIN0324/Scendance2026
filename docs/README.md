@@ -1,6 +1,8 @@
 # Scendance 文档总览（2026-11-04 整理后）
 
 > 这是 `docs/` 的唯一入口。原来 8 份互相引用的 11 月调研文档已合并为 4 份主题文档，原始件完整归档在 `archive/recon-2026-11-src/`，没有删除。
+>
+> 小程序端代码已独立成仓 [`LiliLIN0324/scendance-capture`](https://github.com/LiliLIN0324/scendance-capture)（私有），本仓自 2026-11-05 起不再保留 `miniprogram/`；本仓 `frontend/lib/capture-guide/` 仍是两端共用的阈值真源。
 
 ## 一、现状四句话
 
