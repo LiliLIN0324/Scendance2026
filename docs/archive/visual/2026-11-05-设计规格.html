@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 Scendance · 2026 设计规范 · v2.6.16</title>
+<link rel="preconnect" href="https://fonts.loli.net" crossorigin>
+<link href="https://fonts.loli.net/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── 令牌（与 05-设计规范.md v2 一致） ───────────────── */
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF;
+  --hair-soft:#EFEFF1; --hair:#E4E4E7; --faint:#A6AAB2;
+  --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#3A6247; --green-pale:#E8F0EA;
+  --ok:#4A7C59; --info:#55585F; --warn:#96651F; --err:#B4443C;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10);
+  --e2:0 16px 48px rgba(20,20,22,.18);
+  --ease:cubic-bezier(.2,0,0,1);
+  --font:"Inter",Manrope,Arial,"PingFang SC","Noto Sans SC","Source Han Sans SC","Source Han Sans CN","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{background:var(--paper);color:var(--ink);font-family:var(--font);
+  font-size:14px;line-height:22px;font-variant-numeric:tabular-nums}
+.wrap{max-width:1040px;margin:0 auto;padding:72px 48px 120px}
+a{color:inherit}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--ink-soft);outline-offset:2px}
+.mono{font-family:var(--mono);font-size:12px}
+
+/* ── 页面自身只用 7 档字阶 ───────────────────────────────── */
+h1{font-size:24px;line-height:34px;font-weight:600}
+h2{font-size:20px;line-height:28px;font-weight:600}
+h3{font-size:16px;line-height:24px;font-weight:600}
+.note{font-size:12px;line-height:20px;color:var(--muted)}
+.cap{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+
+/* ── 章节骨架：纯白 + 发丝线 ─────────────────────────────── */
+header.hd{padding-bottom:32px}
+header.hd .note{margin-top:8px}
+section{border-top:1px solid var(--hair);padding:40px 0 48px}
+section>.note{margin-top:4px;max-width:640px}
+.block{margin-top:28px}
+.block>.cap{display:block;margin-bottom:12px}
+
+/* ── 色样 ────────────────────────────────────────────────── */
+.swgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+.sw{border:1px solid var(--hair-soft);border-radius:var(--r-sm);overflow:hidden}
+.sw .chip{height:56px}
+.sw .meta{padding:8px 10px;border-top:1px solid var(--hair-soft)}
+.sw .meta b{display:block;font-size:12px;line-height:18px;font-weight:600}
+.sw .meta span{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.swgrid.g3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:640px){.wrap{padding:48px 20px 80px}.swgrid.g3{grid-template-columns:repeat(3,1fr)}}
+
+/* ── 字阶样张 ────────────────────────────────────────────── */
+.trow{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:baseline;
+  padding:14px 0;border-top:1px solid var(--hair-soft)}
+.trow:first-of-type{border-top:none}
+.trow .meta{text-align:right;font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.t-h1{font-size:24px;line-height:34px;font-weight:600}
+.t-h2{font-size:20px;line-height:28px;font-weight:600}
+.t-h3{font-size:16px;line-height:24px;font-weight:600}
+.t-p1{font-size:14px;line-height:22px}
+.t-c1{font-size:14px;line-height:22px;font-weight:500;color:var(--ink-soft)}
+.t-p2{font-size:12px;line-height:20px;color:var(--muted)}
+.t-cap{font-size:11px;line-height:16px;font-weight:500;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+
+/* ── 间距步进 ────────────────────────────────────────────── */
+.sprow{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap}
+.spitem{text-align:center}
+.spitem i{display:block;background:var(--plane);border:1px solid var(--hair);width:34px;border-radius:2px}
+.spitem span{font-family:var(--mono);font-size:11px;color:var(--muted);display:block;margin-top:6px}
+.bptable{width:100%;border-collapse:collapse;margin-top:4px}
+.bptable th,.bptable td{text-align:left;font-size:12px;line-height:20px;padding:8px 12px;border-top:1px solid var(--hair-soft)}
+.bptable th{color:var(--muted);font-weight:500;font-size:11px;letter-spacing:.08em}
+
+/* ── 图标与阴影 ──────────────────────────────────────────── */
+.ms-glyph{display:inline-block;width:24px;height:24px;background:currentColor;mask:var(--symbol) center/contain no-repeat;-webkit-mask:var(--symbol) center/contain no-repeat}
+.icrow{display:flex;gap:28px;align-items:flex-end}
+.icitem{text-align:center}
+.icitem .box{height:40px;display:flex;align-items:flex-end;justify-content:center;color:var(--ink-soft)}
+.icitem span{font-family:var(--mono);font-size:11px;color:var(--muted);display:block;margin-top:8px}
+.icroles{display:flex;flex-direction:column;gap:10px}
+.icgrp{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.icgrp>b{font-size:12px;line-height:20px;color:var(--ink-soft);width:84px;flex:none;font-weight:500}
+.chipm{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--plane);border-radius:4px;padding:2px 6px}
+.ecards{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.ecard{width:200px;padding:16px;background:var(--paper)}
+.ecard.e0{border:1px solid var(--hair)}
+.ecard.e1{border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1)}
+.ecard.e2{border:1px solid var(--hair);border-radius:var(--r-lg);box-shadow:var(--e2)}
+.ecard b{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+.ecard p{font-size:12px;line-height:20px;color:var(--muted)}
+
+/* ── 按钮 ────────────────────────────────────────────────── */
+.btn{height:36px;padding:0 16px;border-radius:var(--r-sm);font-size:14px;line-height:22px;font-weight:500;
+  border:1px solid transparent;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
+.btn-primary{background:var(--ink);color:var(--paper)}
+.btn-primary:hover{background:#2A2C31}
+.btn-primary:active{background:#3D3F45}
+.btn-secondary{background:var(--paper);border-color:var(--hair);color:var(--ink)}
+.btn-secondary:hover{background:var(--plane)}
+.btn-secondary:active{background:var(--plane-deep)}
+.btn-ghost{background:transparent;color:var(--ink-soft)}
+.btn-ghost:hover{background:var(--plane)}
+.btn-ghost:active{background:var(--plane-deep)}
+.btn-danger{background:var(--paper);border-color:var(--err);color:var(--err)}
+.btn-danger:hover{background:#FBF1F0}
+.btn-text{background:none;border:none;padding:0 4px;color:var(--ink-soft);height:auto}
+.btn-text:hover{color:var(--ink)}
+.btn[disabled]{background:var(--plane)!important;border-color:transparent!important;color:var(--faint)!important;cursor:not-allowed}
+.staterow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.state{display:flex;flex-direction:column;gap:6px;align-items:center}
+.state>span{font-size:11px;color:var(--muted)}
+.send{width:32px;height:32px;border-radius:50%;background:var(--green);color:#fff;border:none;display:inline-flex;align-items:center;justify-content:center}
+.send:hover{background:var(--green-deep)}
+
+/* ── 输入与选择器 ────────────────────────────────────────── */
+.input{height:36px;padding:0 12px;border:1px solid var(--hair);border-radius:var(--r-sm);
+  font-size:14px;color:var(--ink);background:var(--paper);width:220px;font-family:inherit;transition:border-color .12s var(--ease)}
+.input::placeholder{color:var(--muted);font-size:12px}
+.input:hover{border-color:#D6D8DC}
+.input:focus{outline:none;border-color:var(--ink-soft)}
+.input.err{border-color:var(--err)}
+.input.ok{border-color:var(--hair)}
+.input[disabled]{background:var(--plane);color:var(--faint)}
+.fieldstate{display:flex;flex-direction:column;gap:6px}
+.fieldstate>span{font-size:11px;color:var(--muted)}
+.fieldmsg{font-size:12px;line-height:20px}
+.fieldmsg.e{color:var(--err)}
+.selrow{display:flex;gap:32px;flex-wrap:wrap;align-items:center;padding:8px 0}
+.ck{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ink)}
+.dot{width:18px;height:18px;border-radius:50%;border:1px solid var(--hair);background:var(--paper);display:inline-block}
+.dot.on{border-color:var(--green);background:radial-gradient(circle at center,var(--green) 0 5px,transparent 6px)}
+.box{width:18px;height:18px;border-radius:4px;border:1px solid var(--hair);background:var(--paper);display:inline-block}
+.box.on{border-color:var(--green);background:var(--green);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='m5 9.5 2.6 2.6L13 6.6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.switch{width:36px;height:20px;border-radius:10px;border:1px solid var(--hair);background:var(--plane);position:relative;display:inline-block}
+.switch i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;border:1px solid var(--hair)}
+.switch.on{background:var(--green);border-color:var(--green)}
+.switch.on i{left:18px;border-color:var(--green)}
+.select{width:220px;height:36px;padding:0 12px;border:1px solid var(--hair);border-radius:var(--r-sm);font-size:14px;color:var(--ink);background:var(--paper);font-family:inherit}
+
+/* ── 导航样例 ────────────────────────────────────────────── */
+.demobar{border:1px solid var(--hair);border-radius:var(--r-sm);overflow:hidden;margin-top:4px}
+.topnav{height:48px;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--hair-soft)}
+.topnav .logo{font-size:14px;font-weight:600;letter-spacing:.02em}
+.topnav .proj{font-size:12px;color:var(--muted)}
+.topnav .grow{flex:1}
+.topnav .icb{width:32px;height:32px;border-radius:var(--r-sm);border:none;background:transparent;color:var(--ink-soft);display:inline-flex;align-items:center;justify-content:center}
+.topnav .icb:hover{background:var(--plane)}
+.rail{width:64px;background:var(--paper);border-right:1px solid var(--hair-soft);padding:8px 0;display:flex;flex-direction:column;gap:2px}
+.ritem{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;color:var(--ink-soft)}
+.ritem span{font-size:11px;letter-spacing:.08em}
+.ritem:hover{background:var(--plane)}
+.ritem.on{color:var(--green-deep);background:var(--green-pale)}
+.ritem.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;background:var(--green)}
+.tabs{display:flex;gap:24px;padding:0 16px;border-bottom:1px solid var(--hair)}
+.tab{padding:10px 0;font-size:14px;line-height:22px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+
+/* ── 表格 / 弹窗 / 反馈 ──────────────────────────────────── */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:500;text-align:left;
+  padding:8px 12px;background:var(--hair-soft);border-bottom:1px solid var(--hair)}
+.tbl td{font-size:14px;line-height:22px;padding:9px 12px;border-bottom:1px solid var(--hair)}
+.tbl th.num,.tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl tbody tr:hover td{background:var(--plane)}
+.tblwrap{border:1px solid var(--hair);border-radius:var(--r-sm);overflow:hidden}
+.modal-demo{position:relative;height:280px;border:1px solid var(--hair);border-radius:var(--r-sm);overflow:hidden}
+.modal-demo .veil{position:absolute;inset:0;background:rgba(20,20,22,.32)}
+.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(400px,calc(100% - 48px));
+  background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-lg);box-shadow:var(--e2);padding:24px}
+.modal h3{margin-bottom:4px}
+.modal p{font-size:12px;line-height:20px;color:var(--muted)}
+.modal .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.alert{display:flex;gap:10px;align-items:flex-start;background:var(--paper);border:1px solid var(--hair);
+  border-left:3px solid var(--err);border-radius:var(--r-sm);padding:10px 12px;max-width:480px}
+.alert p{font-size:12px;line-height:20px;color:var(--ink-soft)}
+.alert b{color:var(--err);font-weight:600}
+.toast{display:inline-flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--hair);
+  border-radius:var(--r-md);box-shadow:var(--e1);padding:10px 14px;font-size:14px}
+.toast i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.ldrow{display:flex;gap:40px;align-items:center;flex-wrap:wrap}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--hair);border-top-color:var(--ink-soft);animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.skel{width:200px;display:flex;flex-direction:column;gap:8px}
+.skel i{height:10px;border-radius:5px;background:var(--plane);animation:pulse 1.2s var(--ease) infinite}
+.skel i:nth-child(2){width:82%}.skel i:nth-child(3){width:60%}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media (prefers-reduced-motion:reduce){.spin,.skel i{animation:none}}
+
+/* ── 空状态 / 截断 ───────────────────────────────────────── */
+.empty{border:1px dashed var(--hair);border-radius:var(--r-md);padding:40px 24px;text-align:center;max-width:480px}
+.empty svg{color:var(--faint);margin-bottom:12px}
+.empty h3{margin-bottom:4px}
+.empty p{font-size:12px;line-height:20px;color:var(--muted);margin-bottom:16px}
+.clampbox{max-width:420px;display:flex;gap:16px;align-items:flex-start}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;line-height:22px;color:var(--ink-soft)}
+.ellip{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;color:var(--ink-soft)}
+
+/* ── 缺省图（占位图） · 只画线稿，不画插画 ──────────────── */
+.phgrid{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.phitem{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.phitem>span{font-family:var(--mono);font-size:11px;line-height:16px;color:var(--muted);max-width:200px}
+.ph{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  background:var(--plane);border:1px solid var(--hair-soft);border-radius:var(--r-sm);color:var(--faint);overflow:hidden}
+.ph em{font-style:normal;font-size:11px;line-height:16px;letter-spacing:.08em;color:var(--muted)}
+.ph.sq{width:112px;height:112px}
+.ph.sm{width:48px;height:48px}
+.ph.cover{width:187px;height:110px}
+.ph.shot{width:196px;height:110px}
+.ph.av{width:40px;height:40px;border-radius:50%}
+.ph.av.s{width:32px;height:32px}
+.ph.load{animation:pulse 1.2s var(--ease) infinite}
+.ph.fail{border-color:var(--err);background:var(--paper);color:var(--ink-soft)}
+
+/* ── 缺省态 · 全屏 / 面板 / 行内 三种规格 ───────────────── */
+.esgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:720px){.esgrid{grid-template-columns:1fr}}
+.empty.wide{max-width:none;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px}
+.empty.wide p{max-width:34ch}
+.empty h2{font-size:20px;line-height:28px;font-weight:600;margin-bottom:4px}
+.empty .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.empty.row{max-width:none;min-height:0;display:flex;align-items:center;gap:8px;padding:10px 14px;
+  border:1px solid var(--hair);border-radius:var(--r-sm);text-align:left}
+.empty.row svg{margin:0;color:var(--faint)}
+.empty.row span{font-size:12px;line-height:20px;color:var(--muted)}
+.empty.row .btn-text{margin-left:auto}
+.phnote{font-size:12px;line-height:20px;color:var(--muted);max-width:680px;margin-top:12px}
+
+/* ── 错误与异常 · 语义色只做描边与图标，不做大色块 ───────── */
+.errdemo{background:var(--plane);border:1px solid var(--hair-soft);border-radius:var(--r-md);
+  padding:28px 24px;display:grid;justify-items:center;text-align:center;gap:8px}
+.errdemo .eicon{color:var(--err);display:grid;place-items:center;height:32px}
+.errdemo h3{margin:0;font-size:16px;line-height:24px;font-weight:600;color:var(--ink)}
+.errdemo>p{margin:0;font-size:12px;line-height:20px;color:var(--muted);max-width:400px}
+.errdemo .acts{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.errdetail{margin-top:12px;width:100%;max-width:420px;text-align:left;border-top:1px solid var(--hair-soft);padding-top:10px}
+.errdetail summary{cursor:pointer;font:500 11px/16px var(--font);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.errdetail p{margin:6px 0 0;font:11px/18px var(--mono);color:var(--faint);overflow-wrap:anywhere}
+.errdetail ul{margin:6px 0 0;padding-left:16px;font-size:11px;line-height:18px;color:var(--faint)}
+.rulelist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px;max-width:900px}
+@media(max-width:720px){.rulelist{grid-template-columns:1fr}}
+.rulelist div{font-size:12px;line-height:20px;color:var(--muted);padding-left:14px;position:relative}
+.rulelist div::before{content:"";position:absolute;left:0;top:8px;width:4px;height:4px;border-radius:50%;background:var(--err)}
+.rulelist b{font-weight:600;color:var(--ink)}
+
+/* ── 图标索引 · 页面在用 ─────────────────────────────────── */
+
+/* ── 文案 / 对比度 ───────────────────────────────────────── */
+.tonegrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px}
+@media(max-width:640px){.tonegrid{grid-template-columns:1fr}}
+.tone{border:1px solid var(--hair-soft);border-radius:var(--r-sm);padding:12px 14px;font-size:14px;line-height:22px}
+.tone.bad{color:var(--err)}
+.tone.good{color:var(--ink)}
+.tone small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.ctrow{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:10px 0;border-top:1px solid var(--hair-soft)}
+.ctrow:first-of-type{border-top:none}
+.ctrow .chip{width:96px;height:32px;border-radius:var(--r-sm);border:1px solid var(--hair-soft);display:flex;align-items:center;justify-content:center;font-size:14px}
+.ctrow .r{font-family:var(--mono);font-size:12px;color:var(--muted)}
+footer{border-top:1px solid var(--hair);padding-top:24px}
+
+/* ── v2.6 封面 / 形态谱系 / 导航全景 ─────────────────────── */
+.cover{padding:64px 0 0;border-bottom:1px solid var(--hair);margin-bottom:40px}
+.cover-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap}
+.cover-meta{display:flex;flex-direction:column;gap:8px;align-items:flex-end;text-align:right}
+.cover-chips{display:flex;gap:6px}
+.cover-chips span{font-family:var(--mono);font-size:11px;line-height:22px;padding:0 8px;border:1px solid var(--hair);border-radius:999px;color:var(--muted)}
+.cover-line{font-size:12px;line-height:20px;color:var(--muted)}
+.cover-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:40px 0 0}
+.tile{border:1px solid var(--hair);border-radius:var(--r-md);padding:18px;background:var(--paper);display:flex;flex-direction:column;gap:8px;min-height:158px}
+.tile .t-cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.tile b{font-size:15px;font-weight:600;line-height:22px}
+.tile em{font-size:12px;line-height:20px;color:var(--muted);font-style:normal}
+.tile .t-vis{margin-top:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:8px}
+.idx{display:flex;flex-wrap:wrap;gap:2px 16px;padding:18px 0 26px;margin-top:26px;border-top:1px solid var(--hair-soft)}
+.idx a{font-size:11.5px;line-height:24px;color:var(--muted);text-decoration:none}
+.idx a:hover{color:var(--ink);text-decoration:underline}
+.lockrow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.lockcell{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:20px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:132px}
+.lockcell .lc{font-size:11px;line-height:16px;color:var(--muted);text-align:center}
+.misuse{border:1px solid var(--hair-soft);border-radius:var(--r-md);padding:18px 10px 14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;position:relative;min-height:112px}
+.misuse::after{content:"✕";position:absolute;top:6px;right:8px;font-size:11px;color:var(--err);font-weight:600}
+.ia{display:grid;grid-template-columns:64px 1fr 300px;grid-template-rows:minmax(300px,1fr) 56px;border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;background:var(--plane)}
+.ia-rail{grid-row:1;display:flex;flex-direction:column;align-items:center;padding:8px 0;background:var(--paper);border-right:1px solid var(--hair)}
+.ia-stage{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;width:100%;border:none;background:none;font-family:inherit;color:var(--ink-soft)}
+.ia-stage.on{background:var(--green-pale);box-shadow:inset 2px 0 0 var(--green);color:var(--green)}
+.ia-canvas{grid-row:1;position:relative;display:grid;place-items:center;background:linear-gradient(160deg,#F7F8F9,#EEF0F2)}
+.ia-slab{width:62%;aspect-ratio:3/2;border-radius:6px;background:var(--paper);border:1px solid var(--hair);box-shadow:0 18px 40px rgba(20,20,22,.08);position:relative;display:grid;place-items:center;color:var(--faint);font-family:var(--mono);font-size:11px}
+.ia-agent{grid-row:1;background:var(--paper);border-left:1px solid var(--hair);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ia-agent .ia-line{height:8px;border-radius:4px;background:var(--plane)}
+.ia-foot{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--paper);border-top:1px solid var(--hair)}
+.ia-foot .ia-thumb{width:52px;height:32px;border-radius:6px;border:1px solid var(--hair-soft);background:var(--plane)}
+.pin{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:10px;font-weight:600;flex:none;line-height:1}
+.pin.ghost{background:var(--paper);color:var(--ink-soft);border:1px solid var(--hair)}
+.entry{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:14px 16px;border:1px solid var(--hair);border-radius:var(--r-md);background:var(--paper);align-content:start}
+.entry b{font-size:13px;line-height:20px}
+.entry .dest{display:block;font-family:var(--mono);font-size:11px;line-height:18px;color:var(--green-deep);margin-top:2px}
+.entry p{margin:0;font-size:12px;line-height:19px;color:var(--muted)}
+.entrygrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.cover-tiles,.lockrow,.entrygrid{grid-template-columns:repeat(2,1fr)}.ia{grid-template-columns:56px 1fr;grid-template-rows:minmax(260px,1fr) 48px}.ia-agent{display:none}}
+@media(max-width:640px){.cover-tiles,.lockrow,.entrygrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="cover-hero">
+    <div>
+      <div style="display:flex;align-items:center;color:var(--ink)">
+        <span class="agent-brand-avatar" style="width:64px;height:64px;margin-right:14px"><img src="../../../frontend/public/assets/rail/door.png" alt=""><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:33%"></i><i class="agent-brand-eye" style="left:60%;top:31%"></i></span></span>
+        <span style="font-family:'PingFang SC','Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;font-size:36px;font-weight:600;line-height:1.15;white-space:nowrap">幕景</span>
+        <span style="display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;margin:0 10px;transform:translateY(4px);flex-shrink:0"></span>
+        <span style="font-family:'Playfair Display',Georgia,serif;font-size:27px;font-style:italic;font-weight:500;letter-spacing:.01em;white-space:nowrap">S</span><span style="font-family:'Playfair Display',Georgia,serif;font-size:27px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap">CENDANCE</span>
+      </div>
+      <p class="cover-line" style="margin-top:16px;font-size:13px">2026 设计规范 · 品牌、界面、AI-native 一本读完</p>
+    </div>
+    <div class="cover-meta">
+      <div class="cover-chips"><span>v2.6.16</span><span>2026-11-03</span><span>18 节</span></div>
+      <p class="cover-line">纯白纸面 · 发丝线分区 · 近黑墨字 · 品牌绿点睛</p>
+    </div>
+  </div>
+
+  <div class="cover-tiles">
+    <div class="tile">
+      <span class="t-cap">00 · Brand</span>
+      <b>字标只有一种排法</b>
+      <em>门厅 Agent 标志 → 幕景 → 品牌绿点 → SCENDANCE</em>
+      <div class="t-vis" style="gap:9px">
+        <span class="agent-brand-avatar" style="width:24px;height:24px"><img src="../../../frontend/public/assets/rail/door.png" alt="门厅"><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:33%"></i><i class="agent-brand-eye" style="left:60%;top:31%"></i></span></span>
+        <span class="agent-brand-avatar" style="width:24px;height:24px"><img src="../../../frontend/public/assets/rail/ball.png" alt="Bingo"><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:39%"></i><i class="agent-brand-eye" style="left:60%;top:37%"></i></span></span>
+        <span class="agent-brand-avatar" style="width:24px;height:24px"><img src="../../../frontend/public/assets/rail/cube.png" alt="空间"><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:39%"></i><i class="agent-brand-eye" style="left:60%;top:37%"></i></span></span>
+        <span class="agent-brand-avatar" style="width:24px;height:24px"><img src="../../../frontend/public/assets/rail/pyramid.png" alt="物料"><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:57%"></i><i class="agent-brand-eye" style="left:60%;top:55%"></i></span></span>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="t-cap">01–12 · Interface</span>
+      <b>一屏一绿钮，其余靠线</b>
+      <em>左轨 / 画布 / Agent / 物料条，四块拼成工作台（无独立顶栏）</em>
+      <div class="t-vis" aria-hidden="true">
+        <span style="width:10px;height:34px;border:1px solid var(--hair);border-radius:3px;display:inline-block"></span>
+        <span style="width:56px;height:34px;border:1px solid var(--hair);border-radius:3px;display:inline-block"></span>
+        <span style="width:26px;height:34px;border:1px solid var(--hair);border-radius:3px;display:inline-block"></span>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="t-cap">13–18 · AI-native</span>
+      <b>先说人话，再做决定</b>
+      <em>生成态、状态机、案例图谱与多 Agent 协作</em>
+      <div class="t-vis" aria-hidden="true">
+        <span class="pin ghost">1</span><span class="pin ghost">2</span><span class="pin ghost">3</span>
+        <span style="color:var(--faint);font-size:11px">→</span>
+        <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--green);color:var(--paper);font-size:10px">确认布置</span>
+      </div>
+    </div>
+  </div>
+
+  <nav class="idx" aria-label="目录">
+    <a href="#sec-brand-agents">00 门厅与 Agent 标志</a>
+    <a href="#sec-01">01 色彩</a>
+    <a href="#sec-02">02 字体</a>
+    <a href="#sec-03">03 间距栅格</a>
+    <a href="#sec-04">04 图标与阴影</a>
+    <a href="#sec-05">05 图标索引</a>
+    <a href="#sec-06">06 按钮与输入</a>
+    <a href="#sec-07">07 导航</a>
+    <a href="#sec-08">08 数据与反馈</a>
+    <a href="#sec-09">09 动效</a>
+    <a href="#sec-10">10 缺省图</a>
+    <a href="#sec-11">11 错误</a>
+    <a href="#sec-12">12 无障碍</a>
+    <a href="#sec-13">13 Token</a>
+    <a href="#sec-14">14 生成态</a>
+    <a href="#sec-15">15 状态机</a>
+    <a href="#sec-16">16 案例图谱</a>
+    <a href="#sec-17">17 图解</a>
+    <a href="#sec-18">18 多 Agent 身份</a>
+  
+  <a href="2026-11-05-Aholo产品差距.html">缺口 · Aholo 产品化</a>
+  <a href="2026-11-05-产品一页纸.html">产品一页纸</a>
+  <a href="2026-11-05-工作台信息架构.html">工作台 IA</a>
+  <a href="2026-11-05-确认导出页.html">确认与导出</a>
+  <a href="2026-11-05-KeepKill清单.html">KEEP / KILL</a>
+  <a href="2026-11-05-用户旅程.html">旅程</a>
+  <a href="2026-11-05-用户流程图.html">流程图</a>
+  <a href="2026-11-05-产品索引页.html">产品索引</a></nav>
+</header>
+
+<!-- ═══ 一、色彩系统 ═══ -->
+<section id="sec-brand-agents" style="border-top:none;padding-top:16px">
+  <h2>幕景品牌识别 · 门厅与 Agent</h2>
+  <p class="note">新设计稿：品牌标志直接使用门厅 Agent 的绿色软形体和白色眼睛；四个 Agent 共用软形体、白眼睛与轻微表情动效，各自用轮廓区分。左轨的图形只做身份识别，功能由所在入口和名称说明。</p>
+  <style>
+    .agent-brand-preview{display:flex;align-items:center;gap:8px;min-height:76px;padding:18px 22px;border:1px solid var(--hair);border-radius:14px;background:var(--paper)}
+    .agent-brand-avatar{position:relative;display:inline-flex;flex:none;width:48px;height:48px}
+    .agent-brand-avatar img{display:block;width:100%;height:100%;object-fit:contain}
+    .agent-brand-eyes{position:absolute;inset:0;pointer-events:none}
+    .agent-brand-eye{position:absolute;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)}
+    .agent-brand-name{font:600 17px/1 "PingFang SC","Noto Sans SC",sans-serif;color:var(--ink)}
+    .agent-brand-dot{width:5px;height:5px;margin:0 2px;border-radius:50%;background:var(--green)}
+    .agent-brand-en{font:500 11px/1 "Playfair Display",Georgia,serif;letter-spacing:.01em;color:var(--ink-soft)}
+    .agent-brand-en i{font-weight:500}
+    .agent-brand-dark{background:#202321;border-color:#202321}
+    .agent-brand-dark .agent-brand-name,.agent-brand-dark .agent-brand-en{color:#fff}
+    .agent-brand-dark .agent-brand-en{opacity:.62}
+    .agent-roster{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .agent-roster-card{display:flex;align-items:center;gap:10px;min-height:78px;padding:12px;border:1px solid var(--hair);border-radius:12px;background:var(--paper)}
+    .agent-roster-card .agent-brand-avatar{width:40px;height:40px}
+    .agent-roster-card strong{display:block;font-size:12px;color:var(--ink)}
+    .agent-roster-card small{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+    @media(max-width:700px){.agent-roster{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+  <div class="block"><span class="cap">品牌字标 · 浅底 / 深底</span>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+      <div class="agent-brand-preview"><span class="agent-brand-avatar"><img src="../../../frontend/public/assets/rail/door.png" alt=""/><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:33%"></i><i class="agent-brand-eye" style="left:60%;top:31%"></i></span></span><strong class="agent-brand-name">幕景</strong><i class="agent-brand-dot"></i><span class="agent-brand-en"><i>S</i>CENDANCE</span></div>
+      <div class="agent-brand-preview agent-brand-dark"><span class="agent-brand-avatar"><img src="../../../frontend/public/assets/rail/door.png" alt=""/><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:33%"></i><i class="agent-brand-eye" style="left:60%;top:31%"></i></span></span><strong class="agent-brand-name">幕景</strong><i class="agent-brand-dot"></i><span class="agent-brand-en"><i>S</i>CENDANCE</span></div>
+    </div>
+    <p class="note" style="margin:10px 0 0">图标 28×28；容器 29×31；中文字 15px / 600；英文 Playfair 500、首字母 S 斜体、全大写。只用于登录页与官网；工作台左轨只显示门厅形体。</p>
+  </div>
+  <div class="block"><span class="cap">当前 Agent 形体 · 同一视觉系统</span>
+    <div class="agent-roster">
+      <div class="agent-roster-card"><span class="agent-brand-avatar"><img src="../../../frontend/public/assets/rail/door.png" alt=""/><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:33%"></i><i class="agent-brand-eye" style="left:60%;top:31%"></i></span></span><span><strong>门厅</strong><small>品牌 / 总控与开合</small></span></div>
+      <div class="agent-roster-card"><span class="agent-brand-avatar"><img src="../../../frontend/public/assets/rail/ball.png" alt=""/><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:39%"></i><i class="agent-brand-eye" style="left:60%;top:37%"></i></span></span><span><strong>Bingo</strong><small>右栏助手</small></span></div>
+      <div class="agent-roster-card"><span class="agent-brand-avatar"><img src="../../../frontend/public/assets/rail/cube.png" alt=""/><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:39%"></i><i class="agent-brand-eye" style="left:60%;top:37%"></i></span></span><span><strong>空间</strong><small>空间卡片</small></span></div>
+      <div class="agent-roster-card"><span class="agent-brand-avatar"><img src="../../../frontend/public/assets/rail/pyramid.png" alt=""/><span class="agent-brand-eyes"><i class="agent-brand-eye" style="left:41%;top:57%"></i><i class="agent-brand-eye" style="left:60%;top:55%"></i></span></span><span><strong>物料</strong><small>物料卡片</small></span></div>
+    </div>
+    <p class="note" style="margin:10px 0 0">四个形体：门厅 / 总控与开合；Bingo / 右栏助手；空间 / 卡片；物料 / 卡片。门厅是总控与品牌标志，不作为空间或阶段切换项。</p>
+  </div>
+</section>
+
+<section id="sec-01">
+  <h2>一、色彩系统</h2>
+  <p class="note">品牌色全产品只出现在 2 处：选中指示、发送键。语义色只做状态文字、状态点、错误描边，不做大色块。</p>
+
+  <div class="block"><span class="cap">品牌主色 · 衍生 3 档</span>
+    <div class="swgrid g3">
+      <div class="sw"><div class="chip" style="background:#4A7C59"></div><div class="meta"><b>品牌绿</b><span>--green · #4A7C59</span></div></div>
+      <div class="sw"><div class="chip" style="background:#3A6247"></div><div class="meta"><b>品牌绿 · 深（hover）</b><span>--green-deep · #3A6247</span></div></div>
+      <div class="sw"><div class="chip" style="background:#EEF3EF"></div><div class="meta"><b>选中底 · 仅小面积</b><span>--green-pale · #EEF3EF</span></div></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">中性色 · 9 阶</span>
+    <div class="swgrid">
+      <div class="sw"><div class="chip" style="background:#FFFFFF"></div><div class="meta"><b>纸面</b><span>--paper · #FFFFFF</span></div></div>
+      <div class="sw"><div class="chip" style="background:#F4F5F7"></div><div class="meta"><b>浮台 / hover</b><span>--plane · #F4F5F7</span></div></div>
+      <div class="sw"><div class="chip" style="background:#ECEDEF"></div><div class="meta"><b>按压</b><span>--plane-deep · #ECEDEF</span></div></div>
+      <div class="sw"><div class="chip" style="background:#EFEFF1"></div><div class="meta"><b>次分隔线</b><span>--hair-soft · #EFEFF1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#E4E4E7"></div><div class="meta"><b>主分隔线</b><span>--hair · #E4E4E7</span></div></div>
+      <div class="sw"><div class="chip" style="background:#A6AAB2"></div><div class="meta"><b>禁用</b><span>--faint · #A6AAB2</span></div></div>
+      <div class="sw"><div class="chip" style="background:#71767E"></div><div class="meta"><b>辅助文字</b><span>--muted · #71767E</span></div></div>
+      <div class="sw"><div class="chip" style="background:#55585F"></div><div class="meta"><b>次级文字</b><span>--ink-soft · #55585F</span></div></div>
+      <div class="sw"><div class="chip" style="background:#141416"></div><div class="meta"><b>主文字 / 墨底</b><span>--ink · #141416</span></div></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">语义功能色 · 已过 AA 对比</span>
+    <div class="swgrid">
+      <div class="sw"><div class="chip" style="background:#4A7C59"></div><div class="meta"><b>成功</b><span>--ok · 5.0:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#55585F"></div><div class="meta"><b>信息</b><span>--info · 7.4:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#96651F"></div><div class="meta"><b>警告</b><span>--warn · 4.7:1</span></div></div>
+      <div class="sw"><div class="chip" style="background:#B4443C"></div><div class="meta"><b>错误</b><span>--err · 4.6:1</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 二、字体排版 ═══ -->
+<section id="sec-02">
+  <h2>二、字体排版</h2>
+  <p class="note">先定字体家族，再定字号档位。界面正文与控件只用两族：中文 PingFang SC（Noto Sans SC → Microsoft YaHei 降级）、西文与数字 Inter（Arial 降级；本预览页以 Manrope 代显）。品牌字标英文是唯一例外，用 Playfair 衬线（见 00 节）。数字启用 tabular-nums；正文只用以下 7 档，强调靠字重 600，中文不用斜体。</p>  <p class="note"><b style="color:var(--green-deep)">同区三档（v2.5 硬规则）</b>：同一视线区域（面板/弹层/工具栏/卡片组）同时可见字号 ≤3 档；CAP 11 与 P2 12 不同区并用——区域内需要更小的标注时，整区把 <code>--fs-cap</code> 重钉为 <code>--fs-p2</code>，使该区只剩「标题/正文/元信息」三档；品牌字标按 00 节自成体系不计档；禁止面板自建私有字号系统，局部只能重钉全局 token。</p>  <p class="note">
+
+  <div class="block"><span class="cap">字体家族 · 界面两族 + 等宽，字标衬线是唯一例外</span>
+  <div class="trow">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+      <span style="font-family:'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;font-size:20px;line-height:30px"><b style="font-weight:600;color:var(--ink)">幕景 · 活动空间工作台</b><span style="font-weight:400;color:var(--ink-soft)">　中文正文与标题都在这一族，只靠字重分级</span></span>
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap">PingFang SC → Noto Sans SC → YaHei</span>
+    </div>
+    <div class="meta">中文 · 标题 600 / 正文 400，不用斜体</div>
+  </div>
+  <div class="trow">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+      <span style="font-family:Manrope,Inter,Arial,sans-serif;font-size:17px;line-height:28px;color:var(--ink)">Scendance · Rooms &amp; Seating　0123456789</span>
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap">Inter → Arial 降级</span>
+    </div>
+    <div class="meta">西文与数字 · 数字启用 tabular-nums（表格、计数、尺寸角标）</div>
+  </div>
+  <div class="trow">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+      <span style="font-family:var(--mono);font-size:12.5px;line-height:22px;color:var(--ink)">asset_9f3c · err WebGL-8210 · 12.8ms</span>
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap">SF Mono → Cascadia → Consolas</span>
+    </div>
+    <div class="meta">等宽 · 只用于技术细节 / assetId / 诊断，11–12px，禁入正文与按钮</div>
+  </div>
+  <p class="note">分工：一行混排时中文取中文字形、西文取西文字形，浏览器按栈自动各取各的。<b>界面禁第三族</b>（不引入圆体、手写体、衬线）；唯一例外是品牌字标英文用 Playfair 衬线（00 节），它只出现在字标，不进正文、控件与表格。</p>
+</div>
+<div class="block"><span class="cap">七档字阶 · 档名 / 规格 / 用途一一对应,样张即真实用法</span>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span class="t-h1">会议活动的空间决策台</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">H1 · 24/34 · 600<br>页面主标题 · 空状态大字</span>
+      </div>
+    </div>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span class="t-h2">导出交接清单</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">H2 · 20/28 · 600<br>分区标题 · 模态标题</span>
+      </div>
+    </div>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span class="t-h3">布置 · 青序香氛快闪</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">H3 · 16/24 · 600<br>面板标题 · 卡片标题</span>
+      </div>
+    </div>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span class="t-p1">这场大概多少人、室内还是户外？说一句就行。</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">P1 正文 · 14/22 · 400<br>消息 · 正文 · 输入文字</span>
+      </div>
+    </div>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span class="t-c1">确认布置</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">C1 控件 · 14/22 · 500<br>按钮 · tab · 菜单项</span>
+      </div>
+    </div>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span class="t-p2">已保存 · 刚刚</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">P2 辅助 · 12/20 · 400<br>说明 · 占位 · meta</span>
+      </div>
+    </div>
+    <div class="trow">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">
+        <span><span class="t-cap">物料</span><span style="font-size:11px;font-weight:500;color:var(--muted);margin-left:12px">物料库</span></span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:right;line-height:1.7">CAP 标注 · 11/16 · 500<br>区块标签 · 徽标 · 英文大写加 .08em,中文不加字距</span>
+      </div>
+    </div>
+    <p class="note">规矩：一档一个用途，不越档使用；同屏相邻层级至少跳一档（H1 下不接 H2 接 P1 属例外：模态标题下正文）；强调只用字重 600 与墨色，不用字号缩放造强调；中文永远不加字距，字距只属于英文大写标签。</p>
+  </div><div class="block"><span class="cap">中英文混排 · 全角标点</span>
+    <div class="tonegrid">
+      <div class="tone good">共 12 件物料、3 个分区<small>中文与数字之间加空格 ✓</small></div>
+      <div class="tone bad">共12件物料、3个分区<small>无空格 ✗</small></div>
+      <div class="tone good">使用 Figma 设计，导出 PDF 交付。<small>西文两侧空格、全角标点 ✓</small></div>
+      <div class="tone bad">发生错误，代码:02<small>半角标点、机器语气 ✗</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 三、间距与栅格 ═══ -->
+<section id="sec-03">
+  <h2>三、间距与栅格</h2>
+  <p class="note">4px 基准步进：组件内边距用 8 / 12 / 16，区块间距用 16 / 24，分区之间用 32 / 48。</p>
+
+  <div class="block"><span class="cap">间距步进</span>
+    <div class="sprow">
+      <div class="spitem"><i style="height:4px"></i><span>4</span></div>
+      <div class="spitem"><i style="height:8px"></i><span>8</span></div>
+      <div class="spitem"><i style="height:12px"></i><span>12</span></div>
+      <div class="spitem"><i style="height:16px"></i><span>16</span></div>
+      <div class="spitem"><i style="height:24px"></i><span>24</span></div>
+      <div class="spitem"><i style="height:32px"></i><span>32</span></div>
+      <div class="spitem"><i style="height:48px"></i><span>48</span></div>
+      <div class="spitem"><i style="height:64px"></i><span>64</span></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">断点系统</span>
+    <table class="bptable">
+      <tr><th>断点</th><th>区间</th><th>形态</th></tr>
+      <tr><td class="mono">≤640</td><td>移动阅读态</td><td>单列，标题降档（H1→20、H2→18、H3→15），正文不变</td></tr>
+      <tr><td class="mono">641–1024</td><td>窄桌面</td><td>右栏可折叠</td></tr>
+      <tr><td class="mono">1025–1440</td><td>标准工作台</td><td>左轨 64 + 画布 + Agent 栏 300，16px 硬边界</td></tr>
+      <tr><td class="mono">&gt;1440</td><td>大屏</td><td>画布上限 1280 居中</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══ 四、图标与阴影 ═══ -->
+<section id="sec-04">
+  <h2>四、图标与阴影</h2>
+  <p class="note">全站通用 UI 图标统一为本地 Material Symbols Rounded：FILL 1、weight 300、grade 0，optical size 随字形尺寸调整。按钮、菜单、状态切换均使用同一套圆角字形语言，不混用描边库；只按 16 / 20 / 24 / 32px 尺寸阶梯缩放。四个 Agent 头像是角色资产，形体各异但眼睛、比例与呈现统一。E0 为默认——一切元素无阴影，分区靠 1px 发丝线；阴影只给浮层。</p>
+
+<div class="block"><span class="cap">阴影层级 · E0 默认 / E1 浮层 / E2 模态</span>
+    <div class="ecards">
+      <div class="ecard e0"><b>E0 · 无阴影</b><p>卡片、区块、按钮。1px hair 描边承担分区。</p></div>
+      <div class="ecard e1"><b>E1 · 浮层</b><p>菜单、popover、tooltip、toast。y6 模糊 18 · 10%。</p></div>
+      <div class="ecard e2"><b>E2 · 模态</b><p>模态、抽屉，配 32% 墨色遮罩。y16 模糊 48 · 18%。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 五、图标索引 ═══ -->
+<section id="sec-05">
+  <h2>五、图标索引 · 全站实心</h2>
+  <p class="note">通用界面图标统一采用本地 Google Material Symbols Rounded 可变字体：FILL 1、weight 300、grade 0，按尺寸设置 optical size。图标圆角、填充和粗细由同一字体轴统一控制；字体已子集化并随产品本地加载。字体来源及 SIL Open Font License 见 <code>frontend/public/fonts/MATERIAL-SYMBOLS-OFL.txt</code>。PlotCraft 空间编辑符号、MaterialGlyph 缩略图与四种 Agent 形体属于领域 / 角色图形，单独保留。</p>
+  <style>
+    .filled-symbol-group{margin-top:18px}
+    .filled-symbol-group h3{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--ink)}
+    .filled-symbol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+    .filled-symbol-item{display:flex;min-height:62px;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:7px 4px;border:1px solid var(--hair-soft);border-radius:8px;background:var(--paper);color:var(--ink-soft);text-align:center}
+    @font-face{font-family:"Material Symbols Rounded";src:url("../../frontend/public/fonts/material-symbols-rounded-vf.woff2") format("woff2");font-style:normal;font-weight:100 700;font-display:block}
+    .filled-symbol-glyph{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;font-family:"Material Symbols Rounded";font-size:22px;font-weight:300;font-style:normal;line-height:1;letter-spacing:normal;font-feature-settings:normal;font-variation-settings:"FILL" 1,"wght" 300,"GRAD" 0,"opsz" 22;text-transform:none;white-space:nowrap}
+    .filled-symbol-item svg.filled-symbol-glyph{width:18.72px;height:18.72px}
+    .filled-symbol-glyph[data-ms-fill]{background:currentColor;mask:var(--icon-svg) center/contain no-repeat;-webkit-mask:var(--icon-svg) center/contain no-repeat}
+    .filled-symbol-item span:last-child{font-size:10px;line-height:14px;color:var(--ink-soft)}
+  </style>
+  <div class="filled-symbol-group"><h3>导航与轨道 · 16</h3><div class="filled-symbol-grid">
+    <div class="filled-symbol-item" title="widgets"><span class="filled-symbol-glyph" aria-hidden="true">&#xE1BD;</span><span>物料工具</span></div>
+    <div class="filled-symbol-item" title="assignment"><span class="filled-symbol-glyph" aria-hidden="true">&#xE85D;</span><span>活动需求</span></div>
+    <div class="filled-symbol-item" title="description"><span class="filled-symbol-glyph" aria-hidden="true">&#xE873;</span><span>合同约定</span></div>
+    <div class="filled-symbol-item" title="straighten"><span class="filled-symbol-glyph" aria-hidden="true">&#xE41C;</span><span>图纸尺寸</span></div>
+    <div class="filled-symbol-item" title="left_panel_close"><span class="filled-symbol-glyph" aria-hidden="true">&#xF717;</span><span>收起面板</span></div>
+    <div class="filled-symbol-item" title="folder_open"><span class="filled-symbol-glyph" aria-hidden="true">&#xE2C8;</span><span>项目与目录</span></div>
+    <div class="filled-symbol-item" title="corporate_fare"><span class="filled-symbol-glyph" data-ms-fill="corporate_fare" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/corporate_fare-fill.svg')" aria-hidden="true"></span><span>当前工作室</span></div>
+    <div class="filled-symbol-item" title="groups"><span class="filled-symbol-glyph" data-ms-fill="groups" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/groups-fill.svg')" aria-hidden="true"></span><span>协作成员</span></div>
+    <div class="filled-symbol-item" title="map"><span class="filled-symbol-glyph" aria-hidden="true">&#xE55B;</span><span>场景锚定</span></div>
+    <div class="filled-symbol-item" title="document_scanner"><span class="filled-symbol-glyph" aria-hidden="true">&#xE5FA;</span><span>场地重建</span></div>
+    <div class="filled-symbol-item" title="landscape"><span class="filled-symbol-glyph" aria-hidden="true">&#xE564;</span><span>场地观感</span></div>
+    <div class="filled-symbol-item" title="satellite"><span class="filled-symbol-glyph" aria-hidden="true">&#xE562;</span><span>卫星贴地</span></div>
+    <div class="filled-symbol-item" title="dashboard_customize"><span class="filled-symbol-glyph" aria-hidden="true">&#xE99B;</span><span>场景模板</span></div>
+    <div class="filled-symbol-item" title="nature"><span class="filled-symbol-glyph" aria-hidden="true">&#xE406;</span><span>环境预览</span></div>
+    <div class="filled-symbol-item" title="inventory_2"><span class="filled-symbol-glyph" aria-hidden="true">&#xE1A1;</span><span>物料库</span></div>
+    <div class="filled-symbol-item" title="select_all"><span class="filled-symbol-glyph" data-ms-fill="select_all" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/select_all-fill.svg')" aria-hidden="true"></span><span>空白场地</span></div>
+  </div></div>
+  <div class="filled-symbol-group"><h3>画布右侧工具栏 · Material Symbols Rounded · 实心（放大镜组除外）</h3><div class="filled-symbol-grid">
+    <div class="filled-symbol-item" title="ios_share"><span class="filled-symbol-glyph" data-ms-fill="ios_share" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/ios_share-fill.svg')" aria-hidden="true"></span><span>发布</span></div>
+    <div class="filled-symbol-item" title="near_me"><span class="filled-symbol-glyph" aria-hidden="true">&#xE569;</span><span>选择 · 未启用</span></div>
+    <div class="filled-symbol-item" title="near_me · active"><span class="filled-symbol-glyph" aria-hidden="true">&#xE569;</span><span>选择 · 已启用</span></div>
+    <div class="filled-symbol-item" title="view_compact"><span class="filled-symbol-glyph" aria-hidden="true">&#xE42B;</span><span>平面</span></div>
+    <div class="filled-symbol-item" title="view_in_ar"><span class="filled-symbol-glyph" aria-hidden="true">&#xEFC9;</span><span>立体 / 整体</span></div>
+    <div class="filled-symbol-item" title="footprint"><span class="filled-symbol-glyph" aria-hidden="true">&#xF87D;</span><span>进入漫游</span></div>
+    <div class="filled-symbol-item" title="footprint · active"><span class="filled-symbol-glyph" aria-hidden="true">&#xF87D;</span><span>退出漫游</span></div>
+    <div class="filled-symbol-item" title="straighten"><span class="filled-symbol-glyph" aria-hidden="true">&#xE41C;</span><span>尺寸标注</span></div>
+    <div class="filled-symbol-item" title="grid_3x3"><span class="filled-symbol-glyph" aria-hidden="true">&#xF015;</span><span>网格吸附</span></div>
+    <div class="filled-symbol-item" title="center_focus_strong"><span class="filled-symbol-glyph" aria-hidden="true">&#xE3B4;</span><span>中心吸附</span></div>
+    <div class="filled-symbol-item" title="satellite"><span class="filled-symbol-glyph" aria-hidden="true">&#xE562;</span><span>卫星贴地</span></div>
+    <div class="filled-symbol-item" title="undo"><span class="filled-symbol-glyph" data-ms-fill="undo" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/undo-fill.svg')" aria-hidden="true"></span><span>撤销</span></div>
+    <div class="filled-symbol-item" title="redo"><span class="filled-symbol-glyph" data-ms-fill="redo" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/redo-fill.svg')" aria-hidden="true"></span><span>重做</span></div>
+    <div class="filled-symbol-item" title="iconpark_zoom_out_solid"><svg class="filled-symbol-glyph" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M21 38C30.3888 38 38 30.3888 38 21C38 11.6112 30.3888 4 21 4C11.6112 4 4 11.6112 4 21C4 30.3888 11.6112 38 21 38Z" fill="currentColor" stroke="currentColor" stroke-width="4"/><path d="M15 21L27 21" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M33.2216 33.2217L41.7069 41.707" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>缩小</span></div>
+    <div class="filled-symbol-item" title="iconpark_zoom_in_solid"><svg class="filled-symbol-glyph" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M21 38C30.3888 38 38 30.3888 38 21C38 11.6112 30.3888 4 21 4C11.6112 4 4 11.6112 4 21C4 30.3888 11.6112 38 21 38Z" fill="currentColor" stroke="currentColor" stroke-width="4"/><path d="M21 15L21 27M15.0156 21.0156L27 21" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M33.2216 33.2217L41.7069 41.707" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>放大</span></div>
+    <div class="filled-symbol-item" title="photo_camera"><span class="filled-symbol-glyph" aria-hidden="true">&#xE412;</span><span>导出效果图</span></div>
+    <div class="filled-symbol-item" title="sunny"><span class="filled-symbol-glyph" aria-hidden="true">&#xE81A;</span><span>晴天</span></div>
+    <div class="filled-symbol-item" title="rainy"><span class="filled-symbol-glyph" aria-hidden="true">&#xF176;</span><span>雨天</span></div>
+    <div class="filled-symbol-item" title="groups"><span class="filled-symbol-glyph" aria-hidden="true">&#xF233;</span><span>人群</span></div>
+    <div class="filled-symbol-item" title="light_mode"><span class="filled-symbol-glyph" aria-hidden="true">&#xE518;</span><span>晨光</span></div>
+    <div class="filled-symbol-item" title="wb_sunny"><span class="filled-symbol-glyph" aria-hidden="true">&#xE430;</span><span>日照</span></div>
+  </div></div>
+  <div class="filled-symbol-group"><h3>Agent 与输入 · 8</h3><div class="filled-symbol-grid">
+    <div class="filled-symbol-item" title="arrow_upward"><span class="filled-symbol-glyph" data-ms-fill="arrow_upward" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/arrow_upward-fill.svg')" aria-hidden="true"></span><span>发送</span></div>
+    <div class="filled-symbol-item" title="attach_file"><span class="filled-symbol-glyph" data-ms-fill="attach_file" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/attach_file-fill.svg')" aria-hidden="true"></span><span>附图纸 / 照片</span></div>
+    <div class="filled-symbol-item" title="image"><span class="filled-symbol-glyph" aria-hidden="true">&#xE3F4;</span><span>图片文件</span></div>
+    <div class="filled-symbol-item" title="more_horiz"><span class="filled-symbol-glyph" data-ms-fill="more_horiz" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/more_horiz-fill.svg')" aria-hidden="true"></span><span>更多</span></div>
+    <div class="filled-symbol-item" title="progress_activity"><span class="filled-symbol-glyph" data-ms-fill="progress_activity" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/progress_activity-fill.svg')" aria-hidden="true"></span><span>加载</span></div>
+    <div class="filled-symbol-item" title="refresh"><span class="filled-symbol-glyph" data-ms-fill="refresh" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/refresh-fill.svg')" aria-hidden="true"></span><span>重试</span></div>
+    <div class="filled-symbol-item" title="wand_stars"><span class="filled-symbol-glyph" aria-hidden="true">&#xF31E;</span><span>生成 · Agent</span></div>
+    <div class="filled-symbol-item" title="close"><span class="filled-symbol-glyph" aria-hidden="true">&#xE5CD;</span><span>关闭</span></div>
+  </div></div>
+  <div class="filled-symbol-group"><h3>编辑与操作 · 12</h3><div class="filled-symbol-grid">
+    <div class="filled-symbol-item" title="content_copy"><span class="filled-symbol-glyph" aria-hidden="true">&#xE14D;</span><span>复制</span></div>
+    <div class="filled-symbol-item" title="delete"><span class="filled-symbol-glyph" aria-hidden="true">&#xE92E;</span><span>删除</span></div>
+    <div class="filled-symbol-item" title="lock"><span class="filled-symbol-glyph" aria-hidden="true">&#xE899;</span><span>锁定</span></div>
+    <div class="filled-symbol-item" title="lock_open"><span class="filled-symbol-glyph" aria-hidden="true">&#xE898;</span><span>解锁</span></div>
+    <div class="filled-symbol-item" title="replay"><span class="filled-symbol-glyph" data-ms-fill="replay" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/replay-fill.svg')" aria-hidden="true"></span><span>复位</span></div>
+    <div class="filled-symbol-item" title="autorenew"><span class="filled-symbol-glyph" data-ms-fill="autorenew" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/autorenew-fill.svg')" aria-hidden="true"></span><span>换一条</span></div>
+    <div class="filled-symbol-item" title="fullscreen"><span class="filled-symbol-glyph" data-ms-fill="fullscreen" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/fullscreen-fill.svg')" aria-hidden="true"></span><span>全屏</span></div>
+    <div class="filled-symbol-item" title="fullscreen_exit"><span class="filled-symbol-glyph" data-ms-fill="fullscreen_exit" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/fullscreen_exit-fill.svg')" aria-hidden="true"></span><span>退出全屏</span></div>
+    <div class="filled-symbol-item" title="tune"><span class="filled-symbol-glyph" data-ms-fill="tune" style="--icon-svg:url('../../frontend/public/material-symbols/rounded/tune-fill.svg')" aria-hidden="true"></span><span>助手设置</span></div>
+    <div class="filled-symbol-item" title="add"><span class="filled-symbol-glyph" aria-hidden="true">&#xE145;</span><span>新增</span></div>
+    <div class="filled-symbol-item" title="iconpark_search_solid"><svg class="filled-symbol-glyph" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M21 38C30.3888 38 38 30.3888 38 21C38 11.6112 30.3888 4 21 4C11.6112 4 4 11.6112 4 21C4 30.3888 11.6112 38 21 38Z" fill="currentColor" stroke="currentColor" stroke-width="4"/><path d="M26.657 14.3431C25.2093 12.8954 23.2093 12 21.0001 12C18.791 12 16.791 12.8954 15.3433 14.3431" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M33.2216 33.2217L41.7069 41.707" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>搜索</span></div>
+    <div class="filled-symbol-item" title="science"><span class="filled-symbol-glyph" aria-hidden="true">&#xEA4B;</span><span>演示环境</span></div>
+  </div></div>
+  <div class="filled-symbol-group"><h3>状态与通用 · 13</h3><div class="filled-symbol-grid">
+    <div class="filled-symbol-item" title="check"><span class="filled-symbol-glyph" aria-hidden="true">&#xE668;</span><span>成功 · 选中</span></div>
+    <div class="filled-symbol-item" title="keyboard_arrow_down"><span class="filled-symbol-glyph" aria-hidden="true">&#xE313;</span><span>展开</span></div>
+    <div class="filled-symbol-item" title="keyboard_arrow_up"><span class="filled-symbol-glyph" aria-hidden="true">&#xE316;</span><span>收起</span></div>
+    <div class="filled-symbol-item" title="arrow_back"><span class="filled-symbol-glyph" aria-hidden="true">&#xE5C4;</span><span>返回</span></div>
+    <div class="filled-symbol-item" title="arrow_forward"><span class="filled-symbol-glyph" aria-hidden="true">&#xE5C8;</span><span>前进</span></div>
+    <div class="filled-symbol-item" title="north_east"><span class="filled-symbol-glyph" aria-hidden="true">&#xF1E1;</span><span>外链 · 打开</span></div>
+    <div class="filled-symbol-item" title="lock_person"><span class="filled-symbol-glyph" aria-hidden="true">&#xF8F3;</span><span>私有 · 只读</span></div>
+    <div class="filled-symbol-item" title="layers"><span class="filled-symbol-glyph" aria-hidden="true">&#xE53B;</span><span>图层</span></div>
+    <div class="filled-symbol-item" title="inventory_2"><span class="filled-symbol-glyph" aria-hidden="true">&#xE1A1;</span><span>物料 · 空间</span></div>
+    <div class="filled-symbol-item" title="add_photo_alternate"><span class="filled-symbol-glyph" aria-hidden="true">&#xE43E;</span><span>上传图片</span></div>
+    <div class="filled-symbol-item" title="person"><span class="filled-symbol-glyph" aria-hidden="true">&#xF0D3;</span><span>个人</span></div>
+    <div class="filled-symbol-item" title="groups"><span class="filled-symbol-glyph" aria-hidden="true">&#xF233;</span><span>团队</span></div>
+    <div class="filled-symbol-item" title="settings"><span class="filled-symbol-glyph" aria-hidden="true">&#xE8B8;</span><span>设置</span></div>
+  </div></div>
+  <div class="block" style="margin-top:20px"><span class="cap">状态、尺寸与使用规则</span>
+    <p class="note">图标尺寸：16px 行内、20px 控件、24px 面板 / 空态、32px 仅整页空态主图。交互目标至少 32×32。切换按钮使用同系列配对字形或同一字形配合选中底色，并设置 <code>aria-pressed</code> / <code>aria-checked</code>；禁用态用 <code>--faint</code>。加载图标之外不做旋转。</p>
+    <p class="note">左轨四个 Agent 入口继续使用当前角色形体：门厅 / 总控与开合；Bingo / 右栏助手；空间 / 卡片；物料 / 卡片。绘制细节见顶部「门厅与 Agent 标志」。授权与来源：<code>frontend/public/material-symbols/ATTRIBUTION.md</code>。</p>
+  </div>
+</section>
+
+<section id="sec-06">
+  <h2>六、按钮与输入</h2>
+  <p class="note">5 类 × 5 态。悬停真实可试；其余状态为并排模拟。聚焦态统一 2px 外描边，触达区 ≥ 32px。发送键是全产品唯一的圆形绿钮。</p>
+
+  <div class="block"><span class="cap">primary 墨底 · 全 5 态</span>
+    <div class="staterow">
+      <div class="state"><button class="btn btn-primary">生成方案</button><span>常规</span></div>
+      <div class="state"><button class="btn btn-primary" style="background:#2A2C31">生成方案</button><span>悬停</span></div>
+      <div class="state"><button class="btn btn-primary" style="outline:2px solid var(--ink-soft);outline-offset:2px">生成方案</button><span>聚焦</span></div>
+      <div class="state"><button class="btn btn-primary" style="background:#3D3F45">生成方案</button><span>点击</span></div>
+      <div class="state"><button class="btn btn-primary" disabled>生成方案</button><span>禁用</span></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">secondary / ghost / danger / text</span>
+    <div class="staterow">
+      <div class="state"><button class="btn btn-secondary">导出图纸</button><span>secondary 常规</span></div>
+      <div class="state"><button class="btn btn-secondary" style="background:var(--plane)">导出图纸</button><span>悬停</span></div>
+      <div class="state"><button class="btn btn-secondary" disabled>导出图纸</button><span>禁用</span></div>
+      <div class="state"><button class="btn btn-ghost">取消</button><span>ghost</span></div>
+      <div class="state"><button class="btn btn-danger">删除布局</button><span>danger</span></div>
+      <div class="state"><button class="btn btn-text">查看全部 →</button><span>text</span></div>
+    </div>
+  </div>
+
+  <style>
+  .send{transition:background .12s var(--ease),transform .12s var(--ease)}
+  .send:hover{background:var(--green-deep)}
+  .send:active{background:#2E5039;transform:scale(.94)}
+  .send:disabled{background:var(--plane);cursor:not-allowed}
+  .send:disabled svg{color:var(--faint)}
+  .send:focus-visible{outline:2px solid var(--ink-soft);outline-offset:2px}
+  .send-stop{width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--paper);border:none;display:inline-flex;align-items:center;justify-content:center;transition:background .12s var(--ease),transform .12s var(--ease)}
+  .send-stop:hover{background:#2A2C31}
+  .send-stop:active{transform:scale(.94)}
+</style>
+<div class="block"><span class="cap">accent 发送键 · 唯一圆形绿钮 32px · 五态</span>
+  <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+    <div style="text-align:center">
+      <button class="send" aria-label="发送（常态）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 14 0"/><path d="m12 5 7 7-7 7"/></svg></button>
+      <div class="note" style="margin-top:8px">常态 · #4A7C59</div>
+    </div>
+    <div style="text-align:center">
+      <button class="send" style="background:var(--green-deep)" aria-label="发送（悬停）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 14 0"/><path d="m12 5 7 7-7 7"/></svg></button>
+      <div class="note" style="margin-top:8px">悬停 · green-deep #3A6247</div>
+    </div>
+    <div style="text-align:center">
+      <button class="send" style="background:#2E5039;transform:scale(.94)" aria-label="发送（按下）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 14 0"/><path d="m12 5 7 7-7 7"/></svg></button>
+      <div class="note" style="margin-top:8px">按下 · #2E5039 · scale .94</div>
+    </div>
+    <div style="text-align:center">
+      <button class="send" disabled aria-label="发送（禁用）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 14 0"/><path d="m12 5 7 7-7 7"/></svg></button>
+      <div class="note" style="margin-top:8px">禁用 · plane 底 · faint 箭头</div>
+    </div>
+    <div style="text-align:center">
+      <button class="send-stop" aria-label="停止生成"><span style="display:block;width:10px;height:10px;background:currentColor;border-radius:2px"></span></button>
+      <div class="note" style="margin-top:8px">生成中 · 原位变墨底停止钮</div>
+    </div>
+    <div style="flex:1;min-width:260px;text-align:center">
+      <button class="send" aria-label="发送（活样张，试试悬停）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 14 0"/><path d="m12 5 7 7-7 7"/></svg></button>
+      <div class="note" style="margin-top:8px">↑ 活样张 · 悬停 / 按下试试（120ms 变色，不加发光）</div>
+    </div>
+  </div>
+  <p class="note">规矩：悬停只「变深一档」（green-deep），按下再深一档并缩至 .94；全程 120ms 统一缓动，<b>不加发光、不加投影、不做涟漪</b>——克制是这个钮的全部设计。禁用态无过渡直接切 plane 底。生成中原位换墨底停止钮（T-05/十四节），不出现第二颗钮。</p>
+</div>
+<div class="block"><span class="cap">输入框 5 态</span>
+    <div class="staterow">
+      <div class="fieldstate"><input class="input" placeholder="场地长宽，如 20×12 米"><span>占位</span></div>
+      <div class="fieldstate"><input class="input" value="宴会厅 A"><span>输入中</span></div>
+      <div class="fieldstate"><input class="input err" value="30×40"><span class="fieldmsg e">超出场地可编辑范围</span><span>错误</span></div>
+      <div class="fieldstate"><input class="input ok" value="20×12 米"><span class="fieldmsg" style="color:var(--ok)">✓ 尺寸有效</span><span>成功</span></div>
+      <div class="fieldstate"><input class="input" value="20×12 米" disabled><span>禁用</span></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">单选 / 复选 / 开关 / 下拉</span>
+    <div class="selrow">
+      <label class="ck"><span class="dot on"></span>室内</label>
+      <label class="ck"><span class="dot"></span>户外</label>
+      <label class="ck"><span class="box on"></span>含灯光</label>
+      <label class="ck"><span class="box"></span>含音响</label>
+      <span class="switch on"><i></i></span>
+      <span class="switch"><i></i></span>
+      <select class="select"><option>标准展位 · 3×3 米</option></select>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 七、导航架构 ═══ -->
+<section id="sec-07">
+  <h2>七、导航架构</h2>
+  <p class="note">一块画布加三条边：无独立顶栏，左轨 64 · 画布 · 右 Agent 300 · 底部物料条。左轨固定四格：门厅负责总控与开合；Bingo 打开 / 收起右栏助手；空间打开空间卡片；物料打开物料卡片。</p>
+
+  <div class="block"><span class="cap">工作台全景 · 与代码同构</span>
+    <div class="ia">
+      <div class="ia-rail">
+        <button type="button" class="ia-stage on" aria-label="总控门厅" title="门厅 · 总控 / 开合"><span style="position:relative;display:block;width:20px;height:20px"><img src="../../../frontend/public/assets/rail/door.png" alt="" style="width:100%;height:100%;object-fit:contain"><i style="position:absolute;left:42%;top:36%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i><i style="position:absolute;left:61%;top:34%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i></span></button>
+        <span class="pin" title="入口 2">2</span>
+        <button type="button" class="ia-stage" aria-label="Bingo" title="Bingo · 右栏助手"><span style="position:relative;display:block;width:20px;height:20px"><img src="../../../frontend/public/assets/rail/ball.png" alt="" style="width:100%;height:100%;object-fit:contain"><i style="position:absolute;left:42%;top:42%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i><i style="position:absolute;left:61%;top:40%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i></span></button>
+        <button type="button" class="ia-stage" aria-label="空间" title="空间 · 卡片"><span style="position:relative;display:block;width:20px;height:20px"><img src="../../../frontend/public/assets/rail/cube.png" alt="" style="width:100%;height:100%;object-fit:contain"><i style="position:absolute;left:42%;top:42%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i><i style="position:absolute;left:61%;top:40%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i></span></button>
+        <button type="button" class="ia-stage" aria-label="物料" title="物料 · 卡片"><span style="position:relative;display:block;width:20px;height:20px"><img src="../../../frontend/public/assets/rail/pyramid.png" alt="" style="width:100%;height:100%;object-fit:contain"><i style="position:absolute;left:42%;top:60%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i><i style="position:absolute;left:61%;top:58%;width:8%;height:20%;border-radius:99px;background:#fff;transform:rotate(12deg)"></i></span></button>
+        <span style="flex:1"></span>
+        <span class="pin ghost" style="margin-bottom:2px" title="入口 3">3</span>
+        <button type="button" class="ia-stage" aria-label="设置" title="设置"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></button>
+        <span style="font-size:10px;color:var(--muted);margin:6px 0 4px">已保存</span>
+        <span class="pin ghost" title="入口 1">1</span>
+        <span title="账户与素材库" style="width:26px;height:26px;border-radius:50%;background:var(--plane);display:grid;place-items:center;font-size:11px;color:var(--ink-soft);margin-bottom:6px">映</span>
+      </div>
+      <div class="ia-canvas">
+        <div class="ia-slab"><span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--muted);letter-spacing:.04em">12 × 8 m · 布置</span>画布</div>
+        <span class="pin ghost" style="position:absolute;left:8px;bottom:8px" title="入口 7">7</span>
+        <span style="position:absolute;left:30px;bottom:8px;font-size:10px;color:var(--muted)">Aholo 场地重建</span>
+        <span class="pin ghost" style="position:absolute;right:8px;top:8px" title="入口 9">9</span>
+        <span style="position:absolute;right:28px;top:8px;font-size:10px;color:var(--muted)">发布 / 分享</span>
+      </div>
+      <div class="ia-agent" style="position:relative">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pin ghost" title="入口 5">5</span>
+          <strong style="font-size:13px">布置 · 青序香氛快闪</strong>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">12 × 8 m</span>
+        </div>
+        <div style="align-self:flex-end;max-width:86%;background:var(--plane);border-radius:8px;padding:7px 10px;font-size:12px;line-height:18px">40 人，室内 12×9</div>
+        <div style="font-size:12px;line-height:18px">座位 16 / 40 · 过道 900mm</div>
+        <div class="ia-line" style="width:78%"></div>
+        <div class="ia-line" style="width:56%"></div>
+        <span style="flex:1"></span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pin ghost" title="入口 4">4</span>
+          <span class="pin ghost" title="入口 8">8</span>
+          <div style="flex:1;display:flex;align-items:center;gap:6px;border:1px solid var(--hair);border-radius:8px;padding:5px 6px 5px 10px">
+            <span style="flex:1;font-size:12px;color:var(--faint)">说一句要改什么…</span>
+            <span style="width:24px;height:24px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-size:12px">↑</span>
+          </div>
+        </div>
+      </div>
+      <div class="ia-foot">
+        <span class="pin ghost" title="入口 6">6</span>
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap">物料</span>
+        <span class="ia-thumb"></span><span class="ia-thumb"></span><span class="ia-thumb"></span><span class="ia-thumb"></span>
+        <span style="flex:1"></span>
+        <span style="font-size:11px;color:var(--muted)">12 件</span>
+      </div>
+    </div>
+    <p class="note" style="margin-top:10px">左轨只出形体，名称走 <code>data-tip</code> 悬停提示；轨脚依次是保存态、设置、账户/素材库。</p>
+  </div>
+
+  <div class="block"><span class="cap">入口 → 打开什么</span>
+    <div class="entrygrid">
+      <div class="entry"><span class="pin">1</span><div><b>轨脚 · 账户/素材库</b><span class="dest">projects · assets</span><p>我的项目与素材库：新建、打开、另存为云项目</p></div></div>
+      <div class="entry"><span class="pin">2</span><div><b>轨首 · 门厅</b><span class="dest">总控 / 开合</span><p>切换总控并展开 / 收起左轨</p></div></div>
+      <div class="entry"><span class="pin">3</span><div><b>轨脚 · 设置</b><span class="dest">team · settings</span><p>设置、团队与权限演示</p></div></div>
+      <div class="entry"><span class="pin">4</span><div><b>左轨 · Bingo</b><span class="dest">右栏助手</span><p>打开 / 收起右侧助手对话</p></div></div>
+      <div class="entry"><span class="pin">5</span><div><b>左轨 · 空间 / 物料</b><span class="dest">空间卡片 · 物料卡片</span><p>分别打开对应卡片；两张卡片互斥。空间卡片包含场地、场景模板、环境与结构</p></div></div>
+      <div class="entry"><span class="pin">6</span><div><b>底部 · 物料条</b><span class="dest">materials</span><p>拖入画布即成物件；不打断对话</p></div></div>
+      <div class="entry"><span class="pin">7</span><div><b>画布 · Aholo</b><span class="dest">rebuild</span><p>场地重建：图纸、照片；地图只铺场景地面层</p></div></div>
+      <div class="entry"><span class="pin">8</span><div><b>聊天 <code>+</code> 菜单</b><span class="dest">composer</span><p>新建空间、场景锚定、图纸与照片</p></div></div>
+      <div class="entry"><span class="pin">9</span><div><b>画布右上 · 发布</b><span class="dest">publish</span><p>发布 / 分享卡片：二维码、预览、项目大纲</p></div></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">三条规矩</span>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;line-height:20px;padding:8px 12px;border:1px solid var(--hair);border-radius:999px">一个动作只留一个入口</span>
+      <span style="font-size:12px;line-height:20px;padding:8px 12px;border:1px solid var(--hair);border-radius:999px">一屏只有一颗绿钮</span>
+      <span style="font-size:12px;line-height:20px;padding:8px 12px;border:1px solid var(--hair);border-radius:999px">空间与物料卡片互斥，一次只开一个</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 八、数据展示与反馈 ═══ -->
+<section id="sec-08">
+  <h2>八、数据展示与反馈</h2>
+  <p class="note">表格、弹窗、警告、加载——展示与反馈的四个面,全部沿用 E 层级与发丝线规矩。</p>
+
+  <div class="block"><span class="cap">数据表格</span>
+    <div class="tblwrap"><table class="tbl">
+      <thead><tr><th>物料</th><th>分区</th><th class="num">数量</th><th class="num">单价（元）</th></tr></thead>
+      <tbody>
+        <tr><td>宴会圆桌</td><td>主厅</td><td class="num">24</td><td class="num">380</td></tr>
+        <tr><td>折叠椅</td><td>主厅</td><td class="num">192</td><td class="num">45</td></tr>
+        <tr><td>签到台</td><td>入口</td><td class="num">2</td><td class="num">1200</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="block"><span class="cap">模态弹窗 · E2 + 32% 墨遮罩</span>
+    <div class="modal-demo">
+      <div class="veil"></div>
+      <div class="modal">
+        <h3>载入场景模板</h3>
+        <p>当前画布有未保存的改动，载入后将覆盖现有布局。</p>
+        <div class="foot"><button class="btn btn-secondary">取消</button><button class="btn btn-primary">载入并覆盖</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">警告 / 轻提示</span>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+      <div class="alert"><b>⚠</b><p><b>网络连接超时</b>，请检查本地服务后重试。</p></div>
+      <div class="toast"><i></i>已发布评审包</div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">加载 · spinner 800ms / 骨架屏 1.2s 呼吸</span>
+    <div class="ldrow">
+      <span class="spin"></span>
+      <div class="skel"><i></i><i></i><i></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 十、动效与极端情况 ═══ -->
+<section id="sec-09">
+  <h2>九、动效与极端情况</h2>
+  <p class="note">微交互 120ms、弹层 200ms、模态 300ms，统一缓动 cubic-bezier(.2, 0, 0, 1)；系统尊重「减弱动态效果」设置。</p>
+
+  
+  <div class="block"><span class="cap">时长阶梯与缓动 · 全部一条曲线</span>
+    <svg viewBox="0 0 640 150" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="动效时长阶梯与缓动曲线">
+      <g font-size="10" fill="#71767E">
+        <text x="24" y="34">微交互 120ms</text><text x="24" y="70">弹层 200ms</text><text x="24" y="106">模态 300ms</text>
+      </g>
+      <g>
+        <rect x="150" y="24" width="60" height="14" rx="7" fill="#4A7C59"/>
+        <rect x="150" y="60" width="100" height="14" rx="7" fill="#55585F"/>
+        <rect x="150" y="96" width="150" height="14" rx="7" fill="#141416"/>
+      </g>
+      <g stroke="#E4E4E7" fill="none">
+        <line x1="150" y1="20" x2="150" y2="118"/><line x1="330" y1="20" x2="330" y2="118"/>
+      </g>
+      <text x="150" y="132" font-size="9" fill="#A6AAB2">0</text><text x="322" y="132" font-size="9" fill="#A6AAB2">300ms</text>
+      <path d="M420 118 C 440 118, 452 24, 470 24" fill="none" stroke="#141416" stroke-width="4"/>
+      <circle cx="470" cy="24" r="3" fill="#141416"/>
+      <text x="420" y="140" font-size="9" fill="#A6AAB2">cubic-bezier(.2, 0, 0, 1) · 淡入 + 上移 2px · reduced-motion 直切</text>
+    </svg>
+  </div>`n  <div class="block"><span class="cap">截断 / 失败重试</span>
+    <div class="clampbox">
+      <div>
+        <div class="ellip" title="春季发布会主厅 · 舞台区灯光桁架布置确认单">春季发布会主厅 · 舞台区灯光桁架布置确认单</div>
+        <p class="note" style="margin-top:4px">单行溢出省略 + title 提示</p>
+      </div>
+      <div>
+        <p class="clamp2">方案评审包包含平面图、物料清单与预算表，共 12 项内容，全部由 Agent 按活动简报自动汇总生成，可在评审前逐项修改。</p>
+        <p class="note" style="margin-top:4px">多行 line-clamp 2</p>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;align-items:center;gap:12px">
+      <span class="note">清单加载失败</span><button class="btn btn-text">重试</button>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:20px">空状态、缺省图与只读态统一见下一节「十、缺省图 · 占位与缺省态」；错误与异常页见「十一、错误与异常」。</p>
+</section>
+
+<!-- ═══ 十一、缺省图 · 占位与缺省态 ═══ -->
+<section id="sec-10">
+  <h2>十、缺省图 · 占位与缺省态</h2>
+  <p class="note">内容没到位时出现的「图」只有一种画法：浮台底 + 单色线稿图标 + 一行 CAP 说明。不画插画、不放截图、不加投影；加载中 / 内容缺省 / 加载失败三态各自成规，不互相顶班。</p>
+
+  <div class="block"><span class="cap">缺省图 · 固定比例五档</span>
+    <div class="phgrid">
+      <div class="phitem">
+        <div class="ph sq"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><em>暂无预览</em></div>
+        <span>物料卡 1:1 · 112</span>
+      </div>
+      <div class="phitem">
+        <div class="ph cover"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2"/><path d="M10 16c-1.1 0-2-.9-2-2v-4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2"/><rect width="8" height="8" x="14" y="14" rx="2"/></svg><em>暂无封面</em></div>
+        <span>预设 / 模板封面 1.7:1 · 187×110</span>
+      </div>
+      <div class="phitem">
+        <div class="ph shot"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><circle cx="10" cy="12" r="2"/><path d="m20 17-1.3-1.3a2.4 2.4 0 0 0-3.4 0L9 22"/></svg><em>预览未载入</em></div>
+        <span>图纸 / 分享缩略 16:9 · 196×110</span>
+      </div>
+      <div class="phitem">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="ph av"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></div>
+          <div class="ph av s"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></div>
+        </div>
+        <span>成员头像 1:1 · 40 / 32</span>
+      </div>
+      <div class="phitem">
+        <div class="ph sm"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+        <span>列表小方图 1:1 · 48</span>
+      </div>
+    </div>
+    <p class="phnote">一个比例只保留一种构图：图标居中、CAP 在下；图标档位随尺寸走（24 / 20 / 16），缩放只换档位不重排、不裁文案。</p>
+  </div>
+
+  <div class="block"><span class="cap">三态 · 加载中 / 内容缺省 / 加载失败</span>
+    <div class="phgrid">
+      <div class="phitem">
+        <div class="ph sq load"></div>
+        <span>加载中 · 整块呼吸 1.2s，不放图标和文案</span>
+      </div>
+      <div class="phitem">
+        <div class="ph sq"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><em>暂无预览</em></div>
+        <span>内容缺省 · 浮台底 + faint 图标 + CAP</span>
+      </div>
+      <div class="phitem">
+        <div class="ph sq fail"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><em>预览未载入</em></div>
+        <span>加载失败 · 描边换 err、图标转 ink-soft，原地给 ghost 重试</span>
+        <button class="btn btn-text">重试</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">落位与禁令</span>
+    <table class="bptable">
+      <tr><th>用在</th><th>比例</th><th>尺寸</th><th>图标</th><th>CAP 文案</th></tr>
+      <tr><td>物料卡预览</td><td>1:1</td><td class="mono">112</td><td class="mono">Box · 24</td><td>暂无预览</td></tr>
+      <tr><td>预设 / 模板封面</td><td>1.7:1</td><td class="mono">187×110</td><td class="mono">LayoutTemplate · 24</td><td>暂无封面</td></tr>
+      <tr><td>图纸 / 分享缩略</td><td>16:9</td><td class="mono">196×110</td><td class="mono">FileImage · 24</td><td>预览未载入</td></tr>
+      <tr><td>成员头像</td><td>1:1 圆</td><td class="mono">40 / 32</td><td class="mono">UserRound · 20 / 16</td><td>不写文案</td></tr>
+      <tr><td>列表小方图</td><td>1:1</td><td class="mono">48</td><td class="mono">Box · 20</td><td>不写文案</td></tr>
+    </table>
+    <table class="bptable" style="margin-top:16px">
+      <tr><th>规则</th><th>做法</th></tr>
+      <tr><td>底与线</td><td>浮台底 + 1px hair-soft；失败态只把描边换成 err，底色和尺寸都不动</td></tr>
+      <tr><td>图标</td><td>单色 faint（失败态 ink-soft）；一枚图只放一个图标，不叠角标、不加状态点</td></tr>
+      <tr><td>禁令</td><td>插画、渐变、截图、logo 水印、彩色投影、品牌绿——缺省图一律不用</td></tr>
+      <tr><td>进出</td><td>图到位后 120ms 淡入盖住占位；失败不弹 toast，原地 ghost「重试」</td></tr>
+      <tr><td>边界</td><td>缺省图只进 2D 容器；3D 画布空场地的地面由渲染器自绘，不贴缺省图</td></tr>
+    </table>
+  </div>
+
+  <div class="block"><span class="cap">缺省态 · 全屏 / 面板 · 图标 24 + H3 + P2 + 一个主动作</span>
+    <div class="esgrid">
+      <div class="empty wide">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <h3>还没有布局</h3>
+        <p>从左侧物料库拖入第一件设备，或让 Agent 按简报生成一版。</p>
+        <div class="acts"><button class="btn btn-primary">生成初始方案</button><button class="btn btn-text">从空白开始</button></div>
+      </div>
+      <div class="empty wide" style="border-style:solid">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <h3>物料库是空的</h3>
+        <p>上传第一件物料，或切到公共模型直接取用。</p>
+        <div class="acts"><button class="btn btn-secondary">上传素材</button><button class="btn btn-text">浏览公共模型</button></div>
+      </div>
+      <div class="empty wide" style="border-style:solid">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+        <h3>这个工作室还没有项目</h3>
+        <p>新建的项目会保存在当前工作室，成员可共同参与。</p>
+        <div class="acts"><button class="btn btn-primary">新建项目</button></div>
+      </div>
+      <div class="empty wide" style="border-style:solid">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <h3>没有匹配的物料</h3>
+        <p>换个名称，或清除筛选看全部。</p>
+        <div class="acts"><button class="btn btn-text">清除筛选</button></div>
+      </div>
+      <div class="empty wide" style="border-style:solid">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>
+        <h3>当前是只读</h3>
+        <p>编辑权在持有人手上；可以先看图，也可以申请接手。</p>
+        <div class="acts"><button class="btn btn-secondary">申请编辑权</button><button class="btn btn-text">查看历史版本</button></div>
+      </div>
+      <div class="empty wide" style="border-style:solid">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+        <h3>先说一句就行</h3>
+        <p>场地多大、谁参加、要什么气氛；剩下的交给 Agent。</p>
+        <div class="acts"><button class="btn btn-text">试试示例简报</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">缺省态 · 行内</span>
+    <div class="empty row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
+      <span>这个方案还没有物料，导出时清单会是空的。</span>
+      <button class="btn btn-text">从物料库添加</button>
+    </div>
+
+    <p class="phnote">行内缺省只说明缺什么、给一个下一步：不做空卡、不放大插图。整页错误与画布错误见下一节「十一、错误与异常」。</p>
+  </div>
+
+  <div class="block"><span class="cap">缺省态规格 · 三种落位</span>
+    <table class="bptable">
+      <tr><th>规格</th><th>用在哪</th><th>尺寸</th><th>结构</th></tr>
+      <tr><td>全屏</td><td>画布、整页错误</td><td class="mono">最小高 240，居中</td><td>图标 24（主图标可 32）+ H3 + P2 + 主次两个动作</td></tr>
+      <tr><td>面板</td><td>右栏、抽屉、底条</td><td class="mono">最小高 150</td><td>图标 24（主图标可 32）+ H3 + P2 + 一个动作</td></tr>
+      <tr><td>行内</td><td>表格行、列表项</td><td class="mono">一行 36–40</td><td>P2 一句 + text 钮；图标可省</td></tr>
+    </table>
+    <p class="phnote">只读用户不显示编辑类主动作，也不把按钮置灰——直接给「申请编辑权」。动作名与后续 toast 同名：空态「生成初始方案」→ 完成「已生成初始方案」。</p>
+  </div>
+
+  <div class="block"><span class="cap">文案模板 · 说清缺什么，给出下一步</span>
+    <div class="tonegrid">
+      <div class="tone good">还没有布局<small>标题说清缺什么，说明给下一步 ✓</small></div>
+      <div class="tone bad">暂无数据<small>系统词，用户不知道缺什么、下一步做什么 ✗</small></div>
+      <div class="tone good">网络连接超时<small>说人话，可执行 ✓</small></div>
+      <div class="tone bad">发生错误，代码：02<small>机器语气、无出路 ✗</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 十二、错误与异常 ═══ -->
+<section id="sec-11">
+  <h2>十一、错误与异常</h2>
+  <p class="note">错误只说三件事：发生了什么、你的东西还在不在、下一步点哪。语义色只做描边、图标与状态点，不做整屏红；一次只报一处，同一件事不在 toast 和弹窗里各说一遍。</p>
+
+  <div class="block"><span class="cap">四层错误面 · 在哪出错就在哪报</span>
+    <table class="bptable">
+      <tr><th>层</th><th>用在哪</th><th>落位</th><th>结构</th><th>动作</th></tr>
+      <tr><td>整页</td><td>404 / 启动失败 / 方案已移出</td><td class="mono">白纸居中，最小高 240</td><td>H2 标题 + P2 说明，不画插画</td><td>主：返回工作台 / 重新加载；次：下载本地草稿</td></tr>
+      <tr><td>画布</td><td>三维不可用（WebGL、显卡、渲染资源）</td><td class="mono">替换画布，居中</td><td>图标 24 err + H3 + P2 + 折叠技术细节</td><td>主：重新加载；次：复制诊断信息</td></tr>
+      <tr><td>面板 / 行内</td><td>某条清单、某个预览没加载出来</td><td class="mono">原位，最小高 150 / 一行 36–40</td><td>图标 24 err（行内可省）+ P2</td><td>仅 ghost「重试」</td></tr>
+      <tr><td>操作</td><td>保存、发布、上传失败</td><td class="mono">顶部 toast，3.2s 自动退场</td><td>err 状态点 + P1</td><td>文案里写出口：「重试上传」</td></tr>
+    </table>
+    <p class="phnote">破坏性动作（清空、覆盖、开始新方案）永远不做主按钮，且必须先给备份出口；错误页不显示错误码与堆栈。</p>
+  </div>
+
+  <div class="block"><span class="cap">画布错误 · 三维没能启动</span>
+    <div class="errdemo">
+      <span class="eicon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+      <h3>三维画布没能启动</h3>
+      <p>通常是浏览器关闭了硬件加速。动作不会丢，打开加速再重新加载就能继续。</p>
+      <div class="acts"><button class="btn btn-primary">重新加载</button><button class="btn btn-text">复制诊断信息</button></div>
+      <details class="errdetail">
+        <summary>技术细节</summary>
+        <p>WebGL context creation failed: unable to initialize the GPU process.</p>
+        <ul><li>在浏览器设置里打开「使用硬件加速」</li><li>更新显卡驱动后重开浏览器</li><li>换用 Chrome / Edge / Firefox 的最新版</li></ul>
+      </details>
+    </div>
+    <p class="phnote">主区不出现英文报错原文；技术细节默认收起、等宽 11px、可复制。同一错误不叠加 toast。</p>
+  </div>
+
+  <div class="block"><span class="cap">整页异常 · 404 / 500</span>
+    <div class="esgrid">
+      <div class="empty wide">
+        <h2>页面走丢了</h2>
+        <p>链接可能已失效，或方案被移出当前工作室。</p>
+        <div class="acts"><button class="btn btn-secondary">返回工作台</button></div>
+      </div>
+      <div class="empty wide">
+        <h2>服务暂时没响应</h2>
+        <p>本地服务可能还在启动，稍等再试一次。</p>
+        <div class="acts"><button class="btn btn-secondary">重新加载</button><button class="btn btn-text">回到工作台</button></div>
+      </div>
+    </div>
+    <p class="phnote">整页异常不画插画、不给错误码：标题 8 字内说清状态，说明给下一步；404 / 500 只差标题和动作。</p>
+  </div>
+
+  <div class="block"><span class="cap">行内失败 · 短、准、能立刻再做一次</span>
+    <div class="empty row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--err)"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <span>清单没能加载出来，可能是网络断了。</span>
+      <button class="btn btn-text">重试</button>
+    </div>
+    <p class="phnote">行内错误只占一行、只说一句、只给一个动作；不弹窗、不切走当前画面。</p>
+  </div>
+
+  <div class="block"><span class="cap">错误文案 · 说人话，给出路</span>
+    <div class="tonegrid">
+      <div class="tone good">三维画布没能启动<small>说清发生了什么事 ✓</small></div>
+      <div class="tone bad">WebGL context lost<small>英文技术串，用户无从下手 ✗</small></div>
+      <div class="tone good">清单没能加载出来，重试一下<small>一句话给出下一步 ✓</small></div>
+      <div class="tone bad">发生未知错误，请联系管理员<small>推责、没有出口 ✗</small></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">错误态禁则</span>
+    <div class="rulelist">
+      <div><b>不整屏红。</b>语义色只做图标、1px 描边与状态点；不做红底卡片与红字大标题。</div>
+      <div><b>不双报。</b>同一错误只在一处出现：画布错误不叠 toast，toast 不再弹模态。</div>
+      <div><b>不给错误码。</b>错误码、堆栈、英文原文只进「技术细节」折叠区。</div>
+      <div><b>不道歉不推责。</b>不写「未知错误」「请联系管理员」；写清发生了什么与下一步。</div>
+      <div><b>不抢焦点。</b>异步错误用 role="alert"，但不移走键盘焦点，动作钮可 Tab 直达。</div>
+      <div><b>不丢用户的东西。</b>任何清空 / 覆盖前先给备份出口（下载本地草稿）。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 十三、无障碍 ═══ -->
+<section id="sec-12">
+  <h2>十二、无障碍</h2>
+  <p class="note">文本对纸面 ≥ 4.5:1（WCAG 2.1 AA）；键盘 Tab 顺序 = 视觉顺序；可交互元素触达区 ≥ 32px。</p>
+
+  <div class="block"><span class="cap">对比度核验</span>
+    <div class="ctrow"><div class="chip" style="background:#fff;color:#141416">主文字</div><span class="r">ink / paper · 17.9:1</span></div>
+    <div class="ctrow"><div class="chip" style="background:#fff;color:#55585F">次级文字</div><span class="r">ink-soft / paper · 7.4:1</span></div>
+    <div class="ctrow"><div class="chip" style="background:#fff;color:#71767E">辅助文字</div><span class="r">muted / paper · 4.6:1</span></div>
+    <div class="ctrow"><div class="chip" style="background:#fff;color:#4A7C59">成功 / 品牌</div><span class="r">green / paper · 5.0:1</span></div>
+  </div>
+
+  <div class="block"><span class="cap">焦点可见 · 用 Tab 键试一下</span>
+    <div class="staterow">
+      <button class="btn btn-secondary">画布</button>
+      <button class="btn btn-secondary">清单</button>
+      <button class="btn btn-secondary">评审</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 十四、Token 三层架构 ═══ -->
+<section id="sec-13">
+  <h2>十三、Token 三层架构与治理</h2>
+  <p class="note">组件 CSS 禁止 hex 字面量，一切颜色经 L1；现有 token 命名（--green、--ink…）已是语义命名，全部归 L1，不重命名。</p>
+
+  <div class="block"><span class="cap">三层结构 · 引用权限自上而下</span>
+    <table class="tbl">
+      <thead><tr><th>层</th><th>定义</th><th>命名法</th><th>示例</th><th>引用权限</th></tr></thead>
+      <tbody>
+        <tr><td>L0 primitive</td><td>原始值，与用途无关</td><td>--p-&lt;色&gt;-&lt;阶&gt;</td><td style="font-family:var(--mono);font-size:12px">--p-green-500: #4A7C59</td><td>只准 L1 引用</td></tr>
+        <tr><td>L1 semantic</td><td>按用途命名 = 本规范全部 token</td><td>沿用现名</td><td style="font-family:var(--mono);font-size:12px">--green: var(--p-green-500)</td><td>组件 CSS 唯一入口</td></tr>
+        <tr><td>L2 component</td><td>组件私有别名，按需才建</td><td>--&lt;组件&gt;-&lt;用途&gt;</td><td style="font-family:var(--mono);font-size:12px">--agent-accent: var(--green)</td><td>仅该组件文件</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="block"><span class="cap">暗色模式 scope（显式决策）</span>
+    <p class="note" style="margin-top:0;max-width:640px">2026 赛季不支持全产品暗色模式。唯一深底场景 = 官网 hero / 黑底卡片，使用中性反白文字；门厅 Agent 标志本身沿用绿色形体与白色眼睛。若未来立项暗色，只允许改 L0/L1，组件层零改动。</p>
+  </div>
+
+  <div class="block"><span class="cap">嵌套圆角 · 内层 = 外层 − 内边距，结果 &lt;4 改发丝线分区</span>
+    <table class="tbl">
+      <thead><tr><th>外层</th><th class="num">内边距</th><th class="num">内层圆角</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr><td>模态 --r-lg 18</td><td class="num">24</td><td class="num">—</td><td>发丝线分区</td></tr>
+        <tr><td>卡片 --r-md 14</td><td class="num">16</td><td class="num">—</td><td>发丝线分区</td></tr>
+        <tr><td>浮岛 pill</td><td class="num">8</td><td class="num">8</td><td>取内边距值</td></tr>
+      </tbody>
+    </table>
+    <p class="note">禁则：32px 以下控件禁用 --r-sm 10（近胶囊临界）；胶囊只属于发送键。</p>
+  </div>
+
+  <div class="block"><span class="cap">等宽字体栈 · 只用于技术细节 / 代码 / assetId / 诊断</span>
+    <p style="font-family:var(--mono);font-size:12px;line-height:20px;color:var(--ink)">"SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace · 11–12px · 禁用于正文与 Agent 台词</p>
+  </div>
+
+  <div class="block"><span class="cap">治理流程</span>
+    <p class="note" style="margin-top:0;max-width:640px">改值 / 新增：先改规范（版本 +0.1）→ 用户点头 → 改 globals.css → 全库 grep 校验无残留 hex、无未登记 token。废弃 token 标注 deprecated 留到下赛季清。</p>
+  </div>
+</section>
+
+<!-- ═══ 十五、AI 生成态 ═══ -->
+<section id="sec-14">
+  <h2>十四、AI 生成态设计</h2>
+  <p class="note">「AI 在干活」不是加载态，是第一公民的界面形态：过程即界面 · 克制的机器感 · 不确定性诚实 · 速度是美学 · 语言即 UI。</p>
+
+  <div class="block"><span class="cap">生成过程 · 分步叙述，完成折叠为一行摘要</span>
+    <div style="max-width:520px;border:1px solid var(--hair);border-radius:var(--r-md);padding:16px;background:var(--paper)">
+      <p style="font-size:14px;line-height:22px;color:var(--ink);font-weight:600;margin:0">已按提案布置：青序 · 香氛快闪</p>
+      <p class="note" style="margin-top:4px">读简报 → 摆座位 → 核对出口（已完成，收起）</p>
+      <div style="margin-top:12px;border-top:1px solid var(--hair-soft);padding-top:12px">
+        <p class="note" style="margin:0;text-transform:none;letter-spacing:0">这是提案，尚未落盘 · 按「40 人 · 室内 12 × 9 m」</p>
+        <p style="font-size:14px;line-height:22px;color:var(--ink);margin:6px 0 0">座位 16 / 40 · 过道 900mm · 出口净宽 1200mm</p>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <span style="display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:var(--r-sm);background:var(--green);color:var(--paper);font-size:14px;font-weight:500">确认布置</span>
+          <span style="display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:var(--r-sm);border:1px solid var(--hair);font-size:14px;color:var(--ink)">改成 15 × 10 m</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">规则速查</span>
+    <table class="tbl">
+      <thead><tr><th>场景</th><th>规则</th></tr></thead>
+      <tbody>
+        <tr><td>生成中</td><td>分步叙述逐行追加（P2 muted）；确认钮生成完才出现；发送键原位变停止钮</td></tr>
+        <tr><td>流式输出</td><td>尾随 1px 墨色光标闪烁 800ms；文本可选中复制；上滑即停自动滚动；aria-live 节流 800ms</td></tr>
+        <tr><td>可撤销</td><td>落盘后 8s 内 toast 给「撤销」；一律走 onApply 进撤销历史</td></tr>
+        <tr><td>提案卡</td><td>恰一颗主行动（绿）；数字 tabular-nums + 来源行；信息不足列「还差什么」，不猜</td></tr>
+        <tr><td>Agent 台词</td><td>一动一句至多两句；做完才报不预告；禁「抱歉 / 作为 AI / 请稍等」</td></tr>
+        <tr><td>机器感禁则</td><td>禁紫渐变 / 发光 / sparkle 泛滥；Sparkles 仅「生成 · Agent」一处；AI 产物与人工产物画布上一视同仁，不加水印边框</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <style>
+    @keyframes caretblink{0%,49%{opacity:1}50%,100%{opacity:0}}
+    @media (prefers-reduced-motion: reduce){ .ai-caret{animation:none} .spin{animation-duration:0s} }
+    .ai-caret{display:inline-block;width:1px;height:16px;background:var(--ink);vertical-align:-3px;margin-left:2px;animation:caretblink .8s step-end infinite}
+    .agent-mock{max-width:440px;border:1px solid var(--hair);border-radius:var(--r-md);background:var(--paper);overflow:hidden}
+    .agent-mock .am-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--hair)}
+    .agent-mock .am-body{display:flex;flex-direction:column;gap:12px;padding:16px}
+    .agent-mock .am-composer{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--hair)}
+    .am-user{align-self:flex-end;max-width:80%;background:var(--plane);border-radius:var(--r-sm);padding:8px 12px;font-size:14px;line-height:22px;color:var(--ink)}
+    .am-agent{font-size:14px;line-height:22px;color:var(--ink)}
+    .am-note{font-size:12px;line-height:20px;color:var(--muted)}
+    .am-step{display:flex;align-items:center;gap:8px;font-size:12px;line-height:20px;color:var(--muted)}
+    .am-step.done{color:var(--ink-soft)}
+    .am-step.now{color:var(--ink)}
+    .am-ok{color:var(--green);font-weight:500}
+    .am-stop{width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--paper);border:none;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+    .am-input{flex:1;height:36px;border:1px solid var(--hair);border-radius:var(--r-sm);padding:0 12px;font-size:14px;color:var(--faint);display:flex;align-items:center}
+    .am-ghostbtn{height:32px;padding:0 10px;border-radius:var(--r-sm);font-size:12px;color:var(--ink-soft);border:1px solid var(--hair);display:inline-flex;align-items:center;background:var(--paper)}
+    .proposal{max-width:440px;border:1px solid var(--hair);border-radius:var(--r-md);background:var(--paper);padding:16px}
+    .proposal .p-status{font-size:12px;line-height:20px;color:var(--muted);margin-bottom:6px}
+    .proposal .p-title{font-size:16px;line-height:24px;font-weight:600;color:var(--ink)}
+    .proposal .p-nums{font-size:14px;line-height:22px;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:6px}
+    .proposal .p-src{font-size:12px;line-height:20px;color:var(--muted);margin-top:2px}
+    .proposal .p-actions{display:flex;gap:8px;margin-top:12px}
+    .p-btn-main{height:36px;padding:0 16px;border-radius:var(--r-sm);background:var(--green);color:var(--paper);font-size:14px;font-weight:500;display:inline-flex;align-items:center}
+    .p-btn-ghost{height:36px;padding:0 16px;border-radius:var(--r-sm);border:1px solid var(--hair);color:var(--ink);font-size:14px;display:inline-flex;align-items:center;background:var(--paper)}
+    .p8{height:2px;border-radius:1px;background:var(--plane);margin-top:10px;overflow:hidden;display:flex}
+    .p8 i{display:block;height:100%;width:38%;background:var(--ink-soft);border-radius:1px}
+    .sm-state{width:132px;text-align:center}
+    .sm-box{border:1px solid var(--hair);border-radius:var(--r-sm);background:var(--paper);height:64px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink);gap:6px}
+    .sm-box.on{border-color:var(--green);box-shadow:0 1px 2px rgba(20,20,22,.06)}
+    .sm-arrow{color:var(--faint);font-size:14px;align-self:center;padding-top:0}
+  </style>
+
+  <!-- ═══ 十五·补充实样 ═══ -->
+  <div class="block"><span class="cap">Agent 面板解剖 · 定版样机</span>
+    <p class="note" style="margin-bottom:16px">白面板 + 1px 左边线；transcript 非厚气泡（用户 plane 底、AI 直排文字）；composer 底部常驻，发送键是全产品唯一绿色圆形。</p>
+    <div class="agent-mock">
+      <div class="am-head">
+        <span style="font-size:16px;line-height:24px;font-weight:600;color:var(--ink)">布置 · 青序香氛快闪</span>
+        <span class="am-note">12 × 8 m</span>
+      </div>
+      <div class="am-body">
+        <div class="am-user">40 人，室内 12×9，要留出吧台和签到</div>
+        <div>
+          <div class="am-agent">按 40 人出了方案：座位 16 / 40，吧台沿西墙，签到留在门厅侧。<span class="am-note" style="margin-left:6px">这是提案，尚未落盘</span></div>
+        </div>
+        <div class="am-note">读简报 → 摆座位 → 核对出口 · 已完成，收起</div>
+      </div>
+      <div class="am-composer">
+        <span class="am-input">说一句要改什么…</span>
+        <button class="btn btn-ghost" aria-label="附上照片" style="width:32px;height:32px;justify-content:center">＋</button>
+        <button class="send" aria-label="发送">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">生成过程三态 · 过程即界面</span>
+    <p class="note" style="margin-bottom:16px">生成中 = 分步叙述逐行追加；完成 = 折叠成一行摘要，正文只留结果；中断 = 如实标注「未完成」，保留已生成部分。过程永远可见、可停、可撤。</p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      <div class="agent-mock" style="max-width:280px;flex:1;min-width:240px">
+        <div class="am-head"><span class="am-note" style="text-transform:none;letter-spacing:0">生成中</span><button class="am-stop" aria-label="停止生成" style="width:24px;height:24px"><span style="display:block;width:8px;height:8px;background:var(--paper);border-radius:1px"></span></button></div>
+        <div class="am-body">
+          <div class="am-step done"><span class="am-ok">✓</span>读简报：40 人 · 吧台 · 签到</div>
+          <div class="am-step now"><span class="spin" style="width:12px;height:12px"></span>摆座位：16 桌 + 过道 900mm</div>
+          <div class="am-step">· 核对出口净宽</div>
+        </div>
+      </div>
+      <div class="agent-mock" style="max-width:280px;flex:1;min-width:240px">
+        <div class="am-head"><span class="am-note" style="text-transform:none;letter-spacing:0">完成</span></div>
+        <div class="am-body">
+          <div class="am-agent">空白场地立好了：12 × 8 m。</div>
+          <div class="am-note">读简报 → 摆座位 → 核对出口 · 已完成，收起</div>
+        </div>
+      </div>
+      <div class="agent-mock" style="max-width:280px;flex:1;min-width:240px">
+        <div class="am-head"><span class="am-note" style="text-transform:none;letter-spacing:0">已中断</span></div>
+        <div class="am-body">
+          <div class="am-agent">停在「摆座位」这一步，前面读到的要求都在。</div>
+          <div class="am-note">未完成 · <span style="color:var(--ink-soft);text-decoration:underline">继续生成</span> 或 <span style="color:var(--ink-soft);text-decoration:underline">放弃这次</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">流式输出 · 速度是美学</span>
+    <p class="note" style="margin-bottom:16px">逐 token 渲染，尾随 1px 墨色光标闪烁 800ms；上滑即停自动滚动，出现「回到底部」；屏幕阅读器节流 800ms 批量播报。流式期间文字可选中复制。</p>
+    <div class="agent-mock" style="max-width:440px">
+      <div class="am-body" style="padding-bottom:8px">
+        <div class="am-agent">已离开模板：模板物件已撤，自有物料能留的都留了，按新尺寸 20 × 12 m 立了矩形壳<span class="ai-caret" aria-hidden="true"></span></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px 12px">
+        <span class="am-note">正在生成 · 发送键已变为停止钮</span>
+        <span class="am-ghostbtn">↓ 回到底部</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">提案卡四态 · 不确定性诚实</span>
+    <p class="note" style="margin-bottom:16px">每张提案卡恰一颗主行动（绿）；数字 tabular-nums 且带来源行；信息不足列「还差什么」，不用默认值填满后再道歉。</p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      <div class="proposal" style="flex:1;min-width:240px;background:var(--plane)">
+        <div class="p-status">生成中 · 确认钮生成完才出现</div>
+        <div class="p-title">40 人布置方案</div>
+        <div class="p-nums" style="color:var(--muted)">座位 ▢▢ / 40 · 过道 ▢▢▢▢</div>
+        <div class="p8" aria-hidden="true"><i></i></div>
+      </div>
+      <div class="proposal" style="flex:1;min-width:240px">
+        <div class="p-status">这是提案，尚未落盘 · 按「40 人 · 室内 12 × 9 m」</div>
+        <div class="p-title">40 人布置方案</div>
+        <div class="p-nums">座位 16 / 40 · 过道 900mm · 出口净宽 1200mm</div>
+        <div class="p-actions"><span class="p-btn-main">确认布置</span><span class="p-btn-ghost">改成 15 × 10 m</span></div>
+      </div>
+      <div class="proposal" style="flex:1;min-width:240px">
+        <div class="p-status">已按提案布置 · 可撤销</div>
+        <div class="p-title">40 人布置方案</div>
+        <div class="p-nums">座位 16 / 40 · 已进撤销历史</div>
+        <div class="p-actions"><span class="p-btn-ghost">撤销</span><span class="p-btn-ghost">再改一版</span></div>
+      </div>
+      <div class="proposal" style="flex:1;min-width:240px">
+        <div class="p-status">还差什么 · 不猜</div>
+        <div class="p-title">先补两件事</div>
+        <div class="p-nums" style="font-weight:400;color:var(--ink-soft)">① 人数还没说 → <span style="text-decoration:underline">说人数</span>　② 场地尺寸未定 → <span style="text-decoration:underline">用 12 × 8 m 先立壳</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">撤销窗口 · 落盘后 8 秒</span>
+    <p class="note" style="margin-bottom:16px">确认落盘后顶部居中浮出 toast，3.2s 内给「撤销」；画布改动一律走 onApply 进撤销历史，AI 产物与人工产物一视同仁。</p>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="toast"><span class="dot" style="border:none;background:var(--green)"></span>已按提案布置<span class="am-ghostbtn" style="height:28px">撤销</span></div>
+      <span class="am-note">8s 后 toast 退场，之后仍可 ⌘Z / 撤销钮回退</span>
+    </div>
+  </div>
+
+</section>
+
+<!-- ═══ 十六、AI 交互状态机 ═══ -->
+<section id="sec-15">
+  <h2>十五、AI 交互状态机</h2>
+  <p class="note">五个状态，两条铁律：确认钮只在「提案待确认」出现一次；停止/撤销永远同位可达，不并列第二套控件。</p>
+
+  <div class="block"><span class="cap">状态流转</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+      <div class="sm-state"><div class="sm-box">空闲</div><span class="am-note" style="margin-top:6px">简报文字链 / 模板轨</span></div>
+      <span class="sm-arrow">→</span>
+      <div class="sm-state"><div class="sm-box on"><span class="spin" style="width:12px;height:12px"></span>生成中</div><span class="am-note" style="margin-top:6px">分步叙述 · 可停止</span></div>
+      <span class="sm-arrow">→</span>
+      <div class="sm-state"><div class="sm-box on">提案待确认</div><span class="am-note" style="margin-top:6px">恰一颗绿钮</span></div>
+      <span class="sm-arrow">→</span>
+      <div class="sm-state"><div class="sm-box">已落盘</div><span class="am-note" style="margin-top:6px">toast 8s 撤销窗</span></div>
+      <span class="sm-arrow">↺</span>
+      <div class="sm-state"><div class="sm-box">已中断</div><span class="am-note" style="margin-top:6px">保留已生成 · 继续或放弃</span></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="cap">状态 × 界面 × 退出口</span>
+    <table class="tbl">
+      <thead><tr><th>状态</th><th>画布</th><th>Agent 区</th><th>退出口</th></tr></thead>
+      <tbody>
+        <tr><td>空闲</td><td>空场地自绘地面，不贴占位图</td><td>简报 + 文字链「空白场地 · 12 × 8 m」</td><td>直接一句话 / 点链出方案</td></tr>
+        <tr><td>生成中</td><td>不改画面（画布静默，T-06）</td><td>分步叙述；发送键原位变停止钮</td><td>停止 → 已中断</td></tr>
+        <tr><td>提案待确认</td><td>预览浮层</td><td>提案卡（状态行 + 来源行 + 一颗绿钮）</td><td>确认 / 改方案 / 收回</td></tr>
+        <tr><td>已落盘</td><td>实摆 + 进撤销历史</td><td>结果一句 + 「已按提案布置 · 可撤销」</td><td>toast 撤销（8s）· ⌘Z 永久可回</td></tr>
+        <tr><td>已中断</td><td>保持改动前画面</td><td>如实标注未完成</td><td>继续生成 / 放弃这次</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="block"><span class="cap">动效预算 · 全部走统一缓动</span>
+    <table class="tbl">
+      <thead><tr><th>场景</th><th class="num">时长</th><th>规格</th></tr></thead>
+      <tbody>
+        <tr><td>分步叙述行追加</td><td class="num">120ms</td><td>淡入 + 上移 2px，逐行错峰 60ms</td></tr>
+        <tr><td>提案卡出现</td><td class="num">200ms</td><td>淡入 + 上移 2px；不弹跳、不缩放</td></tr>
+        <tr><td>光标闪烁</td><td class="num">800ms</td><td>step-end 循环；reduced-motion 时静止常亮</td></tr>
+        <tr><td>toast 浮出 / 退场</td><td class="num">200ms</td><td>顶部居中；退场不等用户，8s 上限</td></tr>
+        <tr><td>流式自动滚动</td><td class="num">跟随</td><td>用户上滑即停，永不拉回</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+<!-- ═══ 十六、AI-native 案例图谱 ═══ -->
+<section id="sec-16">
+  <h2>十六、AI-native 案例图谱</h2>
+  <p class="note">以下案例图为手绘线稿示意（非截图），参照一线 AI 产品的交互模式自绘，离线可用。每例两行：<b>借鉴</b>收进本规范，<b>弃用</b>标明为什么不。顺序对应十五节五原则。</p>
+
+  <div class="block"><span class="cap">案例 1 · 对话即入口 —— chat-first 双栏（原则：过程即界面）</span>
+    <svg viewBox="0 0 640 170" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="左对话右画布双栏线稿">
+      <rect x="12" y="12" width="250" height="146" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="26" y="32" font-size="11" fill="#71767E">Agent</text>
+      <rect x="120" y="44" width="126" height="26" rx="8" fill="#F4F5F7"/>
+      <text x="130" y="61" font-size="10" fill="#141416">40 人，室内 12×9</text>
+      <text x="26" y="92" font-size="10" fill="#141416">出了方案：座位 16 / 40，</text>
+      <text x="26" y="108" font-size="10" fill="#141416">吧台沿西墙，签到留门厅。</text>
+      <rect x="26" y="124" width="60" height="20" rx="8" fill="#4A7C59"/>
+      <text x="38" y="138" font-size="10" fill="#FFFFFF">确认布置</text>
+      <rect x="274" y="12" width="354" height="146" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="288" y="32" font-size="11" fill="#71767E">画布（吃满 · 静默生成中）</text>
+      <rect x="300" y="48" width="180" height="90" rx="6" fill="none" stroke="#141416"/>
+      <rect x="312" y="60" width="28" height="18" rx="3" fill="#ECEDEF"/>
+      <rect x="348" y="60" width="28" height="18" rx="3" fill="#ECEDEF"/>
+      <rect x="312" y="86" width="28" height="18" rx="3" fill="#ECEDEF"/>
+      <circle cx="436" cy="72" r="10" fill="none" stroke="#4A7C59"/>
+      <text x="300" y="156" font-size="9" fill="#A6AAB2">12 × 9 m</text>
+    </svg>
+    <p class="note"><b>借鉴</b>：对话在左不吃满，画布始终是主角；确认钮长在对话流里，不盖画布。<b>弃用</b>：全屏聊天窗（画布消失＝工作台消失）；对话气泡铺满屏。</p>
+  </div>
+
+  <div class="block"><span class="cap">案例 2 · 过程可见 —— 分步叙述 + 流式 + 可停（原则：过程即界面 / 速度是美学）</span>
+    <svg viewBox="0 0 640 150" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="分步生成与流式输出线稿">
+      <rect x="12" y="12" width="300" height="126" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="26" y="34" font-size="10" fill="#4A7C59">✓ 读简报：40 人 · 吧台 · 签到</text>
+      <circle cx="32" cy="50" r="6" fill="none" stroke="#E4E4E7" stroke-width="4"/>
+      <path d="M32 44 A6 6 0 0 1 38 50" fill="none" stroke="#55585F" stroke-width="4"/>
+      <text x="44" y="54" font-size="10" fill="#141416">摆座位：16 桌 + 过道 900mm</text>
+      <text x="26" y="74" font-size="10" fill="#A6AAB2">· 核对出口净宽</text>
+      <rect x="26" y="96" width="180" height="16" rx="4" fill="#F4F5F7"/>
+      <text x="26" y="130" font-size="10" fill="#141416">发送键原位变停止钮，不并列第二颗</text>
+      <rect x="324" y="12" width="304" height="126" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="338" y="36" font-size="10" fill="#141416">已离开模板：按 20 × 12 m 立了矩形壳</text>
+      <rect x="338" y="46" width="1" height="14" fill="#141416"/>
+      <text x="338" y="84" font-size="9" fill="#A6AAB2">逐 token 渲染 · 光标 1px 墨色闪 800ms</text>
+      <text x="338" y="102" font-size="9" fill="#A6AAB2">上滑即停自动滚动 · 回到底部 ghost 钮</text>
+    </svg>
+    <p class="note"><b>借鉴</b>：进度是叙事（步骤名），不是转圈；流式尾随光标；停止钮与发送键同位。<b>弃用</b>：全屏 spinner、进度条假动画、生成中锁死整个界面。</p>
+  </div>
+
+  <div class="block"><span class="cap">案例 3 · 生成完再确认 —— 提案卡（原则：不确定性诚实）</span>
+    <svg viewBox="0 0 640 130" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="提案卡线稿：一颗绿钮">
+      <rect x="12" y="12" width="380" height="106" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="26" y="34" font-size="9" fill="#71767E">这是提案，尚未落盘 · 按「40 人 · 室内 12 × 9 m」</text>
+      <text x="26" y="56" font-size="13" font-weight="600" fill="#141416">40 人布置方案</text>
+      <text x="26" y="78" font-size="10" fill="#141416">座位 16 / 40 · 过道 900mm · 出口净宽 1200mm</text>
+      <rect x="26" y="90" width="76" height="22" rx="8" fill="#4A7C59"/>
+      <text x="38" y="105" font-size="10" fill="#FFFFFF">确认布置</text>
+      <rect x="110" y="90" width="90" height="22" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="122" y="105" font-size="10" fill="#141416">改成 15 × 10 m</text>
+      <rect x="404" y="12" width="224" height="106" rx="12" fill="#F4F5F7"/>
+      <text x="418" y="34" font-size="9" fill="#71767E">生成中 · 确认钮还没出现</text>
+      <rect x="418" y="48" width="120" height="10" rx="4" fill="#ECEDEF"/>
+      <rect x="418" y="66" width="90" height="10" rx="4" fill="#ECEDEF"/>
+      <text x="418" y="102" font-size="9" fill="#A6AAB2">T-05：生成完再亮确认，不让用户对着空气点</text>
+    </svg>
+    <p class="note"><b>借鉴</b>：状态行写「提案≠结果」；数字带来源行可核对；恰一颗主行动。<b>弃用</b>：生成中就给确认钮；一次冒出多颗绿钮；默认值填满后再道歉。</p>
+  </div>
+
+  <div class="block"><span class="cap">案例 4 · 诚实的不确定性 —— 引用与「还差什么」（原则：不确定性诚实 / 语言即 UI）</span>
+    <svg viewBox="0 0 640 130" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="引用标注与信息缺口线稿">
+      <rect x="12" y="12" width="380" height="106" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="26" y="36" font-size="10" fill="#141416">消防疏散参考规范要求 [1]，出口净宽按场地</text>
+      <text x="26" y="54" font-size="10" fill="#141416">实测计算 [2]。</text>
+      <rect x="26" y="68" width="64" height="18" rx="9" fill="#F4F5F7"/>
+      <text x="34" y="81" font-size="9" fill="#55585F">[1] 场地规范</text>
+      <rect x="98" y="68" width="64" height="18" rx="9" fill="#F4F5F7"/>
+      <text x="106" y="81" font-size="9" fill="#55585F">[2] 图纸实测</text>
+      <text x="26" y="108" font-size="9" fill="#A6AAB2">每句有据 · 引用可点开 · 算不出就引用不算</text>
+      <rect x="404" y="12" width="224" height="106" rx="12" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="418" y="34" font-size="10" font-weight="600" fill="#141416">先补两件事</text>
+      <text x="418" y="56" font-size="10" fill="#55585F">① 人数还没说 → 说人数</text>
+      <text x="418" y="76" font-size="10" fill="#55585F">② 场地未定 → 用 12 × 8 m 先立壳</text>
+      <text x="418" y="102" font-size="9" fill="#A6AAB2">缺信息列缺口给文字链，不用默认值硬猜</text>
+    </svg>
+    <p class="note"><b>借鉴</b>：结论旁挂来源；信息不足时把「差什么」变成可点的下一步。<b>弃用</b>：无来源的断言；用假设值填满方案；「猜错了」再道歉。</p>
+  </div>
+
+  <div class="block"><span class="cap">案例 5 · 落盘可撤 —— 撤销窗与时间线（原则：过程即界面）</span>
+    <svg viewBox="0 0 640 110" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="撤销 toast 与时间线线稿">
+      <rect x="220" y="12" width="200" height="34" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <circle cx="238" cy="29" r="4" fill="#4A7C59"/>
+      <text x="250" y="33" font-size="10" fill="#141416">已按提案布置</text>
+      <rect x="340" y="20" width="52" height="18" rx="6" fill="none" stroke="#E4E4E7"/>
+      <text x="350" y="33" font-size="10" fill="#55585F">撤销</text>
+      <line x1="60" y1="80" x2="580" y2="80" stroke="#E4E4E7"/>
+      <circle cx="120" cy="80" r="5" fill="#141416"/><text x="96" y="100" font-size="9" fill="#71767E">草稿</text>
+      <circle cx="300" cy="80" r="5" fill="#141416"/><text x="272" y="100" font-size="9" fill="#71767E">AI 落盘</text>
+      <circle cx="480" cy="80" r="5" fill="#4A7C59"/><text x="452" y="100" font-size="9" fill="#71767E">你的微调</text>
+      <text x="330" y="60" font-size="9" fill="#A6AAB2">AI 产物与人工产物同一条时间线，同一个撤销历史</text>
+    </svg>
+    <p class="note"><b>借鉴</b>：toast 给出口且限时；AI 与人共用一条撤销时间线。<b>弃用</b>：AI 产物加「AI 水印边框」区别对待；撤销要进二级菜单。</p>
+  </div>
+
+  <div class="block"><span class="cap">案例 6 · 反例墙 —— 一线产品也常犯的错（禁则可视化）</span>
+    <svg viewBox="0 0 640 130" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="四个反例小卡">
+      <rect x="12" y="12" width="148" height="106" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <rect x="26" y="26" width="120" height="46" rx="8" fill="#B4443C" opacity="0.15"/>
+      <text x="30" y="54" font-size="10" fill="#B4443C">紫渐变 · 发光标题</text>
+      <text x="26" y="94" font-size="9" fill="#71767E">✗ 用装饰表达「智能」</text>
+      <rect x="172" y="12" width="148" height="106" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <rect x="186" y="26" width="120" height="46" rx="8" fill="#F4F5F7"/>
+      <text x="190" y="46" font-size="9" fill="#141416">抱歉，作为 AI 我…</text>
+      <text x="190" y="62" font-size="9" fill="#A6AAB2">请稍等，马上就好…</text>
+      <text x="186" y="94" font-size="9" fill="#71767E">✗ 客套话与预告</text>
+      <rect x="332" y="12" width="148" height="106" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <rect x="346" y="26" width="120" height="46" rx="8" fill="#F4F5F7"/>
+      <circle cx="406" cy="49" r="10" fill="none" stroke="#55585F" stroke-width="4"/>
+      <text x="346" y="94" font-size="9" fill="#71767E">✗ 只给 spinner 不给过程</text>
+      <rect x="492" y="12" width="136" height="106" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <rect x="506" y="26" width="108" height="46" rx="8" fill="#F4F5F7"/>
+      <text x="514" y="46" font-size="9" fill="#141416">✓ 已生成方案</text>
+      <text x="514" y="62" font-size="9" fill="#4A7C59">✓ 确认布置</text>
+      <text x="506" y="94" font-size="9" fill="#71767E">✓ 正确做法：结果句 + 一颗绿钮</text>
+    </svg>
+    <p class="note">前四格是行业内最常见的「AI 感」装饰路径，全部与「冷石画廊」立场冲突；最后一格是本规范的收法：结果句 + 来源 + 一颗绿钮。</p>
+  </div>
+</section>
+
+<!-- ═══ 十八、AI-native 图解 ═══ -->
+<section id="sec-17">
+  <h2>十七、AI-native 图解</h2>
+  <p class="note">思维导图、系统架构、请求流程、渲染管线、Token 分层——五张图把十四~十六节的文字规则钉成一张可指着的图。均按本规范色板自绘。</p>
+
+  <div class="block"><span class="cap">图 1 · 思维导图 —— AI-native 审美五原则全景</span>
+    <svg viewBox="0 0 640 300" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI-native 五原则思维导图">
+      <ellipse cx="86" cy="150" rx="64" ry="30" fill="#141416"/>
+      <text x="86" y="146" font-size="11" fill="#FFFFFF" text-anchor="middle">AI-native</text>
+      <text x="86" y="162" font-size="11" fill="#FFFFFF" text-anchor="middle">审美</text>
+      <g stroke="#E4E4E7" fill="none">
+        <path d="M150 138 C 200 120, 210 46, 252 42"/>
+        <path d="M150 144 C 210 132, 210 92, 252 90"/>
+        <path d="M150 150 L 252 150"/>
+        <path d="M150 156 C 210 168, 210 208, 252 210"/>
+        <path d="M150 162 C 200 180, 210 254, 252 258"/>
+      </g>
+      <rect x="252" y="28" width="118" height="28" rx="8" fill="#F4F5F7"/><text x="311" y="46" font-size="11" fill="#141416" text-anchor="middle">过程即界面</text>
+      <text x="382" y="38" font-size="10" fill="#55585F">可见 · 可中断 · 可撤销</text>
+      <text x="382" y="53" font-size="10" fill="#A6AAB2">进度是叙事，不是转圈</text>
+      <rect x="252" y="76" width="118" height="28" rx="8" fill="#F4F5F7"/><text x="311" y="94" font-size="11" fill="#141416" text-anchor="middle">克制的机器感</text>
+      <text x="382" y="86" font-size="10" fill="#55585F">无紫渐变 · 无发光 · Sparkles 单处</text>
+      <text x="382" y="101" font-size="10" fill="#A6AAB2">智能靠排版与灰度表达</text>
+      <rect x="252" y="136" width="118" height="28" rx="8" fill="#F4F5F7"/><text x="311" y="154" font-size="11" fill="#141416" text-anchor="middle">不确定性诚实</text>
+      <text x="382" y="146" font-size="10" fill="#55585F">提案 ≠ 结果 · 来源行 · 缺口清单</text>
+      <text x="382" y="161" font-size="10" fill="#A6AAB2">不猜，缺什么列什么</text>
+      <rect x="252" y="196" width="118" height="28" rx="8" fill="#F4F5F7"/><text x="311" y="214" font-size="11" fill="#141416" text-anchor="middle">速度是美学</text>
+      <text x="382" y="206" font-size="10" fill="#55585F">120ms 反馈 · 流式优先 · 乐观落盘</text>
+      <text x="382" y="221" font-size="10" fill="#A6AAB2">点击后永远有可见响应</text>
+      <rect x="252" y="244" width="118" height="28" rx="8" fill="#F4F5F7"/><text x="311" y="262" font-size="11" fill="#141416" text-anchor="middle">语言即 UI</text>
+      <text x="382" y="254" font-size="10" fill="#55585F">做完才报 · 一动一句 · 给出路</text>
+      <text x="382" y="269" font-size="10" fill="#A6AAB2">禁客套、预告、总结空话</text>
+    </svg>
+  </div>
+
+  <div class="block"><span class="cap">图 2 · 架构图 —— Agent 工作台分层</span>
+    <svg viewBox="0 0 640 250" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agent 工作台五层架构">
+      <defs><marker id="ar2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#71767E"/></marker></defs>
+      <rect x="20" y="20" width="130" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="85" y="38" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">输入层</text>
+      <text x="85" y="54" font-size="9" fill="#71767E" text-anchor="middle">一句话 / 图纸 / 照片</text>
+      <rect x="190" y="20" width="130" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="255" y="38" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">意图识别</text>
+      <text x="255" y="54" font-size="9" fill="#71767E" text-anchor="middle">isVenueSizeOnly 分流</text>
+      <rect x="360" y="20" width="130" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="425" y="38" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">规划层 · Agent</text>
+      <text x="425" y="54" font-size="9" fill="#71767E" text-anchor="middle">提案生成 · 分步叙述</text>
+      <rect x="490" y="20" width="130" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="555" y="38" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">执行层</text>
+      <text x="555" y="54" font-size="9" fill="#71767E" text-anchor="middle">规则生成 · 画布渲染</text>
+      <line x1="150" y1="42" x2="188" y2="42" stroke="#71767E" marker-end="url(#ar2)"/>
+      <line x1="320" y1="42" x2="358" y2="42" stroke="#71767E" marker-end="url(#ar2)"/>
+      <line x1="490" y1="42" x2="488" y2="42" stroke="#71767E" marker-end="url(#ar2)"/>
+      <rect x="490" y="110" width="130" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="555" y="128" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">落盘层</text>
+      <text x="555" y="144" font-size="9" fill="#71767E" text-anchor="middle">onApply → 撤销历史</text>
+      <line x1="555" y1="64" x2="555" y2="108" stroke="#71767E" marker-end="url(#ar2)"/>
+      <rect x="300" y="110" width="150" height="44" rx="8" fill="#F4F5F7"/>
+      <text x="375" y="128" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">提案卡（可确认 / 收回）</text>
+      <text x="375" y="144" font-size="9" fill="#71767E" text-anchor="middle">恰一颗绿钮 · 来源行</text>
+      <line x1="490" y1="120" x2="452" y2="126" stroke="#71767E" marker-end="url(#ar2)"/>
+      <rect x="150" y="110" width="110" height="44" rx="8" fill="#F4F5F7"/>
+      <text x="205" y="128" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">停止 / 中断</text>
+      <text x="205" y="144" font-size="9" fill="#71767E" text-anchor="middle">发送键同位替换</text>
+      <line x1="300" y1="126" x2="262" y2="128" stroke="#71767E" marker-end="url(#ar2)"/>
+      <rect x="20" y="110" width="90" height="44" rx="8" fill="#F4F5F7"/>
+      <text x="65" y="128" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">撤销窗</text>
+      <text x="65" y="144" font-size="9" fill="#71767E" text-anchor="middle">toast · 8s</text>
+      <line x1="150" y1="130" x2="112" y2="130" stroke="#71767E" marker-end="url(#ar2)"/>
+      <rect x="20" y="190" width="600" height="40" rx="8" fill="#EEF3EF"/>
+      <text x="320" y="208" font-size="10" font-weight="600" fill="#3A6247" text-anchor="middle">不变式：AI 产物与人工产物同一条撤销历史 · 画布在生成中静默（T-06） · 确认钮只在提案卡出现一次</text>
+      <text x="320" y="223" font-size="9" fill="#3A6247" text-anchor="middle">任何一层失败都不写死：输入可改说、识别可改派、生成可中断、提案可收回、落盘可撤销</text>
+    </svg>
+  </div>
+
+  <div class="block"><span class="cap">图 3 · 流程图 —— 一句话进来之后发生什么</span>
+    <svg viewBox="0 0 640 290" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="一句话请求的分支流程图">
+      <defs><marker id="ar3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#71767E"/></marker></defs>
+      <rect x="240" y="16" width="160" height="30" rx="8" fill="#141416"/>
+      <text x="320" y="35" font-size="10" fill="#FFFFFF" text-anchor="middle">用户：一句话</text>
+      <path d="M320 46 L320 66" stroke="#71767E" marker-end="url(#ar3)" fill="none"/>
+      <path d="M320 66 L 200 84 M320 66 L 440 84" stroke="#71767E" fill="none"/>
+      <path d="M120 96 A 26 26 0 0 1 120 84 L 280 84 A 26 26 0 0 1 280 96 Z" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <polygon points="320,72 392,98 320,124 248,98" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="320" y="102" font-size="10" fill="#141416" text-anchor="middle">只改尺寸？</text>
+      <text x="236" y="90" font-size="9" fill="#71767E">是（无人数/活动词）</text>
+      <text x="404" y="90" font-size="9" fill="#71767E">否（带人数/活动/时段）</text>
+      <rect x="96" y="140" width="150" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="171" y="158" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">resizeVenueOnly</text>
+      <text x="171" y="174" font-size="9" fill="#71767E" text-anchor="middle">静默收提案 · 立壳 · 一句话</text>
+      <path d="M290 112 L 200 138" stroke="#71767E" marker-end="url(#ar3)" fill="none"/>
+      <rect x="380" y="140" width="150" height="44" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="455" y="158" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">runLocal 生成</text>
+      <text x="455" y="174" font-size="9" fill="#71767E" text-anchor="middle">分步叙述 · 可中断</text>
+      <path d="M352 112 L 440 138" stroke="#71767E" marker-end="url(#ar3)" fill="none"/>
+      <rect x="380" y="210" width="150" height="44" rx="8" fill="#F4F5F7"/>
+      <text x="455" y="228" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">提案卡</text>
+      <text x="455" y="244" font-size="9" fill="#71767E" text-anchor="middle">座位 16/40 · 恰一颗绿钮</text>
+      <path d="M455 184 L455 208" stroke="#71767E" marker-end="url(#ar3)" fill="none"/>
+      <rect x="180" y="210" width="150" height="44" rx="8" fill="#FFFFFF" stroke="#4A7C59"/>
+      <text x="255" y="228" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">确认 → onApply 落盘</text>
+      <text x="255" y="244" font-size="9" fill="#71767E" text-anchor="middle">进撤销历史 · toast 8s</text>
+      <path d="M380 232 L 332 232" stroke="#71767E" marker-end="url(#ar3)" fill="none"/>
+      <text x="96" y="232" font-size="9" fill="#71767E">改尺寸路径：不进生成，</text>
+      <text x="96" y="246" font-size="9" fill="#71767E">无预览卡、无恐吓黄条</text>
+    </svg>
+    <p class="note">这张图就是 <code>isVenueSizeOnly</code> 的行为契约：分流条件、两条路径各自的界面后果、汇合点在落盘与撤销。</p>
+  </div>
+
+  <div class="block"><span class="cap">图 4 · 技术管线 —— 流式渲染与可达性双路</span>
+    <svg viewBox="0 0 640 240" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="流式渲染管线技术图">
+      <defs><marker id="ar4" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#71767E"/></marker></defs>
+      <rect x="20" y="30" width="110" height="36" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="75" y="46" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">token 流</text>
+      <text x="75" y="60" font-size="9" fill="#71767E" text-anchor="middle">LLM / 规则引擎</text>
+      <rect x="180" y="30" width="140" height="36" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="250" y="46" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">渲染器</text>
+      <text x="250" y="60" font-size="9" fill="#71767E" text-anchor="middle">逐 token + 1px 光标</text>
+      <line x1="130" y1="48" x2="178" y2="48" stroke="#71767E" marker-end="url(#ar4)"/>
+      <rect x="370" y="14" width="250" height="30" rx="8" fill="#F4F5F7"/>
+      <text x="495" y="33" font-size="9" fill="#141416" text-anchor="middle">视口路 · 自动滚动守护：用户上滑即停，回到底部 ghost 钮</text>
+      <rect x="370" y="52" width="250" height="30" rx="8" fill="#F4F5F7"/>
+      <text x="495" y="71" font-size="9" fill="#141416" text-anchor="middle">选择路 · 流式文本可选中复制；按钮禁用</text>
+      <line x1="320" y1="40" x2="368" y2="30" stroke="#71767E" marker-end="url(#ar4)"/>
+      <line x1="320" y1="56" x2="368" y2="66" stroke="#71767E" marker-end="url(#ar4)"/>
+      <rect x="180" y="110" width="140" height="36" rx="8" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="250" y="126" font-size="10" font-weight="600" fill="#141416" text-anchor="middle">aria-live 缓冲</text>
+      <text x="250" y="140" font-size="9" fill="#71767E" text-anchor="middle">polite · 不逐 token 播报</text>
+      <line x1="250" y1="66" x2="250" y2="108" stroke="#71767E" marker-end="url(#ar4)"/>
+      <rect x="370" y="110" width="250" height="36" rx="8" fill="#F4F5F7"/>
+      <text x="495" y="126" font-size="9" fill="#141416" text-anchor="middle">节流 800ms 批量播报（逐 token 播报 = 禁令）</text>
+      <line x1="320" y1="128" x2="368" y2="128" stroke="#71767E" marker-end="url(#ar4)"/>
+      <rect x="20" y="180" width="280" height="40" rx="8" fill="#FFFFFF" stroke="#B4443C"/>
+      <text x="160" y="196" font-size="10" font-weight="600" fill="#B4443C" text-anchor="middle">中断信号（停止钮 / 撤回）</text>
+      <text x="160" y="212" font-size="9" fill="#71767E" text-anchor="middle">终止流 → 已生成部分保留 → 标注「未完成」</text>
+      <line x1="250" y1="146" x2="160" y2="178" stroke="#71767E" stroke-dasharray="4 3" marker-end="url(#ar4)"/>
+      <rect x="340" y="180" width="280" height="40" rx="8" fill="#EEF3EF"/>
+      <text x="480" y="196" font-size="10" font-weight="600" fill="#3A6247" text-anchor="middle">完成 → 光标即灭，不留残影</text>
+      <text x="480" y="212" font-size="9" fill="#3A6247" text-anchor="middle">结果句 + 折叠分步摘要，衔接提案卡</text>
+    </svg>
+  </div>
+
+  <div class="block"><span class="cap">图 5 · 技术图 —— Token 三层架构与引用方向</span>
+    <svg viewBox="0 0 640 220" width="100%" style="border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:var(--paper)" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Token 三层架构图">
+      <defs><marker id="ar5" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#71767E"/></marker></defs>
+      <rect x="20" y="20" width="180" height="140" rx="10" fill="#F4F5F7"/>
+      <text x="110" y="42" font-size="11" font-weight="600" fill="#141416" text-anchor="middle">L0 primitive</text>
+      <text x="110" y="58" font-size="9" fill="#71767E" text-anchor="middle">原始值 · 全库唯一</text>
+      <text x="110" y="86" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--p-green-500: #4A7C59</text>
+      <text x="110" y="102" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--p-gray-300: #E4E4E7</text>
+      <text x="110" y="118" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--p-ink: #141416</text>
+      <text x="110" y="146" font-size="9" fill="#A6AAB2" text-anchor="middle">只在 globals.css 出现一次</text>
+      <rect x="240" y="20" width="180" height="140" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="330" y="42" font-size="11" font-weight="600" fill="#141416" text-anchor="middle">L1 semantic</text>
+      <text x="330" y="58" font-size="9" fill="#71767E" text-anchor="middle">按用途命名 · 组件唯一入口</text>
+      <text x="330" y="86" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--green: var(--p-green-500)</text>
+      <text x="330" y="102" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--hair: var(--p-gray-300)</text>
+      <text x="330" y="118" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--ink / --muted / --sp-4 …</text>
+      <text x="330" y="146" font-size="9" fill="#A6AAB2" text-anchor="middle">色 / 距 / 角 / 影 / 动效五族</text>
+      <rect x="460" y="20" width="160" height="140" rx="10" fill="#FFFFFF" stroke="#E4E4E7"/>
+      <text x="540" y="42" font-size="11" font-weight="600" fill="#141416" text-anchor="middle">L2 component</text>
+      <text x="540" y="58" font-size="9" fill="#71767E" text-anchor="middle">组件私有别名 · 按需才建</text>
+      <text x="540" y="86" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--agent-accent</text>
+      <text x="540" y="102" font-size="9" fill="#55585F" text-anchor="middle" font-family="var(--mono)">--proposal-hair</text>
+      <text x="540" y="118" font-size="9" fill="#A6AAB2" text-anchor="middle">仅该组件文件可见</text>
+      <line x1="200" y1="90" x2="238" y2="90" stroke="#71767E" marker-end="url(#ar5)"/>
+      <line x1="420" y1="90" x2="458" y2="90" stroke="#71767E" marker-end="url(#ar5)"/>
+      <text x="219" y="82" font-size="9" fill="#71767E">只准向下</text>
+      <rect x="20" y="176" width="600" height="30" rx="8" fill="#EEF3EF"/>
+      <text x="320" y="195" font-size="10" fill="#3A6247" text-anchor="middle">铁律：组件 CSS 禁止 hex 字面量 · 未来暗色主题只改 L0/L1，组件层零改动</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══ 十九、幕景多 Agent 身份 ═══ -->
+<section id="sec-18">
+  <h2>十八、幕景多 Agent 身份</h2>
+  <p class="note">幕景由多个 Agent 分工协作。晴光已被当前 Agent 阵容替代，不再作为产品级单一助手或默认吉祥物。品牌主标采用门厅形体；各 Agent 使用一致的绿色软形体、白色眼睛与各自轮廓表达职责。</p>
+  <div class="block"><span class="cap">当前身份系统</span>
+    <table><thead><tr><th>身份</th><th>形体</th><th>职责 / 使用位置</th></tr></thead>
+    <tbody>
+      <tr><td>幕景品牌 / 门厅</td><td>绿色软形体 + 白色眼睛</td><td>产品入口与总控；官网、登录页、工作台品牌标志</td></tr>
+      <tr><td>Bingo</td><td>球形</td><td>布置与方案 Agent</td></tr>
+      <tr><td>空间</td><td>立方体形</td><td>场地、场景模板、环境与结构</td></tr>
+      <tr><td>物料</td><td>三棱锥形</td><td>物料库与场景物件</td></tr>
+    </tbody></table>
+  </div>
+  <p class="note">四种形体共用眼睛比例、绿色色阶与轻微表情动效。门厅标志直接复用门厅形体，不叠加旧绿点；Agent 职责由名称和界面文案说明，不靠颜色区分。</p>
+</section><footer>
+  <p class="note">幕景 Scendance · 2026 设计规范 v2.6.16 · 2026-11-03 · 条款与 05-设计规范.md（v2.5.12）一致</p>
+  <p class="note" style="margin-top:6px">v2.6.16：轻字形切换为 Material Symbols Rounded 官方 400 weight 填充 SVG；放大镜组调整为 78% 视觉尺寸；选择、漫游开关固定图形，以选中态显示切换状态。</p>
+</footer>
+
+</div>
+</body>
+</html>
+
+\n
