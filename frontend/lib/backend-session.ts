@@ -1100,6 +1100,19 @@ export class BackendSession {
     if (run.projectId !== projectId || run.requestId !== requestId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
   }
+  /**
+   * 运行中改道：把这句备注交给正在跑的那一趟，工作线程在下一轮模型调用前取走。
+   *
+   * 返回服务端承认的送达总数（steerTotal）。任务已结束会被回 AGENT_RUN_STOPPED——
+   * 那条备注没有执行机会，调用方必须如实告诉用户没送到，不能当成已生效。
+   */
+  async steerAgentRun(runId: string, note: string): Promise<AgentRun> {
+    const projectId = this.snapshot.project?.id;
+    if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
+    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}/notes`, 'POST', { note }));
+    if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
+    return run;
+  }
   async cancelAgentRun(runId: string): Promise<AgentRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);

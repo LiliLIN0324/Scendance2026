@@ -10,7 +10,12 @@
  * 第 8 批增补：生成运行时状态（真步骤时间线 / 运行条三控件 / 空结果回执）。
  * 这一层是纯本机账本，不接大模型、不接 3D；真实接入由后续命令门接线，这里先把
  * UI 要渲染的数据形状和订阅口子定下来。
+ *
+ * 第 11 批增补：账本里多一个「阶段」。阶段名与序号跟服务端共用一份定义
+ * （supabase/functions/_shared/agent-progress.ts），两边不各写一份数字。
  */
+
+import type { AgentPhase } from '../../../../supabase/functions/_shared/agent-progress';
 
 /** 四个格子各自一条线。 */
 export type ChatAgent = 'door' | 'bingo' | 'space' | 'material';
@@ -118,6 +123,9 @@ export interface AgentStepLogEntry {
  * - shouldPauseAfterStep：「跑完这步停」一次性 checkpoint，当前步收尾即停。
  * - stopRequested：「停止」优雅停，等当前步在 turn 边界收尾。
  * - steerNotes：用户在运行条输入框塞进来的备注，按顺序注入下一轮上下文。
+ * - steerDelivered：云端承认已收到的备注总数（run.steerTotal），单调递增。
+ *   它和 steerNotes 是两件事：steerNotes 是「还没送到」的，steerDelivered 是「已经送到、
+ *   会在下一轮生效」的。界面上不能把两者混成一个数，否则用户以为写进去了其实没送到。
  * - emptyOutcome：本轮结束既无输出又无布局改动 → 触发空结果回执卡。
  */
 export interface AgentRunState {
@@ -128,8 +136,23 @@ export interface AgentRunState {
   shouldPauseAfterStep: boolean;
   stopRequested: boolean;
   steerNotes: string[];
+  steerDelivered: number;
   emptyOutcome: boolean;
+  /**
+   * 这一趟推进到哪一段（四段工作：看现状 / 定落点 / 出方案 / 交付）。
+   * 云端的真值，刷新页面重新读档也接得上。拿不到就不显示——阶段是给用户看的
+   * 读数，前端自己分段就是编的。
+   */
+  phase: AgentPhase | null;
+  /**
+   * 这一轮属于哪张脸。四张脸共用一本账本，不分区的话活动脸的运行过程会
+   * 飘到空间/物料脸上——那是别的功能域的事，不该出现在那里。
+   */
+  scope: AgentRunScope;
 }
+
+/** 运行账本的作用域：与四张脸一一对应。 */
+export type AgentRunScope = 'layout' | 'space' | 'material';
 
 const IDLE_RUN: AgentRunState = {
   isRunning: false,
@@ -139,7 +162,10 @@ const IDLE_RUN: AgentRunState = {
   shouldPauseAfterStep: false,
   stopRequested: false,
   steerNotes: [],
+  steerDelivered: 0,
   emptyOutcome: false,
+  phase: null,
+  scope: 'layout',
 };
 
 let run: AgentRunState = { ...IDLE_RUN, stepLog: [], steerNotes: [] };
@@ -162,11 +188,12 @@ export function getAgentRun(): AgentRunState {
 }
 
 /** 开一轮新生成：清掉上一轮的步骤、备注、空结果标记。 */
-export function startAgentRun(): void {
+export function startAgentRun(scope: AgentRunScope = 'layout'): void {
   commitRun({
     ...IDLE_RUN,
     isRunning: true,
     startedAt: Date.now(),
+    scope,
     stepLog: [],
     steerNotes: [],
   });
@@ -196,6 +223,45 @@ export function bumpAgentThought(count = 1): void {
   commitRun({ ...run, thoughtCount: run.thoughtCount + Math.max(1, count) });
 }
 
+/**
+ * 直接把思考条数设成某个值（云端给的是绝对值，不是增量）。
+ *
+ * 云端 AgentRun.call_count 是本轮真实模型调用次数（0–6 轮，上限由
+ * AGENT_CALL_LIMIT 守着）。它是权威读数，前端不用自己数——数出来的永远
+ * 是猜的。设成绝对值也避免了「+1 计数」在轮询重复时越加越多。
+ */
+export function setAgentThoughtCount(count: number): void {
+  const next = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  if (next === run.thoughtCount) return;
+  commitRun({ ...run, thoughtCount: next });
+}
+
+/**
+ * 写当前阶段（云端给的真值）。
+ *
+ * 阶段只前进不后退是服务端那条链路的保证（advancePhase），前端这里照单全收，
+ * 不自己推进——否则刷新一次界面就会退回上一段，看着像进度倒流。
+ * 传 null 表示这趟没有阶段读数（老记录、本机规则模式），界面就不显示阶段。
+ */
+export function setAgentPhase(phase: AgentPhase | null): void {
+  if (phase === run.phase) return;
+  commitRun({ ...run, phase });
+}
+
+/**
+ * 收尾当前那一步：把「这一步从开工到收尾」的墙钟耗时写回账本。
+ *
+ * 步骤是按「进度句变了」记的，所以一步的耗时在**下一步开始时**才知道。
+ * durationMs 传 0 表示这一步还在跑（UI 会用当前时刻减 startedAt 实时显示）。
+ */
+export function closeAgentStep(durationMs: number): void {
+  if (!run.stepLog.length) return;
+  const stepLog = run.stepLog.slice();
+  const last = stepLog[stepLog.length - 1]!;
+  stepLog[stepLog.length - 1] = { ...last, durationMs: Math.max(0, Math.round(durationMs)) };
+  commitRun({ ...run, stepLog });
+}
+
 /** 「跑完这步停」：一次性 checkpoint，当前步跑完即停。 */
 export function setAgentPauseAfterStep(value: boolean): void {
   commitRun({ ...run, shouldPauseAfterStep: value });
@@ -216,6 +282,18 @@ export function pushAgentSteerNote(text: string): void {
 /** 读完 steerNotes 后由调用方清空（避免同一备注被反复注入）。 */
 export function clearAgentSteerNotes(): void {
   commitRun({ ...run, steerNotes: [] });
+}
+
+/**
+ * 把「云端一共收到几条改道备注」写进账本。
+ *
+ * 这个数是服务端的绝对读数（run.steerTotal），不是前端自己加出来的——备注送没送到
+ * 只有服务端知道。轮询会重复读到同一个值，所以设成绝对值才不会越滚越大。
+ */
+export function setAgentSteerDelivered(count: number): void {
+  const next = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  if (next === run.steerDelivered) return;
+  commitRun({ ...run, steerDelivered: next });
 }
 
 /** 空结果回执卡由人/主代理点掉时清掉标记。 */
