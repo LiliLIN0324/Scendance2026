@@ -2,6 +2,7 @@ import { useEffect, useMemo, type RefObject, type MutableRefObject } from 'react
 import { addFloorPlanRepaintHandler, render2DTopDown } from '../canvas-2d/render';
 import { DEFAULT_FLOOR_PLAN_OPACITY } from '../lib/constants';
 import { floorKeepOut, type KeepOutBuilding } from '../lib/floor-keep-out';
+import { isMapReferenceImage } from '../lib/amap-venue';
 import { hasCollisions } from '../lib/geometry';
 import { mountBand } from '../lib/mount-band';
 import { hasNeighbours, lowestGround } from '../lib/site';
@@ -314,6 +315,9 @@ export function useSceneEffects({
         })
       : null;
 
+    // 调研底图已在 3D 地面铺一张连续地图；旧的卫星贴地是另一套坐标，
+    // 继续当地板贴图会盖住扫描场地，这里只停用它、不删用户数据。
+    const legacyGroundMap = !!layout.researchArea && isMapReferenceImage(layout.floorPlanImage);
     for (const { floor, index } of floorsToRender) {
       const isActive = index === activeFloorIndex;
       const wallOpenings = computeWallOpenings(
@@ -342,8 +346,8 @@ export function useSceneEffects({
         wallOpenings,
         ...(floor.hiddenWalls ? { hiddenWalls: floor.hiddenWalls } : {}),
         floorOpenings,
-        floorPlanImage: index === 0 ? layout.floorPlanImage ?? null : null,
-          satelliteGroundRef: index === 0 ? !!layout.satelliteGroundRef : false,
+        floorPlanImage: index === 0 && !legacyGroundMap ? layout.floorPlanImage ?? null : null,
+          satelliteGroundRef: index === 0 && !legacyGroundMap ? !!layout.satelliteGroundRef : false,
         floorPlanOpacity: view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
         floorPlanFitMode: layout.floorPlanFitMode ?? 'stretch',
         floorPlan3DEffect: view.floorPlan3DEffect,
@@ -358,7 +362,7 @@ export function useSceneEffects({
       // exactly when that wall is: not on the traced ground floor (buildRoom
       // builds no walls there) and not when the north wall is hidden — the
       // plan dashes the recess then, like the rest of the wall (#392).
-      const tracedGround = index === 0 && !!layout.floorPlanImage;
+      const tracedGround = index === 0 && !!layout.floorPlanImage && !legacyGroundMap;
       if (entrance && index === entrance.floorIndex && !tracedGround) {
         const northHidden = floor.hiddenWalls?.includes('north') ?? false;
         for (const group of buildEntrance(THREE, {
@@ -393,7 +397,7 @@ export function useSceneEffects({
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
     layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
-    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef,
+    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea,
     layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
     layout.mapGroundPolygon?.length,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
@@ -465,6 +469,16 @@ export function useSceneEffects({
     // direct render would draw the full scene twice per frame while orbiting.
     const apply = () => {
       const changed = applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
+      // 滚轮 dolly 不会走 preset/fit，也就不会刷新远裁剪面：距离超过取景基线 far 后
+      // 底图和场景会被整幅裁掉。这里按「相机到焦点距离 × 2.5」动态抬高 far，
+      // 回到近处时再收回到取景基线，避免白白损失深度精度。
+      const distance = camera.position.distanceTo(controls.target);
+      const baseFar = typeof camera.userData.baseFar === 'number' ? camera.userData.baseFar : camera.far;
+      const neededFar = Math.max(baseFar, distance * 2.5);
+      if (Math.abs(neededFar - camera.far) > 1e-3) {
+        camera.far = neededFar;
+        camera.updateProjectionMatrix();
+      }
       // Walls cast shadows (#132) and the shadow map is static: refresh it
       // when a cutaway flip actually hid/showed a wall — which happens only
       // when the camera crosses a wall plane, not on every orbit frame.

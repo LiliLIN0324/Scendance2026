@@ -10,7 +10,7 @@ interface PresetView {
   target: readonly [number, number, number];
 }
 
-/** 相机焦点框：钳制与取景都跟着它走（docs/49）。null = 跟随「底图概览 ?? 场地」。 */
+/** 相机焦点框：钳制与取景都跟着它走（docs/19）。null = 跟随「底图概览 ?? 场地」。 */
 export interface SceneFocusFrame {
   width: number;
   depth: number;
@@ -103,6 +103,8 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
       const backward = camera.position.clone().set(0, 0, 1).applyQuaternion(camera.quaternion);
       camera.position.addScaledVector(backward, frame.dollyOut);
     }
+    // 记录取景基线：滚轮 dolly 超出它时由 controls change 回调按距离临时放大 far。
+    camera.userData.baseFar = frame.far;
     const farChanged = camera.far !== frame.far;
     if (farChanged) {
       camera.far = frame.far;
