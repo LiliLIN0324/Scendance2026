@@ -53,6 +53,7 @@ import {
 import { proposalDifferences } from '../three/proposal-preview';
 import { useStudioAgent } from './creative-studio';
 import { BingoAuditCard } from './bingo-audit-card';
+import { AgentRunPanel, useAgentRun } from './agent-run-panel';
 import { PlanHome, isPlanHome } from './plan-flow';
 import { SiteCaptureCard } from './site-capture-card';
 import { StyleBundlePanel } from './style-bundle-panel';
@@ -1781,9 +1782,11 @@ function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?
   })}</>;
 }
 
-function GenProgress({ agent, paused }: { agent: AgentValue; paused?: boolean }): JSX.Element {
+function GenProgress({ agent, paused, hidden }: { agent: AgentValue; paused?: boolean; hidden?: boolean }): JSX.Element | null {
   const { layout } = useRoomEditor();
   const n = Math.max(1, agent.progress);
+  // 真实步骤时间线在场时，这套写死的步骤条让位——不同时摆两套进度。
+  if (hidden) return null;
   return <div className="ap-card" id="gen-progress">
     <ol className="ap-steps">{GEN_STEPS.map((step, index) => {
       const done = agent.progress > index + 1;
@@ -1866,6 +1869,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const feed = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const demo = isDemoBackend();
+  // 第 8 批：真实运行账本（云端 AgentRun 写进来的真步骤/真轮数）。
+  const runState = useAgentRun();
   const items = materialCount(activeFloor.items);
   // 空会话要让人先看见顶上那句指路，别一进来就滚到底。
   useEffect(() => {
@@ -1973,7 +1978,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}
       {activity && mode === 'layout' && <>
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={agent.pickFile}>换个文件</button></> : <button type="button" className="chip is-on" onClick={agent.pickFile}>重新选文件</button>}</div>}
-        {(generating || paused) && <GenProgress agent={agent} paused={paused}/>}
+        {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
+            没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
+        <AgentRunPanel scope="layout" controls={false}/>
+        {(generating || paused) && <GenProgress agent={agent} paused={paused} hidden={runState.scope === 'layout' && runState.stepLog.length > 0}/>}
         {agent.state === 'generateFailed' && <div id="inline-error" className="ap-inline-error" role="alert">
           <p><span aria-hidden="true">!</span>这次没出成，场地和设置都还在。可能是网络断了，重试就好。</p>
           <p><button type="button" className="ap-link" onClick={agent.retry}><RotateCw size={16} aria-hidden="true"/>重试</button> · <button type="button" className="ap-link" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button></p>

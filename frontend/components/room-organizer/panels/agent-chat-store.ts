@@ -129,7 +129,15 @@ export interface AgentRunState {
   stopRequested: boolean;
   steerNotes: string[];
   emptyOutcome: boolean;
+  /**
+   * 这一轮属于哪张脸。四张脸共用一本账本，不分区的话活动脸的运行过程会
+   * 飘到空间/物料脸上——那是别的功能域的事，不该出现在那里。
+   */
+  scope: AgentRunScope;
 }
+
+/** 运行账本的作用域：与四张脸一一对应。 */
+export type AgentRunScope = 'layout' | 'space' | 'material';
 
 const IDLE_RUN: AgentRunState = {
   isRunning: false,
@@ -140,6 +148,7 @@ const IDLE_RUN: AgentRunState = {
   stopRequested: false,
   steerNotes: [],
   emptyOutcome: false,
+  scope: 'layout',
 };
 
 let run: AgentRunState = { ...IDLE_RUN, stepLog: [], steerNotes: [] };
@@ -162,11 +171,12 @@ export function getAgentRun(): AgentRunState {
 }
 
 /** 开一轮新生成：清掉上一轮的步骤、备注、空结果标记。 */
-export function startAgentRun(): void {
+export function startAgentRun(scope: AgentRunScope = 'layout'): void {
   commitRun({
     ...IDLE_RUN,
     isRunning: true,
     startedAt: Date.now(),
+    scope,
     stepLog: [],
     steerNotes: [],
   });
@@ -194,6 +204,33 @@ export function appendAgentStep(entry: AgentStepLogEntry): void {
 /** 模型每出一段自述思考 +1，用来驱动头部"N 条思考"。 */
 export function bumpAgentThought(count = 1): void {
   commitRun({ ...run, thoughtCount: run.thoughtCount + Math.max(1, count) });
+}
+
+/**
+ * 直接把思考条数设成某个值（云端给的是绝对值，不是增量）。
+ *
+ * 云端 AgentRun.call_count 是本轮真实模型调用次数（0–6 轮，上限由
+ * AGENT_CALL_LIMIT 守着）。它是权威读数，前端不用自己数——数出来的永远
+ * 是猜的。设成绝对值也避免了「+1 计数」在轮询重复时越加越多。
+ */
+export function setAgentThoughtCount(count: number): void {
+  const next = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  if (next === run.thoughtCount) return;
+  commitRun({ ...run, thoughtCount: next });
+}
+
+/**
+ * 收尾当前那一步：把「这一步从开工到收尾」的墙钟耗时写回账本。
+ *
+ * 步骤是按「进度句变了」记的，所以一步的耗时在**下一步开始时**才知道。
+ * durationMs 传 0 表示这一步还在跑（UI 会用当前时刻减 startedAt 实时显示）。
+ */
+export function closeAgentStep(durationMs: number): void {
+  if (!run.stepLog.length) return;
+  const stepLog = run.stepLog.slice();
+  const last = stepLog[stepLog.length - 1]!;
+  stepLog[stepLog.length - 1] = { ...last, durationMs: Math.max(0, Math.round(durationMs)) };
+  commitRun({ ...run, stepLog });
 }
 
 /** 「跑完这步停」：一次性 checkpoint，当前步跑完即停。 */

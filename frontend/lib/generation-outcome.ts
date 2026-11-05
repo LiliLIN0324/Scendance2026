@@ -22,10 +22,10 @@ export interface GenerationReport {
   /** 本次落盘 + 体检耗时（毫秒）。 */
   durationMs?: number;
   /**
-   * AI 思考轮数。
+   * 本次生成的模型调用轮数。
    *
-   * 真实轮数只在服务端会话能报出来时才有；拿不到就留空，卡上不显示这一行，
-   * 不拿「预览帧数」冒充思考轮数。
+   * 取云端 `AgentRun.call_count` 的真值（0–6 轮，由 AGENT_CALL_LIMIT 守着），
+   * 不是前端自己数的，也不是拿别的数字顶替的。拿不到就整行不渲染。
    */
   rounds?: number;
 }
