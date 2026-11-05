@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useReducer } from 'react';
 import {
   addAnnotation as addAnnotationToDraft,
-  clearAllAnnotations,
   createEmptyPlanDraft,
   type LayoutPlanDraft,
   type PlanAnnotation,
@@ -47,7 +46,8 @@ function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationStat
       };
     case 'CLEAR_DRAFT':
       if (!state.draft) return state;
-      return { ...state, draft: clearAllAnnotations(state.draft) };
+      // 取消/换一版必须整份关闭（draft 置 null），否则空草案会永远卡在「还没有阶段」。
+      return { ...state, draft: null, drawMode: 'off' };
     case 'REPLACE_DRAFT':
       return { ...state, draft: action.draft, nextId: 1 };
     case 'TOGGLE_VISIBLE':
