@@ -17,16 +17,16 @@ npm run smoke:edge
 
 `npm run check` 用 PGlite 的真实 PostgreSQL 引擎执行迁移、事务、角色授权、权限和 HTTP 契约测试；它不能替代完整 Supabase Auth/Storage/PostgREST 的联调和多连接并发验收。
 
-完整本地服务需要 Docker：按 [部署说明](docs/35-本地运行与云端维护.md) 启动 Supabase，再配置真实本地 Auth 账号。付费接口未配置时返回 `503`，不伪造生成结果。
+完整本地服务需要 Docker：按 [部署说明](docs/archive/legacy/2026-10-02-本地运行与维护.md) 启动 Supabase，再配置真实本地 Auth 账号。付费接口未配置时返回 `503`，不伪造生成结果。
 
 ## 开发交接
 
-- [后端设计与数据规则](docs/32-后端设计.md)
-- [用自己的 Supabase 项目当后端（tutorial）](docs/37-自建Supabase教程.md)
-- [HTTP API、场景格式与前端接入](docs/31-HTTP-API与前端接入.md)
-- [本地运行、云端部署与故障恢复](docs/35-本地运行与云端维护.md)
-- [最近修复与验收](docs/archive/DEBUG1003_REPAIR_REPORT.md)；首次后端配置阶段的历史验证见 [归档记录](docs/archive/VERIFICATION.md)
-- [完整 AI 系统提示词](docs/29-AI系统提示词.md)
+- [后端设计与数据规则](docs/14-后端设计.md)
+- [用自己的 Supabase 项目当后端（tutorial）](docs/archive/legacy/2026-11-04-自建Supabase教程.md)
+- [HTTP API、场景格式与前端接入](docs/13-HTTP-API与前端接入.md)
+- [本地运行、云端部署与故障恢复](docs/archive/legacy/2026-10-02-本地运行与维护.md)
+- [最近修复与验收](docs/archive/report/2026-10-09-debug1003修复.md)；首次后端配置阶段的历史验证见 [归档记录](docs/archive/report/2026-10-09-本轮验证记录.md)
+- [完整 AI 系统提示词](docs/11-AI系统提示词.md)
 - [前端请求与旧提案保护辅助代码](client/scene-client.ts)
 
 ## 目录
