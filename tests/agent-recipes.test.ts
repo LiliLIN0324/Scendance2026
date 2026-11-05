@@ -29,6 +29,12 @@ describe('brief 命中哪一类配方', () => {
     expect(kinds('   ')).toEqual(['generic']);
   });
 
+  it('一老一小 / 口袋公园 落到代际共用园，且优先于单纯老人或亲子', () => {
+    expect(only('做一老一小共用的口袋公园').kind).toBe('intergenerational');
+    expect(only('祖孙一起的共享空间').kind).toBe('intergenerational');
+    expect(only('全龄共享的口袋公园').kind).toBe('intergenerational');
+  });
+
   it('亲子市集返回两条，且人群类配方排在前面', () => {
     const result = matchRecipes('亲子市集');
     expect(result).toHaveLength(2);
@@ -59,9 +65,9 @@ describe('渲染成提示词片段', () => {
 });
 
 describe('配方数据本身的完整性', () => {
-  it('七类配方都在，且每类判据条数够用', () => {
+  it('八类配方都在，且每类判据条数够用', () => {
     expect(ACTIVITY_RECIPES.map(recipe => recipe.kind)).toEqual([
-      'family', 'elder', 'market', 'stage', 'camp', 'exhibition', 'generic',
+      'family', 'elder', 'intergenerational', 'market', 'stage', 'camp', 'exhibition', 'generic',
     ]);
     for (const recipe of ACTIVITY_RECIPES) {
       expect(recipe.hardRules.length).toBeGreaterThanOrEqual(4);

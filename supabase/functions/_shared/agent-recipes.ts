@@ -10,7 +10,7 @@
  * 每条规则的 note 开头标明来源级别（A 国标 / B 地方或公安口径 / C 经验值）。
  */
 
-export type ActivityKind = 'family' | 'elder' | 'market' | 'stage' | 'camp' | 'exhibition' | 'generic';
+export type ActivityKind = 'family' | 'elder' | 'intergenerational' | 'market' | 'stage' | 'camp' | 'exhibition' | 'generic';
 
 /** 分区：key 供程序引用，share 是相对面积占比（百分数整数），adjacency 写前后左右关系。 */
 export interface RecipeZone {
@@ -52,7 +52,7 @@ export interface ActivityRecipe {
 
 /** 人群限定类配方（亲子 / 适老）在同等命中长度下优先：人群约束比场景名词更具体。 */
 const KIND_WEIGHT: Record<ActivityKind, number> = {
-  family: 1.2, elder: 1.2, market: 1, stage: 1, camp: 1, exhibition: 1, generic: 0.5,
+  family: 1.2, elder: 1.2, intergenerational: 1.2, market: 1, stage: 1, camp: 1, exhibition: 1, generic: 0.5,
 };
 
 const family: ActivityRecipe = {
@@ -152,6 +152,61 @@ const elder: ActivityRecipe = {
     '所有高差处有坡道且平台 ≥2 格',
   ],
   objects: ['靠背座椅', '扶手', '坡道', '轮椅停留位', '遮荫乔木', '标识牌'],
+};
+
+/**
+ * 一老一小共用：不是「老人区 + 儿童区」两块的简单相加，而是两块必须互相看得见、
+ * 各自有屏障、中间有一条婴儿车与轮椅能并行的过渡带。这是多代共融空间的核心矛盾——
+ * 老人要稳定遮荫、安静、避风，孩子要日照、跑跳、攀爬，判定主要落在「视线通透」与
+ * 「代际通道净宽」上，而不是把两块地各自做好就行。
+ */
+const intergenerational: ActivityRecipe = {
+  kind: 'intergenerational',
+  label: '一老一小共用园',
+  aliases: ['一老一小', '代际', '多代', '老幼', '祖孙', '共享空间', '全龄', '口袋公园', '老小'],
+  intent: '让老人坐着就能一眼看到孩子，中间那条路婴儿车和轮椅能并行',
+  operations: [
+    '老人区靠上风避风、儿童区靠日照，两块之间用一条 2 格宽视线带连接，中间不放 ≥1 格高的遮挡',
+    '老人座椅面向儿童区，视线带内不种高灌木——看得到比挨得近更重要',
+  ],
+  zones: [
+    { key: 'elder', label: '老人休憩带', share: 40, adjacency: '靠避风一侧，座椅面向儿童区' },
+    { key: 'child', label: '儿童活动区', share: 40, adjacency: '靠日照一侧，边缘有围合' },
+    { key: 'link', label: '代际视线带', share: 20, adjacency: '夹在两区之间，净宽 ≥2 格、视线通透' },
+  ],
+  layout: [
+    '先定代际视线带：2 格宽、不放 ≥1 格高遮挡，老人区座椅到儿童区核心 ≤20 格',
+    '老人区每 3–4 座配一处 1×2 格轮椅停靠，座椅带靠背与扶手、背靠树或矮墙',
+    '儿童区边缘用连续矮墙或护栏围合，开口只留一个、对着老人区',
+    '老人区遮荫 ≥60%、儿童区留日照，交界处用乔木做渐变过渡',
+  ],
+  hardRules: [
+    { id: 'IG-01', check: '代际通道净宽 ≥2 格（轮椅 + 婴儿车并行）', cells: 2, note: 'A级 GB 50763-2012 §3.5.1' },
+    { id: 'IG-02', check: '老人区到儿童区核心的看护视距 ≤20 格', cells: 20, note: 'C级 经验值（合肥实践降高 20 m 口径）' },
+    { id: 'IG-03', check: '视线带内遮挡物高 ≤0.5 格，不得有连续高灌木或实墙', cells: 1, note: 'C级 经验值' },
+    { id: 'IG-04', check: '儿童区边缘有连续围合，护栏高 ≥1 格且不留缺口', cells: 1, note: 'A级 GB 34272 类（平台 0.6–1 m 时护栏 ≥600 mm）' },
+    { id: 'IG-05', check: '老人区每 3–4 座配 ≥1 处 1×2 格轮椅停靠位', cells: 2, note: 'B级 地方适老化导则' },
+    { id: 'IG-06', check: '任一无障碍通道净宽 ≥2 格，轮椅回转留 2×2 格空区', cells: 2, note: 'A级 GB 50763-2012 §3.5.1、§3.11.2' },
+  ],
+  softRules: [
+    { id: 'IG-07', check: '老人区遮荫 ≥60%（按格数统计）', cells: 60, note: 'C级 经验值，未能核实标准号' },
+    { id: 'IG-08', check: '休息点沿步道间隔 ≤50 格', cells: 50, note: 'B/C级 冬奥无障碍指南口径' },
+    { id: 'IG-09', check: '儿童活动区底线面积 ≥20 格', cells: 20, note: 'C级 经验值' },
+    { id: 'IG-10', check: '老人座椅带靠背，座面高 0.4–0.5 格、带扶手', cells: 1, note: 'B级 地方适老化导则（高度类，格制以有无靠背扶手代判）' },
+  ],
+  antiPatterns: [
+    '不要把老人区和儿童区做成互不相望的两块，中间还种一排高灌木，否则看护形同虚设',
+    '不要用「一段护栏」就围合儿童区，否则缺口就是通道，孩子能从那里跑出去',
+    '不要给老人区也做全日照，否则遮荫不足老人不愿久坐',
+    '不要在代际通道上摆桌椅或花坛，否则婴儿车与轮椅无法并行',
+  ],
+  completionChecks: [
+    '老人座椅到儿童区核心视距 ≤20 格，视线带内无 ≥1 格高遮挡',
+    '代际通道全程净宽 ≥2 格，无物件侵占',
+    '儿童区边缘围合连续无缺口，开口只对老人区',
+    '老人区有 ≥60% 遮荫，每 3–4 座配轮椅停靠位',
+  ],
+  objects: ['靠背座椅', '扶手', '矮墙护栏', '轮椅停靠位', '遮荫乔木', '儿童游乐设施', '柔性铺装'],
 };
 
 const market: ActivityRecipe = {
@@ -368,6 +423,7 @@ const generic: ActivityRecipe = {
     '沿通道外扩 2 格作为物件缓冲带',
     '大件靠边、小件居中，每 15 格留 2×2 格回转点',
     '悬挂物与棚架底边留 3 格净高',
+    '面积不足时按 安全 > 可达 > 舒适 > 美观 的顺序砍，砍掉的可达/舒适项要在 explanation 里说清',
   ],
   hardRules: [
     { id: 'GEN-01', check: '室外通行净宽 ≥2 格（室内 ≥2 格）', cells: 2, note: 'A级 GB 50763-2012 §3.5.1' },
@@ -379,24 +435,27 @@ const generic: ActivityRecipe = {
     { id: 'GEN-02', check: '主要人流通道 ≥2 格', cells: 2, note: 'A级 GB 50763-2012 §3.5.1-1' },
     { id: 'GEN-07', check: '临时设施距固定建筑外墙 ≥3 格', cells: 3, note: 'C级 经验值 + 消防车道禁占' },
     { id: 'EXH-11', check: '物件距出入口 ≥3 格作集散缓冲', cells: 3, note: 'C级 经验值（借用展览场景的集散缓冲口径）' },
+    { id: 'CN-02', check: '任一功能区低于最小可行尺度（如儿童区 <20 格、轮椅回转 <2×2 格）时应显式报告「放不下」而非硬塞', cells: 20, note: 'C级 经验值' },
   ],
   antiPatterns: [
     '不要先摆物件再找通道，主通道会被挤到 1 格',
     '不要把物件压住消防设施 2 格净空',
     '不要在唯一出入口前堆物',
     '不要把悬挂物降到 3 格净高以下',
+    '不要为了凑齐需求数量把物件硬塞进通道或缓冲带，否则安全项先崩；放不下就如实说明并给降级方案',
   ],
   completionChecks: [
     '主通道 ≥3 格且两端通到出入口',
     '出入口 ≥2 个',
     '任意物件与墙、与他物之间 ≥1 格',
     '所有悬挂物底边 ≥3 格',
+    '面积不足时已说明哪些需求被降级或未满足',
   ],
   objects: ['桌椅', '隔断', '标识牌', '绿植', '垃圾桶', '照明'],
 };
 
 /** 全部配方，顺序即同分时的先后次序。 */
-export const ACTIVITY_RECIPES: ActivityRecipe[] = [family, elder, market, stage, camp, exhibition, generic];
+export const ACTIVITY_RECIPES: ActivityRecipe[] = [family, elder, intergenerational, market, stage, camp, exhibition, generic];
 
 const GENERIC = generic;
 
