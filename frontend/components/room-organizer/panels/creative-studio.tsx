@@ -23,6 +23,7 @@ import { STORAGE_KEY } from '../lib/constants';
 import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARDS, INITIAL_BRIEF, isBlankBriefScaffold, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { buildReviewReference } from '../lib/review-copy';
+import { appendAgentStep, closeAgentStep, endAgentRun, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend } from '../lib/workbench-agent';
@@ -752,8 +753,26 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     let result=initial;
     const pollingDeadline=Date.now()+120_000;
     const active=()=>alive.current&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current;
+    // 第 8 批：把云端这一趟写成运行时账本——头部「N 条思考」用的是云端给的
+    // 真实模型调用轮数（call_count，上限 6 轮），步骤流用的是云端自己写的
+    // 进度句（每次工具调用一条中文步骤）。前端不自己编进度。
+    startAgentRun('layout');
+    let lastProgress='';
+    let stepStartedAt=Date.now();
+    const publish=(now:number):void=>{
+      const progress=(result.progress??'').trim();
+      if(progress&&progress!==lastProgress){
+        if(lastProgress)closeAgentStep(now-stepStartedAt);
+        lastProgress=progress;
+        stepStartedAt=now;
+        // 这一趟在确认前不改画布，所以每一步都是只读步——不装成写入步。
+        appendAgentStep({toolName:progress,durationMs:0,isReadonly:true,startedAt:now});
+      }
+      setAgentThoughtCount(result.callCount);
+    };
     while(active()){
       setRun(result);
+      publish(Date.now());
       const marker=markerRef.current;
       if(marker){try{rememberRun({...marker,runId:result.id},submittedScope);}catch{setNotice('任务已提交，但本机记录更新失败；请保持页面打开。');}}
       if(!['queued','running'].includes(result.state))break;
@@ -762,6 +781,9 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       if(!active())return;
       result=await controller.getAgentRun(result.id);
     }
+    if(lastProgress)closeAgentStep(Date.now()-stepStartedAt);
+    // 本轮既没给候选也没改动画布 → 出空结果回执卡，不许沉默结束。
+    endAgentRun({emptyOutcome:!result.candidates.length});
     if(active())await consumeRun(result,base,submittedBrief,submittedScope,allowDirect,epoch);
   }
   async function recoverRun():Promise<void> {

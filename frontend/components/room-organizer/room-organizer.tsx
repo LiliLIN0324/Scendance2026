@@ -9,6 +9,7 @@ import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
+import { getAgentRun } from './panels/agent-chat-store';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
 import {
   executeSceneCommand,
@@ -2159,6 +2160,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
     };
     if (hasOutcomeChanges(outcome)) {
+      // 第 8 批：模型轮数取云端那一趟的真值（AgentRun.call_count），
+      // 拿不到就不写 —— 完成卡不编数字。
+      const lastRun = getAgentRun();
+      const rounds = lastRun.scope === 'layout' && lastRun.thoughtCount > 0 ? lastRun.thoughtCount : undefined;
       const report = buildGenerationReport({
         score: bingoScore,
         placedCount: placedItems.length,
@@ -2168,6 +2173,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         stuckCount: bingoScore.stuckCount,
         areaM2: finalLayout.width * finalLayout.height,
         durationMs: Date.now() - applyStartedAt,
+        ...(rounds === undefined ? {} : { rounds }),
       });
       applyOutcome({ ...outcome, report });
     }
