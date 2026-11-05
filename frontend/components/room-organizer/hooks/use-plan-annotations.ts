@@ -6,6 +6,7 @@ import {
   type PlanAnnotation,
   type PlanAnnotationKind,
   type PlanPoint,
+  type ZoneSemanticType,
 } from '../../../lib/plan-annotation';
 
 /** 绘制模式：off 表示不在画标注；其余三种对应标注 kind。 */
@@ -89,6 +90,7 @@ export interface UsePlanAnnotationsResult {
     points: PlanPoint[],
     kind: PlanAnnotationKind,
     label: string,
+    zoneType?: ZoneSemanticType,
   ): void;
 }
 
@@ -113,7 +115,7 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
   );
 
   const addAnnotationFromPoints = useCallback(
-    (points: PlanPoint[], kind: PlanAnnotationKind, label: string) => {
+    (points: PlanPoint[], kind: PlanAnnotationKind, label: string, zoneType?: ZoneSemanticType) => {
       if (!state.draft || points.length === 0) return;
       const id = `ann-${state.nextId}`;
       // 默认挂到现有最大阶段号；没有阶段时落 1。
@@ -142,7 +144,14 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
         geometry = { kind: 'measure', from, to };
       }
 
-      const annotation: PlanAnnotation = { id, kind, label, stageNo, geometry };
+      const annotation: PlanAnnotation = {
+        id,
+        kind,
+        label,
+        stageNo,
+        geometry,
+        ...(kind === 'zone' && zoneType ? { zoneType } : {}),
+      };
       dispatch({ type: 'ADD_ANNOTATION', annotation });
     },
     [state.draft, state.nextId],

@@ -142,8 +142,8 @@ import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
 import { estimateCapacity } from '@/lib/capacity-meter';
 import { computeBingoScore } from '@/lib/bingo-score';
-import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, type PlanPoint } from '@/lib/plan-annotation';
-import { planZoneApprovals } from '@/lib/plan-approve';
+import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
+import { planZones } from '@/lib/plan-approve';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
 import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -215,6 +215,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const planAnnot = usePlanAnnotations();
   // 第 10 批「批注→施工」：正在画但还没落地的临时点（世界坐标），喂给 PlanOverlay 做跟随反馈。
   const [draftPoints, setDraftPoints] = useState<PlanPoint[]>([]);
+  // 第 11 批：当前要画的 zone 语义类型（决定批准时落什么家具）。
+  const [zoneType, setZoneType] = useState<ZoneSemanticType>('roundtable');
   // canvas 尺寸变化（view 切到 2D / 窗口缩放）时 bump，触发 overlay 重算 transform。
   const [overlayTick, setOverlayTick] = useState(0);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
@@ -1344,15 +1346,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       e.preventDefault();
       e.stopPropagation();
       if (w && Math.hypot(w.x - zoneStart.x, w.z - zoneStart.z) > 0.1) {
+        // 第 11 批：按当前选中的语义类型落标签；画完不退出，可连续画多个框。
         planAnnot.addAnnotationFromPoints(
           [zoneStart, w],
           'zone',
-          ANNOTATION_PRESET_LABELS.roundtable,
+          ZONE_SEMANTIC_LABELS[zoneType],
+          zoneType,
         );
       }
       zoneStart = null;
       setDraftPoints([]);
-      planAnnot.setDrawMode('off');
+      // 不再 setDrawMode('off')——连续画框；退出靠 Esc 或再点一次标注钮。
     };
 
     const finishRoute = (): void => {
@@ -1384,6 +1388,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (planAnnot.drawMode === 'route' && e.key === 'Enter') {
         finishRoute();
       }
+      // 第 11 批：Esc 随时退出绘制（zone 连续画框时用它收尾）。
+      if (e.key === 'Escape' && planAnnot.drawMode !== 'off') {
+        planAnnot.setDrawMode('off');
+        setDraftPoints([]);
+      }
     };
 
     canvas.addEventListener('pointerdown', onPointerDown, true);
@@ -1405,6 +1414,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     clientToWorld2D,
     planAnnot.addAnnotationFromPoints,
     planAnnot.setDrawMode,
+    zoneType,
   ]);
 
   // canvas 挂载 / 尺寸变化时 bump overlayTick，让 PlanOverlay 用真实 transform 重算。
@@ -2897,7 +2907,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 draftPoints={draftPoints}
               />
             )}
-            {/* 集成接线：规划草案浮层（右侧卡）。批准真执行——zone 标注落成圆桌+椅子，经命令门 + settle 收敛。 */}
+            {/* 第 11 批：正在画区时，底部浮出语义类型选择条（连续画框中随时切换）。 */}
+            {view.view2D && planAnnot.drawMode === 'zone' && (
+              <div className="sc-zone-picker" role="toolbar" aria-label="标注区类型">
+                {(Object.keys(ZONE_SEMANTIC_LABELS) as ZoneSemanticType[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={zoneType === key}
+                    className={zoneType === key ? 'is-active' : ''}
+                    onClick={() => setZoneType(key)}
+                  >
+                    {ZONE_SEMANTIC_LABELS[key]}
+                  </button>
+                ))}
+                <span className="sc-zone-picker__hint">拖框即画，可连续画；Esc 收尾</span>
+              </div>
+            )}
             {planAnnot.draft && (planAnnot.draft.stages.length > 0 || planAnnot.draft.annotations.length > 0) && (
               <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
                 <PlanCard
@@ -2911,43 +2937,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                       planAnnot.clearDraft();
                       return;
                     }
-                    const placements = planZoneApprovals(zoneAnnotations, 0.5);
+                    const { placements, skipped } = planZones(zoneAnnotations, 0.5);
                     if (placements.length === 0) {
-                      notify('标注区太小，摆不下桌椅，请扩大标注范围', 'error');
+                      notify(
+                        skipped.map((s) => s.reason).join('；') || '标注区太小，摆不下家具，请扩大标注范围',
+                        'error',
+                      );
                       return;
                     }
                     const opId = `approve-${Date.now()}`;
                     const stamp = { source: 'ai' as const, opId };
                     const newItems: FurnitureItem[] = placements.map((p, idx) => {
-                      const baseId = `approve-${p.kind}-${idx}-${Date.now().toString(36)}`;
-                      if (p.kind === 'table') {
-                        return {
-                          id: baseId,
-                          type: 'dining-table',
-                          name: '圆桌',
-                          width: 1.2,
-                          depth: 1.2,
-                          height: 0.75,
-                          color: '#A0522D',
-                          icon: '🟫',
-                          position: { x: p.x, z: p.z },
-                          rotation: 0,
-                          category: 'tables',
-                          provenance: stamp,
-                        } as FurnitureItem;
-                      }
+                      const baseId = `approve-${p.spec.type}-${idx}-${Date.now().toString(36)}`;
                       return {
                         id: baseId,
-                        type: 'dining-chair',
-                        name: '餐椅',
-                        width: 0.45,
-                        depth: 0.45,
-                        height: 0.9,
-                        color: '#5D4037',
-                        icon: '🪑',
+                        type: p.spec.type,
+                        name: p.spec.name,
+                        width: p.spec.width,
+                        depth: p.spec.depth,
+                        height: p.spec.height,
+                        color: p.spec.color,
+                        icon: p.spec.icon,
                         position: { x: p.x, z: p.z },
                         rotation: p.rotation,
-                        category: 'seating',
+                        category: p.spec.category,
                         provenance: stamp,
                       } as FurnitureItem;
                     });
@@ -2973,8 +2986,26 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                     actions.applyLayout(settleReport.layout);
                     const placedCount = newItems.length - result.refused.length;
                     const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
+                    // 第 11 批：回执说人话——按名统计落了什么、被拒为什么、哪个区没摆下。
+                    const nameCounts = new Map<string, number>();
+                    for (const p of placements) {
+                      nameCounts.set(p.spec.name, (nameCounts.get(p.spec.name) ?? 0) + 1);
+                    }
+                    const doneText = [...nameCounts.entries()].map(([name, n]) => `${name} ${n} 件`).join('、');
+                    const REFUSED_HUMAN: Record<string, string> = {
+                      OUT_OF_BOUNDS: '超出场地边界',
+                      WALL_INTERSECTION: '压住墙体',
+                      BBOX_OVERLAP: '压住现有家具',
+                      FLOOR_OUT_OF_RANGE: '不在本层',
+                    };
+                    const refusedText = result.refused.length
+                      ? `；${result.refused.length} 件未放（${[
+                          ...new Set(result.refused.map((r) => REFUSED_HUMAN[r.code] ?? r.code)),
+                        ].join('、')}）`
+                      : '';
+                    const skippedText = skipped.length ? `；${skipped.map((s) => s.reason).join('；')}` : '';
                     notify(
-                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件家具，${movedCount} 处堵点已自动挪开`,
+                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件（${doneText}），${movedCount} 处堵点已自动挪开${refusedText}${skippedText}`,
                       'success',
                     );
                     planAnnot.clearDraft();
