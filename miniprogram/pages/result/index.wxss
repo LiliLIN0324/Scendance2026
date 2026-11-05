@@ -1,0 +1,252 @@
+page {
+  background: #0B0C0B;
+}
+
+.page {
+  position: relative;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: calc(env(safe-area-inset-top) + 32rpx) 24rpx calc(env(safe-area-inset-bottom) + 32rpx);
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  background: linear-gradient(180deg, #0C0D0C 0%, #151614 100%);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+
+/* 11 / 13：失败态用径向黑底，不拿场地照片撒谎；卡片垂直居中。 */
+.page--fail {
+  justify-content: center;
+  padding-top: env(safe-area-inset-top);
+  background: radial-gradient(120% 90% at 50% 32%, #151715 0%, #0A0B0A 62%, #070807 100%);
+}
+
+/* 09 底图：场内照片 blur(16px) + brightness(.42)，边缘外扩 24px 遮住虚化毛边。 */
+.backdrop {
+  position: absolute;
+  top: -24px;
+  left: -24px;
+  width: calc(100% + 48px);
+  height: calc(100% + 48px);
+  pointer-events: none;
+  filter: blur(16px) brightness(.42);
+}
+
+.layer {
+  z-index: 0;
+}
+
+.card,
+.preview-grid,
+.link,
+.fail {
+  position: relative;
+  z-index: 1;
+}
+
+.card {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.note {
+  font-size: 24rpx;
+  line-height: 1.7;
+  font-weight: 400;
+  color: var(--b-w3);
+}
+
+.progress-card {
+  gap: 20rpx;
+}
+
+.progress-card.is-stalled .bar__fill {
+  background: var(--b-amber);
+}
+
+.progress-thumb {
+  display: block;
+  width: 124px;
+  height: 96px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1a1c1a;
+}
+
+/* 09：标题在卡内，25px / 500，与设计稿一致。 */
+.progress-title {
+  font-size: 48rpx;
+  line-height: 1.42;
+  font-weight: 500;
+  color: var(--b-w1);
+}
+
+.progress-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-eta {
+  font-size: 24rpx;
+  line-height: 1.2;
+  color: var(--b-w3);
+}
+
+/* 3px 进度条：轨道 .12，填充 .72，与 token 一致；不用 TDesign progress 的默认外观。 */
+.bar {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.bar__fill {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.72);
+  transition: width 900ms linear;
+}
+
+.progress-note {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--b-w3);
+}
+
+.progress-note.is-warn {
+  color: var(--b-amber);
+}
+
+/* 上传 / 重建 / 失败：内容整体垂直居中，别把卡片吊在状态栏底下。 */
+.page--center {
+  justify-content: center;
+  padding-top: env(safe-area-inset-top);
+}
+
+.back {
+  width: 44px;
+  height: 44px;
+  margin-left: -6px;
+  display: flex;
+  align-items: center;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.preview {
+  width: 100%;
+  height: 156px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1a1c1a;
+}
+
+.size {
+  display: flex;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.size__num {
+  font-size: 48rpx;
+  line-height: 1.42;
+  font-weight: 500;
+  color: var(--b-w1);
+}
+
+.size__unit {
+  padding-bottom: 8rpx;
+  font-size: 24rpx;
+  font-weight: 400;
+  color: var(--b-w3);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.link {
+  display: flex;
+}
+
+/* 产物：两个等宽方形按钮（GLB / 原件），自绘，不用 TDesign cell 的默认行样式。 */
+.artifacts {
+  display: flex;
+  gap: 12px;
+}
+
+.artifact {
+  flex: 1;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 120ms ease-out;
+}
+
+.artifact--down {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.artifact__label {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--b-w1);
+}
+
+.fail {
+  gap: 16rpx;
+}
+
+.fail__title {
+  font-size: 48rpx;
+  line-height: 1.42;
+  font-weight: 500;
+  color: var(--b-amber);
+}
+
+.fail__cause {
+  font-size: 28rpx;
+  line-height: 1.7;
+  color: var(--b-w2);
+}
+
+.fail__eta {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--b-w3);
+}
+
+.fail__refund {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--b-w2);
+}
+
+.fail__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.fail__exit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  font-size: 24rpx;
+  color: var(--b-w3);
+}

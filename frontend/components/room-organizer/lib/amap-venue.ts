@@ -1,4 +1,4 @@
-import type { RoomLayout } from './types';
+import type { RoomLayout, SceneAnchor } from './types';
 import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
 import { RECON_MATERIAL_BAN } from './site-recon-mock';
@@ -348,6 +348,23 @@ export function frameForExistingShell(polygon: AmapPoint[], shell?: { x: number;
 }
 
 /**
+ * 旧圈画框架 → 场景锚点（docs/49）。frame 的 lng0 是西缘经度、lat0 是壳体 z=0 的纬度
+ * （latSign=-1 即北缘）；壳体中心就是世界原点。metersPerUnit = 1/scale（壳体缩小时
+ * 1 个世界单位对应更多真实米）。圈画流程写 frame 的地方必须同时写它，锚点是正源。
+ */
+export function anchorFromMapFrame(frame: MapGroundFrame, widthM: number, depthM: number): SceneAnchor {
+  const scale = frame.scale > 0 ? frame.scale : 1;
+  // latSign 是 z 轴的纬度方向：-1 时 z=0 在北缘（lat0 北），中心 = lat0 − 半个壳深；+1 反之。
+  const sign = frame.latSign ?? 1;
+  return {
+    lng: frame.lng0 + widthM / (2 * scale * metersPerDegreeLng(frame.latMid)),
+    lat: frame.lat0 + sign * depthM / (2 * scale * METERS_PER_DEGREE_LAT),
+    orientationDeg: 0,
+    metersPerUnit: 1 / scale,
+  };
+}
+
+/**
  * 旧圈画把地理北放在 z 最大的一边，平面图上沿却是 z=0。
  * 打开存档时把顶点翻到北在上，并换成同一套帧。已经朝北的原样返回。
  */
@@ -373,7 +390,10 @@ export function orientMapShellNorthUp(layout: RoomLayout): RoomLayout {
     ...layout,
     ...(venue ? { backendVenue: venue } : {}),
     ...(scene ? { backendSceneV2: scene } : {}),
-    ...(registration ? { mapGroundFrame: registration.frame } : {}),
+    ...(registration ? {
+      mapGroundFrame: registration.frame,
+      sceneAnchor: anchorFromMapFrame(registration.frame, layout.width, layout.height),
+    } : {}),
   };
 }
 
@@ -605,6 +625,8 @@ export interface SatelliteGroundPatch {
   mapGroundPolygon?: AmapPoint[];
   mapLngLat?: { lng: number; lat: number };
   mapGroundFrame?: MapGroundFrame;
+  /** 场景锚点（docs/49）：与 mapGroundFrame 同源推出，锚点是正源、frame 是派生旧字段。 */
+  sceneAnchor?: SceneAnchor;
 }
 
 /**
@@ -628,6 +650,7 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
         mapGroundPolygon: located,
         mapLngLat: centroid(located),
         mapGroundFrame: frame,
+        sceneAnchor: anchorFromMapFrame(frame, layout.width, layout.height),
       };
     }
   }
@@ -668,6 +691,7 @@ export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGr
     ...(patch.mapGroundPolygon ? { mapGroundPolygon: patch.mapGroundPolygon } : {}),
     ...(patch.mapLngLat ? { mapLngLat: patch.mapLngLat } : {}),
     ...(patch.mapGroundFrame ? { mapGroundFrame: patch.mapGroundFrame } : {}),
+    ...(patch.sceneAnchor ? { sceneAnchor: patch.sceneAnchor } : {}),
   };
 }
 
@@ -716,7 +740,10 @@ export function createVenueFromPick(
   const registration = groundRegistration(pick.polygon);
   let layout: RoomLayout = {
     ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon),
-    ...(registration ? { mapGroundFrame: registration.frame } : {}),
+    ...(registration ? {
+      mapGroundFrame: registration.frame,
+      sceneAnchor: anchorFromMapFrame(registration.frame, safeWidth, safeDepth),
+    } : {}),
   };
   if (pick.satelliteGround) {
     const raw = pick.satelliteGroundImage?.trim() ?? '';

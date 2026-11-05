@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Box,
   Camera,
   Check,
   ClipboardCheck,
@@ -31,12 +32,24 @@ import {
   Video,
   X,
 } from '@/components/solid-icons';
+import { CoverageDial } from './coverage-dial';
+import { ReceiptCard } from './receipt-card';
+import { SceneExport } from './scene-export';
+import { PriceCard } from '../pay/price-card';
 import {
   analyseImageFile,
   analyseVideoFile,
   duplicateIdsFor,
   type AnalyzedImage,
 } from '@/lib/capture-guide/image-analysis';
+import {
+  inferLayerFromDeviceTilt,
+  judgeShot,
+  nextShotAdvice,
+  recommendCaptureMode,
+  type VenueSize,
+  type ShotVerdict,
+} from '@/lib/capture-guide/shot-rules';
 import {
   CAPTURE_LAYERS,
   LAYER_LABELS,
@@ -59,14 +72,14 @@ import {
   type GpsFix,
 } from '@/lib/capture-guide/scoring';
 
-type StepId = 'mode' | 'rules' | 'orbit' | 'scale' | 'verify' | 'scan' | 'score' | 'examples' | 'receipt';
+type StepId = 'mode' | 'rules' | 'orbit' | 'scale' | 'verify' | 'scan' | 'score' | 'export' | 'examples' | 'receipt';
 type GpsStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'unavailable';
 type CompassStatus = 'idle' | 'requesting' | 'active' | 'unsupported' | 'denied';
 type BusyState = { done: number; total: number; label: string } | null;
 type ScanCompleteness = 'complete' | 'partial' | 'unknown';
 
-const CAPTURE_STEPS: StepId[] = ['mode', 'rules', 'orbit', 'scale', 'verify', 'score', 'examples', 'receipt'];
-const SCAN_STEPS: StepId[] = ['mode', 'scan', 'score', 'examples', 'receipt'];
+const CAPTURE_STEPS: StepId[] = ['mode', 'rules', 'orbit', 'scale', 'verify', 'score', 'export', 'examples', 'receipt'];
+const SCAN_STEPS: StepId[] = ['mode', 'scan', 'score', 'export', 'examples', 'receipt'];
 
 const STEP_LABELS: Record<StepId, string> = {
   mode: '选择路径',
@@ -76,8 +89,9 @@ const STEP_LABELS: Record<StepId, string> = {
   verify: '现场校验',
   scan: '导入自检',
   score: '评分结果',
+  export: '出 3D',
   examples: '失败案例',
-  receipt: '采集凭证',
+  receipt: '采集回执',
 };
 
 const VERDICT_META: Record<CaptureVerdict, { label: string; detail: string; tone: string; hex: string }> = {
@@ -182,6 +196,9 @@ export function CaptureGuide(): JSX.Element {
   const [score, setScore] = useState<CaptureScore | null>(null);
   const [scoreAt, setScoreAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [shotNotice, setShotNotice] = useState<{ verdict: ShotVerdict; thumb: string } | null>(null);
+  const [tiltLayer, setTiltLayer] = useState<CaptureLayer | null>(null);
+  const [sizeHint, setSizeHint] = useState<VenueSize | null>(null);
 
   const latestFixRef = useRef<GpsFix | null>(null);
   const headingRef = useRef<number | null>(null);
@@ -200,6 +217,8 @@ export function CaptureGuide(): JSX.Element {
   const scaleOk = isValidScale(scaleMeters);
 
   const onOrientation = useCallback((event: DeviceOrientationEvent) => {
+    // 俯仰角与罗盘相互独立：没有磁力计的手机也能靠 beta 自动判层。
+    if (typeof event.beta === 'number') setTiltLayer(inferLayerFromDeviceTilt(event.beta));
     const compassEvent = event as DeviceOrientationEvent & { webkitCompassHeading?: number };
     const raw = compassEvent.webkitCompassHeading ?? (typeof event.alpha === 'number' ? 360 - event.alpha : null);
     if (raw === null || !Number.isFinite(raw)) return;
@@ -228,9 +247,23 @@ export function CaptureGuide(): JSX.Element {
   const lowResCount = frames.filter(frame => Math.min(frame.width, frame.height) < 1080).length;
   const missingGpsCount = frames.filter(frame => frame.gps === null || frame.gps.accuracy > 10).length;
   const headingStats = useMemo(() => headingCoverage(frames.map(frame => frame.heading)), [frames]);
-  const liveCoverage = headingStats.samples >= Math.min(12, Math.max(1, frames.length))
-    ? headingStats.coverageDeg
-    : Math.min(360, distinctFrames * 5);
+  const coverageEstimated = headingStats.samples < Math.min(12, Math.max(1, frames.length));
+  const liveCoverage = coverageEstimated
+    ? Math.min(360, distinctFrames * 5)
+    : headingStats.coverageDeg;
+  const advice = useMemo(
+    () =>
+      nextShotAdvice({
+        layerCounts,
+        currentLayer: layer,
+        totalFrames: frames.length,
+        coverageDeg: liveCoverage,
+        coverageEstimated,
+        headings: frames.map(frame => frame.heading),
+      }),
+    [layerCounts, layer, frames, liveCoverage, coverageEstimated],
+  );
+  const modeRec = sizeHint ? recommendCaptureMode(sizeHint) : null;
 
   function chooseMode(mode: CaptureMode): void {
     if (mode !== selectedMode) {
@@ -321,6 +354,7 @@ export function CaptureGuide(): JSX.Element {
     if (files.length === 0) return;
     setNotice('');
     let failed = 0;
+    let previous = frames[frames.length - 1] ?? null;
     setBusy({ done: 0, total: files.length, label: '正在快检图片' });
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
@@ -333,7 +367,9 @@ export function CaptureGuide(): JSX.Element {
           at: Date.now() + index,
         });
         markCaptureStart(analyzed.at ?? Date.now());
-        setFrames(previous => [...previous, analyzed]);
+        setShotNotice({ verdict: judgeShot(analyzed, previous), thumb: analyzed.thumb });
+        setFrames(previousFrames => [...previousFrames, analyzed]);
+        previous = analyzed;
       } catch {
         failed += 1;
       }
@@ -369,6 +405,13 @@ export function CaptureGuide(): JSX.Element {
       } else {
         added += extracted.length;
         markCaptureStart(extracted[0]?.at ?? Date.now());
+        const lastFrame = extracted[extracted.length - 1];
+        if (lastFrame) {
+          setShotNotice({
+            verdict: judgeShot(lastFrame, frames[frames.length - 1] ?? null),
+            thumb: lastFrame.thumb,
+          });
+        }
         setFrames(previous => [...previous, ...extracted]);
       }
     }
@@ -399,6 +442,15 @@ export function CaptureGuide(): JSX.Element {
     setStepIndex(steps.indexOf('score'));
   }
 
+  /** 出重建的硬门槛：三层各 24 个机位，环向覆盖 ≥300°，才允许去评分。 */
+  const GATE_COVERAGE_DEG = 300;
+  const gateMissing: string[] = [];
+  if (layerCounts.low < TARGET_PER_LAYER) gateMissing.push(`低层还差 ${TARGET_PER_LAYER - layerCounts.low} 张`);
+  if (layerCounts.eye < TARGET_PER_LAYER) gateMissing.push(`视线层还差 ${TARGET_PER_LAYER - layerCounts.eye} 张`);
+  if (layerCounts.high < TARGET_PER_LAYER) gateMissing.push(`高层还差 ${TARGET_PER_LAYER - layerCounts.high} 张`);
+  if (liveCoverage < GATE_COVERAGE_DEG) gateMissing.push(`环向覆盖还差 ${Math.ceil(GATE_COVERAGE_DEG - liveCoverage)}°`);
+  const gateReady = gateMissing.length === 0;
+
   const canAdvance =
     currentStep === 'mode'
       ? selectedMode !== null
@@ -410,7 +462,9 @@ export function CaptureGuide(): JSX.Element {
             ? scaleOk
             : currentStep === 'scan'
               ? scanFiles.length > 0 && scaleOk
-              : true;
+              : currentStep === 'verify'
+                ? gateReady
+                : true;
 
   function advance(): void {
     if (!canAdvance) return;
@@ -514,10 +568,12 @@ export function CaptureGuide(): JSX.Element {
       : currentStep === 'verify' || currentStep === 'scan'
         ? '生成可重建性评分'
         : currentStep === 'score'
-          ? '生成采集凭证'
-          : currentStep === 'examples'
-            ? '生成采集凭证'
-            : '下一步';
+          ? '出 3D'
+          : currentStep === 'export'
+            ? '看失败案例'
+            : currentStep === 'examples'
+              ? '生成采集回执'
+              : '下一步';
 
   const verdict = score ? VERDICT_META[score.verdict] : null;
 
@@ -529,7 +585,7 @@ export function CaptureGuide(): JSX.Element {
             <BrandMark size={24} />
             <span>幕景</span>
           </Link>
-          <span className="cg-top-title">采集守门员</span>
+          <span className="cg-top-title">拍摄场地 · 出 3D</span>
           <Link className="cg-top-link" href="/">
             工作台
           </Link>
@@ -565,6 +621,30 @@ export function CaptureGuide(): JSX.Element {
                 title="先选一条采集路径"
                 lead="守门员只做一件事：在你离开场地前，判断这批素材能不能重建。不通过就不上传。"
               />
+              <div className="cg-mode-rec" data-testid="mode-rec">
+                <span className="cg-mode-rec-label">场地多大？</span>
+                <div className="cg-mode-rec-chips" role="group" aria-label="场地规模">
+                  {(['small', 'medium', 'large'] as const).map(size => (
+                    <button
+                      key={size}
+                      type="button"
+                      className={sizeHint === size ? 'is-active' : ''}
+                      aria-pressed={sizeHint === size}
+                      onClick={() => {
+                        setSizeHint(size);
+                        chooseMode(recommendCaptureMode(size).mode);
+                      }}
+                    >
+                      {size === 'small' ? '小场地' : size === 'medium' ? '中型场地' : '大场地'}
+                    </button>
+                  ))}
+                </div>
+                {modeRec && (
+                  <span className="cg-mode-rec-reason" data-testid="mode-rec-reason">
+                    推荐选「{modeRec.mode === 'photo' ? '拍照采集' : '视频采集'}」——{modeRec.reason}
+                  </span>
+                )}
+              </div>
               <div className="cg-modes">
                 <button
                   type="button"
@@ -879,6 +959,25 @@ export function CaptureGuide(): JSX.Element {
                     </button>
                   ))}
                 </div>
+                {advice && (
+                  <div className={`cg-advice cg-advice--${advice.priority}`} data-testid="next-advice">
+                    <Compass size={15} aria-hidden="true" />
+                    <div className="cg-advice-body">
+                      <strong>{advice.headline}</strong>
+                      <span>{advice.detail}</span>
+                    </div>
+                    {tiltLayer && tiltLayer !== layer && (
+                      <button
+                        type="button"
+                        className="cg-advice-tilt"
+                        onClick={() => setLayer(tiltLayer)}
+                        data-testid="tilt-switch"
+                      >
+                        俯仰角像{tiltLayer === 'low' ? '低层' : tiltLayer === 'high' ? '高层' : '视线层'} · 切过去
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="cg-capture-actions">
                   <button type="button" className="cg-btn cg-btn--primary" onClick={() => photoInputRef.current?.click()}>
                     <Upload size={16} aria-hidden="true" />
@@ -991,7 +1090,7 @@ export function CaptureGuide(): JSX.Element {
                   <div className="cg-card-title">
                     <span className="cg-icon"><Compass size={20} aria-hidden="true" /></span>
                     <div>
-                      <strong>朝向记录 · 可选</strong>
+                      <strong>环向覆盖 · 现在缺哪边</strong>
                       <span>有罗盘才算真实覆盖角；没有就按机位数推算。</span>
                     </div>
                   </div>
@@ -1018,6 +1117,7 @@ export function CaptureGuide(): JSX.Element {
                     开启
                   </button>
                 </div>
+                <CoverageDial headings={frames.map(frame => frame.heading)} coverageDeg={liveCoverage} compact />
                 <p className="cg-note">
                   {compassStatus === 'active'
                     ? '机身朝向会写进每个新机位。原地旋转时，朝向跨度会暴露你。'
@@ -1252,10 +1352,28 @@ export function CaptureGuide(): JSX.Element {
             </>
           )}
 
+          {currentStep === 'export' && (
+            <>
+              <StepHead
+                eyebrow="07 出 3D"
+                title="把这批素材变成能进编辑器的场景"
+                lead="出口分两半：把素材清单交出去，把重建产物归一化收回来。网页端不假装能自己算出 3D。"
+              />
+              <SceneExport
+                frames={frames}
+                mode={selectedMode ?? 'photo'}
+                score={score}
+                scaleMeters={scaleMeters}
+                gateReady={gateReady}
+              />
+              <PriceCard />
+            </>
+          )}
+
           {currentStep === 'examples' && (
             <>
               <StepHead
-                eyebrow="07 反例对比"
+                eyebrow="08 反例对比"
                 title="这三种素材，为什么救不回来"
                 lead="下面的缩略图来自我们 2026-11-04 西湖夜间采集：32 个文件，0 个带 GPS，原地转了 102°。"
               />
@@ -1343,37 +1461,28 @@ export function CaptureGuide(): JSX.Element {
           {currentStep === 'receipt' && (
             <>
               <StepHead
-                eyebrow="08 采集凭证"
-                title="把证据带进 Scendance"
-                lead="一份 JSON 摘要，记录这批素材是什么状态下拍出来的。它不包含照片，也不会上传服务器。"
+                eyebrow="09 采集回执"
+                title="留一张现场回执，顺手发给同事"
+                lead="回执是副产物。真正的交付在第 07 步「出 3D」；这里只把现场证据带走，不包含照片，也不上传服务器。"
               />
               {score && verdict ? (
                 <>
-                  <div className="cg-receipt-head">
-                    <div>
-                      <span>评分</span>
-                      <strong>{score.total}<i>/100</i></strong>
-                    </div>
-                    <span className={`cg-verdict cg-verdict--${verdict.tone}`}>{verdict.label}</span>
-                  </div>
-                  <div className="cg-stats cg-stats--receipt">
-                    {scoreStatItems(score, scanMode, scaleMeters).map(item => (
-                      <div key={item.label}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                  <section className="cg-card">
-                    <div className="cg-card-head">
-                      <div className="cg-card-title">
-                        <span className="cg-icon"><ClipboardCheck size={20} aria-hidden="true" /></span>
-                        <div>
-                          <strong>scendance.capture/v1</strong>
-                          <span>{scoreAt ? new Date(scoreAt).toLocaleString('zh-CN', { hour12: false }) : '刚刚生成'}</span>
-                        </div>
-                      </div>
-                    </div>
+                  <ReceiptCard
+                    total={score.total}
+                    verdictLabel={verdict.label}
+                    verdictTone={verdict.tone}
+                    stations={score.metrics.frames}
+                    layers={score.metrics.layers}
+                    coverageDeg={score.metrics.coverageDeg}
+                    gpsCoverage={score.metrics.gpsGoodCoverage}
+                    scaleText={scaleOk && scaleMeters ? formatMeters(scaleMeters) : '缺失'}
+                    generatedAt={scoreAt}
+                  />
+                  <details className="cg-fold">
+                    <summary>
+                      <span>原始 JSON · scendance.capture/v1</span>
+                      <span>{scoreAt ? new Date(scoreAt).toLocaleString('zh-CN', { hour12: false }) : '刚刚生成'}</span>
+                    </summary>
                     <pre className="cg-json" data-testid="receipt-json">{receiptJson}</pre>
                     <div className="cg-receipt-actions">
                       <button type="button" className="cg-btn cg-btn--primary" onClick={downloadReceipt} disabled={!receiptJson}>
@@ -1385,7 +1494,7 @@ export function CaptureGuide(): JSX.Element {
                         {copied ? '已复制' : '复制摘要'}
                       </button>
                     </div>
-                  </section>
+                  </details>
                 </>
               ) : (
                 <div className="cg-empty">
@@ -1405,9 +1514,9 @@ export function CaptureGuide(): JSX.Element {
                   </div>
                 </div>
                 <ol className="cg-steps">
-                  <li><b>回到工作台</b><span>打开幕景，进入当前项目。</span></li>
-                  <li><b>打开「场地重建」</b><span>选「生成引擎重建真实场地」，上传这次拍的原片。</span></li>
-                  <li><b>把凭证放进项目备注</b><span>重建失败时，先对照扣分项，而不是盲猜。</span></li>
+                  <li><b>回到第 07 步「出 3D」</b><span>生成任务包；后端接上后可直接投递。</span></li>
+                  <li><b>重建完成后把 GLB 选回来</b><span>在同一屏归一化导出，尺寸与坐标系一起写进结果卡。</span></li>
+                  <li><b>把回执放进项目备注</b><span>重建失败时，先对照扣分项，而不是盲猜。</span></li>
                 </ol>
                 <Link className="cg-btn cg-btn--primary" href="/">
                   进入工作台
@@ -1426,6 +1535,39 @@ export function CaptureGuide(): JSX.Element {
             </>
           )}
         </main>
+
+        {shotNotice && (
+          <div
+            className={`cg-shotcard ${shotNotice.verdict.ok ? 'is-ok' : 'is-bad'}`}
+            role="status"
+            data-testid="shot-card"
+          >
+            <img className="cg-shotcard-thumb" src={shotNotice.thumb} alt="" />
+            <div className="cg-shotcard-copy">
+              <strong>{shotNotice.verdict.title}</strong>
+              <p>{shotNotice.verdict.action}</p>
+            </div>
+            {shotNotice.verdict.sample && (
+              <figure className="cg-shotcard-sample">
+                <img
+                  src={shotNotice.verdict.sample}
+                  alt="反例"
+                  className={shotNotice.verdict.sampleTone === 'bright' ? 'is-bright' : undefined}
+                />
+                <figcaption>反例</figcaption>
+              </figure>
+            )}
+            <button type="button" aria-label="收起结论" onClick={() => setShotNotice(null)}>
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
+        {currentStep === 'verify' && !gateReady && (
+          <p className="cg-gate-hint" data-testid="gate-hint">
+            还差：{gateMissing.join(' · ')}。补够这些机位才能出重建。
+          </p>
+        )}
 
         <footer className="cg-foot">
           {safeIndex > 0 && currentStep !== 'receipt' && (
@@ -1447,7 +1589,13 @@ export function CaptureGuide(): JSX.Element {
               disabled={!canAdvance}
               data-testid="next"
             >
-              {busy ? <Loader2 size={16} aria-hidden="true" /> : currentStep === 'verify' || currentStep === 'scan' ? <ShieldCheck size={16} aria-hidden="true" /> : null}
+              {busy ? (
+                <Loader2 size={16} aria-hidden="true" />
+              ) : currentStep === 'verify' || currentStep === 'scan' ? (
+                <ShieldCheck size={16} aria-hidden="true" />
+              ) : currentStep === 'score' ? (
+                <Box size={16} aria-hidden="true" />
+              ) : null}
               {nextLabel}
               <ArrowRight size={16} aria-hidden="true" />
             </button>

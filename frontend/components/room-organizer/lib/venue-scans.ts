@@ -1,4 +1,4 @@
-import { listAholoAssets } from './aholo-assets';
+import { listAholoAssets, type AholoAssetGeo } from './aholo-assets';
 
 /** 一套已扫描/重建好的真实场地；尺寸与时间来自扫描库记录。 */
 export type ScannedVenue = {
@@ -6,6 +6,8 @@ export type ScannedVenue = {
   name: string;
   meters?: { width: number; depth: number; height: number };
   savedAt?: number;
+  /** 拍摄位置（docs/49 地理底图）；没有就还没标注。 */
+  geo?: AholoAssetGeo;
 };
 
 /**
@@ -15,10 +17,11 @@ export type ScannedVenue = {
 export function listScannedVenues(): ScannedVenue[] {
   return listAholoAssets()
     .filter(asset => asset.kind !== 'glb')
-    .map(({ assetId, name, meters, savedAt }) => ({
+    .map(({ assetId, name, meters, savedAt, geo }) => ({
       assetId,
       name,
       ...(meters ? { meters: { ...meters } } : {}),
+      ...(geo ? { geo: { ...geo } } : {}),
       savedAt,
     }))
     .sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));

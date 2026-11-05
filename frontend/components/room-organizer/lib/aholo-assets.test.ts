@@ -126,4 +126,24 @@ describe('Aholo 资产注册表', () => {
     stubFetch(() => jsonResponse(stashed()));
     await expect(importAholoAsset({ url: COS, name: '一把木椅' })).resolves.toMatchObject({ url: `${DIRECT_BASE}/asset/${ID}.glb` });
   });
+
+  it('拍摄位置（geo）随资产保存；坏的 geo 会被丢掉不进注册表', async () => {
+    expect(rememberAholoAsset({
+      assetId: ID, kind: 'spz', name: '西湖茶亭·极速档', bytes: 1, savedAt: 1,
+      geo: { lng: 120.121358, lat: 30.222692, radiusM: 800, source: 'lookup' },
+    })?.geo).toEqual({ lng: 120.121358, lat: 30.222692, radiusM: 800, source: 'lookup' });
+    // 非法经纬度与未知来源都不收
+    expect(rememberAholoAsset({ assetId: ID, kind: 'spz', name: '坏经度', bytes: 1, savedAt: 2, geo: { lng: 200, lat: 30, source: 'manual' } })?.geo).toBeUndefined();
+    expect(rememberAholoAsset({ assetId: ID, kind: 'spz', name: '坏来源', bytes: 1, savedAt: 2, geo: { lng: 120, lat: 30, source: 'guess' as 'manual' } })?.geo).toBeUndefined();
+    // 已落盘的资产这次带来 geo 而旧记录没有，就补写进注册表
+    localStorage.setItem('scendance:aholo-assets', JSON.stringify([
+      { assetId: ID, kind: 'spz', name: '西湖茶亭·极速档', bytes: 10, savedAt: 1, taskid: '3FO4K4RKIQ9S' },
+    ]));
+    const backfilled = await importAholoAsset({
+      url: 'https://aholo-cos.example.test/x.spz', taskid: '3FO4K4RKIQ9S',
+      geo: { lng: 120.121358, lat: 30.222692, source: 'lookup' },
+    });
+    expect(backfilled.geo).toEqual({ lng: 120.121358, lat: 30.222692, source: 'lookup' });
+    expect(findAholoAssetByTask('3FO4K4RKIQ9S')?.geo?.lat).toBe(30.222692);
+  });
 });

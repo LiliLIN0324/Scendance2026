@@ -41,7 +41,7 @@ output/model-library/
 .cache/
 .temp-cloud.txt
 frontend/.preview/
-docs/evidence/aholo/
+docs/evidence/
 
 # ZCode scratch dumps
 .temp-*.txt
@@ -61,4 +61,16 @@ _work/
 .vm/
 frontend-gp/
 scene-3d/
+
+# Heavy captures, generated exports and agent scratch (2026-11-05)
+scene-3d-outdoor/
+exports/
+.reports/
+.screenshots/
+.trae-html-share-packages/
+.zcode/
+probe-*.png
+$null
+console.log(x))}
+/.intro-head.*
 

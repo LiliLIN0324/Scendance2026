@@ -94,7 +94,7 @@
       <span><span class="st ok">虚线箭头</span>&nbsp;本批补上的跳转（F-01～F-05，已落地）</span>
       <span>&nbsp;<b style="font-size:11px;background:var(--ink);color:#fff;border-radius:4px;padding:0 6px">黑chip</b>＝触发跳转的按钮</span>
     </div>
-    <p class="lead">每条链从左往右读；「分支」用上下几条泳道表示（建场地有 A 对话 / B 图纸 / C 地图三条）；链下注明回环（放弃/撤销回到哪）。<b>同一页面的两种状态</b>：空白新草稿时首屏是底部快捷生成条、左栏是「简报卡＋更多资料」折叠层；一旦有资料（填过需求/打开过深工具），左栏常驻「活动简报｜活动资料」页签——你在用的就是后者，本图按后者画。</p>
+    <p class="lead">每条链从左往右读；「分支」用上下几条泳道表示（建场地有 A 对话 / B 图纸 / C 场景地面层三条）；链下注明回环（放弃/撤销回到哪）。<b>同一页面的两种状态</b>：空白新草稿时首屏是底部快捷生成条、左栏是「简报卡＋更多资料」折叠层；一旦有资料（填过需求/打开过深工具），左栏常驻「活动简报｜活动资料」页签——你在用的就是后者，本图按后者画。</p>
   </section>
 
   <section>
@@ -119,14 +119,14 @@
           <div class="jarrow"><span class="a-label">生成布置预览</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
           <div class="jnode"><div class="jwf"><i>三维候选方案</i><div><span class="chip hot">确认应用并保存</span><span class="chip">放弃候选</span></div><i>应用后结果区出现：</i><div><span class="chip">回对话继续布置</span></div></div><div class="jcap"><span class="pg">同页结果区</span><b>候选确认</b><span>应用后可撤销 · 引导回右栏对话</span></div></div>
         </div></div>
-        <div class="jlane"><span class="lane-tag">C 地图</span><div class="jflow">
-          <div class="jnode"><div class="jwf"><i>左栏简报 · 这块场地从哪来（场地立没立起来都在）</i><div><span class="chip">图纸与照片</span><span class="chip hot">地图圈画</span><span class="chip">空白场地</span></div></div><div class="jcap"><span class="pg">左栏</span><b>这块场地从哪来</b><span>与「图纸与照片」并列钉在左边；场地立起来后不消失，重圈即替换</span></div></div>
-          <div class="jarrow"><span class="a-label">点「地图圈画」<small>浮层盖住画布，圈地块要看清</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
-          <div class="jnode"><div class="jwf"><i>高德选址圈画（Key + 圈边界 + 可选主客流线）</i><div><span class="chip">搜索地点</span><span class="chip">搜索</span></div><div><span class="chip hot">圈画场地</span><span class="chip hot">生成户外场地</span></div></div><div class="jcap"><span class="pg">画布浮层</span><b>圈一块地</b><span>需高德 Key 与联网，本机拍不到</span></div></div>
-          <div class="jarrow"><span class="a-label">生成户外场地</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
-          <div class="jnode"><div class="jwf"><i>户外场地立好：真轮廓壳体 + 外接矩形报米；可选卫星贴地参考（默认关，不可作重建素材）</i><div><span class="chip done">放得下的物料留着</span><span class="chip">放不下先撤 n 件</span></div></div><div class="jcap"><span class="pg">画布</span><b>户外场地</b><span>可挂历史观感样例 · 重圈同一入口</span></div></div>
-          <div class="jarrow"><span class="a-label">再开「地图」见采集单<small>高德只定场；卫星不可重建</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
-          <div class="jnode"><div class="jwf"><i>现场采集单：沿主客流线加密站位 · 导出纸单</i><div><span class="chip">导出采集单</span><span class="chip hot">去上传现场素材</span></div></div><div class="jcap"><span class="pg">地图浮层</span><b>采集单</b><span>禁令：勿用高德/卫星当素材</span></div></div>
+        <div class="jlane"><span class="lane-tag">C 场景地面层</span><div class="jflow">
+          <div class="jnode"><div class="jwf"><i>左栏简报 · 这块场地从哪来（场地立没立起来都在）</i><div><span class="chip">图纸与照片</span><span class="chip hot">场景锚定</span><span class="chip">空白场地 null</span></div></div><div class="jcap"><span class="pg">左栏</span><b>这块场地从哪来</b><span>与「图纸与照片」并列钉在左边；场地立起来后不消失，改锚点即替换</span></div></div>
+          <div class="jarrow"><span class="a-label">点「场景锚定」<small>只写锚点，不开地图入口</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>场景锚定（geo/manual：地名或经纬度 + 正北朝向 + 米制尺度；null 用 1m 网格）</i><div><span class="chip">写锚点</span><span class="chip hot">铺场景地面层</span></div></div><div class="jcap"><span class="pg">画布顶栏</span><b>铺地面层</b><span>地图不是独立入口；geo/manual 需瓦片与联网，null 可离线</span></div></div>
+          <div class="jarrow"><span class="a-label">铺场景地面层</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>地面层铺在场地脚下：真轮廓壳体照旧，地图只提供底图</i><div><span class="chip done">放得下的物料留着</span><span class="chip">放不下先撤 n 件</span></div></div><div class="jcap"><span class="pg">画布</span><b>场地 + 地面层</b><span>地图不生成场地；可挂历史观感样例 · 改锚点同一入口</span></div></div>
+          <div class="jarrow"><span class="a-label">再开「场景锚定」见采集单<small>地图只铺地面；卫星不可重建</small></span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
+          <div class="jnode"><div class="jwf"><i>现场采集单：沿主客流线加密站位 · 导出纸单</i><div><span class="chip">导出采集单</span><span class="chip hot">去上传现场素材</span></div></div><div class="jcap"><span class="pg">场景锚定浮层</span><b>采集单</b><span>禁令：勿用高德/卫星当素材</span></div></div>
           <div class="jarrow"><span class="a-label">左轨「观感」· 场地重建</span><svg class="a-line" viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="88" y2="5" stroke="#4A7C59" stroke-width="2"/><path d="M88,0.5 L98,5 L88,9.5z" fill="#4A7C59"/></svg></div>
           <div class="jnode"><div class="jwf"><i>场地重建（默认干跑）→ 挂环境预览</i><div><span class="chip">干跑重建</span><span class="chip hot">挂环境预览</span></div><div><span class="chip done">观感层不进碰撞</span></div></div><div class="jcap"><span class="pg">左栏观感</span><b>重建 → 观感</b><span>壳体+glTF 布置不变 · 进 S4</span></div></div>
         </div></div>
@@ -278,7 +278,7 @@
       <span><b>S5</b> · 体检给出一条改法，点「按这条改：把靠边的桌椅往场中挪」之后，右栏<b>没有长出「确认布置」</b>，还是「换一版 / 我来调 / 走一遍给客户看」——图上这一跳是断的 → <span class="st ask">待复测</span></span>
       <span><b>S2</b> · Agent 面板默认收起，正线第一步少画一跳「点头像打开晴光」 → <span class="st ok">图上已补</span></span>
     </div>
-    <p class="lead">这一轮实测撞在另一会话写一半的代码上（地图入口那批改动，13:44–13:50 连续落盘），画布整块空白、Agent 栏撑宽盖住画布，所以核心三条链的<b>实拍还没补</b>；等那批改动落定一次性拍。</p>
+    <p class="lead">这一轮实测撞在另一会话写一半的代码上（场景锚定那批改动，13:44–13:50 连续落盘），画布整块空白、Agent 栏撑宽盖住画布，所以核心三条链的<b>实拍还没补</b>；等那批改动落定一次性拍。</p>
   </section>
 
   <section class="anchor" id="cards">

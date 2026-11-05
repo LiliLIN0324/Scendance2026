@@ -351,6 +351,19 @@ export interface NeighbourSpec {
 export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | 'lawn' | 'market' | 'museum' | 'office' | 'studio';
 
 /**
+ * 场景锚点（docs/49）：场景世界坐标 ↔ 地理坐标的唯一变换参数。
+ * lng/lat 是世界原点 (0, 0) 对应的地理坐标；
+ * orientationDeg 是世界 -Z 轴（平面图「上」）相对正北的顺时针偏航角，0 表示正北朝上；
+ * metersPerUnit 是 1 个世界单位对应的米数——正常为 1；壳体被等比缩小时为 1/scale。
+ */
+export interface SceneAnchor {
+  lng: number;
+  lat: number;
+  orientationDeg: number;
+  metersPerUnit: number;
+}
+
+/**
  * A multi-floor building. `floors[0]` is the ground floor; subsequent
  * entries stack upward. Footprint and floor-plan upload live on the
  * building because they're shared across levels.
@@ -405,7 +418,13 @@ export interface RoomLayout {
    */
   mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
   /**
-   * 调研底图：这一片区域的路网，尺度到公里。正北朝上、真实米制，
+   * 场景锚点：场景坐标 ↔ 地理坐标的唯一变换（docs/49 架构定案）。
+   * 地图是 3D 场景里的一个渲染层，没有自己的定位，只能跟着它走。
+   * 底图与场景点位一律按它投影；mapGroundFrame 是由它派生的旧字段，仅为壳体卫星 UV 保留。
+   */
+  sceneAnchor?: SceneAnchor;
+  /**
+   * 调研底图：这一片区域的路网，尺度到公里。朝向与米制跟随 sceneAnchor，
    * 场地壳体立在它上面，两者共用同一套地理换算。
    * 只是参考底图，与卫星贴地同一条禁令：不可作重建素材。本地编辑元数据，不进场景线。
    */
@@ -420,6 +439,12 @@ export interface RoomLayout {
     imageUrl: string;
     /** 高德瓦片样式：6 卫星、7 路网、8 路网加注记。 */
     style: 6 | 7 | 8;
+    /** 场地脚下那片 z18 级高清卫星贴片；没有就没有贴片层。 */
+    detailRadiusM?: number;
+    detailBounds?: { west: number; south: number; east: number; north: number };
+    detailImageUrl?: string;
+    /** 这张底图跟着哪套场地扫描走（docs/49）；没有就是用户手动标的，自动逻辑不动它。 */
+    scanAssetId?: string;
   };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;

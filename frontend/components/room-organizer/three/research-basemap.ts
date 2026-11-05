@@ -1,16 +1,17 @@
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '../lib/amap-venue';
+import { boundsSizeMeters } from '../lib/research-area';
+import { anchorBasemapYawRad, anchorGeoToWorld, sceneAnchorOf } from '../lib/scene-anchor';
 import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
 
 /**
  * 调研底图：这一片区域的路网，铺在 3D 地面上。
  *
- * 与场地壳体的关系：壳体在画布原点，调研底图按地理偏移摆到它该在的位置。
- * 两层用的是同一套换算（`mapGroundFrame` + 米制投影），所以底图上的路
- * 和壳体下的那块地，是同一个世界里的同一个位置。
+ * 架构定案（docs/49）：地图不是独立模块，是 3D 场景里的一个渲染层。
+ * 场景坐标 ↔ 地理坐标只有场景锚点（lib/scene-anchor.ts）这一套变换，
+ * 底图的中心、尺寸、正北朝向全部由锚点推出，不再自己持有定位。
  *
- * 朝向：正北朝上（世界 -Z 为北），和地图、平面图上沿一致。
- * 尺度：真实米制。壳体被等比缩小过（mapGroundFrame.scale < 1）时，底图一起缩小。
+ * 尺度：真实米制。壳体被等比缩小过（锚点 metersPerUnit > 1）时，底图一起缩小。
  */
 
 export const RESEARCH_BASEMAP_TAG = 'research-basemap';
@@ -18,60 +19,67 @@ export const RESEARCH_BASEMAP_TAG = 'research-basemap';
 export const RESEARCH_BASEMAP_Y = -0.02;
 
 export interface ResearchBasemapPlacement {
-  /** 底图覆盖的壳体米（x 向东，z 向南）。 */
+  /** 底图覆盖的世界米（x 向东，z 向南；已随锚点 metersPerUnit 缩放）。 */
   widthM: number;
   depthM: number;
-  /** 底图中心在 3D 世界里的位置（相对画布原点）。 */
+  /** 底图中心在 3D 世界里的位置（相对世界原点）。 */
   centerX: number;
   centerZ: number;
+  /** 底图绕世界 Y 轴的偏航（弧度）：锚点正北朝向的反向旋转，0 表示正北朝上。 */
+  yawRad: number;
 }
 
 /**
  * 经纬度 → 3D 世界坐标（x 向东、z 向南，y=0）。
- * 有场地壳（mapGroundFrame）时按壳的缩放与中心摆；还没有壳时以底图中心为原点——
- * 调研是从底图开始的，空地也要能铺图、能定点。
+ * 唯一变换是场景锚点；还没有锚点（项目刚开始就先调研）时以底图中心为原点，
+ * 空地也要能铺图、能定点。
  */
 export function researchGeoToWorld(layout: RoomLayout, lng: number, lat: number): { x: number; z: number } | null {
   const area = layout.researchArea;
   if (!area) return null;
-  const frame = layout.mapGroundFrame;
-  const scale = frame && frame.scale > 0 ? frame.scale : 1;
-  const mLng = metersPerDegreeLng(frame ? frame.latMid : area.center.lat);
-  if (frame) {
-    // 壳体中心的经纬度：localX = width/2、localZ = height/2 处。
-    const venueLng = frame.lng0 + layout.width / (2 * scale * mLng);
-    const venueLat = frame.lat0 - layout.height / (2 * scale * METERS_PER_DEGREE_LAT);
-    return { x: (lng - venueLng) * mLng * scale, z: (venueLat - lat) * METERS_PER_DEGREE_LAT * scale };
-  }
+  const anchor = sceneAnchorOf(layout);
+  if (anchor) return anchorGeoToWorld(anchor, lng, lat);
+  const mLng = metersPerDegreeLng(area.center.lat);
   return { x: (lng - area.center.lng) * mLng, z: (area.center.lat - lat) * METERS_PER_DEGREE_LAT };
 }
 
 /**
- * 底图该摆在哪、多大。
+ * 底图该摆在哪、多大、朝哪。
  *
- * 壳体原点在场地几何中心，场地中心经纬度由 `mapGroundFrame` 推出；
- * 底图范围中心和场地中心的经纬度差，乘上壳体缩放就是底图的世界偏移。
- * 没有壳（项目刚开始就先调研）时底图中心就是画布原点。
+ * 底图范围的地理中心经锚点投影得到世界偏移；尺寸是范围的真实米数除以
+ * 锚点 metersPerUnit（壳体缩小时底图同步缩）；朝向随锚点正北偏航。
+ * 没有锚点时底图中心就是世界原点。
  */
 export function researchBasemapPlacement(layout: RoomLayout): ResearchBasemapPlacement | null {
   const area = layout.researchArea;
   if (!area) return null;
   const widthM = (area.bounds.east - area.bounds.west) * metersPerDegreeLng(area.center.lat);
   const depthM = (area.bounds.north - area.bounds.south) * METERS_PER_DEGREE_LAT;
-  const frame = layout.mapGroundFrame;
-  if (!frame) return { widthM, depthM, centerX: 0, centerZ: 0 };
-  const scale = frame.scale > 0 ? frame.scale : 1;
-  const mLng = metersPerDegreeLng(frame.latMid);
-  const venueLng = frame.lng0 + layout.width / (2 * scale * mLng);
-  const venueLat = frame.lat0 - layout.height / (2 * scale * METERS_PER_DEGREE_LAT);
+  const anchor = sceneAnchorOf(layout);
+  if (!anchor) return { widthM, depthM, centerX: 0, centerZ: 0, yawRad: 0 };
   const boundsLng = (area.bounds.west + area.bounds.east) / 2;
   const boundsLat = (area.bounds.south + area.bounds.north) / 2;
-  return {
-    widthM: widthM * scale,
-    depthM: depthM * scale,
-    centerX: (boundsLng - venueLng) * mLng * scale,
-    centerZ: (venueLat - boundsLat) * METERS_PER_DEGREE_LAT * scale,
-  };
+  const center = anchorGeoToWorld(anchor, boundsLng, boundsLat);
+  const mpu = anchor.metersPerUnit;
+  return { widthM: widthM / mpu, depthM: depthM / mpu, centerX: center.x, centerZ: center.z, yawRad: anchorBasemapYawRad(anchor) };
+}
+
+/**
+ * 底图观感（docs/49 需求B）：去饱和 + 提亮 + 压对比，让底图退到后面、场景跳出来。
+ * 只作用在底图贴图像素上，不碰场景里任何别的东西。
+ */
+export const BASEMAP_TONE_FILTER = 'saturate(0.55) brightness(1.12) contrast(0.9)';
+
+/** 按 BASEMAP_TONE_FILTER 过一遍画布；画布不可用（测试环境）时原样返回。 */
+function toneDownBasemapImage(image: HTMLImageElement): HTMLImageElement | HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx || canvas.width === 0 || canvas.height === 0) return image;
+  ctx.filter = BASEMAP_TONE_FILTER;
+  ctx.drawImage(image, 0, 0);
+  return canvas;
 }
 
 /** 底图贴图。代理地址跨源，必须带 anonymous 解码，否则 WebGL 会报 SecurityError。 */
@@ -80,7 +88,7 @@ function loadBasemapTexture(THREE: typeof import('three'), url: string): Promise
     const image = new Image();
     image.crossOrigin = 'anonymous';
     image.onload = () => {
-      const texture = new THREE.Texture(image);
+      const texture = new THREE.Texture(toneDownBasemapImage(image));
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -120,6 +128,8 @@ export function buildResearchBasemap(
   // PlaneGeometry 的 UV：u 沿 +x（东），v 沿 +y。绕 X 转 -90° 后 +y 指向 -z（北），
   // 贴图 flipY 默认把图片首行放到 v=1（北），所以这张平面天然正北朝上。
   mesh.rotation.x = -Math.PI / 2;
+  // 锚点带朝向时，把纹理正北偏到锚点给出的方位（绕世界 Y，与投影旋转互逆）。
+  if (placement.yawRad !== 0) mesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), placement.yawRad);
   mesh.position.set(placement.centerX, RESEARCH_BASEMAP_Y, placement.centerZ);
   mesh.receiveShadow = false;
   mesh.castShadow = false;
@@ -137,6 +147,37 @@ export function buildResearchBasemap(
     // 图没拉下来时留一张素底，别让地面变成一块说不清的颜色。
     if (mesh.material === material) material.color.setHex(0xe8e4da);
   });
+
+  // 场地脚下那块 z18 级高清贴片：同锚点、略高于全景底图，走近时地面是真实的树/路/岸线。
+  // 真实比例不变——尺寸就是 detailBounds 换算出来的真实米数，不缩放。
+  const detailSize = area.detailBounds ? boundsSizeMeters(area.detailBounds) : null;
+  if (area.detailImageUrl && detailSize && [detailSize.widthM, detailSize.depthM].every(value => Number.isFinite(value) && value > 0)) {
+    const detailGeometry = new THREE.PlaneGeometry(detailSize.widthM, detailSize.depthM, 1, 1);
+    const detailMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    });
+    const detailMesh = new THREE.Mesh(detailGeometry, detailMaterial);
+    detailMesh.rotation.x = -Math.PI / 2;
+    if (placement.yawRad !== 0) detailMesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), placement.yawRad);
+    detailMesh.position.set(placement.centerX, RESEARCH_BASEMAP_Y + 0.01, placement.centerZ);
+    detailMesh.renderOrder = 1;
+    detailMesh.receiveShadow = false;
+    detailMesh.castShadow = false;
+    detailMesh.userData.type = RESEARCH_BASEMAP_TAG;
+    detailMesh.userData.mapReference = true;
+    detailMesh.userData.mapReferenceLabel = '参考底图·不可作重建素材';
+    scene.add(detailMesh);
+    void loadBasemapTexture(THREE, area.detailImageUrl).then(texture => {
+      if (detailMesh.material !== detailMaterial) { texture.dispose(); return; }
+      detailMaterial.map = texture;
+      detailMaterial.needsUpdate = true;
+      options.onTextureLoaded?.();
+    }).catch(() => {
+      // 贴片没拉下来就整层隐掉，让全景底图露出来，不留一块白板。
+      if (detailMesh.material === detailMaterial) detailMaterial.visible = false;
+    });
+  }
   return mesh;
 }
 

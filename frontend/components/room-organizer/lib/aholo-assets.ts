@@ -35,6 +35,28 @@ const REGISTRY_MAX = 40;
 // 场景包（SPZ/PLY）本机回源也可能上百 MB；比代理侧的 300 秒再多一点，让代理的原文错误先返回。
 const ASSET_TIMEOUT_MS = 330_000;
 
+/**
+ * 场景资产的拍摄位置（docs/49 地理底图）：采集中心经纬度与覆盖半径。
+ * 只作元数据给底图对齐用，不参与碰撞/落盘几何，更不进重建素材（RECON_MATERIAL_BAN）。
+ */
+export type AholoAssetGeo = {
+  lng: number;
+  lat: number;
+  /** 采集覆盖半径（米）；缺了就由底图侧按资产尺度推。 */
+  radiusM?: number;
+  /** 坐标来源：picker=地图圈画采集单；manual=人工标注；lookup=地名查得（Bingo 调研路线）。 */
+  source: 'picker' | 'manual' | 'lookup';
+};
+
+function validGeo(value: unknown): value is AholoAssetGeo {
+  if (!value || typeof value !== 'object') return false;
+  const geo = value as Partial<AholoAssetGeo>;
+  return typeof geo.lng === 'number' && Number.isFinite(geo.lng) && geo.lng >= -180 && geo.lng <= 180
+    && typeof geo.lat === 'number' && Number.isFinite(geo.lat) && geo.lat >= -90 && geo.lat <= 90
+    && (geo.radiusM === undefined || (Number.isFinite(geo.radiusM) && geo.radiusM > 0 && geo.radiusM <= 20000))
+    && (geo.source === 'picker' || geo.source === 'manual' || geo.source === 'lookup');
+}
+
 /** 一次落盘的元数据；签名链接不进这里，本机地址由 assetId + kind 推出。 */
 export type AholoAsset = {
   assetId: string;
@@ -45,6 +67,8 @@ export type AholoAsset = {
   taskid?: string;
   /** 场景资产的真实尺度（米，来自 lod-meta forwardBox）；物件模型没有。 */
   meters?: { width: number; depth: number; height: number };
+  /** 场景资产的拍摄位置；物件模型没有。 */
+  geo?: AholoAssetGeo;
 };
 
 function validMeters(value: unknown): value is { width: number; depth: number; height: number } {
@@ -60,6 +84,7 @@ function isValidAsset(value: unknown): value is AholoAsset {
     Number.isFinite(asset.savedAt) &&
     (asset.taskid === undefined || (typeof asset.taskid === 'string' && taskidPattern.test(asset.taskid))) &&
     (asset.meters === undefined || validMeters(asset.meters)) &&
+    (asset.geo === undefined || validGeo(asset.geo)) &&
     Boolean(aholoAssetUrl(asset));
 }
 
@@ -128,6 +153,7 @@ export function rememberAholoAsset(asset: AholoAsset): AholoAsset | undefined {
     savedAt: Number.isFinite(asset.savedAt) && asset.savedAt > 0 ? asset.savedAt : Date.now(),
     ...(typeof asset.taskid === 'string' && taskidPattern.test(asset.taskid) ? { taskid: asset.taskid } : {}),
     ...(validMeters(asset.meters) ? { meters: asset.meters } : {}),
+    ...(validGeo(asset.geo) ? { geo: asset.geo } : {}),
   };
   if (!isValidAsset(record)) return undefined;
   const storage = currentStorage();
@@ -180,13 +206,17 @@ export async function importAholoAsset(source: {
   name?: string;
   taskid?: string;
   meters?: { width: number; depth: number; height: number };
+  geo?: AholoAssetGeo;
 }): Promise<AholoAsset & { url: string }> {
-  // 同一任务号复用本机文件；这次若带来了真实尺度而旧记录没有，就补写进注册表，历史场景也能按真实尺寸回放。
+  // 同一任务号复用本机文件；这次若带来了真实尺度或拍摄位置而旧记录没有，就补写进注册表，历史场景也能按真实尺寸回放。
   const cached = findAholoAssetByTask(source.taskid);
   let asset = cached ?? await postAsset({ ...source, name: source.name ?? '' });
   const incoming = source.meters;
   if (!validMeters(asset.meters) && validMeters(incoming)) {
     asset = await rememberAholoAsset({ ...asset, meters: incoming }) ?? asset;
+  }
+  if (!validGeo(asset.geo) && validGeo(source.geo)) {
+    asset = await rememberAholoAsset({ ...asset, geo: source.geo }) ?? asset;
   }
   const url = aholoAssetUrl(asset);
   if (!url) throw new Error('落盘后仍无法生成本机地址。');

@@ -8,7 +8,12 @@
 
 /* 入口按钮只在手机出现，桌面为零影响。 */
 .sc-mobile-agent-entry,
-.sc-mobile-dock { display: none; }
+.sc-mobile-dock,
+.sc-mobile-capture-entry { display: none; }
+
+/* “拍场”只在手机弹层里占一格；桌面左轨恢复四格（品牌 + 三个 agent 钮），这里默认收起。
+   它是链接而不是按钮，去掉默认下划线，其余沿用 sc-rail-tool。 */
+.sc-rail-capture { display: none; color: inherit; text-decoration: none; }
 
 @media (max-width: 768px) {
   .sc-workbench {
@@ -144,17 +149,18 @@
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail[data-mobile-open="true"] {
     opacity: 1; visibility: visible; pointer-events: auto; transform: none;
   }
-  /* 四格同宽：把 nav 摊平，品牌钮与三个 agent 钮都成为同一行的网格项 */
+  /* 手机五格：品牌 + 三个 agent 钮 + 拍场链接（桌面端该格由上面的 display:none 收起） */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px;
     flex: 1 1 auto; min-width: 0; align-items: stretch;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary { display: contents; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team { display: none; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft { display: none; }
-  /* 四格：图标 28 + 标签 16，格高 64，整格即触控区 */
+  /* 五格：图标 28 + 标签 16，格高 64，整格即触控区 */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand,
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail a.sc-rail-capture {
     display: flex !important; flex-direction: column !important; align-items: center; justify-content: center; gap: 4px;
     width: auto; min-width: 0; height: 64px; min-height: 64px;
     margin: 0; padding: 4px; border: 0; border-radius: 12px; background: transparent;
@@ -164,7 +170,8 @@
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-avatar {
     display: grid; flex: none; width: 28px; height: 28px; margin: 0;
   }
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-label {
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button > span.sc-rail-label,
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail a.sc-rail-capture > span.sc-rail-label {
     display: block; flex: none; color: var(--wk-ink-soft); font-size: 12px; line-height: 16px; white-space: nowrap;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active > span.sc-rail-label { color: var(--wk-green-deep); }
@@ -258,4 +265,17 @@
     width: 32px; height: 32px; border-radius: 50%;
     background: var(--wk-green); color: #fff;
   }
+
+  /* 常驻“拍场”入口：贴在右下角，与左下角的左轨入口同一高度，不压对话条 */
+  .sc-mobile-capture-entry {
+    position: fixed; right: 12px; bottom: var(--sc-mobile-fab-bottom);
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 44px; padding: 0 14px;
+    border: 1px solid var(--wk-hair); border-radius: 22px;
+    background: var(--wk-paper); color: var(--wk-green-deep);
+    font: inherit; font-size: 13px; text-decoration: none;
+    box-shadow: 0 6px 18px rgb(20 20 22 / 14%);
+    z-index: 77;
+  }
+  .sc-mobile-capture-entry span { white-space: nowrap; }
 }

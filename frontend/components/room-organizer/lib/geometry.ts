@@ -322,6 +322,48 @@ export function hasCollisions(
   return overlapsAnother();
 }
 
+/**
+ * 落点避让：候选位置如果和别的物件 / 墙 / 禁入区撞上，就沿同心环找最近的空位。
+ * 量出来的效果是「落点重叠 0 处」，而不是让人自己把椅子从沙发里拖出来。
+ */
+export interface FreeSpotOptions {
+  item: FurnitureItem;
+  others: readonly FurnitureItem[];
+  roomWidth: number;
+  roomDepth: number;
+  context?: CollisionContext;
+  /** 环间距，米。 */
+  step?: number;
+  /** 最远找多远，米。 */
+  maxRadius?: number;
+}
+
+export function findFreePosition({
+  item,
+  others,
+  roomWidth,
+  roomDepth,
+  context = {},
+  step = 0.1,
+  maxRadius = 2.4,
+}: FreeSpotOptions): Vec2 | null {
+  const origin = item.position ?? { x: 0, z: 0 };
+  const free = (position: Vec2): boolean => !hasCollisions({ ...item, position }, others, roomWidth, roomDepth, context);
+  if (free(origin)) return { ...origin };
+  // 同心环：先近后远，同一环上按角度均匀取样，保证结果与方位无关。
+  const rings = Math.ceil(maxRadius / step);
+  const spokes = 24;
+  for (let ring = 1; ring <= rings; ring += 1) {
+    const radius = ring * step;
+    for (let spoke = 0; spoke < spokes; spoke += 1) {
+      const angle = (spoke / spokes) * Math.PI * 2;
+      const position = { x: origin.x + Math.cos(angle) * radius, z: origin.z + Math.sin(angle) * radius };
+      if (free(position)) return position;
+    }
+  }
+  return null;
+}
+
 export type AutoOrganizeStrategy = 'shelf' | 'by-category' | 'by-size';
 
 export function autoOrganize(

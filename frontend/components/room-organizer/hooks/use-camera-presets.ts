@@ -1,5 +1,5 @@
-import { useCallback, useRef } from 'react';
-import { calculateRoomFraming } from '../lib/camera-framing';
+import { useCallback, useRef, useState } from 'react';
+import { calculateRoomFraming, cameraDistanceClamp } from '../lib/camera-framing';
 import type { ViewportPadding } from '../lib/camera-framing';
 import type { CameraPreset } from '../lib/types';
 import type * as ThreeNS from 'three';
@@ -8,6 +8,14 @@ import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/cont
 interface PresetView {
   position: readonly [number, number, number];
   target: readonly [number, number, number];
+}
+
+/** 相机焦点框：钳制与取景都跟着它走（docs/49）。null = 跟随「底图概览 ?? 场地」。 */
+export interface SceneFocusFrame {
+  width: number;
+  depth: number;
+  centerX: number;
+  centerZ: number;
 }
 
 const PRESETS: Record<CameraPreset, (size: number) => PresetView> = {
@@ -42,23 +50,42 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
   focusOn(target: { x: number; z: number }, distance?: number, floorY?: number): void;
   fitToRoom(): void;
   ensureRoomInView(): void;
+  /** 把焦点切到某个场景框（点场景 zoom 时）；null 回到「底图概览 ?? 场地」。 */
+  setSceneFocus(frame: SceneFocusFrame | null): void;
 } {
   const roomFramingActive = useRef(true);
+  const [sceneFocus, setSceneFocus] = useState<SceneFocusFrame | null>(null);
   const safeSize = Number.isFinite(roomSize) ? Math.max(2, roomSize) : 2;
   const safeHeight = Number.isFinite(buildingHeight) && buildingHeight > 0 ? buildingHeight : 3;
   const width = roomWidth !== undefined && Number.isFinite(roomWidth) && roomWidth > 0 ? roomWidth : safeSize;
   const depth = roomDepth !== undefined && Number.isFinite(roomDepth) && roomDepth > 0 ? roomDepth : safeSize;
-  // 有底图就框底图：它的范围更大，也才是人此刻想看的。
-  const frameWidth = overview && overview.width > 0 ? overview.width : width;
-  const frameDepth = overview && overview.depth > 0 ? overview.depth : depth;
-  const frameCenterX = overview ? overview.centerX : 0;
-  const frameCenterZ = overview ? overview.centerZ : 0;
+  // 焦点优先：点过的场景框住它自己；否则有底图框底图（它的范围更大），都没有框场地。
+  const activeFrame = sceneFocus ?? (overview && overview.width > 0 ? overview : null);
+  const frameWidth = activeFrame ? activeFrame.width : width;
+  const frameDepth = activeFrame ? activeFrame.depth : depth;
+  const frameCenterX = activeFrame ? activeFrame.centerX : 0;
+  const frameCenterZ = activeFrame ? activeFrame.centerZ : 0;
   const frameSize = Math.max(frameWidth, frameDepth, safeHeight);
+
+  // 钳制只跟当前焦点框走：场地焦点是 2m ~ 对角线×3；焦点切到全湖底图才放大。
+  // 不再拿「相机当前离多远」去单调撑大 maxDistance——那正是 12km 底图把相机锁死的根因。
+  const lastClampRef = useRef<{ minDistance: number; maxDistance: number } | null>(null);
+  const applyCameraClamp = useCallback((controls: OrbitControlsType) => {
+    const clamp = cameraDistanceClamp(frameWidth, frameDepth);
+    const last = lastClampRef.current;
+    controls.minDistance = clamp.minDistance;
+    controls.maxDistance = clamp.maxDistance;
+    if (!last || last.minDistance !== clamp.minDistance || last.maxDistance !== clamp.maxDistance) {
+      lastClampRef.current = clamp;
+      console.debug(`[camera-clamp] frame=${frameWidth.toFixed(1)}x${frameDepth.toFixed(1)} min=${clamp.minDistance} max=${clamp.maxDistance.toFixed(1)}`);
+    }
+  }, [frameWidth, frameDepth]);
 
   const frameCurrentView = useCallback(() => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera) return;
+    if (controls) applyCameraClamp(controls);
     const canvas = canvasRef?.current ?? controls?.domElement;
     const frame = calculateRoomFraming(camera, { width: frameWidth, depth: frameDepth, height: safeHeight, centerX: frameCenterX, centerZ: frameCenterZ }, {
       ...(canvas ? { viewport: { width: canvas.clientWidth, height: canvas.clientHeight } } : {}),
@@ -67,17 +94,22 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
     });
     if (!frame) return;
     if (frame.dollyOut > 0) {
+      // 取景需要的距离可能被焦点钳制卡住（窄视口 + 小焦点框）：临时放宽到取景所需，
+      // 下一次 applyCameraClamp 会把它收回来——钳制仍由焦点框拥有，只是不卡取景。
+      if (controls) {
+        const needed = camera.position.distanceTo(controls.target) + frame.dollyOut;
+        if (needed > controls.maxDistance) controls.maxDistance = needed;
+      }
       const backward = camera.position.clone().set(0, 0, 1).applyQuaternion(camera.quaternion);
       camera.position.addScaledVector(backward, frame.dollyOut);
     }
-    if (controls) controls.maxDistance = Math.max(controls.maxDistance, camera.position.distanceTo(controls.target));
     const farChanged = camera.far !== frame.far;
     if (farChanged) {
       camera.far = frame.far;
       camera.updateProjectionMatrix();
     }
     if (frame.dollyOut > 0 || farChanged) invalidate?.();
-  }, [cameraRef, controlsRef, canvasRef, frameWidth, frameDepth, frameCenterX, frameCenterZ, safeHeight, viewportPadding, invalidate]);
+  }, [cameraRef, controlsRef, canvasRef, frameWidth, frameDepth, frameCenterX, frameCenterZ, safeHeight, viewportPadding, invalidate, applyCameraClamp]);
 
   const ensureRoomInView = useCallback(() => {
     if (roomFramingActive.current) frameCurrentView();
@@ -90,6 +122,9 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
       if (!camera) return;
 
       roomFramingActive.current = true;
+      // 先按新焦点框应用钳制再 update：否则旧钳制（比如场地焦点的 37m）会把刚摆好的
+      // 全湖机位瞬间拽回来。
+      if (controls) applyCameraClamp(controls);
       const view = PRESETS[preset](frameSize);
       camera.position.set(view.position[0] + frameCenterX, view.position[1], view.position[2] + frameCenterZ);
       camera.lookAt(frameCenterX, view.target[1], frameCenterZ);
@@ -101,7 +136,7 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
       frameCurrentView();
       invalidate?.();
     },
-    [cameraRef, controlsRef, frameSize, frameCenterX, frameCenterZ, frameCurrentView, invalidate]
+    [cameraRef, controlsRef, frameSize, frameCenterX, frameCenterZ, frameCurrentView, applyCameraClamp, invalidate]
   );
 
   const focusOn = useCallback(
@@ -135,6 +170,7 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
     const distance = Math.max(frameSize, safeHeight);
     const targetY = safeHeight / 2;
 
+    if (controls) applyCameraClamp(controls);
     camera.position.set(distance * 0.6 + frameCenterX, distance * 0.7 + targetY, distance * 0.6 + frameCenterZ);
     camera.lookAt(frameCenterX, targetY, frameCenterZ);
 
@@ -144,7 +180,7 @@ export function useCameraPresets({ cameraRef, controlsRef, canvasRef, roomSize, 
     }
     frameCurrentView();
     invalidate?.();
-  }, [cameraRef, controlsRef, frameSize, frameCenterX, frameCenterZ, safeHeight, frameCurrentView, invalidate]);
+  }, [cameraRef, controlsRef, frameSize, frameCenterX, frameCenterZ, safeHeight, frameCurrentView, applyCameraClamp, invalidate]);
 
-  return { applyPreset, focusOn, fitToRoom, ensureRoomInView };
+  return { applyPreset, focusOn, fitToRoom, ensureRoomInView, setSceneFocus };
 }
