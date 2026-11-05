@@ -132,6 +132,10 @@
   justify-content: center;
   gap: 4px;
   width: 100%;
+  /* 左轨横向折叠态下 flex 会把它压成 2px，禁止收缩并保证文字不换行。 */
+  flex: 0 0 auto;
+  min-width: 44px;
+  white-space: nowrap;
   padding: 6px 8px;
   border: 1px solid #d0d7de;
   border-radius: 6px;
@@ -155,4 +159,31 @@
 }
 .sc-annotation-toggle:not(.is-active) .sc-annotation-toggle__suffix {
   color: #8a938d;
+}
+
+/* 移动端折叠横轨：globals.css 会把轨道按钮压成纯图标（span display:none、底色透明），
+   标注钮没有图标，必须显式救回文字与胶囊底色，否则只剩 2px 空框。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot button.sc-annotation-toggle {
+  display: flex;
+  flex: 0 0 auto;
+  width: auto;
+  height: 44px;
+  min-width: 44px;
+  padding: 6px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #F4F5F7;
+  color: #4A7C59;
+  white-space: nowrap;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot button.sc-annotation-toggle.is-active {
+  background: #4A7C59;
+  color: #ffffff;
+  border-color: #4A7C59;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot button.sc-annotation-toggle > span {
+  display: inline-flex;
+  visibility: visible;
+  width: auto;
+  height: auto;
 }
