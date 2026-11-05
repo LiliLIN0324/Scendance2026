@@ -187,3 +187,41 @@
   width: auto;
   height: auto;
 }
+
+/* 第 11 批：画区时的语义类型选择条（底部居中，复用冷石/品牌绿，不引新色）。 */
+.sc-zone-picker {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #F4F5F7;
+  border: 1px solid #D9DCE1;
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.sc-zone-picker button {
+  border: none;
+  background: transparent;
+  color: #3A3F47;
+  font-size: 13px;
+  line-height: 1;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sc-zone-picker button.is-active {
+  background: #4A7C59;
+  color: #FFFFFF;
+}
+.sc-zone-picker__hint {
+  font-size: 12px;
+  color: #8A9099;
+  margin-left: 4px;
+  white-space: nowrap;
+}

@@ -9,6 +9,17 @@
 
 export type PlanAnnotationKind = 'zone' | 'route' | 'measure';
 
+/** 第 11 批：zone 标注的语义类型，决定批准时落什么家具。 */
+export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest';
+
+/** zone 类型 → 画布/卡片中文标签。 */
+export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
+  roundtable: '圆桌区',
+  checkin: '签到区',
+  photo: '打卡区',
+  rest: '休息区',
+};
+
 /** 米制二维点（x 向右，z 向下，房间中心为原点）。 */
 export interface PlanPoint {
   x: number;
@@ -29,6 +40,8 @@ export interface PlanAnnotation {
   geometry: PlanAnnotationGeometry;
   /** 对应计划卡第几阶段，1-based。 */
   stageNo: number;
+  /** zone 类标注的语义类型；route/measure 不使用。缺省按圆桌区处理。 */
+  zoneType?: ZoneSemanticType;
 }
 
 export interface LayoutPlanStage {
