@@ -19,6 +19,7 @@ import { generationCapabilities } from './generation-contract.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
 import { AGENT_PHASES, advancePhase, progressLine, type AgentPhase } from './agent-progress.ts';
 import { matchRecipes, renderRecipes } from './agent-recipes.ts';
+import { briefTarget, deadlinePressure, renderTurnBrief, type TurnTraceEntry } from './turn-brief.ts';
 import type { Backend } from './backend.ts';
 
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
@@ -55,7 +56,8 @@ presetNode 是已归档预设中的可编辑物件，中文名称见 presetObjec
 空间判据由引擎算，不由你猜：首条用户消息里的 planOverview 是按米格渲染的平面概览（列=x，行=z，#墙 =门窗洞 O柱子 E出入口 首字母为物件，大写表示锁定），它只表示占位与相邻关系，不代表净空；largestEmptySquare 是概览精度下最大的一块空地。要判断某个尺寸能不能摆、该摆在哪，调用 find_free_areas（占地宽深+需要留出的净距），直接使用它返回的落地中心坐标；要改某块地方，先 inspect_zone 看现状。不要用相邻坐标试错，也不要把"看起来空"当作可摆放。
 工具返回 {code,details,hint} 时，hint 是唯一的下一步：按 hint 改一次；同一个 code 在同一个目标上失败两次，就换落点、换尺寸或直接说明这条限制，不要第三次重试，也不要为了绕过校验去改无关区域。validate_candidate 返回 valid:true 即已达标，不要为了更好看再反复试算；它同时给出 clearances（每个被改物件到最近障碍的实测净距），主通道按 1.2 米、次通道按 0.9 米判断——不够就换落点或如实说明，不要靠目测，也不要为了凑数去改无关区域；valid:false 时 failedCommand 指向第几条命令，只改那一条。只处理用户要求的部分，未被要求的地方保持原样。
 最终必须调用submit_candidates，每个候选{title,explanation,commands,materialSuggestions?}。JEV开启时提供三个可比较方案，不能仅改标题、ID或颜色；每个基于原草稿，禁止累积应用。方案解释指出实际差异。只有用户确定应用后程序才改场景；不能提前声称已应用。只询问信息可空commands作答。
-首条用户消息若带 layoutRecipes，那是按本次需求检索到的分区套路与硬判据：用它决定先做什么、哪些东西必须留出净距，但不要照抄里面的示意坐标——每个落点仍必须由 find_free_areas 或 inspect_zone 给出。配方与工具回执冲突时，以工具回执为准；配方标「经验值」的条目不等于规范，不要说成合规。`;
+首条用户消息若带 layoutRecipes，那是按本次需求检索到的分区套路与硬判据：用它决定先做什么、哪些东西必须留出净距，但不要照抄里面的示意坐标——每个落点仍必须由 find_free_areas 或 inspect_zone 给出。配方与工具回执冲突时，以工具回执为准；配方标「经验值」的条目不等于规范，不要说成合规。
+用户用形容词提要求（能坐、有荫、走得动、看着舒服）时，先把形容词翻译成格数再动手：inspect_zone 量出实际尺寸，再定几个座位、几格净距、遮荫占几成，把换算写进 explanation。用户没给数就用配方里的经验阈值，并声明这是经验值。形容词没有通过条件，靠形容词自检会一直转下去；宁可用一个说清楚的近似值交付，也不要为了「更周到」反复复核同一个地方。需求抽象到无法落位时（比如让做一条游线却没给宽度），按场地实际尺寸自行补全一组最小可行数值，说明取值理由后直接开工。`;
 
 /** Direct execution is an explicit user action; recommendations and JEV always preview. */
 export function agentExecutionMode(input:AgentRunRequest) {
@@ -149,10 +151,38 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       return -1;
     };
     const currentResources=()=>resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId&&assetUuidKey(o.assetId)===assetUuidKey(r.assetId))));
+    /**
+     * 查不到时给「最接近的几个」，不要给空目录。
+     *
+     * 工坊三组实验里都出现了同一幕：模型开口要一个库里没有的物件，得到空结果，于是换个说法再要一次。
+     * 空数组不含任何方向信息，模型只能猜；给出「最接近的 5 个 + 尺寸」它才有得选。
+     * 相似度用 2 字滑窗重合数，够用且稳定——中文物件名（「长椅」「花坛」「指示牌」）几乎都是双字词。
+     */
+    const nearestResources=(query:string,limit=5)=>{
+      const bigrams=(text:string)=>{const set=new Set<string>();for(let i=0;i<text.length-1;i+=1)set.add(text.slice(i,i+2));return set;};
+      const wanted=bigrams(query.toLowerCase());
+      if(!wanted.size)return [];
+      return resources.map(resource=>{
+        const hay=bigrams(`${resource.name} ${resource.category}`.toLowerCase());
+        let score=0;for(const gram of wanted)if(hay.has(gram))score+=1;
+        // 命中相同就算相关；查询词整段出现在名字里额外加权（「长椅」整词命中优于零散双字）。
+        return {resource,score:score+(resource.name.includes(query)?4:0)};
+      }).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.resource.name.length-b.resource.name.length||a.resource.resourceId.localeCompare(b.resource.resourceId))
+        .slice(0,limit).map(item=>item.resource);
+    };
     // 配方是按需求检索出来的通用套路，只在首条消息里给一次：它决定「先分区还是先摆件」，
     // 但不给坐标——坐标必须来自 find_free_areas。需求认不出类型时 matchRecipes 回 generic。
     const layoutRecipes=renderRecipes(matchRecipes(`${input.instruction} ${input.context.brief}`));
     const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),planOverview:sceneDigest(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog,layoutRecipes})}];
+    /**
+     * 每轮刷新的「刚才做了什么」简报，占一条固定位置的消息，内容整条替换、不追加。
+     *
+     * 为什么占固定位置而不是每轮追加一条：追加会让上下文线性膨胀（6 轮多出 6 段），
+     * 而且会把上一条工具回执挤离末尾——回执在末尾模型才读得到。这里只替换不追加，
+     * 上下文长度稳定，回执仍紧贴最后的 assistant 消息。
+     */
+    const briefSlot=messages.length;
+    messages.push({role:'user',content:''});
     // ponytail: run-local receipts; terminal run fencing still prevents worker restarts.
     const receipts=new Map<string,{fingerprint:string;content:string}>();
     // 同一个工具用同一批参数撞同一类错误第二次，就说明模型在原地打转：
@@ -163,15 +193,27 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     const aholoReady=generationCapabilities(env).aholoTextToModel;
     // 界面上的主标题是阶段，不是轮数：`第 2/4 阶段 · 定落点 · 第 3/6 轮`。
     let phase:AgentPhase=persistedPhase??'survey';
+    // 工具轨迹：只记「用什么工具、碰了哪块地方、成没成」，判打转用，不进模型上下文原文。
+    const trace:TurnTraceEntry[]=[];
+    // 通过校验的候选参数指纹。用它而不是计数器：同一个候选校验两次只算一个。
+    const validated=new Set<string>();
+    let lastFailure:{code:string;tool:string}|null=null;
+    let roundCostSec=90;
     for(let turn=1;turn<=6&&!finished;turn++) {
+      const roundStart=Date.now();
       await check();
       // 用户在这一轮跑着的时候追加的改道要求，在这一次模型调用之前生效。取走即清空，
       // 所以同一条备注不会在后续每一轮里反复出现；送达条数以 run.steerTotal 为准。
       const steering:{notes?:string[]}=await call('take_notes');
       for(const note of steering.notes??[])messages.push({role:'user',content:`用户在本次运行进行中追加了要求（后说的盖过先说的，优先于最初需求）：${note}\n如果它与你已经做过的步骤冲突，先用一句话说明冲突点，再按这条要求继续；不要撤掉无关的已完成部分。`});
       await call('step',{progress:progressLine(phase,turn,6),phase});
-      if(turn===6)messages.push({role:'user',content:`这是最后一次模型调用。请现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个完整候选（title、explanation、commands），不要继续读取或校验。此前 validate_candidate 的结果未提交；提交仍需通过程序校验，JEV 方案由用户最终选择。`});
-      const { url, init } = chatRequest(env, { messages, tools:aholoReady?tools:baseTools, tool_choice:turn===6?{type:'function',function:{name:'submit_candidates'}}:'auto', max_tokens:7000 });
+      // 三道闸：轮次用尽 / 时间不够再跑一轮 / 在同一处打转。后两道来自工坊实测——
+      // 只看轮次时，模型能把单轮里的「再查一次」拖到 deadline，用户什么也拿不到。
+      const remainingSec=(deadline-Date.now())/1000;
+      const pressure=deadlinePressure({turn,maxTurns:6,remainingSec,roundCostSec,trace});
+      messages[briefSlot]={role:'user',content:renderTurnBrief({turn,maxTurns:6,phase,trace,remainingSec,pressure,...(lastFailure?{lastError:lastFailure}:{}),readyCandidates:validated.size})};
+      if(pressure.forceSubmit)messages.push({role:'user',content:`现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个完整候选（title、explanation、commands），不要继续读取或校验。提交仍需通过程序校验，JEV 方案由用户最终选择。`});
+      const { url, init } = chatRequest(env, { messages, tools:aholoReady?tools:baseTools, tool_choice:pressure.forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', max_tokens:7000 });
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.
       if(new TextEncoder().encode(init.body as string).length>220000)throw new ApiError('AGENT_CONTEXT_LIMIT',422);
       const raw=await fetchJson(url,init,fetcher,150000,Math.min(35000,Math.max(1,deadline-Date.now())));
@@ -200,7 +242,14 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             else if(name==='search_resources') {
               const query=(args as z.infer<typeof schemas.search_resources>).query.toLowerCase();
               const matches=query?resources.filter(r=>`${r.name} ${r.category} ${r.resourceId} ${r.assetId}`.toLowerCase().includes(query)):resources;
-              result=resourceIndex(matches.slice(0,100));
+              // 空结果不给空数组：工坊实验里模型遇到空目录会换个说法再搜一次，直到把轮次烧完。
+              // 给「最接近的几个 + 尺寸」，它才有得选——这是把「库缺件」变成「换件」的那一步。
+              if(!matches.length) {
+                const nearest=nearestResources(query);
+                result={columns:['resourceId','name','category','sizeMeters'],items:[],exact:false,
+                  note:nearest.length?`没有精确包含「${query}」的资源。下面是名称或类别最接近的可用物件；若尺寸不符，改用 create_parametric_model（只支持桌/椅凳/柜台/台座/背景板/柜）或调整排布避让，不要再用别的说法重复搜索。`:'库里没有相近的资源；改用现有物件或 create_parametric_model 的六类。',
+                  nearest:resourceIndex(nearest)};
+              } else result=resourceIndex(matches.slice(0,100));
             } else if(name==='inspect_zone') {
               const a=args as z.infer<typeof schemas.inspect_zone>;
               const rect:Rect={x1:Math.min(a.x1,a.x2),z1:Math.min(a.z1,a.z2),x2:Math.max(a.x1,a.x2),z2:Math.max(a.z1,a.z2)};
@@ -252,6 +301,8 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
                 const candidate=build(raw);
                 const before=new Set(input.scene.objects.map(o=>o.id));
                 const touched=[...new Set([...candidate.scene.objects.filter(o=>!before.has(o.id)).map(o=>o.id),...raw.commands.flatMap(c=>'id' in c?[c.id]:[])])];
+                // 通过校验才算「手里有了可提交的方案」，简报的候选数用它。
+                validated.add(fingerprint!);
                 result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length,clearances:clearanceReport(candidate.scene,touched)};
               } catch(error) {
                 const issue=safeError(error),index=firstFailingCommand(raw);
@@ -286,6 +337,13 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             hint:`这个调用已经用同样的参数失败 ${repeats} 次：不要再试第三次。换落点、换尺寸或换工具，或者直接用 submit_candidates 提交现有可用结果并说明这条限制。`};
         }
         const content=JSON.stringify(result);
+        // 轨迹：只留判打转要用的三件事（工具、目标、成没成）。失败同时记错误码，
+        // 下一轮简报据此提醒「不要用同样参数再试一次」。
+        const failure=result&&typeof result==='object'&&'code' in result?String((result as {code:unknown}).code):
+          result&&typeof result==='object'&&(result as {valid?:unknown}).valid===false?'CANDIDATE_INVALID':undefined;
+        const traceTarget=briefTarget(tool.function.name,(()=>{try{return JSON.parse(tool.function.arguments??'{}') as Record<string,unknown>;}catch{return {};}})());
+        trace.push({turn,tool:tool.function.name,ok:!failure,...(failure?{code:failure}:{}),...(traceTarget?{target:traceTarget}:{})});
+        if(failure)lastFailure={code:failure,tool:tool.function.name};
         // Keep execution failures too: a lost response may follow a committed effect.
         if(fingerprint!==undefined&&!receipts.has(tool.id))receipts.set(tool.id,{fingerprint,content});
         // An unconfirmed checkpoint is a persistence boundary, not a candidate repair.
@@ -295,6 +353,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         // Any further tools in this message are acknowledged without side effects.
         if(finished){for(const pending of reply.toolCalls.slice(reply.toolCalls.indexOf(tool)+1))messages.push({role:'tool',tool_call_id:pending.id,content:'{"stopped":true}'});break;}
       }
+      // 下一轮的时间闸用「刚刚这一轮实际花了多久」而不是拍一个常数：
+      // 模型在不同场景下思考深度差三倍，固定常数会把时间闸定得过松或过紧。
+      roundCostSec=Math.max(20,Math.round((Date.now()-roundStart)/1000));
     }
     if(!candidates.length)throw lastError??new ApiError('AGENT_NO_VALID_CANDIDATE',422);
     await check();

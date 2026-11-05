@@ -83,4 +83,16 @@ describe('配方数据本身的完整性', () => {
       expect(recipe.zones.reduce((sum, zone) => sum + zone.share, 0)).toBe(100);
     }
   });
+
+  it('每个配方都写了运营动线，且至少两条', () => {
+    for (const recipe of ACTIVITY_RECIPES) {
+      expect(recipe.operations?.length ?? 0).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('动线写进提示词，且出现在套路之前', () => {
+    const text = renderRecipes([ACTIVITY_RECIPES.find(r => r.kind === 'market')!]);
+    expect(text).toContain('动线：');
+    expect(text.indexOf('动线：')).toBeLessThan(text.indexOf('套路：'));
+  });
 });

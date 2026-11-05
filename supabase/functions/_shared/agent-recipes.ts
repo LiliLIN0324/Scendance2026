@@ -34,6 +34,14 @@ export interface ActivityRecipe {
   aliases: string[];
   intent: string;
   zones: RecipeZone[];
+  /**
+   * 运营动线：人不摆东西，但场地必须为它让路。
+   *
+   * 为什么单列一段：谷地工坊的三组实验里，模型在没有被要求的情况下自己做出了
+   * 「摊主后场 2 格、顾客走前场」——这是真实市集最容易被忽略的痛点。说明动线是可以教的套路，
+   * 不是审美。写进配方后，模型不必每次重新发明一遍。
+   */
+  operations?: string[];
   layout: string[];
   hardRules: RecipeRule[];
   softRules: RecipeRule[];
@@ -52,6 +60,10 @@ const family: ActivityRecipe = {
   label: '亲子活动区',
   aliases: ['亲子', '亲子活动', '儿童', '儿童活动区', '遛娃', '小朋友', '游乐区', '亲子乐园'],
   intent: '让看护者与孩子的距离小于孩子跑开的距离',
+  operations: [
+    '家长从入口进来先看到座椅带，再看到孩子——先有落座点再放娃',
+    '儿童区只有一个开口，开口对着座椅带而不是对着通道',
+  ],
   zones: [
     { key: 'play', label: '儿童活动区', share: 55, adjacency: '居中，四周被缓冲环包住' },
     { key: 'care', label: '看护休憩带', share: 30, adjacency: '沿活动区一侧连续，视线不被遮挡' },
@@ -95,6 +107,10 @@ const elder: ActivityRecipe = {
   label: '适老休憩区',
   aliases: ['老人', '适老', '适老化', '老年', '长者', '休憩区', '座椅', '康养'],
   intent: '让轮椅能到每一个停留点，并且坐下与起身都有支撑',
+  operations: [
+    '一圈走回来不要走回头路：环路是轮椅使用者的核心诉求，不是装饰',
+    '座椅带在环路外侧，轮椅停靠在环路内侧——推的人停在外圈、坐的人面向内圈看人',
+  ],
   zones: [
     { key: 'seat', label: '座椅休憩带', share: 45, adjacency: '沿散步道一侧，每 ≤15 格一处' },
     { key: 'loop', label: '环形散步道', share: 35, adjacency: '成环不回头，净宽 ≥2 格' },
@@ -138,6 +154,10 @@ const market: ActivityRecipe = {
   label: '户外市集',
   aliases: ['市集', '集市', '周末市集', '摊位', '摆摊', '快闪', '夜市', '摊点'],
   intent: '让摊位排得下、人走得动、明火管得住',
+  operations: [
+    '摊主后场 2 格（备货、倒水、吃饭），顾客只走前场，两侧不混',
+    '主通道从入口一眼通到舞台，不在中途被摊位收窄',
+  ],
   zones: [
     { key: 'stall', label: '摊位阵列', share: 60, adjacency: '沿通道两侧成排，排长 ≤40 格' },
     { key: 'aisle', label: '主次通道', share: 30, adjacency: '主通道 3 格贯穿全场，次通道 2 格接主通道' },
@@ -183,6 +203,10 @@ const stage: ActivityRecipe = {
   label: '小型户外演出',
   aliases: ['演出', '舞台', '音乐会', '音乐节', '观众区', '表演', 'live'],
   intent: '先按人数算容量与通道，再谈舞台好不好看',
+  operations: [
+    '观众区两侧各留一条疏散通道，不与进场通道共用',
+    '舞台后方留缓冲区，演职人员不从观众区穿行',
+  ],
   zones: [
     { key: 'stage', label: '舞台与设备', share: 20, adjacency: '一端，台口正对观众区中轴' },
     { key: 'audience', label: '观众区', share: 55, adjacency: '在首排退距之后，被通道切成若干块' },
@@ -228,6 +252,10 @@ const camp: ActivityRecipe = {
   label: '户外营地',
   aliases: ['露营', '营地', '帐篷', '营位', '野营'],
   intent: '每个营位都能独立进出，且火与帐篷之间留够距离',
+  operations: [
+    '车停在营位外侧、帐篷在内侧，中间是活动空地——三件套的顺序不能乱',
+    '营位之间用树或矮墙隔开视线，但不要挡消防通道',
+  ],
   zones: [
     { key: 'pitch', label: '营位组团', share: 55, adjacency: '成组团铺开，位与位之间留间距' },
     { key: 'service', label: '卫浴与服务', share: 25, adjacency: '服务中心在营地入口，服务半径 ≤250 格' },
@@ -272,6 +300,10 @@ const exhibition: ActivityRecipe = {
   label: '户外展览',
   aliases: ['展览', '展位', '展会', '展陈', '打卡', '游线', '展区'],
   intent: '通道宽度决定能设几排展，先定通道再定展位',
+  operations: [
+    '单向游线：入口与出口分开，观众不走回头路',
+    '每个展点前留出站立区，观众不站在通道上拍照',
+  ],
   zones: [
     { key: 'booth', label: '展位组团', share: 60, adjacency: '贴着通道外侧，尽端式组团' },
     { key: 'aisle', label: '主次通道', share: 30, adjacency: '主通道 5 格成环，次通道 3 格接入' },
@@ -317,6 +349,10 @@ const generic: ActivityRecipe = {
   label: '通用活动场地',
   aliases: ['通用', '其他', '活动场地'],
   intent: '先把通行与疏散的骨架定下来，再往里塞活动内容',
+  operations: [
+    '先定出入口与主通道，再分区，最后才摆物件',
+    '任何一个分区失火或拥挤，都能从两侧疏散',
+  ],
   zones: [
     { key: 'main', label: '主活动区', share: 60, adjacency: '居中，四周留缓冲' },
     { key: 'aisle', label: '环形通道', share: 25, adjacency: '包住主活动区，两端接出入口' },
@@ -395,6 +431,7 @@ function renderBlock(recipe: ActivityRecipe, keep: Keep): string {
     `【配方·${recipe.label}】本质：${recipe.intent}`,
     `分区：${recipe.zones.map(zone => `${zone.label} ${zone.share}%`).join(' / ')}`,
   ];
+  if (keep.layout > 0 && recipe.operations?.length) lines.push(`动线：${recipe.operations.slice(0, keep.layout).join('；')}`);
   if (keep.layout > 0) {
     lines.push(`套路：${recipe.layout.slice(0, keep.layout).map((step, i) => `${i + 1}) ${step}`).join(' ')}`);
   }
