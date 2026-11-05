@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronUp, Globe, Info, Layers, LayoutTemplate, Mountain, Scan } from '@/components/solid-icons';
+import { Camera, ChevronDown, ChevronUp, Globe, Info, Layers, LayoutTemplate, Mountain, Scan } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { isUntouched } from '../lib/restore-point';
@@ -136,12 +136,11 @@ export function SpacePanel({
                   </li>;
                 })}
               </ul>
-              : <>
-                <div className="sc-lib-empty" role="note"><Scan size={14} aria-hidden="true"/><span>还没有已扫描的真实场地</span></div>
-                <button type="button" className="sc-button" onClick={() => onOpenAholo?.('recon')} disabled={!onOpenAholo}>
-                  <Scan size={14} aria-hidden="true"/>去采集 / 重建
-                </button>
-              </>}
+              : <div className="sc-space-venue-hint">
+                <Camera size={13} aria-hidden="true"/>
+                <span title="用现场照片或视频重建这一场；拍完当场就能判断能不能出 3D，电脑端只给这一步提示。">用手机拍一段场地</span>
+                <a className="sc-button" href="/guide/capture" title="打开采集引导：先看合格拍法，再回来重建">拍摄场地</a>
+              </div>}
           </section>
           <section className="sc-space-block sc-space-env" aria-label="当前环境">
             {environment

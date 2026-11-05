@@ -1,5 +1,8 @@
 import { mountBand } from '../lib/mount-band';
 import { type BuilderContext, type FurnitureBuilder, type ThreeModule, buildFallback } from './builder-utils';
+import { isWallHung } from '../lib/mount-band';
+import { isWallMounted } from '../lib/opening-snap';
+
 import { buildToilet, buildBathtub, buildShower } from './builders/builders-bathroom';
 import { buildBed, buildNightstand, buildDresser } from './builders/builders-bedroom';
 import {
@@ -110,7 +113,7 @@ export function createFurnitureModel(
       baseColor: state.status === 'error' ? '#b94c4c' : '#b5a87b', opacity: 0.45 });
     placeholder.userData.glbStatus = state.status;
     placeholder.name = state.status === 'error' ? '模型加载失败（占位）' : '模型待加载（占位）';
-    return withElevation(item, placeholder);
+    return withElevation(item, fitToDeclared(THREE, item, placeholder));
   }
   const ctx: BuilderContext = {
     THREE,
@@ -120,8 +123,45 @@ export function createFurnitureModel(
     opacity: hasCollision ? 0.7 : 1.0,
   };
   const builder = BUILDERS[item.type] ?? buildFallback;
-  return withElevation(item, builder(ctx));
+  return withElevation(item, fitToDeclared(THREE, item, builder(ctx)));
 }
+
+/**
+ * 把建好的模型对回目录里的标称尺寸：宽 / 深 / 高各按比例收放，
+ * 水平居中；站地物件的底面落到 y=0，挂墙 / 门窗保持自己的基准高度。
+ * 这样一来「1 m 就是 1 m」不是靠 builder 自觉，而是每次建模都强制对表。
+ */
+function fitToDeclared(THREE: ThreeModule, item: FurnitureItem, model: ReturnType<FurnitureBuilder>): ReturnType<FurnitureBuilder> {
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  if (![size.x, size.y, size.z].every(n => Number.isFinite(n) && n > 1e-6)) return model;
+  const center = box.getCenter(new THREE.Vector3());
+  const sx = item.width > 0 ? item.width / size.x : 1;
+  const sz = item.depth > 0 ? item.depth / size.z : 1;
+  // 标称高度只是「板厚 / 水深」的几类，模型里含摆件或水面，硬压会变形；
+  // 它们的尺寸误差由各自 builder 负责，这里只对齐水平占地。
+  const sy = item.height > 0 && !HEIGHT_FIT_EXEMPT.has(item.type) ? item.height / size.y : 1;
+  const groundItem = !isWallHung(item.type) && !isWallMounted(item.type) && item.type !== 'pendant-light';
+  const targetBottom = groundItem ? 0 : box.min.y;
+  const needsFit =
+    Math.abs(sx - 1) > 0.005 ||
+    Math.abs(sy - 1) > 0.005 ||
+    Math.abs(sz - 1) > 0.005 ||
+    Math.abs(center.x) > 0.001 ||
+    Math.abs(center.z) > 0.001 ||
+    Math.abs(targetBottom - box.min.y) > 0.001;
+  if (!needsFit) return model;
+  const wrapper = new THREE.Group();
+  wrapper.userData.fitToDeclared = true;
+  wrapper.scale.set(sx, sy, sz);
+  wrapper.position.set(-center.x * sx, targetBottom - box.min.y * sy, -center.z * sz);
+  wrapper.add(model);
+  return wrapper;
+}
+
+/** 标称高度不是整体外廓的类型（挂墙板的摆件、池塘的水面）。 */
+const HEIGHT_FIT_EXEMPT = new Set(['wall-shelf', 'pond']);
 
 /** Match GLB instances: meshes carry their elevation, the outer group stays on the floor. */
 function withElevation(item: FurnitureItem, model: ReturnType<FurnitureBuilder>): ReturnType<FurnitureBuilder> {

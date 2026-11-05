@@ -169,6 +169,15 @@ function isLngLatPoint(value: unknown): boolean {
     && value.lat >= -90 && value.lat <= 90;
 }
 
+/** 场景锚点（docs/49）：原点经纬度 + 正北朝向 + 米制尺度，场景↔地理的唯一变换。 */
+function isSceneAnchor(value: unknown): boolean {
+  return isPlainObject(value)
+    && isFiniteNumber(value.lng) && value.lng >= -180 && value.lng <= 180
+    && isFiniteNumber(value.lat) && value.lat >= -90 && value.lat <= 90
+    && isFiniteNumber(value.orientationDeg)
+    && isFiniteNumber(value.metersPerUnit) && value.metersPerUnit > 0;
+}
+
 /** 调研底图：地名、中心点、半径、经纬度范围与图地址。范围不对就不认这份底图。 */
 function isResearchArea(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
@@ -183,6 +192,8 @@ function isResearchArea(value: unknown): boolean {
   if (!isFiniteNumber(bounds.west) || !isFiniteNumber(bounds.south)) return false;
   if (!isFiniteNumber(bounds.east) || !isFiniteNumber(bounds.north)) return false;
   if (bounds.east <= bounds.west || bounds.north <= bounds.south) return false;
+  // scanAssetId：底图跟哪套场地扫描走（docs/49）；没有或不是字符串都按手动底图处理。
+  if (value.scanAssetId !== undefined && (typeof value.scanAssetId !== 'string' || value.scanAssetId.length === 0 || value.scanAssetId.length > MAX_ID_LENGTH)) return false;
   return typeof value.imageUrl === 'string' && isSatelliteProxyUrl(value.imageUrl);
 }
 
@@ -372,6 +383,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   )) return false;
   if (v.mapLngLat !== undefined && !isLngLatPoint(v.mapLngLat)) return false;
   if (v.mapGroundFrame !== undefined && !isMapGroundFrame(v.mapGroundFrame)) return false;
+  if (v.sceneAnchor !== undefined && !isSceneAnchor(v.sceneAnchor)) return false;
   if (v.researchArea !== undefined && !isResearchArea(v.researchArea)) return false;
   // Opacity outside [0,1] is corruption, not preference — the UI slider only
   // produces this range and canvas globalAlpha silently misbehaves outside it.
@@ -555,6 +567,7 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   mapGroundPolygon: true,
   mapLngLat: true,
   mapGroundFrame: true,
+  sceneAnchor: true,
   researchArea: true,
   terrain: true,
   neighbours: true,

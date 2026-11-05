@@ -318,7 +318,7 @@
         <div class="line canvas"><u>画布上看到</u>零墙零门，只报范围；简报的室内外自动切成户外。</div>
       </div>
       <p class="note">为什么不假造一个入口：真相字段 <code>mainEntrance.openingId</code> 必须指向真实开口。宁可不报入口，也不编一个。</p>
-      <p class="note">地图圈画：按外接矩形报真实范围，布置壳上限 100 m；圈到超过 100 m 时取其中一块 100×100 m 规划区，真实范围写进场地名。</p>
+      <p class="note">场景地面层圈画：按外接矩形报真实范围，布置壳上限 100 m；范围超过 100 m 时取其中一块 100×100 m 规划区，真实范围写进场地名。</p>
     </div>
 
     <h3>摆完之后的那些话</h3>
@@ -520,15 +520,15 @@
   </section>
 
   <section>
-    <h2>地图支路硬钉：定场 ≠ 重建素材</h2>
-    <p class="lead">户外地图支路已接通采集单与左栏「场地观感」。Bingo说话时必须把定场与重建分开，不许暗示卫星图能出 3D。</p>
+    <h2>场景地面层硬钉：地图不归 Agent</h2>
+    <p class="lead">地图只是场景的地面层，由视图层按 <code>sceneAnchor</code> 渲染。Bingo 不做地点搜索、不切城市、不算路线；输入只有已定位好的场景 + 物件 + 用户意图。</p>
     <div class="nails">
       <div class="nail">
-        <b>高德只定场 + 采集单</b>
-        <p>圈画报真实米数、立壳体、给出沿边界站位。不说「用地图直接重建」。用户问卫星能不能当素材时，直接拒绝并指向现场视频/照片。</p>
+        <b>Agent 没有地图工具</b>
+        <p>不提供搜地点、切城市、算路线、改锚点等能力。用户问「帮我找场地 / 这块地在哪」，直接说不在职责内；地点设置交给画布左上角的场景锚定输入（视图层）。地图只作场景地面层，不做独立入口或独立定位状态。</p>
         <div class="dlg">
           <div class="line user"><u>你说</u>能不能用卫星图重建这块地</div>
-          <div class="line agent"><u>Bingo说</u>不能。卫星和高德图只用来圈范围；重建要你按采集单在现场拍视频或绕场照片，再进左轨「空间」里的「场地观感 · 场地重建」。</div>
+          <div class="line agent"><u>Bingo说</u>不能。卫星图只是场景地面层的参照；重建要你按采集单在现场拍视频或绕场照片。地点在画布左上角锚定，不经过我。</div>
         </div>
       </div>
       <div class="nail">
@@ -544,7 +544,7 @@
     <ul class="tight">
       <li>壳体：层高默认 <code>4.0 m</code>（没说就标 <code>heightSource:'default'</code>）、外墙厚 <code>0.16 m</code>、主入口宽上限 <code>1.8 m</code>、高上限 <code>2.2 m</code>，开口状态一律 <code>inferred</code>（待确认）。户外零墙零门。</li>
       <li>真相字段只有三个：<code>venue.height</code>、<code>venue.site.mainEntrance.openingId</code>、<code>indoorOutdoor</code>。禁止另造 <code>ceilingHeightM</code> 这类平行字段。</li>
-      <li>尺寸：最小 <code>1 m</code>，立墙上限 <code>100 m</code>，对话输入上限 <code>500 m</code>，地图圈画布置壳上限 <code>100 m</code>。</li>
+      <li>尺寸：最小 <code>1 m</code>，立墙上限 <code>100 m</code>，对话输入上限 <code>500 m</code>，场景地面层圈画布置壳上限 <code>100 m</code>。</li>
       <li>本地摆场常量：餐桌 <code>areaSets = max(1, floor(面积/30))</code>、<code>wantedSets = ceil(人数/4)</code>、<code>count = max(1, min(可用槽, wantedSets, areaSets×2))</code>；课桌椅墙距 0.35 · 椅距 0.7 · 列距 1.7 · 行距 2.1，未给人头按 1.8 ㎡/人推；背景板贴北墙内侧 0.4 m；点缀 3–6 件、带随机种子可复现。</li>
       <li>提案契约：确认前零写入 · 逐帧推进（每帧 420 ms，末帧停 120 ms，五步文案）· 确认才一次落盘 · 画布被改即作废并说明 · 一屏一颗绿钮。</li>
     </ul>

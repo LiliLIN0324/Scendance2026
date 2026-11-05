@@ -46,7 +46,7 @@ import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useSceneLighting } from './hooks/use-scene-lighting';
-import { researchBasemapPlacement } from './three/research-basemap';
+import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
 import { useSplatPreview } from './hooks/use-splat-preview';
 import type { SplatPosition, SplatTransformMode } from './three/splat-preview';
@@ -85,6 +85,12 @@ import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import type { ScannedVenue } from './lib/venue-scans';
+import { listScannedVenues } from './lib/venue-scans';
+import { sceneAnchorOf } from './lib/scene-anchor';
+import { cameraDistanceClamp } from './lib/camera-framing';
+import type { SceneAnchor } from './lib/types';
+import { useSceneZoom, SCENE_ZOOM_CLOSER_RATIO } from './hooks/use-scene-zoom';
+import { SceneGeoDots } from './panels/scene-geo-dots';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
@@ -92,6 +98,8 @@ import { snapWallEndpoint } from './lib/wall-snap';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
+import { GeoBasemapInput } from './panels/geo-basemap-input';
+import { createResearchArea, RESEARCH_SATELLITE_STYLE } from './lib/research-area';
 import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
 import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
@@ -1651,7 +1659,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   // 调研底图在场时，取景框换成底图那片区域：底图铺在哪，镜头就框哪。
   const researchPlacement = researchBasemapPlacement(layout);
-  const { applyPreset, focusOn, fitToRoom, ensureRoomInView } = useCameraPresets({
+  const { applyPreset, focusOn, fitToRoom, ensureRoomInView, setSceneFocus } = useCameraPresets({
     cameraRef,
     controlsRef,
     invalidate,
@@ -1671,6 +1679,59 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   });
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
+  // docs/49 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
+  // 距离=max(8m, 包围盒最长边×2.5)，俯角 42.5°；打断与推近规则在 use-scene-zoom 里。
+  const { zoomToScene } = useSceneZoom({ cameraRef, controlsRef, invalidate });
+  const [focusedVenueId, setFocusedVenueId] = useState<string | null>(null);
+  const zoomToVenue = useCallback((venue: ScannedVenue, closer: boolean) => {
+    if (view.walkthroughMode) return; // 漫游里相机归第一人称，不抢
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const current = layoutStore.getState().layout;
+    const world = (venue.geo ? researchGeoToWorld(current, venue.geo.lng, venue.geo.lat) : null) ?? { x: 0, z: 0 };
+    const width = venue.meters && venue.meters.width > 0 ? venue.meters.width : 8;
+    const depth = venue.meters && venue.meters.depth > 0 ? venue.meters.depth : 8;
+    const height = venue.meters?.height ?? 0;
+    setSceneFocus({ width, depth, centerX: world.x, centerZ: world.z });
+    setFocusedVenueId(venue.assetId);
+    if (closer) {
+      // 已在焦点上的场景再点一次：保持当前方位，距离推近一档。
+      const clamp = cameraDistanceClamp(width, depth);
+      const distance = Math.max(clamp.minDistance, controls.getDistance() * SCENE_ZOOM_CLOSER_RATIO);
+      zoomToScene({ target: { x: world.x, y: height / 2, z: world.z }, distance });
+      return;
+    }
+    const longest = Math.max(width, depth, height);
+    zoomToScene({
+      target: { x: world.x, y: height / 2, z: world.z },
+      distance: Math.max(8, longest * 2.5),
+      clamp: cameraDistanceClamp(width, depth),
+    });
+  }, [view.walkthroughMode, controlsRef, setSceneFocus, zoomToScene]);
+  // 换场地时 splat 是异步加载的：等它就绪再 zoom（load 完成会先框一遍场地，zoom 随后带到定点机位）。
+  const pendingVenueZoomRef = useRef<ScannedVenue | null>(null);
+  useEffect(() => {
+    const pending = pendingVenueZoomRef.current;
+    if (!pending) return;
+    if (splatState.status === 'ready' && splatState.assetId === pending.assetId) {
+      pendingVenueZoomRef.current = null;
+      zoomToVenue(pending, false);
+    } else if (splatState.status === 'error') {
+      pendingVenueZoomRef.current = null;
+    }
+  }, [splatState, zoomToVenue]);
+
+  // 底图变化（手动铺图/撤图）时焦点重置：手动铺图框整片给人看；自动铺图（scanAssetId）的相机归场地取景管。
+  const lastResearchAreaRef = useRef<RoomLayout['researchArea']>();
+  useEffect(() => {
+    const area = layout.researchArea;
+    if (lastResearchAreaRef.current === area) return;
+    lastResearchAreaRef.current = area;
+    setSceneFocus(null);
+    setFocusedVenueId(null);
+    if (!area || !area.scanAssetId) fitToRoom();
+  }, [layout.researchArea, setSceneFocus, fitToRoom]);
+
   const { captureRenderImage, exportRenderImage, exportRenderAlbum, handleShareLink } = useImportExport({
     layout,
     actions,
@@ -1682,6 +1743,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     cameraRef,
     controlsRef,
     applyPreset,
+    // 导出走实时那条渲染栈（点云背景 + 布置前景），否则成图里只剩布置。
+    paintFrame: paintSplatFrame,
     onImported: clearTransientSelection,
   });
 
@@ -2071,12 +2134,49 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome]);
 
   /**
+   * docs/49 地理底图：只动 researchArea 与场景锚点，走正式历史；输入与自动铺图共用这一条路。
+   *
+   * 架构定案：地图是 3D 场景里的一个渲染层，场景坐标 ↔ 地理坐标的唯一变换是场景锚点。
+   * 铺图 = 把场景重新锚到那片真实位置（锚点原点 = 底图中心经纬度）；朝向沿用现有锚点
+   * （默认正北朝上），米制沿用壳体缩放（没有壳就是 1）。底图不再读 mapGroundFrame，
+   * 场景里不存在第二套地面坐标——因此删掉了旧的「异地框架 >3km 就清掉」补丁：
+   * 它是在掩盖两套坐标打架，而不是解决问题。
+   */
+  const applyResearchArea = useCallback((area: RoomLayout['researchArea'] | null) => {
+    const current = layoutStore.getState().layout;
+    const next: RoomLayout = (() => {
+      if (!area) {
+        const { researchArea: _dropped, ...rest } = current;
+        return rest as RoomLayout;
+      }
+      const existing = sceneAnchorOf(current);
+      const sceneAnchor: SceneAnchor = {
+        lng: area.center.lng,
+        lat: area.center.lat,
+        orientationDeg: existing?.orientationDeg ?? 0,
+        metersPerUnit: existing?.metersPerUnit ?? 1,
+      };
+      return { ...current, sceneAnchor, researchArea: area };
+    })();
+    try {
+      commitHistoryNow();
+      actions.applyLayout(next);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  }, [actions, commitHistoryNow, notify]);
+
+  /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
    * 尺寸与场地标记合成一步历史——撤销一次就回到上一套场地（画布与尺寸一起退）。
    * 注册表带米制尺寸就直接按它摆壳体；没带时才等高斯就绪校准。
    */
   const applyRealVenue = useCallback((venue: ScannedVenue) => {
-    if (venue.assetId === environmentsRef.current[0]?.assetId) return;
+    if (venue.assetId === environmentsRef.current[0]?.assetId) {
+      // 点当前场地：已在焦点上的再点推近一档（×0.75），没在焦点上的 zoom 过去。
+      zoomToVenue(venue, venue.assetId === focusedVenueId);
+      return;
+    }
     const active = environmentsRef.current[0];
     const before = layoutStore.getState().layout;
     // 换场前的这份布局就是撤销目标；记下它当时的场地，撤销时画布才能一起退回去。
@@ -2104,7 +2204,24 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
     }
-  }, [notify, onApplyCreative, selectEnvironment]);
+    // 场地 splat 异步加载，就绪后 zoom 到该场景（pending 效果在 splatState ready 时触发）。
+    pendingVenueZoomRef.current = venue;
+  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId]);
+
+  // 场景点位（docs/49 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
+  const sceneGeoDots = useMemo(() => {
+    if (view.view2D || !layout.researchArea) return [];
+    return listScannedVenues().flatMap(venue => {
+      if (!venue.geo) return [];
+      const world = researchGeoToWorld(layout, venue.geo.lng, venue.geo.lat);
+      return world ? [{ id: venue.assetId, name: venue.name, x: world.x, z: world.z }] : [];
+    });
+    // 只看影响投影的字段：锚点/底图/场地尺寸。
+  }, [view.view2D, layout.researchArea, layout.sceneAnchor, layout.mapGroundFrame, layout.mapLngLat, layout.width, layout.height]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickSceneGeoDot = useCallback((assetId: string) => {
+    const venue = listScannedVenues().find(item => item.assetId === assetId);
+    if (venue) applyRealVenue(venue);
+  }, [applyRealVenue]);
 
   /** 场景生成/真重建「取回并预览」：先落盘再切到 3D；真成功挂本场 .spz 时同步打开环境预览抽屉，替换当前观感层。 */
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
@@ -2139,6 +2256,28 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       setSplatShellKeptFor(splatState.assetId);
     }
   }, [splatState, onApplyCreative]);
+  // docs/49 地理底图：场地扫描资产带 geo（拍摄位置）就自动铺卫星底图，重建物落在真实位置上；
+  // 手动/调研标的底图（无 scanAssetId 标记）永远不被自动逻辑覆盖；新场地没 geo 就撤掉自己铺的那张。
+  const scanBasemapAssetRef = useRef('');
+  useEffect(() => {
+    const assetId = environments[0]?.assetId ?? '';
+    if (!assetId || scanBasemapAssetRef.current === assetId) return;
+    scanBasemapAssetRef.current = assetId;
+    const asset = findAholoAsset(assetId);
+    const existing = layoutStore.getState().layout.researchArea;
+    if (existing && !existing.scanAssetId) return; // 手动底图优先，不覆盖
+    if (!asset?.geo) {
+      if (existing?.scanAssetId) applyResearchArea(null);
+      return;
+    }
+    if (existing?.scanAssetId === assetId) return;
+    const span = Math.max(asset.meters?.width ?? 0, asset.meters?.depth ?? 0);
+    const radius = asset.geo.radiusM ?? Math.round(Math.max(300, Math.min(1600, span * 12)));
+    applyResearchArea({
+      ...createResearchArea({ name: asset.name, address: '', lng: asset.geo.lng, lat: asset.geo.lat }, radius, RESEARCH_SATELLITE_STYLE),
+      scanAssetId: assetId,
+    });
+  }, [environments, applyResearchArea]);
   const splatPlacement = splatState.status === 'ready'
     ? placeSplatPreview(layout, splatState.name, splatState.meters ?? null)
     : null;
@@ -2319,6 +2458,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   <RailLaneDot lane="material" open={isLaneOpen('material')}/>
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
+                <a
+                  href="/guide/capture"
+                  className="sc-rail-tool sc-rail-disc sc-rail-capture"
+                  aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"
+                  data-tip="拍摄场地 · 出 3D"
+                >
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.6" />
+                    <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                  <span className="sc-rail-label" aria-hidden="true">拍摄场地</span>
+                </a>
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => setChatPeerId(current => current === member.userId ? null : member.userId)} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
@@ -2369,6 +2520,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             </svg>
           </button>
           {!columnExpanded && <MobileAgentDock agentId={activeAgent} onOpen={() => toggleAgent(activeAgent)} />}
+          <a className="sc-mobile-capture-entry" href="/guide/capture" aria-label="拍摄场地：拍完出 3D">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
+            <span>拍摄场地</span>
+          </a>
           <div id="workbench-nav-column" className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}`}>
           <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
@@ -2494,6 +2652,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
             <CanvasHeading view2D={view.view2D} />
+            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={() => { setSceneFocus(null); fitToRoom(); }} />
+            <SceneGeoDots
+              dots={sceneGeoDots}
+              focusedId={focusedVenueId}
+              toScreen={toScreen}
+              controlsRef={controlsRef}
+              cameraReady={isReady}
+              onPick={pickSceneGeoDot}
+            />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
               {environmentShown

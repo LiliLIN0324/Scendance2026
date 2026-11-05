@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { ChevronDown, ChevronUp, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
@@ -100,9 +100,11 @@ export interface OnlineModelLibraryProps {
   roomSize?: { width: number; depth: number };
   /** 物料卡（三块并排）：我的生成 / 收藏 / 库。 */
   cardMode?: boolean;
+  /** 本机 GLB 导入入口，跟着物料轨一起走，不另开一栏。 */
+  importSlot?: ReactNode;
 }
 
-export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, cardMode = false }: OnlineModelLibraryProps): JSX.Element {
+export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAddSet, roomSize, controller, capturePlacement, cardMode = false, importSlot }: OnlineModelLibraryProps): JSX.Element {
   const [index, setIndex] = useState<OnlineModelIndex | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
@@ -428,6 +430,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           <LayoutGrid size={15} aria-hidden="true"/><span>库</span><small>{libraryModels.length}</small>
         </button>
       </div>
+      {importSlot}
       <div className="sc-lib-results" aria-live="polite">
         {pane === 'fav'
           ? (favoriteRows === 0
@@ -530,6 +533,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       </div>
     )}
     <div ref={cards.setRef} onKeyDown={cards.onKeyDown} className="sc-material-rail" role="group" aria-label="线上模型" tabIndex={0}>
+      {importSlot}
       <MaterialCreateCell {...(controller ? { controller } : {})} disabled={disabled} variant="tile"/>
       {shown.length === 0 && generatedShown.length === 0 && <p className="sc-muted sc-material-empty">{bucket.startsWith('tag:') ? '还没有物料挂上这个标签。' : '没有匹配的模型。'}</p>}
       {shown.map(model => {

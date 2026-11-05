@@ -1,6 +1,7 @@
 import { useCallback, useRef, type MutableRefObject } from 'react';
-import { hasCollisions, type KeepOutRect } from '../lib/geometry';
-import { settleWallMountedItem, type WallGap } from '../lib/opening-snap';
+import { findFreePosition, hasCollisions, type KeepOutRect } from '../lib/geometry';
+import { isWallHung } from '../lib/mount-band';
+import { isWallMounted, settleWallMountedItem, type WallGap } from '../lib/opening-snap';
 import { canApplyLayoutGeometry, structuralItemCollides } from '../lib/structural-layout';
 import {
   advanceGroupScaleSession,
@@ -365,6 +366,26 @@ export function useItemDrag({
       if (session && finalPos && moved) {
         const primaryGroup = findFurnitureGroup(id);
         if (primaryGroup) setDragCollisionTint(primaryGroup, false);
+        // 单件落点若和别的物件 / 墙撞上，收手时挪到最近的空位；成组拖动保持相对位置，不拆散。
+        if (session.latest.size === 1) {
+          const item = activeFloor.items.find((entry) => entry.id === id);
+          if (
+            item &&
+            item.category !== 'outdoor' &&
+            item.type !== 'stairs' &&
+            !isWallHung(item.type) &&
+            !isWallMounted(item.type)
+          ) {
+            const resolved = findFreePosition({
+              item: { ...item, position: finalPos },
+              others: activeFloor.items,
+              roomWidth,
+              roomDepth,
+              context: { keepOut, interiorWalls: activeFloor.interiorWalls ?? [] },
+            });
+            if (resolved) session.latest.set(id, resolved);
+          }
+        }
         // Single dispatch for the whole gesture; the rebuild effect runs once.
         actions.bulkSetPositions(session.latest);
       }

@@ -76,18 +76,37 @@ describe('camera presets with the real orbit controller', () => {
     expect(state.controls.target.equals(target)).toBe(true);
   });
 
-  it('fits the full stacked room in a short canvas and respects the orbit minimum', () => {
+  it('fits the full stacked room in a short canvas and owns the orbit clamps', () => {
     const state = setup(1100, 140);
     state.controls.minDistance = 80;
     state.controls.maxDistance = 90;
     act(() => state.result.current.fitToRoom());
     expect(state.controls.target.toArray()).toEqual([0, 4.5, 0]);
-    expect(state.camera.position.distanceTo(state.controls.target)).toBeGreaterThanOrEqual(80);
+    // 钳制由焦点框接管（docs/49）：min 恒为 2m，max = 焦点框对角线×3，不再沿用外部塞进来的值。
+    expect(state.controls.minDistance).toBe(2);
+    expect(state.controls.maxDistance).toBeCloseTo(Math.hypot(18, 9) * 3, 5);
     expectWholeRoomVisible(state.camera, state.viewport);
     state.controls.update();
     expectWholeRoomVisible(state.camera, state.viewport);
     expect(Number.isFinite(state.camera.far)).toBe(true);
-    expect(Number.isFinite(state.controls.maxDistance)).toBe(true);
+  });
+
+  it('frames the scene focus (point-picked venue) instead of the room, until cleared', () => {
+    const state = setup();
+    act(() => state.result.current.setSceneFocus({ width: 11.7, depth: 3.7, centerX: 100, centerZ: 200 }));
+    act(() => state.result.current.fitToRoom());
+    const [tx, ty, tz] = state.controls.target.toArray();
+    expect(tx).toBeCloseTo(100, 8);
+    expect(ty).toBeCloseTo(4.5, 8);
+    expect(tz).toBeCloseTo(200, 8);
+    // 场景焦点钳制：西湖茶亭 11.7×3.7 → min 2m、max ≈ 36.8m。
+    expect(state.controls.minDistance).toBe(2);
+    expect(state.controls.maxDistance).toBeCloseTo(Math.hypot(11.7, 3.7) * 3, 5);
+    act(() => state.result.current.setSceneFocus(null));
+    act(() => state.result.current.fitToRoom());
+    expect(state.controls.target.toArray()).toEqual([0, 4.5, 0]);
+    expect(state.controls.maxDistance).toBeCloseTo(Math.hypot(18, 9) * 3, 5);
+    expectWholeRoomVisible(state.camera, state.viewport);
   });
 
   it('only dollies out after resize, preserving the current yaw and panned target', () => {

@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { GRID_SIZE_METERS } from '../lib/constants';
 import {
+  findFreePosition,
   snapToGrid as snapValueToGrid,
   snapToNeighbors,
   snapToWall as snapPositionToWall,
@@ -198,10 +199,20 @@ export function useItemPlacement({
         return actions.addCatalogItem(catalogItem, outsidePos);
       }
       const base = layout ?? { name: '放置', width: roomWidth, height: roomDepth, floors: [activeFloor] };
-      const candidateItem = { ...catalogItem, id: '__placement_preview__', position: position ?? { x: 0, z: 0 }, rotation: 0 };
+      // 落点避让：撞上已有物件 / 墙 / 禁入区就沿最近的环位挪开，落进画面的是空位。
+      const requested = position ?? { x: 0, z: 0 };
+      const resolved = findFreePosition({
+        item: { ...catalogItem, id: '__placement_preview__', position: requested, rotation: 0 },
+        others: activeFloor.items,
+        roomWidth,
+        roomDepth,
+        context: { interiorWalls: activeFloor.interiorWalls ?? [] },
+      });
+      if (!resolved) return '';
+      const candidateItem = { ...catalogItem, id: '__placement_preview__', position: resolved, rotation: 0 };
       const candidate = { ...base, floors: base.floors.map(f => f.id === activeFloor.id ? { ...f, items: [...f.items, candidateItem] } : f) };
       if (!canApplyLayoutGeometry(base, candidate)) return '';
-      const id = actions.addCatalogItem(catalogItem, position);
+      const id = actions.addCatalogItem(catalogItem, resolved);
       actions.setLocked(id, false);
       return id;
     },

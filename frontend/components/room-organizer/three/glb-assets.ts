@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { isGlbUrl } from '../lib/glb-url';
+import { GLB_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { normalizeGlbRoot } from '../lib/glb-normalize';
+import { isGlbUrl } from '../lib/glb-url';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
 
-const MAX_GLB_BYTES = 10 * 1024 * 1024;
 const TIMEOUT_MS = 30_000;
 export type GlbAssetState = Readonly<{
   status: 'idle' | 'loading' | 'ready' | 'error';
@@ -30,7 +30,7 @@ export function glbAssetKey(item: Pick<FurnitureItem, 'assetId' | 'glbUrl'>): st
 
 /** Reject external URI dependencies: an archived standalone GLB must reopen by itself. */
 export function validateGlbBuffer(buffer: ArrayBuffer): void {
-  if (buffer.byteLength > MAX_GLB_BYTES) throw new Error('GLB 超过 10 MB，未载入。');
+  if (buffer.byteLength > GLB_MAX_FILE_BYTES) throw new Error('GLB 超过 10 MB，未载入。');
   if (buffer.byteLength < 20) throw new Error('GLB 文件不完整。');
   const view = new DataView(buffer);
   if (view.getUint32(0, true) !== 0x46546c67 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== buffer.byteLength) {
@@ -48,7 +48,7 @@ async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffe
   if (!isGlbUrl(url)) throw new Error('模型地址无效。');
   const response = await fetch(url, { signal, credentials: 'omit' });
   if (!response.ok) throw new Error(`模型下载失败（HTTP ${response.status}）。`);
-  if (Number(response.headers.get('content-length')) > MAX_GLB_BYTES) throw new Error('GLB 超过 10 MB，未载入。');
+  if (Number(response.headers.get('content-length')) > GLB_MAX_FILE_BYTES) throw new Error('GLB 超过 10 MB，未载入。');
   if (!response.body) {
     const buffer = await response.arrayBuffer(); validateGlbBuffer(buffer); return buffer;
   }
@@ -60,7 +60,7 @@ async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffe
       const result = await reader.read();
       if (result.done) break;
       count += result.value.byteLength;
-      if (count > MAX_GLB_BYTES) { await reader.cancel(); throw new Error('GLB 超过 10 MB，未载入。'); }
+      if (count > GLB_MAX_FILE_BYTES) { await reader.cancel(); throw new Error('GLB 超过 10 MB，未载入。'); }
       chunks.push(result.value);
     }
   } finally { reader.releaseLock(); }
@@ -235,4 +235,78 @@ export function disposeOwnedModel(root: THREE.Object3D): void {
 export function clearGlbAssetCache(): void {
   for (const entry of cache.values()) { entry.controller.abort(); if (entry.source) disposeOwnedModel(entry.source); }
   cache.clear(); changed();
+}
+
+/** A model the user picked off their own disk. Session-only: it never joins the shipped library. */
+export interface ImportedGlbAsset {
+  key: string;
+  name: string;
+  fileName: string;
+  width: number;
+  depth: number;
+  height: number;
+  unit: 'm' | 'cm';
+  upAxis: 'y' | 'z';
+  importedAt: number;
+}
+
+let importedLocalGlbs: readonly ImportedGlbAsset[] = [];
+/** Stable snapshot for useSyncExternalStore; the array only changes when an import or rename lands. */
+export function listImportedGlbAssets(): readonly ImportedGlbAsset[] { return importedLocalGlbs; }
+
+export function renameImportedGlbAsset(key: string, name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  const next = importedLocalGlbs.map(asset => (asset.key === key ? { ...asset, name: trimmed } : asset));
+  importedLocalGlbs = next;
+  changed();
+}
+
+/**
+ * Parse a picked .glb with the same loader, validation and normalization the
+ * downloader uses, then leave it in the shared cache under a local key so
+ * `createCachedGlbModel` and the material panel can reuse it in this session.
+ */
+export async function importLocalGlb(file: File, key: string): Promise<ImportedGlbAsset> {
+  if (!key) throw new Error('缺少模型标识。');
+  const prior = cache.get(key);
+  prior?.controller.abort();
+  const controller = new AbortController();
+  const entry: CachedAsset = { url: key, state: { status: 'loading' }, controller, promise: Promise.resolve() };
+  cache.set(key, entry);
+  changed();
+  let source: THREE.Object3D | undefined;
+  try {
+    const buffer = await file.arrayBuffer();
+    validateGlbBuffer(buffer);
+    const gltf = await new GLTFLoader().parseAsync(buffer, '').catch(() => {
+      throw new Error('模型解析失败：文件损坏或不是标准 glTF 2.0。');
+    });
+    source = gltf.scene;
+    assertRenderableGlb(source);
+    const normalized = normalizeGlbRoot(source);
+    if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型导入请求已过期，请重试。');
+    entry.source = normalized.root;
+    entry.state = { status: 'ready', dimensions: normalized.size };
+    source = undefined;
+    const asset: ImportedGlbAsset = {
+      key,
+      name: file.name.replace(/\.glb$/i, ''),
+      fileName: file.name,
+      width: normalized.size.width,
+      depth: normalized.size.depth,
+      height: normalized.size.height,
+      unit: normalized.plan.unit,
+      upAxis: normalized.plan.upAxis,
+      importedAt: Date.now(),
+    };
+    importedLocalGlbs = [...importedLocalGlbs.filter(item => item.key !== key), asset];
+    changed();
+    return asset;
+  } catch (error) {
+    if (source) disposeOwnedModel(source);
+    const message = error instanceof Error ? error.message : '模型导入失败，请重试。';
+    if (cache.get(key) === entry) { entry.state = { status: 'error', error: message }; changed(); }
+    throw new Error(message);
+  }
 }

@@ -1,0 +1,174 @@
+<view class="screen td-dark {{glassClass}}">
+  <camera
+    wx:if="{{!devtools && !cameraError}}"
+    class="camera"
+    device-position="back"
+    flash="off"
+    binderror="onCameraError"
+    bindinitdone="onCameraReady"
+  />
+  <view wx:else class="placeholder">
+    <view class="b-noise"></view>
+    <view class="b-vig-mid"></view>
+    <view class="empty b-glass">
+      <image class="empty__thumb" src="/assets/guide/album-thumb.jpg" mode="aspectFill" />
+      <t-button theme="primary" size="large" block t-class="btn-green" bind:tap="onChooseMedia">从相册导入</t-button>
+      <text class="t-aux empty__hint">{{devtools ? '模拟器没有后置相机' : '相机不可用'}}</text>
+    </view>
+  </view>
+
+  <!-- 取景压暗：camera 不吃 filter，用 .38 黑 view；pointer-events 必须 none。 -->
+  <view class="dim"></view>
+  <view class="b-vig-mid"></view>
+
+  <view class="overlay">
+    <view class="info b-glass" style="top:{{infoTop}}px;" bindtap="onHintTap">
+      <t-icon name="info-circle" size="36rpx" color="rgba(255,255,255,0.72)" />
+    </view>
+
+    <view class="cross">
+      <view class="cross__tl"></view>
+      <view class="cross__tr"></view>
+      <view class="cross__bl"></view>
+      <view class="cross__br"></view>
+    </view>
+
+    <view wx:if="{{verdictText}}" class="verdict b-glass b-pill {{verdictBad ? 'is-bad' : ''}}">
+      <text class="verdict__text">{{verdictText}}</text>
+      <text wx:if="{{verdictHint}}" class="verdict__hint">{{verdictHint}}</text>
+    </view>
+    <view wx:if="{{arrowShow}}" class="arrow arrow--{{arrowSide}}"></view>
+
+    <view wx:if="{{!devtools && !cameraError}}" class="ring {{ringPulse ? 'is-pulse' : ''}}">
+      <view
+        wx:for="{{ringTicks}}"
+        wx:key="id"
+        class="ring__tick {{item.on ? 'is-on' : ''}} {{item.gap ? 'is-gap' : ''}}"
+        style="transform: rotate({{item.deg}}deg);"
+      >
+        <view class="ring__bar"></view>
+      </view>
+    </view>
+
+    <view class="actions {{canSubmit ? 'is-ready' : ''}}">
+      <view wx:if="{{gateText && !verdictText}}" class="gate b-glass gate--{{gateKind}}">
+        <text class="gate__text">{{gateText}}</text>
+        <text wx:if="{{gateHint}}" class="gate__hint">{{gateHint}}</text>
+      </view>
+      <view
+        wx:if="{{canSubmit}}"
+        class="submit {{submitting ? 'is-busy' : ''}}"
+        hover-class="is-down"
+        hover-stay-time="80"
+        bindtap="onSubmit"
+      >
+        <text class="submit__label">{{submitting ? '提交中…' : '提交重建'}}</text>
+      </view>
+    </view>
+
+    <view class="dial">
+      <block wx:if="{{!devtools && !cameraError}}">
+        <view
+          class="shutter {{shutterActive ? 'is-active' : ''}} {{submitting ? 'is-busy' : ''}}"
+          hover-class="is-down"
+          hover-stay-time="80"
+          bindtap="onShutter"
+        >
+          <view class="shutter__core"></view>
+        </view>
+      </block>
+      <view wx:else class="dial__ghost"></view>
+    </view>
+
+    <view wx:if="{{!devtools && !cameraError}}" class="album b-glass" bindtap="onChooseMedia">
+      <t-icon name="image" size="40rpx" color="rgba(255,255,255,0.72)" />
+    </view>
+
+    <!-- 层进度：不只说「低/视线/高」，直接给 n/24，缺哪层一眼能看到。 -->
+    <view wx:if="{{!canSubmit && !devtools && !cameraError}}" class="layers">
+      <view
+        wx:for="{{layerBars}}"
+        wx:key="id"
+        class="layer {{item.on ? 'is-on' : ''}} {{item.count >= item.target ? 'is-done' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onLayerTap"
+      >
+        <view class="layer__dot"></view>
+        <text class="layer__label">{{item.label}}</text>
+        <text class="layer__count">{{item.count}}/{{item.target}}</text>
+      </view>
+    </view>
+
+    <text wx:if="{{waitHint}}" class="wait b-glass b-pill">对准场地</text>
+  </view>
+
+  <t-popup
+    visible="{{hintOpen}}"
+    placement="bottom"
+    bind:visible-change="onHintVisibleChange"
+  >
+    <view class="hint b-glass">
+      <text class="hint__text t-body">{{hintBody}}</text>
+      <text class="hint__pay t-aux">{{hintPay}}</text>
+      <view class="hint__row">
+        <input
+          class="hint__input"
+          placeholder="已知长度（如 3.5）"
+          value="{{scaleText}}"
+          bindinput="onScaleInput"
+          bindconfirm="onScaleConfirm"
+        />
+        <text class="hint__save" bindtap="onScaleConfirm">存</text>
+      </view>
+      <view class="hint__links">
+        <text class="t-aux" bindtap="onReplayWelcome">重看引导</text>
+        <text class="t-aux" bindtap="onHintClose">关闭</text>
+      </view>
+    </view>
+  </t-popup>
+
+  <view wx:if="{{welcomeVisible}}" class="welcome">
+    <image class="welcome__bg" src="{{welcomePage.bg}}" mode="aspectFill" />
+    <view class="{{welcomeIndex === 2 ? 'b-veil-hard' : 'b-veil'}}"></view>
+    <view class="b-top-scrim"></view>
+    <view class="b-vig"></view>
+    <view class="b-noise"></view>
+
+    <text class="welcome__brand t-aux" style="top:{{brandTop}}px;">幕景 · 把场地拍成 3D</text>
+    <text class="welcome__skip t-aux" style="top:{{skipTop}}px;" bindtap="onWelcomeSkip">跳过</text>
+
+    <view
+      class="welcome__card b-glass {{welcomeIndex === 2 ? 'welcome__card--shot' : ''}}"
+    >
+      <image
+        wx:if="{{welcomeIndex === 2}}"
+        class="welcome__shot"
+        src="/assets/guide/editor-crop.jpg"
+        mode="aspectFill"
+      />
+      <text class="t-title welcome__title">{{welcomePage.title}}</text>
+      <text class="t-body welcome__sub">{{welcomePage.sub}}</text>
+    </view>
+
+    <view
+      wx:if="{{welcomeIndex < 2}}"
+      class="welcome__next b-glass"
+      bindtap="onWelcomeNext"
+    >
+      <t-icon name="arrow-right" size="40rpx" color="rgba(255,255,255,0.96)" />
+    </view>
+
+    <view wx:else class="welcome__cta">
+      <t-button theme="primary" size="large" block t-class="btn-green" bind:tap="onWelcomeNext">开始拍</t-button>
+    </view>
+
+    <view class="welcome__dots b-glass b-pill" style="top:{{topPad + 28}}px;">
+      <view
+        wx:for="{{welcomePages}}"
+        wx:key="title"
+        class="welcome__dot {{index <= welcomeIndex ? 'is-on' : ''}}"
+        style="width:{{index === welcomeIndex ? '16px' : '6px'}};"
+      ></view>
+    </view>
+  </view>
+</view>

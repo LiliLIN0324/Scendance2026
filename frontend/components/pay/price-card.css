@@ -1,0 +1,263 @@
+/* 付费卡片：图标优先、单层卡片、说明收进 ⓘ；选中仅 1.5px 绿描边。 */
+.pay-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #e2ded4);
+  border-radius: var(--r-md, 12px);
+  background: var(--paper, #fff);
+}
+
+.pay-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pay-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: rgba(53, 98, 74, 0.08);
+  color: var(--brand, #35624a);
+}
+
+.pay-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink, #1f2320);
+}
+
+.pay-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #7d807b);
+  cursor: pointer;
+}
+
+.pay-mode {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--line, #e2ded4);
+  color: var(--muted, #7d807b);
+}
+
+.pay-mode--mock {
+  border-color: #e6c27a;
+  background: #fdf6e6;
+  color: #8a6a1f;
+}
+
+.pay-mode--sandbox {
+  border-color: #9dc3e6;
+  background: #eef6fd;
+  color: #2b5f8a;
+}
+
+.pay-mode--live {
+  border-color: rgba(53, 98, 74, 0.35);
+  background: rgba(53, 98, 74, 0.07);
+  color: var(--brand, #35624a);
+}
+
+.pay-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wash, #f6f5f1);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted, #7d807b);
+}
+
+.pay-skus {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pay-sku {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--line, #e2ded4);
+  border-radius: var(--r-md, 12px);
+  background: var(--paper, #fff);
+  cursor: pointer;
+}
+
+.pay-sku--on {
+  border: 1.5px solid var(--brand, #35624a);
+}
+
+.pay-sku-badge {
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand, #35624a);
+  color: #fff;
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.pay-sku-title {
+  font-size: 11px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-sku-price {
+  font-size: 18px;
+  font-weight: 650;
+  color: var(--ink, #1f2320);
+}
+
+.pay-sku-note {
+  font-size: 10px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pay-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--brand, #35624a);
+  border-radius: 10px;
+  background: var(--brand, #35624a);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pay-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pay-remaining {
+  font-size: 11px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-error {
+  font-size: 11px;
+  color: #a4442f;
+}
+
+.pay-hint {
+  font-size: 10px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-qr {
+  align-self: center;
+  border: 1px solid var(--line, #e2ded4);
+  border-radius: 8px;
+}
+
+.pay-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--line, #e2ded4);
+  border-radius: 8px;
+}
+
+.pay-receipt-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink, #1f2320);
+}
+
+.pay-receipt-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--brand, #35624a);
+}
+
+.pay-receipt-mode {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-receipt-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.pay-receipt-rows > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pay-receipt-rows dt {
+  font-size: 10px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-receipt-rows dd {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink, #1f2320);
+}
+
+.pay-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.pay-receipt-foot {
+  font-size: 10px;
+  color: var(--muted, #7d807b);
+}
+
+.pay-spin {
+  animation: pay-spin 0.9s linear infinite;
+}
+
+@keyframes pay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .pay-skus {
+    grid-template-columns: 1fr;
+  }
+}
