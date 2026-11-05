@@ -18,6 +18,8 @@ import {
 import { settlePlacement } from '@/lib/settle-placement';
 import { combineOutcomes, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
 import { isOpening } from './lib/opening-snap';
+import { planPointToCanvas } from './lib/review-pins';
+import { get2DViewTransform } from './canvas-2d/render';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
@@ -1747,6 +1749,25 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     paintFrame: paintSplatFrame,
     onImported: clearTransientSelection,
   });
+
+  // 世界坐标 → 屏幕像素：2D 走平面变换，3D 走相机投影。卫星底图钉点/取景标记共用。
+  const toScreen = useCallback((point: { x: number; y: number; z: number }) => {
+    if (view.view2D) {
+      const canvas = canvas2DRef.current;
+      if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
+      return planPointToCanvas(point, layout, get2DViewTransform(canvas.clientWidth, canvas.clientHeight, layout));
+    }
+    const THREE = threeModuleRef.current;
+    const camera = cameraRef.current;
+    const canvas = canvasRef.current;
+    if (!THREE || !camera || !canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
+    const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
+    if (projected.z > 1) return null;
+    return {
+      x: (projected.x * 0.5 + 0.5) * canvas.clientWidth,
+      y: (-projected.y * 0.5 + 0.5) * canvas.clientHeight,
+    };
+  }, [view.view2D, layout, cameraRef, canvasRef, canvas2DRef, threeModuleRef]);
 
   // 效果图导出：先出预览，确认后下载同一帧；2D 平面按当前分辨率抓取。
   const handleExportImage = useCallback(async (options: { view: 'current' | 'iso' | 'top' | 'front' | 'corner'; scale: number }) => {

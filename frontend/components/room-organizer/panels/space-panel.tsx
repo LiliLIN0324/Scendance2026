@@ -22,7 +22,6 @@ export function SpacePanel({
   layout,
   onApply,
   environment,
-  onOpenAholo,
   currentScanId,
   onPickScan,
   workflow: controlledWorkflow,
