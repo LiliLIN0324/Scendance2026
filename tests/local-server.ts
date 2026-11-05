@@ -74,6 +74,11 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
   })[key] ?? options.env?.(key);
   const api = createApi(backend, env, aiFetcher);
   const server = createServer(async (req, res) => {
+    // 浏览器直连本机服务要过跨域与私有网络两道预检，Node 侧集成测试走不到这里。
+    const origin = req.headers.origin;
+    const allowOrigin = origin && origins.includes(origin) ? origin : null;
+    const corsHeaders = new Headers({ 'Access-Control-Allow-Headers': 'authorization,apikey,content-type', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Allow-Local-Network': 'true' });
+    if (allowOrigin) corsHeaders.set('Access-Control-Allow-Origin', allowOrigin);
     try {
       const address = new URL(req.url ?? '/', url);
       const chunks: Buffer[] = [];
@@ -87,6 +92,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
       const body = Buffer.concat(chunks);
       let response: Response;
       if (address.pathname.startsWith('/functions/v1/scene-api')) {
+        if (req.method === 'OPTIONS') { res.writeHead(204, Object.fromEntries(corsHeaders)); res.end(); return; }
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(',') : value);
         response = await api(new Request(address, {
@@ -94,11 +100,8 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
           ...(body.length ? { body } : {}),
         }));
       } else {
-        const origin = req.headers.origin;
         const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        if (origin && origins.includes(origin)) headers.set('Access-Control-Allow-Origin', origin);
-        headers.set('Access-Control-Allow-Headers', 'authorization,apikey,content-type');
-        headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+        for (const [key, value] of corsHeaders) headers.set(key, value);
         const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
         if (origin && !origins.includes(origin)) response = json({ error: 'test_origin_forbidden' }, 403);
         else if (req.method === 'OPTIONS') response = new Response(null, { status: 204, headers });
@@ -132,11 +135,15 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
         } else response = json({ error: 'test_route_not_found' }, 404);
       }
       response.headers.set('X-Scendance-Test-Fixture', 'PGlite; Auth and Storage are test doubles');
+      // 业务接口也要带 CORS 头：浏览器直连本机服务时，缺头就是 net::ERR_FAILED，而不是可见的 HTTP 错误。
+      for (const [key, value] of corsHeaders) { try { response.headers.set(key, value); } catch { /* 不可变的响应头（重定向等）保持原样 */ } }
       res.writeHead(response.status, Object.fromEntries(response.headers));
       res.end(Buffer.from(await response.arrayBuffer()));
     } catch (error) {
       console.error('Local integration fixture failed:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' }).end('{"error":"test_fixture_failed"}');
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      for (const [key, value] of corsHeaders) headers.set(key, value);
+      res.writeHead(500, Object.fromEntries(headers)).end('{"error":"test_fixture_failed"}');
     }
   });
   server.listen(port, '127.0.0.1');
