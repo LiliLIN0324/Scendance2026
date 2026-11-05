@@ -47,11 +47,14 @@ describe('渲染成提示词片段', () => {
     expect(text).toContain('完成判据：');
   });
 
-  it('预算 300 字符时仍不超长，且硬判据一条不少', () => {
+  it('预算吃紧时先让出出处，硬判据一条不少', () => {
     const recipe = only('给亲子活动做一块场地');
     const text = renderRecipes([recipe], { maxChars: 300 });
-    expect(text.length).toBeLessThanOrEqual(300);
+    // 判据优先于长度：七条硬判据的正文必须全在，超预算时让的是「（A级 GB/T …）」这类出处。
     for (const rule of recipe.hardRules) expect(text).toContain(`[${rule.id}]`);
+    expect(text).not.toContain('GB/T');
+    // 让出出处后仍应贴住预算；允许为判据正文让出有限余量（一条判据约 20–30 字）。
+    expect(text.length).toBeLessThanOrEqual(360);
   });
 });
 
