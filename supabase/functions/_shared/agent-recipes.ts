@@ -81,6 +81,10 @@ const family: ActivityRecipe = {
     { id: 'KID-08', check: '儿童区边界距车行道 ≥5 格且设连续物理隔离', cells: 5, note: 'C级 经验值 + 场地安全通行做法' },
     { id: 'KID-10', check: '出入口 ≥2 个、净宽 ≥2 格，不得正对车行流线', cells: 2, note: 'A级 GB 50763-2012 §3.5.1' },
     { id: 'GEN-06', check: '通道与悬挂物底边净高 ≥3 格', cells: 3, note: 'A级 GB/T 36731-2018 §6.2.6.1' },
+    // 水与高差这两条是从「场地条件不好」的实测里补的：同样的需求换到临水带坡的空地，
+    // 缺了这两条，模型只会绕开水面，不会主动退让距离，也不会发现水侧围栏的缺口。
+    { id: 'KID-12', check: '儿童活动区边缘距水体轮廓 ≥4 格，水侧围栏逐格连续、不留缺口', cells: 4, note: 'C级 经验值（4 格 ≈ 幼儿 3 秒冲刺距离）' },
+    { id: 'KID-13', check: '儿童活动区地面高差为 0；必须借坡时坡度 ≤1:12（每 1 格升 ≤0.08 格）', cells: 1, note: 'A级 GB 50763-2012 §3.4.2 轮椅坡道坡度；「高差为 0」为 C级 经验值' },
   ],
   softRules: [
     { id: 'KID-05', check: '3–6 岁与 6–8 岁分区，区界留 ≥3 格缓冲', cells: 3, note: 'C级 经验值' },
@@ -92,6 +96,7 @@ const family: ActivityRecipe = {
     '不要用低分枝乔木给活动区遮荫，否则树冠侵入 3 格自由空间',
     '不要让看护座椅背对活动区，否则看护形同虚设',
     '不要在唯一出入口正前方放设备，否则进出与跌落空间重叠',
+    '不要用「离水 1 格 + 一段围栏」就算隔离，否则缺口就是通道',
   ],
   completionChecks: [
     '每个设备外扩 2 格内无他物',
@@ -426,7 +431,7 @@ function gradeOf(rule: RecipeRule): string {
 
 type Keep = { layout: number; soft: number; anti: number; completion: number };
 
-function renderBlock(recipe: ActivityRecipe, keep: Keep): string {
+function renderBlock(recipe: ActivityRecipe, keep: Keep, compact = false): string {
   const lines: string[] = [
     `【配方·${recipe.label}】本质：${recipe.intent}`,
     `分区：${recipe.zones.map(zone => `${zone.label} ${zone.share}%`).join(' / ')}`,
@@ -436,7 +441,9 @@ function renderBlock(recipe: ActivityRecipe, keep: Keep): string {
     lines.push(`套路：${recipe.layout.slice(0, keep.layout).map((step, i) => `${i + 1}) ${step}`).join(' ')}`);
   }
   // 硬判据永不裁剪：它是提示词里唯一能一票否决的部分。
-  lines.push(`硬判据：${recipe.hardRules.map(rule => `[${rule.id}] ${rule.check}（${gradeOf(rule)}）`).join('；')}`);
+  // 硬判据永不裁，但出处可以裁：预算逼到极限时先去掉「（A级 GB/T …）」，判据正文一格不动。
+  // 顺序很重要——先保「该做什么」，再保「依据哪条」，反过来会让提示词只剩标准号。
+  lines.push(`硬判据：${recipe.hardRules.map(rule => compact ? `[${rule.id}] ${rule.check}` : `[${rule.id}] ${rule.check}（${gradeOf(rule)}）`).join('；')}`);
   if (keep.soft > 0) {
     lines.push(`软判据：${recipe.softRules.slice(0, keep.soft).map(rule => `[${rule.id}] ${rule.check}（${gradeOf(rule)}）`).join('；')}`);
   }
@@ -459,7 +466,8 @@ export function renderRecipes(recipes: ActivityRecipe[], opts: { maxChars?: numb
     anti: recipe.antiPatterns.length,
     completion: recipe.completionChecks.length,
   }));
-  const text = () => recipes.map((recipe, i) => renderBlock(recipe, keep[i])).join('\n\n');
+  let compact = false;
+  const text = () => recipes.map((recipe, i) => renderBlock(recipe, keep[i], compact)).join('\n\n');
 
   let out = text();
   if (out.length <= maxChars) return out;
@@ -477,5 +485,7 @@ export function renderRecipes(recipes: ActivityRecipe[], opts: { maxChars?: numb
       }
     }
   }
-  return out;
+  // 最后一步：判据正文保留、出处让路。仍超预算就只能超——判据比长度重要。
+  compact = true;
+  return text();
 }
