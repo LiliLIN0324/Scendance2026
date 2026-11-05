@@ -1,39 +1,54 @@
 'use client';
 
 import { formatMeasureLabel, type PlanAnnotation, type PlanPoint } from '../../../lib/plan-annotation';
+import { worldToScreen, type View2DTransform } from './render';
 
 /** 品牌绿（与 render.ts 中 PLAN_SELECT_SOFT / marquee 同色）。 */
 const BRAND_GREEN = '#4A7C59';
 const BRAND_GREEN_FILL = 'rgba(74, 124, 89, 0.12)';
+/** 绘制中的临时草稿用更浅的笔触，避免与已确认标注混淆。 */
+const DRAFT_STROKE = 'rgba(74, 124, 89, 0.65)';
 
 export interface PlanOverlayProps {
   annotations: readonly PlanAnnotation[];
-  /** 米→像素倍率（与 render.ts 的 scale 同义）。 */
-  scale: number;
-  /** 世界原点 (0,0) 在画布上的像素坐标（房间中心）。 */
-  origin: { x: number; y: number };
+  /**
+   * 2D 渲染器使用的真实 fit-and-center 变换（与 render2DTopDown 同源）。
+   * 未挂载 / 尺寸未就绪时传 null，组件直接返回 null，避免用近似 scale 错位。
+   */
+  transform: View2DTransform | null;
+  /** 房间尺寸（米），与 render.ts 同一套 worldToScreen 约定。 */
+  layout: Pick<{ width: number; height: number }, 'width' | 'height'>;
   /** 整层显示开关；false 时渲染空层。 */
   visible: boolean;
+  /** 正在画但还没落地的临时点（世界坐标），绘制中跟随鼠标反馈。 */
+  draftPoints?: readonly PlanPoint[];
 }
 
 /**
  * 第 7.5 批「规划标注层」2D 覆盖渲染。
  *
  * 纯展示组件：不接事件、不改状态，交互全部由 use-plan-annotations 与
- * use-canvas-2d-interaction 完成。坐标映射与 render.ts 一致——
- * 世界米制、房间中心为原点，px = origin + world * scale。
+ * use-canvas-2d-interaction 完成。坐标映射与 render.ts 同源——
+ * 通过 worldToScreen 把世界米制坐标投影到 CSS px，与家具 / 网格严格重合。
  *
  * - zone：半透明绿底 + 1px 虚线框，左上角 label + stageNo 徽章；
  * - route：2px 绿色虚线折线，端点圆点；
- * - measure：实线，中点显示「12.4 m」。
+ * - measure：实线，中点显示「12.4 m」；
+ * - draftPoints：绘制中临时反馈（更浅、无填充）。
  */
-export function PlanOverlay({ annotations, scale, origin, visible }: PlanOverlayProps): JSX.Element | null {
-  if (!visible) return null;
+export function PlanOverlay({
+  annotations,
+  transform,
+  layout,
+  visible,
+  draftPoints,
+}: PlanOverlayProps): JSX.Element | null {
+  if (!visible || !transform) return null;
 
-  const toPx = (p: PlanPoint): { x: number; y: number } => ({
-    x: origin.x + p.x * scale,
-    y: origin.y + p.z * scale,
-  });
+  const toPx = (p: PlanPoint): { x: number; y: number } => {
+    const s = worldToScreen(p.x, p.z, transform, layout);
+    return { x: s.px, y: s.py };
+  };
 
   return (
     <svg
@@ -52,8 +67,8 @@ export function PlanOverlay({ annotations, scale, origin, visible }: PlanOverlay
           case 'rect': {
             const g = ann.geometry;
             const topLeft = toPx({ x: g.x, z: g.z });
-            const w = g.width * scale;
-            const h = g.depth * scale;
+            const w = g.width * transform.scale;
+            const h = g.depth * transform.scale;
             const badgeY = topLeft.y + 14;
             return (
               <g key={ann.id}>
@@ -154,6 +169,28 @@ export function PlanOverlay({ annotations, scale, origin, visible }: PlanOverlay
             return null;
         }
       })}
+      {draftPoints && draftPoints.length > 0 && (
+        <g>
+          {draftPoints.map((p, i) => {
+            const s = toPx(p);
+            return <circle key={i} cx={s.x} cy={s.y} r={3.5} fill={DRAFT_STROKE} />;
+          })}
+          {draftPoints.length >= 2 && (
+            <polyline
+              points={draftPoints.map((p) => {
+                const s = toPx(p);
+                return `${s.x},${s.y}`;
+              }).join(' ')}
+              fill="none"
+              stroke={DRAFT_STROKE}
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+        </g>
+      )}
     </svg>
   );
 }
