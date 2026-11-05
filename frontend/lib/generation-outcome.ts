@@ -2,8 +2,33 @@
  * M5-A Outcome 报表：一次 AI 生成跑完的「账本」。
  *
  * 纯类型 + 纯辅助函数，不接 UI、不接 store，也不依赖任何房间组织模块。
- * Bingo 审校台后续会把 {@link outcomeSummary} 贴到「本次报告」卡上。
+ * Bingo 审校台会把 {@link outcomeSummary} 与 {@link GenerationReport} 贴到「本次报告」卡上。
  */
+
+import type { BingoScore } from './bingo-score';
+
+/**
+ * 「完成卡 Z8」字段：一次生成跑完之后给策划师看的那几行。
+ *
+ * 全部可选 —— 没有真实数据就不给，不编。构造口径见 `lib/generation-report.ts`。
+ */
+export interface GenerationReport {
+  /** 体检量化分（含分项）。 */
+  score?: BingoScore;
+  /** 「为什么这么摆」：只允许写实测到的数字，不允许推测。 */
+  reasoning?: string;
+  /** 「后续建议」：下一句该做什么。 */
+  suggestion?: string;
+  /** 本次落盘 + 体检耗时（毫秒）。 */
+  durationMs?: number;
+  /**
+   * 本次生成的模型调用轮数。
+   *
+   * 取云端 `AgentRun.call_count` 的真值（0–6 轮，由 AGENT_CALL_LIMIT 守着），
+   * 不是前端自己数的，也不是拿别的数字顶替的。拿不到就整行不渲染。
+   */
+  rounds?: number;
+}
 
 /** 空结果原因：整次生成为什么一件都没放。 */
 export type ScopeEmptyReason =
@@ -36,6 +61,8 @@ export interface GenerationOutcome<TItem = unknown> {
   skipped: OutcomeEntry<TItem>[];
   /** 整次为空时的原因；有任意一件放置时为 undefined。 */
   scopeEmpty?: ScopeEmptyReason;
+  /** 完成卡字段（体检分 / 为什么这么摆 / 后续建议 / 耗时 / 轮数）。 */
+  report?: GenerationReport;
 }
 
 /** scopeEmpty 到中文人话的映射，给 {@link outcomeSummary} 用。 */
@@ -115,4 +142,15 @@ export function countByCode<TItem>(entries: OutcomeEntry<TItem>[]): Record<strin
     counts[entry.code] = (counts[entry.code] ?? 0) + 1;
   }
   return counts;
+}
+
+/**
+ * 这份账本里有没有「真的动了东西」。
+ *
+ * 空账本不该被写进「本次结果」：落盘链不止 AI 生成一条路，场地壳体按真实尺寸
+ * resize 也会走同一条，那条路一件家具都没变。若照写，「本次结果」会变成
+ * 「放了 0 件」，把上一次真的生成结果冲掉——审校台上的话必须名副其实。
+ */
+export function hasOutcomeChanges<TItem>(out: GenerationOutcome<TItem>): boolean {
+  return out.placed.length > 0 || out.refused.length > 0 || out.skipped.length > 0;
 }

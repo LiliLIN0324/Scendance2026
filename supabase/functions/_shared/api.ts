@@ -175,6 +175,13 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           }
           return respond(waitUntil?stored:await backend.agent(actor,'get',{projectId,id:stored.id}),stored.reused?200:202);
         }
+        // 运行中改道：用户在这趟跑着的时候追加一句要求，工作线程在下一轮模型调用前取走。
+        // 任务已结束时这里回 AGENT_RUN_STOPPED（409）——备注没有执行机会，不能假装收到。
+        const agentNote=tail.match(/^\/agent-runs\/([^/]+)\/notes$/);
+        if(agentNote&&method==='POST'&&backend.agent) {
+          const input=z.strictObject({note:z.string().trim().min(1).max(500)}).parse(await json());
+          return respond(await backend.agent(actor,'note',{projectId,id:uuid.parse(agentNote[1]),note:input.note}),202);
+        }
         const agentRun=tail.match(/^\/agent-runs\/(by-request\/)?([^/]+)(\/cancel)?$/);
         if(agentRun&&backend.agent) {
           if(agentRun[1]&&method==='GET'&&!agentRun[3])return respond(await backend.agent(actor,'by_request',{projectId,requestId:uuid.parse(agentRun[2])}));
