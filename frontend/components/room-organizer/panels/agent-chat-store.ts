@@ -118,6 +118,9 @@ export interface AgentStepLogEntry {
  * - shouldPauseAfterStep：「跑完这步停」一次性 checkpoint，当前步收尾即停。
  * - stopRequested：「停止」优雅停，等当前步在 turn 边界收尾。
  * - steerNotes：用户在运行条输入框塞进来的备注，按顺序注入下一轮上下文。
+ * - steerDelivered：云端承认已收到的备注总数（run.steerTotal），单调递增。
+ *   它和 steerNotes 是两件事：steerNotes 是「还没送到」的，steerDelivered 是「已经送到、
+ *   会在下一轮生效」的。界面上不能把两者混成一个数，否则用户以为写进去了其实没送到。
  * - emptyOutcome：本轮结束既无输出又无布局改动 → 触发空结果回执卡。
  */
 export interface AgentRunState {
@@ -128,6 +131,7 @@ export interface AgentRunState {
   shouldPauseAfterStep: boolean;
   stopRequested: boolean;
   steerNotes: string[];
+  steerDelivered: number;
   emptyOutcome: boolean;
   /**
    * 这一轮属于哪张脸。四张脸共用一本账本，不分区的话活动脸的运行过程会
@@ -253,6 +257,18 @@ export function pushAgentSteerNote(text: string): void {
 /** 读完 steerNotes 后由调用方清空（避免同一备注被反复注入）。 */
 export function clearAgentSteerNotes(): void {
   commitRun({ ...run, steerNotes: [] });
+}
+
+/**
+ * 把「云端一共收到几条改道备注」写进账本。
+ *
+ * 这个数是服务端的绝对读数（run.steerTotal），不是前端自己加出来的——备注送没送到
+ * 只有服务端知道。轮询会重复读到同一个值，所以设成绝对值才不会越滚越大。
+ */
+export function setAgentSteerDelivered(count: number): void {
+  const next = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  if (next === run.steerDelivered) return;
+  commitRun({ ...run, steerDelivered: next });
 }
 
 /** 空结果回执卡由人/主代理点掉时清掉标记。 */

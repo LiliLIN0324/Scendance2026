@@ -133,7 +133,12 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     // never sees it and cannot promise an async generation it cannot start.
     const aholoReady=generationCapabilities(env).aholoTextToModel;
     for(let turn=1;turn<=6&&!finished;turn++) {
-      await check();await call('step',{progress:`DeepSeek 正在处理（${turn}/6）`});
+      await check();
+      // 用户在这一轮跑着的时候追加的改道要求，在这一次模型调用之前生效。取走即清空，
+      // 所以同一条备注不会在后续每一轮里反复出现；送达条数以 run.steerTotal 为准。
+      const steering:{notes?:string[]}=await call('take_notes');
+      for(const note of steering.notes??[])messages.push({role:'user',content:`用户在本次运行进行中追加了要求（后说的盖过先说的，优先于最初需求）：${note}\n如果它与你已经做过的步骤冲突，先用一句话说明冲突点，再按这条要求继续；不要撤掉无关的已完成部分。`});
+      await call('step',{progress:`DeepSeek 正在处理（${turn}/6）`});
       if(turn===6)messages.push({role:'user',content:`这是最后一次模型调用。请现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个完整候选（title、explanation、commands），不要继续读取或校验。此前 validate_candidate 的结果未提交；提交仍需通过程序校验，JEV 方案由用户最终选择。`});
       const { url, init } = chatRequest(env, { messages, tools:aholoReady?tools:baseTools, tool_choice:turn===6?{type:'function',function:{name:'submit_candidates'}}:'auto', max_tokens:7000 });
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.

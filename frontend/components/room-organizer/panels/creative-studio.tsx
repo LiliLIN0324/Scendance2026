@@ -23,7 +23,7 @@ import { STORAGE_KEY } from '../lib/constants';
 import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARDS, INITIAL_BRIEF, isBlankBriefScaffold, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { buildReviewReference } from '../lib/review-copy';
-import { appendAgentStep, closeAgentStep, endAgentRun, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
+import { appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend } from '../lib/workbench-agent';
@@ -759,6 +759,27 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     startAgentRun('layout');
     let lastProgress='';
     let stepStartedAt=Date.now();
+    let steerNoticeShown=false;
+    /**
+     * 运行条里塞进来的备注，交给正在跑的这一趟。工作线程在下一轮模型调用之前取走，
+     * 所以送达时机是「下一次它要思考的时候」，不是立刻——界面上说的也是这个。
+     *
+     * 任务已经收尾时会回 AGENT_RUN_STOPPED：那条备注没有执行机会，必须如实说，
+     * 不能打着「已提交」的绿灯糊过去。
+     */
+    const deliverSteerNotes=async(current:AgentRun):Promise<void>=>{
+      setAgentSteerDelivered(current.steerTotal??0);
+      const pending=getAgentRun().steerNotes;
+      if(!pending.length)return;
+      clearAgentSteerNotes();
+      for(const note of pending){
+        try{await controller.steerAgentRun(current.id,note);}
+        catch{
+          if(!steerNoticeShown){steerNoticeShown=true;say('这趟已经收尾，你刚写的那句备注没有生效；要改的话请把要求写进新一轮。');}
+          return;
+        }
+      }
+    };
     const publish=(now:number):void=>{
       const progress=(result.progress??'').trim();
       if(progress&&progress!==lastProgress){
@@ -773,6 +794,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     while(active()){
       setRun(result);
       publish(Date.now());
+      await deliverSteerNotes(result);
       const marker=markerRef.current;
       if(marker){try{rememberRun({...marker,runId:result.id},submittedScope);}catch{setNotice('任务已提交，但本机记录更新失败；请保持页面打开。');}}
       if(!['queued','running'].includes(result.state))break;
