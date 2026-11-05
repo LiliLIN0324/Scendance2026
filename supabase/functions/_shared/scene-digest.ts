@@ -22,7 +22,7 @@ export const PLAN_LEGEND = 'c 椅子 t 桌子 r 签到台 b 背景板 d 展架 p
 export type Rect = { x1: number; z1: number; x2: number; z2: number };
 export type Plan = { cell: number; cols: number; rows: number; lines: string[]; legend: string };
 
-function venuePolygon(scene: Scene): Point[] {
+export function venuePolygon(scene: Scene): Point[] {
   const v = scene.venue;
   return v.polygon ?? [{ x: 0, z: 0 }, { x: v.width, z: 0 }, { x: v.width, z: v.depth }, { x: 0, z: v.depth }];
 }
@@ -41,7 +41,8 @@ function insidePolygon(p: Point, poly: Point[]) {
   }
   return hit;
 }
-function wallPolygons(scene: Scene): Point[][] {
+/** 墙的占地矩形（按厚度向两侧各展开一半）。净距报告要用它量「到墙还有多远」。 */
+export function wallPolygons(scene: Scene): Point[][] {
   return structureOf(scene).walls.map(wall => {
     const dx = wall.end.x - wall.start.x, dz = wall.end.z - wall.start.z, length = Math.hypot(dx, dz) || 1;
     const nx = -dz / length * wall.thickness / 2, nz = dx / length * wall.thickness / 2;

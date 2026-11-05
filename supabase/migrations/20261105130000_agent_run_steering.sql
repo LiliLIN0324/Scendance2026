@@ -7,8 +7,8 @@
 -- 存在哪：agent_runs.steer_notes 是「还没被工作线程取走的」备注队列（取走即清空）；
 -- steer_total 是「一共收到过多少条」，单调递增，供界面显示送达数——队列清空后
 -- 界面上那个数字不该倒退。
-alter table scene_private.agent_runs add column steer_notes jsonb not null default '[]';
-alter table scene_private.agent_runs add column steer_total integer not null default 0;
+alter table scene_private.agent_runs add column if not exists steer_notes jsonb not null default '[]';
+alter table scene_private.agent_runs add column if not exists steer_total integer not null default 0;
 
 create or replace function scene_private.agent_view(r scene_private.agent_runs) returns jsonb language sql stable set search_path='' as $$
  select jsonb_build_object('id',r.id,'projectId',r.project_id,'requestId',r.request_key,'state',r.state,'progress',r.progress,
