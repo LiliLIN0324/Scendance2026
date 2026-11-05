@@ -23,7 +23,7 @@ import { STORAGE_KEY } from '../lib/constants';
 import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARDS, INITIAL_BRIEF, isBlankBriefScaffold, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { buildReviewReference } from '../lib/review-copy';
-import { appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
+import { appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend } from '../lib/workbench-agent';
@@ -790,6 +790,9 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
         appendAgentStep({toolName:progress,durationMs:0,isReadonly:true,startedAt:now});
       }
       setAgentThoughtCount(result.callCount);
+      // 阶段是云端的真值（第几段工作），刷新后重新读档也接得上；拿不到就清空，
+      // 界面不显示阶段——不拿轮数顶替阶段。
+      setAgentPhase(result.phase??null);
     };
     while(active()){
       setRun(result);

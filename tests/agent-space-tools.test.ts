@@ -103,6 +103,7 @@ describe('the agent can ask the engine where things fit',()=>{
     const {projectId,...body}=i;
     const response=await createApi(backend,env,fetcher)(new Request(`https://api.test/projects/${projectId}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(body)}));
     expect(response.status).toBe(202);
+    const run=agentRunSchema.parse(await response.json());
 
     const stepLines=steps.filter(line=>line.includes('阶段'));
     // 每一轮开头都是一行阶段进度，且轮数在尾部作为预算读数保留。
@@ -111,6 +112,8 @@ describe('the agent can ask the engine where things fit',()=>{
       '第 1/4 阶段 · 看现状 · 第 1/6 轮',
       '第 2/4 阶段 · 定落点 · 第 2/6 轮',
     ]);
+    // 阶段同时落库：刷新页面重新读档也接得上，不用从最后一行文案里解析。
+    expect(run.phase).toBe('deliver');
     // 阶段没有被阶段行写到的部分，靠每次工具调用那一行补齐——交付那一步必须看得见。
     expect(steps).toContain('正在整理候选方案');
     // 旧的「DeepSeek 正在处理（N/6）」这种只有机器账、没有工作含义的行不应该再出现。

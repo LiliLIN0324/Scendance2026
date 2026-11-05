@@ -1,0 +1,135 @@
+-- 阶段落库（第 13 批）：把「这一趟推进到哪一段」写进运行行，刷新页面重新读档也接得上。
+--
+-- 为什么：第 11 批的阶段是算在进度字符串里的，刷新后只能从最后一行文字里读；
+-- 顶卡要单独显示「第 2/4 阶段 · 定落点」，就得有个字段，不能靠解析文案。
+--
+-- 与改道同一处改法（场景侧落在 agent_rpc_before_activity_tasks，不能覆盖分发器），
+-- 所以本文件是改道那份的完整接续版：一次把两个字段都补齐，避免函数体出现两份。
+--
+-- 运行中改道（steering）：用户在 agent 跑着的时候追加一句要求，下一轮模型调用前生效。
+--
+-- 为什么需要它：一次运行最长 6 轮、90 秒，用户看见第一步的读法不对时，原来只有
+-- 「取消重发」一条路——重发会作废已经付出的轮数与已通过的候选。谷地工坊把这个口子
+-- 做成了运行条输入框（"为下一步添加备注"），这里补上同一条通道。
+--
+-- 存在哪：agent_runs.steer_notes 是「还没被工作线程取走的」备注队列（取走即清空）；
+-- steer_total 是「一共收到过多少条」，单调递增，供界面显示送达数——队列清空后
+-- 界面上那个数字不该倒退。
+alter table scene_private.agent_runs add column if not exists steer_notes jsonb not null default '[]';
+alter table scene_private.agent_runs add column if not exists steer_total integer not null default 0;
+-- 阶段：可空。老记录没有这一段，界面就不显示阶段——不拿轮数顶替。
+alter table scene_private.agent_runs add column if not exists phase text check(phase in ('survey','locate','compose','deliver'));
+
+create or replace function scene_private.agent_view(r scene_private.agent_runs) returns jsonb language sql stable set search_path='' as $$
+ select jsonb_build_object('id',r.id,'projectId',r.project_id,'requestId',r.request_key,'state',r.state,'progress',r.progress,
+ 'callCount',r.call_count,'phase',r.phase,'candidates',case when r.state='cancelled' then '[]'::jsonb else r.candidates end,'evaluation',r.evaluation,
+ 'executionMode',r.execution_mode,'jevEnabled',(r.input->>'jevEnabled')::boolean,'expiresAt',r.deadline,
+ 'steerTotal',r.steer_total)
+ || case when r.error_code is null then '{}'::jsonb else jsonb_build_object('errorCode',r.error_code) end
+ || case when r.message is null then '{}'::jsonb else jsonb_build_object('message',r.message) end
+$$;
+
+-- 注意链条：public.agent_rpc 现在只是分发器（20261010010000），活动任务走它自己的分支，
+-- 场景这边落到 agent_rpc_before_activity_tasks。改场景协议要改后者，不能覆盖分发器。
+create or replace function public.agent_rpc_before_activity_tasks(p_actor uuid,p_action text,p_data jsonb default '{}') returns jsonb
+language plpgsql security invoker set search_path='' as $$
+declare r scene_private.agent_runs; p scene_private.projects; c jsonb; stored jsonb; items jsonb:='[]'; v_day date;
+  v_pending jsonb;
+begin
+  select * into p from scene_private.projects where id=(p_data->>'projectId')::uuid;
+  if p_actor is null or not found or not scene_private.is_member(p_actor,p.studio_id) then raise exception 'PROJECT_NOT_FOUND'; end if;
+  if p_action='create' then
+    perform pg_advisory_xact_lock(hashtextextended('agent-owner:'||p_actor::text,0));
+    perform pg_advisory_xact_lock(hashtextextended('agent:'||p_actor::text||':'||p.id::text||':'||(p_data->'input'->>'requestId'),0));
+    select * into r from scene_private.agent_runs where owner_id=p_actor and project_id=p.id and request_key=(p_data->'input'->>'requestId')::uuid for update;
+    if found then
+      if r.fingerprint is distinct from p_data->>'fingerprint' then raise exception 'IDEMPOTENCY_CONFLICT'; end if;
+      return scene_private.agent_view(r)||'{"reused":true}';
+    end if;
+    perform scene_private.require_lease(p_actor,p_data->'input'||jsonb_build_object('projectId',p.id));
+    perform scene_private.check_assets(p_actor,p_data->'input'->'scene');
+    if exists(select 1 from scene_private.agent_runs where owner_id=p_actor and state in ('queued','running') and deadline>clock_timestamp()) then raise exception 'AI_BUSY'; end if;
+    insert into scene_private.agent_runs(owner_id,project_id,request_key,fingerprint,input,base_hash,execution_mode)
+      values(p_actor,p.id,(p_data->'input'->>'requestId')::uuid,p_data->>'fingerprint',p_data->'input',p_data->>'baseHash',p_data->>'executionMode') returning * into r;
+    return scene_private.agent_view(r)||'{"reused":false}';
+  end if;
+  if p_action='by_request' then
+    select * into r from scene_private.agent_runs where owner_id=p_actor and project_id=p.id and request_key=(p_data->>'requestId')::uuid for update;
+  else
+    select * into r from scene_private.agent_runs where id=(p_data->>'id')::uuid and owner_id=p_actor and project_id=p.id for update;
+  end if;
+  if not found then raise exception 'AGENT_RUN_NOT_FOUND'; end if;
+  if r.state in ('queued','running') and r.deadline<=clock_timestamp() then
+    update scene_private.agent_runs set state=case when jsonb_array_length(candidates)>0 then 'complete' else 'failed' end,error_code='AGENT_DEADLINE',progress='执行已中断，保留有效结果',evaluation=case when (input->>'jevEnabled')::boolean then jsonb_build_object('status','partial','message','运行已中断，保留通过检查的方案，未完成评价。') else null end where id=r.id returning * into r;
+  end if;
+  if p_action in ('get','by_request') then return scene_private.agent_view(r); end if;
+  -- 改道备注由用户侧送入，因此必须放在下面的 claim 守卫之前：送备注的人不是工作线程，
+  -- 没有也不该有 claim。只在任务仍可继续时才收，已结束的备注没有执行机会，直接拒收。
+  if p_action='note' then
+    if r.state not in ('queued','running') or r.deadline<=clock_timestamp() then raise exception 'AGENT_RUN_STOPPED'; end if;
+    update scene_private.agent_runs
+      set steer_notes=case when jsonb_array_length(steer_notes)>=8 then steer_notes - 0 else steer_notes end
+        || jsonb_build_array(jsonb_build_object('text',left(coalesce(p_data->>'note',''),500),'at',clock_timestamp())),
+        steer_total=steer_total+1
+      where id=r.id returning * into r;
+    return scene_private.agent_view(r)||'{"accepted":true}';
+  end if;
+  if p_action='cancel' then
+    update scene_private.agent_runs set state='cancelled',progress='已取消',execution_mode='preview' where id=r.id returning * into r;
+    return scene_private.agent_view(r);
+  end if;
+  if p_action='start' then
+    if r.state<>'queued' then return '{"claimed":false}'; end if;
+    update scene_private.agent_runs set state='running',claim=gen_random_uuid(),progress='正在读取当前场景',phase=coalesce(phase,'survey') where id=r.id returning * into r;
+    return jsonb_build_object('claimed',true,'claim',r.claim,'input',r.input,'deadline',r.deadline,'studioId',p.studio_id,'phase',r.phase);
+  end if;
+  if r.state<>'running' or r.claim is distinct from (p_data->>'claim')::uuid then raise exception 'AGENT_RUN_STOPPED'; end if;
+  -- 取走队列：备注只该被注入一次。运营上宁可丢一条（工作线程重启时这一趟本来也结束），
+  -- 也不能让同一条备注在后续每一轮里反复出现、把模型的注意力钉在旧要求上。
+  if p_action='take_notes' then
+    v_pending:=r.steer_notes;
+    if v_pending='[]'::jsonb then return '{"notes":[]}'; end if;
+    update scene_private.agent_runs set steer_notes='[]' where id=r.id;
+    return jsonb_build_object('notes',coalesce((select jsonb_agg(e->>'text') from jsonb_array_elements(v_pending) e),'[]'::jsonb));
+  end if;
+  if p_action='fail' then
+    update scene_private.agent_runs set state=case when jsonb_array_length(candidates)>0 and p_data->>'errorCode' not in ('LEASE_LOST','LEASE_BUSY','REVISION_CONFLICT','FORBIDDEN','PROJECT_NOT_FOUND') then 'complete' else 'failed' end,
+      error_code=p_data->>'errorCode',progress='执行中断，原场景与有效方案已保留',
+      evaluation=case when (input->>'jevEnabled')::boolean then jsonb_build_object('status','partial','message','后续处理未完成，有效方案已保留，未生成推荐概率。') else null end
+      where id=r.id returning * into r;
+    return scene_private.agent_view(r);
+  end if;
+  -- Check the edit lease/revision before each tool and model call, and again at final storage.
+  perform scene_private.require_lease(p_actor,r.input||jsonb_build_object('projectId',p.id));
+  if p_action='check' then return jsonb_build_object('active',true); end if;
+  if p_action='step' then
+    if r.call_count>=6 then raise exception 'AGENT_CALL_LIMIT'; end if;
+    v_day:=(clock_timestamp() at time zone 'Asia/Shanghai')::date;
+    insert into scene_private.text_daily_budgets(usage_day,committed_cents) values(v_day,20)
+      on conflict(usage_day) do update set committed_cents=scene_private.text_daily_budgets.committed_cents+20;
+    update scene_private.agent_runs set call_count=call_count+1,progress=p_data->>'progress',phase=coalesce(p_data->>'phase',phase) where id=r.id returning * into r;
+    return jsonb_build_object('callCount',r.call_count,'phase',r.phase);
+  elsif p_action='usage' then
+    update scene_private.agent_runs set usage=usage||jsonb_build_array(p_data->'usage') where id=r.id;
+    return '{}';
+  elsif p_action='progress' then
+    update scene_private.agent_runs set progress=left(p_data->>'progress',200),phase=coalesce(p_data->>'phase',phase) where id=r.id;
+    return '{}';
+  elsif p_action in ('finish','checkpoint') then
+    if jsonb_array_length(p_data->'candidates')>3 then raise exception 'INVALID_CANDIDATES'; end if;
+    if p_data ? 'candidates' then
+    for c in select value from jsonb_array_elements(p_data->'candidates') loop
+      stored:=public.scene_rpc(p_actor,'proposals.store',r.input||jsonb_build_object('projectId',p.id,'id',gen_random_uuid(),
+        'baseHash',r.base_hash,'candidate',c->'scene','explanation',c->>'explanation','warnings',c->'warnings'));
+      stored:=stored||jsonb_build_object('modelSuggestions',coalesce(c->'modelSuggestions','[]'),'materialSuggestions',coalesce(c->'materialSuggestions','[]'));
+      insert into scene_private.agent_proposals values((stored->>'id')::uuid,r.id);
+      items:=items||jsonb_build_array(jsonb_build_object('label',c->>'label','title',c->>'title','proposal',stored));
+    end loop;
+    end if;
+    update scene_private.agent_runs set state=case when p_action='checkpoint' then 'running' else 'complete' end,progress=case when p_action='checkpoint' then '已保存通过检查的候选方案' else '方案已准备好' end,candidates=case when p_data ? 'candidates' then items else candidates end,evaluation=p_data->'evaluation',message=p_data->>'message' where id=r.id returning * into r;
+    return scene_private.agent_view(r);
+  end if;
+  raise exception 'UNKNOWN_ACTION';
+end $$;
+revoke all on function public.agent_rpc_before_activity_tasks(uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function public.agent_rpc_before_activity_tasks(uuid,text,jsonb) to service_role;

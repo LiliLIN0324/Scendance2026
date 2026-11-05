@@ -66,9 +66,9 @@ describe('净距报告', () => {
   });
 
   it('多边形净距函数：相交为 0，分离为最短边距', () => {
-    const a = footprint({ position: { x: 0, z: 0 }, size: { width: 2, depth: 2 }, rotation: 0 });
-    const near = footprint({ position: { x: 2.5, z: 0 }, size: { width: 1, depth: 1 }, rotation: 0 });
-    const overlap = footprint({ position: { x: 1, z: 0 }, size: { width: 2, depth: 2 }, rotation: 0 });
+    const a = footprint({ position: { x: 0, z: 0 }, size: { width: 2, depth: 2, height: 0.75 }, rotation: 0 });
+    const near = footprint({ position: { x: 2.5, z: 0 }, size: { width: 1, depth: 1, height: 0.75 }, rotation: 0 });
+    const overlap = footprint({ position: { x: 1, z: 0 }, size: { width: 2, depth: 2, height: 0.75 }, rotation: 0 });
     expect(polygonGap(a, near)).toBe(1);
     expect(polygonGap(a, overlap)).toBe(0);
   });

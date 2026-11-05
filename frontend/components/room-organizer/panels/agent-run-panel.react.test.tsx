@@ -9,6 +9,7 @@ import {
   endAgentRun,
   getAgentRun,
   pushAgentSteerNote,
+  setAgentPhase,
   setAgentSteerDelivered,
   setAgentThoughtCount,
   startAgentRun,
@@ -64,14 +65,35 @@ describe('AgentRunPanel', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('头部用的是云端给的真实思考条数与真实步骤', () => {
+  it('头部用的是云端给的真实轮数与真实步骤', () => {
     setAgentThoughtCount(4);
     appendAgentStep({ toolName: '正在读取当前场景', durationMs: 1200, isReadonly: true, startedAt: Date.now() - 1200 });
     appendAgentStep({ toolName: '正在整理候选方案', durationMs: 800, isReadonly: true, startedAt: Date.now() - 800 });
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText(/正在思考 · 4 条思考/)).toBeTruthy();
+    expect(screen.getByText('正在思考')).toBeTruthy();
+    expect(screen.getByText(/第 4 轮/)).toBeTruthy();
     expect(screen.getByText('正在读取当前场景')).toBeTruthy();
     expect(screen.getByText('正在整理候选方案')).toBeTruthy();
+  });
+
+  it('主标题是阶段（云端给的真值），轮数降为副行', () => {
+    setAgentPhase('locate');
+    setAgentThoughtCount(3);
+    appendAgentStep({ toolName: '正在检索模型资源', durationMs: 900, isReadonly: true, startedAt: Date.now() - 900 });
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText('第 2/4 阶段 · 定落点')).toBeTruthy();
+    // 这一段具体在做什么，要说得出话。
+    expect(screen.getByText('算合法落点、建缺的模型')).toBeTruthy();
+    // 轮数还在，但退到副行当预算读数——它不占主标题。
+    expect(screen.getByText(/第 3 轮/)).toBeTruthy();
+  });
+
+  it('拿不到阶段就不写阶段，也不拿轮数顶替', () => {
+    setAgentPhase(null);
+    setAgentThoughtCount(2);
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.queryByText(/阶段 ·/)).toBeNull();
+    expect(screen.getByText('正在思考')).toBeTruthy();
   });
 
   it('步骤流默认只显示最后 3 步，可以展开全部', () => {
@@ -108,7 +130,8 @@ describe('AgentRunPanel', () => {
     appendAgentStep({ toolName: '正在检查方案', durationMs: 900, isReadonly: true, startedAt: Date.now() - 900 });
     endAgentRun();
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText(/这一趟走完了 · 3 条思考 · 1 步/)).toBeTruthy();
+    expect(screen.getByText('这一趟走完了')).toBeTruthy();
+    expect(screen.getByText(/第 3 轮 · 1 步/)).toBeTruthy();
     expect(screen.getByText('正在检查方案')).toBeTruthy();
   });
 
