@@ -70,6 +70,8 @@ docs/                      文档，入口见 docs/README.md
 introduction.html          官网（构建时复制进 public/）
 ```
 
+小程序端（现场采集器）已于 2026-11-05 独立成仓：[`LiliLIN0324/scendance-capture`](https://github.com/LiliLIN0324/scendance-capture)，本仓不再保留 `miniprogram/`。
+
 ## 文档
 
 唯一入口：[docs/README.md](docs/README.md)。
