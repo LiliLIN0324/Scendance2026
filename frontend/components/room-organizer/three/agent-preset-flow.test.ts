@@ -73,7 +73,9 @@ it.each([3, 6])('keeps the real gym read, BOM, three validations and JEV workflo
   expect(results[0].presetObjectLabels).toBeUndefined();
   expect(results[1].items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0)).toBe(307);
   candidates.forEach((candidate, index) => {
-    expect(results[results.length - 3 + index]).toEqual({ valid: true, objectCount: 308,
+    // 用局部匹配而不是整对象相等：校验回执后来又带上了 clearances（实测净距），
+    // 那是回执该有的新字段，不该让这条断言整条挂掉。这里只钉住它该保证的三件事。
+    expect(results[results.length - 3 + index]).toMatchObject({ valid: true, objectCount: 308,
       warnings: buildProposal(scene, 'modify', { explanation: candidate.explanation, commands: candidate.commands }).warnings });
   });
   expect(jevBodies).toHaveLength(1);
