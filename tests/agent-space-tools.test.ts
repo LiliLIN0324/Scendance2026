@@ -116,4 +116,40 @@ describe('the agent can ask the engine where things fit',()=>{
     // 旧的「DeepSeek 正在处理（N/6）」这种只有机器账、没有工作含义的行不应该再出现。
     expect(steps.some(line=>line.includes('DeepSeek 正在处理'))).toBe(false);
   },30000);
+
+  it('通过时回实测净距，不通过时指出第几条命令',async()=>{
+    const draft=room(),i=await input(draft);
+    let passed:{valid?:boolean;clearances?:{id:string;gap:number;nearest:{kind:string}}[]}={};
+    let refused:{valid?:boolean;failedCommand?:number|null;issues?:{code?:string}[]}={};
+    const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
+      const body=JSON.parse(String(init?.body));
+      const lastTool=()=>JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').pop().content);
+      if(fetcher.mock.calls.length===1)return completion([tool('validate_candidate',{
+        title:'两件一起摆',
+        explanation:'先试算再加。',
+        commands:[
+          {op:'add',materialId:'table',position:{x:8,z:3},rotation:0,color:'#ffffff'},
+          {op:'remove',id:id(77)},
+        ],
+      })]);
+      if(fetcher.mock.calls.length===2){refused=lastTool();return completion([tool('validate_candidate',{
+        title:'只摆桌子',
+        explanation:'去掉不存在的那条命令。',
+        commands:[{op:'add',materialId:'table',position:{x:8,z:3},rotation:0,color:'#ffffff'}],
+      })]);}
+      passed=lastTool();
+      return completion([tool('submit_candidates',{candidates:[{title:'摆一张桌子',explanation:'通道留足。',commands:[{op:'add',materialId:'table',position:{x:8,z:3},rotation:0,color:'#ffffff'}]}]})]);
+    });
+    const run=await send(i,fetcher);
+    expect(run.state).toBe('complete');
+    // 第一条命令是好的，第二条删的是不存在的物件——回执必须指向第 2 条，而不是只说不合法。
+    expect(refused.valid).toBe(false);
+    expect(refused.failedCommand).toBe(2);
+    expect(refused.issues?.[0]?.code).toBeTruthy();
+    // 通过时给的是实测净距：引擎量的数，模型不必再猜通道够不够。
+    expect(passed.valid).toBe(true);
+    expect(passed.clearances?.length).toBe(1);
+    expect(passed.clearances?.[0].gap).toBeGreaterThan(0);
+    expect(['object','wall','column','edge']).toContain(passed.clearances?.[0].nearest.kind);
+  },30000);
 });

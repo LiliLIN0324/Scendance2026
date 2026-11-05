@@ -9,6 +9,7 @@ import { parametricParametersSchema } from './parametric-contract.ts';
 import { createParametricAsset } from './parametric.ts';
 import { findFreeAreas } from './placement-search.ts';
 import { inspectZone, sceneDigest, type Rect } from './scene-digest.ts';
+import { clearanceReport } from './clearance-report.ts';
 import { createMaterialVariant, readAssetMaterials } from './material-variants.ts';
 import { materialChangeSchema } from './asset-customization-contract.ts';
 import { evaluateCandidates } from './jev.ts';
@@ -16,7 +17,7 @@ import { fetchJson, reserveCost, type Env, type Fetcher } from './http.ts';
 import { parseAgentModelReply } from './agent-model-reply.ts';
 import { generationCapabilities } from './generation-contract.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
-import { advancePhase, progressLine, type AgentPhase } from './agent-progress.ts';
+import { AGENT_PHASES, advancePhase, progressLine, type AgentPhase } from './agent-progress.ts';
 import type { Backend } from './backend.ts';
 
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
@@ -33,7 +34,7 @@ const schemas={
 };
 const descriptions:Record<keyof typeof schemas,string>={get_scene:'读取本次未保存草稿和选中物件。',search_resources:'检索有授权的公共/个人模型；空字符串列出目录。返回真实资源引用和米制尺寸。',
   inspect_zone:'读一块矩形场地：返回按米格画的局部平面（墙#、门窗=、柱子O、物件首字母、出入口E）以及该范围内的墙、洞口、柱子、物件（含 id 与坐标）。局部要改之前先看它，不要凭想象推断现状。',
-  find_free_areas:'让引擎找合法落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回可直接写进 add/move 的落地中心坐标、离最近出入口距离。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，返回程序校验结果，不保存。',submit_candidates:'结束本次运行并提交方案。JEV关闭提交1个，开启提交3个有实际布局/材质差异的独立方案；全都基于同一个原始草稿。说明性答复可用空commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'提交 Aholo Lux3D 文生 3D 异步任务（付费，约数分钟）。完成后用户在历史模型面板手动加入场地；本方案不能包含刚提交的物件，不得声称已布置。仅用于参数化六类和现有资源都无法满足的定制物件。'};
+  find_free_areas:'让引擎找合法落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回可直接写进 add/move 的落地中心坐标、离最近出入口距离。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，返回程序校验结果，不保存。通过时附 clearances：每个本次被改动的物件到最近物件/墙/柱子/场地边界的实测净距（米）；不通过时用 failedCommand 指出第几条命令失败，并给 code 与 hint。',submit_candidates:'结束本次运行并提交方案。JEV关闭提交1个，开启提交3个有实际布局/材质差异的独立方案；全都基于同一个原始草稿。说明性答复可用空commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'提交 Aholo Lux3D 文生 3D 异步任务（付费，约数分钟）。完成后用户在历史模型面板手动加入场地；本方案不能包含刚提交的物件，不得声称已布置。仅用于参数化六类和现有资源都无法满足的定制物件。'};
 const progressLabels:Record<keyof typeof schemas,string>={get_scene:'正在读取当前场景',search_resources:'正在检索模型资源',
   inspect_zone:'正在读取局部平面',find_free_areas:'正在搜索可落点',
   create_parametric_model:'正在创建参数化模型',inspect_materials:'正在读取模型材质',customize_material:'正在创建材质副本',validate_candidate:'正在检查方案',submit_candidates:'正在整理候选方案',get_bom:'正在统计物料清单',start_lux3d_model:'正在提交 Lux3D 生成任务'};
@@ -51,7 +52,7 @@ const system=`你是幕景 Binggo 场景 Agent，使用 DeepSeek 的工具调用
 commands格式：add {materialId,position:{x,z},rotation,color}；remove {id}；move {id,position}；rotate {id,rotation}；recolor {id,color}仅内置对象；replace {id,materialId}；add_resource {resourceId,position,rotation,size?}；replace_resource {id,resourceId,size?}。均需op字段。内置materialId为chair/table/reception/backdrop/display/partition/carpet/decoration。优先真实resource。资源必须来自工具，尺寸未知且无明确需求时先询问。
 presetNode 是已归档预设中的可编辑物件，中文名称见 presetObjectLabels；可以移动、旋转、移除或替换，不能把 presetNode 当作独立云资源做材质编辑。普通GLB换色先inspect_materials读取实际槽，再customize_material生成副本后replace_resource。用户明确整件换色可选全部有效槽；只改不明确部位时返回materialSuggestions让用户选择槽。保留旧几何和UV，不能把颜色冒充新纹理。修改参数须读取metadata来源后创建新模型，仅替换目标实例。
 空间判据由引擎算，不由你猜：首条用户消息里的 planOverview 是按米格渲染的平面概览（列=x，行=z，#墙 =门窗洞 O柱子 E出入口 首字母为物件，大写表示锁定），它只表示占位与相邻关系，不代表净空；largestEmptySquare 是概览精度下最大的一块空地。要判断某个尺寸能不能摆、该摆在哪，调用 find_free_areas（占地宽深+需要留出的净距），直接使用它返回的落地中心坐标；要改某块地方，先 inspect_zone 看现状。不要用相邻坐标试错，也不要把"看起来空"当作可摆放。
-工具返回 {code,details,hint} 时，hint 是唯一的下一步：按 hint 改一次；同一个 code 在同一个目标上失败两次，就换落点、换尺寸或直接说明这条限制，不要第三次重试，也不要为了绕过校验去改无关区域。validate_candidate 返回 valid:true 即已达标，不要为了更好看再反复试算。只处理用户要求的部分，未被要求的地方保持原样。
+工具返回 {code,details,hint} 时，hint 是唯一的下一步：按 hint 改一次；同一个 code 在同一个目标上失败两次，就换落点、换尺寸或直接说明这条限制，不要第三次重试，也不要为了绕过校验去改无关区域。validate_candidate 返回 valid:true 即已达标，不要为了更好看再反复试算；它同时给出 clearances（每个被改物件到最近障碍的实测净距），主通道按 1.2 米、次通道按 0.9 米判断——不够就换落点或如实说明，不要靠目测，也不要为了凑数去改无关区域；valid:false 时 failedCommand 指向第几条命令，只改那一条。只处理用户要求的部分，未被要求的地方保持原样。
 最终必须调用submit_candidates，每个候选{title,explanation,commands,materialSuggestions?}。JEV开启时提供三个可比较方案，不能仅改标题、ID或颜色；每个基于原草稿，禁止累积应用。方案解释指出实际差异。只有用户确定应用后程序才改场景；不能提前声称已应用。只询问信息可空commands作答。`;
 
 /** Direct execution is an explicit user action; recommendations and JEV always preview. */
@@ -93,6 +94,8 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   const rpc=backend.agent!;
   const start=await rpc(actor,'start',{projectId,id});if(!start.claimed)return;
   const input=agentRunRequestSchema.parse(start.input),deadline=Date.parse(start.deadline),claim=start.claim;
+  // 阶段从行上接着走：这一趟之前推进到哪一段，重新接上时不该从头报。
+  const persistedPhase=AGENT_PHASES.find(phase=>phase===start.phase);
   const call=(action:string,data:Record<string,unknown>={})=>rpc(actor,action,{projectId,id,claim,...data});
   const check=async()=>{if(Date.now()>=deadline)throw new ApiError('AGENT_DEADLINE',409);await call('check');};
   type Candidate=ReturnType<typeof buildProposal>&{label:'A'|'B'|'C';title:string};
@@ -132,6 +135,17 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       if(dimensionConflicts(proposal.scene).length)throw new ApiError('DIMENSION_CONFLICT',422,dimensionConflicts(proposal.scene));
       return {...proposal,title:parsed.title};
     };
+    /**
+     * 定位第一条没通过的命令：逐条加前缀重试，第一个失败的前缀就指向它。
+     * build 只做内存计算（不下发、不落库），命令数在十条以内，代价可忽略。
+     */
+    const firstFailingCommand=(raw:z.infer<typeof candidateSchema>)=>{
+      for(let index=0;index<raw.commands.length;index+=1){
+        try{build({...raw,commands:raw.commands.slice(0,index+1)});}
+        catch{return index;}
+      }
+      return -1;
+    };
     const currentResources=()=>resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId&&assetUuidKey(o.assetId)===assetUuidKey(r.assetId))));
     const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),planOverview:sceneDigest(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog})}];
     // ponytail: run-local receipts; terminal run fencing still prevents worker restarts.
@@ -140,14 +154,14 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     // never sees it and cannot promise an async generation it cannot start.
     const aholoReady=generationCapabilities(env).aholoTextToModel;
     // 界面上的主标题是阶段，不是轮数：`第 2/4 阶段 · 定落点 · 第 3/6 轮`。
-    let phase:AgentPhase='survey';
+    let phase:AgentPhase=persistedPhase??'survey';
     for(let turn=1;turn<=6&&!finished;turn++) {
       await check();
       // 用户在这一轮跑着的时候追加的改道要求，在这一次模型调用之前生效。取走即清空，
       // 所以同一条备注不会在后续每一轮里反复出现；送达条数以 run.steerTotal 为准。
       const steering:{notes?:string[]}=await call('take_notes');
       for(const note of steering.notes??[])messages.push({role:'user',content:`用户在本次运行进行中追加了要求（后说的盖过先说的，优先于最初需求）：${note}\n如果它与你已经做过的步骤冲突，先用一句话说明冲突点，再按这条要求继续；不要撤掉无关的已完成部分。`});
-      await call('step',{progress:progressLine(phase,turn,6)});
+      await call('step',{progress:progressLine(phase,turn,6),phase});
       if(turn===6)messages.push({role:'user',content:`这是最后一次模型调用。请现在用 submit_candidates 提交 ${input.jevEnabled?3:1} 个完整候选（title、explanation、commands），不要继续读取或校验。此前 validate_candidate 的结果未提交；提交仍需通过程序校验，JEV 方案由用户最终选择。`});
       const { url, init } = chatRequest(env, { messages, tools:aholoReady?tools:baseTools, tool_choice:turn===6?{type:'function',function:{name:'submit_candidates'}}:'auto', max_tokens:7000 });
       // Bytes, not characters: the prompt and the scene payload are largely Chinese.
@@ -171,7 +185,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
             result=JSON.parse(receipt.content);replayed=true;
           } else {
             phase=advancePhase(phase,phaseOfTool[name]);
-            await call('progress',{progress:progressLabels[name]});
+            await call('progress',{progress:progressLabels[name],phase});
             if(name==='get_scene')result=input.scene.objects.length>50
               ?{sameAsInitialScene:true,objectCount:input.scene.objects.length,selectedIds:input.selectedIds,message:'当前草稿未变化。完整scene、presetObjectLabels与资源引用已在首条用户消息中，请使用该数据；重复省略以保留工具调用空间。'}
               :{scene:input.scene,presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources()};
@@ -185,7 +199,16 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               result=inspectZone(input.scene,rect);
             } else if(name==='find_free_areas') {
               const a=args as z.infer<typeof schemas.find_free_areas>;
-              result=findFreeAreas(input.scene,{width:a.width,depth:a.depth,height:a.height,rotation:a.rotation,clearance:a.clearance,near:a.nearX!==undefined&&a.nearZ!==undefined?{x:a.nearX,z:a.nearZ}:undefined,limit:a.limit,step:a.step});
+              // 可选项只在真的有值时才带上：exactOptionalPropertyTypes 下不能显式传 undefined。
+              result=findFreeAreas(input.scene,{
+                width:a.width,depth:a.depth,
+                ...(a.height===undefined?{}:{height:a.height}),
+                ...(a.rotation===undefined?{}:{rotation:a.rotation}),
+                ...(a.clearance===undefined?{}:{clearance:a.clearance}),
+                ...(a.nearX!==undefined&&a.nearZ!==undefined?{near:{x:a.nearX,z:a.nearZ}}:{}),
+                ...(a.limit===undefined?{}:{limit:a.limit}),
+                ...(a.step===undefined?{}:{step:a.step}),
+              });
             } else if(name==='create_parametric_model') {
               const parameters=(args as z.infer<typeof schemas.create_parametric_model>).parameters;
               const created=await createParametricAsset(backend,actor,start.studioId,crypto.randomUUID(),parameters);
@@ -212,7 +235,22 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               const prepared=await prepareGenerationRequest(backend,actor,{requestId:crypto.randomUUID(),prompt,kind:'text',provider:'aholo'},env);
               const job=await backend.jobs(actor,'jobs.create',{...prepared,reserveCents:reserveCost(env,'GENERATION_MAX_TASK_CENTS')});
               result={submitted:true,jobId:job.id,note:'Lux3D 生成任务已提交，约需数分钟；完成后用户在历史模型面板手动加入场地。'};
-            } else if(name==='validate_candidate') {const candidate=build(args);result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length};}
+            } else if(name==='validate_candidate') {
+              // 校验回执要能直接改。通过时给实测净距——「不重叠但通道只剩 0.8 米」是真实
+              // 事故，布尔回执会把它吞掉；不通过时指出是第几条命令——一份候选常有五到十条，
+              // 只说「不合法」等于让模型重猜是哪里。
+              const raw=args as z.infer<typeof schemas.validate_candidate>;
+              try {
+                const candidate=build(raw);
+                const before=new Set(input.scene.objects.map(o=>o.id));
+                const touched=[...new Set([...candidate.scene.objects.filter(o=>!before.has(o.id)).map(o=>o.id),...raw.commands.flatMap(c=>'id' in c?[c.id]:[])])];
+                result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length,clearances:clearanceReport(candidate.scene,touched)};
+              } catch(error) {
+                const issue=safeError(error),index=firstFailingCommand(raw);
+                result={...issue,valid:false,failedCommand:index>=0?index+1:null,commandCount:raw.commands.length,issues:[issue],
+                  message:index>=0?`第 ${index+1}/${raw.commands.length} 条命令没有通过；只改这一条，其他命令保持原样。`:'整份候选没有通过；按 code 与 hint 处理。'};
+              }
+            }
             else if(name==='submit_candidates') {
               const rawCandidates=(args as z.infer<typeof schemas.submit_candidates>).candidates,valid:Candidate[]=[],errors:unknown[]=[];
               for(const rawCandidate of rawCandidates)try{
