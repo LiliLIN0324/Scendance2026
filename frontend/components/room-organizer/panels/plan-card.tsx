@@ -2,6 +2,9 @@
 
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
+import { planZones } from '../../../lib/plan-approve';
+
+type SkippedZone = { zoneId: string; reason: string };
 
 /**
  * 第 7.5 批「规划草案」计划卡。
@@ -127,6 +130,21 @@ export function PlanCard({ draft, onApprove, onReplace, onCancel, onComment }: P
     [draft],
   );
 
+  // 批准前先把「每个区会落什么」算出来摆给用户看，别让人盲批。
+  const preview = useMemo(() => {
+    if (!draft) return { byId: new Map<string, string>(), skipped: [] as SkippedZone[] };
+    const outcome = planZones(draft.annotations, 0.5);
+    const byId = new Map<string, string>();
+    for (const zone of draft.annotations.filter((a) => a.kind === 'zone')) {
+      const items = outcome.placements.filter((p) => p.zoneId === zone.id);
+      if (items.length === 0) continue;
+      const counts = new Map<string, number>();
+      for (const p of items) counts.set(p.spec.name, (counts.get(p.spec.name) ?? 0) + 1);
+      byId.set(zone.id, [...counts.entries()].map(([name, n]) => `${name}×${n}`).join('、'));
+    }
+    return { byId, skipped: outcome.skipped };
+  }, [draft]);
+
   if (!draft) return null;
 
   const submitComment = (): void => {
@@ -145,14 +163,26 @@ export function PlanCard({ draft, onApprove, onReplace, onCancel, onComment }: P
       )}
 
       {stages.map((stage) => {
-        const annCount = stage.annotationIds.length;
+        const zoneAnnotations = (draft?.annotations ?? []).filter(
+          (a) => a.kind === 'zone' && stage.annotationIds.includes(a.id),
+        );
         return (
           <div key={stage.stageNo} style={stageStyle}>
             <div style={stageTitleStyle}>
               <span aria-hidden="true">{stage.stageNo}.</span> {stage.title}
             </div>
             <div style={rationaleStyle}>{stage.rationale}</div>
-            <div style={metaStyle}>{annCount} 条标注</div>
+            {zoneAnnotations.map((a) => {
+              const planned = preview.byId.get(a.id);
+              const missed = preview.skipped.find((s) => s.zoneId === a.id);
+              return (
+                <div key={a.id} style={metaStyle}>
+                  · {a.label}
+                  {planned ? ` → ${planned}` : ''}
+                  {missed ? `（${missed.reason}）` : ''}
+                </div>
+              );
+            })}
           </div>
         );
       })}
