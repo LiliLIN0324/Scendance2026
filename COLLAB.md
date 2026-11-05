@@ -1,0 +1,71 @@
+# COLLAB.md — 与 Qoder（账号 LiliLIN0324）的文件所有权边界
+
+建立日期：2026-11-05
+适用仓库：Scendance2026（main 分支，Cloudflare Pages 从 main 自动构建）
+起因：computer-use 插件实测无法挂载（`ide_mcp.config.ext.computer-use not found`），改为在仓库内约定协作边界。
+
+> 本文件只约定「谁改哪块、怎么改、怎么提交」，不替代代码规范与设计文档。
+> 任何一方要改动另一方独占的区域，先走第四节「待协商」流程。
+
+---
+
+## 一、渲染 / 导出链路：归我方独占（Qoder 不要直接改）
+
+以下 5 个文件构成一条闭环，任一环变动都会让成图静默失效（不报错、只是图不对）：
+
+- `frontend/components/room-organizer/hooks/use-import-export.ts`
+- `frontend/components/room-organizer/hooks/use-splat-preview.ts`
+- `frontend/components/room-organizer/three/splat-preview.ts`
+- `frontend/components/room-organizer/room-organizer.tsx`
+- `frontend/components/room-organizer/panels/scendance-workspace.tsx`
+
+**为什么独占：**
+
+1. 导出合成 3DGS 刚验通：成图 **1920×1080、2,722,871 B**，与「无点云」对照组**逐像素 diff 69.24%**——说明真实场地确实进了成图。这个结论依赖上面五处协同：`room-organizer.tsx` 注入 `paintFrame`，`use-import-export.ts` 用它走同一条渲染路径，`scendance-workspace.tsx` 负责档位与触发。
+2. `use-import-export.ts` 的 `resolution` 分支（固定 1920×1080 起算、导出时改 `camera.aspect` / `pixelRatio` 再还原）**目前没有单测覆盖**；改坏了构建仍会通过，只有出图时才发现。
+3. 需要调整导出尺寸、档位、点云合成顺序时，由我方先补测试再改；Qoder 侧只提需求，不直接编辑这五处。
+
+## 二、几何基线：禁改
+
+- `frontend/components/room-organizer/three/scan-placement.ts`
+- `frontend/components/room-organizer/three/furniture-builders.ts`
+
+**为什么禁改：** 现有基线已实测达标——**3° 斜场贴地残差 0.0 mm**，**69 件布置 0/69 超差**。证据在 `docs/evidence/measure-2026-11-05/`。这两处承载米制尺度、贴地与朝向的唯一真值，改动会让所有历史方案的尺寸悄悄漂移，且不易被 UI 察觉。
+
+## 三、提交纪律
+
+- 不用 `git add -A`、`git add .`、`git commit -a`；**只按明确路径 add 自己改过的文件**。
+- 提交前先自查：`git status`、`git diff --stat`，确认没有捎带别人的半成品。
+- 不提交 `.env`、任何密钥、`.temp/`、`exports/`、`docs/evidence` 下新生成的证据文件。
+- 反面案例：`8362728` 一次性把 **108 个文件**（付费、采集、导出、文档、台账、脚本）收进一个提交，把多条在途分支的边界全部打穿。不要重复这种收口方式。
+
+## 四、要改上面任何区域：先登记，后动手
+
+在文末「待协商」表里加一行，写明：**意图 + 涉及文件 + 时间 + 提出方**，等我方确认后再改。未登记直接改的，按回退处理，不进入评审。
+
+### 待协商
+
+| 日期 | 提出方 | 意图 | 涉及文件 | 状态 |
+| --- | --- | --- | --- | --- |
+| 2026-11-05 | Qoder（LiliLIN0324） | 补登记（改动早于 COLLAB.md）：应用调研底图时清掉旧场地的 `mapGroundFrame/mapGroundPolygon/mapLngLat`，否则卫星贴地会用旧坐标重写 `sceneAnchor`，把底图甩到千公里外。只动 `applyResearchArea` 一段。 | `frontend/components/room-organizer/room-organizer.tsx` | 待确认（分支 `feat/research-basemap-anchor` b6a9c93，未推送） |
+| 2026-11-05 | Qoder（LiliLIN0324） | 补登记（改动早于 COLLAB.md）：导出成图时隐藏点云定位辅助（网格、footprint 边线、基准面、锚点标记）；`SplatPaint` 增加可选 `guides`，预览行为不变。只动导出传参与辅助层可见性。 | `frontend/components/room-organizer/hooks/use-splat-preview.ts`、`frontend/components/room-organizer/three/splat-preview.ts` | 待确认（分支 `feat/clean-export-guides` b8848ec，未推送） |
+
+---
+
+## 已知未决工程项（只登记，不动手）
+
+| # | 问题 | 现状 / 影响 |
+| --- | --- | --- |
+| 1 | `.gitignore` 把 `docs/evidence/aholo/` 放宽成整个 `docs/evidence/` | 已跟踪的 55 个证据文件仍在，但 15 份文档引用该目录；以后新证据无法入库，文档会断链 |
+| 2 | `deliverables/asset-ledger/glb-ledger.json` 属生成物入仓 | 1.53 MB / 5.3 万行，另有 CSV 322 KB；每次重新生成都会产生大 diff |
+| 3 | `package.json` 依赖归类 | `miniprogram-automator` 放在 `dependencies`，应归 `devDependencies` |
+| 4 | `frontend/.local-map.mjs`、`.local-map2.mjs`、`.local-map3.mjs`（另有 `.local-final.mjs`）未被 ignore | 调试脚本；谁做一次全量 add 就会被带上，提交前需确认 |
+
+---
+
+## 五、收尾纪律
+
+- **长会话结束前必须更新根目录 `HANDOFF.md`**，五节固定：当前任务 / 已完成 / 卡住的问题 / 下一步计划 / 踩过的坑。
+- **新会话开场第一句：「先读 HANDOFF.md」**，读完再动手。
+- **永远维护同一份 `HANDOFF.md`**，不要另起 `HANDOFF-2.md`、`HANDOFF-日期.md` 之类的新文件；有新进展就覆盖旧内容。
+- 数字类结论（字节、行号、接口返回）以仓库实测为准；复核不了的写「上传记录/外部后台」，不要编。
