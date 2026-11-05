@@ -110,6 +110,22 @@ export function canvasToWorld(
   };
 }
 
+/**
+ * 与 canvasToWorld 互逆：世界坐标（米，房间中心为原点）→ 画布 CSS px。
+ * 供标注覆盖层 / 草稿线 / 单测往返断言使用。
+ */
+export function worldToScreen(
+  worldX: number,
+  worldZ: number,
+  transform: View2DTransform,
+  layout: Pick<RoomLayout, 'width' | 'height'>
+): { px: number; py: number } {
+  return {
+    px: (worldX + layout.width / 2) * transform.scale + transform.offsetX,
+    py: (worldZ + layout.height / 2) * transform.scale + transform.offsetY,
+  };
+}
+
 // Decoded floor-plan image cache, keyed on the data-URL. Decoding a multi-MB
 // data-URL is async: the first render kicks off the load and re-renders once
 // the pixels are ready (so the image never paints over grid/furniture drawn
