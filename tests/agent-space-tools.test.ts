@@ -85,4 +85,35 @@ describe('the agent can ask the engine where things fit',()=>{
     expect(refusal.hint).toContain('selectedIds');
     expect(run.candidates[0].proposal.candidate.objects.find(o=>o.id===id(21))?.position).toEqual({x:4,z:4});
   },30000);
+
+  it('进度报的是阶段，不是第几次模型调用',async()=>{
+    const draft=room(),i=await input(draft);
+    // 抓运行器写给界面的每一行进度：step 是轮首那一行，progress 是每次工具调用那一行。
+    const steps:string[]=[];
+    const backend={...f.backend,agent:async(a:string|null,action:string,data:Record<string,unknown>|undefined)=>{
+      if((action==='step'||action==='progress')&&typeof data?.progress==='string')steps.push(data.progress);
+      return f.backend.agent!(a,action,data);
+    }};
+    const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
+      const body=JSON.parse(String(init?.body));
+      if(fetcher.mock.calls.length===1)return completion([tool('find_free_areas',{width:1.2,depth:0.6,clearance:0.5})]);
+      const sites=JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').pop().content).sites;
+      return completion([tool('submit_candidates',{candidates:[{title:'摆一张桌子',explanation:'放到引擎给出的空位。',commands:[{op:'add',materialId:'table',position:{x:sites[0].x,z:sites[0].z},rotation:0,color:'#ffffff'}]}]})]);
+    });
+    const {projectId,...body}=i;
+    const response=await createApi(backend,env,fetcher)(new Request(`https://api.test/projects/${projectId}/agent-runs`,{method:'POST',headers:{authorization:`Bearer ${owner}`,'content-type':'application/json'},body:JSON.stringify(body)}));
+    expect(response.status).toBe(202);
+
+    const stepLines=steps.filter(line=>line.includes('阶段'));
+    // 每一轮开头都是一行阶段进度，且轮数在尾部作为预算读数保留。
+    // 这一趟在第 2 轮就交付了，所以只有两行：第 1 轮看现状，第 2 轮已推进到定落点。
+    expect(stepLines).toEqual([
+      '第 1/4 阶段 · 看现状 · 第 1/6 轮',
+      '第 2/4 阶段 · 定落点 · 第 2/6 轮',
+    ]);
+    // 阶段没有被阶段行写到的部分，靠每次工具调用那一行补齐——交付那一步必须看得见。
+    expect(steps).toContain('正在整理候选方案');
+    // 旧的「DeepSeek 正在处理（N/6）」这种只有机器账、没有工作含义的行不应该再出现。
+    expect(steps.some(line=>line.includes('DeepSeek 正在处理'))).toBe(false);
+  },30000);
 });
