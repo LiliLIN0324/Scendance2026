@@ -182,7 +182,7 @@ cd frontend && npm run build
 - 被拒件（2）：`chair-07 压主通道`、`table-12 出界`——是人话，不是 code
 - 页脚常驻「我会出错，也可能破坏你的设计。请在交付前亲自巡场一遍。」
 
-预览页验完即删（`frontend/app/zz-audit-preview/` 已删除，工作树无残留）。
+预览页验完即删（`frontend/app/zz-audit-preview/` 已删除，工作树无残留）。实拍图见同目录 `_shots/审校卡-完成卡Z8-体检分与被拒件.png`。
 
 同时在真实 `/editor` 页复验：页面加载无 console error；点开 Bingo 面板后**审校卡不渲染**——正是 §4.2 守卫要的效果（场地 resize 那条路不再写出假账本）。
 
