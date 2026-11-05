@@ -18,6 +18,7 @@ import { parseAgentModelReply } from './agent-model-reply.ts';
 import { generationCapabilities } from './generation-contract.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
 import { AGENT_PHASES, advancePhase, progressLine, type AgentPhase } from './agent-progress.ts';
+import { matchRecipes, renderRecipes } from './agent-recipes.ts';
 import type { Backend } from './backend.ts';
 
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
@@ -53,7 +54,8 @@ commands格式：add {materialId,position:{x,z},rotation,color}；remove {id}；
 presetNode 是已归档预设中的可编辑物件，中文名称见 presetObjectLabels；可以移动、旋转、移除或替换，不能把 presetNode 当作独立云资源做材质编辑。普通GLB换色先inspect_materials读取实际槽，再customize_material生成副本后replace_resource。用户明确整件换色可选全部有效槽；只改不明确部位时返回materialSuggestions让用户选择槽。保留旧几何和UV，不能把颜色冒充新纹理。修改参数须读取metadata来源后创建新模型，仅替换目标实例。
 空间判据由引擎算，不由你猜：首条用户消息里的 planOverview 是按米格渲染的平面概览（列=x，行=z，#墙 =门窗洞 O柱子 E出入口 首字母为物件，大写表示锁定），它只表示占位与相邻关系，不代表净空；largestEmptySquare 是概览精度下最大的一块空地。要判断某个尺寸能不能摆、该摆在哪，调用 find_free_areas（占地宽深+需要留出的净距），直接使用它返回的落地中心坐标；要改某块地方，先 inspect_zone 看现状。不要用相邻坐标试错，也不要把"看起来空"当作可摆放。
 工具返回 {code,details,hint} 时，hint 是唯一的下一步：按 hint 改一次；同一个 code 在同一个目标上失败两次，就换落点、换尺寸或直接说明这条限制，不要第三次重试，也不要为了绕过校验去改无关区域。validate_candidate 返回 valid:true 即已达标，不要为了更好看再反复试算；它同时给出 clearances（每个被改物件到最近障碍的实测净距），主通道按 1.2 米、次通道按 0.9 米判断——不够就换落点或如实说明，不要靠目测，也不要为了凑数去改无关区域；valid:false 时 failedCommand 指向第几条命令，只改那一条。只处理用户要求的部分，未被要求的地方保持原样。
-最终必须调用submit_candidates，每个候选{title,explanation,commands,materialSuggestions?}。JEV开启时提供三个可比较方案，不能仅改标题、ID或颜色；每个基于原草稿，禁止累积应用。方案解释指出实际差异。只有用户确定应用后程序才改场景；不能提前声称已应用。只询问信息可空commands作答。`;
+最终必须调用submit_candidates，每个候选{title,explanation,commands,materialSuggestions?}。JEV开启时提供三个可比较方案，不能仅改标题、ID或颜色；每个基于原草稿，禁止累积应用。方案解释指出实际差异。只有用户确定应用后程序才改场景；不能提前声称已应用。只询问信息可空commands作答。
+首条用户消息若带 layoutRecipes，那是按本次需求检索到的分区套路与硬判据：用它决定先做什么、哪些东西必须留出净距，但不要照抄里面的示意坐标——每个落点仍必须由 find_free_areas 或 inspect_zone 给出。配方与工具回执冲突时，以工具回执为准；配方标「经验值」的条目不等于规范，不要说成合规。`;
 
 /** Direct execution is an explicit user action; recommendations and JEV always preview. */
 export function agentExecutionMode(input:AgentRunRequest) {
@@ -147,9 +149,15 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       return -1;
     };
     const currentResources=()=>resourceIndex(resources.filter(r=>input.scene.objects.some(o=>o.assetId&&assetUuidKey(o.assetId)===assetUuidKey(r.assetId))));
-    const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),planOverview:sceneDigest(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog})}];
+    // 配方是按需求检索出来的通用套路，只在首条消息里给一次：它决定「先分区还是先摆件」，
+    // 但不给坐标——坐标必须来自 find_free_areas。需求认不出类型时 matchRecipes 回 generic。
+    const layoutRecipes=renderRecipes(matchRecipes(`${input.instruction} ${input.context.brief}`));
+    const messages:Record<string,unknown>[]=[{role:'system',content:system},{role:'user',content:JSON.stringify({instruction:input.instruction,context:input.context,scene:sceneContext(input.scene),planOverview:sceneDigest(input.scene),presetObjectLabels:presetObjectLabels(input.scene),selectedIds:input.selectedIds,sceneResourceRefs:sceneResourceRefs(input.scene,resources),currentResources:currentResources(),jevEnabled:input.jevEnabled,catalog,layoutRecipes})}];
     // ponytail: run-local receipts; terminal run fencing still prevents worker restarts.
     const receipts=new Map<string,{fingerprint:string;content:string}>();
+    // 同一个工具用同一批参数撞同一类错误第二次，就说明模型在原地打转：
+    // 第一次失败只给 hint 让它自己改，第二次直接在回执里置 stop，别把剩下的轮次烧光。
+    const repeatedFailures=new Map<string,number>();
     // The Lux3D tool is advertised only when the vendor is fully configured; otherwise the model
     // never sees it and cannot promise an async generation it cannot start.
     const aholoReady=generationCapabilities(env).aholoTextToModel;
@@ -268,7 +276,15 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               else {result={accepted:valid.length,expected,errors,message:'只修复这些问题后完整重交，最多再修复一次。'};}
             }
           }
-        } catch(error) {lastError=error;result=safeError(error);}
+        } catch(error) {
+          lastError=error;result=safeError(error);
+          // 失败也要留证：同一 (错误码, 工具, 参数前缀) 第二次只提醒，第三次升级为 STOP 信号。
+          const code=(result as {code?:string}).code??'AGENT_TOOL_FAILED';
+          const repeatKey=`${code}|${tool.function.name}|${(tool.function.arguments??'').slice(0,160)}`;
+          const repeats=(repeatedFailures.get(repeatKey)??0)+1;repeatedFailures.set(repeatKey,repeats);
+          if(repeats>=2)result={...(result as Record<string,unknown>),repeat:repeats,stop:true,
+            hint:`这个调用已经用同样的参数失败 ${repeats} 次：不要再试第三次。换落点、换尺寸或换工具，或者直接用 submit_candidates 提交现有可用结果并说明这条限制。`};
+        }
         const content=JSON.stringify(result);
         // Keep execution failures too: a lost response may follow a committed effect.
         if(fingerprint!==undefined&&!receipts.has(tool.id))receipts.set(tool.id,{fingerprint,content});
