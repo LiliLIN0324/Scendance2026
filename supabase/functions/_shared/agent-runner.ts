@@ -20,6 +20,7 @@ import { prepareGenerationRequest } from './generation-input.ts';
 import { AGENT_PHASES, advancePhase, progressLine, type AgentPhase } from './agent-progress.ts';
 import { matchRecipes, renderRecipes } from './agent-recipes.ts';
 import { briefTarget, deadlinePressure, renderTurnBrief, type TurnTraceEntry } from './turn-brief.ts';
+import { rankCandidates, explainRanking, type ScoreInput } from './scorecard.ts';
 import type { Backend } from './backend.ts';
 
 const candidateSchema=modificationSchema.omit({modelSuggestions:true}).extend({title:z.string().min(1).max(100)});
@@ -197,6 +198,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
     const trace:TurnTraceEntry[]=[];
     // 通过校验的候选参数指纹。用它而不是计数器：同一个候选校验两次只算一个。
     const validated=new Set<string>();
+    // 校验回执的完整数据，键是 diversityKey(candidate.scene)。submit_candidates 据此给每个
+    // 候选打确定性分并排序：净距、结构警告、物件数都来自引擎实测，不靠模型目测。
+    const validatedScores=new Map<string,{clearances:{from:string;to:string;gap:number;required:number}[];violations:{code:string;severity:'fatal'|'warn'}[];objectCount:number}>();
     let lastFailure:{code:string;tool:string}|null=null;
     let roundCostSec=90;
     for(let turn=1;turn<=6&&!finished;turn++) {
@@ -303,6 +307,11 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
                 const touched=[...new Set([...candidate.scene.objects.filter(o=>!before.has(o.id)).map(o=>o.id),...raw.commands.flatMap(c=>'id' in c?[c.id]:[])])];
                 // 通过校验才算「手里有了可提交的方案」，简报的候选数用它。
                 validated.add(fingerprint!);
+                // 把这份回执记进打分表：submit 时按 diversityKey 找回实测净距与结构警告，
+                // 引擎打分排序，而不是让模型自说自话哪份更好。
+                const clearances=clearanceReport(candidate.scene,touched).map(c=>({from:c.id,to:`${c.nearest.kind}:${c.nearest.ref}`,gap:c.gap,required:1}));
+                const violations=candidate.warnings.map(w=>({code:w.code,severity:(w.code==='OUT_OF_BOUNDS'||w.code==='OVERLAP'?'fatal':'warn') as 'fatal'|'warn'}));
+                validatedScores.set(diversityKey(candidate.scene,identities),{clearances,violations,objectCount:candidate.scene.objects.length});
                 result={valid:true,warnings:candidate.warnings,objectCount:candidate.scene.objects.length,clearances:clearanceReport(candidate.scene,touched)};
               } catch(error) {
                 const issue=safeError(error),index=firstFailingCommand(raw);
@@ -317,14 +326,31 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
                 if(valid.some(v=>diversityKey(v.scene,identities)===diversityKey(candidate.scene,identities)))throw new ApiError('CANDIDATES_NOT_DISTINCT',422);
                 valid.push({...candidate,label:(['A','B','C'] as const)[valid.length]});
               }catch(error){errors.push(safeError(error));}
+              // 引擎实测打分排序：把「哪个方案更好」从模型主观判断换成可复算的分数。
+              // 没跑过 validate_candidate 的候选直接否决（validated:false），净距/结构警告/物件数
+              // 都取自 validate 那一步的引擎回执，不在这里重新算。
+              if(valid.length>1){
+                const inputs:ScoreInput[]=valid.map(candidate=>{
+                  const key=diversityKey(candidate.scene,identities);
+                  const scored=validatedScores.get(key);
+                  return scored
+                    ? {candidateId:candidate.title,validated:true,clearances:scored.clearances,violations:scored.violations,objectCount:scored.objectCount}
+                    : {candidateId:candidate.title,validated:false,violations:[]};
+                });
+                const ranked=rankCandidates(inputs);
+                const byTitle=new Map(ranked.map(r=>[r.candidateId,r]));
+                valid.sort((a,b)=>(byTitle.get(a.title)?.total??-1)-(byTitle.get(b.title)?.total??-1));
+                for(const [i,candidate] of valid.entries())candidate.label=(['A','B','C'] as const)[i];
+                result={accepted:valid.length,ranking:explainRanking(ranked),unvalidated:valid.filter(c=>!validatedScores.has(diversityKey(c.scene,identities))).map(c=>c.title)};
+              }
               const expected=input.jevEnabled?3:1;
               const nextCandidates=valid.length>=candidates.length?valid.slice(0,expected):candidates;
               if(nextCandidates.length)try{await call('checkpoint',{candidates:nextCandidates});}
               catch(error){checkpointFailed=true;throw error;}
               candidates=nextCandidates;
-              if(valid.length===expected){finished=true;result={accepted:valid.length};}
-              else if(++repair>1){finished=true;result={accepted:valid.length,partial:true};}
-              else {result={accepted:valid.length,expected,errors,message:'只修复这些问题后完整重交，最多再修复一次。'};}
+              if(valid.length===expected){finished=true;result={accepted:valid.length,...(result as Record<string,unknown>)};}
+              else if(++repair>1){finished=true;result={accepted:valid.length,partial:true,...(result as Record<string,unknown>)};}
+              else {result={accepted:valid.length,expected,errors,message:'只修复这些问题后完整重交，最多再修复一次。',...(result as Record<string,unknown>)};}
             }
           }
         } catch(error) {
