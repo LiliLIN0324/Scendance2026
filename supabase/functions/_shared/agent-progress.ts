@@ -8,9 +8,14 @@
  * 阶段的归属由「工具调用落在哪一段工作」决定，不由轮数决定：同一轮里可以既读场地又定落点。
  * 阶段只前进不后退——返回上一段读细节是细化，不是退回原点，界面上不该看到进度倒流。
  */
-export type AgentPhase = 'survey' | 'locate' | 'compose' | 'deliver';
+/**
+ * 四个阶段的固定次序。新增阶段时这里就是唯一需要改的地方——
+ * 阶段名、序号、说明都从这张表派生，界面上不另写一份数字。
+ */
+export const AGENT_PHASES = ['survey', 'locate', 'compose', 'deliver'] as const;
+export type AgentPhase = (typeof AGENT_PHASES)[number];
 
-const ORDER: AgentPhase[] = ['survey', 'locate', 'compose', 'deliver'];
+const ORDER: AgentPhase[] = [...AGENT_PHASES];
 
 /** 阶段总数：界面上写「第 N/4」，不要在两处各写一个数字。 */
 export const AGENT_PHASE_COUNT = ORDER.length;

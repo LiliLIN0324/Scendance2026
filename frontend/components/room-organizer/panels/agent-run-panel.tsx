@@ -6,8 +6,9 @@
  * 第 8 批前端接线的共用件：谁在跑生成，谁就把这块面板挂上。
  *
  * 内容口径（对应路线书 Y3/Y4/Y5/Y6 + X8）：
- * - 头部一行说清「正在思考 · N 条思考 · 已用时 mm:ss」——N 是**云端给的真实
- *   模型调用轮数**，不是前端自己数的；
+ * - 头部主标题是**阶段**（"第 2/4 阶段 · 定落点"）——云端给的真值，回答"在干什么"；
+ *   拿不到阶段就不显示阶段，不拿轮数顶替。
+ * - 副行是这一段的说明 + 预算读数（已用时 / 第 N 轮 / N 步）；
  * - 步骤流默认只显示最后 3 步，可「共 N 步，展开全部」；
  * - 每一步一行：中文步骤名 + 单步耗时，写入步带品牌绿左边框；
  * - 空结果回执卡：本轮既没给出候选也没改动画布时必须出声，不许沉默结束；
@@ -18,6 +19,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { AGENT_PHASE_COUNT, phaseDetail, phaseIndex, phaseLabel } from '../../../../supabase/functions/_shared/agent-progress';
 import {
   chineseToolLabel,
   dismissAgentEmptyReceipt,
@@ -121,11 +123,24 @@ export function AgentRunPanel({ scope = 'layout', controls = true }: { scope?: A
             fontSize: 12,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontWeight: 600, color: '#2b2f36' }}>
+          {/* 主标题是「推进到哪一段工作」，不是「第几次模型调用」。
+              阶段是云端给的真值（run.phase）：刷新页面重新读档也接得上。
+              拿不到就不写阶段——不拿轮数顶替，那会把机器账当成工作进度。 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, fontWeight: 600, color: '#2b2f36' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: run.isRunning ? COLOR_GREEN : '#9aa0a6', display: 'inline-block' }} aria-hidden="true"/>
-            {run.isRunning
-              ? <span>正在思考 · {run.thoughtCount} 条思考 · 已用时 {formatDurationClock(elapsedMs)}</span>
-              : <span>这一趟走完了 · {run.thoughtCount} 条思考 · {run.stepLog.length} 步 · 用时 {formatDurationClock(elapsedMs)}</span>}
+            {run.phase
+              ? <span>第 {phaseIndex(run.phase)}/{AGENT_PHASE_COUNT} 阶段 · {phaseLabel(run.phase)}</span>
+              : <span>{run.isRunning ? '正在思考' : '这一趟走完了'}</span>}
+          </div>
+
+          {/* 副行：这一段具体在做什么 + 预算读数。
+              轮数在这里，不在主标题——它是真实的（6 轮硬上限），但它不回答「在干什么」。 */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6, fontSize: 11.5, color: '#4a4f57' }}>
+            {run.phase && <span>{phaseDetail(run.phase)}</span>}
+            <span>
+              {run.isRunning ? '已用时' : '用时'} {formatDurationClock(elapsedMs)} · 第 {run.thoughtCount} 轮
+              {!run.isRunning && ` · ${run.stepLog.length} 步`}
+            </span>
           </div>
 
           {/* 改道备注的去向：写进输入框不等于它已经在生效。送到服务端的那句会在

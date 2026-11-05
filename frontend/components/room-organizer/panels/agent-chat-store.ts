@@ -10,7 +10,12 @@
  * 第 8 批增补：生成运行时状态（真步骤时间线 / 运行条三控件 / 空结果回执）。
  * 这一层是纯本机账本，不接大模型、不接 3D；真实接入由后续命令门接线，这里先把
  * UI 要渲染的数据形状和订阅口子定下来。
+ *
+ * 第 11 批增补：账本里多一个「阶段」。阶段名与序号跟服务端共用一份定义
+ * （supabase/functions/_shared/agent-progress.ts），两边不各写一份数字。
  */
+
+import type { AgentPhase } from '../../../../supabase/functions/_shared/agent-progress';
 
 /** 四个格子各自一条线。 */
 export type ChatAgent = 'door' | 'bingo' | 'space' | 'material';
@@ -134,6 +139,12 @@ export interface AgentRunState {
   steerDelivered: number;
   emptyOutcome: boolean;
   /**
+   * 这一趟推进到哪一段（四段工作：看现状 / 定落点 / 出方案 / 交付）。
+   * 云端的真值，刷新页面重新读档也接得上。拿不到就不显示——阶段是给用户看的
+   * 读数，前端自己分段就是编的。
+   */
+  phase: AgentPhase | null;
+  /**
    * 这一轮属于哪张脸。四张脸共用一本账本，不分区的话活动脸的运行过程会
    * 飘到空间/物料脸上——那是别的功能域的事，不该出现在那里。
    */
@@ -151,7 +162,9 @@ const IDLE_RUN: AgentRunState = {
   shouldPauseAfterStep: false,
   stopRequested: false,
   steerNotes: [],
+  steerDelivered: 0,
   emptyOutcome: false,
+  phase: null,
   scope: 'layout',
 };
 
@@ -221,6 +234,18 @@ export function setAgentThoughtCount(count: number): void {
   const next = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
   if (next === run.thoughtCount) return;
   commitRun({ ...run, thoughtCount: next });
+}
+
+/**
+ * 写当前阶段（云端给的真值）。
+ *
+ * 阶段只前进不后退是服务端那条链路的保证（advancePhase），前端这里照单全收，
+ * 不自己推进——否则刷新一次界面就会退回上一段，看着像进度倒流。
+ * 传 null 表示这趟没有阶段读数（老记录、本机规则模式），界面就不显示阶段。
+ */
+export function setAgentPhase(phase: AgentPhase | null): void {
+  if (phase === run.phase) return;
+  commitRun({ ...run, phase });
 }
 
 /**
