@@ -91,7 +91,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
   return (
     <div className={`ap-chat is-${agent}`}>
       {/* 第 8 批：运行态面板走共享件，活动脸与空间/物料脸共用同一块。 */}
-      <AgentRunPanel scope={agent}/>
+      <AgentRunPanel scope={agent} steerInputId={`ap-chat-${agent}`}/>
 
       <form className="ap-composer ap-composer-compact" aria-label={`${meta.name}动作框`} onSubmit={run.isRunning ? submitSteer : submit}>
         {agent === 'space' && onOpenAholo && !run.isRunning && (

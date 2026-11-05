@@ -18,7 +18,8 @@
  * 不产生数据。生产者是谁由调用方决定（活动脸接云端 AgentRun）。
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { detectStall, type StallResult, type StallSnapshot } from '@/lib/stall-detect';
 import { AGENT_PHASE_COUNT, phaseDetail, phaseIndex, phaseLabel } from '../../../../supabase/functions/_shared/agent-progress';
 import {
   chineseToolLabel,
@@ -36,6 +37,10 @@ import {
 const COLOR_STONE = '#F4F5F7';
 const COLOR_GREEN = '#4A7C59';
 const COLOR_RED = '#C0392B';
+const COLOR_AMBER = '#B45309';
+
+/** 停滞侦测的采样间隔：与云端轮询（2s）同频。 */
+const STALL_SAMPLE_MS = 2000;
 
 /** 订阅运行时账本。 */
 export function useAgentRun(): AgentRunState {
@@ -56,6 +61,45 @@ function useNowMs(running: boolean): number {
 }
 
 /**
+ * 停滞侦测：运行期间每 2s 采样一次进度快照（与云端轮询同频），交给纯函数
+ * detectStall 判断「是否在同一处打转」。停止或开新一轮时重置历史。
+ *
+ * 云端只在进度真的变时才发一次账本更新，没变化就不发——所以这里不能靠订阅
+ * 事件数「没变化」，得自己按心跳采样，把「没变化」也记下来。
+ */
+function useStall(run: AgentRunState): StallResult {
+  const historyRef = useRef<StallSnapshot[]>([]);
+  const [stall, setStall] = useState<StallResult>({ stalled: false });
+
+  useEffect(() => {
+    historyRef.current = [];
+    if (!run.isRunning) {
+      setStall({ stalled: false });
+      return;
+    }
+
+    const sample = (): void => {
+      const current = getAgentRun();
+      const snapshot: StallSnapshot = {
+        round: current.thoughtCount,
+        // 前端没有真正的「改动格数」，用步骤数代理：它单调递增，能反映有没有继续往前走。
+        changedCells: current.stepLog.length,
+        ts: Date.now(),
+      };
+      if (current.phase) snapshot.phase = current.phase;
+      historyRef.current.push(snapshot);
+      setStall(detectStall(historyRef.current));
+    };
+
+    sample();
+    const timer = window.setInterval(sample, STALL_SAMPLE_MS);
+    return () => window.clearInterval(timer);
+  }, [run.isRunning, run.startedAt]);
+
+  return stall;
+}
+
+/**
  * 运行时面板。账本里没有真实运行时（没在跑、也没跑过）时返回 null，
  * 让调用方回退到自己的占位形态（本机规则模式那套写死的步骤）。
  *
@@ -63,9 +107,10 @@ function useNowMs(running: boolean): number {
  * 三控件里的「跑完这步停」「为下一步加备注」要后端支持「运行中插话」才
  * 能真生效，没有那条通道就别挂上去冒充能用。
  */
-export function AgentRunPanel({ scope = 'layout', controls = true }: { scope?: AgentRunScope; controls?: boolean } = {}): JSX.Element | null {
+export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId }: { scope?: AgentRunScope; controls?: boolean; steerInputId?: string } = {}): JSX.Element | null {
   const run = useAgentRun();
   const now = useNowMs(run.isRunning);
+  const stall = useStall(run);
   const [expandedAll, setExpandedAll] = useState(false);
   const [openThought, setOpenThought] = useState<number | null>(null);
 
@@ -81,6 +126,13 @@ export function AgentRunPanel({ scope = 'layout', controls = true }: { scope?: A
 
   // 跑完后这一行仍要说清「这一趟用了多久」，所以结束时按当前时刻算总耗时。
   const elapsedMs = run.startedAt ? (run.isRunning ? now : Date.now()) - run.startedAt : 0;
+
+  // 停滞提示的入口：聚焦到父组件里那个已有的「运行中改道」输入框。面板自己
+  // 不造新输入框——没有传 steerInputId 就只显示文字提示，不给按钮。
+  const focusSteerInput = (): void => {
+    if (!steerInputId) return;
+    document.getElementById(steerInputId)?.focus();
+  };
 
   return (
     <>
@@ -142,6 +194,45 @@ export function AgentRunPanel({ scope = 'layout', controls = true }: { scope?: A
               {!run.isRunning && ` · ${run.stepLog.length} 步`}
             </span>
           </div>
+
+          {/* 停滞提示（纯前端推断）：连续 N 次轮询进度毫无变化，就提醒用户「似乎在同一处
+              打转」，并给一个去写改道备注的入口。进度一旦前进立即移除（detectStall 判的）。 */}
+          {stall.stalled && (
+            <div
+              role="status"
+              style={{
+                margin: '0 0 6px',
+                padding: '8px 10px',
+                background: '#FFF7E6',
+                borderLeft: `3px solid ${COLOR_AMBER}`,
+                borderRadius: 6,
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: '#7a4f01',
+              }}
+            >
+              <strong>智能体似乎在同一处打转。</strong>
+              <span>你可以给它加一句备注，指个方向。</span>
+              {steerInputId && (
+                <button
+                  type="button"
+                  onClick={focusSteerInput}
+                  style={{
+                    marginLeft: 8,
+                    padding: '2px 8px',
+                    fontSize: 11.5,
+                    border: `1px solid ${COLOR_AMBER}`,
+                    borderRadius: 999,
+                    background: '#fff',
+                    color: COLOR_AMBER,
+                    cursor: 'pointer',
+                  }}
+                >
+                  去写备注
+                </button>
+              )}
+            </div>
+          )}
 
           {/* 改道备注的去向：写进输入框不等于它已经在生效。送到服务端的那句会在
               下一轮思考之前被取走，所以这里分「已送达（等下一轮生效）」和「待送达」两截说。 */}
