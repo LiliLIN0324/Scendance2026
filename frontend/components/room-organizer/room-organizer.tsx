@@ -2721,8 +2721,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 visible={planAnnot.annotationsVisible}
               />
             )}
-            {/* 集成接线：规划草案浮层（右侧卡），批准/换一版/取消/反馈先 notify，不接后端执行。 */}
-            {planAnnot.draft && (
+            {/* 集成接线：规划草案浮层（右侧卡），批准/换一版/取消/反馈先 notify，不接后端执行。空草案不显示，避免「还没有阶段」卡死。 */}
+            {planAnnot.draft && (planAnnot.draft.stages.length > 0 || planAnnot.draft.annotations.length > 0) && (
               <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
                 <PlanCard
                   draft={planAnnot.draft}
