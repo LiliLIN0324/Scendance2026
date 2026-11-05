@@ -33,6 +33,8 @@ export const agentRunSchema=z.object({
   callCount:z.number().int().nonnegative(),candidates:z.array(z.object({label:z.enum(['A','B','C']),title:z.string(),proposal:agentProposalSchema})).max(3),
   evaluation:agentEvaluationSchema.nullable(),errorCode:z.string().optional(),message:z.string().optional(),
   executionMode:z.enum(['preview','direct']),jevEnabled:z.boolean(),expiresAt:z.string(),
+  /** 这趟一共收到过几条运行中改道备注；活动任务运行没有这条通道，缺省为 0。 */
+  steerTotal:z.number().int().nonnegative().optional(),
 });
 export type AgentRun=z.infer<typeof agentRunSchema>;
 export const agentDispatchRunSchema=z.preprocess((value,ctx)=>{

@@ -4,9 +4,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendAgentStep,
+  clearAgentSteerNotes,
   closeAgentStep,
   endAgentRun,
   getAgentRun,
+  pushAgentSteerNote,
+  setAgentSteerDelivered,
   setAgentThoughtCount,
   startAgentRun,
 } from './agent-chat-store';
@@ -113,5 +116,37 @@ describe('AgentRunPanel', () => {
     endAgentRun({ emptyOutcome: true });
     render(<AgentRunPanel scope="layout"/>);
     expect(screen.getByText('没做成。')).toBeTruthy();
+  });
+
+  it('改道备注的「已送达」是服务端绝对值，不是前端自己加', () => {
+    setAgentSteerDelivered(2);
+    expect(getAgentRun().steerDelivered).toBe(2);
+    setAgentSteerDelivered(2);
+    expect(getAgentRun().steerDelivered).toBe(2);
+    expect(getAgentRun().steerNotes).toHaveLength(0);
+  });
+
+  it('已送达与待送达必须分成两截说，不能并成一个数', () => {
+    setAgentSteerDelivered(1);
+    pushAgentSteerNote('把舞台往左挪一米');
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText(/已送达 1 条改道备注/)).toBeTruthy();
+    expect(screen.getByText(/还有 1 条待送达/)).toBeTruthy();
+  });
+
+  it('只有待送达时不说「已送达」，避免把写进输入框当成已生效', () => {
+    pushAgentSteerNote('换成圆桌');
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.queryByText(/已送达/)).toBeNull();
+    expect(screen.getByText(/还有 1 条待送达/)).toBeTruthy();
+  });
+
+  it('送走之后待送达清零，只剩已送达读数', () => {
+    setAgentSteerDelivered(3);
+    pushAgentSteerNote('换成圆桌');
+    clearAgentSteerNotes();
+    render(<AgentRunPanel scope="layout"/>);
+    expect(screen.getByText(/已送达 3 条改道备注/)).toBeTruthy();
+    expect(screen.queryByText(/待送达/)).toBeNull();
   });
 });

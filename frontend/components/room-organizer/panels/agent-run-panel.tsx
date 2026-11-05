@@ -128,6 +128,19 @@ export function AgentRunPanel({ scope = 'layout', controls = true }: { scope?: A
               : <span>这一趟走完了 · {run.thoughtCount} 条思考 · {run.stepLog.length} 步 · 用时 {formatDurationClock(elapsedMs)}</span>}
           </div>
 
+          {/* 改道备注的去向：写进输入框不等于它已经在生效。送到服务端的那句会在
+              下一轮思考之前被取走，所以这里分「已送达（等下一轮生效）」和「待送达」两截说。 */}
+          {(run.steerDelivered > 0 || run.steerNotes.length > 0) && (
+            <div style={{ margin: '0 0 6px', fontSize: 11.5, color: '#4a4f57', lineHeight: 1.5 }}>
+              {run.steerDelivered > 0 && <span>已送达 {run.steerDelivered} 条改道备注 · 下一轮思考前生效</span>}
+              {run.steerNotes.length > 0 && (
+                <span style={{ color: '#8a6d3b' }}>
+                  {run.steerDelivered > 0 ? ' · ' : ''}还有 {run.steerNotes.length} 条待送达
+                </span>
+              )}
+            </div>
+          )}
+
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {visibleSteps.map((step, index) => {
               const globalIndex = run.stepLog.indexOf(step);
