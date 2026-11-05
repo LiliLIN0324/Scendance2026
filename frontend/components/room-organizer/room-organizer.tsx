@@ -8,6 +8,7 @@ import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
+import { buildGenerationReport } from '@/lib/generation-report';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
 import {
   executeSceneCommand,
@@ -16,7 +17,7 @@ import {
   applyLayoutCommand,
 } from '@/lib/build-command';
 import { settlePlacement } from '@/lib/settle-placement';
-import { combineOutcomes, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
+import { combineOutcomes, hasOutcomeChanges, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
 import { isOpening } from './lib/opening-snap';
 import { planPointToCanvas } from './lib/review-pins';
 import { get2DViewTransform } from './canvas-2d/render';
@@ -2073,6 +2074,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const onApplyCreative = useCallback((next: RoomLayout) => {
     const before = layoutStore.getState().layout;
+    // 第 7 批收尾：记录本次落盘 + 体检的起始时刻，完成卡上的「落盘耗时」用它算。
+    const applyStartedAt = Date.now();
     let forceApply = false;
     if (previewGuard) {
       const decision = decideOnApply(before, previewGuard);
@@ -2124,7 +2127,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
     }
     const finalLayout = settleReport.layout;
-    // 集成接线：Bingo 体检分即时 notify（后续 BingoAuditCard 可从同一来源取数）。
+    // 集成接线：Bingo 体检分即时 notify，并把同一份数带进「本次报告」卡（第 7 批收尾）。
     const bingoScore = computeBingoScore(finalLayout, settleReport);
     notify(bingoScore.summary, bingoScore.total >= 95 && bingoScore.stuckCount === 0 ? 'success' : 'info');
 
@@ -2143,11 +2146,31 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       reason: r.message,
       code: r.code,
     }));
-    applyOutcome({
+    // 第 7 批收尾：把体检分、被拒/跳过件数、落盘耗时写进本次账本，
+    // 让 Bingo「本次报告」卡上真的能看到这次跑出来的数（而不是只弹一条 toast）。
+    // 思考轮数拿不到就不写 —— 不用别的数字冒充。
+    //
+    // 只有「真动了东西」才写账：onApplyCreative 也是场地壳体改尺寸的入口
+    // （splat 预览就绪时按真实尺寸 resize），那种操作一件家具都没变，
+    // 写进去只会让「本次结果」变成「放了 0 件」，把上一次真的生成结果冲掉。
+    const outcome: GenerationOutcome<FurnitureItem> = {
       placed: placedItems,
       refused: refusedEntries,
       skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
-    });
+    };
+    if (hasOutcomeChanges(outcome)) {
+      const report = buildGenerationReport({
+        score: bingoScore,
+        placedCount: placedItems.length,
+        refusedCount: refusedEntries.length,
+        skippedCount: removedItems.length,
+        fixedCount: bingoScore.fixedCount,
+        stuckCount: bingoScore.stuckCount,
+        areaM2: finalLayout.width * finalLayout.height,
+        durationMs: Date.now() - applyStartedAt,
+      });
+      applyOutcome({ ...outcome, report });
+    }
     setPreviewGuard(null);
     clearTransientSelection();
     initiallyFramed.current = false;
