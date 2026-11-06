@@ -137,6 +137,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
 import { F3CoachBubble } from './panels/f3-coach-bubble';
 import { usePlanAnnotations } from './hooks/use-plan-annotations';
+import { buildDefaultZoneRects } from '@/lib/auto-zone-apply';
 import { PlanOverlay } from './canvas-2d/plan-overlay';
 import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
@@ -2660,7 +2661,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider handoffExportRequest={handoffExportRequest} onVenueIOChange={io => setOutdoorVenue(io === 'outdoor')} onPreview={onPreviewAi} onApply={onApplyCreative} callbacks={{
+      <LayoutAgentProvider handoffExportRequest={handoffExportRequest} onVenueIOChange={io => setOutdoorVenue(io === 'outdoor')} onPreview={onPreviewAi} onApply={onApplyCreative} onApplyZoneRects={(zones) => {
+        // 「回好自动落区」：把 AI 提议的 zone 类型按 defaultZoneRect 排到 2D 草案。
+        // drawMode 保持 off，不强迫用户进绘制模式；reducer 内部没有 draft 时自动建一份。
+        const rects = buildDefaultZoneRects(zones, { width: layout.width, height: layout.height });
+        if (rects.length === 0) return null;
+        planAnnot.addZoneRects(rects);
+        return rects.map(r => r.label).join('、');
+      }} callbacks={{
         workbenchMode,
         onOpenMaterials: () => { setWorkbenchMode('layout'); showAgent('material'); },
         onSelectMode: selectWorkbenchMode,
