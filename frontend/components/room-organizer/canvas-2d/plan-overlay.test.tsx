@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   canvasToWorld,
   get2DViewTransform,
   worldToScreen,
 } from './render';
+import { PlanOverlay } from './plan-overlay';
+import type { PlanAnnotation } from '../../../lib/plan-annotation';
 
 /**
  * 第 10 批：标注覆盖层与 2D 渲染器共用同一套世界↔屏幕映射。
@@ -66,5 +69,54 @@ describe('2D view transform 往返', () => {
     const s = worldToScreen(-layout.width / 2, -layout.height / 2, t, layout);
     expect(s.px).toBeCloseTo(t.offsetX, 3);
     expect(s.py).toBeCloseTo(t.offsetY, 3);
+  });
+});
+
+describe('PlanOverlay 门弧：真门 vs 推测门', () => {
+  const t = get2DViewTransform(800, 600, layout, 60);
+  const realDoor: PlanAnnotation = {
+    id: 'door-real',
+    kind: 'door',
+    label: '用户真画的门',
+    stageNo: 1,
+    geometry: { kind: 'door', wall: 'south', position: 0, widthM: 0.9 },
+  };
+  const inferredDoor: PlanAnnotation = {
+    id: 'door-inferred',
+    kind: 'door',
+    label: '推测南门',
+    stageNo: 1,
+    geometry: { kind: 'door', wall: 'south', position: 0, widthM: 0.9, inferred: true },
+  };
+
+  function renderMarkup(anns: readonly PlanAnnotation[]): string {
+    return renderToStaticMarkup(
+      <PlanOverlay annotations={anns} transform={t} layout={layout} visible />,
+    );
+  }
+
+  it('同时渲染两扇门：每扇都有 data-door-inferred 标记', () => {
+    const html = renderMarkup([realDoor, inferredDoor]);
+    expect(html).toContain('data-door-inferred="false"');
+    expect(html).toContain('data-door-inferred="true"');
+  });
+
+  it('推测门（inferred=true）的门扇/门弧带 stroke-dasharray', () => {
+    const html = renderMarkup([inferredDoor]);
+    // 关位线 / 开位线 / 门弧 path 三条都应带 dash。
+    const dashCount = (html.match(/stroke-dasharray/g) ?? []).length;
+    expect(dashCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('真门（inferred 缺省）的门扇/门弧不带 stroke-dasharray（保持实线）', () => {
+    const html = renderMarkup([realDoor]);
+    expect(html).not.toContain('stroke-dasharray');
+  });
+
+  it('推测门旁出现「门未确认」小字；真门旁不出现', () => {
+    const inferredHtml = renderMarkup([inferredDoor]);
+    expect(inferredHtml).toContain('门未确认');
+    const realHtml = renderMarkup([realDoor]);
+    expect(realHtml).not.toContain('门未确认');
   });
 });

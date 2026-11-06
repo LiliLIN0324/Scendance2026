@@ -165,6 +165,100 @@ export function PlanOverlay({
               </g>
             );
           }
+          case 'door': {
+            const g = ann.geometry;
+            // 门洞沿墙 position ± widthM/2；铰链取门洞一端，门长=widthM。
+            // 关位端点 = 铰链 + 沿墙方向 * L；开位端点 = 铰链 + 室内法线 * L。
+            // 房间中心为原点；worldToScreen 已把 (worldX, worldZ) 投影到 CSS px。
+            const halfL = g.widthM / 2;
+            const wallLen = g.widthM;
+            let hingeW = { x: 0, z: 0 };
+            let along = { x: 1, z: 0 }; // 沿墙单位向量（指向门洞另一端）
+            let inward = { x: 0, z: -1 }; // 室内法线（指向房间内）
+            if (g.wall === 'south') {
+              hingeW = { x: g.position - halfL, z: layout.height / 2 };
+              along = { x: 1, z: 0 };
+              inward = { x: 0, z: -1 };
+            } else if (g.wall === 'north') {
+              hingeW = { x: g.position - halfL, z: -layout.height / 2 };
+              along = { x: 1, z: 0 };
+              inward = { x: 0, z: 1 };
+            } else if (g.wall === 'west') {
+              hingeW = { x: -layout.width / 2, z: g.position - halfL };
+              along = { x: 0, z: 1 };
+              inward = { x: 1, z: 0 };
+            } else {
+              hingeW = { x: layout.width / 2, z: g.position - halfL };
+              along = { x: 0, z: 1 };
+              inward = { x: -1, z: 0 };
+            }
+            const hinge = toPx(hingeW);
+            const closedEnd = toPx({
+              x: hingeW.x + along.x * wallLen,
+              z: hingeW.z + along.z * wallLen,
+            });
+            const openEnd = toPx({
+              x: hingeW.x + inward.x * wallLen,
+              z: hingeW.z + inward.z * wallLen,
+            });
+            // 门弧：从关位端点绕铰链 90° 扫到开位端点。
+            // SVG arc：rx=ry=门长在屏幕上的像素长度；large-arc=0；sweep 按几何方向定。
+            const arcR = wallLen * transform.scale;
+            // 铰链→关位 与 铰链→开位 是两条垂直向量；叉积符号决定 sweep 方向。
+            const cross = along.x * inward.z - along.z * inward.x;
+            const sweepFlag = cross > 0 ? 1 : 0;
+            // 门旁小字锚点：把小字放「铰链 + 1.5 倍室内法线」位置（房间内侧、离墙稍远）。
+            const labelAnchor = toPx({
+              x: hingeW.x + inward.x * (wallLen * 1.6),
+              z: hingeW.z + inward.z * (wallLen * 1.6),
+            });
+            const isInferred = !!g.inferred;
+            const dashAttr = isInferred ? '4 3' : undefined;
+            return (
+              <g key={ann.id} data-door-inferred={isInferred ? 'true' : 'false'}>
+                {/* 门扇关位（贴墙） */}
+                <line
+                  x1={hinge.x}
+                  y1={hinge.y}
+                  x2={closedEnd.x}
+                  y2={closedEnd.y}
+                  stroke={BRAND_GREEN}
+                  strokeWidth={1.5}
+                  strokeDasharray={dashAttr}
+                />
+                {/* 门扇开位（向室内打开） */}
+                <line
+                  x1={hinge.x}
+                  y1={hinge.y}
+                  x2={openEnd.x}
+                  y2={openEnd.y}
+                  stroke={BRAND_GREEN}
+                  strokeWidth={1.2}
+                  strokeDasharray={dashAttr}
+                />
+                {/* 门扇扫过的 90° 弧 */}
+                <path
+                  d={`M ${closedEnd.x} ${closedEnd.y} A ${arcR} ${arcR} 0 0 ${sweepFlag} ${openEnd.x} ${openEnd.y}`}
+                  fill="none"
+                  stroke={BRAND_GREEN}
+                  strokeWidth={1}
+                  strokeDasharray={dashAttr}
+                />
+                <circle cx={hinge.x} cy={hinge.y} r={2.5} fill={BRAND_GREEN} />
+                {isInferred && (
+                  <text
+                    x={labelAnchor.x}
+                    y={labelAnchor.y}
+                    fontSize={10}
+                    fill={BRAND_GREEN}
+                    textAnchor="middle"
+                  >
+                    门未确认
+                  </text>
+                )}
+              </g>
+            );
+          }
           default:
             return null;
         }
