@@ -12,9 +12,10 @@
 | `door/door-eyes.svg` | 1024 | 母版 + `icon.svg` 那两只白眼睛（128 换算值 13.44×30.08 / `rx 6.72` / `rotate 12°`） |
 | `door/png/` | 16 / 24 / 28 / 32 / 48 / 64 / 128 / 256 / 512 | **128 档 = 原件字节**（SHA256 `911D11FD…ADAF8F`）；其余 8 档由 `door.svg` 以 resvg 渲染 |
 | `door/png/door-eyes-128.png`、`door-eyes-512.png` | 128 / 512 | 由 `door-eyes.svg` 渲染 |
-| `door/compare-128.png` | 1180×384 | 原图 / SVG 渲回 128 / 差异高亮（灰=一致，红=PNG 有 SVG 无，蓝=SVG 多） |
-| `door/compare-eyes.png` | 782×384 | 带眼 / 不带眼并排 |
 | `door/door-master-128.png` | 128 | 运行时 `door.png` 逐字节副本（SHA256 `911D11FD…ADAF8F`），仅作溯源 |
+
+> QA 对照位图 `compare-128.png` / `compare-eyes.png` 已按品牌 P0 删除（2026-11-07，见 docs/26）；
+> 渲回比对随时可复现：`door.svg` resvg 渲 128 后与原件做掩膜比对（IoU 数字见下文「校验数字」）。
 
 **512 档现在是真的能出了**：它由矢量渲染，不是把 128 位图放大——这是相对"只有 128 位图"的关键改善，
 大尺寸印刷、商店图、演示封面都可以直接用。
