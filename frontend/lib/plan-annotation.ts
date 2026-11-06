@@ -72,14 +72,32 @@ export function createEmptyPlanDraft(): LayoutPlanDraft {
   };
 }
 
-/** 不可变追加一条标注，返回新 draft。 */
+/** 不可变追加一条标注，返回新 draft；同 stageNo 的阶段自动归集，没有就补一个默认阶段。 */
 export function addAnnotation(
   draft: LayoutPlanDraft,
   annotation: PlanAnnotation,
 ): LayoutPlanDraft {
+  const annotations = [...draft.annotations, annotation];
+  const existingStage = draft.stages.find((stage) => stage.stageNo === annotation.stageNo);
+  const stages = existingStage
+    ? draft.stages.map((stage) =>
+      stage.stageNo === annotation.stageNo
+        ? { ...stage, annotationIds: [...stage.annotationIds, annotation.id] }
+        : stage,
+    )
+    : [
+      ...draft.stages,
+      {
+        stageNo: annotation.stageNo,
+        title: `第 ${annotation.stageNo} 阶段`,
+        rationale: '画布标注自动归集',
+        annotationIds: [annotation.id],
+      },
+    ];
   return {
     ...draft,
-    annotations: [...draft.annotations, annotation],
+    annotations,
+    stages,
   };
 }
 
