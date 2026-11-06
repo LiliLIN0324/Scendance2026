@@ -4,12 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { CanvasHeading } from './canvas-heading';
 
 describe('CanvasHeading', () => {
-  it('shows only the view kind in 3D without venue dimensions', () => {
+  it('does not show a heading in 3D', () => {
     const { container } = render(<CanvasHeading view2D={false} />);
-    const heading = container.querySelector('.sc-canvas-heading');
-    expect(heading?.textContent).toBe('3D 场景');
-    expect(screen.getByText('3D 场景')).toBeTruthy();
-    expect(heading?.textContent).not.toMatch(/×\s*\d|\d\s*×|m²|m\b/);
+    expect(container.querySelector('.sc-canvas-heading')).toBeNull();
+    expect(screen.queryByText('3D 场景')).toBeNull();
   });
 
   it('shows 2D 平面 when the flat plan view is active', () => {
