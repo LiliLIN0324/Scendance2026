@@ -6,6 +6,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // 同一份源码开两个 dev 时，共用一个 .next 会让 webpack 清单互相覆盖，
+  // 页面报「reading 'call'」的 chunk 错。后启动的那个用 NEXT_DIST_DIR 单独起目录。
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   output: 'export',
   images: { unoptimized: true },
   devIndicators: false,
