@@ -99,6 +99,12 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-bubble-action { min-height: 28px; padding: 0 12px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--plane); color: var(--ink); font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: border-color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
 .ap-bubble-action:hover { border-color: var(--wk-ink-soft); background: var(--plane-deep); color: var(--ink); transform: translateY(-1px); }
 .ap-bubble-action:active { transform: none; }
+/* 「回好自动落区」提议卡：品牌绿描边 + 浅底，按钮用品牌绿主按钮风格。 */
+.ap-zone-proposal { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border: 1px solid var(--ap-green); border-radius: var(--r-sm); background: var(--green-pale); max-width: 100%; }
+.ap-zone-proposal__hint { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-cap); color: var(--ink); }
+.ap-zone-proposal__btn { align-self: flex-start; min-height: 28px; padding: 0 14px; border: 0; border-radius: var(--r-sm); background: var(--ap-green); color: #fff; font-size: var(--fs-p2); font-weight: 500; cursor: pointer; transition: background var(--dur-1) var(--ease-spec), transform var(--dur-1) var(--ease-spec); }
+.ap-zone-proposal__btn:hover { background: var(--ap-deep); transform: translateY(-1px); }
+.ap-zone-proposal__btn:active { transform: none; }
 .ap-small { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-guide { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--plane); border: 1px solid var(--wk-hair); border-radius: var(--r-md); }
 .ap-guide-tag { margin: 0; font-size: var(--fs-p2); color: var(--ink); font-weight: 500; }

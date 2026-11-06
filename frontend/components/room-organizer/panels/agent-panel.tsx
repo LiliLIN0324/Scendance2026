@@ -17,6 +17,12 @@
 import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { resolveBriefTurn } from '../../../lib/agent-resolver';
+import {
+  extractProposedZoneTypes,
+  hasZoneApplyProposal,
+  isAffirmativeIntent,
+} from '../../../lib/auto-zone-apply';
+import type { ZoneSemanticType } from '../../../lib/plan-annotation';
 import { readReviewReturn, reviewOrbClass, reviewOrbShouldTurnRed } from '../../review-share-page/review-return';
 import { localPlanKey } from '../../review-share-page/load-plan';
 import { useRoomEditor } from '../contexts';
@@ -98,12 +104,18 @@ type Bubble = {
   image?: string;
   /** 气泡里的一句话动作：只给「拖了图纸、还差一步就能出方案」这种当场要点的下一步，不当第二套入口。 */
   action?: { label: string; run(): void };
+  /**
+   * 「要不要我帮你圈区」提议卡：AI 给完硬建议、末尾问一句时挂这个。
+   * 渲染成品牌绿描边小卡 + 「好，帮我圈」按钮；落盘时函数被丢，回读不会重现按钮。
+   */
+  zoneApply?: { run(): void };
   /** S2 T2：审校台专属气泡（体检回执/钉评指路）。Bingo 脸只回放这类，活动脸回放全部。 */
   review?: boolean;
 };
 
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
+  // zoneApply 是闭包，落盘时丢掉；翻回话文字还在，按钮不重现。
   return bubbles.map(({ id, role, text, meta, warn, amber, long, image }) => {
     return {
       id, role, text,
@@ -271,7 +283,7 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, onApplyZoneRects, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, history, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   const assistantSessions = useAssistantSessions();
@@ -1340,6 +1352,19 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       say({ role: 'agent', text: '这里只看方案，不改布置。要挪物料，回到布置对话再说。' });
       return;
     }
+    // 「回好自动落区」：用户直接说「好 / 可以 / 圈吧」时，若上一条 agent 给过「要不要帮你圈出来」提议，
+    // 就在这里把默认 zone 矩形落到 2D 草案，不再走 brief-agent 解析。非 layout 模式不触发，避免误动画布。
+    if (isAffirmativeIntent(trimmed)) {
+      const lastAgent = [...bubblesRef.current].reverse().find(b => b.role === 'agent');
+      if (lastAgent && hasZoneApplyProposal(lastAgent.text)) {
+        const zones = extractProposedZoneTypes(lastAgent.text);
+        const labels = onApplyZoneRects?.(zones) ?? null;
+        if (labels) {
+          say({ role: 'agent', text: `已经在 2D 上圈好${labels}，去画布看一眼？` });
+          return;
+        }
+      }
+    }
     // 「按图纸估」= 说完了就往下走：估完尺寸直接出预览，不再让人补一句「出方案」。
     if (isEstimateCommand(trimmed)) {
       // 「300 平米，按图纸估」是一句话里的两件事：这句的面积要先记进记忆，估算才不会退回画布上的旧尺寸。
@@ -1422,7 +1447,23 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     if (turn.kind !== 'generate') {
-      say({ role: 'agent', text: turn.text });
+      // AI 回复末尾问「要不要我帮你圈出来」时，挂一张绿描边提议卡；点按钮等价于用户回「好」。
+      const zoneProposal = hasZoneApplyProposal(turn.text);
+      say({
+        role: 'agent',
+        text: turn.text,
+        ...(zoneProposal
+          ? {
+              zoneApply: {
+                run: () => {
+                  const zones = extractProposedZoneTypes(turn.text);
+                  const labels = onApplyZoneRects?.(zones) ?? null;
+                  if (labels) say({ role: 'agent', text: `已经在 2D 上圈好${labels}，去画布看一眼？` });
+                },
+              },
+            }
+          : {}),
+      });
       return;
     }
     const cloud = studioRef.current;
@@ -1777,6 +1818,12 @@ function Bubbles({ agent, reviewOnly = false }: { agent: AgentValue; reviewOnly?
     return bubble.role === 'user'
     ? <div key={bubble.id} className={`ap-user${bubble.meta || bubble.warn ? ' is-file' : ''}`}>{(bubble.meta || bubble.warn) && <FileImage size={16} aria-hidden="true"/>}<div><strong>{bubble.text}</strong>{bubble.image && <img className="ap-msg-image" src={bubble.image} alt={bubble.text}/>}{bubble.meta && <small>{bubble.meta}</small>}{bubble.warn && <small className="ap-warn"><span aria-hidden="true">!</span>{bubble.warn}</small>}</div></div>
     : <div key={bubble.id} className="ap-turn"><p className={`ap-agent${bubble.amber ? ' is-amber' : ''}${bubble.long ? ' is-long' : ''}`}>{bubble.text}</p>
+      {bubble.zoneApply && (
+        <div className="ap-zone-proposal">
+          <p className="ap-zone-proposal__hint">要不要直接在 2D 上把这两个区圈出来？</p>
+          <button type="button" className="ap-zone-proposal__btn" onClick={bubble.zoneApply.run}>好，帮我圈</button>
+        </div>
+      )}
       {bubble.action && <button type="button" className="ap-bubble-action" onClick={bubble.action.run}>{bubble.action.label}</button>}
     </div>;
   })}</>;

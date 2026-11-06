@@ -33,7 +33,15 @@ type Action =
   | { type: 'REPLACE_DRAFT'; draft: LayoutPlanDraft }
   | { type: 'TOGGLE_VISIBLE' }
   | { type: 'SET_DRAW_MODE'; mode: PlanDrawMode }
-  | { type: 'ADD_ANNOTATION'; annotation: PlanAnnotation };
+  | { type: 'ADD_ANNOTATION'; annotation: PlanAnnotation }
+  | { type: 'ADD_ZONE_RECTS'; items: readonly ZoneRectItem[] };
+
+/** 批量落区的输入形状：zone 类型 + 标签 + 中心矩形（x/z 是中心，width/depth 是米）。 */
+export interface ZoneRectItem {
+  zoneType: ZoneSemanticType;
+  label: string;
+  rect: { x: number; z: number; width: number; depth: number };
+}
 
 function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationState {
   switch (action.type) {
@@ -56,12 +64,46 @@ function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationStat
     case 'SET_DRAW_MODE':
       return { ...state, drawMode: action.mode };
     case 'ADD_ANNOTATION': {
-      if (!state.draft) return state;
+      // 调用方没先 startDraft 也能直接落（例如「回好自动落区」在一个事件回调里连落多个矩形）：
+      // reducer 自己补一份空草案，避免闭包里 state.draft 还是 null 被静默丢弃。
+      const base = state.draft ?? createEmptyPlanDraft();
+      const nextDraft = addAnnotationToDraft(base, action.annotation);
       return {
         ...state,
-        draft: addAnnotationToDraft(state.draft, action.annotation),
+        draft: nextDraft,
         nextId: state.nextId + 1,
       };
+    }
+    case 'ADD_ZONE_RECTS': {
+      // 「回好自动落区」专用：一次 dispatch 落多个矩形，id 在 reducer 里连续自增，
+      // 避免闭包里 state.nextId 还是旧值导致同帧多个 annotation id 撞车。
+      if (action.items.length === 0) return state;
+      const base = state.draft ?? createEmptyPlanDraft();
+      const stageNo = base.stages.reduce((max, s) => Math.max(max, s.stageNo), 0) || 1;
+      let draft = base;
+      let nextId = state.nextId;
+      for (const item of action.items) {
+        const p1 = { x: item.rect.x - item.rect.width / 2, z: item.rect.z - item.rect.depth / 2 };
+        const p2 = { x: item.rect.x + item.rect.width / 2, z: item.rect.z + item.rect.depth / 2 };
+        const x = Math.min(p1.x, p2.x);
+        const z = Math.min(p1.z, p2.z);
+        draft = addAnnotationToDraft(draft, {
+          id: `ann-${nextId}`,
+          kind: 'zone',
+          label: item.label,
+          stageNo,
+          geometry: {
+            kind: 'rect',
+            x,
+            z,
+            width: Math.abs(p2.x - p1.x),
+            depth: Math.abs(p2.z - p1.z),
+          },
+          zoneType: item.zoneType,
+        });
+        nextId += 1;
+      }
+      return { ...state, draft, nextId };
     }
     default:
       return state;
@@ -92,6 +134,12 @@ export interface UsePlanAnnotationsResult {
     label: string,
     zoneType?: ZoneSemanticType,
   ): void;
+  /**
+   * 批量落 zone 矩形（「回好自动落区」专用）。
+   * 一次 dispatch 落多个矩形，id 在 reducer 里连续自增；没 draft 时自动建一份空草案。
+   * drawMode 保持不变，不强迫用户进绘制模式。
+   */
+  addZoneRects(items: readonly ZoneRectItem[]): void;
 }
 
 /**
@@ -116,10 +164,12 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
 
   const addAnnotationFromPoints = useCallback(
     (points: PlanPoint[], kind: PlanAnnotationKind, label: string, zoneType?: ZoneSemanticType) => {
-      if (!state.draft || points.length === 0) return;
+      if (points.length === 0) return;
+      // draft 为 null 时由 reducer 自动补一份空草案（见 ADD_ANNOTATION case），
+      // 所以这里不再 early-return；nextId 读闭包，连续多个 annotation 会在 reducer 里自增。
       const id = `ann-${state.nextId}`;
       // 默认挂到现有最大阶段号；没有阶段时落 1。
-      const stageNo = state.draft.stages.reduce(
+      const stageNo = state.draft?.stages.reduce(
         (max, s) => Math.max(max, s.stageNo),
         0,
       ) || 1;
@@ -157,6 +207,14 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     [state.draft, state.nextId],
   );
 
+  const addZoneRects = useCallback(
+    (items: readonly ZoneRectItem[]) => {
+      if (items.length === 0) return;
+      dispatch({ type: 'ADD_ZONE_RECTS', items });
+    },
+    [],
+  );
+
   const annotations = useMemo(
     () => (state.draft ? state.draft.annotations : []),
     [state.draft],
@@ -173,5 +231,6 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     toggleVisible,
     setDrawMode,
     addAnnotationFromPoints,
+    addZoneRects,
   };
 }
