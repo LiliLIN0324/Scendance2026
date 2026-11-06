@@ -287,6 +287,8 @@ function gridDeskRows(
   const inset = ZONE_INSET;
   const left = x0 + inset;
   const right = x0 + w - inset;
+  // 舞台前留空由 zone 坐标本身表达（fixture 里课桌区北缘内缩出台前带），
+  // grid 函数不强行再加 5m——否则小房间（如 7.1m 深的会议室）会被吃光。
   const top = z0 + inset;
   const bottom = z0 + d - inset;
 
@@ -469,7 +471,7 @@ export function applyWallClearance(
     let cEast = WALL_CLEARANCE_M;
     let cNorth = WALL_CLEARANCE_M;
     let cSouth = WALL_CLEARANCE_M;
-    if (p.spec.type === 'dining-chair' && p.ownerTableId) {
+    if ((p.spec.type === 'dining-chair' || p.spec.type === 'desk-chair') && p.ownerTableId) {
       const [txRaw, tzRaw] = p.ownerTableId.split('|');
       const tx = Number(txRaw);
       const tz = Number(tzRaw);

@@ -56,9 +56,10 @@ export const FURNITURE_CATALOG: readonly CatalogFurniture[] = [
     type: 'dining-table',
     name: '圆桌',
     category: 'table',
-    width: 1.2,
-    depth: 1.2,
-    height: 0.75,
+    // 官方宴会圆桌 Ø1.8m（东京国际论坛 Hall D5），按正方形 footprint 记 1.8×1.8。
+    width: 1.8,
+    depth: 1.8,
+    height: 0.7,
     color: '#A0522D',
     icon: '🟫',
     zoneTypes: ['roundtable'],
