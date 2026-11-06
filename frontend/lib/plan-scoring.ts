@@ -10,8 +10,10 @@
  */
 
 import type { PlanAnnotation } from './plan-annotation';
+import { withDefaultDoor } from './plan-annotation';
 import {
   planZones,
+  applyWallClearance,
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
@@ -62,6 +64,26 @@ export interface ScoredPlan {
     /** 人体：100 - hard violation 数 * 10，不低于 0。 */
     ergonomics: number;
   };
+  /**
+   * 方案可信度：用户在画布上真实画了门才是 verified；
+   * 门由 withDefaultDoor 推测合成时为 draft_unverified，
+   * reasons 会带「门位置未确认，本方案为待核验草案」。
+   */
+  assurance: 'verified' | 'draft_unverified';
+  /**
+   * 可行性否决：凡有 hard violation（ZONE_UNREACHABLE / BBOX_OVERLAP /
+   * DOOR_SWEEP_BLOCKED / ZONE_ENTRANCE_BLOCKED / ZONE_PAIR_DISCONNECTED 等）
+   * → feasible=false，不参与推荐排序，不能被座位容量加分盖过。
+   */
+  feasible: boolean;
+  /**
+   * 三态可行性：
+   * - FEASIBLE：无 hard violation，可推荐；
+   * - INFEASIBLE：有依据证明冲突（hard violation 存在）；
+   * - INSUFFICIENT_INPUT：缺房间尺寸/门数据等无法判断；
+   * - SEARCH_TIMEOUT：求解预算耗尽（本批为占位，未启用真实超时枚举）。
+   */
+  feasibilityStatus: 'FEASIBLE' | 'INFEASIBLE' | 'INSUFFICIENT_INPUT' | 'SEARCH_TIMEOUT';
 }
 
 /** 浮点容差。 */
@@ -93,35 +115,61 @@ const TIE_PRIORITY: Record<PlanVariantId, number> = {
 
 /**
  * 对同一批 zone 标注生成三版布置（松/适中/密），每版独立打分。
- * 返回数组顺序固定为 [sparse, balanced, dense]。
- * opts 可选：roomSize 启用场地外越界判定。受众文案只在 suggestions 层，本层保持纯几何。
+ * 返回顺序固定为 [sparse, balanced, dense] 的子集——若两版算出来
+ * score / capacitySeats / subScores 完全相同，合并为一版（组内优先保留 balanced）。
+ * 空 annotations / 极小场地可能只返回 1 版，杜绝假差异。
  */
 export function generateScoredPlans(
   annotations: readonly PlanAnnotation[],
   opts?: ScoringOptions,
 ): ScoredPlan[] {
   const roomSize = opts?.roomSize;
-  return VARIANTS.map((v) =>
+  const all = VARIANTS.map((v) =>
     scoreVariant(annotations, v.variantId, v.label, v.density, roomSize),
   );
+  return dedupePlans(all);
+}
+
+/** 合并 score+capacitySeats+subScores 完全相同的版本；同组优先保留 balanced > sparse > dense。 */
+function dedupePlans(plans: readonly ScoredPlan[]): ScoredPlan[] {
+  const keyOf = (p: ScoredPlan) =>
+    [p.score, p.capacitySeats, p.subScores.capacity, p.subScores.flow, p.subScores.ergonomics].join('|');
+  const groups = new Map<string, ScoredPlan[]>();
+  for (const p of plans) {
+    const k = keyOf(p);
+    const list = groups.get(k) ?? [];
+    list.push(p);
+    groups.set(k, list);
+  }
+  const out: ScoredPlan[] = [];
+  for (const list of groups.values()) {
+    const preferred =
+      list.find((p) => p.variantId === 'balanced') ??
+      list.find((p) => p.variantId === 'sparse') ??
+      list[0]!;
+    out.push(preferred);
+  }
+  // 按 variantId 在 VARIANTS 里的原始顺序排回。
+  const order = new Map(VARIANTS.map((v, i) => [v.variantId, i]));
+  out.sort((a, b) => (order.get(a.variantId) ?? 99) - (order.get(b.variantId) ?? 99));
+  return out;
 }
 
 /**
- * 从三版里挑推荐版：score 最高；并列时优先 balanced > sparse > dense。
- * 若三版 placements 全空，返回 balanced 版（让 UI 走「摆不下」分支）。
+ * 从候选方案里挑推荐版：
+ * - 只在 feasible=true 的集合里选（hard violation 方案直接否决，不能被座位容量加分盖过）；
+ * - feasible 集合为空时返回 null（不 throw、不硬出三版），调用方应展示「无可行方案」并列出硬冲突；
+ * - 同分并列时优先 balanced > sparse > dense。
  * 不修改输入数组。
  */
-export function pickRecommendedPlan(plans: readonly ScoredPlan[]): ScoredPlan {
-  if (plans.length === 0) {
-    throw new Error('pickRecommendedPlan: plans 不能为空');
-  }
-  const balanced = plans.find((p) => p.variantId === 'balanced') ?? plans[0];
-  const allEmpty = plans.every((p) => p.placements.length === 0);
-  if (allEmpty) return balanced;
+export function pickRecommendedPlan(plans: readonly ScoredPlan[]): ScoredPlan | null {
+  if (plans.length === 0) return null;
+  const feasiblePlans = plans.filter((p) => p.feasible);
+  if (feasiblePlans.length === 0) return null;
 
-  let best = plans[0];
-  for (let i = 1; i < plans.length; i++) {
-    const p = plans[i];
+  let best = feasiblePlans[0]!;
+  for (let i = 1; i < feasiblePlans.length; i++) {
+    const p = feasiblePlans[i]!;
     const diff = p.score - best.score;
     if (diff > EPS) {
       best = p;
@@ -145,9 +193,18 @@ function scoreVariant(
   let placements = raw.placements;
   let skipped = raw.skipped;
 
-  // 区分度 #1：sparse 版主动删一桌（按 zone 分组，离中心最远的那张圆桌 + 4 椅）。
+  // 区分度 #1：sparse 版主动删一桌（按 zone 分组，离中心最远的那张圆桌 + 其归属餐椅）。
   if (variantId === 'sparse') {
     placements = dropFarthestRoundtable(placements, annotations);
+  }
+
+  // 墙退距后处理：有 roomSize 时把越界家具内移，移不动的进 skipped。
+  if (roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height)) {
+    const walled = applyWallClearance(placements, roomSize);
+    placements = walled.placements;
+    if (walled.skipped.length > 0) {
+      skipped = [...skipped, ...walled.skipped];
+    }
   }
 
   // 计算 flow：dense 版在 evaluateFlow 之后做通道 -0.3m 修正。
@@ -175,15 +232,48 @@ function scoreVariant(
   // P1：家具 footprint 真重叠（两两 AABB，含 0.02m 容差）。
   const furnViolations = detectFurnitureOverlap(placements);
   // 4.0.0 补：门弧遮挡 + 隐私区顺序建议。
-  const doorViolations = evaluateDoorSweep(placements, annotations);
+  // 若用户没画门，数据层合成默认南门，让 evaluateDoorSweep 仍能给出 DOOR_SWEEP_BLOCKED。
+  const hasRealDoor = annotations.some(
+    (a) => a.kind === 'door' && a.geometry.kind === 'door' && !a.geometry.inferred,
+  );
+  const doorAnnots = withDefaultDoor(annotations);
+  const doorViolations = evaluateDoorSweep(placements, doorAnnots, roomSize);
   const privacyViolations = evaluatePrivacyOrder(annotations, roomSize);
-  const violations = [
+  const violations: ScoredViolation[] = [
     ...hfViolations,
     ...reach.violations,
     ...furnViolations,
     ...doorViolations,
     ...privacyViolations,
   ];
+  // 缺场地尺寸 → soft unknown violation，绝不当成合规 pass。
+  const hasRoomSize = !!roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height);
+  if (!hasRoomSize) {
+    violations.push({
+      code: 'ROOM_SIZE_UNKNOWN',
+      severity: 'soft',
+      status: 'unknown',
+      message: '缺少房间宽度/深度，墙退距与可达性未核验',
+    });
+  }
+  // 缺真实门数据（用的是推测门）→ soft unknown violation 提示。
+  if (!hasRealDoor) {
+    violations.push({
+      code: 'DOOR_UNKNOWN',
+      severity: 'soft',
+      status: 'unknown',
+      message: '门位置未确认，本方案为待核验草案',
+    });
+  }
+
+  // hard violation → 方案不可行；缺关键数据 → INSUFFICIENT_INPUT。
+  const hardViolations = violations.filter((v) => v.severity === 'hard' && v.status !== 'unknown');
+  const feasible = hardViolations.length === 0;
+  const feasibilityStatus: ScoredPlan['feasibilityStatus'] = !hasRoomSize
+    ? 'INSUFFICIENT_INPUT'
+    : feasible
+      ? 'FEASIBLE'
+      : 'INFEASIBLE';
   const hfPenalty = violations.reduce((sum, v) => {
     if (v.severity !== 'hard') return sum;
     if (v.code === 'CHAIR_GAP') return sum - 1;
@@ -253,12 +343,17 @@ function scoreVariant(
     reasons,
     violations,
     subScores,
+    assurance: hasRealDoor ? 'verified' as const : 'draft_unverified' as const,
+    feasible,
+    feasibilityStatus,
   };
 }
 
 /**
  * sparse 版删桌：按 zoneId 分组，每个 zone 内如果圆桌 ≥2 张，
- * 删掉离该 zone 几何中心最远的那张桌及其 4 把餐椅（椅的判定：与被删桌中心距离 < 1.0m）。
+ * 删掉离该 zone 几何中心最远的那张桌及其归属餐椅。
+ * 椅子优先按 ownerTableId === 被删桌 key 判定；ownerTableId 缺失时
+ * （如测试 mock）回退到「椅心到被删桌心 ≤ 1.0m」的旧距离规则。
  * 其他类型家具（签到台/长椅/背景墙）不动。
  */
 function dropFarthestRoundtable(
@@ -287,7 +382,7 @@ function dropFarthestRoundtable(
     const c = zoneCenter.get(zoneId);
     if (!c) continue;
     let farthest = tables[0];
-    let farthestD = (tables[0].x - c.cx) ** 2 + (tables[0].z - c.cz) ** 2;
+    let farthestD = (tables[0]!.x - c.cx) ** 2 + (tables[0]!.z - c.cz) ** 2;
     for (const t of tables) {
       const d = (t.x - c.cx) ** 2 + (t.z - c.cz) ** 2;
       if (d > farthestD + EPS) {
@@ -295,22 +390,25 @@ function dropFarthestRoundtable(
         farthestD = d;
       }
     }
-    dropKeys.add(`${farthest.x}|${farthest.z}`);
+    dropKeys.add(`${farthest!.x}|${farthest!.z}`);
   }
 
   if (dropKeys.size === 0) return placements.slice();
 
-  // 删桌 + 其 4 把餐椅（餐椅 = 类型 dining-chair 且到被删桌中心 ≤ 1.0m）。
+  // 删桌 + 其归属餐椅（ownerTableId 命中 dropKeys；缺失时回退距离判定）。
   return placements.filter((p) => {
     if (p.spec.type === 'dining-table') {
       return !dropKeys.has(`${p.x}|${p.z}`);
     }
     if (p.spec.type === 'dining-chair') {
-      for (const key of dropKeys) {
-        const [sx, sz] = key.split('|');
-        const tx = Number(sx);
-        const tz = Number(sz);
-        if (Math.hypot(p.x - tx, p.z - tz) < 1.0 + EPS) return false;
+      if (p.ownerTableId && dropKeys.has(p.ownerTableId)) return false;
+      if (!p.ownerTableId) {
+        for (const key of dropKeys) {
+          const [sx, sz] = key.split('|');
+          const tx = Number(sx);
+          const tz = Number(sz);
+          if (Math.hypot(p.x - tx, p.z - tz) < 1.0 + EPS) return false;
+        }
       }
     }
     return true;

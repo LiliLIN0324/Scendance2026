@@ -108,10 +108,11 @@ function chairAt(x: number, z: number, zoneId = 'z1'): ZoneFurniturePlacement {
 }
 
 describe('generateScoredPlans — 空输入', () => {
-  it('空 annotations → 三版 placements 都空，pickRecommendedPlan 返回 balanced', () => {
+  it('空 annotations → 三版算出完全相同，合并为 1 版 balanced，pickRecommendedPlan 返回 balanced', () => {
     const plans = generateScoredPlans([]);
-    expect(plans).toHaveLength(3);
-    expect(plans.map(p => p.variantId)).toEqual(['sparse', 'balanced', 'dense']);
+    // 空 annotations 三版同分同 subScores，按合并规则只保留 balanced。
+    expect(plans.length).toBeGreaterThanOrEqual(1);
+    expect(plans.map(p => p.variantId)).toEqual(['balanced']);
     for (const p of plans) {
       expect(p.placements).toEqual([]);
       expect(p.skipped).toEqual([]);
@@ -119,9 +120,12 @@ describe('generateScoredPlans — 空输入', () => {
       expect(p.outOfBounds).toBe(0);
       expect(p.score).toBe(0);
       expect(p.reasons.length).toBeGreaterThanOrEqual(2);
+      // 空 annotations 没有真实门 → draft_unverified。
+      expect(p.assurance).toBe('draft_unverified');
+      expect(p.violations.some(v => v.code === 'DOOR_UNKNOWN')).toBe(true);
     }
     const rec = pickRecommendedPlan(plans);
-    expect(rec.variantId).toBe('balanced');
+    expect(rec!.variantId).toBe('balanced');
   });
 });
 
@@ -258,37 +262,44 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
       return { aisleWidthM: 1.6, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] };
     });
     const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
-    // sparse: 1 座, clean → 1
-    // balanced: 1 座, clean → 1
-    // dense: 4 座, -5 → -1
-    expect(plans[0].score).toBe(1);
-    expect(plans[1].score).toBe(1);
-    expect(plans[2].score).toBe(-1);
+    // sparse 与 balanced mock 出完全相同的 1 椅 → 合并为 1 版 balanced；dense 4 椅 -5。
+    expect(plans.length).toBe(2);
+    expect(plans[0]!.variantId).toBe('balanced');
+    expect(plans[0]!.score).toBe(1);
+    expect(plans[1]!.variantId).toBe('dense');
+    // dense: 4 座 -5（轮椅过不去）= -1
+    expect(plans[1]!.score).toBe(-1);
     const rec = pickRecommendedPlan(plans);
-    expect(rec.variantId).toBe('balanced'); // 并列时 balanced > sparse
+    expect(rec!.variantId).toBe('balanced'); // 并列时 balanced > sparse
   });
 
   it('并列 score → 优先 balanced > sparse > dense（乱序输入也成立）', () => {
     const base = {
-      placements: [], skipped: [], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'], violations: [] as any[],
+      placements: [] as any[], skipped: [] as any[], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'], violations: [] as any[],
       flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
       subScores: { capacity: 10, flow: 100, ergonomics: 100 },
+      assurance: 'verified' as const,
+      feasible: true as const,
+      feasibilityStatus: 'FEASIBLE' as const,
     };
     const plans = [
       { ...base, variantId: 'sparse' as const, label: '松', density: 0.25 },
       { ...base, variantId: 'balanced' as const, label: '适中', density: 0.5 },
       { ...base, variantId: 'dense' as const, label: '密', density: 0.8 },
     ];
-    expect(pickRecommendedPlan(plans).variantId).toBe('balanced');
+    expect(pickRecommendedPlan(plans)!.variantId).toBe('balanced');
     const shuffled = [plans[2], plans[0], plans[1]];
-    expect(pickRecommendedPlan(shuffled).variantId).toBe('balanced');
+    expect(pickRecommendedPlan(shuffled)!.variantId).toBe('balanced');
   });
 
   it('pickRecommendedPlan 不修改输入数组（不可变）', () => {
     const base = {
-      placements: [], skipped: [], outOfBounds: 0, reasons: ['x'], violations: [] as any[],
+      placements: [] as any[], skipped: [] as any[], outOfBounds: 0, reasons: ['x'], violations: [] as any[],
       flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
       subScores: { capacity: 10, flow: 100, ergonomics: 100 },
+      assurance: 'verified' as const,
+      feasible: true as const,
+      feasibilityStatus: 'FEASIBLE' as const,
     };
     const plans = [
       { ...base, variantId: 'sparse' as const, label: '松', density: 0.25, capacitySeats: 1, score: 1 },
@@ -298,6 +309,30 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
     const snapshot = plans.map(p => ({ ...p }));
     pickRecommendedPlan(plans);
     expect(plans).toEqual(snapshot);
+  });
+
+  it('feasible=false 的方案不参与推荐；全不可行时返回 null', () => {
+    const infeasible = {
+      placements: [] as any[], skipped: [] as any[], outOfBounds: 0, capacitySeats: 99, score: 99,
+      reasons: ['hard conflict'], violations: [] as any[],
+      flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
+      subScores: { capacity: 100, flow: 100, ergonomics: 0 },
+      assurance: 'verified' as const,
+      feasible: false as const,
+      feasibilityStatus: 'INFEASIBLE' as const,
+      variantId: 'dense' as const, label: '密', density: 0.8,
+    };
+    const feasibleLow = {
+      ...infeasible,
+      feasible: true as const,
+      feasibilityStatus: 'FEASIBLE' as const,
+      capacitySeats: 2, score: 2, variantId: 'balanced' as const, label: '适中', density: 0.5,
+    };
+    // 即使 infeasible 分数 99 远高于 feasible 的 2，也必须选 feasible。
+    expect(pickRecommendedPlan([infeasible, feasibleLow])!.variantId).toBe('balanced');
+    // 全不可行 → null。
+    expect(pickRecommendedPlan([infeasible])).toBeNull();
+    expect(pickRecommendedPlan([])).toBeNull();
   });
 });
 
@@ -325,7 +360,7 @@ describe('P0 接入：violations 字段 + ZONE_UNREACHABLE 扣分', () => {
   it('每个 ScoredPlan 都带 violations 数组（类型正确、可空）', () => {
     mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
     const plans = generateScoredPlans([makeZone('z1')]);
-    expect(plans).toHaveLength(3);
+    expect(plans.length).toBeGreaterThanOrEqual(1);
     for (const p of plans) {
       expect(Array.isArray(p.violations)).toBe(true);
       for (const v of p.violations) {
@@ -353,7 +388,10 @@ describe('P0 接入：violations 字段 + ZONE_UNREACHABLE 扣分', () => {
     });
     const blockedPlans = generateScoredPlans([makeZone('z1')]);
 
-    for (let i = 0; i < 3; i++) {
+    // mock 下三版同分 → 合并为 1 版 balanced；对每版断言分差 ≥5。
+    expect(openPlans.length).toBeGreaterThanOrEqual(1);
+    expect(blockedPlans.length).toBeGreaterThanOrEqual(1);
+    for (let i = 0; i < Math.min(openPlans.length, blockedPlans.length); i++) {
       const openScore = openPlans[i]!.score;
       const blockedScore = blockedPlans[i]!.score;
       expect(openScore - blockedScore).toBeGreaterThanOrEqual(5);
@@ -403,7 +441,7 @@ describe('P1 家具 footprint AABB 重叠（BBOX_OVERLAP）', () => {
     mockPlanZones.mockReturnValue({ placements: stackedPlacements, skipped: [] });
     const stackedPlans = generateScoredPlans([makeZone('z1')]);
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < Math.min(normalPlans.length, stackedPlans.length); i++) {
       const stacked = stackedPlans[i]!;
       const normal = normalPlans[i]!;
       expect(stacked.violations.some((v) => v.code === 'BBOX_OVERLAP')).toBe(true);
