@@ -48,8 +48,18 @@ export type AholoAssetGeo = {
   lat: number;
   /** 采集覆盖半径（米）；缺了就由底图侧按资产尺度推。 */
   radiusM?: number;
-  /** 坐标来源：picker=地图圈画采集单；manual=人工标注（坐标系未标注，接入前先确认）；lookup=地名查得（Bingo 调研路线）。 */
-  source: 'picker' | 'manual' | 'lookup';
+  /**
+   * 坐标来源：picker=地图圈画采集单；manual=人工标注（坐标系未标注，接入前先确认）；
+   * lookup=地名查得（Bingo 调研路线）；telemetry=采集遥测/EXIF（WGS-84 原始坐标，
+   * 进 GCJ-02 消费端前必须先过 `wgs84ToGcj02`，见 room-organizer 的 scanAssetId 自动铺图）。
+   */
+  source: 'picker' | 'manual' | 'lookup' | 'telemetry';
+  /**
+   * 采集主朝向（度，正北顺时针；如 DJI 遥测 heading）。MAP-04 通路预留：
+   * scanAssetId 自动铺图时作为锚点 orientationDeg（「壳体平面图上方 = 采集朝向」的
+   * 语义假设未经真资产核验，校准归 MAP-05）；缺省时锚点朝向沿用现有值（默认正北）。
+   */
+  headingDeg?: number;
 };
 
 function validGeo(value: unknown): value is AholoAssetGeo {
@@ -58,7 +68,8 @@ function validGeo(value: unknown): value is AholoAssetGeo {
   return typeof geo.lng === 'number' && Number.isFinite(geo.lng) && geo.lng >= -180 && geo.lng <= 180
     && typeof geo.lat === 'number' && Number.isFinite(geo.lat) && geo.lat >= -90 && geo.lat <= 90
     && (geo.radiusM === undefined || (Number.isFinite(geo.radiusM) && geo.radiusM > 0 && geo.radiusM <= 20000))
-    && (geo.source === 'picker' || geo.source === 'manual' || geo.source === 'lookup');
+    && (geo.source === 'picker' || geo.source === 'manual' || geo.source === 'lookup' || geo.source === 'telemetry')
+    && (geo.headingDeg === undefined || (Number.isFinite(geo.headingDeg) && Math.abs(geo.headingDeg) <= 360));
 }
 
 /** 一次落盘的元数据；签名链接不进这里，本机地址由 assetId + kind 推出。 */

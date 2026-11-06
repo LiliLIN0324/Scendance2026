@@ -99,7 +99,8 @@ import type { ScannedVenue } from './lib/venue-scans';
 import { listScannedVenues } from './lib/venue-scans';
 import { sceneAnchorOf } from './lib/scene-anchor';
 import { cameraDistanceClamp } from './lib/camera-framing';
-import type { SceneAnchor } from './lib/types';
+import type { SceneAnchor, SceneAnchorSource } from './lib/types';
+import { wgs84ToGcj02 } from './lib/geo-coords';
 import { useSceneZoom, SCENE_ZOOM_CLOSER_RATIO } from './hooks/use-scene-zoom';
 import { SceneGeoDots } from './panels/scene-geo-dots';
 import { SplatLodMarker } from './panels/splat-lod-marker';
@@ -1525,12 +1526,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     } catch { return []; }
   }), [environments, layout.floors]);
   // 第 3 步：整景区视距 LOD。锚点 = 点云落位（geo 锚点投影到世界后即环境位移），
-  // 距离按锚点 metersPerUnit 折回真实米；只在整景区预设下启用，室内照旧。
+  // 距离按锚点 metersPerUnit 折回真实米。MAP-03：凡铺了调研底图（整景区预设、
+  // 地名定位、scanAssetId 自动铺图）都启用——概览视距下点云一样不该解码；室内照旧。
   const splatLodAnchor = environment ? {
     x: environment.position?.x ?? 0,
     z: environment.position?.z ?? 0,
   } : null;
-  const splatLodEnabled = !!layout.researchArea?.presetId && !!environment;
+  const splatLodEnabled = !!layout.researchArea && !!environment;
   const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
   const { mode: splatLod, measured: splatLodMeasured } = useSplatLod({
     isReady,
@@ -1898,6 +1900,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     canvasRef,
     buildingHeight: buildingHeight(layout.floors),
   });
+  // MAP-03 走查实测：清焦点后同步调 fitToRoom，闭包里还是旧焦点框，取景会停在场地
+  // 而不是全湖。回概览/底图重置统一走 ref+rAF，等焦点态真的清掉再取景。
+  const fitToRoomRef = useRef(fitToRoom);
+  fitToRoomRef.current = fitToRoom;
+  const fitOverviewAfterFocusClear = useCallback(() => {
+    setSceneFocus(null);
+    const raf = requestAnimationFrame(() => fitToRoomRef.current());
+    return () => cancelAnimationFrame(raf);
+  }, [setSceneFocus]);
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
   // docs/19 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
@@ -1946,12 +1957,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const lastResearchAreaRef = useRef<RoomLayout['researchArea']>();
   useEffect(() => {
     const area = layout.researchArea;
-    if (lastResearchAreaRef.current === area) return;
+    if (lastResearchAreaRef.current === area) return undefined;
     lastResearchAreaRef.current = area;
-    setSceneFocus(null);
     setFocusedVenueId(null);
-    if (!area || !area.scanAssetId) fitToRoom();
-  }, [layout.researchArea, setSceneFocus, fitToRoom]);
+    // 焦点清掉后下一帧再取景（同步调 fitToRoom 会读到旧焦点闭包，停在场地框）。
+    if (!area || !area.scanAssetId) return fitOverviewAfterFocusClear();
+    setSceneFocus(null);
+    return undefined;
+  }, [layout.researchArea, setSceneFocus, fitOverviewAfterFocusClear]);
 
   const { captureRenderImage, exportRenderImage, exportRenderAlbum, handleShareLink } = useImportExport({
     layout,
@@ -2409,7 +2422,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
    * 场景里不存在第二套地面坐标——因此删掉了旧的「异地框架 >3km 就清掉」补丁：
    * 它是在掩盖两套坐标打架，而不是解决问题。
    */
-  const applyResearchArea = useCallback((area: RoomLayout['researchArea'] | null) => {
+  const applyResearchArea = useCallback((area: RoomLayout['researchArea'] | null, meta?: {
+    /** 锚点定位来源（MAP-04 元数据）：缺省视为人工底图定位。 */
+    source?: SceneAnchorSource;
+    /** 锚点朝向（度，正北顺时针）：scanAssetId 自动铺图带资产采集朝向时写入；缺省沿用现有锚点。 */
+    orientationDeg?: number;
+  }) => {
     const current = layoutStore.getState().layout;
     const next: RoomLayout = (() => {
       if (!area) {
@@ -2420,12 +2438,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       // 静态整景区底图是「给已有锚点的场景垫一张大图」：锚点必须留在原扫描位置，
       // 底图中心由 bounds 经 anchorGeoToWorld 投出来，不能把锚点搬到 bbox 中心去。
       const sceneAnchor: SceneAnchor = area.presetId
-        ? existing ?? { lng: area.center.lng, lat: area.center.lat, orientationDeg: 0, metersPerUnit: 1 }
+        ? existing ?? { lng: area.center.lng, lat: area.center.lat, orientationDeg: 0, metersPerUnit: 1, source: 'preset' }
         : {
           lng: area.center.lng,
           lat: area.center.lat,
-          orientationDeg: existing?.orientationDeg ?? 0,
+          orientationDeg: meta?.orientationDeg ?? existing?.orientationDeg ?? 0,
           metersPerUnit: existing?.metersPerUnit ?? 1,
+          source: meta?.source ?? 'manual',
         };
       return { ...current, sceneAnchor, researchArea: area };
     })();
@@ -2475,9 +2494,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
     }
+    // MAP-03：整景区视距（POI）下点云被延后挂载，等 splat ready 再 zoom 会永远等不到——
+    // 先把相机推到场地，推近途中视距翻回 splat（<100 m），延后的挂载自动补上。
+    if (splatLod === 'poi') {
+      zoomToVenue(venue, false);
+      return;
+    }
     // 场地 splat 异步加载，就绪后 zoom 到该场景（pending 效果在 splatState ready 时触发）。
     pendingVenueZoomRef.current = venue;
-  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId]);
+  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, splatLod]);
 
   // 场景点位（docs/19 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
   const sceneGeoDots = useMemo(() => {
@@ -2542,11 +2567,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       return;
     }
     if (existing?.scanAssetId === assetId) return;
+    // MAP-04 坐标系边界：telemetry（遥测/EXIF）是 WGS-84，喂给高德底图与锚点前必须转 GCJ-02；
+    // picker/lookup 本来就是 GCJ-02，直接用（约定见 lib/aholo-assets.ts AholoAssetGeo 注释）。
+    const geo = asset.geo.source === 'telemetry'
+      ? { ...asset.geo, ...wgs84ToGcj02(asset.geo.lng, asset.geo.lat) }
+      : asset.geo;
     const span = Math.max(asset.meters?.width ?? 0, asset.meters?.depth ?? 0);
-    const radius = asset.geo.radiusM ?? Math.round(Math.max(300, Math.min(1600, span * 12)));
+    const radius = geo.radiusM ?? Math.round(Math.max(300, Math.min(1600, span * 12)));
     applyResearchArea({
-      ...createResearchArea({ name: asset.name, address: '', lng: asset.geo.lng, lat: asset.geo.lat }, radius, RESEARCH_SATELLITE_STYLE),
+      ...createResearchArea({ name: asset.name, address: '', lng: geo.lng, lat: geo.lat }, radius, RESEARCH_SATELLITE_STYLE),
       scanAssetId: assetId,
+    }, {
+      source: 'asset-geo',
+      // 采集主朝向（通路预留，现无生产者）：写成锚点 orientationDeg，底图正北随它转。
+      ...(geo.headingDeg !== undefined && Number.isFinite(geo.headingDeg) ? { orientationDeg: geo.headingDeg } : {}),
     });
   }, [environments, applyResearchArea]);
   const splatPlacement = splatState.status === 'ready'
@@ -2995,7 +3029,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
             <CanvasHeading view2D={view.view2D} />
-            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={() => { setSceneFocus(null); fitToRoom(); }}
+            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={fitOverviewAfterFocusClear}
               overlaysVisible={view.showResearchOverlays !== false}
               onToggleOverlays={() => setView(current => ({ ...current, showResearchOverlays: current.showResearchOverlays === false }))} />
             <SceneGeoDots

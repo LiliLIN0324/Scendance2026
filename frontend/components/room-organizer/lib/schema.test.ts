@@ -19,7 +19,7 @@ import {
 import { ENTRANCE_DOOR_ID, ENTRANCE_WALL_ID } from './street';
 import { MAX_STORAGE_ENTRY_CHARS } from './version-history';
 import { MAX_ZONES } from './zones';
-import type { FurnitureItem, RoomLayout } from './types';
+import type { FurnitureItem, RoomLayout, SceneAnchor } from './types';
 
 describe('isFurnitureItem', () => {
   it('accepts a well-formed item', () => {
@@ -252,6 +252,22 @@ describe('isRoomLayout', () => {
       imageUrl: '/api/amap-static?location=120.1,30.2&zoom=15&size=2048*2048&scale=2&x-ref=map-basemap',
     };
     expect(isRoomLayout(makeLayout({ researchArea: manual }))).toBe(true);
+  });
+
+  it('accepts scene anchor metadata (source/accuracyM) and rejects unknown sources', () => {
+    const anchor: SceneAnchor = { lng: 120.13, lat: 30.24, orientationDeg: 0, metersPerUnit: 1, source: 'asset-geo', accuracyM: 12.5 };
+    const layout = makeLayout({ sceneAnchor: anchor });
+    expect(isRoomLayout(layout)).toBe(true);
+    // 元数据随存档往返不丢（MAP-05 拿它核对锚点可信度）。
+    expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))?.sceneAnchor).toEqual(anchor);
+    // 旧存档没有元数据字段照常收。
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { lng: 120.13, lat: 30.24, orientationDeg: 0, metersPerUnit: 1 } }))).toBe(true);
+    // 来源白名单：未知值与类型不对都拒收，防止随存档扩散。
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, source: 'rumour' as never } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, source: 7 as never } }))).toBe(false);
+    // 不确定度不为负数、不编数字（没有就不写字段）。
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, accuracyM: -1 } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, accuracyM: Number.NaN } }))).toBe(false);
   });
 
   it('accepts exactly MAX_ROOM_DIMENSION and exactly MAX_FLOORS', () => {

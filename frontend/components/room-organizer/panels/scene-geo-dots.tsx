@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * 场景点位层（docs/19 需求A）：有经纬度的扫描场地在 3D 底图上各钉一个点，
@@ -33,24 +33,48 @@ export function SceneGeoDots({ dots, focusedId, toScreen, controlsRef, cameraRea
   onPick(id: string): void;
 }): JSX.Element | null {
   const [placed, setPlaced] = useState<{ id: string; name: string; x: number; y: number }[]>([]);
+  const placedRef = useRef<typeof placed>([]);
+  // 首次挂载竞态（MAP-03 走查实测）：初次 update 可能跑在相机取景就绪前——投影全
+  // null，而相机落定后的落定帧不再有 change 事件，点位就停在空列表。除事件外再加一条
+  // 500ms 心跳兜底程序化运镜（fit/preset 落定帧），投影值没变就不 setState。
+  const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
-    if (!cameraReady || dots.length === 0) { setPlaced([]); return undefined; }
+    if (!cameraReady || dots.length === 0) {
+      placedRef.current = [];
+      setPlaced([]);
+      return undefined;
+    }
+    const controls = controlsRef.current;
+    if (!controls) {
+      const retry = window.setTimeout(() => setRetryTick(tick => tick + 1), 120);
+      return () => window.clearTimeout(retry);
+    }
     const update = () => {
-      setPlaced(dots.flatMap(dot => {
+      const next = dots.flatMap(dot => {
         const point = toScreen({ x: dot.x, y: 0, z: dot.z });
         return point ? [{ id: dot.id, name: dot.name, x: point.x, y: point.y }] : [];
-      }));
+      });
+      const prev = placedRef.current;
+      const same = prev.length === next.length
+        && prev.every((item, index) => item.id === next[index]!.id
+          && Math.abs(item.x - next[index]!.x) < 0.5
+          && Math.abs(item.y - next[index]!.y) < 0.5);
+      if (!same) {
+        placedRef.current = next;
+        setPlaced(next);
+      }
     };
     update();
-    const controls = controlsRef.current;
-    controls?.addEventListener('change', update);
+    controls.addEventListener('change', update);
     window.addEventListener('resize', update);
+    const beat = window.setInterval(update, 500);
     return () => {
-      controls?.removeEventListener('change', update);
+      window.clearInterval(beat);
+      controls.removeEventListener('change', update);
       window.removeEventListener('resize', update);
     };
-  }, [dots, toScreen, controlsRef, cameraReady]);
+  }, [dots, toScreen, controlsRef, cameraReady, retryTick]);
 
   if (dots.length === 0) return null;
   return <div data-testid="scene-geo-dots" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }}>

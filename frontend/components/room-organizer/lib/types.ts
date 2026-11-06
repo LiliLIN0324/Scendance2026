@@ -362,11 +362,18 @@ export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | '
  * orientationDeg 是世界 -Z 轴（平面图「上」）相对正北的顺时针偏航角，0 表示正北朝上；
  * metersPerUnit 是 1 个世界单位对应的米数——正常为 1；壳体被等比缩小时为 1/scale。
  */
+/** 锚点定位来源（MAP-05 核对锚点可信度用）：圈画 / 底图定位 / 地名回退 / 资产拍摄位 / 预置整景区。 */
+export type SceneAnchorSource = 'picker' | 'manual' | 'lookup' | 'asset-geo' | 'preset';
+
 export interface SceneAnchor {
   lng: number;
   lat: number;
   orientationDeg: number;
   metersPerUnit: number;
+  /** 定位来源；缺省视为旧存档（来源不明），不参与坐标数学。 */
+  source?: SceneAnchorSource;
+  /** 定位不确定度（米）；未知就不写，不编数字。 */
+  accuracyM?: number;
 }
 
 /**

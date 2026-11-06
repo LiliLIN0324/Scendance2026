@@ -674,7 +674,7 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
         satelliteGroundRef: true,
         mapGroundPolygon: located,
         mapLngLat: centroid(located),
-        ...(anchored ? {} : { mapGroundFrame: frame, sceneAnchor: anchorFromMapFrame(frame, layout.width, layout.height) }),
+        ...(anchored ? {} : { mapGroundFrame: frame, sceneAnchor: { ...anchorFromMapFrame(frame, layout.width, layout.height), source: 'picker' } }),
       };
     }
   }
@@ -766,7 +766,7 @@ export function createVenueFromPick(
     ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon),
     ...(registration ? (() => {
       // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
-      const anchor = anchorFromMapFrame(registration.frame, safeWidth, safeDepth);
+      const anchor: SceneAnchor = { ...anchorFromMapFrame(registration.frame, safeWidth, safeDepth), source: 'picker' };
       return { mapGroundFrame: frameFromAnchor(anchor, safeWidth, safeDepth), sceneAnchor: anchor };
     })() : {}),
   };
