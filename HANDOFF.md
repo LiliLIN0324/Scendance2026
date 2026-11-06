@@ -114,6 +114,7 @@
 - **C 盘又满了（2026-11-07 实测 0 字节可用）**。本轮已清可再生缓存救回约 6.5 GB（根 `.temp/` 4.6 GB、`frontend/.next-ci`/`.next-local`、npm cache、Temp 两天前旧文件）。**Downloads 22.6 GB 与 HANDOFF 十一节的批 2/批 3 清理仍待用户批准**；D 盘还有 186 GB，大资产应一律落 D。
 - **并行会话同树工作（2026-11-07 实发）**：本轮提交期间用户另开的 chat 同时在改 HANDOFF、写 `docs/plans/hangzhou-isometric-map-research.md`（未跟踪，未入库，归那个会话）。共享树纪律：动手前和提交前都要重查 `git status`，别人的未跟踪产物不卷进自己的提交。
 - **`docs/evidence/` 的 ignore 规则仍过宽**（整目录忽略，见历史第五段），新证据无法入库且删除不可从 git 恢复，待收窄白名单。
+- **GitHub Dependabot 报 42 个依赖漏洞（2026-11-07 push 时提示：2 critical / 16 high / 21 moderate / 3 low）**：存量状态，非本轮引入；清点入口 https://github.com/LiliLIN0324/Scendance2026/security/dependabot 。尚未逐项核对是否影响运行时（多数可能在 devDependencies 或传递依赖），收口前先分类再升级。
 - 小程序体验版二维码、价格配置口径和真机采集体验见后面的历史记录，恢复对应工作前先核对状态。
 
 ## 下一步
