@@ -11,6 +11,7 @@
 
 import type { PlanAnnotation } from './plan-annotation';
 import type { ZoneFurniturePlacement } from './plan-approve';
+import type { ScoredViolation } from './human-factors';
 
 /** 主通道最低净宽（米）：普通通过。 */
 export const AISLE_MIN_NORMAL = 1.2;
@@ -177,4 +178,127 @@ function rectSurfaceGap(
   const dx = Math.max(0, Math.max(ax1, bx1) - Math.min(ax2, bx2));
   const dz = Math.max(0, Math.max(az1, bz1) - Math.min(az2, bz2));
   return Math.hypot(dx, dz);
+}
+
+/* ---------- P0：走廊连通 + zone 可达性（0.3m 网格 BFS） ---------- */
+
+/** 网格边长（米）。 */
+export const REACH_CELL = 0.3;
+
+export interface ReachabilityResult {
+  /** 可达的 zone id 列表（诊断用）。 */
+  reachableZones: string[];
+  /** 不可达的 zone id 列表（家具围死）。 */
+  unreachableZones: string[];
+  /** 不可达转换为标准 violation（severity=hard，供 plan-scoring 扣分）。 */
+  violations: ScoredViolation[];
+}
+
+/**
+ * 走廊连通 + zone 可达性评估（对齐 Co-Layout research-b）。
+ *
+ * 做法：
+ * 1. 按 roomSize 铺 0.3m 网格；家具 footprint 覆盖的格子 = blocked；
+ * 2. 从所有「在场地边缘上的 walkable 格子」出发 BFS，得到能从出口走进来的格子集合；
+ * 3. 每个 zone rect（内缩 0.15m）至少要有一个格子在可达集合里，否则 = 被围死。
+ *
+ * 不传 roomSize 时退化为空结果（向后兼容，不参与打分）。
+ */
+export function evaluateReachability(
+  placements: readonly ZoneFurniturePlacement[],
+  zones: readonly PlanAnnotation[],
+  roomSize: { width: number; height: number } | undefined,
+): ReachabilityResult {
+  const empty: ReachabilityResult = { reachableZones: [], unreachableZones: [], violations: [] };
+  if (!roomSize || !Number.isFinite(roomSize.width) || !Number.isFinite(roomSize.height)) {
+    return empty;
+  }
+
+  const cols = Math.max(2, Math.ceil(roomSize.width / REACH_CELL));
+  const rows = Math.max(2, Math.ceil(roomSize.height / REACH_CELL));
+  const blocked = new Uint8Array(cols * rows);
+
+  const idx = (cx: number, cz: number) => cz * cols + cx;
+
+  // 家具 footprint 铺进 blocked
+  for (const p of placements) {
+    const x1 = p.x - p.spec.width / 2;
+    const x2 = p.x + p.spec.width / 2;
+    const z1 = p.z - p.spec.depth / 2;
+    const z2 = p.z + p.spec.depth / 2;
+    const c0 = Math.floor((x1 + roomSize.width / 2) / REACH_CELL);
+    const c1 = Math.floor((x2 + roomSize.width / 2) / REACH_CELL);
+    const r0 = Math.floor((z1 + roomSize.height / 2) / REACH_CELL);
+    const r1 = Math.floor((z2 + roomSize.height / 2) / REACH_CELL);
+    for (let r = Math.max(0, r0); r <= Math.min(rows - 1, r1); r++) {
+      for (let c = Math.max(0, c0); c <= Math.min(cols - 1, c1); c++) {
+        blocked[idx(c, r)] = 1;
+      }
+    }
+  }
+
+  // BFS 从边缘 walkable 格出发
+  const seen = new Uint8Array(cols * rows);
+  const queue: number[] = [];
+  const pushBorder = (c: number, r: number) => {
+    if (c < 0 || c >= cols || r < 0 || r >= rows) return;
+    if (blocked[idx(c, r)] || seen[idx(c, r)]) return;
+    seen[idx(c, r)] = 1;
+    queue.push(idx(c, r));
+  };
+  for (let c = 0; c < cols; c++) {
+    pushBorder(c, 0);
+    pushBorder(c, rows - 1);
+  }
+  for (let r = 0; r < rows; r++) {
+    pushBorder(0, r);
+    pushBorder(cols - 1, r);
+  }
+  while (queue.length > 0) {
+    const cur = queue.pop()!;
+    const cc = cur % cols;
+    const cr = Math.floor(cur / cols);
+    pushBorder(cc - 1, cr);
+    pushBorder(cc + 1, cr);
+    pushBorder(cc, cr - 1);
+    pushBorder(cc, cr + 1);
+  }
+
+  // 每个 zone 检查
+  const rects = zones.filter(
+    (a): a is PlanAnnotation & { geometry: { kind: 'rect'; x: number; z: number; width: number; depth: number } } =>
+      a.kind === 'zone' && a.geometry.kind === 'rect',
+  );
+  const reachableZones: string[] = [];
+  const unreachableZones: string[] = [];
+  const violations: ScoredViolation[] = [];
+  for (const zone of rects) {
+    const g = zone.geometry;
+    const inset = REACH_CELL / 2;
+    const c0 = Math.floor((g.x + inset + roomSize.width / 2) / REACH_CELL);
+    const c1 = Math.floor((g.x + g.width - inset + roomSize.width / 2) / REACH_CELL);
+    const r0 = Math.floor((g.z + inset + roomSize.height / 2) / REACH_CELL);
+    const r1 = Math.floor((g.z + g.depth - inset + roomSize.height / 2) / REACH_CELL);
+    let touched = false;
+    for (let r = Math.max(0, r0); r <= Math.min(rows - 1, r1) && !touched; r++) {
+      for (let c = Math.max(0, c0); c <= Math.min(cols - 1, c1); c++) {
+        if (seen[idx(c, r)]) {
+          touched = true;
+          break;
+        }
+      }
+    }
+    if (touched) {
+      reachableZones.push(zone.id);
+    } else {
+      unreachableZones.push(zone.id);
+      violations.push({
+        code: 'ZONE_UNREACHABLE',
+        severity: 'hard',
+        zoneId: zone.id,
+        message: `「${zone.label}」被桌椅围死，人走不过去`,
+      });
+    }
+  }
+  return { reachableZones, unreachableZones, violations };
 }
