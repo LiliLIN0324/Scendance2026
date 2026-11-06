@@ -90,6 +90,116 @@ describe('parseBriefTurn — 记忆槽位跨句累积，失配不再退回开场
   });
 });
 
+describe('audience 主动建议 — 模型 proactiveReply 优先，正则兜底，三档语义防回潮', () => {
+  // 已有规模基础上「补人话」的语境：headcount/长宽/venueIO 都齐了，venueUp=true。
+  // 关键：句子本身不能被 parseBriefSentence 命中任何硬槽（event/headcount/venueIO/...），
+  // 否则会被 `(command || saidSomething) && scaleKnown` 直接走 generate，到不了 audience ack 分支。
+  const elderlyMemory = { ...initialBriefMemory(), headcount: 120, lengthM: 30, widthM: 18, venueIO: 'indoor' as const };
+
+  it('【档位 2 防回潮】只说「老年长辈」不提轮椅：正则兜底文案不得含「轮椅」二字，必须含确认式问句和 1.2m', () => {
+    const turn = parseBriefTurn('我们是老年长辈参加的活动', elderlyMemory, venueUp);
+    expect(turn.kind).toBe('ack');
+    // 红线：elderly ≠ mobilityAssistance，不能直接替用户断言轮椅通道
+    expect(turn.text).not.toContain('轮椅');
+    expect(turn.text).toContain('？');
+    expect(turn.text).toContain('1.2m');
+    expect(turn.text).toContain('助行器');
+  });
+
+  it('【档位 1 防回潮】「腿脚不便要轮椅」：正则兜底文案必须给 1.5m 硬建议', () => {
+    const turn = parseBriefTurn('我们这边有腿脚不便要轮椅的', elderlyMemory, venueUp);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).toContain('1.5m');
+    expect(turn.text).toContain('2m');
+  });
+
+  it('【档位 3 防回潮】family 场文案禁止出现「轮椅」二字', () => {
+    const turn = parseBriefTurn('我们是亲子带小孩来的', elderlyMemory, venueUp);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).not.toContain('轮椅');
+    expect(turn.text).toContain('防撞条');
+  });
+
+  it('【档位 3 防回潮】business 场文案禁止出现「轮椅」二字', () => {
+    const turn = parseBriefTurn('我们这边都是重要客户', elderlyMemory, venueUp);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).not.toContain('轮椅');
+    expect(turn.text).toContain('1.8m');
+  });
+
+  it('【模型优先】模型给了 proactiveReply：直接展示模型文案，不走本地正则', () => {
+    const pre = {
+      event: null,
+      headcount: null,
+      areaM2: null,
+      lengthM: null,
+      widthM: null,
+      venueIO: null,
+      timeOfDay: null,
+      audienceTags: ['elderly' as const],
+      mobilityAssistance: true,
+      proactiveReply: '咱这有行动不便的客人，主通道按 1.5m 留，签到前空 2m。要不要我直接在 2D 上帮你把签到区和休息区圈出来？',
+    };
+    const turn = parseBriefTurn('我们是老年长辈参加的活动', elderlyMemory, venueUp, pre);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).toContain('咱这有行动不便');
+    expect(turn.text).toContain('1.5m');
+  });
+
+  it('【模型 null 回退】模型 proactiveReply=null 且 mobilityAssistance=true：回退正则档位 1，给 1.5m', () => {
+    const pre = {
+      event: null,
+      headcount: null,
+      areaM2: null,
+      lengthM: null,
+      widthM: null,
+      venueIO: null,
+      timeOfDay: null,
+      audienceTags: ['elderly' as const],
+      mobilityAssistance: true,
+      proactiveReply: null,
+    };
+    const turn = parseBriefTurn('我们是老年长辈参加的活动', elderlyMemory, venueUp, pre);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).toContain('1.5m');
+  });
+
+  it('【模型空串回退】模型 proactiveReply 是空白字符串：按回退处理，走正则档位 2', () => {
+    const pre = {
+      event: null,
+      headcount: null,
+      areaM2: null,
+      lengthM: null,
+      widthM: null,
+      venueIO: null,
+      timeOfDay: null,
+      proactiveReply: '   ',
+    };
+    const turn = parseBriefTurn('我们是老年长辈参加的活动', elderlyMemory, venueUp, pre);
+    expect(turn.kind).toBe('ack');
+    expect(turn.text).not.toContain('轮椅');
+    expect(turn.text).toContain('1.2m');
+    expect(turn.text).toContain('助行器');
+  });
+
+  it('【合规承诺红线】正则兜底文案不得出现「保证通行合规/无障碍达标/确保通过消防验收」类兜底承诺', () => {
+    const samples = [
+      parseBriefTurn('我们是老年长辈参加的活动', elderlyMemory, venueUp).text,
+      parseBriefTurn('我们这边有腿脚不便要轮椅的', elderlyMemory, venueUp).text,
+      parseBriefTurn('我们是亲子带小孩来的', elderlyMemory, venueUp).text,
+      parseBriefTurn('我们这边都是重要客户', elderlyMemory, venueUp).text,
+    ];
+    for (const text of samples) {
+      expect(text).not.toContain('保证通行');
+      expect(text).not.toContain('无障碍达标');
+      expect(text).not.toContain('确保通过');
+      expect(text).not.toContain('消防验收');
+      expect(text).not.toContain('保证过审');
+      expect(text).not.toContain('一定符合');
+    }
+  });
+});
+
 describe('summarizeMemory / memoryExtraction', () => {
   it('记忆复述按 人数 · 室内外 · 尺度 · 形态 · 类型 拼', () => {
     const memory = { ...initialBriefMemory(), headcount: 80, venueIO: 'indoor' as const, layoutMode: 'desk-chair' as const, event: '教学' };

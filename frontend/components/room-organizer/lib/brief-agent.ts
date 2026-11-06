@@ -145,8 +145,16 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   }
   // 4.0.0 UX 改进：用户在已有规模基础上「补人话」（如「我们是个老年人活动」），
   // 不要再回「我没接住」。识别受众关键词 → 主动给 2-3 条硬建议 + 提出帮他圈区。
+  // 推理层：模型通道（preExtraction.proactiveReply）给了文案就优先用模型版，
+  // 没给/超时/不可用（resolver 自己 try/catch 回退正则版）才走本地 buildAudiencePrompt。
   const known = summarizeMemory(memory);
-  const audiencePrompt = buildAudiencePrompt(raw);
+  const modelReply =
+    typeof preExtraction?.proactiveReply === 'string' && preExtraction.proactiveReply.trim().length > 0
+      ? preExtraction.proactiveReply.trim()
+      : '';
+  // 模型若给了 mobilityAssistance 判定就优先用；没给时正则兜底从 raw 自己识别。
+  const mobilityHint = preExtraction?.mobilityAssistance ?? null;
+  const audiencePrompt = modelReply || buildAudiencePrompt(raw, mobilityHint);
   if (audiencePrompt) {
     return {
       kind: 'ack',
@@ -162,33 +170,56 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
 /**
  * 识别用户这一句里的受众关键词，命中就给一段「人话硬建议」。
  * 不命中返回空串，让上层回默认话术。
+ *
+ * 2026-11-06 三档语义（用户反馈「是老年人就必须有轮椅吗？这智能吗？」后重构）：
+ *  档位 1 mobilityAssistance=true（raw 命中「轮椅/腿脚不便/助行器/残疾人/拐杖/行动不便」
+ *       或模型显式判定）→ 给 1.5m 轮椅通道硬建议，直接断言。
+ *  档位 2 只说老年/长辈/银发/中老年但没提行动能力 → 禁止出现「轮椅」二字，
+ *       给确认式问句（「长辈里有需要轮椅/助行器的吗？有的话按 1.5m，没有按 1.2m 也够」），
+ *       把判断权交回用户。
+ *  档位 3 family/business 等其他受众且没 mobility → 常规硬建议，文案禁止出现「轮椅」二字。
+ *
+ * mobilityAssistanceHint：模型通道显式判定的布尔值；null 表示模型没给，由本函数从 raw 正则识别。
  */
-function buildAudiencePrompt(raw: string): string {
-  const isElderly = /(老年|中老年|老人|长辈|银发)/.test(raw);
-  const isFamily = /(亲子|小孩|儿童|孩子|小朋友)/.test(raw);
-  const isBusiness = /(商务|企业|客户|答谢|晚宴)/.test(raw);
-  if (!isElderly && !isFamily && !isBusiness) return '';
+const MOBILITY_PATTERN = /(轮椅|腿脚不便|助行器|残疾人|轮椅通道|拐杖|行动不便|起身困难)/;
+const ELDERLY_PATTERN = /(老年|中老年|老人|长辈|银发|退休|高龄)/;
+const FAMILY_PATTERN = /(亲子|小孩|儿童|孩子|小朋友|宝宝)/;
+const BUSINESS_PATTERN = /(商务|企业|客户|答谢|晚宴|年会|公司)/;
+
+function buildAudiencePrompt(raw: string, mobilityAssistanceHint: boolean | null = null): string {
+  const hasMobility = mobilityAssistanceHint === true || (mobilityAssistanceHint === null && MOBILITY_PATTERN.test(raw));
+  const isElderly = ELDERLY_PATTERN.test(raw);
+  const isFamily = FAMILY_PATTERN.test(raw);
+  const isBusiness = BUSINESS_PATTERN.test(raw);
+  // 没有任何受众信号、也没有明确行动能力信号：不说话，走默认话术。
+  if (!isElderly && !isFamily && !isBusiness && !hasMobility) return '';
 
   // 借用 generateZonePrompts 取「建议圈哪些区」，但当前没画过任何 zone（新会话），所以默认全推。
   const zonePrompts = generateZonePrompts({
     audience: raw,
     zoneTypes: [],
   });
-  const bullets: string[] = [];
-  if (isElderly) {
-    bullets.push('① 主通道按 1.5m 留轮椅宽度，别按 1.2m 挤');
-    bullets.push('② 签到台别贴墙，前面留 2m 排队缓冲');
-  }
-  if (isFamily) {
-    bullets.push('① 休息区长椅别靠墙，孩子跑过来有缓冲');
-    bullets.push('② 尖角/玻璃位置贴防撞条');
-  }
-  if (isBusiness) {
-    bullets.push('① 圆桌默认 8 人，桌距 ≥ 1.8m 好走通道');
-    bullets.push('② 签到区放到进门侧，别把客户往深处塞');
-  }
   const zoneAsk = zonePrompts.length > 0
     ? `要不要我直接在 2D 上帮你把${zonePrompts.map((p) => ({ checkin: '签到区', rest: '休息区', roundtable: '圆桌区', photo: '打卡区' })[p.zoneType]).join('和')}先圈出来？回「好」就落。`
-    : '';
+    : '要不要我直接在 2D 上帮你把签到区和休息区圈出来？';
+
+  // 档位 1：明确行动不便/轮椅 → 硬建议，1.5m 通道。
+  if (hasMobility) {
+    return `主通道按 1.5m 留轮椅宽度，签到台前先空 2m 排队缓冲，休息区别塞门口、放到场地深处。${zoneAsk}`;
+  }
+
+  // 档位 2：只说老年没提行动能力 → 禁止「轮椅」二字出现在硬建议里，改确认式问句把判断权交回用户。
+  if (isElderly) {
+    return `长辈里有需要助行器/行动不便的吗？有的话我按 1.5m 通道留，没有按普通 1.2m 也够。${zoneAsk}`;
+  }
+
+  // 档位 3：family/business → 常规硬建议，文案禁止出现「轮椅」二字。
+  const bullets: string[] = [];
+  if (isFamily) {
+    bullets.push('休息区长椅别靠墙，孩子跑过来有缓冲；尖角/玻璃位置贴防撞条');
+  }
+  if (isBusiness) {
+    bullets.push('圆桌默认 8 人一桌，桌距至少 1.8m 好走通道；签到区放到进门侧，别把客户往深处塞');
+  }
   return `${bullets.join('；')}。${zoneAsk}`;
 }

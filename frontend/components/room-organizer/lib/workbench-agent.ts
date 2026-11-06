@@ -363,7 +363,11 @@ export function parseRevisionRequest(text: string): RevisionRequest | null {
 
 /* ───────── 一句话开场：客户端解析（无新增后端） ───────── */
 
-/** 从一句话里能读出来的活动要素；读不出的字段保持 null，由默认值兜底。 */
+/**
+ * 从一句话里能读出来的活动要素；读不出的字段保持 null，由默认值兜底。
+ * audienceTags / proactiveReply 是模型通道独有（本地正则 parseBriefSentence 不填），
+ * 仅在 resolver 把模型结果注入时存在；作为可选字段不破坏既有调用方的 shape。
+ */
 export interface BriefExtraction {
   event: string | null;
   headcount: number | null;
@@ -372,6 +376,12 @@ export interface BriefExtraction {
   widthM: number | null;
   venueIO: VenueIO | null;
   timeOfDay: number | null;
+  /** 模型识别的受众标签；本地正则版不填。 */
+  audienceTags?: Array<'elderly' | 'family' | 'business' | 'student' | 'vip'>;
+  /** 模型判定的行动辅助需求；elderly ≠ mobilityAssistance。本地正则版不填。 */
+  mobilityAssistance?: boolean | null;
+  /** 模型给的一句中文人话建议；null/缺省时前端回退到 buildAudiencePrompt 正则版。 */
+  proactiveReply?: string | null;
 }
 
 const EVENT_KEYWORDS: ReadonlyArray<readonly [RegExp, string]> = [
