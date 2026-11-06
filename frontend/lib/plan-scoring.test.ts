@@ -44,7 +44,7 @@ vi.mock('./plan-approve', async (importOriginal) => {
 import { evaluateFlow, evaluateReachability } from './flow-constraints';
 import { evaluateHumanFactors } from './human-factors';
 import { planZones, type ZoneFurniturePlacement } from './plan-approve';
-import { generateScoredPlans, pickRecommendedPlan } from './plan-scoring';
+import { generateScoredPlans, pickRecommendedPlan, detectFurnitureOverlap } from './plan-scoring';
 import type { PlanAnnotation } from './plan-annotation';
 
 const mockPlanZones = vi.mocked(planZones);
@@ -117,9 +117,13 @@ describe('generateScoredPlans — 空输入', () => {
 
 describe('capacitySeats — 按家具名计数', () => {
   it('4 餐椅 + 1 长椅 = 6 座；圆桌本身不算座', () => {
+    // 椅放在圆桌周环 0.9m 处（与桌边留 0.075m > 0.02m 容差，不触发 BBOX_OVERLAP）。
     const fakePlacements: ZoneFurniturePlacement[] = [
       { spec: { ...TABLE_SPEC }, x: 1, z: 1, rotation: 0, zoneId: 'z1', zoneType: 'roundtable' },
-      ...[0,1,2,3].map(() => chairAt(1, 1, 'z1')),
+      chairAt(1, 0.1, 'z1'),
+      chairAt(1, 1.9, 'z1'),
+      chairAt(0.1, 1, 'z1'),
+      chairAt(1.9, 1, 'z1'),
       { spec: { ...BENCH_SPEC }, x: 7, z: 0, rotation: 0, zoneId: 'z2', zoneType: 'rest' },
     ];
     mockPlanZones.mockReturnValue({ placements: fakePlacements, skipped: [] });
@@ -225,11 +229,14 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
   it('dense 容量大但通道违规扣分后更低 → balanced 胜出', () => {
     mockPlanZones.mockImplementation((_a, density) => {
       const isDense = Math.abs(density - 0.8) < 1e-6;
-      const count = isDense ? 4 : 1;
-      return {
-        placements: Array.from({ length: count }, () => chairAt(1, 1)),
-        skipped: [],
-      };
+      if (isDense) {
+        // 4 椅分散到 1.5m 网格，避免触发 BBOX_OVERLAP（本用例只钉 flow 扣分）。
+        return {
+          placements: [chairAt(0, 0), chairAt(1.5, 0), chairAt(0, 1.5), chairAt(1.5, 1.5)],
+          skipped: [],
+        };
+      }
+      return { placements: [chairAt(1, 1)], skipped: [] };
     });
     mockEvaluateFlow.mockImplementation((placements) => {
       if (placements.length >= 4) {
@@ -356,6 +363,65 @@ describe('P0 接入：violations 字段 + ZONE_UNREACHABLE 扣分', () => {
       expect(p.violations.filter((v) => v.code === 'CHAIR_GAP')).toHaveLength(2);
       expect(p.violations.some((v) => v.code === 'CHECKIN_QUEUE' && v.severity === 'soft')).toBe(true);
       expect(p.reasons.some((r) => r.includes('排队缓冲'))).toBe(true);
+    }
+  });
+});
+
+describe('P1 家具 footprint AABB 重叠（BBOX_OVERLAP）', () => {
+  it('4 椅故意叠在同一坐标 → 至少 1 条 BBOX_OVERLAP，score 比正常摆放低 ≥2', () => {
+    // 正常版：4 椅分散到 1.5m 网格（椅边长 0.45m，间距 1.5m ≫ 0.02m 容差）。
+    const normalPlacements = [
+      chairAt(0, 0),
+      chairAt(1.5, 0),
+      chairAt(0, 1.5),
+      chairAt(1.5, 1.5),
+    ];
+    mockPlanZones.mockReturnValue({ placements: normalPlacements, skipped: [] });
+    const normalPlans = generateScoredPlans([makeZone('z1')]);
+
+    // 重叠版：4 椅全压在 (0,0)。
+    const stackedPlacements = [
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+    ];
+    mockPlanZones.mockReturnValue({ placements: stackedPlacements, skipped: [] });
+    const stackedPlans = generateScoredPlans([makeZone('z1')]);
+
+    for (let i = 0; i < 3; i++) {
+      const stacked = stackedPlans[i]!;
+      const normal = normalPlans[i]!;
+      expect(stacked.violations.some((v) => v.code === 'BBOX_OVERLAP')).toBe(true);
+      // 6 对重叠 × -2 = -12，远大于 2 的下限。
+      expect(normal.score - stacked.score).toBeGreaterThanOrEqual(2);
+      expect(stacked.reasons.some((r) => r.includes('互相压住'))).toBe(true);
+    }
+  });
+
+  it('两椅中心距 1.5m（不重叠）→ 无 BBOX_OVERLAP', () => {
+    mockPlanZones.mockReturnValue({
+      placements: [chairAt(0, 0), chairAt(1.5, 0)],
+      skipped: [],
+    });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    for (const p of plans) {
+      expect(p.violations.some((v) => v.code === 'BBOX_OVERLAP')).toBe(false);
+    }
+  });
+
+  it('detectFurnitureOverlap 直接调用：同坐标 4 椅 → 6 对 violation', () => {
+    const placements = [
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+    ];
+    const vs = detectFurnitureOverlap(placements);
+    expect(vs.length).toBe(6);
+    for (const v of vs) {
+      expect(v.code).toBe('BBOX_OVERLAP');
+      expect(v.severity).toBe('hard');
     }
   });
 });

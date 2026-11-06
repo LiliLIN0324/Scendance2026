@@ -65,6 +65,8 @@ const ZONE_OVERLAP_RATIO = 0.3;
 const ZONE_OFFSITE_RATIO = 0.5;
 /** dense 版在有签到区时通道修正量（米）：模拟密档通道更窄。 */
 const DENSE_AISLE_SQUEEZE = 0.3;
+/** 家具 footprint AABB 容差（米）：两件边距 ≤ 此值仍视为压住。 */
+export const BBOX_OVERLAP_TOLERANCE_M = 0.02;
 
 /** 三档配置：顺序固定，generateScoredPlans 按此返回。 */
 const VARIANTS: ReadonlyArray<{ variantId: PlanVariantId; label: string; density: number }> = [
@@ -161,12 +163,15 @@ function scoreVariant(
   // P0：人体工学 + 可达性 violation envelope。
   const hfViolations = evaluateHumanFactors(placements, annotations);
   const reach = evaluateReachability(placements, annotations, roomSize);
-  const violations = [...hfViolations, ...reach.violations];
+  // P1：家具 footprint 真重叠（两两 AABB，含 0.02m 容差）。
+  const furnViolations = detectFurnitureOverlap(placements);
+  const violations = [...hfViolations, ...reach.violations, ...furnViolations];
   const hfPenalty = violations.reduce((sum, v) => {
     if (v.severity !== 'hard') return sum;
     if (v.code === 'CHAIR_GAP') return sum - 1;
     if (v.code === 'AISLE_CLEARANCE') return sum - 2;
     if (v.code === 'ZONE_UNREACHABLE') return sum - 5;
+    if (v.code === 'BBOX_OVERLAP') return sum - 2;
     return sum;
   }, 0);
 
@@ -181,6 +186,19 @@ function scoreVariant(
     flow,
     overlap.count,
   );
+  // P1：footprint 重叠人话总结——统计参与至少一对压住的不同家具件数。
+  if (furnViolations.length > 0) {
+    const involved = new Set<number>();
+    for (let i = 0; i < placements.length; i++) {
+      for (let j = i + 1; j < placements.length; j++) {
+        if (boxesOverlap(placements[i]!, placements[j]!)) {
+          involved.add(i);
+          involved.add(j);
+        }
+      }
+    }
+    reasons.push(`${involved.size} 件家具互相压住，扣分 -${2 * furnViolations.length}`);
+  }
   // 把 violation 人话补到 reasons 末尾：soft 全推（提示不扣分），hard 最多推 2 条。
   for (const v of violations) {
     if (v.severity === 'soft') reasons.push(v.message);
@@ -435,6 +453,50 @@ function detectZoneOverlap(
     }
   }
   return { count, sampleLabel };
+}
+
+/**
+ * 两件家具 footprint AABB 是否相交（含 0.02m 容差）。
+ * footprint 按 placement 中心 ± (spec.width/2, spec.depth/2) 算轴对齐矩形，
+ * 再向外扩 BBOX_OVERLAP_TOLERANCE_M；两扩边矩形相交即视为压住。
+ */
+function boxesOverlap(a: ZoneFurniturePlacement, b: ZoneFurniturePlacement): boolean {
+  const t = BBOX_OVERLAP_TOLERANCE_M;
+  const ax1 = a.x - a.spec.width / 2 - t;
+  const ax2 = a.x + a.spec.width / 2 + t;
+  const az1 = a.z - a.spec.depth / 2 - t;
+  const az2 = a.z + a.spec.depth / 2 + t;
+  const bx1 = b.x - b.spec.width / 2 - t;
+  const bx2 = b.x + b.spec.width / 2 + t;
+  const bz1 = b.z - b.spec.depth / 2 - t;
+  const bz2 = b.z + b.spec.depth / 2 + t;
+  return ax1 < bx2 - EPS && bx1 < ax2 - EPS && az1 < bz2 - EPS && bz1 < az2 - EPS;
+}
+
+/**
+ * 两两 AABB 相交检测（含 0.02m 容差）。
+ * 家具 footprint 按 placement 中心 ± (spec.width/2, spec.depth/2) 算轴对齐矩形。
+ * 相交 → 每次生成 code='BBOX_OVERLAP' 的 hard violation（进 violations 数组）。
+ * 同一对家具只报一次（i<j 遍历）。扣分由 scoreVariant 按 hard/code 统一算。
+ */
+export function detectFurnitureOverlap(
+  placements: readonly ZoneFurniturePlacement[],
+): ScoredViolation[] {
+  const violations: ScoredViolation[] = [];
+  for (let i = 0; i < placements.length; i++) {
+    for (let j = i + 1; j < placements.length; j++) {
+      const a = placements[i]!;
+      const b = placements[j]!;
+      if (boxesOverlap(a, b)) {
+        violations.push({
+          code: 'BBOX_OVERLAP',
+          severity: 'hard',
+          message: `${a.spec.name} 与 ${b.spec.name} 位置压住`,
+        });
+      }
+    }
+  }
+  return violations;
 }
 
 /** 人话理由，2~4 条。variantId 决定首条差异化前缀。 */
