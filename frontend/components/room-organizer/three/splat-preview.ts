@@ -15,7 +15,77 @@ export type SplatMeters = Readonly<{ width: number; depth: number; height: numbe
  * 让人在点云里走扫描出来的实际空间，而不是布置区那 12×9 米。
  */
 export type SplatWalkBounds = Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number; minY: number }>;
-export type SplatSource = Readonly<{ assetId: string; url: string; name: string; meters?: SplatMeters }>;
+export type SplatSource = Readonly<{
+  assetId: string;
+  url: string;
+  name: string;
+  meters?: SplatMeters;
+  /** 可选：本地派生的 lod-meta.json（`files` 指向 2–3 档 spz），按相机距离换档。 */
+  lodUrl?: string;
+}>;
+
+/** lod-meta 的最小可消费视图：一档一个文件，offset 恒为 0（多节点分片暂不支持）。 */
+export type SplatLodLevel = Readonly<{ url: string; count: number; bytes: number }>;
+export type SplatLodMeta = Readonly<{ levels: number; files: readonly SplatLodLevel[] }>;
+export type SplatLodStats = Readonly<{
+  level: number;
+  levels: number;
+  bytes: number;
+  loadedBytes: number;
+  fps: number | undefined;
+  samples: readonly Readonly<{ level: number; bytes: number; fps: number }>[];
+}>;
+
+/** 只读 lod-meta；形状不对（多节点 world 分片等）就返回 null，预览退回单文件全量。 */
+async function fetchLodMeta(metaUrl: string): Promise<SplatLodMeta | null> {
+  try {
+    const response = await fetch(metaUrl, { credentials: 'omit' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const raw = await response.json() as {
+      files?: unknown; counts?: unknown; bytes?: unknown;
+      tree?: Array<{ lods?: Array<{ file?: number; count?: number }> }>;
+    };
+    if (!Array.isArray(raw.files) || raw.files.length < 2) return null;
+    if (Array.isArray(raw.tree) && raw.tree.length > 1) {
+      console.info('[splat-lod] 多节点 lod-meta 暂不支持，回退单文件');
+      return null;
+    }
+    const base = new URL(metaUrl, window.location.href);
+    const files: SplatLodLevel[] = [];
+    for (let index = 0; index < raw.files.length; index += 1) {
+      const entry = raw.files[index] as string | { name?: unknown; filename?: unknown; href?: unknown; bytes?: unknown } | null;
+      const name = typeof entry === 'string' ? entry
+        : typeof entry?.name === 'string' ? entry.name
+        : typeof entry?.filename === 'string' ? entry.filename
+        : typeof entry?.href === 'string' ? entry.href : '';
+      if (!name) continue;
+      const count = Number((raw.counts as unknown[] | undefined)?.[index])
+        || Number(raw.tree?.[0]?.lods?.[index]?.count)
+        || 0;
+      const bytes = Number((raw.bytes as unknown[] | undefined)?.[index])
+        || Number((entry as { bytes?: unknown } | null)?.bytes)
+        || 0;
+      files.push({ url: new URL(name, base).toString(), count, bytes });
+    }
+    return files.length >= 2 ? { levels: files.length, files } : null;
+  } catch (error) {
+    console.info('[splat-lod] lod-meta 读取失败，回退单文件:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+type SplatLodRuntime = {
+  meta: SplatLodMeta;
+  level: number;
+  startedAt: number;
+  lastCheck: number;
+  loadedBytes: number;
+  samples: Array<{ level: number; bytes: number; fps: number }>;
+  fps: number | undefined;
+  pendingLevel: number | null;
+  /** 换档时复用同一个消隐 modifier，不重复构造 dyno。 */
+  modifier: unknown;
+};
 export type SplatPosition = Readonly<{ x: number; y: number; z: number }>;
 export type SplatDisplayMode = 'gaussian' | 'footprint';
 /** Whole-scene move: gizmo shows XYZ axes; numeric keeps the panel only. */
@@ -421,6 +491,25 @@ export function createSplatPreview(deps: {
   // 一次只认最后一次请求：还在下载时又点了别的场景，先完成的那条要自己丢掉。
   let generation = 0;
   let disposed = false;
+  // 距离换档：只保 2–3 档，首屏先挂最粗那档。
+  let lodRuntime: SplatLodRuntime | null = null;
+  let lodToken = 0;
+  let frameCount = 0;
+  let fpsWindowStart = 0;
+  let currentFps: number | undefined;
+
+  function publishLodStats() {
+    const scope = window as typeof window & { __splatLod?: SplatLodStats };
+    if (!lodRuntime) { delete scope.__splatLod; return; }
+    scope.__splatLod = Object.freeze({
+      level: lodRuntime.level,
+      levels: lodRuntime.meta.levels,
+      bytes: lodRuntime.meta.files[lodRuntime.level].bytes,
+      loadedBytes: lodRuntime.loadedBytes,
+      fps: lodRuntime.fps,
+      samples: Object.freeze([...lodRuntime.samples]),
+    });
+  }
 
   function releaseTransformControls() {
     if (!transformControls) return;
@@ -437,6 +526,9 @@ export function createSplatPreview(deps: {
     mesh?.dispose();
     holder = null;
     mesh = null;
+    lodToken += 1;
+    lodRuntime = null;
+    publishLodStats();
     roofCutoff = null;
     localBox = null;
     localCenters = [];
@@ -736,6 +828,41 @@ export function createSplatPreview(deps: {
     occlusionProxy?.position.add(delta);
   }
 
+  /** 按距离换档：新档解码完成才替换，旧档立即 dispose，始终只留一档在场上。 */
+  async function switchLod(level: number) {
+    const runtime = lodRuntime;
+    if (!runtime || !holder || !mesh || runtime.pendingLevel !== null) return;
+    if (level < 0 || level >= runtime.meta.levels || level === runtime.level) return;
+    const target = runtime.meta.files[level];
+    runtime.pendingLevel = level;
+    const token = ++lodToken;
+    const started = performance.now();
+    console.info(`[splat-lod] L${runtime.level} → L${level}，${(target.bytes / 1048576).toFixed(2)} MB`);
+    const sparkModule = await sparkPromise;
+    const next = new sparkModule.SplatMesh({ url: target.url });
+    try { await next.initialized; } catch { next.dispose(); runtime.pendingLevel = null; return; }
+    if (disposed || token !== lodToken || !holder || !mesh) { next.dispose(); runtime.pendingLevel = null; return; }
+    if (runtime.fps !== undefined) {
+      runtime.samples.push({ level: runtime.level, bytes: runtime.meta.files[runtime.level].bytes, fps: Math.round(runtime.fps * 10) / 10 });
+    }
+    next.quaternion.copy(upQuaternion);
+    next.worldModifier = runtime.modifier as typeof next.worldModifier;
+    next.visible = displayMode === 'gaussian';
+    holder.remove(mesh);
+    holder.add(next);
+    mesh.dispose();
+    mesh = next;
+    runtime.level = level;
+    runtime.pendingLevel = null;
+    runtime.loadedBytes = target.bytes;
+    runtime.fps = undefined;
+    runtime.startedAt = performance.now();
+    runtime.lastCheck = 0;
+    console.info(`[splat-lod] 已切 L${level}，耗时 ${((performance.now() - started) / 1000).toFixed(1)}s`);
+    publishLodStats();
+    deps.invalidate();
+  }
+
   async function load(source: SplatSource, options: SplatLoadOptions): Promise<Readonly<{ splats: number; meters: SplatMeters; walkBounds: SplatWalkBounds | null }>> {
     if (disposed) throw new Error('环境预览已关闭。');
     const sparkModule = await sparkPromise;
@@ -748,8 +875,12 @@ export function createSplatPreview(deps: {
       spark.onDirty = () => deps.invalidate();
       splatScene.add(spark);
     }
+    // 有 LOD 就先挂最粗那档，首屏字节按档位下降；没有就维持原来的整文件解码。
+    const lod = source.lodUrl ? await fetchLodMeta(source.lodUrl) : null;
+    if (disposed || generation !== pending) throw new Error('环境预览请求已过期，请重试。');
+    const lodStartLevel = lod ? lod.levels - 1 : 0;
     const next = new sparkModule.SplatMesh({
-      url: source.url,
+      url: lod ? lod.files[lodStartLevel].url : source.url,
       onProgress: event => {
         if (generation !== pending) return;
         const ratio = event.total > 0 ? event.loaded / event.total : Number.NaN;
@@ -807,6 +938,24 @@ export function createSplatPreview(deps: {
     mesh = next;
     holder = group;
     placeSplat();
+    frameCount = 0;
+    fpsWindowStart = 0;
+    currentFps = undefined;
+    lodRuntime = lod ? {
+      meta: lod,
+      level: lodStartLevel,
+      startedAt: performance.now(),
+      lastCheck: 0,
+      loadedBytes: lod.files[lodStartLevel].bytes,
+      samples: [],
+      fps: undefined,
+      pendingLevel: null,
+      modifier: cutModifier,
+    } : null;
+    if (lod) {
+      console.info(`[splat-lod] 首屏 L${lodStartLevel} ${(lod.files[lodStartLevel].bytes / 1048576).toFixed(2)} MB · 全量 L0 ${(lod.files[0].bytes / 1048576).toFixed(2)} MB · ${lod.levels} 档`);
+      publishLodStats();
+    }
     if (transformMode === 'gizmo' && transformControls) transformControls.attach(group);
     if (!bounds) throw new Error('场景点云没有有效的包围盒，无法摆放。');
     // 标定后 bounds 仍是真实米制（比例已经乘进落位）：实测宽深高直接带回去。
@@ -823,9 +972,40 @@ export function createSplatPreview(deps: {
     });
   }
 
+  /** LOD 的每帧表计与换档判定。编辑器真正的绘制入口在 use-splat-preview（paintSplatLayers），
+   *  所以这一支必须由那层显式调用，不能只挂在 renderFrame 上。 */
+  function frameTick(camera: THREE.Camera) {
+    if (!lodRuntime || !bounds) return;
+    const now = performance.now();
+    // 每秒一窗的帧率，按档位留样，供首屏/换档对比。
+    frameCount += 1;
+    if (!fpsWindowStart) fpsWindowStart = now;
+    if (now - fpsWindowStart >= 1000) {
+      currentFps = (frameCount * 1000) / (now - fpsWindowStart);
+      frameCount = 0;
+      fpsWindowStart = now;
+      lodRuntime.fps = currentFps;
+      publishLodStats();
+    }
+    // 首屏先看 2.5s 粗档，再按距离决定是否换档；阈值带迟滞由档位本身承担。
+    if (now - lodRuntime.startedAt > 2500 && now - lodRuntime.lastCheck > 700 && lodRuntime.pendingLevel === null) {
+      lodRuntime.lastCheck = now;
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const horizontal = Math.max(size.x, size.z, 0.001);
+      const ratio = camera.position.distanceTo(center) / horizontal;
+      const desired = ratio < 0.35 ? 0 : ratio < 0.85 ? 1 : lodRuntime.meta.levels - 1;
+      if (desired !== lodRuntime.level) void switchLod(desired);
+    }
+    // 按需绘制不会为「量帧率」自己转起来：换档后头 12 秒主动续帧，凑满每秒一窗的样本；
+    // 表计结束就回到按需绘制，不长期占 GPU。
+    if (now - lodRuntime.startedAt < 12000) deps.invalidate();
+  }
+
   const renderFrame: SplatPaint = (renderer, scene, camera) => {
     if (!holder || !shownId) { renderer.render(scene, camera); return; }
     if (mesh) mesh.visible = displayMode === 'gaussian';
+    frameTick(camera);
     paintAsBackLayer({ renderer, back: splatScene, scene, camera });
   };
 
@@ -971,6 +1151,8 @@ export function createSplatPreview(deps: {
       deps.invalidate();
     },
     renderFrame,
+    /** 绘制层（paintSplatLayers 路径）每帧调用一次，驱动 LOD 表计与换档。 */
+    frameTick,
     dispose() {
       disposed = true;
       generation += 1;
