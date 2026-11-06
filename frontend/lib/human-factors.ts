@@ -17,7 +17,8 @@ export type ViolationCode =
   | 'CHAIR_GAP'
   | 'AISLE_CLEARANCE'
   | 'CHECKIN_QUEUE'
-  | 'ZONE_UNREACHABLE';
+  | 'ZONE_UNREACHABLE'
+  | 'BBOX_OVERLAP';
 
 export interface ScoredViolation {
   code: ViolationCode;

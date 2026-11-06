@@ -187,6 +187,33 @@ const variantRowMeta: CSSProperties = {
   fontSize: 11,
 };
 
+/** 单版 violation 列表容器（无 violations 时整块不渲染）。 */
+const variantViolationsWrapStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  padding: '2px 4px 2px 6px',
+};
+
+/** hard violation：品牌绿左边框 + 浅灰底（复用 stageStyle 色板，禁紫/禁靛）。 */
+const violationHardStyle: CSSProperties = {
+  borderLeft: '3px solid #4A7C59',
+  background: '#f9fafb',
+  padding: '3px 8px',
+  fontSize: 12,
+  color: '#374151',
+  borderRadius: 4,
+  lineHeight: 1.4,
+};
+
+/** soft violation：灰色小字，不扣分只提示。 */
+const violationSoftStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  padding: '1px 8px',
+  lineHeight: 1.4,
+};
+
 const suggestionsBlockStyle: CSSProperties = {
   background: '#f9fafb',
   border: '1px solid #e5e7eb',
@@ -315,23 +342,41 @@ export function PlanCard({
             const isRecommended = recommendedId === p.variantId && hasReasons;
             const isSelected = selectedId === p.variantId;
             const rowStyle = isSelected ? variantRowSelected : variantRowBase;
+            const hardViolations = Array.isArray(p.violations)
+              ? p.violations.filter((v) => v.severity === 'hard')
+              : [];
+            const softViolations = Array.isArray(p.violations)
+              ? p.violations.filter((v) => v.severity === 'soft')
+              : [];
+            const hasViolations = hardViolations.length > 0 || softViolations.length > 0;
             return (
-              <button
-                key={p.variantId}
-                type="button"
-                style={rowStyle}
-                onClick={() => onSelectVariant?.(p.variantId)}
-                aria-pressed={isSelected}
-              >
-                <span style={isRecommended ? variantRowRecommendedText : undefined}>
-                  {isRecommended ? '✅ 推荐 ' : ''}
-                  {isSelected ? '👉 选中 ' : ''}
-                  {p.label}版
-                </span>
-                <span style={variantRowMeta}>
-                  可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds} · 总分 {p.score}
-                </span>
-              </button>
+              <div key={p.variantId} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <button
+                  type="button"
+                  style={rowStyle}
+                  onClick={() => onSelectVariant?.(p.variantId)}
+                  aria-pressed={isSelected}
+                >
+                  <span style={isRecommended ? variantRowRecommendedText : undefined}>
+                    {isRecommended ? '✅ 推荐 ' : ''}
+                    {isSelected ? '👉 选中 ' : ''}
+                    {p.label}版
+                  </span>
+                  <span style={variantRowMeta}>
+                    可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds} · 总分 {p.score}
+                  </span>
+                </button>
+                {hasViolations && (
+                  <div style={variantViolationsWrapStyle}>
+                    {hardViolations.map((v, i) => (
+                      <div key={`h-${i}`} style={violationHardStyle}>{v.message}</div>
+                    ))}
+                    {softViolations.map((v, i) => (
+                      <div key={`s-${i}`} style={violationSoftStyle}>{v.message}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
