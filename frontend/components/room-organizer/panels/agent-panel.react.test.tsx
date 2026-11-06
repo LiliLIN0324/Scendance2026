@@ -72,7 +72,7 @@ function seatLayout(overrides: { locked?: boolean } = {}): RoomLayout {
 
 function ui(layout: RoomLayout, onApply = vi.fn(), onPreview = vi.fn()) {
   state.layout = layout;
-  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>;
+  return <LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>;
 }
 
 /**
@@ -83,7 +83,7 @@ function LocalHarness({ initial, onApply, onPreview = vi.fn(), brief = false }: 
   const [current, setCurrent] = useState(initial);
   state.layout = current;
   state.apply = vi.fn((next: RoomLayout) => setCurrent(next));
-  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/>{brief && <ActivityBrief tools={[]}/>}</LayoutAgentProvider>;
+  return <LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/>{brief && <ActivityBrief tools={[]}/>}</LayoutAgentProvider>;
 }
 
 /** 云端预览只要这几栏：右栏的差分、提案卡与 stale 判断读的就是它们。 */
@@ -297,12 +297,12 @@ describe('T-UI visible interaction', () => {
 
   it('keeps the plan picker out of the Bingo review face', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.queryByLabelText('生成活动方案')).toBeNull();
   });
 
   it('puts 按风格配一套 on 活动 alongside 地图选址 and opens the style panel', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
@@ -321,7 +321,7 @@ describe('T-UI visible interaction', () => {
   });
 
   it('keeps map选址 on the 活动 face together with the style chip', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
@@ -338,7 +338,7 @@ describe('T-UI visible interaction', () => {
   });
 
   it('renders the activity brief as read-only facts from the conversation', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
     // 无眉题头：左栏 Tab 已标明位置，卡片直接以活动名开场。
     expect(within(brief).queryByText('来自对话')).toBeNull();
@@ -354,7 +354,7 @@ describe('T-UI visible interaction', () => {
       { id: 'reference', label: '图纸与照片', hint: '图纸、照片与实测尺寸', icon: <span aria-hidden="true"/>, group: 'venue', onOpen: vi.fn() },
       { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', icon: <span aria-hidden="true"/>, group: 'docs', onOpen: vi.fn() },
     ];
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 量出同一块场地的两条路并列，不再一个在左栏一个在左轨。
     expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['图纸与照片', '地图圈画', '空白空间 · 12 × 8 m']);
@@ -369,7 +369,7 @@ describe('T-UI visible interaction', () => {
 
   it('still offers the map once a venue is standing, as a replacement', () => {
     state.layout = { ...seatLayout(), backendVenue: { shape: 'rectangle', entrances: [], width: 12, depth: 8, height: 4 } };
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={[]}/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={[]}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 场地立起来后空地文字链退场，地图圈画留着。
     expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['地图圈画']);
@@ -381,7 +381,7 @@ describe('T-UI visible interaction', () => {
   // F-02：左栏表单是次要轨，但改过的值必须看得见——简报和对话回显读的是同一个 recap。
   it('echoes a left-rail form change into the brief', () => {
     studioMock.brief = { event: '工作坊', guests: 40 };
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
     expect(within(brief).getByText('工作坊')).toBeTruthy();
     expect(within(brief).getByText('40 人')).toBeTruthy();
@@ -390,7 +390,7 @@ describe('T-UI visible interaction', () => {
 
   it('keeps untouched form defaults out of the brief', () => {
     studioMock.brief = { event: INITIAL_BRIEF.event, guests: INITIAL_BRIEF.guests };
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
     expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
     expect(within(brief).queryByText('品牌快闪')).toBeNull();
@@ -789,7 +789,7 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
 describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除', () => {
   it('活动脸集齐例句卡、会话操作与两枚能力芯片', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     // 默认脸即活动：布置生成例句卡归活动脸。
     expect(screen.getByLabelText('生成活动方案')).toBeTruthy();
     // 会话历史与新开随生成主对话一起归活动脸。
@@ -804,7 +804,7 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 
   it('Bingo 脸是纯审校台：无输入框、无布置话术，空态只说审校的事', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.queryByLabelText('生成活动方案')).toBeNull();
     expect(screen.queryByRole('button', { name: '会话历史' })).toBeNull();
     expect(screen.queryByRole('button', { name: '新开会话' })).toBeNull();
@@ -821,14 +821,14 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 
   it('Bingo 脸只回放审校气泡：体检回执出现在审校台', async () => {
     state.layout = seatLayout();
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
     expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
   });
 
   it('假分派控件与话术全部消失，空态改成统一的先说一句引导', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
     expect(screen.queryByRole('group', { name: '这场对话里找谁说' })).toBeNull();
     expect(screen.queryByRole('group', { name: '一起说的 agent' })).toBeNull();
     expect(screen.queryByText('分派结果')).toBeNull();
@@ -841,44 +841,44 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 
   it('S1.1 画廊桥缺 Provider 时安静不渲染，活动脸与 Bingo 脸都不炸', () => {
     state.layout = INITIAL_LAYOUT;
-    const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    const view = render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     // 本壳没有 CreativeStudioProvider，useLocalProjectBackup() 为 null：画廊整块缺席而非抛错。
     expect(view.container.querySelector('.sc-local-activities')).toBeNull();
-    view.rerender(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    view.rerender(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(view.container.querySelector('.sc-local-activities')).toBeNull();
   });
 });
 
 describe('S2 Bingo 审校台：三钮状态台直达', () => {
   it('Bingo 脸渲染三钮状态台', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '准备客户评审' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '发送钉评链接' })).toBeTruthy();
   });
 
   it('活动脸不挂审校状态台三钮', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     expect(screen.queryByRole('button', { name: '立即体检' })).toBeNull();
     expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
     expect(screen.queryByRole('button', { name: '发送钉评链接' })).toBeNull();
   });
 
   it('点「立即体检」不打字即出几何体检回执', async () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
     // 与 T-03 口令路径同引擎、同口径声明，只是入口从 send() 换成按钮。
     expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
   });
 
   it('点「准备客户评审」直接回调，不落气泡', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '准备客户评审' }));
     expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
   });
 
   it('点「发送钉评链接」只指路到甲方评审记录卡，聊天不打链接', async () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '发送钉评链接' }));
     await waitFor(() => expect(callbacks.onIssueReviewLink).toHaveBeenCalled());
     expect(screen.getByText(/下面「甲方评审记录」里点「复制甲方链接」/)).toBeTruthy();
