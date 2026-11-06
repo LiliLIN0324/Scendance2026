@@ -82,7 +82,7 @@ describe('camera presets with the real orbit controller', () => {
     state.controls.maxDistance = 90;
     act(() => state.result.current.fitToRoom());
     expect(state.controls.target.toArray()).toEqual([0, 4.5, 0]);
-    // 钳制由焦点框接管（docs/49）：min 恒为 2m，max = 焦点框对角线×3，不再沿用外部塞进来的值。
+    // 钳制由焦点框接管（docs/19）：min 恒为 2m，max = 焦点框对角线×3，不再沿用外部塞进来的值。
     expect(state.controls.minDistance).toBe(2);
     expect(state.controls.maxDistance).toBeCloseTo(Math.hypot(18, 9) * 3, 5);
     expectWholeRoomVisible(state.camera, state.viewport);
