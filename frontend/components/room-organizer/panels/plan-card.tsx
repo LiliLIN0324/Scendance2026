@@ -187,6 +187,14 @@ const variantRowMeta: CSSProperties = {
   fontSize: 11,
 };
 
+/** 0-100 三维子分小行（容量/动线/人体），灰色小字，不再显示裸总分。 */
+const variantSubScoreStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  padding: '0 6px 2px 6px',
+  lineHeight: 1.4,
+};
+
 /** 单版 violation 列表容器（无 violations 时整块不渲染）。 */
 const variantViolationsWrapStyle: CSSProperties = {
   display: 'flex',
@@ -363,9 +371,12 @@ export function PlanCard({
                     {p.label}版
                   </span>
                   <span style={variantRowMeta}>
-                    可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds} · 总分 {p.score}
+                    可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds}
                   </span>
                 </button>
+                <div style={variantSubScoreStyle}>
+                  容量 {p.subScores.capacity} · 动线 {p.subScores.flow} · 人体 {p.subScores.ergonomics}
+                </div>
                 {hasViolations && (
                   <div style={variantViolationsWrapStyle}>
                     {hardViolations.map((v, i) => (
