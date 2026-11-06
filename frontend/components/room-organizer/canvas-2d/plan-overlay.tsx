@@ -1,6 +1,7 @@
 'use client';
 
 import { formatMeasureLabel, type PlanAnnotation, type PlanPoint } from '../../../lib/plan-annotation';
+import { doorRenderStyle } from './door-render';
 import { worldToScreen, type View2DTransform } from './render';
 
 /** 品牌绿（与 render.ts 中 PLAN_SELECT_SOFT / marquee 同色）。 */
@@ -8,6 +9,10 @@ const BRAND_GREEN = '#4A7C59';
 const BRAND_GREEN_FILL = 'rgba(74, 124, 89, 0.12)';
 /** 绘制中的临时草稿用更浅的笔触，避免与已确认标注混淆。 */
 const DRAFT_STROKE = 'rgba(74, 124, 89, 0.65)';
+/** 推测门旁小字（中性灰，不引新色板）。 */
+const INFERRED_LABEL_INK = '#6b7280';
+/** 推测门开门弧的虚线 pattern（与 drawRoomOutline 隐藏墙 [6,4] 同节奏）。 */
+const INFERRED_ARC_DASH = '6 4';
 
 export interface PlanOverlayProps {
   annotations: readonly PlanAnnotation[];
@@ -167,6 +172,9 @@ export function PlanOverlay({
           }
           case 'door': {
             const g = ann.geometry;
+            // 样式决策抽成纯函数 doorRenderStyle：inferred:true → 门弧虚线 + 「门未确认」小字。
+            // 门扇（关位贴墙 / 开位向室内）无论推测与否都保持实线，只虚线开门弧。
+            const style = doorRenderStyle(g);
             // 门洞沿墙 position ± widthM/2；铰链取门洞一端，门长=widthM。
             // 关位端点 = 铰链 + 沿墙方向 * L；开位端点 = 铰链 + 室内法线 * L。
             // 房间中心为原点；worldToScreen 已把 (worldX, worldZ) 投影到 CSS px。
@@ -207,16 +215,14 @@ export function PlanOverlay({
             // 铰链→关位 与 铰链→开位 是两条垂直向量；叉积符号决定 sweep 方向。
             const cross = along.x * inward.z - along.z * inward.x;
             const sweepFlag = cross > 0 ? 1 : 0;
-            // 门旁小字锚点：把小字放「铰链 + 1.5 倍室内法线」位置（房间内侧、离墙稍远）。
+            // 门旁小字锚点：把小字放「铰链 + 1.6 倍室内法线」位置（房间内侧、离墙稍远）。
             const labelAnchor = toPx({
               x: hingeW.x + inward.x * (wallLen * 1.6),
               z: hingeW.z + inward.z * (wallLen * 1.6),
             });
-            const isInferred = !!g.inferred;
-            const dashAttr = isInferred ? '4 3' : undefined;
             return (
-              <g key={ann.id} data-door-inferred={isInferred ? 'true' : 'false'}>
-                {/* 门扇关位（贴墙） */}
+              <g key={ann.id} data-door-inferred={style.dashed ? 'true' : 'false'}>
+                {/* 门扇关位（贴墙）：始终实线，推测门也不虚 */}
                 <line
                   x1={hinge.x}
                   y1={hinge.y}
@@ -224,9 +230,8 @@ export function PlanOverlay({
                   y2={closedEnd.y}
                   stroke={BRAND_GREEN}
                   strokeWidth={1.5}
-                  strokeDasharray={dashAttr}
                 />
-                {/* 门扇开位（向室内打开） */}
+                {/* 门扇开位（向室内打开）：始终实线 */}
                 <line
                   x1={hinge.x}
                   y1={hinge.y}
@@ -234,26 +239,25 @@ export function PlanOverlay({
                   y2={openEnd.y}
                   stroke={BRAND_GREEN}
                   strokeWidth={1.2}
-                  strokeDasharray={dashAttr}
                 />
-                {/* 门扇扫过的 90° 弧 */}
+                {/* 门扇扫过的 90° 弧：真实门实线；推测门（inferred:true）虚线 */}
                 <path
                   d={`M ${closedEnd.x} ${closedEnd.y} A ${arcR} ${arcR} 0 0 ${sweepFlag} ${openEnd.x} ${openEnd.y}`}
                   fill="none"
                   stroke={BRAND_GREEN}
                   strokeWidth={1}
-                  strokeDasharray={dashAttr}
+                  strokeDasharray={style.dashed ? INFERRED_ARC_DASH : undefined}
                 />
                 <circle cx={hinge.x} cy={hinge.y} r={2.5} fill={BRAND_GREEN} />
-                {isInferred && (
+                {style.label && (
                   <text
                     x={labelAnchor.x}
                     y={labelAnchor.y}
-                    fontSize={10}
-                    fill={BRAND_GREEN}
+                    fontSize={11}
+                    fill={INFERRED_LABEL_INK}
                     textAnchor="middle"
                   >
-                    门未确认
+                    {style.label}
                   </text>
                 )}
               </g>
