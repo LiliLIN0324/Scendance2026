@@ -27,6 +27,9 @@ vi.mock('./flow-constraints', () => ({
     pairReachability: [] as Array<{ from: string; to: string; connected: boolean }>,
     blockedBy: [] as Array<{ zoneId: string; blockedFurnitureIds: string[]; coverageRatio: number }>,
   })),
+  // SC-19 §五.4：必留区/必留通道检查默认无冲突（本文件只关心打分公式）。
+  evaluateKeepOut: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
+  evaluateRouteClear: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
 }));
 
 // ---- mock human-factors：默认无 violation（避免现有用例被真实人体工学扣分干扰） ----

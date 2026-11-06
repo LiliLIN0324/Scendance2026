@@ -9,8 +9,13 @@
 
 export type PlanAnnotationKind = 'zone' | 'route' | 'measure' | 'door';
 
-/** 第 11 批：zone 标注的语义类型，决定批准时落什么家具。 */
-export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk';
+/**
+ * 第 11 批：zone 标注的语义类型，决定批准时落什么家具。
+ * reserved（SC-19 §五.4 / SC-20 输入侧）是 keep-out 语义：「预留区」「消防疏散」
+ * 这类必留区共用它——生成层不摆任何家具，评分层把别区家具的侵入判成 hard
+ * violation（KEEP_OUT_INTRUDED，见 flow-constraints.evaluateKeepOut）。
+ */
+export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk' | 'reserved';
 
 /** zone 类型 → 画布/卡片中文标签。 */
 export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
@@ -19,6 +24,7 @@ export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
   photo: '打卡区',
   rest: '休息区',
   desk: '课桌区',
+  reserved: '预留区',
 };
 
 /** 米制二维点（x 向右，z 向下，房间中心为原点）。 */

@@ -19,7 +19,7 @@ import {
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
-import { evaluateFlow, evaluateReachability, type FlowEvaluation } from './flow-constraints';
+import { evaluateFlow, evaluateReachability, evaluateKeepOut, evaluateRouteClear, type FlowEvaluation } from './flow-constraints';
 import { evaluateHumanFactors, evaluateDoorSweep, evaluatePrivacyOrder, type ScoredViolation } from './human-factors';
 import { getCatalogByType } from './furniture-catalog';
 
@@ -113,7 +113,8 @@ export interface ScoredPlan {
   assurance: 'verified' | 'draft_unverified';
   /**
    * 可行性否决：凡有 hard violation（ZONE_UNREACHABLE / BBOX_OVERLAP /
-   * DOOR_SWEEP_BLOCKED / ZONE_ENTRANCE_BLOCKED / ZONE_PAIR_DISCONNECTED 等）
+   * DOOR_SWEEP_BLOCKED / ZONE_ENTRANCE_BLOCKED / ZONE_PAIR_DISCONNECTED /
+   * KEEP_OUT_INTRUDED / ROUTE_BLOCKED 等）
    * → feasible=false，不参与推荐排序，不能被座位容量加分盖过。
    */
   feasible: boolean;
@@ -296,12 +297,19 @@ function scoreVariant(
   const doorAnnots = withDefaultDoor(annotations);
   const doorViolations = evaluateDoorSweep(placements, doorAnnots, roomSize);
   const privacyViolations = evaluatePrivacyOrder(annotations, roomSize);
+  // SC-19 §五.4 / SC-20 输入侧：必留区（reserved）侵入与必留通道（route 走廊）
+  // 压线都是硬约束——annotations 里有没有 route/reserved 由调用方决定
+  // （产品主路径传全量 draft 标注，routes 才有机会参与评分）。
+  const keepOutViolations = evaluateKeepOut(placements, annotations);
+  const routeViolations = evaluateRouteClear(placements, annotations);
   const violations: ScoredViolation[] = [
     ...hfViolations,
     ...reach.violations,
     ...furnViolations,
     ...doorViolations,
     ...privacyViolations,
+    ...keepOutViolations,
+    ...routeViolations,
   ];
   // 缺场地尺寸 → soft unknown violation，绝不当成合规 pass。
   const hasRoomSize = !!roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height);
@@ -340,6 +348,8 @@ function scoreVariant(
     if (v.code === 'ZONE_PAIR_DISCONNECTED') return sum - 2;
     if (v.code === 'ZONE_ENTRANCE_BLOCKED') return sum - 3;
     if (v.code === 'DOOR_SWEEP_BLOCKED') return sum - 3;
+    if (v.code === 'KEEP_OUT_INTRUDED') return sum - 3;
+    if (v.code === 'ROUTE_BLOCKED') return sum - 3;
     return sum;
   }, 0);
 

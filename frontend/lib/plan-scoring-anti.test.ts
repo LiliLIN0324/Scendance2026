@@ -19,7 +19,7 @@ function makeZone(
   id: string,
   opts: Partial<{
     x: number; z: number; w: number; d: number;
-    zoneType: 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk';
+    zoneType: 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk' | 'reserved';
     label: string;
   }> = {},
 ): PlanAnnotation {
@@ -335,5 +335,89 @@ describe('SC-19：rest 带不再错杀整版（G7 + S1②）', () => {
     expect(rec!.feasible).toBe(true);
     expect(rec!.placements.some((pl) => pl.spec.type === 'bench')).toBe(true);
     expect(rec!.violations.some((v) => v.code === 'AISLE_CLEARANCE')).toBe(false);
+  });
+});
+
+/* =====================================================================
+ * SC-19 §五.4 / SC-20 输入侧：必留区（reserved）与必留通道（route）
+ * docs/32 §三 S1 的三条死路（进不了输入 / 被无关常数错杀 / 兜底摆满家具）
+ * 分别由「reserved 类型 + evaluateKeepOut」「evaluateRouteClear」「无类型
+ * 落 skipped」堵上。
+ * ===================================================================== */
+describe('SC-20：必留区与必留通道是硬约束', () => {
+  it('必留区画在课桌区外：方案保持可行，KEEP_OUT_INTRUDED 不出现', () => {
+    const room = { width: 19, height: 15 };
+    // rect 的 x/z 是左上角：桌区 z∈[-5.5,3.5]（最末排椅后缘 ≈3.0）。
+    const desk = makeZone('desk', { x: -8.5, z: -5.5, w: 17, d: 9, zoneType: 'desk', label: '课桌区' });
+    // 预留带 z∈[3.6,5.6]，与桌椅净空 >0.5m；x∈[-6,6] 与桌区 x 投影重叠但 z 分离。
+    const keep = makeZone('keep', { x: -6, z: 3.6, w: 12, d: 2, zoneType: 'reserved', label: '消防疏散' });
+    const plans = generateScoredPlans([desk, keep], { roomSize: room });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
+    expect(rec!.feasible).toBe(true);
+    for (const p of plans) {
+      expect(p.violations.some((v) => v.code === 'KEEP_OUT_INTRUDED')).toBe(false);
+      // 预留区本身不产家具：全方案无任何 placement 归属 keep 区。
+      expect(p.placements.some((pl) => pl.zoneId === 'keep')).toBe(false);
+    }
+  });
+
+  it('必留区被课桌区压住：全变体 INFEASIBLE、REC=null、硬冲突说人话', () => {
+    const room = { width: 19, height: 15 };
+    const desk = makeZone('desk', { x: -8.5, z: -5.5, w: 17, d: 9, zoneType: 'desk', label: '课桌区' });
+    // 预留带 z∈[-1,1] 横穿桌区中部，课桌椅必然压进来。
+    const keep = makeZone('keep', { x: -6, z: -1, w: 12, d: 2, zoneType: 'reserved', label: '消防疏散' });
+    const plans = generateScoredPlans([desk, keep], { roomSize: room });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).toBeNull();
+    for (const p of plans) {
+      expect(p.feasible).toBe(false);
+      expect(p.feasibilityStatus).toBe('INFEASIBLE');
+      const ko = p.violations.find((v) => v.code === 'KEEP_OUT_INTRUDED');
+      expect(ko).toBeDefined();
+      expect(ko!.severity).toBe('hard');
+      expect(ko!.message).toContain('消防疏散');
+      expect(ko!.message).toContain('必留区');
+    }
+  });
+
+  it('宾客动线横穿课桌区：ROUTE_BLOCKED hard、不进推荐；挪到空地后恢复可行', () => {
+    const room = { width: 19, height: 15 };
+    const desk = makeZone('desk', { x: 0, z: -3.5, w: 12, d: 8, zoneType: 'desk', label: '课桌区' });
+    // 动线 x=0 从南到北纵穿桌区（桌区 x∈[-6,6]）→ 桌椅距线段 <0.58m。
+    const cross: PlanAnnotation = {
+      id: 'route-cross', kind: 'route', label: '宾客动线', stageNo: 1,
+      geometry: { kind: 'polyline', points: [{ x: 0, z: -7.25 }, { x: 0, z: 7.25 }] },
+    };
+    const plans = generateScoredPlans([desk, cross], { roomSize: room });
+    expect(pickRecommendedPlan(plans)).toBeNull();
+    for (const p of plans) {
+      const rb = p.violations.find((v) => v.code === 'ROUTE_BLOCKED');
+      expect(rb).toBeDefined();
+      expect(rb!.severity).toBe('hard');
+    }
+    // 动线挪到桌区西侧空地（x=-7.75，距最近桌椅 >2m）：恢复可行。
+    const west: PlanAnnotation = {
+      id: 'route-west', kind: 'route', label: '宾客动线', stageNo: 1,
+      geometry: { kind: 'polyline', points: [{ x: -7.75, z: -7.25 }, { x: -7.75, z: 7.25 }] },
+    };
+    const clearPlans = generateScoredPlans([desk, west], { roomSize: room });
+    const rec = pickRecommendedPlan(clearPlans);
+    expect(rec).not.toBeNull();
+    expect(rec!.feasible).toBe(true);
+    expect(rec!.violations.some((v) => v.code === 'ROUTE_BLOCKED')).toBe(false);
+  });
+
+  it('无 zoneType 的注入区不兜底成圆桌：三版都不落家具，skipped 说人话（S1③ 端到端）', () => {
+    const untyped: PlanAnnotation = {
+      id: 'u1', kind: 'zone', label: '外部注入区', stageNo: 1,
+      geometry: { kind: 'rect', x: -4.5, z: -4.5, width: 9, depth: 9 },
+    };
+    const plans = generateScoredPlans([untyped], { roomSize: { width: 19, height: 15 } });
+    expect(plans.length).toBeGreaterThanOrEqual(1);
+    for (const p of plans) {
+      expect(p.placements).toEqual([]);
+      expect(p.skipped.some((s) => s.reason.includes('没选类型'))).toBe(true);
+    }
   });
 });
