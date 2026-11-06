@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   SPLAT_LOD_ENTER_M,
   SPLAT_POI_COLORS,
@@ -40,29 +40,43 @@ export function SplatLodMarker({
   cameraReady: boolean;
 }): JSX.Element | null {
   const [placed, setPlaced] = useState<{ x: number; y: number; distanceM: number } | null>(null);
+  const placedRef = useRef<typeof placed>(null);
   const anchorX = anchor?.x ?? null;
   const anchorZ = anchor?.z ?? null;
 
   useEffect(() => {
     if (!visible || !cameraReady || anchorX === null || anchorZ === null) {
+      placedRef.current = null;
       setPlaced(null);
       return undefined;
     }
     const update = () => {
       const camera = cameraRef.current;
       if (!camera) {
+        placedRef.current = null;
         setPlaced(null);
         return;
       }
       const distanceM = splatLodDistanceM(camera.position, { x: anchorX, z: anchorZ }, metersPerUnit);
       const point = toScreen({ x: anchorX, y: 0, z: anchorZ });
-      setPlaced(point ? { x: point.x, y: point.y, distanceM } : null);
+      const next = point ? { x: point.x, y: point.y, distanceM } : null;
+      // change 事件覆盖不到的程序化运镜靠 500ms 心跳兜底；值没变不 setState，避免无谓重渲染。
+      const prev = placedRef.current;
+      const same = prev !== null && next !== null
+        && Math.abs(prev.x - next.x) < 0.5 && Math.abs(prev.y - next.y) < 0.5
+        && Math.abs(prev.distanceM - next.distanceM) < 0.5;
+      if (!same) {
+        placedRef.current = next;
+        setPlaced(next);
+      }
     };
     update();
     const controls = controlsRef.current;
     controls?.addEventListener('change', update);
     window.addEventListener('resize', update);
+    const beat = window.setInterval(update, 500);
     return () => {
+      window.clearInterval(beat);
       controls?.removeEventListener('change', update);
       window.removeEventListener('resize', update);
     };

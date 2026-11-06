@@ -178,12 +178,16 @@ function isLngLatPoint(value: unknown): boolean {
 }
 
 /** 场景锚点（docs/19）：原点经纬度 + 正北朝向 + 米制尺度，场景↔地理的唯一变换。 */
+const SCENE_ANCHOR_SOURCES = ['picker', 'manual', 'lookup', 'asset-geo', 'preset'];
 function isSceneAnchor(value: unknown): boolean {
   return isPlainObject(value)
     && isFiniteNumber(value.lng) && value.lng >= -180 && value.lng <= 180
     && isFiniteNumber(value.lat) && value.lat >= -90 && value.lat <= 90
     && isFiniteNumber(value.orientationDeg)
-    && isFiniteNumber(value.metersPerUnit) && value.metersPerUnit > 0;
+    && isFiniteNumber(value.metersPerUnit) && value.metersPerUnit > 0
+    // MAP-04 元数据（来源/不确定度）：可选；来源白名单防未知值随存档扩散，准确度不明就不写。
+    && (value.source === undefined || SCENE_ANCHOR_SOURCES.includes(value.source as string))
+    && (value.accuracyM === undefined || (isFiniteNumber(value.accuracyM) && value.accuracyM >= 0));
 }
 
 /** 调研底图：地名、中心点、半径、经纬度范围与图地址。范围不对就不认这份底图。 */
