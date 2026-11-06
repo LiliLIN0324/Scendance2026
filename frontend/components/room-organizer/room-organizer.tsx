@@ -136,10 +136,12 @@ import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
 import { F3CoachBubble } from './panels/f3-coach-bubble';
 import { usePlanAnnotations } from './hooks/use-plan-annotations';
 import { PlanOverlay } from './canvas-2d/plan-overlay';
+import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
 import { estimateCapacity } from '@/lib/capacity-meter';
 import { computeBingoScore } from '@/lib/bingo-score';
-import { createEmptyPlanDraft } from '@/lib/plan-annotation';
+import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, type PlanPoint } from '@/lib/plan-annotation';
+import { planZoneApprovals } from '@/lib/plan-approve';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
 import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -209,6 +211,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 集成接线：F3 首次吸附教练气泡、规划标注层、确认弹层状态。
   const f3Coach = useF3CoachBubble();
   const planAnnot = usePlanAnnotations();
+  // 第 10 批「批注→施工」：正在画但还没落地的临时点（世界坐标），喂给 PlanOverlay 做跟随反馈。
+  const [draftPoints, setDraftPoints] = useState<PlanPoint[]>([]);
+  // canvas 尺寸变化（view 切到 2D / 窗口缩放）时 bump，触发 overlay 重算 transform。
+  const [overlayTick, setOverlayTick] = useState(0);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
   useEffect(() => { setSpaceWorkflow('aholo'); }, [layout.id]);
   const liveLayout = useRef(layout); liveLayout.current = layout;
@@ -1278,6 +1284,151 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     gizmoMode,
     onMarqueeSelect: handleMarqueeSelect,
   });
+
+  // 第 10 批「批注→施工」：drawMode != 'off' 时在 2D canvas 上以 capture 阶段接管指针事件。
+  // 只在 2D 视图 + 非 off 模式下挂监听；其它时候完全不影响现有点选 / 拖放。
+  useEffect(() => {
+    const canvas = canvas2DRef.current;
+    if (!view.view2D || planAnnot.drawMode === 'off' || !canvas) {
+      setDraftPoints([]);
+      return;
+    }
+
+    let zoneStart: PlanPoint | null = null;
+    let measureFrom: PlanPoint | null = null;
+
+    const toWorld = (clientX: number, clientY: number): PlanPoint | null => {
+      const p = clientToWorld2D(clientX, clientY);
+      if (!p) return null;
+      return { x: p.x, z: p.z };
+    };
+
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return;
+      const w = toWorld(e.clientX, e.clientY);
+      if (!w) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (planAnnot.drawMode === 'zone') {
+        zoneStart = w;
+        setDraftPoints([w]);
+      } else if (planAnnot.drawMode === 'measure') {
+        if (!measureFrom) {
+          measureFrom = w;
+          setDraftPoints([w]);
+        } else {
+          planAnnot.addAnnotationFromPoints([measureFrom, w], 'measure', '测距');
+          measureFrom = null;
+          setDraftPoints([]);
+          planAnnot.setDrawMode('off');
+        }
+      } else if (planAnnot.drawMode === 'route') {
+        setDraftPoints((prev) => [...prev, w]);
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent): void => {
+      if (planAnnot.drawMode !== 'zone' || !zoneStart) return;
+      const w = toWorld(e.clientX, e.clientY);
+      if (!w) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDraftPoints([zoneStart, w]);
+    };
+
+    const onPointerUp = (e: PointerEvent): void => {
+      if (planAnnot.drawMode !== 'zone' || !zoneStart) return;
+      const w = toWorld(e.clientX, e.clientY);
+      e.preventDefault();
+      e.stopPropagation();
+      if (w && Math.hypot(w.x - zoneStart.x, w.z - zoneStart.z) > 0.1) {
+        planAnnot.addAnnotationFromPoints(
+          [zoneStart, w],
+          'zone',
+          ANNOTATION_PRESET_LABELS.roundtable,
+        );
+      }
+      zoneStart = null;
+      setDraftPoints([]);
+      planAnnot.setDrawMode('off');
+    };
+
+    const finishRoute = (): void => {
+      setDraftPoints((prev) => {
+        if (prev.length >= 2) {
+          planAnnot.addAnnotationFromPoints(
+            prev,
+            'route',
+            ANNOTATION_PRESET_LABELS.guest_route,
+          );
+        }
+        // 让 setState 落账后再清空 draftPoints / 退出绘制模式。
+        window.setTimeout(() => {
+          setDraftPoints([]);
+          planAnnot.setDrawMode('off');
+        }, 0);
+        return prev;
+      });
+    };
+
+    const onDoubleClick = (e: MouseEvent): void => {
+      if (planAnnot.drawMode !== 'route') return;
+      e.preventDefault();
+      e.stopPropagation();
+      finishRoute();
+    };
+
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (planAnnot.drawMode === 'route' && e.key === 'Enter') {
+        finishRoute();
+      }
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown, true);
+    canvas.addEventListener('pointermove', onPointerMove, true);
+    canvas.addEventListener('pointerup', onPointerUp, true);
+    canvas.addEventListener('dblclick', onDoubleClick, true);
+    window.addEventListener('keydown', onKeyDown, true);
+
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown, true);
+      canvas.removeEventListener('pointermove', onPointerMove, true);
+      canvas.removeEventListener('pointerup', onPointerUp, true);
+      canvas.removeEventListener('dblclick', onDoubleClick, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [
+    view.view2D,
+    planAnnot.drawMode,
+    clientToWorld2D,
+    planAnnot.addAnnotationFromPoints,
+    planAnnot.setDrawMode,
+  ]);
+
+  // canvas 挂载 / 尺寸变化时 bump overlayTick，让 PlanOverlay 用真实 transform 重算。
+  useEffect(() => {
+    if (!view.view2D) return;
+    const canvas = canvas2DRef.current;
+    if (!canvas) return;
+    setOverlayTick((t) => t + 1);
+    const ro = new ResizeObserver(() => setOverlayTick((t) => t + 1));
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [view.view2D]);
+
+  // 第 10 批：PlanOverlay 用的真实 fit-and-center 变换（与 render2DTopDown 同源）。
+  const overlayTransform: View2DTransform | null = useMemo(() => {
+    if (!view.view2D) return null;
+    const canvas = canvas2DRef.current;
+    if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return null;
+    // overlayTick 仅作依赖：canvas 尺寸变化时强制重算。
+    void overlayTick;
+    try {
+      return get2DViewTransform(canvas.clientWidth, canvas.clientHeight, layout);
+    } catch {
+      return null;
+    }
+  }, [view.view2D, layout, overlayTick]);
 
   // 3DGS 环境预览的渲染入口；useThreeScene 每帧走它，预览关闭时它是空的。
   const splatPaintRef = useRef<SplatPaint | null>(null);
@@ -2498,6 +2649,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               {draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               <button
                 type="button"
+                className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
+                aria-label="切换标注模式：区/线/距"
                 onClick={() => {
                   // 集成接线：规划标注模式循环 off→zone→route→measure→off；首次点击时开一份空草案。
                   const order: Array<'off' | 'zone' | 'route' | 'measure'> = ['off', 'zone', 'route', 'measure'];
@@ -2506,18 +2659,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                   if (!planAnnot.draft) planAnnot.startDraft();
                   planAnnot.setDrawMode(next);
                 }}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: 4,
-                  border: '1px solid #d0d7de',
-                  background: planAnnot.drawMode !== 'off' ? '#4A7C59' : '#F4F5F7',
-                  color: planAnnot.drawMode !== 'off' ? '#ffffff' : '#4A7C59',
-                  cursor: 'pointer',
-                  fontSize: 11,
-                  fontFamily: 'inherit',
-                }}
               >
-                规划标注{planAnnot.drawMode !== 'off' ? `·${planAnnot.drawMode}` : ''}
+                <span className="sc-annotation-toggle__label">标注</span>
+                {planAnnot.drawMode === 'zone' && <span className="sc-annotation-toggle__suffix">·区</span>}
+                {planAnnot.drawMode === 'route' && <span className="sc-annotation-toggle__suffix">·线</span>}
+                {planAnnot.drawMode === 'measure' && <span className="sc-annotation-toggle__suffix">·距</span>}
               </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               
@@ -2712,21 +2858,98 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             <StatusToastHost/>
             {/* 集成接线：F3 首次吸附教练气泡，固定锚点（画布中央偏左），不追求精确吸附位置。 */}
             <F3CoachBubble anchor={{ x: 240, y: 260 }} visible={f3Coach.shouldShow} onDismiss={f3Coach.dismiss} />
-            {/* 集成接线：2D 视图下渲染规划标注层（近似 scale/origin，集成层后续精调）。 */}
+            {/* 集成接线：2D 视图下渲染规划标注层；transform 与 render2DTopDown 同源，避免错位。 */}
             {view.view2D && (
               <PlanOverlay
                 annotations={planAnnot.draft?.annotations ?? []}
-                scale={10}
-                origin={{ x: 240, y: 240 }}
+                transform={overlayTransform}
+                layout={layout}
                 visible={planAnnot.annotationsVisible}
+                draftPoints={draftPoints}
               />
             )}
-            {/* 集成接线：规划草案浮层（右侧卡），批准/换一版/取消/反馈先 notify，不接后端执行。空草案不显示，避免「还没有阶段」卡死。 */}
+            {/* 集成接线：规划草案浮层（右侧卡）。批准真执行——zone 标注落成圆桌+椅子，经命令门 + settle 收敛。 */}
             {planAnnot.draft && (planAnnot.draft.stages.length > 0 || planAnnot.draft.annotations.length > 0) && (
               <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
                 <PlanCard
                   draft={planAnnot.draft}
-                  onApprove={() => notify('规划已批准：执行层接线后将把标注落到布局。', 'info')}
+                  onApprove={() => {
+                    const draft = planAnnot.draft;
+                    if (!draft) return;
+                    const zoneAnnotations = draft.annotations.filter((a) => a.kind === 'zone');
+                    if (zoneAnnotations.length === 0) {
+                      notify('只有路线/测距标注，没有区域可以落家具', 'info');
+                      planAnnot.clearDraft();
+                      return;
+                    }
+                    const placements = planZoneApprovals(zoneAnnotations, 0.5);
+                    if (placements.length === 0) {
+                      notify('标注区太小，摆不下桌椅，请扩大标注范围', 'error');
+                      return;
+                    }
+                    const opId = `approve-${Date.now()}`;
+                    const stamp = { source: 'ai' as const, opId };
+                    const newItems: FurnitureItem[] = placements.map((p, idx) => {
+                      const baseId = `approve-${p.kind}-${idx}-${Date.now().toString(36)}`;
+                      if (p.kind === 'table') {
+                        return {
+                          id: baseId,
+                          type: 'dining-table',
+                          name: '圆桌',
+                          width: 1.2,
+                          depth: 1.2,
+                          height: 0.75,
+                          color: '#A0522D',
+                          icon: '🟫',
+                          position: { x: p.x, z: p.z },
+                          rotation: 0,
+                          category: 'tables',
+                          provenance: stamp,
+                        } as FurnitureItem;
+                      }
+                      return {
+                        id: baseId,
+                        type: 'dining-chair',
+                        name: '餐椅',
+                        width: 0.45,
+                        depth: 0.45,
+                        height: 0.9,
+                        color: '#5D4037',
+                        icon: '🪑',
+                        position: { x: p.x, z: p.z },
+                        rotation: p.rotation,
+                        category: 'seating',
+                        provenance: stamp,
+                      } as FurnitureItem;
+                    });
+                    const before = layout;
+                    const candidate: RoomLayout = {
+                      ...before,
+                      floors: before.floors.map((f, i) =>
+                        i === activeFloorIndex ? { ...f, items: [...f.items, ...newItems] } : f,
+                      ),
+                    };
+                    const cmd = applyLayoutCommand({ layout: candidate });
+                    const result = applyLayoutCommandWithRefusals(cmd, { layout: before });
+                    if (!result.ok) {
+                      const msg =
+                        result.shapeIssues.map((s) => s.message).join('；') ||
+                        result.preconditions.map((p) => p.message).join('；') ||
+                        '候选方案无法应用';
+                      notify(msg, 'error');
+                      return;
+                    }
+                    const settleReport = settlePlacement(result.nextLayout, activeFloorIndex);
+                    commitHistoryNow();
+                    actions.applyLayout(settleReport.layout);
+                    const placedCount = newItems.length - result.refused.length;
+                    const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
+                    notify(
+                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件家具，${movedCount} 处堵点已自动挪开`,
+                      'success',
+                    );
+                    planAnnot.clearDraft();
+                  }}
                   onReplace={() => planAnnot.replaceDraft(createEmptyPlanDraft())}
                   onCancel={() => planAnnot.clearDraft()}
                   onComment={(text) => notify(`已记下反馈：${text}`, 'info')}
