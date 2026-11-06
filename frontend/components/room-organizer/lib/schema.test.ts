@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
+import { createPresetResearchArea } from './research-area';
 import {
   MAX_COLOR_LENGTH,
   MAX_COORDINATE,
@@ -232,6 +233,25 @@ describe('isRoomLayout', () => {
     const frame = { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 0.5 };
     expect(parseStoredLayout(makeLayout({ floorPlanImage: bounded, mapGroundFrame: frame }))?.mapGroundFrame).toEqual(frame);
     expect(isRoomLayout(makeLayout({ mapGroundFrame: { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 2 } }))).toBe(false);
+  });
+
+  it('accepts the scenic preset basemap and round-trips its presetId', () => {
+    const area = createPresetResearchArea();
+    const layout = makeLayout({ researchArea: area });
+    expect(isRoomLayout(layout)).toBe(true);
+    const parsed = parseStoredLayout(JSON.parse(JSON.stringify(layout)));
+    expect(parsed?.researchArea).toEqual(area);
+    // 静态底图只放行仓库 /basemap/ 相对路径：外站与越界路径仍拒绝。
+    expect(isRoomLayout(makeLayout({ researchArea: { ...area, imageUrl: 'https://evil.example/basemap/x.jpg' } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ researchArea: { ...area, imageUrl: '/basemap/../secrets.json' } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ researchArea: { ...area, presetId: 'unknown-preset' as never } }))).toBe(false);
+    // 手动底图没有 presetId 也照常收（走卫星代理白名单）。
+    const manual = {
+      ...area,
+      presetId: undefined as never,
+      imageUrl: '/api/amap-static?location=120.1,30.2&zoom=15&size=2048*2048&scale=2&x-ref=map-basemap',
+    };
+    expect(isRoomLayout(makeLayout({ researchArea: manual }))).toBe(true);
   });
 
   it('accepts exactly MAX_ROOM_DIMENSION and exactly MAX_FLOORS', () => {

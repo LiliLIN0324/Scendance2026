@@ -149,6 +149,14 @@ function isSatelliteProxyUrl(value: string): boolean {
   }
 }
 
+/**
+ * 整景区预置底图（docs/19）是仓库静态资源 /basemap/ 下的图，不走代理。
+ * 只放行同源相对路径，其余仍拒绝，避免存档加载时去打任意外站。
+ */
+function isStaticBasemapUrl(value: string): boolean {
+  return /^\/basemap\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value);
+}
+
 function isAllowedFloorPlanImage(value: unknown): value is string {
   return isDataImageUrl(value) || (typeof value === 'string' && isSatelliteProxyUrl(value));
 }
@@ -169,7 +177,7 @@ function isLngLatPoint(value: unknown): boolean {
     && value.lat >= -90 && value.lat <= 90;
 }
 
-/** 场景锚点（docs/49）：原点经纬度 + 正北朝向 + 米制尺度，场景↔地理的唯一变换。 */
+/** 场景锚点（docs/19）：原点经纬度 + 正北朝向 + 米制尺度，场景↔地理的唯一变换。 */
 function isSceneAnchor(value: unknown): boolean {
   return isPlainObject(value)
     && isFiniteNumber(value.lng) && value.lng >= -180 && value.lng <= 180
@@ -192,9 +200,12 @@ function isResearchArea(value: unknown): boolean {
   if (!isFiniteNumber(bounds.west) || !isFiniteNumber(bounds.south)) return false;
   if (!isFiniteNumber(bounds.east) || !isFiniteNumber(bounds.north)) return false;
   if (bounds.east <= bounds.west || bounds.north <= bounds.south) return false;
-  // scanAssetId：底图跟哪套场地扫描走（docs/49）；没有或不是字符串都按手动底图处理。
+  // scanAssetId：底图跟哪套场地扫描走（docs/19）；没有或不是字符串都按手动底图处理。
   if (value.scanAssetId !== undefined && (typeof value.scanAssetId !== 'string' || value.scanAssetId.length === 0 || value.scanAssetId.length > MAX_ID_LENGTH)) return false;
-  return typeof value.imageUrl === 'string' && isSatelliteProxyUrl(value.imageUrl);
+  // 预置底图（presetId）今天只有整景区一张：白名单防未知值随存档扩散。
+  if (value.presetId !== undefined && value.presetId !== 'xihu-scenic') return false;
+  if (typeof value.imageUrl !== 'string') return false;
+  return isSatelliteProxyUrl(value.imageUrl) || isStaticBasemapUrl(value.imageUrl);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

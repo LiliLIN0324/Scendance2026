@@ -27,6 +27,7 @@ import { clearMeasurement, clearRoomDimensions, renderMeasurement, renderRoomDim
 import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
 import { buildResearchBasemap, clearGeoCrosses, clearResearchBasemap, buildGeoCrosses, parseGeoCrossParam } from '../three/research-basemap';
+import { buildResearchOverlays, clearResearchOverlays } from '../three/research-overlays';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
 import { createPresetStructure } from '../three/scene-presets';
@@ -410,11 +411,13 @@ export function useSceneEffects({
   const researchKey = layout.researchArea
     ? [
       layout.researchArea.imageUrl,
+      layout.researchArea.presetId,
       layout.researchArea.bounds.west, layout.researchArea.bounds.south,
       layout.researchArea.bounds.east, layout.researchArea.bounds.north,
       layout.width, layout.height,
       layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0,
       layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale,
+      view.showResearchOverlays === false ? 'overlays-off' : 'overlays-on',
     ].join('|')
     : '';
   useEffect(() => {
@@ -424,10 +427,15 @@ export function useSceneEffects({
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
     buildResearchBasemap(THREE, scene, layout, { onTextureLoaded: invalidate });
+    // 整景区矢量叠加（范围线 + 水面）：与底图同一套 geo→world，默认开，可关。
+    if (layout.researchArea?.presetId && view.showResearchOverlays !== false) {
+      buildResearchOverlays(THREE, scene, layout, { onLoaded: invalidate });
+    }
     // 候选坐标十字核对：?geocross=lng,lat,名字;lng,lat,名字（肉眼读图不可靠，用十字压点核对投影）
     const crosses = parseGeoCrossParam(window.location.search);
     if (crosses.length > 0) buildGeoCrosses(THREE, scene, layout, crosses);
     return () => {
+      clearResearchOverlays(scene);
       clearResearchBasemap(scene);
       clearGeoCrosses(scene);
     };

@@ -23,7 +23,7 @@ const AREA = {
   style: 6 as const,
 };
 
-describe('GeoBasemapInput（docs/49 地理底图输入）', () => {
+describe('GeoBasemapInput（docs/19 地理底图输入）', () => {
   afterEach(cleanup);
   beforeEach(() => {
     lookupPlace.mockReset();

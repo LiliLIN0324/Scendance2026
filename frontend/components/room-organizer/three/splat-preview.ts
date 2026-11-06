@@ -3,6 +3,7 @@ import { ROOM_OBJECT_TAGS } from './room-builder';
 import { sampleSplatColors, rememberSceneSample } from './scene-lighting';
 import { DEFAULT_GROUND_PLANE, groundFromHeight, groundHeightAt, type GroundAnchor, type GroundPlane } from '../lib/site-capture';
 import { computeScanFit, rotatedBox } from './scan-placement';
+import { RESEARCH_BASEMAP_TAG } from './research-basemap';
 import type { SplatMesh, SparkRenderer } from '@sparkjsdev/spark';
 
 /** Aholo World 的 3DGS 竖直轴；上游不给时按它给的 Z-up 立起来。 */
@@ -343,6 +344,13 @@ export function paintSplatLayers(deps: {
     hidden.push([child, child.visible]);
     child.visible = false;
   }
+  // 调研底图是环境层：主场景在点云之后画，底图留在主场景里无论放多低都会盖住点云。
+  // 渲染背景栈时临时挪进点云场景，画完挪回，世界坐标不变。
+  const underlays: THREE.Object3D[] = [];
+  for (const child of scene.children) {
+    if (child.userData.type === RESEARCH_BASEMAP_TAG) underlays.push(child);
+  }
+  for (const child of underlays) backs[0]!.attach(child);
   // 天空属于背景那一层：临时挪到点云场景，免得点云没盖到的地方露出纯黑。
   const sky = scene.background;
   scene.background = null;
@@ -355,6 +363,8 @@ export function paintSplatLayers(deps: {
   }
   renderer.autoClear = false;
   renderer.render(scene, camera);
+  // 主场景画完再搬回来：点云不写深度，底图若在这趟里画，照样铺在 3D 上面。
+  for (const child of underlays) scene.attach(child);
   renderer.autoClear = true;
   scene.background = sky;
   for (const [child, visible] of hidden) child.visible = visible;
