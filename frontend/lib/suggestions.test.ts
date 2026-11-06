@@ -83,4 +83,27 @@ describe('generateSuggestions', () => {
     const titles = list.map((s) => s.title);
     expect(new Set(titles).size).toBe(titles.length);
   });
+
+  // ---- 第 12 批：对抗用例 D / E ----
+
+  it('D. 老人 audience + 签到区 → 建议含「1.5m」或「轮椅」', () => {
+    const list = generateSuggestions({
+      audience: '面向中老年长辈的社区茶话会',
+      zoneTypes: ['checkin'],
+    });
+    expect(list.length).toBeGreaterThanOrEqual(1);
+    const joined = list.map((s) => s.title + s.reason).join('|');
+    expect(joined).toMatch(/轮椅|1\.5m/);
+  });
+
+  it('E. 商务 audience + 签到区 → 建议不含「轮椅」「1.5m」', () => {
+    const list = generateSuggestions({
+      audience: '企业客户答谢晚宴',
+      zoneTypes: ['checkin', 'roundtable'],
+    });
+    expect(list.length).toBeGreaterThanOrEqual(1);
+    const joined = list.map((s) => s.title + s.reason).join('|');
+    expect(joined).not.toContain('轮椅');
+    expect(joined).not.toMatch(/1\.5m/);
+  });
 });

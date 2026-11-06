@@ -1,3 +1,13 @@
+/**
+ * 活动受众/区类型/场地短边命中式建议表。
+ *
+ * 本模块是离线规则表兜底，未来 LLM Agent 可直接替换本层；
+ * 接口形状 generateSuggestions(ctx) 是 Agent 可调用的工具形状：
+ * 入参 SuggestionContext（audience 自由文本 + zoneTypes 去重列表 + roomShortSideM），
+ * 出参 ActivitySuggestion[]（短标题 + 一句话理由，最多 3 条）。
+ *
+ * 红线：纯规则、纯函数；不调模型、不读 layoutStore；文案中文简体。
+ */
 import type { ZoneSemanticType } from './plan-annotation';
 
 /** 一条对话式专业建议（短标题 + 一句话理由）。 */

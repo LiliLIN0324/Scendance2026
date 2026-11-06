@@ -9,7 +9,7 @@ import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
-import { getAgentRun } from './panels/agent-chat-store';
+import { getAgentRun, getAgentChatThreads } from './panels/agent-chat-store';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
 import {
   executeSceneCommand,
@@ -2606,16 +2606,21 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 纯函数，没有副作用，每次 render 重算即可（zone 数量小）。
   const draftAnnotations = planAnnot.draft?.annotations ?? [];
   const zoneAnnotationsForScoring = draftAnnotations.filter((a) => a.kind === 'zone');
+  // 第 12 批：把场地尺寸喂给打分层，启用「zone 越出场地边界」整块跳过判定。
+  const roomSizeForScoring = (typeof layout.width === 'number' && typeof layout.height === 'number')
+    ? { width: layout.width, height: layout.height }
+    : undefined;
   const scoredPlans: ScoredPlan[] = zoneAnnotationsForScoring.length > 0
-    ? generateScoredPlans(zoneAnnotationsForScoring)
+    ? generateScoredPlans(zoneAnnotationsForScoring, roomSizeForScoring ? { roomSize: roomSizeForScoring } : undefined)
     : [];
   const recommendedPlan: ScoredPlan | null = scoredPlans.length > 0
     ? pickRecommendedPlan(scoredPlans)
     : null;
   const effectiveSelectedPlan: ScoredPlan | null =
     scoredPlans.find((p) => p.variantId === selectedVariantId) ?? recommendedPlan;
-  // 第 12 批：AI 建议（受众/区类型/场地短边命中式）。audience 本期最小口子传空，
-  // TODO: 接活动画像 audience 字段后填入。
+  // 第 12 批：AI 建议（受众/区类型/场地短边命中式）。
+  // audience 从本机对话账本 getAgentChatThreads() 拼所有 'you' 消息文本——
+  // 用户在左轨跟空间/物料/活动/Bingo 四条线说过的所有话，就是活动画像的近似来源。
   const zoneTypesForSuggestions = [
     ...new Set(
       zoneAnnotationsForScoring.map((a) => a.zoneType ?? 'roundtable'),
@@ -2624,7 +2629,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const roomShortSideM = (typeof layout.width === 'number' && typeof layout.height === 'number')
     ? Math.min(layout.width, layout.height)
     : undefined;
-  const audienceForSuggestions = '';
+  const audienceForSuggestions = (() => {
+    try {
+      const threads = getAgentChatThreads();
+      const parts: string[] = [];
+      for (const agent of ['door', 'bingo', 'space', 'material'] as const) {
+        for (const m of threads[agent] ?? []) {
+          if (m.from === 'you' && typeof m.text === 'string' && m.text.trim()) {
+            parts.push(m.text.trim());
+          }
+        }
+      }
+      return parts.join(' ');
+    } catch {
+      return '';
+    }
+  })();
   const activitySuggestions: ActivitySuggestion[] = zoneAnnotationsForScoring.length > 0
     ? generateSuggestions({
         audience: audienceForSuggestions,
@@ -2980,7 +3000,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                     if (!draft) return;
                     const zoneAnnotations = draft.annotations.filter((a) => a.kind === 'zone');
                     if (zoneAnnotations.length === 0) {
-                      notify('只有路线/测距标注，没有区域可以落家具', 'info');
+                      notify('还没画任何区，请先拖框画一个签到/休息/圆桌区', 'info');
                       planAnnot.clearDraft();
                       return;
                     }

@@ -23,6 +23,12 @@ const BLOCKED_EPSILON = 0.5;
 const AISLE_X_MARGIN = 0.3;
 /** 浮点比较容差（米）。 */
 const EPS = 1e-6;
+/**
+ * 无签到区时的默认宽敞通道（米）。
+ * 当既无签到区也无 placements 时，主通道不被任何家具约束，给一个保守的宽敞估值，
+ * 让 UI 不再显示 Infinity；这个数字不会触发任何 violation。
+ */
+const DEFAULT_AISLE_WHEN_EMPTY = 3.0;
 
 export interface FlowEvaluation {
   /** 签到区入口侧（z0 边外）到最近家具/zone 家具投影的净空，米；没有签到区时返回 Infinity。 */
@@ -62,10 +68,15 @@ export function evaluateFlow(
   );
 
   if (checkinZones.length === 0) {
+    // 无签到区：不写硬约束，但返回有限的「主通道估算余量」让 UI 能显示一个数字。
+    // - 无 placements → 默认宽敞 3.0m；
+    // - 有 placements → 扫所有家具两两之间的最大正向间隙（轴对齐矩形表面距离），
+    //   作为最可能走人那条通道的宽度估算；所有 pair 都贴住时回落到 0.5m。
+    const estimated = estimateMainAisleFromPlacements(placements);
     return {
-      aisleWidthM: Infinity,
-      wheelChairPassable: true,
-      normalPassable: true,
+      aisleWidthM: estimated,
+      wheelChairPassable: estimated >= AISLE_MIN_WHEELCHAIR - EPS,
+      normalPassable: estimated >= AISLE_MIN_NORMAL - EPS,
       checkinBlocked: false,
       violations: [],
     };
@@ -116,4 +127,54 @@ export function evaluateFlow(
     checkinBlocked,
     violations,
   };
+}
+
+/**
+ * 无签到区时的主通道估算余量：扫所有家具两两之间的最大正间隙（轴对齐矩形表面距离）。
+ * 这只是一个粗估，不参与硬约束，violations 始终为空。
+ * - placements 不足 2 件 → 默认宽敞 3.0m；
+ * - 所有 pair 都贴住/重叠 → 回落到 0.5m（贴脸档）；
+ * - 否则返回最宽的那条可走人间隙。
+ */
+function estimateMainAisleFromPlacements(
+  placements: readonly ZoneFurniturePlacement[],
+): number {
+  if (placements.length < 2) return DEFAULT_AISLE_WHEN_EMPTY;
+  let maxGap = 0;
+  for (let i = 0; i < placements.length; i++) {
+    for (let j = i + 1; j < placements.length; j++) {
+      const a = placements[i]!;
+      const b = placements[j]!;
+      const gap = rectSurfaceGap(a, b);
+      if (gap > maxGap) maxGap = gap;
+    }
+  }
+  if (maxGap <= EPS) return BLOCKED_EPSILON;
+  return maxGap;
+}
+
+/** 两件轴对齐矩形家具之间的表面距离（米）；相交或接触返回 0。 */
+function rectSurfaceGap(
+  a: ZoneFurniturePlacement,
+  b: ZoneFurniturePlacement,
+): number {
+  const ax1 = a.x - a.spec.width / 2;
+  const ax2 = a.x + a.spec.width / 2;
+  const az1 = a.z - a.spec.depth / 2;
+  const az2 = a.z + a.spec.depth / 2;
+  const bx1 = b.x - b.spec.width / 2;
+  const bx2 = b.x + b.spec.width / 2;
+  const bz1 = b.z - b.spec.depth / 2;
+  const bz2 = b.z + b.spec.depth / 2;
+
+  const xOverlap = Math.min(ax2, bx2) - Math.max(ax1, bx1);
+  const zOverlap = Math.min(az2, bz2) - Math.max(az1, bz1);
+
+  if (xOverlap > EPS && zOverlap > EPS) return 0; // 相交
+  if (xOverlap > EPS) return Math.max(0, Math.max(az1, bz1) - Math.min(az2, bz2));
+  if (zOverlap > EPS) return Math.max(0, Math.max(ax1, bx1) - Math.min(ax2, bx2));
+  // 对角：用欧氏距离近似（保守）
+  const dx = Math.max(0, Math.max(ax1, bx1) - Math.min(ax2, bx2));
+  const dz = Math.max(0, Math.max(az1, bz1) - Math.min(az2, bz2));
+  return Math.hypot(dx, dz);
 }

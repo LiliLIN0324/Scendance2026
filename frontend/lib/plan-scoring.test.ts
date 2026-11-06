@@ -103,10 +103,10 @@ describe('capacitySeats — 按家具名计数', () => {
     const fakePlacements: ZoneFurniturePlacement[] = [
       { spec: { ...TABLE_SPEC }, x: 1, z: 1, rotation: 0, zoneId: 'z1', zoneType: 'roundtable' },
       ...[0,1,2,3].map(() => chairAt(1, 1, 'z1')),
-      { spec: { ...BENCH_SPEC }, x: 0, z: 0, rotation: 0, zoneId: 'z2', zoneType: 'rest' },
+      { spec: { ...BENCH_SPEC }, x: 7, z: 0, rotation: 0, zoneId: 'z2', zoneType: 'rest' },
     ];
     mockPlanZones.mockReturnValue({ placements: fakePlacements, skipped: [] });
-    const plans = generateScoredPlans([makeZone('z1'), makeZone('z2', { zoneType: 'rest' })]);
+    const plans = generateScoredPlans([makeZone('z1'), makeZone('z2', { x: 6, z: 0, zoneType: 'rest' })]);
     for (const p of plans) {
       expect(p.capacitySeats).toBe(6);
       expect(p.outOfBounds).toBe(0);
@@ -193,7 +193,13 @@ describe('flow penalty — 动线扣分', () => {
     }));
     const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
     for (const p of plans) {
-      expect(p.score).toBe(1 - 2); // -2 不是 -5
+      // sparse/balanced: capacity=1, 轮椅过不去但行人能过 → -2 → score=-1
+      // dense: 通道收紧 1.3-0.3=1.0m，normalPassable 变 false → -5 → score=-4
+      if (p.variantId === 'dense') {
+        expect(p.score).toBe(1 - 5);
+      } else {
+        expect(p.score).toBe(1 - 2);
+      }
     }
   });
 });
@@ -269,7 +275,12 @@ describe('reasons — 每版至少 2 条人话', () => {
     for (const p of plans) {
       expect(p.reasons.length).toBeGreaterThanOrEqual(2);
       expect(p.reasons[0]).toContain('可坐 1 座');
-      expect(p.reasons.some(r => r.includes('轮椅可过'))).toBe(true);
+      // sparse/balanced 通道 1.6m 轮椅可过；dense 收紧到 1.3m 行人能过
+      if (p.variantId === 'dense') {
+        expect(p.reasons.some(r => r.includes('行人能过'))).toBe(true);
+      } else {
+        expect(p.reasons.some(r => r.includes('轮椅可过'))).toBe(true);
+      }
     }
   });
 });
