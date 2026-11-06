@@ -55,7 +55,7 @@ function harness(opts?: {
   onHangDemoEnvironment?: () => void;
 }) {
   state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
-  return render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
+  return render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
     <ActivityBrief tools={[]}/>
     <MapVenueOverlay
       {...(opts?.onReconUpload === undefined ? {} : { onReconUpload: opts.onReconUpload })}
@@ -109,7 +109,7 @@ describe('圈画 → 采集单 → 上传重建', () => {
 
   it('左轨那颗地图是同一个开关：点开浮层，再点收回去', () => {
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}>
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}>
       <MapRailButton/>
       <MapVenueOverlay/>
     </LayoutAgentProvider>);

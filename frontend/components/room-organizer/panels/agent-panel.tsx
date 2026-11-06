@@ -283,7 +283,7 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 
-export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, onApplyZoneRects, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, handoffExportRequest = 0, children }: { callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout): void; /** 「调研」底图的落盘：走 docs/49 的专用路径（store 现取布局 + 场景锚点），不走 onApply 的整张覆盖。 */ onApplyResearchArea(area: NonNullable<RoomLayout['researchArea']>): void; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, history, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   const assistantSessions = useAssistantSessions();
@@ -758,7 +758,11 @@ export function LayoutAgentProvider({ callbacks, onVenueIOChange, onPreview, onA
       return;
     }
     const area = createResearchArea(place);
-    onApply({ ...live.current, researchArea: area });
+    // 落盘走 docs/49 的专用路径：从 store 现取布局再叠底图并设场景锚点。
+    // 不能整张覆盖 live 快照——查询等待期间挂载的场地（venueScan/sceneAnchor）会被旧快照冲掉。
+    onApplyResearchArea(area);
+    // 旧路径经 onApplyCreative 收尾时会把画布切回 3D；专用路径不管视图，这里自己切。
+    setView(current => ({ ...current, view2D: false }));
     say({
       role: 'agent',
       image: area.imageUrl,
