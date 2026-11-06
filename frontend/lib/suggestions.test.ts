@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateSuggestions } from './suggestions';
+import { generateSuggestions, generateZonePrompts, defaultZoneRect } from './suggestions';
 
 describe('generateSuggestions', () => {
   it('中老年受众 + 签到/休息区：至少 2 条，含轮椅或 1.5m 提醒', () => {
@@ -105,5 +105,47 @@ describe('generateSuggestions', () => {
     const joined = list.map((s) => s.title + s.reason).join('|');
     expect(joined).not.toContain('轮椅');
     expect(joined).not.toMatch(/1\.5m/);
+  });
+});
+
+describe('generateZonePrompts（主对话主动提示）', () => {
+  it('中老年 + 空 zone：至少推签到区+休息区', () => {
+    const list = generateZonePrompts({ audience: '面向中老年人', zoneTypes: [] });
+    const types = list.map((p) => p.zoneType);
+    expect(types).toContain('checkin');
+    expect(types).toContain('rest');
+  });
+
+  it('已经画了签到区 → 不重复推签到区', () => {
+    const list = generateZonePrompts({ audience: '面向中老年人', zoneTypes: ['checkin'] });
+    expect(list.some((p) => p.zoneType === 'checkin')).toBe(false);
+  });
+
+  it('商务晚宴 + 空 zone：推签到区+圆桌区', () => {
+    const list = generateZonePrompts({ audience: '企业客户答谢晚宴', zoneTypes: [] });
+    const types = list.map((p) => p.zoneType);
+    expect(types).toContain('checkin');
+    expect(types).toContain('roundtable');
+  });
+
+  it('普通活动 + 空 zone：只推签到区', () => {
+    const list = generateZonePrompts({ audience: '普通市集', zoneTypes: [] });
+    expect(list.map((p) => p.zoneType)).toEqual(['checkin']);
+  });
+});
+
+describe('defaultZoneRect（一键落区默认位）', () => {
+  it('checkin 在场地前侧（z>0）', () => {
+    const r = defaultZoneRect('checkin', { width: 12, height: 8 });
+    expect(r.z).toBeGreaterThan(0);
+  });
+  it('rest 在场地深处（z<0）', () => {
+    const r = defaultZoneRect('rest', { width: 12, height: 8 });
+    expect(r.z).toBeLessThan(0);
+  });
+  it('roundtable 在场地正中', () => {
+    const r = defaultZoneRect('roundtable', { width: 12, height: 8 });
+    expect(r.x).toBe(0);
+    expect(r.z).toBe(0);
   });
 });
