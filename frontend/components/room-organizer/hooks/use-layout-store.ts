@@ -50,6 +50,11 @@ const nextId = randomId;
 
 interface LayoutStoreState extends LayoutState {
   readonly actions: LayoutActions;
+  /**
+   * 结论失效计数器：任何走 dispatch 的布局 / 家具 / 墙体变更都 +1。
+   * 消费侧（评分 / reachability / 门弧检查）依赖它重算，旧结论标记 stale。
+   */
+  readonly revision: number;
 }
 
 // A store (not a hook) so state lives outside the React tree and can be read by
@@ -57,8 +62,9 @@ interface LayoutStoreState extends LayoutState {
 // the initializer, so `useLayoutActions()` returns a stable reference forever.
 export const createLayoutStore = (initialState?: LayoutState) => createStore<LayoutStoreState>()((set, get) => {
   // Internal dispatch: delegate to the existing reducer, never reimplement it.
+  // 所有数据变更都过这里，统一 bump revision——消费侧靠它判断旧评分/violation 是否失效。
   const dispatch = (action: LayoutAction): void => {
-    set((state) => layoutReducer(state, action));
+    set((state) => ({ ...layoutReducer(state, action), revision: state.revision + 1 }));
   };
 
   const actions: LayoutActions = {
@@ -179,6 +185,7 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
   return {
     layout: initialState?.layout ?? withHouseId(INITIAL_LAYOUT),
     activeFloorIndex: initialState?.activeFloorIndex ?? 0,
+    revision: 0,
     actions,
   };
 });
@@ -221,6 +228,15 @@ export function useActiveFloor(): FloorLayout {
     const { layout, activeFloorIndex } = s;
     return layout.floors[activeFloorIndex] ?? layout.floors[0] ?? INITIAL_GROUND_FLOOR;
   });
+}
+
+/**
+ * 布局结论失效计数器：任何家具 / 墙体 / 场地变更都 +1。
+ * 消费侧用 `useEffect(() => { 重跑评分/reachability/门弧检查 }, [useLayoutRevision(), planAnnot.revision])`
+ * 触发重算；重算未完成期间 UI 应显示「核验中」而非沿用旧结论。
+ */
+export function useLayoutRevision(): number {
+  return useStore(layoutStore, (s) => s.revision);
 }
 
 // Actions are created once and never change identity, so this hook never causes
