@@ -610,6 +610,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   source: true,
   glbUrl: true,
   glbNode: true,
+  uniformScale: true,
   venueEntranceId: true,
   id: true,
   type: true,

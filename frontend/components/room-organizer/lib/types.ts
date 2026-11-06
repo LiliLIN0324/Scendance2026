@@ -136,6 +136,12 @@ export interface FurnitureItem {
   glbUrl?: string;
   /** Named editable fixture within an archived scene model. */
   glbNode?: string;
+  /**
+   * 等比缩放：按标称高度算一个统一倍率，不做三轴独立拉伸。
+   * 默认关（程序化家具照旧按轴对表）；带骨骼/动画的资产会自动启用，
+   * 否则骨骼会被非均匀缩放扯变形。
+   */
+  uniformScale?: boolean;
   /** Rendered structural marker; never exported as a material object. */
   venueEntranceId?: string;
   id: string;

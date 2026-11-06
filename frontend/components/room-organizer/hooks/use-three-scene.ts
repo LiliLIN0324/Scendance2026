@@ -3,6 +3,7 @@ import { reloadOnceForChunkError } from '../lib/chunk-reload';
 import { attachDragHandlers } from '../three/drag-handlers';
 import { addLights } from '../three/lighting';
 import { applyRendererLook, BASE_ENVIRONMENT_INTENSITY } from '../three/render-look';
+import { advanceGlbAnimations } from '../three/glb-assets';
 import { setMaxAnisotropy } from '../three/texture-settings';
 import type { SceneEventHandlers } from '../three/drag-handlers';
 import type * as ThreeNS from 'three';
@@ -214,8 +215,13 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
       let contextLost = false;
 
       let rafId = 0;
+      let lastFrameAt = performance.now();
       const tick = () => {
         rafId = requestAnimationFrame(tick);
+        const frameNow = performance.now();
+        // 切标签页回来时别把整段暂停一次补上；0.1 s 上限足够跟手。
+        const deltaSeconds = Math.min((frameNow - lastFrameAt) / 1000, 0.1);
+        lastFrameAt = frameNow;
         // OrbitControls.update() returns true while the camera is moving
         // (including damping glide). Skip rendering entirely when nothing
         // changed — an editor sits idle most of the time.
@@ -225,6 +231,8 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         // into the polar cone before every render (#114). Walkthrough marks
         // frames dirty itself, so skipping update() here loses nothing.
         const controlsMoved = handlersRef.current.walkthroughActive ? false : controls.update();
+        // 有实例动画在播时必须每帧推进，并主动置脏——否则下面的早退会让它一帧都不动。
+        if (advanceGlbAnimations(deltaSeconds) > 0) dirtyRef.current = true;
         if (contextLost) return;
         if (!controlsMoved && !dirtyRef.current) return;
         dirtyRef.current = false;
