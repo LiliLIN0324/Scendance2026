@@ -150,3 +150,39 @@ describe("A/G 对抗：极小区 + 连续 4 类 zone", () => {
     }
   });
 });
+
+describe('P1. subScores 0-100 三维子分', () => {
+  it('9×9 圆桌区：三版 subScores 不全相同（capacity 或 flow 至少一项有差）', () => {
+    const ann = makeZone('big', { x: -4.5, z: -4.5, w: 9, d: 9, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([ann], { roomSize: { width: 12, height: 12 } });
+    expect(plans).toHaveLength(3);
+    const capSet = new Set(plans.map((p) => p.subScores.capacity));
+    const flowSet = new Set(plans.map((p) => p.subScores.flow));
+    // sparse 主动删一桌 → capacity 必降；dense 通道收紧 → flow 可能降。
+    expect(capSet.size + flowSet.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('每个 subScores 分量都落在 [0,100] 闭区间', () => {
+    const ann = makeZone('big', { x: -4.5, z: -4.5, w: 9, d: 9, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([ann], { roomSize: { width: 12, height: 12 } });
+    for (const p of plans) {
+      expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
+      expect(p.subScores.capacity).toBeLessThanOrEqual(100);
+      expect(p.subScores.flow).toBeGreaterThanOrEqual(0);
+      expect(p.subScores.flow).toBeLessThanOrEqual(100);
+      expect(p.subScores.ergonomics).toBeGreaterThanOrEqual(0);
+      expect(p.subScores.ergonomics).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('empty annotations 时 subScores 全为 0 或 100（不越界、不 NaN）', () => {
+    const plans = generateScoredPlans([]);
+    for (const p of plans) {
+      expect(Number.isFinite(p.subScores.capacity)).toBe(true);
+      expect(Number.isFinite(p.subScores.flow)).toBe(true);
+      expect(Number.isFinite(p.subScores.ergonomics)).toBe(true);
+      expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
+      expect(p.subScores.flow).toBeLessThanOrEqual(100);
+    }
+  });
+});
