@@ -351,7 +351,7 @@ export interface NeighbourSpec {
 export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | 'lawn' | 'market' | 'museum' | 'office' | 'studio';
 
 /**
- * 场景锚点（docs/49）：场景世界坐标 ↔ 地理坐标的唯一变换参数。
+ * 场景锚点（docs/19）：场景世界坐标 ↔ 地理坐标的唯一变换参数。
  * lng/lat 是世界原点 (0, 0) 对应的地理坐标；
  * orientationDeg 是世界 -Z 轴（平面图「上」）相对正北的顺时针偏航角，0 表示正北朝上；
  * metersPerUnit 是 1 个世界单位对应的米数——正常为 1；壳体被等比缩小时为 1/scale。
@@ -418,7 +418,7 @@ export interface RoomLayout {
    */
   mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
   /**
-   * 场景锚点：场景坐标 ↔ 地理坐标的唯一变换（docs/49 架构定案）。
+   * 场景锚点：场景坐标 ↔ 地理坐标的唯一变换（docs/19 架构定案）。
    * 地图是 3D 场景里的一个渲染层，没有自己的定位，只能跟着它走。
    * 底图与场景点位一律按它投影；mapGroundFrame 是由它派生的旧字段，仅为壳体卫星 UV 保留。
    */
@@ -439,12 +439,10 @@ export interface RoomLayout {
     imageUrl: string;
     /** 高德瓦片样式：6 卫星、7 路网、8 路网加注记。 */
     style: 6 | 7 | 8;
-    /** 场地脚下那片 z18 级高清卫星贴片；没有就没有贴片层。 */
-    detailRadiusM?: number;
-    detailBounds?: { west: number; south: number; east: number; north: number };
-    detailImageUrl?: string;
-    /** 这张底图跟着哪套场地扫描走（docs/49）；没有就是用户手动标的，自动逻辑不动它。 */
+    /** 这张底图跟着哪套场地扫描走（docs/19）；没有就是用户手动标的，自动逻辑不动它。 */
     scanAssetId?: string;
+    /** 静态预置整景区底图；有它时 bounds 即图片精确范围，不再按半径重算。 */
+    presetId?: 'xihu-scenic';
   };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
@@ -471,6 +469,8 @@ export interface ViewSettings {
   /** Pure main-canvas presentation; never deletes an image or changes its correspondence. */
   showReferenceImage?: boolean;
   referenceImageOpacity?: number;
+  /** 整景区底图上叠景区范围线/水面；未设 = 开。 */
+  showResearchOverlays?: boolean;
   /** Hour of the day in [0, 24); drives the continuous sun-arc lighting. */
   timeOfDay: number;
   /** Rain or snow falling over the lot, with matching overcast lighting (#189). */

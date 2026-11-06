@@ -2371,12 +2371,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         return rest as RoomLayout;
       }
       const existing = sceneAnchorOf(current);
-      const sceneAnchor: SceneAnchor = {
-        lng: area.center.lng,
-        lat: area.center.lat,
-        orientationDeg: existing?.orientationDeg ?? 0,
-        metersPerUnit: existing?.metersPerUnit ?? 1,
-      };
+      // 静态整景区底图是「给已有锚点的场景垫一张大图」：锚点必须留在原扫描位置，
+      // 底图中心由 bounds 经 anchorGeoToWorld 投出来，不能把锚点搬到 bbox 中心去。
+      const sceneAnchor: SceneAnchor = area.presetId
+        ? existing ?? { lng: area.center.lng, lat: area.center.lat, orientationDeg: 0, metersPerUnit: 1 }
+        : {
+          lng: area.center.lng,
+          lat: area.center.lat,
+          orientationDeg: existing?.orientationDeg ?? 0,
+          metersPerUnit: existing?.metersPerUnit ?? 1,
+        };
       return { ...current, sceneAnchor, researchArea: area };
     })();
     try {
@@ -2929,7 +2933,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
             <CanvasHeading view2D={view.view2D} />
-            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={() => { setSceneFocus(null); fitToRoom(); }} />
+            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={() => { setSceneFocus(null); fitToRoom(); }}
+              overlaysVisible={view.showResearchOverlays !== false}
+              onToggleOverlays={() => setView(current => ({ ...current, showResearchOverlays: current.showResearchOverlays === false }))} />
             <SceneGeoDots
               dots={sceneGeoDots}
               focusedId={focusedVenueId}

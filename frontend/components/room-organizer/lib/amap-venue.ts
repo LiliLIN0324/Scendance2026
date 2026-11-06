@@ -348,7 +348,7 @@ export function frameForExistingShell(polygon: AmapPoint[], shell?: { x: number;
 }
 
 /**
- * 旧圈画框架 → 场景锚点（docs/49）。frame 的 lng0 是西缘经度、lat0 是壳体 z=0 的纬度
+ * 旧圈画框架 → 场景锚点（docs/19）。frame 的 lng0 是西缘经度、lat0 是壳体 z=0 的纬度
  * （latSign=-1 即北缘）；壳体中心就是世界原点。metersPerUnit = 1/scale（壳体缩小时
  * 1 个世界单位对应更多真实米）。圈画流程写 frame 的地方必须同时写它，锚点是正源。
  */
@@ -361,6 +361,23 @@ export function anchorFromMapFrame(frame: MapGroundFrame, widthM: number, depthM
     lat: frame.lat0 + sign * depthM / (2 * scale * METERS_PER_DEGREE_LAT),
     orientationDeg: 0,
     metersPerUnit: 1 / scale,
+  };
+}
+
+/**
+ * 场景锚点 → 旧圈画框架。立壳卫星贴图的 UV 仍按 frame 算，但 frame 只由锚点推导，
+ * 不参与世界定位——场景里唯一的坐标变换是锚点，这里是它的一个视图。
+ */
+export function frameFromAnchor(
+  anchor: SceneAnchor, widthM: number, depthM: number, latSign: -1 | 1 = -1,
+): MapGroundFrame {
+  const scale = 1 / anchor.metersPerUnit;
+  return {
+    lng0: anchor.lng - widthM / (2 * scale * metersPerDegreeLng(anchor.lat)),
+    lat0: anchor.lat - latSign * depthM / (2 * scale * METERS_PER_DEGREE_LAT),
+    latMid: anchor.lat,
+    scale,
+    latSign,
   };
 }
 
@@ -390,10 +407,11 @@ export function orientMapShellNorthUp(layout: RoomLayout): RoomLayout {
     ...layout,
     ...(venue ? { backendVenue: venue } : {}),
     ...(scene ? { backendSceneV2: scene } : {}),
-    ...(registration ? {
-      mapGroundFrame: registration.frame,
-      sceneAnchor: anchorFromMapFrame(registration.frame, layout.width, layout.height),
-    } : {}),
+    ...(registration ? (() => {
+      // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
+      const anchor = anchorFromMapFrame(registration.frame, layout.width, layout.height);
+      return { mapGroundFrame: frameFromAnchor(anchor, layout.width, layout.height), sceneAnchor: anchor };
+    })() : {}),
   };
 }
 
@@ -596,6 +614,8 @@ async function geocodeViaSameOrigin(query: string): Promise<AmapPoint | null> {
 
 /** 优先用立壳时存下的圈画或中心点；旧场地没有点列时，用场地名向高德要一个中心再摊矩形。 */
 export async function resolveSatellitePolygon(layout: RoomLayout): Promise<AmapPoint[] | null> {
+  // 调研底图已经定了位置：场地脚下一律跟着这个中心铺，旧场地的圈画点不能把贴地拽回去。
+  if (layout.researchArea) return rectangleAroundMeters(layout.researchArea.center, layout.width, layout.height);
   const stored = layout.mapGroundPolygon;
   if (stored && stored.length >= 3) return stored.map(point => ({ lng: point.lng, lat: point.lat }));
   if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) {
@@ -625,7 +645,7 @@ export interface SatelliteGroundPatch {
   mapGroundPolygon?: AmapPoint[];
   mapLngLat?: { lng: number; lat: number };
   mapGroundFrame?: MapGroundFrame;
-  /** 场景锚点（docs/49）：与 mapGroundFrame 同源推出，锚点是正源、frame 是派生旧字段。 */
+  /** 场景锚点（docs/19）：与 mapGroundFrame 同源推出，锚点是正源、frame 是派生旧字段。 */
   sceneAnchor?: SceneAnchor;
 }
 
@@ -640,7 +660,12 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
   if (located) {
     const registration = groundRegistration(located);
     const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
-    const frame = layout.mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
+    // 调研底图已经用显式锚点定过位：贴地帧只按这片矩形算，且不再写锚点，
+    // 免得把铺图时定下的锚点又按旧壳体姿态改一遍。
+    const anchored = !!layout.researchArea && !!layout.sceneAnchor;
+    const frame = anchored
+      ? registration?.frame
+      : layout.mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
     const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height });
     if (fetched && frame) {
       return {
@@ -649,8 +674,7 @@ export async function ensureSatelliteGround(layout: RoomLayout): Promise<Satelli
         satelliteGroundRef: true,
         mapGroundPolygon: located,
         mapLngLat: centroid(located),
-        mapGroundFrame: frame,
-        sceneAnchor: anchorFromMapFrame(frame, layout.width, layout.height),
+        ...(anchored ? {} : { mapGroundFrame: frame, sceneAnchor: anchorFromMapFrame(frame, layout.width, layout.height) }),
       };
     }
   }
@@ -740,10 +764,11 @@ export function createVenueFromPick(
   const registration = groundRegistration(pick.polygon);
   let layout: RoomLayout = {
     ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon),
-    ...(registration ? {
-      mapGroundFrame: registration.frame,
-      sceneAnchor: anchorFromMapFrame(registration.frame, safeWidth, safeDepth),
-    } : {}),
+    ...(registration ? (() => {
+      // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
+      const anchor = anchorFromMapFrame(registration.frame, safeWidth, safeDepth);
+      return { mapGroundFrame: frameFromAnchor(anchor, safeWidth, safeDepth), sceneAnchor: anchor };
+    })() : {}),
   };
   if (pick.satelliteGround) {
     const raw = pick.satelliteGroundImage?.trim() ?? '';
