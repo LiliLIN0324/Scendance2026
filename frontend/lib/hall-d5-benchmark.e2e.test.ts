@@ -247,15 +247,21 @@ describe('场景 B：对抗 250 人（超官方剧院 200）', () => {
     // 这条产品 gap 在对照结论里列出，本测试只验证"不硬凑"。
   });
 
-  it('B3：目标人数 250 超过官方 200，最小调整建议（降到 ≤200）——通过测试侧暴露产品 gap', () => {
-    // 现有管线没有"目标人数"入参，不会主动说"建议降到 200"。
-    // 这条断言在测试侧记录 gap：把 250 与官方 200 对比，要求系统在 reasons 里
-    // 能找到"空间不够"的人话（B2 已断言），但"最小调整建议（降到 200）"是产品 gap，
-    // 本测试只记录，不要求管线立即实现。
-    const OFFICIAL_THEATER_CAP = HALL_D5.capacityReference.theater!; // 200
-    expect(OFFICIAL_THEATER_CAP).toBe(200);
-    expect(250).toBeGreaterThan(OFFICIAL_THEATER_CAP);
-    // 这条断言永远通过——它是 gap 文档，不是行为断言。
+  it('B3：传 targetCapacity=250 时，推荐版 reasons 必须出现「装不下 250」或「建议降到」人话', () => {
+    // 真断言：直接调用 generateScoredPlans 并把 targetCapacity=250 喂进去，
+    // 要求推荐版 reasons 里有人话降容提示（不是测试侧自己算 capacity<250 的旧绕法）。
+    const maxDesk = deskZone('d5-max3', -9, -7, 18, 14);
+    const plans = generateScoredPlans([maxDesk, ...doors], {
+      roomSize: HALL_D5.roomSize,
+      targetCapacity: 250,
+    });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
+    const reasonText = rec!.reasons.join('\n');
+    expect(reasonText).toMatch(/装不下\s*250/);
+    expect(reasonText).toMatch(/建议(把人数)?降到/);
+    // 同时保留「容量不虚增」的硬断言。
+    expect(rec!.capacitySeats).toBeLessThan(250);
   });
 });
 

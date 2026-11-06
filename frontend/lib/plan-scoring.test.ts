@@ -81,7 +81,7 @@ beforeEach(() => {
 
 /** 构造一个 zone 标注。 */
 function makeZone(id: string, opts: Partial<{
-  x: number; z: number; w: number; d: number; zoneType: 'roundtable'|'checkin'|'photo'|'rest'; label: string;
+  x: number; z: number; w: number; d: number; zoneType: 'roundtable'|'checkin'|'photo'|'rest'|'desk'; label: string;
 }> = {}): PlanAnnotation {
   return {
     id,
@@ -475,5 +475,122 @@ describe('P1 家具 footprint AABB 重叠（BBOX_OVERLAP）', () => {
       expect(v.code).toBe('BBOX_OVERLAP');
       expect(v.severity).toBe('hard');
     }
+  });
+});
+
+/* =====================================================================
+ * 库存短缺（inventory）+ 交付清单（BOM）
+ * ===================================================================== */
+const DESK_TABLE_SPEC = { type: 'desk-table', name: '课桌', category: 'desk', width: 1.8, depth: 0.6, height: 0.75, color: '#A0522D', icon: '📚' };
+const DESK_CHAIR_SPEC = { type: 'desk-chair', name: '讲座椅', category: 'chair', width: 0.49, depth: 0.57, height: 0.9, color: '#5D4037', icon: '🪑' };
+const DINING_TABLE_SPEC = { type: 'dining-table', name: '圆桌', category: 'table', width: 1.8, depth: 1.8, height: 0.7, color: '#A0522D', icon: '🟫' };
+
+function deskTableAt(x: number, z: number, zoneId = 'z1'): ZoneFurniturePlacement {
+  return { spec: { ...DESK_TABLE_SPEC }, x, z, rotation: 0, zoneId, zoneType: 'desk' };
+}
+function deskChairAt(x: number, z: number, zoneId = 'z1'): ZoneFurniturePlacement {
+  return { spec: { ...DESK_CHAIR_SPEC }, x, z, rotation: 0, zoneId, zoneType: 'desk' };
+}
+function diningTableAt(x: number, z: number, zoneId = 'z1'): ZoneFurniturePlacement {
+  return { spec: { ...DINING_TABLE_SPEC }, x, z, rotation: 0, zoneId, zoneType: 'roundtable' };
+}
+
+describe('库存库存短缺（ScoringOptions.inventory）', () => {
+  it('库存 10 把讲座椅、placement 需要 15 把 → shortage 含 desk-chair 缺 5，reasons 含「缺 5」', () => {
+    // 5 张课桌 × 3 椅 = 15 把讲座椅。
+    const placements = [
+      deskTableAt(0, 0), deskTableAt(2, 0), deskTableAt(4, 0), deskTableAt(6, 0), deskTableAt(8, 0),
+      deskChairAt(0.5, 0.5), deskChairAt(0, 0.5), deskChairAt(-0.5, 0.5),
+      deskChairAt(2.5, 0.5), deskChairAt(2, 0.5), deskChairAt(1.5, 0.5),
+      deskChairAt(4.5, 0.5), deskChairAt(4, 0.5), deskChairAt(3.5, 0.5),
+      deskChairAt(6.5, 0.5), deskChairAt(6, 0.5), deskChairAt(5.5, 0.5),
+      deskChairAt(8.5, 0.5), deskChairAt(8, 0.5), deskChairAt(7.5, 0.5),
+    ];
+    mockPlanZones.mockReturnValue({ placements, skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })], {
+      inventory: { 'desk-chair': 10 },
+    });
+    for (const p of plans) {
+      expect(p.shortage).toBeDefined();
+      const chairShort = p.shortage!.find((s) => s.type === 'desk-chair');
+      expect(chairShort).toBeDefined();
+      expect(chairShort!.needed).toBe(15);
+      expect(chairShort!.available).toBe(10);
+      expect(chairShort!.missing).toBe(5);
+      expect(chairShort!.name).toBe('讲座椅');
+      expect(p.reasons.some((r) => r.includes('缺 5') && r.includes('讲座椅'))).toBe(true);
+      // shortage 不静默截断 placements，placements 仍然是 20 件。
+      expect(p.placements.length).toBe(20);
+    }
+  });
+
+  it('库存 ≥ 需要数 → shortage 为空数组，reasons 不出现「缺 N 件」类人话', () => {
+    const placements = [deskChairAt(0, 0), deskChairAt(1, 0)];
+    mockPlanZones.mockReturnValue({ placements, skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })], {
+      inventory: { 'desk-chair': 10 },
+    });
+    for (const p of plans) {
+      expect(p.shortage).toEqual([]);
+      // 不出现「缺 N 把/张/件」这种 shortage 人话（其他 soft violation 可能含「缺场地尺寸」等无关字样）。
+      expect(p.reasons.some((r) => /缺\s*\d+\s*(把|张|件|面|盆|条)/.test(r))).toBe(false);
+    }
+  });
+
+  it('不传 inventory → shortage 字段缺省（undefined），兼容旧调用', () => {
+    mockPlanZones.mockReturnValue({ placements: [deskChairAt(0, 0)], skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })]);
+    for (const p of plans) {
+      expect(p.shortage).toBeUndefined();
+      expect(p.reasons.some((r) => /缺\s*\d+\s*(把|张|件|面|盆|条)/.test(r))).toBe(false);
+    }
+  });
+});
+
+describe('交付清单（billOfMaterials）', () => {
+  it('120 人课桌式：BOM 含 desk-table（=桌数）和 desk-chair（=3×桌数），同 type 聚合去重', () => {
+    // 2 桌 × 3 椅 = 2 桌 + 6 椅；椅子 z=1.5 与桌 footprint(z∈[-0.3,0.3]) 拉开，避免 BBOX_OVERLAP。
+    const placements = [
+      deskTableAt(0, 0), deskTableAt(3, 0),
+      deskChairAt(-0.6, 1.5), deskChairAt(0, 1.5), deskChairAt(0.6, 1.5),
+      deskChairAt(2.4, 1.5), deskChairAt(3, 1.5), deskChairAt(3.6, 1.5),
+    ];
+    mockPlanZones.mockReturnValue({ placements, skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })]);
+    const rec = pickRecommendedPlan(plans)!;
+    expect(rec).not.toBeNull();
+    expect(rec.billOfMaterials).toBeDefined();
+    const tableLine = rec.billOfMaterials!.find((b) => b.type === 'desk-table');
+    const chairLine = rec.billOfMaterials!.find((b) => b.type === 'desk-chair');
+    expect(tableLine).toBeDefined();
+    expect(tableLine!.count).toBe(2);
+    expect(tableLine!.name).toBe('课桌');
+    expect(chairLine).toBeDefined();
+    expect(chairLine!.count).toBe(6);
+    expect(chairLine!.name).toBe('讲座椅');
+    // 同 type 不重复列两行。
+    const types = rec.billOfMaterials!.map((b) => b.type);
+    expect(new Set(types).size).toBe(types.length);
+  });
+
+  it('size 人话：圆桌写「Ø1.8m」，课桌写「1.8×0.6m」', () => {
+    mockPlanZones.mockReturnValue({
+      placements: [diningTableAt(0, 0), deskTableAt(3, 0)],
+      skipped: [],
+    });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    const rec = pickRecommendedPlan(plans)!;
+    const round = rec.billOfMaterials!.find((b) => b.type === 'dining-table');
+    const desk = rec.billOfMaterials!.find((b) => b.type === 'desk-table');
+    expect(round!.size).toBe('Ø1.8m');
+    expect(desk!.size).toBe('1.8×0.6m');
+  });
+
+  it('推荐版（pickRecommended）必然填 BOM', () => {
+    mockPlanZones.mockReturnValue({ placements: [deskChairAt(0, 0)], skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'desk' })]);
+    const rec = pickRecommendedPlan(plans)!;
+    expect(rec.billOfMaterials).toBeDefined();
+    expect(rec.billOfMaterials!.length).toBeGreaterThanOrEqual(1);
   });
 });
