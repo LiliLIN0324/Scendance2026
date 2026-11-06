@@ -3,6 +3,8 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
 import { planZones } from '../../../lib/plan-approve';
+import type { ScoredPlan, PlanVariantId } from '../../../lib/plan-scoring';
+import type { ActivitySuggestion } from '../../../lib/suggestions';
 
 type SkippedZone = { zoneId: string; reason: string };
 
@@ -12,6 +14,10 @@ type SkippedZone = { zoneId: string; reason: string };
  * 受控组件：不订阅 agent-chat 内部状态，全部回调由父组件注入。
  * 对应 Z4/Z5——阶段带空间关系理由，三按钮「批准 / 换一版 / 取消」，
  * 输入框允许口头改方案，页脚常驻「执行前我会先征求你的意见」。
+ *
+ * 第 12 批：父组件额外传入三版打分结果 + AI 建议，卡片在阶段列表下方、
+ * 按钮行上方插入「三版分数小条」与「AI 建议」两块，让用户在批准前
+ * 看到「思考过程」和可切换的推荐版本。
  */
 export interface PlanCardProps {
   draft: LayoutPlanDraft | null;
@@ -19,6 +25,16 @@ export interface PlanCardProps {
   onReplace(): void;
   onCancel(): void;
   onComment(text: string): void;
+  /** 三版打分结果（松/适中/密），由父组件算好传入；空数组时不渲染分数条。 */
+  plans?: ScoredPlan[] | undefined;
+  /** 父组件推荐版 variantId。 */
+  recommendedId?: PlanVariantId | undefined;
+  /** 用户当前手动选中的 variantId（受控）。 */
+  selectedId?: PlanVariantId | undefined;
+  /** 切换版本回调。 */
+  onSelectVariant?(id: PlanVariantId): void;
+  /** AI 建议列表；空数组时不渲染建议卡。 */
+  suggestions?: ActivitySuggestion[] | undefined;
 }
 
 const cardStyle: CSSProperties = {
@@ -122,7 +138,102 @@ const footerStyle: CSSProperties = {
   marginTop: 2,
 };
 
-export function PlanCard({ draft, onApprove, onReplace, onCancel, onComment }: PlanCardProps): JSX.Element | null {
+/* ---------- 第 12 批：三版分数条 / AI 建议样式 ---------- */
+
+const variantsBlockStyle: CSSProperties = {
+  background: '#f9fafb',
+  border: '1px solid #e5e7eb',
+  borderRadius: 8,
+  padding: '8px 10px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+};
+
+const variantsTitleStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 0.3,
+};
+
+const variantRowBase: CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 6,
+  fontSize: 12,
+  padding: '4px 6px',
+  borderRadius: 6,
+  cursor: 'pointer',
+  color: '#374151',
+  border: '1px solid transparent',
+  background: 'transparent',
+  textAlign: 'left',
+};
+
+const variantRowSelected: CSSProperties = {
+  ...variantRowBase,
+  border: '1px solid #4A7C59',
+  background: '#fff',
+};
+
+const variantRowRecommendedText: CSSProperties = {
+  color: '#4A7C59',
+  fontWeight: 700,
+};
+
+const variantRowMeta: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+};
+
+const suggestionsBlockStyle: CSSProperties = {
+  background: '#f9fafb',
+  border: '1px solid #e5e7eb',
+  borderRadius: 8,
+  padding: '8px 10px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+};
+
+const suggestionsTitleStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 0.3,
+};
+
+const suggestionItemStyle: CSSProperties = {
+  fontSize: 12,
+  color: '#374151',
+  lineHeight: 1.5,
+};
+
+const suggestionReasonStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+};
+
+/** 把 aisleWidthM 格式化成一行人话；没有签到区时返回「通道不限」。 */
+function formatAisle(plan: ScoredPlan): string {
+  const w = plan.flow.aisleWidthM;
+  if (!Number.isFinite(w)) return '通道不限';
+  return `通道 ${w.toFixed(1)}m`;
+}
+
+export function PlanCard({
+  draft,
+  onApprove,
+  onReplace,
+  onCancel,
+  onComment,
+  plans,
+  recommendedId,
+  selectedId,
+  onSelectVariant,
+  suggestions,
+}: PlanCardProps): JSX.Element | null {
   const [comment, setComment] = useState('');
 
   const stages = useMemo(
@@ -153,6 +264,9 @@ export function PlanCard({ draft, onApprove, onReplace, onCancel, onComment }: P
     onComment(text);
     setComment('');
   };
+
+  const hasPlans = Array.isArray(plans) && plans.length > 0;
+  const hasSuggestions = Array.isArray(suggestions) && suggestions.length > 0;
 
   return (
     <section style={cardStyle} aria-label="规划草案">
@@ -186,6 +300,49 @@ export function PlanCard({ draft, onApprove, onReplace, onCancel, onComment }: P
           </div>
         );
       })}
+
+      {/* 第 12 批：三版分数小条——思考过程可见，推荐版高亮，可点击换版。 */}
+      {hasPlans && (
+        <div style={variantsBlockStyle}>
+          <div style={variantsTitleStyle}>三版布置打分</div>
+          {plans!.map((p) => {
+            const isRecommended = recommendedId === p.variantId;
+            const isSelected = selectedId === p.variantId;
+            const rowStyle = isSelected ? variantRowSelected : variantRowBase;
+            return (
+              <button
+                key={p.variantId}
+                type="button"
+                style={rowStyle}
+                onClick={() => onSelectVariant?.(p.variantId)}
+                aria-pressed={isSelected}
+              >
+                <span style={isRecommended ? variantRowRecommendedText : undefined}>
+                  {isRecommended ? '✅ 推荐 ' : ''}
+                  {isSelected ? '👉 选中 ' : ''}
+                  {p.label}版
+                </span>
+                <span style={variantRowMeta}>
+                  可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds} · 总分 {p.score}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 第 12 批：AI 建议卡——按受众/区类型/场地短边给人话提醒。 */}
+      {hasSuggestions && (
+        <div style={suggestionsBlockStyle}>
+          <div style={suggestionsTitleStyle}>AI 建议</div>
+          {suggestions!.map((s, i) => (
+            <div key={`${s.title}-${i}`} style={suggestionItemStyle}>
+              · {s.title}
+              <div style={suggestionReasonStyle}>{s.reason}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={buttonRowStyle}>
         <button type="button" style={primaryButtonStyle} onClick={onApprove}>
