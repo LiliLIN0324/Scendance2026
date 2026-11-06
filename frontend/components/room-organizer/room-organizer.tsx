@@ -1,4 +1,9 @@
 ﻿'use client';
+/*
+ * COLLAB.md 独占区（Qoder 侧只提需求）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
+ * 整景区视距下点云退化成锚点 POI，进到 100 m 内再挂/显示 splat。
+ * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
+ */
 
 import { PanelLeftClose } from '@/components/solid-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -53,6 +58,7 @@ import { useSceneLighting } from './hooks/use-scene-lighting';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
 import { useSplatPreview } from './hooks/use-splat-preview';
+import { useSplatLod } from './hooks/use-splat-lod';
 import type { SplatPosition, SplatTransformMode } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
@@ -95,6 +101,7 @@ import { cameraDistanceClamp } from './lib/camera-framing';
 import type { SceneAnchor } from './lib/types';
 import { useSceneZoom, SCENE_ZOOM_CLOSER_RATIO } from './hooks/use-scene-zoom';
 import { SceneGeoDots } from './panels/scene-geo-dots';
+import { SplatLodMarker } from './panels/splat-lod-marker';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
@@ -1516,6 +1523,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         floorIndex: entry.floorIndex ?? 0, roofCutoffY: floorElevation(layout.floors, (entry.floorIndex ?? 0) + 1) + (entry.position?.y ?? 0) - floorElevation(layout.floors, entry.floorIndex ?? 0) }];
     } catch { return []; }
   }), [environments, layout.floors]);
+  // 第 3 步：整景区视距 LOD。锚点 = 点云落位（geo 锚点投影到世界后即环境位移），
+  // 距离按锚点 metersPerUnit 折回真实米；只在整景区预设下启用，室内照旧。
+  const splatLodAnchor = environment ? {
+    x: environment.position?.x ?? 0,
+    z: environment.position?.z ?? 0,
+  } : null;
+  const splatLodEnabled = !!layout.researchArea?.presetId && !!environment;
+  const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
+  const { mode: splatLod, measured: splatLodMeasured } = useSplatLod({
+    isReady,
+    cameraRef,
+    controlsRef,
+    anchor: splatLodAnchor,
+    metersPerUnit: splatLodMetersPerUnit,
+    enabled: splatLodEnabled,
+  });
   const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat,
     setPosition: setSplatPosition, displayMode: splatDisplayMode, setDisplayMode: setSplatDisplayMode,
     setTransformMode: setSplatTransform, pickScene: pickSplatScene } = useSplatPreview({
@@ -1535,7 +1558,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     onPositionChange: onSplatPositionChange,
     otherScenes: otherSplatScenes,
     activeFloorIndex,
-    primaryVisible: (environment?.floorIndex ?? 0) === activeFloorIndex,
+    primaryVisible: (environment?.floorIndex ?? 0) === activeFloorIndex && splatLod !== 'poi',
     preserveCameraRef: preserveSplatCameraRef,
   });
   environmentPickerRef.current = pickSplatScene;
@@ -1551,10 +1574,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, isReady, sceneRef, invalidate]);
   splatPaintRef.current = paintSplatFrame;
   const restoredEnvironmentRef = useRef('');
+  // 第 3 步：整景区视距下自动挂载只记在这里，不 startSplat；进到 100 m 内再补挂。
+  const deferredEnvironmentRef = useRef<StoredEnvironment | null>(null);
   const selectEnvironment = useCallback((assetId: string, name: string, options?: { restoreItems?: boolean }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     const current = environmentsRef.current;
     if (current[0]?.assetId === assetId) return;
+    deferredEnvironmentRef.current = null;
     const liveLayout = layoutStore.getState().layout;
     const currentItems = liveLayout.floors.map(floor => floor.items.map(item => ({
       ...item,
@@ -1660,18 +1686,36 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setEnvironments(defaults);
   }, [environmentKey, layout.id, stopSplat]);
   // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
+  // 第 3 步：整景区视距（>200 m）下不解码点云，先挂锚点 POI；等到 <100 m 再补挂。
+  // 等 splatLodMeasured 才判断，避免相机/控件尚未就绪时把「还没量」误当成近景。
   useEffect(() => {
     if (!environment) return;
+    if (!isReady || !splatLodMeasured) return;
     const key = `${environmentKey}:${environment.assetId}`;
     if (restoredEnvironmentRef.current === key) return;
+    if (splatLod === 'poi') {
+      deferredEnvironmentRef.current = environment;
+      return;
+    }
     restoredEnvironmentRef.current = key;
+    deferredEnvironmentRef.current = null;
     restoreEnvironment(environment);
-  }, [environment, environmentKey, restoreEnvironment]);
+  }, [environment, environmentKey, restoreEnvironment, isReady, splatLodMeasured, splatLod]);
+  // 从整景区视距回到 100 m 内：把先前压住的自动挂载补上（只补一次）。
+  useEffect(() => {
+    if (!isReady || !splatLodMeasured || splatLod !== 'splat') return;
+    const deferred = deferredEnvironmentRef.current;
+    if (!deferred) return;
+    deferredEnvironmentRef.current = null;
+    restoredEnvironmentRef.current = `${environmentKey}:${deferred.assetId}`;
+    restoreEnvironment(deferred);
+  }, [isReady, splatLodMeasured, splatLod, environmentKey, restoreEnvironment]);
   const removeEnvironment = useCallback((assetId: string) => {
     const next = environmentsRef.current.filter(entry => entry.assetId !== assetId);
     environmentsRef.current = next;
     setEnvironments(next);
     restoredEnvironmentRef.current = '';
+    if (deferredEnvironmentRef.current?.assetId === assetId) deferredEnvironmentRef.current = null;
     if (next.length) writeEnvironments(layoutStore.getState().layout.id, next);
     else {
       clearEnvironment(layoutStore.getState().layout.id);
@@ -1683,6 +1727,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     setEnvironments([]);
     clearEnvironment(layoutStore.getState().layout.id);
     restoredEnvironmentRef.current = '';
+    deferredEnvironmentRef.current = null;
     stopSplat();
   }, [stopSplat]);
   const setEnvironmentFloor = useCallback((assetId: string, floorIndex: number) => {
@@ -1919,7 +1964,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     controlsRef,
     applyPreset,
     // 导出走实时那条渲染栈（点云背景 + 布置前景），否则成图里只剩布置。
-    paintFrame: paintSplatFrame,
+    paintFrame: (renderer, scene, camera) => paintSplatFrame(renderer, scene, camera),
     onImported: clearTransientSelection,
   });
 
@@ -2943,6 +2988,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               controlsRef={controlsRef}
               cameraReady={isReady}
               onPick={pickSceneGeoDot}
+            />
+            <SplatLodMarker
+              visible={splatLodEnabled && splatLod === 'poi'}
+              name={environment?.name ?? '扫描场地'}
+              anchor={splatLodAnchor}
+              metersPerUnit={splatLodMetersPerUnit}
+              cameraRef={cameraRef}
+              controlsRef={controlsRef}
+              toScreen={toScreen}
+              cameraReady={isReady}
             />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
