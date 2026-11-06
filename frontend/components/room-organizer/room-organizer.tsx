@@ -2754,8 +2754,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 aria-label="切换标注模式：区/线/距"
                 onClick={() => {
                   // 集成接线：规划标注模式循环 off→zone→route→measure→off；首次点击时开一份空草案。
+                  // door 是数据层新增（开门弧遮挡用），暂未接入画布循环按钮，从 UI 入口再开。
                   const order: Array<'off' | 'zone' | 'route' | 'measure'> = ['off', 'zone', 'route', 'measure'];
-                  const idx = order.indexOf(planAnnot.drawMode);
+                  const idx = order.indexOf(planAnnot.drawMode as 'off' | 'zone' | 'route' | 'measure');
                   const next = order[(idx + 1) % order.length];
                   if (!planAnnot.draft) planAnnot.startDraft();
                   planAnnot.setDrawMode(next);

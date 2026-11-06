@@ -32,6 +32,8 @@ vi.mock('./flow-constraints', () => ({
 // ---- mock human-factors：默认无 violation（避免现有用例被真实人体工学扣分干扰） ----
 vi.mock('./human-factors', () => ({
   evaluateHumanFactors: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
+  evaluateDoorSweep: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
+  evaluatePrivacyOrder: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
 }));
 
 // ---- plan-approve：保留真实导出，planZones 换成 vi.fn ----
