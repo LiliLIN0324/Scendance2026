@@ -222,6 +222,58 @@ const violationSoftStyle: CSSProperties = {
   lineHeight: 1.4,
 };
 
+/* ---------- SC-19/G1：版级可行性徽标 + 无推荐横幅样式 ---------- */
+
+/** 不可行（hard violation）徽标：琥珀色，沿用取消按钮色板，禁紫/禁靛。 */
+const variantInfeasibleBadgeStyle: CSSProperties = {
+  color: '#b45309',
+  fontSize: 11,
+  fontWeight: 600,
+  border: '1px solid #f3d5a4',
+  borderRadius: 999,
+  padding: '1px 8px',
+  whiteSpace: 'nowrap',
+};
+
+/** 缺关键数据（INSUFFICIENT_INPUT）徽标：灰底灰字。 */
+const variantInsufficientBadgeStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 600,
+  border: '1px solid #e5e7eb',
+  borderRadius: 999,
+  padding: '1px 8px',
+  whiteSpace: 'nowrap',
+};
+
+/** 推测门草案（draft_unverified）小字标签：灰色，不与不可行混用。 */
+const variantDraftMetaStyle: CSSProperties = {
+  color: '#9ca3af',
+  fontSize: 11,
+};
+
+/** REC=null 横幅：所有版本都有硬冲突时，先说「没有可推荐方案」。 */
+const noRecommendBannerStyle: CSSProperties = {
+  borderLeft: '3px solid #b45309',
+  background: '#fff7ed',
+  padding: '6px 10px',
+  fontSize: 12,
+  color: '#92400e',
+  borderRadius: 4,
+  lineHeight: 1.5,
+};
+
+/** feasibilityStatus → 版级徽标文案；FEASIBLE 不出徽标。 */
+function feasibilityBadge(p: ScoredPlan): { text: string; style: CSSProperties } | null {
+  if (p.feasibilityStatus === 'INSUFFICIENT_INPUT') {
+    return { text: '⚠ 缺尺寸未核验', style: variantInsufficientBadgeStyle };
+  }
+  if (!p.feasible) {
+    return { text: '⛔ 不可行', style: variantInfeasibleBadgeStyle };
+  }
+  return null;
+}
+
 const suggestionsBlockStyle: CSSProperties = {
   background: '#f9fafb',
   border: '1px solid #e5e7eb',
@@ -305,6 +357,20 @@ export function PlanCard({
 
   const hasPlans = Array.isArray(plans) && plans.length > 0;
   const hasSuggestions = Array.isArray(suggestions) && suggestions.length > 0;
+  // SC-19/G1：三版都有硬冲突（父组件推荐版为空）时，先明说「没有可推荐方案」，
+  // 再列硬冲突清单——不能让用户对着一排看似正常的分数条自己猜。
+  const noRecommendedPlan = hasPlans && !recommendedId;
+  const hardConflictSummary = noRecommendedPlan
+    ? (() => {
+        const seen = new Set<string>();
+        for (const p of plans!) {
+          for (const v of Array.isArray(p.violations) ? p.violations : []) {
+            if (v.severity === 'hard') seen.add(v.message);
+          }
+        }
+        return [...seen].slice(0, 4);
+      })()
+    : [];
 
   return (
     <section style={cardStyle} aria-label="规划草案">
@@ -343,6 +409,14 @@ export function PlanCard({
       {hasPlans && (
         <div style={variantsBlockStyle}>
           <div style={variantsTitleStyle}>三版布置打分</div>
+          {noRecommendedPlan && (
+            <div style={noRecommendBannerStyle} data-testid="plan-card-no-recommendation">
+              三版都有硬冲突，没有可推荐方案：
+              {hardConflictSummary.length > 0
+                ? hardConflictSummary.map((m, i) => <div key={`hc-${i}`}>· {m}</div>)
+                : '请调整标注或场地尺寸'}
+            </div>
+          )}
           {plans!.map((p) => {
             // 防御：reasons 为空数组时，这个 plan 没法向用户解释为什么推荐，
             // 哪怕它被父组件标成 recommendedId 也不渲染「✅ 推荐」标签。
@@ -357,6 +431,9 @@ export function PlanCard({
               ? p.violations.filter((v) => v.severity === 'soft')
               : [];
             const hasViolations = hardViolations.length > 0 || softViolations.length > 0;
+            // G1 版级出口：不可行 / 缺尺寸出版级徽标；推测门草案出灰色小字。
+            const badge = feasibilityBadge(p);
+            const isDraft = p.assurance === 'draft_unverified';
             return (
               <div key={p.variantId} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <button
@@ -370,12 +447,14 @@ export function PlanCard({
                     {isSelected ? '👉 选中 ' : ''}
                     {p.label}版
                   </span>
+                  {badge && <span style={badge.style} data-testid={`plan-variant-badge-${p.variantId}`}>{badge.text}</span>}
                   <span style={variantRowMeta}>
                     可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds}
                   </span>
                 </button>
                 <div style={variantSubScoreStyle}>
                   容量 {p.subScores.capacity} · 动线 {p.subScores.flow} · 人体 {p.subScores.ergonomics}
+                  {isDraft && <span style={variantDraftMetaStyle} data-testid="plan-card-draft-unverified"> · 门未确认，待核验草案</span>}
                 </div>
                 {hasViolations && (
                   <div style={variantViolationsWrapStyle}>
