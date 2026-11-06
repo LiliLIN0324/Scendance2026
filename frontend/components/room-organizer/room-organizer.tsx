@@ -143,7 +143,14 @@ import { PlanCard } from './panels/plan-card';
 import { estimateCapacity } from '@/lib/capacity-meter';
 import { computeBingoScore } from '@/lib/bingo-score';
 import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
-import { planZones } from '@/lib/plan-approve';
+// 第 12 批：三版打分 + 动线约束 + AI 建议（纯函数层，已独立测试）。
+import {
+  generateScoredPlans,
+  pickRecommendedPlan,
+  type ScoredPlan,
+  type PlanVariantId,
+} from '@/lib/plan-scoring';
+import { generateSuggestions, type ActivitySuggestion } from '@/lib/suggestions';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
 import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -217,6 +224,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [draftPoints, setDraftPoints] = useState<PlanPoint[]>([]);
   // 第 11 批：当前要画的 zone 语义类型（决定批准时落什么家具）。
   const [zoneType, setZoneType] = useState<ZoneSemanticType>('roundtable');
+  // 第 12 批：三版打分里用户手动选中的布置版本；默认适中版，批准时按它落家具。
+  const [selectedVariantId, setSelectedVariantId] = useState<PlanVariantId>('balanced');
   // canvas 尺寸变化（view 切到 2D / 窗口缩放）时 bump，触发 overlay 重算 transform。
   const [overlayTick, setOverlayTick] = useState(0);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
@@ -2591,6 +2600,39 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     ? `本场上限 ${capacityEstimate.maxItems} 件 · 已放 ${capacityEstimate.placedItems} 件`
     : '本场上限 —';
   const capacityOverloaded = !!capacityEstimate && capacityEstimate.ratio > 0.9;
+
+  // 第 12 批：「能摆 → 会摆」三版打分。draft.annotations 里的 zone 标注跑三档密度
+  // （松/适中/密），每版独立打分，父组件把分数条 + 推荐版传给 PlanCard。
+  // 纯函数，没有副作用，每次 render 重算即可（zone 数量小）。
+  const draftAnnotations = planAnnot.draft?.annotations ?? [];
+  const zoneAnnotationsForScoring = draftAnnotations.filter((a) => a.kind === 'zone');
+  const scoredPlans: ScoredPlan[] = zoneAnnotationsForScoring.length > 0
+    ? generateScoredPlans(zoneAnnotationsForScoring)
+    : [];
+  const recommendedPlan: ScoredPlan | null = scoredPlans.length > 0
+    ? pickRecommendedPlan(scoredPlans)
+    : null;
+  const effectiveSelectedPlan: ScoredPlan | null =
+    scoredPlans.find((p) => p.variantId === selectedVariantId) ?? recommendedPlan;
+  // 第 12 批：AI 建议（受众/区类型/场地短边命中式）。audience 本期最小口子传空，
+  // TODO: 接活动画像 audience 字段后填入。
+  const zoneTypesForSuggestions = [
+    ...new Set(
+      zoneAnnotationsForScoring.map((a) => a.zoneType ?? 'roundtable'),
+    ),
+  ] as ZoneSemanticType[];
+  const roomShortSideM = (typeof layout.width === 'number' && typeof layout.height === 'number')
+    ? Math.min(layout.width, layout.height)
+    : undefined;
+  const audienceForSuggestions = '';
+  const activitySuggestions: ActivitySuggestion[] = zoneAnnotationsForScoring.length > 0
+    ? generateSuggestions({
+        audience: audienceForSuggestions,
+        zoneTypes: zoneTypesForSuggestions,
+        ...(typeof roomShortSideM === 'number' ? { roomShortSideM } : {}),
+      })
+    : [];
+
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -2928,6 +2970,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
                 <PlanCard
                   draft={planAnnot.draft}
+                  plans={scoredPlans}
+                  recommendedId={recommendedPlan?.variantId}
+                  selectedId={effectiveSelectedPlan?.variantId}
+                  onSelectVariant={setSelectedVariantId}
+                  suggestions={activitySuggestions}
                   onApprove={() => {
                     const draft = planAnnot.draft;
                     if (!draft) return;
@@ -2937,7 +2984,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                       planAnnot.clearDraft();
                       return;
                     }
-                    const { placements, skipped } = planZones(zoneAnnotations, 0.5);
+                    // 第 12 批：按用户选中的版本（默认推荐版）落家具，不再写死 0.5 密度。
+                    const plan = effectiveSelectedPlan;
+                    if (!plan) {
+                      notify('三版打分未生成，请重新画标注', 'error');
+                      return;
+                    }
+                    const placements = plan.placements;
+                    const skipped = plan.skipped;
                     if (placements.length === 0) {
                       notify(
                         skipped.map((s) => s.reason).join('；') || '标注区太小，摆不下家具，请扩大标注范围',
@@ -3004,8 +3058,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                         ].join('、')}）`
                       : '';
                     const skippedText = skipped.length ? `；${skipped.map((s) => s.reason).join('；')}` : '';
+                    // 第 12 批：回执带上推荐版标签 + 前两条打分理由，让用户知道为什么是这版。
+                    const recommendTag = recommendedPlan
+                      ? `；推荐${recommendedPlan.label}版（${recommendedPlan.reasons.slice(0, 2).join('；')}）`
+                      : '';
                     notify(
-                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件（${doneText}），${movedCount} 处堵点已自动挪开${refusedText}${skippedText}`,
+                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件（${doneText}）${recommendTag}；${movedCount} 处堵点已自动挪开${refusedText}${skippedText}`,
                       'success',
                     );
                     planAnnot.clearDraft();
