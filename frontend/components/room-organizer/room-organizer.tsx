@@ -1900,7 +1900,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   });
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
-  // docs/49 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
+  // docs/19 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
   // 距离=max(8m, 包围盒最长边×2.5)，俯角 42.5°；打断与推近规则在 use-scene-zoom 里。
   const { zoomToScene } = useSceneZoom({ cameraRef, controlsRef, invalidate });
   const [focusedVenueId, setFocusedVenueId] = useState<string | null>(null);
@@ -2401,7 +2401,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome]);
 
   /**
-   * docs/49 地理底图：只动 researchArea 与场景锚点，走正式历史；输入与自动铺图共用这一条路。
+   * docs/19 地理底图：只动 researchArea 与场景锚点，走正式历史；输入与自动铺图共用这一条路。
    *
    * 架构定案：地图是 3D 场景里的一个渲染层，场景坐标 ↔ 地理坐标的唯一变换是场景锚点。
    * 铺图 = 把场景重新锚到那片真实位置（锚点原点 = 底图中心经纬度）；朝向沿用现有锚点
@@ -2479,7 +2479,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     pendingVenueZoomRef.current = venue;
   }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId]);
 
-  // 场景点位（docs/49 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
+  // 场景点位（docs/19 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
   const sceneGeoDots = useMemo(() => {
     if (view.view2D || !layout.researchArea) return [];
     return listScannedVenues().flatMap(venue => {
@@ -2527,7 +2527,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       setSplatShellKeptFor(splatState.assetId);
     }
   }, [splatState, onApplyCreative]);
-  // docs/49 地理底图：场地扫描资产带 geo（拍摄位置）就自动铺卫星底图，重建物落在真实位置上；
+  // docs/19 地理底图：场地扫描资产带 geo（拍摄位置）就自动铺卫星底图，重建物落在真实位置上；
   // 手动/调研标的底图（无 scanAssetId 标记）永远不被自动逻辑覆盖；新场地没 geo 就撤掉自己铺的那张。
   const scanBasemapAssetRef = useRef('');
   useEffect(() => {

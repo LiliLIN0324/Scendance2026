@@ -788,6 +788,7 @@ body {
 .sc-geo-basemap .sc-geo-chip strong { color: var(--wk-ink); font-weight: 500; }
 .sc-geo-basemap .sc-geo-chip small { color: var(--wk-muted); }
 .sc-geo-basemap .sc-geo-notice { font-size: var(--fs-cap); color: var(--warn); background: var(--paper); border: 1px solid var(--wk-hair); border-radius: var(--r-sm); padding: 3px 8px; }
+.sc-geo-basemap .sc-geo-attribution { font-size: var(--fs-cap); color: var(--wk-muted); background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: 999px; padding: 3px 9px; opacity: 0.9; }
 .sc-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sc-canvas-dot { color: var(--faint); }
 .sc-canvas-tip { position: absolute; right: 20px; top: 17px; padding-right: 24px; pointer-events: none; }
@@ -1242,6 +1243,11 @@ body {
 .sc-lux-direct textarea { resize: vertical; }
 .sc-lux-direct input[type='file'] { width: 100%; min-width: 0; font: inherit; font-size: var(--sc-type-meta); }
 .sc-lux-direct-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); color: var(--sc-ink); overflow-wrap: anywhere; }
+/* 选址输入联想：挂在搜索行（position:relative）下方的浮层，打字时不把地图挤下去。 */
+.sc-amap-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; margin: 0; padding: 4px; list-style: none; display: flex; flex-direction: column; gap: 2px; background: var(--paper); border: 1px solid var(--sc-line); border-radius: var(--r-md); box-shadow: 0 12px 30px rgba(20, 20, 22, 0.14); max-height: 240px; overflow-y: auto; }
+.sc-amap-suggest button { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--r-sm); background: none; font: inherit; color: var(--sc-ink); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.sc-amap-suggest button .sc-note { color: var(--sc-muted); }
+.sc-amap-suggest button[aria-selected='true'], .sc-amap-suggest button:hover { background: var(--sc-accent-soft, var(--plane)); }
 .sc-aholo-path { margin: 0; padding: 8px 10px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--wk-plane, var(--plane)); color: var(--sc-ink); font-size: var(--sc-type-meta); line-height: 1.55; }
 .sc-aholo-from-capture { margin: 0; }
 .sc-aholo-tabs { display: flex; align-items: stretch; border-bottom: 1px solid var(--sc-line); }

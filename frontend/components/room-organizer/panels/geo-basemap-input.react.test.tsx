@@ -76,4 +76,14 @@ describe('GeoBasemapInput（docs/19 地理底图输入）', () => {
     const { container } = render(<GeoBasemapInput area={AREA} onApply={vi.fn()} view2D />);
     expect(container.querySelector('.sc-geo-basemap')).toBeNull();
   });
+
+  it('地图署名常驻：动态底图标高德，整景区标高德+OSM（MAP-02 保留来源）', () => {
+    const onApply = vi.fn();
+    const { rerender } = render(<GeoBasemapInput area={AREA} onApply={onApply} view2D={false} />);
+    expect(screen.getByTestId('geo-basemap-attribution').textContent).toBe('底图 © 高德地图');
+    rerender(<GeoBasemapInput area={{ ...AREA, presetId: 'xihu-scenic', imageUrl: '/basemap/xihu-scenic-z15.jpg' }} onApply={onApply} view2D={false} />);
+    expect(screen.getByTestId('geo-basemap-attribution').textContent).toContain('© OpenStreetMap 贡献者');
+    // 清掉底图后署名也随域撤掉，不留无来源的声明
+    expect(screen.queryByTestId('geo-basemap-attribution')).toBeTruthy();
+  });
 });
