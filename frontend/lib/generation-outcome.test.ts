@@ -4,6 +4,7 @@ import {
   combineOutcomes,
   countByCode,
   emptyOutcome,
+  hasOutcomeChanges,
   outcomeSummary,
 } from './generation-outcome';
 import type { GenerationOutcome, OutcomeEntry } from './generation-outcome';
@@ -122,5 +123,26 @@ describe('combineOutcomes', () => {
     expect(merged.refused).toEqual([]);
     expect(merged.skipped).toEqual([]);
     expect(merged.scopeEmpty).toBe('NO_SPOT');
+  });
+});
+
+describe('hasOutcomeChanges', () => {
+  it('is false for an empty ledger (场地壳体 resize 那条路不该写「本次结果」)', () => {
+    expect(hasOutcomeChanges<FakeItem>({ placed: [], refused: [], skipped: [] })).toBe(false);
+  });
+
+  it('is true when anything was placed, refused or skipped', () => {
+    expect(hasOutcomeChanges<FakeItem>({ placed: [item('a')], refused: [], skipped: [] })).toBe(true);
+    expect(hasOutcomeChanges<FakeItem>({ placed: [], refused: [makeEntry('x', 'OUT_OF_BOUNDS', '越界')], skipped: [] })).toBe(true);
+    expect(hasOutcomeChanges<FakeItem>({ placed: [], refused: [], skipped: [makeEntry('y', 'LOCKED', '锁着')] })).toBe(true);
+  });
+
+  it('只看三个桶，不看 report —— 报告本身不算「动了东西」', () => {
+    expect(hasOutcomeChanges<FakeItem>({
+      placed: [],
+      refused: [],
+      skipped: [],
+      report: { durationMs: 120 },
+    })).toBe(false);
   });
 });

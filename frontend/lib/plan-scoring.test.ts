@@ -1,0 +1,427 @@
+/**
+ * plan-scoring.ts 单测。
+ *
+ * 策略：
+ * - flow-constraints 整体 mock（并行任务在写，本测试只关心打分公式是否正确套用返回值）；
+ * - plan-approve 部分 mock（保留真实导出，planZones 换成可 mock 的 vi.fn）；
+ * - 8 例以上，覆盖 spec 列出的全部验收点。
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ---- mock flow-constraints：默认无签到区、动线合规、可达性全可达 ----
+vi.mock('./flow-constraints', () => ({
+  AISLE_MIN_NORMAL: 1.2,
+  AISLE_MIN_WHEELCHAIR: 1.5,
+  evaluateFlow: vi.fn(() => ({
+    aisleWidthM: Infinity,
+    wheelChairPassable: true,
+    normalPassable: true,
+    checkinBlocked: false,
+    violations: [] as string[],
+  })),
+  evaluateReachability: vi.fn(() => ({
+    reachableZones: [] as string[],
+    unreachableZones: [] as string[],
+    violations: [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>,
+  })),
+}));
+
+// ---- mock human-factors：默认无 violation（避免现有用例被真实人体工学扣分干扰） ----
+vi.mock('./human-factors', () => ({
+  evaluateHumanFactors: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
+}));
+
+// ---- plan-approve：保留真实导出，planZones 换成 vi.fn ----
+vi.mock('./plan-approve', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./plan-approve')>();
+  return {
+    ...actual,
+    planZones: vi.fn(actual.planZones),
+  };
+});
+
+import { evaluateFlow, evaluateReachability } from './flow-constraints';
+import { evaluateHumanFactors } from './human-factors';
+import { planZones, type ZoneFurniturePlacement } from './plan-approve';
+import { generateScoredPlans, pickRecommendedPlan, detectFurnitureOverlap } from './plan-scoring';
+import type { PlanAnnotation } from './plan-annotation';
+
+const mockPlanZones = vi.mocked(planZones);
+const mockEvaluateFlow = vi.mocked(evaluateFlow);
+const mockReach = vi.mocked(evaluateReachability);
+const mockHumanFactors = vi.mocked(evaluateHumanFactors);
+
+beforeEach(() => {
+  mockPlanZones.mockReset();
+  mockPlanZones.mockReturnValue({ placements: [], skipped: [] });
+  mockEvaluateFlow.mockReset();
+  mockEvaluateFlow.mockImplementation(() => ({
+    aisleWidthM: Infinity,
+    wheelChairPassable: true,
+    normalPassable: true,
+    checkinBlocked: false,
+    violations: [],
+  }));
+  mockReach.mockReset();
+  mockReach.mockReturnValue({ reachableZones: [], unreachableZones: [], violations: [] });
+  mockHumanFactors.mockReset();
+  mockHumanFactors.mockReturnValue([]);
+});
+
+/** 构造一个 zone 标注。 */
+function makeZone(id: string, opts: Partial<{
+  x: number; z: number; w: number; d: number; zoneType: 'roundtable'|'checkin'|'photo'|'rest'; label: string;
+}> = {}): PlanAnnotation {
+  return {
+    id,
+    kind: 'zone',
+    label: opts.label ?? id,
+    geometry: {
+      kind: 'rect',
+      x: opts.x ?? 0,
+      z: opts.z ?? 0,
+      width: opts.w ?? 4,
+      depth: opts.d ?? 4,
+    },
+    stageNo: 1,
+    zoneType: opts.zoneType ?? 'roundtable',
+  };
+}
+
+const CHAIR_SPEC = { type: 'dining-chair', name: '餐椅', category: 'seating', width: 0.45, depth: 0.45, height: 0.9, color: '#5D4037', icon: '🪑' };
+const TABLE_SPEC = { type: 'dining-table', name: '圆桌', category: 'tables', width: 1.2, depth: 1.2, height: 0.75, color: '#A0522D', icon: '🟫' };
+const BENCH_SPEC = { type: 'bench', name: '长椅', category: 'rest', width: 1.8, depth: 0.45, height: 0.45, color: '#8D6E63', icon: '🪑' };
+
+function chairAt(x: number, z: number, zoneId = 'z1'): ZoneFurniturePlacement {
+  return { spec: { ...CHAIR_SPEC }, x, z, rotation: 0, zoneId, zoneType: 'roundtable' };
+}
+
+describe('generateScoredPlans — 空输入', () => {
+  it('空 annotations → 三版 placements 都空，pickRecommendedPlan 返回 balanced', () => {
+    const plans = generateScoredPlans([]);
+    expect(plans).toHaveLength(3);
+    expect(plans.map(p => p.variantId)).toEqual(['sparse', 'balanced', 'dense']);
+    for (const p of plans) {
+      expect(p.placements).toEqual([]);
+      expect(p.skipped).toEqual([]);
+      expect(p.capacitySeats).toBe(0);
+      expect(p.outOfBounds).toBe(0);
+      expect(p.score).toBe(0);
+      expect(p.reasons.length).toBeGreaterThanOrEqual(2);
+    }
+    const rec = pickRecommendedPlan(plans);
+    expect(rec.variantId).toBe('balanced');
+  });
+});
+
+describe('capacitySeats — 按家具名计数', () => {
+  it('4 餐椅 + 1 长椅 = 6 座；圆桌本身不算座', () => {
+    // 椅放在圆桌周环 0.9m 处（与桌边留 0.075m > 0.02m 容差，不触发 BBOX_OVERLAP）。
+    const fakePlacements: ZoneFurniturePlacement[] = [
+      { spec: { ...TABLE_SPEC }, x: 1, z: 1, rotation: 0, zoneId: 'z1', zoneType: 'roundtable' },
+      chairAt(1, 0.1, 'z1'),
+      chairAt(1, 1.9, 'z1'),
+      chairAt(0.1, 1, 'z1'),
+      chairAt(1.9, 1, 'z1'),
+      { spec: { ...BENCH_SPEC }, x: 7, z: 0, rotation: 0, zoneId: 'z2', zoneType: 'rest' },
+    ];
+    mockPlanZones.mockReturnValue({ placements: fakePlacements, skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1'), makeZone('z2', { x: 6, z: 0, zoneType: 'rest' })]);
+    for (const p of plans) {
+      expect(p.capacitySeats).toBe(6);
+      expect(p.outOfBounds).toBe(0);
+      expect(p.score).toBe(6);
+      expect(p.reasons[0]).toContain('可坐 6 座');
+      expect(p.reasons.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+});
+
+describe('skipped — 区被跳过时扣分并说人话', () => {
+  it('有 skipped → score -= 2*n，reasons 含跳过原因', () => {
+    mockPlanZones.mockReturnValue({
+      placements: [],
+      skipped: [{ zoneId: 'z0', label: '小签到', reason: '签到区至少要 1.8×1.4m（台面+工作人员座椅）' }],
+    });
+    const plans = generateScoredPlans([makeZone('z0', { zoneType: 'checkin' })]);
+    for (const p of plans) {
+      expect(p.skipped.length).toBe(1);
+      expect(p.score).toBe(-2);
+      expect(p.reasons.some(r => r.includes('被跳过'))).toBe(true);
+      expect(p.reasons.some(r => r.includes('签到区至少要'))).toBe(true);
+    }
+  });
+});
+
+describe('outOfBounds — 越界件数', () => {
+  it('某件 center 超出 zone rect +0.05 → outOfBounds=1，扣 3 分', () => {
+    // zone rect: [0,0] 到 [3,3]。件 1 在 (1.5,1.5) 区内；件 2 在 (3.5,1.5) 超出。
+    const zone = makeZone('z1', { x: 0, z: 0, w: 3, d: 3 });
+    const fakePlacements: ZoneFurniturePlacement[] = [
+      { spec: { ...TABLE_SPEC }, x: 1.5, z: 1.5, rotation: 0, zoneId: 'z1', zoneType: 'roundtable' },
+      chairAt(3.5, 1.5, 'z1'),
+    ];
+    mockPlanZones.mockReturnValue({ placements: fakePlacements, skipped: [] });
+    const plans = generateScoredPlans([zone]);
+    for (const p of plans) {
+      expect(p.outOfBounds).toBe(1);
+      expect(p.capacitySeats).toBe(1);
+      expect(p.score).toBe(1 - 3);
+      expect(p.reasons.some(r => r.includes('越界'))).toBe(true);
+    }
+  });
+
+  it('找不到 zoneId 的 placement 容错不计入越界', () => {
+    mockPlanZones.mockReturnValue({
+      placements: [chairAt(99, 99, 'no-such-zone')],
+      skipped: [],
+    });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    for (const p of plans) {
+      expect(p.outOfBounds).toBe(0);
+      expect(p.capacitySeats).toBe(1);
+    }
+  });
+});
+
+describe('flow penalty — 动线扣分', () => {
+  it('「轮椅过不去」且 normalPassable=false → -5；checkinBlocked → -8', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    mockEvaluateFlow.mockImplementation(() => ({
+      aisleWidthM: 0.8,
+      wheelChairPassable: false,
+      normalPassable: false,
+      checkinBlocked: true,
+      violations: ['签到台前通道只剩 0.8m，轮椅过不去', '签到区入口被家具贴脸堵住'],
+    }));
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
+    for (const p of plans) {
+      // capacity=1, OOB=0, skipped=0, flow = -5 (轮椅) + -8 (blocked) = -13
+      expect(p.score).toBe(1 - 13);
+      expect(p.reasons.some(r => r.includes('轮椅过不去'))).toBe(true);
+    }
+  });
+
+  it('「轮椅过不去」但 normalPassable=true → -2', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    mockEvaluateFlow.mockImplementation(() => ({
+      aisleWidthM: 1.3,
+      wheelChairPassable: false,
+      normalPassable: true,
+      checkinBlocked: false,
+      violations: ['签到台前通道 1.3m，轮椅过不去，但行人能过'],
+    }));
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
+    for (const p of plans) {
+      // sparse/balanced: capacity=1, 轮椅过不去但行人能过 → -2 → score=-1
+      // dense: 通道收紧 1.3-0.3=1.0m，normalPassable 变 false → -5 → score=-4
+      if (p.variantId === 'dense') {
+        expect(p.score).toBe(1 - 5);
+      } else {
+        expect(p.score).toBe(1 - 2);
+      }
+    }
+  });
+});
+
+describe('pickRecommendedPlan — 排序、并列、不可变', () => {
+  it('dense 容量大但通道违规扣分后更低 → balanced 胜出', () => {
+    mockPlanZones.mockImplementation((_a, density) => {
+      const isDense = Math.abs(density - 0.8) < 1e-6;
+      if (isDense) {
+        // 4 椅分散到 1.5m 网格，避免触发 BBOX_OVERLAP（本用例只钉 flow 扣分）。
+        return {
+          placements: [chairAt(0, 0), chairAt(1.5, 0), chairAt(0, 1.5), chairAt(1.5, 1.5)],
+          skipped: [],
+        };
+      }
+      return { placements: [chairAt(1, 1)], skipped: [] };
+    });
+    mockEvaluateFlow.mockImplementation((placements) => {
+      if (placements.length >= 4) {
+        return {
+          aisleWidthM: 0.8, wheelChairPassable: false, normalPassable: false, checkinBlocked: false,
+          violations: ['签到台前通道只剩 0.8m，轮椅过不去'],
+        };
+      }
+      return { aisleWidthM: 1.6, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] };
+    });
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
+    // sparse: 1 座, clean → 1
+    // balanced: 1 座, clean → 1
+    // dense: 4 座, -5 → -1
+    expect(plans[0].score).toBe(1);
+    expect(plans[1].score).toBe(1);
+    expect(plans[2].score).toBe(-1);
+    const rec = pickRecommendedPlan(plans);
+    expect(rec.variantId).toBe('balanced'); // 并列时 balanced > sparse
+  });
+
+  it('并列 score → 优先 balanced > sparse > dense（乱序输入也成立）', () => {
+    const base = {
+      placements: [], skipped: [], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'], violations: [] as any[],
+      flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
+    };
+    const plans = [
+      { ...base, variantId: 'sparse' as const, label: '松', density: 0.25 },
+      { ...base, variantId: 'balanced' as const, label: '适中', density: 0.5 },
+      { ...base, variantId: 'dense' as const, label: '密', density: 0.8 },
+    ];
+    expect(pickRecommendedPlan(plans).variantId).toBe('balanced');
+    const shuffled = [plans[2], plans[0], plans[1]];
+    expect(pickRecommendedPlan(shuffled).variantId).toBe('balanced');
+  });
+
+  it('pickRecommendedPlan 不修改输入数组（不可变）', () => {
+    const base = {
+      placements: [], skipped: [], outOfBounds: 0, reasons: ['x'], violations: [] as any[],
+      flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
+    };
+    const plans = [
+      { ...base, variantId: 'sparse' as const, label: '松', density: 0.25, capacitySeats: 1, score: 1 },
+      { ...base, variantId: 'balanced' as const, label: '适中', density: 0.5, capacitySeats: 5, score: 5 },
+      { ...base, variantId: 'dense' as const, label: '密', density: 0.8, capacitySeats: 3, score: 3 },
+    ];
+    const snapshot = plans.map(p => ({ ...p }));
+    pickRecommendedPlan(plans);
+    expect(plans).toEqual(snapshot);
+  });
+});
+
+describe('reasons — 每版至少 2 条人话', () => {
+  it('干净有签到区场景 → 含容量 + 正面通道描述', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    mockEvaluateFlow.mockImplementation(() => ({
+      aisleWidthM: 1.6, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [],
+    }));
+    const plans = generateScoredPlans([makeZone('z1', { zoneType: 'checkin' })]);
+    for (const p of plans) {
+      expect(p.reasons.length).toBeGreaterThanOrEqual(2);
+      expect(p.reasons[0]).toContain('可坐 1 座');
+      // sparse/balanced 通道 1.6m 轮椅可过；dense 收紧到 1.3m 行人能过
+      if (p.variantId === 'dense') {
+        expect(p.reasons.some(r => r.includes('行人能过'))).toBe(true);
+      } else {
+        expect(p.reasons.some(r => r.includes('轮椅可过'))).toBe(true);
+      }
+    }
+  });
+});
+
+describe('P0 接入：violations 字段 + ZONE_UNREACHABLE 扣分', () => {
+  it('每个 ScoredPlan 都带 violations 数组（类型正确、可空）', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    expect(plans).toHaveLength(3);
+    for (const p of plans) {
+      expect(Array.isArray(p.violations)).toBe(true);
+      for (const v of p.violations) {
+        expect(v).toHaveProperty('code');
+        expect(v).toHaveProperty('severity');
+        expect(v).toHaveProperty('message');
+      }
+    }
+  });
+
+  it('ZONE_UNREACHABLE hard violation → 每条扣 5 分（围死 vs 开放分差 ≥5）', () => {
+    // 开放版：mock reach 返回空 violations
+    mockReach.mockReturnValue({ reachableZones: ['z1'], unreachableZones: [], violations: [] });
+    mockHumanFactors.mockReturnValue([]);
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    const openPlans = generateScoredPlans([makeZone('z1')]);
+
+    // 围死版：mock reach 返回一条 ZONE_UNREACHABLE
+    mockReach.mockReturnValue({
+      reachableZones: [],
+      unreachableZones: ['z1'],
+      violations: [{ code: 'ZONE_UNREACHABLE', severity: 'hard', zoneId: 'z1', message: '「休息区」被桌椅围死，人走不过去' }],
+    });
+    const blockedPlans = generateScoredPlans([makeZone('z1')]);
+
+    for (let i = 0; i < 3; i++) {
+      const openScore = openPlans[i]!.score;
+      const blockedScore = blockedPlans[i]!.score;
+      expect(openScore - blockedScore).toBeGreaterThanOrEqual(5);
+      expect(blockedPlans[i]!.violations.some((v) => v.code === 'ZONE_UNREACHABLE')).toBe(true);
+    }
+  });
+
+  it('CHAIR_GAP hard → 每条 -1；soft violation 不扣分只进 reasons', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    // 两条 hard CHAIR_GAP + 一条 soft CHECKIN_QUEUE
+    mockHumanFactors.mockReturnValue([
+      { code: 'CHAIR_GAP', severity: 'hard', message: '餐椅间距仅 0.50m' },
+      { code: 'CHAIR_GAP', severity: 'hard', message: '餐椅间距仅 0.40m' },
+      { code: 'CHECKIN_QUEUE', severity: 'soft', message: '签到台前排队缓冲不足' },
+    ]);
+    mockReach.mockReturnValue({ reachableZones: [], unreachableZones: [], violations: [] });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    for (const p of plans) {
+      // capacity=1, 两条 CHAIR_GAP 各 -1 → score = 1 - 2 = -1；soft 不扣
+      expect(p.score).toBe(-1);
+      expect(p.violations.filter((v) => v.code === 'CHAIR_GAP')).toHaveLength(2);
+      expect(p.violations.some((v) => v.code === 'CHECKIN_QUEUE' && v.severity === 'soft')).toBe(true);
+      expect(p.reasons.some((r) => r.includes('排队缓冲'))).toBe(true);
+    }
+  });
+});
+
+describe('P1 家具 footprint AABB 重叠（BBOX_OVERLAP）', () => {
+  it('4 椅故意叠在同一坐标 → 至少 1 条 BBOX_OVERLAP，score 比正常摆放低 ≥2', () => {
+    // 正常版：4 椅分散到 1.5m 网格（椅边长 0.45m，间距 1.5m ≫ 0.02m 容差）。
+    const normalPlacements = [
+      chairAt(0, 0),
+      chairAt(1.5, 0),
+      chairAt(0, 1.5),
+      chairAt(1.5, 1.5),
+    ];
+    mockPlanZones.mockReturnValue({ placements: normalPlacements, skipped: [] });
+    const normalPlans = generateScoredPlans([makeZone('z1')]);
+
+    // 重叠版：4 椅全压在 (0,0)。
+    const stackedPlacements = [
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+    ];
+    mockPlanZones.mockReturnValue({ placements: stackedPlacements, skipped: [] });
+    const stackedPlans = generateScoredPlans([makeZone('z1')]);
+
+    for (let i = 0; i < 3; i++) {
+      const stacked = stackedPlans[i]!;
+      const normal = normalPlans[i]!;
+      expect(stacked.violations.some((v) => v.code === 'BBOX_OVERLAP')).toBe(true);
+      // 6 对重叠 × -2 = -12，远大于 2 的下限。
+      expect(normal.score - stacked.score).toBeGreaterThanOrEqual(2);
+      expect(stacked.reasons.some((r) => r.includes('互相压住'))).toBe(true);
+    }
+  });
+
+  it('两椅中心距 1.5m（不重叠）→ 无 BBOX_OVERLAP', () => {
+    mockPlanZones.mockReturnValue({
+      placements: [chairAt(0, 0), chairAt(1.5, 0)],
+      skipped: [],
+    });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    for (const p of plans) {
+      expect(p.violations.some((v) => v.code === 'BBOX_OVERLAP')).toBe(false);
+    }
+  });
+
+  it('detectFurnitureOverlap 直接调用：同坐标 4 椅 → 6 对 violation', () => {
+    const placements = [
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+      chairAt(0, 0),
+    ];
+    const vs = detectFurnitureOverlap(placements);
+    expect(vs.length).toBe(6);
+    for (const v of vs) {
+      expect(v.code).toBe('BBOX_OVERLAP');
+      expect(v.severity).toBe('hard');
+    }
+  });
+});
