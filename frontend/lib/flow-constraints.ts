@@ -180,6 +180,179 @@ function rectSurfaceGap(
   return Math.hypot(dx, dz);
 }
 
+/* ---------- SC-19 §五.4 / SC-20 输入侧：必留区与必留通道（硬约束） ---------- */
+
+/**
+ * 必留通道（route 折线）两侧各要求的最小净空（米），总净宽 1.2m。
+ * 与 flow-constraints.AISLE_MIN_NORMAL、plan-approve.DESK_AISLE_M 同一档：
+ * 官方课桌图的走道/消防疏散最低值，不随密度旋钮缩放。
+ */
+export const ROUTE_CORRIDOR_WIDTH_M = 1.2;
+/**
+ * 侵入判定容差（米）：量级与 plan-scoring.BBOX_OVERLAP_TOLERANCE_M 对齐
+ * （不直接 import 那边，避免 plan-scoring → human-factors → plan-scoring 环）。
+ * 方向取宽容：家具压进必留区/通道**超过**容差才判违规——贴线与 2cm 内的
+ * 舍入噪声不判（G7 教训：边界噪声错杀整版，比漏掉 2cm 侵入更伤）。
+ */
+const INTRUSION_TOLERANCE_M = 0.02;
+
+/**
+ * 必留区（reserved，预留区/消防疏散）侵入检查：
+ * 生成层对 reserved 区不摆任何家具（planZones），这里负责把**别区**家具
+ * 压进必留区的方案判成 hard violation——压通道的方案不进推荐（SC-20 口径）。
+ * 判定取宽容方向：把必留区内缩 INTRUSION_TOLERANCE_M 出「核心」，家具压进
+ * 核心才算侵入——贴线/1cm 级舍入噪声不判（G7 教训：边界噪声错杀整版更伤）。
+ * 每个 keep-out 区聚合一条 violation（点名家具与件数），避免 24 把椅子刷 24 条。
+ */
+export function evaluateKeepOut(
+  placements: readonly ZoneFurniturePlacement[],
+  zones: readonly PlanAnnotation[],
+): ScoredViolation[] {
+  const out: ScoredViolation[] = [];
+  for (const zone of zones) {
+    if (zone.kind !== 'zone' || zone.zoneType !== 'reserved') continue;
+    const g = zone.geometry;
+    if (g.kind !== 'rect') continue;
+    // 核心区 = 必留区四边各内缩容差；家具 footprint 与核心相交才算压住。
+    const coreX1 = g.x + INTRUSION_TOLERANCE_M;
+    const coreX2 = g.x + g.width - INTRUSION_TOLERANCE_M;
+    const coreZ1 = g.z + INTRUSION_TOLERANCE_M;
+    const coreZ2 = g.z + g.depth - INTRUSION_TOLERANCE_M;
+    const offenders = new Map<string, number>();
+    let total = 0;
+    for (const p of placements) {
+      const fx1 = p.x - p.spec.width / 2;
+      const fx2 = p.x + p.spec.width / 2;
+      const fz1 = p.z - p.spec.depth / 2;
+      const fz2 = p.z + p.spec.depth / 2;
+      if (fx1 < coreX2 - EPS && coreX1 < fx2 - EPS && fz1 < coreZ2 - EPS && coreZ1 < fz2 - EPS) {
+        offenders.set(p.spec.name, (offenders.get(p.spec.name) ?? 0) + 1);
+        total += 1;
+      }
+    }
+    if (total === 0) continue;
+    const names = [...offenders.entries()].map(([n, c]) => `${n}×${c}`).join('、');
+    out.push({
+      code: 'KEEP_OUT_INTRUDED',
+      severity: 'hard',
+      zoneId: zone.id,
+      message: `「${zone.label}」是必留区，不能摆东西——被 ${total} 件家具占住（${names}）`,
+    });
+  }
+  return out;
+}
+
+/**
+ * 必留通道（route 折线，宾客动线/消防疏散）压线检查：
+ * 折线按 ROUTE_CORRIDOR_WIDTH_M 展宽成走廊，家具 footprint 到任一线段的
+ * 距离 < 半宽 − 容差 → 压通道（hard）。压通道的方案不进推荐（SC-20 口径）。
+ * 注意：动线终点要停在区外——伸进签到台/桌椅堆里的最后一段按压通道算。
+ */
+export function evaluateRouteClear(
+  placements: readonly ZoneFurniturePlacement[],
+  routes: readonly PlanAnnotation[],
+): ScoredViolation[] {
+  const out: ScoredViolation[] = [];
+  const half = ROUTE_CORRIDOR_WIDTH_M / 2;
+  const limit = half - INTRUSION_TOLERANCE_M;
+  for (const route of routes) {
+    if (route.kind !== 'route' || route.geometry.kind !== 'polyline') continue;
+    const pts = route.geometry.points;
+    if (pts.length < 2) continue;
+    const offenders = new Map<string, number>();
+    let total = 0;
+    for (const p of placements) {
+      const rect = {
+        x1: p.x - p.spec.width / 2,
+        z1: p.z - p.spec.depth / 2,
+        x2: p.x + p.spec.width / 2,
+        z2: p.z + p.spec.depth / 2,
+      };
+      let hit = false;
+      for (let i = 0; i + 1 < pts.length && !hit; i++) {
+        if (segmentRectDistance(pts[i]!, pts[i + 1]!, rect) < limit) hit = true;
+      }
+      if (hit) {
+        offenders.set(p.spec.name, (offenders.get(p.spec.name) ?? 0) + 1);
+        total += 1;
+      }
+    }
+    if (total === 0) continue;
+    const names = [...offenders.entries()].map(([n, c]) => `${n}×${c}`).join('、');
+    out.push({
+      code: 'ROUTE_BLOCKED',
+      severity: 'hard',
+      zoneId: route.id,
+      message: `「${route.label}」动线要留 ${ROUTE_CORRIDOR_WIDTH_M}m 净空——被 ${total} 件家具压住（${names}）`,
+    });
+  }
+  return out;
+}
+
+/** 线段到轴对齐矩形的最短距离（米）；相交或接触返回 0。 */
+function segmentRectDistance(
+  a: { x: number; z: number },
+  b: { x: number; z: number },
+  rect: { x1: number; z1: number; x2: number; z2: number },
+): number {
+  // 1) Liang-Barsky slab test：线段与矩形相交（含端点在矩形内）→ 0。
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  let t0 = 0;
+  let t1 = 1;
+  let intersect = true;
+  const p = [-dx, dx, -dz, dz];
+  const q = [a.x - rect.x1, rect.x2 - a.x, a.z - rect.z1, rect.z2 - a.z];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(p[i]!) < EPS) {
+      if (q[i]! < 0) {
+        intersect = false;
+        break;
+      }
+    } else {
+      const r = q[i]! / p[i]!;
+      if (p[i]! < 0) {
+        if (r > t1) { intersect = false; break; }
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) { intersect = false; break; }
+        if (r < t1) t1 = r;
+      }
+    }
+  }
+  if (intersect && t0 <= t1 + EPS) return 0;
+  // 2) 不相交：最近距离只会出现在「线段端点→矩形」或「矩形角→线段」。
+  let min = Infinity;
+  for (const [px, pz] of [[a.x, a.z], [b.x, b.z]] as const) {
+    const cx = Math.min(Math.max(px, rect.x1), rect.x2);
+    const cz = Math.min(Math.max(pz, rect.z1), rect.z2);
+    min = Math.min(min, Math.hypot(px - cx, pz - cz));
+  }
+  const corners: Array<[number, number]> = [
+    [rect.x1, rect.z1], [rect.x2, rect.z1], [rect.x1, rect.z2], [rect.x2, rect.z2],
+  ];
+  for (const [cx, cz] of corners) {
+    min = Math.min(min, pointSegmentDistance(cx, cz, a, b));
+  }
+  return min;
+}
+
+/** 点到线段的最短距离（米）。 */
+function pointSegmentDistance(
+  px: number,
+  pz: number,
+  a: { x: number; z: number },
+  b: { x: number; z: number },
+): number {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq <= EPS) return Math.hypot(px - a.x, pz - a.z);
+  let t = ((px - a.x) * dx + (pz - a.z) * dz) / lenSq;
+  t = Math.min(1, Math.max(0, t));
+  return Math.hypot(px - (a.x + t * dx), pz - (a.z + t * dz));
+}
+
 /* ---------- P0：走廊连通 + zone 可达性（0.3m 网格 BFS） ---------- */
 
 /** 网格边长（米）。 */

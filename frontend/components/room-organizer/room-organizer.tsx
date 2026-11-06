@@ -2664,9 +2664,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // SC-19 修复：需求人数从左栏「活动需求」镜像读（provider 树外读不到 context），
   // 装不下时方案卡才出「装不下 N 人 + 建议降到」的降容话术（docs/27 B4 断点补上）。
   const targetCapacityForScoring = getBriefHeadcount() ?? undefined;
+  // SC-19 §五.4：传全量 draft 标注（zone+route+door+measure，各消费端按 kind 过滤）——
+  // 只传 zone 会把门/动线在 UI 边界丢掉，门弧检查与 verified assurance 在产品里永不激活，
+  // route 折线也进不了评分。是否出三版仍以「画过区」为准。
   const scoredPlans: ScoredPlan[] = zoneAnnotationsForScoring.length > 0
     ? generateScoredPlans(
-        zoneAnnotationsForScoring,
+        draftAnnotations,
         roomSizeForScoring || targetCapacityForScoring !== undefined
           ? {
               ...(roomSizeForScoring ? { roomSize: roomSizeForScoring } : {}),
@@ -2683,11 +2686,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 第 12 批：AI 建议（受众/区类型/场地短边命中式）。
   // audience 从本机对话账本 getAgentChatThreads() 拼所有 'you' 消息文本——
   // 用户在左轨跟空间/物料/活动/Bingo 四条线说过的所有话，就是活动画像的近似来源。
-  const zoneTypesForSuggestions = [
+  const zoneTypesForSuggestions: ZoneSemanticType[] = [
     ...new Set(
-      zoneAnnotationsForScoring.map((a) => a.zoneType ?? 'roundtable'),
+      zoneAnnotationsForScoring
+        .filter((a): a is typeof a & { zoneType: ZoneSemanticType } => typeof a.zoneType === 'string')
+        .map((a) => a.zoneType),
     ),
-  ] as ZoneSemanticType[];
+  ];
   const roomShortSideM = (typeof layout.width === 'number' && typeof layout.height === 'number')
     ? Math.min(layout.width, layout.height)
     : undefined;
@@ -3095,8 +3100,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                     const placements = plan.placements;
                     const skipped = plan.skipped;
                     if (placements.length === 0) {
+                      // 只画了预留区（keep-out 不摆家具）时别误报「区太小」。
+                      const onlyReserved = draft.annotations
+                        .filter((a) => a.kind === 'zone')
+                        .every((a) => a.zoneType === 'reserved');
                       notify(
-                        skipped.map((s) => s.reason).join('；') || '标注区太小，摆不下家具，请扩大标注范围',
+                        skipped.map((s) => s.reason).join('；')
+                        || (onlyReserved
+                          ? '预留区不摆家具；请再画至少一个要落家具的区'
+                          : '标注区太小，摆不下家具，请扩大标注范围'),
                         'error',
                       );
                       return;

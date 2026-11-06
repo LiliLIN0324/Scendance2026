@@ -23,7 +23,7 @@ function zone(
   z: number,
   width: number,
   depth: number,
-  zoneType?: ZoneSemanticType,
+  zoneType: ZoneSemanticType = 'roundtable',
   label = '圆桌区',
 ): PlanAnnotation {
   return {
@@ -32,7 +32,7 @@ function zone(
     label,
     stageNo: 1,
     geometry: { kind: 'rect', x, z, width, depth },
-    ...(zoneType ? { zoneType } : {}),
+    zoneType,
   };
 }
 
@@ -231,6 +231,29 @@ describe('planZoneApprovals / planZones', () => {
     expect(out.skipped.length).toBe(1);
     expect(out.skipped[0].zoneId).toBe('x');
     expect(out.skipped[0].reason).toMatch(/未知|通用/);
+  });
+
+  it('SC-19 §五.4：无 zoneType 的区不兜底成圆桌——不落家具，skipped 说人话（S1③ 回归）', () => {
+    // 故意不走 zone() 助手（它默认补 roundtable），构造真正无 zoneType 的标注：
+    // 旧兜底曾把这种注入区摆满 3 桌 24 椅（docs/32 §三.S1③ 实测）。
+    const untyped: PlanAnnotation = {
+      id: 'u1',
+      kind: 'zone',
+      label: '外部注入区',
+      stageNo: 1,
+      geometry: { kind: 'rect', x: -4.5, z: -4.5, width: 9, depth: 9 },
+    };
+    const out = planZones([untyped], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped).toHaveLength(1);
+    expect(out.skipped[0].zoneId).toBe('u1');
+    expect(out.skipped[0].reason).toContain('没选类型');
+  });
+
+  it('SC-19 §五.4：预留区（reserved）不摆任何家具、也不进 skipped——留空是语义本身', () => {
+    const out = planZones([zone('k1', -4, 1, 8, 2, 'reserved', '消防疏散')], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped).toEqual([]);
   });
 });
 

@@ -182,9 +182,19 @@ export function planZones(
   for (const ann of annotations) {
     if (ann.kind !== 'zone' || ann.geometry.kind !== 'rect') continue;
     const g = ann.geometry;
+    // 无 zoneType 的区不再兜底成圆桌（docs/32 §三.S1③：外部注入的无类型区
+    // 曾被摆满 3 桌 24 椅）——落 skipped 让 UI 说人话，等用户补选区类型。
+    if (!ann.zoneType) {
+      skipped.push({
+        zoneId: ann.id,
+        label: ann.label,
+        reason: '这个区没选类型，本版不落家具；点区重新选一个类型后再出方案',
+      });
+      continue;
+    }
     // 故意放宽成 string：未来若扩展 zoneType 或外部注入非法值，不要静默按 rest 摆家具，
     // 走下面的「未知类型降级」分支落 skipped。
-    const zoneType = (ann.zoneType ?? 'roundtable') as string;
+    const zoneType = ann.zoneType as string;
     const push = (p: Omit<ZoneFurniturePlacement, 'zoneId' | 'zoneType'>) =>
       placements.push({ ...p, zoneId: ann.id, zoneType: zoneType as ZoneSemanticType });
 
@@ -236,6 +246,11 @@ export function planZones(
         continue;
       }
       rowsRest(g.x, g.z, g.width, g.depth, push);
+    } else if (zoneType === 'reserved') {
+      // 预留区/消防疏散（keep-out）：按定义本版不摆家具，也不进 skipped——
+      // 「留空」是这个区的语义本身，不是失败；别区家具压进来由评分层
+      // evaluateKeepOut 判 hard violation（KEEP_OUT_INTRUDED）。
+      continue;
     } else {
       // 未知 zoneType：不摆任何家具，落一条 skipped 让 UI 说人话。
       skipped.push({
