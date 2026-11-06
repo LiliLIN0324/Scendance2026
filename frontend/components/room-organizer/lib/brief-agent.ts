@@ -14,6 +14,7 @@
  * 时把 parseBriefTurn 换成 LLM resolver 即可，面板与生成器不动。
  */
 import { formatArea, HEADCOUNT_MAX, parseBriefSentence, type BriefExtraction, type VenueIO } from './workbench-agent';
+import { generateZonePrompts } from '@/lib/suggestions';
 
 /** 布置形态：dining = 餐桌组（默认），desk-chair = 一人一套课桌椅。 */
 export type LayoutMode = 'dining' | 'desk-chair';
@@ -142,6 +143,52 @@ export function parseBriefTurn(raw: string, previous: BriefMemory, context: Brie
   if (memory.headcount === null && memory.event === null && memory.venueIO === null && !hasDims(memory) && memory.areaM2 === null) {
     return { kind: 'none', memory, extraction, filledScaleAsk: false, text: '这句我没接住。跟我说一句「80 人，室内 12×9」这样的需求，我就能先出一版预览。' };
   }
+  // 4.0.0 UX 改进：用户在已有规模基础上「补人话」（如「我们是个老年人活动」），
+  // 不要再回「我没接住」。识别受众关键词 → 主动给 2-3 条硬建议 + 提出帮他圈区。
   const known = summarizeMemory(memory);
+  const audiencePrompt = buildAudiencePrompt(raw);
+  if (audiencePrompt) {
+    return {
+      kind: 'ack',
+      memory,
+      extraction,
+      filledScaleAsk: false,
+      text: `${known ? `记下了：${known}。` : ''}${audiencePrompt}`,
+    };
+  }
   return { kind: 'ack', memory, extraction, filledScaleAsk: false, text: `这句我没接住。已记下：${known}${scaleKnown ? '' : '；还差场地多大，说一句「12×9」就行'}。要调布置直接说，比如「加两把椅子」或「换个摆法」。` };
+}
+
+/**
+ * 识别用户这一句里的受众关键词，命中就给一段「人话硬建议」。
+ * 不命中返回空串，让上层回默认话术。
+ */
+function buildAudiencePrompt(raw: string): string {
+  const isElderly = /(老年|中老年|老人|长辈|银发)/.test(raw);
+  const isFamily = /(亲子|小孩|儿童|孩子|小朋友)/.test(raw);
+  const isBusiness = /(商务|企业|客户|答谢|晚宴)/.test(raw);
+  if (!isElderly && !isFamily && !isBusiness) return '';
+
+  // 借用 generateZonePrompts 取「建议圈哪些区」，但当前没画过任何 zone（新会话），所以默认全推。
+  const zonePrompts = generateZonePrompts({
+    audience: raw,
+    zoneTypes: [],
+  });
+  const bullets: string[] = [];
+  if (isElderly) {
+    bullets.push('① 主通道按 1.5m 留轮椅宽度，别按 1.2m 挤');
+    bullets.push('② 签到台别贴墙，前面留 2m 排队缓冲');
+  }
+  if (isFamily) {
+    bullets.push('① 休息区长椅别靠墙，孩子跑过来有缓冲');
+    bullets.push('② 尖角/玻璃位置贴防撞条');
+  }
+  if (isBusiness) {
+    bullets.push('① 圆桌默认 8 人，桌距 ≥ 1.8m 好走通道');
+    bullets.push('② 签到区放到进门侧，别把客户往深处塞');
+  }
+  const zoneAsk = zonePrompts.length > 0
+    ? `要不要我直接在 2D 上帮你把${zonePrompts.map((p) => ({ checkin: '签到区', rest: '休息区', roundtable: '圆桌区', photo: '打卡区' })[p.zoneType]).join('和')}先圈出来？回「好」就落。`
+    : '';
+  return `${bullets.join('；')}。${zoneAsk}`;
 }
