@@ -101,11 +101,12 @@ describe('PlanOverlay 门弧：真门 vs 推测门', () => {
     expect(html).toContain('data-door-inferred="true"');
   });
 
-  it('推测门（inferred=true）的门扇/门弧带 stroke-dasharray', () => {
+  it('推测门（inferred=true）只有开门弧带 stroke-dasharray，两条门扇保持实线', () => {
     const html = renderMarkup([inferredDoor]);
-    // 关位线 / 开位线 / 门弧 path 三条都应带 dash。
+    // 关位线 / 开位线是实线门扇，只有扫过弧是虚线。
     const dashCount = (html.match(/stroke-dasharray/g) ?? []).length;
-    expect(dashCount).toBeGreaterThanOrEqual(3);
+    expect(dashCount).toBe(1);
+    expect(html).toContain('stroke-dasharray="6 4"');
   });
 
   it('真门（inferred 缺省）的门扇/门弧不带 stroke-dasharray（保持实线）', () => {
@@ -113,9 +114,11 @@ describe('PlanOverlay 门弧：真门 vs 推测门', () => {
     expect(html).not.toContain('stroke-dasharray');
   });
 
-  it('推测门旁出现「门未确认」小字；真门旁不出现', () => {
+  it('推测门旁出现「门未确认」小字（11px 灰 #6b7280）；真门旁不出现', () => {
     const inferredHtml = renderMarkup([inferredDoor]);
     expect(inferredHtml).toContain('门未确认');
+    expect(inferredHtml).toContain('font-size="11"');
+    expect(inferredHtml).toContain('#6b7280');
     const realHtml = renderMarkup([realDoor]);
     expect(realHtml).not.toContain('门未确认');
   });
