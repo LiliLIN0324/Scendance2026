@@ -35,7 +35,8 @@ import {
 import { CoverageDial } from './coverage-dial';
 import { ReceiptCard } from './receipt-card';
 import { SceneExport } from './scene-export';
-import { PriceCard } from '../pay/price-card';
+// 付费入口暂不上线（paid flow 未就绪）；恢复时取消注释。
+// import { PriceCard } from '../pay/price-card';
 import {
   analyseImageFile,
   analyseVideoFile,
@@ -1391,7 +1392,7 @@ export function CaptureGuide(): JSX.Element {
                 scaleMeters={scaleMeters}
                 gateReady={gateReady}
               />
-              <PriceCard />
+              {/* 付费入口暂不上线：<PriceCard /> */}
             </>
           )}
 
