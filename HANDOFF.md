@@ -36,6 +36,8 @@
 
 **派发顺序**：XH-01 与 MAP-01/02 可以分开领。拿到素材候选后推进 XH-02。用仓库现有茶亭资产提前走查 MAP-03/04，换入新批次资产后再做 MAP-05。每轮在本节回填卡片状态、证据路径和阻塞条件。
 
+> **卡片回填（2026-11-07，ZCode 会话）**：**XH-01 ✅**——36 段全量清单落 [docs/33](docs/33-西湖新素材分段清单.md)（元数据 `D:\…\xihu-2026-11-06\_catalog\manifest.json` + 6 张抽帧拼图 `sheets/`；4 处换场断档、6 个地点群、强地标：慕才亭/玉带晴虹匾额）。**XH-02 候选已定**：0233（174s 园林走拍，首选）→ 0234（同园连续）→ 0220（65s 湖面+候船亭）；提交 AHOLO 仍等用户对「本批上传+额度」授权（卡片原文条件），未动上传。GPS：各段有 DJI `djmd` 遥测轨但未解析，机器无 exiftool；地点置信度逐段标注，○=待核对。**MAP-01 代码侧已执行**（联想+竞态守卫+取消/键盘+测试 19 例全绿）、**MAP-02**（署名常驻+矢量线宽测试）、**MAP-04**（GCJ-02↔WGS-84 纯工具+边界约定），详见「已完成与证据」首行。MAP-01/02 的真机 UI 实测（触控、真联想结果）归 SC-03 走查一并看。
+
 高德参考：[输入提示与 POI 搜索](https://lbs.amap.com/api/javascript-api-v2/guide/services/autocomplete) · [地图坐标与基础类型](https://lbs.amap.com/api/javascript-api-v2/guide/abc/basetype) · [比例尺、测距与缩放插件](https://lbs.amap.com/api/javascript-api-v2/guide/abc/plugins)。
 
 ## 优先接力 · AHOLO 绑骨人物库与多人实景漫游
@@ -76,13 +78,14 @@
 
 - **产品主线**：幕景 Scendance 是活动场地方案工作台。用已有场地或尺寸平面完成圈区、出方案、复核、客户确认和执行交接。近期产品评估建议先验证一个真实活动的交付闭环。
 - **用户已授权的待办**：在 AHOLO 官方实景重建工作台，用同一批 63 张茶室照片做一次网页对照。记录上传、创建和最终状态的页面原文、任务号与截图。
-- **仓库基线**：2026-11-07 深夜二轮：SC-19 §五.4（必留通道输入）已补齐——reserved keep-out 区型 + route 走廊硬约束 + 无 zoneType 兜底封堵 + 全量标注接线（见「已完成与证据」首行）。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
+- **仓库基线**：2026-11-07 三轮：MAP-01/02/04 地图空间缺口执行（输入联想/竞态守卫/署名/坐标系边界工具，见「已完成与证据」首行）+ XH-01 素材清单落 docs/33。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
 - **任务派发**：见 [Scendance 需求清单](docs/25-Scendance需求清单.md)。按依赖每次领一张，优先验证一单从方案到交付的闭环。
 
 ## 已完成与证据
 
 | 工作 | 当前结果 |
 | --- | --- |
+| MAP-01/02/04 地图空间缺口执行 + XH-01 素材清单（2026-11-07 三轮，ZCode） | **MAP-01 找地点**：`amap-venue-picker.tsx` 补齐三件——① 输入联想（`AMap.AutoComplete` 进插件表 + 250ms 防抖 + 下拉 `role=listbox`，区划/地址区分同名地点，无坐标 tip 转 POI 搜索不出假坐标）；② 竞态守卫（搜索与联想各自 seq 序号，慢的旧响应不覆盖新结果；`search(keywordOverride)` 支持 tip 转搜）；③ 取消/键盘（「清空搜索」按钮、Escape 收联想、↓/↑/Enter 导航；status 加 `role=status` 并把「已定位」改为「已定位预览」，文案明示写入锚点只发生在「生成户外场地」——预览/取消/确认三态分清）。**MAP-02 看懂区域**：`geo-basemap-input.tsx` 加常驻署名（动态底图「底图 © 高德地图」、整景区「底图 © 高德地图 · 范围线/水面 © OpenStreetMap 贡献者」，`data-testid=geo-basemap-attribution`）；新建 `three/research-overlays.test.ts` 钉线宽公式（clamp 1–8px、1000m≈4.68px 回归钉、单调性）。**MAP-04 空间尺度**：新建 `lib/geo-coords.ts`（GCJ-02↔WGS-84 公开拟合算法，`wgs84ToGcj02`/`gcj02ToWgs84` 迭代收敛 <1e-9°，境外原样返回）+ 5 例测试；**不假接线**——现资产 geo 只有 picker/lookup（本身即 GCJ-02），真正 WGS-84 边界在 `room-organizer.tsx:2548`（scanAssetId 自动铺图直喂 `asset.geo`），已在 `lib/aholo-assets.ts` 的 `AholoAssetGeo` 类型注释写死约定「EXIF/遥测来源必须先过 wgs84ToGcj02」，接线等有 WGS-84 生产者再动独占区。**XH-01**：36 段清单落 [docs/33](docs/33-西湖新素材分段清单.md)（ffprobe 全量 + 抽帧拼图判读；候选 0233/0234/0220；djmd 遥测未解析如实标注）。**docs/49→docs/19 注释勘误**：agent-panel ×2、room-organizer ×3（仅注释，COLLAB 已登记）、docs/23 ×1。**验证**：定向 6 套件 19+53 全绿（新增 geo-coords 5 / research-overlays 4 / amap-venue-picker 5，geo-basemap-input 5 含署名 2 例，amap-venue 22、scene-anchor 13、agent-panel 53 均绿）；scendance-workspace 8 失败=HANDOFF 已记载的历史漂移（数量一致非本轮引入）；`npx tsc --noEmit` 0 错误；`NEXT_DIST_DIR=.next-ci npm run build` exit 0（14 条路由）。 |
 | SC-19 §五.4 必留通道输入补齐（2026-11-07 深夜二轮，SC-20 输入侧） | docs/32 §五.4/补测 8 已回填 ✅，docs/32 状态改「§五 1~6 全部执行完毕」。**① reserved keep-out 区型**：`ZoneSemanticType` + `'reserved'`（标签「预留区」，预留区/消防疏散共用），画布区类型条经 ZONE_SEMANTIC_LABELS 自动多出第 6 钮；`planZones` 对 reserved 不摆家具也不进 skipped（留空是语义本身），其余区家具压进必留区（内缩 0.02m 核心）→ hard `KEEP_OUT_INTRUDED`（`evaluateKeepOut`，按区聚合点名件数，扣 -3/条）。**② route 折线参与评分**：`evaluateRouteClear` 把 route 按 `ROUTE_CORRIDOR_WIDTH_M=1.2m` 展宽走廊，线段-矩形距离（Liang-Barsky 相交 + 端点/角点最短距离）< 半宽−容差 → hard `ROUTE_BLOCKED`（扣 -3/条）；官方 1.2m 块间走道居中走线不误杀。**③ 兜底封堵**：`planZones` 无 zoneType 不再兜底成圆桌——落 skipped「没选类型」（docs/32 S1③ 的「注入区被摆满 3 桌 24 椅」关闭）。**④ 额外接线缺口修复**：room-organizer 原来只把 zone 标注传给 `generateScoredPlans`，门/动线在 UI 边界被丢弃——**门弧检查与 assurance=verified 在产品里从未激活过**；现传全量 draft 标注（各消费端按 kind 过滤），画真门后产品路径出 verified、DOOR_UNKNOWN 消失、DOOR_SWEEP_BLOCKED 可判 hard。room-organizer.tsx 三处 hunk 已按 COLLAB 纪律登记待 Qoder 复核；附带入库 brief-agent 的标签映射改用 ZONE_SEMANTIC_LABELS（reserved 进枚举后的 TS 收口）。**验证**：定向 18 套件 288 例全绿（anti 23 含 SC-20 describe 四例、flow-constraints 22 含新单元 6 例、plan-approve 35、brief-agent/agent-panel 76）；`npx tsc --noEmit` 0 错误；`NEXT_DIST_DIR=.next-ci npm run build` exit 0（14 条路由）。UI 走查（画预留区/动线/真门看徽标与横幅）归 SC-03。 |
 | SC-19 修复卡执行（2026-11-07 深夜二轮，5 项修复 + 回归网落地） | docs/32 §五清单执行回填（`docs/32-SC19-容量边界复验.md` 状态已改「复验完成」）：**① targetCapacity 接线**——新增 `panels/brief-headcount-store.ts` 模块镜像（与 agent-chat-store 同款模式），creative-studio 按「非脚手架」谓词（与右栏 formBrief 判定同源，脚手架默认 24 不算说过的人数）镜像 `brief.guests`，room-organizer `targetCapacityForScoring` 传入 `generateScoredPlans`，docs/27 B4 超容量话术在真实 UI 生效；COLLAB 待协商表已登记。**② G5 圆桌**——TABLE_DIAMETER 1.2→1.8（与 catalog 同步）、CHAIR_RING_RADIUS 0.9→1.22（同时满足 8 椅弦长 ≥0.9 与椅不进桌面）、pitch ≥ 2×环半径+阈值+0.1 舍入余量、zone 内缩含整圈椅子（下限 1.9→3.6m）；**执行中发现第三层根因**：45° 斜向环椅的轴对齐 AABB 角戳进自家圆桌包围盒（径向 1.22 够远但逐轴 dx=dz≈0.86<1.145）→ 新增 `isRingChairOfTable` 共享判定（ownerTableId 配对+径向 ≥ 桌半径+椅半宽−容差的**径向自守卫**，环半径改小豁免自动失效），wall 退距层与 detectFurnitureOverlap 双侧接入，wall 退距不再吞斜椅；丢弃语义保留但 reason 分两种事实（真内移→「贴墙放不下」/没挪就撞→「位置压住」）。**③ G7 rest**——`rowsRest` 对坐距直接 import `AISLE_CLEARANCE_THRESHOLD_M`（单一真相），rest 最小深度动态化 2.0→2.3。**④ G1**——plan-card 版行徽标（INFEASIBLE→⛔ 不可行 / INSUFFICIENT_INPUT→⚠ 缺尺寸未核验）、draft_unverified 出「门未确认，待核验草案」小字、REC=null 出「三版都有硬冲突」横幅+去重硬冲突清单。**⑤ 文案**——skipped 计数「{N} 个区被跳过」→「{N} 项被跳过」（skipped 混含整块区与单件，「项」对两种都诚实）；圆桌超容量降容行带「圆桌区按当前配方一区最多 3 桌 × 8 椅」。**回归网**：anti 新增 SC-19 圆桌 e2e 两例（16×10 in 19×15 → REC 可行 24 座、装不下 250、降到约 20=floor(cap/10)×10）+ S1② rest 带不再错杀整版；plan-approve.test 新增环几何回归 3 例；新建 plan-card.react.test 5 例、brief-headcount-store.test 3 例。**验证**：定向 12 套件全绿；`npx tsc --noEmit` 0 错误；`NEXT_DIST_DIR=.next-ci npm run build` exit 0（14 条路由）；全量 4819 过/38 失败（= 11 个已定性漂移文件 + agent-preset-flow 1 项，后者与本轮改动无 import 路径交集，属 jsdom/GLTF 环境类，见「卡住的问题」）。 |
 | --- | --- |
@@ -115,12 +118,15 @@
 
 ## 下一步
 
-1. **SC-03 走查当前流程（P0，万事俱备，且比上一轮更省事）**：输入用 docs/27 用例 A/B；重点人工核对 A1/A11/A12/B6 四条非自动化断言 + docs/30/31/32 三份交接注记。**UI 侧验收点已积压两轮**：走查时应看到——圆桌区方案可行（24 座）、左栏填人数后方案卡出「装不下 N 人 + 建议降到」、不可行版有 ⛔ 徽标；以及本轮新增：区类型条多出「预留区」钮、画一条宾客动线横穿桌区后方案卡出「动线要留 1.2m 净空」硬冲突并 REC=null、画真门后「待核验草案」小字消失（verified）。走查结果回填 docs/32 §五。宜在并行会话不改前端时做（dev `cmd /c "set NEXT_DIST_DIR=.next-dev-z&& cd frontend && npm run dev -- --port 3030"` + mock 3099；角落按钮 locator click 会超时，用 `tab.cua.click` 坐标点）。
-2. **SC-20 复核硬约束/偏好的全链表达（输入侧已接）**：必留区/动线已是硬约束（KEEP_OUT_INTRUDED / ROUTE_BLOCKED），复核草案卡上「硬冲突不进推荐、偏好未满足有说明」的呈现是否完整；顺带评估 reserved 区是否要给画布专属配色（当前与普通区同款绿框，仅徽章文字区分）。
-3. **价格拍板（SC-34 §二 9 项）**：SKU 金额/免费额度/退款链路等全部等用户点头；**付费入口恢复必须排在价格拍板之后**（否则 ¥4.90 旧价见用户，负毛利）。
-4. **继续网页对照（SC-24）**。先确认工具连接到了用户已登录且可控制的浏览器会话，再打开 [AHOLO 工作台](https://studio.aholo3d.cn/)。使用上面的 63 张 JPEG，室内空间、最低质量档，只创建一次，等终态并记录原文。浏览器连接仍失败时，记录工具具体阻塞，避免把它记为 AHOLO 重建失败。
-5. **做一次真实活动交付（SC-17）**。选有明确人数、场地和日期的活动，用现有扫描或尺寸平面出两个备选。让甲方确认一版，把同版本的效果图、尺寸平面、物料清单和分享链接交给执行方。记录耗时、人工补件和实际采用的文件。docs/27 演练卡可作真实卡片的模板。
-6. **磁盘清理批 2/批 3 等用户批准**；并行会话的西湖新素材线（XH/MAP 卡）按其接力节推进（杭州等距地图调研 `docs/plans/hangzhou-isometric-map-research.md` 仍未入库，归那个会话）。
+1. **XH-02 单段重建（P0，只差授权）**：素材已就绪——首选 [docs/33](docs/33-西湖新素材分段清单.md) 候选 0233（174s 园林走拍，白天多视角），对照 0234（同园连续）；备选 0220（65s 湖面+候船亭）。等用户对「本批素材上传 + 额度」点头后，复用 `tools/aholo/` 视频链路提交一单（录输入时间段/任务号/终态/产物读取；失败全退的计费口径见记忆档）。**提交前先问一次授权，卡片原文条件未满足前不动上传。**
+2. **SC-03 走查当前流程（P0，与 XH-02 无依赖可先行）**：输入用 docs/27 用例 A/B；重点人工核对 A1/A11/A12/B6 四条非自动化断言 + docs/30/31/32 三份交接注记。**UI 侧验收点已积压三轮**：圆桌区方案可行（24 座）、「装不下 N 人 + 建议降到」、⛔ 徽标；区类型条「预留区」钮、动线硬冲突横幅（REC=null）、真门 verified；**本轮再加两处**：选址浮层输入「西湖」出联想下拉且同名条目可区分、底图常驻署名（动态=高德，整景区=高德+OSM）。走查结果回填 docs/32 §五。宜在并行会话不改前端时做（dev `cmd /c "set NEXT_DIST_DIR=.next-dev-z&& cd frontend && npm run dev -- --port 3030"` + mock 3099；角落按钮 locator click 会超时，用 `tab.cua.click` 坐标点）。
+3. **MAP-03 地图到实景（P0，下一张实现卡）**：全湖概览轻量场地点位 → 选场地定位范围 → 近景加载点云 → 回到概览。沿用现有相机/LOD（`use-camera-presets`、`ed003b0` 视距 LOD），先用茶亭资产走查，换入 XH-02 新资产后再做 MAP-05。实现时注意 `use-scene-effects.ts` 里 `buildResearchOverlays` 的清理顺序。
+4. **MAP-04 收尾（小项）**：orientationDeg 无数据通路（`venueScan.geo.headingDeg` 与锚点朝向不联动）、锚点无 source/accuracy 元数据；WGS-84 接线点在 `room-organizer.tsx:2548`，等 XH 批次解析出 djmd GPS（或资产 geo 新增 exif 来源）时，在喂 `createResearchArea` 前过 `lib/geo-coords.ts` 的 `wgs84ToGcj02`。
+5. **SC-20 复核硬约束/偏好的全链表达（输入侧已接）**：复核草案卡上「硬冲突不进推荐、偏好未满足有说明」的呈现是否完整；顺带评估 reserved 区是否要给画布专属配色（当前与普通区同款绿框，仅徽章文字区分）。
+6. **价格拍板（SC-34 §二 9 项）**：SKU 金额/免费额度/退款链路等全部等用户点头；**付费入口恢复必须排在价格拍板之后**（否则 ¥4.90 旧价见用户，负毛利）。
+7. **继续网页对照（SC-24）**。先确认工具连接到了用户已登录且可控制的浏览器会话，再打开 [AHOLO 工作台](https://studio.aholo3d.cn/)。使用上面的 63 张 JPEG，室内空间、最低质量档，只创建一次，等终态并记录原文。浏览器连接仍失败时，记录工具具体阻塞，避免把它记为 AHOLO 重建失败。
+8. **做一次真实活动交付（SC-17）**。选有明确人数、场地和日期的活动，用现有扫描或尺寸平面出两个备选。让甲方确认一版，把同版本的效果图、尺寸平面、物料清单和分享链接交给执行方。记录耗时、人工补件和实际采用的文件。docs/27 演练卡可作真实卡片的模板。
+9. **磁盘清理批 2/批 3 等用户批准**；并行会话的杭州等距地图调研 `docs/plans/hangzhou-isometric-map-research.md` 仍未入库（归那个会话，勿卷进本线提交）。
 
 ## 踩过的坑
 
