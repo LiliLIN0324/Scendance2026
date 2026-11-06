@@ -19,7 +19,7 @@ function makeZone(
   id: string,
   opts: Partial<{
     x: number; z: number; w: number; d: number;
-    zoneType: 'roundtable' | 'checkin' | 'photo' | 'rest';
+    zoneType: 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk';
     label: string;
   }> = {},
 ): PlanAnnotation {
@@ -42,7 +42,7 @@ function makeZone(
 describe('B. zone 越出场地边界一半 → 整块 zone 被跳过', () => {
   it('roomSize 10×8m，zone 大部分落在场地外（z∈[5,9]，场地半深 4）→ placements 越界率 ≥50% → skipped 含「越出场地」', () => {
     // 场地 [−5,5]×[−4,4]；zone rect x∈[-2,2]、z∈[5,9]（完全在 z>4 之外）。
-    // 桌心网格在 [x: -1.1..1.1, z: 5.9..8.1]，所有桌心 z>4 → 越界率 100%。
+    // 桌心网格 z 在 [6.7, 7.3]（内缩含整圈椅子），所有桌心 z>4 → 越界率 100%。
     const ann = makeZone('z-out', { x: -2, z: 5, w: 4, d: 4 });
     const plans = generateScoredPlans([ann], { roomSize: { width: 10, height: 8 } });
     expect(plans.length).toBeGreaterThanOrEqual(1);
@@ -66,13 +66,13 @@ describe('B. zone 越出场地边界一半 → 整块 zone 被跳过', () => {
 
 describe('C. 两个 zone 重叠一半 → 扣分并说人话', () => {
   it('同尺寸两个 zone：不重叠版 score 比重叠版高 ≥3', () => {
-    // 两个 3×3 圆桌区，各自只能落 1 桌（inset 后可用 1.2×1.2）。
-    // 不重叠：A 在 (-4,0)，B 在 (2,0)。两 zone 间隔 0.5m，不触发 overlap。
-    // 重叠：A 在 (-1.5,0)，B 在 (0,0)。重叠 [0,1.5]×[-1.5,1.5]=4.5㎡，较小 zone=9㎡，50%>30%。
-    const aOverlap = makeZone('a', { x: -1.5, z: 0, w: 3, d: 3 });
-    const bOverlap = makeZone('b', { x: 0, z: 0, w: 3, d: 3 });
-    const aApart = makeZone('a', { x: -4, z: 0, w: 3, d: 3 });
-    const bApart = makeZone('b', { x: 2, z: 0, w: 3, d: 3 });
+    // 两个 4×4 圆桌区（圆桌区含整圈椅子的下限 ≈3.6×3.6m，3×3 会被整块跳过）。
+    // 不重叠：A 在 (-4,0)，B 在 (2,0)。两 zone 间隔 2m，不触发 overlap。
+    // 重叠：A 在 (-1.5,0)，B 在 (0,0)。重叠 [0,2.5]×[0,4]=10㎡，较小 zone=16㎡，62%>30%。
+    const aOverlap = makeZone('a', { x: -1.5, z: 0, w: 4, d: 4 });
+    const bOverlap = makeZone('b', { x: 0, z: 0, w: 4, d: 4 });
+    const aApart = makeZone('a', { x: -4, z: 0, w: 4, d: 4 });
+    const bApart = makeZone('b', { x: 2, z: 0, w: 4, d: 4 });
 
     const apartPlans = generateScoredPlans([aApart, bApart]);
     const overlapPlans = generateScoredPlans([aOverlap, bOverlap]);
@@ -87,8 +87,8 @@ describe('C. 两个 zone 重叠一半 → 扣分并说人话', () => {
 
 describe('F. 大场地 roundtable 三版必须有可观测差异', () => {
   it('12×8m 圆桌区：三版 capacitySeats 或 reasons 不能完全同分', () => {
-    // 12×8m 足够大，planZones 密档能摆到 MAX_TABLES_PER_ZONE=3 桌（受限于常数，不是网格）。
-    // sparse 删一桌 → capacitySeats 应比 balanced 少 5（1 桌 + 4 椅 = 5 座）；
+    // 12×8m 足够大，planZones 能摆到 MAX_TABLES_PER_ZONE=3 桌（受限于常数，不是网格）。
+    // sparse 删一桌 → capacitySeats 应比 balanced 少 8（1 桌 + 8 椅）；
     // dense 档（density=0.8）与 balanced（density=0.5）在 pitch 上不同，
     // 但 MAX_TABLES_PER_ZONE=3 上限封顶。关键钉：reasons 首条前缀必须差异化。
     const ann = makeZone('big', { x: -6, z: -4, w: 12, d: 8 });
@@ -274,5 +274,66 @@ describe('4.0.1 默认南门（withDefaultDoor）+ 墙退距', () => {
         expect(3 - (pl.z + hd)).toBeGreaterThanOrEqual(0.3 - 0.01);
       }
     }
+  });
+});
+
+/* =====================================================================
+ * SC-19 复验回归（docs/32 §五修复 1/2/3 的验收网）
+ * ===================================================================== */
+describe('SC-19：圆桌路径修复（G5）+ 降容数字断言', () => {
+  it('圆桌区 16×10 in 19×15 + targetCapacity=250 → 推荐版可行、24 座、说破配方上限', () => {
+    // 修复前（docs/32 §三 S3）：环椅自撞被 applyWallClearance 吞 16 件，
+    // 存活椅 CHAIR_GAP 全灭 → REC=null；「可达容量 10 座」是吞件残渣。
+    const ann = makeZone('ball', { x: -8, z: -5, w: 16, d: 10, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([ann], { roomSize: { width: 19, height: 15 }, targetCapacity: 250 });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
+    expect(rec!.feasible).toBe(true);
+    expect(rec!.feasibilityStatus).toBe('FEASIBLE');
+    // 配方上限 = 单区 3 桌 × 每桌 8 椅 = 24 座。
+    expect(rec!.capacitySeats).toBe(24);
+    expect(rec!.placements.filter((p) => p.spec.type === 'dining-table')).toHaveLength(3);
+    expect(rec!.placements.filter((p) => p.spec.type === 'dining-chair')).toHaveLength(24);
+    const text = rec!.reasons.join('\n');
+    expect(text).toMatch(/装不下\s*250/);
+    expect(text).toMatch(/配方一区最多 3 桌 × 8 椅/);
+    // 降容建议 = floor(cap/10)×10（docs/27 A11 人工核对项自动化）。
+    expect(text).toContain('建议把人数降到约 20 人');
+  });
+
+  it('不传 targetCapacity 时圆桌区同样可行（G5 修复不引入回归）', () => {
+    const ann = makeZone('ball', { x: -8, z: -5, w: 16, d: 10, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([ann], { roomSize: { width: 19, height: 15 } });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
+    expect(rec!.feasible).toBe(true);
+    expect(rec!.capacitySeats).toBe(24);
+  });
+});
+
+describe('SC-19：rest 带不再错杀整版（G7 + S1②）', () => {
+  it('课桌区 + 过浅 rest 带：rest 被跳过，课桌版保持可行', () => {
+    // docs/32 §三 S1②：rest 对坐距 1.5 < 1.65 曾让任何含 rest 的方案全变体 INFEASIBLE。
+    const desk = makeZone('desk', { x: -8.5, z: -5.5, w: 17, d: 9, zoneType: 'desk' });
+    const rest = makeZone('keep', { x: -8, z: 3.5, w: 16, d: 2, zoneType: 'rest' });
+    const plans = generateScoredPlans([desk, rest], { roomSize: { width: 19, height: 15 } });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
+    expect(rec!.feasible).toBe(true);
+    for (const p of plans) {
+      // 过浅 rest 区在生成层就被跳过，不再产出会自撞的长椅。
+      expect(p.placements.some((pl) => pl.spec.type === 'bench')).toBe(false);
+    }
+  });
+
+  it('足够深的休息区正常出长椅，且不产生 AISLE_CLEARANCE 硬冲突', () => {
+    const desk = makeZone('desk', { x: -8.5, z: -5.5, w: 17, d: 9, zoneType: 'desk' });
+    const rest = makeZone('rest', { x: -4, z: 4, w: 6, d: 3, zoneType: 'rest' });
+    const plans = generateScoredPlans([desk, rest], { roomSize: { width: 19, height: 15 } });
+    const rec = pickRecommendedPlan(plans);
+    expect(rec).not.toBeNull();
+    expect(rec!.feasible).toBe(true);
+    expect(rec!.placements.some((pl) => pl.spec.type === 'bench')).toBe(true);
+    expect(rec!.violations.some((v) => v.code === 'AISLE_CLEARANCE')).toBe(false);
   });
 });
