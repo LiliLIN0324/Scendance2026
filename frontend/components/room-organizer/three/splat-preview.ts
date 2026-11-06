@@ -114,7 +114,15 @@ export type SplatLoadOptions = Readonly<{
   onProgress?(ratio: number | undefined): void;
 }>;
 export type SplatFit = Readonly<{ scale: number; position: THREE.Vector3 }>;
-export type SplatPaint = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) => void;
+export interface SplatPaintOptions {
+  /**
+   * 是否带上点云的定位辅助（地面网格、footprint 边线、基准面、锚点标记）。
+   * 预览时默认带；导出成图时传 false，成图里只留真实场地和布置。
+   */
+  guides?: boolean | undefined;
+}
+
+export type SplatPaint = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, options?: SplatPaintOptions) => void;
 
 
 const EPSILON = 0.000001;
@@ -395,6 +403,7 @@ export function paintAsBackLayer(deps: {
   back: THREE.Scene;
   scene: THREE.Scene;
   camera: THREE.Camera;
+  guides?: boolean | undefined;
 }): void {
   paintSplatLayers({ ...deps, backs: [deps.back] });
 }
@@ -405,6 +414,8 @@ export function paintSplatLayers(deps: {
   backs: readonly THREE.Scene[];
   scene: THREE.Scene;
   camera: THREE.Camera;
+  /** 传 false 时连点云定位辅助一起藏掉，用于导出干净的成图。 */
+  guides?: boolean | undefined;
 }): void {
   const { renderer, backs, scene, camera } = deps;
   if (!backs.length) { renderer.render(scene, camera); return; }
@@ -421,6 +432,15 @@ export function paintSplatLayers(deps: {
     if (child.userData.type === RESEARCH_BASEMAP_TAG) underlays.push(child);
   }
   for (const child of underlays) backs[0]!.attach(child);
+  if (deps.guides === false) {
+    for (const back of backs) {
+      for (const child of back.children) {
+        if (child.userData.splatGuide !== true) continue;
+        hidden.push([child, child.visible]);
+        child.visible = false;
+      }
+    }
+  }
   // 天空属于背景那一层：临时挪到点云场景，免得点云没盖到的地方露出纯黑。
   const sky = scene.background;
   scene.background = null;
@@ -649,6 +669,8 @@ export function createSplatPreview(deps: {
     edgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(edgePoints, 3));
     group.add(new THREE.LineSegments(edgeGeometry, new THREE.LineBasicMaterial({ color: 0x665343, transparent: true, opacity: 0.88 })));
     group.position.set(box.min.x, box.min.y, box.min.z);
+    // 定位辅助（地面网格 + footprint 边线）：预览要，导出成图不要。
+    group.userData.splatGuide = true;
     ground = group;
     groundOutline = outline;
     splatScene.add(group);
@@ -732,6 +754,7 @@ export function createSplatPreview(deps: {
     );
     grid.renderOrder = -3;
     inner.add(grid);
+    group.userData.splatGuide = true;
     referencePlane = group;
     splatScene.add(group);
   }
@@ -766,6 +789,7 @@ export function createSplatPreview(deps: {
       mast.renderOrder = -2;
       group.add(mast);
     }
+    group.userData.splatGuide = true;
     anchorMarkers = group;
     splatScene.add(group);
   }
@@ -1002,11 +1026,11 @@ export function createSplatPreview(deps: {
     if (now - lodRuntime.startedAt < 12000) deps.invalidate();
   }
 
-  const renderFrame: SplatPaint = (renderer, scene, camera) => {
+  const renderFrame: SplatPaint = (renderer, scene, camera, options) => {
     if (!holder || !shownId) { renderer.render(scene, camera); return; }
     if (mesh) mesh.visible = displayMode === 'gaussian';
     frameTick(camera);
-    paintAsBackLayer({ renderer, back: splatScene, scene, camera });
+    paintAsBackLayer({ renderer, back: splatScene, scene, camera, guides: options?.guides });
   };
 
   return {
