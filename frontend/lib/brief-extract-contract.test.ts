@@ -89,6 +89,45 @@ describe('briefSlotSchema — mobilityAssistance（elderly ≠ mobilityAssistanc
   });
 });
 
+describe('briefSlotSchema — requirements（must vs prefer，模型不得私自升级）', () => {
+  it('must 合法：「必须 80 人」这类强约束', () => {
+    const parsed = briefSlotSchema.safeParse({
+      headcount: 80,
+      requirements: [{ key: 'headcount', value: 80, mode: 'must' }],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.requirements?.[0]?.mode).toBe('must');
+  });
+
+  it('prefer 合法：「80 人左右」这类模糊陈述', () => {
+    const parsed = briefSlotSchema.safeParse({
+      headcount: 80,
+      requirements: [{ key: 'headcount', value: 80, mode: 'prefer' }],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.requirements?.[0]?.mode).toBe('prefer');
+  });
+
+  it('非法 mode（如 required/optional）被拒', () => {
+    expect(briefSlotSchema.safeParse({
+      requirements: [{ key: 'headcount', value: 80, mode: 'required' }],
+    }).success).toBe(false);
+    expect(briefSlotSchema.safeParse({
+      requirements: [{ key: 'headcount', value: 80, mode: 'optional' }],
+    }).success).toBe(false);
+  });
+
+  it('非法 key（如 capacity）被拒', () => {
+    expect(briefSlotSchema.safeParse({
+      requirements: [{ key: 'capacity', value: 80, mode: 'must' }],
+    }).success).toBe(false);
+  });
+
+  it('空数组合法（没强度信号就空数组）', () => {
+    expect(briefSlotSchema.safeParse({ requirements: [] }).success).toBe(true);
+  });
+});
+
 describe('briefExtractResponseSchema — 整体响应', () => {
   it('extraction 为 null 合法（后端禁用模型时返回 enabled:false）', () => {
     const parsed = briefExtractResponseSchema.safeParse({ enabled: false, extraction: null });
