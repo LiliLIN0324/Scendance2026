@@ -12,6 +12,7 @@
 
 import type { PlanAnnotation, PlanPoint, ZoneSemanticType } from './plan-annotation';
 import { densityToSpec } from './density';
+import { getCatalogForZone } from './furniture-catalog';
 
 /** 圆桌直径（米）。 */
 export const TABLE_DIAMETER = 1.2;
@@ -59,23 +60,28 @@ export interface ZonePlanOutcome {
   skipped: ZonePlanSkipped[];
 }
 
+/**
+ * 嵌套 SPEC 视图：从 furniture-catalog 按 (type, zoneType) 取条目，
+ * 保持原有 SPEC.roundtable.table / SPEC.checkin.desk 访问形态向后兼容。
+ * catalog 是唯一数据源，未来加家具只改 furniture-catalog.ts。
+ */
 const SPEC = {
   roundtable: {
-    table: { type: 'dining-table', name: '圆桌', category: 'tables', width: 1.2, depth: 1.2, height: 0.75, color: '#A0522D', icon: '🟫' },
-    chair: { type: 'dining-chair', name: '餐椅', category: 'seating', width: 0.45, depth: 0.45, height: 0.9, color: '#5D4037', icon: '🪑' },
+    table: getCatalogForZone('dining-table', 'roundtable')!,
+    chair: getCatalogForZone('dining-chair', 'roundtable')!,
   },
   checkin: {
-    desk: { type: 'table', name: '签到台', category: 'checkin', width: 1.4, depth: 0.6, height: 0.75, color: '#4A7C59', icon: '🖊️' },
-    chair: { type: 'dining-chair', name: '工作椅', category: 'seating', width: 0.45, depth: 0.45, height: 0.9, color: '#5D4037', icon: '🪑' },
+    desk: getCatalogForZone('table', 'checkin')!,
+    chair: getCatalogForZone('dining-chair', 'checkin')!,
   },
   photo: {
-    backdrop: { type: 'backdrop', name: '打卡背景墙', category: 'signage', width: 2.4, depth: 0.15, height: 2.0, color: '#4A7C59', icon: '🖼️' },
-    plant: { type: 'plant', name: '绿植', category: 'decor', width: 0.6, depth: 0.6, height: 1.2, color: '#4A7C59', icon: '🌿' },
+    backdrop: getCatalogForZone('backdrop', 'photo')!,
+    plant: getCatalogForZone('plant', 'photo')!,
   },
   rest: {
-    bench: { type: 'bench', name: '长椅', category: 'rest', width: 1.8, depth: 0.45, height: 0.45, color: '#8D6E63', icon: '🪑' },
+    bench: getCatalogForZone('bench', 'rest')!,
   },
-} as const;
+};
 
 /**
  * 把一组 zone 标注 + 密度旋钮转成家具放置列表（只返回 placements）。

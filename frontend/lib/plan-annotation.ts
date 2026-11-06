@@ -7,7 +7,7 @@
  * - 坐标一律米制、房间中心为原点（与 FurnitureItem.position 同一套约定）。
  */
 
-export type PlanAnnotationKind = 'zone' | 'route' | 'measure';
+export type PlanAnnotationKind = 'zone' | 'route' | 'measure' | 'door';
 
 /** 第 11 批：zone 标注的语义类型，决定批准时落什么家具。 */
 export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest';
@@ -26,11 +26,12 @@ export interface PlanPoint {
   z: number;
 }
 
-/** 标注几何：矩形区域 / 折线动线 / 两点测距，三种互斥形态。 */
+/** 标注几何：矩形区域 / 折线动线 / 两点测距 / 门（4.0 补：开门弧遮挡用）。 */
 export type PlanAnnotationGeometry =
   | { kind: 'rect'; x: number; z: number; width: number; depth: number }
   | { kind: 'polyline'; points: PlanPoint[] }
-  | { kind: 'measure'; from: PlanPoint; to: PlanPoint };
+  | { kind: 'measure'; from: PlanPoint; to: PlanPoint }
+  | { kind: 'door'; wall: 'north' | 'south' | 'east' | 'west'; position: number; widthM: number };
 
 export interface PlanAnnotation {
   id: string;

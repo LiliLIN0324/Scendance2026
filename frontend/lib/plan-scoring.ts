@@ -16,7 +16,7 @@ import {
   type ZonePlanSkipped,
 } from './plan-approve';
 import { evaluateFlow, evaluateReachability, type FlowEvaluation } from './flow-constraints';
-import { evaluateHumanFactors, type ScoredViolation } from './human-factors';
+import { evaluateHumanFactors, evaluateDoorSweep, evaluatePrivacyOrder, type ScoredViolation } from './human-factors';
 
 /** 三档密度旋钮。 */
 export type PlanVariantId = 'sparse' | 'balanced' | 'dense';
@@ -174,7 +174,16 @@ function scoreVariant(
   const reach = evaluateReachability(placements, annotations, roomSize);
   // P1：家具 footprint 真重叠（两两 AABB，含 0.02m 容差）。
   const furnViolations = detectFurnitureOverlap(placements);
-  const violations = [...hfViolations, ...reach.violations, ...furnViolations];
+  // 4.0.0 补：门弧遮挡 + 隐私区顺序建议。
+  const doorViolations = evaluateDoorSweep(placements, annotations);
+  const privacyViolations = evaluatePrivacyOrder(annotations, roomSize);
+  const violations = [
+    ...hfViolations,
+    ...reach.violations,
+    ...furnViolations,
+    ...doorViolations,
+    ...privacyViolations,
+  ];
   const hfPenalty = violations.reduce((sum, v) => {
     if (v.severity !== 'hard') return sum;
     if (v.code === 'CHAIR_GAP') return sum - 1;
@@ -183,6 +192,7 @@ function scoreVariant(
     if (v.code === 'BBOX_OVERLAP') return sum - 2;
     if (v.code === 'ZONE_PAIR_DISCONNECTED') return sum - 2;
     if (v.code === 'ZONE_ENTRANCE_BLOCKED') return sum - 3;
+    if (v.code === 'DOOR_SWEEP_BLOCKED') return sum - 3;
     return sum;
   }, 0);
 
