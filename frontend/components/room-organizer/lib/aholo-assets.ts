@@ -38,13 +38,17 @@ const ASSET_TIMEOUT_MS = 330_000;
 /**
  * 场景资产的拍摄位置（docs/19 地理底图）：采集中心经纬度与覆盖半径。
  * 只作元数据给底图对齐用，不参与碰撞/落盘几何，更不进重建素材（RECON_MATERIAL_BAN）。
+ *
+ * 坐标系边界（MAP-04，详见 lib/geo-coords.ts）：本类型的坐标一律按 GCJ-02 解释——
+ * picker/lookup 本来就取自高德；将来若接入 GPS/EXIF/采集遥测（WGS-84）来源，
+ * 必须先过 `wgs84ToGcj02` 再写入，否则底图自动锚定（room-organizer 的 scanAssetId 铺图）会偏几百米。
  */
 export type AholoAssetGeo = {
   lng: number;
   lat: number;
   /** 采集覆盖半径（米）；缺了就由底图侧按资产尺度推。 */
   radiusM?: number;
-  /** 坐标来源：picker=地图圈画采集单；manual=人工标注；lookup=地名查得（Bingo 调研路线）。 */
+  /** 坐标来源：picker=地图圈画采集单；manual=人工标注（坐标系未标注，接入前先确认）；lookup=地名查得（Bingo 调研路线）。 */
   source: 'picker' | 'manual' | 'lookup';
 };
 

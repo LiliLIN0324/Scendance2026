@@ -139,5 +139,10 @@ export function GeoBasemapInput({ area, onApply, view2D, onFrameOverview, overla
         </button>
       </>}
     {notice && <span className="sc-geo-notice" role="alert">{notice}</span>}
+    {area && <span className="sc-geo-attribution" data-testid="geo-basemap-attribution">
+      {area.presetId === 'xihu-scenic'
+        ? '底图 © 高德地图 · 范围线/水面 © OpenStreetMap 贡献者'
+        : '底图 © 高德地图'}
+    </span>}
   </div>;
 }

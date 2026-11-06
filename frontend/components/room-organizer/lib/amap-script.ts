@@ -8,8 +8,14 @@ export interface AmapPlaceSearch {
   search(keyword: string, cb: (status: string, result: unknown) => void): void;
 }
 
+/** 输入提示（联想）。2.0 版插件名为 AMap.AutoComplete（1.4 时代叫 Autocomplete，勿混用）。 */
+export interface AmapAutoComplete {
+  search(keyword: string, cb: (status: string, result: unknown) => void): void;
+}
+
 export interface AmapNamespace {
   PlaceSearch?: new (opts: Record<string, unknown>) => AmapPlaceSearch;
+  AutoComplete?: new (opts: Record<string, unknown>) => AmapAutoComplete;
   Map?: new (...args: unknown[]) => unknown;
   MouseTool?: new (...args: unknown[]) => unknown;
   TileLayer?: { Satellite?: new () => { setMap(map: unknown): void; show(): void } };
@@ -18,7 +24,7 @@ export interface AmapNamespace {
 // 高德 Key 的域名白名单只放行线上域名时，localhost 会被回 10006（INVALID_USER_DOMAIN）并用 JSON 顶掉脚本，
 // 浏览器按 ORB 直接拦掉。本机 dev 改走 3199 代理拉脚本 + 代理服务请求，线上仍直连。
 const AMAP_DEV_PROXY = 'http://127.0.0.1:3199';
-const AMAP_PLUGINS = 'AMap.PlaceSearch,AMap.MouseTool,AMap.ToolBar';
+const AMAP_PLUGINS = 'AMap.PlaceSearch,AMap.AutoComplete,AMap.MouseTool,AMap.ToolBar';
 
 /** 当前页面是否要用本机代理；只有 localhost / 127.0.0.1 才启用，线上域名保持直连。 */
 export function amapDevProxyOrigin(): string {
