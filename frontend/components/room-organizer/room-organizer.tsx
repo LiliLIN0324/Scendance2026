@@ -1964,7 +1964,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     controlsRef,
     applyPreset,
     // 导出走实时那条渲染栈（点云背景 + 布置前景），否则成图里只剩布置。
-    paintFrame: (renderer, scene, camera) => paintSplatFrame(renderer, scene, camera),
+    paintFrame: (renderer, scene, camera) => paintSplatFrame(renderer, scene, camera, { guides: false }),
     onImported: clearTransientSelection,
   });
 
