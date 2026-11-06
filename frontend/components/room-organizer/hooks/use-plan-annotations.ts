@@ -18,6 +18,12 @@ interface PlanAnnotationState {
   annotationsVisible: boolean;
   /** 单调递增的标注 id 计数器，避免同一草案里 id 撞车。 */
   nextId: number;
+  /**
+   * 结论失效计数器：任何 draft/annotation 变更 action 都 +1。
+   * 消费侧（评分 / reachability / 门弧检查）依赖它重算，旧结论标记 stale。
+   * TOGGLE_VISIBLE / SET_DRAW_MODE 这类 UI 偏好不 +1，因为不改数据。
+   */
+  revision: number;
 }
 
 const initialState: PlanAnnotationState = {
@@ -25,6 +31,7 @@ const initialState: PlanAnnotationState = {
   drawMode: 'off',
   annotationsVisible: true,
   nextId: 1,
+  revision: 0,
 };
 
 type Action =
@@ -43,36 +50,42 @@ export interface ZoneRectItem {
   rect: { x: number; z: number; width: number; depth: number };
 }
 
+function bump(state: PlanAnnotationState, next: Omit<PlanAnnotationState, 'revision'>): PlanAnnotationState {
+  return { ...next, revision: state.revision + 1 };
+}
+
 function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationState {
   switch (action.type) {
     case 'START_DRAFT':
       // 重新开一份草案，绘制模式默认关、可见性保持。
-      return {
-        ...state,
+      return bump(state, {
         draft: createEmptyPlanDraft(),
         nextId: 1,
         drawMode: 'off',
-      };
+        annotationsVisible: state.annotationsVisible,
+      });
     case 'CLEAR_DRAFT':
       if (!state.draft) return state;
       // 取消/换一版必须整份关闭（draft 置 null），否则空草案会永远卡在「还没有阶段」。
-      return { ...state, draft: null, drawMode: 'off' };
+      return bump(state, { ...state, draft: null, drawMode: 'off' });
     case 'REPLACE_DRAFT':
-      return { ...state, draft: action.draft, nextId: 1 };
+      return bump(state, { ...state, draft: action.draft, nextId: 1 });
     case 'TOGGLE_VISIBLE':
+      // 可见性是 UI 偏好，不改数据，不 bump revision。
       return { ...state, annotationsVisible: !state.annotationsVisible };
     case 'SET_DRAW_MODE':
+      // 绘制模式也是 UI 偏好，不 bump revision。
       return { ...state, drawMode: action.mode };
     case 'ADD_ANNOTATION': {
       // 调用方没先 startDraft 也能直接落（例如「回好自动落区」在一个事件回调里连落多个矩形）：
       // reducer 自己补一份空草案，避免闭包里 state.draft 还是 null 被静默丢弃。
       const base = state.draft ?? createEmptyPlanDraft();
       const nextDraft = addAnnotationToDraft(base, action.annotation);
-      return {
+      return bump(state, {
         ...state,
         draft: nextDraft,
         nextId: state.nextId + 1,
-      };
+      });
     }
     case 'ADD_ZONE_RECTS': {
       // 「回好自动落区」专用：一次 dispatch 落多个矩形，id 在 reducer 里连续自增，
@@ -103,7 +116,7 @@ function reducer(state: PlanAnnotationState, action: Action): PlanAnnotationStat
         });
         nextId += 1;
       }
-      return { ...state, draft, nextId };
+      return bump(state, { ...state, draft, nextId });
     }
     default:
       return state;
@@ -116,6 +129,12 @@ export interface UsePlanAnnotationsResult {
   annotationsVisible: boolean;
   /** 直接喂给 2D 覆盖渲染层的标注数组。 */
   annotations: PlanAnnotation[];
+  /**
+   * 结论失效计数器：任何 draft/annotation 变更都 +1。
+   * 消费侧 useEffect 依赖它重跑评分 / reachability / 门弧检查；
+   * 旧结论在重算完成前应标记为 stale / 「核验中」。
+   */
+  revision: number;
   startDraft(): void;
   clearDraft(): void;
   replaceDraft(draft: LayoutPlanDraft): void;
@@ -225,6 +244,7 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     drawMode: state.drawMode,
     annotationsVisible: state.annotationsVisible,
     annotations,
+    revision: state.revision,
     startDraft,
     clearDraft,
     replaceDraft,

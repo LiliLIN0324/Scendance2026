@@ -123,3 +123,40 @@ describe('use-layout-store — development hot replacement state', () => {
     expect(second.getState().actions).not.toBe(first.getState().actions);
   });
 });
+
+describe('use-layout-store — 结论失效计数器 revision', () => {
+  beforeEach(reset);
+
+  it('初始 revision 为 0', () => {
+    const store = createLayoutStore();
+    expect(store.getState().revision).toBe(0);
+  });
+
+  it('addCatalogItem / moveItem / removeItem 每次都 +1，旧结论应判 stale', () => {
+    const store = createLayoutStore();
+    const r0 = store.getState().revision;
+    const id = store.getState().actions.addCatalogItem(makeCatalogItem(), { x: 1, z: 1 });
+    const r1 = store.getState().revision;
+    expect(r1).toBe(r0 + 1);
+
+    store.getState().actions.setLocked(id, false);
+    const r2 = store.getState().revision;
+    expect(r2).toBe(r1 + 1);
+
+    store.getState().actions.moveItem(id, 3, 3);
+    const r3 = store.getState().revision;
+    expect(r3).toBe(r2 + 1);
+
+    store.getState().actions.removeItem(id);
+    expect(store.getState().revision).toBe(r3 + 1);
+  });
+
+  it('setWidth / applyLayout 等场地变更也 bump revision', () => {
+    const store = createLayoutStore();
+    const r0 = store.getState().revision;
+    store.getState().actions.setWidth(15);
+    expect(store.getState().revision).toBe(r0 + 1);
+    store.getState().actions.applyLayout({ ...INITIAL_LAYOUT, width: 10 });
+    expect(store.getState().revision).toBe(r0 + 2);
+  });
+});
