@@ -192,7 +192,28 @@ export interface ReachabilityResult {
   unreachableZones: string[];
   /** 不可达转换为标准 violation（severity=hard，供 plan-scoring 扣分）。 */
   violations: ScoredViolation[];
+  /** 固定三对 zone 之间的连通性（签到→圆桌、圆桌→休息、打卡→休息）。 */
+  pairReachability: Array<{ from: string; to: string; connected: boolean }>;
+  /** zone 入口边（z0 边）被家具 footprint 覆盖率 ≥50% 的列表。 */
+  blockedBy: Array<{
+    zoneId: string;
+    blockedFurnitureIds: string[];
+    coverageRatio: number;
+  }>;
 }
+
+/**
+ * 固定要测的三对 zone（按 zoneType 匹配，不是 zoneId）。
+ * 顺序固定，UI/测试都依赖这个顺序。
+ */
+const PAIR_CHECKS: ReadonlyArray<{ from: 'checkin' | 'roundtable' | 'photo'; to: 'roundtable' | 'rest' }> = [
+  { from: 'checkin', to: 'roundtable' },
+  { from: 'roundtable', to: 'rest' },
+  { from: 'photo', to: 'rest' },
+];
+
+/** zone 入口边被家具覆盖多少比例以上 → 视为堵门。 */
+const ENTRANCE_BLOCKED_RATIO = 0.5;
 
 /**
  * 走廊连通 + zone 可达性评估（对齐 Co-Layout research-b）。
@@ -209,7 +230,13 @@ export function evaluateReachability(
   zones: readonly PlanAnnotation[],
   roomSize: { width: number; height: number } | undefined,
 ): ReachabilityResult {
-  const empty: ReachabilityResult = { reachableZones: [], unreachableZones: [], violations: [] };
+  const empty: ReachabilityResult = {
+    reachableZones: [],
+    unreachableZones: [],
+    violations: [],
+    pairReachability: [],
+    blockedBy: [],
+  };
   if (!roomSize || !Number.isFinite(roomSize.width) || !Number.isFinite(roomSize.height)) {
     return empty;
   }
@@ -300,5 +327,110 @@ export function evaluateReachability(
       });
     }
   }
-  return { reachableZones, unreachableZones, violations };
+
+  /* ---------- P1：固定三对 zone 连通性 BFS ---------- */
+  // 取每类 zoneType 的「代表 zone」（按出现顺序第一个）。
+  const zoneByType = new Map<string, (typeof rects)[number]>();
+  for (const zone of rects) {
+    const t = zone.zoneType;
+    if (t && !zoneByType.has(t)) zoneByType.set(t, zone);
+  }
+
+  // zone 入口点：z0 边中点再往 z 负方向退半格（站在入口外的走廊上）。
+  const entryCellOf = (
+    zone: (typeof rects)[number],
+  ): { c: number; r: number } | null => {
+    const g = zone.geometry;
+    const ex = g.x + g.width / 2;
+    const ez = g.z - REACH_CELL / 2;
+    const c = Math.floor((ex + roomSize.width / 2) / REACH_CELL);
+    const r = Math.floor((ez + roomSize.height / 2) / REACH_CELL);
+    if (c < 0 || c >= cols || r < 0 || r >= rows) return null;
+    return { c, r };
+  };
+
+  // 从 (startC, startR) 出发 4 邻域 BFS，目标格 visited 即连通。
+  const bfsConnected = (sc: number, sr: number, tc: number, tr: number): boolean => {
+    if (blocked[idx(sc, sr)] || blocked[idx(tc, tr)]) return false;
+    const vis = new Uint8Array(cols * rows);
+    const q: number[] = [];
+    vis[idx(sc, sr)] = 1;
+    q.push(idx(sc, sr));
+    while (q.length > 0) {
+      const cur = q.pop()!;
+      const cc = cur % cols;
+      const cr = Math.floor(cur / cols);
+      if (cc === tc && cr === tr) return true;
+      const nb: Array<[number, number]> = [[cc - 1, cr], [cc + 1, cr], [cc, cr - 1], [cc, cr + 1]];
+      for (const [nc, nr] of nb) {
+        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+        if (blocked[idx(nc, nr)] || vis[idx(nc, nr)]) continue;
+        vis[idx(nc, nr)] = 1;
+        q.push(idx(nc, nr));
+      }
+    }
+    return vis[idx(tc, tr)] === 1;
+  };
+
+  const pairReachability: ReachabilityResult['pairReachability'] = [];
+  for (const pair of PAIR_CHECKS) {
+    const fromZone = zoneByType.get(pair.from);
+    const toZone = zoneByType.get(pair.to);
+    if (!fromZone || !toZone) continue; // 任一类缺失 → 跳过该对
+    const fromCell = entryCellOf(fromZone);
+    const toCell = entryCellOf(toZone);
+    if (!fromCell || !toCell) continue;
+    const connected = bfsConnected(fromCell.c, fromCell.r, toCell.c, toCell.r);
+    pairReachability.push({ from: fromZone.id, to: toZone.id, connected });
+    if (!connected) {
+      violations.push({
+        code: 'ZONE_PAIR_DISCONNECTED',
+        severity: 'hard',
+        message: `「${fromZone.label}」走到不了「${toZone.label}」`,
+      });
+    }
+  }
+
+  /* ---------- P1：zone 入口边被家具 footprint 覆盖 ---------- */
+  // 每件家具一个稳定 id（placement 本身无 id）。
+  const furnId = (p: ZoneFurniturePlacement, i: number): string =>
+    `${p.zoneId}@${p.x.toFixed(2)},${p.z.toFixed(2)}#${i}`;
+
+  const blockedBy: ReachabilityResult['blockedBy'] = [];
+  for (const zone of rects) {
+    const g = zone.geometry;
+    const covered: Array<{ id: string; len: number }> = [];
+    for (let i = 0; i < placements.length; i++) {
+      const p = placements[i]!;
+      const fx1 = p.x - p.spec.width / 2;
+      const fx2 = p.x + p.spec.width / 2;
+      const fz1 = p.z - p.spec.depth / 2;
+      const fz2 = p.z + p.spec.depth / 2;
+      // z0 边（水平线 z=g.z）穿过家具 footprint？
+      if (fz1 > g.z + EPS || fz2 < g.z - EPS) continue;
+      const ix1 = Math.max(g.x, fx1);
+      const ix2 = Math.min(g.x + g.width, fx2);
+      const len = Math.max(0, ix2 - ix1);
+      if (len <= EPS) continue;
+      covered.push({ id: furnId(p, i), len });
+    }
+    if (g.width <= EPS) continue;
+    // 合并重叠段（按 id 累加，但同一件家具的 id 唯一，直接 sum len 即可）。
+    const total = covered.reduce((s, c) => s + c.len, 0);
+    const ratio = total / g.width;
+    if (ratio < ENTRANCE_BLOCKED_RATIO - EPS) continue;
+    blockedBy.push({
+      zoneId: zone.id,
+      blockedFurnitureIds: covered.map((c) => c.id),
+      coverageRatio: ratio,
+    });
+    violations.push({
+      code: 'ZONE_ENTRANCE_BLOCKED',
+      severity: 'hard',
+      zoneId: zone.id,
+      message: `「${zone.label}」入口被 ${covered.length} 件家具堵了一半`,
+    });
+  }
+
+  return { reachableZones, unreachableZones, violations, pairReachability, blockedBy };
 }

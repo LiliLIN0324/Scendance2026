@@ -3,6 +3,7 @@ import {
   AISLE_MIN_NORMAL,
   AISLE_MIN_WHEELCHAIR,
   evaluateFlow,
+  evaluateReachability,
 } from './flow-constraints';
 import type { PlanAnnotation, ZoneSemanticType } from './plan-annotation';
 import type { ZoneFurniturePlacement } from './plan-approve';
