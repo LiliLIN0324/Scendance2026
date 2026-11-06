@@ -55,7 +55,7 @@ function harness(opts?: {
   onHangDemoEnvironment?: () => void;
 }) {
   state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
-  return render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
+  return render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
     <ActivityBrief tools={[]}/>
     <MapVenueOverlay
       {...(opts?.onReconUpload === undefined ? {} : { onReconUpload: opts.onReconUpload })}
@@ -67,12 +67,13 @@ function harness(opts?: {
 afterEach(() => { cleanup(); });
 
 describe('圈画 → 采集单 → 上传重建', () => {
-  it('圈完一块地，采集单留在浮层里，不用重新打开地图', () => {
+  it('圈完一块地浮层即收；重开地图采集单还在，不用重新圈', () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const overlay = screen.getByRole('dialog', { name: '地图选址' });
     fireEvent.click(within(overlay).getByRole('button', { name: '模拟圈画' }));
-    expect(screen.getByRole('dialog', { name: '地图选址' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: '地图选址' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const card = screen.getByRole('region', { name: '现场采集单' });
     expect(within(card).getByText(/现场采集单 · \d+ 张 · 沿流线/)).toBeTruthy();
   });
@@ -82,6 +83,8 @@ describe('圈画 → 采集单 → 上传重建', () => {
     harness({ onReconUpload });
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     fireEvent.click(within(screen.getByRole('dialog', { name: '地图选址' })).getByRole('button', { name: '模拟圈画' }));
+    expect(screen.queryByRole('region', { name: '现场采集单' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const card = screen.getByRole('region', { name: '现场采集单' });
     fireEvent.click(within(card).getByRole('button', { name: /去上传现场素材/ }));
     expect(onReconUpload).toHaveBeenCalledWith(expect.objectContaining({ name: '盐官潮乐之城' }));
