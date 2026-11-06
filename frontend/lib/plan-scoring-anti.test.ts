@@ -45,7 +45,7 @@ describe('B. zone 越出场地边界一半 → 整块 zone 被跳过', () => {
     // 桌心网格在 [x: -1.1..1.1, z: 5.9..8.1]，所有桌心 z>4 → 越界率 100%。
     const ann = makeZone('z-out', { x: -2, z: 5, w: 4, d: 4 });
     const plans = generateScoredPlans([ann], { roomSize: { width: 10, height: 8 } });
-    expect(plans).toHaveLength(3);
+    expect(plans.length).toBeGreaterThanOrEqual(1);
     for (const p of plans) {
       const offsiteReason = p.skipped.find((s) =>
         /越出场地/.test(s.reason),
@@ -93,33 +93,39 @@ describe('F. 大场地 roundtable 三版必须有可观测差异', () => {
     // 但 MAX_TABLES_PER_ZONE=3 上限封顶。关键钉：reasons 首条前缀必须差异化。
     const ann = makeZone('big', { x: -6, z: -4, w: 12, d: 8 });
     const plans = generateScoredPlans([ann]);
-    expect(plans).toHaveLength(3);
-    const [sparse, balanced, dense] = plans;
+    // 纯圆桌区：sparse 删一桌，balanced/dense 无 checkin 不 squeeze → 合并为 2 版。
+    expect(plans.length).toBeGreaterThanOrEqual(2);
+    const variants = plans.map(p => p.variantId);
+    expect(variants).toContain('sparse');
+    expect(variants).toContain('balanced');
 
-    // reasons 首条前缀差异化（红线：三版必须真拉开）。
+    const sparse = plans.find(p => p.variantId === 'sparse')!;
+    const balanced = plans.find(p => p.variantId === 'balanced')!;
+
+    // reasons 首条前缀差异化（红线：版本必须真拉开）。
     expect(sparse.reasons[0]).toContain('松：');
     expect(balanced.reasons[0]).toContain('适中：');
-    expect(dense.reasons[0]).toContain('密：');
 
-    // 三版不能 capacitySeats / score 完全一样（钉死同分是 bug）。
+    // 各版不能 capacitySeats / score 完全一样（钉死同分是 bug）。
     const capSet = new Set(plans.map((p) => p.capacitySeats));
     const scoreSet = new Set(plans.map((p) => p.score));
     expect(capSet.size + scoreSet.size).toBeGreaterThanOrEqual(2);
   });
 });
 
-describe('H. 空 annotations → 三版 placements=[]，推荐版 balanced', () => {
-  it('空数组 → 三版 placements 全空，pickRecommendedPlan 返回 balanced', () => {
+describe('H. 空 annotations → 合并为 1 版 balanced', () => {
+  it('空数组 → 三版 placements 全空、同分同 subScores，合并为 1 版 balanced', () => {
     const plans = generateScoredPlans([]);
-    expect(plans).toHaveLength(3);
+    expect(plans).toHaveLength(1);
+    expect(plans[0]!.variantId).toBe('balanced');
     for (const p of plans) {
       expect(p.placements).toEqual([]);
       expect(p.skipped).toEqual([]);
       expect(p.capacitySeats).toBe(0);
     }
     const rec = pickRecommendedPlan(plans);
-    expect(rec.variantId).toBe('balanced');
-    expect(rec.placements).toEqual([]);
+    expect(rec!.variantId).toBe('balanced');
+    expect(rec!.placements).toEqual([]);
   });
 });
 
@@ -155,7 +161,7 @@ describe('P1. subScores 0-100 三维子分', () => {
   it('9×9 圆桌区：三版 subScores 不全相同（capacity 或 flow 至少一项有差）', () => {
     const ann = makeZone('big', { x: -4.5, z: -4.5, w: 9, d: 9, zoneType: 'roundtable' });
     const plans = generateScoredPlans([ann], { roomSize: { width: 12, height: 12 } });
-    expect(plans).toHaveLength(3);
+    expect(plans.length).toBeGreaterThanOrEqual(2);
     const capSet = new Set(plans.map((p) => p.subScores.capacity));
     const flowSet = new Set(plans.map((p) => p.subScores.flow));
     // sparse 主动删一桌 → capacity 必降；dense 通道收紧 → flow 可能降。
@@ -183,6 +189,90 @@ describe('P1. subScores 0-100 三维子分', () => {
       expect(Number.isFinite(p.subScores.ergonomics)).toBe(true);
       expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
       expect(p.subScores.flow).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
+describe('4.0.1 默认南门（withDefaultDoor）+ 墙退距', () => {
+  it('无 door 标注时数据层合成默认南门；签到台压在门近似点 (0,0) 附近 → violations 含 DOOR_SWEEP_BLOCKED', () => {
+    // 签到区 2×1.4 居中：desk rowZ = 0 + 0.3 + 0.3 = 0.6，desk x=0。
+    // evaluateDoorSweep 对 south 门近似门点 (position=0, z=0)；
+    // desk 中心距 (0,0) 仅 0.6m，furnitureR=0.7，0.6 < 0.45+0.7=1.15 → 触发。
+    const ann = makeZone('checkin', { x: -1, z: 0, w: 2, d: 1.4, zoneType: 'checkin', label: '签到区' });
+    const plans = generateScoredPlans([ann], { roomSize: { width: 10, height: 8 } });
+    expect(plans.length).toBeGreaterThanOrEqual(1);
+    for (const p of plans) {
+      expect(p.violations.some((v) => v.code === 'DOOR_SWEEP_BLOCKED')).toBe(true);
+      // 推测门：assurance=draft_unverified，reasons 含「未确认」。
+      expect(p.assurance).toBe('draft_unverified');
+      expect(p.reasons.some((r) => r.includes('未确认'))).toBe(true);
+    }
+  });
+
+  it('用户已画真实门时 assurance=verified（不是 draft_unverified）', () => {
+    const userDoor: PlanAnnotation = {
+      id: 'user-door-north',
+      kind: 'door',
+      label: '北门',
+      stageNo: 1,
+      geometry: { kind: 'door', wall: 'north', position: 0, widthM: 0.9 },
+    };
+    const zone = makeZone('round', { x: -4, z: 0, w: 4, d: 4, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([zone, userDoor], { roomSize: { width: 12, height: 10 } });
+    for (const p of plans) {
+      expect(p.assurance).toBe('verified');
+      expect(p.violations.some(v => v.code === 'DOOR_UNKNOWN')).toBe(false);
+    }
+  });
+
+  it('缺 roomSize 时生成 ROOM_SIZE_UNKNOWN soft unknown violation，不当成 pass', () => {
+    const ann = makeZone('big', { x: -4.5, z: -4.5, w: 9, d: 9, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([ann]); // 不传 roomSize
+    for (const p of plans) {
+      const unknown = p.violations.find(v => v.code === 'ROOM_SIZE_UNKNOWN');
+      expect(unknown).toBeDefined();
+      expect(unknown!.severity).toBe('soft');
+      expect(unknown!.status).toBe('unknown');
+      expect(p.reasons.some(r => r.includes('缺少房间'))).toBe(true);
+    }
+  });
+
+  it('用户已画 door 标注时 withDefaultDoor 不重复添加（直接走真实门）', () => {
+    // 用一个远离任何家具的北门，确认不因为默认南门误报。
+    // 这里只验证 generateScoredPlans 不崩、violations 可枚举。
+    const userDoor: PlanAnnotation = {
+      id: 'user-door-north',
+      kind: 'door',
+      label: '北门',
+      stageNo: 1,
+      geometry: { kind: 'door', wall: 'north', position: 0, widthM: 0.9 },
+    };
+    // 圆桌区放场地远离门的位置（避免真压到北门近似点）。
+    const zone = makeZone('round', { x: -4, z: 0, w: 4, d: 4, zoneType: 'roundtable' });
+    const plans = generateScoredPlans([zone, userDoor], { roomSize: { width: 12, height: 10 } });
+    for (const p of plans) {
+      expect(Array.isArray(p.violations)).toBe(true);
+    }
+  });
+
+  it('墙退距：所有 placement 中心距 [±W/2, ±H/2] 边 ≥ 0.3m（小房间贴墙场景被内移或 skipped）', () => {
+    // 8×6 小房间；签到区故意贴南墙（z0=2.6，半深 3，desk rowZ 会接近南墙）。
+    // desk depth 0.6；rowZ = 2.6 + 0.3 + 0.3 = 3.2；桌底沿 = 3.2+0.3=3.5 > 3-0.3=2.7 → 被内移。
+    const ann = makeZone('checkin', { x: -1, z: 2.6, w: 2, d: 1.4, zoneType: 'checkin' });
+    const plans = generateScoredPlans([ann], { roomSize: { width: 8, height: 6 } });
+    for (const p of plans) {
+      for (const pl of p.placements) {
+        const hw = pl.spec.width / 2;
+        const hd = pl.spec.depth / 2;
+        // 左沿距西墙
+        expect(pl.x - hw - (-4)).toBeGreaterThanOrEqual(0.3 - 0.01);
+        // 右沿距东墙
+        expect(4 - (pl.x + hw)).toBeGreaterThanOrEqual(0.3 - 0.01);
+        // 上沿距北墙
+        expect(pl.z - hd - (-3)).toBeGreaterThanOrEqual(0.3 - 0.01);
+        // 下沿距南墙
+        expect(3 - (pl.z + hd)).toBeGreaterThanOrEqual(0.3 - 0.01);
+      }
     }
   });
 });

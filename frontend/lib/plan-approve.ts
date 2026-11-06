@@ -24,6 +24,12 @@ export const CHAIR_RING_RADIUS = 0.9;
 export const MAX_TABLES_PER_ZONE = 3;
 /** 距 zone 边缘的最小留白（米）。 */
 export const ZONE_INSET = 0.3;
+/** 所有家具 footprint 距四面墙的最小退距（米）。 */
+export const WALL_CLEARANCE_M = 0.3;
+/** 椅子背向桌子那侧（拉椅出人空间）距墙最小退距（米）。 */
+export const CHAIR_BACK_CLEARANCE_M = 0.6;
+/** 椅子中心到所属桌心允许的最大距离（米）：桌外接圆 + 椅深 + 容差。 */
+export const MAX_CHAIR_OWNER_DIST_M = TABLE_DIAMETER / 2 + CHAIR_SIZE + 0.15;
 
 /** 家具模板（与 onApprove 落库字段一一对应）。 */
 export interface FurnitureSpec {
@@ -47,6 +53,11 @@ export interface ZoneFurniturePlacement {
   /** 来源 zone 标注 id，便于出问题时回溯。 */
   zoneId: string;
   zoneType: ZoneSemanticType;
+  /**
+   * 仅餐椅（secondary）使用：所属主桌的位置 key（`${table.x}|${table.z}`）。
+   * 主桌本身（primary）不设置该字段。
+   */
+  ownerTableId?: string;
 }
 
 export interface ZonePlanSkipped {
@@ -183,20 +194,26 @@ function gridRoundtable(
     const db = (b.x - centerX) ** 2 + (b.z - centerZ) ** 2;
     return da - db;
   });
+
+  // 每张主桌配椅数从 catalog 读（圆桌默认 8）。
+  const chairsPerTable = SPEC.roundtable.table.chairsPerTable ?? 4;
+
   for (const tableAt of points.slice(0, MAX_TABLES_PER_ZONE)) {
     push({ spec: SPEC.roundtable.table, x: tableAt.x, z: tableAt.z, rotation: 0 });
-    const chairs = [
-      { dx: 0, dz: -CHAIR_RING_RADIUS, rotation: Math.PI },
-      { dx: 0, dz: CHAIR_RING_RADIUS, rotation: 0 },
-      { dx: -CHAIR_RING_RADIUS, dz: 0, rotation: Math.PI / 2 },
-      { dx: CHAIR_RING_RADIUS, dz: 0, rotation: -Math.PI / 2 },
-    ];
-    for (const c of chairs) {
+    const tableKey = `${round2(tableAt.x)}|${round2(tableAt.z)}`;
+    // 沿环周按角度均分摆椅；rotation 让椅面朝向桌心。
+    for (let k = 0; k < chairsPerTable; k++) {
+      const theta = (2 * Math.PI * k) / chairsPerTable;
+      const cx = tableAt.x + CHAIR_RING_RADIUS * Math.cos(theta);
+      const cz = tableAt.z + CHAIR_RING_RADIUS * Math.sin(theta);
+      // facing = (-cos θ, -sin θ)；rotation r 满足 (sin r, -cos r) = facing。
+      const rotation = Math.atan2(-Math.cos(theta), Math.sin(theta));
       push({
         spec: SPEC.roundtable.chair,
-        x: round2(tableAt.x + c.dx),
-        z: round2(tableAt.z + c.dz),
-        rotation: c.rotation,
+        x: round2(cx),
+        z: round2(cz),
+        rotation: round2(rotation),
+        ownerTableId: tableKey,
       });
     }
   }
@@ -271,4 +288,125 @@ function rowsRest(
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+/* ---------- 墙退距（4.0.1 新增） ---------- */
+
+/** 场地尺寸（米制、房间中心为原点；width=x 全宽、height=z 全深）。与 plan-scoring.RoomSize 结构同形。 */
+export interface PlanRoomSize {
+  width: number;
+  height: number;
+}
+
+export interface WallClearanceOutcome {
+  placements: ZoneFurniturePlacement[];
+  skipped: ZonePlanSkipped[];
+}
+
+/** 家具 footprint AABB 相交容差（米）：与 plan-scoring.BBOX_OVERLAP_TOLERANCE_M 同值。 */
+const WALL_OVERLAP_TOLERANCE_M = 0.02;
+
+function aabbOverlap(
+  ax: number, az: number, ahw: number, ahd: number,
+  bx: number, bz: number, bhw: number, bhd: number,
+): boolean {
+  const t = WALL_OVERLAP_TOLERANCE_M;
+  const eps = 1e-6;
+  const ax1 = ax - ahw - t;
+  const ax2 = ax + ahw + t;
+  const az1 = az - ahd - t;
+  const az2 = az + ahd + t;
+  const bx1 = bx - bhw - t;
+  const bx2 = bx + bhw + t;
+  const bz1 = bz - bhd - t;
+  const bz2 = bz + bhd + t;
+  return ax1 < bx2 - eps && bx1 < ax2 - eps && az1 < bz2 - eps && bz1 < az2 - eps;
+}
+
+/**
+ * 墙退距后处理：每件家具 footprint 距四面墙至少 WALL_CLEARANCE_M（0.3m）；
+ * 餐椅背向桌子那侧（拉椅出人）至少 CHAIR_BACK_CLEARANCE_M（0.6m）。
+ * 越界先沿法线向内平移到刚好满足；平移后与已接受家具 footprint AABB 相交
+ * （0.02m 容差）则该件进 skipped，reason 「贴墙放不下{家具名}」。
+ *
+ * 纯函数、不可变；输入数组不被修改。
+ */
+export function applyWallClearance(
+  placements: readonly ZoneFurniturePlacement[],
+  roomSize: PlanRoomSize,
+): WallClearanceOutcome {
+  const halfW = roomSize.width / 2;
+  const halfH = roomSize.height / 2;
+  const accepted: ZoneFurniturePlacement[] = [];
+  const skipped: ZonePlanSkipped[] = [];
+
+  for (const p of placements) {
+    const hw = p.spec.width / 2;
+    const hd = p.spec.depth / 2;
+
+    // 四面墙退距；椅子背侧按 0.6m，其余按 0.3m。
+    let cWest = WALL_CLEARANCE_M;
+    let cEast = WALL_CLEARANCE_M;
+    let cNorth = WALL_CLEARANCE_M;
+    let cSouth = WALL_CLEARANCE_M;
+    if (p.spec.type === 'dining-chair' && p.ownerTableId) {
+      const [txRaw, tzRaw] = p.ownerTableId.split('|');
+      const tx = Number(txRaw);
+      const tz = Number(tzRaw);
+      if (Number.isFinite(tx) && Number.isFinite(tz)) {
+        const dx = p.x - tx;
+        const dz = p.z - tz;
+        const len = Math.hypot(dx, dz);
+        if (len > 1e-6) {
+          const backX = dx / len;
+          const backZ = dz / len;
+          if (backX < -0.5) cWest = CHAIR_BACK_CLEARANCE_M;
+          else if (backX > 0.5) cEast = CHAIR_BACK_CLEARANCE_M;
+          if (backZ < -0.5) cNorth = CHAIR_BACK_CLEARANCE_M;
+          else if (backZ > 0.5) cSouth = CHAIR_BACK_CLEARANCE_M;
+        }
+      }
+    }
+
+    // 计算沿法线需要平移的量（dx / dz）。
+    let dx = 0;
+    let dz = 0;
+    const leftEdge = p.x - hw;
+    const rightEdge = p.x + hw;
+    const topEdge = p.z - hd;
+    const bottomEdge = p.z + hd;
+
+    const westLimit = -halfW + cWest;
+    if (leftEdge < westLimit) dx += westLimit - leftEdge;
+    const eastLimit = halfW - cEast;
+    if (rightEdge > eastLimit) dx += eastLimit - rightEdge;
+
+    const northLimit = -halfH + cNorth;
+    if (topEdge < northLimit) dz += northLimit - topEdge;
+    const southLimit = halfH - cSouth;
+    if (bottomEdge > southLimit) dz += southLimit - bottomEdge;
+
+    const nx = round2(p.x + dx);
+    const nz = round2(p.z + dz);
+
+    // 与已接受家具做 AABB 相交检测；相交则放弃这件。
+    let collided = false;
+    for (const q of accepted) {
+      if (aabbOverlap(nx, nz, hw, hd, q.x, q.z, q.spec.width / 2, q.spec.depth / 2)) {
+        collided = true;
+        break;
+      }
+    }
+    if (collided) {
+      skipped.push({
+        zoneId: p.zoneId,
+        label: p.zoneType,
+        reason: `贴墙放不下「${p.spec.name}」，向内平移后与其他家具压住`,
+      });
+      continue;
+    }
+    accepted.push({ ...p, x: nx, z: nz });
+  }
+
+  return { placements: accepted, skipped };
 }

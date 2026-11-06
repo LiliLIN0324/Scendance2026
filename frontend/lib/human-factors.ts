@@ -22,7 +22,14 @@ export type ViolationCode =
   | 'ZONE_PAIR_DISCONNECTED'
   | 'ZONE_ENTRANCE_BLOCKED'
   | 'DOOR_SWEEP_BLOCKED'
-  | 'PRIVACY_ORDER';
+  | 'PRIVACY_ORDER'
+  /** 缺房间尺寸：墙退距/可达性无法核验，不算 pass。 */
+  | 'ROOM_SIZE_UNKNOWN'
+  /** 缺门数据：门弧/动线可信度未知（推测门由 assurance 单独标记）。 */
+  | 'DOOR_UNKNOWN';
+
+/** 检查结果四值：pass 不必生成 violation；violated 进 violations；unknown 软提示；not_applicable 省略。 */
+export type CheckStatus = 'pass' | 'violated' | 'unknown' | 'not_applicable';
 
 export interface ScoredViolation {
   code: ViolationCode;
@@ -31,6 +38,8 @@ export interface ScoredViolation {
   message: string;
   /** 可选：归因的 zoneId。 */
   zoneId?: string;
+  /** 四值状态；缺省视为 violated（向后兼容）。 */
+  status?: CheckStatus;
 }
 
 /** 餐椅中心距小于此值视为过挤（米）。 */
@@ -124,40 +133,87 @@ export function evaluateHumanFactors(
 export const DOOR_SWEEP_RADIUS_M = 0.45;
 
 /**
- * 门弧遮挡：每个 door 标注沿墙开门后 0.45m 半径扇区内若有家具 footprint 落入，
- * → DOOR_SWEEP_BLOCKED hard（-3）。无 door 标注返回空。
+ * 门弧遮挡：每个 door 标注按真实墙位置算扇区中心，沿墙法线向室内展开 widthM/2 半径。
+ * 家具 footprint 落入扇区 → DOOR_SWEEP_BLOCKED hard（-3）。
+ *
+ * 门宽已知但开启方向（swing）未知 → 结论为「近似，门扇未核验」，
+ * 另产一条 soft unknown violation（DOOR_SWEEP_UNVERIFIED），不声称通过。
+ * roomSize 缺失时退化为旧近似并标 INSUFFICIENT_INPUT。
  */
 export function evaluateDoorSweep(
   placements: readonly ZoneFurniturePlacement[],
   annotations: readonly PlanAnnotation[],
+  roomSize?: { width: number; height: number },
 ): ScoredViolation[] {
   const doors = annotations.filter((a) => a.kind === 'door' && a.geometry.kind === 'door');
   if (doors.length === 0) return [];
   const out: ScoredViolation[] = [];
+
+  // 缺 roomSize：几何不真实，统一标 unknown，不算通过。
+  if (!roomSize || !Number.isFinite(roomSize.width) || !Number.isFinite(roomSize.height)) {
+    for (const d of doors) {
+      out.push({
+        code: 'DOOR_SWEEP_BLOCKED',
+        severity: 'soft',
+        status: 'unknown',
+        zoneId: d.id,
+        message: `「${d.label || '门'}」缺房间尺寸，门弧几何未核验（近似，门扇未核验）`,
+      });
+    }
+    return out;
+  }
+
+  const halfW = roomSize.width / 2;
+  const halfH = roomSize.height / 2;
+
   for (const d of doors) {
     const g = d.geometry;
     if (g.kind !== 'door') continue;
-    // 门沿墙位置的世界坐标（墙边为 ±room 半边长；这里用 position 直接当沿墙坐标）。
-    // 简化：认为门在场地边线上，门扇区中心 = (position, 边线z/x)，扇区半径 DOOR_SWEEP_RADIUS_M。
-    // wall=north 门在 z=-H/2 边，south 在 z=+H/2，west 在 x=-W/2，east 在 x=+W/2。
-    // 由于没传 roomSize，这里只做「position 附近 0.45m 内家具」的近似判定，
-    // 用 furniture 中心到门沿墙坐标点的欧氏距离 < DOOR_SWEEP_RADIUS_M + 家具外接半径近似 0.3m。
+    // 真实门中心按墙位置算；扇区半径 = 门宽的一半。
+    const sweepR = g.widthM / 2;
+    let doorX: number;
+    let doorZ: number;
+    // 向室内展开的法线方向（用于判定家具在门内侧而非墙外）。
+    let inwardX: number;
+    let inwardZ: number;
+    switch (g.wall) {
+      case 'south':
+        doorX = g.position; doorZ = halfH; inwardX = 0; inwardZ = -1; break;
+      case 'north':
+        doorX = g.position; doorZ = -halfH; inwardX = 0; inwardZ = 1; break;
+      case 'east':
+        doorX = halfW; doorZ = g.position; inwardX = -1; inwardZ = 0; break;
+      case 'west':
+        doorX = -halfW; doorZ = g.position; inwardX = 1; inwardZ = 0; break;
+    }
+    let blocked = false;
     for (const p of placements) {
       const furnitureR = Math.max(p.spec.width, p.spec.depth) / 2;
-      // 沿墙坐标点：north/south → x=g.position, z=0（近似）；east/west → x=0, z=g.position
-      const doorX = (g.wall === 'west' || g.wall === 'east') ? 0 : g.position;
-      const doorZ = (g.wall === 'north' || g.wall === 'south') ? 0 : g.position;
-      const dist = Math.hypot(p.x - doorX, p.z - doorZ);
-      if (dist < DOOR_SWEEP_RADIUS_M + furnitureR) {
+      const dx = p.x - doorX;
+      const dz = p.z - doorZ;
+      const dist = Math.hypot(dx, dz);
+      // 家具在扇区半径内，且位于门内侧（向内法线方向投影 ≥ -0.1m 容差）。
+      const inwardProj = dx * inwardX + dz * inwardZ;
+      if (dist < sweepR + furnitureR && inwardProj >= -0.1) {
         out.push({
           code: 'DOOR_SWEEP_BLOCKED',
           severity: 'hard',
+          status: 'violated',
           zoneId: d.id,
-          message: `${d.label || '门'}的开门扇区被「${p.spec.name}」压住，开门会撞家具`,
+          message: `${d.label || '门'}的开门扇区被「${p.spec.name}」压住，开门会撞家具（近似，门扇未核验）`,
         });
-        break; // 每扇门只报一次
+        blocked = true;
+        break;
       }
     }
+    // 无论是否 blocked，开启方向未知 → 软 unknown 提示。
+    out.push({
+      code: 'DOOR_SWEEP_BLOCKED',
+      severity: 'soft',
+      status: 'unknown',
+      zoneId: d.id,
+      message: `「${d.label || '门'}」门扇开启方向未核验，结论为近似${blocked ? '，且已检出遮挡' : ''}`,
+    });
   }
   return out;
 }

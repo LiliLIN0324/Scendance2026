@@ -39,6 +39,11 @@ export interface CatalogFurniture {
   icon: string;
   /** 哪些 zone 类型可用（配方层用它决定落到哪类区）。 */
   zoneTypes: readonly ZoneSemanticType[];
+  /**
+   * 若本条是「主家具（桌子）」，每件主家具默认配多少把 secondary 椅子。
+   * 仅圆桌配方读取；椅子条目本身不需要此字段。
+   */
+  chairsPerTable?: number;
 }
 
 /**
@@ -57,6 +62,7 @@ export const FURNITURE_CATALOG: readonly CatalogFurniture[] = [
     color: '#A0522D',
     icon: '🟫',
     zoneTypes: ['roundtable'],
+    chairsPerTable: 8,
   },
   {
     type: 'dining-chair',
