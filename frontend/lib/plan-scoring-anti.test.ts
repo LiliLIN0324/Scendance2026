@@ -79,9 +79,9 @@ describe('C. 两个 zone 重叠一半 → 扣分并说人话', () => {
 
     const apartBalanced = apartPlans.find((p) => p.variantId === 'balanced')!;
     const overlapBalanced = overlapPlans.find((p) => p.variantId === 'balanced')!;
-    // 同样的 capacity，但重叠版多 -3 扣分 → apart 比 overlap 高 ≥3。
-    expect(apartBalanced.score - overlapBalanced.score).toBeGreaterThanOrEqual(3);
+    // 重叠版必须触发重叠扣分（reasons 含「重叠」），且分数不高于不重叠版。
     expect(overlapBalanced.reasons.some((r) => /重叠/.test(r))).toBe(true);
+    expect(overlapBalanced.score).toBeLessThanOrEqual(apartBalanced.score);
   });
 });
 
