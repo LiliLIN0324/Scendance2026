@@ -23,6 +23,7 @@ import { STORAGE_KEY } from '../lib/constants';
 import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARDS, INITIAL_BRIEF, isBlankBriefScaffold, mergeProposalPresentation, migrateBriefDescription, proposalSummary, type CreativeBrief } from '../lib/creative-brief';
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { buildReviewReference } from '../lib/review-copy';
+import { appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend } from '../lib/workbench-agent';
@@ -752,8 +753,51 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     let result=initial;
     const pollingDeadline=Date.now()+120_000;
     const active=()=>alive.current&&agentScopeRef.current===submittedScope&&epoch===runEpoch.current;
+    // 第 8 批：把云端这一趟写成运行时账本——头部「N 条思考」用的是云端给的
+    // 真实模型调用轮数（call_count，上限 6 轮），步骤流用的是云端自己写的
+    // 进度句（每次工具调用一条中文步骤）。前端不自己编进度。
+    startAgentRun('layout');
+    let lastProgress='';
+    let stepStartedAt=Date.now();
+    let steerNoticeShown=false;
+    /**
+     * 运行条里塞进来的备注，交给正在跑的这一趟。工作线程在下一轮模型调用之前取走，
+     * 所以送达时机是「下一次它要思考的时候」，不是立刻——界面上说的也是这个。
+     *
+     * 任务已经收尾时会回 AGENT_RUN_STOPPED：那条备注没有执行机会，必须如实说，
+     * 不能打着「已提交」的绿灯糊过去。
+     */
+    const deliverSteerNotes=async(current:AgentRun):Promise<void>=>{
+      setAgentSteerDelivered(current.steerTotal??0);
+      const pending=getAgentRun().steerNotes;
+      if(!pending.length)return;
+      clearAgentSteerNotes();
+      for(const note of pending){
+        try{await controller.steerAgentRun(current.id,note);}
+        catch{
+          if(!steerNoticeShown){steerNoticeShown=true;say('这趟已经收尾，你刚写的那句备注没有生效；要改的话请把要求写进新一轮。');}
+          return;
+        }
+      }
+    };
+    const publish=(now:number):void=>{
+      const progress=(result.progress??'').trim();
+      if(progress&&progress!==lastProgress){
+        if(lastProgress)closeAgentStep(now-stepStartedAt);
+        lastProgress=progress;
+        stepStartedAt=now;
+        // 这一趟在确认前不改画布，所以每一步都是只读步——不装成写入步。
+        appendAgentStep({toolName:progress,durationMs:0,isReadonly:true,startedAt:now});
+      }
+      setAgentThoughtCount(result.callCount);
+      // 阶段是云端的真值（第几段工作），刷新后重新读档也接得上；拿不到就清空，
+      // 界面不显示阶段——不拿轮数顶替阶段。
+      setAgentPhase(result.phase??null);
+    };
     while(active()){
       setRun(result);
+      publish(Date.now());
+      await deliverSteerNotes(result);
       const marker=markerRef.current;
       if(marker){try{rememberRun({...marker,runId:result.id},submittedScope);}catch{setNotice('任务已提交，但本机记录更新失败；请保持页面打开。');}}
       if(!['queued','running'].includes(result.state))break;
@@ -762,6 +806,9 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
       if(!active())return;
       result=await controller.getAgentRun(result.id);
     }
+    if(lastProgress)closeAgentStep(Date.now()-stepStartedAt);
+    // 本轮既没给候选也没改动画布 → 出空结果回执卡，不许沉默结束。
+    endAgentRun({emptyOutcome:!result.candidates.length});
     if(active())await consumeRun(result,base,submittedBrief,submittedScope,allowDirect,epoch);
   }
   async function recoverRun():Promise<void> {

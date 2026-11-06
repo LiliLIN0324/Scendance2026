@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { leaseSchema, sceneSchema, uuid } from './domain.ts';
 import { materialSuggestionSchema } from './agent-material-contract.ts';
 import { modelSuggestionSchema } from './ai.ts';
+import { AGENT_PHASES } from './agent-progress.ts';
 import { activityTaskRunRequestSchema, activityTaskRunSchema } from './activity-task-contract.ts';
 
 export const agentContextSchema=z.strictObject({
@@ -30,9 +31,14 @@ export const agentEvaluationSchema=z.object({
 });
 export const agentRunSchema=z.object({
   id:uuid,projectId:uuid,requestId:uuid,state:z.enum(['queued','running','complete','failed','cancelled']),progress:z.string(),
-  callCount:z.number().int().nonnegative(),candidates:z.array(z.object({label:z.enum(['A','B','C']),title:z.string(),proposal:agentProposalSchema})).max(3),
+  callCount:z.number().int().nonnegative(),
+  /** 这一趟工作推进到哪一段（四段工作）。可空：没有阶段账的老记录与活动任务运行都没有这条，界面就不显示阶段。 */
+  phase:z.enum(AGENT_PHASES).nullish(),
+  candidates:z.array(z.object({label:z.enum(['A','B','C']),title:z.string(),proposal:agentProposalSchema})).max(3),
   evaluation:agentEvaluationSchema.nullable(),errorCode:z.string().optional(),message:z.string().optional(),
   executionMode:z.enum(['preview','direct']),jevEnabled:z.boolean(),expiresAt:z.string(),
+  /** 这趟一共收到过几条运行中改道备注；活动任务运行没有这条通道，缺省为 0。 */
+  steerTotal:z.number().int().nonnegative().optional(),
 });
 export type AgentRun=z.infer<typeof agentRunSchema>;
 export const agentDispatchRunSchema=z.preprocess((value,ctx)=>{

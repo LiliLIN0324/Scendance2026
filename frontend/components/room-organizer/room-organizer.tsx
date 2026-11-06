@@ -8,6 +8,8 @@ import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitLocalRestoreLayout, prepareLocalRestoreLayout } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
+import { buildGenerationReport } from '@/lib/generation-report';
+import { getAgentRun, getAgentChatThreads } from './panels/agent-chat-store';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
 import {
   executeSceneCommand,
@@ -16,7 +18,7 @@ import {
   applyLayoutCommand,
 } from '@/lib/build-command';
 import { settlePlacement } from '@/lib/settle-placement';
-import { combineOutcomes, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
+import { combineOutcomes, hasOutcomeChanges, type GenerationOutcome, type OutcomeEntry } from '@/lib/generation-outcome';
 import { isOpening } from './lib/opening-snap';
 import { planPointToCanvas } from './lib/review-pins';
 import { get2DViewTransform } from './canvas-2d/render';
@@ -140,8 +142,15 @@ import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
 import { estimateCapacity } from '@/lib/capacity-meter';
 import { computeBingoScore } from '@/lib/bingo-score';
-import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, type PlanPoint } from '@/lib/plan-annotation';
-import { planZoneApprovals } from '@/lib/plan-approve';
+import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
+// 第 12 批：三版打分 + 动线约束 + AI 建议（纯函数层，已独立测试）。
+import {
+  generateScoredPlans,
+  pickRecommendedPlan,
+  type ScoredPlan,
+  type PlanVariantId,
+} from '@/lib/plan-scoring';
+import { generateSuggestions, type ActivitySuggestion } from '@/lib/suggestions';
 
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
 import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
@@ -213,6 +222,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const planAnnot = usePlanAnnotations();
   // 第 10 批「批注→施工」：正在画但还没落地的临时点（世界坐标），喂给 PlanOverlay 做跟随反馈。
   const [draftPoints, setDraftPoints] = useState<PlanPoint[]>([]);
+  // 第 11 批：当前要画的 zone 语义类型（决定批准时落什么家具）。
+  const [zoneType, setZoneType] = useState<ZoneSemanticType>('roundtable');
+  // 第 12 批：三版打分里用户手动选中的布置版本；默认适中版，批准时按它落家具。
+  const [selectedVariantId, setSelectedVariantId] = useState<PlanVariantId>('balanced');
   // canvas 尺寸变化（view 切到 2D / 窗口缩放）时 bump，触发 overlay 重算 transform。
   const [overlayTick, setOverlayTick] = useState(0);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; confirmText?: string }>({ open: false, title: '', description: '' });
@@ -1342,15 +1355,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       e.preventDefault();
       e.stopPropagation();
       if (w && Math.hypot(w.x - zoneStart.x, w.z - zoneStart.z) > 0.1) {
+        // 第 11 批：按当前选中的语义类型落标签；画完不退出，可连续画多个框。
         planAnnot.addAnnotationFromPoints(
           [zoneStart, w],
           'zone',
-          ANNOTATION_PRESET_LABELS.roundtable,
+          ZONE_SEMANTIC_LABELS[zoneType],
+          zoneType,
         );
       }
       zoneStart = null;
       setDraftPoints([]);
-      planAnnot.setDrawMode('off');
+      // 不再 setDrawMode('off')——连续画框；退出靠 Esc 或再点一次标注钮。
     };
 
     const finishRoute = (): void => {
@@ -1382,6 +1397,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       if (planAnnot.drawMode === 'route' && e.key === 'Enter') {
         finishRoute();
       }
+      // 第 11 批：Esc 随时退出绘制（zone 连续画框时用它收尾）。
+      if (e.key === 'Escape' && planAnnot.drawMode !== 'off') {
+        planAnnot.setDrawMode('off');
+        setDraftPoints([]);
+      }
     };
 
     canvas.addEventListener('pointerdown', onPointerDown, true);
@@ -1403,6 +1423,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     clientToWorld2D,
     planAnnot.addAnnotationFromPoints,
     planAnnot.setDrawMode,
+    zoneType,
   ]);
 
   // canvas 挂载 / 尺寸变化时 bump overlayTick，让 PlanOverlay 用真实 transform 重算。
@@ -2224,6 +2245,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const onApplyCreative = useCallback((next: RoomLayout) => {
     const before = layoutStore.getState().layout;
+    // 第 7 批收尾：记录本次落盘 + 体检的起始时刻，完成卡上的「落盘耗时」用它算。
+    const applyStartedAt = Date.now();
     let forceApply = false;
     if (previewGuard) {
       const decision = decideOnApply(before, previewGuard);
@@ -2275,7 +2298,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       notify(`AI 摆完已自动巡场：挪开 ${movedCount} 处堵点，${stillBad} 处挪不动已标红。`, 'info');
     }
     const finalLayout = settleReport.layout;
-    // 集成接线：Bingo 体检分即时 notify（后续 BingoAuditCard 可从同一来源取数）。
+    // 集成接线：Bingo 体检分即时 notify，并把同一份数带进「本次报告」卡（第 7 批收尾）。
     const bingoScore = computeBingoScore(finalLayout, settleReport);
     notify(bingoScore.summary, bingoScore.total >= 95 && bingoScore.stuckCount === 0 ? 'success' : 'info');
 
@@ -2294,11 +2317,36 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       reason: r.message,
       code: r.code,
     }));
-    applyOutcome({
+    // 第 7 批收尾：把体检分、被拒/跳过件数、落盘耗时写进本次账本，
+    // 让 Bingo「本次报告」卡上真的能看到这次跑出来的数（而不是只弹一条 toast）。
+    // 思考轮数拿不到就不写 —— 不用别的数字冒充。
+    //
+    // 只有「真动了东西」才写账：onApplyCreative 也是场地壳体改尺寸的入口
+    // （splat 预览就绪时按真实尺寸 resize），那种操作一件家具都没变，
+    // 写进去只会让「本次结果」变成「放了 0 件」，把上一次真的生成结果冲掉。
+    const outcome: GenerationOutcome<FurnitureItem> = {
       placed: placedItems,
       refused: refusedEntries,
       skipped: removedItems.map(i => ({ item: i, reason: '候选未保留', code: 'REMOVED' })),
-    });
+    };
+    if (hasOutcomeChanges(outcome)) {
+      // 第 8 批：模型轮数取云端那一趟的真值（AgentRun.call_count），
+      // 拿不到就不写 —— 完成卡不编数字。
+      const lastRun = getAgentRun();
+      const rounds = lastRun.scope === 'layout' && lastRun.thoughtCount > 0 ? lastRun.thoughtCount : undefined;
+      const report = buildGenerationReport({
+        score: bingoScore,
+        placedCount: placedItems.length,
+        refusedCount: refusedEntries.length,
+        skippedCount: removedItems.length,
+        fixedCount: bingoScore.fixedCount,
+        stuckCount: bingoScore.stuckCount,
+        areaM2: finalLayout.width * finalLayout.height,
+        durationMs: Date.now() - applyStartedAt,
+        ...(rounds === undefined ? {} : { rounds }),
+      });
+      applyOutcome({ ...outcome, report });
+    }
     setPreviewGuard(null);
     clearTransientSelection();
     initiallyFramed.current = false;
@@ -2552,6 +2600,59 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     ? `本场上限 ${capacityEstimate.maxItems} 件 · 已放 ${capacityEstimate.placedItems} 件`
     : '本场上限 —';
   const capacityOverloaded = !!capacityEstimate && capacityEstimate.ratio > 0.9;
+
+  // 第 12 批：「能摆 → 会摆」三版打分。draft.annotations 里的 zone 标注跑三档密度
+  // （松/适中/密），每版独立打分，父组件把分数条 + 推荐版传给 PlanCard。
+  // 纯函数，没有副作用，每次 render 重算即可（zone 数量小）。
+  const draftAnnotations = planAnnot.draft?.annotations ?? [];
+  const zoneAnnotationsForScoring = draftAnnotations.filter((a) => a.kind === 'zone');
+  // 第 12 批：把场地尺寸喂给打分层，启用「zone 越出场地边界」整块跳过判定。
+  const roomSizeForScoring = (typeof layout.width === 'number' && typeof layout.height === 'number')
+    ? { width: layout.width, height: layout.height }
+    : undefined;
+  const scoredPlans: ScoredPlan[] = zoneAnnotationsForScoring.length > 0
+    ? generateScoredPlans(zoneAnnotationsForScoring, roomSizeForScoring ? { roomSize: roomSizeForScoring } : undefined)
+    : [];
+  const recommendedPlan: ScoredPlan | null = scoredPlans.length > 0
+    ? pickRecommendedPlan(scoredPlans)
+    : null;
+  const effectiveSelectedPlan: ScoredPlan | null =
+    scoredPlans.find((p) => p.variantId === selectedVariantId) ?? recommendedPlan;
+  // 第 12 批：AI 建议（受众/区类型/场地短边命中式）。
+  // audience 从本机对话账本 getAgentChatThreads() 拼所有 'you' 消息文本——
+  // 用户在左轨跟空间/物料/活动/Bingo 四条线说过的所有话，就是活动画像的近似来源。
+  const zoneTypesForSuggestions = [
+    ...new Set(
+      zoneAnnotationsForScoring.map((a) => a.zoneType ?? 'roundtable'),
+    ),
+  ] as ZoneSemanticType[];
+  const roomShortSideM = (typeof layout.width === 'number' && typeof layout.height === 'number')
+    ? Math.min(layout.width, layout.height)
+    : undefined;
+  const audienceForSuggestions = (() => {
+    try {
+      const threads = getAgentChatThreads();
+      const parts: string[] = [];
+      for (const agent of ['door', 'bingo', 'space', 'material'] as const) {
+        for (const m of threads[agent] ?? []) {
+          if (m.from === 'you' && typeof m.text === 'string' && m.text.trim()) {
+            parts.push(m.text.trim());
+          }
+        }
+      }
+      return parts.join(' ');
+    } catch {
+      return '';
+    }
+  })();
+  const activitySuggestions: ActivitySuggestion[] = zoneAnnotationsForScoring.length > 0
+    ? generateSuggestions({
+        audience: audienceForSuggestions,
+        zoneTypes: zoneTypesForSuggestions,
+        ...(typeof roomShortSideM === 'number' ? { roomShortSideM } : {}),
+      })
+    : [];
+
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -2868,57 +2969,72 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 draftPoints={draftPoints}
               />
             )}
-            {/* 集成接线：规划草案浮层（右侧卡）。批准真执行——zone 标注落成圆桌+椅子，经命令门 + settle 收敛。 */}
+            {/* 第 11 批：正在画区时，底部浮出语义类型选择条（连续画框中随时切换）。 */}
+            {view.view2D && planAnnot.drawMode === 'zone' && (
+              <div className="sc-zone-picker" role="toolbar" aria-label="标注区类型">
+                {(Object.keys(ZONE_SEMANTIC_LABELS) as ZoneSemanticType[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={zoneType === key}
+                    className={zoneType === key ? 'is-active' : ''}
+                    onClick={() => setZoneType(key)}
+                  >
+                    {ZONE_SEMANTIC_LABELS[key]}
+                  </button>
+                ))}
+                <span className="sc-zone-picker__hint">拖框即画，可连续画；Esc 收尾</span>
+              </div>
+            )}
             {planAnnot.draft && (planAnnot.draft.stages.length > 0 || planAnnot.draft.annotations.length > 0) && (
               <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 40, maxWidth: 320 }}>
                 <PlanCard
                   draft={planAnnot.draft}
+                  plans={scoredPlans}
+                  recommendedId={recommendedPlan?.variantId}
+                  selectedId={effectiveSelectedPlan?.variantId}
+                  onSelectVariant={setSelectedVariantId}
+                  suggestions={activitySuggestions}
                   onApprove={() => {
                     const draft = planAnnot.draft;
                     if (!draft) return;
                     const zoneAnnotations = draft.annotations.filter((a) => a.kind === 'zone');
                     if (zoneAnnotations.length === 0) {
-                      notify('只有路线/测距标注，没有区域可以落家具', 'info');
+                      notify('还没画任何区，请先拖框画一个签到/休息/圆桌区', 'info');
                       planAnnot.clearDraft();
                       return;
                     }
-                    const placements = planZoneApprovals(zoneAnnotations, 0.5);
+                    // 第 12 批：按用户选中的版本（默认推荐版）落家具，不再写死 0.5 密度。
+                    const plan = effectiveSelectedPlan;
+                    if (!plan) {
+                      notify('三版打分未生成，请重新画标注', 'error');
+                      return;
+                    }
+                    const placements = plan.placements;
+                    const skipped = plan.skipped;
                     if (placements.length === 0) {
-                      notify('标注区太小，摆不下桌椅，请扩大标注范围', 'error');
+                      notify(
+                        skipped.map((s) => s.reason).join('；') || '标注区太小，摆不下家具，请扩大标注范围',
+                        'error',
+                      );
                       return;
                     }
                     const opId = `approve-${Date.now()}`;
                     const stamp = { source: 'ai' as const, opId };
                     const newItems: FurnitureItem[] = placements.map((p, idx) => {
-                      const baseId = `approve-${p.kind}-${idx}-${Date.now().toString(36)}`;
-                      if (p.kind === 'table') {
-                        return {
-                          id: baseId,
-                          type: 'dining-table',
-                          name: '圆桌',
-                          width: 1.2,
-                          depth: 1.2,
-                          height: 0.75,
-                          color: '#A0522D',
-                          icon: '🟫',
-                          position: { x: p.x, z: p.z },
-                          rotation: 0,
-                          category: 'tables',
-                          provenance: stamp,
-                        } as FurnitureItem;
-                      }
+                      const baseId = `approve-${p.spec.type}-${idx}-${Date.now().toString(36)}`;
                       return {
                         id: baseId,
-                        type: 'dining-chair',
-                        name: '餐椅',
-                        width: 0.45,
-                        depth: 0.45,
-                        height: 0.9,
-                        color: '#5D4037',
-                        icon: '🪑',
+                        type: p.spec.type,
+                        name: p.spec.name,
+                        width: p.spec.width,
+                        depth: p.spec.depth,
+                        height: p.spec.height,
+                        color: p.spec.color,
+                        icon: p.spec.icon,
                         position: { x: p.x, z: p.z },
                         rotation: p.rotation,
-                        category: 'seating',
+                        category: p.spec.category,
                         provenance: stamp,
                       } as FurnitureItem;
                     });
@@ -2944,8 +3060,30 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                     actions.applyLayout(settleReport.layout);
                     const placedCount = newItems.length - result.refused.length;
                     const movedCount = settleReport.steps.reduce((n, s) => n + s.moved.length, 0);
+                    // 第 11 批：回执说人话——按名统计落了什么、被拒为什么、哪个区没摆下。
+                    const nameCounts = new Map<string, number>();
+                    for (const p of placements) {
+                      nameCounts.set(p.spec.name, (nameCounts.get(p.spec.name) ?? 0) + 1);
+                    }
+                    const doneText = [...nameCounts.entries()].map(([name, n]) => `${name} ${n} 件`).join('、');
+                    const REFUSED_HUMAN: Record<string, string> = {
+                      OUT_OF_BOUNDS: '超出场地边界',
+                      WALL_INTERSECTION: '压住墙体',
+                      BBOX_OVERLAP: '压住现有家具',
+                      FLOOR_OUT_OF_RANGE: '不在本层',
+                    };
+                    const refusedText = result.refused.length
+                      ? `；${result.refused.length} 件未放（${[
+                          ...new Set(result.refused.map((r) => REFUSED_HUMAN[r.code] ?? r.code)),
+                        ].join('、')}）`
+                      : '';
+                    const skippedText = skipped.length ? `；${skipped.map((s) => s.reason).join('；')}` : '';
+                    // 第 12 批：回执带上推荐版标签 + 前两条打分理由，让用户知道为什么是这版。
+                    const recommendTag = recommendedPlan
+                      ? `；推荐${recommendedPlan.label}版（${recommendedPlan.reasons.slice(0, 2).join('；')}）`
+                      : '';
                     notify(
-                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件家具，${movedCount} 处堵点已自动挪开`,
+                      `已按 ${zoneAnnotations.length} 个标注区布置 ${placedCount} 件（${doneText}）${recommendTag}；${movedCount} 处堵点已自动挪开${refusedText}${skippedText}`,
                       'success',
                     );
                     planAnnot.clearDraft();
