@@ -57,14 +57,35 @@ function furniture(
 const CHECKIN = zone('c1', 0, 0, 2, 1.4, 'checkin');
 
 describe('evaluateFlow / 动线约束', () => {
-  it('无签到区时不约束：aisleWidthM=Infinity、violations=[]、checkinBlocked=false', () => {
+  it('无签到区时不写硬约束：violations=[]、checkinBlocked=false，aisleWidthM 返回有限估值', () => {
     const zones = [zone('r1', -2, -2, 3, 3, 'roundtable')];
+    // 单件 placement：不构成 pair，回落到默认宽敞 3.0m。
     const placements = [furniture('r1', 'roundtable', 0, 0, 0.6)];
     const r = evaluateFlow(placements, zones);
-    expect(r.aisleWidthM).toBe(Infinity);
+    expect(Number.isFinite(r.aisleWidthM)).toBe(true);
+    expect(r.aisleWidthM).toBe(3.0);
     expect(r.wheelChairPassable).toBe(true);
     expect(r.normalPassable).toBe(true);
     expect(r.checkinBlocked).toBe(false);
+    expect(r.violations).toEqual([]);
+  });
+
+  it('无签到区 + 多件 placement：返回最大正间隙作为主通道估算', () => {
+    // 两件家具 x 方向相距 2.5m（表面距离），z 方向投影重叠。
+    const placements = [
+      furniture('r1', 'roundtable', -1.0, 0, 0.6, 0.6), // 左边缘 -1.3
+      furniture('r1', 'roundtable',  1.0, 0, 0.6, 0.6), // 右边缘  0.7
+    ];
+    const r = evaluateFlow(placements, []);
+    expect(r.violations).toEqual([]);
+    expect(r.checkinBlocked).toBe(false);
+    // 表面间隙 = 1.0 - (-1.0) - 0.3 - 0.3 = 1.4m
+    expect(r.aisleWidthM).toBeCloseTo(1.4, 6);
+  });
+
+  it('无签到区且无 placement：默认宽敞 3.0m', () => {
+    const r = evaluateFlow([], []);
+    expect(r.aisleWidthM).toBe(3.0);
     expect(r.violations).toEqual([]);
   });
 

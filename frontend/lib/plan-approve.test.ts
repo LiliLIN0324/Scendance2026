@@ -177,4 +177,48 @@ describe('planZoneApprovals / planZones', () => {
     expect(out.skipped).toHaveLength(1);
     expect(out.skipped[0].zoneId).toBe('b');
   });
+
+  // ---- 第 12 批：对抗用例 A / G / 未知类型降级 ----
+
+  it('A. 极小签到区 0.8×0.6m → skipped 含「太小」或「签到区」', () => {
+    const out = planZones([zone('tiny', 0, 0, 0.8, 0.6, 'checkin', '迷你签到')], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped.length).toBeGreaterThanOrEqual(1);
+    const joined = out.skipped.map((s) => s.reason).join('\n');
+    expect(joined).toMatch(/太小|签到区/);
+  });
+
+  it('G. 4 类 zone 混合（roundtable+checkin+photo+rest）→ planZones 不崩，每类都有产出或各自 skipped', () => {
+    const out = planZones(
+      [
+        zone('r', -8, -3, 4, 4, 'roundtable', '圆桌区'),
+        zone('c', -2, -3, 4, 2, 'checkin', '签到区'),
+        zone('p',  3, -3, 4, 3, 'photo', '打卡区'),
+        zone('s', -2,  1, 5, 3, 'rest', '休息区'),
+      ],
+      0.5,
+    );
+    // 不崩就行；每类要么有 placements 要么在 skipped 里出现。
+    const seenZoneTypes = new Set(out.placements.map((p) => p.zoneType));
+    const seenSkippedIds = new Set(out.skipped.map((s) => s.zoneId));
+    const expected = ['r', 'c', 'p', 's'];
+    for (const id of expected) {
+      const hasPlacement = [...seenZoneTypes].length > 0 && out.placements.some((p) => p.zoneId === id);
+      const isSkipped = seenSkippedIds.has(id);
+      expect(hasPlacement || isSkipped).toBe(true);
+    }
+  });
+
+  it('未知 zoneType（如 "storage"）→ 不摆任何家具，skipped 含「未知」或「通用」', () => {
+    // 用类型断言注入一个 4 类之外的字符串，模拟未来扩展或外部非法值。
+    const unknownZone = {
+      ...zone('x', 0, 0, 5, 4),
+      zoneType: 'storage' as unknown as ZoneSemanticType,
+    };
+    const out = planZones([unknownZone], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped.length).toBe(1);
+    expect(out.skipped[0].zoneId).toBe('x');
+    expect(out.skipped[0].reason).toMatch(/未知|通用/);
+  });
 });

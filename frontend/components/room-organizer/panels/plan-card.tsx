@@ -215,10 +215,13 @@ const suggestionReasonStyle: CSSProperties = {
   fontSize: 11,
 };
 
-/** 把 aisleWidthM 格式化成一行人话；没有签到区时返回「通道不限」。 */
+/** 把 aisleWidthM 格式化成一行人话。
+ * - NaN / >=999（无穷或哨兵值）→ 「通道 ≥3.0m」，避免 UI 出现「通道 Infintym」；
+ * - 否则显示实际米数。
+ */
 function formatAisle(plan: ScoredPlan): string {
   const w = plan.flow.aisleWidthM;
-  if (!Number.isFinite(w)) return '通道不限';
+  if (!Number.isFinite(w) || w >= 999) return '通道 ≥3.0m';
   return `通道 ${w.toFixed(1)}m`;
 }
 
@@ -306,7 +309,10 @@ export function PlanCard({
         <div style={variantsBlockStyle}>
           <div style={variantsTitleStyle}>三版布置打分</div>
           {plans!.map((p) => {
-            const isRecommended = recommendedId === p.variantId;
+            // 防御：reasons 为空数组时，这个 plan 没法向用户解释为什么推荐，
+            // 哪怕它被父组件标成 recommendedId 也不渲染「✅ 推荐」标签。
+            const hasReasons = Array.isArray(p.reasons) && p.reasons.length > 0;
+            const isRecommended = recommendedId === p.variantId && hasReasons;
             const isSelected = selectedId === p.variantId;
             const rowStyle = isSelected ? variantRowSelected : variantRowBase;
             return (
@@ -335,12 +341,18 @@ export function PlanCard({
       {hasSuggestions && (
         <div style={suggestionsBlockStyle}>
           <div style={suggestionsTitleStyle}>AI 建议</div>
-          {suggestions!.map((s, i) => (
-            <div key={`${s.title}-${i}`} style={suggestionItemStyle}>
-              · {s.title}
-              <div style={suggestionReasonStyle}>{s.reason}</div>
-            </div>
-          ))}
+          {suggestions!.map((s, i) => {
+            // 防御：title 与 reason 都为空字符串时不渲染那一条。
+            const title = typeof s.title === 'string' ? s.title.trim() : '';
+            const reason = typeof s.reason === 'string' ? s.reason.trim() : '';
+            if (!title && !reason) return null;
+            return (
+              <div key={`${title || i}`} style={suggestionItemStyle}>
+                {title ? `· ${title}` : ''}
+                {reason ? <div style={suggestionReasonStyle}>{reason}</div> : null}
+              </div>
+            );
+          })}
         </div>
       )}
 

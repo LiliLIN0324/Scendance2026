@@ -100,9 +100,11 @@ export function planZones(
   for (const ann of annotations) {
     if (ann.kind !== 'zone' || ann.geometry.kind !== 'rect') continue;
     const g = ann.geometry;
-    const zoneType: ZoneSemanticType = ann.zoneType ?? 'roundtable';
+    // 故意放宽成 string：未来若扩展 zoneType 或外部注入非法值，不要静默按 rest 摆家具，
+    // 走下面的「未知类型降级」分支落 skipped。
+    const zoneType = (ann.zoneType ?? 'roundtable') as string;
     const push = (p: Omit<ZoneFurniturePlacement, 'zoneId' | 'zoneType'>) =>
-      placements.push({ ...p, zoneId: ann.id, zoneType });
+      placements.push({ ...p, zoneId: ann.id, zoneType: zoneType as ZoneSemanticType });
 
     if (g.width <= 0 || g.depth <= 0) {
       skipped.push({ zoneId: ann.id, label: ann.label, reason: '画得太小，基本是个点' });
@@ -128,12 +130,19 @@ export function planZones(
         continue;
       }
       spotPhoto(g.x, g.z, g.width, push);
-    } else {
+    } else if (zoneType === 'rest') {
       if (g.width < 2.2 || g.depth < 2.0) {
         skipped.push({ zoneId: ann.id, label: ann.label, reason: '休息区至少要 2.2×2.0m 才能两排长椅对坐' });
         continue;
       }
       rowsRest(g.x, g.z, g.width, g.depth, push);
+    } else {
+      // 未知 zoneType：不摆任何家具，落一条 skipped 让 UI 说人话。
+      skipped.push({
+        zoneId: ann.id,
+        label: ann.label,
+        reason: `未知区类型 ${zoneType}，按通用矩形区处理，本版不落家具`,
+      });
     }
   }
 
