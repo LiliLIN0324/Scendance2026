@@ -71,6 +71,6 @@ exports/
 .zcode/
 probe-*.png
 $null
-console.log(x))}
+console.log\(x\)\)\}
 /.intro-head.*
 
