@@ -53,6 +53,15 @@ export interface ScoredPlan {
   reasons: string[];
   /** 带 code 的 violation envelope（P0：人体工学 + 可达性）。 */
   violations: ScoredViolation[];
+  /** 0-100 三维子分（容量/动线/人体），UI 展示用。 */
+  subScores: {
+    /** 容量：每座 5 分，20 座封顶 100。 */
+    capacity: number;
+    /** 动线：100 - 通道扣分项绝对值 * 10，不低于 0。 */
+    flow: number;
+    /** 人体：100 - hard violation 数 * 10，不低于 0。 */
+    ergonomics: number;
+  };
 }
 
 /** 浮点容差。 */
@@ -172,6 +181,8 @@ function scoreVariant(
     if (v.code === 'AISLE_CLEARANCE') return sum - 2;
     if (v.code === 'ZONE_UNREACHABLE') return sum - 5;
     if (v.code === 'BBOX_OVERLAP') return sum - 2;
+    if (v.code === 'ZONE_PAIR_DISCONNECTED') return sum - 2;
+    if (v.code === 'ZONE_ENTRANCE_BLOCKED') return sum - 3;
     return sum;
   }, 0);
 
@@ -211,6 +222,14 @@ function scoreVariant(
     if (hardCount >= 2) break;
   }
 
+  // 0-100 三维子分：容量按座位数线性、动线按通道扣分绝对值、人体按 hard 条数。
+  const hardTotal = violations.filter((v) => v.severity === 'hard').length;
+  const subScores = {
+    capacity: Math.min(100, capacitySeats * 5),
+    flow: Math.max(0, 100 + flowPenalty * 10),
+    ergonomics: Math.max(0, 100 - hardTotal * 10),
+  };
+
   return {
     variantId,
     label,
@@ -223,6 +242,7 @@ function scoreVariant(
     score,
     reasons,
     violations,
+    subScores,
   };
 }
 

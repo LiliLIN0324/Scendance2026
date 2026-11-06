@@ -18,7 +18,9 @@ export type ViolationCode =
   | 'AISLE_CLEARANCE'
   | 'CHECKIN_QUEUE'
   | 'ZONE_UNREACHABLE'
-  | 'BBOX_OVERLAP';
+  | 'BBOX_OVERLAP'
+  | 'ZONE_PAIR_DISCONNECTED'
+  | 'ZONE_ENTRANCE_BLOCKED';
 
 export interface ScoredViolation {
   code: ViolationCode;
