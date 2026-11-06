@@ -31,6 +31,37 @@ export const CHAIR_BACK_CLEARANCE_M = 0.6;
 /** 椅子中心到所属桌心允许的最大距离（米）：桌外接圆 + 椅深 + 容差。 */
 export const MAX_CHAIR_OWNER_DIST_M = TABLE_DIAMETER / 2 + CHAIR_SIZE + 0.15;
 
+/* ---------- 课桌式（教室式）布局常数（对齐东京国际论坛 Hall D5 官方图） ---------- */
+// 红线：以下常数直接来自官方图，不要用 density 旋钮缩放——课桌排距 1.4m、
+// 走道 1.2m 是消防/人体工学硬值，dense 档也不能压到 0.9m。
+
+/** 课桌宽（米，沿 x 方向）。 */
+export const DESK_TABLE_WIDTH_M = 1.8;
+/** 课桌深（米，沿 z 方向）。 */
+export const DESK_TABLE_DEPTH_M = 0.6;
+/** 讲座椅宽（米）。 */
+export const DESK_CHAIR_WIDTH_M = 0.49;
+/** 讲座椅深（米）。 */
+export const DESK_CHAIR_DEPTH_M = 0.57;
+/** 课桌排距（米，桌前沿到下一排桌前沿；官方 1400mm）。 */
+export const DESK_ROW_PITCH_M = 1.4;
+/** 课桌块间走道净宽（米；官方 1200mm）。 */
+export const DESK_AISLE_M = 1.2;
+/** 每桌配几把讲座椅（官方课桌图：1.8m 长桌沿长边坐 3 人）。 */
+export const DESK_CHAIRS_PER_TABLE = 3;
+/** 每个 block 内并几张课桌（官方「三列块」按 3 桌一块）。 */
+export const DESK_BLOCK_TABLES = 3;
+/** 讲台/舞台到第一排课桌前沿的留空（米；官方 5000mm，本批仅导出常量、不参与布置）。 */
+export const STAGE_FRONT_CLEAR_M = 5.0;
+/** 椅桌间隙（米，桌前沿到椅后缘）。 */
+export const DESK_CHAIR_GAP_M = 0.05;
+/**
+ * 同一 block 内相邻课桌之间的拼接间隙（米）。
+ * 官方图上课桌并桌是无缝拼接，但我们 AABB 重叠检测有 0.02m 容差，
+ * 两桌正好相接会被误判为压住，这里留 0.04m 工程间隙（视觉上仍为并排）。
+ */
+export const DESK_TABLE_GAP_M = 0.04;
+
 /** 家具模板（与 onApprove 落库字段一一对应）。 */
 export interface FurnitureSpec {
   type: string;
@@ -80,6 +111,10 @@ const SPEC = {
   roundtable: {
     table: getCatalogForZone('dining-table', 'roundtable')!,
     chair: getCatalogForZone('dining-chair', 'roundtable')!,
+  },
+  desk: {
+    table: getCatalogForZone('desk-table', 'desk')!,
+    chair: getCatalogForZone('desk-chair', 'desk')!,
   },
   checkin: {
     desk: getCatalogForZone('table', 'checkin')!,
@@ -135,6 +170,19 @@ export function planZones(
         continue;
       }
       gridRoundtable(g.x, g.z, g.width, g.depth, inset, pitch, push);
+    } else if (zoneType === 'desk') {
+      // 课桌区：最小 6.0m 宽（1 个 block 3 桌）× 1.8m 深（1 排含椅）。
+      const minW = ZONE_INSET * 2 + DESK_BLOCK_TABLES * DESK_TABLE_WIDTH_M;
+      const minD = ZONE_INSET * 2 + DESK_TABLE_DEPTH_M + DESK_CHAIR_GAP_M + DESK_CHAIR_DEPTH_M;
+      if (g.width < minW || g.depth < minD) {
+        skipped.push({
+          zoneId: ann.id,
+          label: ann.label,
+          reason: `课桌区至少要 ${minW.toFixed(1)}×${minD.toFixed(1)}m 才摆得下一排课桌（每桌 3 椅）`,
+        });
+        continue;
+      }
+      gridDeskRows(g.x, g.z, g.width, g.depth, push);
     } else if (zoneType === 'checkin') {
       if (g.width < 1.8 || g.depth < 1.4) {
         skipped.push({ zoneId: ann.id, label: ann.label, reason: '签到区至少要 1.8×1.4m（台面+工作人员座椅）' });
@@ -216,6 +264,78 @@ function gridRoundtable(
         ownerTableId: tableKey,
       });
     }
+  }
+}
+
+/**
+ * 课桌式（教室式）排桌布局：
+ * - 桌 1.8×0.6 沿 x 摆，每 block DESK_BLOCK_TABLES 桌并排（5.4m 宽）；
+ * - block 间走道 DESK_AISLE_M=1.2m（官方课桌图）；
+ * - 排距 DESK_ROW_PITCH_M=1.4m（桌前沿到下一排桌前沿；官方 1400mm）；
+ * - 每桌 DESK_CHAIRS_PER_TABLE=3 把讲座椅沿桌长三等分摆在桌前沿外 0.05m；
+ * - 椅子 rotation=π 面向 z 负方向（讲台/前方），ownerTableId 链到所属桌。
+ *
+ * 注意：排距/走道不随 density 旋钮缩放——这是官方硬值，dense 档也不能压到 0.9m。
+ */
+function gridDeskRows(
+  x0: number,
+  z0: number,
+  w: number,
+  d: number,
+  push: (p: Omit<ZoneFurniturePlacement, 'zoneId' | 'zoneType'>) => void,
+): void {
+  const inset = ZONE_INSET;
+  const left = x0 + inset;
+  const right = x0 + w - inset;
+  const top = z0 + inset;
+  const bottom = z0 + d - inset;
+
+  const tableW = SPEC.desk.table.width; // 1.8
+  const tableD = SPEC.desk.table.depth; // 0.6
+  const chairD = SPEC.desk.chair.depth; // 0.57
+
+  // 第一排桌心 z = top + tableD/2（桌前沿在 z 正方向）。
+  let rowZ = top + tableD / 2;
+  // 排距：桌前沿到下一排桌前沿 = DESK_ROW_PITCH_M；桌深相同 → 桌心距 = DESK_ROW_PITCH_M。
+  const rowPitch = DESK_ROW_PITCH_M;
+
+  while (rowZ + tableD / 2 <= bottom + 1e-6) {
+    // 沿 x 从左到右摆 block，每个 block 内 DESK_BLOCK_TABLES 桌并排。
+    let xCursor = left + tableW / 2;
+    let tableIndexInBlock = 0;
+    while (xCursor + tableW / 2 <= right + 1e-6) {
+      const tableX = xCursor;
+      const tableKey = `${round2(tableX)}|${round2(rowZ)}`;
+      push({ spec: SPEC.desk.table, x: round2(tableX), z: round2(rowZ), rotation: 0 });
+
+      // 每桌 3 椅沿桌长三等分（椅中心在桌长内等分，不伸出桌外）：
+      // 偏移 = (k - (n-1)/2) * (tableW/n)，n=3 → ±0.6m。
+      // z 在桌前沿（z 正方向）外 DESK_CHAIR_GAP_M。
+      const chairZ = rowZ + tableD / 2 + DESK_CHAIR_GAP_M + chairD / 2;
+      for (let k = 0; k < DESK_CHAIRS_PER_TABLE; k++) {
+        const offset = (k - (DESK_CHAIRS_PER_TABLE - 1) / 2) * (tableW / DESK_CHAIRS_PER_TABLE);
+        const chairX = tableX + offset;
+        push({
+          spec: SPEC.desk.chair,
+          x: round2(chairX),
+          z: round2(chairZ),
+          rotation: Math.PI,
+          ownerTableId: tableKey,
+        });
+      }
+
+      // 下一桌：同一 block 内桌间留 DESK_TABLE_GAP_M 工程间隙（避开 AABB 0.02m 容差）；
+      // block 内第 DESK_BLOCK_TABLES 桌之后，跳过 DESK_AISLE_M 走道。
+      tableIndexInBlock += 1;
+      if (tableIndexInBlock >= DESK_BLOCK_TABLES) {
+        // 走到下一个 block：当前桌右缘 + 走道 + 下一桌半宽
+        xCursor = xCursor + tableW / 2 + DESK_AISLE_M + tableW / 2;
+        tableIndexInBlock = 0;
+      } else {
+        xCursor = xCursor + tableW + DESK_TABLE_GAP_M;
+      }
+    }
+    rowZ += rowPitch;
   }
 }
 

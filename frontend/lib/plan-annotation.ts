@@ -10,7 +10,7 @@
 export type PlanAnnotationKind = 'zone' | 'route' | 'measure' | 'door';
 
 /** 第 11 批：zone 标注的语义类型，决定批准时落什么家具。 */
-export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest';
+export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk';
 
 /** zone 类型 → 画布/卡片中文标签。 */
 export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
@@ -18,6 +18,7 @@ export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
   checkin: '签到区',
   photo: '打卡区',
   rest: '休息区',
+  desk: '课桌区',
 };
 
 /** 米制二维点（x 向右，z 向下，房间中心为原点）。 */

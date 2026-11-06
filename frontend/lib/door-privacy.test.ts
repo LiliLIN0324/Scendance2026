@@ -15,17 +15,26 @@ const southDoor: PlanAnnotation = {
   geometry: { kind: 'door', wall: 'south', position: 0, widthM: 0.9 },
 };
 
+// 新坐标系：房间居中，南墙在 z=+height/2；家具坐标原点同中心。
+const room = { width: 10, height: 8 };
+
 describe('evaluateDoorSweep', () => {
-  it('门弧内放桌 → DOOR_SWEEP_BLOCKED', () => {
-    const v = evaluateDoorSweep([table(0, 0.3)], [southDoor]);
-    expect(v.some((x) => x.code === 'DOOR_SWEEP_BLOCKED' && x.severity === 'hard')).toBe(true);
+  it('门弧内放桌 → DOOR_SWEEP_BLOCKED（hard）', () => {
+    // 桌子贴南墙内侧（z=3.0，南墙 z=4.0），距门 1.0m，落入扇区半径。
+    const v = evaluateDoorSweep([table(0, 3.0)], [southDoor], room);
+    expect(v.some((x) => x.code === 'DOOR_SWEEP_BLOCKED' && x.severity === 'hard' && x.status === 'violated')).toBe(true);
   });
-  it('门弧外放桌（远离门）→ 无 violation', () => {
-    const v = evaluateDoorSweep([table(5, 3)], [southDoor]);
-    expect(v.some((x) => x.code === 'DOOR_SWEEP_BLOCKED')).toBe(false);
+  it('门弧外放桌（远离门）→ 无 hard 遮挡，但因开启方向未知给出 soft unknown', () => {
+    const v = evaluateDoorSweep([table(5, 0)], [southDoor], room);
+    expect(v.some((x) => x.code === 'DOOR_SWEEP_BLOCKED' && x.severity === 'hard')).toBe(false);
+    expect(v.some((x) => x.code === 'DOOR_SWEEP_BLOCKED' && x.status === 'unknown')).toBe(true);
+  });
+  it('缺房间尺寸 → 不硬判遮挡，只给 unknown（近似，门扇未核验）', () => {
+    const v = evaluateDoorSweep([table(0, 0.3)], [southDoor]);
+    expect(v.every((x) => x.status === 'unknown' && x.severity === 'soft')).toBe(true);
   });
   it('无 door 标注 → 空', () => {
-    expect(evaluateDoorSweep([table(0, 0)], [])).toEqual([]);
+    expect(evaluateDoorSweep([table(0, 0)], [], room)).toEqual([]);
   });
 });
 

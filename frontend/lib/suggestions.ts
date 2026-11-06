@@ -181,5 +181,10 @@ export function defaultZoneRect(
       return { x: 0, z: 0, width: Math.min(6, w * 0.6), depth: Math.min(5, h * 0.5) };
     case 'photo':
       return { x: -w / 2 + 2, z: 0, width: 2, depth: Math.min(3, h * 0.4) };
+    case 'desk':
+      // 课桌区：场地中央偏前（z 正方向靠入口），宽 60% 深 60%。
+      return { x: 0, z: h * 0.05, width: Math.min(8, w * 0.7), depth: Math.min(6, h * 0.6) };
+    default:
+      return { x: 0, z: 0, width: 3, depth: 2 };
   }
 }

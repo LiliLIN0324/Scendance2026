@@ -200,7 +200,7 @@ function buildAudiencePrompt(raw: string, mobilityAssistanceHint: boolean | null
     zoneTypes: [],
   });
   const zoneAsk = zonePrompts.length > 0
-    ? `要不要我直接在 2D 上帮你把${zonePrompts.map((p) => ({ checkin: '签到区', rest: '休息区', roundtable: '圆桌区', photo: '打卡区' })[p.zoneType]).join('和')}先圈出来？回「好」就落。`
+    ? `要不要我直接在 2D 上帮你把${zonePrompts.map((p) => ({ checkin: '签到区', rest: '休息区', roundtable: '圆桌区', photo: '打卡区', desk: '课桌区' })[p.zoneType]).join('和')}先圈出来？回「好」就落。`
     : '要不要我直接在 2D 上帮你把签到区和休息区圈出来？';
 
   // 档位 1：明确行动不便/轮椅 → 硬建议，1.5m 通道。

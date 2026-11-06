@@ -480,12 +480,12 @@ function isOutsideRoom(p: ZoneFurniturePlacement, roomSize: RoomSize): boolean {
   );
 }
 
-/** 餐椅/工作椅 +1，长椅 +2，其余 0。 */
+/** 餐椅/工作椅/讲座椅 +1，长椅 +2，其余 0。 */
 function computeCapacitySeats(placements: readonly ZoneFurniturePlacement[]): number {
   let seats = 0;
   for (const p of placements) {
     const n = p.spec.name;
-    if (n === '餐椅' || n === '工作椅') seats += 1;
+    if (n === '餐椅' || n === '工作椅' || n === '讲座椅') seats += 1;
     else if (n === '长椅') seats += 2;
   }
   return seats;

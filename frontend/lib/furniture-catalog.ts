@@ -65,6 +65,32 @@ export const FURNITURE_CATALOG: readonly CatalogFurniture[] = [
     chairsPerTable: 8,
   },
   {
+    // 课桌式（教室式）讲座用 1.8×0.6m 长条桌，与东京国际论坛 Hall D5 官方图一致。
+    type: 'desk-table',
+    name: '课桌',
+    category: 'table',
+    width: 1.8,
+    depth: 0.6,
+    height: 0.75,
+    color: '#A0522D',
+    icon: '📚',
+    zoneTypes: ['desk'],
+    // 每桌 3 人（官方课桌图：1.8m 长桌沿长边坐 3 人）。
+    chairsPerTable: 3,
+  },
+  {
+    // 讲座椅 0.49×0.57m，与官方图一致；与餐椅（0.45×0.45）是不同道具。
+    type: 'desk-chair',
+    name: '讲座椅',
+    category: 'chair',
+    width: 0.49,
+    depth: 0.57,
+    height: 0.9,
+    color: '#5D4037',
+    icon: '🪑',
+    zoneTypes: ['desk'],
+  },
+  {
     type: 'dining-chair',
     name: '餐椅',
     category: 'chair',
