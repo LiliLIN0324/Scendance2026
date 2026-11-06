@@ -14,6 +14,8 @@ import { withDefaultDoor } from './plan-annotation';
 import {
   planZones,
   applyWallClearance,
+  isRingChairOfTable,
+  MAX_TABLES_PER_ZONE,
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
@@ -380,8 +382,14 @@ function scoreVariant(
   // 容量不足人话建议：用户要的人数明显摆不下时，给具体数字建议，不硬凑也不默默减椅子。
   if (targetCapacity && Number.isFinite(targetCapacity) && capacitySeats < targetCapacity * 0.9) {
     const suggested = Math.max(10, Math.floor(capacitySeats / 10) * 10);
+    // 圆桌区的可达容量被配方钉死（单区最多 MAX_TABLES_PER_ZONE 桌 × 每桌椅数），
+    // 装不下时把「配方上限」说破，别让人误以为换小一点的数字就能装进这块区。
+    const hasRoundtable = placements.some((p) => p.spec.type === 'dining-table');
+    const recipeCap = hasRoundtable
+      ? `（圆桌区按当前配方一区最多 ${MAX_TABLES_PER_ZONE} 桌 × ${(getCatalogByType('dining-table')?.chairsPerTable ?? 4)} 椅）`
+      : '';
     reasons.push(
-      `这里最多约可坐 ${capacitySeats} 座，装不下 ${targetCapacity} 人；建议把人数降到约 ${suggested} 人，或换更大的场地`,
+      `这里最多约可坐 ${capacitySeats} 座${recipeCap}，装不下 ${targetCapacity} 人；建议把人数降到约 ${suggested} 人，或换更大的场地`,
     );
   }
 
@@ -763,6 +771,9 @@ function boxesOverlap(a: ZoneFurniturePlacement, b: ZoneFurniturePlacement): boo
  * 两两 AABB 相交检测（含 0.02m 容差）。
  * 家具 footprint 按 placement 中心 ± (spec.width/2, spec.depth/2) 算轴对齐矩形。
  * 相交 → 每次生成 code='BBOX_OVERLAP' 的 hard violation（进 violations 数组）。
+ * 例外：斜向环椅 vs 自家圆桌——AABB 轴对齐近似下 45° 环椅的包围盒角会戳进
+ * 桌包围盒，但径向距离够远（isRingChairOfTable 自带径向自守卫，环半径被改小
+ * 豁免自动失效），不算压住（G5 修复）。
  * 同一对家具只报一次（i<j 遍历）。扣分由 scoreVariant 按 hard/code 统一算。
  */
 export function detectFurnitureOverlap(
@@ -773,7 +784,7 @@ export function detectFurnitureOverlap(
     for (let j = i + 1; j < placements.length; j++) {
       const a = placements[i]!;
       const b = placements[j]!;
-      if (boxesOverlap(a, b)) {
+      if (boxesOverlap(a, b) && !isRingChairOfTable(a, b) && !isRingChairOfTable(b, a)) {
         violations.push({
           code: 'BBOX_OVERLAP',
           severity: 'hard',
@@ -809,7 +820,9 @@ function buildReasons(
     reasons.push(`${prefix}可坐 ${capacitySeats} 座（${placements.length} 件家具）`);
   }
   if (skipped.length > 0) {
-    reasons.push(`${skipped.length} 个区被跳过：${skipped[0].reason}`);
+    // skipped 里既有整块区（越界/太小）也有单件家具（墙退距放不下），
+    // 用中性的「项」计数，不把件数说成区数（docs/32 验收点二缺口 4）。
+    reasons.push(`${skipped.length} 项被跳过：${skipped[0].reason}`);
   }
   if (outOfBounds > 0) {
     reasons.push(`${outOfBounds} 件越界，扣分 -${3 * outOfBounds}`);

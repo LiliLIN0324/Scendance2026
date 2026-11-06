@@ -13,13 +13,25 @@
 import type { PlanAnnotation, PlanPoint, ZoneSemanticType } from './plan-annotation';
 import { densityToSpec } from './density';
 import { getCatalogForZone } from './furniture-catalog';
+// 生成器要保证自己的产物过得了检查层：环几何与 rest 对坐距直接吃检查层阈值，
+// 避免再出现「生成常数和检查常数各写一份」的漂移（G5/G7 根因）。
+import { AISLE_CLEARANCE_THRESHOLD_M, CHAIR_GAP_THRESHOLD_M } from './human-factors';
 
-/** 圆桌直径（米）。 */
-export const TABLE_DIAMETER = 1.2;
+/**
+ * 圆桌直径（米）。与 furniture-catalog 的圆桌条目（Ø1.8，Hall D5 官方值）同步——
+ * 旧值 1.2 与 catalog 脱钩是 G5 的第一层根因，别再各写一份。
+ */
+export const TABLE_DIAMETER = 1.8;
 /** 椅子边长（米）。 */
 export const CHAIR_SIZE = 0.45;
-/** 桌心到相邻椅心的径向距离（米）。 */
-export const CHAIR_RING_RADIUS = 0.9;
+/**
+ * 桌心到相邻椅心的径向距离（米）。
+ * 要同时满足两条几何约束（都按最坏 round2 量化误差 ±0.015m 留余量）：
+ * - 同环相邻椅弦长 2r·sin(π/8) ≥ CHAIR_GAP_THRESHOLD_M（8 椅均布不过挤）→ r ≥ 1.196；
+ * - 椅内缘 r−CHAIR_SIZE/2 与桌缘 TABLE_DIAMETER/2 之间留 > AABB 容差 0.02m → r ≥ 1.145。
+ * 旧值 0.9 会让椅脚伸进 Ø1.8 桌面里（G5 第二层根因）。
+ */
+export const CHAIR_RING_RADIUS = 1.22;
 /** 单 zone 最多落几桌（MVP 上限）。 */
 export const MAX_TABLES_PER_ZONE = 3;
 /** 距 zone 边缘的最小留白（米）。 */
@@ -30,6 +42,18 @@ export const WALL_CLEARANCE_M = 0.3;
 export const CHAIR_BACK_CLEARANCE_M = 0.6;
 /** 椅子中心到所属桌心允许的最大距离（米）：桌外接圆 + 椅深 + 容差。 */
 export const MAX_CHAIR_OWNER_DIST_M = TABLE_DIAMETER / 2 + CHAIR_SIZE + 0.15;
+/**
+ * 相邻两桌之间，两把面朝彼此的椅子的中心距下限（米）：
+ * 跨桌椅距 = pitch − 2×CHAIR_RING_RADIUS，必须 ≥ CHAIR_GAP_THRESHOLD_M。
+ * 额外 +0.1m 盖住 round2 量化误差，别让 0.90 被舍成 0.89 触发误报。
+ */
+export const ROUND_TABLE_PITCH_GUARD_M = 0.1;
+/**
+ * 圆桌区网格内缩（米）：桌心距 zone 边至少这么远，让最外圈椅子
+ * （桌心 ± CHAIR_RING_RADIUS + CHAIR_SIZE/2）整个留在区里，
+ * 不越过 zone 入口边（否则触发 ZONE_ENTRANCE_BLOCKED）也不被墙退距吞掉。
+ */
+export const ROUND_TABLE_INSET_M = ZONE_INSET + CHAIR_RING_RADIUS + CHAIR_SIZE / 2;
 
 /* ---------- 课桌式（教室式）布局常数（对齐东京国际论坛 Hall D5 官方图） ---------- */
 // 红线：以下常数直接来自官方图，不要用 density 旋钮缩放——课桌排距 1.4m、
@@ -145,7 +169,13 @@ export function planZones(
   density: number,
 ): ZonePlanOutcome {
   const spec = densityToSpec(density);
-  const pitch = Math.max(TABLE_DIAMETER + 0.3, spec.spacingMeters);
+  // 桌心距下限：除了桌径 + 走道余量，还要保证相邻两桌的环椅互不贴脸
+  // （跨桌椅距 = pitch − 2×环半径 ≥ CHAIR_GAP_THRESHOLD_M，见 ROUND_TABLE_PITCH_GUARD_M）。
+  const pitch = Math.max(
+    TABLE_DIAMETER + 0.3,
+    2 * CHAIR_RING_RADIUS + CHAIR_GAP_THRESHOLD_M + ROUND_TABLE_PITCH_GUARD_M,
+    spec.spacingMeters,
+  );
   const placements: ZoneFurniturePlacement[] = [];
   const skipped: ZonePlanSkipped[] = [];
 
@@ -164,9 +194,12 @@ export function planZones(
     }
 
     if (zoneType === 'roundtable') {
-      const inset = ZONE_INSET + TABLE_DIAMETER / 2;
+      // 内缩含整圈椅子（不是只含桌面）：桌心距区边至少 ROUND_TABLE_INSET_M，
+      // 否则最外圈椅子越出区界，触发入口堵门/墙退距吞件（G5 修复前实测）。
+      const inset = ROUND_TABLE_INSET_M;
+      const minSide = inset * 2 + 0.1;
       if (g.width - inset * 2 < 0.1 || g.depth - inset * 2 < 0.1) {
-        skipped.push({ zoneId: ann.id, label: ann.label, reason: '圆桌区至少要 1.9×1.9m 才摆得下一桌四椅' });
+        skipped.push({ zoneId: ann.id, label: ann.label, reason: `圆桌区至少要 ${minSide.toFixed(1)}×${minSide.toFixed(1)}m 才摆得下一桌八椅` });
         continue;
       }
       gridRoundtable(g.x, g.z, g.width, g.depth, inset, pitch, push);
@@ -196,8 +229,10 @@ export function planZones(
       }
       spotPhoto(g.x, g.z, g.width, push);
     } else if (zoneType === 'rest') {
-      if (g.width < 2.2 || g.depth < 2.0) {
-        skipped.push({ zoneId: ann.id, label: ann.label, reason: '休息区至少要 2.2×2.0m 才能两排长椅对坐' });
+      // 深度下限 = 对坐中心距 + 椅深 + 两侧各 0.1m 余量：再浅长椅就会伸出区界（G7 同源）。
+      const restMinDepth = AISLE_CLEARANCE_THRESHOLD_M + SPEC.rest.bench.depth + 0.2;
+      if (g.width < 2.2 || g.depth < restMinDepth) {
+        skipped.push({ zoneId: ann.id, label: ann.label, reason: `休息区至少要 2.2×${restMinDepth.toFixed(1)}m 才能两排长椅对坐` });
         continue;
       }
       rowsRest(g.x, g.z, g.width, g.depth, push);
@@ -383,7 +418,7 @@ function spotPhoto(
   }
 }
 
-/** 休息区：两排长椅对坐，中间留 1.5m 通道。 */
+/** 休息区：两排长椅对坐。对坐中心距直接取检查层阈值（G7：旧硬值 1.5 < 1.65 自产 INFEASIBLE）。 */
 function rowsRest(
   x0: number,
   z0: number,
@@ -393,7 +428,7 @@ function rowsRest(
 ): void {
   const benchPitch = 2.2;
   const maxBenchesPerRow = 3;
-  const aisle = 1.5;
+  const aisle = AISLE_CLEARANCE_THRESHOLD_M;
   const inset = ZONE_INSET;
   const usable = w - inset * 2;
   const count = Math.min(maxBenchesPerRow, Math.max(1, Math.floor(usable / benchPitch)));
@@ -428,6 +463,25 @@ export interface WallClearanceOutcome {
 /** 家具 footprint AABB 相交容差（米）：与 plan-scoring.BBOX_OVERLAP_TOLERANCE_M 同值。 */
 const WALL_OVERLAP_TOLERANCE_M = 0.02;
 
+/**
+ * 同桌环椅对判定：这把餐椅是不是「环在这张桌边」的那把。
+ *
+ * 背景：AABB 是轴对齐近似，45° 环椅的包围盒角会戳进自家圆桌的包围盒
+ * （径向距离 CHAIR_RING_RADIUS 够远，但逐轴比较 dx=dz≈0.86 < 桌半径+容差）。
+ * 这类对不算压住——前提是径向距离真的 ≥ 桌半径+椅半宽−容差（自守卫）：
+ * 环半径将来被改小（椅真伸进桌面），豁免自动失效，BBOX_OVERLAP 重新出现。
+ * 供 applyWallClearance（不再吞斜向环椅）与 detectFurnitureOverlap（不再误报）共用。
+ */
+export function isRingChairOfTable(
+  chair: ZoneFurniturePlacement,
+  table: ZoneFurniturePlacement,
+): boolean {
+  if (chair.spec.type !== 'dining-chair' || !chair.ownerTableId) return false;
+  if (`${table.x}|${table.z}` !== chair.ownerTableId) return false;
+  const d = Math.hypot(chair.x - table.x, chair.z - table.z);
+  return d >= TABLE_DIAMETER / 2 + CHAIR_SIZE / 2 - WALL_OVERLAP_TOLERANCE_M;
+}
+
 function aabbOverlap(
   ax: number, az: number, ahw: number, ahd: number,
   bx: number, bz: number, bhw: number, bhd: number,
@@ -449,7 +503,8 @@ function aabbOverlap(
  * 墙退距后处理：每件家具 footprint 距四面墙至少 WALL_CLEARANCE_M（0.3m）；
  * 餐椅背向桌子那侧（拉椅出人）至少 CHAIR_BACK_CLEARANCE_M（0.6m）。
  * 越界先沿法线向内平移到刚好满足；平移后与已接受家具 footprint AABB 相交
- * （0.02m 容差）则该件进 skipped，reason 「贴墙放不下{家具名}」。
+ * （0.02m 容差）则该件进 skipped。reason 按事实分两种：真内移过 →「贴墙放不下」；
+ * 没内移就撞上 →「与其他家具位置压住」（旧版一律报贴墙，掩盖环椅自撞类冲突）。
  *
  * 纯函数、不可变；输入数组不被修改。
  */
@@ -512,18 +567,29 @@ export function applyWallClearance(
     const nz = round2(p.z + dz);
 
     // 与已接受家具做 AABB 相交检测；相交则放弃这件。
+    // 例外：斜向环椅 vs 自家圆桌的 AABB 角碰撞不是真压住（isRingChairOfTable
+    // 自带径向自守卫），不吞这件——否则每桌 8 椅会被吞掉 4 把（G5 实测）。
+    // 径向距离按「内移之后」的位置算，才反映真实挤压状态。
     let collided = false;
     for (const q of accepted) {
-      if (aabbOverlap(nx, nz, hw, hd, q.x, q.z, q.spec.width / 2, q.spec.depth / 2)) {
+      if (
+        aabbOverlap(nx, nz, hw, hd, q.x, q.z, q.spec.width / 2, q.spec.depth / 2)
+        && !isRingChairOfTable({ ...p, x: nx, z: nz }, q)
+      ) {
         collided = true;
         break;
       }
     }
     if (collided) {
+      // 两种事实分开说：真被墙顶过内移的才叫「贴墙放不下」；
+      // 没挪一步就撞上的（如环椅几何自撞）直说「位置压住」——
+      // 旧文案把第二种也报成贴墙，掩盖了真实的几何冲突（docs/32 §三.3）。
       skipped.push({
         zoneId: p.zoneId,
         label: p.zoneType,
-        reason: `贴墙放不下「${p.spec.name}」，向内平移后与其他家具压住`,
+        reason: (dx !== 0 || dz !== 0)
+          ? `贴墙放不下「${p.spec.name}」，向内平移后与其他家具压住`
+          : `「${p.spec.name}」与其他家具位置压住，本件跳过`,
       });
       continue;
     }

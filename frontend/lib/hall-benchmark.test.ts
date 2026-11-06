@@ -106,7 +106,7 @@ describe('Hall D5 基准（285㎡，参考课桌 120）', () => {
   });
 
   it('对抗例「塞 250 人进 285㎡」：极小区被跳过，不默默减椅硬排', () => {
-    // 1×1m 小 zone，远小于 1.9×1.9m 圆桌下限。
+    // 1×1m 小 zone，远小于圆桌区下限（含整圈椅子 ≈3.6×3.6m）。
     const tiny = zone('d5-tiny', -0.5, -0.5, 1, 1);
     const out = planZones([tiny], 0.5);
     expect(out.placements).toEqual([]);
