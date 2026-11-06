@@ -186,6 +186,21 @@ export function evaluateDoorSweep(
       case 'west':
         doorX = -halfW; doorZ = g.position; inwardX = 1; inwardZ = 0; break;
     }
+
+    // 推测门（inferred:true，含 withDefaultDoor 合成门和 fixture 按图推断的门）：
+    // 门宽/位置/开启方向都未核验，不做 hard blocked 判定，统一走 soft unknown，
+    // 避免用「猜的门」硬否决一个可行方案。
+    if (g.inferred) {
+      out.push({
+        code: 'DOOR_SWEEP_BLOCKED',
+        severity: 'soft',
+        status: 'unknown',
+        zoneId: d.id,
+        message: `「${d.label || '门'}」为推测门（门宽/位置/开启方向未核验），门弧几何不做硬判定`,
+      });
+      continue;
+    }
+
     let blocked = false;
     for (const p of placements) {
       const furnitureR = Math.max(p.spec.width, p.spec.depth) / 2;
