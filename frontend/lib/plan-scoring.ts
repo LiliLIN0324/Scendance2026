@@ -15,7 +15,8 @@ import {
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
-import { evaluateFlow, type FlowEvaluation } from './flow-constraints';
+import { evaluateFlow, evaluateReachability, type FlowEvaluation } from './flow-constraints';
+import { evaluateHumanFactors, type ScoredViolation } from './human-factors';
 
 /** 三档密度旋钮。 */
 export type PlanVariantId = 'sparse' | 'balanced' | 'dense';
@@ -50,6 +51,8 @@ export interface ScoredPlan {
   score: number;
   /** 人话理由数组，2~4 条。 */
   reasons: string[];
+  /** 带 code 的 violation envelope（P0：人体工学 + 可达性）。 */
+  violations: ScoredViolation[];
 }
 
 /** 浮点容差。 */
@@ -154,7 +157,20 @@ function scoreVariant(
   const flowPenalty = computeFlowPenalty(flow);
   const overlap = detectZoneOverlap(annotations);
   const overlapPenalty = overlap.count > 0 ? -3 * overlap.count : 0;
-  const score = capacitySeats - 2 * skipped.length - 3 * outOfBounds + flowPenalty + overlapPenalty;
+
+  // P0：人体工学 + 可达性 violation envelope。
+  const hfViolations = evaluateHumanFactors(placements, annotations);
+  const reach = evaluateReachability(placements, annotations, roomSize);
+  const violations = [...hfViolations, ...reach.violations];
+  const hfPenalty = violations.reduce((sum, v) => {
+    if (v.severity !== 'hard') return sum;
+    if (v.code === 'CHAIR_GAP') return sum - 1;
+    if (v.code === 'AISLE_CLEARANCE') return sum - 2;
+    if (v.code === 'ZONE_UNREACHABLE') return sum - 5;
+    return sum;
+  }, 0);
+
+  const score = capacitySeats - 2 * skipped.length - 3 * outOfBounds + flowPenalty + overlapPenalty + hfPenalty;
 
   const reasons = buildReasons(
     variantId,
@@ -165,6 +181,17 @@ function scoreVariant(
     flow,
     overlap.count,
   );
+  // 把 violation 人话补到 reasons 末尾：soft 全推（提示不扣分），hard 最多推 2 条。
+  for (const v of violations) {
+    if (v.severity === 'soft') reasons.push(v.message);
+  }
+  let hardCount = 0;
+  for (const v of violations) {
+    if (v.severity !== 'hard') continue;
+    reasons.push(v.message);
+    hardCount += 1;
+    if (hardCount >= 2) break;
+  }
 
   return {
     variantId,
@@ -177,6 +204,7 @@ function scoreVariant(
     flow,
     score,
     reasons,
+    violations,
   };
 }
 

@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ---- mock flow-constraints：默认无签到区、动线合规 ----
+// ---- mock flow-constraints：默认无签到区、动线合规、可达性全可达 ----
 vi.mock('./flow-constraints', () => ({
   AISLE_MIN_NORMAL: 1.2,
   AISLE_MIN_WHEELCHAIR: 1.5,
@@ -20,6 +20,16 @@ vi.mock('./flow-constraints', () => ({
     checkinBlocked: false,
     violations: [] as string[],
   })),
+  evaluateReachability: vi.fn(() => ({
+    reachableZones: [] as string[],
+    unreachableZones: [] as string[],
+    violations: [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>,
+  })),
+}));
+
+// ---- mock human-factors：默认无 violation（避免现有用例被真实人体工学扣分干扰） ----
+vi.mock('./human-factors', () => ({
+  evaluateHumanFactors: vi.fn(() => [] as Array<{ code: string; severity: 'hard' | 'soft'; message: string }>),
 }));
 
 // ---- plan-approve：保留真实导出，planZones 换成 vi.fn ----
@@ -31,13 +41,16 @@ vi.mock('./plan-approve', async (importOriginal) => {
   };
 });
 
-import { evaluateFlow } from './flow-constraints';
+import { evaluateFlow, evaluateReachability } from './flow-constraints';
+import { evaluateHumanFactors } from './human-factors';
 import { planZones, type ZoneFurniturePlacement } from './plan-approve';
 import { generateScoredPlans, pickRecommendedPlan } from './plan-scoring';
 import type { PlanAnnotation } from './plan-annotation';
 
 const mockPlanZones = vi.mocked(planZones);
 const mockEvaluateFlow = vi.mocked(evaluateFlow);
+const mockReach = vi.mocked(evaluateReachability);
+const mockHumanFactors = vi.mocked(evaluateHumanFactors);
 
 beforeEach(() => {
   mockPlanZones.mockReset();
@@ -50,6 +63,10 @@ beforeEach(() => {
     checkinBlocked: false,
     violations: [],
   }));
+  mockReach.mockReset();
+  mockReach.mockReturnValue({ reachableZones: [], unreachableZones: [], violations: [] });
+  mockHumanFactors.mockReset();
+  mockHumanFactors.mockReturnValue([]);
 });
 
 /** 构造一个 zone 标注。 */
@@ -236,7 +253,7 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
 
   it('并列 score → 优先 balanced > sparse > dense（乱序输入也成立）', () => {
     const base = {
-      placements: [], skipped: [], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'],
+      placements: [], skipped: [], outOfBounds: 0, capacitySeats: 2, score: 2, reasons: ['x'], violations: [] as any[],
       flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
     };
     const plans = [
@@ -251,7 +268,7 @@ describe('pickRecommendedPlan — 排序、并列、不可变', () => {
 
   it('pickRecommendedPlan 不修改输入数组（不可变）', () => {
     const base = {
-      placements: [], skipped: [], outOfBounds: 0, reasons: ['x'],
+      placements: [], skipped: [], outOfBounds: 0, reasons: ['x'], violations: [] as any[],
       flow: { aisleWidthM: Infinity, wheelChairPassable: true, normalPassable: true, checkinBlocked: false, violations: [] as string[] },
     };
     const plans = [
@@ -281,6 +298,64 @@ describe('reasons — 每版至少 2 条人话', () => {
       } else {
         expect(p.reasons.some(r => r.includes('轮椅可过'))).toBe(true);
       }
+    }
+  });
+});
+
+describe('P0 接入：violations 字段 + ZONE_UNREACHABLE 扣分', () => {
+  it('每个 ScoredPlan 都带 violations 数组（类型正确、可空）', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    expect(plans).toHaveLength(3);
+    for (const p of plans) {
+      expect(Array.isArray(p.violations)).toBe(true);
+      for (const v of p.violations) {
+        expect(v).toHaveProperty('code');
+        expect(v).toHaveProperty('severity');
+        expect(v).toHaveProperty('message');
+      }
+    }
+  });
+
+  it('ZONE_UNREACHABLE hard violation → 每条扣 5 分（围死 vs 开放分差 ≥5）', () => {
+    // 开放版：mock reach 返回空 violations
+    mockReach.mockReturnValue({ reachableZones: ['z1'], unreachableZones: [], violations: [] });
+    mockHumanFactors.mockReturnValue([]);
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    const openPlans = generateScoredPlans([makeZone('z1')]);
+
+    // 围死版：mock reach 返回一条 ZONE_UNREACHABLE
+    mockReach.mockReturnValue({
+      reachableZones: [],
+      unreachableZones: ['z1'],
+      violations: [{ code: 'ZONE_UNREACHABLE', severity: 'hard', zoneId: 'z1', message: '「休息区」被桌椅围死，人走不过去' }],
+    });
+    const blockedPlans = generateScoredPlans([makeZone('z1')]);
+
+    for (let i = 0; i < 3; i++) {
+      const openScore = openPlans[i]!.score;
+      const blockedScore = blockedPlans[i]!.score;
+      expect(openScore - blockedScore).toBeGreaterThanOrEqual(5);
+      expect(blockedPlans[i]!.violations.some((v) => v.code === 'ZONE_UNREACHABLE')).toBe(true);
+    }
+  });
+
+  it('CHAIR_GAP hard → 每条 -1；soft violation 不扣分只进 reasons', () => {
+    mockPlanZones.mockReturnValue({ placements: [chairAt(1, 1)], skipped: [] });
+    // 两条 hard CHAIR_GAP + 一条 soft CHECKIN_QUEUE
+    mockHumanFactors.mockReturnValue([
+      { code: 'CHAIR_GAP', severity: 'hard', message: '餐椅间距仅 0.50m' },
+      { code: 'CHAIR_GAP', severity: 'hard', message: '餐椅间距仅 0.40m' },
+      { code: 'CHECKIN_QUEUE', severity: 'soft', message: '签到台前排队缓冲不足' },
+    ]);
+    mockReach.mockReturnValue({ reachableZones: [], unreachableZones: [], violations: [] });
+    const plans = generateScoredPlans([makeZone('z1')]);
+    for (const p of plans) {
+      // capacity=1, 两条 CHAIR_GAP 各 -1 → score = 1 - 2 = -1；soft 不扣
+      expect(p.score).toBe(-1);
+      expect(p.violations.filter((v) => v.code === 'CHAIR_GAP')).toHaveLength(2);
+      expect(p.violations.some((v) => v.code === 'CHECKIN_QUEUE' && v.severity === 'soft')).toBe(true);
+      expect(p.reasons.some((r) => r.includes('排队缓冲'))).toBe(true);
     }
   });
 });
