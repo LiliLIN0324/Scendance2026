@@ -243,8 +243,8 @@ describe('场景 B：对抗 250 人（超官方剧院 200）', () => {
     expect(rec.capacitySeats).toBe(actualChairs);
     // 没有"为了凑 250 而虚增椅子"：实际 chair 数 < 250。
     expect(actualChairs).toBeLessThan(250);
-    // gap：现有管线无"目标人数"入参，不会主动说"空间不够，建议降到 200"。
-    // 这条产品 gap 在对照结论里列出，本测试只验证"不硬凑"。
+    // 降容人话由 targetCapacity 入参驱动（UI 主路径经 brief-headcount-store 接线，
+    // 见 room-organizer 的 targetCapacityForScoring）；B3 验证 lib 能力。
   });
 
   it('B3：传 targetCapacity=250 时，推荐版 reasons 必须出现「装不下 250」或「建议降到」人话', () => {

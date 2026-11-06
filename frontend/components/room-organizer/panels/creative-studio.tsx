@@ -24,6 +24,7 @@ import { BRIEF_EVENT_OPTIONS, briefInstruction, composeBriefReference, IDEA_CARD
 import { localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../lib/persistence';
 import { buildReviewReference } from '../lib/review-copy';
 import { appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
+import { setBriefHeadcount } from './brief-headcount-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend } from '../lib/workbench-agent';
@@ -222,6 +223,13 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     const timer=setTimeout(()=>{briefTimer.current=undefined;void saveBrief(scope).catch(()=>{});},250);briefTimer.current=timer;
     return()=>{clearTimeout(timer);if(briefTimer.current===timer)briefTimer.current=undefined;};
   },[brief,briefReady,scope,saveBrief,backupPending]);
+  // 人数镜像给 2D 方案打分（room-organizer 在 provider 树外读不到 context）。
+  // 脚手架默认 24 不算「用户说过的人数」，与右栏 formBrief 的判定同一条谓词，
+  // 否则没填过需求的会话会假触发「装不下 24 人」的降容话术。
+  useEffect(()=>{
+    const statedBrief=hasSavedBrief||brief.event!==INITIAL_BRIEF.event||brief.guests!==INITIAL_BRIEF.guests;
+    setBriefHeadcount(statedBrief?brief.guests:null);
+  },[brief.event,brief.guests,hasSavedBrief]);
   function retryBrief():void { if(briefStorage.current.ready)void saveBrief(scope).catch(()=>{});else setBriefLoadAttempt(value=>value+1); }
   const [expanded,setExpanded]=useState(false);
   // 默认先预览再确认；「明确指令直接应用」只能由用户当场显式打开。

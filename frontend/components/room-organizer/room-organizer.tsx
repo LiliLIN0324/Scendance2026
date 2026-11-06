@@ -15,6 +15,7 @@ import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
 import { getAgentRun, getAgentChatThreads } from './panels/agent-chat-store';
+import { getBriefHeadcount } from './panels/brief-headcount-store';
 import { setGenerationOutcome } from './lib/use-generation-outcome';
 import {
   executeSceneCommand,
@@ -2660,8 +2661,19 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const roomSizeForScoring = (typeof layout.width === 'number' && typeof layout.height === 'number')
     ? { width: layout.width, height: layout.height }
     : undefined;
+  // SC-19 修复：需求人数从左栏「活动需求」镜像读（provider 树外读不到 context），
+  // 装不下时方案卡才出「装不下 N 人 + 建议降到」的降容话术（docs/27 B4 断点补上）。
+  const targetCapacityForScoring = getBriefHeadcount() ?? undefined;
   const scoredPlans: ScoredPlan[] = zoneAnnotationsForScoring.length > 0
-    ? generateScoredPlans(zoneAnnotationsForScoring, roomSizeForScoring ? { roomSize: roomSizeForScoring } : undefined)
+    ? generateScoredPlans(
+        zoneAnnotationsForScoring,
+        roomSizeForScoring || targetCapacityForScoring !== undefined
+          ? {
+              ...(roomSizeForScoring ? { roomSize: roomSizeForScoring } : {}),
+              ...(targetCapacityForScoring !== undefined ? { targetCapacity: targetCapacityForScoring } : {}),
+            }
+          : undefined,
+      )
     : [];
   const recommendedPlan: ScoredPlan | null = scoredPlans.length > 0
     ? pickRecommendedPlan(scoredPlans)
