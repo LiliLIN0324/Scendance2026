@@ -4,6 +4,7 @@ import {
   AISLE_MIN_WHEELCHAIR,
   evaluateFlow,
   evaluateReachability,
+  evaluatePrivacyOrder,
 } from './flow-constraints';
 import type { PlanAnnotation, ZoneSemanticType } from './plan-annotation';
 import type { ZoneFurniturePlacement } from './plan-approve';
@@ -240,5 +241,45 @@ describe('evaluateReachability — blockedBy 入口边被家具覆盖', () => {
     const r = evaluateReachability([small], [restZone], { width: 6, height: 6 });
     expect(r.blockedBy.find((b) => b.zoneId === 'r1')).toBeUndefined();
     expect(r.violations.some((v) => v.code === 'ZONE_ENTRANCE_BLOCKED')).toBe(false);
+  });
+});
+
+describe('evaluatePrivacyOrder — 隐私区前后排软约束', () => {
+  const room = { width: 10, height: 8 };
+
+  it('休息区 center z<0（后排）→ 无 PRIVACY_ORDER', () => {
+    // zone z0=-3, depth=2 → center = -2
+    const rest = zone('r1', -1.5, -3, 3, 2, 'rest', '休息区');
+    const v = evaluatePrivacyOrder([rest], room);
+    expect(v.some((x) => x.code === 'PRIVACY_ORDER')).toBe(false);
+  });
+
+  it('休息区 center z>0（前排）→ PRIVACY_ORDER soft，message 含「休息区」人话', () => {
+    // zone z0=1, depth=2 → center = 2（跑到前排）
+    const rest = zone('r1', -1.5, 1, 3, 2, 'rest', '休息区');
+    const v = evaluatePrivacyOrder([rest], room);
+    const hit = v.find((x) => x.code === 'PRIVACY_ORDER');
+    expect(hit).toBeDefined();
+    expect(hit!.severity).toBe('soft');
+    expect(hit!.message).toContain('休息区');
+    expect(hit!.message).toContain('往深处挪');
+  });
+
+  it('签到区 center z<0（后排）→ PRIVACY_ORDER soft，建议往前排挪', () => {
+    // zone z0=-3, depth=1.4 → center = -2.3（签到跑到后排）
+    const c = zone('c1', -1, -3, 2, 1.4, 'checkin', '签到区');
+    const v = evaluatePrivacyOrder([c], room);
+    const hit = v.find((x) => x.code === 'PRIVACY_ORDER');
+    expect(hit).toBeDefined();
+    expect(hit!.severity).toBe('soft');
+    expect(hit!.message).toContain('签到区');
+    expect(hit!.message).toContain('往前排挪');
+  });
+
+  it('签到区 center z>0（前排）→ 无 PRIVACY_ORDER', () => {
+    // zone z0=0, depth=1.4 → center = 0.7（在前排）
+    const c = zone('c1', -1, 0, 2, 1.4, 'checkin', '签到区');
+    const v = evaluatePrivacyOrder([c], room);
+    expect(v.some((x) => x.code === 'PRIVACY_ORDER')).toBe(false);
   });
 });

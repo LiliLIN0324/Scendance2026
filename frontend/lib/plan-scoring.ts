@@ -15,8 +15,8 @@ import {
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
-import { evaluateFlow, evaluateReachability, type FlowEvaluation } from './flow-constraints';
-import { evaluateHumanFactors, evaluateDoorSweep, evaluatePrivacyOrder, type ScoredViolation } from './human-factors';
+import { evaluateFlow, evaluateReachability, evaluatePrivacyOrder, type FlowEvaluation } from './flow-constraints';
+import { evaluateHumanFactors, evaluateDoorSweep, type ScoredViolation } from './human-factors';
 
 /** 三档密度旋钮。 */
 export type PlanVariantId = 'sparse' | 'balanced' | 'dense';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateHumanFactors } from './human-factors';
+import { evaluateHumanFactors, evaluateDoorSweep, DOOR_SWEEP_RADIUS_M } from './human-factors';
 import { evaluateReachability } from './flow-constraints';
 import type { ZoneFurniturePlacement } from './plan-approve';
 import type { PlanAnnotation } from './plan-annotation';
@@ -105,5 +105,42 @@ describe('evaluateReachability — 走廊连通 + zone 可达性', () => {
     expect(r.violations.some(
       (v) => v.code === 'ZONE_UNREACHABLE' && v.zoneId === 'rest2',
     )).toBe(true);
+  });
+});
+
+describe('evaluateDoorSweep — 门弧遮挡', () => {
+  function doorWall(wall: 'north' | 'south' | 'east' | 'west', position = 0): PlanAnnotation {
+    return {
+      id: `d-${wall}`, kind: 'door', label: `${wall}门`, stageNo: 1,
+      geometry: { kind: 'door', wall, position, widthM: 0.9 },
+    };
+  }
+  function smallTable(x: number, z: number, name = '签到台'): ZoneFurniturePlacement {
+    return {
+      zoneId: 'z1', zoneType: 'checkin', x, z, rotation: 0,
+      spec: { type: 'table', name, category: 'desk', width: 1.4, depth: 0.6, height: 0.75, color: '#x', icon: 'x' },
+    };
+  }
+
+  it('门弧内放桌（距门沿墙位置 0.3m）→ DOOR_SWEEP_BLOCKED hard', () => {
+    const v = evaluateDoorSweep([smallTable(0, 0.3)], [doorWall('south')]);
+    const hit = v.find((x) => x.code === 'DOOR_SWEEP_BLOCKED');
+    expect(hit).toBeDefined();
+    expect(hit!.severity).toBe('hard');
+    expect(hit!.message).toContain('签到台');
+    expect(hit!.message).toContain('南');
+  });
+
+  it('门弧外放桌（距门沿墙位置 ≥5m）→ 无 DOOR_SWEEP_BLOCKED', () => {
+    const v = evaluateDoorSweep([smallTable(5, 3)], [doorWall('south')]);
+    expect(v.some((x) => x.code === 'DOOR_SWEEP_BLOCKED')).toBe(false);
+  });
+
+  it('无 door 标注 → 返回空数组（向后兼容）', () => {
+    expect(evaluateDoorSweep([smallTable(0, 0)], [])).toEqual([]);
+  });
+
+  it('常量 DOOR_SWEEP_RADIUS_M = 0.45（开门弧半径）', () => {
+    expect(DOOR_SWEEP_RADIUS_M).toBeCloseTo(0.45, 6);
   });
 });

@@ -434,3 +434,46 @@ export function evaluateReachability(
 
   return { reachableZones, unreachableZones, violations, pairReachability, blockedBy };
 }
+
+/* ---------- 4.1：隐私区前后排软约束 ---------- */
+
+/**
+ * 隐私区前后排顺序（soft，不扣分只进 reasons）：
+ * - 签到区应在前排（zone 中心 z > 0，靠近入场门）；
+ * - 圆桌区居中（不强制）；
+ * - 休息区应在后排（zone 中心 z < 0，远离门）。
+ *
+ * 违反人话：
+ * - 休息区 centerZ > 0（跑到前排）→「休息区离门太近，建议往深处挪」
+ * - 签到区 centerZ < 0（跑到后排）→「签到区离门太远，建议往前排挪」
+ *
+ * roomSize 参数保留为 API 一致性（当前判定只用 zone 中心 z 相对 0）；未传 roomSize 时仍按 z=0 判定。
+ */
+export function evaluatePrivacyOrder(
+  zones: readonly PlanAnnotation[],
+  _roomSize: { width: number; height: number } | undefined,
+): ScoredViolation[] {
+  const out: ScoredViolation[] = [];
+  for (const z of zones) {
+    if (z.kind !== 'zone' || z.geometry.kind !== 'rect') continue;
+    const g = z.geometry;
+    const centerZ = g.z + g.depth / 2;
+    if (z.zoneType === 'rest' && centerZ > 0) {
+      out.push({
+        code: 'PRIVACY_ORDER',
+        severity: 'soft',
+        zoneId: z.id,
+        message: '休息区离门太近，建议往深处挪',
+      });
+    }
+    if (z.zoneType === 'checkin' && centerZ < 0) {
+      out.push({
+        code: 'PRIVACY_ORDER',
+        severity: 'soft',
+        zoneId: z.id,
+        message: '签到区离门太远，建议往前排挪',
+      });
+    }
+  }
+  return out;
+}
