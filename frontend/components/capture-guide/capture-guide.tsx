@@ -50,6 +50,7 @@ import {
   type VenueSize,
   type ShotVerdict,
 } from '@/lib/capture-guide/shot-rules';
+import { assessReconReadiness } from '@/lib/capture-guide/recon-readiness';
 import {
   CAPTURE_LAYERS,
   LAYER_LABELS,
@@ -246,6 +247,7 @@ export function CaptureGuide(): JSX.Element {
   const brightCount = frames.filter(frame => frame.meanLuma > 210 || frame.brightRatio > 0.12).length;
   const lowResCount = frames.filter(frame => Math.min(frame.width, frame.height) < 1080).length;
   const missingGpsCount = frames.filter(frame => frame.gps === null || frame.gps.accuracy > 10).length;
+  const recon = useMemo(() => assessReconReadiness(frames), [frames]);
   const headingStats = useMemo(() => headingCoverage(frames.map(frame => frame.heading)), [frames]);
   const coverageEstimated = headingStats.samples < Math.min(12, Math.max(1, frames.length));
   const liveCoverage = coverageEstimated
@@ -1083,6 +1085,29 @@ export function CaptureGuide(): JSX.Element {
                     })}
                   </div>
                 )}
+              </section>
+
+              <section className={`cg-card cg-recon cg-recon--${recon.verdict}`} data-testid="recon-readiness">
+                <div className="cg-card-head">
+                  <div className="cg-card-title">
+                    <span className="cg-icon"><Layers size={20} aria-hidden="true" /></span>
+                    <div>
+                      <strong>重建可行性 · 实时</strong>
+                      <span>密集多拍：每步 0.3–0.5 m，相邻留 7 成重叠。</span>
+                    </div>
+                  </div>
+                  <span className={`cg-recon-badge cg-recon-badge--${recon.verdict}`}>
+                    {recon.verdict === 'enough' ? '够' : recon.verdict === 'borderline' ? '接近' : '不足'}
+                  </span>
+                </div>
+                <div className="cg-recon-headline">{recon.headline}</div>
+                <div className="cg-recon-grid">
+                  <span><b>{recon.usable}</b><i>可用帧</i></span>
+                  <span className={recon.blurry > 0 ? 'is-warn' : ''}><b>{recon.blurry}</b><i>糊片</i></span>
+                  <span className={recon.gaps > 0 ? 'is-warn' : ''}><b>{recon.gaps}</b><i>重叠断档</i></span>
+                  <span><b>{recon.estimatedRegistered}</b><i>预计登记</i></span>
+                </div>
+                <p className="cg-note">{recon.detail}</p>
               </section>
 
               <section className="cg-card">
