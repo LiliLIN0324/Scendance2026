@@ -19,6 +19,7 @@ import {
 } from './plan-approve';
 import { evaluateFlow, evaluateReachability, type FlowEvaluation } from './flow-constraints';
 import { evaluateHumanFactors, evaluateDoorSweep, evaluatePrivacyOrder, type ScoredViolation } from './human-factors';
+import { getCatalogByType } from './furniture-catalog';
 
 /** 三档密度旋钮。 */
 export type PlanVariantId = 'sparse' | 'balanced' | 'dense';
@@ -29,12 +30,48 @@ export interface RoomSize {
   height: number;
 }
 
+/** 某类家具的库存缺口条目（placements 需求 > 可用库存）。 */
+export interface FurnitureShortage {
+  /** furniture type（与 placement.spec.type 对齐）。 */
+  type: string;
+  /** 中文家具名（人话，用于 reasons 拼接）。 */
+  name: string;
+  /** placements 实际需要的件数。 */
+  needed: number;
+  /** 库存可用件数。 */
+  available: number;
+  /** 缺几件 = needed - available。 */
+  missing: number;
+}
+
+/** 交付清单（BOM）一行：按 type 聚合后的家具明细。 */
+export interface BillOfMaterialLine {
+  /** 中文家具名（来自 catalog）。 */
+  name: string;
+  /** furniture type。 */
+  type: string;
+  /** 数量（同 type 件数求和）。 */
+  count: number;
+  /**
+   * 尺寸人话：圆桌写「Ø1.8m」；其他家具写「1.8×0.6m」（宽×深，米）。
+   * catalog 查不到时回退 placements 的 spec.width×depth。
+   */
+  size: string;
+}
+
 /** generateScoredPlans 的可选开关。 */
 export interface ScoringOptions {
   /** 场地尺寸；提供后越界判定会把「落到场地外」的件数计入 outOfBounds。 */
   roomSize?: RoomSize;
   /** 用户要求的目标人数；当实际可坐座位明显不足时，reasons 给人话降容建议，不硬凑。 */
   targetCapacity?: number;
+  /**
+   * 可选库存清单：key=furniture type，value=可用件数。
+   * 缺省=不限（不做库存核验）。
+   * 若 placements 里某 type 数量 > inventory[type]，placements 不静默截断，
+   * 而是在 shortage / reasons 里显式列出「缺 N 把{中文家具名}」。
+   */
+  inventory?: Record<string, number>;
 }
 
 export interface ScoredPlan {
@@ -86,6 +123,18 @@ export interface ScoredPlan {
    * - SEARCH_TIMEOUT：求解预算耗尽（本批为占位，未启用真实超时枚举）。
    */
   feasibilityStatus: 'FEASIBLE' | 'INFEASIBLE' | 'INSUFFICIENT_INPUT' | 'SEARCH_TIMEOUT';
+  /**
+   * 库存缺口清单（仅当 ScoringOptions.inventory 提供且 placements 需求 > 可用库存时填充）。
+   * 不静默截断 placements，而是显式列出缺几件；方案 feasible 状态不变。
+   * 未传 inventory 时为 undefined（旧调用兼容）。
+   */
+  shortage?: FurnitureShortage[] | undefined;
+  /**
+   * 交付清单（BOM）：按 placements 的 furniture type 聚合成中文明细。
+   * 同 type 合并一行；size 从 furniture-catalog 取（圆桌写 ØØm，其他写 w×d m）。
+   * 推荐版（pickRecommended 选中）必然填此字段。
+   */
+  billOfMaterials?: BillOfMaterialLine[];
 }
 
 /** 浮点容差。 */
@@ -127,8 +176,9 @@ export function generateScoredPlans(
 ): ScoredPlan[] {
   const roomSize = opts?.roomSize;
   const targetCapacity = opts?.targetCapacity;
+  const inventory = opts?.inventory;
   const all = VARIANTS.map((v) =>
-    scoreVariant(annotations, v.variantId, v.label, v.density, roomSize, targetCapacity),
+    scoreVariant(annotations, v.variantId, v.label, v.density, roomSize, targetCapacity, inventory),
   );
   return dedupePlans(all);
 }
@@ -192,6 +242,7 @@ function scoreVariant(
   density: number,
   roomSize: RoomSize | undefined,
   targetCapacity?: number,
+  inventory?: Record<string, number>,
 ): ScoredPlan {
   const raw = planZones(annotations, density);
   let placements = raw.placements;
@@ -334,6 +385,16 @@ function scoreVariant(
     );
   }
 
+  // 库存缺口：placements 不静默截断，显式列出缺几件（人话进 reasons）。
+  // 未传 inventory → shortage 字段缺省（undefined），保持向后兼容。
+  const shortage = inventory ? computeShortage(placements, inventory) : undefined;
+  for (const s of shortage ?? []) {
+    reasons.push(`缺 ${s.missing} ${pluralUnit(s.name)}${s.name}（需要 ${s.needed}、库存 ${s.available}）`);
+  }
+
+  // 交付清单（BOM）：按 type 聚合，推荐版必然填。
+  const billOfMaterials = buildBillOfMaterials(placements);
+
   // 0-100 三维子分：容量按座位数线性、动线按通道扣分绝对值、人体按 hard 条数。
   const hardTotal = violations.filter((v) => v.severity === 'hard').length;
   const subScores = {
@@ -358,7 +419,92 @@ function scoreVariant(
     assurance: hasRealDoor ? 'verified' as const : 'draft_unverified' as const,
     feasible,
     feasibilityStatus,
+    shortage,
+    billOfMaterials,
   };
+}
+
+/**
+ * 库存核验：placements 按 spec.type 聚合计数，对比 inventory[type]。
+ * inventory 未传或缺该 key → 不做核验，返回空数组。
+ * 库存 ≥ 需要数 → 空；否则每条记 needed/available/missing。
+ */
+function computeShortage(
+  placements: readonly ZoneFurniturePlacement[],
+  inventory: Record<string, number> | undefined,
+): FurnitureShortage[] {
+  if (!inventory) return [];
+  const neededByType = new Map<string, { name: string; needed: number }>();
+  for (const p of placements) {
+    const t = p.spec.type;
+    const cur = neededByType.get(t) ?? { name: p.spec.name, needed: 0 };
+    cur.needed += 1;
+    neededByType.set(t, cur);
+  }
+  const out: FurnitureShortage[] = [];
+  for (const [type, agg] of neededByType) {
+    if (!(type in inventory)) continue;
+    const available = inventory[type]!;
+    if (agg.needed <= available) continue;
+    out.push({
+      type,
+      name: agg.name,
+      needed: agg.needed,
+      available,
+      missing: agg.needed - available,
+    });
+  }
+  return out;
+}
+
+/** 家具名单量词：椅类用「把」，桌/台用「张」，其他用「件」。 */
+function pluralUnit(name: string): string {
+  if (name.includes('椅')) return '把';
+  if (name.includes('桌') || name.includes('台')) return '张';
+  if (name.includes('墙')) return '面';
+  if (name.includes('绿植')) return '盆';
+  if (name.includes('长椅')) return '条';
+  return '件';
+}
+
+/**
+ * 从 placements 聚合交付清单（BOM）：
+ * - 同 type 合并一行；数量求和；
+ * - name/尺寸优先从 furniture-catalog 取（type→catalog），查不到回退 placement.spec；
+ * - size 人话：圆桌（正方形 footprint 且 name 含「圆桌」）写「Ø1.8m」，其他写「1.8×0.6m」。
+ */
+export function buildBillOfMaterials(
+  placements: readonly ZoneFurniturePlacement[],
+): BillOfMaterialLine[] {
+  const grouped = new Map<string, { name: string; count: number; width: number; depth: number; isRound: boolean }>();
+  for (const p of placements) {
+    const type = p.spec.type;
+    const catalog = getCatalogByType(type);
+    // 同名 type 在 catalog 里可能有多条（dining-chair 分餐椅/工作椅）；取第一条匹配。
+    // 尺寸以 placement.spec 为准（与实际摆放一致），catalog 只用于判定圆桌。
+    const width = catalog?.width ?? p.spec.width;
+    const depth = catalog?.depth ?? p.spec.depth;
+    const name = catalog?.name ?? p.spec.name;
+    const isRound = name.includes('圆桌') || (Math.abs(width - depth) < EPS && name.includes('桌'));
+    const cur = grouped.get(type) ?? { name, count: 0, width, depth, isRound };
+    cur.count += 1;
+    grouped.set(type, cur);
+  }
+  const out: BillOfMaterialLine[] = [];
+  for (const [type, agg] of grouped) {
+    const size = agg.isRound
+      ? `Ø${trimTrailingZero(agg.width)}m`
+      : `${trimTrailingZero(agg.width)}×${trimTrailingZero(agg.depth)}m`;
+    out.push({ name: agg.name, type, count: agg.count, size });
+  }
+  // 稳定排序：按家具数量倒序，再按 type 字母序，便于测试快照。
+  out.sort((a, b) => b.count - a.count || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
+  return out;
+}
+
+function trimTrailingZero(v: number): string {
+  // 1.8 → "1.8"；1.0 → "1"；0.45 → "0.45"。
+  return Number.isInteger(v) ? String(v) : String(v);
 }
 
 /**
