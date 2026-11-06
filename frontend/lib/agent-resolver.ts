@@ -46,5 +46,11 @@ function toExtraction(slot: BriefSlots): BriefExtraction & { layoutMode: LayoutM
     areaM2: slot.areaM2 ?? null,
     timeOfDay: slot.timeOfDay ?? null,
     layoutMode: slot.layoutMode ?? null,
+    // 推理层新字段原样透传：audienceTags 留空数组/缺省都不影响本地正则兜底；
+    // mobilityAssistance 是布尔判定，前端 buildAudiencePrompt 据此走三档（轮椅硬建议/elderly 确认式问句/常规）；
+    // proactiveReply 是一次性回话文案，前端 brief-agent 优先展示、null 时回退正则 buildAudiencePrompt。
+    ...(slot.audienceTags && slot.audienceTags.length > 0 ? { audienceTags: slot.audienceTags } : {}),
+    ...(slot.mobilityAssistance !== undefined && slot.mobilityAssistance !== null ? { mobilityAssistance: slot.mobilityAssistance } : {}),
+    ...(slot.proactiveReply !== undefined ? { proactiveReply: slot.proactiveReply } : {}),
   };
 }
