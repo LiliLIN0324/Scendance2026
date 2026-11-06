@@ -33,6 +33,8 @@ export interface RoomSize {
 export interface ScoringOptions {
   /** 场地尺寸；提供后越界判定会把「落到场地外」的件数计入 outOfBounds。 */
   roomSize?: RoomSize;
+  /** 用户要求的目标人数；当实际可坐座位明显不足时，reasons 给人话降容建议，不硬凑。 */
+  targetCapacity?: number;
 }
 
 export interface ScoredPlan {
@@ -124,8 +126,9 @@ export function generateScoredPlans(
   opts?: ScoringOptions,
 ): ScoredPlan[] {
   const roomSize = opts?.roomSize;
+  const targetCapacity = opts?.targetCapacity;
   const all = VARIANTS.map((v) =>
-    scoreVariant(annotations, v.variantId, v.label, v.density, roomSize),
+    scoreVariant(annotations, v.variantId, v.label, v.density, roomSize, targetCapacity),
   );
   return dedupePlans(all);
 }
@@ -188,6 +191,7 @@ function scoreVariant(
   label: string,
   density: number,
   roomSize: RoomSize | undefined,
+  targetCapacity?: number,
 ): ScoredPlan {
   const raw = planZones(annotations, density);
   let placements = raw.placements;
@@ -320,6 +324,14 @@ function scoreVariant(
     reasons.push(v.message);
     hardCount += 1;
     if (hardCount >= 2) break;
+  }
+
+  // 容量不足人话建议：用户要的人数明显摆不下时，给具体数字建议，不硬凑也不默默减椅子。
+  if (targetCapacity && Number.isFinite(targetCapacity) && capacitySeats < targetCapacity * 0.9) {
+    const suggested = Math.max(10, Math.floor(capacitySeats / 10) * 10);
+    reasons.push(
+      `这里最多约可坐 ${capacitySeats} 座，装不下 ${targetCapacity} 人；建议把人数降到约 ${suggested} 人，或换更大的场地`,
+    );
   }
 
   // 0-100 三维子分：容量按座位数线性、动线按通道扣分绝对值、人体按 hard 条数。
