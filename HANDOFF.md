@@ -1,9 +1,102 @@
-# HANDOFF.md — 长会话交接单
+# HANDOFF.md — Scendance2026 跨会话交接
 
-> 维护规则：永远只维护这一份（不另起 `HANDOFF-2.md`）。新会话开场第一句先读它，结束前必须更新。
-> 最后更新：2026-11-05
+新会话第一句：
+
+> 先读HANDOFF.md。
+
+最后更新：2026-11-07。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+
+## 优先接力 · 西湖新素材与地图空间体验
+
+2026-11-07 交接。用户把地图和空间列为这一轮重点，体验对标高德。用这批实拍做一个可验收的「找到地点 → 看懂周边与范围 → 进入实景空间 → 放置物件 → 返回地图」案例。地图交互承接场地定位和空间设计。先跑一处能验证的样板，再扩展多个点位。
+
+- **原包**：原仓库根目录的 `11.6.zip` 已迁至 [D 盘归档](/D:/Scendance2026/archives/11.6.zip)（22,596,012,979 B）。仓库根目录和 Downloads 的副本均在确认与 D 盘归档的 SHA-256 一致后移除，校验值 `89b7913cb823aa0920b2b51a4bebe30ee8b94cca2782dc56a12c18e581489c7b6`。DJI 文件名显示拍摄日期 2026-11-06，时间 15:44:03–17:23:37，编号 0219–0254。
+- **素材位置**：[D 盘西湖原片](/D:/Scendance2026/scene-3d-outdoor/xihu-2026-11-06)。D 盘路径用于本机采集工作，旧批次继续使用仓库的 `scene-3d-outdoor/`。同名 MP4 是原片，LRF 是预览代理。
+- **验收状态**：已解压并通过 ZIP CRC 和逐文件大小校验，共 72 个文件、22,950,463,068 B（36 MP4 + 36 LRF）。
+- **杭州城市地图调研**：参考 Isometric SF，先用西湖东岸做可定位、可拼接的等距像素地图小样，验证后在独立仓库持续生产瓦片，并通过场地锚点接入 Scendance。派发 HZ-01 至 HZ-05 见 [调研与验收](docs/plans/hangzhou-isometric-map-research.md)。
+- **接力原则**：先读 [COLLAB.md](COLLAB.md) 和 [地图锚点方案](docs/20-场地资产地理底图提案.md)。素材、剪辑、临时重建产物放 D 盘，Git 只提交明确范围内的代码、文档或经过选择的项目资产。现有地图、LOD 和相机可能有未提交改动，先核对再分工。
+
+### 素材与实景处理
+
+| 卡片 | 执行步骤 | 验收 |
+| --- | --- | --- |
+| XH-01 · P0 素材分段 | 按拍摄时间快速预览 LRF，记录每段的内容、时长、清晰度、运动轨迹、遮挡与候选地标。同名 MP4/LRF 视为同一段。检查是否存在可信 GPS 或轨迹元数据。 | 形成 36 段清单，包含原片文件名、时间、地点线索、定位来源、置信度和用途。地点不确定时标「待核对」。先挑 2–3 段连续、稳定、有多视角的候选。 |
+| XH-02 · P0 单段重建 | 从 XH-01 选一段原始 MP4。先用低成本代理或抽帧检查重叠、曝光与运动，再按选定范围准备短片。复用仓库已有 AHOLO 视频链路，在有本次素材上传和额度授权时提交一单。 | 记录输入文件及时间段、方法、档位、任务号、终态、错误原文和产物。成功后实际读取 SPZ/PLY 并截图。失败则用同一份证据说明是上传、重建还是产物读取失败。 |
+| XH-03 · P0 实景定位 | 给成功资产匹配可辨认的岸线、建筑角点或入口，优先使用可信坐标和已知长度。记录定位、北向、比例与来源，按现有资产入口挂入场景。 | 用至少两个可辨认控制点对齐实景与地图，报告残差。再用一处独立已知距离核对尺度。缺可靠参照时仅标「示意定位」，留给用户校准。依赖 XH-02。 |
+
+### 地图与空间实现
+
+| 卡片 | 执行步骤 | 验收 |
+| --- | --- | --- |
+| MAP-01 · P0 高德式找地点 | 复用现有高德适配和地图入口，检查输入联想、POI 地址/区县、结果落点、缩放至场地、明确确认定位。覆盖桌面键盘和手机触控。 | 输入「西湖」及一个具体西湖地标，结果可区分同名地点。连续搜索时旧请求不会覆盖新结果；预览地点、取消搜索和确认写入锚点有明确区别。空结果和服务失败可恢复。 |
+| MAP-02 · P0 看懂整个区域 | 优先核对现有整景区底图、岸线、水面、路网与比例尺。把「看全西湖」「回到场地」「北向」做成可复验的操作。 | 桌面和手机都能看清范围、当前场地落点和缩放后的上下文。保留地图来源及署名。反复切换底图和相机视角，实景锚点位置保持稳定。 |
+| MAP-03 · P0 地图到实景 | 先实现一条可靠链路：全湖概览显示轻量场地点位，选场地后定位到范围，近景加载或细化点云，进入空间后仍能回到概览。沿用现有相机与 LOD 实现，先测再调阈值。 | 录屏覆盖概览→场地→实景→返回。概览阶段检查网络与解码开销；在加载阈值附近往返，检查重复请求、资源泄漏和画面闪烁。点云失败时仍可看到点位与范围。依赖 MAP-02。 |
+| MAP-04 · P0 空间尺度和状态 | 统一使用 `sceneAnchor` 表达场地与地图的变换。区分采集坐标与高德 GCJ-02，在已有坐标边界处理转换，核对现有米制几何和北向。场景内的可测空间和点云分层。 | 有坐标的场景保存重开后落点、方向和物件尺寸一致。移动地图相机、切底图不会移动已摆物件。无坐标场地仍可在米制网格上摆放。记录同一地标的误差与来源。依赖 MAP-01/02，真实样片使用 XH-03。 |
+| MAP-05 · P1 空间工作流验收 | 在西湖样板里跑「搜地点 → 确认场地 → 进实景 → 量一处已知长度 → 放一件已知尺寸物件 → 保存重开 → 回到概览」。比对高德同一地点的搜索、落点和比例尺体验。 | 桌面和手机各一轮，回填设备、网络、首屏、实景就绪时间、请求量、对齐误差与最明显的三个操作问题。证据包括全湖、近景、实景三个画面。依赖 MAP-01 至 MAP-04 及 XH-03。 |
+
+**派发顺序**：XH-01 与 MAP-01/02 可以分开领。拿到素材候选后推进 XH-02。用仓库现有茶亭资产提前走查 MAP-03/04，换入新批次资产后再做 MAP-05。每轮在本节回填卡片状态、证据路径和阻塞条件。
+
+高德参考：[输入提示与 POI 搜索](https://lbs.amap.com/api/javascript-api-v2/guide/services/autocomplete) · [地图坐标与基础类型](https://lbs.amap.com/api/javascript-api-v2/guide/abc/basetype) · [比例尺、测距与缩放插件](https://lbs.amap.com/api/javascript-api-v2/guide/abc/plugins)。
+
+## 当前任务
+
+- **产品主线**：幕景 Scendance 是活动场地方案工作台。用已有场地或尺寸平面完成圈区、出方案、复核、客户确认和执行交接。近期产品评估建议先验证一个真实活动的交付闭环。
+- **用户已授权的待办**：在 AHOLO 官方实景重建工作台，用同一批 63 张茶室照片做一次网页对照。记录上传、创建和最终状态的页面原文、任务号与截图。
+- **仓库基线**：2026-11-07 深夜会话已把全部在途改动按主题切成 13 个干净提交（见「已完成与证据」首行）。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
+- **任务派发**：见 [Scendance 需求清单](docs/25-Scendance需求清单.md)。按依赖每次领一张，优先验证一单从方案到交付的闭环。
+
+## 已完成与证据
+
+| 工作 | 当前结果 |
+| --- | --- |
+| 在途改动按主题收口（2026-11-07 深夜） | `9adbf7b` 之上 13 个提交：`afb54bf` 构建卫生（NEXT_DIST_DIR+gitignore，public/scans 不入库）→ `7f4209c` 整景区静态底图+锚点 → `e6cb502` 点云字节 LOD → `ed003b0` 整景区视距 LOD → `e0e0495` venueScan 覆盖修复 → `aaf8abd` 导出 guides → `ec24ef4` 雕塑动画验证 → `4970a6c` 采集就绪 → `c9fe28a` 付费入口下线 → `a2d9bb8` UI 面板打磨 → `6bce406` 品牌 P0（compare 位图删+品牌规划落 docs/26）→ `4afa51f` aholo 工具脚本 → `a8ba9b9` 注释勘误。热文件按 hunk 拆分（room-organizer 4 主题、splat-preview 3 主题、types/schema 2 主题）；`frontend/public/scans/`（38MB 本地 LOD 夹具）进 gitignore 不入库。分支 feat/research-basemap-anchor 与 feat/clean-export-guides 已被工作区吸收（COLLAB 待协商表已回填），无需合并可弃。 |
+| SC-01 干净基线复验（2026-11-07 深夜，首次全量） | 树干净（代码=HEAD）后：`npx tsc --noEmit` **0 错误**；`npx vitest run` **全量 318 文件：307 过 / 11 文件 37 项失败**（历史首次跑全量——上一轮 SC-01 只跑 18 个定向套件）；`$env:NEXT_DIST_DIR='.next-ci'; npm run build` **exit 0，14 条路由**。11 个失败文件逐一定性：①jsdom 环境限制——structure-satellite 5（canvas 2D 未实现）、scene-presets 等（WebGL context 无法创建，全日志 113×）；②远端测试与现行组件漂移（与已修 4 项同类）——assets-panel 7（期望「素材库」钮）、scendance-workspace 8（钮数 15 vs 13，整景区等新钮入列）、scene-delivery 8（多层文案改了）、nav-chrome 1（断言源码含 toggleNavColumns 重构）、workbench-rail-head 1（左轨 4 格 vs 3）、space-panel/lux3d-direct-test/share/structure-v2。**无一项由本轮提交引入**（本轮内容增量仅 schema 放行+2 个测试文件对齐，均不在失败链路；各主题定向套件全绿）。 |
+| 修 schema 存档拒收整景区底图真 bug（2026-11-07 深夜） | `isResearchArea` 只认卫星代理 URL，带 `/basemap/xihu-scenic-z15.jpg` 预置底图的布局存档读回时 `isRoomLayout` 整份拒收、`parseStoredLayout` 返回 null。现放行 `/basemap/<安全名>` 同源静态图并校验 `presetId`（今天仅 'xihu-scenic'），schema.test 补往返用例（108/108 过）。随 `7f4209c`。MAP-04 的「保存重开一致」直接受益。 |
+| 4 项长期失败测试清零（2026-11-07 深夜） | 根因是 Qoder 自己提交里测试与实现脱节（dda1863 同一提交内测试与组件「圈完即收」及同文件 D0 用例互相矛盾；b6ffa32 写死从未存在的按钮名，110f348 又把入口挪到空间脸）。只改测试断言对齐现行交互，提交 `3371ade`，两文件 12/12 过；已在 COLLAB 待协商表登记待 Qoder 复核。 |
+| docs/25 编号撞车收口 | 需求清单 23:57 先建留 25；品牌规划 23:58 后建改 docs/26（P0 拍板内容未动）。随 `6bce406` 入库。 |
+| 同步远端 | 上一轮曾快进 42 个提交至 `2f78747`，本地改动恢复且无冲突。同步前留有 stash 备份 `be5b367`。编制需求清单时已核对，后续 12 个提交也已进入本地 main。2026-11-07 第二轮会话独立复核：`git merge --ff-only` 到 `9adbf7b`，方式 stash(含未跟踪)→ff→pop，零冲突；双方改动只碰 `.gitignore`/`agent-panel.css`/`room-organizer.tsx` 三个文件且 hunk 不重叠。`.gitignore` 补 `frontend/.next-*/`（隔离构建目录不再进 untracked）。 |
+| SC-01 执行基线（2026-11-07） | 基线 `9adbf7b` + 工作区在途改动上：`npx tsc --noEmit` **0 错误**；18 套件 **281+53 项测试通过**（本地改动 7 套 146：scene-anchor/schema/geo-basemap-input/canvas-heading/camera-presets/recon-readiness/glb-anim-verify；远端新套件 11 套 135：plan-scoring×2/plan-approve/hall-benchmark/brief-extract-contract/auto-zone-apply/door-privacy/door-render/plan-overlay/use-layout-store/plan-annotations；agent-panel 53）；构建 `cd frontend` → `$env:NEXT_DIST_DIR='.next-ci'; npm run build` **exit 0**，14 条路由全出（警告全部为既有 import-order/lint 风格类）。可重复命令如上。4 项既有测试失败与环境问题分列「卡住的问题」。**注意这不是干净工作区**：底图/LOD/采集就绪等在途改动仍在树上，干净基线复验需独立 worktree。 |
+| 修 venueScan 覆盖真 bug | Bingo「调研西湖」原先 `onApply({ ...live.current, researchArea })` 整张覆盖**渲染期快照**：查询等待期间挂载的 `venueScan`/`sceneAnchor` 会被旧快照冲掉，且绕开锚点逻辑。现改为 `LayoutAgentProvider` 新增必填 `onApplyResearchArea` prop，agent 调研与手动「底图定位」共用 docs/49 的 `applyResearchArea`（store 现取布局 + 场景锚点唯一变换）；画布切 3D 在 agent 侧补。3 个测试文件的全部挂载点补 `onApplyResearchArea={vi.fn()}`。 |
+| 修 3 个 TS 错误 | 上轮 LOD 在途工作 `frameTick` 签名收得太紧（`PerspectiveCamera`），绘制入口 `SplatPaint` 只给 `THREE.Camera`；函数体只读 `camera.position`，签名放宽（`three/splat-preview.ts` frameTick）。 |
+| 产品评估 | 本地布局评分、审批、门和隐私四个核心测试套件共 50 项通过。远端已加真实场地基准用例、降容理由、门弧与未知门信息处理，以及物料短缺清单逻辑。在线客户主流程未复验，全量类型检查主动停止，本轮无全量检查结论。见 [主流程实测](docs/04-Golden-Path-规格与实测.md)、[交付缺口](docs/24-Web端三个产品问题.md)。 |
+| 雕塑本地绑骨 | 原 GLB 保留。Blender 导出 4 骨骼、约 2 秒的 `Sculpture_Small_Bow`，GLB 回读确认蒙皮有效，峰值位移约 13.6 cm、脚底固定、首尾回到同姿势。工作区另有编辑器动画验证记录，见 [GLB](docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb)、[Blender 源文件](docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.blend)、[回读报告](docs/evidence/aholo/sculpture-rig-local/validation.json)、[编辑器画面对照](docs/evidence/aholo/sculpture-rig-local/editor-diff.json)。 |
+| 茶室照片 API 复测 | 本地 SfM 主组 63 张，归一 EXIF 方向后去掉 EXIF、JPEG RGB、最长边 2048，`scene=space`、`taskQuality=low`。任务 `3FO4K4RL8KM8` 创建 HTTP 200，约 122 秒后观测到 `FAILED`，没有错误字段或 SPZ/PLY。见 [回执](docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/report.json)、[输入清单](docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/input-manifest.json)。 |
+| 图片通道对照 | 同一套开放平台上传流程中，寺庙 32 张照片的 5 个对照任务均成功并生成 SPZ。西湖茶亭也有实拍视频成功。旧报告中「图片通道整体故障」已被照片对照反驳，茶室云端失败阶段仍未知。见 [寺庙 SPZ](docs/evidence/aholo/chan-temple-2048-rep1/3FO4K4RKHRTI.spz)、[户外重建记录](docs/19-西湖户外重建接力.md)。 |
+
+## 卡住的问题
+
+- **全量套件 37 项失败（11 文件，2026-11-07 首次实测）**：全部是 jsdom 环境限制（WebGL/canvas 无法创建）或远端测试与现行组件漂移，逐文件定性见「已完成与证据」SC-01 行。处置建议：环境类给 vitest 装 `canvas`/headless-gl 或显式 skip；漂移类按 docs/25 派发复验卡逐套对表（同已修 4 项的做法）。
+- **AHOLO 网页对照还没执行**。Computer Use 能识别 Chrome 窗口，但因无法核实浏览器 URL 而停止。AutoGLM 扩展的页面显示「连接成功」，任务端仍回「扩展未登录」，尚未确认两者是否接到同一个浏览器会话。用户已授权上传，避免重复询问授权或让用户代做。照片从原片按输入清单重新生成并逐项核对字节数，存于 [网页上传目录](docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/web-upload-images/)。网页尚无上传、重建任务或报错。
+- **交付闭环缺证据**。已有机位图、DXF、物料 CSV 和只读分享，但缺少用一个真实活动验证同一版本的方案能否让甲方确认、让执行团队直接使用。现有材料不足以判断付费、复用或节省工时。
+- **原雕塑的 AHOLO 自动绑骨仍失败**。三单 `MODEL_NOT_RIGGABLE`，双臂屈在胸前，袖子融合。现有本地样件把折叠双臂合用一骨、下身固定，适合原地鞠躬。此前约定地图不做行走，`Walk_Loop` 未验证。
+- **C 盘又满了（2026-11-07 实测 0 字节可用）**。本轮已清可再生缓存救回约 6.5 GB（根 `.temp/` 4.6 GB、`frontend/.next-ci`/`.next-local`、npm cache、Temp 两天前旧文件）。**Downloads 22.6 GB 与 HANDOFF 十一节的批 2/批 3 清理仍待用户批准**；D 盘还有 186 GB，大资产应一律落 D。
+- **并行会话同树工作（2026-11-07 实发）**：本轮提交期间用户另开的 chat 同时在改 HANDOFF、写 `docs/plans/hangzhou-isometric-map-research.md`（未跟踪，未入库，归那个会话）。共享树纪律：动手前和提交前都要重查 `git status`，别人的未跟踪产物不卷进自己的提交。
+- **`docs/evidence/` 的 ignore 规则仍过宽**（整目录忽略，见历史第五段），新证据无法入库且删除不可从 git 恢复，待收窄白名单。
+- 小程序体验版二维码、价格配置口径和真机采集体验见后面的历史记录，恢复对应工作前先核对状态。
+
+## 下一步
+
+1. **按 [docs/25 清单](docs/25-Scendance需求清单.md) 派发 SC-02~SC-05**（SC-01 干净基线已复验，4 项历史失败已清零，树是干净的）。
+2. **继续网页对照（SC-24）**。先确认工具连接到了用户已登录且可控制的浏览器会话，再打开 [AHOLO 工作台](https://studio.aholo3d.cn/)。使用上面的 63 张 JPEG，室内空间、最低质量档，只创建一次，等终态并记录原文。浏览器连接仍失败时，记录工具具体阻塞，避免把它记为 AHOLO 重建失败。
+3. **做一次真实活动交付（SC-17）**。选有明确人数、场地和日期的活动，用现有扫描或尺寸平面出两个备选。让甲方确认一版，把同版本的效果图、尺寸平面、物料清单和分享链接交给执行方。记录耗时、人工补件和实际采用的文件。
+4. **磁盘清理批 2/批 3 等用户批准**；并行会话的西湖新素材线（XH/MAP 卡）按其接力节推进。
+
+## 踩过的坑
+
+- **有 worldId 只代表受理**。按终态、错误字段和实际产物分别记账。`FAILED` 时 `progress=1` 也不表示成功。开放平台国内网关建任务要带 `x-source: openapi`，缺头曾误报「文件链接不对」。
+- **重建阶段的失败归因要有对照**。本地 SfM 配准成功、上传成功、云端重建成功是三件事。寺庙能过并不能解释茶室为什么失败。
+- **浏览器连接与认证要分开核对**。扩展的「连接成功」不能证明任务所用会话已认证。临时目录可能被清理，复测素材以证据目录和清单为准。
+- **绑骨要验证实际形变**。原雕塑 GLB 以模型中心为原点，初次按地面为零放骨骼，权重写进了 GLB 但网格几乎不动。按实际底面校准后再回读动画。拉宽融合衣袖也没有得到有效 T-Pose。
+- **点云提供观感，尺寸与碰撞依赖独立几何**。导出验证需用确实含定位辅助的场景，否则 `guides:false` 的对照没有验证到目标分支。
+- **并行工作区要保护**。开发和构建分离 `NEXT_DIST_DIR`，避免共用 `.next` 的清单冲突。不要用 `git add -A` 把构建缓存、证据大图和别人的改动卷入提交。
+- **C 盘满的表现是「工具静默崩」不是报错**（2026-11-07 实踩）：vitest 直接退出（ENOSPC / exit 4294963241），Bash 工具自己临时区满导致输出丢失。先查磁盘再怀疑代码。清理顺序：根 `.temp/` → `frontend/.next-ci`/`.next-local` → npm cache → Temp 两天前旧文件，约 7 GB；`C:\Users\13266\Downloads`（22.6 GB）是用户数据不能动。
+- **提交前重查 `git status`**：并行会话会往共享树里写新文件（本轮中途出现另一会话的调研文档）；hunk 拆分提交用「备份全量→checkout HEAD→Edit 重放→add→还原」比手写 patch 稳。
 
 ---
+
+## 历史记录（保留原始排查与接力细节）
+
+以下是 11 月 5–6 日的阶段性记录。其中「当前任务」「下一步」为原记录当时的状态。雕塑章节中的失败结论指 AHOLO 自动绑骨，后续本地绑骨已成功，见顶部。
 
 ## 一、当前任务
 
@@ -20,6 +113,8 @@ Scendance2026：把「拍照/视频采集 → 3DGS 重建 → Web 画布交付�
 - **docs 全量审计**：138 份，1,683,622 → 1,682,572 字节；4 处重复合并（−1,710 B）、4 处过时修正；报告 `.reports/docs-audit-2026-11/audit.md`。
 - **Web 体检**：P0 4 / P1 7 / P2 7（共 18 条，W-01–W-18），全表 `.reports/web-audit-2026-11/issues.md`。
 - **`COLLAB.md` 已建立**：与 Qoder（LiliLIN0324）的文件所有权边界 + 提交纪律。
+- **西湖点云 × 调研底图层级（Qoder 侧，未提交）**：底图原先被主场景在点云之后重画一遍，任何高度都盖住 3D。现在底图只随点云所在的背景栈画一次，主场景渲染完才搬回；同机位 A/B（有/无底图）茶亭像素一致。同时 `researchArea.scanAssetId` 的自动铺图不再套 1600 m 底图做概览取景。改动仅 `three/splat-preview.ts` + `room-organizer.tsx`，已在 `COLLAB.md` 待协商表登记。
+- **地理底图改锚点驱动（本会话，未提交）**：`sceneAnchor` 成为场景坐标↔地理坐标唯一变换，底图按锚点投影（`lib/scene-anchor.ts`、`three/research-basemap.ts`）；`mapGroundFrame` 不再读进世界定位，只剩 `frameFromAnchor` 推出来的一个视图（立壳卫星贴图 UV）。`applyResearchArea` 里「异地框架 >3 km 就清空」的补丁已删，改为铺图时无条件移除 frame/polygon/center。实测：12 km 底图与场景地面最大偏差 2.02 m（z15 瓦片 4.13 m/px）；相机 `minDistance` 2 m，`maxDistance` 随焦点 = 焦点框对角线 ×3（茶亭 36.8 m / 场地 60.4 m / 全湖 51.7 km）。
 
 ## 三、卡住的问题
 
@@ -47,3 +142,207 @@ Scendance2026：把「拍照/视频采集 → 3DGS 重建 → Web 画布交付�
 - `.gitignore:45` 把 `docs/evidence/aholo/` 放宽成整个 `docs/evidence/`，以后新证据无法入库。
 - `miniprogram-automator` 在根 `package.json:30` 的 `dependencies`，应归 `devDependencies`。
 - `frontend/.local-map*.mjs`、`.local-final.mjs` 这类调试脚本 `.gitignore` 无对应规则；当前目录已清理，谁再生成谁记得别被 `git add` 带上。
+
+---
+
+## 六、雕塑绑骨（2026-11-06）
+
+**目标**：给 Lux3D 图生雕塑绑骨。后经用户拍板「地图上不动就不动」，**不做行走代码改动**，只验证绑骨链路本机可跑通。
+
+**资产**：`docs/evidence/aholo/sculpture-img2-3d/4676340-unpacked/MODEL.glb`，985,424 B，19,883 顶点 / 28,888 三角面，0.846×1.800×0.842 m，米制 Y-up 底面贴地。**全程只读，未改。**
+
+**结论：Aholo 自动绑骨走不通，停滞在这里。**（修订：这一尊后来用**外部绑骨**成功，只能原地鞠躬，见第十段；Aholo 侧结论不变。） 三次 Aholo `POST /lux3d/v1/animations/rig/task/create` 全部 `MODEL_NOT_RIGGABLE`，无任何产物，`retarget`（`rigModelUrl` 必填）无从提交。积分接口不返回。
+
+| taskId | 提交物 | 耗时 | 失败原文 |
+| --- | --- | --- | --- |
+| 4734738 | 原始 GLB | 191 s | `{"error":{"code":"MODEL_NOT_RIGGABLE","message":"主体为类人形角色，但双臂弯曲抱于身前，不符合可绑骨的T-Pose或A-Pose站姿要求。"}}` |
+| 4736139 | T-Pose（横向平移 DX 0.34） | 28 s | `...双臂屈肘交叠于身前，不符合可绑骨基础站姿要求。` |
+| 4736194 | T-Pose（DX 0.36 / 手团 R 0.24） | 23 s | `...但其手臂呈抱臂姿态，不符合可绑骨的T-Pose或A-Pose基础站姿要求。` |
+
+重试额度（最多 1 次）已用尽。
+
+**T-Pose 派生结果**（`docs/evidence/aholo/sculpture-rig-tpose/MODEL-tpose.glb`，812,712 B）：宽 0.846073 → **1.406383 m**（+0.560310），深 0.842209（0），高 1.800000（0），顶点/三角面不变，臂展/身高 0.470 → 0.781，移动顶点 6,948。但外张质量集中在 0.90–1.45 m 一条板状带，1.50 m 处硬断层。
+
+**根因（别再重复踩）**：
+- 手臂与袍身、底座是**一张融合网格**，没有可独立驱动的臂部件；单手到肩距离仅 0.409 m。
+- Blender 自动权重 `Bone Heat Weighting: failed to find solution for one or more bones`，手臂骨骼权重覆盖率 **0**，形变完全不发生；envelope 只到 0.964、手工胶囊 0.9895。
+- 绕肩刚性旋转**方向本身就是错的**：解析解算出「手臂正好水平」的那一版宽度到 1.102，但剪影里被甩出去的是**肩部衣料**，手臂仍抱在胸前；旋到底袖料会飞到 1.84 m（高过头顶）。
+- 换成横向平移能把宽度推到 1.406，分类器判语从「抱臂」变成「屈肘交叠」「抱臂姿态」——它读到外张了，但仍认定手臂形态是抱臂。**宽度不是判据，臂的形态才是。**
+
+**下一步（按用户指定顺序，但需先解决根因）**：建骨架 → 把双臂拉平 → apply 形变 → 回传 rig → retarget `Walk_Loop`。此路在前四版已证伪，直接重开会复现 `MODEL_NOT_RIGGABLE`。真正可行的三条：
+1. 放弃绑骨，雕塑静止（与「地图上不动就不动」一致）。
+2. 用 img2-3d / text2-3d 重新生成一尊**手臂张开或下垂**的雕塑再绑骨，而不是改造这一尊。
+3. 人工重拓扑出可分离的手臂，或换通用人形模型穿这尊的贴图——超出本轮范围。
+
+**环境（已装好，可直接用）**：Blender **4.5.10 LTS**（build 2026-05-19，hash `6dc0b208d1b5`），内置 Python 3.11.11。**（修订：上一轮记的便携路径 `D:\tools\blender\blender-4.5.10-windows-x64\blender.exe` 已删，现用安装版 `D:\Program Files\Blender Foundation\Blender 4.5\`，见第十一段。）** glTF 插件可用。winget 装不了（退出码 1602，MSI 需提权），改官方 zip 便携解压；官方站被 Cloudflare 拦，走清华镜像下满 **398,911,842 B / 27 s**，`tar -xf` 解压 15 s，SHA256 `EF6D846B8015F47ADE6DF3F9322CE17419080A5D922FA562B6C966064FE30DCE`。**下载已完成，无半截文件、无残留 zip。**
+
+**证据**：`docs/evidence/aholo/sculpture-rig/README.md`（第 1 轮）、`docs/evidence/aholo/sculpture-rig-tpose/README.md`（本轮，含安装记录、逐层 max|x| 表、四视图与正交剪影）。脚本：`derive_tpose_v5.py`（采用）、`derive_tpose_v4.py`（旋转版对照）、`analyze_silhouette.py`、`render_glb.py`、`diag_coords.py`；`sculpture-rig/run-rig.mjs` 新增 `LUX3D_GLB` / `LUX3D_OUT` 环境变量可换输入与输出目录。
+
+**未完成**：retarget `Walk_Loop`（被阻塞）；`skins`/`JOINTS_0`/`WEIGHTS_0`/`animations` 四项核验（无对象可查）；沿路线行走的代码改动（用户已明确不做）。
+
+### 换线：UniRig 本地跑（2026-11-06 傍晚）
+
+Aholo 那条**正式放弃**，不再消耗额度。改走 UniRig（VAST-AI-Research，MIT）本地推理，输入仍用原始 `MODEL.glb`（只读）。
+
+**硬件体检结论：这台机器跑不了，卡两层，未做任何安装。**
+
+| 项 | 实测 |
+| --- | --- |
+| GPU | NVIDIA GeForce RTX 3050 Ti Laptop |
+| 显存 | **4096 MiB 总，已占用 2156 MiB，余约 1.9 GB** |
+| 驱动 / CUDA | 580.97 / CUDA 13.0 |
+| Python | 3.12.10（`C:\Users\13266\AppData\Local\Programs\Python\Python312\python.exe`），**无 conda**，py launcher 只有 3.12 |
+| 磁盘 | C 剩 33.3 GB / D 剩 206.4 GB |
+| 内存 | 15.8 GB |
+| 系统 | Windows 11 家庭版 |
+
+UniRig 官方要求（README + requirements.txt）：Python **3.11**、torch ≥2.3.1、`spconv-{cuda}`、`torch_scatter`/`torch_cluster`（需按 torch+cuda 版本取轮子）、**`flash_attn`**、`bpy==4.2`、`open3d`、`pyrender`、权重来自 `huggingface.co/VAST-AI/UniRig`。
+
+- **第一层卡点：显存**。4 GB 总容量（还得先腾出被图形界面占的 2.1 GB），而 UniRig 是稀疏卷积 + transformer 推理，社区反馈普遍需 ≥8 GB，跑起来必然 CUDA OOM。
+- **第二层卡点：`flash_attn` 在 Windows 上没有预编译轮子**，源码编译要 CUDA Toolkit + MSVC，Windows 上成功率极低。
+- 次要：本机只有 Python 3.12（官方要 3.11）、无 conda；`bpy==4.2` 需 cp311 轮子。
+
+**下一步待定**（需用户选择）：租云 GPU（最省事，8–16 GB 即可）；或换不需要 flash_attn 的替代实现；或放弃自动绑骨（同前述三条）。
+
+
+---
+
+## 七、地图 / 底图：整景区静态底图（2026-11-06）
+
+**目标**：把西湖风景名胜区整幅底图垫进 3D 场景（原定三步：①整景区底图 ②范围线+水面矢量 ③100 m 内切点云）。用户中途要求提速，**只做第 1 步并出一张总览图**后收口。
+
+**做到哪一步**
+- ✅ 第 1 步代码完成，`npx tsc --noEmit` exit 0（先删除 dev 生成的陈旧 `frontend/.next-local/types`，它引用了已不存在的 `app/review/[id]/page.js`）。
+- ⛔ 第 2 步（`xihu-scenic-area-osm-13164471.geojson` 717 点主环+5 碎片、`xihu-water-osm-2308774.geojson`）、第 3 步（<100 m 点云 / >200 m POI、滞回、总览不加载）**未开始**。
+- 🟡 浏览器实测：编辑器里点「整景区」后底图能加载，西湖轮廓可辨；但总览截图**未落盘**（agent 汇报保存路径，`docs/evidence/basemap-20261105/` 下实际没有 png），且现场目测「未铺满画布、疑似拉伸」，**未复核**。
+
+**改过哪些文件（行号按本轮收口时）**
+- `frontend/components/room-organizer/lib/research-area.ts`：`:60` 加 `presetId?`、`:190` 预置底图不再响应换半径/换样式、`:227-250` `XIHU_SCENIC_PRESET` + `createPresetResearchArea()`。
+- `frontend/components/room-organizer/lib/types.ts`：`:445` `presetId?: 'xihu-scenic'`（RoomLayout 结构里同步字段）。
+- `frontend/components/room-organizer/panels/geo-basemap-input.tsx`：`:6` 引入、`:74/:80` 预置底图隐藏半径/样式、`:119-131` 新增「整景区」按钮（`data-testid="geo-basemap-preset"`）。
+- `frontend/components/room-organizer/room-organizer.tsx`：`:2372-2382` `applyResearchArea` 对 `presetId` **保留已有 sceneAnchor**（不再把锚点搬到 bbox 中心）。
+- 新增静态资源（未入库）：`frontend/public/basemap/xihu-scenic-z15.jpg`（1,447,595 B）、`xihu-scenic-area.geojson`（19,144 B）、`xihu-water.geojson`（69,517 B）。后两个是第 2 步备用，尚未被代码引用。
+- **未动**：`three/scan-placement.ts`、`three/furniture-builders.ts`、`hooks/use-splat-preview.ts`、`three/splat-preview.ts`；`room-organizer.tsx` 仅 `applyResearchArea` 一处最小改动（COLLAB.md 独占区，按约定只做必要 diff，未登记新行）。
+- `frontend/tsconfig.json` 被 dev 自动追加的 `.next-local/types/**/*.ts` 已还原为 HEAD 版本（`git diff` 为空）。
+
+**底图接进去没有**：**接进去了（可用），但未经像素级验收。**
+- 方案取舍：选「静态图放 `frontend/public/`」而不是「代理加免压缩直通」——整景区图固定、只拼一次，静态资源无长边 2048 限流、像素可复现；代价是仓库/部署多 1.38 MB 且范围改动要重新拼图。代理直通则每次请求仍要拼 110 块瓦片、依赖高德上游、且每次像素可能变。
+- 无第二套 geo→world：`bounds` 设为图片精确裁切范围（W120.0714663 / S30.1777743 / E120.1737028 / N30.2736397），中心/尺寸/偏航仍由 `researchArea.bounds + sceneAnchor` 推出。按 z15 墨卡托算，该 bbox 对应 2382.30×2585.30 px，与图片 2382×2585 对齐；线性纬度 vs 墨卡托的最大内部偏差 **0.32 px**。
+
+**卡在哪**
+1. 总览截图没落盘，铺满/拉伸未被证实也没被证伪。
+2. 底图是「已有锚点的场景垫大图」，但实测时浏览器先点了「杭州西湖→定位」，锚点被挪到西湖 POI 中心后再铺图；茶亭锚点是否仍在原位**没核对**。
+3. 四角/边界线像素偏差、build exit code、底图加载字节与首帧耗时**都还没测**。
+
+**下一步（恢复时按此顺序）**
+1. 重开 dev：`cd frontend` → `npm run dev -- --port 3030`（需要 3199 代理时用同一脚本，它会在无代理时自拉）。
+2. 打开 `http://127.0.0.1:3030/editor`，**先确认 `sceneAnchor` 是茶亭原始经纬度**，再点「整景区」；截一张总览存 `docs/evidence/basemap-20261105/scenic-overview.png`。
+3. 查「未铺满」：若是透视画幅留白（正常），换正交/拉高相机复拍；若与 `fitToRoom` 焦点有关，看 `use-camera-presets` 的 `overview` 是否取到 `researchBasemapPlacement` 的 9.83×10.60 km。
+4. 第 2 步：GeoJSON→`Line2`/`ShapeGeometry`，挂到 `RESEARCH_BASEMAP_TAG` 组随点云背景栈一起画（`renderOrder -10` 底图 / `-9` 矢量），线宽公式 `clamp(1, 8, 6 m × h/(2·d·tan(fov/2)))`。
+5. 第 3 步：水平距离 `hypot(camera.x, camera.z)`；进入 <100 m、退出 >120 m；>200 m 显示 POI；总览不调用 `startSplat`（不得先解 1.3M 点）。
+6. 补验收：四角偏差 ±1 px、`npx tsc --noEmit`、`$env:NEXT_DIST_DIR='.next-ci'; npm run build` 的 exit code、底图 1,447,595 B 的加载耗时。
+
+**可复现命令（PowerShell）**
+```powershell
+cd frontend
+npx tsc --noEmit                                  # 若 .next-local/types 陈旧：Remove-Item -Recurse -Force .next-local/types
+$env:NEXT_DIST_DIR = '.next-ci'; npm run build    # 跑完记得 Remove-Item Env:NEXT_DIST_DIR
+```
+
+---
+
+## 八、Aholo 图片通道的边界已测清——死因是张数，不是拍摄方式（2026-11-06）
+
+**三组对照，一组比一组清楚。**
+
+| 张数 | 上传 | 登记 | 结果 |
+| --- | --- | --- | --- |
+| 20（室内走拍） | 20/20 ready | — | 作业 8.0 秒失败：`Fewer than 12 photos have reliable camera positions` |
+| 63 | 全量 | 24（38.1%） | 2.59M 点 |
+| 130 | 全量 | 38（29.2%） | 作业 108.6 秒、1,843,754 点、ply 457,252,690 B、spz 61,654,317 B、status succeeded、error null |
+
+130 张这组产物在 `docs/evidence/aholo/scan-room130-2048/`。
+
+**结论**：登记率约 30%，最低门槛是 12 张可靠位姿。实操 **≥40 张起步、≥80 张留 2× 余量**。20 张那组不是拍得差，是过不了 12 张这条线。
+
+**两条服务端硬约束（今天新测出）**：
+1. 一条 job 至少 12 张：`A reconstruction requires 12 to 1000000 valid uploaded images.`
+2. 同一 scene 内画幅和镜头必须一致，混装**在上传阶段就拒**：`Keep the same aspect ratio and lens within one scene`
+
+**`quality:"high"` 对图片会 422 硬拒**：`quality 'high' applies only to a reconstruction imported from an INSV or OSV`。它只对 INSV/OSV 导入有效，普通照片一律用默认档。
+
+**尺度**：`scale.json` 全部 `mode:"relative"`、`has_metric_scale=false`、`meters_per_unit=null`、`world_up:[0,-1,0]`、`world_up_source:"photos_low_confidence"`。**能看，但没有米制尺度**，必须走场地标定。
+
+**接口**：web-scan 有公开 OpenAPI（`studio.aholo3d.cn/api/web-scan/v1/openapi.json`，632 KB）。调用链 `POST /reconstructions` → `PUT /reconstructions/{pid}/images/{fid}?sequence=N` → `POST /reconstructions/{pid}/jobs`。脚本 `tools/aholo/scan-chain.mjs`，key 只读 `AHOLO_SCAN_KEY`，日志脱敏。日配额：`projects_per_day 100`、`active_builds 3`、`import_gib_per_day 64`，不扣积分。
+
+**两个判读细节**：`progress=1` 不是失败信号，判终态只认 `status`；`capture_seconds` 对批量导入是**入库时间窗**，不是拍摄时长。
+
+---
+
+## 九、户外那批：29 张在任何合法形态下都提交不了（2026-11-06）
+
+**29 张全量传到第 11 张被拒**（画幅不一致）；按画幅分组后，同画幅组只有 **10 张**，建 job 时报 12 张门槛。**没有 job、没有产物**，所以不存在「户外 vs 室内」的 scale 对比。
+
+**四条根因，全是素材侧的**：
+1. 跨 3 个不相关场地（17:45 神像 / 19:10 广场 / 19:33 茶室，时间跨 1h52m）。
+2. 4 种画幅混装：9:16 十张 / 8:3 六张 / 16:9 八张 / 1:1 五张——中途切了变焦或画幅模式。
+3. 真正户外的只有 12 张，且连续组仅 10 张。
+4. GPS 全 0。
+
+**给拍摄端的硬规范**：一个场地一次拍完；锁死单一画幅（16:9 或 3:4），全程不变焦、不切模式；连续绕场走拍，同一物体覆盖左/正/右三面；**≥40 张起步、≥80 张留余量**；别把多趟拍摄混进同一目录。
+
+证据：`docs/evidence/aholo/scan-outdoor-29/outdoor-blockers.json`、`scan-fail.json`。
+
+---
+
+## 十、雕塑：能动了，但只能鞠躬，走不了路（2026-11-06）
+
+**Aholo 侧绑骨三次全拒**，`MODEL_NOT_RIGGABLE`：`主体为类人形角色，但双臂弯曲抱于身前，不符合可绑骨的T-Pose或A-Pose站姿要求`。taskId 4734738 / 4736139 / 4736194，重试额度用尽（原始三条原文见第六段）。
+
+**派生双臂张开的 T-Pose 版本也没救**：宽度 0.846 → 1.406 m，自动权重覆盖率 **0**——手臂与袍身是同一张融合网格，没有可独立驱动的部件。
+
+**UniRig 本机跑不了**：RTX 3050 Ti Laptop、显存 4 GB / 可用 1.9 GB，UniRig 需 ≥8 GB，`flash_attn` 无 Windows 轮子。**没装任何东西。**
+
+**最终有效的产物是外部绑的**：`docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb`（1,217,480 B）。
+
+| 核验项 | 实测 |
+| --- | --- |
+| 蒙皮 | 1 个 skin，`JOINTS_0` / `WEIGHTS_0` 齐全 |
+| 权重覆盖 | 19,922 / 19,922 = **100%** |
+| 动画 | clip `Sculpture_Small_Bow` 2.0 s |
+| 位移 | 第 25 帧最大 13.6 cm，9,409 顶点在动 |
+| 循环 | 首尾归零，可循环 |
+
+**局限写死**：只有 4 根骨（`base → torso → head / folded_arms`），`folded_arms` 只管 533 顶点（**2.7%**），所以只能整体鞠躬/起伏，**走不了路**。副作用：几何被垂直居中，bbox z −0.9…+0.9，**不再底面贴地**。
+
+**接入位置**（行号按本轮）：
+- `frontend/components/room-organizer/lib/glb-assets.ts`：CachedAsset 约 L15、加载约 L96-97 / L282-285、`SkeletonUtils.clone` 约 L119、非均匀缩放约 L161、`createCachedGlbModel` 约 L165-199、dispose 约 L230。
+- `frontend/components/room-organizer/hooks/use-three-scene.ts` 约 L217-234；**L229 的 dirty-flag 早退必须让动画续跑**（`mixer.update(dt)` 要放在早退之前或之外）。
+- 非均匀缩放任要改等比方案，否则鞠躬幅度在 X/Z 方向会被拉伸。
+
+---
+
+## 十一、环境与机器状态（2026-11-06 收口）
+
+**Blender 安装版**在 `D:\Program Files\Blender Foundation\Blender 4.5\`，**932,388,214 B / 5,732 文件**，`--version` = `Blender 4.5.10 LTS / 2026-05-19`。MSI **360,173,568 B**，SHA256 `38A3F6EE…C957` 与官方一致。**便携版已删**（第六段记的 `D:\tools\blender\...` 已不存在）。
+
+**MSI 静默安装的坑**：目录变量是 `INSTALL_ROOT`（`WIXUI_INSTALLDIR = INSTALL_ROOT`），传 `INSTALLDIR` 会**静默装回 C 盘**，不报错。
+
+**`Start-Process` 起的 GUI 会被 job object 回收**，改用 `explorer.exe` 或 `Invoke-CimMethod Win32_Process.Create`。
+
+**C 盘清理**：批 1 已执行，释放 **12,613,068,048 B（12.61 GB）**，C 从 34.48 GB → **46.74 GB**。含 Temp 4.88 GB（剩 504 MB 被占用跳过）、回收站 2.75 GB 全清、codex-runtimes 1.69 GB、npm+pip 1.91 GB、四个更新包 1.85 GB。
+- 批 2（需关 Chrome / Qoder / ACE Studio，约 **6.8 GB**）**未执行**。
+- 批 3（迁移飞书 13.38 GB、腾讯 3.03 GB、豆包 2.05 GB 到 D 盘）**未执行**。
+- 批 2、批 3 都需用户批准后再动。
+
+---
+
+## 十二、遗留与待决（2026-11-06）
+
+- **空 reconstruction 待清理**：`dd4bac7a824644578678bd28583a927d`、`68779929750445f8a94068ec227e85a3`，以及 `0939269611ae48e5b9d1d8e2f0b7f663`（躺着 10 张图、无 job、无产物）。**等用户点头再删。**
+- **`docs/evidence/` 的 ignore 规则被放宽成整个目录**（同第五段那条），删除**不能从 git 恢复**，需收窄回 `docs/evidence/aholo/` 之类的白名单。
+- **当前 Chrome 是临时 `user-data-dir` 的 CDP 窗口**，原始 Chrome 未恢复；网页对照重启前先恢复到用户自己的会话。
+- **61.6 MB 的 spz 尚未标定尺度落进西湖画布**（登记率 29.2% 那组，见第八段）。
+- **`docs/55` 编号仍空着**（原计划写 Studio 生成链路逆向规格）。
+
+> 下次开新会话第一句：先读 HANDOFF.md。

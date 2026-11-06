@@ -4,7 +4,7 @@
 
 **面向小型活动策划执行工作室的三维场景协作 Web 应用：用 AI 和内置物料快速形成活动方案，让团队共同完善布置，并向客户交付可自由查看的三维场景。**
 
-需求依据为[飞书 PRD](https://my.feishu.cn/wiki/IpFNwYdoci5vc9kLRVXcp8Oan4b)及本轮确认。本文独立重写，飞书保持不变。旧方案中的二维教室定位不再沿用；现有私人派对 Figma 原型仅供交互参考，[原型说明](</Users/lwc/Documents/ChatGPT/场景规划Agent产品开发/prototype/README.md>)也明确尚未实现真实三维、AI、持久化和下载。
+需求依据为[飞书 PRD](https://my.feishu.cn/wiki/IpFNwYdoci5vc9kLRVXcp8Oan4b)及本轮确认。本文独立重写，飞书保持不变。旧方案中的二维教室定位不再沿用；现有私人派对 Figma 原型仅供交互参考，（已失效：`</Users/lwc/Documents/ChatGPT/场景规划Agent产品开发/prototype/README.md>`）也明确尚未实现真实三维、AI、持久化和下载。
 
 ### 已冻结的产品决策
 
