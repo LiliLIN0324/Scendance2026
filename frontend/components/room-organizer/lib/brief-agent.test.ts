@@ -196,6 +196,13 @@ describe('audience 主动建议 — 模型 proactiveReply 优先，正则兜底�
       expect(text).not.toContain('消防验收');
       expect(text).not.toContain('保证过审');
       expect(text).not.toContain('一定符合');
+      // 深度评审新增禁词
+      expect(text).not.toContain('消防已批准');
+      expect(text).not.toContain('门扇已核验');
+      expect(text).not.toContain('已核验');
+      expect(text).not.toContain('已批准');
+      expect(text).not.toContain('GB 55019');
+      expect(text).not.toContain('GB 55037');
     }
   });
 });
