@@ -6,6 +6,19 @@
 
 最后更新：2026-11-07（十轮）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
+## 产品优先级 · 2026-11-07 复盘
+
+当前优先验证一条用户能自行完成的流程：用自己的场地做出可信布置，交给甲方确认，再交给执行团队。
+
+| 优先级 | 当前不足 | 下一步与验收 |
+| --- | --- | --- |
+| 1 · 布置信息可用 | 评分层已有降容结果，真实页面缺少降容建议的稳定出口。本次走查未找到「预计人数」表单。真实门已有数据和评分能力，画布还没有绘制或确认入口。 | 续接 SC-03 的 B4 与真门断点。用正常人数和超容量各走一次，草案卡应显示预计人数、可容纳人数和调整建议。再从画布标注一扇真实门，确认可行性与门弧随输入重算。 |
+| 2 · 同版交付 | 已有机位图、DXF、物料 CSV 和分享链接，缺少真实项目的整体验收。 | 续接 SC-06～12、SC-16/17。让甲方确认一个具体版本，执行方打开同一版四件套，记录采用了哪些文件、耗时和仍需人工补齐的内容。 |
+| 3 · 地图到真实空间 | 地点联想、全湖概览、旧茶亭实景切换已有验证。新西湖场地还要重建并核对落点、朝向、比例和可走范围。 | 续接 XH-02/03、MAP-04/05。用一段新实景核对至少两个地标和一段独立已知距离，再验收量距、摆放、保存重开及返回概览。杭州等距底图按 HZ 卡独立推进。 |
+| 4 · 古风人物实景效果 | 模板人物的路线与跟拍已有实测。原创汉服人物的 AHOLO 建模、绑骨、动作重定向和同场效果仍待验证。 | 续接 PEOPLE-02/03/06。先让一名古风人物在真实路线自然走完一圈，验收裙摆穿插、脚底滑步和手机表现，再扩充人物库。 |
+
+**两条线并行派发。** 产品线先补人数和真门的页面断点，再用真实活动做同版交付。空间线用 AHOLO 跑一段新西湖实景和一个汉服角色，先分别验证产物，再放进同一个场景验收。将真实客户使用证据、浏览器走查和模型生成结果分别回填到已有卡片。
+
 ## 优先接力 · 西湖新素材与地图空间体验
 
 2026-11-07 交接。用户把地图和空间列为这一轮重点，体验对标高德。用这批实拍做一个可验收的「找到地点 → 看懂周边与范围 → 进入实景空间 → 放置物件 → 返回地图」案例。地图交互承接场地定位和空间设计。先跑一处能验证的样板，再扩展多个点位。
@@ -13,7 +26,7 @@
 - **原包**：原仓库根目录的 `11.6.zip` 已迁至 [D 盘归档](/D:/Scendance2026/archives/11.6.zip)（22,596,012,979 B）。仓库根目录和 Downloads 的副本均在确认与 D 盘归档的 SHA-256 一致后移除，校验值 `89b7913cb823aa0920b2b51a4bebe30ee8b94cca2782dc56a12c18e581489c7b6`。DJI 文件名显示拍摄日期 2026-11-06，时间 15:44:03–17:23:37，编号 0219–0254。
 - **素材位置**：[D 盘西湖原片](/D:/Scendance2026/scene-3d-outdoor/xihu-2026-11-06)。D 盘路径用于本机采集工作，旧批次继续使用仓库的 `scene-3d-outdoor/`。同名 MP4 是原片，LRF 是预览代理。
 - **验收状态**：已解压并通过 ZIP CRC 和逐文件大小校验，共 72 个文件、22,950,463,068 B（36 MP4 + 36 LRF）。
-- **杭州城市地图调研**：参考 Isometric SF，先用西湖东岸做可定位、可拼接的等距像素地图小样，验证后在独立仓库持续生产瓦片，并通过场地锚点接入 Scendance。派发 HZ-01 至 HZ-05 见 [调研与验收](docs/plans/hangzhou-isometric-map-research.md)。
+- **杭州城市地图调研**：参考 Isometric SF，先用西湖东岸做可定位、可拼接的等距像素地图小样，验证后在独立仓库持续生产瓦片，并通过场地锚点接入 Scendance。派发 HZ-01 至 HZ-05 见 [调研与验收](docs/plans/hangzhou-isometric-map-research.md)。**截至本文件更新时只有派发，零实现、零产物、零数字**；该文档本地存在（5,879 B，未跟踪、未入库），五张卡是：HZ-01 西湖东岸 1–2 km² 样区输入清单 / HZ-02 独立预览的确定性等距样片+两级缩放（≥2×2 瓦片）/ HZ-03 同区图生图 A/B / HZ-04 Scendance 内部接入样片预览（manifest）/ HZ-05 扩展决策（按瓦片密度估时间、存储与流量）。
 - **接力原则**：先读 [COLLAB.md](COLLAB.md) 和 [地图锚点方案](docs/20-场地资产地理底图提案.md)。素材、剪辑、临时重建产物放 D 盘，Git 只提交明确范围内的代码、文档或经过选择的项目资产。现有地图、LOD 和相机可能有未提交改动，先核对再分工。
 
 ### 素材与实景处理
@@ -120,6 +133,8 @@
 > - **新断点二（真门 verified 无 UI 入口）**：SC-03 的「真门 verified」验收点在产品里当前不可达——门标注（kind:'door'）未接入画布绘制循环（room-organizer.tsx 标注钮注释自证「暂未接入画布循环按钮，从 UI 入口再开」），assurance='verified' 分支只能靠数据层注入触达。数据层/评分层已就绪，缺的只是绘制入口。
 > - **走查技术突破（对后续验收有用）**：2D 画布的 zone/route 绘制监听是原生 capture 监听 + 纯几何坐标换算（`clientToWorld2D`），**合成 PointerEvent 可完整驱动画区/画线**（`canvas.dispatchEvent(new PointerEvent(...))`，坐标按 `get2DViewTransform` 复算，PADDING=60）——不依赖 rAF、不依赖拾取，IAB 遮挡环境下可用。三个新坑已记「踩过的坑」：活动缩略图画布会插队 canvas[0]、zoneType 闭包要等 React 提交后再画（~900ms）、预计人数表单本次不可达。
 
+> **卡片回填（2026-11-07 十一轮，ZCode 会话）**：**XH-02 已执行（用户当面确认「0233 双档」后发起）——0233 被 2 GiB 上游硬拒（未建任务未扣额度），按 docs/33 对照候选顺延 0234 双档，结果两档全部 FAILED**：受理成功 → **13 秒云端秒败 → 无任何错误字段**（progress=1 陷阱再现），上传链路完全干净（1.90 GB 全量入库 + md5 落档），无 SPZ/PLY。**关键发现：与茶室 63 张照片（122s FAILED 无错误字段）同签名 → docs/29 的 U1「space 照片管线特有」假设被推翻，秒败签名跨照片/视频两通道存在**，指向共用接入/预处理层。新 AHOLO 边界：**资产入库 2 GiB 单文件硬上限**（未文档化）。证据与决策项见 [docs/34](docs/34-XH02-单段重建回执.md)；额度应退（极速 20 + 标准 50）无法本机核实，标「上传记录/外部后台」。
+
 ## 当前任务
 
 - **产品主线**：幕景 Scendance 是活动场地方案工作台。用已有场地或尺寸平面完成圈区、出方案、复核、客户确认和执行交接。近期产品评估建议先验证一个真实活动的交付闭环。
@@ -131,6 +146,7 @@
 
 | 工作 | 当前结果 |
 | --- | --- |
+| XH-02 单段重建执行（2026-11-07 十一轮，ZCode 会话；用户确认后发起） | **0233 双档被上游拒**：`File size (2508044152) is greater than 2 GiB`——新发现 AHOLO 资产入库 2 GiB 单文件硬上限（未建任务未扣额度）。**顺延对照候选 0234 双档**（1,904,846,713 B 全量上传成功，md5 `60e41bf1…`）：low=`3FO4K4RLMISE`、normal=`3FO4K4RLM8RB`，两单全部 **FAILED**——受理（RUNNING progress=0）后 **13-14 秒秒败**，**响应体无任何错误字段**，splats 全 null、仅 `semanticsMetadata.upAxis="Z"`；与茶室 63 张照片 122s 秒败同签名，**docs/29 U1「照片管线特有」假设被推翻（跨通道共有）**。按卡三分归因：上传成功 / 云端重建失败 / 产物读取未发生。额度应退未核实（积分接口不返回）。证据 [docs/34](docs/34-XH02-单段重建回执.md) + `docs/evidence/aholo/xh02-0234-{low,normal}/chain-report.json`。决策项：0220 单变量试探（65s/788MB 在成功案例量级）或反馈 AHOLO。 |
 | SC-03 走查 DOM 子集 + 两个断点入账（2026-11-07 十轮，ZCode 会话；纯文档批不打 tag） | **环境**：dev 3040 + mock 3095（`dev:floorplan`，新数据目录 `.local-dev/dom-sc03`、`NEXT_DIST_DIR=.next-dom`），种子布局 23.8×16.1 直接用、零注入。**方法**：合成 PointerEvent 驱动 2D 画布画区/画线（原生 capture 监听 + `get2DViewTransform` 复算 client 坐标，PADDING=60），全程 DOM 读数取证、零生产代码改动。**通过项**：① 圆桌区 16×10 → 适中版「✅ 推荐 可坐 24 座」/松版 16 座（与 anti e2e 已知答案一致）；② 区类型条六钮全出含「预留区」；③ 课桌区×预留区重叠 → 横幅「『预留区』是必留区，不能摆东西——被 21 件家具占住（课桌×6、讲座椅×15）」+ 预留区行无家具输出；④ 动线穿课桌区 → 「三版都有硬冲突，没有可推荐方案：『宾客动线』动线要留 1.2m 净空——被 40 件家具压住」+ ✅推荐标签消失；⑤ `plan-variant-badge-balanced`=「⛔ 不可行」两例命中；⑥ 可行版全带「门未确认，待核验草案」小字（A10 UI 面）。**断点**：① B4 降容话术 UI 无露出面（plan-card 不渲染 reasons；toast 只取 `reasons.slice(0,2)`，降容 reason 恒在 index≥4——buildReasons 先占满 4 条；targetCapacity 镜像依赖的「预计人数」brief 表单在 docked 助手内未出现，走查未能从 UI 置 250）；② 真门 verified 无 UI 入口（door 标注未接入画布绘制循环，数据层已就绪）。[docs/32](docs/32-SC19-容量边界复验.md) 状态行与方法声明已同步回填。剩余画布类/rAF 类验收点（popover 跟拍按钮、2D 行走标记目视、贴障提示、实景围栏）仍需前台窗口。 |
 | 测试漂移清零 + 测试基建补齐（2026-11-07 九轮，ZCode 会话；tag v4.6.0） | **HANDOFF「卡住的问题」挂账的 11 个漂移文件全部转绿（106 例）**，全量套件 **4933 过 / 7 失败（5 文件）**——7 例全部复跑即过（隔离全绿，全量并发 worker 争抢类抖动，其中两个 GLB 导出重测试已加 15s 超时档防抖），漂移类失败自此清零。**测试基建**：① frontend 装 `canvas` 3.2.3 devDep（HANDOFF 既定建议路径），jsdom 下 2D 画布（纹理签名 getImageData、grid beginPath、ban label fillText）真实可用；② 新建 `lib/__testshims__/gltf-blob-image-loader.ts`（仅 scene-delivery.test 加载）：GLTFExporter 导出 GLB 的内嵌纹理走 bufferView→`URL.createObjectURL(blob)`→TextureLoader，jsdom ResourceLoader 不取 blob: URL、Image 永不回调 → `GLTFLoader.parseAsync` **永久挂死**（探针定位，180s 仍挂）；shim 把 createObjectURL 的 Blob 登记 + 给 ImageLoader 补 node-canvas 真解码路径，挂死变 1s 级通过。**逐文件**：structure-satellite（删掉污染 prototype 的旧 getContext 猴补——jsdom 无 canvas 时代产物缺 beginPath，把自己和后续 4 例一起搞挂）6/6；structure-v2 补 `@vitest-environment jsdom`（document undefined→node env）3/3；scene-delivery 17/17（多层文案钉现行「多层方案」+ shim + 超时档）；scene-presets gym 块按现行 jev `comparisonState` 压缩格式重写断言（objectRows/objectColumns 行列格式已弃用）10/10；space-panel 3/3（空态对齐「拍摄场地」链接 + aholo/traditional 分支的当前环境/环境两段）；lux3d 9/9（标题随 c754e59 禁词收口改「生成引擎空间模型」+ 主路径文案）；workbench-rail-head 1/1（f74a0a9 拍摄场地左轨锚点，disc 2→3）；nav-chrome 5/5（toggleNavColumns 调用已位移，room-organizer 只派生 navExpanded）；scendance-workspace 24/24（移动局部物体/进入漫游/画质档 aria-label「1920×1080（1080p）」/导出默认 1080p/楼层切换计数 15/图标改 sc-material-symbol span）；assets-panel 8/8（「物料」区三页签：我的生成/收藏/库、刷新钮、登录后查看物料）。**零生产代码改动**；11 文件对表细节已登记 [COLLAB.md](COLLAB.md) 待协商表。**验证**：定向 11 文件 106 例全绿、`npx tsc --noEmit` 0 错、`NEXT_DIST_DIR=.next-ci npm run build` exit 0。**顺带核实**：guide.html/introduction.html「两份 guide 漂移」已由并行会话今晨同步解除（四格/右缘/灯光三档/MAX_FLOORS=4 全对码验证）。 |
 | 依赖安全 B 类收口 + 茶亭实景接线（2026-11-07 八轮，ZCode 会话；tag v4.5.0） | **① deps B 类（两份 audit 双清零）**：根 overrides（miniprogram-automator.debug→4.3.1 scoped、jpeg-js→0.4.4、phin→3.7.1、mkdirp.minimist→0.2.4 scoped）+ frontend `npm update wrangler` 4.148.0→4.158.0（miniflare 5.20261104.0-beta：嵌套 undici 7.30.1、sharp 0.35.5 恰为修复版）+ minimatch 11.0.1 scoped override（上游 8.72.1 仍 pin ^10、audit fix 断路；`npm run lint` 0 errors 实证兼容）。**验证**：根/前端 `npm audit` 双 0；jimp decode/encode 往返 + automator 模块加载 + dev:agent 启动实测通过；根 tsc、前端 tsc、build（14 路由）全绿；[docs/34](docs/34-依赖漏洞分类清点.md) 已回填——**Dependabot 42 条 open 告警修复路径全部执行完毕**。**② 茶亭实景接线（PEOPLE 线③）**：巡游人物可走边界从布局名义矩形换成点云实测四至——`person-route.ts` 新增 `personWalkBounds`（实景四至内缩 0.3 m 优先、退化回退布局矩形）+ `routePointErrorInRect`（矩形布点校验，`routePointError` 改委托等价）；`use-scene-effects.ts` 行走上下文加可选 `personRouteBounds`；room-organizer 五处零删除接线（splatWalkBoundsRef/布点校验实景分支/useSceneEffects 传参；独占区 hunk 已登记 COLLAB）。**验证**：person-route 15 例（+2）+ 定向 6 套件 224 例全绿、tsc 0 错、build exit 0；页面级实景巡游目视归 SC-03。 |
@@ -175,7 +191,7 @@
 
 ## 下一步
 
-1. **XH-02 单段重建（P0，用户已表态要跑，等发起）**：素材已就绪——首选 [docs/33](docs/33-西湖新素材分段清单.md) 候选 0233（174s 园林走拍，2,391.9 MB `DJI_20261106161858_0233_D.MP4`），对照 0234（同园连续 1,942.7 MB）；备选 0220（65s 湖面+候船亭 787.9 MB）。**用户 2026-11-07 明确表态「准备等会儿跑」（原话记录见本轮提交）——下次会话开场向用户确认一句「现在提交吗」即可执行，不必再把授权当阻塞项反复问**；档位默认与西湖亭上一批一致（极速+标准双档，`--quality low`/`normal` 各一单，创建即扣失败全退），用户临时改口径按其说法。复用 `tools/aholo/recon-chain.mjs --video` 提交（录输入时间段/任务号/终态/产物读取；链路八轮已复核，key 在根 `.env.local` 的 `LUX3D_API_KEY`，脚本只读环境变量需注入）。
+1. **XH-02 已执行、已失败、待决策（P0）**：0233 被 2 GiB 上限拒收（未扣额度）；0234 双档受理后 13 秒秒败、无错误字段（与茶室照片秒败同签名，跨通道）。**三个决策项等用户**：① 再烧一单 0220（65s/788MB，时长与大小都在成功案例量级，单变量试探「素材属性 vs 通道」）；② 汇总失败签名反馈 AHOLO 官方（无错误字段是他们的可观测性缺陷；茶室+0234 两单原文都在 docs/34）；③ 暂停重建烧钱，转 B4/真门/SC-17 等不耗额度项。额度应退（70 分档）需在 AHOLO 后台核实。
 2. **PEOPLE 线续接（P0-P1）**：① **PEOPLE-02（P0，用户已表态要跑，随 XH-02 同批发起）**——AHOLO 古风样板：先做原创参考图（浅色对襟/交领、青绿裙、窄袖离地裙摆、中性站姿），审合格后提 G1/G1-Turbo 图生 3D 一单；执行时与 XH-02 一并向用户确认发起即可。② **PEOPLE-04 遗留（归 SC-03 前台窗口一并做）**：跟拍进入帧绝对机位前台复测（探针 `__personFollowProbe` 已就绪）、popover「跟拍镜头」按钮坐标级走查、退出跟拍后「回概览」chip 链路目视、**行走者 2D 标记像素级终证**（本轮折线已验，标记差最后一眼）。③ ~~茶亭实景接线~~ **已于八轮收口**（巡游围栏=点云实测范围；剩页面级实景巡游目视归 SC-03）。④ PEOPLE-05/06（六人库、多人验收）依赖 PEOPLE-02/03。⑤ 已知限制「行走者 2D 显示锚点」「贴障折返无提示」已于七轮收口（剩余体感问题走 SC-03 走查反馈）。
 3. **SC-03 走查当前流程（P0，DOM 子集已过，剩画布类/rAF 类需前台窗口）**：**十轮已划掉**（dev 3040+mock 3095，合成 PointerEvent 画区/画线，证据见「已完成与证据」十轮行）：圆桌区方案可行（24 座）、⛔ 不可行徽标、区类型条「预留区」钮、动线硬冲突横幅（REC=null）、预留区 keep-out 话术、draft_unverified 小字；「装不下 N 人 + 建议降到」与「真门 verified」转断点卡（见 4/5）。**剩余验收点**：popover 路线绘制/跟拍按钮坐标级走查、2D 平面图行走者标记随路线移动目视、贴障布点提示文案出现、真 splat 场景里巡游人物不出点云范围（实景围栏目视）、实景下布点出界被拦（点云四至校验）、退出跟拍后「回概览」chip 链路目视、跟拍进入帧绝对机位复测（探针 `__personFollowProbe` 已就绪）。docs/27 的 A1/A11/A12/B6 人工核对项继续挂（A11 依赖 B4 修复）。**必须 ZCode 窗口真实前台时做**（rAF 才活）；mock 环境启动命令见踩坑节。
 4. **B4 降容话术露出面修复（P1，十轮新断点，先拍设计再动码）**：「装不下 N 人 / 建议降到」目前到不了用户——plan-card 不渲染 reasons（只作 hasReasons 门），唯一理论出口「批准施工」回执 toast 只取 `reasons.slice(0, 2)`（room-organizer.tsx:3354），而降容 reason 恒在 index≥4（buildReasons 先占满 4 条，plan-scoring.ts:857）。两个候选露出面：**方案卡渲染推荐版 reasons**（`plan-card.tsx`，非独占区）或 **toast 把降容 reason 提前**（独占区，需 COLLAB 登记）。**修复前先核实**：CreativeAssistant docked 面板内「预计人数」brief 表单（`input[aria-label=预计人数]`）十轮走查未出现，挂载条件未知——targetCapacity 从 UI 置数这条路要先通。修完用十轮同款合成 PointerEvent 走查复验。
@@ -231,7 +247,7 @@ Scendance2026：把「拍照/视频采集 → 3DGS 重建 → Web 画布交付�
 - **Web 体检**：P0 4 / P1 7 / P2 7（共 18 条，W-01–W-18），全表 `.reports/web-audit-2026-11/issues.md`。
 - **`COLLAB.md` 已建立**：与 Qoder（LiliLIN0324）的文件所有权边界 + 提交纪律。
 - **西湖点云 × 调研底图层级（Qoder 侧，未提交）**：底图原先被主场景在点云之后重画一遍，任何高度都盖住 3D。现在底图只随点云所在的背景栈画一次，主场景渲染完才搬回；同机位 A/B（有/无底图）茶亭像素一致。同时 `researchArea.scanAssetId` 的自动铺图不再套 1600 m 底图做概览取景。改动仅 `three/splat-preview.ts` + `room-organizer.tsx`，已在 `COLLAB.md` 待协商表登记。
-- **地理底图改锚点驱动（本会话，未提交）**：`sceneAnchor` 成为场景坐标↔地理坐标唯一变换，底图按锚点投影（`lib/scene-anchor.ts`、`three/research-basemap.ts`）；`mapGroundFrame` 不再读进世界定位，只剩 `frameFromAnchor` 推出来的一个视图（立壳卫星贴图 UV）。`applyResearchArea` 里「异地框架 >3 km 就清空」的补丁已删，改为铺图时无条件移除 frame/polygon/center。实测：12 km 底图与场景地面最大偏差 2.02 m（z15 瓦片 4.13 m/px）；相机 `minDistance` 2 m，`maxDistance` 随焦点 = 焦点框对角线 ×3（茶亭 36.8 m / 场地 60.4 m / 全湖 51.7 km）。
+- **地理底图改锚点驱动（本会话，未提交）**：`sceneAnchor` 成为场景坐标↔地理坐标唯一变换，底图按锚点投影（`lib/scene-anchor.ts`、`three/research-basemap.ts`）；`mapGroundFrame` 不再读进世界定位，只剩 `frameFromAnchor` 推出来的一个视图（立壳卫星贴图 UV）。`applyResearchArea` 里「异地框架 >3 km 就清空」的补丁已删，改为铺图时无条件移除 frame/polygon/center。实测：12 km 底图与场景地面最大偏差 2.02 m（z15 瓦片 4.13 m/px）；相机 `minDistance` 2 m，`maxDistance` 随焦点 = 焦点框对角线 ×3（茶亭 36.8 m / 场地 60.4 m）。**「全湖 51.7 km」不是整景区 bbox 那一档**：整景区预设的焦点框就是 `researchArea.bounds`（`room-organizer.tsx:2029-2036` → `use-camera-presets.ts:74` → `camera-framing.ts:122-126`），即 **9.83×10.60 km**、对角线 14.46 km，按代码复算钳制应是 **43.4 km**；51.7 km 应属 12 km 卫星底图那一档（源框含瓦片补边，未落盘），**标待核**。
 
 ## 三、卡住的问题
 
@@ -330,26 +346,27 @@ UniRig 官方要求（README + requirements.txt）：Python **3.11**、torch ≥
 
 **做到哪一步**
 - ✅ 第 1 步代码完成，`npx tsc --noEmit` exit 0（先删除 dev 生成的陈旧 `frontend/.next-local/types`，它引用了已不存在的 `app/review/[id]/page.js`）。
-- ⛔ 第 2 步（`xihu-scenic-area-osm-13164471.geojson` 717 点主环+5 碎片、`xihu-water-osm-2308774.geojson`）、第 3 步（<100 m 点云 / >200 m POI、滞回、总览不加载）**未开始**。
-- 🟡 浏览器实测：编辑器里点「整景区」后底图能加载，西湖轮廓可辨；但总览截图**未落盘**（agent 汇报保存路径，`docs/evidence/basemap-20261105/` 下实际没有 png），且现场目测「未铺满画布、疑似拉伸」，**未复核**。
+- ✅ 第 2 步（`xihu-scenic-area-osm-13164471.geojson` 717 点主环+5 碎片、`xihu-water-osm-2308774.geojson`）**已完成并上线**：2026-11-07 深夜浏览器冒烟里点「整景区」后范围线与水面叠加渲染、开关 `aria-pressed` true→false→true 往返正常；叠图前后 top 截图（1258×666）逐像素差 **23,405 px**（本次复核值；原记 21,099 px 未能从落盘截图复现，**标待核**）。
+- ⛔ 第 3 步（<100 m 点云 / >200 m POI、滞回、总览不加载）**未开始**。
+- ✅ 浏览器实测：点「整景区」后底图加载、西湖轮廓可辨，**已像素级验收**——底图四角与地面四角偏差 **0 m**，尺寸差 **东西 1.2 m / 南北 70.2 m（0.66%）**，贴图拉伸 **≤0.7%**，因此不再算「未铺满/疑似拉伸」；截图已落盘 `docs/evidence/basemap-20261105/scenic-overview.png`（230,401 B）与 `scenic-overview-top.png`（579,040 B）。读数出自那次冒烟，未落 JSON。
 
 **改过哪些文件（行号按本轮收口时）**
 - `frontend/components/room-organizer/lib/research-area.ts`：`:60` 加 `presetId?`、`:190` 预置底图不再响应换半径/换样式、`:227-250` `XIHU_SCENIC_PRESET` + `createPresetResearchArea()`。
 - `frontend/components/room-organizer/lib/types.ts`：`:445` `presetId?: 'xihu-scenic'`（RoomLayout 结构里同步字段）。
 - `frontend/components/room-organizer/panels/geo-basemap-input.tsx`：`:6` 引入、`:74/:80` 预置底图隐藏半径/样式、`:119-131` 新增「整景区」按钮（`data-testid="geo-basemap-preset"`）。
 - `frontend/components/room-organizer/room-organizer.tsx`：`:2372-2382` `applyResearchArea` 对 `presetId` **保留已有 sceneAnchor**（不再把锚点搬到 bbox 中心）。
-- 新增静态资源（未入库）：`frontend/public/basemap/xihu-scenic-z15.jpg`（1,447,595 B）、`xihu-scenic-area.geojson`（19,144 B）、`xihu-water.geojson`（69,517 B）。后两个是第 2 步备用，尚未被代码引用。
+- 新增静态资源（**已随 `7f4209c` 入库**）：`frontend/public/basemap/xihu-scenic-z15.jpg`（1,447,595 B）、`xihu-scenic-area.geojson`（19,144 B）、`xihu-water.geojson`（69,517 B）；后两个已被范围线/水面叠加引用。`/basemap/xihu-scenic-z15.jpg` 已在 `isResearchArea` 放行（同源 `/basemap/<安全名>` + `presetId='xihu-scenic'` 校验），schema 108/108 通过。
 - **未动**：`three/scan-placement.ts`、`three/furniture-builders.ts`、`hooks/use-splat-preview.ts`、`three/splat-preview.ts`；`room-organizer.tsx` 仅 `applyResearchArea` 一处最小改动（COLLAB.md 独占区，按约定只做必要 diff，未登记新行）。
 - `frontend/tsconfig.json` 被 dev 自动追加的 `.next-local/types/**/*.ts` 已还原为 HEAD 版本（`git diff` 为空）。
 
-**底图接进去没有**：**接进去了（可用），但未经像素级验收。**
+**底图接进去没有**：**接进去了，且已过像素级验收**——四角偏差 0 m、拉伸 ≤0.7%（见上条）。
 - 方案取舍：选「静态图放 `frontend/public/`」而不是「代理加免压缩直通」——整景区图固定、只拼一次，静态资源无长边 2048 限流、像素可复现；代价是仓库/部署多 1.38 MB 且范围改动要重新拼图。代理直通则每次请求仍要拼 110 块瓦片、依赖高德上游、且每次像素可能变。
 - 无第二套 geo→world：`bounds` 设为图片精确裁切范围（W120.0714663 / S30.1777743 / E120.1737028 / N30.2736397），中心/尺寸/偏航仍由 `researchArea.bounds + sceneAnchor` 推出。按 z15 墨卡托算，该 bbox 对应 2382.30×2585.30 px，与图片 2382×2585 对齐；线性纬度 vs 墨卡托的最大内部偏差 **0.32 px**。
 
 **卡在哪**
-1. 总览截图没落盘，铺满/拉伸未被证实也没被证伪。
+1. 总览截图与「未铺满/拉伸」已解决（见「做到哪一步」第 4 条）；换端口后若再复现，按下一步第 3 条查相机取景。
 2. 底图是「已有锚点的场景垫大图」，但实测时浏览器先点了「杭州西湖→定位」，锚点被挪到西湖 POI 中心后再铺图；茶亭锚点是否仍在原位**没核对**。
-3. 四角/边界线像素偏差、build exit code、底图加载字节与首帧耗时**都还没测**。
+3. build exit code、底图加载字节与首帧耗时**仍未测**；四角/边界线偏差已测（0 m，见上）。
 
 **下一步（恢复时按此顺序）**
 1. 重开 dev：`cd frontend` → `npm run dev -- --port 3030`（需要 3199 代理时用同一脚本，它会在无代理时自拉）。
