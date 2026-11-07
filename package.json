@@ -10,6 +10,7 @@
     "test:integration": "npm --prefix frontend exec -- vitest run lib/backend-integration.test.ts --root frontend",
     "test": "vitest run tests/",
     "typecheck": "tsc --noEmit",
+    "gate": "node scripts/release-gate.mjs",
     "check": "npm run typecheck && npm test",
     "check:edge": "deno check --config supabase/functions/deno.json supabase/functions/scene-api/index.ts supabase/functions/generation-worker/index.ts supabase/functions/reconstruction-worker/index.ts",
     "demo:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
