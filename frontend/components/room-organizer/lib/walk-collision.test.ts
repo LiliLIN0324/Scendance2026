@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWalkColliders, resolveWalkerPosition, resolveWalkerStep } from './walk-collision';
+import { buildWalkColliders, resolveWalkerPosition, resolveWalkerStep, walkerClearanceAt } from './walk-collision';
 import type { FurnitureCategory, FurnitureItem, InteriorWall } from './types';
 
 const RADIUS = 0.3;
@@ -260,5 +260,47 @@ describe('resolveWalkerStep', () => {
     const out = { x: 0, z: 0 };
     resolveWalkerStep(colliders, { x: 3, z: 3 }, { x: 3, z: 3 }, RADIUS, out, ROOM);
     expect(out).toEqual({ x: 3, z: 3 });
+  });
+});
+
+describe('walkerClearanceAt — 路线布点贴障预检', () => {
+  it('measures the gap to a box face', () => {
+    const colliders = buildWalkColliders([BOX], [], ROOM);
+    // BOX 近面在 z = -1，点在 z = -0.8。
+    expect(walkerClearanceAt(colliders, { x: 0, z: -0.8 }, ROOM)).toBeCloseTo(0.2, 6);
+  });
+
+  it('is zero inside a box', () => {
+    const colliders = buildWalkColliders([BOX], [], ROOM);
+    expect(walkerClearanceAt(colliders, { x: 0, z: -1.5 }, ROOM)).toBe(0);
+  });
+
+  it('honours rotation — a 90°-turned box swaps width/depth extents', () => {
+    const rotated = item({ id: 'rot', position: { x: 0, z: 0 }, rotation: Math.PI / 2 });
+    const colliders = buildWalkColliders([rotated], [], ROOM);
+    // 2×1 旋 90° 后占 z ∈ [-1, 1]、x ∈ [-0.5, 0.5]。
+    expect(walkerClearanceAt(colliders, { x: 0, z: 1.6 }, ROOM)).toBeCloseTo(0.6, 6);
+    expect(walkerClearanceAt(colliders, { x: 1.0, z: 0 }, ROOM)).toBeCloseTo(0.5, 6);
+  });
+
+  it('picks the nearest of several boxes', () => {
+    const far = item({ id: 'far', position: { x: 3, z: 0 }, width: 1, depth: 1 });
+    const colliders = buildWalkColliders([BOX, far], [], ROOM);
+    // 点 (0.6, 0)：到 BOX 近面 1.0，到 far 盒 1.9。
+    expect(walkerClearanceAt(colliders, { x: 0.6, z: 0 }, ROOM)).toBeCloseTo(1.0, 6);
+  });
+
+  it('ignores outdoor boxes inside the room and counts them outside', () => {
+    // 1×1 盒贴在房间东边界外沿：占 x ∈ [5, 6]。
+    const outdoor = item({ id: 'out', position: { x: 5.5, z: 0 }, width: 1, depth: 1, category: 'outdoor' as FurnitureCategory });
+    const colliders = buildWalkColliders([outdoor], [], ROOM);
+    expect(walkerClearanceAt(colliders, { x: 4.5, z: 0 }, ROOM)).toBe(Infinity);
+    expect(walkerClearanceAt(colliders, { x: 6.2, z: 0 }, ROOM)).toBeCloseTo(0.2, 6);
+  });
+
+  it('returns Infinity with no colliders and without room bounds', () => {
+    expect(walkerClearanceAt([], { x: 0, z: 0 })).toBe(Infinity);
+    const colliders = buildWalkColliders([BOX], [], {});
+    expect(walkerClearanceAt(colliders, { x: 100, z: 100 })).toBeGreaterThan(90);
   });
 });

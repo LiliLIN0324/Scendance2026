@@ -17,7 +17,7 @@ import { buildEntrance } from '../three/entrance';
 import { createFurnitureModel } from '../three/furniture-builders';
 import { ROUTE_BOUNDARY_MARGIN_M, routeIsLoop } from '../lib/person-route';
 import { buildWalkColliders } from '../lib/walk-collision';
-import { setPeopleShadowRefresher, setPersonWalkContext } from '../three/people-anim';
+import { personAnimIds, personFollowSample, setPeopleShadowRefresher, setPersonWalkContext } from '../three/people-anim';
 import {
   clearInteriorWalls,
   clearPreview as clearWallPreview,
@@ -1080,11 +1080,21 @@ export function useSceneEffects({
         showFloorPlan: view.showReferenceImage !== false,
         ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         hasCollision: (item) => structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls }),
+        // 行走人物（PEOPLE-04）：2D 标记吃注册表的实时位置（personFollowSample，
+        // 由 3D tick 每帧推进——2D 模式下 tick 也照跑），路线画虚线折线。
+        personSample: personFollowSample,
       });
     };
 
     const removeRepaintHandler = addFloorPlanRepaintHandler(paint);
     paint();
+
+    // 行走人物在 2D 平面图上的实时位置：没有 per-frame 重绘链路，用 250ms
+    // 低频重绘消费注册表（与 autoCycleLighting 的 250ms 心跳同款节拍）。
+    // 动画人物清零（纯座位图布局）时不挂表，行为与开销都和从前一致。
+    // 注册表生命周期事件（加/删路线人物、暂停切换）都伴随 layout 变化，
+    // 会重跑本 effect 重新决定是否挂表，无需单独订阅。
+    const walkTimer = personAnimIds().length > 0 ? window.setInterval(paint, 250) : null;
 
     const observer = new ResizeObserver(paint);
     observer.observe(canvas);
@@ -1110,6 +1120,7 @@ export function useSceneEffects({
       dprQuery?.removeEventListener('change', onDprChange);
       observer.disconnect();
       removeRepaintHandler();
+      if (walkTimer !== null) window.clearInterval(walkTimer);
     };
   }, [invalidate, canvas2DRef, view.view2D, view.showMeasurements, view.showWiFiSignals, view.showHeatmap,
     view.showReferenceImage, view.referenceImageOpacity, referenceImage, layout, activeFloor, activeFloorIndex,

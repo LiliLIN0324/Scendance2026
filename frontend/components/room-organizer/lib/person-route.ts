@@ -28,6 +28,11 @@ export const MIN_WAYPOINT_DISTANCE_M = 0.15;
 export const MAX_WAYPOINTS = 32;
 /** 路线点距场地边界的最小距离（人物半径 + 一点余量）。 */
 export const ROUTE_BOUNDARY_MARGIN_M = 0.3;
+/**
+ * 途经点贴障提示阈值：距最近障碍不足此值时布点提示但不阻断（1.2s 受阻掉头
+ * 仍兜底）。E2E 实踩 0.2m 间隙会被推挤钉死反走徘徊，0.5m ≈ 半径 + 一步余量。
+ */
+export const ROUTE_WAYPOINT_CLEARANCE_WARN_M = 0.5;
 
 export interface RouteFollowerState {
   /** 当前位置（米，场景坐标）。从首个路点出发。 */
