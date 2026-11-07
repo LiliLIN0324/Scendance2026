@@ -2907,7 +2907,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   return (
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
-    <CreativeStudioProvider onUpdateProductionPlan={value=>{commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} controller={controller} layout={layout} onApply={onApplyCreative} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+    <CreativeStudioProvider captureImage={view => captureRenderImage({ view, scale: 1 })} onUpdateProductionPlan={value=>{commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} controller={controller} layout={layout} onApply={onApplyCreative} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} onBindProject={onBindProject} onPreview={onPreviewAi} onUpdateItem={(id, patch) => { commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>

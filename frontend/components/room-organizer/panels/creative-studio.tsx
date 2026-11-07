@@ -35,6 +35,7 @@ import { MaterialCustomization, type MaterialCustomizationSeed } from './materia
 import { ProjectReviewPanel } from './project-review-panel';
 import { useReconstructionPanel } from './reconstruction-panel';
 import { SceneDeliveryPanel, exportActivityHandoff } from './scene-delivery-panel';
+import type { DeliveryCapture } from '../lib/delivery-package';
 import { ScenePresetsPanel } from './scene-presets-panel';
 import { VenuePhotosPanel, type VenuePhoto } from './venue-photos-panel';
 import type { ActivityTaskPanelContext } from './activity-task-workspace';
@@ -54,7 +55,7 @@ type Preview = { assets: { assetUrls: Record<string,string>; assetNames: Record<
 type CheckinRestoreWrite = { scope: string; before: MaterialCheckinLedger | undefined; attempted: MaterialCheckinLedger | undefined };
 type SourceRestoreWrite = { scope: string; before: SourceScopeSnapshot; attempted: SourceScopeSnapshot };
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
-interface Props { reviewContext?: string; controller: BackendSession; layout: RoomLayout; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
+interface Props { reviewContext?: string; controller: BackendSession; layout: RoomLayout; captureImage?: DeliveryCapture | undefined; onApply(layout: RoomLayout): void; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 export interface LocalProjectBackupActions {
   prepareBackup(options?:{includeSourceDocuments?:boolean}): Promise<string>; restoreBackup(candidate: LocalProjectRestoreCandidate): Promise<void>; undoRestore(): Promise<void>;
@@ -62,6 +63,7 @@ export interface LocalProjectBackupActions {
 }
 interface StudioValue extends LocalProjectBackupActions {
   sourcesRestoring: boolean;
+  captureImage?: DeliveryCapture | undefined;
   checkins: MaterialCheckinState;
   reviewSource: ProjectReviewSource;
   getReviewSource(): ProjectReviewSource;
@@ -95,7 +97,7 @@ export function useMaterialCheckinState(): MaterialCheckinState { return useStud
 const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。' }];
 const PARTIAL_RUN_NOTICE='后续处理中断，已保留通过检查的方案，请核对后继续。';
 
-export function CreativeStudioProvider({ reviewContext, controller, layout, onApply, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
+export function CreativeStudioProvider({ reviewContext, controller, layout, captureImage, onApply, prepareRestoreLayout, commitRestoredLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
   const { allSelectedIds }=useSelection();
   const [brief,setBriefValue]=useState<CreativeBrief>(INITIAL_BRIEF);
@@ -1007,7 +1009,7 @@ export function CreativeStudioProvider({ reviewContext, controller, layout, onAp
     await exportActivityHandoff({layout:base,prepareBackup,stillCurrent});
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={sourcesRestoring,captureImage,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,scope:agentScope,controller,layout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,directApply,setDirectApply,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale)setPreview(item.preview);},applyPreview,discardPreview:()=>{setPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
 }
 
@@ -1522,7 +1524,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           <div hidden={modelTool!=='generate'}>{modelOpened&&((typeof generationPanel==='function'?generationPanel(generationContext):generationPanel)??<p className="sc-note">登录并打开云项目后可查看历史模型。</p>)}</div>
           {modelOpened&&<div hidden={modelTool!=='customize'}>{materialSeed?.scope===studio.scope&&<button type="button" className="sc-button" onClick={()=>setMaterialSeed(undefined)}>使用当前选中物件</button>}<MaterialCustomization controller={studio.controller} layout={studio.layout} onApply={applyMaterial} seed={materialSeed?.scope===studio.scope?materialSeed:undefined} active={(docked?workspaceExpanded:studio.expanded)&&!templatesOpen&&businessMode==='model'&&modelTool==='customize'}/></div>}
         </section>
-        <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
+        <section id="agent-panel-delivery" aria-label="执行交付" hidden={businessMode!=='delivery'||templatesOpen}>{deliveryOpened&&<div ref={deliveryFocusTarget} tabIndex={-1} role="group" aria-label="执行工作单"><SceneDeliveryPanel captureImage={studio.captureImage} activityTaskPanel={activityTaskPanel?.({layout:studio.layout,disabled:studio.busy||studio.backupPending,checkins:studio.checkins,briefState:{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}})} deliveryViewRequest={deliveryViewRequest} layout={studio.layout} controller={studio.controller} checkins={studio.checkins} onLocate={selectOnly} onUpdateItem={studio.onUpdateItem} onUpdateEventOperations={studio.onUpdateEventOperations} onUpdateProductionPlan={studio.onUpdateProductionPlan} backupActions={studio} briefState={{brief:studio.brief,ready:studio.briefReady,error:studio.briefError,hasSavedBrief:studio.hasSavedBrief}} onOpenBrief={openBrief} onBackupRestored={finishBackupNavigation}/></div>}</section>
         <section id="agent-panel-review" aria-label="方案评审" hidden={businessMode!=='review'||templatesOpen}>{reviewOpened&&<div ref={reviewTarget} tabIndex={-1} role="group" aria-label="当前方案评审"><ProjectReviewPanel storageIdentity={JSON.stringify([studio.controller.config.apiUrl,studio.controller.getSnapshot().user?.id??null,studio.reviewSource.scope])} source={studio.reviewSource} actions={{getSource:studio.getReviewSource,prepare:studio.prepareReview,prefill:prefillReview,...(captureReview?{capture:(snapshot,options)=>{if(studio.preview||studio.busy)throw new Error('请先结束候选预览或当前任务，再捕获画面。');return captureReview(snapshot,options,studio.getReviewSource);}}:{})}} inputLocked={studio.backupPending} disabled={studio.busy||!studio.briefReady||!!studio.briefError}/></div>}</section>
         {commercialPanel!=null&&<section id="agent-panel-commercial" aria-label="合同与约定" hidden={businessMode!=='commercial'||templatesOpen}>{commercialOpened&&<div ref={commercialTarget} tabIndex={-1} role="group" aria-label="合同与约定资料">{commercialPanel}</div>}</section>}
         {!onOpenTemplates&&<section aria-label="场景模板资源" hidden={!templatesOpen}>{templatesOpen&&<ScenePresetsPanel layout={studio.layout} onApply={studio.onApply}/>}</section>}

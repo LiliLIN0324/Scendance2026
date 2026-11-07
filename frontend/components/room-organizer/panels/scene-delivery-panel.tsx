@@ -17,6 +17,8 @@ import {
   deliveryVersionState,
   type DeliveryVersionState,
 } from '../lib/delivery-version';
+import { isRetryableDeliveryCode, type DeliveryArtifactKind, type DeliveryFailureCode } from '../lib/delivery-package-spec';
+import type { DeliveryCapture, DeliveryPackageResult } from '../lib/delivery-package';
 import { EventOperationsPanel } from './event-operations-panel';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
 import { MaterialCheckinPanel } from './material-checkin-panel';
@@ -32,6 +34,8 @@ interface Props {
   activityTaskPanel?: ReactNode;
   checkins?: MaterialCheckinState | undefined;
   layout: RoomLayout; controller: BackendSession;
+  /** 打效果图用的渲染取图（three 只在工作台里，交付面板不碰渲染器）。 */
+  captureImage?: DeliveryCapture | undefined;
   onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined;
   onLocate?: ((id: string) => void) | undefined;
   onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined;
@@ -42,6 +46,16 @@ interface Props {
   onBackupRestored?: (() => void) | undefined;
   deliveryViewRequest?: { serial: number; view: 'operations' | 'materials' | 'backup' } | undefined;
 }
+
+const PACKAGE_KIND_LABELS: Record<DeliveryArtifactKind, string> = {
+  hero: '效果图', floor: '平面图', materials: '物料清单', share: '分享链接', manifest: '清单', readme: '说明',
+};
+
+const PACKAGE_FAILURE_LABELS: Record<DeliveryFailureCode, string> = {
+  network: '网络失败', 'asset-fetch': '资产未取到', timeout: '超时', memory: '内存不足',
+  'no-floor': '没有楼层', 'preset-unsupported': '场景预设不支持', 'entrance-unsupported': '入口类型不支持',
+  'share-over-budget': '分享链接超预算', 'render-failed': '渲染失败',
+};
 
 /**
  * T-UI §4-5：完整活动交接只有一条实现——右栏「确认导出」与执行页共用。
@@ -140,9 +154,11 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 }
 
 /** Delivery and local execution stay inside the existing Bingo Agent entry point. */
-export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel }: Props): JSX.Element {
+export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
+  const [packageResult, setPackageResult] = useState<DeliveryPackageResult | null>(null);
+  const [packageStage, setPackageStage] = useState(''), [packageNotice, setPackageNotice] = useState('');
   const [version, setVersion] = useState<DeliveryVersionState | null>(null);
   const [versionBusy, setVersionBusy] = useState(false), [versionNotice, setVersionNotice] = useState('');
   const versionLatest = useRef<DeliveryVersionState | null>(null);
@@ -155,6 +171,11 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
       .catch(() => { if (!cancelled) setVersionNotice('版本身份没核对出来；导出仍按当前内容走。'); });
     return () => { cancelled = true; };
   }, [layout]);
+  // 换了确认版（或退回草案）之后，上一包的结果与续跑依据都作废，不能拿旧快照的缺件去重试。
+  useEffect(() => {
+    if (!packageResult || !version) return;
+    if (version.status !== 'confirmed' || packageResult.manifest.snapshotId !== version.snapshotId) setPackageResult(null);
+  }, [version, packageResult]);
   async function confirmVersion(): Promise<void> {
     if (versionBusy) return;
     setVersionBusy(true); setVersionNotice('');
@@ -204,7 +225,7 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   }, [layout, preview.items]);
   const checking = reviews?.layout !== layout && preview.items.some(item => item.handoff?.status === 'review' || item.handoff?.status === 'accepted');
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setNotice(''); exportSnapshot.current = null; }, [layout.id, cloud.user?.id, cloud.project?.id]);
+  useEffect(() => { setNotice(''); exportSnapshot.current = null; setPackageResult(null); setPackageNotice(''); }, [layout.id, cloud.user?.id, cloud.project?.id]);
   async function download(kind: 'glb' | 'json' | 'csv' | 'execution' | 'operations' | 'production' | 'activity' | 'timetable' | 'print' | 'dxf' | 'manifest'): Promise<void> {
     if (pending.current) return;
     pending.current = true; setBusy(true); setNotice('');
@@ -284,6 +305,50 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     } catch (error) { if (mounted.current && latest.current.userId === before.userId && latest.current.projectId === before.projectId && (kind !== 'timetable' || stillCurrent())) setNotice(error instanceof Error ? error.message : '导出失败，请重试。'); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
+  // MP-DEL 一键交付包（B2）：只打确认版；失败按 §6 归码，缺件下仍出「不完整」包，可单独续跑。
+  async function buildPackage(mode: 'fresh' | 'retry'): Promise<void> {
+    if (pending.current || versionBusy) return;
+    const state = versionLatest.current;
+    const confirmed = state?.confirmed;
+    if (!state || state.status !== 'confirmed' || !confirmed) {
+      setPackageNotice('先确认这一版，交付包才能绑定固定的版本号与快照号。');
+      return;
+    }
+    pending.current = true; setBusy(true); setPackageStage(mode === 'retry' ? '准备重试缺件…' : '准备打包…'); setPackageNotice('');
+    const before = latest.current;
+    const stillCurrent = () => mounted.current && latest.current.epoch === before.epoch && latest.current.layout === before.layout && latest.current.controller === before.controller && latest.current.userId === before.userId && latest.current.projectId === before.projectId && latest.current.checkins === before.checkins && latest.current.brief === before.brief;
+    const reuse = mode === 'retry' && packageResult && packageResult.manifest.snapshotId === confirmed.snapshotId
+      ? new Map(packageResult.files.map(file => [file.path, { sha256: file.sha256, bytes: file.bytes }] as const))
+      : undefined;
+    try {
+      const { buildDeliveryPackage } = await import('../lib/delivery-package');
+      if (!stillCurrent()) return;
+      const result = await buildDeliveryPackage({
+        layout: before.layout,
+        identity: {
+          deliveryVersion: confirmed.deliveryVersion,
+          snapshotId: confirmed.snapshotId,
+          contentFingerprint: confirmed.contentFingerprint,
+          status: 'confirmed',
+        },
+        generatedAt: new Date().toISOString(),
+        confirmedAt: confirmed.confirmedAt,
+        shareOrigin: window.location.origin,
+        ...(captureImage ? { captureImage } : {}),
+        ...(reuse ? { reuse } : {}),
+        onProgress: stage => { if (mounted.current) setPackageStage(stage); },
+      });
+      if (!stillCurrent()) return;
+      setPackageResult(result);
+      const { downloadSceneDelivery } = await import('../lib/scene-delivery');
+      downloadSceneDelivery(result.zip, 'application/zip', result.root, 'zip');
+    } catch (error) {
+      if (mounted.current) setPackageNotice(error instanceof Error ? error.message : '打包失败，请重试。');
+    } finally {
+      pending.current = false;
+      if (mounted.current) { setBusy(false); setPackageStage(''); }
+    }
+  }
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
     <div className="sc-section-heading"><div><h2>执行资料</h2></div></div>
     {/* 版本身份（SC-06）：确认一次分配一个号，导出与分享链接共用。 */}
@@ -302,6 +367,25 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     </div>
     <p className="sc-note">确认后导出文件名和分享链接都用这个快照号；再改草案会排到下一版，旧链接仍打开原来那一版。</p>
     {versionNotice && <p className="sc-note" role="status">{versionNotice}</p>}
+    {/* B2 一键交付包：只打确认版，缺件也出包但明确标「不完整」，可以只重试缺的几件。 */}
+    <div className="dl-package">
+      <button type="button" className="sc-button" disabled={busy || versionBusy || version?.status !== 'confirmed'} onClick={() => void buildPackage(packageResult?.missing.length ? 'retry' : 'fresh')}>
+        {busy ? '正在打包…' : packageResult ? (packageResult.missing.length ? '重试缺件' : '重新打包') : '导出交付包'}
+      </button>
+      {version && version.status !== 'confirmed' && <p className="sc-note">确认这一版后，才能打成带版本号的 zip 交付包（效果图 ×3、平面 DXF、物料清单、分享链接）。</p>}
+      {busy && packageStage && <p className="dl-package-stage" role="status">{packageStage}</p>}
+      {packageNotice && <p className="sc-note" role="status">{packageNotice}</p>}
+    </div>
+    {packageResult && <div className="dl-package-result" data-delivery-package-status={packageResult.manifest.status} data-delivery-package-root={packageResult.root}>
+      <p className="sc-note">{packageResult.manifest.status === 'complete'
+        ? `交付包已导出：${packageResult.fileName} · ${packageResult.files.length} 个文件 · 版本 ${packageResult.manifest.deliveryVersion} · 快照 ${packageResult.manifest.snapshotId}。`
+        : `交付包已导出但缺 ${packageResult.missing.length} 项，已标「不完整」，没有把缺件藏起来。`}</p>
+      {packageResult.missing.length > 0 && <ul className="dl-package-missing" aria-label="交付包缺件">
+        {packageResult.missing.map(item => <li key={`${item.kind}-${item.code}`} data-delivery-missing-code={item.code}>
+          {PACKAGE_KIND_LABELS[item.kind]} · {PACKAGE_FAILURE_LABELS[item.code]}：{item.detail || '没有更多说明'}（{isRetryableDeliveryCode(item.code) ? '可重试' : '需先处理'}）
+        </li>)}
+      </ul>}
+    </div>}
     {/* 六页执行台留在折叠里，不当默认门面。 */}
     <details className="dl-tools" open={toolsOpen} onToggle={event => setToolsOpen(event.currentTarget.open)}>
       <summary>内部资料</summary>

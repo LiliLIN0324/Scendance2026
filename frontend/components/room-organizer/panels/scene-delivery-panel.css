@@ -37,3 +37,11 @@
 .dl-version-line b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 .dl-version-line small { flex-basis: 100%; font-size: 11px; color: var(--sc-muted, #6f6f6f); overflow-wrap: anywhere; }
 .dl-version > button { flex: 0 0 auto; }
+.dl-package { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 8px; }
+.dl-package > button { flex: 0 0 auto; }
+.dl-package > .sc-note { flex-basis: 100%; margin: 0; }
+.dl-package-stage { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--sc-muted, #6f6f6f); }
+.dl-package-result { margin: 0 0 10px; padding: 8px 12px; border: 1px dashed var(--sc-line, #d6d6d2); border-radius: 8px; background: #ffffff60; }
+.dl-package-result > .sc-note { margin: 0; }
+.dl-package-missing { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--sc-ink, #2f2f2f); }
+.dl-package-missing li + li { margin-top: 2px; }

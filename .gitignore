@@ -52,6 +52,7 @@ frontend/.preview/
 # re-ignore line, and re-ignore any heavy payloads it contains.
 docs/evidence/*
 !docs/evidence/B1/
+!docs/evidence/mp-del/
 !docs/evidence/aholo/
 docs/evidence/aholo/*
 !docs/evidence/aholo/sculpture-rig/
