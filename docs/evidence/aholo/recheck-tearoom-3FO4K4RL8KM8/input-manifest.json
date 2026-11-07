@@ -1,0 +1,569 @@
+[
+  {
+    "input": "IMG_20261104_175911.jpg",
+    "file": "view-001.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 475858
+  },
+  {
+    "input": "IMG_20261104_175923.jpg",
+    "file": "view-002.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 494354
+  },
+  {
+    "input": "IMG_20261104_175936.jpg",
+    "file": "view-003.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 508481
+  },
+  {
+    "input": "IMG_20261104_175951.jpg",
+    "file": "view-004.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 442365
+  },
+  {
+    "input": "IMG_20261104_180002.jpg",
+    "file": "view-005.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 478018
+  },
+  {
+    "input": "IMG_20261104_180013.jpg",
+    "file": "view-006.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 541469
+  },
+  {
+    "input": "IMG_20261104_180017.jpg",
+    "file": "view-007.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 341165
+  },
+  {
+    "input": "IMG_20261104_180027.jpg",
+    "file": "view-008.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 429786
+  },
+  {
+    "input": "IMG_20261104_180032.jpg",
+    "file": "view-009.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 559541
+  },
+  {
+    "input": "IMG_20261104_180036.jpg",
+    "file": "view-010.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 516996
+  },
+  {
+    "input": "IMG_20261104_180038.jpg",
+    "file": "view-011.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 426353
+  },
+  {
+    "input": "IMG_20261104_180041.jpg",
+    "file": "view-012.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 548397
+  },
+  {
+    "input": "IMG_20261104_180045.jpg",
+    "file": "view-013.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 804949
+  },
+  {
+    "input": "IMG_20261104_180046.jpg",
+    "file": "view-014.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 550902
+  },
+  {
+    "input": "IMG_20261104_180048.jpg",
+    "file": "view-015.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 1086222
+  },
+  {
+    "input": "IMG_20261104_180050.jpg",
+    "file": "view-016.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 507178
+  },
+  {
+    "input": "IMG_20261104_180104.jpg",
+    "file": "view-017.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 766769
+  },
+  {
+    "input": "IMG_20261104_180109.jpg",
+    "file": "view-018.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 489533
+  },
+  {
+    "input": "IMG_20261104_180114.jpg",
+    "file": "view-019.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 415431
+  },
+  {
+    "input": "IMG_20261104_180120.jpg",
+    "file": "view-020.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 590648
+  },
+  {
+    "input": "IMG_20261104_180129.jpg",
+    "file": "view-021.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 436975
+  },
+  {
+    "input": "IMG_20261104_180135.jpg",
+    "file": "view-022.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 404513
+  },
+  {
+    "input": "IMG_20261104_180136.jpg",
+    "file": "view-023.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 529050
+  },
+  {
+    "input": "IMG_20261104_180143.jpg",
+    "file": "view-024.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 486649
+  },
+  {
+    "input": "IMG_20261104_180154.jpg",
+    "file": "view-025.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 479878
+  },
+  {
+    "input": "IMG_20261104_180201.jpg",
+    "file": "view-026.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 442547
+  },
+  {
+    "input": "IMG_20261104_180209.jpg",
+    "file": "view-027.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 544766
+  },
+  {
+    "input": "IMG_20261104_180225.jpg",
+    "file": "view-028.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 505742
+  },
+  {
+    "input": "IMG_20261104_180227.jpg",
+    "file": "view-029.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 300720
+  },
+  {
+    "input": "IMG_20261104_180233.jpg",
+    "file": "view-030.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 413449
+  },
+  {
+    "input": "IMG_20261104_180237.jpg",
+    "file": "view-031.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 456816
+  },
+  {
+    "input": "IMG_20261104_180239.jpg",
+    "file": "view-032.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 357952
+  },
+  {
+    "input": "IMG_20261104_180242.jpg",
+    "file": "view-033.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 534442
+  },
+  {
+    "input": "IMG_20261104_180243.jpg",
+    "file": "view-034.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 393832
+  },
+  {
+    "input": "IMG_20261104_180253.jpg",
+    "file": "view-035.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 420500
+  },
+  {
+    "input": "IMG_20261104_180304.jpg",
+    "file": "view-036.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 451201
+  },
+  {
+    "input": "IMG_20261104_180315.jpg",
+    "file": "view-037.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 492551
+  },
+  {
+    "input": "IMG_20261104_180318.jpg",
+    "file": "view-038.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 456462
+  },
+  {
+    "input": "IMG_20261104_180331.jpg",
+    "file": "view-039.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 427415
+  },
+  {
+    "input": "IMG_20261104_180344.jpg",
+    "file": "view-040.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 562487
+  },
+  {
+    "input": "IMG_20261104_180345.jpg",
+    "file": "view-041.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 411729
+  },
+  {
+    "input": "IMG_20261104_180348.jpg",
+    "file": "view-042.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 500193
+  },
+  {
+    "input": "IMG_20261104_180349.jpg",
+    "file": "view-043.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 492206
+  },
+  {
+    "input": "IMG_20261104_180352.jpg",
+    "file": "view-044.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 521246
+  },
+  {
+    "input": "IMG_20261104_180353.jpg",
+    "file": "view-045.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 475197
+  },
+  {
+    "input": "IMG_20261104_180354.jpg",
+    "file": "view-046.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 334868
+  },
+  {
+    "input": "IMG_20261104_180403.jpg",
+    "file": "view-047.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 646218
+  },
+  {
+    "input": "IMG_20261104_180420.jpg",
+    "file": "view-048.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 458381
+  },
+  {
+    "input": "IMG_20261104_180432.jpg",
+    "file": "view-049.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 487406
+  },
+  {
+    "input": "IMG_20261104_180440.jpg",
+    "file": "view-050.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 615604
+  },
+  {
+    "input": "IMG_20261104_180448.jpg",
+    "file": "view-051.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 508198
+  },
+  {
+    "input": "IMG_20261104_180458.jpg",
+    "file": "view-052.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 437372
+  },
+  {
+    "input": "IMG_20261104_180501_1.jpg",
+    "file": "view-053.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 451913
+  },
+  {
+    "input": "IMG_20261104_180503.jpg",
+    "file": "view-054.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 532834
+  },
+  {
+    "input": "IMG_20261104_180505.jpg",
+    "file": "view-055.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 539749
+  },
+  {
+    "input": "IMG_20261104_180508.jpg",
+    "file": "view-056.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 980726
+  },
+  {
+    "input": "IMG_20261104_180509.jpg",
+    "file": "view-057.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 460349
+  },
+  {
+    "input": "IMG_20261104_180510.jpg",
+    "file": "view-058.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 474248
+  },
+  {
+    "input": "IMG_20261104_180512.jpg",
+    "file": "view-059.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 552924
+  },
+  {
+    "input": "IMG_20261104_180520.jpg",
+    "file": "view-060.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 500938
+  },
+  {
+    "input": "IMG_20261104_180522.jpg",
+    "file": "view-061.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 1289486
+  },
+  {
+    "input": "IMG_20261104_180525.jpg",
+    "file": "view-062.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 632403
+  },
+  {
+    "input": "IMG_20261104_180536.jpg",
+    "file": "view-063.jpg",
+    "pixels": [
+      1536,
+      2048
+    ],
+    "bytes": 643142
+  }
+]

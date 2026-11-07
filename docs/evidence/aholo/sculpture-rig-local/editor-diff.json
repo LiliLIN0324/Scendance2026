@@ -1,0 +1,33 @@
+{
+  "frame01_vs_frame25": {
+    "pair": "frame01→frame25 (+1041.7 ms)",
+    "changedPixels": 2448,
+    "maxChannelDelta": 218,
+    "diffBox": {
+      "x0": 860,
+      "y0": 222,
+      "x1": 957,
+      "y1": 372
+    },
+    "totalPixels": 1296000
+  },
+  "frame01_vs_frame49": {
+    "pair": "frame01→frame49 (+2041.7 ms)",
+    "changedPixels": 0,
+    "maxChannelDelta": 2,
+    "diffBox": null,
+    "totalPixels": 1296000
+  },
+  "closeup_01_vs_25": {
+    "pair": "closeup 01→25",
+    "changedPixels": 2448,
+    "maxChannelDelta": 218,
+    "diffBox": {
+      "x0": 148,
+      "y0": 35,
+      "x1": 245,
+      "y1": 185
+    },
+    "totalPixels": 168000
+  }
+}

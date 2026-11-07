@@ -1,0 +1,74 @@
+{
+  "taskId": "3FO4K4RL8KM8",
+  "input": {
+    "collection": "scene-3d indoor tearoom",
+    "selection": "63 images registered in local SfM main component",
+    "count": 63,
+    "format": "JPEG RGB",
+    "longEdgeMaxPx": 2048,
+    "exif": "removed after orientation normalization",
+    "scene": "space",
+    "taskQuality": "low"
+  },
+  "createHttp": 200,
+  "status": "FAILED",
+  "progress": 1,
+  "elapsedMsIncludingUpload": 279710,
+  "polls": [
+    {
+      "status": "PREPROCESSING",
+      "progress": 0
+    },
+    {
+      "status": "PREPROCESSING",
+      "progress": 0
+    },
+    {
+      "status": "PREPROCESSING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "RUNNING",
+      "progress": 0
+    },
+    {
+      "status": "FAILED",
+      "progress": 1
+    }
+  ],
+  "reportedErrorFields": [],
+  "outputs": {
+    "spzPath": false,
+    "plyPath": false,
+    "lodMetaPath": false
+  },
+  "secondsFromAcceptedToObservedFailure": 122.2
+}

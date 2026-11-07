@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-11-06T03:59:10.550Z",
+  "base": "https://api.aholo3d.cn",
+  "endpoint": "https://api.aholo3d.cn/lux3d/v1/animations/rig/task/create",
+  "request": {
+    "modelUrl": "https://holo-cos.aholo3d.cn/resource/platform/temp/2026/11/06/NLWVBDQKTK2RYAABAAAAADA8.glb"
+  },
+  "upload": {
+    "file": "MODEL.glb",
+    "bytes": 985424,
+    "md5": "0cde9c2eba8c1afd3962f536cc2254da",
+    "url": "https://holo-cos.aholo3d.cn/resource/platform/temp/2026/11/06/NLWVBDQKTK2RYAABAAAAADA8.glb",
+    "assetId": "3FO2QX9JMMQJ",
+    "uploadMs": 2496
+  },
+  "taskId": 4734738,
+  "createResponse": {
+    "f": null,
+    "c": "0",
+    "m": "",
+    "d": 4734738
+  },
+  "polls": 38,
+  "finalStatus": 4,
+  "finalStatusLabel": "失败",
+  "finalDetail": {
+    "bizId": "LUX_3D",
+    "status": 4,
+    "outputs": [
+      {
+        "content": "{\"error\":{\"code\":\"MODEL_NOT_RIGGABLE\",\"message\":\"主体为类人形角色，但双臂弯曲抱于身前，不符合可绑骨的T-Pose或A-Pose站姿要求。\"}}"
+      }
+    ],
+    "taskId": 4734738
+  },
+  "credits": "接口不返回",
+  "artifact": null,
+  "error": "{\"error\":{\"code\":\"MODEL_NOT_RIGGABLE\",\"message\":\"主体为类人形角色，但双臂弯曲抱于身前，不符合可绑骨的T-Pose或A-Pose站姿要求。\"}}",
+  "elapsedMs": 191361,
+  "elapsedSeconds": 191
+}
