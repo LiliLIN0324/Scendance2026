@@ -112,3 +112,62 @@ describe('PlanCard 版级可行性出口（SC-19/G1）', () => {
     expect(screen.getByText('✅ 推荐 适中版')).toBeDefined();
   });
 });
+
+describe('PlanCard 推荐理由露出（B4 降容话术）', () => {
+  it('推荐版行下渲染「推荐理由」块，降容建议行带琥珀色 testid', () => {
+    render(
+      <PlanCard
+        draft={draft()}
+        plans={[plan({
+          reasons: [
+            '适中：平衡容量与通道；可坐 24 座（6 件家具）',
+            '通道 1.5m，轮椅可过',
+            '这里最多约可坐 24 座，装不下 250 人；建议把人数降到约 20 人，或换更大的场地',
+          ],
+        })]}
+        recommendedId="balanced"
+        onApprove={noop} onReplace={noop} onCancel={noop} onComment={noop} />,
+    );
+    const block = screen.getByTestId('plan-card-recommended-reasons');
+    expect(block.textContent).toContain('推荐理由');
+    expect(block.textContent).toContain('可坐 24 座（6 件家具）');
+    // B4 核心：降容建议出方案时就可见，不再埋在批准 toast 的 slice(0,2) 之后。
+    const advice = screen.getByTestId('plan-card-capacity-advice');
+    expect(advice.textContent).toContain('装不下 250 人');
+    expect(advice.textContent).toContain('建议把人数降到约 20 人');
+  });
+
+  it('非推荐版不渲染理由块（只在推荐版露出，避免三版理由刷屏）', () => {
+    render(
+      <PlanCard
+        draft={draft()}
+        plans={[plan(), plan({ variantId: 'dense', label: '密', reasons: ['密：多摆但通道紧'] })]}
+        recommendedId="balanced"
+        onApprove={noop} onReplace={noop} onCancel={noop} onComment={noop} />,
+    );
+    expect(screen.getByTestId('plan-card-recommended-reasons').textContent).toContain('平衡容量与通道');
+    // dense 版的理由不出现在页面上。
+    expect(screen.queryByText('密：多摆但通道紧')).toBeNull();
+  });
+
+  it('与 violations 逐字相同的理由去重，不与违规清单重复列一遍', () => {
+    const dupMessage = '圆桌 与 餐椅 位置压住';
+    render(
+      <PlanCard
+        draft={draft()}
+        plans={[plan({
+          reasons: ['适中：平衡容量与通道；可坐 24 座', dupMessage],
+          violations: [{ code: 'BBOX_OVERLAP', severity: 'soft', message: dupMessage }],
+        })]}
+        recommendedId="balanced"
+        onApprove={noop} onReplace={noop} onCancel={noop} onComment={noop} />,
+    );
+    const block = screen.getByTestId('plan-card-recommended-reasons');
+    // 违规清单区与理由块各自存在……
+    expect(block.textContent).toContain('平衡容量与通道');
+    // ……但同一句话不在理由块重复。
+    expect(block.textContent).not.toContain(dupMessage);
+    // 违规清单里仍有一份。
+    expect(screen.getByText(dupMessage)).toBeDefined();
+  });
+});

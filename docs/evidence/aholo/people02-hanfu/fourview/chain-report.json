@@ -1,0 +1,66 @@
+{
+  "cmd": "get",
+  "startedAt": "2026-11-07T08:33:54.348Z",
+  "base": "https://api.aholo3d.cn",
+  "taskId": "4826419",
+  "finalStatus": 3,
+  "detail": "{\"bizId\":\"LUX_3D\",\"status\":3,\"outputs\":[{\"content\":\"[\\\"https://qhmtl-cos.kujiale.com/materialtexture/6ed/1f8/0f359252d96c2b61480b97a7c9c78ad52da314e.png\\\",\\\"https://qhmtl-cos.kujiale.com/materialtexture/69c/a43/1b70f54441f7b44ed3ed2cd59d092101e3a9c26.png\\\",\\\"https://qhmtl-cos.kujiale.com/materialtexture/958/4c0/954a8ca3d161964a90d7b49922a632492685b60.png\\\",\\\"https://qhmtl-cos.kujiale.com/materialtexture/783/d67/60cedd558ef439254c750fc1eccf7e05eba764d.png\\\"]\"}],\"taskId\":4826419}",
+  "outputs": [
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-1.png",
+      "bytes": 667982
+    },
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-2.png",
+      "bytes": 695334
+    },
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-3.png",
+      "bytes": 547680
+    },
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-4.png",
+      "bytes": 685645
+    }
+  ],
+  "log": [
+    {
+      "at": "0.2s",
+      "iso": "2026-11-07T08:33:54.502Z",
+      "op": "poll",
+      "polls": 1,
+      "http": 200,
+      "status": 3,
+      "label": "成功",
+      "progress": null
+    },
+    {
+      "at": "0.5s",
+      "iso": "2026-11-07T08:33:54.872Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-1.png",
+      "bytes": 667982
+    },
+    {
+      "at": "0.8s",
+      "iso": "2026-11-07T08:33:55.150Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-2.png",
+      "bytes": 695334
+    },
+    {
+      "at": "1.1s",
+      "iso": "2026-11-07T08:33:55.481Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-3.png",
+      "bytes": 547680
+    },
+    {
+      "at": "1.5s",
+      "iso": "2026-11-07T08:33:55.826Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\fourview\\model-4.png",
+      "bytes": 685645
+    }
+  ]
+}

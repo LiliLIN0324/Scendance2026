@@ -155,7 +155,7 @@ import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
 import { estimateCapacity } from '@/lib/capacity-meter';
 import { computeBingoScore } from '@/lib/bingo-score';
-import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
+import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, pickDoorWallFromPoint, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
 // 第 12 批：三版打分 + 动线约束 + AI 建议（纯函数层，已独立测试）。
 import {
   generateScoredPlans,
@@ -1479,6 +1479,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           setDraftPoints([]);
           planAnnot.setDrawMode('off');
         }
+      } else if (planAnnot.drawMode === 'door') {
+        // 真门标注：单击墙边落一扇门（inferred 缺省 = 真门，非 withDefaultDoor 推测）。
+        // 离四墙都太远时静默不落（保持绘制模式，用户点到墙边再落）；
+        // 单击即收（同 measure 的单段语义），Esc/再点标注钮退出。
+        const door = pickDoorWallFromPoint(w, { width: layout.width, height: layout.height });
+        if (door) {
+          planAnnot.addDoorAnnotation(door);
+          setDraftPoints([]);
+          planAnnot.setDrawMode('off');
+        }
       } else if (planAnnot.drawMode === 'route') {
         setDraftPoints((prev) => [...prev, w]);
       }
@@ -1566,8 +1576,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     planAnnot.drawMode,
     clientToWorld2D,
     planAnnot.addAnnotationFromPoints,
+    planAnnot.addDoorAnnotation,
     planAnnot.setDrawMode,
     zoneType,
+    layout.width,
+    layout.height,
   ]);
 
   // canvas 挂载 / 尺寸变化时 bump overlayTick，让 PlanOverlay 用真实 transform 重算。
@@ -2996,12 +3009,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
               <button
                 type="button"
                 className={`sc-annotation-toggle${planAnnot.drawMode !== 'off' ? ' is-active' : ''}`}
-                aria-label="切换标注模式：区/线/距"
+                aria-label="切换标注模式：区/线/距/门"
                 onClick={() => {
-                  // 集成接线：规划标注模式循环 off→zone→route→measure→off；首次点击时开一份空草案。
-                  // door 是数据层新增（开门弧遮挡用），暂未接入画布循环按钮，从 UI 入口再开。
-                  const order: Array<'off' | 'zone' | 'route' | 'measure'> = ['off', 'zone', 'route', 'measure'];
-                  const idx = order.indexOf(planAnnot.drawMode as 'off' | 'zone' | 'route' | 'measure');
+                  // 集成接线：规划标注模式循环 off→zone→route→measure→door→off；首次点击时开一份空草案。
+                  // door（真门标注）已接入：点墙边落一扇真门（inferred 缺省），评分层走 verified 门弧检查。
+                  const order: Array<'off' | 'zone' | 'route' | 'measure' | 'door'> = ['off', 'zone', 'route', 'measure', 'door'];
+                  const idx = order.indexOf(planAnnot.drawMode);
                   const next = order[(idx + 1) % order.length];
                   if (!planAnnot.draft) planAnnot.startDraft();
                   planAnnot.setDrawMode(next);
@@ -3011,6 +3024,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 {planAnnot.drawMode === 'zone' && <span className="sc-annotation-toggle__suffix">·区</span>}
                 {planAnnot.drawMode === 'route' && <span className="sc-annotation-toggle__suffix">·线</span>}
                 {planAnnot.drawMode === 'measure' && <span className="sc-annotation-toggle__suffix">·距</span>}
+                {planAnnot.drawMode === 'door' && <span className="sc-annotation-toggle__suffix">·门</span>}
               </button>
               <SettingsMenu buttonRef={workspaceEntryRef} />
               

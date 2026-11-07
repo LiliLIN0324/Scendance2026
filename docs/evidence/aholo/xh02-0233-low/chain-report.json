@@ -1,0 +1,4113 @@
+{
+  "startedAt": "2026-11-07T08:11:41.302Z",
+  "base": "https://api.aholo3d.cn",
+  "mode": "video",
+  "taskId": "3FO4K4RLNAJM",
+  "finalStatus": "SUCCEEDED",
+  "uploads": [
+    {
+      "file": "DJI_0233_first138s.mp4",
+      "bytes": 1895635260,
+      "md5": "b121e0929c8fe51fe394cd04c430a639",
+      "assetId": "3FO2QRKX4H0B",
+      "url": "https://holo-cos.aholo3d.cn/resource/platform/temp/2026/11/07/NLXN2QIKTKX72AABAAAAAAA8.mp4"
+    }
+  ],
+  "artifacts": {
+    "spzPath": "https://holo-cos.aholo3d.cn/3dgs/2026/11/7/3dgs-common/3FO4FMTUKCW4/a86bb68af19143cfaf08452223e2da6d_point_cloud_compressed.spz",
+    "plyPath": "https://holo-cos.aholo3d.cn/3dgs-common/3FO4FMTUKCW4/2026/11/7/a86bb68af19143cfaf08452223e2da6d_point_cloud.ply",
+    "lodMetaPath": "https://holo-cos.aholo3d.cn/splat-transform/3FO4FMTUKCW4/1794041308/lod-meta.json",
+    "local": "C:\\Users\\13266\\.dsh\\bot\\workspace\\Scendance2026\\docs\\evidence\\aholo\\xh02-0233-low\\3FO4K4RLNAJM.spz",
+    "bytes": 7795522,
+    "magicOk": true
+  },
+  "steps": [
+    {
+      "op": "asset.token",
+      "http": 200,
+      "response": "{\"ousToken\":\"F3B88BC9-D4C8-45C6-AA63-0A057BB1D94C\",\"globalDomain\":\"https://ous-cos.kujiale.com\",\"blockSize\":5242880}"
+    },
+    {
+      "op": "asset.begin",
+      "file": "DJI_0233_first138s.mp4",
+      "bytes": 1895635260,
+      "md5": "b121e0929c8fe51fe394cd04c430a639",
+      "note": "逐文件入库开始"
+    },
+    {
+      "op": "asset.block.init",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"obsTaskId\":\"3FO2QRKX4H0B\"}}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\"}"
+    },
+    {
+      "op": "asset.status",
+      "http": 200,
+      "file": "DJI_0233_first138s.mp4",
+      "attempt": 0,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"status\":4,\"uploadKey\":\"resource/platform/temp/2026/11/07/NLXN2QIKTKX72AABAAAAAAA8.mp4\",\"blockUpload\":{\"status\":1,\"progressPercent\":99,\"obsId\":\"3FO4ASO2KVR4\"},\"obsTaskId\":\"3FO2QRKX4H0B\"}}"
+    },
+    {
+      "op": "asset.status",
+      "http": 200,
+      "file": "DJI_0233_first138s.mp4",
+      "attempt": 1,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"status\":5,\"uploadKey\":\"resource/platform/temp/2026/11/07/NLXN2QIKTKX72AABAAAAAAA8.mp4\",\"url\":\"https://holo-cos.aholo3d.cn/resource/platform/temp/2026/11/07/NLXN2QIKTKX72AABAAAAAAA8.mp4\",\"md5\":\"b121e0929c8fe51fe394cd04c430a639\",\"blockUpload\":{\"status\":1,\"progressPercent\":100,\"obsId\":\"3FO4ASO2KVR4\"},\"obsTaskId\":\"3FO2QRKX4H0B\"}}"
+    },
+    {
+      "op": "asset.ready",
+      "file": "DJI_0233_first138s.mp4",
+      "assetId": "3FO2QRKX4H0B",
+      "url": "https://holo-cos.aholo3d.cn/resource/platform/temp/2026/11/07/NLXN2QIKTKX72AABAAAAAAA8.mp4",
+      "note": "入库完成（obsTaskId 即资产 ID）"
+    },
+    {
+      "op": "recon.create",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\"}"
+    },
+    {
+      "op": "recon.task",
+      "taskId": "3FO4K4RLNAJM",
+      "name": "xihu-0233-garden-walk-low",
+      "note": "建任务成功"
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039479000,\"status\":\"PREPROCESSING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "PREPROCESSING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":null,\"imagery\":null,\"semanticsMetadata\":null}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.02,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.02,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.11,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.11,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.28,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.28,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.36,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.36,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.43,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.43,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.5,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.5,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.57,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.57,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.63,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.63,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.7,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.7,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.76,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.76,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.83,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.83,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.9,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.9,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.98,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.98,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":null,\"spzPath\":null,\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":\"https://holo-cos.aholo3d.cn/3dgs-common/3FO4FMTUKCW4/2026/11/7/a86bb68af19143cfaf08452223e2da6d_point_cloud.ply\",\"spzPath\":\"https://holo-cos.aholo3d.cn/3dgs/2026/11/7/3dgs-common/3FO4FMTUKCW4/a86bb68af19143cfaf08452223e2da6d_point_cloud_compressed.spz\",\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794039485000,\"status\":\"RUNNING\",\"progress\":0.99,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":\"https://holo-cos.aholo3d.cn/3dgs-common/3FO4FMTUKCW4/2026/11/7/a86bb68af19143cfaf08452223e2da6d_point_cloud.ply\",\"spzPath\":\"https://holo-cos.aholo3d.cn/3dgs/2026/11/7/3dgs-common/3FO4FMTUKCW4/a86bb68af19143cfaf08452223e2da6d_point_cloud_compressed.spz\",\"lodMetaPath\":null}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "RUNNING",
+      "progress": 0.99,
+      "note": ""
+    },
+    {
+      "op": "recon.status",
+      "http": 200,
+      "response": "{\"worldId\":\"3FO4K4RLNAJM\",\"name\":\"xihu-0233-garden-walk-low\",\"cover\":\"https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg\",\"scene\":\"space\",\"createTime\":1794039473000,\"updateTime\":1794041322000,\"status\":\"SUCCEEDED\",\"progress\":1,\"assets\":{\"splats\":{\"urls\":{\"plyPath\":\"https://holo-cos.aholo3d.cn/3dgs-common/3FO4FMTUKCW4/2026/11/7/a86bb68af19143cfaf08452223e2da6d_point_cloud.ply\",\"spzPath\":\"https://holo-cos.aholo3d.cn/3dgs/2026/11/7/3dgs-common/3FO4FMTUKCW4/a86bb68af19143cfaf08452223e2da6d_point_cloud_compressed.spz\",\"lodMetaPath\":\"https://holo-cos.aholo3d.cn/splat-transform/3FO4FMTUKCW4/1794041308/lod-meta.json\"}},\"imagery\":null,\"semanticsMetadata\":{\"upAxis\":\"Z\"}}}"
+    },
+    {
+      "op": "recon.poll",
+      "taskId": "3FO4K4RLNAJM",
+      "status": "SUCCEEDED",
+      "progress": 1,
+      "note": ""
+    },
+    {
+      "op": "artifact.download",
+      "http": 200,
+      "taskId": "3FO4K4RLNAJM",
+      "bytes": 7795522,
+      "magicOk": true,
+      "local": "C:\\Users\\13266\\.dsh\\bot\\workspace\\Scendance2026\\docs\\evidence\\aholo\\xh02-0233-low\\3FO4K4RLNAJM.spz"
+    }
+  ],
+  "finalDetail": {
+    "worldId": "3FO4K4RLNAJM",
+    "name": "xihu-0233-garden-walk-low",
+    "cover": "https://holo-cos.aholo3d.cn/image/2026/11/07/FQGyzG-2TwaFF5J5v2GczA.jpg",
+    "scene": "space",
+    "createTime": 1794039473000,
+    "updateTime": 1794041322000,
+    "status": "SUCCEEDED",
+    "progress": 1,
+    "assets": {
+      "splats": {
+        "urls": {
+          "plyPath": "https://holo-cos.aholo3d.cn/3dgs-common/3FO4FMTUKCW4/2026/11/7/a86bb68af19143cfaf08452223e2da6d_point_cloud.ply",
+          "spzPath": "https://holo-cos.aholo3d.cn/3dgs/2026/11/7/3dgs-common/3FO4FMTUKCW4/a86bb68af19143cfaf08452223e2da6d_point_cloud_compressed.spz",
+          "lodMetaPath": "https://holo-cos.aholo3d.cn/splat-transform/3FO4FMTUKCW4/1794041308/lod-meta.json"
+        }
+      },
+      "imagery": null,
+      "semanticsMetadata": {
+        "upAxis": "Z"
+      }
+    }
+  },
+  "elapsedMs": 2226808
+}

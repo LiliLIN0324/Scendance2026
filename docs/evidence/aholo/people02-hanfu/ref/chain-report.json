@@ -1,0 +1,59 @@
+{
+  "cmd": "refimage",
+  "startedAt": "2026-11-07T08:30:19.801Z",
+  "base": "https://api.aholo3d.cn",
+  "taskId": 4826379,
+  "finalStatus": 3,
+  "outputs": [
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\ref\\ref-1.jpg",
+      "bytes": 431717
+    }
+  ],
+  "log": [
+    {
+      "at": "0.5s",
+      "iso": "2026-11-07T08:30:20.281Z",
+      "op": "refimage.create",
+      "http": 200,
+      "response": "{\"f\":null,\"c\":\"0\",\"m\":\"\",\"d\":4826379}"
+    },
+    {
+      "at": "0.6s",
+      "iso": "2026-11-07T08:30:20.373Z",
+      "op": "poll",
+      "polls": 1,
+      "http": 200,
+      "status": 0,
+      "label": "初始化",
+      "progress": null
+    },
+    {
+      "at": "26.0s",
+      "iso": "2026-11-07T08:30:45.842Z",
+      "op": "poll",
+      "polls": 6,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "31.1s",
+      "iso": "2026-11-07T08:30:50.926Z",
+      "op": "poll",
+      "polls": 7,
+      "http": 200,
+      "status": 3,
+      "label": "成功",
+      "progress": null
+    },
+    {
+      "at": "31.6s",
+      "iso": "2026-11-07T08:30:51.390Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\ref\\ref-1.jpg",
+      "bytes": 431717
+    }
+  ]
+}
