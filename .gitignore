@@ -53,6 +53,7 @@ frontend/.preview/
 docs/evidence/*
 !docs/evidence/B1/
 !docs/evidence/SC-16/
+!docs/evidence/C1/
 !docs/evidence/mp-del/
 !docs/evidence/aholo/
 docs/evidence/aholo/*

@@ -16,6 +16,7 @@ const CORE_TESTS = [
   'lib/plan-scoring.test.ts',
   'lib/plan-scoring-anti.test.ts',
   'lib/plan-approve.test.ts',
+  'lib/style-plan.test.ts',
   'lib/plan-annotation.test.ts',
   'lib/flow-constraints.test.ts',
   'lib/door-privacy.test.ts',

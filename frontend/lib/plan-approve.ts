@@ -127,6 +127,32 @@ export interface ZonePlanOutcome {
 }
 
 /**
+ * 风格 brief 能改的两件事：把某类区换一种已验配方、按家具 type 换色。
+ * 配方只放行 roundtable → desk / checkin（这两种配方在同一块矩形里都已验过），
+ * 其他覆盖一律忽略——风格不许把区改成未验证的摆法。
+ */
+export interface PlanZoneStyle {
+  recipeOverride?: Partial<Record<ZoneSemanticType, ZoneSemanticType>>;
+  colors?: Readonly<Record<string, string>>;
+}
+
+export interface PlanZoneOptions {
+  style?: PlanZoneStyle;
+}
+
+const ALLOWED_RECIPE_OVERRIDES: Readonly<Partial<Record<ZoneSemanticType, readonly ZoneSemanticType[]>>> = {
+  roundtable: ['desk', 'checkin'],
+};
+
+/** 把标注里的区类型换成风格指定的配方；不在白名单内的覆盖回落原类型。 */
+export function resolveZoneRecipe(zoneType: string, style?: PlanZoneStyle): string {
+  const wanted = style?.recipeOverride?.[zoneType as ZoneSemanticType];
+  if (!wanted) return zoneType;
+  const allowed = ALLOWED_RECIPE_OVERRIDES[zoneType as ZoneSemanticType];
+  return allowed?.includes(wanted) ? wanted : zoneType;
+}
+
+/**
  * 嵌套 SPEC 视图：从 furniture-catalog 按 (type, zoneType) 取条目，
  * 保持原有 SPEC.roundtable.table / SPEC.checkin.desk 访问形态向后兼容。
  * catalog 是唯一数据源，未来加家具只改 furniture-catalog.ts。
@@ -160,13 +186,15 @@ const SPEC = {
 export function planZoneApprovals(
   annotations: readonly PlanAnnotation[],
   density: number,
+  options?: PlanZoneOptions,
 ): ZoneFurniturePlacement[] {
-  return planZones(annotations, density).placements;
+  return planZones(annotations, density, options).placements;
 }
 
 export function planZones(
   annotations: readonly PlanAnnotation[],
   density: number,
+  options?: PlanZoneOptions,
 ): ZonePlanOutcome {
   const spec = densityToSpec(density);
   // 桌心距下限：除了桌径 + 走道余量，还要保证相邻两桌的环椅互不贴脸
@@ -195,15 +223,21 @@ export function planZones(
     // 故意放宽成 string：未来若扩展 zoneType 或外部注入非法值，不要静默按 rest 摆家具，
     // 走下面的「未知类型降级」分支落 skipped。
     const zoneType = ann.zoneType as string;
+    // 区类型仍是标注自己的（回溯、必留区判定都读它），只有摆法按风格配方走。
+    const recipe = resolveZoneRecipe(zoneType, options?.style);
+    const styleColor = (spec: FurnitureSpec): FurnitureSpec => {
+      const color = options?.style?.colors?.[spec.type];
+      return color ? { ...spec, color } : spec;
+    };
     const push = (p: Omit<ZoneFurniturePlacement, 'zoneId' | 'zoneType'>) =>
-      placements.push({ ...p, zoneId: ann.id, zoneType: zoneType as ZoneSemanticType });
+      placements.push({ ...p, spec: styleColor(p.spec), zoneId: ann.id, zoneType: zoneType as ZoneSemanticType });
 
     if (g.width <= 0 || g.depth <= 0) {
       skipped.push({ zoneId: ann.id, label: ann.label, reason: '画得太小，基本是个点' });
       continue;
     }
 
-    if (zoneType === 'roundtable') {
+    if (recipe === 'roundtable') {
       // 内缩含整圈椅子（不是只含桌面）：桌心距区边至少 ROUND_TABLE_INSET_M，
       // 否则最外圈椅子越出区界，触发入口堵门/墙退距吞件（G5 修复前实测）。
       const inset = ROUND_TABLE_INSET_M;
@@ -213,7 +247,7 @@ export function planZones(
         continue;
       }
       gridRoundtable(g.x, g.z, g.width, g.depth, inset, pitch, push);
-    } else if (zoneType === 'desk') {
+    } else if (recipe === 'desk') {
       // 课桌区：最小 6.0m 宽（1 个 block 3 桌）× 1.8m 深（1 排含椅）。
       const minW = ZONE_INSET * 2 + DESK_BLOCK_TABLES * DESK_TABLE_WIDTH_M;
       const minD = ZONE_INSET * 2 + DESK_TABLE_DEPTH_M + DESK_CHAIR_GAP_M + DESK_CHAIR_DEPTH_M;
@@ -226,19 +260,20 @@ export function planZones(
         continue;
       }
       gridDeskRows(g.x, g.z, g.width, g.depth, push);
-    } else if (zoneType === 'checkin') {
+    } else if (recipe === 'checkin') {
       if (g.width < 1.8 || g.depth < 1.4) {
         skipped.push({ zoneId: ann.id, label: ann.label, reason: '签到区至少要 1.8×1.4m（台面+工作人员座椅）' });
         continue;
       }
-      rowCheckin(g.x, g.z, g.width, push);
-    } else if (zoneType === 'photo') {
+      // 风格把一块大区改排成接待时按纵深重复多排；普通签到区仍是一排。
+      rowCheckin(g.x, g.z, g.width, recipe !== zoneType ? g.depth : undefined, push);
+    } else if (recipe === 'photo') {
       if (g.width < 2.6 || g.depth < 1.4) {
         skipped.push({ zoneId: ann.id, label: ann.label, reason: '打卡区至少要 2.6×1.4m（背景墙+拍照站立空间）' });
         continue;
       }
       spotPhoto(g.x, g.z, g.width, push);
-    } else if (zoneType === 'rest') {
+    } else if (recipe === 'rest') {
       // 深度下限 = 对坐中心距 + 椅深 + 两侧各 0.1m 余量：再浅长椅就会伸出区界（G7 同源）。
       const restMinDepth = AISLE_CLEARANCE_THRESHOLD_M + SPEC.rest.bench.depth + 0.2;
       if (g.width < 2.2 || g.depth < restMinDepth) {
@@ -246,7 +281,7 @@ export function planZones(
         continue;
       }
       rowsRest(g.x, g.z, g.width, g.depth, push);
-    } else if (zoneType === 'reserved') {
+    } else if (recipe === 'reserved') {
       // 预留区/消防疏散（keep-out）：按定义本版不摆家具，也不进 skipped——
       // 「留空」是这个区的语义本身，不是失败；别区家具压进来由评分层
       // evaluateKeepOut 判 hard violation（KEEP_OUT_INTRUDED）。
@@ -256,7 +291,7 @@ export function planZones(
       skipped.push({
         zoneId: ann.id,
         label: ann.label,
-        reason: `未知区类型 ${zoneType}，按通用矩形区处理，本版不落家具`,
+        reason: `未知区类型 ${recipe}，按通用矩形区处理，本版不落家具`,
       });
     }
   }
@@ -391,11 +426,16 @@ function gridDeskRows(
   }
 }
 
-/** 签到台沿 zone 上边一字排开，工作人员椅在台后（z 正向）。 */
+/**
+ * 签到台沿 zone 上边一字排开，工作人员椅在台后（z 正向）。
+ * `depth` 只在风格覆盖时传入：一块大区改成接待时按纵深重复多排，
+ * 普通签到区仍只摆一排（不传 depth）。
+ */
 function rowCheckin(
   x0: number,
   z0: number,
   w: number,
+  depth: number | undefined,
   push: (p: Omit<ZoneFurniturePlacement, 'zoneId' | 'zoneType'>) => void,
 ): void {
   const stationPitch = 1.8;
@@ -403,18 +443,28 @@ function rowCheckin(
   const inset = ZONE_INSET;
   const usable = w - inset * 2;
   const count = Math.min(maxStations, Math.max(1, Math.floor(usable / stationPitch)));
-  const rowZ = z0 + inset + SPEC.checkin.desk.depth / 2;
-  for (let i = 0; i < count; i++) {
-    const x = count === 1
-      ? x0 + w / 2
-      : x0 + inset + (usable * i) / (count - 1);
-    push({ spec: SPEC.checkin.desk, x: round2(x), z: round2(rowZ), rotation: 0 });
-    push({
-      spec: SPEC.checkin.chair,
-      x: round2(x),
-      z: round2(rowZ + SPEC.checkin.desk.depth / 2 + 0.45),
-      rotation: Math.PI,
-    });
+  const rowPitch = 2.0;
+  const chairReach = SPEC.checkin.desk.depth / 2 + 0.45 + 0.225;
+  let rows = 1;
+  if (depth !== undefined) {
+    // 每一排（桌+工作人员椅）都要整个落在区内。
+    const usableDepth = depth - inset * 2;
+    rows = Math.max(1, Math.floor((usableDepth - chairReach) / rowPitch) + 1);
+  }
+  for (let r = 0; r < rows; r += 1) {
+    const rowZ = z0 + inset + SPEC.checkin.desk.depth / 2 + r * rowPitch;
+    for (let i = 0; i < count; i++) {
+      const x = count === 1
+        ? x0 + w / 2
+        : x0 + inset + (usable * i) / (count - 1);
+      push({ spec: SPEC.checkin.desk, x: round2(x), z: round2(rowZ), rotation: 0 });
+      push({
+        spec: SPEC.checkin.chair,
+        x: round2(x),
+        z: round2(rowZ + SPEC.checkin.desk.depth / 2 + 0.45),
+        rotation: Math.PI,
+      });
+    }
   }
 }
 
