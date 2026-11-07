@@ -15,7 +15,7 @@ import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
 import { buildEntrance } from '../three/entrance';
 import { createFurnitureModel } from '../three/furniture-builders';
-import { ROUTE_BOUNDARY_MARGIN_M, routeIsLoop } from '../lib/person-route';
+import { personWalkBounds, routeIsLoop } from '../lib/person-route';
 import { buildWalkColliders } from '../lib/walk-collision';
 import { personAnimIds, personFollowSample, setPeopleShadowRefresher, setPersonWalkContext } from '../three/people-anim';
 import {
@@ -140,6 +140,8 @@ export interface UseSceneEffectsParams {
   layout: RoomLayout;
   activeFloor: FloorLayout;
   activeFloorIndex: number;
+  /** 实景点云实测四至（SplatWalkBounds）：有值时人物巡游夹取框用它而非布局名义矩形。 */
+  personRouteBounds?: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }> | null;
   referenceImage?: ReferenceImageLayer;
   view: ViewSettings;
   selectedItemId: string | null;
@@ -165,6 +167,7 @@ export function useSceneEffects({
   layout,
   activeFloor,
   activeFloorIndex,
+  personRouteBounds = null,
   referenceImage,
   view,
   selectedItemId,
@@ -561,7 +564,8 @@ export function useSceneEffects({
   ]);
 
   // 行走上下文（PEOPLE-04）：本层有带路线的人物时，把碰撞盒与可走边界交给
-  // three/people-anim 的注册表。坐标与场景一致（房间中心为原点）。
+  // three/people-anim 的注册表。坐标与场景一致（房间中心为原点）；真实景
+  // （点云就绪）时边界换成点云实测四至，与第一人称漫游共用同一条围栏。
   useEffect(() => {
     const routed = activeFloor.items.some((item) => item.walkRoute && item.walkRoute.points.length >= 2);
     if (!routed) {
@@ -573,15 +577,10 @@ export function useSceneEffects({
         roomWidth: layout.width,
         roomDepth: layout.height,
       }),
-      bounds: {
-        minX: -(layout.width / 2 - ROUTE_BOUNDARY_MARGIN_M),
-        minZ: -(layout.height / 2 - ROUTE_BOUNDARY_MARGIN_M),
-        maxX: layout.width / 2 - ROUTE_BOUNDARY_MARGIN_M,
-        maxZ: layout.height / 2 - ROUTE_BOUNDARY_MARGIN_M,
-      },
+      bounds: personWalkBounds(personRouteBounds, { width: layout.width, depth: layout.height }),
     });
     return () => setPersonWalkContext(null);
-  }, [activeFloor, activeFloor.interiorWalls, layout.width, layout.height]);
+  }, [activeFloor, activeFloor.interiorWalls, layout.width, layout.height, personRouteBounds]);
 
   // 行走中的人物是动态投影体：把静态阴影图的重算入口递给注册表（与 use-npcs 同款）。
   useEffect(() => {
