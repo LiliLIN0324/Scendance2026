@@ -10,7 +10,9 @@ import {
   normalizeRouteSpeed,
   routeIsLoop,
   routeLength,
+  personWalkBounds,
   routePointError,
+  routePointErrorInRect,
   routeSignature,
   stepRouteFollower,
 } from './person-route';
@@ -64,6 +66,35 @@ describe('route helpers', () => {
     expect(routePointError(square.points, { x: 2, z: 6.05 }, { width: 16, depth: 16 })).toContain('太近');
     const full = Array.from({ length: MAX_WAYPOINTS }, (_, i) => ({ x: i, z: 0 }));
     expect(routePointError(full, { x: 3, z: 3 }, { width: 12, depth: 12 })).toContain('最多');
+  });
+
+  it('rect form validates against an offset venue box (real scan range)', () => {
+    // 实景点云范围不居中（有落位偏移）：四至直接给，界内判据是同一条 0.3 m 余量。
+    const venue = { minX: -2, maxX: 10, minZ: -2, maxZ: 10 };
+    expect(routePointErrorInRect(square.points, { x: 3, z: 3 }, venue)).toBeNull();
+    expect(routePointErrorInRect(square.points, { x: -1.8, z: 3 }, venue)).toContain('场地内');
+    expect(routePointErrorInRect(square.points, { x: 3, z: 9.8 }, venue)).toContain('场地内');
+    // 与中心原点版共享「太近 / 最多」两条非几何检查。
+    expect(routePointErrorInRect(square.points, { x: 2, z: 6.05 }, venue)).toContain('太近');
+    const full = Array.from({ length: MAX_WAYPOINTS }, (_, i) => ({ x: i, z: 0 }));
+    expect(routePointErrorInRect(full, { x: 3, z: 3 }, venue)).toContain('最多');
+    // 等价性：中心原点的布局矩形两种形式结论一致。
+    expect(routePointErrorInRect(square.points, { x: 5.9, z: 3 }, { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }))
+      .toBe(routePointError(square.points, { x: 5.9, z: 3 }, { width: 12, depth: 12 }));
+  });
+
+  it('walk bounds prefer the real scan range and fall back to the layout rect', () => {
+    // 实景：点云四至内缩 0.3 m 余量。
+    expect(personWalkBounds({ minX: 2, maxX: 14, minZ: -1, maxZ: 9 }, { width: 12, depth: 12 }))
+      .toEqual({ minX: 2.3, minZ: -0.7, maxX: 13.7, maxZ: 8.7 });
+    // 无实景（null / undefined）退回布局名义矩形。
+    expect(personWalkBounds(null, { width: 12, depth: 9 }))
+      .toEqual({ minX: -5.7, minZ: -4.2, maxX: 5.7, maxZ: 4.2 });
+    expect(personWalkBounds(undefined, { width: 12, depth: 9 }))
+      .toEqual({ minX: -5.7, minZ: -4.2, maxX: 5.7, maxZ: 4.2 });
+    // 范围退化（任一边 ≤ 2×0.3 m）同样退回布局矩形，避免夹取框翻转把人钉死。
+    expect(personWalkBounds({ minX: 0, maxX: 0.5, minZ: 0, maxZ: 8 }, { width: 12, depth: 9 }))
+      .toEqual({ minX: -5.7, minZ: -4.2, maxX: 5.7, maxZ: 4.2 });
   });
 });
 

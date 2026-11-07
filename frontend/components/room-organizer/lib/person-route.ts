@@ -253,17 +253,17 @@ export function stepRouteFollower(
   return { x: state.x, z: state.z, facing: state.facing, moving, blocked };
 }
 
-/** 画布布点时的合法性检查：界内（房间中心为原点）、与上一点不重叠。返回错误文案或 null。 */
-export function routePointError(
+/** 画布布点时的合法性检查（矩形形式）：界内（四至直接给定——实景点云范围
+ * 有落位偏移，不再以房间中心为原点）、与上一点不重叠。返回错误文案或 null。 */
+export function routePointErrorInRect(
   points: readonly Vec2[],
   point: Vec2,
-  bounds: { width: number; depth: number }
+  rect: { minX: number; maxX: number; minZ: number; maxZ: number }
 ): string | null {
   if (points.length >= MAX_WAYPOINTS) return `路线最多 ${MAX_WAYPOINTS} 个途经点。`;
   const margin = ROUTE_BOUNDARY_MARGIN_M;
-  const halfW = bounds.width / 2 - margin;
-  const halfD = bounds.depth / 2 - margin;
-  if (Math.abs(point.x) > halfW || Math.abs(point.z) > halfD) {
+  if (point.x < rect.minX + margin || point.x > rect.maxX - margin ||
+      point.z < rect.minZ + margin || point.z > rect.maxZ - margin) {
     return '路点要留在场地内（距边界至少 0.3 m）。';
   }
   const last = points[points.length - 1];
@@ -271,4 +271,44 @@ export function routePointError(
     return '新路点离上一个点太近了（至少 0.15 m）。';
   }
   return null;
+}
+
+/** 画布布点时的合法性检查：界内（房间中心为原点）、与上一点不重叠。返回错误文案或 null。 */
+export function routePointError(
+  points: readonly Vec2[],
+  point: Vec2,
+  bounds: { width: number; depth: number }
+): string | null {
+  return routePointErrorInRect(points, point, {
+    minX: -bounds.width / 2,
+    maxX: bounds.width / 2,
+    minZ: -bounds.depth / 2,
+    maxZ: bounds.depth / 2,
+  });
+}
+
+/**
+ * 巡游夹取框：真实景（点云就绪）用点云实测四至内缩边界余量——巡游人物与
+ * 第一人称漫游共用同一条实景围栏，不再被布局名义矩形困住或放空；无实景或
+ * 范围退化（任一边 ≤ 2×余量）时回退布局矩形。坐标同为场景系（房间中心原点）。
+ */
+export function personWalkBounds(
+  splat: { minX: number; maxX: number; minZ: number; maxZ: number } | null | undefined,
+  layout: { width: number; depth: number }
+): { minX: number; minZ: number; maxX: number; maxZ: number } {
+  const margin = ROUTE_BOUNDARY_MARGIN_M;
+  if (splat && splat.maxX - splat.minX > margin * 2 && splat.maxZ - splat.minZ > margin * 2) {
+    return {
+      minX: splat.minX + margin,
+      minZ: splat.minZ + margin,
+      maxX: splat.maxX - margin,
+      maxZ: splat.maxZ - margin,
+    };
+  }
+  return {
+    minX: -(layout.width / 2 - margin),
+    minZ: -(layout.depth / 2 - margin),
+    maxX: layout.width / 2 - margin,
+    maxZ: layout.depth / 2 - margin,
+  };
 }

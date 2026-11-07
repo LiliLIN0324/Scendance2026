@@ -60,7 +60,7 @@ import { researchBasemapPlacement, researchGeoToWorld } from './three/research-b
 import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
 import { useSplatPreview } from './hooks/use-splat-preview';
 import { useSplatLod } from './hooks/use-splat-lod';
-import type { SplatPosition, SplatTransformMode } from './three/splat-preview';
+import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
@@ -108,7 +108,7 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
-import { ROUTE_WAYPOINT_CLEARANCE_WARN_M, routePointError } from './lib/person-route';
+import { ROUTE_WAYPOINT_CLEARANCE_WARN_M, routePointError, routePointErrorInRect } from './lib/person-route';
 import { buildWalkColliders, walkerClearanceAt } from './lib/walk-collision';
 import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
@@ -557,6 +557,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   // 近景跟拍（PEOPLE-04 后半）：目标 id 只是 UI 态；镜头推进在渲染循环里
   // （three/person-follow），人物被删时由 follow 模块回调收摊。
   const [followPersonId, setFollowPersonId] = useState<string | null>(null);
+  // 实景点云实测四至（茶亭实景接线）：splatState 声明在 handleEmptyClick 之后，
+  // 布点校验经 ref 读现值（每渲染同步），渲染进 useSceneEffects 时直接传值。
+  const splatWalkBoundsRef = useRef<SplatWalkBounds | null>(null);
   // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
 
@@ -610,7 +613,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         const points = routeDraft?.itemId === routeDrawItemId
           ? routeDraft.points
           : item.walkRoute?.points ?? [];
-        const problem = routePointError(points, { x, z }, { width: layout.width, depth: layout.height });
+        // 真实景（点云就绪）按点云实测四至校验，与巡游夹取框同一围栏；
+        // 无实景退回布局名义矩形（房间中心原点）。
+        const problem = splatWalkBoundsRef.current
+          ? routePointErrorInRect(points, { x, z }, splatWalkBoundsRef.current)
+          : routePointError(points, { x, z }, { width: layout.width, depth: layout.height });
         if (problem) {
           setRouteDrawHint(problem);
           return;
@@ -1907,6 +1914,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   // 环境预览就绪时，围栏换成点云真实范围：1:1 实景漫游（不再被 12×9 的场地板困住）。
   const splatWalkBounds = splatState.status === 'ready' ? splatState.walkBounds ?? null : null;
+  splatWalkBoundsRef.current = splatWalkBounds;
 
   const { phase: walkthroughPhase } = useWalkthrough({
     enabled: isReady && walkthroughActive,
@@ -1950,6 +1958,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
     layout,
     activeFloor,
     activeFloorIndex,
+    ...(splatWalkBounds ? { personRouteBounds: splatWalkBounds } : {}),
     view,
     ...(referenceImage.layer ? { referenceImage: referenceImage.layer } : {}),
     selectedItemId,
