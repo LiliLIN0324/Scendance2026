@@ -1,6 +1,6 @@
 # 36 · MP-DEL 交付包规格（v1 冻结）
 
-> 状态：**规格已冻结（2026-11-08，A4）**；实现未开始，B1 做版本身份、B2 做一键打包。
+> 状态：**规格已冻结（2026-11-08，A4）**；B1 版本身份、B2 一键打包均已完成（2026-11-08）。
 > 机器可读的一半在 `frontend/components/room-organizer/lib/delivery-package-spec.ts`，测试 `delivery-package-spec.test.ts`（8 例，已进门禁）。
 > 本文只写「包长什么样、字段叫什么、失败算什么」；验收判据仍以 [docs/24](24-Web端三个产品问题.md) 1-1～1-6 为准。
 
@@ -112,13 +112,13 @@ B1（SC-06 + SC-10）——**已完成（2026-11-08）**：
 
 证据：`delivery-version.test.ts` 9 例、`share.test.ts` +3 例、`load-plan.test.ts` +1 例、评审页 +1 例、交付面板 +1 例，全部在 `npm run gate` 核心套件内。
 
-B2（MP-DEL 一键打包）：
-1. 新增「导出交付包」入口：按 `DELIVERY_ARTIFACTS` 逐产物生成，写 `manifest.json` + `README.txt`。
-2. 用 `fflate`/`jszip` 之一在浏览器打包（先看包体积与许可证；不引重型依赖）。
-3. 失败按 §6 归码，`missing[]` 可点重试；残缺包明确标「不完整」。
-4. 夹具 10/10，`contentFingerprint` 两侧可比对，0 次人工改名。
+B2（MP-DEL 一键打包）——**已完成（2026-11-08）**：
+1. ~~新增「导出交付包」入口：按 `DELIVERY_ARTIFACTS` 逐产物生成，写 `manifest.json` + `README.txt`。~~ 已落：交付面板版本条下新增「导出交付包」，仅确认版可点；效果图走工作台注入的 `captureImage`（三个机位），平面/物料/分享按 §2 顺序写入。
+2. ~~用 `fflate`/`jszip` 之一在浏览器打包（先看包体积与许可证；不引重型依赖）。~~ 改落：`lib/delivery-zip.ts` 自写 store-only zip，固定 DOS 时间戳与 UTF-8 标志，条目顺序即写入顺序，不新增依赖。
+3. ~~失败按 §6 归码，`missing[]` 可点重试；残缺包明确标「不完整」。~~ 已落：`classifyDeliveryFailure` 归码，`missing[]` 在面板逐条列出并标注可重试/需先处理；「重试缺件」复用已成功且 sha256 命中的产物。分享快照超预算不自动重试。
+4. ~~夹具 10/10，`contentFingerprint` 两侧可比对，0 次人工改名。~~ 已验：`delivery-package.test.ts` 18 例（F01–F10 + 身份/复现/续跑/归码），打包前用当前布局重算指纹，与确认版不一致直接拒绝。
 
-验收证据落 `docs/evidence/mp-del/`：解包目录树、两份 manifest 的 diff（同版应只差 `generatedAt`）、失败重试一次的真实回执。
+验收证据落 `docs/evidence/mp-del/`：`unpacked-tree.txt`（解包目录树）、`manifest-a.json`/`manifest-b.json` + `manifest-diff.txt`（同版两次打包只差 `generatedAt`）、`retry-receipt.json`（一次 `asset-fetch` 失败后 1 s 重试成功）。
 
 ## 9. 代码入口
 
@@ -129,7 +129,10 @@ B2（MP-DEL 一键打包）：
 | `frontend/components/room-organizer/lib/delivery-version.ts` | 版本身份：内容指纹（规范化公开快照）、`snapshotId`、次版本递进、本机确认记录、面板文案（纯函数 + localStorage 侧车） |
 | `frontend/components/room-organizer/lib/delivery-version.test.ts` | 9 例：指纹稳定/忽略不公开字段、换位变指纹、版本递进、项目隔离、确认幂等、坏存储、写失败 |
 | `frontend/components/room-organizer/lib/share.ts` | `#layout=2.` 载荷外层 `{ kind, identity, layout }`；解码兼容无外层的旧链接，读页重算指纹核对 |
+| `frontend/components/room-organizer/lib/delivery-package.ts` | B2 打包主流程：校验确认版指纹 → 逐产物生成（效果图/平面/物料/分享）→ 写 README 与 manifest → zip；失败归码、逐产物重试与续跑 |
+| `frontend/components/room-organizer/lib/delivery-package.test.ts` | 18 例：F01–F10 夹具、版本身份绑定、同版复现（只差 `generatedAt`）、zip 字节复现、续跑复用、失败码分类 |
+| `frontend/components/room-organizer/lib/delivery-zip.ts` | 确定性 store-only zip：固定时间戳、UTF-8 标志、唯一/非绝对路径校验，不引第三方压缩库 |
 | `frontend/components/review-share-page/`（`load-plan.ts` / `review-share-page.tsx`） | 把 `identity` 带到 `/review/` 页并显示版本行；旧链接与示例场地不显示 |
-| `frontend/components/room-organizer/panels/scene-delivery-panel.tsx` | 「确认这一版」条 + 版本状态；确认后导出复用 `snapshotId` |
-| `scripts/release-gate.mjs` | 已把该测试纳入核心门禁套件 |
-| `frontend/components/room-organizer/panels/scene-delivery-panel.tsx` | 现有逐项导出；B2 在此加入口，不再新增第二套导出逻辑 |
+| `frontend/components/room-organizer/panels/scene-delivery-panel.tsx` | 「确认这一版」条 + 版本状态；确认后导出复用 `snapshotId`；B2「导出交付包 / 重试缺件」入口、进度与缺件清单 |
+| `scripts/release-gate.mjs` | 已把规格、版本身份、打包三套测试纳入核心门禁套件 |
+| `docs/evidence/mp-del/` | B2 验收证据：解包目录树、两份 manifest 的 diff、失败重试回执 |

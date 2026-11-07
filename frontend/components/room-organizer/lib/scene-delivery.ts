@@ -369,8 +369,10 @@ export async function exportDeliveryGlb(layout: RoomLayout, controller?: Backend
   } finally { disposeOwnedModel(scene); if(loaded)disposeOwnedModel(loaded); }
 }
 
-export function downloadSceneDelivery(data: BlobPart, type: string, name: string, extension: 'glb'|'json'|'csv'|'html'): void {
-  const url = URL.createObjectURL(new Blob([data],{type}));
+export function downloadSceneDelivery(data: BlobPart | Uint8Array, type: string, name: string, extension: 'glb'|'json'|'csv'|'html'|'zip'): void {
+  // Uint8Array<ArrayBufferLike> 不能直接当 BlobPart（可能落在 SharedArrayBuffer 上），复制一份定回来。
+  const body: BlobPart = data instanceof Uint8Array ? data.slice() : data;
+  const url = URL.createObjectURL(new Blob([body],{type}));
   const anchor = document.createElement('a');
   anchor.href=url;anchor.download=`${(name||'Scendance').replace(/[\\/:*?"<>|\s]+/g,'_')}.${extension}`;
   try { anchor.click(); } finally { setTimeout(()=>URL.revokeObjectURL(url),0); }

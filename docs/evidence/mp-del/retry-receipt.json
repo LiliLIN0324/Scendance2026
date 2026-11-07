@@ -1,0 +1,25 @@
+{
+  "failure": "01-效果图/效果图-01.png 第一次 asset-fetch",
+  "waitsMs": [
+    1000
+  ],
+  "retries": [
+    {
+      "path": "01-效果图/效果图-01.png",
+      "attempt": 1,
+      "code": "asset-fetch",
+      "detail": "模拟贴图拉取失败（第一次）",
+      "waitedMs": 1000
+    }
+  ],
+  "attempts": {
+    "01-效果图/效果图-01.png": 2,
+    "01-效果图/效果图-02.png": 1,
+    "01-效果图/效果图-03.png": 1,
+    "02-平面图/平面-1F.dxf": 1,
+    "03-物料清单/物料清单.csv": 1,
+    "04-分享/分享链接.txt": 1
+  },
+  "finalStatus": "complete",
+  "missing": []
+}

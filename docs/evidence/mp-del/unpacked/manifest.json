@@ -1,0 +1,63 @@
+{
+  "format": "scendance-delivery-package",
+  "packageVersion": 1,
+  "deliveryVersion": "v1.0",
+  "snapshotId": "a525fadfac725815",
+  "layoutId": "project-b2",
+  "projectName": "西湖会客厅",
+  "generatedAt": "2026-11-08T10:00:00.000Z",
+  "sceneFormat": {
+    "format": "scendance-scene-delivery",
+    "version": 2
+  },
+  "contentFingerprint": "a525fadfac72581545550d92b07a86161cc9c3b548a313313ad51a89217c53f2",
+  "status": "complete",
+  "files": [
+    {
+      "kind": "hero",
+      "path": "01-效果图/效果图-01.png",
+      "bytes": 70,
+      "sha256": "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+    },
+    {
+      "kind": "hero",
+      "path": "01-效果图/效果图-02.png",
+      "bytes": 70,
+      "sha256": "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+    },
+    {
+      "kind": "hero",
+      "path": "01-效果图/效果图-03.png",
+      "bytes": 70,
+      "sha256": "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+    },
+    {
+      "kind": "floor",
+      "path": "02-平面图/平面-1F.dxf",
+      "bytes": 1367,
+      "sha256": "f975bea0ef94bfffcec5adc89d5f33bc40e0101645fe71d1b80d4ced92a90a71"
+    },
+    {
+      "kind": "materials",
+      "path": "03-物料清单/物料清单.csv",
+      "bytes": 543,
+      "sha256": "37e1ad4abecb4f9f565cad917e1ed20f7b9c8a5eb4336ececf893550ae2100a5"
+    },
+    {
+      "kind": "share",
+      "path": "04-分享/分享链接.txt",
+      "bytes": 946,
+      "sha256": "5d9f058738b192a046a0959c02c671e25b8069d66cd1d8c8267ffdfa3d891c9f"
+    },
+    {
+      "kind": "readme",
+      "path": "README.txt",
+      "bytes": 982,
+      "sha256": "f7bdf2ee1dba9ccfec73d7d116ba0ecaceb29c8f75b3e7bd5efcc1449cf427b5"
+    }
+  ],
+  "missing": [],
+  "share": {
+    "url": "https://scendance.example/review/#layout=2.pZGxahwxEIbf5U-rM6vdk29PbcDgF3BjXMxJWq_itbRoZSeXY8ukCoE0KUIgJCRNDOkNBr-M75Iyj2C0vvO5cCDgKYYRGv3z6Z8FTqzTkOiUcZqcMqO2ITfqagoGDFYbF22cQy6gTWPPTZgfmNBZ7yBxzncyMHSO2q72cT8JkchFRboiNclFyQUYlHfRuLhn3bEJbbAuPtI3FkJkeprPsgmVu3yXKzVVxUyMSyp4UfCCtOBUTnM-UaKo8jQ3UjzrIKEDVRE9Q0NzfxYTrKNTA4k_P65Xlx9vrj4tf31bvn8DhpdWxxqyZKiNPa7jUFaN96GDPFzApk9UHGwjwfewbnjuGx8g8UxNSUx0siea0wfPsnWMhjROqdwc15GE47xNwqomG7Zzlp_frr6-2xLynZJBm_a-3vDy5OiapBoikahhI3-__PwAhtZ3Ng47WuAVZMbwGjLrGYKPdHeR9ez_qfN_Uv--uFx9f-Ar3zI_hTh_lPioP2J3zG3wL4yKo1mOvr8F"
+  }
+}

@@ -18,6 +18,12 @@ import { SceneDeliveryPanel } from './scene-delivery-panel';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { FurnitureItem } from '../lib/types';
 vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
+// jsdom 的 Blob 没有 stream()，真实压缩在 node 环境的 delivery-package.test 里验；面板只验入口接线。
+vi.mock('../lib/share',async importOriginal=>({ ...await importOriginal<typeof import('../lib/share')>(),encodeShareUrl:vi.fn(async(layout,origin)=>{
+  const { contentFingerprintOfLayout }=await import('../lib/delivery-version');
+  const contentFingerprint=await contentFingerprintOfLayout(layout);
+  return { url:`${origin}#layout=2.mock`,strippedFloorPlan:false,identity:{deliveryVersion:'v1.0',snapshotId:contentFingerprint.slice(0,16),contentFingerprint,status:'confirmed' as const} };
+}) }));
 vi.mock('@/lib/production-plan-export',async importOriginal=>{
   const original=await importOriginal<typeof import('@/lib/production-plan-export')>();
   return {...original,productionPlanHandoffHtml:vi.fn(original.productionPlanHandoffHtml)};
@@ -525,4 +531,27 @@ describe('saved execution timetable delivery',()=>{
     expect(screen.queryByRole('button',{name:'这一版已确认'})).toBeNull();
     localStorage.clear();
   });
+  it('builds a versioned delivery package only after the version is confirmed',async()=>{
+    localStorage.clear();
+    const current=workLayout();
+    // 1×1 合法 PNG：交付包会校验效果图确实是 PNG，不能拿占位串糊过去。
+    const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const captureImage=vi.fn(async()=>png);
+    render(<SceneDeliveryPanel layout={current} controller={controller} captureImage={captureImage}/>);
+    expect((await screen.findByRole('button',{name:'导出交付包'})).hasAttribute('disabled')).toBe(true);
+    expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'确认这一版'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'这一版已确认'})).toBeTruthy());
+    const packageButton=screen.getByRole('button',{name:'导出交付包'});
+    expect(packageButton.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(packageButton);
+    await waitFor(()=>expect(document.querySelector('[data-delivery-package-status="complete"]')).toBeTruthy(),{timeout:5000});
+    expect(captureImage).toHaveBeenCalledTimes(3);
+    const [data,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls.at(-1)!;
+    expect(data).toBeInstanceOf(Uint8Array);
+    expect(mime).toBe('application/zip');
+    expect(name).toMatch(/^幕景_.+_v1\.0$/);
+    expect(extension).toBe('zip');
+    localStorage.clear();
+  },20000);
 });

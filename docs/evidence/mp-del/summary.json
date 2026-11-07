@@ -1,0 +1,19 @@
+{
+  "card": "B2",
+  "date": "2026-11-08",
+  "how": "真实 buildDeliveryPackage（fixed generatedAt / 1×1 PNG capture）在 vitest node 环境跑；zip 由本仓 delivery-zip 以固定时间戳写出；证据目录为解包后的真实条目",
+  "acceptance": "按 docs/36 §2 出四件套 + manifest + README；0 次人工改名；同版两次打包只差 generatedAt；失败一次后重试成功",
+  "root": "幕景_西湖会客厅_v1.0",
+  "fileCount": 8,
+  "deliveryVersion": "v1.0",
+  "snapshotId": "a525fadfac725815",
+  "contentFingerprint": "a525fadfac72581545550d92b07a86161cc9c3b548a313313ad51a89217c53f2",
+  "status": "complete",
+  "manifestDiff": "only generatedAt",
+  "retry": {
+    "path": "01-效果图/效果图-01.png",
+    "attempts": 2,
+    "waitedMs": 1000,
+    "finalStatus": "complete"
+  }
+}
