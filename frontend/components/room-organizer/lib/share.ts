@@ -1,4 +1,11 @@
 import { layoutForExport } from '../../../lib/layout-export';
+import { DELIVERY_VERSION_PATTERN } from './delivery-package-spec';
+import {
+  contentFingerprintOfShareable,
+  deliveryShareableLayout,
+  deliveryVersionState,
+  snapshotIdFor,
+} from './delivery-version';
 import { MAX_LAYOUT_JSON_BYTES, parseLayoutEventOperations, parseStoredLayout } from './schema';
 import type { RoomLayout } from './types';
 
@@ -23,13 +30,31 @@ export const MAX_SHARE_HASH_LENGTH = 64 * 1024;
 export type ShareDecodeFailure = 'too-large' | 'unreadable';
 
 export type ShareDecodeResult =
-  | { ok: true; layout: RoomLayout }
+  | { ok: true; layout: RoomLayout; identity: ReadPlanShareIdentity | null }
   | { ok: false; reason: ShareDecodeFailure };
+
+/** 链接自带的交付版本身份（SC-10）：旧链接没有这一段，读作 null。 */
+export interface PlanShareIdentity {
+  deliveryVersion: string;
+  snapshotId: string;
+  contentFingerprint: string;
+  status: 'confirmed' | 'draft';
+}
+
+/** 读链接时重算指纹的核对结果；`verified=false` 说明快照号和内容对不上。 */
+export interface ReadPlanShareIdentity extends PlanShareIdentity {
+  verified: boolean;
+}
+
+/** 载荷外壳标记：`{ kind, identity, layout }`；没有这个标记就是旧链接的裸布局。 */
+export const PLAN_SHARE_KIND = 'scendance-plan-share';
 
 export interface EncodeShareUrlResult {
   url: string;
   /** True when the layout had a floor-plan image that was stripped to keep the URL compact. */
   strippedFloorPlan: boolean;
+  /** 这条链接绑定的版本身份；内容未确认时为草案身份。 */
+  identity: PlanShareIdentity;
 }
 
 export async function encodeShareUrl(
@@ -39,13 +64,13 @@ export async function encodeShareUrl(
   const stripped = layout.floorPlanImage !== undefined;
   const checked = parseLayoutEventOperations(layout);
   if (!checked) throw new Error('制作计划或活动安排无效，请先核对后再分享。');
-  const shareable = layoutForExport(checked, true);
-  delete shareable.floorPlanImage;
+  const shareable = deliveryShareableLayout(checked);
 
-  const json = JSON.stringify(shareable);
+  const identity = await planShareIdentity(shareable);
+  const json = JSON.stringify({ kind: PLAN_SHARE_KIND, identity, layout: shareable });
   const compressed = await deflateRaw(new TextEncoder().encode(json));
   const encoded = `${V2_PREFIX}${bytesToBase64Url(compressed)}`;
-  return { url: `${origin}${HASH_PREFIX}${encoded}`, strippedFloorPlan: stripped };
+  return { url: `${origin}${HASH_PREFIX}${encoded}`, strippedFloorPlan: stripped, identity };
 }
 
 /**
@@ -87,8 +112,12 @@ export async function readShareHash(hash: string): Promise<ShareDecodeResult> {
     // instead of silently decoding to replacement characters.
     const json = new TextDecoder('utf-8', { fatal: true }).decode(jsonBytes);
     const parsed: unknown = JSON.parse(json);
-    const layout = parseStoredLayout(parsed);
-    return layout ? { ok: true, layout: layoutForExport(layout, true) } : { ok: false, reason: 'unreadable' };
+    const envelope = readPlanShareEnvelope(parsed);
+    const layout = parseStoredLayout(envelope ? envelope.layout : parsed);
+    if (!layout) return { ok: false, reason: 'unreadable' };
+    const exported = layoutForExport(layout, true);
+    const identity = envelope?.identity ? await verifyPlanShareIdentity(envelope.identity, exported) : null;
+    return { ok: true, layout: exported, identity };
   } catch {
     return { ok: false, reason: 'unreadable' };
   }
@@ -96,6 +125,56 @@ export async function readShareHash(hash: string): Promise<ShareDecodeResult> {
 
 export function isShareUrlReasonablySized(url: string): boolean {
   return url.length <= MAX_REASONABLE_URL_LENGTH;
+}
+
+async function planShareIdentity(shareable: RoomLayout): Promise<PlanShareIdentity> {
+  const state = await deliveryVersionState({ layout: shareable, storage: shareStorage() });
+  return {
+    deliveryVersion: state.deliveryVersion,
+    snapshotId: state.snapshotId,
+    contentFingerprint: state.contentFingerprint,
+    status: state.status === 'confirmed' ? 'confirmed' : 'draft',
+  };
+}
+
+function shareStorage(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readPlanShareEnvelope(value: unknown): { identity: PlanShareIdentity | null; layout: unknown } | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (record.kind !== PLAN_SHARE_KIND) return null;
+  if (!record.layout || typeof record.layout !== 'object') return null;
+  const identity = parsePlanShareIdentity(record.identity);
+  return { identity, layout: record.layout };
+}
+
+function parsePlanShareIdentity(value: unknown): PlanShareIdentity | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const deliveryVersion = typeof record.deliveryVersion === 'string' ? record.deliveryVersion : '';
+  const snapshotId = typeof record.snapshotId === 'string' ? record.snapshotId : '';
+  const contentFingerprint = typeof record.contentFingerprint === 'string' ? record.contentFingerprint : '';
+  if (!DELIVERY_VERSION_PATTERN.test(deliveryVersion)) return null;
+  if (!/^[0-9a-f]{16}$/.test(snapshotId) || !/^[0-9a-f]{64}$/.test(contentFingerprint)) return null;
+  if (snapshotIdFor(contentFingerprint) !== snapshotId) return null;
+  if (record.status !== 'confirmed' && record.status !== 'draft') return null;
+  return { deliveryVersion, snapshotId, contentFingerprint, status: record.status };
+}
+
+/** 链接内容自带指纹：读页时重算一遍，确认快照号确实对得上这一版。 */
+async function verifyPlanShareIdentity(identity: PlanShareIdentity, layout: RoomLayout): Promise<ReadPlanShareIdentity> {
+  try {
+    const fingerprint = await contentFingerprintOfShareable(layout);
+    return { ...identity, verified: fingerprint === identity.contentFingerprint };
+  } catch {
+    return { ...identity, verified: false };
+  }
 }
 
 // CompressionStream/DecompressionStream are native in every modern browser and

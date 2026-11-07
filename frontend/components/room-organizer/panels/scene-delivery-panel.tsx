@@ -11,6 +11,12 @@ import { downloadTextFile } from '../lib/plan-export/download';
 import { layoutToDxf } from '../lib/plan-export/dxf';
 import { openPlanPrintWindow } from '../lib/plan-export/print';
 import { blankHandoff, effectiveHandoffStatus, handoffBasis, HANDOFF_STATUS_LABELS } from '../lib/scene-handoff';
+import {
+  confirmDeliveryVersion,
+  deliveryVersionLabel,
+  deliveryVersionState,
+  type DeliveryVersionState,
+} from '../lib/delivery-version';
 import { EventOperationsPanel } from './event-operations-panel';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
 import { MaterialCheckinPanel } from './material-checkin-panel';
@@ -137,6 +143,31 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
+  const [version, setVersion] = useState<DeliveryVersionState | null>(null);
+  const [versionBusy, setVersionBusy] = useState(false), [versionNotice, setVersionNotice] = useState('');
+  const versionLatest = useRef<DeliveryVersionState | null>(null);
+  versionLatest.current = version;
+  useEffect(() => {
+    let cancelled = false;
+    setVersion(null); setVersionNotice('');
+    void deliveryVersionState({ layout, storage: panelStorage() })
+      .then(state => { if (!cancelled) setVersion(state); })
+      .catch(() => { if (!cancelled) setVersionNotice('版本身份没核对出来；导出仍按当前内容走。'); });
+    return () => { cancelled = true; };
+  }, [layout]);
+  async function confirmVersion(): Promise<void> {
+    if (versionBusy) return;
+    setVersionBusy(true); setVersionNotice('');
+    try {
+      const result = await confirmDeliveryVersion({ layout, storage: panelStorage() });
+      setVersion(result.state);
+      setVersionNotice(`${result.record.deliveryVersion} 已确认：快照 ${result.record.snapshotId}。导出与分享链接都用这个号。`);
+    } catch (error) {
+      setVersionNotice(error instanceof Error ? error.message : '确认失败，请重试。');
+    } finally {
+      setVersionBusy(false);
+    }
+  }
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
   const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
   useEffect(() => { setView(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials')); }, [deliveryViewRequest, layout.id, operationsAvailable]);
@@ -180,8 +211,11 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     const before = latest.current;
     const stillCurrent = () => mounted.current && latest.current.epoch === before.epoch && latest.current.layout === before.layout && latest.current.controller === before.controller && latest.current.userId === before.userId && latest.current.projectId === before.projectId&&latest.current.checkins===before.checkins&&latest.current.checkinsReady===before.checkinsReady&&latest.current.brief===before.brief&&latest.current.briefReady===before.briefReady;
     const previous = exportSnapshot.current;
-    const snapshot = kind !== 'activity' && kind !== 'timetable' && previous && previous.epoch === before.epoch && previous.layout === layout && previous.controller === before.controller && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins&&previous.brief===before.brief&&previous.briefReady===before.briefReady
-      ? previous : { ...before, metadata: { id: crypto.randomUUID(), generatedAt: new Date().toISOString() } };
+    // 确认过的版本用快照号做文件号，同一版重复导出会复现同一个号；草案才退回导出批次号。
+    const confirmedSnapshot = versionLatest.current?.status === 'confirmed' ? versionLatest.current.snapshotId : null;
+    const reusePrevious = !!previous && (confirmedSnapshot === null || previous.metadata.id === confirmedSnapshot);
+    const snapshot = kind !== 'activity' && kind !== 'timetable' && previous && reusePrevious && previous.epoch === before.epoch && previous.layout === layout && previous.controller === before.controller && previous.userId === before.userId && previous.projectId === before.projectId&&previous.checkins===before.checkins&&previous.brief===before.brief&&previous.briefReady===before.briefReady
+      ? previous : { ...before, metadata: { id: confirmedSnapshot ?? crypto.randomUUID(), generatedAt: new Date().toISOString() } };
     exportSnapshot.current = snapshot;
     const metadata = snapshot.metadata;
     try {
@@ -252,6 +286,22 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
   }
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
     <div className="sc-section-heading"><div><h2>执行资料</h2></div></div>
+    {/* 版本身份（SC-06）：确认一次分配一个号，导出与分享链接共用。 */}
+    <div className="dl-version" data-delivery-version={version?.deliveryVersion ?? ''} data-snapshot-id={version?.snapshotId ?? ''} data-delivery-version-status={version?.status ?? 'checking'}>
+      <div className="dl-version-main">
+        <p className="dl-version-label">交付版本</p>
+        <p className="dl-version-line">
+          <b>{version?.deliveryVersion ?? '—'}</b>
+          <span>{deliveryVersionLabel(version)}</span>
+          {version && <small>快照 {version.snapshotId} · 内容指纹 {version.contentFingerprint.slice(0, 8)}…</small>}
+        </p>
+      </div>
+      <button type="button" className="sc-button" disabled={versionBusy || !version || version.status === 'confirmed'} onClick={() => void confirmVersion()}>
+        {version?.status === 'confirmed' ? '这一版已确认' : versionBusy ? '正在确认…' : '确认这一版'}
+      </button>
+    </div>
+    <p className="sc-note">确认后导出文件名和分享链接都用这个快照号；再改草案会排到下一版，旧链接仍打开原来那一版。</p>
+    {versionNotice && <p className="sc-note" role="status">{versionNotice}</p>}
     {/* 六页执行台留在折叠里，不当默认门面。 */}
     <details className="dl-tools" open={toolsOpen} onToggle={event => setToolsOpen(event.currentTarget.open)}>
       <summary>内部资料</summary>
@@ -327,4 +377,12 @@ export function SceneDeliveryPanel({ layout, controller, onUpdateItem, onLocate,
     {preview.error && view === 'operations' && <p className="sc-note">当前场馆模型暂不能完整交付，文字活动安排仍可单独导出。</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
   </section>;
+}
+
+function panelStorage(): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch {
+    return null;
+  }
 }

@@ -51,6 +51,7 @@ frontend/.preview/
 # To admit a new evidence dir: add `!docs/evidence/<sub>/` after the `aholo/*`
 # re-ignore line, and re-ignore any heavy payloads it contains.
 docs/evidence/*
+!docs/evidence/B1/
 !docs/evidence/aholo/
 docs/evidence/aholo/*
 !docs/evidence/aholo/sculpture-rig/

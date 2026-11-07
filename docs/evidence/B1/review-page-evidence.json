@@ -1,0 +1,23 @@
+{
+  "card": "B1",
+  "date": "2026-11-08",
+  "how": "static export (.next-ci) served on 127.0.0.1:4178; links produced by the app's own encodeShareUrl against a memory storage holding a confirmed v1.0 record; opened in headless Chromium via Playwright",
+  "acceptance": "改草案后旧分享链接仍出旧版",
+  "confirmedLink": {
+    "name": "西湖会客厅 · 旧版方案",
+    "deliveryVersion": "v1.0",
+    "status": "confirmed",
+    "snapshotId": "ccfa4f007b5649c8",
+    "contentFingerprint": "ccfa4f007b5649c84c75021b37e250727e5ca5e42d97d329026d402c6004d8c7",
+    "versionLine": "v1.0 已确认的交付版 快照 ccfa4f007b5649c8 · 内容与快照一致，旧链接一直指着这一版"
+  },
+  "draftLink": {
+    "name": "西湖会客厅 · 新草案",
+    "deliveryVersion": "v1.1",
+    "status": "draft",
+    "snapshotId": "cb45838aeb838709",
+    "contentFingerprint": "cb45838aeb838709f540c41fad332cf9c67478b61e5d81d5e65e8687b5d65850",
+    "versionLine": "v1.1 草案版，分享者尚未确认 快照 cb45838aeb838709 · 内容与快照一致，旧链接一直指着这一版"
+  },
+  "consoleErrors": []
+}

@@ -28,3 +28,12 @@
 .dl-tools[open] > summary::before { content: '▾'; }
 .dl-tools > summary small { font-size: 11px; opacity: .8; }
 .dl-tools .sc-execution-tabs { margin-top: 10px; }
+
+/* SC-06 版本身份：一行号 + 一个确认动作，不折进内部资料里。 */
+.dl-version { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0 8px; padding: 10px 12px; border: 1px solid var(--sc-line, #d6d6d2); border-radius: 8px; background: #ffffff80; }
+.dl-version-main { min-width: 0; }
+.dl-version-label { margin: 0; font-size: 11px; letter-spacing: .04em; color: var(--sc-muted, #6f6f6f); }
+.dl-version-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 2px 0 0; font-size: 13px; color: var(--sc-ink, #2f2f2f); }
+.dl-version-line b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.dl-version-line small { flex-basis: 100%; font-size: 11px; color: var(--sc-muted, #6f6f6f); overflow-wrap: anywhere; }
+.dl-version > button { flex: 0 0 auto; }
