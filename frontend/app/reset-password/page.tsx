@@ -26,7 +26,7 @@ export default function ResetPasswordPage(): JSX.Element {
   };
 
   return <main className="sc-auth-page">
-    <a className="sc-auth-brand" href="/introduction#scene">幕景 <span>Scendance</span></a>
+    <a className="sc-auth-brand" href="/introduction#scene">幕景 <span className="sc-brand-en">Scendance</span></a>
     <section className="sc-auth-card">
       <div className="sc-auth-intro"><span>BACK TO YOUR SCENE</span><h1>重新连接，<br />你的创作。</h1><p>验证邮箱后设置新密码，<br />回到你的工作室。</p><a href="/auth">← 返回登录</a></div>
       <div className="sc-auth-form-wrap">

@@ -8,6 +8,7 @@ import type { FloorLayout, RoomLayout } from '../components/room-organizer/lib/t
 
 // ── 品牌色（与 docs/figures/stage-*.html 保持一致）─────────────────────────
 const BRAND = {
+  doorGreen: '#35624A',
   darkGreen: '#2C4A34',
   midGreen: '#3E6B45',
   lightGreen: '#6C9A63',
@@ -102,23 +103,38 @@ function drawBackground(ctx: CanvasRenderingContext2D): void {
   }
 }
 
-/** 三柱标（Scendance mark）。 */
+/** 「AI 的门」品牌标：绿圆角块 + 白拱门洞 + 白眼，几何取自 door.svg（128 单位）。 */
 function drawBrandMark(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  const bars = [
-    { h: 17, w: 8, c: BRAND.darkGreen, a: 0.55 },
-    { h: 25, w: 8, c: BRAND.darkGreen, a: 1 },
-    { h: 30, w: 8, c: BRAND.lightGreen, a: 1 },
-  ];
-  let cursor = x;
-  for (const b of bars) {
-    ctx.save();
-    ctx.globalAlpha = b.a;
-    ctx.fillStyle = b.c;
-    roundRect(ctx, cursor, y - b.h, b.w, b.h, 4);
-    ctx.fill();
-    ctx.restore();
-    cursor += b.w + 5;
+  const size = 30;
+  const mark = document.createElement('canvas');
+  mark.width = 128;
+  mark.height = 128;
+  const m = mark.getContext('2d');
+  if (!m) return;
+  roundRect(m, 8.53, 9.14, 110.21, 108.97, 35);
+  m.fillStyle = BRAND.doorGreen;
+  m.fill();
+  // 门洞用 destination-out 挖空，透出下面的报告纸底
+  m.save();
+  m.globalCompositeOperation = 'destination-out';
+  m.beginPath();
+  m.moveTo(47.83, 118.1);
+  m.lineTo(47.83, 89.148);
+  m.arc(64.103, 89.148, 16.273, Math.PI, 0, false);
+  m.lineTo(80.376, 118.1);
+  m.closePath();
+  m.fill();
+  m.restore();
+  m.fillStyle = '#FFFFFF';
+  for (const eye of [{ x: 40, y: 41.92 }, { x: 68.48, y: 39.36 }]) {
+    m.save();
+    m.translate(eye.x, eye.y);
+    m.rotate((12 * Math.PI) / 180);
+    roundRect(m, 0, 0, 13.44, 30.08, 6.72);
+    m.fill();
+    m.restore();
   }
+  ctx.drawImage(mark, x, y - size, size, size);
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

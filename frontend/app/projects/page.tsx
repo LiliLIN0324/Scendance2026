@@ -107,7 +107,7 @@ export default function ProjectsPage(): JSX.Element {
 
   if (!auth.ready || !cloud.user) return <main className="sc-studio-manager"><p role="status">正在打开你的工作室…</p></main>;
   return <main className="sc-studio-manager">
-    <header className="sc-studio-manager-header"><Link className="sc-studio-manager-brand" href="/projects/">幕景 <span>Scendance</span></Link><Link href="/editor/">回到画布 <ArrowUpRight size={16} /></Link></header>
+    <header className="sc-studio-manager-header"><Link className="sc-studio-manager-brand" href="/projects/">幕景 <span className="sc-brand-en">Scendance</span></Link><Link href="/editor/">回到画布 <ArrowUpRight size={16} /></Link></header>
     <div className="sc-studio-manager-layout">
       <aside className="sc-studio-manager-sidebar">
         <label className="sc-studio-manager-switch"><span><Building2 size={16} /> 当前工作室</span><select aria-label="工作室" disabled={busy || loadingStudios} value={studioId} onChange={event => selectStudio(event.target.value)}>
