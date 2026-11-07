@@ -61,7 +61,7 @@ export default function SharedViewPage(): JSX.Element {
   const localAssetUrls = useMemo(() => Object.fromEntries(localSnapshot?.assets.map(asset => [asset.id, asset.url]) ?? []), [localSnapshot]);
 
   return <main className="sc-share-page">
-    <header className="sc-share-masthead"><span>幕景 <small>Scendance</small></span><span>{localSnapshot ? '只读 3D 方案' : '客户只读方案'}</span></header>
+    <header className="sc-share-masthead"><span>幕景 <small className="sc-brand-en">Scendance</small></span><span>{localSnapshot ? '只读 3D 方案' : '客户只读方案'}</span></header>
     {busy ? <section className="sc-share-state" role="status"><h1>正在打开方案</h1><p>正在读取发布版本与模型资源…</p></section> : error ? <section className="sc-share-state" role="alert"><h1>暂时无法查看方案</h1><p>{error}</p><button type="button" onClick={() => setRefresh(value => value + 1)}>重试</button></section> : localSnapshot ? <>
       <div className="sc-share-title">
         <div>

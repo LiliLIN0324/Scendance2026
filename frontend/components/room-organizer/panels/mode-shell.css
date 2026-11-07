@@ -54,8 +54,8 @@
   cursor: pointer;
 }
 .sc-issue-filters button[aria-pressed="true"] {
-  background: var(--wk-green-pale, #e8f0ea);
-  color: var(--wk-green-deep, #3a6247);
+  background: var(--wk-green-pale, #EEF3EF);
+  color: var(--wk-green-deep, #35624A);
   border-color: var(--wk-green, #4a7c59);
 }
 .sc-issue-list { min-height: 0; }
@@ -88,7 +88,7 @@
 .sc-issue-go strong { font-weight: 600; }
 .sc-issue-go small { color: var(--wk-muted, #71767e); }
 .sc-mode-card li.is-on .sc-issue-go {
-  background: var(--wk-green-pale, #e8f0ea);
+  background: var(--wk-green-pale, #EEF3EF);
   box-shadow: inset 0 0 0 1px var(--wk-green, #4a7c59);
 }
 .sc-issue-acts { display: flex; gap: 10px; padding: 0 4px; }
@@ -96,7 +96,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--wk-green-deep, #3a6247);
+  color: var(--wk-green-deep, #35624A);
   font-size: 12px;
   cursor: pointer;
 }
@@ -120,7 +120,7 @@
   border-bottom: 1px solid var(--wk-hair-soft, #efeff1);
 }
 .sc-mode-card[aria-label="执行清单"] li:last-child { border-bottom: 0; }
-.sc-mode-card b[data-status="齐"] { color: var(--wk-green-deep, #3a6247); }
+.sc-mode-card b[data-status="齐"] { color: var(--wk-green-deep, #35624A); }
 .sc-mode-card b[data-status="缺"] { color: var(--wk-ink, #141416); }
 .sc-mode-shell-empty,
 .sc-mode-shell-empty p { margin: 0; color: var(--wk-muted, #71767e); }

@@ -62,7 +62,7 @@
   --ink: #141416;
   /* 色彩 · 品牌与语义（绿只做选中/发送/确认点睛） */
   --green: #4A7C59;
-  --green-deep: #3A6247;
+  --green-deep: #35624A;
   --green-pale: #EEF3EF;
   --ok: #4A7C59;
   --info: #55585F;
@@ -517,8 +517,8 @@ body {
   --sc-paper: var(--wk-paper);
   --sc-canvas: var(--wk-plane);
   --sc-accent: var(--wk-green);
-  --sc-accent-ink: var(--wk-green-deep, #3a6247);
-  --sc-accent-soft: var(--wk-green-pale, #e8f0ea);
+  --sc-accent-ink: var(--wk-green-deep, #35624A);
+  --sc-accent-soft: var(--wk-green-pale, #EEF3EF);
   --sc-surface: #ffffff;
   --sc-glass-shadow: 0 1px 3px rgba(24, 24, 27, .05);
   --sc-ease: var(--ease-spec);
@@ -606,6 +606,7 @@ body {
 .sc-brand { display: flex; gap: 6px; align-items: center; flex-shrink: 0; color: var(--wk-ink); }
 .sc-brand-mark { width: 29px; height: 31px; display: grid; place-items: center; flex-shrink: 0; background: transparent; color: var(--wk-ink); }
 .sc-brand-cn { font-family: "PingFang SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0; line-height: 1.2; color: var(--wk-ink); }
+.sc-brand-en { font-family: var(--font-playfair), "Playfair Display", Georgia, serif; font-weight: 500; letter-spacing: .01em; }
 .sc-brand-dot, .sc-workbench .sc-brand-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--green); flex: none; }
 .sc-project-heading { min-width: 0; flex: 1; }
 .sc-eyebrow { display: block; color: var(--wk-muted); font-size: var(--fs-cap); font-weight: 500; letter-spacing: .08em; line-height: 1.45; }
@@ -982,7 +983,7 @@ body {
 
 /* ── 工作台设计系统：2026 冷石扁平（T-VISUAL-2026）─────────────────────
    纸 #FFFFFF / 底·画布 #F4F5F7 / 发丝 #E4E4E7 / 墨 #141416 /
-   品牌绿 #4A7C59（仅选中+主操作）/ soft #E8F0EA。
+   品牌绿 #4A7C59（仅选中+主操作）/ soft #EEF3EF。
    禁旧奶油 #F4F5F7、#4A7C59、#A58B69、靛蓝主色、毛玻璃。图标沿用现产品。 */
 .sc-workbench {
   /* 色彩全部继承 :root 规范 token（docs/05-设计规范.md）；此处只留工作台字号映射。 */
@@ -1475,7 +1476,7 @@ body {
 }
 .sc-workbench .sc-tool-column > button.is-active,
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
-  background: var(--wk-paper); border-color: var(--wk-green, #4A7C59); color: var(--wk-green-deep, #3a6247);
+  background: var(--wk-paper); border-color: var(--wk-green, #4A7C59); color: var(--wk-green-deep, #35624A);
 }
 /* 选择工具是开关，不是禁用：关掉后按钮还在，只用虚线描边示意「画布只浏览、不抓物料」。 */
 .sc-workbench .sc-tool-column > #tool-select.is-off {
@@ -1485,10 +1486,10 @@ body {
 }
 /* 第一人称是走进去，正面机位只是环绕。用石绿图标色区分，不再套一圈描边。 */
 .sc-workbench .sc-tool-column > #tool-walk {
-  border-color: transparent; color: #3a6247;
+  border-color: transparent; color: #35624A;
 }
 .sc-workbench .sc-tool-column > #tool-walk.is-active {
-  background: var(--wk-paper); border-color: #4A7C59; color: #3a6247;
+  background: var(--wk-paper); border-color: #4A7C59; color: #35624A;
 }
 .sc-workbench .sc-tool-column > #tool-walk .sc-walk-label {
   position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%);

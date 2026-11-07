@@ -155,7 +155,7 @@
 }
 .sc-session-actions button:hover,
 .sc-session-confirm button:hover { background: rgba(20, 20, 22, 0.06); color: var(--wk-ink, #141416); }
-.sc-session-actions button.is-on { color: var(--wk-green-deep, #3a6247); }
+.sc-session-actions button.is-on { color: var(--wk-green-deep, #35624A); }
 .sc-session-confirm { gap: 2px; padding-right: 2px; }
 .sc-session-confirm span {
   color: var(--wk-ink-soft, #71767e);

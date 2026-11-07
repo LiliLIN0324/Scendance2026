@@ -112,7 +112,7 @@
   margin: 0;
   font-size: var(--fs-cap, 12px);
   line-height: 1.4;
-  color: var(--wk-green-deep, #3a6247);
+  color: var(--wk-green-deep, #35624A);
 }
 .sc-style-section {
   margin: 4px 0 0;
@@ -221,7 +221,7 @@
   cursor: pointer;
   transition: background-color 130ms ease, box-shadow 130ms ease, transform 130ms ease;
 }
-.sc-style-save-act:hover:not(:disabled) { background: var(--wk-green-deep, #3a6247); box-shadow: 0 3px 10px rgb(58 98 71 / 18%); transform: translateY(-1px); }
+.sc-style-save-act:hover:not(:disabled) { background: var(--wk-green-deep, #35624A); box-shadow: 0 3px 10px rgb(53 98 74 / 18%); transform: translateY(-1px); }
 .sc-style-save-act:disabled {
   background: var(--plane, #f4f5f7);
   color: var(--faint, #a1a1aa);

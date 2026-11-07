@@ -146,7 +146,7 @@ export function ReviewSharePage(): JSX.Element {
   return (
     <main className="rsp" data-review-share-page="true" data-review-source={plan?.source ?? phase.kind}>
       <header className="rsp-mast">
-        <p className="rsp-brand"><span>幕景</span><small>Scendance</small></p>
+        <p className="rsp-brand"><span>幕景</span><small className="sc-brand-en">Scendance</small></p>
         <p className="rsp-mast-status">可评论方案 · 只读 · 画内落钉</p>
       </header>
       {phase.kind === 'loading' ? (
