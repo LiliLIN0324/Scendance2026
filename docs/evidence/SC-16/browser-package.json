@@ -1,0 +1,178 @@
+{
+  "checkedAt": "2026-11-07T21:15:16.712Z",
+  "source": "real Chrome + dev server new-project path (World splat sample normalises venue size)",
+  "zip": {
+    "root": "幕景_验收·西湖会客厅_v1.0",
+    "fileCount": 8,
+    "files": [
+      "幕景_验收·西湖会客厅_v1.0/01-效果图/效果图-01.png",
+      "幕景_验收·西湖会客厅_v1.0/01-效果图/效果图-02.png",
+      "幕景_验收·西湖会客厅_v1.0/01-效果图/效果图-03.png",
+      "幕景_验收·西湖会客厅_v1.0/02-平面图/平面-1F.dxf",
+      "幕景_验收·西湖会客厅_v1.0/03-物料清单/物料清单.csv",
+      "幕景_验收·西湖会客厅_v1.0/04-分享/分享链接.txt",
+      "幕景_验收·西湖会客厅_v1.0/manifest.json",
+      "幕景_验收·西湖会客厅_v1.0/README.txt"
+    ],
+    "bytes": 1259675
+  },
+  "heroes": [
+    {
+      "path": "幕景_验收·西湖会客厅_v1.0/01-效果图/效果图-01.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 407413
+    },
+    {
+      "path": "幕景_验收·西湖会客厅_v1.0/01-效果图/效果图-02.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 492904
+    },
+    {
+      "path": "幕景_验收·西湖会客厅_v1.0/01-效果图/效果图-03.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 350182
+    }
+  ],
+  "manifest": {
+    "format": "scendance-delivery-package",
+    "packageVersion": 1,
+    "deliveryVersion": "v1.0",
+    "snapshotId": "2155a889895705fa",
+    "layoutId": "sc16-browser-1",
+    "projectName": "验收·西湖会客厅",
+    "generatedAt": "2026-11-07T21:15:11.584Z",
+    "sceneFormat": {
+      "format": "scendance-scene-delivery",
+      "version": 2
+    },
+    "contentFingerprint": "2155a889895705fa2ddf2ecc22b536e4e766d87e6e2603feb4c578ddbbf0b2ad",
+    "status": "complete",
+    "files": [
+      {
+        "kind": "hero",
+        "path": "01-效果图/效果图-01.png",
+        "bytes": 407413,
+        "sha256": "a0172e71a28d4842d35ab85d1e05c2f67aefcf9a48a2b6ec54f8cada94845e82"
+      },
+      {
+        "kind": "hero",
+        "path": "01-效果图/效果图-02.png",
+        "bytes": 492904,
+        "sha256": "a8013e78ce1a187e97faf1e58f58e8e42e8b1c907957e294b8eadf2dc1be1f59"
+      },
+      {
+        "kind": "hero",
+        "path": "01-效果图/效果图-03.png",
+        "bytes": 350182,
+        "sha256": "a3b349209bd6674a375ddd3e5906a20d72775dd93a63e399675d1009312e4d30"
+      },
+      {
+        "kind": "floor",
+        "path": "02-平面图/平面-1F.dxf",
+        "bytes": 1845,
+        "sha256": "d634fbf8a98c47b261a7f6f705ad489df6472599fc3c521ec628e68089fb3874"
+      },
+      {
+        "kind": "materials",
+        "path": "03-物料清单/物料清单.csv",
+        "bytes": 936,
+        "sha256": "d563544f17c09fd022520a0687091276015d33735403dbbcfc670c3ea83d6cc0"
+      },
+      {
+        "kind": "share",
+        "path": "04-分享/分享链接.txt",
+        "bytes": 1193,
+        "sha256": "ea4d4139d21b10275de2e6d3fe8d74a074aa5d4c08d31fa26367d114cd35852f"
+      },
+      {
+        "kind": "readme",
+        "path": "README.txt",
+        "bytes": 998,
+        "sha256": "cf0cb8d063225ff3d0579855a63d4fad1810e4006402cf216e2ca40a5e73d2d6"
+      }
+    ],
+    "missing": [],
+    "share": {
+      "url": "http://127.0.0.1:3001/review/#layout=2.zZPPaxQxFMf_l-c1MyTZnR87V6HgP-BFeshMMt3gbDJk0q7rMsd6WhRBLBShqC3IKh7VoiD4p0h3a2_-CZLZrjPQuoog-A4hQ17e-87nfTOFu1JxSKDKhOJMZcIrC6a8asiMAASSC2WlnUAyBS4KuSfM5LYwldQKEtgjPgYElWJlNdT2litESRCwOB7EgyDCQc4AQaaVFcpuSbUjTGmkstfkUc5zKrKM0jTohaIvojDkcSRCQUPcy0Xaz4Io5jxNc5xSxl1fy-xuBYlrkEszEhxqBAWb6F3rBMvVj5HQS40eV8J4BBAoNhKQwMV8tnzy7sv7byefl6dPzz4dLt6-WDzcBwRjye0QEtrzYwRDIXeGFhIS-gRBXmhtKkjuXBbPOwXJFlwm3NSFNpDAjWzAgsgplVaMOtdSipvwmqXvlnj9eRmusJ2UrjDX2rRtzj58XOyfLB69vDh41YolPkXARen22Ce0FU7dSbZWlDfhFGXNBL8fHc4BQakraZuZTuEeJB5FcB8SXCMw2rLVCUYwYlYYyYpm0CUzdnUJQWn0nlDOPq5CpXeN2wGTgECXTTqTHokGfRyHBOMoiqGu0Z_joC2OsVRcj1sgi9nB-fygMze__wsUxA82opgfXUWxIhH9PyR6LQnL0kJ0QDx7sHw-63oi_gmCdL2M_WgTiK9vjq-xRK8B0dsIYi3on0PotxCyIZOd53H--nR53HnF2A87bgi7EAabzfD4KoTGQL-lsFb0dxS26-26_gE"
+    }
+  },
+  "dxf": {
+    "path": "幕景_验收·西湖会客厅_v1.0/02-平面图/平面-1F.dxf",
+    "unitsMetres": true,
+    "wallExtent": {
+      "width": 23.8,
+      "depth": 16.1
+    },
+    "doorArcs": 1,
+    "windowLines": 4,
+    "furniturePolylines": 2,
+    "dimensionTexts": 2,
+    "roomTitles": [
+      "\\U+9A8C\\U+6536\\U+00B7\\U+897F\\U+6E56\\U+4F1A\\U+5BA2\\U+5385 - 1F"
+    ],
+    "layers": [
+      "WALLS",
+      "DOORS",
+      "WINDOWS",
+      "FURNITURE",
+      "DIMENSIONS",
+      "ROOMS"
+    ]
+  },
+  "csv": {
+    "path": "幕景_验收·西湖会客厅_v1.0/03-物料清单/物料清单.csv",
+    "header": [
+      "名称",
+      "物料类型",
+      "资产版本ID",
+      "来源",
+      "宽/m",
+      "深/m",
+      "高/m",
+      "颜色",
+      "数量",
+      "物件ID",
+      "采购状态",
+      "来源页面",
+      "许可",
+      "SHA256",
+      "交付编号",
+      "生成时间"
+    ],
+    "rowCount": 4,
+    "quantity": 4,
+    "snapshotIds": [
+      "2155a889895705fa"
+    ],
+    "objectIds": [
+      "b2000000-0000-4000-8000-000000000001",
+      "b2000000-0000-4000-8000-000000000002",
+      "b2000000-0000-4000-8000-000000000003",
+      "b2000000-0000-4000-8000-000000000004"
+    ],
+    "bytes": 936
+  },
+  "share": {
+    "path": "幕景_验收·西湖会客厅_v1.0/04-分享/分享链接.txt",
+    "urlLength": 798,
+    "versionLine": "版本：v1.0（快照 2155a889895705fa）",
+    "mentionsSnapshot": true
+  },
+  "readme": {
+    "path": "幕景_验收·西湖会客厅_v1.0/README.txt",
+    "bytes": 998,
+    "excerpt": "幕景 Scendance · 交付包\n项目：验收·西湖会客厅\n版本：v1.0\n快照：2155a889895705fa\n包根：幕景_验收·西湖会客厅_v1.0\n\n这个包里有什么\n01-效果图/  3 张：整体、俯视、正面，1920×1080 PNG。给客户看效果，也用于内部对光。\n02-平面图/  1 张：1F 平面 DXF，按真实米制绘制；在 CAD 里可直接量尺寸、排施工。\n03-物料清单/  1 份：名称、尺寸、颜色、数量、采购状态；单价、损耗与报价尚未进包。\n04-分享/  1 份：只读评审链接，对方不用安装即可打开；链接与包内文件同属一个快照。\nmanifest.json  机器可读清单：文件、字节数、sha256、版本身份与缺件原因。\n\n仍需人工确认\n- 采购规格、价格与损耗以最终确认为准；本包不含报价。\n- 效果图为布置示意，非实测；实物规格与颜色以最终确认为准。\n- 打印 P"
+  },
+  "consistency": {
+    "versionMatchesManifest": true,
+    "snapshotInCsv": true,
+    "snapshotInShare": true,
+    "shareMatchesManifestUrl": true,
+    "dxfMatchesManifestBytes": true,
+    "csvMatchesManifestBytes": true,
+    "heroBytesMatchManifest": true
+  }
+}

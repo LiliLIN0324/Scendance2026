@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-11-07T21:15:30.438Z",
+  "source": "real Chrome opening the share URL written inside the downloaded package",
+  "base": "http://127.0.0.1:3001 (Next dev)",
+  "devWarmLoadMs": 7177,
+  "coldFirstLoadMs": 67852,
+  "identityNode": "<p class=\"rsp-version\" data-delivery-version=\"v1.0\" data-snapshot-id=\"2155a889895705fa\"><b>v1.0</b><span>已确认的交付版</span><small>快照 2155a889895705fa · 内容与快照一致，旧链接一直指着这一版</small></p>",
+  "bodyText": "幕景\nScendance\n\n可评论方案 · 只读 · 画内落钉\n\n平面预览\n\n验收·西湖会客厅\n\n23.8 × 16.1 米 · 1F · 平面上 4 件\n\nv1.0\n已确认的交付版\n快照 2155a889895705fa · 内容与快照一致，旧链接一直指着这一版\n\n这是分享链接里的方案快照。此页只读，可在平面上落钉评审。\n\n点物件或地面，钉一条意见\n\n场内物件\n主入口门\n北窗\n圆桌\n竹椅\n钉汇总\n\n钉留在这台浏览器，刷新还在，不会同步到其他设备。与工作台评审钉同一套短文案。\n\n还没有钉。在左侧平面上点选位置即可落钉。\n\n分享链接怎么进这一页\n完成评审\n\n点完成评审后，创作者这边的球会变红。这一笔只留在这台浏览器。",
+  "errors": [],
+  "notes": [
+    "冷启动首次打开含 Next dev 编译（约 68 s），热启动 7.2 s；生产静态导出与 30 天有效期未在本轮测量。",
+    "页面显示场地 23.8 × 16.1 米、4 件，与包内 CSV 行数一致；这是编辑器新项目 World 样场校准后的尺寸。"
+  ]
+}

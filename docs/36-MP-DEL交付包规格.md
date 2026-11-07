@@ -94,14 +94,16 @@ v1 规格定为：
 
 ## 7. 与 docs/24 验收的对应
 
-| docs/24 | 本规格负责 | 仍需另外验 |
+| docs/24 | 本规格负责 | B3 结果（2026-11-08） |
 | --- | --- | --- |
-| 1-1 一键出交付包 | 包结构、命名、0 人工改名（B2 落地） | 10/10 任务、≤10 分钟——需真实任务批量跑 |
-| 1-2 效果图可对外 | 固定 3 张、文件名与版本号进 manifest | 1920×1080、水印、盲评 ≥4/5（渲染侧） |
-| 1-3 平面能施工 | 按楼层出 DXF、文件名带楼层 | 5 处尺寸误差 ≤1%、图框标注（SC-08） |
-| 1-4 清单能报价 | CSV 结构沿用 `sceneDeliveryCsv` | 单价/小计/损耗——SC-34 拍板后才进包 |
-| 1-5 链接免安装可看 | 分享 URL 进包、与包同 `snapshotId` | 首屏 ≤5 秒、≥30 天有效期（分享服务） |
-| 1-6 甲方能自答三问 | README 写清四项用途 | 3 人 5 分钟盲测 |
+| 1-1 一键出交付包 | 包结构、命名、0 人工改名（B2 落地） | ✅ 夹具 10/10 `complete`、0 改名、52 ms；真机单包下载 8 文件也对。真机整批出图耗时仍未压测 |
+| 1-2 效果图可对外 | 固定 3 张、文件名与版本号进 manifest | ⚠️ 3/3 真为 1920×1080；**图内无水印/版号/项目名**；3 人盲评未做（渲染侧） |
+| 1-3 平面能施工 | 按楼层出 DXF、文件名带楼层 | ✅ 夹具 10/10 的房间宽深、门宽、窗宽、家具间距与真值一致；6 图层、2 标注、标题带楼层；施工方实读未做 |
+| 1-4 清单能报价 | CSV 结构沿用 `sceneDeliveryCsv` | ⚠️ 行数与数量对、带快照与生成时间；**无单价/小计**，报价合计无法核；等 SC-34 |
+| 1-5 链接免安装可看 | 分享 URL 进包、与包同 `snapshotId` | ⚠️ 无登录无安装可看、页内版本行自校通过；生产静态首屏 ≤5 s 与 ≥30 天有效期未测 |
+| 1-6 甲方能自答三问 | README 写清四项用途 | ⏳ 尺寸可答；价格未进包、进场时间无字段；需 3 人实测 |
+
+证据与复现命令见 `docs/evidence/SC-16/README.md`；批量夹具已进 `npm run gate`（`delivery-acceptance.test.ts`）。
 
 ## 8. B1 / B2 要做的事
 
@@ -120,6 +122,13 @@ B2（MP-DEL 一键打包）——**已完成（2026-11-08）**：
 
 验收证据落 `docs/evidence/mp-del/`：`unpacked-tree.txt`（解包目录树）、`manifest-a.json`/`manifest-b.json` + `manifest-diff.txt`（同版两次打包只差 `generatedAt`）、`retry-receipt.json`（一次 `asset-fetch` 失败后 1 s 重试成功）。
 
+B3（SC-16 四件套验收）——**已完成（2026-11-08）**：
+1. ~~用夹具跑 docs/24 1-1～1-6，10/10、0 人工改名、同版四件套一致。~~ 已落：`delivery-acceptance.test.ts` 建 10 份确认版布局、逐份打包解包，校验 8 文件、包根、路径、快照、分享 URL 自校、DXF 五项尺寸与标题、CSV 行数与数量；已进 `npm run gate`。
+2. ~~真机走一遍「确认版 → 下载 zip → 开分享链接」。~~ 已验：Chrome 实点下载 8 文件包，3 张真 1920×1080；分享页显示 v1.0 + 同快照并自校指纹（dev 热启 7.2 s）。
+3. 未闭环项按事实记在 §7：水印/版号（渲染侧）、单价（SC-34）、生产首屏与 30 天有效期（服务侧）、3 人盲评与甲方三问（真人）。
+
+证据与复现命令：`docs/evidence/SC-16/README.md`，数据文件 `acceptance-run.json`、`browser-package.json`、`browser-review.json` 与三张实拍图。
+
 ## 9. 代码入口
 
 | 位置 | 作用 |
@@ -131,8 +140,10 @@ B2（MP-DEL 一键打包）——**已完成（2026-11-08）**：
 | `frontend/components/room-organizer/lib/share.ts` | `#layout=2.` 载荷外层 `{ kind, identity, layout }`；解码兼容无外层的旧链接，读页重算指纹核对 |
 | `frontend/components/room-organizer/lib/delivery-package.ts` | B2 打包主流程：校验确认版指纹 → 逐产物生成（效果图/平面/物料/分享）→ 写 README 与 manifest → zip；失败归码、逐产物重试与续跑 |
 | `frontend/components/room-organizer/lib/delivery-package.test.ts` | 18 例：F01–F10 夹具、版本身份绑定、同版复现（只差 `generatedAt`）、zip 字节复现、续跑复用、失败码分类 |
+| `frontend/components/room-organizer/lib/delivery-acceptance.test.ts` | B3 验收夹具：10 份确认版布局逐份出包并解包，核对四件套同版、DXF 五项尺寸、CSV 行数与数量；设 `DELIVERY_ACCEPTANCE_OUT` 时把结果写回证据目录 |
 | `frontend/components/room-organizer/lib/delivery-zip.ts` | 确定性 store-only zip：固定时间戳、UTF-8 标志、唯一/非绝对路径校验，不引第三方压缩库 |
 | `frontend/components/review-share-page/`（`load-plan.ts` / `review-share-page.tsx`） | 把 `identity` 带到 `/review/` 页并显示版本行；旧链接与示例场地不显示 |
 | `frontend/components/room-organizer/panels/scene-delivery-panel.tsx` | 「确认这一版」条 + 版本状态；确认后导出复用 `snapshotId`；B2「导出交付包 / 重试缺件」入口、进度与缺件清单 |
 | `scripts/release-gate.mjs` | 已把规格、版本身份、打包三套测试纳入核心门禁套件 |
 | `docs/evidence/mp-del/` | B2 验收证据：解包目录树、两份 manifest 的 diff、失败重试回执 |
+| `docs/evidence/SC-16/` | B3 验收证据：10 任务批量结果、真机包与分享页数据、三张实拍图、结论与复现说明 |
