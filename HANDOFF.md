@@ -4,7 +4,7 @@
 
 > 先读HANDOFF.md。
 
-最后更新：2026-11-07。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-07（六轮）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 优先接力 · 西湖新素材与地图空间体验
 
@@ -88,6 +88,12 @@
 > - **画布点击画路线（popover 链路）**：单元件齐备（routePointError 3 例、room-organizer 接线、COLLAB 已登记四处 hunk）；IAB 坐标级走查被 F3 教练气泡劫持未走通，归 SC-03 专项走查。
 > - **PEOPLE-02 仍待授权**：本轮向用户发了 XH-02/PEOPLE-02 授权询问，均未获应答，按卡片原文不动上传、不耗额度。
 > - **提交**：本回填随 PEOPLE-01/04 全链路一个提交入 main（含 COLLAB 登记）；tag 决策见「已完成与证据」首行与顶部基线。
+>
+> **卡片回填（2026-11-07 六轮，ZCode 会话）**：**PEOPLE-04 后半·近景跟拍已落地并浏览器实证**（本轮授权询问再次未获应答，XH-02/PEOPLE-02 按卡片原文不动上传）：
+> - **实现**：新建 `three/person-follow.ts`（模块级跟拍状态机，同 people-anim 模式）——进入帧把机位摆到目标背后近景（背后 3.5 m、眼高 3.0 m、注视胸口 1.2 m，polar 角留在 OrbitControls 72° 限内），之后每帧把人物位移同量平移 `camera.position` 与 `controls.target`（相对偏移守恒，旋转/缩放权始终在用户手里；不在帧内抢跑 `controls.update()`，渲染循环下帧开头统一收敛防 damping 双步进）；目标被删/脱表自动退出并回调 UI 收摊；第一人称漫游期间冻结（`lastPos=null`，退出漫游后重新取机位而不是把漫游位移一次补上）；相机态不持久化、资源零新增。`people-anim.ts` 加 `personFollowSample(id)` 位姿访问器；`use-three-scene.ts` tick 在人物推进后一行接线（返回 true 置脏）；popover「人物动画」区加「跟拍镜头/退出跟拍」按钮（`following/onToggleFollow` props）；room-organizer 加 `followPersonId` state + `toggleFollowPerson`（2D 中开跟拍自动切回 3D）——**独占区一处主题 hunk 已登记 COLLAB 待协商**。
+> - **验证**：单测新建 `person-follow.test.ts` 8 例（背后机位数学/位移同步/静止零开销/删除自动退出 onEnd 一次/手动退出不回调/漫游冻结与恢复重摆/切目标重摆/无 controls lookAt 兜底）+ people-anim 8 例 = 16/16 绿；`npx tsc --noEmit` 0 错误；`NEXT_DIST_DIR=.next-ci npm run build` exit 0（14 路由）；item-context-popover 35 例回归全绿。dev 探针 `window.__personFollowProbe`（targetId/lastPos/相机位）+ `__setPersonFollowTarget`（仅 dev 构建，生产零全局）。
+> - **浏览器 E2E（dev 3032 + mock 3099，注入三人布局，IAB 遮挡 rAF 用截图连拍驱动）**：**位移同步实证**——镜头平移与人物位移逐帧一致（camDelta (−6.014, 1.529) vs walkDelta (−6.014, 1.504)，syncErr 0.024 m；另一 trace 中 cam.x 与人物 x 每帧精确相等）；**自动退出实证**（目标消失 tgt=null）。**遗留一处存疑归 SC-03 前台复测**：进入帧的绝对机位读数（y=13.1）与背后 3.0 m 预期不符——rAF 死透后无法复测（见踩坑），单测已钉机位数学，怀疑页面加载期某取景逻辑与跟拍叠加，需 ZCode 窗口真实前台时目视+探针定位。
+> - **顺带完成（SC-03 清单划掉两项）**：**MAP-01 真机验收通过**——选址浮层输「西湖」出联想 listbox、同名条目可区分（两个「西湖公园」分别标注福州/泉州）、tip 无坐标转 POI 搜索不出假坐标、选「断桥残雪」出「已定位预览」态、清空按钮就位；**MAP-02 署名验收通过**——动态底图「© 2026 AutoNavi - GS(2025)1807号」、整景区 `data-testid=geo-basemap-attribution`「底图 © 高德地图 · 范围线/水面 © OpenStreetMap 贡献者」。SC-03 剩余画布类验收点（圆桌 24 座/降容话术/⛔ 徽标/预留区钮/动线横幅/真门 verified + popover 绘制链路坐标级 + 跟拍前台复测）仍需前台窗口。
 
 来源：[AHOLO 能力总览](https://labs.aholo.ai/api-docs/intro) · [自动绑骨与动作重定向](https://labs.aholo.ai/api-docs/release-notes) · [官方 SDK 动作示例](https://labs.aholo.ai/api-docs/en/sdk/typescript)。
 
@@ -95,12 +101,14 @@
 
 - **产品主线**：幕景 Scendance 是活动场地方案工作台。用已有场地或尺寸平面完成圈区、出方案、复核、客户确认和执行交接。近期产品评估建议先验证一个真实活动的交付闭环。
 - **用户已授权的待办**：在 AHOLO 官方实景重建工作台，用同一批 63 张茶室照片做一次网页对照。记录上传、创建和最终状态的页面原文、任务号与截图。
-- **仓库基线**：2026-11-07 五轮：**PEOPLE-01/04 全链路（人物动画注册表 + 路线巡游引擎 + 阻挡折返 + 绘制 UI）已由实现者会话完成、验证（tsc 0 错误、定向 10 套件 229 例全绿、build exit 0）并提交**；两轮验证（并行验证会话 + 实现者浏览器 E2E）结论一致，见「优先接力 · AHOLO 绑骨人物库」两个五轮回填块。四轮基线（MAP-03/04）在 tag `v3.7.0`（7061b85）。版本线两轨并存（Qoder 的 v4.0/v4.1 与本线的 v3.6/v3.7），本次按语义最高线收敛打 **tag `v4.2.0`**。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
+- **仓库基线**：2026-11-07 六轮：**PEOPLE-04 后半·近景跟拍（follow-cam）落地并浏览器实证位移同步/自动退出**，PEOPLE-04 P0 代码面收口；同轮真机走查通过 SC-03 清单中 DOM 可达的两项（MAP-01 联想下拉/同名区分/预览态、MAP-02 双底图署名）。五轮基线（PEOPLE-01/04 全链路）在 tag `v4.2.0`（be37cb8），四轮（MAP-03/04）在 `v3.7.0`。本轮按 minor 增量打 **tag `v4.3.0`**。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
 - **任务派发**：见 [Scendance 需求清单](docs/25-Scendance需求清单.md)。按依赖每次领一张，优先验证一单从方案到交付的闭环。
 
 ## 已完成与证据
 
 | 工作 | 当前结果 |
+| --- | --- |
+| PEOPLE-04 后半·近景跟拍 + SC-03 两项真机走查（2026-11-07 六轮，ZCode 会话；tag v4.3.0） | **follow-cam**：新建 `three/person-follow.ts`（进入帧摆背后近景机位 3.5m/3.0m/胸口 1.2m，此后每帧同量平移 camera+target，OrbitControls 旋转/缩放权保留；目标删除自动退出回调 UI；漫游期间冻结退出后重取机位；相机态不持久化零新增资源）+ `people-anim.ts` `personFollowSample(id)` 访问器 + `use-three-scene.ts` tick 一行接线 + popover「跟拍镜头/退出跟拍」按钮 + room-organizer `followPersonId` state（2D 中开启自动切回 3D；独占区 hunk 已登记 COLLAB）。**验证**：person-follow 8 例 + people-anim 8 例 = 16/16 绿（机位数学/位移同步/删除自动退出/手动退出不回调/漫游冻结恢复/切目标/lookAt 兜底）、tsc 0 错、build exit 0、popover 35 例回归绿；dev 探针 `__personFollowProbe`/`__setPersonFollowTarget`。**浏览器 E2E**（IAB 遮挡 rAF 截图连拍驱动）：镜头平移与人物位移逐帧一致（syncErr 0.024m）、cam.x 与人物 x 每帧精确相等、目标消失自动退出 tgt=null。**遗留**：进入帧绝对机位读数存疑（y=13.1 vs 预期 3.0）归 SC-03 前台复测（rAF 死透无法定位，见踩坑）；popover 按钮链路坐标级走查同归 SC-03。**SC-03 两项划掉**：MAP-01 联想下拉真机通过（「西湖」出 listbox、两个「西湖公园」以福州/泉州区分、tip 转 POI 不出假坐标、断桥残雪出「已定位预览」）；MAP-02 署名通过（动态=© AutoNavi、整景区=高德+OSM 常驻 `geo-basemap-attribution`）。 |
 | --- | --- |
 | PEOPLE-01/04 模板人物动画 + 路线巡游（2026-11-07 五轮，ZCode 实现者会话；tag v4.2.0） | **PEOPLE-01**：修掉「摆置人物 mixer 用完即弃」的静帧根因（builders-people 采样一帧 idle 即丢）——新注册表 `three/people-anim.ts` 按 item id 存续：家具层全量重建时换绑新 mixer、行走进度按 `routeSignature` 保留、注册时立即落行进位姿（暂停中不瞬移回锚点）、脱离场景顺手摘表；动作=待机/交谈/行走三 clip（`personAction`）、暂停=`personPaused`（路线+mixer 全停）、逐实例时间错峰（`stanceSeed` 确定性相位）。**动画资格收紧**：仅带路线/改过动作/被暂停的人物进注册表，普通静态人物（座位图式布局）渲染行为与开销与改前一致。**PEOPLE-04**：新引擎 `lib/person-route.ts`（纯几何，不碰 three）——闭环/折返双巡游、路点停留（pauseMs）、平滑转向（9 rad/s）、`resolveWalkerStep` 避障滑行、边界夹取、里程表；步幅同步默认 1.05 m/s（≈Walk_Loop 1.333s 周期 1.4m 步幅 → timeScale=1；`root.position` 全程 span=0 实测无双重位移）。路线可视化（`ROOM_OBJECT_TAGS.PersonRoute` 青绿折线+路点圆片，不参与拾取）随布局重建；带路线人物不再在锚点留静态碰撞盒（同 NPC，防自挡）。绘制 UI：popover「人物动画/行走路线」区（三动作钮+暂停+画布布点/撤销/清除/环形折返/步速停留）+ room-organizer 四处 hunk（COLLAB 已登记）：复用画墙 `floorPickOnly+onEmptyClick`，首点存草稿（单点路线过不了 schema）、两点起 `updateItem(walkRoute)`，Esc/离开面板/取消选中收摊。schema 三件套放行（isWalkRoute 有界校验 + ITEM_KEYS + repairWalkRoute 剔重截断，<2 点整条丢弃防存档拒收）。**E2E 抓出并修复真死锁**：路线贴障碍（距桌沿 0.2m < 半径 0.28）时碰撞推挤把人钉死在障碍面（每帧位移≈0 永久 blocked）→ 新增 1.2s 受阻掉头（`BLOCKED_TURNAROUND_S` + `reverseDirection`），页面复测解锁，单测加回归例。**浏览器 E2E（dev 3031+mock 3099，注入 3 人布局，IAB 遮挡 rAF 用截图连拍强制走帧）**：环行者 laps=2（两圈）、折返者 laps=2+持续巡游、交谈者静止；里程与路径逐段精确对账（29.9=21.4+8.55；113.2=7×14.98+8.3）；位置全程压线不越界。dev 探针 `window.__peopleWalkStates` 仅 dev 构建挂载（生产零全局）。**验证**：`npx tsc --noEmit` 0 错误；定向 10 套件 229 例全绿（新增 person-route 13、people-anim 8 含真实 GLB 回读、schema walkRoute 往返、plan-card 5 回归）；`NEXT_DIST_DIR=.next-ci npm run build` exit 0。**遗留**：近景跟拍一人、2D 平面图不显示行进位（归 PEOPLE-06）、popover 绘制链路坐标级走查（归 SC-03）。 |
 | MAP-03 地图到实景 + MAP-04 收尾（2026-11-07 四轮，ZCode 会话） | **MAP-03**：① LOD 门控 `splatLodEnabled` 从「仅整景区 presetId」扩到「有任意调研底图+有点云环境」（room-organizer L1533 一行），scanAssetId 自动铺图/地名定位的概览同样不解码点云；② `applyRealVenue` 在视距 LOD=poi 时立即 `zoomToVenue`（原实现等 splat ready 但 poi 态 splat 被 defer 永不 ready——点位点击死等不推近，浏览器走查坐实后修复）；③ `SceneGeoDots`/`SplatLodMarker` 加 500ms 心跳重投影（走查实测：初次 update 跑在相机取景落定前、落定帧无 change 事件，点位永不渲染；心跳 + 值没变不 setState 双保险）；④ 新增 `fitOverviewAfterFocusClear`（ref+rAF）：「底图 chip 回概览」同步调 `fitToRoom` 读到旧焦点闭包、取景停在场地框，chip 与底图重置 effect 两处改走它。**浏览器 E2E 实录**（dev 3030+mock 3099，注入带 geo 样例场地驱动）：概览 spz **0 请求**（网络/解码开销=0）→ 点场地点位 → 相机推近 + LOD 翻转横幅消失 → 点云 404 时点位/底图/壳体仍在 → chip 回概览 9.1 km 横幅恢复；截图存于会话 artifacts（`C:\Users\13266\.zcode\cli\artifacts\…\call_*-tool-result-*.png` 四张）。**MAP-04**：`SceneAnchor` 加 `source`（picker/manual/lookup/asset-geo/preset 白名单）+`accuracyM`（≥0 可选，不编数字）；`AholoAssetGeo` 扩 `telemetry`（WGS-84 遥测预留，scanAssetId 铺图前自动过 `wgs84ToGcj02`，现网全是 GCJ-02 行为零变化）+`headingDeg`（锚点朝向通路；「壳体平面图上方=采集朝向」的语义假设未经真资产核验，校准归 MAP-05）；`createVenueFromPick`/`ensureSatelliteGround` 锚点补 `source:'picker'`；schema 校验放行+白名单防扩散，存档往返测试 1 例、splat-lod 状态机测试 9 例（新建）、scene-geo-dots 挂载测试 4 例（新建）。**验证**：定向 16 套件 279 例全绿；`npx tsc --noEmit` 0 错误；`NEXT_DIST_DIR=.next-ci npm run build` exit 0。COLLAB 待协商表已登记（独占区四处 hunk + amap-venue 两处）。 |
@@ -139,9 +147,9 @@
 
 ## 下一步
 
-1. **XH-02 单段重建（P0，只差授权）**：素材已就绪——首选 [docs/33](docs/33-西湖新素材分段清单.md) 候选 0233（174s 园林走拍，白天多视角），对照 0234（同园连续）；备选 0220（65s 湖面+候船亭）。等用户对「本批素材上传 + 额度」点头后，复用 `tools/aholo/` 视频链路提交一单（录输入时间段/任务号/终态/产物读取；失败全退的计费口径见记忆档）。**提交前先问一次授权，卡片原文条件未满足前不动上传。**
-2. **PEOPLE 线续接（P0-P1）**：① **PEOPLE-02（P0，只差授权）**——AHOLO 古风样板：先做原创参考图（浅色对襟/交领、青绿裙、窄袖离地裙摆、中性站姿），审合格后提 G1/G1-Turbo 图生 3D 一单；本轮授权询问未获应答，**额度动作仍等用户点头**。② **PEOPLE-04 后半：近景跟拍一人**（相机 follow 一名行走者、退出跟拍回概览，资源状态正确）——引擎/注册表已就绪，follow-cam 是纯增量。③ **茶亭实景接线**：把巡游人物放进真 splat 场景（walkBounds=实景米制范围）+ popover 绘制链路的画布坐标级走查（可并进 SC-03）。④ PEOPLE-05/06（六人库、多人验收）依赖 PEOPLE-02/03。⑤ 已知限制收口候选：行走者 2D 平面图仍显示锚点、路线贴障碍时人物会原地折返徘徊（可加画布布点时的碰撞预检提示）。
-3. **SC-03 走查当前流程（P0，与 XH-02 无依赖可先行）**：输入用 docs/27 用例 A/B；重点人工核对 A1/A11/A12/B6 四条非自动化断言 + docs/30/31/32 三份交接注记。**UI 侧验收点已积压三轮**：圆桌区方案可行（24 座）、「装不下 N 人 + 建议降到」、⛔ 徽标；区类型条「预留区」钮、动线硬冲突横幅（REC=null）、真门 verified；**再加两处**：选址浮层输入「西湖」出联想下拉且同名条目可区分、底图常驻署名（动态=高德，整景区=高德+OSM）。走查结果回填 docs/32 §五。宜在并行会话不改前端时做（dev `cmd /c "set NEXT_DIST_DIR=.next-dev-z&& cd frontend && npm run dev -- --port 3030"` + mock 3099；角落按钮 locator click 会超时，用 `tab.cua.click` 坐标点；**画布对持续渲染不空闲，cua.scroll/连点也会超时——DOM 元素用 `locator.evaluate(el => el.click())` 派发真点击**）。
+1. **XH-02 单段重建（P0，只差授权）**：素材已就绪——首选 [docs/33](docs/33-西湖新素材分段清单.md) 候选 0233（174s 园林走拍，2,391.9 MB），对照 0234（同园连续 1,942.7 MB）；备选 0220（65s 湖面+候船亭 787.9 MB）。等用户对「本批素材上传 + 额度」点头后，复用 `tools/aholo/` 视频链路提交一单（录输入时间段/任务号/终态/产物读取；失败全退的计费口径见记忆档）。**提交前先问一次授权，卡片原文条件未满足前不动上传**（六轮内已两次在线询问未获应答）。
+2. **PEOPLE 线续接（P0-P1）**：① **PEOPLE-02（P0，只差授权）**——AHOLO 古风样板：先做原创参考图（浅色对襟/交领、青绿裙、窄袖离地裙摆、中性站姿），审合格后提 G1/G1-Turbo 图生 3D 一单；**额度动作仍等用户点头**。② **PEOPLE-04 遗留三件（归 SC-03 前台窗口一并做）**：跟拍进入帧绝对机位前台复测（探针 `__personFollowProbe` 已就绪，怀疑与页面加载期取景逻辑叠加）、popover「跟拍镜头」按钮坐标级走查（画布选中在 IAB 走不通，见五轮）、退出跟拍后「回概览」chip 链路目视。③ **茶亭实景接线**：把巡游人物放进真 splat 场景（walkBounds=实景米制范围）。④ PEOPLE-05/06（六人库、多人验收）依赖 PEOPLE-02/03。⑤ 已知限制收口候选：行走者 2D 平面图仍显示锚点、路线贴障碍时人物会原地折返徘徊（可加画布布点时的碰撞预检提示）。
+3. **SC-03 走查当前流程（P0，剩余画布类验收点需前台窗口）**：输入用 docs/27 用例 A/B；重点人工核对 A1/A11/A12/B6 四条非自动化断言 + docs/30/31/32 三份交接注记。**剩余验收点**（六轮已划掉 MAP-01 联想下拉与 MAP-02 署名两项）：圆桌区方案可行（24 座）、「装不下 N 人 + 建议降到」、⛔ 徽标；区类型条「预留区」钮、动线硬冲突横幅（REC=null）、真门 verified；popover 路线绘制/跟拍按钮坐标级走查。**必须 ZCode 窗口真实前台时做**（rAF 才活、画布点击才可能命中）；mock 环境启动命令见踩坑节。
 4. **MAP-05 空间工作流验收（P1，依赖 XH-02 新资产）**：搜地点 → 确认场地 → 进实景 → 量一处已知长度 → 放一件已知尺寸物件 → 保存重开 → 回到概览；桌面+手机各一轮，回填设备/网络/首屏/实景就绪时间/请求量/对齐误差与三个最明显的操作问题。**顺带收口两个 MAP-03 遗留**：① 多 geo 场地互切时新场地落位用 stride 偏移不落 geo 投影位（v3.3.0 并排协作模式既有设计，第二个真 geo 场地出现时改 `selectEnvironment` 落位）；② LOD 阈值 100/200 m 按真机手感调；③ `AholoAssetGeo.headingDeg`→锚点朝向的语义校准（真资产进来后核「壳体平面图上方=采集朝向」假设）。
 5. **SC-20 复核（五轮已给结论，无需再开卡）**：草案卡硬约束呈现已齐——⛔ 不可行 / ⚠ 缺尺寸未核验徽标、draft_unverified 小字、REC=null「三版都有硬冲突」横幅+去重冲突清单，plan-card.react.test 5 例钉住；reserved 区配色评估结论=维持现状（徽章文字区分足够，动配色属视觉决策等用户拍板）。剩余动作只有 SC-03 的 UI 走查把这几件真点一遍。
 6. **价格拍板（SC-34 §二 9 项）**：SKU 金额/免费额度/退款链路等全部等用户点头；**付费入口恢复必须排在价格拍板之后**（否则 ¥4.90 旧价见用户，负毛利）。
@@ -151,6 +159,10 @@
 
 ## 踩过的坑
 
+- **mock 3099 的真实启动方式**（2026-11-07 六轮实测）：mock 后端 = `npm run dev:floorplan`（`scripts/local-floorplan.ts`），端口用 `SCENDANCE_DEV_API_PORT=3099 SCENDANCE_DEV_WEB_PORT=3032` 覆盖（它自己 spawn 配好 mock env 的前端 dev，一个命令两件事）；`frontend/.env.local` 指向真云 Supabase，mock 联调靠该脚本进程变量覆盖，别直接改 env 文件。存量数据目录会在迁移文件变更后整份拒跑（"Local fixture migration changed"），按报错换新 `SCENDANCE_DEV_DATA=.local-dev/<新名>` 即可。`tools/aholo/mock-e2e.mjs` 不是 server，是打 3099 的一次性自测脚本。
+- **布局注入 localStorage 两个必踩坑**（2026-11-07 六轮）：① `isFurnitureItem` 要求 `icon` 是必填 string——注入的人物物件漏 `icon` 字段时**整份布局被 schema 拒收、静默回退种子 demo 布局**（固定 UUID a0100000-…的 5 件），表现为「注入不生效」；② 注入与刷新必须**同一个 evaluate 调用里连续执行**（`setItem` 后立刻 `location.reload()`），分开两次调用会被 autosave debounce 用内存旧态覆盖回去。
+- **IAB rAF 有「假死透」状态**（2026-11-07 六轮补五轮）：遮挡节流后截图连拍**有时**能驱动帧循环（一次实测 45 帧/张），有时完全无效（全尺寸/小图/置前台 capability 都救不回，`advanceCalls` 纹丝不动）——**每次验收前先读 `advanceCalls` 两次对比确认帧循环真的在跑**，别默认连拍一定有效；探针读数（DOM 级）永远可用。
+- **IAB 里 3D 画布内物件的点击选中走不通**（2026-11-07 六轮再证五轮）：cua.click 坐标点击与 evaluate 派发 PointerEvent（页面里有两个 canvas，`document.querySelector('canvas')` 拿到的是 0×0 的隐藏 2D canvas，真 3D canvas 是 `[...document.querySelectorAll('canvas')][1]`）都没法选中画布内 3D 物件（桌子也选不中，popover 不出）——画布类验收统一归 SC-03 前台窗口；DOM 元素（按钮/下拉/输入框）用 `evaluate(el => el.click())` 派发真点击完全可用。
 - **「人物/动画不动」先对探针再怀疑代码**（2026-11-07 五轮）：IAB 遮挡节流下 rAF 全停，`people-anim` 的 `advanceCalls` 计数器（函数第一行自增）为 0 就是「渲染 tick 从未跑过」的铁证，同时 canvas 绘制缓冲会停在 300×150 默认值；这不是引擎 bug，换前台窗口复测即可。`window.__peopleWalkStates`（仅 dev 构建）可读注册表条目/里程/附着状态。**破解法**：`tab.screenshot({clip 小图})` 连拍（每张强制一次 BeginFrame，实测一张能走出 ~45 帧）即可在遮挡状态下驱动帧循环完成验收；背靠背两张截图字节必不同（GPU/PNG 噪声），「字节不同」不能当渲染证据。
 - **长跑的 dev server 会 serve 旧编译产物**（2026-11-07 五轮实踩）：上一会话留下的 3030 dev 进程对新改的 `use-three-scene.ts` 一直吐旧 chunk（页面上 tick 接线缺失、`advanceCalls` 冻结），而新改的文件又正常热更——征兆是「源码对、编译产物对、页面行为不对」。复用占用端口的老 dev 前先验证一个新符号；不稳就杀进程换端口+新 `NEXT_DIST_DIR` 重启（本次 3030→3031 + `.next-dev-people`）。
 - **有 worldId 只代表受理**。按终态、错误字段和实际产物分别记账。`FAILED` 时 `progress=1` 也不表示成功。开放平台国内网关建任务要带 `x-source: openapi`，缺头曾误报「文件链接不对」。
