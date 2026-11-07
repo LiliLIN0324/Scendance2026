@@ -5,6 +5,7 @@ import { addLights } from '../three/lighting';
 import { applyRendererLook, BASE_ENVIRONMENT_INTENSITY } from '../three/render-look';
 import { advanceGlbAnimations } from '../three/glb-assets';
 import { advancePeopleAnimations } from '../three/people-anim';
+import { advancePersonFollow } from '../three/person-follow';
 import { setMaxAnisotropy } from '../three/texture-settings';
 import type { SceneEventHandlers } from '../three/drag-handlers';
 import type * as ThreeNS from 'three';
@@ -236,6 +237,9 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         if (advanceGlbAnimations(deltaSeconds) > 0) dirtyRef.current = true;
         // 人物动画（people-anim 注册表）：路线行走 + mixer 推进，同上置脏。
         if (advancePeopleAnimations(deltaSeconds) > 0) dirtyRef.current = true;
+        // PEOPLE-04 近景跟拍：人物推进后把镜头平移到新位置（漫游期间冻结），
+        // 返回 true 表示相机动过——不置脏的话 render-on-demand 会跳帧。
+        if (advancePersonFollow(camera, controls, handlersRef.current.walkthroughActive === true)) dirtyRef.current = true;
         if (contextLost) return;
         if (!controlsMoved && !dirtyRef.current) return;
         dirtyRef.current = false;

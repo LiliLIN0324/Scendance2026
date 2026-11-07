@@ -30,6 +30,10 @@ export interface ItemContextPopoverProps {
   onToggleRouteDrawing?(): void;
   /** 撤掉最后一个路点（先撤草稿首点，再撤已提交路线的末点）。 */
   onUndoRoutePoint?(): void;
+  /** 正在近景跟拍该人物（PEOPLE-04 后半）。 */
+  following?: boolean;
+  /** 开始/停止跟拍该人物；镜头推进在渲染循环里（three/person-follow）。 */
+  onToggleFollow?(): void;
 }
 
 const COLORS = ['#375B4B', '#78958B', '#B5C3B2', '#C9B89D', '#DDD9CA', '#EDEAE1', '#B98067', '#404748'];
@@ -177,7 +181,8 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         <button type="button" className="sc-button" disabled={locked} onClick={() => props.onRotate(item.id)}><RotateCcw size={16}/>旋转 90°</button>
       </div></section>
       {isPerson && <PersonSections item={item} locked={locked} routeDrawing={props.routeDrawing} routeDrawHint={props.routeDrawHint}
-        onToggleRouteDrawing={props.onToggleRouteDrawing} onUndoRoutePoint={props.onUndoRoutePoint} />}
+        onToggleRouteDrawing={props.onToggleRouteDrawing} onUndoRoutePoint={props.onUndoRoutePoint}
+        following={props.following} onToggleFollow={props.onToggleFollow} />}
       {item.glbUrl || item.assetId
         ? <p className="sc-note">{item.assetId?'该模型保留原材质。需要调整时，请到“资料 → 物料工具 → 材质调整”核对材质槽并预览新版本。':'该模型保留自身材质，暂不支持改色。'}</p>
         : <section><h3>物料颜色 <input type="color" aria-label="物料颜色" value={item.color} disabled={locked} onChange={event => { actions.setColor(item.id, event.target.value); pushColor(event.target.value); }}/></h3><div className="sc-color-swatches">{COLORS.map(color => <button type="button" key={color} style={{ background: color }} aria-label={`颜色 ${color}`} aria-pressed={item.color.toUpperCase() === color} disabled={locked} onClick={() => { actions.setColor(item.id, color); pushColor(color); }}/>)}</div></section>}
@@ -195,13 +200,15 @@ const PERSON_ACTIONS: Array<[PersonAction, string]> = [['idle', '待机'], ['tal
  * 人物动画与行走路线（PEOPLE-01/04）。路线数据存放在 item.walkRoute：
  * 点位来自画布布点（room-organizer 转发），本面板负责撤销、清除与巡游参数。
  */
-function PersonSections({ item, locked, routeDrawing, routeDrawHint, onToggleRouteDrawing, onUndoRoutePoint }: {
+function PersonSections({ item, locked, routeDrawing, routeDrawHint, onToggleRouteDrawing, onUndoRoutePoint, following, onToggleFollow }: {
   item: FurnitureItem;
   locked: boolean;
   routeDrawing?: boolean | undefined;
   routeDrawHint?: string | null | undefined;
   onToggleRouteDrawing?: (() => void) | undefined;
   onUndoRoutePoint?: (() => void) | undefined;
+  following?: boolean | undefined;
+  onToggleFollow?: (() => void) | undefined;
 }): JSX.Element {
   const { actions, history } = useRoomEditor();
   const route = item.walkRoute;
@@ -227,6 +234,8 @@ function PersonSections({ item, locked, routeDrawing, routeDrawHint, onToggleRou
       <div className="sc-property-actions">
         <button type="button" className="sc-button" aria-pressed={paused} disabled={locked || !route && currentAction === 'idle'}
           onClick={() => { history.commitNow(); actions.updateItem(item.id, { personPaused: !paused }); }}>{paused ? '继续播放' : '暂停动作'}</button>
+        {onToggleFollow && <button type="button" className="sc-button" aria-pressed={!!following} disabled={locked}
+          onClick={onToggleFollow}>{following ? '退出跟拍' : '跟拍镜头'}</button>}
       </div>
       <p className="sc-note">{route
         ? '人物正沿路线行走：走动时播「行走」，在途经点停留时回「待机」。'

@@ -164,6 +164,16 @@ export function personOdometer(id: string): { travelled: number; laps: number } 
   return follower ? { travelled: follower.travelled, laps: follower.laps } : null;
 }
 
+/**
+ * 近景跟拍用：读一个在册实例的实时行进位姿（脚底位置 + 朝向）。
+ * 不在册或已脱离场景返回 null——跟拍镜头以此判定目标消失并自动退出。
+ */
+export function personFollowSample(id: string): { x: number; z: number; facing: number } | null {
+  const entry = entries.get(id);
+  if (!entry || !entry.group.parent) return null;
+  return { x: entry.group.position.x, z: entry.group.position.z, facing: entry.group.rotation.y };
+}
+
 export interface PersonWalkProbe {
   id: string;
   x: number;

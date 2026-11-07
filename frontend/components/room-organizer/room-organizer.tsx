@@ -109,6 +109,7 @@ import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
 import { routePointError } from './lib/person-route';
+import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
@@ -552,6 +553,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [routeDrawItemId, setRouteDrawItemId] = useState<string | null>(null);
   const [routeDraft, setRouteDraft] = useState<{ itemId: string; points: Array<{ x: number; z: number }> } | null>(null);
   const [routeDrawHint, setRouteDrawHint] = useState<string | null>(null);
+  // 近景跟拍（PEOPLE-04 后半）：目标 id 只是 UI 态；镜头推进在渲染循环里
+  // （three/person-follow），人物被删时由 follow 模块回调收摊。
+  const [followPersonId, setFollowPersonId] = useState<string | null>(null);
   // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
 
@@ -735,6 +739,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: points.slice(0, -1) } });
     }
   }, [routeDrawItemId, routeDraft, activeFloor.items, actions, stopRouteDraw]);
+
+  // 近景跟拍（PEOPLE-04 后半）：toggle 一名人物的跟随镜头。人物被删时
+  // three/person-follow 检测到目标消失自动退出并回调清 UI 态。
+  const toggleFollowPerson = useCallback((itemId: string) => {
+    if (followPersonId === itemId) {
+      setPersonFollowTarget(null);
+      setFollowPersonId(null);
+      return;
+    }
+    setPersonFollowTarget(itemId, () => setFollowPersonId(null));
+    setFollowPersonId(itemId);
+    // 跟拍是 3D 视角的事：停在 2D 平面图上看不到，切回 3D。
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+  }, [followPersonId]);
 
   // Reset wall draft + wall selection whenever draw mode flips off.
   useEffect(() => {
@@ -3122,6 +3140,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
                 routeDrawHint={routeDrawHint}
                 onToggleRouteDrawing={toggleRouteDraw}
                 onUndoRoutePoint={undoRoutePoint}
+                following={followPersonId === selectedItem.id}
+                onToggleFollow={() => toggleFollowPerson(selectedItem.id)}
                 onRotate={id => { commitHistoryNow(); if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
             </div>}
             {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
