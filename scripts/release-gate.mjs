@@ -20,6 +20,7 @@ const CORE_TESTS = [
   'lib/flow-constraints.test.ts',
   'lib/door-privacy.test.ts',
   'components/room-organizer/lib/scene-delivery.test.ts',
+  'components/room-organizer/lib/delivery-package-spec.test.ts',
   'components/room-organizer/lib/share.test.ts',
   'components/room-organizer/lib/scene-anchor.test.ts',
   'components/room-organizer/lib/schema.test.ts',
