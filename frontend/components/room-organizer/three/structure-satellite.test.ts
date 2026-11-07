@@ -60,12 +60,8 @@ describe('satellite floor texture', () => {
       onerror: null | (() => void) = null;
       set src(_value: string) { queueMicrotask(() => this.onerror?.()); }
     });
-    HTMLCanvasElement.prototype.getContext = (() => ({
-      fillStyle: '',
-      font: '',
-      fillRect() {},
-      fillText() {},
-    })) as unknown as HTMLCanvasElement['getContext'];
+    // jsdom 现已装 canvas 包，真 2D context 自带 fillRect/fillText；
+    // 旧的 getContext 猴补缺 beginPath，会把本用例和文件里后续用例一起搞挂（prototype 级污染）。
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, makeLayout({
       satelliteGroundRef: true,

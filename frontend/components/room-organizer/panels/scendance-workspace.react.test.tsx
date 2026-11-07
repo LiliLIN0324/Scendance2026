@@ -212,14 +212,14 @@ describe('ScendanceViewTools design column', () => {
   it('renders one right-edge island of flat round tools with no more-ellipsis', () => {
     const { values, rail } = renderTools();
     expect(rail.id).toBe('tool-column');
-    // 室内常驻：发布 / 选择 / 2D·3D / 第一人称走进场 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围。卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(13);
+    // 室内常驻：发布 / 移动局部物体 / 2D·3D / 进入漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
+    expect(within(rail).getAllByRole('button')).toHaveLength(15);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
-    for (const name of ['发布', '选择工具 · 激活中，再点一次退出', '2D / 3D', '第一人称走进场', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图']) {
+    for (const name of ['发布', '移动局部物体 · 激活中，再点一次退出', '2D / 3D', '进入漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     // 选择是开关而不是禁用：默认激活，但按钮可点，再点一次退出。
-    const selectButton = within(rail).getByRole('button', { name: '选择工具 · 激活中，再点一次退出' }) as HTMLButtonElement;
+    const selectButton = within(rail).getByRole('button', { name: '移动局部物体 · 激活中，再点一次退出' }) as HTMLButtonElement;
     expect(selectButton.disabled).toBe(false);
     expect(selectButton.getAttribute('aria-pressed')).toBe('true');
     // 三个机位是同一层切换，右轨只留一颗「视角」钮，点一下按 整体 → 俯视 → 正面机位 轮换。
@@ -254,15 +254,16 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.querySelector('.sc-atmosphere-group')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
     const dimension = within(rail).getByRole('button', { name: '2D / 3D' });
-    expect(dimension.querySelector('svg')).toBeTruthy();
+    // 图标体系已迁到 Material Symbol 蒙版 span（sc-material-symbol），不再是 svg。
+    expect(dimension.querySelector('.sc-material-symbol')).toBeTruthy();
     expect(dimension.textContent).not.toMatch(/2D|3D/);
     fireEvent.click(dimension);
     expect(values.toggle).toHaveBeenCalledWith('view2D');
   });
 
-  it('toggles 选择 as a real switch instead of disabling it', () => {
+  it('toggles 移动局部物体 as a real switch instead of disabling it', () => {
     const { values, rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '选择工具 · 激活中，再点一次退出' }) as HTMLButtonElement;
+    const select = within(rail).getByRole('button', { name: '移动局部物体 · 激活中，再点一次退出' }) as HTMLButtonElement;
     expect(select.disabled).toBe(false);
     expect(select.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(select);
@@ -271,7 +272,7 @@ describe('ScendanceViewTools design column', () => {
     // 关掉之后是「未启用」：仍然可点，再点一下就是重新启用。
     const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
     render(<Providers values={off}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const offSelect = screen.getByRole('button', { name: '选择工具 · 未启用，点一下启用' }) as HTMLButtonElement;
+    const offSelect = screen.getByRole('button', { name: '移动局部物体 · 未启用，点一下启用' }) as HTMLButtonElement;
     expect(offSelect.disabled).toBe(false);
     expect(offSelect.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(offSelect);
@@ -280,7 +281,7 @@ describe('ScendanceViewTools design column', () => {
     // 在走动里它不是当前工具：可点，点一下就是退出走动回到选择。
     const walking = contexts(makeLayout(), makeViewSettings({ walkthroughMode: true }));
     render(<Providers values={walking}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
-    const walkingSelect = screen.getByRole('button', { name: '选择工具 · 已启用，点一下切回' });
+    const walkingSelect = screen.getByRole('button', { name: '移动局部物体 · 已启用，点一下切回' });
     expect((walkingSelect as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(walkingSelect);
     expect(walking.setView).toHaveBeenCalledTimes(1);
@@ -325,20 +326,22 @@ describe('ScendanceViewTools design column', () => {
     const dialog = screen.getByRole('dialog', { name: '导出效果图选项' });
     expect(dialog.textContent).toContain('导出效果图');
     fireEvent.click(screen.getByRole('button', { name: '整体' }));
-    fireEvent.click(screen.getByRole('button', { name: '超清 3×' }));
+    // 画质钮 aria-label = 提示（档位）：EXPORT_SCALES 三档 1080p/4K/6K。
+    fireEvent.click(screen.getByRole('button', { name: '5760×3240（6K）' }));
     fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
     await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'iso', scale: 3 }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '导出效果图选项' })).toBeNull());
   });
 
-  it('defaults to the current view at 2× and marks the choices active', async () => {
+  it('defaults to the current view at 1080p and marks the choices active', async () => {
     const onExportImage = vi.fn().mockResolvedValue(true);
     const { rail } = renderTools(makeViewSettings(), onExportImage);
     fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
     expect((screen.getByRole('button', { name: '跟随当前' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
-    expect((screen.getByRole('button', { name: '高清 2×' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    // 交付默认档改为 1080p（1×），4K/6K 是加档而不是默认。
+    expect((screen.getByRole('button', { name: '1920×1080（1080p）' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
-    await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'current', scale: 2 }));
+    await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'current', scale: 1 }));
   });
 
   it('exports the album of stable camera angles once and keeps it out of 2D', async () => {
@@ -350,7 +353,7 @@ describe('ScendanceViewTools design column', () => {
     fireEvent.click(album);
     expect(album.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '导出机位册' }));
-    await waitFor(() => expect(onExportAlbum).toHaveBeenCalledWith({ scale: 2 }));
+    await waitFor(() => expect(onExportAlbum).toHaveBeenCalledWith({ scale: 1 }));
   });
 
   it('keeps the album out of the 2D plan', () => {
@@ -369,7 +372,7 @@ describe('ScendanceViewTools design column', () => {
       expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(within(rail).getByRole('button', { name: '第一人称走进场' })).toBeTruthy();
+    expect(within(rail).getByRole('button', { name: '进入漫游' })).toBeTruthy();
   });
 
   it('keeps the atmosphere controls in view once something is actually changed', () => {
@@ -390,7 +393,7 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 第一人称走进场 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
+  it('wires 进入漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
     const values = contexts();
     const canvas = document.createElement('canvas');
     canvas.id = 'sc-viewport-3d';
@@ -399,7 +402,7 @@ describe('ScendanceViewTools atmosphere menus', () => {
     document.body.appendChild(canvas);
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onApplyPreset={vi.fn()} onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
-    fireEvent.click(within(rail).getByRole('button', { name: '第一人称走进场' }));
+    fireEvent.click(within(rail).getByRole('button', { name: '进入漫游' }));
     const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
     expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
     expect(walk(makeViewSettings()).view2D).toBe(false);
@@ -577,8 +580,8 @@ describe('MaterialDrawerHandle', () => {
     const { rerender } = render(<MaterialDrawerHandle open={false} onToggle={onToggle} buttonRef={buttonRef}/>);
     const button = screen.getByRole('button', { name: '展开物料库' });
     expect(buttonRef.current).toBe(button);
-    // 底条是分区切换：主视觉是物料图标，中文名留在 aria-label。
-    expect(button.querySelector('svg')).toBeTruthy();
+    // 底条是分区切换：主视觉是物料图标（图标体系已迁到 Material Symbol 蒙版 span，不再是 svg），中文名留在 aria-label。
+    expect(button.querySelector('.sc-material-symbol')).toBeTruthy();
     expect(button.textContent ?? '').not.toMatch(/物料/);
     expect(button.getAttribute('aria-controls')).toBe('workbench-material-shelf');
     fireEvent.click(button);

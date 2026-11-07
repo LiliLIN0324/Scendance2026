@@ -90,22 +90,17 @@ describe('editable scene archives', () => {
       expect(encoded).not.toBe('');
       const { state } = JSON.parse(encoded);
       expect(new TextEncoder().encode(encoded).length).toBeLessThan(100000);
-      expect(state.objectRows).toHaveLength(310); // 307 shared fixtures plus three distinct tables.
-      const restored = state.candidates.map(({ warningRefs, scene: compactScene, ...candidate }: {
-        warningRefs: number[]; scene: { objects: number[] }; [key: string]: unknown;
-      }) => ({ ...candidate, scene: { ...compactScene, objects: compactScene.objects.map(index => {
-        const object: Record<string, unknown> = {};
-        state.objectColumns.forEach((column: string, field: number) => {
-          const value = state.objectRows[index][field];
-          if (value === null) return;
-          const [key, child] = column.split('.');
-          if (child) object[key] ??= {};
-          if (child) (object[key] as Record<string, unknown>)[child] = value;
-          else object[key] = value;
-        });
-        return object;
-      }) }, warnings: warningRefs.map(index => state.warningRows[index]) }));
-      expect(restored).toEqual(JSON.parse(JSON.stringify(candidates)));
+      // 压缩格式（jev comparisonState）：候选只带差异物件，307 个共享件省略进 sharedContext，
+      // UUID 在序列化层替换为 refN 别名；旧 objectRows/objectColumns 行列格式已弃用。
+      expect(state.task).toBe('比较三个新增桌子的位置，保留原体育馆布置');
+      expect(state.sharedContext.objectCount).toBe(307);
+      expect(state.candidates).toHaveLength(3);
+      for (const candidate of state.candidates) {
+        expect(candidate.objectCount).toBe(308);
+        expect(candidate.scene.objects).toHaveLength(1); // 只带各自新增的桌子
+      }
+      expect(encoded).not.toMatch(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/i);
+      expect(encoded).toContain('ref0');
       expect(evaluation).toMatchObject({ status: 'complete', choice: 'B', confidence: 0.5, probabilities: { A: 0.2, B: 0.5, C: 0.2, NONE: 0.1 } });
       expect(candidates).toEqual(originalCandidates);
     }

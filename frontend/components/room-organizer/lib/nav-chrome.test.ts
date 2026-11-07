@@ -53,7 +53,9 @@ describe('nav chrome state', () => {
   it('does not store a separate navExpanded flag beside the two doors', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).not.toMatch(/navExpanded\s*=\s*useState|const \[navExpanded/);
-    expect(source).toContain('toggleNavColumns');
+    // 重构后 room-organizer 只派生 navExpanded（isNavExpanded 读现值），
+    // toggleNavColumns 的调用位移进了 WorkbenchBrandToggle 的 onToggle 链，不再出现在本文件。
     expect(source).toContain('isNavExpanded');
+    expect(source).toMatch(/isNavExpanded\(\{/);
   });
 });
