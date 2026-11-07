@@ -4,6 +4,7 @@ import { attachDragHandlers } from '../three/drag-handlers';
 import { addLights } from '../three/lighting';
 import { applyRendererLook, BASE_ENVIRONMENT_INTENSITY } from '../three/render-look';
 import { advanceGlbAnimations } from '../three/glb-assets';
+import { advancePeopleAnimations } from '../three/people-anim';
 import { setMaxAnisotropy } from '../three/texture-settings';
 import type { SceneEventHandlers } from '../three/drag-handlers';
 import type * as ThreeNS from 'three';
@@ -233,6 +234,8 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         const controlsMoved = handlersRef.current.walkthroughActive ? false : controls.update();
         // 有实例动画在播时必须每帧推进，并主动置脏——否则下面的早退会让它一帧都不动。
         if (advanceGlbAnimations(deltaSeconds) > 0) dirtyRef.current = true;
+        // 人物动画（people-anim 注册表）：路线行走 + mixer 推进，同上置脏。
+        if (advancePeopleAnimations(deltaSeconds) > 0) dirtyRef.current = true;
         if (contextLost) return;
         if (!controlsMoved && !dirtyRef.current) return;
         dirtyRef.current = false;

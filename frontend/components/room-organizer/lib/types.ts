@@ -120,6 +120,25 @@ export interface CategoryMeta {
   icon: string;
 }
 
+/** 人物可切换的动作（people.glb 的三个 clip；见 three/people-model.ts）。 */
+export type PersonAction = 'idle' | 'talk' | 'walk';
+
+/**
+ * 人物沿米制平面行走的路线（PEOPLE-04）。路点是场景坐标（SW 原点，米），
+ * 与 `item.position` 无关——行走时人物的可视位置由路线驱动，锚点保持不动。
+ * `loop` 省缺为闭环巡游（末点走回首点）；显式 false 时走折返（到终点后原路返回）。
+ */
+export interface WalkRoute {
+  /** 途经点，至少 2 个；点距过近（<0.15 m）的相邻点在引擎里合并。 */
+  points: Vec2[];
+  /** 省缺 true：末点接回首点成环。false：折返巡游。 */
+  loop?: boolean;
+  /** 步速 m/s，省缺 PERSON_WALK_SPEED（≈1.05，与 Walk_Loop 1.333s 周期的自然步幅同步）。 */
+  speed?: number;
+  /** 每个途经点的停留时长 ms，省缺 900；0 表示不停留。 */
+  pauseMs?: number;
+}
+
 export interface FurnitureItem {
   /** Local execution record for this instance; not part of the cloud Scene. */
   handoff?: Handoff | undefined;
@@ -199,6 +218,15 @@ export interface FurnitureItem {
    * 纯可选字段，缺省时与既有布局完全兼容；不进必填面。
    */
   provenance?: Provenance;
+  /**
+   * 人物（type 'person'）的默认动作；缺省 'idle'。带 `walkRoute` 时被路线驱动
+   * 覆盖（走时 walk、停时 idle），本字段只在无路线时生效。
+   */
+  personAction?: PersonAction;
+  /** 人物动画暂停：mixer 停在当前帧，恢复后从原地继续。 */
+  personPaused?: boolean;
+  /** 人物行走路线（PEOPLE-04）；存在时人物每帧沿路线移动（可视层，锚点不动）。 */
+  walkRoute?: WalkRoute;
 }
 
 export type CameraPreset = 'iso' | 'top' | 'front' | 'corner';
