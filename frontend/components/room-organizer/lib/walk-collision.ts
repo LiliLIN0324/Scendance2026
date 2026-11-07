@@ -107,6 +107,9 @@ export function buildWalkColliders(
     if (!item.position) continue;
     if (isWallMounted(item.type) || isWallHung(item.type)) continue;
     if (item.height <= LOW_PROFILE_MAX_HEIGHT) continue;
+    // 带路线的人物（PEOPLE-04）会离开锚点行走，锚点处留一个静态碰撞盒会挡住
+    // 它自己和其他行走者；人群 NPC 本来就不是碰撞体，同款处理。静态人物照旧是实体。
+    if (item.walkRoute && item.walkRoute.points.length >= 2) continue;
     colliders.push(
       boxCollider(
         item.position.x,

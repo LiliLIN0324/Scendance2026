@@ -15,6 +15,9 @@ import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
 import { buildEntrance } from '../three/entrance';
 import { createFurnitureModel } from '../three/furniture-builders';
+import { ROUTE_BOUNDARY_MARGIN_M, routeIsLoop } from '../lib/person-route';
+import { buildWalkColliders } from '../lib/walk-collision';
+import { setPeopleShadowRefresher, setPersonWalkContext } from '../three/people-anim';
 import {
   clearInteriorWalls,
   clearPreview as clearWallPreview,
@@ -556,6 +559,74 @@ export function useSceneEffects({
     // from the model cache, and this re-runs the build once it's filled.
     peopleModelReady, glbAssetsRevision,
   ]);
+
+  // 行走上下文（PEOPLE-04）：本层有带路线的人物时，把碰撞盒与可走边界交给
+  // three/people-anim 的注册表。坐标与场景一致（房间中心为原点）。
+  useEffect(() => {
+    const routed = activeFloor.items.some((item) => item.walkRoute && item.walkRoute.points.length >= 2);
+    if (!routed) {
+      setPersonWalkContext(null);
+      return;
+    }
+    setPersonWalkContext({
+      colliders: buildWalkColliders(activeFloor.items, activeFloor.interiorWalls ?? [], {
+        roomWidth: layout.width,
+        roomDepth: layout.height,
+      }),
+      bounds: {
+        minX: -(layout.width / 2 - ROUTE_BOUNDARY_MARGIN_M),
+        minZ: -(layout.height / 2 - ROUTE_BOUNDARY_MARGIN_M),
+        maxX: layout.width / 2 - ROUTE_BOUNDARY_MARGIN_M,
+        maxZ: layout.height / 2 - ROUTE_BOUNDARY_MARGIN_M,
+      },
+    });
+    return () => setPersonWalkContext(null);
+  }, [activeFloor, activeFloor.interiorWalls, layout.width, layout.height]);
+
+  // 行走中的人物是动态投影体：把静态阴影图的重算入口递给注册表（与 use-npcs 同款）。
+  useEffect(() => {
+    setPeopleShadowRefresher(requestShadowUpdate);
+    return () => setPeopleShadowRefresher(null);
+  }, [requestShadowUpdate]);
+
+  // 路线可视化（PEOPLE-04）：折线（闭环含收尾段）+ 路点圆片，纯装饰、不参与拾取。
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!THREE || !scene) return;
+
+    removeTagged(scene, ROOM_OBJECT_TAGS.PersonRoute);
+    const routed = activeFloor.items.filter((item) => item.walkRoute && item.walkRoute.points.length >= 2);
+    if (routed.length === 0) return;
+
+    const floorY = floorElevation(layout.floors, activeFloorIndex);
+    const material = new THREE.MeshBasicMaterial({ color: 0x0f766e, transparent: true, opacity: 0.85 });
+    const markerGeometry = new THREE.CircleGeometry(0.11, 20);
+    for (const item of routed) {
+      const route = item.walkRoute!;
+      const pts = routeIsLoop(route) ? [...route.points, route.points[0]!] : route.points;
+      const geometry = new THREE.BufferGeometry().setFromPoints(
+        pts.map((p) => new THREE.Vector3(p.x, floorY + 0.02, p.z))
+      );
+      const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x0f766e, transparent: true, opacity: 0.9 }));
+      line.raycast = () => {};
+      line.userData.type = ROOM_OBJECT_TAGS.PersonRoute;
+      scene.add(line);
+      for (const point of route.points) {
+        const marker = new THREE.Mesh(markerGeometry, material);
+        marker.rotation.x = -Math.PI / 2;
+        marker.position.set(point.x, floorY + 0.012, point.z);
+        marker.raycast = () => {};
+        marker.userData.type = ROOM_OBJECT_TAGS.PersonRoute;
+        scene.add(marker);
+      }
+    }
+    return () => {
+      removeTagged(scene, ROOM_OBJECT_TAGS.PersonRoute);
+    };
+  }, [isReady, invalidate, threeModuleRef, sceneRef, activeFloor, activeFloorIndex, layout.floors]);
 
   // Selection / highlight outlines. Kept out of the furniture effect above so
   // a selection click only swaps the outline LineSegments instead of

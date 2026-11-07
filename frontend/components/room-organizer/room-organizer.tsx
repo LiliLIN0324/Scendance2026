@@ -108,6 +108,7 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
+import { routePointError } from './lib/person-route';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
@@ -546,6 +547,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const [measurementPoints, setMeasurementPoints] = useState<ReadonlyArray<{ x: number; z: number }>>([]);
   const [wallDraft, setWallDraft] = useState<{ x: number; z: number } | null>(null);
   const [pointerWorld, setPointerWorld] = useState<{ x: number; z: number } | null>(null);
+  // 人物路线布点（PEOPLE-04）：画布点击喂给选中人物的 walkRoute。首个路点先落
+  // 草稿（单点路线过不了 schema 校验，不能提前写进 item），第二个点起直接提交。
+  const [routeDrawItemId, setRouteDrawItemId] = useState<string | null>(null);
+  const [routeDraft, setRouteDraft] = useState<{ itemId: string; points: Array<{ x: number; z: number }> } | null>(null);
+  const [routeDrawHint, setRouteDrawHint] = useState<string | null>(null);
   // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
 
@@ -585,6 +591,35 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
 
   const handleEmptyClick = useCallback(
     (x: number, z: number) => {
+      if (routeDrawItemId) {
+        // 人物路线布点（PEOPLE-04）：与画墙同款「点击布点」。第一个点存草稿，
+        // 第二个点起写进 item.walkRoute（路线可视化随布局重建自动出现）。
+        // 撤销边界由 useHistory 的自动快照负责（同 addInteriorWall）。
+        const item = activeFloor.items.find((candidate) => candidate.id === routeDrawItemId);
+        if (!item) {
+          setRouteDrawItemId(null);
+          setRouteDraft(null);
+          setRouteDrawHint(null);
+          return;
+        }
+        const points = routeDraft?.itemId === routeDrawItemId
+          ? routeDraft.points
+          : item.walkRoute?.points ?? [];
+        const problem = routePointError(points, { x, z }, { width: layout.width, depth: layout.height });
+        if (problem) {
+          setRouteDrawHint(problem);
+          return;
+        }
+        setRouteDrawHint(null);
+        const next = [...points, { x, z }];
+        if (next.length >= 2) {
+          actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: next } });
+          setRouteDraft(null);
+        } else {
+          setRouteDraft({ itemId: routeDrawItemId, points: next });
+        }
+        return;
+      }
       if (view.drawWallMode) {
         const snapped = snapWallEndpoint({
           point: { x, z },
@@ -630,6 +665,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       activeFloor.interiorWalls,
       layout.width,
       layout.height,
+      routeDrawItemId,
+      routeDraft,
     ]
   );
 
@@ -640,6 +677,64 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
   const handleFloorPointerLeave = useCallback(() => {
     setPointerWorld(null);
   }, []);
+
+  const stopRouteDraw = useCallback(() => {
+    setRouteDrawItemId(null);
+    setRouteDraft(null);
+    setRouteDrawHint(null);
+  }, []);
+
+  // Esc 结束布点；离开属性面板或取消选中时同样收摊（未满两点的草稿直接丢弃）。
+  useEffect(() => {
+    if (!routeDrawItemId) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') stopRouteDraw();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [routeDrawItemId, stopRouteDraw]);
+  useEffect(() => {
+    if (routeDrawItemId && leftMode !== 'properties') stopRouteDraw();
+  }, [routeDrawItemId, leftMode, stopRouteDraw]);
+  useEffect(() => {
+    if (routeDrawItemId && selectedItemId !== routeDrawItemId) stopRouteDraw();
+  }, [routeDrawItemId, selectedItemId, stopRouteDraw]);
+
+  const toggleRouteDraw = useCallback(() => {
+    if (routeDrawItemId) {
+      stopRouteDraw();
+      return;
+    }
+    if (!selectedItemId) return;
+    const item = activeFloor.items.find((candidate) => candidate.id === selectedItemId);
+    if (!item || item.type !== 'person') return;
+    setRouteDrawItemId(selectedItemId);
+    // 已有路线就在末点续画；无路线从空草稿起步。
+    setRouteDraft(item.walkRoute ? null : { itemId: selectedItemId, points: [] });
+    setRouteDrawHint(null);
+  }, [routeDrawItemId, selectedItemId, activeFloor.items, stopRouteDraw]);
+
+  const undoRoutePoint = useCallback(() => {
+    if (!routeDrawItemId) return;
+    const item = activeFloor.items.find((candidate) => candidate.id === routeDrawItemId);
+    if (!item) {
+      stopRouteDraw();
+      return;
+    }
+    if (routeDraft?.itemId === routeDrawItemId && routeDraft.points.length > 0) {
+      setRouteDraft({ itemId: routeDrawItemId, points: routeDraft.points.slice(0, -1) });
+      return;
+    }
+    const points = item.walkRoute?.points ?? [];
+    if (points.length === 0) return;
+    if (points.length <= 2) {
+      // 撤到不足两点：整条路线随存档规则一起撤销，首点退回草稿方便重画。
+      actions.updateItem(routeDrawItemId, { walkRoute: undefined } as unknown as Partial<FurnitureItem>);
+      setRouteDraft({ itemId: routeDrawItemId, points: [points[0]!] });
+    } else {
+      actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: points.slice(0, -1) } });
+    }
+  }, [routeDrawItemId, routeDraft, activeFloor.items, actions, stopRouteDraw]);
 
   // Reset wall draft + wall selection whenever draw mode flips off.
   useEffect(() => {
@@ -1478,7 +1573,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       onViewportResize: () => frameViewportRef.current(),
       walkthroughActive,
       // The distance tool measures across furniture, so its clicks go to the floor (#341).
-      floorPickOnly: view.drawWallMode || view.measurementMode,
+      // 人物路线布点同理：绘制中所有点击都落到地面坐标（PEOPLE-04）。
+      floorPickOnly: view.drawWallMode || view.measurementMode || routeDrawItemId !== null,
       onItemSelect: handleSelect,
       onItemDoubleClick: openPropertiesForItem,
       selectedIds: allSelectedIds,
@@ -3022,6 +3118,10 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
                 hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
+                routeDrawing={routeDrawItemId !== null && routeDrawItemId === selectedItem.id}
+                routeDrawHint={routeDrawHint}
+                onToggleRouteDrawing={toggleRouteDraw}
+                onUndoRoutePoint={undoRoutePoint}
                 onRotate={id => { commitHistoryNow(); if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
             </div>}
             {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
