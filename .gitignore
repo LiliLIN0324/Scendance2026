@@ -45,7 +45,27 @@ output/model-library/
 .cache/
 .temp-cloud.txt
 frontend/.preview/
-docs/evidence/
+
+# docs/evidence: default NO (COLLAB §三 提交纪律); only whitelisted dirs may be
+# committed on purpose, heavy rebuild products stay excluded everywhere.
+# To admit a new evidence dir: add `!docs/evidence/<sub>/` after the `aholo/*`
+# re-ignore line, and re-ignore any heavy payloads it contains.
+docs/evidence/*
+!docs/evidence/aholo/
+docs/evidence/aholo/*
+!docs/evidence/aholo/sculpture-rig/
+!docs/evidence/aholo/sculpture-rig-local/
+!docs/evidence/aholo/sculpture-rig-tpose/
+!docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/
+docs/evidence/aholo/sculpture-rig-tpose/*.png
+docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/web-upload-images/
+# Heavy rebuild products / bulk captures: never commit from any evidence dir
+docs/evidence/**/*.spz
+docs/evidence/**/*.ply
+docs/evidence/**/*.zip
+docs/evidence/**/*.mp4
+docs/evidence/**/*.lrf
+docs/evidence/**/*_hq.glb
 
 # ZCode scratch dumps
 .temp-*.txt
