@@ -4,7 +4,7 @@
 
 > 先读HANDOFF.md。
 
-最后更新：2026-11-07（七轮）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-07（八轮）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 优先接力 · 西湖新素材与地图空间体验
 
@@ -104,17 +104,22 @@
 
 来源：[AHOLO 能力总览](https://labs.aholo.ai/api-docs/intro) · [自动绑骨与动作重定向](https://labs.aholo.ai/api-docs/release-notes) · [官方 SDK 动作示例](https://labs.aholo.ai/api-docs/en/sdk/typescript)。
 
+> **卡片回填（2026-11-07 八轮，ZCode 会话）**：**XH-02/PEOPLE-02 授权第八轮当面问询仍未获应答**（本轮以结构化问句直接问询，未获选择），按卡片原文不动上传、不耗额度。本轮执行两个不耗额度的缺口：
+> - **依赖安全 B 类全部收口**（[docs/34](docs/34-依赖漏洞分类清点.md) §三.B，**两份 npm audit 双清零**）：根 `package.json` 新增 `overrides`——miniprogram-automator.debug→4.3.1（scoped）、jpeg-js→0.4.4、phin→3.7.1、mkdirp.minimist→0.2.4（scoped）；jimp 0.6.8 在新链下 PNG/JPEG decode/encode 往返实测像素正确（miniprogram 截图比对的真实消费路径）+ miniprogram-automator 模块加载正常。frontend `npm update wrangler` 4.148.0→**4.158.0**，miniflare 随之 5.20261104.0-beta（嵌套 undici=**7.30.1**、sharp=**0.35.5**，恰为 §三.B 表修复版，无需 override）。minimatch #46：上游 @typescript-eslint 8.72.1 仍 pin ^10.2.2（audit fix 断路），提前以 frontend scoped override `@typescript-eslint/typescript-estree.minimatch=11.0.1` 收口（minimatch 11 双包有 CJS 入口），`npm run lint` **0 errors** 实证兼容。**验证**：根/前端 `npm audit` 双 **0**、根 tsc + 前端 tsc 0 错、build exit 0（14 路由）、`npm run dev:agent` 启动干净（PGlite 迁移就绪）；小程序 DevTools 全链自动化本轮未跑（改动面=已实测的模块级路径）。**Dependabot 42 条 open 告警的修复路径全部执行完毕。**
+> - **茶亭实景接线（PEOPLE 线③：巡游围栏换点云实测范围）**：此前巡游人物的可走边界永远是布局名义矩形（layout.width/height），真 splat 场景里人物会走出点云范围；第一人称漫游早已用点云实测围栏（`walkBoundsOf`），本轮让巡游人物共用同一条围栏——`lib/person-route.ts` 新增 `personWalkBounds`（实景四至内缩 ROUTE_BOUNDARY_MARGIN_M 优先，范围退化回退布局矩形）+ `routePointErrorInRect`（矩形布点校验，实景四至有落位偏移不再居中；原 `routePointError` 改为委托等价实现）；`use-scene-effects.ts` 行走上下文 effect 加可选 `personRouteBounds`；room-organizer 五处零删除接线（`splatWalkBoundsRef`——`splatState` 声明在布点回调之后经 ref 读现值、布点校验实景分支、`useSceneEffects` 传参、import 两行；**独占区一处主题 hunk 已登记 COLLAB 待协商**）。**验证**：person-route 15 例（+2：偏移四至校验/实景优先与退化回退）+ 定向 6 套件 224 例全绿、`npx tsc --noEmit` 0 错误、`NEXT_DIST_DIR=.next-ci npm run build` exit 0（14 路由）；页面级实景巡游目视归 SC-03 前台（纯边界来源替换，无动画语义变化）。
+
 ## 当前任务
 
 - **产品主线**：幕景 Scendance 是活动场地方案工作台。用已有场地或尺寸平面完成圈区、出方案、复核、客户确认和执行交接。近期产品评估建议先验证一个真实活动的交付闭环。
 - **用户已授权的待办**：在 AHOLO 官方实景重建工作台，用同一批 63 张茶室照片做一次网页对照。记录上传、创建和最终状态的页面原文、任务号与截图。
-- **仓库基线**：2026-11-07 七轮：**PEOPLE 已知限制收口（行走者 2D 平面图实时位置 + 路线布点贴障预检提示）落地并单测钉住**；依赖安全清点与两档升级（docs/34，生产运行时告警清零）；`.gitignore` 证据白名单收口 + 唯一有效绑骨交付物入库。六轮基线（PEOPLE-04 近景跟拍）在 tag `v4.3.0`，五轮（PEOPLE-01/04 全链路）在 `v4.2.0`。本轮按 minor 增量打 **tag `v4.4.0`**。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
+- **仓库基线**：2026-11-07 八轮：**依赖安全 B 类全部收口（根/前端 npm audit 双清零，docs/34 §三.B 执行完毕）+ 茶亭实景接线（巡游围栏换点云实测范围，PEOPLE 线③）**。七轮基线（PEOPLE 收口 + deps 立即档 + 证据白名单）在 tag `v4.4.0`，六轮（PEOPLE-04 近景跟拍）在 `v4.3.0`，五轮（PEOPLE-01/04 全链路）在 `v4.2.0`。本轮按 minor 增量打 **tag `v4.5.0`**。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
 - **任务派发**：见 [Scendance 需求清单](docs/25-Scendance需求清单.md)。按依赖每次领一张，优先验证一单从方案到交付的闭环。
 
 ## 已完成与证据
 
 | 工作 | 当前结果 |
 | --- | --- |
+| 依赖安全 B 类收口 + 茶亭实景接线（2026-11-07 八轮，ZCode 会话；tag v4.5.0） | **① deps B 类（两份 audit 双清零）**：根 overrides（miniprogram-automator.debug→4.3.1 scoped、jpeg-js→0.4.4、phin→3.7.1、mkdirp.minimist→0.2.4 scoped）+ frontend `npm update wrangler` 4.148.0→4.158.0（miniflare 5.20261104.0-beta：嵌套 undici 7.30.1、sharp 0.35.5 恰为修复版）+ minimatch 11.0.1 scoped override（上游 8.72.1 仍 pin ^10、audit fix 断路；`npm run lint` 0 errors 实证兼容）。**验证**：根/前端 `npm audit` 双 0；jimp decode/encode 往返 + automator 模块加载 + dev:agent 启动实测通过；根 tsc、前端 tsc、build（14 路由）全绿；[docs/34](docs/34-依赖漏洞分类清点.md) 已回填——**Dependabot 42 条 open 告警修复路径全部执行完毕**。**② 茶亭实景接线（PEOPLE 线③）**：巡游人物可走边界从布局名义矩形换成点云实测四至——`person-route.ts` 新增 `personWalkBounds`（实景四至内缩 0.3 m 优先、退化回退布局矩形）+ `routePointErrorInRect`（矩形布点校验，`routePointError` 改委托等价）；`use-scene-effects.ts` 行走上下文加可选 `personRouteBounds`；room-organizer 五处零删除接线（splatWalkBoundsRef/布点校验实景分支/useSceneEffects 传参；独占区 hunk 已登记 COLLAB）。**验证**：person-route 15 例（+2）+ 定向 6 套件 224 例全绿、tsc 0 错、build exit 0；页面级实景巡游目视归 SC-03。 |
 | PEOPLE 已知限制收口 + 依赖安全两档升级 + 证据白名单（2026-11-07 七轮，ZCode 会话；tag v4.4.0） | **① 行走者 2D 平面图实时位置**：`canvas-2d/render.ts` 可选 `personSample` 采样器（人物 2D 标记画到路线实时位，脚印/线符/选择框整体跟随；minimap 等无采样调用方零变化）+ `drawPersonRoutes` 虚线折线投影（#0f766e、闭环规则与 3D 同款）+ `use-scene-effects.ts` 传 `personFollowSample` 与 250ms 重绘 interval（动画人物非零才挂表）。**② 路线布点贴障预检**：`walkerClearanceAt`（walk-collision）+ `ROUTE_WAYPOINT_CLEARANCE_WARN_M=0.5`（person-route）+ room-organizer 布点分支提示不阻断（独占区 hunk 已登记 COLLAB）。**验证**：定向 7 套件 237 例全绿（render +5、walk-collision +6）、tsc 0 错、build exit 0（14 路由）；浏览器 E2E：注入布局→注册表/3D tick 行走（travelled 5.0m）→2D 路线折线像素级命中路点坐标；行走标记像素级终证归 SC-03 前台。**③ 依赖安全**：[docs/34](docs/34-依赖漏洞分类清点.md) 分类 42 条 Dependabot 告警（生产运行时 6 / dev 链 35 / 0 无修复）；立即+随手两档升级执行完毕——next 15.5.26→15.5.29（critical RCE #20 等 4 条）、zod 4.6.6 两处、source-map-js 1.2.2、vite 8.3.6 两处、vitest 4.1.12、undici 8.12.4、brace-expansion、postcss-selector-parser；**`npm audit --omit=dev`（frontend）= 0**，剩余 open 全落 B 类 overrides 清单（根 jimp 链 6 + miniflare 链 6 + minimatch 1）。升级后 tsc/237 例/build 全复验绿。**④ .gitignore 证据白名单**：`docs/evidence/` 整目录忽略改为「默认不入库+白名单」，sculpture-rig 三目录 + recheck-tearoom 报告入库（含唯一有效绑骨交付物 glb/blend，此前删了无法从 git 恢复）；spz/ply/zip/mp4/lrf/_hq.glb 任何证据目录一律排除。 |
 | PEOPLE-04 后半·近景跟拍 + SC-03 两项真机走查（2026-11-07 六轮，ZCode 会话；tag v4.3.0） | **follow-cam**：新建 `three/person-follow.ts`（进入帧摆背后近景机位 3.5m/3.0m/胸口 1.2m，此后每帧同量平移 camera+target，OrbitControls 旋转/缩放权保留；目标删除自动退出回调 UI；漫游期间冻结退出后重取机位；相机态不持久化零新增资源）+ `people-anim.ts` `personFollowSample(id)` 访问器 + `use-three-scene.ts` tick 一行接线 + popover「跟拍镜头/退出跟拍」按钮 + room-organizer `followPersonId` state（2D 中开启自动切回 3D；独占区 hunk 已登记 COLLAB）。**验证**：person-follow 8 例 + people-anim 8 例 = 16/16 绿（机位数学/位移同步/删除自动退出/手动退出不回调/漫游冻结恢复/切目标/lookAt 兜底）、tsc 0 错、build exit 0、popover 35 例回归绿；dev 探针 `__personFollowProbe`/`__setPersonFollowTarget`。**浏览器 E2E**（IAB 遮挡 rAF 截图连拍驱动）：镜头平移与人物位移逐帧一致（syncErr 0.024m）、cam.x 与人物 x 每帧精确相等、目标消失自动退出 tgt=null。**遗留**：进入帧绝对机位读数存疑（y=13.1 vs 预期 3.0）归 SC-03 前台复测（rAF 死透无法定位，见踩坑）；popover 按钮链路坐标级走查同归 SC-03。**SC-03 两项划掉**：MAP-01 联想下拉真机通过（「西湖」出 listbox、两个「西湖公园」以福州/泉州区分、tip 转 POI 不出假坐标、断桥残雪出「已定位预览」）；MAP-02 署名通过（动态=© AutoNavi、整景区=高德+OSM 常驻 `geo-basemap-attribution`）。 |
 | --- | --- |
@@ -151,21 +156,20 @@
 - **C 盘又满了（2026-11-07 实测 0 字节可用）**。本轮已清可再生缓存救回约 6.5 GB（根 `.temp/` 4.6 GB、`frontend/.next-ci`/`.next-local`、npm cache、Temp 两天前旧文件）。**Downloads 22.6 GB 与 HANDOFF 十一节的批 2/批 3 清理仍待用户批准**；D 盘还有 186 GB，大资产应一律落 D。
 - **并行会话同树工作（2026-11-07 实发）**：本轮提交期间用户另开的 chat 同时在改 HANDOFF、写 `docs/plans/hangzhou-isometric-map-research.md`（未跟踪，未入库，归那个会话）。共享树纪律：动手前和提交前都要重查 `git status`，别人的未跟踪产物不卷进自己的提交。
 - **`docs/evidence/` 的 ignore 规则已收口（2026-11-07 七轮）**：整目录忽略改为「默认不入库 + 白名单子目录」，4 个已引用目录入库（sculpture 绑骨三目录 + recheck 报告），重产物扩展名全局排除；以后新证据按 `.gitignore` 注释里的两行模式加白名单。COLLAB 已知项 #1 同步销案。
-- **GitHub Dependabot 依赖漏洞：已分类，生产运行时已清零（2026-11-07 七轮）**：42 条 open 告警逐条分类落 [docs/34](docs/34-依赖漏洞分类清点.md)（生产运行时 6 / dev 工具链 35 / 0 无修复）；立即+随手两档升级已执行并复验（next 15.5.29 含 critical RCE 修复、zod/source-map-js/vite/vitest/undici 等，`npm audit --omit=dev`=0）。**剩余 10 条全部是 B 类**（根 jimp 旧链 6 条含 critical 的 minimist——仅本地脚本/小程序自动化运行不进生产；miniflare pin 的 undici/sharp 6 条；minimatch 等 @typescript-eslint 上游 1 条），处置路径=overrides 或等上游，见 docs/34 §三.B。
+- **GitHub Dependabot 依赖漏洞：42 条 open 告警修复路径全部执行完毕（2026-11-07 八轮销案）**：立即/随手档（七轮）+ B 类（八轮根 overrides 四条 + wrangler 4.158.0/miniflare 链 + minimatch 11.0.1 scoped override），**根与 frontend 的 `npm audit` 双 0**；明细与实测证据见 [docs/34](docs/34-依赖漏洞分类清点.md) 执行进度注。遗留小尾巴：minimatch 11.0.1 是跨大版本 override（上游 @typescript-eslint 发 minimatch 11 兼容版后可移除）；小程序 DevTools 全链自动化未重跑（改动面=模块级已实测路径）。
 - 小程序体验版二维码、价格配置口径和真机采集体验见后面的历史记录，恢复对应工作前先核对状态。
 
 ## 下一步
 
-1. **XH-02 单段重建（P0，只差授权）**：素材已就绪——首选 [docs/33](docs/33-西湖新素材分段清单.md) 候选 0233（174s 园林走拍，2,391.9 MB），对照 0234（同园连续 1,942.7 MB）；备选 0220（65s 湖面+候船亭 787.9 MB）。等用户对「本批素材上传 + 额度」点头后，复用 `tools/aholo/` 视频链路提交一单（录输入时间段/任务号/终态/产物读取；失败全退的计费口径见记忆档）。**提交前先问一次授权，卡片原文条件未满足前不动上传**（七轮内多次询问未获应答；key 按既有方式经 `AHOLO_SCAN_KEY` 注入，不在仓库）。
-2. **PEOPLE 线续接（P0-P1）**：① **PEOPLE-02（P0，只差授权）**——AHOLO 古风样板：先做原创参考图（浅色对襟/交领、青绿裙、窄袖离地裙摆、中性站姿），审合格后提 G1/G1-Turbo 图生 3D 一单；**额度动作仍等用户点头**。② **PEOPLE-04 遗留（归 SC-03 前台窗口一并做）**：跟拍进入帧绝对机位前台复测（探针 `__personFollowProbe` 已就绪）、popover「跟拍镜头」按钮坐标级走查、退出跟拍后「回概览」chip 链路目视、**行走者 2D 标记像素级终证**（本轮折线已验，标记差最后一眼）。③ **茶亭实景接线**：把巡游人物放进真 splat 场景（walkBounds=实景米制范围）。④ PEOPLE-05/06（六人库、多人验收）依赖 PEOPLE-02/03。⑤ 已知限制「行走者 2D 显示锚点」「贴障折返无提示」已于七轮收口（剩余体感问题走 SC-03 走查反馈）。
-3. **SC-03 走查当前流程（P0，剩余画布类验收点需前台窗口）**：输入用 docs/27 用例 A/B；重点人工核对 A1/A11/A12/B6 四条非自动化断言 + docs/30/31/32 三份交接注记。**剩余验收点**（六轮已划掉 MAP-01 联想下拉与 MAP-02 署名两项）：圆桌区方案可行（24 座）、「装不下 N 人 + 建议降到」、⛔ 徽标；区类型条「预留区」钮、动线硬冲突横幅（REC=null）、真门 verified；popover 路线绘制/跟拍按钮坐标级走查 + **七轮新增**：2D 平面图行走者标记随路线移动目视、贴障布点提示文案出现。**必须 ZCode 窗口真实前台时做**（rAF 才活、画布点击才可能命中）；mock 环境启动命令见踩坑节。
-4. **依赖安全 B 类收尾（P2，10 条，不阻塞任何功能）**：按 [docs/34](docs/34-依赖漏洞分类清点.md) §三.B 清单做 overrides（根 jimp 旧链 6 条一次性 + miniflare 链 undici/sharp 随 wrangler 升级）后回归 `npm run dev:agent` 与小程序自动化；minimatch 等 @typescript-eslint 上游。生产运行时已是 0（`npm audit --omit=dev`）。
-5. **MAP-05 空间工作流验收（P1，依赖 XH-02 新资产）**：搜地点 → 确认场地 → 进实景 → 量一处已知长度 → 放一件已知尺寸物件 → 保存重开 → 回到概览；桌面+手机各一轮，回填设备/网络/首屏/实景就绪时间/请求量/对齐误差与三个最明显的操作问题。**顺带收口两个 MAP-03 遗留**：① 多 geo 场地互切时新场地落位用 stride 偏移不落 geo 投影位（v3.3.0 并排协作模式既有设计，第二个真 geo 场地出现时改 `selectEnvironment` 落位）；② LOD 阈值 100/200 m 按真机手感调；③ `AholoAssetGeo.headingDeg`→锚点朝向的语义校准（真资产进来后核「壳体平面图上方=采集朝向」假设）。
-6. **SC-20 复核（五轮已给结论，无需再开卡）**：草案卡硬约束呈现已齐——⛔ 不可行 / ⚠ 缺尺寸未核验徽标、draft_unverified 小字、REC=null「三版都有硬冲突」横幅+去重冲突清单，plan-card.react.test 5 例钉住；reserved 区配色评估结论=维持现状（徽章文字区分足够，动配色属视觉决策等用户拍板）。剩余动作只有 SC-03 的 UI 走查把这几件真点一遍。
-7. **价格拍板（SC-34 §二 9 项）**：SKU 金额/免费额度/退款链路等全部等用户点头；**付费入口恢复必须排在价格拍板之后**（否则 ¥4.90 旧价见用户，负毛利）。
-8. **继续网页对照（SC-24）**。先确认工具连接到了用户已登录且可控制的浏览器会话，再打开 [AHOLO 工作台](https://studio.aholo3d.cn/)。使用上面的 63 张 JPEG，室内空间、最低质量档，只创建一次，等终态并记录原文。浏览器连接仍失败时，记录工具具体阻塞，避免把它记为 AHOLO 重建失败。
-9. **做一次真实活动交付（SC-17）**。选有明确人数、场地和日期的活动，用现有扫描或尺寸平面出两个备选。让甲方确认一版，把同版本的效果图、尺寸平面、物料清单和分享链接交给执行方。记录耗时、人工补件和实际采用的文件。docs/27 演练卡可作真实卡片的模板。
-10. **磁盘清理批 2/批 3 等用户批准**；并行会话的杭州等距地图调研 `docs/plans/hangzhou-isometric-map-research.md` 仍未入库（归那个会话，勿卷进本线提交）。
+1. **XH-02 单段重建（P0，只差授权）**：素材已就绪——首选 [docs/33](docs/33-西湖新素材分段清单.md) 候选 0233（174s 园林走拍，2,391.9 MB `DJI_20261106161858_0233_D.MP4`），对照 0234（同园连续 1,942.7 MB）；备选 0220（65s 湖面+候船亭 787.9 MB）。等用户对「本批素材上传 + 额度」点头后，复用 `tools/aholo/recon-chain.mjs --video` 提交一单（录输入时间段/任务号/终态/产物读取；失败全退的计费口径见记忆档；链路八轮已复核，key 在根 `.env.local` 的 `LUX3D_API_KEY`，脚本只读环境变量需注入）。**提交前先问一次授权，卡片原文条件未满足前不动上传**（八轮内多次询问未获应答）。
+2. **PEOPLE 线续接（P0-P1）**：① **PEOPLE-02（P0，只差授权）**——AHOLO 古风样板：先做原创参考图（浅色对襟/交领、青绿裙、窄袖离地裙摆、中性站姿），审合格后提 G1/G1-Turbo 图生 3D 一单；**额度动作仍等用户点头**。② **PEOPLE-04 遗留（归 SC-03 前台窗口一并做）**：跟拍进入帧绝对机位前台复测（探针 `__personFollowProbe` 已就绪）、popover「跟拍镜头」按钮坐标级走查、退出跟拍后「回概览」chip 链路目视、**行走者 2D 标记像素级终证**（本轮折线已验，标记差最后一眼）。③ ~~茶亭实景接线~~ **已于八轮收口**（巡游围栏=点云实测范围；剩页面级实景巡游目视归 SC-03）。④ PEOPLE-05/06（六人库、多人验收）依赖 PEOPLE-02/03。⑤ 已知限制「行走者 2D 显示锚点」「贴障折返无提示」已于七轮收口（剩余体感问题走 SC-03 走查反馈）。
+3. **SC-03 走查当前流程（P0，剩余画布类验收点需前台窗口）**：输入用 docs/27 用例 A/B；重点人工核对 A1/A11/A12/B6 四条非自动化断言 + docs/30/31/32 三份交接注记。**剩余验收点**（六轮已划掉 MAP-01 联想下拉与 MAP-02 署名两项）：圆桌区方案可行（24 座）、「装不下 N 人 + 建议降到」、⛔ 徽标；区类型条「预留区」钮、动线硬冲突横幅（REC=null）、真门 verified；popover 路线绘制/跟拍按钮坐标级走查 + **七轮新增**：2D 平面图行走者标记随路线移动目视、贴障布点提示文案出现 + **八轮新增**：真 splat 场景里巡游人物不出点云范围（实景围栏目视）、实景下布点出界被拦（点云四至校验）。**必须 ZCode 窗口真实前台时做**（rAF 才活、画布点击才可能命中）；mock 环境启动命令见踩坑节。
+4. **MAP-05 空间工作流验收（P1，依赖 XH-02 新资产）**：搜地点 → 确认场地 → 进实景 → 量一处已知长度 → 放一件已知尺寸物件 → 保存重开 → 回到概览；桌面+手机各一轮，回填设备/网络/首屏/实景就绪时间/请求量/对齐误差与三个最明显的操作问题。**顺带收口两个 MAP-03 遗留**：① 多 geo 场地互切时新场地落位用 stride 偏移不落 geo 投影位（v3.3.0 并排协作模式既有设计，第二个真 geo 场地出现时改 `selectEnvironment` 落位）；② LOD 阈值 100/200 m 按真机手感调；③ `AholoAssetGeo.headingDeg`→锚点朝向的语义校准（真资产进来后核「壳体平面图上方=采集朝向」假设）。
+5. **SC-20 复核（五轮已给结论，无需再开卡）**：草案卡硬约束呈现已齐——⛔ 不可行 / ⚠ 缺尺寸未核验徽标、draft_unverified 小字、REC=null「三版都有硬冲突」横幅+去重冲突清单，plan-card.react.test 5 例钉住；reserved 区配色评估结论=维持现状（徽章文字区分足够，动配色属视觉决策等用户拍板）。剩余动作只有 SC-03 的 UI 走查把这几件真点一遍。
+6. **价格拍板（SC-34 §二 9 项）**：SKU 金额/免费额度/退款链路等全部等用户点头；**付费入口恢复必须排在价格拍板之后**（否则 ¥4.90 旧价见用户，负毛利）。
+7. **继续网页对照（SC-24）**。先确认工具连接到了用户已登录且可控制的浏览器会话，再打开 [AHOLO 工作台](https://studio.aholo3d.cn/)。使用上面的 63 张 JPEG，室内空间、最低质量档，只创建一次，等终态并记录原文。浏览器连接仍失败时，记录工具具体阻塞，避免把它记为 AHOLO 重建失败。
+8. **做一次真实活动交付（SC-17）**。选有明确人数、场地和日期的活动，用现有扫描或尺寸平面出两个备选。让甲方确认一版，把同版本的效果图、尺寸平面、物料清单和分享链接交给执行方。记录耗时、人工补件和实际采用的文件。docs/27 演练卡可作真实卡片的模板。
+9. **磁盘清理批 2/批 3 等用户批准**；并行会话的杭州等距地图调研 `docs/plans/hangzhou-isometric-map-research.md` 仍未入库（归那个会话，勿卷进本线提交）。
 
 ## 踩过的坑
 
