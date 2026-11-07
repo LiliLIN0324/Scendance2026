@@ -2,9 +2,11 @@ import { useCallback, useMemo, useReducer } from 'react';
 import {
   addAnnotation as addAnnotationToDraft,
   createEmptyPlanDraft,
+  DOOR_DEFAULT_WIDTH_M,
   type LayoutPlanDraft,
   type PlanAnnotation,
   type PlanAnnotationKind,
+  type PlanDoorWall,
   type PlanPoint,
   type ZoneSemanticType,
 } from '../../../lib/plan-annotation';
@@ -159,6 +161,12 @@ export interface UsePlanAnnotationsResult {
    * drawMode 保持不变，不强迫用户进绘制模式。
    */
   addZoneRects(items: readonly ZoneRectItem[]): void;
+  /**
+   * 落一扇用户在画布上真实画的门（inferred 缺省 = 真门，非 withDefaultDoor 推测）。
+   * 落地后 draft_unverified 小字与推测门虚线随之消失，评分层走 verified 门弧检查。
+   * 没 draft 时由 reducer 自动补一份空草案（同 ADD_ANNOTATION 语义）。
+   */
+  addDoorAnnotation(door: { wall: PlanDoorWall; position: number; widthM?: number }): void;
 }
 
 /**
@@ -234,6 +242,31 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     [],
   );
 
+  const addDoorAnnotation = useCallback(
+    (door: { wall: PlanDoorWall; position: number; widthM?: number }) => {
+      const id = `ann-${state.nextId}`;
+      const stageNo = state.draft?.stages.reduce(
+        (max, s) => Math.max(max, s.stageNo),
+        0,
+      ) || 1;
+      const annotation: PlanAnnotation = {
+        id,
+        kind: 'door',
+        label: '主入口门',
+        stageNo,
+        // 用户真实画的门不带 inferred——渲染层实线门弧、评分层 verified。
+        geometry: {
+          kind: 'door',
+          wall: door.wall,
+          position: door.position,
+          widthM: door.widthM ?? DOOR_DEFAULT_WIDTH_M,
+        },
+      };
+      dispatch({ type: 'ADD_ANNOTATION', annotation });
+    },
+    [state.draft, state.nextId],
+  );
+
   const annotations = useMemo(
     () => (state.draft ? state.draft.annotations : []),
     [state.draft],
@@ -252,5 +285,6 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     setDrawMode,
     addAnnotationFromPoints,
     addZoneRects,
+    addDoorAnnotation,
   };
 }

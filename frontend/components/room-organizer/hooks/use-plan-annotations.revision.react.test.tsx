@@ -77,3 +77,36 @@ describe('use-plan-annotations — 结论失效计数器 revision', () => {
     expect(result.current.draft).toBeNull();
   });
 });
+
+describe('use-plan-annotations — addDoorAnnotation（真门绘制）', () => {
+  it('落一扇真门：kind=door、inferred 缺省、默认宽 0.9m，且 bump revision', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    act(() => result.current.startDraft());
+    const r0 = result.current.revision;
+
+    act(() => result.current.addDoorAnnotation({ wall: 'east', position: 1.5 }));
+    expect(result.current.revision).toBe(r0 + 1);
+    expect(result.current.annotations).toHaveLength(1);
+    const door = result.current.annotations[0]!;
+    expect(door.kind).toBe('door');
+    expect(door.geometry).toEqual({ kind: 'door', wall: 'east', position: 1.5, widthM: 0.9 });
+    expect((door.geometry as { inferred?: boolean }).inferred).toBeUndefined();
+    // 评分层 verified 的判据：kind=door 且 !inferred（plan-scoring 真门过滤）。
+    expect(door.kind === 'door' && !(door.geometry as { inferred?: boolean }).inferred).toBe(true);
+  });
+
+  it('没有 draft 时也能直接落（reducer 自动补空草案，同 ADD_ANNOTATION 语义）', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    expect(result.current.draft).toBeNull();
+    act(() => result.current.addDoorAnnotation({ wall: 'south', position: -2 }));
+    expect(result.current.draft).not.toBeNull();
+    expect(result.current.annotations).toHaveLength(1);
+    expect(result.current.annotations[0]!.geometry).toMatchObject({ kind: 'door', wall: 'south', position: -2 });
+  });
+
+  it('widthM 可覆盖默认值', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    act(() => result.current.addDoorAnnotation({ wall: 'north', position: 0, widthM: 1.5 }));
+    expect(result.current.annotations[0]!.geometry).toMatchObject({ kind: 'door', widthM: 1.5 });
+  });
+});

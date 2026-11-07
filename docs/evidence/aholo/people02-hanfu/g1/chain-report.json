@@ -1,0 +1,228 @@
+{
+  "cmd": "img3d",
+  "startedAt": "2026-11-07T08:34:30.943Z",
+  "base": "https://api.aholo3d.cn",
+  "request": {
+    "version": "G1",
+    "outputFormat": [
+      "zip",
+      "glb"
+    ],
+    "imgs": 4
+  },
+  "taskId": 4826561,
+  "finalStatus": 3,
+  "outputs": [
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\g1\\model-1.zip",
+      "bytes": 16914855
+    },
+    {
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\g1\\model-2.glb",
+      "bytes": 17450236
+    }
+  ],
+  "log": [
+    {
+      "at": "0.0s",
+      "iso": "2026-11-07T08:34:30.948Z",
+      "op": "asset.token",
+      "file": "model-1.png",
+      "bytes": 667982,
+      "md5": "70e687867e15c460b167064b7656f5eb"
+    },
+    {
+      "at": "0.4s",
+      "iso": "2026-11-07T08:34:31.360Z",
+      "op": "asset.single",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"obsTaskId\":\"3FO2QRNHBEW0\"}}"
+    },
+    {
+      "at": "2.5s",
+      "iso": "2026-11-07T08:34:33.457Z",
+      "op": "asset.token",
+      "file": "model-2.png",
+      "bytes": 695334,
+      "md5": "5f7fa12e4f943a5a230d278bb025aec8"
+    },
+    {
+      "at": "2.6s",
+      "iso": "2026-11-07T08:34:33.584Z",
+      "op": "asset.single",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"obsTaskId\":\"3FO2QRNH4MHY\"}}"
+    },
+    {
+      "at": "4.7s",
+      "iso": "2026-11-07T08:34:35.647Z",
+      "op": "asset.token",
+      "file": "model-3.png",
+      "bytes": 547680,
+      "md5": "d8042f40d298b15b8643f9b1c1439fe1"
+    },
+    {
+      "at": "4.8s",
+      "iso": "2026-11-07T08:34:35.752Z",
+      "op": "asset.single",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"obsTaskId\":\"3FO2QRNHOONY\"}}"
+    },
+    {
+      "at": "6.9s",
+      "iso": "2026-11-07T08:34:37.810Z",
+      "op": "asset.token",
+      "file": "model-4.png",
+      "bytes": 685645,
+      "md5": "72d7a94cd6f56d0ea01385c724998719"
+    },
+    {
+      "at": "7.0s",
+      "iso": "2026-11-07T08:34:37.928Z",
+      "op": "asset.single",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"obsTaskId\":\"3FO2QRNHJJ4F\"}}"
+    },
+    {
+      "at": "9.3s",
+      "iso": "2026-11-07T08:34:40.236Z",
+      "op": "img3d.create",
+      "http": 200,
+      "response": "{\"f\":null,\"c\":\"0\",\"m\":\"\",\"d\":4826561}"
+    },
+    {
+      "at": "9.4s",
+      "iso": "2026-11-07T08:34:40.322Z",
+      "op": "poll",
+      "polls": 1,
+      "http": 200,
+      "status": 0,
+      "label": "初始化",
+      "progress": null
+    },
+    {
+      "at": "34.8s",
+      "iso": "2026-11-07T08:35:05.746Z",
+      "op": "poll",
+      "polls": 6,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "65.3s",
+      "iso": "2026-11-07T08:35:36.240Z",
+      "op": "poll",
+      "polls": 12,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "95.8s",
+      "iso": "2026-11-07T08:36:06.772Z",
+      "op": "poll",
+      "polls": 18,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "126.4s",
+      "iso": "2026-11-07T08:36:37.365Z",
+      "op": "poll",
+      "polls": 24,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "157.3s",
+      "iso": "2026-11-07T08:37:08.242Z",
+      "op": "poll",
+      "polls": 30,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "187.8s",
+      "iso": "2026-11-07T08:37:38.715Z",
+      "op": "poll",
+      "polls": 36,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "218.6s",
+      "iso": "2026-11-07T08:38:09.515Z",
+      "op": "poll",
+      "polls": 42,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "249.6s",
+      "iso": "2026-11-07T08:38:40.537Z",
+      "op": "poll",
+      "polls": 48,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "281.1s",
+      "iso": "2026-11-07T08:39:11.993Z",
+      "op": "poll",
+      "polls": 54,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "312.0s",
+      "iso": "2026-11-07T08:39:42.935Z",
+      "op": "poll",
+      "polls": 60,
+      "http": 200,
+      "status": 1,
+      "label": "运行中",
+      "progress": null
+    },
+    {
+      "at": "317.2s",
+      "iso": "2026-11-07T08:39:48.131Z",
+      "op": "poll",
+      "polls": 61,
+      "http": 200,
+      "status": 3,
+      "label": "成功",
+      "progress": null
+    },
+    {
+      "at": "320.2s",
+      "iso": "2026-11-07T08:39:51.107Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\g1\\model-1.zip",
+      "bytes": 16914855
+    },
+    {
+      "at": "322.9s",
+      "iso": "2026-11-07T08:39:53.831Z",
+      "op": "download",
+      "file": "docs\\evidence\\aholo\\people02-hanfu\\g1\\model-2.glb",
+      "bytes": 17450236
+    }
+  ]
+}

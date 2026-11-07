@@ -252,6 +252,37 @@ const variantDraftMetaStyle: CSSProperties = {
   fontSize: 11,
 };
 
+/* ---------- B4 降容话术露出面：推荐版 reasons 渲染 ---------- */
+
+/** 推荐版理由列表容器（挂在推荐版行下，与 violations 同级）。 */
+const variantReasonsWrapStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  padding: '0 6px 2px 10px',
+};
+
+/** 「推荐理由」小标题。 */
+const variantReasonTitleStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 600,
+};
+
+/** 单条理由：灰色小字，与子分行保持同色系。 */
+const variantReasonStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  lineHeight: 1.5,
+};
+
+/** 降容建议行（「装不下 N 人 / 建议降到」）：琥珀色提醒，沿用 REC=null 横幅色板。 */
+const variantCapacityAdviceStyle: CSSProperties = {
+  color: '#92400e',
+  fontSize: 11,
+  lineHeight: 1.5,
+};
+
 /** REC=null 横幅：所有版本都有硬冲突时，先说「没有可推荐方案」。 */
 const noRecommendBannerStyle: CSSProperties = {
   borderLeft: '3px solid #b45309',
@@ -434,6 +465,15 @@ export function PlanCard({
             // G1 版级出口：不可行 / 缺尺寸出版级徽标；推测门草案出灰色小字。
             const badge = feasibilityBadge(p);
             const isDraft = p.assurance === 'draft_unverified';
+            // B4：推荐版的 reasons 从数据层露出——降容建议（「装不下 N 人 / 建议降到」）
+            // 此前只存在 reasons 数组里，任何 UI 都不渲染，用户永远看不到。
+            // 与 violations 去重：与违规清单逐字相同的理由不再重复列一遍。
+            const shownViolationTexts = new Set(
+              [...hardViolations, ...softViolations].map((v) => v.message),
+            );
+            const reasonLines = isRecommended && hasReasons
+              ? [...new Set((p.reasons ?? []).filter((r) => !shownViolationTexts.has(r)))]
+              : [];
             return (
               <div key={p.variantId} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <button
@@ -456,6 +496,25 @@ export function PlanCard({
                   容量 {p.subScores.capacity} · 动线 {p.subScores.flow} · 人体 {p.subScores.ergonomics}
                   {isDraft && <span style={variantDraftMetaStyle} data-testid="plan-card-draft-unverified"> · 门未确认，待核验草案</span>}
                 </div>
+                {reasonLines.length > 0 && (
+                  <div style={variantReasonsWrapStyle} data-testid="plan-card-recommended-reasons">
+                    <div style={variantReasonTitleStyle}>推荐理由</div>
+                    {reasonLines.map((r, i) => {
+                      // 降容建议行加琥珀色提醒：这是 B4 的核心露出——出方案时就
+                      // 能看到「装不下 N 人 / 建议降到约 X 人」，不必等批准。
+                      const isCapacityAdvice = r.includes('装不下');
+                      return (
+                        <div
+                          key={`r-${i}`}
+                          style={isCapacityAdvice ? variantCapacityAdviceStyle : variantReasonStyle}
+                          data-testid={isCapacityAdvice ? 'plan-card-capacity-advice' : undefined}
+                        >
+                          · {r}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {hasViolations && (
                   <div style={variantViolationsWrapStyle}>
                     {hardViolations.map((v, i) => (

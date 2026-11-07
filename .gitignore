@@ -57,8 +57,12 @@ docs/evidence/aholo/*
 !docs/evidence/aholo/sculpture-rig-local/
 !docs/evidence/aholo/sculpture-rig-tpose/
 !docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/
+!docs/evidence/aholo/xh02-0233-low/
+!docs/evidence/aholo/xh02-0233-normal/
+!docs/evidence/aholo/people02-hanfu/
 docs/evidence/aholo/sculpture-rig-tpose/*.png
 docs/evidence/aholo/recheck-tearoom-3FO4K4RL8KM8/web-upload-images/
+docs/evidence/aholo/people02-hanfu/g1/*.zip
 # Heavy rebuild products / bulk captures: never commit from any evidence dir
 docs/evidence/**/*.spz
 docs/evidence/**/*.ply
