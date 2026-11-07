@@ -1,8 +1,9 @@
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-contract';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { confirmDeliveryVersion } from './delivery-version';
 import { MAX_LAYOUT_JSON_BYTES, MAX_NAME_LENGTH } from './schema';
 import {
   MAX_SHARE_HASH_LENGTH,
@@ -259,8 +260,75 @@ describe('untrusted share hashes (#332)', () => {
   it('reads a normal link as before', async () => {
     const layout = makeLargeLayout();
     const { url } = await encodeShareUrl(layout, ORIGIN);
-    expect(await readShareHash(hashOf(url))).toEqual({ ok: true, layout });
+    const read = await readShareHash(hashOf(url));
+    expect(read.ok && read.layout).toEqual(layout);
+    expect(read.ok && read.identity?.verified).toBe(true);
     expect(await readShareHash(`${PREFIX}2.@@@`)).toEqual({ ok: false, reason: 'unreadable' });
     expect(await readShareHash('#other')).toEqual({ ok: false, reason: 'unreadable' });
+  });
+});
+
+describe('share links carry the delivery version identity (SC-10)', () => {
+  function memoryStorage(): Storage {
+    const data = new Map<string, string>();
+    return {
+      get length() { return data.size; },
+      clear: () => data.clear(),
+      getItem: (key) => data.get(key) ?? null,
+      key: (index) => [...data.keys()][index] ?? null,
+      removeItem: (key) => { data.delete(key); },
+      setItem: (key, value) => { data.set(key, value); },
+    };
+  }
+
+  it('stamps the confirmed version and keeps the old link on the old version', async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    try {
+      const base = makeLayout({ id: 'share-project-1', name: '旧版方案' });
+      const confirmed = await confirmDeliveryVersion({ layout: base, storage });
+      const first = await encodeShareUrl(base, ORIGIN);
+      expect(first.identity).toEqual({
+        deliveryVersion: 'v1.0',
+        snapshotId: confirmed.record.snapshotId,
+        contentFingerprint: confirmed.record.contentFingerprint,
+        status: 'confirmed',
+      });
+
+      const draft = { ...base, name: '新版方案', floors: [makeFloor({ items: [makeItem({ id: 'moved', position: { x: 2, z: 1 } })] })] };
+      const second = await encodeShareUrl(draft, ORIGIN);
+      expect(second.identity).toMatchObject({ deliveryVersion: 'v1.1', status: 'draft' });
+      expect(second.identity.snapshotId).not.toBe(first.identity.snapshotId);
+
+      const oldLink = await readShareHash(hashOf(first.url));
+      expect(oldLink.ok && oldLink.layout.name).toBe('旧版方案');
+      expect(oldLink.ok && oldLink.identity).toMatchObject({ deliveryVersion: 'v1.0', status: 'confirmed', verified: true });
+      const newLink = await readShareHash(hashOf(second.url));
+      expect(newLink.ok && newLink.layout.name).toBe('新版方案');
+      expect(newLink.ok && newLink.identity).toMatchObject({ deliveryVersion: 'v1.1', verified: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('leaves old raw-layout links without an identity instead of failing them', async () => {
+    const legacy = await readShareHash(legacyEncodeHash(makeLayout({ name: '没有版本段的旧链接' })));
+    expect(legacy.ok && legacy.identity).toBeNull();
+    expect(legacy.ok && legacy.layout.name).toBe('没有版本段的旧链接');
+  });
+
+  it('drops a tampered identity but still opens the layout', async () => {
+    const layout = makeLayout({ name: '快照被改过' });
+    const identity = {
+      deliveryVersion: 'v1.0',
+      snapshotId: '0123456789abcdef',
+      contentFingerprint: 'f'.repeat(64),
+      status: 'confirmed',
+    };
+    const payload = JSON.stringify({ kind: 'scendance-plan-share', identity, layout });
+    const hash = `${PREFIX}${Buffer.from(payload).toString('base64url')}`;
+    const read = await readShareHash(hash);
+    expect(read.ok && read.layout.name).toBe('快照被改过');
+    expect(read.ok && read.identity).toBeNull();
   });
 });

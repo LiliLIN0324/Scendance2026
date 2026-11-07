@@ -36,8 +36,19 @@ describe('review share plan loading', () => {
     expect(loaded.plan.source).toBe('link');
     expect(loaded.plan.layout.name).toBe('发布会主场');
     expect(loaded.plan.notice).toBe(REVIEW_PLAN_NOTICES.link);
+    expect(loaded.plan.identity).toMatchObject({ deliveryVersion: 'v1.0', status: 'draft', verified: true });
+    expect(loaded.plan.identity?.snapshotId).toBe(encoded.identity.snapshotId);
     const again = await loadReviewPlan({ hash, search: '', localLayout: null });
     expect(again.ok && again.plan.planKey).toBe(loaded.plan.planKey);
+  });
+
+  it('opens an older link without a version section and keeps local/sample plans unversioned', async () => {
+    const legacy = `#layout=${Buffer.from(JSON.stringify({ ...INITIAL_LAYOUT, name: '旧链接' })).toString('base64url')}`;
+    const loaded = await loadReviewPlan({ hash: legacy, search: '', localLayout: null });
+    expect(loaded.ok && loaded.plan.layout.name).toBe('旧链接');
+    expect(loaded.ok && loaded.plan.identity).toBeNull();
+    const local = await loadReviewPlan({ hash: '', search: '', localLayout: INITIAL_LAYOUT });
+    expect(local.ok && local.plan.identity).toBeNull();
   });
 
   it('stops on a broken hash instead of showing another plan', async () => {

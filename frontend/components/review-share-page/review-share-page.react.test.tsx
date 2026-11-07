@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
+import { webcrypto } from 'node:crypto';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 const LOCAL_LAYOUT_KEY = 'scendance-editor-local-v1';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
+import { contentFingerprintOfLayout } from '../room-organizer/lib/delivery-version';
+import { parseStoredLayout } from '../room-organizer/lib/schema';
 import { REVIEW_RETURN_STORAGE_KEY } from './review-return';
 import { ReviewSharePage } from './review-share-page';
 import { REVIEW_SHARE_PIN_STORAGE_KEY } from './share-pins';
 import type { RoomLayout } from '../room-organizer/lib/types';
+
+// 评审页要重算内容指纹核对快照号，jsdom 没有 crypto.subtle。
+beforeAll(() => { vi.stubGlobal('crypto', webcrypto); });
+afterAll(() => { vi.unstubAllGlobals(); });
 
 vi.mock('./review-plan-sheet', () => ({
   ReviewPlanSheet: ({
@@ -94,6 +101,26 @@ describe('review share page', () => {
     render(<ReviewSharePage />);
     expect(await screen.findByRole('heading', { name: '本机共创' })).toBeTruthy();
     expect(screen.getByText(/当前保存的布置/)).toBeTruthy();
+  });
+
+  it('shows the delivery version bound into a versioned link', async () => {
+    const stored = parseStoredLayout(JSON.parse(JSON.stringify({ ...INITIAL_LAYOUT, id: 'review-version-1' })))!;
+    const contentFingerprint = await contentFingerprintOfLayout(stored);
+    const identity = {
+      deliveryVersion: 'v1.2',
+      snapshotId: contentFingerprint.slice(0, 16),
+      contentFingerprint,
+      status: 'confirmed' as const,
+    };
+    const payload = JSON.stringify({ kind: 'scendance-plan-share', identity, layout: stored });
+    window.history.replaceState(null, '', `/review/#layout=${Buffer.from(payload).toString('base64url')}`);
+    render(<ReviewSharePage />);
+    expect(await screen.findByText('v1.2')).toBeTruthy();
+    expect(screen.getByText('已确认的交付版')).toBeTruthy();
+    expect(screen.getByText(/旧链接一直指着这一版/)).toBeTruthy();
+    const line = document.querySelector<HTMLElement>('[data-delivery-version]');
+    expect(line?.getAttribute('data-delivery-version')).toBe('v1.2');
+    expect(line?.getAttribute('data-snapshot-id')).toBe(identity.snapshotId);
   });
 
   it('switches floors and refuses a broken share hash', async () => {

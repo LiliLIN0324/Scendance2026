@@ -159,6 +159,17 @@ export function ReviewSharePage(): JSX.Element {
             <p className="rsp-kicker">平面预览</p>
             <h1 id="rsp-plan-title">{plan.layout.name}</h1>
             <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>
+            {plan.identity && (
+              <p className="rsp-version" data-delivery-version={plan.identity.deliveryVersion} data-snapshot-id={plan.identity.snapshotId}>
+                <b>{plan.identity.deliveryVersion}</b>
+                <span>{plan.identity.status === 'confirmed' ? '已确认的交付版' : '草案版，分享者尚未确认'}</span>
+                <small>
+                  快照 {plan.identity.snapshotId} · {plan.identity.verified
+                    ? '内容与快照一致，旧链接一直指着这一版'
+                    : '内容与快照对不上，请让分享者重新生成链接'}
+                </small>
+              </p>
+            )}
             <p className="rsp-notice">{plan.notice}</p>
             {!pinDraft && pins.length === 0 && (
               <p className="rsp-review-hint" role="status">点物件或地面，钉一条意见</p>
@@ -235,6 +246,7 @@ export function ReviewSharePage(): JSX.Element {
               <details className="rsp-entry">
                 <summary>分享链接怎么进这一页</summary>
                 <p>评审链接是 <code>/review/#layout=…</code>。井号后的片段与编辑器里的方案哈希相同，路径用 /review/。对方打开后就是这一页：平面和画内钉。</p>
+                <p>新版链接还带着交付版本身份，会在标题下显示「v1.0 已确认」和快照号；分享者改了草案重新确认，旧链接仍打开原来那一版。早期链接没有这段，只显示平面。</p>
                 <p>钉写在 localStorage，键名 <code>{REVIEW_SHARE_PIN_STORAGE_KEY}</code>。这是演示存储，不进 Supabase。</p>
               </details>
             </div>

@@ -503,4 +503,26 @@ describe('saved execution timetable delivery',()=>{
     expect(screen.queryByText('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。')).toBeNull();
     expect(exportButton().disabled).toBe(false);
   });
+  it('confirms a delivery version and reuses its snapshot id for later exports',async()=>{
+    localStorage.clear();
+    const current=workLayout();
+    const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'确认这一版'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'这一版已确认'})).toBeTruthy());
+    expect(screen.getByText('v1.0 已确认')).toBeTruthy();
+    const stored=JSON.parse(localStorage.getItem('scendance.deliveryVersions.v1')!);
+    expect(stored[0].deliveryVersion).toBe('v1.0');
+    expect(document.querySelector(`[data-delivery-version="v1.0"][data-snapshot-id="${stored[0].snapshotId}"]`)).toBeTruthy();
+
+    openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
+    await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
+    expect(vi.mocked(sceneDeliveryJson).mock.calls[0][1]!.id).toBe(stored[0].snapshotId);
+
+    const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],position:{x:2,z:1}}]}]};
+    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller}/>);
+    expect(await screen.findByText(/v1\.1 草案 · 已确认的是 v1\.0/)).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'这一版已确认'})).toBeNull();
+    localStorage.clear();
+  });
 });

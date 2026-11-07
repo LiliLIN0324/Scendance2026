@@ -60,6 +60,8 @@ v1 规格定为：
 
 硬规则：`deliveryVersion` 与 `snapshotId` 一旦写进 `manifest.json` 就不再回写；重新打包只能生成新的 `generatedAt`。
 
+> **已收口（2026-11-08，B1）**：`frontend/components/room-organizer/lib/delivery-version.ts` 算号并记在本机（键 `scendance.deliveryVersions.v1`，按项目 id 一条，无 id 归 `local-draft`）。首版 `v1.0`；内容变了再确认，次版本 +1；同内容重复确认幂等，不换号。分享载荷外层带 `identity`（`deliveryVersion`/`snapshotId`/`contentFingerprint`/`status`），`/review/` 页用同一份规范化 JSON 重算指纹核对；旧链接没有外层，照常打开、不显示版本行。改草案后旧链接仍出旧版，已由 `share.test.ts` 与评审页 DOM 双验。
+
 ## 5. manifest.json 字段
 
 `format` `packageVersion` `deliveryVersion` `snapshotId` `layoutId` `projectName` `generatedAt` `sceneFormat` `contentFingerprint` `status` `files` `missing` `share`
@@ -103,10 +105,12 @@ v1 规格定为：
 
 ## 8. B1 / B2 要做的事
 
-B1（SC-06 + SC-10）：
-1. 确认版分配 `deliveryVersion` / `snapshotId`，落进布局持久化；改草案不改旧号。
-2. 导出与分享都从确认版读号，替换现在 `crypto.randomUUID()` 的批次号语义。
-3. 改草案后打开旧分享链接，仍出旧版（现成的「免安装只读快照」链路只差绑号）。
+B1（SC-06 + SC-10）——**已完成（2026-11-08）**：
+1. ~~确认版分配 `deliveryVersion` / `snapshotId`，落进布局持久化；改草案不改旧号。~~ 已落：本机 `scendance.deliveryVersions.v1` 侧车记录（不写布局，撤销/云端发布不受影响）。
+2. ~~导出与分享都从确认版读号，替换现在 `crypto.randomUUID()` 的批次号语义。~~ 已落：交付面板「确认这一版」；确认后导出 `metadata.id` 用 `snapshotId`，草案仍用导出批次号；分享载荷绑号。
+3. ~~改草案后打开旧分享链接，仍出旧版。~~ 已验：`share.test.ts` 旧链接回读 v1.0 + `/review/` 页版本行 DOM。
+
+证据：`delivery-version.test.ts` 9 例、`share.test.ts` +3 例、`load-plan.test.ts` +1 例、评审页 +1 例、交付面板 +1 例，全部在 `npm run gate` 核心套件内。
 
 B2（MP-DEL 一键打包）：
 1. 新增「导出交付包」入口：按 `DELIVERY_ARTIFACTS` 逐产物生成，写 `manifest.json` + `README.txt`。
@@ -122,5 +126,10 @@ B2（MP-DEL 一键打包）：
 | --- | --- |
 | `frontend/components/room-organizer/lib/delivery-package-spec.ts` | 路径、清洗、版本、manifest 字段、失败码与重试策略（纯函数，无 DOM） |
 | `frontend/components/room-organizer/lib/delivery-package-spec.test.ts` | 8 例：结构、路径唯一、清洗、版本、字段、与 `scene-delivery.ts` 对齐、重试、快照不可变 |
+| `frontend/components/room-organizer/lib/delivery-version.ts` | 版本身份：内容指纹（规范化公开快照）、`snapshotId`、次版本递进、本机确认记录、面板文案（纯函数 + localStorage 侧车） |
+| `frontend/components/room-organizer/lib/delivery-version.test.ts` | 9 例：指纹稳定/忽略不公开字段、换位变指纹、版本递进、项目隔离、确认幂等、坏存储、写失败 |
+| `frontend/components/room-organizer/lib/share.ts` | `#layout=2.` 载荷外层 `{ kind, identity, layout }`；解码兼容无外层的旧链接，读页重算指纹核对 |
+| `frontend/components/review-share-page/`（`load-plan.ts` / `review-share-page.tsx`） | 把 `identity` 带到 `/review/` 页并显示版本行；旧链接与示例场地不显示 |
+| `frontend/components/room-organizer/panels/scene-delivery-panel.tsx` | 「确认这一版」条 + 版本状态；确认后导出复用 `snapshotId` |
 | `scripts/release-gate.mjs` | 已把该测试纳入核心门禁套件 |
 | `frontend/components/room-organizer/panels/scene-delivery-panel.tsx` | 现有逐项导出；B2 在此加入口，不再新增第二套导出逻辑 |

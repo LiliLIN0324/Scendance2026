@@ -10,7 +10,7 @@
 import { STORAGE_KEY } from '../room-organizer/lib/constants';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
 import { parseStoredLayout } from '../room-organizer/lib/schema';
-import { isShareHash, readShareHash } from '../room-organizer/lib/share';
+import { isShareHash, readShareHash, type ReadPlanShareIdentity } from '../room-organizer/lib/share';
 import type { RoomLayout } from '../room-organizer/lib/types';
 
 export const REVIEW_SHARE_PATH = '/review/';
@@ -33,6 +33,8 @@ export interface LoadedReviewPlan {
   layout: RoomLayout;
   planKey: string;
   notice: string;
+  /** 链接绑定的交付版本身份（SC-10）；旧链接与本机方案没有这一段。 */
+  identity: ReadPlanShareIdentity | null;
 }
 
 export type LoadReviewPlanResult =
@@ -90,6 +92,7 @@ export async function loadReviewPlan(input: {
         layout: decoded.layout,
         planKey: `link:${fnv1a(input.hash)}`,
         notice: REVIEW_PLAN_NOTICES.link,
+        identity: decoded.identity,
       },
     };
   }
@@ -102,6 +105,7 @@ export async function loadReviewPlan(input: {
         layout: input.localLayout,
         planKey: localPlanKey(input.localLayout),
         notice: REVIEW_PLAN_NOTICES.local,
+        identity: null,
       },
     };
   }
@@ -112,6 +116,7 @@ export async function loadReviewPlan(input: {
       layout: INITIAL_LAYOUT,
       planKey: 'sample:initial',
       notice: REVIEW_PLAN_NOTICES.sample,
+      identity: null,
     },
   };
 }

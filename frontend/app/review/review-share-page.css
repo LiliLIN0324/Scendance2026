@@ -111,6 +111,31 @@ body:has(.rsp) {
   border-radius: 12px;
 }
 
+/* 交付版本身份：不加底色，靠字号与字距区分主次。 */
+.rsp-version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft, #55585f);
+}
+
+.rsp-version b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.rsp-version small {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted, #71767e);
+}
+
 .rsp-floors {
   display: flex;
   flex-wrap: wrap;
