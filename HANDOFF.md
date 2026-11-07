@@ -4,7 +4,7 @@
 
 > 先读HANDOFF.md。
 
-最后更新：2026-11-08（十七轮 · B1 版本身份：交付版号/快照绑分享链接）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
+最后更新：2026-11-08（十八轮 · B2 一键交付包：确认版出 zip 四件套）。只维护这一份交接单，结束前更新顶部状态。后半部是历史记录，若与顶部冲突，以顶部及链接证据为准。
 
 ## 宏观产品计划（2026-11-08 制定 · 自动化执行基线）
 
@@ -22,7 +22,7 @@
 ### 1. 代码级现状（2026-11-08 核对）
 
 1. 方案链已可用，但「三版」是同一需求下的**三档密度**（松/适中/密，`frontend/lib/plan-scoring.ts:157`），不是三种风格。
-2. 交付包没打通：`frontend/components/room-organizer/panels/scene-delivery-panel.tsx` 只有逐项导出，**无 zip/打包**；四件套版本已绑（B1：`deliveryVersion`/`snapshotId` 随确认版进分享链接与导出），分享快照上限 50 物料 / 50 资产。**规格已冻结（A4）**：[docs/36](docs/36-MP-DEL交付包规格.md) + `delivery-package-spec.ts`；打包实现归 B2。
+2. 交付包已打通（B2）：`frontend/components/room-organizer/panels/scene-delivery-panel.tsx` 的「导出交付包」按 [docs/36](docs/36-MP-DEL交付包规格.md) §2 出 zip（效果图×3 / 平面 DXF / 物料 CSV / 分享链接 + `manifest.json` + `README.txt`）；只打确认版，包根与清单沿用 B1 的 `deliveryVersion`/`snapshotId`，失败逐产物归码、缺件可重试。**验收仍待 B3**：docs/24 1-1～1-6 要用真实夹具跑（1920×1080、水印、10/10 任务、≤10 分钟）。
 3. 空间/人物各有半成品：XH-02 双档 SPZ 已落盘（23,239,097 B / 7,795,522 B）；PEOPLE-02 GLB 17.45 MB 但无 skin/动画；XH-03、PEOPLE-03、MAP-05 未做。
 4. 商业口径未定：价格两套账、免费额度代码为零、付费入口暂下线（docs/28、SC-34）。
 5. ~~品牌 P0 四项仍在~~ → **已收口（A2，2026-11-08）**：`--green-deep` 统一 `#35624A`、`.css` fallback 全部 `#EEF3EF`、`investor-report.ts` 改门形标志（绿块 + 白拱 + 双眼）、`.sc-brand-en` 接 Playfair 并四处消费；`lib/brand-tokens.test.ts` 5 例上门禁。
@@ -44,7 +44,7 @@
 
 | 流 | 主卡 | 现状 | 本轮可自动做 | 完成判据 |
 | --- | --- | --- | --- | --- |
-| W1 交付闭环（第一优先） | SC-06/07/08/09/10/11/12/16/17 + 新卡 MP-DEL | 规格已冻结（A4）；版本身份/分享绑版本已通（B1）；仍逐项导出、无 zip | 一键 zip → 四件套夹具验收 | docs/24 1-1～1-6 |
+| W1 交付闭环（第一优先） | SC-06/07/08/09/10/11/12/16/17 + 新卡 MP-DEL | 规格冻结（A4）；版本身份/分享绑版本已通（B1）；一键 zip 已通（B2）；仍待四件套真实验收 | B3 四件套验收（夹具） | docs/24 1-1～1-6 |
 | W2 方案质量与产能 | SC-19～23 + 新卡 MP-PLAN | 三档密度；无风格 brief；物料无价 | 风格 brief 维度、两版可比性、库存/报价缺口 | docs/24 2-1～2-5；SC-21/23 |
 | W3 地图到实景 | XH-03、MAP-05、SC-28 | SPZ 有、未标定未挂场景 | 两控制点对齐 + 已知长度核对 + LOD/返回概览 | 残差与尺度报告 + 录屏 |
 | W4 人物与场景 | PEOPLE-03/06 | GLB 无骨骼 | retarget 后 3 人同场（绑骨一单需授权） | 无滑步/穿插 + 帧时记录 |
@@ -91,7 +91,7 @@
 | A3 ✅ | 发布门禁脚本（SC-31 本地部分） | 无 | L1 | **完成 2026-11-08**：`npm run gate` 一条命令，4 步（`c373530`） |
 | A4 ✅ | 交付包规格冻结（MP-DEL 规格卡 + 测试骨架） | docs/24 | L1 | **完成 2026-11-08**：[docs/36](docs/36-MP-DEL交付包规格.md) + 8 例测试（`928bdfa`） |
 | B1 ✅ | SC-06 版本身份 + SC-10 分享绑版本 | A4 ✅ | L1 | **完成 2026-11-08**：改草案出 v1.1、旧链接仍开 v1.0（`d392603`；证据 docs/evidence/B1） |
-| B2 | MP-DEL 一键交付包（zip 四件套） | B1 ✅ | L1 | 夹具 10/10，0 人工改名 |
+| B2 ✅ | MP-DEL 一键交付包（zip 四件套） | B1 ✅ | L1 | **完成 2026-11-08**：只打确认版，zip 四件套 + manifest/README，缺件归码可重试（`9f2d77f`；证据 docs/evidence/mp-del） |
 | B3 | SC-16 四件套验收（夹具） | B2 | L1 | docs/24 1-1～1-6 |
 | B4 | SC-17 真实首单 | 用户给项目 | L4 | 真实确认 + 交接记录 |
 | C1 | MP-PLAN 风格 brief 三套 | B2 | L1 | 盲评 ≥2/3；SKU 替换 ≥30% 或位置变动 ≥40% |
@@ -112,7 +112,7 @@
 
 **并行约束**：同一时刻不要有两个会话改 `room-organizer.tsx`；W1 未过 M1 前，空间/人物卡每轮最多一张；品牌与发布卡只在非独占文件上并行。
 
-**当前指针**：B1 已完成（2026-11-08 十七轮），**下一轮从 B2 起**（MP-DEL 一键交付包：按 [docs/36](docs/36-MP-DEL交付包规格.md) §2 包结构 + §6 失败码出 zip 四件套，版本号直接用 B1 的 `deliveryVersion`/`snapshotId`）。A1 仍需真前台窗口，等用户把浏览器置前台再做，不挡 B 批。
+**当前指针**：B2 已完成（2026-11-08 十八轮），**下一轮从 B3 起**（SC-16 四件套验收：用夹具跑 docs/24 1-1～1-6，10/10 任务、0 人工改名、同版四件套一致）。A1 仍需真前台窗口，等用户把浏览器置前台再做，不挡 B 批。
 
 ### 6. 成功指标
 
@@ -124,7 +124,7 @@
 | 产能 | 风格可辨 | 盲评每人 ≥2/3 贴对，一致率 ≥80% | 3 人盲评 |
 | 空间 | 对齐与尺度 | 两控制点残差有记录；已知长度误差 ≤1% | XH-03 报告 |
 | 人物 | 同场可用 | 3 人无滑步/穿插，帧时有记录 | 录屏 + 性能读数 |
-| 质量 | 工程门禁 | tsc 0、build 14 路由、全量测试 0 漂移、audit 0 | `npm run gate`（17 套核心 382 例）；全量 `-- --full` |
+| 质量 | 工程门禁 | tsc 0、build 14 路由、全量测试 0 漂移、audit 0 | `npm run gate`（18 套核心 400 例）；全量 `-- --full` |
 | 商业 | 口径 | 单一价格表、0 负毛利 SKU、免费额度有实现 | SC-34 + 沙箱 |
 
 ### 7. 人工闸门（不点头就不动）
@@ -306,13 +306,14 @@
 - **产品主线**：幕景 Scendance 是活动场地方案工作台。用已有场地或尺寸平面完成圈区、出方案、复核、客户确认和执行交接。近期产品评估建议先验证一个真实活动的交付闭环。
 - **宏观计划（2026-11-08 十五轮）**：见本文件顶部《宏观产品计划》。自动化轮次从 §5 队列取卡，一轮一张，按 §4 协议验证与回填；agent 升级不排进该队列。
 - **用户已授权的待办**：在 AHOLO 官方实景重建工作台，用同一批 63 张茶室照片做一次网页对照。记录上传、创建和最终状态的页面原文、任务号与截图。
-- **仓库基线**：2026-11-08 十七轮：**B1 版本身份/分享绑版本（`d392603`）**；M0 三项（`577cb65` A2 / `c373530` A3 / `928bdfa` A4）已落地、无 tag；十二轮（B4 露出面 / 真门 UI / PEOPLE-02 GLB / XH-02 双档）为上一代码批；九轮基线（测试漂移清零）在 tag `v4.6.0`。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
+- **仓库基线**：2026-11-08 十八轮：**B2 一键交付包（`9f2d77f`）**；B1 版本身份/分享绑版本（`d392603`）；M0 三项（`577cb65` A2 / `c373530` A3 / `928bdfa` A4）已落地、无 tag；十二轮（B4 露出面 / 真门 UI / PEOPLE-02 GLB / XH-02 双档）为上一代码批；九轮基线（测试漂移清零）在 tag `v4.6.0`。并行会话若继续改树，提交前先重查 `git status -sb` 和 [COLLAB.md](COLLAB.md)。
 - **任务派发**：见 [Scendance 需求清单](docs/25-Scendance需求清单.md)。按依赖每次领一张，优先验证一单从方案到交付的闭环。
 
 ## 已完成与证据
 
 | 工作 | 当前结果 |
 | --- | --- |
+| **B2 MP-DEL 一键交付包（2026-11-08 十八轮，Qoder 会话；`9f2d77f`）** | 交付面板版本条下新增「导出交付包」，仅确认版可点：`lib/delivery-package.ts` 先重算当前布局指纹、与确认版不一致直接拒绝，再按 `DELIVERY_ARTIFACTS` 顺序生成效果图×3（走工作台注入的 `captureImage`，与效果图册同一条 1920×1080 渲染路径）、平面 DXF（先过 `deliveryScene` 交付门槛）、物料 CSV（生成时间写确认时刻，同版可复现）、分享链接（绑 `snapshotId`/指纹，超 12,000 字符判 `share-over-budget`），最后写 `README.txt` + `manifest.json`；`lib/delivery-zip.ts` 自写 store-only zip（固定 DOS 时间戳 + UTF-8 标志、条目顺序即规格顺序），不新增依赖。失败按 §6 归码，缺件仍出包但标 `incomplete` 并逐条列出，「重试缺件」复用 sha256 命中的产物，非可重试码不自动重试。**独占区只加一处传递 prop**（`room-organizer.tsx` 的 `captureImage`，COLLAB 已登记）。**验证**：`npm run gate` 4 步 PASS（核心 18 套 **400 例**；新增打包 18 例含 F01–F10 夹具、身份绑定、同版只差 `generatedAt`、zip 字节复现、续跑与归码；交付面板 63 例含新入口用例）。证据 [docs/evidence/mp-del](docs/evidence/mp-del)：解包树 8 文件、两份 manifest diff（仅 `generatedAt`）、`asset-fetch` 失败 1 s 后重试成功回执。**边界**：证据中的效果图是 1×1 校验 PNG，不是真实机位；1920×1080、水印、盲评仍按 docs/36 §7 归渲染侧，B3 用真实夹具验 docs/24 1-1～1-6。**下一步**：B3 四件套验收。 |
 | **B1 版本身份 + 分享绑版本（2026-11-08 十七轮，Qoder 会话；`d392603`）** | 新增 `components/room-organizer/lib/delivery-version.ts`：分享载荷（`layoutForExport(true)` 去 floorPlanImage）→ canonical JSON（键排序）→ **sha256 全指纹**，`snapshotId`=前 16 位；`deliveryVersion` 从 v1.0 起、仅「确认这一版」后才升次版本（v1.0→v1.1，坏号回落 v1.0）；localStorage 侧车 `scendance.deliveryVersions.v1` 按项目 id（缺省 `local-draft`）存，确认幂等、最多 40 条、写失败给人话。**分享链接**在压缩哈希内包一层 `{kind:'scendance-plan-share',identity,layout}` 信封（前缀仍是 `2.`，旧裸布局链接永久可开、identity=null）；评审页重算指纹显示「内容与快照一致/对不上」核对；交付面板用「确认这一版」取代 `crypto.randomUUID()` 导出批次号，已确认的导出复用同一快照号。**不碰 COLLAB 五文件**：身份全在新 lib + 信封，`reviewShareHref` 原样透传哈希。**验证**：定向 5 套 108 例绿、`npm run gate` 4 步 **413.1 s** PASS（17 套核心 **382 例**，含静态导出 build）；页面级证据 [docs/evidence/B1](docs/evidence/B1)（静态导出 + 无头浏览器：旧链接 v1.0 已确认、改草案新链接 v1.1 草案，各自打开自己的内容，控制台 0 错）。**下一步**：B2 打包 zip 四件套时直接用这两个字段做包根/清单。 |
 | **A4 交付包规格冻结（2026-11-08 十六轮，Qoder 会话；`928bdfa`）** | 新增 `components/room-organizer/lib/delivery-package-spec.ts`（纯常量/纯函数）：包结构 `01-效果图/效果图-01..03.png`、`02-平面图/平面-<楼层>.dxf`、`03-物料清单/物料清单.csv`、`04-分享/分享链接.txt` + `manifest.json` + `README.txt`；包根 `幕景_<项目>_v<主>.<次>`；版本号 `^v\d+\.\d+$`（`1.0`/`v1`/`v1.0-beta` 拒）；manifest 13 个必填字段；9 个失败码（4 可重试）+ 3 次尝试/退避 1s·4s + 逐产物续跑 + 分享快照不可变。规格正文 [docs/36](docs/36-MP-DEL交付包规格.md)，含与 docs/24 1-1～1-6 的对应表和 B1/B2 待做清单；docs/25 SC-12 行已挂链接。**测试** 8 例（结构与路径唯一、清洗、版本、字段、与 `scene-delivery.ts` 格式同源、重试、快照不可变）已纳入 `npm run gate`。**验证**：gate 4 步 221 s PASS（16 套 370 例）。**下一步**：B1 已把 `deliveryVersion`/`snapshotId` 绑到确认版（见首行），B2 直接复用。 |
 | **A3 发布门禁（2026-11-08 十六轮，Qoder 会话；`c373530`）** | 新增 `scripts/release-gate.mjs` + 根 `package.json` `"gate"`：根 tsc → 前端 tsc → 核心测试套件 → `NEXT_DIST_DIR=.next-ci npm run build`。`npm run gate` 实测 4 步 **221 s** PASS（核心 16 套 370 例；全量 `-- --full`、只跑检查 `-- --skip-build` 18 s）；套件清单缺文件时 exit 2 并点名；Windows 下单条命令行 + `shell:true` 规避 DEP0190。**剩余**：SC-31 的资产访问与四件套导出验收随 B2/B3 接进同一命令。 |
