@@ -3,6 +3,7 @@ import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '.
 import { rotatedHalfExtents } from '../lib/geometry';
 import { planDrawOrder } from '../lib/plan-order';
 import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
+import { routeIsLoop } from '../lib/person-route';
 import { entrancePlanOutline, planFloorIndex } from '../lib/street';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { zoneArea, type ZoneRect } from '../lib/zones';
@@ -31,6 +32,14 @@ export interface Render2DOptions {
   /** The 2D marquee being dragged out — a light green selection rectangle (#P0-3). */
   marqueeDraft?: ZoneRect | null;
   hasCollision: (item: FurnitureItem) => boolean;
+  /**
+   * Live position sampler for walking people (PEOPLE-04). When given and it
+   * returns a sample for a person item, the 2D marker (footprint, symbol and
+   * selection outline) is drawn at the sampled route position instead of the
+   * anchor, and the walk route is traced as a dashed polyline. Callers without
+   * walking people (the minimap) omit it and behaviour is unchanged.
+   */
+  personSample?: (itemId: string) => { x: number; z: number } | null;
   /**
    * Margin (CSS px) around the room. The default suits the full-screen 2D
    * view; small consumers (the 180×130 minimap) must pass a small value or
@@ -224,6 +233,7 @@ export function render2DTopDown(options: Render2DOptions): void {
       16, ctx.measureText(`${Number(layout.height.toFixed(2))}m`).width + 6));
     ctx.restore();
   }
+  drawPersonRoutes(ctx, options, offsetX, offsetY, scale);
   drawFurniture(ctx, options, offsetX, offsetY, scale, { width: viewWidth, height: viewHeight }, dimensionBlockers);
 
   if (options.showMeasurements) {
@@ -845,6 +855,50 @@ function drawPlanSymbol(ctx: CanvasRenderingContext2D, kind: PlanSymbol, w: numb
   ctx.restore();
 }
 
+/** 3D 路线可视化（use-scene-effects）同款青绿；2D 用虚线以便与墙线区分。 */
+const PERSON_ROUTE_2D_COLOR = '#0f766e';
+
+/**
+ * 人物行走路线的 2D 投影（PEOPLE-04）：与 3D 折线同数据（walkRoute）、同配色、
+ * 同闭环规则，让平面图也能读懂「人物往哪走」。画在家具之前，路线是场地级注记。
+ */
+function drawPersonRoutes(
+  ctx: CanvasRenderingContext2D,
+  options: Render2DOptions,
+  offsetX: number,
+  offsetY: number,
+  scale: number
+): void {
+  for (const item of options.floor.items) {
+    const route = item.walkRoute;
+    if (!item.position || !route || route.points.length < 2) continue;
+    const pts = routeIsLoop(route) ? [...route.points, route.points[0]!] : route.points;
+    ctx.save();
+    ctx.strokeStyle = PERSON_ROUTE_2D_COLOR;
+    ctx.fillStyle = PERSON_ROUTE_2D_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const px = offsetX + (p.x + options.layout.width / 2) * scale;
+      const py = offsetY + (p.z + options.layout.height / 2) * scale;
+      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const p of route.points) {
+      ctx.beginPath();
+      ctx.arc(
+        offsetX + (p.x + options.layout.width / 2) * scale,
+        offsetY + (p.z + options.layout.height / 2) * scale,
+        2.2, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
 function drawFurniture(
   ctx: CanvasRenderingContext2D,
   options: Render2DOptions,
@@ -862,8 +916,11 @@ function drawFurniture(
     const collision = options.hasCollision(item);
     const cut = isPlanCut(item);
     const symbol = planSymbol(item);
-    const cx = offsetX + (item.position.x + options.layout.width / 2) * scale;
-    const cy = offsetY + (item.position.z + options.layout.height / 2) * scale;
+    // 行走人物（PEOPLE-04）：有实时采样就把整个标记（脚印+线符+选择框）画到
+    // 路线当前位置，不再钉在锚点。非人物或无采样走原位。
+    const live = symbol === 'person' ? options.personSample?.(item.id) ?? null : null;
+    const cx = offsetX + ((live?.x ?? item.position.x) + options.layout.width / 2) * scale;
+    const cy = offsetY + ((live?.z ?? item.position.z) + options.layout.height / 2) * scale;
     const w = item.width * scale;
     const d = item.depth * scale;
 
@@ -948,10 +1005,12 @@ function drawSelectionOutlines(
     const collision = options.hasCollision(item);
     const w = item.width * scale;
     const d = item.depth * scale;
+    // 与 drawFurniture 同款：行走人物的选择框跟着实时位置走，不留在锚点。
+    const live = planSymbol(item) === 'person' ? options.personSample?.(item.id) ?? null : null;
     ctx.save();
     ctx.translate(
-      offsetX + (item.position.x + options.layout.width / 2) * scale,
-      offsetY + (item.position.z + options.layout.height / 2) * scale
+      offsetX + ((live?.x ?? item.position.x) + options.layout.width / 2) * scale,
+      offsetY + ((live?.z ?? item.position.z) + options.layout.height / 2) * scale
     );
     ctx.rotate(-(item.rotation ?? 0));
     ctx.strokeStyle = collision ? PLAN_COLLISION : primary ? PLAN_SELECT : PLAN_SELECT_SOFT;

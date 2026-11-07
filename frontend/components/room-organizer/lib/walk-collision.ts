@@ -305,6 +305,35 @@ export function resolveWalkerPosition(
   return resolveWalkerStep(colliders, from, to, radius, { x: from.x, z: from.z }, options);
 }
 
+/**
+ * Distance (metres) from a ground point to the nearest solid surface a walker
+ * would collide with — 0 when the point is inside a box, `Infinity` when there
+ * are no colliders. Outdoor boxes are ignored while the point is inside the
+ * room, the same rule the resolver applies (`pushOut`), so the value reflects
+ * what a walker at that point would actually rub against. Used by route
+ * drawing to warn about waypoints placed too close to an obstacle.
+ */
+export function walkerClearanceAt(
+  colliders: readonly WalkCollider[],
+  point: Readonly<WalkerPosition>,
+  options: WalkCollisionOptions = {}
+): number {
+  const insideRoom = walkerInsideRoom(point, options);
+  let best = Infinity;
+  for (const box of colliders) {
+    if (box.outdoor && insideRoom) continue;
+    const dx = point.x - box.cx;
+    const dz = point.z - box.cz;
+    const lx = dx * box.ax + dz * box.az;
+    const lz = dx * box.bx + dz * box.bz;
+    const gapX = Math.max(Math.abs(lx) - box.hw, 0);
+    const gapZ = Math.max(Math.abs(lz) - box.hd, 0);
+    const dist = Math.hypot(gapX, gapZ);
+    if (dist < best) best = dist;
+  }
+  return best;
+}
+
 function walkerInsideRoom(position: Readonly<WalkerPosition>, options: WalkCollisionOptions): boolean {
   const { roomWidth, roomDepth } = options;
   if (roomWidth === undefined || roomDepth === undefined) return false;

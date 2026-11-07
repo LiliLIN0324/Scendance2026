@@ -108,7 +108,8 @@ import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
-import { routePointError } from './lib/person-route';
+import { ROUTE_WAYPOINT_CLEARANCE_WARN_M, routePointError } from './lib/person-route';
+import { buildWalkColliders, walkerClearanceAt } from './lib/walk-collision';
 import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
@@ -614,7 +615,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           setRouteDrawHint(problem);
           return;
         }
-        setRouteDrawHint(null);
+        // 贴障预检（PEOPLE-04 E2E 实踩：距桌沿 0.2m 的路线点会被碰撞推挤钉死、
+        // 来回徘徊）：途经点离障碍太近时提示但不阻断——1.2s 受阻掉头仍兜底，
+        // 用户可能就是想要贴着桌边走。排除本人（首点尚无路线时自己是静态碰撞盒）。
+        const colliders = buildWalkColliders(
+          activeFloor.items.filter((candidate) => candidate.id !== routeDrawItemId),
+          activeFloor.interiorWalls ?? [],
+          { roomWidth: layout.width, roomDepth: layout.height }
+        );
+        const clearance = walkerClearanceAt(colliders, { x, z }, { roomWidth: layout.width, roomDepth: layout.height });
+        setRouteDrawHint(
+          clearance < ROUTE_WAYPOINT_CLEARANCE_WARN_M
+            ? `途经点距最近障碍约 ${clearance.toFixed(1)}m，行走时可能被推挤折返徘徊，建议离障碍 ${ROUTE_WAYPOINT_CLEARANCE_WARN_M}m 以上。`
+            : null
+        );
         const next = [...points, { x, z }];
         if (next.length >= 2) {
           actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: next } });
