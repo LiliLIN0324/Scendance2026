@@ -16,6 +16,7 @@ import {
   applyWallClearance,
   isRingChairOfTable,
   MAX_TABLES_PER_ZONE,
+  type PlanZoneStyle,
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
@@ -74,6 +75,11 @@ export interface ScoringOptions {
    * 而是在 shortage / reasons 里显式列出「缺 N 把{中文家具名}」。
    */
   inventory?: Record<string, number>;
+  /**
+   * 风格 brief（MP-PLAN）：只换摆法与颜色，不换评分口径。
+   * 三档密度仍在，风格差异由 plan-approve 的配方白名单保证有已验摆法兜底。
+   */
+  style?: PlanZoneStyle;
 }
 
 export interface ScoredPlan {
@@ -180,8 +186,9 @@ export function generateScoredPlans(
   const roomSize = opts?.roomSize;
   const targetCapacity = opts?.targetCapacity;
   const inventory = opts?.inventory;
+  const style = opts?.style;
   const all = VARIANTS.map((v) =>
-    scoreVariant(annotations, v.variantId, v.label, v.density, roomSize, targetCapacity, inventory),
+    scoreVariant(annotations, v.variantId, v.label, v.density, roomSize, targetCapacity, inventory, style),
   );
   return dedupePlans(all);
 }
@@ -246,8 +253,9 @@ function scoreVariant(
   roomSize: RoomSize | undefined,
   targetCapacity?: number,
   inventory?: Record<string, number>,
+  style?: PlanZoneStyle,
 ): ScoredPlan {
-  const raw = planZones(annotations, density);
+  const raw = planZones(annotations, density, style ? { style } : undefined);
   let placements = raw.placements;
   let skipped = raw.skipped;
 
