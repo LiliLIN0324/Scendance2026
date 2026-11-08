@@ -22,6 +22,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 import { ArrowUp, Check, Clock, FileImage, Loader2, Map as MapIcon, MapPin, Maximize2, MessageCirclePlus, Minimize2, Palette, Paperclip, RotateCw, SquareDashed, X } from '@/components/solid-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
+import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount } from '../lib/agent-turn-outcome';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -643,8 +644,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setReviewedHistory(id);phaseRef.current='idle';setPhase('idle');setProgress(0);
     say({role:'agent',text:'已按当前记录重新开始；旧预览已收回，请重新生成并核对方案。'});
   }
-  const updateDialogueIncomplete=(sessionId:string|null,text:string,incomplete:boolean)=>{
-    const value=text.trim();if(!sessionId||!value||isGeneralActivityQuestion(value))return;
+  const updateDialogueIncomplete=(sessionId:string|null,text:string,incomplete:boolean,provenUnhandled=false)=>{
+    const value=text.trim();if(!sessionId||!value||(incomplete&&!provenUnhandled&&isGeneralActivityQuestion(value)))return;
     const entries=incompleteDialogueTurns.current.get(sessionId)??new Set<string>(),was=entries.size>0;
     if(incomplete)entries.add(value);else entries.delete(value);
     if(entries.size)incompleteDialogueTurns.current.set(sessionId,entries);else incompleteDialogueTurns.current.delete(sessionId);
@@ -732,14 +733,16 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     });
   },[studio?.controller,pendingCandidates]);
 
-  function saveMemory(memory: BriefMemory): void {
-    if (!sessionScopeIsCurrent()) return;
+  function saveMemory(memory: BriefMemory): boolean {
+    if (!sessionScopeIsCurrent()) return false;
     if (JSON.stringify({ ...memoryRef.current, askedScale: false }) !== JSON.stringify({ ...memory, askedScale: false })) memoryRevision.current++;
     memoryRef.current = memory;
     onBriefMemoryChange?.(memory,boundSessionId.current);
     const id = boundSessionId.current;
     if (id) sessionMemories.current.set(id, memory);
-    if (id && !writeBriefMemory(id, memory, scopedAssistantStorage(sessionScope), requireSessionWrite)) say({ role: 'agent', amber: true, text: '这次需求暂时无法保存在本机，当前输入保留在页面中，请先备份。' });
+    const saved = !!id && writeBriefMemory(id, memory, scopedAssistantStorage(sessionScope), requireSessionWrite);
+    if (id && !saved) say({ role: 'agent', amber: true, text: '这次需求暂时无法保存在本机，当前输入保留在页面中，请先备份。' });
+    return saved;
   }
 
   // 点历史 / 新开会话：换 activeId 时把气泡切到对应正文；新场没有正文就是空对话。
@@ -2523,10 +2526,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
     } catch (error) { releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
     if (!sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence) { releaseTurn(); return; }
-    if(turn.resolution==='failed'||turn.resolution==='unavailable'||turn.resolution==='not_connected')updateDialogueIncomplete(turnSessionId,trimmed,true);
-    else if(turn.unhandled?.some(item=>item.kind==='action'||item.kind==='other'))updateDialogueIncomplete(turnSessionId,trimmed,true);
-    else if(turn.resolution==='model'&&!mixedUtility)updateDialogueIncomplete(turnSessionId,trimmed,false);
+    const outcome=resolvedTurnOutcome(turn,previousMemory,mixedUtility,trimmed);
+    const incompleteUpdate=incompleteUpdateForOutcome(outcome);
     const unhandledRequirement=turn.unhandled?.some(item=>(item.kind==='action'||item.kind==='other')&&!!item.evidence&&trimmed.includes(item.evidence))??false;
+    if(incompleteUpdate==='mark')updateDialogueIncomplete(turnSessionId,trimmed,true,unhandledRequirement);
     if(unifiedConversation&&unhandledRequirement&&(phaseRef.current==='proposed'||phaseRef.current==='paused')){
       dropProposal();discardCloudPreview();phaseRef.current='idle';setPhase('idle');setProgress(0);
       say({role:'agent',amber:true,text:'这项操作尚未执行，旧方案预览已收回。请带上这项要求重新生成，再核对修改。'});
@@ -2575,7 +2578,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       briefFallbackNotified.current = true;
       say({ role: 'agent', amber: true, text: turn.modelNotice ?? '这次暂时只能识别基本信息，复杂要求请核对后再出方案。' });
     }
-    saveMemory(turn.memory);
+    const memorySaved=saveMemory(turn.memory);
     releaseTurn();
     if(unifiedConversation && (phaseRef.current==='proposed'||phaseRef.current==='paused') && !sameRecoveryFormValue({...previousMemory,askedScale:false},{...turn.memory,askedScale:false})) {dropProposal();discardCloudPreview();setPhase('idle');setProgress(0);}
     const extraction = turn.extraction;
@@ -2583,6 +2586,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 人数 / 类型 / 室内外 / 长宽先写进左栏简报，再决定出不出预览。云端忙也不能把这句漏掉。
     applyExtraction(extraction);
     syncMemory(turn.memory);
+    // The model result is only eligible to clear an old item after the venue
+    // fences, the memory write, and a readback of the fact all succeeded.
+    if(incompleteUpdate==='clear_current' && memorySaved && turnSessionId && sessionScopeIsCurrent() &&
+      boundSessionId.current===turnSessionId && briefTurnSequence.current===turnSequence &&
+      (sessionScope==='legacy' || (turnVenueBasis===venueScaleBasis(layoutStore.getState().layout) && venueFacts.isCurrent(turnVenueFact))) &&
+      samePersistedHeadcount(readBriefMemory(turnSessionId,scopedAssistantStorage(sessionScope)),turn.memory))
+      updateDialogueIncomplete(turnSessionId,trimmed,false);
     const briefNote = syncStudioBrief(merged);
     const suffix = briefNote ? ` ${briefNote}` : '';
     const anchors = { checkin: turn.memory.zoneNeeds.checkin === true, stage: turn.memory.zoneNeeds.stage === true };
