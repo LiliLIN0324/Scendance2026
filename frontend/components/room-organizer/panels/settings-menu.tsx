@@ -1,14 +1,15 @@
 'use client';
 
 /**
- * 画布左下角「设置」：切回官网、购买重建次数、新手指引与 GitHub。
+ * 画布左下角设置：切回官网、新手指引与 GitHub；付费入口暂不开放。
  */
-import { BookOpen, Home, Scan, Settings } from '@/components/solid-icons';
+import { BookOpen, Home, Settings } from '@/components/solid-icons';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 const HOME_URL = '/introduction';
 const GETTING_STARTED_URL = '/guide';
-const PRICING_URL = '/pricing';
+// 付费入口暂不上线（paid flow 未就绪）；恢复时取消注释。
+// const PRICING_URL = '/pricing';
 const GITHUB_URL = 'https://github.com/LiliLIN0324/Scendance2026';
 
 function GithubMark(): JSX.Element {
@@ -43,9 +44,9 @@ export function SettingsMenu({ buttonRef }: { buttonRef?: RefObject<HTMLButtonEl
         <Home size={15} aria-hidden="true"/><span>切回官网</span>
       </a>
       <span className="sc-more-sep" aria-hidden="true"/>
-      <a className="sc-settings-link" href={PRICING_URL}>
+      {/* 付费入口暂不上线：<a className="sc-settings-link" href={PRICING_URL}>
         <Scan size={15} aria-hidden="true"/><span>购买重建次数</span>
-      </a>
+      </a> */}
       <a className="sc-settings-link" href={GETTING_STARTED_URL} target="_blank" rel="noopener noreferrer">
         <BookOpen size={15} aria-hidden="true"/><span>新手指引</span>
       </a>

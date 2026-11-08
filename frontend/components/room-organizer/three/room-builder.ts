@@ -28,6 +28,8 @@ export const ROOM_OBJECT_TAGS = {
   Furniture: 'furniture',
   Signal: 'wifi-signal',
   CameraVision: 'camera-vision',
+  /** 人物行走路线的可视化（折线 + 路点标记），纯装饰不参与拾取（PEOPLE-04）。 */
+  PersonRoute: 'person-route',
 } as const;
 
 export type RoomObjectTag = (typeof ROOM_OBJECT_TAGS)[keyof typeof ROOM_OBJECT_TAGS];

@@ -29,13 +29,13 @@ function environment(preview: SplatPreviewState = { status: 'idle', assetId: '',
 describe('SpacePanel', () => {
   it('shows the real-venue entry with an honest empty state, and hosts templates in traditional', () => {
     const onApply = vi.fn();
-    const onOpenAholo = vi.fn();
     let runNew: (() => void) | undefined;
-    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onOpenAholo={onOpenAholo} onRegisterNew={run => { runNew = run; }}/>);
+    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply} onRegisterNew={run => { runNew = run; }}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
     expect(screen.getByText('用手机拍一段场地')).toBeTruthy();
     expect(screen.getByRole('link', { name: '拍摄场地' }).getAttribute('href')).toBe('/guide/capture');
-    expect(onOpenAholo).not.toHaveBeenCalled();
+    // 默认 aholo 分支：未传 environment 时显示「当前环境」占位。
+    expect(screen.getByRole('heading', { name: '当前环境' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /传统空间/ }));
     expect(screen.getByRole('heading', { name: '场景模板' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: '环境' })).toBeTruthy();

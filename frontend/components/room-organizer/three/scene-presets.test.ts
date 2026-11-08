@@ -105,6 +105,9 @@ describe('editable scene archives', () => {
         expect({ ...candidate.scene.objects[0], id: originalAdded.id }).toEqual(originalAdded);
         expect(candidate.scene.objects[0].id).toMatch(/^ref\d+$/);
       }
+      expect(state.task).toBe('比较三个新增桌子的位置，保留原体育馆布置');
+      expect(encoded).not.toMatch(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/i);
+      expect(encoded).toContain('ref0');
       expect(evaluation).toMatchObject({ status: 'complete', choice: 'B', confidence: 0.5, probabilities: { A: 0.2, B: 0.5, C: 0.2, NONE: 0.1 } });
       expect(candidates).toEqual(originalCandidates);
     }

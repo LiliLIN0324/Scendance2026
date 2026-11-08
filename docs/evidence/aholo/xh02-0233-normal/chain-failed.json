@@ -1,0 +1,28 @@
+{
+  "error": "asset.block.part 被拒: 上传任务已结束",
+  "steps": [
+    {
+      "op": "asset.token",
+      "http": 200,
+      "response": "{\"ousToken\":\"E997DDE7-C3A8-431B-8001-730CCDE62E4A\",\"globalDomain\":\"https://ous-cos.kujiale.com\",\"blockSize\":5242880}"
+    },
+    {
+      "op": "asset.begin",
+      "file": "DJI_0233_first138s.mp4",
+      "bytes": 1895635260,
+      "md5": "b121e0929c8fe51fe394cd04c430a639",
+      "note": "逐文件入库开始"
+    },
+    {
+      "op": "asset.block.init",
+      "http": 200,
+      "response": "{\"c\":\"0\",\"m\":\"\",\"d\":{\"deduplicated\":true,\"obsTaskId\":\"3FO2QRKX4H0B\"}}"
+    },
+    {
+      "op": "asset.block.part",
+      "http": 200,
+      "response": "{\"c\":\"13\",\"m\":\"上传任务已结束\"}"
+    }
+  ],
+  "at": "2026-11-07T08:50:11.090Z"
+}

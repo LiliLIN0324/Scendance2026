@@ -42,6 +42,7 @@ import type {createSourceEditorCoordinator} from '@/lib/source-editor-coordinato
 import type { ActivitySessionToken } from '../lib/activity-session-epoch';
 import { buildReviewReference } from '../lib/review-copy';
 import { appendAgentRunEvents, appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
+import { setBriefHeadcount } from './brief-headcount-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend, proposalWarningText, seatingShortfallText } from '../lib/workbench-agent';
@@ -450,6 +451,11 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const timer=setTimeout(()=>{briefTimer.current=undefined;void saveBrief(scope,undefined,undefined,guard).catch(()=>{});},250);briefTimer.current=timer;
     return()=>{clearTimeout(timer);if(briefTimer.current===timer)briefTimer.current=undefined;};
   },[brief,briefReady,scope,saveBrief,backupPending]); // A new lease alone must not silently replay an old dirty draft.
+  // Only explicitly confirmed headcount is published to 2D scoring.
+  useEffect(()=>{
+    setBriefHeadcount(briefReady && brief.guestsConfirmed === true ? brief.guests : null);
+    return () => setBriefHeadcount(null);
+  },[briefReady,brief.guests,brief.guestsConfirmed,scope]);
   function retryBrief():void { if(briefStorage.current.ready)void saveBrief(scope,undefined,undefined,sourceWriteGuard).catch(()=>{});else setBriefLoadAttempt(value=>value+1); }
   const [expanded,setExpanded]=useState(false);
   const [jevEnabled,setJevEnabled]=useState(false);
@@ -1675,6 +1681,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     if(captureDialogue&&!dialogue)throw new Error('当前对话尚未核对完成，请稍后重试。');
     const checkRequirements=()=>{
       if(briefEditEpoch.current!==briefEpoch||briefRef.current!==selected.briefKey||getActiveAssistantSessionId(chatScope)!==chatId||dialogue&&!dialogue.isCurrent())throw new Error('应用期间需求或对话已变化，已保留当前画布。');
+      if(dialogue && dialogue.project().availability!=='available')throw new Error('当前对话尚未核对完成，请稍后重试。');
+      if(dialogue && !dialogue.isCurrent())throw new Error('应用期间需求或对话已变化，已保留当前画布。');
     };
     try {
     checkRequirements();

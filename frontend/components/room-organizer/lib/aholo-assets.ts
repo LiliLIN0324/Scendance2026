@@ -36,16 +36,30 @@ const REGISTRY_MAX = 40;
 const ASSET_TIMEOUT_MS = 330_000;
 
 /**
- * 场景资产的拍摄位置（docs/49 地理底图）：采集中心经纬度与覆盖半径。
+ * 场景资产的拍摄位置（docs/19 地理底图）：采集中心经纬度与覆盖半径。
  * 只作元数据给底图对齐用，不参与碰撞/落盘几何，更不进重建素材（RECON_MATERIAL_BAN）。
+ *
+ * 坐标系边界（MAP-04，详见 lib/geo-coords.ts）：本类型的坐标一律按 GCJ-02 解释——
+ * picker/lookup 本来就取自高德；将来若接入 GPS/EXIF/采集遥测（WGS-84）来源，
+ * 必须先过 `wgs84ToGcj02` 再写入，否则底图自动锚定（room-organizer 的 scanAssetId 铺图）会偏几百米。
  */
 export type AholoAssetGeo = {
   lng: number;
   lat: number;
   /** 采集覆盖半径（米）；缺了就由底图侧按资产尺度推。 */
   radiusM?: number;
-  /** 坐标来源：picker=地图圈画采集单；manual=人工标注；lookup=地名查得（Bingo 调研路线）。 */
-  source: 'picker' | 'manual' | 'lookup';
+  /**
+   * 坐标来源：picker=地图圈画采集单；manual=人工标注（坐标系未标注，接入前先确认）；
+   * lookup=地名查得（Bingo 调研路线）；telemetry=采集遥测/EXIF（WGS-84 原始坐标，
+   * 进 GCJ-02 消费端前必须先过 `wgs84ToGcj02`，见 room-organizer 的 scanAssetId 自动铺图）。
+   */
+  source: 'picker' | 'manual' | 'lookup' | 'telemetry';
+  /**
+   * 采集主朝向（度，正北顺时针；如 DJI 遥测 heading）。MAP-04 通路预留：
+   * scanAssetId 自动铺图时作为锚点 orientationDeg（「壳体平面图上方 = 采集朝向」的
+   * 语义假设未经真资产核验，校准归 MAP-05）；缺省时锚点朝向沿用现有值（默认正北）。
+   */
+  headingDeg?: number;
 };
 
 function validGeo(value: unknown): value is AholoAssetGeo {
@@ -54,7 +68,8 @@ function validGeo(value: unknown): value is AholoAssetGeo {
   return typeof geo.lng === 'number' && Number.isFinite(geo.lng) && geo.lng >= -180 && geo.lng <= 180
     && typeof geo.lat === 'number' && Number.isFinite(geo.lat) && geo.lat >= -90 && geo.lat <= 90
     && (geo.radiusM === undefined || (Number.isFinite(geo.radiusM) && geo.radiusM > 0 && geo.radiusM <= 20000))
-    && (geo.source === 'picker' || geo.source === 'manual' || geo.source === 'lookup');
+    && (geo.source === 'picker' || geo.source === 'manual' || geo.source === 'lookup' || geo.source === 'telemetry')
+    && (geo.headingDeg === undefined || (Number.isFinite(geo.headingDeg) && Math.abs(geo.headingDeg) <= 360));
 }
 
 /** 一次落盘的元数据；签名链接不进这里，本机地址由 assetId + kind 推出。 */
@@ -69,7 +84,15 @@ export type AholoAsset = {
   meters?: { width: number; depth: number; height: number };
   /** 场景资产的拍摄位置；物件模型没有。 */
   geo?: AholoAssetGeo;
+  /** 可选：本地派生 LOD 的元数据（站内路径，如 /scans/<id>/lod-meta.json）。 */
+  lodUrl?: string;
 };
+
+const LOD_URL_PATTERN = /^\/scans\/[A-Za-z0-9_-]{1,48}\/lod-meta\.json$/;
+
+function validLodUrl(value: unknown): value is string {
+  return typeof value === 'string' && LOD_URL_PATTERN.test(value);
+}
 
 function validMeters(value: unknown): value is { width: number; depth: number; height: number } {
   if (!value || typeof value !== 'object') return false;
@@ -85,6 +108,7 @@ function isValidAsset(value: unknown): value is AholoAsset {
     (asset.taskid === undefined || (typeof asset.taskid === 'string' && taskidPattern.test(asset.taskid))) &&
     (asset.meters === undefined || validMeters(asset.meters)) &&
     (asset.geo === undefined || validGeo(asset.geo)) &&
+    (asset.lodUrl === undefined || validLodUrl(asset.lodUrl)) &&
     Boolean(aholoAssetUrl(asset));
 }
 
@@ -154,6 +178,7 @@ export function rememberAholoAsset(asset: AholoAsset): AholoAsset | undefined {
     ...(typeof asset.taskid === 'string' && taskidPattern.test(asset.taskid) ? { taskid: asset.taskid } : {}),
     ...(validMeters(asset.meters) ? { meters: asset.meters } : {}),
     ...(validGeo(asset.geo) ? { geo: asset.geo } : {}),
+    ...(validLodUrl(asset.lodUrl) ? { lodUrl: asset.lodUrl } : {}),
   };
   if (!isValidAsset(record)) return undefined;
   const storage = currentStorage();
@@ -167,7 +192,7 @@ export function forgetAholoAsset(assetId: string): void {
   writeRegistry(storage, readRegistry(storage).filter(item => item.assetId !== assetId));
 }
 
-async function postAsset(source: { url: string; name: string; taskid?: string }): Promise<AholoAsset> {
+async function postAsset(source: { url: string; name: string; taskid?: string; lodUrl?: string }): Promise<AholoAsset> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ASSET_TIMEOUT_MS);
   let response: Response;
@@ -195,6 +220,7 @@ async function postAsset(source: { url: string; name: string; taskid?: string })
     bytes: Number(body.bytes) || 0,
     savedAt: Date.now(),
     ...(source.taskid ? { taskid: source.taskid } : {}),
+    ...(validLodUrl(source.lodUrl) ? { lodUrl: source.lodUrl } : {}),
   });
   if (!saved) throw new Error('落盘返回的资产号无效，已放弃。');
   return saved;
@@ -207,6 +233,8 @@ export async function importAholoAsset(source: {
   taskid?: string;
   meters?: { width: number; depth: number; height: number };
   geo?: AholoAssetGeo;
+  /** 本地已派生好 LOD 时一并登记，预览即可按距离换档。 */
+  lodUrl?: string;
 }): Promise<AholoAsset & { url: string }> {
   // 同一任务号复用本机文件；这次若带来了真实尺度或拍摄位置而旧记录没有，就补写进注册表，历史场景也能按真实尺寸回放。
   const cached = findAholoAssetByTask(source.taskid);
@@ -217,6 +245,9 @@ export async function importAholoAsset(source: {
   }
   if (!validGeo(asset.geo) && validGeo(source.geo)) {
     asset = await rememberAholoAsset({ ...asset, geo: source.geo }) ?? asset;
+  }
+  if (!validLodUrl(asset.lodUrl) && validLodUrl(source.lodUrl)) {
+    asset = await rememberAholoAsset({ ...asset, lodUrl: source.lodUrl }) ?? asset;
   }
   const url = aholoAssetUrl(asset);
   if (!url) throw new Error('落盘后仍无法生成本机地址。');

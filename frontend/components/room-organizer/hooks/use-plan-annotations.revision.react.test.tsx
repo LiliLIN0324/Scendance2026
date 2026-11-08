@@ -163,3 +163,43 @@ describe('同步草案快照与条件消费',()=>{
     expect(result.current.getSnapshot().revision).toBe(revision);
   });
 });
+
+describe('use-plan-annotations — addDoorAnnotation（门位置标注）', () => {
+  it('未给出的宽度和开向保持待核验，且 bump revision', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    act(() => result.current.startDraft());
+    const r0 = result.current.revision;
+
+    act(() => result.current.addDoorAnnotation({ wall: 'east', position: 1.5 }));
+    expect(result.current.revision).toBe(r0 + 1);
+    expect(result.current.annotations).toHaveLength(1);
+    const door = result.current.annotations[0]!;
+    expect(door.kind).toBe('door');
+    expect(door.geometry).toEqual({ kind: 'door', wall: 'east', position: 1.5, widthM: null, inferred: true });
+  });
+
+  it('没有 draft 时也能直接落（reducer 自动补空草案，同 ADD_ANNOTATION 语义）', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    expect(result.current.draft).toBeNull();
+    act(() => result.current.addDoorAnnotation({ wall: 'south', position: -2 }));
+    expect(result.current.draft).not.toBeNull();
+    expect(result.current.annotations).toHaveLength(1);
+    expect(result.current.annotations[0]!.geometry).toMatchObject({ kind: 'door', wall: 'south', position: -2 });
+  });
+
+  it('记录用户输入的宽度，但不把门及开向当作现场已确认', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    act(() => result.current.addDoorAnnotation({ wall: 'north', position: 0, widthM: 1.5 }));
+    expect(result.current.annotations[0]!.geometry).toMatchObject({ kind: 'door', widthM: 1.5, inferred: true });
+  });
+
+  it('同批次绘制两扇门时使用不同 ID，非法宽度不被采纳', () => {
+    const { result } = renderHook(() => usePlanAnnotations());
+    act(() => {
+      result.current.addDoorAnnotation({ wall: 'north', position: 0, widthM: NaN });
+      result.current.addDoorAnnotation({ wall: 'south', position: 1 });
+    });
+    expect(result.current.annotations.map((item) => item.id)).toEqual(['ann-1', 'ann-2']);
+    expect(result.current.annotations[0]!.geometry).toMatchObject({ widthM: null, inferred: true });
+  });
+});

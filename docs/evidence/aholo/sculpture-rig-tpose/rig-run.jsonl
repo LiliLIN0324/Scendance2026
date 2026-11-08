@@ -1,0 +1,11 @@
+{"at":"0.0s","iso":"2026-11-06T04:39:59.240Z","op":"local.file","file":"docs/evidence/aholo/sculpture-rig-tpose/MODEL-tpose.glb","bytes":812712,"md5":"bb2e1964f304cc65e5a0f89f254a735b"}
+{"at":"0.1s","iso":"2026-11-06T04:39:59.353Z","op":"asset.token","http":200,"response":"{\"ousToken\":\"0D2CCB54-6740-45CE-87CF-F64223751BDE\",\"globalDomain\":\"https://ous-cos.kujiale.com\",\"blockSize\":5242880}"}
+{"at":"0.3s","iso":"2026-11-06T04:39:59.511Z","op":"asset.single","http":200,"response":"{\"c\":\"0\",\"m\":\"\",\"d\":{\"obsTaskId\":\"3FO2QX8PI42M\"}}"}
+{"at":"0.3s","iso":"2026-11-06T04:39:59.556Z","op":"asset.status","attempt":1,"http":200,"pending":true}
+{"at":"2.3s","iso":"2026-11-06T04:40:01.582Z","op":"asset.status","attempt":2,"http":200,"url":"https://holo-cos.aholo3d.cn/resource/platform/temp/2026/11/06/NLWVUHAKTKX72AABAAAAADA8.glb","assetId":"3FO2QX8PI42M"}
+{"at":"2.5s","iso":"2026-11-06T04:40:01.735Z","op":"rig.create","http":200,"response":"{\"f\":null,\"c\":\"0\",\"m\":\"\",\"d\":4736194}","ms":153}
+{"at":"2.6s","iso":"2026-11-06T04:40:01.794Z","op":"rig.poll","polls":1,"http":200,"status":0,"label":"初始化","progress":null}
+{"at":"7.6s","iso":"2026-11-06T04:40:06.870Z","op":"rig.poll","polls":2,"http":200,"status":1,"label":"运行中","progress":null}
+{"at":"12.7s","iso":"2026-11-06T04:40:11.950Z","op":"rig.poll","polls":3,"http":200,"status":1,"label":"运行中","progress":null}
+{"at":"17.8s","iso":"2026-11-06T04:40:17.024Z","op":"rig.poll","polls":4,"http":200,"status":1,"label":"运行中","progress":null}
+{"at":"22.9s","iso":"2026-11-06T04:40:22.108Z","op":"rig.poll","polls":5,"http":200,"status":4,"label":"失败","progress":null,"outputs":["{\"error\":{\"code\":\"MODEL_NOT_RIGGABLE\",\"message\":\"主体为类人形角色，但其手臂呈抱臂姿态，不符合可绑骨的T-Pose或A-Pose基础站姿要求。\"}}"]}

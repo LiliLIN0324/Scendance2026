@@ -1,5 +1,4 @@
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '../lib/amap-venue';
-import { boundsSizeMeters } from '../lib/research-area';
 import { anchorBasemapYawRad, anchorGeoToWorld, sceneAnchorOf } from '../lib/scene-anchor';
 import type { RoomLayout } from '../lib/types';
 import type * as ThreeNS from 'three';
@@ -7,7 +6,7 @@ import type * as ThreeNS from 'three';
 /**
  * 调研底图：这一片区域的路网，铺在 3D 地面上。
  *
- * 架构定案（docs/49）：地图不是独立模块，是 3D 场景里的一个渲染层。
+ * 架构定案（docs/19）：地图不是独立模块，是 3D 场景里的一个渲染层。
  * 场景坐标 ↔ 地理坐标只有场景锚点（lib/scene-anchor.ts）这一套变换，
  * 底图的中心、尺寸、正北朝向全部由锚点推出，不再自己持有定位。
  *
@@ -15,8 +14,8 @@ import type * as ThreeNS from 'three';
  */
 
 export const RESEARCH_BASEMAP_TAG = 'research-basemap';
-/** 底图压在场地下方一点点，不和壳体地面抢同一层深度。 */
-export const RESEARCH_BASEMAP_Y = -0.02;
+/** 底图压在场地下方，不和壳体地面/高斯地面抢同一层深度（2 cm 不够，远看会互相穿插）。 */
+export const RESEARCH_BASEMAP_Y = -0.12;
 
 export interface ResearchBasemapPlacement {
   /** 底图覆盖的世界米（x 向东，z 向南；已随锚点 metersPerUnit 缩放）。 */
@@ -53,9 +52,12 @@ export function researchGeoToWorld(layout: RoomLayout, lng: number, lat: number)
 export function researchBasemapPlacement(layout: RoomLayout): ResearchBasemapPlacement | null {
   const area = layout.researchArea;
   if (!area) return null;
-  const widthM = (area.bounds.east - area.bounds.west) * metersPerDegreeLng(area.center.lat);
-  const depthM = (area.bounds.north - area.bounds.south) * METERS_PER_DEGREE_LAT;
   const anchor = sceneAnchorOf(layout);
+  // 经度换算的参考纬度取锚点纬度：世界坐标是锚点定义的，底图宽度必须和它同一把尺子，
+  // 否则底图中心和锚点稍偏一点，东西向就按两条纬线的余弦差拉开（实测 0.9 m @1.9 km）。
+  const mLng = metersPerDegreeLng(anchor ? anchor.lat : area.center.lat);
+  const widthM = (area.bounds.east - area.bounds.west) * mLng;
+  const depthM = (area.bounds.north - area.bounds.south) * METERS_PER_DEGREE_LAT;
   if (!anchor) return { widthM, depthM, centerX: 0, centerZ: 0, yawRad: 0 };
   const boundsLng = (area.bounds.west + area.bounds.east) / 2;
   const boundsLat = (area.bounds.south + area.bounds.north) / 2;
@@ -65,7 +67,7 @@ export function researchBasemapPlacement(layout: RoomLayout): ResearchBasemapPla
 }
 
 /**
- * 底图观感（docs/49 需求B）：去饱和 + 提亮 + 压对比，让底图退到后面、场景跳出来。
+ * 底图观感（docs/19 需求B）：去饱和 + 提亮 + 压对比，让底图退到后面、场景跳出来。
  * 只作用在底图贴图像素上，不碰场景里任何别的东西。
  */
 export const BASEMAP_TONE_FILTER = 'saturate(0.55) brightness(1.12) contrast(0.9)';
@@ -123,8 +125,18 @@ export function buildResearchBasemap(
   if (![placement.widthM, placement.depthM].every(value => Number.isFinite(value) && value > 0)) return null;
 
   const geometry = new THREE.PlaneGeometry(placement.widthM, placement.depthM, 1, 1);
-  const material = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  // 底图是纯背景层：最先画、不写深度。只靠高度下沉挡不住点云——
+  // 点云不写深度、相机稍低一点底图就会盖上来，所以这里从深度上彻底让开。
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: 2,
+    polygonOffsetUnits: 4,
+  });
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = -10;
   // PlaneGeometry 的 UV：u 沿 +x（东），v 沿 +y。绕 X 转 -90° 后 +y 指向 -z（北），
   // 贴图 flipY 默认把图片首行放到 v=1（北），所以这张平面天然正北朝上。
   mesh.rotation.x = -Math.PI / 2;
@@ -148,50 +160,27 @@ export function buildResearchBasemap(
     if (mesh.material === material) material.color.setHex(0xe8e4da);
   });
 
-  // 场地脚下那块 z18 级高清贴片：同锚点、略高于全景底图，走近时地面是真实的树/路/岸线。
-  // 真实比例不变——尺寸就是 detailBounds 换算出来的真实米数，不缩放。
-  const detailSize = area.detailBounds ? boundsSizeMeters(area.detailBounds) : null;
-  if (area.detailImageUrl && detailSize && [detailSize.widthM, detailSize.depthM].every(value => Number.isFinite(value) && value > 0)) {
-    const detailGeometry = new THREE.PlaneGeometry(detailSize.widthM, detailSize.depthM, 1, 1);
-    const detailMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff, side: THREE.DoubleSide,
-      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
-    });
-    const detailMesh = new THREE.Mesh(detailGeometry, detailMaterial);
-    detailMesh.rotation.x = -Math.PI / 2;
-    if (placement.yawRad !== 0) detailMesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), placement.yawRad);
-    detailMesh.position.set(placement.centerX, RESEARCH_BASEMAP_Y + 0.01, placement.centerZ);
-    detailMesh.renderOrder = 1;
-    detailMesh.receiveShadow = false;
-    detailMesh.castShadow = false;
-    detailMesh.userData.type = RESEARCH_BASEMAP_TAG;
-    detailMesh.userData.mapReference = true;
-    detailMesh.userData.mapReferenceLabel = '参考底图·不可作重建素材';
-    scene.add(detailMesh);
-    void loadBasemapTexture(THREE, area.detailImageUrl).then(texture => {
-      if (detailMesh.material !== detailMaterial) { texture.dispose(); return; }
-      detailMaterial.map = texture;
-      detailMaterial.needsUpdate = true;
-      options.onTextureLoaded?.();
-    }).catch(() => {
-      // 贴片没拉下来就整层隐掉，让全景底图露出来，不留一块白板。
-      if (detailMesh.material === detailMaterial) detailMaterial.visible = false;
-    });
-  }
+  // 地图就是一个世界空间：整片场地只铺这一张连续底图，不再叠第二块高清贴片。
+  // 贴片会在边界上露出亮度/清晰度的接缝，看起来像两张图拼在一起。
   return mesh;
 }
 
-/** 拆掉旧底图，连同贴图一起释放。 */
+/** 拆掉旧底图（含挂同 tag 的矢量叠加组），连同贴图一起释放。 */
 export function clearResearchBasemap(scene: ThreeNS.Scene): void {
   for (const child of [...scene.children]) {
     if (child.userData?.type !== RESEARCH_BASEMAP_TAG) continue;
     scene.remove(child);
-    const mesh = child as ThreeNS.Mesh;
-    mesh.geometry?.dispose();
-    const material = mesh.material as ThreeNS.Material | undefined;
-    const map = (material as unknown as { map?: import('three').Texture } | undefined)?.map;
-    if (map && (map as { isTexture?: boolean }).isTexture) map.dispose();
-    material?.dispose();
+    child.traverse(object => {
+      const mesh = object as ThreeNS.Mesh;
+      mesh.geometry?.dispose?.();
+      const material = mesh.material as ThreeNS.Material | ThreeNS.Material[] | undefined;
+      const materials = Array.isArray(material) ? material : material ? [material] : [];
+      for (const item of materials) {
+        const map = (item as unknown as { map?: import('three').Texture }).map;
+        if (map && (map as { isTexture?: boolean }).isTexture) map.dispose();
+        item.dispose();
+      }
+    });
   }
 }
 

@@ -414,11 +414,14 @@ export function useSplatPreview(deps: {
     hudRef.current = null;
   }, []);
 
-  const renderFrame = useCallback<SplatPaint>((renderer, scene, camera) => {
+  const renderFrame = useCallback<SplatPaint>((renderer, scene, camera, options) => {
     const controller = controllerRef.current;
+    // 这一层才是编辑器真正的每帧入口：LOD 表计与换档由各控制器自己推进。
+    controller?.frameTick(camera);
+    for (const extra of otherControllersRef.current.values()) extra.frameTick(camera);
     const backs = [controller?.renderScene, ...[...otherControllersRef.current.values()].map(extra => extra.renderScene)]
       .filter((back): back is NonNullable<typeof back> => back !== null && back !== undefined);
-    if (backs.length) paintSplatLayers({ renderer, backs, scene, camera });
+    if (backs.length) paintSplatLayers({ renderer, backs, scene, camera, guides: options?.guides });
     else renderer.render(scene, camera);
   }, []);
 

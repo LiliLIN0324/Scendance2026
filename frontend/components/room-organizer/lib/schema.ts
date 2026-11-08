@@ -30,6 +30,7 @@ import type {
   TerrainSpec,
   WallId,
   WallPattern,
+  WalkRoute,
 } from './types';
 
 /*
@@ -149,6 +150,14 @@ function isSatelliteProxyUrl(value: string): boolean {
   }
 }
 
+/**
+ * 整景区预置底图（docs/19）是仓库静态资源 /basemap/ 下的图，不走代理。
+ * 只放行同源相对路径，其余仍拒绝，避免存档加载时去打任意外站。
+ */
+function isStaticBasemapUrl(value: string): boolean {
+  return /^\/basemap\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value);
+}
+
 function isAllowedFloorPlanImage(value: unknown): value is string {
   return isDataImageUrl(value) || (typeof value === 'string' && isSatelliteProxyUrl(value));
 }
@@ -169,13 +178,17 @@ function isLngLatPoint(value: unknown): boolean {
     && value.lat >= -90 && value.lat <= 90;
 }
 
-/** 场景锚点（docs/49）：原点经纬度 + 正北朝向 + 米制尺度，场景↔地理的唯一变换。 */
+/** 场景锚点（docs/19）：原点经纬度 + 正北朝向 + 米制尺度，场景↔地理的唯一变换。 */
+const SCENE_ANCHOR_SOURCES = ['picker', 'manual', 'lookup', 'asset-geo', 'preset'];
 function isSceneAnchor(value: unknown): boolean {
   return isPlainObject(value)
     && isFiniteNumber(value.lng) && value.lng >= -180 && value.lng <= 180
     && isFiniteNumber(value.lat) && value.lat >= -90 && value.lat <= 90
     && isFiniteNumber(value.orientationDeg)
-    && isFiniteNumber(value.metersPerUnit) && value.metersPerUnit > 0;
+    && isFiniteNumber(value.metersPerUnit) && value.metersPerUnit > 0
+    // MAP-04 元数据（来源/不确定度）：可选；来源白名单防未知值随存档扩散，准确度不明就不写。
+    && (value.source === undefined || SCENE_ANCHOR_SOURCES.includes(value.source as string))
+    && (value.accuracyM === undefined || (isFiniteNumber(value.accuracyM) && value.accuracyM >= 0));
 }
 
 /** 调研底图：地名、中心点、半径、经纬度范围与图地址。范围不对就不认这份底图。 */
@@ -192,9 +205,12 @@ function isResearchArea(value: unknown): boolean {
   if (!isFiniteNumber(bounds.west) || !isFiniteNumber(bounds.south)) return false;
   if (!isFiniteNumber(bounds.east) || !isFiniteNumber(bounds.north)) return false;
   if (bounds.east <= bounds.west || bounds.north <= bounds.south) return false;
-  // scanAssetId：底图跟哪套场地扫描走（docs/49）；没有或不是字符串都按手动底图处理。
+  // scanAssetId：底图跟哪套场地扫描走（docs/19）；没有或不是字符串都按手动底图处理。
   if (value.scanAssetId !== undefined && (typeof value.scanAssetId !== 'string' || value.scanAssetId.length === 0 || value.scanAssetId.length > MAX_ID_LENGTH)) return false;
-  return typeof value.imageUrl === 'string' && isSatelliteProxyUrl(value.imageUrl);
+  // 预置底图（presetId）今天只有整景区一张：白名单防未知值随存档扩散。
+  if (value.presetId !== undefined && value.presetId !== 'xihu-scenic') return false;
+  if (typeof value.imageUrl !== 'string') return false;
+  return isSatelliteProxyUrl(value.imageUrl) || isStaticBasemapUrl(value.imageUrl);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -207,6 +223,20 @@ function isOptionalString(value: unknown): boolean {
 
 function isVec2(value: unknown): boolean {
   return isPlainObject(value) && isFiniteNumber(value.x) && isFiniteNumber(value.z);
+}
+
+const PERSON_ACTIONS = ['idle', 'talk', 'walk'] as const;
+
+/** 人物行走路线（PEOPLE-04）：路点数量与数值范围有界，防止存档被撑爆。 */
+function isWalkRoute(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  const v = value;
+  if (!Array.isArray(v.points) || v.points.length < 2 || v.points.length > 64) return false;
+  for (const point of v.points) if (!isVec2(point)) return false;
+  if (v.loop !== undefined && typeof v.loop !== 'boolean') return false;
+  if (v.speed !== undefined && (!isFiniteNumber(v.speed) || v.speed <= 0 || v.speed > 10)) return false;
+  if (v.pauseMs !== undefined && (!isFiniteNumber(v.pauseMs) || v.pauseMs < 0 || v.pauseMs > 60_000)) return false;
+  return true;
 }
 
 export function isFurnitureItem(value: unknown): value is FurnitureItem {
@@ -268,6 +298,10 @@ export function isFurnitureItem(value: unknown): value is FurnitureItem {
   if (!isOptionalBoolean(v.isCCTV)) return false;
   if (!isOptionalBoolean(v.isWiFiAccessPoint)) return false;
   if (!isOptionalBoolean(v.hasVisionCone)) return false;
+  // 人物动画与行走路线（PEOPLE-01/04）：动作必须是已知 clip，否则注册表查不到就静默失效。
+  if (v.personAction !== undefined && !PERSON_ACTIONS.includes(v.personAction as 'idle' | 'talk' | 'walk')) return false;
+  if (!isOptionalBoolean(v.personPaused)) return false;
+  if (v.walkRoute !== undefined && !isWalkRoute(v.walkRoute)) return false;
   return true;
 }
 
@@ -599,6 +633,7 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   source: true,
   glbUrl: true,
   glbNode: true,
+  uniformScale: true,
   venueEntranceId: true,
   id: true,
   type: true,
@@ -629,6 +664,9 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
   sillHeight: true,
   groupId: true,
   provenance: true,
+  personAction: true,
+  personPaused: true,
+  walkRoute: true,
 });
 const VEC2_KEYS = ['x', 'z'] as const;
 const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true, thickness: true, height: true, kind: true, status: true });
@@ -727,6 +765,26 @@ function repairVec2(vec: { x: number; z: number }): { x: number; z: number } {
   return x === picked.x && z === picked.z ? picked : { x, z };
 }
 
+/** 人物行走路线修复：夹取坐标、剔重、截断点数；少于 2 点整条丢弃。 */
+function repairWalkRoute(route: WalkRoute): WalkRoute | undefined {
+  const raw = Array.isArray(route.points) ? route.points : [];
+  const points: { x: number; z: number }[] = [];
+  for (const point of raw) {
+    if (!isVec2(point)) continue;
+    const repaired = repairVec2(point as { x: number; z: number });
+    const previous = points[points.length - 1];
+    if (previous && Math.hypot(repaired.x - previous.x, repaired.z - previous.z) < 0.05) continue;
+    points.push(repaired);
+    if (points.length >= 32) break;
+  }
+  if (points.length < 2) return undefined;
+  const clean: WalkRoute = { points };
+  if (route.loop !== undefined) clean.loop = route.loop === true;
+  if (route.speed !== undefined && isFiniteNumber(route.speed) && route.speed > 0) clean.speed = Math.min(route.speed, 3);
+  if (route.pauseMs !== undefined && isFiniteNumber(route.pauseMs) && route.pauseMs >= 0) clean.pauseMs = Math.min(route.pauseMs, 60_000);
+  return clean;
+}
+
 function repairItem(item: FurnitureItem): FurnitureItem {
   const patch: Partial<FurnitureItem> = {
     id: capText(item.id, MAX_ID_LENGTH),
@@ -745,6 +803,10 @@ function repairItem(item: FurnitureItem): FurnitureItem {
   // A negative price turns the budget and every cost total upside down (#350).
   if (item.price !== undefined && item.price < 0) patch.price = 0;
   if (item.position) patch.position = repairVec2(item.position);
+  if (item.walkRoute !== undefined) {
+    const route = repairWalkRoute(item.walkRoute);
+    if (route) patch.walkRoute = route;
+  }
   return rebuild(item, ITEM_KEYS, patch);
 }
 

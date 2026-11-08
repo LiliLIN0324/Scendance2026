@@ -1,5 +1,6 @@
 import { type BuilderContext, cornerPositions, material, mesh } from '../builder-utils';
 import { PEOPLE_CLIPS, clonePerson, findClip, getPeopleModel } from '../people-model';
+import { personIsAnimated, registerPersonAnim } from '../people-anim';
 import { FIGURE_HEIGHT, buildHumanFigure } from './human-figure';
 import type * as ThreeNS from 'three';
 
@@ -8,8 +9,13 @@ export function buildPerson(ctx: BuilderContext): ThreeNS.Group {
 }
 
 /**
- * The rigged mannequin, held in a still idle pose. Null until people.glb has
- * loaded — the scene rebuilds furniture once it has (see usePeopleModel).
+ * The rigged mannequin. Null until people.glb has loaded — the scene rebuilds
+ * furniture once it has (see usePeopleModel).
+ *
+ * Plain persons stay a still idle pose exactly as before (mixer sampled once,
+ * then dropped — stopping would restore the T-pose). Persons with a route or
+ * an explicit action keep their mixer alive in the people-anim registry, so
+ * they animate and walk without being reset by furniture rebuilds.
  */
 function buildRiggedPerson({ THREE, item, hasCollision, baseColor, opacity }: BuilderContext): ThreeNS.Group | null {
   const people = getPeopleModel();
@@ -20,20 +26,36 @@ function buildRiggedPerson({ THREE, item, hasCollision, baseColor, opacity }: Bu
     joints: hasCollision ? 0x7f1d1d : 0x3a3f47,
     opacity,
   });
+  person.scale.setScalar(item.height / people.height);
+  const group = new THREE.Group();
+  group.add(person);
+  if (personIsAnimated(item.walkRoute, item.personAction, item.personPaused)) {
+    registerPersonAnim(group, {
+      id: item.id,
+      mixer: new THREE.AnimationMixer(person),
+      rig: null,
+      clips: {
+        idle,
+        talk: findClip(people, PEOPLE_CLIPS.talk),
+        walk: findClip(people, PEOPLE_CLIPS.walk),
+      },
+      action: item.personAction ?? 'idle',
+      paused: item.personPaused === true,
+      route: item.walkRoute ?? null,
+    });
+    return group;
+  }
   // Sample the idle clip once to leave the skeleton in a relaxed stance. The
   // mixer is dropped rather than stopped: stopping restores the T-pose.
   const mixer = new THREE.AnimationMixer(person);
   mixer.clipAction(idle).play();
   mixer.update(0.6);
-  person.scale.setScalar(item.height / people.height);
-  const group = new THREE.Group();
-  group.add(person);
   return group;
 }
 
 function buildProceduralPerson({ THREE, item, hasCollision, baseColor, opacity }: BuilderContext): ThreeNS.Group {
   // The item colour dresses the figure; skin, trousers, shoes and hair are fixed.
-  const { group: figure } = buildHumanFigure(THREE, {
+  const { group: figure, rig } = buildHumanFigure(THREE, {
     top: material(THREE, baseColor, hasCollision, opacity, { roughness: 0.8 }),
     skin: material(THREE, 0xd9a787, hasCollision, opacity, { roughness: 0.65 }),
     bottom: material(THREE, 0x2f3542, hasCollision, opacity, { roughness: 0.85 }),
@@ -44,6 +66,18 @@ function buildProceduralPerson({ THREE, item, hasCollision, baseColor, opacity }
   figure.scale.setScalar(item.height / FIGURE_HEIGHT);
   const group = new THREE.Group();
   group.add(figure);
+  // 程序化兜底同样支持路线行走：模型没加载时用关节摆动代替 clip（ PEOPLE-04 不空转）。
+  if (personIsAnimated(item.walkRoute, item.personAction, item.personPaused)) {
+    registerPersonAnim(group, {
+      id: item.id,
+      mixer: null,
+      rig,
+      clips: { idle: null, talk: null, walk: null },
+      action: item.personAction ?? 'idle',
+      paused: item.personPaused === true,
+      route: item.walkRoute ?? null,
+    });
+  }
   return group;
 }
 

@@ -62,7 +62,7 @@ function harness(onApply = vi.fn()) {
   state.layout = makeLayout();
   state.view = makeViewSettings();
   state.apply = onApply;
-  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel activeAgent="space"/><VenuePickerOverlay/></LayoutAgentProvider>);
+  render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel activeAgent="space"/><VenuePickerOverlay/></LayoutAgentProvider>);
   return onApply;
 }
 

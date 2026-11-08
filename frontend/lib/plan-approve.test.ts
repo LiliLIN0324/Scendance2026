@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   applyWallClearance,
   CHAIR_RING_RADIUS,
+  CHAIR_SIZE,
   MAX_CHAIR_OWNER_DIST_M,
   MAX_TABLES_PER_ZONE,
   planZoneApprovals,
   planZones,
+  ROUND_TABLE_INSET_M,
   TABLE_DIAMETER,
   WALL_CLEARANCE_M,
-  ZONE_INSET,
 } from './plan-approve';
+import { evaluateHumanFactors, AISLE_CLEARANCE_THRESHOLD_M, CHAIR_GAP_THRESHOLD_M } from './human-factors';
+import { detectFurnitureOverlap, BBOX_OVERLAP_TOLERANCE_M } from './plan-scoring';
+import { getCatalogByType } from './furniture-catalog';
 import { withDefaultDoor } from './plan-annotation';
 import type { PlanAnnotation, ZoneSemanticType } from './plan-annotation';
 
@@ -19,7 +23,7 @@ function zone(
   z: number,
   width: number,
   depth: number,
-  zoneType?: ZoneSemanticType,
+  zoneType: ZoneSemanticType = 'roundtable',
   label = '圆桌区',
 ): PlanAnnotation {
   return {
@@ -28,7 +32,7 @@ function zone(
     label,
     stageNo: 1,
     geometry: { kind: 'rect', x, z, width, depth },
-    ...(zoneType ? { zoneType } : {}),
+    zoneType,
   };
 }
 
@@ -77,9 +81,9 @@ describe('planZoneApprovals / planZones', () => {
     }
   });
 
-  it('网格点被矩形边界裁剪：桌心必须落在内缩区内', () => {
+  it('网格点被矩形边界裁剪：桌心必须落在内缩区内（内缩含整圈椅子）', () => {
     const ann = zone('z1', -4.5, -4.5, 9, 9);
-    const inset = ZONE_INSET + TABLE_DIAMETER / 2;
+    const inset = ROUND_TABLE_INSET_M;
     for (const p of planZoneApprovals([ann], 0.5)) {
       if (!isTable(p)) continue;
       expect(p.x).toBeGreaterThanOrEqual(-4.5 + inset - 1e-6);
@@ -228,6 +232,29 @@ describe('planZoneApprovals / planZones', () => {
     expect(out.skipped[0].zoneId).toBe('x');
     expect(out.skipped[0].reason).toMatch(/未知|通用/);
   });
+
+  it('SC-19 §五.4：无 zoneType 的区不兜底成圆桌——不落家具，skipped 说人话（S1③ 回归）', () => {
+    // 故意不走 zone() 助手（它默认补 roundtable），构造真正无 zoneType 的标注：
+    // 旧兜底曾把这种注入区摆满 3 桌 24 椅（docs/32 §三.S1③ 实测）。
+    const untyped: PlanAnnotation = {
+      id: 'u1',
+      kind: 'zone',
+      label: '外部注入区',
+      stageNo: 1,
+      geometry: { kind: 'rect', x: -4.5, z: -4.5, width: 9, depth: 9 },
+    };
+    const out = planZones([untyped], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped).toHaveLength(1);
+    expect(out.skipped[0].zoneId).toBe('u1');
+    expect(out.skipped[0].reason).toContain('没选类型');
+  });
+
+  it('SC-19 §五.4：预留区（reserved）不摆任何家具、也不进 skipped——留空是语义本身', () => {
+    const out = planZones([zone('k1', -4, 1, 8, 2, 'reserved', '消防疏散')], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped).toEqual([]);
+  });
 });
 
 // ---- 4.0.1 布置质量：椅子组团 + 墙退距 + 默认南门 ----
@@ -339,6 +366,81 @@ describe('applyWallClearance 墙退距', () => {
     expect(out.placements.length).toBe(1);
     expect(out.skipped.length).toBe(1);
     expect(out.skipped[0].reason).toContain('贴墙放不下');
+  });
+
+  it('没贴墙也没内移就撞上的家具，reason 直说「位置压住」，不再假报贴墙', () => {
+    // 两件签到台都在房间中央（没有任何墙顶），AABB 直接相交——
+    // 旧文案把这种几何自撞也报成「贴墙放不下」，掩盖真实冲突（docs/32 §三.3）。
+    const spec = { type: 'table', name: '签到台', category: 'desk', width: 1.4, depth: 0.6, height: 0.75, color: '#4A7C59', icon: '🖊️' };
+    const placements = [
+      { spec, x: 0, z: 0, rotation: 0, zoneId: 'z1', zoneType: 'checkin' as ZoneSemanticType },
+      { spec, x: 0.5, z: 0, rotation: 0, zoneId: 'z1', zoneType: 'checkin' as ZoneSemanticType },
+    ];
+    const out = applyWallClearance(placements, ROOM);
+    expect(out.placements.length).toBe(1);
+    expect(out.skipped.length).toBe(1);
+    expect(out.skipped[0].reason).toContain('位置压住');
+    expect(out.skipped[0].reason).not.toContain('贴墙');
+  });
+});
+
+describe('圆桌环几何回归（G5：与 catalog Ø1.8 同步 + 环距过检查层）', () => {
+  const ann = zone('z1', -8, -5, 16, 10);
+  const out = planZones([ann], 0.5);
+  const tables = out.placements.filter(isTable);
+  const chairs = out.placements.filter(isChair);
+
+  it('常数自检：TABLE_DIAMETER 与 furniture-catalog 圆桌条目同步，环半径满足 8 椅均布', () => {
+    const catalogTable = getCatalogByType('dining-table')!;
+    expect(TABLE_DIAMETER).toBe(catalogTable.width);
+    expect(TABLE_DIAMETER).toBe(catalogTable.depth);
+    // 同环相邻椅弦长 2r·sin(π/8) ≥ 0.9 − 0.015（round2 量化最坏余量）。
+    const chord = 2 * CHAIR_RING_RADIUS * Math.sin(Math.PI / 8);
+    expect(chord).toBeGreaterThanOrEqual(CHAIR_GAP_THRESHOLD_M - 0.015);
+    // 椅内缘距桌缘 > AABB 容差，椅脚不许伸进桌面。
+    expect(CHAIR_RING_RADIUS - CHAIR_SIZE / 2 - TABLE_DIAMETER / 2).toBeGreaterThan(BBOX_OVERLAP_TOLERANCE_M);
+  });
+
+  it('生成产物直接过检查层：无 CHAIR_GAP、无 BBOX_OVERLAP', () => {
+    expect(tables.length).toBeGreaterThanOrEqual(1);
+    const hf = evaluateHumanFactors(out.placements, [ann]);
+    expect(hf.filter((v) => v.code === 'CHAIR_GAP')).toEqual([]);
+    expect(detectFurnitureOverlap(out.placements)).toEqual([]);
+  });
+
+  it('椅子 footprint 整个留在 zone 里（不越入口边，不触发墙退距吞件）', () => {
+    const g = ann.geometry;
+    if (g.kind !== 'rect') return;
+    for (const c of [...chairs, ...tables]) {
+      expect(c.x - c.spec.width / 2).toBeGreaterThanOrEqual(g.x - 1e-6);
+      expect(c.x + c.spec.width / 2).toBeLessThanOrEqual(g.x + g.width + 1e-6);
+      expect(c.z - c.spec.depth / 2).toBeGreaterThanOrEqual(g.z - 1e-6);
+      expect(c.z + c.spec.depth / 2).toBeLessThanOrEqual(g.z + g.depth + 1e-6);
+    }
+  });
+});
+
+describe('休息区对坐通道（G7：生成中心距与检查阈值同源）', () => {
+  it('对坐长椅中心距 = 阈值，过人体工学检查（不再自产 AISLE_CLEARANCE）', () => {
+    const ann = zone('r1', -2.5, -1.5, 5, 3, 'rest', '休息区');
+    const out = planZones([ann], 0.5);
+    expect(out.skipped).toEqual([]);
+    const benches = out.placements.filter((p) => p.spec.type === 'bench');
+    expect(benches.length).toBeGreaterThanOrEqual(2);
+    const facing = benches.filter((b, i) => benches.some((o, j) => j > i && Math.abs(o.x - b.x) < 0.01 && o.z !== b.z));
+    expect(facing.length).toBeGreaterThanOrEqual(2);
+    for (const v of evaluateHumanFactors(out.placements, [ann])) {
+      expect(v.code).not.toBe('AISLE_CLEARANCE');
+    }
+  });
+
+  it('太浅的休息区被跳过并说人话（下限 = 对坐距 + 椅深 + 余量）', () => {
+    const out = planZones([zone('r2', 0, 0, 5, 2.0, 'rest')], 0.5);
+    expect(out.placements).toEqual([]);
+    expect(out.skipped[0]!.reason).toContain('休息区');
+    // 下限公式与生成器同源：对坐距 + 长椅深 + 0.2 余量 = 2.3。
+    const benchDepth = getCatalogByType('bench')!.depth;
+    expect(out.skipped[0]!.reason).toContain((AISLE_CLEARANCE_THRESHOLD_M + benchDepth + 0.2).toFixed(1));
   });
 });
 

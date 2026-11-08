@@ -2,7 +2,7 @@ import { anchorFromMapFrame, METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '.
 import type { RoomLayout, SceneAnchor } from './types';
 
 /**
- * 场景锚点换算（docs/49 架构定案）。
+ * 场景锚点换算（docs/19 架构定案）。
  * 地图不是独立模块，是 3D 场景里的一个渲染层：场景坐标 ↔ 地理坐标只有这一套变换。
  * - 世界 +x 向东、+z 向南（orientationDeg = 0 时）；
  * - orientationDeg 是世界 -Z（平面图「上」）相对正北的顺时针偏航角；

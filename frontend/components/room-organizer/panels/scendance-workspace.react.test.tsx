@@ -217,6 +217,8 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.id).toBe('tool-column');
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
+    // 室内常驻：发布 / 移动局部物体 / 2D·3D / 进入漫游 / 视角（整体·俯视·正面机位轮换）/ 尺寸 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。卫星只在户外。
+    expect(within(rail).getAllByRole('button')).toHaveLength(15);
     expect(within(rail).getAllByRole('button', { name: '发布' })).toHaveLength(1);
     for (const name of ['发布', '移动局部物体 · 激活中，再点一次退出', '2D / 3D', '进入漫游', '尺寸标注', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图']) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
@@ -257,13 +259,14 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.querySelector('.sc-atmosphere-group')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
     const dimension = within(rail).getByRole('button', { name: '2D / 3D' });
+    // 图标体系已迁到 Material Symbol 蒙版 span（sc-material-symbol），不再是 svg。
     expect(dimension.querySelector('.sc-material-symbol')).toBeTruthy();
     expect(dimension.textContent).not.toMatch(/2D|3D/);
     fireEvent.click(dimension);
     expect(values.toggle).toHaveBeenCalledWith('view2D');
   });
 
-  it('toggles 选择 as a real switch instead of disabling it', () => {
+  it('toggles 移动局部物体 as a real switch instead of disabling it', () => {
     const { values, rail } = renderTools();
     const select = within(rail).getByRole('button', { name: '移动局部物体 · 激活中，再点一次退出' }) as HTMLButtonElement;
     expect(select.disabled).toBe(false);
@@ -328,6 +331,7 @@ describe('ScendanceViewTools design column', () => {
     const dialog = screen.getByRole('dialog', { name: '导出效果图选项' });
     expect(dialog.textContent).toContain('导出效果图');
     fireEvent.click(screen.getByRole('button', { name: '整体' }));
+    // 画质钮 aria-label = 提示（档位）：EXPORT_SCALES 三档 1080p/4K/6K。
     fireEvent.click(screen.getByRole('button', { name: '5760×3240（6K）' }));
     fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
     await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'iso', scale: 3 }));
@@ -339,6 +343,7 @@ describe('ScendanceViewTools design column', () => {
     const { rail } = renderTools(makeViewSettings(), onExportImage);
     fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
     expect((screen.getByRole('button', { name: '跟随当前' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    // 交付默认档改为 1080p（1×），4K/6K 是加档而不是默认。
     expect((screen.getByRole('button', { name: '1920×1080（1080p）' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
     await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'current', scale: 1 }));
@@ -393,7 +398,7 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 第一人称走进场 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
+  it('wires 进入漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
     const values = contexts();
     const canvas = document.createElement('canvas');
     canvas.id = 'sc-viewport-3d';
@@ -580,7 +585,7 @@ describe('MaterialDrawerHandle', () => {
     const { rerender } = render(<MaterialDrawerHandle open={false} onToggle={onToggle} buttonRef={buttonRef}/>);
     const button = screen.getByRole('button', { name: '展开物料库' });
     expect(buttonRef.current).toBe(button);
-    // 底条是分区切换：主视觉是物料图标，中文名留在 aria-label。
+    // 底条是分区切换：主视觉是物料图标（图标体系已迁到 Material Symbol 蒙版 span，不再是 svg），中文名留在 aria-label。
     expect(button.querySelector('.sc-material-symbol')).toBeTruthy();
     expect(button.textContent ?? '').not.toMatch(/物料/);
     expect(button.getAttribute('aria-controls')).toBe('workbench-material-shelf');

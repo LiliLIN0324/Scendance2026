@@ -94,11 +94,13 @@ describe('场地观感只出场地', () => {
 });
 
 describe('Aholo 产品化壳体', () => {
-  it('面板说明空间生成与重建路径和素材限制', () => {
+  it('面板标题是生成引擎空间模型，并写明主路径与禁令', () => {
     offline();
     render(<Lux3dDirectTest/>);
+    // 标题已随 c754e59 禁词收口改为「生成引擎空间模型」。
     expect(screen.getByRole('heading', { name: '生成引擎空间模型' })).toBeTruthy();
     expect(screen.getAllByText(/物料生成在 Bingo 的「物料生成」里/).length).toBeGreaterThan(0);
+    // 主路径文案已改为「真实场地重建：地图圈画 → …」（c754e59 收口）。
     expect(screen.getAllByText(/真实场地重建：地图圈画/).length).toBeGreaterThan(0);
     expect(screen.getByText(/卫星不可作重建素材/)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Aholo 接口测试' })).toBeNull();

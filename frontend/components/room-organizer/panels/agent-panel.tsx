@@ -411,6 +411,8 @@ export interface LayoutAgentCallbacks {
 interface AgentValue {
   sessionScope: string;
   isSessionCurrent(): boolean;
+  unresolvedDialogue: readonly string[];
+  withdrawUnresolvedDialogue(text:string): void;
   assertSessionWrite: () => void;
   sessionSaveFailed: boolean;
   understanding: boolean; isUnderstanding(text?:string): boolean; cancelUnderstanding(): void;
@@ -495,7 +497,7 @@ function volatileMemoriesFor(scope: string): Map<string, BriefMemory> {
   return values;
 }
 
-export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
+export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
   const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
   const studio = useStudioAgent();
   const venueFacts = useVenueFactTracker(layoutStore);
@@ -612,13 +614,27 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const dialogueTurnStartRef=useRef(onDialogueTurnStart);dialogueTurnStartRef.current=onDialogueTurnStart;
   const dialogueIncompleteRef=useRef(onDialogueIncompleteChange);dialogueIncompleteRef.current=onDialogueIncompleteChange;
   const incompleteDialogueTurns=useRef(new Map<string,Set<string>>());
+  const [unresolvedDialogue,setUnresolvedDialogue]=useState<readonly string[]>([]);
   const updateDialogueIncomplete=(sessionId:string|null,text:string,incomplete:boolean)=>{
     const value=text.trim();if(!sessionId||!value||isGeneralActivityQuestion(value))return;
     const entries=incompleteDialogueTurns.current.get(sessionId)??new Set<string>(),was=entries.size>0;
     if(incomplete)entries.add(value);else entries.delete(value);
     if(entries.size)incompleteDialogueTurns.current.set(sessionId,entries);else incompleteDialogueTurns.current.delete(sessionId);
+    if(boundSessionId.current===sessionId)setUnresolvedDialogue([...entries]);
     if(was!==(entries.size>0))dialogueIncompleteRef.current?.(sessionId,entries.size>0);
   };
+  const withdrawUnresolvedDialogue=(text:string)=>{
+    const id=boundSessionId.current;
+    if(!id||!sessionScopeIsCurrent()||getActiveAssistantSessionId(sessionScope)!==id||!incompleteDialogueTurns.current.get(id)?.has(text))return;
+    updateDialogueIncomplete(id,text,false);
+    say({role:'agent',text:'已撤回这项尚未处理的要求。其他要求仍然保留；如需方案，请重新生成并核对。'});
+  };
+  function markUnresolvedModification(text:string):void {
+    updateDialogueIncomplete(boundSessionId.current,text,true);
+    if(phaseRef.current==='proposed'||phaseRef.current==='paused'||studioRef.current?.preview){
+      dropProposal();discardCloudPreview();phaseRef.current='idle';setPhase('idle');setProgress(0);
+    }
+  }
   const dialogueTurnReleases=useRef(new Map<()=>void,{sessionId:string|null;text:string}>());
   useEffect(()=>()=>{for(const [release,pending] of [...dialogueTurnReleases.current]){updateDialogueIncomplete(pending.sessionId,pending.text,true);release();}},[]);
   function cancelUnderstanding():void {
@@ -707,6 +723,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (prevId && assistantSessionExists(prevId, sessionScope)) persistBubbles(prevId, bubblesRef.current);
     if (prevId && assistantSessionExists(prevId, sessionScope)) sessionMemories.current.set(prevId, {...memoryRef.current,pendingGeneration:undefined});
     boundSessionId.current = nextId;
+    setUnresolvedDialogue(nextId?[...(incompleteDialogueTurns.current.get(nextId)??[])]:[]);
     const nextMemory = (nextId && (sessionMemories.current.get(nextId) ?? readBriefMemory(nextId, scopedAssistantStorage(sessionScope)))) || initialBriefMemory();
     memoryRef.current = nextMemory;
     onBriefMemoryChange?.(nextMemory,nextId);
@@ -1166,14 +1183,23 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', text: '调研哪一片？说个地名就行，比如「调研西湖」。' });
       return;
     }
+    if (!onApplyResearchArea) { say({role:'agent',amber:true,text:'当前工作台暂不支持应用调研底图。'}); return; }
+    const researchSession = getActiveAssistantSessionId(sessionScope);
+    const researchToken = runToken.current;
     say({ role: 'agent', text: `正在查「${query}」的位置…` });
     const place = await lookupPlace(query);
+    if (researchToken !== runToken.current || !sessionScopeIsCurrent() || getActiveAssistantSessionId(sessionScope) !== researchSession) return;
     if (!place) {
       say({ role: 'agent', amber: true, text: `没查到「${query}」。换个更准的地名再试，或点「地图选址」手动圈一块。` });
       return;
     }
     const area = createResearchArea(place);
-    onApply({ ...live.current, researchArea: area });
+    // 落盘走 docs/19 的专用路径：从 store 现取布局再叠底图并设场景锚点。
+    // 不能整张覆盖 live 快照——查询等待期间挂载的场地（venueScan/sceneAnchor）会被旧快照冲掉。
+    try { requireSessionWrite(); onApplyResearchArea(area); }
+    catch { say({role:'agent',amber:true,text:'当前活动无法写入调研底图，请检查编辑权后重试。'}); return; }
+    // 旧路径经 onApplyCreative 收尾时会把画布切回 3D；专用路径不管视图，这里自己切。
+    setView(current => ({ ...current, view2D: false }));
     say({
       role: 'agent',
       image: area.imageUrl,
@@ -1758,6 +1784,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 确认才写 objects：本地一次 applyLayout，进撤销栈，撤销一步能整体退回来。 */
   function confirmProposal(): void {
+    const sessionId=boundSessionId.current;
+    if(sessionId&&(incompleteDialogueTurns.current.get(sessionId)?.size??0)>0){
+      say({role:'agent',amber:true,text:'还有尚未处理的要求，请逐项核对后再生成和确认。'});return;
+    }
     if(generationQueuedRef.current>0||generationWait.current||briefRequest.current||pendingModelInputs.current.size>0){
       say({role:'agent',amber:true,text:'还有消息或方案正在处理，请等当前要求处理完成后再确认。'});return;
     }
@@ -2280,41 +2310,41 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 按对象改（挪舞台/加灯/删除）走增量命令；普通「加两把椅子」仍走下面的物料请求。
     const mentionsRecolor=/(?:换成|改成|变成|换为|改为|涂成|刷成)[^，。；,;]{1,16}色|(?:涂成|刷成)/.test(trimmed.replace(/\s+/g,''));
     const safeRecolor=mentionsRecolor?parseSafeRecolor(trimmed):null;
-    if(mentionsRecolor&&!safeRecolor){updateDialogueIncomplete(boundSessionId.current,trimmed,true);say({role:'agent',amber:true,text:'颜色或要求不明确，请单独说明物件和要改成的颜色；本次没有修改画布。'});return;}
+    if(mentionsRecolor&&!safeRecolor){markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'颜色或要求不明确，请单独说明物件和要改成的颜色；本次没有修改画布。'});return;}
     const mentionsRotation=/(?:旋转|转动|顺时针|逆时针|(?:把|将).{1,20}转\d)/.test(trimmed.replace(/\s+/g,''));
     const safeRotation=mentionsRotation?parseSafeRotation(trimmed):null;
-    if(mentionsRotation&&!safeRotation){updateDialogueIncomplete(boundSessionId.current,trimmed,true);say({role:'agent',amber:true,text:'旋转方向、角度或要求不明确，请单独说明物件、顺时针或逆时针和准确角度；本次没有修改画布。'});return;}
+    if(mentionsRotation&&!safeRotation){markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'旋转方向、角度或要求不明确，请单独说明物件、顺时针或逆时针和准确角度；本次没有修改画布。'});return;}
     const directionalMove = /(?:往|向|朝)(?:东|西|南|北|左|右|前|后)(?:边|侧|方)?(?:挪|移动|平移|移|搬)|(?:挪|移动|平移|移|搬)(?:到|至)?(?:东|西|南|北|左|右|前|后)/.test(trimmed.replace(/\s+/g,''));
     const safeMove = directionalMove ? parseSafeDirectionalMove(trimmed) : null;
     if (directionalMove && !safeMove && hasMixedActivityRequirements(trimmed)) {
-      updateDialogueIncomplete(boundSessionId.current,trimmed,true);say({role:'agent',amber:true,text:'这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。'}); return;
+      markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。'}); return;
     }
     if (directionalMove && !safeMove) {
-      say({role:'agent',amber:true,text:'移动距离或要求不明确，请单独说明物件、方向和准确距离（米、厘米或毫米）；本次没有修改画布。'}); return;
+      markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'移动距离或要求不明确，请单独说明物件、方向和准确距离（米、厘米或毫米）；本次没有修改画布。'}); return;
     }
     const revision = safeMove ? {ops:[safeMove],bands:[]} : safeRotation ? {ops:[safeRotation],bands:[]} : safeRecolor ? {ops:[safeRecolor],bands:[]} : parseRevisionRequest(trimmed);
     if (/(?:放大|缩小|缩放|变大|变小)/.test(trimmed)) {
       const scale = revision?.ops.length === 1 && revision.ops[0]?.kind === 'scale' ? revision.ops[0] : null;
       if (!scale || /(?:不要|不用|别|勿|暂不|暂时|不确定|可能|也许|是否|待定|看情况|[?？，,；;])/.test(trimmed) ||
         (/缩小|变小/.test(trimmed) && scale.factor >= 1) || (/放大|变大/.test(trimmed) && scale.factor <= 1)) {
-        say({role:'agent',amber:true,text:'缩放倍数或要求不明确，请单独说明物件与准确倍数或百分比；本次没有修改画布。'}); return;
+        markUnresolvedModification(trimmed);say({role:'agent',amber:true,text:'缩放倍数或要求不明确，请单独说明物件与准确倍数或百分比；本次没有修改画布。'}); return;
       }
     }
     const request = parseMaterialRequest(trimmed);
     const count = explicitAdditionCount(trimmed);
     const additionLimit = revision?.ops.some(op => op.kind === 'add') ? 20 : 50;
     if ((revision || request) && count !== null && (!Number.isSafeInteger(count) || count < 1 || count > additionLimit)) {
-      say({ role: 'agent', amber: true, text: `你要求添加 ${count} 件，单次支持 1 至 ${additionLimit} 件；请调整数量后重试，本次没有修改画布。` }); return;
+      markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: `你要求添加 ${count} 件，单次支持 1 至 ${additionLimit} 件；请调整数量后重试，本次没有修改画布。` }); return;
     }
     if ((revision || request) && needsMaterialCommandClarification(trimmed, !!revision, !!request)) {
-      say({ role: 'agent', amber: true, text: '物料增减的意思尚不明确，请逐件说明要加什么；本次没有修改画布。' }); return;
+      markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '物料增减的意思尚不明确，请逐件说明要加什么；本次没有修改画布。' }); return;
     }
     if (revision) {
-      if (hasMixedActivityRequirements(trimmed)) { updateDialogueIncomplete(boundSessionId.current,trimmed,true);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
+      if (hasMixedActivityRequirements(trimmed)) { markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
       reviseMaterials(revision); return;
     }
     if (request) {
-      if (hasMixedActivityRequirements(trimmed)) { updateDialogueIncomplete(boundSessionId.current,trimmed,true);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
+      if (hasMixedActivityRequirements(trimmed)) { markUnresolvedModification(trimmed);say({ role: 'agent', amber: true, text: '这句话同时包含物件修改和活动需求，请分开发送；本次没有修改画布或需求。' }); return; }
       addMaterials(request); return;
     }
     const styleCmd = matchStyleBundleCommand(trimmed, window.localStorage);
@@ -2385,8 +2415,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(turn.resolution==='failed'||turn.resolution==='unavailable'||turn.resolution==='not_connected')updateDialogueIncomplete(turnSessionId,trimmed,true);
     else if(turn.unhandled?.some(item=>item.kind==='action'||item.kind==='other'))updateDialogueIncomplete(turnSessionId,trimmed,true);
     else if(turn.resolution==='model'&&!mixedUtility)updateDialogueIncomplete(turnSessionId,trimmed,false);
-    const unhandledAction=turn.unhandled?.some(item=>item.kind==='action'&&!!item.evidence&&trimmed.includes(item.evidence))??false;
-    if(unifiedConversation&&unhandledAction&&(phaseRef.current==='proposed'||phaseRef.current==='paused')){
+    const unhandledRequirement=turn.unhandled?.some(item=>(item.kind==='action'||item.kind==='other')&&!!item.evidence&&trimmed.includes(item.evidence))??false;
+    if(unifiedConversation&&unhandledRequirement&&(phaseRef.current==='proposed'||phaseRef.current==='paused')){
       dropProposal();discardCloudPreview();phaseRef.current='idle';setPhase('idle');setProgress(0);
       say({role:'agent',amber:true,text:'这项操作尚未执行，旧方案预览已收回。请带上这项要求重新生成，再核对修改。'});
     }
@@ -2574,7 +2604,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
 
   const value: AgentValue = {
-    sessionScope, isSessionCurrent: sessionScopeIsCurrent, understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
+    sessionScope, isSessionCurrent: sessionScopeIsCurrent, unresolvedDialogue,withdrawUnresolvedDialogue,understanding, generationQueued, isUnderstanding:(text)=>text===undefined ? briefRequest.current!==null : pendingModelInputs.current.has(text.trim()),
     canForward:(text)=>{const value=text.trim(),session=boundSessionId.current;return !!value&&!!session&&sessionScopeIsCurrent()&&getActiveAssistantSessionId(sessionScope)===session&&!pendingModelInputs.current.has(value)&&!uncertainInputs.current.has(value);},cancelUnderstanding,
     cancelledInput, retryUncertain, confirmUncertainRetry:()=>{const text=retryUncertain;if(!text||briefRequest.current)return;setRetryUncertain(null);void send(text,true);}, dismissUncertainRetry:()=>setRetryUncertain(null), assertSessionWrite: requireSessionWrite, sessionSaveFailed: sessionSaveFailed || assistantSessions.saveFailed, callbacks, state, venueIO, baseName, issue, dragging, recap, venueUp,
     setVenueIO: next => { setVenueIO(next); onVenueIOChange?.(next); if (next === 'indoor' && view.weather === 'rain') setView(current => ({ ...current, weather: 'clear' })); },
@@ -3110,6 +3140,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
       <Bubbles agent={agent} reviewOnly={bingo}/>
+      {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card" aria-label="尚未处理的要求">
+        <strong>尚未处理的要求</strong>
+        <p>这些要求尚未完成。若已另行说明，请逐项确认是否撤回旧要求，再重新生成方案。</p>
+        {agent.unresolvedDialogue.map(text=><div key={text}><p>{text}</p><button type="button" onClick={()=>agent.withdrawUnresolvedDialogue(text)}>撤回这项要求</button></div>)}
+      </section>}
       {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
       {bingo && <div className="ap-card" aria-label="审校状态台">
         <p className="ap-small">审校状态</p>

@@ -120,6 +120,25 @@ export interface CategoryMeta {
   icon: string;
 }
 
+/** 人物可切换的动作（people.glb 的三个 clip；见 three/people-model.ts）。 */
+export type PersonAction = 'idle' | 'talk' | 'walk';
+
+/**
+ * 人物沿米制平面行走的路线（PEOPLE-04）。路点是场景坐标（SW 原点，米），
+ * 与 `item.position` 无关——行走时人物的可视位置由路线驱动，锚点保持不动。
+ * `loop` 省缺为闭环巡游（末点走回首点）；显式 false 时走折返（到终点后原路返回）。
+ */
+export interface WalkRoute {
+  /** 途经点，至少 2 个；点距过近（<0.15 m）的相邻点在引擎里合并。 */
+  points: Vec2[];
+  /** 省缺 true：末点接回首点成环。false：折返巡游。 */
+  loop?: boolean;
+  /** 步速 m/s，省缺 PERSON_WALK_SPEED（≈1.05，与 Walk_Loop 1.333s 周期的自然步幅同步）。 */
+  speed?: number;
+  /** 每个途经点的停留时长 ms，省缺 900；0 表示不停留。 */
+  pauseMs?: number;
+}
+
 export interface FurnitureItem {
   /** Local execution record for this instance; not part of the cloud Scene. */
   handoff?: Handoff | undefined;
@@ -136,6 +155,12 @@ export interface FurnitureItem {
   glbUrl?: string;
   /** Named editable fixture within an archived scene model. */
   glbNode?: string;
+  /**
+   * 等比缩放：按标称高度算一个统一倍率，不做三轴独立拉伸。
+   * 默认关（程序化家具照旧按轴对表）；带骨骼/动画的资产会自动启用，
+   * 否则骨骼会被非均匀缩放扯变形。
+   */
+  uniformScale?: boolean;
   /** Rendered structural marker; never exported as a material object. */
   venueEntranceId?: string;
   id: string;
@@ -193,6 +218,15 @@ export interface FurnitureItem {
    * 纯可选字段，缺省时与既有布局完全兼容；不进必填面。
    */
   provenance?: Provenance;
+  /**
+   * 人物（type 'person'）的默认动作；缺省 'idle'。带 `walkRoute` 时被路线驱动
+   * 覆盖（走时 walk、停时 idle），本字段只在无路线时生效。
+   */
+  personAction?: PersonAction;
+  /** 人物动画暂停：mixer 停在当前帧，恢复后从原地继续。 */
+  personPaused?: boolean;
+  /** 人物行走路线（PEOPLE-04）；存在时人物每帧沿路线移动（可视层，锚点不动）。 */
+  walkRoute?: WalkRoute;
 }
 
 export type CameraPreset = 'iso' | 'top' | 'front' | 'corner';
@@ -351,16 +385,23 @@ export interface NeighbourSpec {
 export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | 'lawn' | 'market' | 'museum' | 'office' | 'studio';
 
 /**
- * 场景锚点（docs/49）：场景世界坐标 ↔ 地理坐标的唯一变换参数。
+ * 场景锚点（docs/19）：场景世界坐标 ↔ 地理坐标的唯一变换参数。
  * lng/lat 是世界原点 (0, 0) 对应的地理坐标；
  * orientationDeg 是世界 -Z 轴（平面图「上」）相对正北的顺时针偏航角，0 表示正北朝上；
  * metersPerUnit 是 1 个世界单位对应的米数——正常为 1；壳体被等比缩小时为 1/scale。
  */
+/** 锚点定位来源（MAP-05 核对锚点可信度用）：圈画 / 底图定位 / 地名回退 / 资产拍摄位 / 预置整景区。 */
+export type SceneAnchorSource = 'picker' | 'manual' | 'lookup' | 'asset-geo' | 'preset';
+
 export interface SceneAnchor {
   lng: number;
   lat: number;
   orientationDeg: number;
   metersPerUnit: number;
+  /** 定位来源；缺省视为旧存档（来源不明），不参与坐标数学。 */
+  source?: SceneAnchorSource;
+  /** 定位不确定度（米）；未知就不写，不编数字。 */
+  accuracyM?: number;
 }
 
 /**
@@ -418,7 +459,7 @@ export interface RoomLayout {
    */
   mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
   /**
-   * 场景锚点：场景坐标 ↔ 地理坐标的唯一变换（docs/49 架构定案）。
+   * 场景锚点：场景坐标 ↔ 地理坐标的唯一变换（docs/19 架构定案）。
    * 地图是 3D 场景里的一个渲染层，没有自己的定位，只能跟着它走。
    * 底图与场景点位一律按它投影；mapGroundFrame 是由它派生的旧字段，仅为壳体卫星 UV 保留。
    */
@@ -439,12 +480,10 @@ export interface RoomLayout {
     imageUrl: string;
     /** 高德瓦片样式：6 卫星、7 路网、8 路网加注记。 */
     style: 6 | 7 | 8;
-    /** 场地脚下那片 z18 级高清卫星贴片；没有就没有贴片层。 */
-    detailRadiusM?: number;
-    detailBounds?: { west: number; south: number; east: number; north: number };
-    detailImageUrl?: string;
-    /** 这张底图跟着哪套场地扫描走（docs/49）；没有就是用户手动标的，自动逻辑不动它。 */
+    /** 这张底图跟着哪套场地扫描走（docs/19）；没有就是用户手动标的，自动逻辑不动它。 */
     scanAssetId?: string;
+    /** 静态预置整景区底图；有它时 bounds 即图片精确范围，不再按半径重算。 */
+    presetId?: 'xihu-scenic';
   };
   /** Sloped site; absent is flat ground at the ground-floor level. */
   terrain?: TerrainSpec;
@@ -471,6 +510,8 @@ export interface ViewSettings {
   /** Pure main-canvas presentation; never deletes an image or changes its correspondence. */
   showReferenceImage?: boolean;
   referenceImageOpacity?: number;
+  /** 整景区底图上叠景区范围线/水面；未设 = 开。 */
+  showResearchOverlays?: boolean;
   /** Hour of the day in [0, 24); drives the continuous sun-arc lighting. */
   timeOfDay: number;
   /** Rain or snow falling over the lot, with matching overcast lighting (#189). */

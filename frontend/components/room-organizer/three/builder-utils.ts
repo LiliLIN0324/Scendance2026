@@ -1,5 +1,6 @@
 import type { FurnitureItem } from '../lib/types';
 import type * as ThreeNS from 'three';
+import { disposeGlbMixersIn } from './glb-assets';
 
 export type ThreeModule = typeof import('three');
 
@@ -22,6 +23,8 @@ export type FurnitureBuilder = (ctx: BuilderContext) => ThreeNS.Group;
  * call this, otherwise repeated scene rebuilds leak GPU memory.
  */
 export function disposeObject(obj: ThreeNS.Object3D): void {
+  // 停掉这台设备上的实例动画，否则 mixer 会继续往已脱离场景的骨骼上写。
+  disposeGlbMixersIn(obj);
   obj.traverse((node) => {
     const mesh = node as ThreeNS.Mesh;
     if (mesh.geometry) mesh.geometry.dispose();

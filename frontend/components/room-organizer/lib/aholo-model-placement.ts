@@ -5,13 +5,13 @@ import type { CatalogItem } from './types';
 import type { SplatMeters, SplatSource } from '../three/splat-preview';
 
 /** 本机落盘的档和仓库留档的档走同一条摆放/预览链路，只差在地址从哪来。 */
-type AssetLike = { assetId: string; kind: 'glb' | 'spz' | 'ply'; name: string; meters?: SplatMeters };
+type AssetLike = { assetId: string; kind: 'glb' | 'spz' | 'ply'; name: string; meters?: SplatMeters; lodUrl?: string };
 
 /** 找到文件却打不开它时该说什么：物件与场景走的是两条不同的入口。 */
 function sceneSourceOf(asset: AssetLike | undefined, url: string | undefined): SplatSource {
   if (!asset || !url) throw new Error('本机已经没有这个场景，请重新生成。');
   if (asset.kind === 'glb') throw new Error('这是物件模型，请在「生成物件」里摆进场景。');
-  return { assetId: asset.assetId, url, name: asset.name, ...(asset.meters ? { meters: asset.meters } : {}) };
+  return { assetId: asset.assetId, url, name: asset.name, ...(asset.meters ? { meters: asset.meters } : {}), ...(asset.lodUrl ? { lodUrl: asset.lodUrl } : {}) };
 }
 
 /**

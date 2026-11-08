@@ -1708,3 +1708,40 @@
   background: var(--paper); color: var(--green-deep);
   font: 500 12px/1 var(--font-sans); cursor: pointer;
 }
+
+/* ── 重建可行性（SfM 登记预估）：实时够不够 ── */
+.cg-recon { border-left: 3px solid var(--hair); }
+.cg-recon--borderline { border-left-color: var(--warn); }
+.cg-recon--enough { border-left-color: var(--green); }
+.cg-recon--not-enough { border-left-color: var(--err); }
+
+.cg-recon-badge {
+  flex: none; padding: 3px 8px; border-radius: 999px;
+  font: 600 10px/14px var(--font-sans); letter-spacing: 0.02em;
+}
+.cg-recon-badge--not-enough { background: #f7e9e8; color: var(--err); }
+.cg-recon-badge--borderline { background: #f7f0e4; color: var(--warn); }
+.cg-recon-badge--enough { background: var(--green-pale); color: var(--green-deep); }
+
+.cg-recon-headline {
+  margin-top: 12px;
+  font: 620 20px/1.25 var(--font-sans);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-recon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.cg-recon-grid span {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  background: var(--plane);
+}
+.cg-recon-grid b { font: 620 16px/1.1 var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+.cg-recon-grid i { font: 400 10px/1.4 var(--font-sans); font-style: normal; color: var(--faint); }
+.cg-recon-grid span.is-warn b { color: var(--err); }

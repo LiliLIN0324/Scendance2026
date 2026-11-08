@@ -43,13 +43,15 @@ function setup(bound = false) {
   const onApplyLayout = vi.fn();
   const props = { controller, layout: backendSceneToLayout(scene), onApplyLayout, bound, busy: false };
   const view = render(<AssetsPanel {...props}/>);
+  expect(screen.getByRole('tab', { name: /^库/ }).getAttribute('aria-selected')).toBe('true');
+  // 面板已并入「物料」区（我的生成/收藏/库三页签），个人素材走「我的生成」页签；独立的「素材库」开关钮已删。
+  fireEvent.click(screen.getByRole('tab', { name: /我的生成/ }));
   return { ...view, props, onApplyLayout };
 }
 describe('personal cloud assets', () => {
   it('only lists personal assets without another AI generation entry or requests', async () => {
     setup(); await screen.findByRole('button', { name: '预览 木椅' });
-    expect(screen.getByRole('tab', { name: /^库/ }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: /^我的生成/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^我的生成/ }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: /^收藏/ })).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByText(/生成任务/)).toBeNull();

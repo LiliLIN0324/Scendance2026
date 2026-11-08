@@ -55,7 +55,7 @@ function harness(opts?: {
   onHangDemoEnvironment?: () => void;
 }) {
   state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
-  return render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
+  return render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
     <ActivityBrief tools={[]}/>
     <MapVenueOverlay
       {...(opts?.onReconUpload === undefined ? {} : { onReconUpload: opts.onReconUpload })}
@@ -67,7 +67,7 @@ function harness(opts?: {
 afterEach(() => { cleanup(); });
 
 describe('圈画 → 采集单 → 上传重建', () => {
-  it('圈完一块地后收起浮层，再打开地图仍能查看采集单', () => {
+  it('圈完一块地浮层即收；重开地图采集单还在，不用重新圈', () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const overlay = screen.getByRole('dialog', { name: '地图选址' });
@@ -83,6 +83,7 @@ describe('圈画 → 采集单 → 上传重建', () => {
     harness({ onReconUpload });
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     fireEvent.click(within(screen.getByRole('dialog', { name: '地图选址' })).getByRole('button', { name: '模拟圈画' }));
+    expect(screen.queryByRole('region', { name: '现场采集单' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     const card = screen.getByRole('region', { name: '现场采集单' });
     fireEvent.click(within(card).getByRole('button', { name: /去上传现场素材/ }));
@@ -111,7 +112,7 @@ describe('圈画 → 采集单 → 上传重建', () => {
 
   it('左轨那颗地图是同一个开关：点开浮层，再点收回去', () => {
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}>
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}>
       <MapRailButton/>
       <MapVenueOverlay/>
     </LayoutAgentProvider>);

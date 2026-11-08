@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// buildStructureShell→buildGridPlane 需要 document + 2D canvas（jsdom + canvas 包）；纯 node 环境下 document 不存在。
 import * as THREE from 'three';
 import { describe, it, expect } from 'vitest';
 import { sceneSchema, type SceneV2 } from '../../../../supabase/functions/_shared/domain';
