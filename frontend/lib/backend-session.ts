@@ -5,15 +5,22 @@ import { z } from "zod";
 import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState, type Proposal } from "../../client/scene-client";
 import { activityTaskRunRequestSchema, type ActivityTaskRun, type ActivityTaskRunRequest } from "../../supabase/functions/_shared/activity-task-contract";
 import { agentRunRequestSchema, agentRunSchema, type AgentRun, type AgentRunRequest } from "../../supabase/functions/_shared/agent-contract";
+import {parseAgentRunEvents,type AgentRunEventPage} from './agent-run-events';
 import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
-import { briefExtractRequestSchema, briefExtractResponseSchema, type BriefExtractResponse } from "../../supabase/functions/_shared/brief-extract-contract";
-import { canonical, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
+import { briefExtractRequestSchema, briefExtractResponseSchema, briefConversationRequestSchema, briefConversationResponseSchema, parseBriefConversation, type BriefExtractResponse, type BriefConversationResponse } from "../../supabase/functions/_shared/brief-extract-contract";
+import { assistantChatRequestSchema, assistantChatResponseSchema, type AssistantChatResult } from "../../supabase/functions/_shared/assistant-chat-contract";
+import { canonical, sha256, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 import { createSupabaseBrowserClient } from "./supabase/client";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
+import {commitOriginalReview,isOriginalReviewReceipt,originalReviewReceiptKey,readOriginalReviewPending,type OriginalReviewReceipt} from './original-review-commit';
+import {auditOriginalReviewStartup,type OriginalReviewCompletion,type OriginalReviewCompletionStore,type OriginalReviewCloudEvidence} from './original-review-completion';
+import {createOriginalReviewLedger} from './original-review-ledger-idb';
+import {localWriteCapabilityGuard,type LocalWriteCapability} from './local-write-lease';
+import {sameRecoveryFormValue} from './recovery-form-value';
 export { SceneApiError };
 export type { AgentRun };
 export type AgentRunInput = Pick<AgentRunRequest, "requestId" | "scene" | "selectedIds" | "instruction" | "context" | "jevEnabled" | "executionMode">;
@@ -27,6 +34,76 @@ function parseReconstructionJob(input: unknown): ReconstructionJob {
   return {...parsed, proposal: parsed.proposal ? proposalResponseSchema.parse(parsed.proposal) : parsed.proposal};
 }
 export type { Scene };
+// Completion cleanup stays disabled until the ledger exposes a non-forgeable,
+// session-bound authorization instead of ordinary capability-based deletion.
+const ORIGINAL_REVIEW_COMPLETION_ENABLED:boolean=false;
+
+/** Unexported: callers cannot supply a real storage and fabricate cloud evidence. */
+async function reconcileVerifiedOriginalReview(options:{accountId:string;projectId:string;storage:Storage;ledger:OriginalReviewCompletionStore;isCurrent:()=>boolean;readCloud:()=>Promise<OriginalReviewCloudEvidence>}):Promise<'cleared'|'blocked'> {
+ const {accountId,projectId,storage,ledger,isCurrent,readCloud}=options;
+ try{
+  const key=originalReviewReceiptKey(accountId,projectId);if(!isCurrent())return 'blocked';
+  const pending=readOriginalReviewPending(storage,key),old=await ledger.get(key);
+  const valid=(value:unknown):value is OriginalReviewCompletion=>!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')==='appliedRevision,receipt,version'&&
+   (value as OriginalReviewCompletion).version===1&&isOriginalReviewReceipt((value as OriginalReviewCompletion).receipt)&&
+   (value as OriginalReviewCompletion).appliedRevision===(value as OriginalReviewCompletion).receipt.baseRevision+1;
+  if(!isCurrent()||pending.state==='unavailable'||(old!==null&&!valid(old)))return 'blocked';
+  const receipt=pending.state==='pending'?pending.receipt:old&&valid(old)?old.receipt:null;
+  if(!receipt||receipt.projectId.toLowerCase()!==projectId.toLowerCase()||(old!==null&&(!valid(old)||!sameRecoveryFormValue(old.receipt,receipt))))return 'blocked';
+  const cloud=await readCloud();
+  if(!isCurrent()||cloud.projectId!==receipt.projectId||cloud.reviewId!==receipt.reviewId||cloud.baseHash!==receipt.baseHash||cloud.candidateHash!==receipt.candidateHash||cloud.baseRevision!==receipt.baseRevision||cloud.appliedRevision!==receipt.baseRevision+1||cloud.currentRevision!==receipt.baseRevision+1||cloud.currentSceneHash!==receipt.candidateHash)return 'blocked';
+  const completion:OriginalReviewCompletion={version:1,receipt,appliedRevision:receipt.baseRevision+1};
+  if(old===null){await ledger.put(key,completion);if(!isCurrent()||!sameRecoveryFormValue(await ledger.get(key),completion))return 'blocked';}
+  else if(!sameRecoveryFormValue(old,completion))return 'blocked';
+  const latest=readOriginalReviewPending(storage,key);
+  if(latest.state==='unavailable'||(latest.state==='pending'&&!sameRecoveryFormValue(latest.receipt,receipt)))return 'blocked';
+  if(latest.state==='pending')storage.removeItem(key);
+  if(!isCurrent()||storage.getItem(key)!==null)return 'blocked';
+  await ledger.delete(key);
+  if(!isCurrent()||await ledger.get(key)!==null||storage.getItem(key)!==null)return 'blocked';
+  return 'cleared';
+ }catch{return 'blocked';}
+}
+
+/** Only the authenticated, locked coordinator below calls this guarded CAS. */
+async function deleteVerifiedOriginalCompletion(key:string,expected:OriginalReviewCompletion,guard:ReturnType<typeof localWriteCapabilityGuard>,current:()=>boolean):Promise<void> {
+  const check=()=>{guard.assertStillHeld();if(guard.signal.aborted||!current())throw new Error('核对权限已失效。');};
+  check();
+  const db=await new Promise<IDBDatabase>((resolve,reject)=>{
+    let done=false;const request=indexedDB.open('scendance-original-review-ledger-v1',1);
+    request.onupgradeneeded=()=>{try{request.transaction?.abort();}catch{};};
+    request.onblocked=()=>{done=true;reject(new Error('完成记录正被占用。'));};
+    request.onerror=()=>{done=true;reject(request.error??new Error('完成记录不可读取。'));};
+    request.onsuccess=()=>{if(done){request.result.close();return;}try{check();done=true;resolve(request.result);}catch(error){request.result.close();reject(error);}};
+  });
+  try {await new Promise<void>((resolve,reject)=>{
+    check();const tx=db.transaction('records','readwrite',{durability:'strict'}),abort=()=>{try{tx.abort();}catch{}};
+    guard.signal.addEventListener('abort',abort,{once:true});
+    const cleanup=()=>guard.signal.removeEventListener('abort',abort);
+    tx.oncomplete=()=>{cleanup();try{check();resolve();}catch(error){reject(error);}};
+    tx.onerror=tx.onabort=()=>{cleanup();reject(tx.error??new Error('完成记录事务已中断。'));};
+    try{
+      check();const store=tx.objectStore('records'),request=store.get(key);
+      request.onsuccess=()=>{try{
+        check();if(!sameRecoveryFormValue(request.result,expected))throw new Error('完成记录已变化。');
+        const deletion=store.delete(key);deletion.onsuccess=()=>{try{check();}catch{abort();}};
+      }catch{abort();}};
+    }catch(error){abort();cleanup();reject(error);}
+  });}finally{db.close();}
+}
+
+const originalReviewResponseSchema=z.object({
+  id:uuid,projectId:uuid,baseRevision:z.number().int().nonnegative(),baseHash:z.string().regex(/^[a-f0-9]{64}$/),candidateHash:z.string().regex(/^[a-f0-9]{64}$/),
+  expiresAt:z.string(),appliedAt:z.string().nullable(),appliedRevision:z.number().int().nonnegative().nullable(),
+  changes:z.array(z.object({path:z.string(),before:z.object({present:z.boolean(),value:z.unknown().optional()}),after:z.object({present:z.boolean(),value:z.unknown().optional()})})).max(512),
+});
+function parseOriginalReview(raw:unknown,projectId:string,reviewId:string) {
+  const parsed=originalReviewResponseSchema.safeParse(raw);
+  if(!parsed.success||parsed.data.projectId!==projectId||parsed.data.id!==reviewId||!Number.isFinite(Date.parse(parsed.data.expiresAt))||
+    ((parsed.data.appliedAt===null)!==(parsed.data.appliedRevision===null))||
+    (parsed.data.appliedAt!==null&&!Number.isFinite(Date.parse(parsed.data.appliedAt))))throw new SceneApiError('INVALID_RESPONSE',502,null);
+  return parsed.data;
+}
 
 export interface BackendConfig {
   configured: boolean;
@@ -68,7 +145,7 @@ export interface ProjectSummary {
   id: string; name: string; studio_id: string; revision: number;
   updated_at?: string; current_editor?: string | null; lease_expires?: string | null;
 }
-export interface BackendProject extends ProjectSummary { scene: Scene; materials?: unknown[] }
+export interface BackendProject extends ProjectSummary { scene: Scene; materials?: unknown[]; projection?: {requiresOriginalSceneForWrite:boolean;changed?:boolean;status?:string} }
 export interface Lease {
   projectId: string; sessionId: string; generation: number; expiresAt: string; revision: number;
 }
@@ -199,6 +276,8 @@ function failure(error: unknown): BackendFailure {
     RECONSTRUCTION_BUSY: "项目正在生成方案，请等待任务完成后再删除。",
     NETWORK_ERROR: "连接失败，草稿已保留，云端写入已暂停。",
     CLOUD_WRITE_BLOCKED: "请先获取有效编辑权再保存。",
+    ORIGINAL_SCENE_REVIEW_REQUIRED: "此项目含未核验的原始文字，当前仅可只读核对；原始场景已保留，暂不能安全编辑。",
+    MODEL_TEXT_REVIEW_REQUIRED: "原候选含未核验的模型文字，不能直接应用；请保留原记录并重新核对。",
     CLOUD_OPERATION_BUSY: "上一个保存或交接仍在进行。",
     CONFIGURATION_MISSING: "云端连接尚未配置。",
     INVALID_RESPONSE: "云端返回的数据格式无效。",
@@ -216,6 +295,7 @@ function failure(error: unknown): BackendFailure {
     PROJECT_SWITCH_REQUIRES_RELEASE: "请先交接当前项目的编辑权。",
     LOCAL_ACTIVITY_ID_REQUIRED: "请先打开一个本地活动，再连接场景处理。",
     STALE_PROPOSAL: "方案生成期间场景或编辑权已变化，请根据当前场景重新生成。",
+    CANVAS_PROJECT_MISMATCH: "云端项目与当前画布未完成匹配，云端写入已暂停；请重新打开当前活动并核对。",
     LAYOUT_REQUIRES_EMPTY_SCENE: "生成初稿需要空白场景；已有物料请使用修改方案。",
     AI_BUSY: "已有方案正在生成，请等待本次请求完成。",
     GENERATION_BUSY: "已有模型生成任务正在处理，请先查看任务状态。",
@@ -235,6 +315,8 @@ export class BackendSession {
   private operationPending = false;
   private renewing = false;
   private epoch = 0;
+  private dispatchScopeEpoch = 0;
+  private canvasProjectMismatch = false;
   private owners = 0;
   private lifecycle = 0;
   private readonly proposalRequestIds = new Map<string, string>();
@@ -266,6 +348,14 @@ export class BackendSession {
   }
 
   getSnapshot = (): BackendSnapshot => this.snapshot;
+  /** Synchronous fence for creating an explicitly local-only, non-cloud draft. */
+  canCreateUnboundLocalDraft(): boolean {
+    const state=this.snapshot;
+    return !this.geometryPending&&!this.workbenchPending&&!this.operationPending&&!this.proposalPending&&!this.generationPending&&
+      !state.recoveryReady&&!state.project&&!state.geometryBinding&&!state.lease&&state.status!=='saving';
+  }
+  /** Changes when authentication or geometry preparation is invalidated. */
+  localDraftAuthorityVersion(): string { return `${this.epoch}:${this.geometryEpoch}`; }
   isGeometryBound(localActivityId: string): boolean {
     const binding = this.snapshot.geometryBinding;
     return !!binding && binding.localActivityId === localActivityId && binding.userId === this.snapshot.user?.id &&
@@ -291,7 +381,11 @@ export class BackendSession {
     };
   };
   private update(patch: Partial<BackendSnapshot>) {
-    this.snapshot = { ...this.snapshot, ...patch };
+    const old=this.snapshot,next={...old,...patch};
+    if(old.user?.id!==next.user?.id||old.project?.id!==next.project?.id||old.sessionId!==next.sessionId||
+      old.lease?.projectId!==next.lease?.projectId||old.lease?.sessionId!==next.lease?.sessionId||old.lease?.generation!==next.lease?.generation||
+      old.geometryBinding?.localActivityId!==next.geometryBinding?.localActivityId||old.geometryBinding?.cloudProjectId!==next.geometryBinding?.cloudProjectId)this.dispatchScopeEpoch++;
+    this.snapshot = next;
     for (const listener of this.listeners) listener();
   }
   private stopRenewal() {
@@ -314,6 +408,31 @@ export class BackendSession {
   private block(error: unknown) {
     this.stopRenewal();
     this.update({ writeBlocked: true, status: "blocked", error: failure(error) });
+  }
+  /** Fail closed if selecting a cloud project succeeded but replacing the canvas did not. */
+  suspendForCanvasProjectMismatch(projectId:string):void {
+    if(this.snapshot.project?.id!==projectId)return;
+    this.canvasProjectMismatch=true;++this.epoch;
+    this.block(new SceneApiError('CANVAS_PROJECT_MISMATCH',409,null));
+  }
+  /** Call only after the caller synchronously applied and verified this canvas identity. */
+  acknowledgeCanvasProjectMatch(projectId:string):void {
+    if(this.snapshot.project?.id!==projectId)throw new SceneApiError('SESSION_CHANGED',409,null);
+    this.canvasProjectMismatch=false;
+  }
+  /** Release only the mismatched lease; failed release leaves writes blocked. */
+  async releaseLeaseAfterCanvasMismatch(projectId:string):Promise<void> {
+    const lease=this.snapshot.lease,epoch=this.epoch,scopeEpoch=this.dispatchScopeEpoch,actor=this.snapshot.user?.id;
+    if(!this.canvasProjectMismatch)throw new SceneApiError('SESSION_CHANGED',409,null);
+    if(!lease)return;
+    if(lease.projectId!==projectId)throw new SceneApiError('SESSION_CHANGED',409,null);
+    const check=()=>{if(!actor||this.epoch!==epoch||this.dispatchScopeEpoch!==scopeEpoch||this.snapshot.user?.id!==actor||!this.canvasProjectMismatch||this.snapshot.lease!==lease||this.snapshot.project?.id!==projectId||this.snapshot.sessionId!==lease.sessionId)throw new SceneApiError('SESSION_CHANGED',409,null);};
+    try{await this.client.request(`/projects/${encodeURIComponent(projectId)}/lease/release`,'POST',{sessionId:lease.sessionId,generation:lease.generation},false,undefined,check);}
+    catch(error){if(!(error instanceof SceneApiError&&error.code==='LEASE_LOST'))throw error;}
+    check();this.update({lease:null});
+  }
+  private assertCanvasProjectMatch():void {
+    if(this.canvasProjectMismatch)throw new SceneApiError('CANVAS_PROJECT_MISMATCH',409,null);
   }
   private requireConfig() {
     if (!this.config.configured) throw new SceneApiError("CONFIGURATION_MISSING", 0, null);
@@ -422,16 +541,29 @@ export class BackendSession {
     return current.projectId === scope.projectId && current.lease?.projectId === scope.lease?.projectId &&
       current.lease?.sessionId === scope.lease?.sessionId && current.lease?.generation === scope.lease?.generation;
   }
-  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation, transport?: () => Promise<T>): Promise<T> {
-    const epoch = this.epoch;
+  /** Capture account/project/lease now, recheck after token refresh immediately before dispatch. */
+  private scopedDispatchGuard(mutates:boolean):()=>void {
+    const epoch=this.epoch,scopeEpoch=this.dispatchScopeEpoch,actor=this.snapshot.user?.id,scope=this.captureRequestScope();
+    return ()=>{
+      if(epoch!==this.epoch||scopeEpoch!==this.dispatchScopeEpoch||this.snapshot.user?.id!==actor||!this.isCurrentRequestScope(scope))throw new SceneApiError('SESSION_CHANGED',409,null);
+      if(mutates)this.assertCanvasProjectMatch();
+    };
+  }
+  private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation, transport?: (beforeDispatch:()=>void) => Promise<T>,requestCurrent?:()=>boolean): Promise<T> {
+    if(method.toUpperCase()!=='GET')this.assertCanvasProjectMatch();
+    const epoch = this.epoch,scopeEpoch=this.dispatchScopeEpoch,actor=this.snapshot.user?.id;
+    const beforeDispatch=()=>{
+      if(epoch!==this.epoch||scopeEpoch!==this.dispatchScopeEpoch||this.snapshot.user?.id!==actor||!this.isCurrentRequestScope(scope)||geometry&&!geometry.current()||requestCurrent&&!requestCurrent())throw new SceneApiError('SESSION_CHANGED',409,null);
+      if(method.toUpperCase()!=='GET')this.assertCanvasProjectMatch();
+    };
     const credentials = this.tokens;
     try {
       this.requireConfig();
-      const result = await (transport ? transport() : this.client.request<T>(path, method, body));
-      if (epoch !== this.epoch) throw new SceneApiError("SESSION_CHANGED", 409, null);
+      const result = await (transport ? transport(beforeDispatch) : this.client.request<T>(path, method, body,false,undefined,beforeDispatch));
+      if (epoch !== this.epoch||scopeEpoch!==this.dispatchScopeEpoch||this.snapshot.user?.id!==actor||!this.isCurrentRequestScope(scope)||requestCurrent&&!requestCurrent()) throw new SceneApiError("SESSION_CHANGED", 409, null);
       return result;
     } catch (error) {
-      if (epoch === this.epoch && (!geometry || geometry.current()) && this.isCurrentRequestScope(scope)) {
+      if (epoch === this.epoch && scopeEpoch===this.dispatchScopeEpoch && this.snapshot.user?.id===actor && (!geometry || geometry.current()) && (!requestCurrent||requestCurrent()) && this.isCurrentRequestScope(scope)) {
         if (error instanceof SceneApiError && (error.status === 401 || error.code === "UNAUTHENTICATED")) {
           // accessToken() rebuilds this.tokens on every call, so an object identity check can
           // never match after a request; compare the access token value instead.
@@ -634,6 +766,7 @@ export class BackendSession {
   }
   async signOut(): Promise<void> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    if(this.canvasProjectMismatch&&this.snapshot.lease)await this.releaseLeaseAfterCanvasMismatch(this.snapshot.lease.projectId);
     try { if (this.snapshot.lease && !this.snapshot.writeBlocked) await this.releaseLease(); } catch { /* Lease expires within 90 seconds; draft remains. */ }
     ++this.epoch;
     this.tokens = null;
@@ -859,6 +992,7 @@ export class BackendSession {
   }
   private ensureCanSwitch() {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
+    if(this.canvasProjectMismatch&&this.snapshot.lease)throw new SceneApiError('PROJECT_SWITCH_REQUIRES_RELEASE',409,null);
     if (this.snapshot.lease && !this.snapshot.writeBlocked) throw new SceneApiError("PROJECT_SWITCH_REQUIRES_RELEASE", 409, null);
   }
   private selectProject(project: BackendProject, geometryBinding?: GeometryWorkbenchBinding) {
@@ -892,6 +1026,139 @@ export class BackendSession {
     const project = await this.businessRequest<BackendProject>(`/projects/${encodeURIComponent(projectId)}`);
     return { ...project, scene: sceneSchema.parse(project.scene) };
   }
+  /** A read-only authority is invalidated by sign-in/out, project or lease changes. */
+  captureOriginalSceneReadGuard():()=>boolean {
+    const epoch=this.epoch,scope=this.captureRequestScope(),user=this.snapshot.user?.id;
+    return ()=>!!user&&epoch===this.epoch&&this.snapshot.user?.id===user&&this.isCurrentRequestScope(scope);
+  }
+  async readOriginalScene(projectId:string):Promise<{scene:unknown;revision:number;originalSceneHash:string}>{return this.#readOriginalScene(projectId);}
+  async #readOriginalScene(projectId:string):Promise<{scene:unknown;revision:number;originalSceneHash:string}>{
+    const id=uuid.parse(projectId),epoch=this.epoch,scope=this.captureRequestScope(),user=this.snapshot.user?.id;
+    if(!user)throw new SceneApiError('UNAUTHENTICATED',401,null);
+    const raw=await this.request<unknown>(`/projects/${encodeURIComponent(id)}/original-scene`,'GET',undefined,scope,'business');
+    const result=z.object({projectId:uuid,scene:z.unknown(),revision:z.number().int().nonnegative(),originalSceneHash:z.string().regex(/^[a-f0-9]{64}$/)}).safeParse(raw);
+    if(!result.success||result.data.projectId.toLowerCase()!==id.toLowerCase()||!sceneSchema.safeParse(result.data.scene).success)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const hash=await sha256(canonical(result.data.scene));
+    if(epoch!==this.epoch||!this.isCurrentRequestScope(scope)||this.snapshot.user?.id!==user)throw new SceneApiError('SESSION_CHANGED',409,null);
+    if(hash!==result.data.originalSceneHash)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    return {scene:result.data.scene,revision:result.data.revision,originalSceneHash:hash};
+  }
+  /** These operations never select a project or replace the local canvas. */
+  async beginOriginalReview(projectId:string,record:{revision:number;originalSceneHash:string}) {
+    this.assertCanvasProjectMatch();
+    const id=uuid.parse(projectId),guard=this.captureOriginalSceneReadGuard(),dispatch=this.scopedDispatchGuard(true),sessionId=this.snapshot.sessionId;
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const raw=await this.client.request<unknown>(`/projects/${id}/original-scene/lease`,'POST',{
+      sessionId,originalRevision:record.revision,originalSceneHash:record.originalSceneHash,
+    },false,undefined,()=>{dispatch();if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);});
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const parsed=z.object({sessionId:uuid,generation:z.number().int().nonnegative(),revision:z.number().int().nonnegative(),expiresAt:z.string(),originalSceneHash:z.string().regex(/^[a-f0-9]{64}$/)}).safeParse(raw);
+    if(!parsed.success||parsed.data.sessionId!==sessionId||parsed.data.revision!==record.revision||parsed.data.originalSceneHash!==record.originalSceneHash||!Number.isFinite(Date.parse(parsed.data.expiresAt)))throw new SceneApiError('INVALID_RESPONSE',502,null);
+    return parsed.data;
+  }
+  async prepareOriginalReview(projectId:string,lease:{sessionId:string;generation:number;revision:number;originalSceneHash:string},candidate:unknown,reviewId:string) {
+    this.assertCanvasProjectMatch();
+    const id=uuid.parse(projectId),review=uuid.parse(reviewId),guard=this.captureOriginalSceneReadGuard(),dispatch=this.scopedDispatchGuard(true);
+    if(!guard()||lease.sessionId!==this.snapshot.sessionId)throw new SceneApiError('SESSION_CHANGED',409,null);
+    const candidateHash=await sha256(canonical(candidate));
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    this.assertCanvasProjectMatch();
+    const raw=await this.client.request<unknown>(`/projects/${id}/original-scene/reviews`,'POST',{sessionId:lease.sessionId,generation:lease.generation,expectedRevision:lease.revision,reviewId:review,originalSceneHash:lease.originalSceneHash,candidate},false,undefined,()=>{dispatch();if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);});
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const result=parseOriginalReview(raw,id,review);
+    if(result.baseRevision!==lease.revision||result.baseHash!==lease.originalSceneHash||result.candidateHash!==candidateHash||result.appliedAt!==null||result.appliedRevision!==null)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    return result;
+  }
+  async readOriginalReview(projectId:string,reviewId:string) {return this.#readOriginalReview(projectId,reviewId);}
+  async #readOriginalReview(projectId:string,reviewId:string) {
+    const id=uuid.parse(projectId),review=uuid.parse(reviewId),guard=this.captureOriginalSceneReadGuard();
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const raw=await this.client.request<unknown>(`/projects/${id}/original-scene/reviews/${review}`,'GET',undefined,false,undefined,()=>{if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);});
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    return parseOriginalReview(raw,id,review);
+  }
+  /** Read both authoritative records under the same authenticated session. */
+  async readOriginalReviewEvidence(receipt:OriginalReviewReceipt) {return this.#readOriginalReviewEvidence(receipt);}
+  async #readOriginalReviewEvidence(receipt:OriginalReviewReceipt) {
+    if(!isOriginalReviewReceipt(receipt))throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const guard=this.captureOriginalSceneReadGuard();
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const review=await this.#readOriginalReview(receipt.projectId,receipt.reviewId);
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const original=await this.#readOriginalScene(receipt.projectId);
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    return {projectId:review.projectId,reviewId:review.id,baseHash:review.baseHash,candidateHash:review.candidateHash,
+      baseRevision:review.baseRevision,appliedRevision:review.appliedRevision,currentRevision:original.revision,currentSceneHash:original.originalSceneHash};
+  }
+  /** Never dispatch without a durable receipt and the authenticated project lock. */
+  async commitAuthorizedOriginalReview(receipt:OriginalReviewReceipt,lease:{sessionId:string;generation:number;revision:number;originalSceneHash:string},capability:LocalWriteCapability,isActivityCurrent:()=>boolean):Promise<'committed'|'unknown'|'blocked'> {
+    try {
+      if(!ORIGINAL_REVIEW_COMPLETION_ENABLED||!isOriginalReviewReceipt(receipt))return 'blocked';
+      const account=this.snapshot.user?.id,sessionGuard=this.captureOriginalSceneReadGuard(),guard=localWriteCapabilityGuard(capability);
+      if(!account||typeof window==='undefined'||!navigator.locks||lease.sessionId!==this.snapshot.sessionId||lease.revision!==receipt.baseRevision||lease.originalSceneHash!==receipt.baseHash)return 'blocked';
+      const current=()=>{try{guard.assertStillHeld();return !guard.signal.aborted&&sessionGuard()&&isActivityCurrent()&&this.snapshot.user?.id===account;}catch{return false;}};
+      if(!current())return 'blocked';
+      const result=await commitOriginalReview({storage:window.localStorage,locks:navigator.locks,accountId:account,receipt,isCurrent:current,submit:async()=>{
+        const review=await this.#readOriginalReview(receipt.projectId,receipt.reviewId);
+        if(!current()||review.appliedAt!==null||review.appliedRevision!==null||review.baseRevision!==receipt.baseRevision||review.baseHash!==receipt.baseHash||review.candidateHash!==receipt.candidateHash)throw new Error('候选已变化。');
+        const original=await this.#readOriginalScene(receipt.projectId);
+        if(!current()||original.revision!==receipt.baseRevision||original.originalSceneHash!==receipt.baseHash)throw new Error('原始场景已变化。');
+        return this.#applyOriginalReview(receipt.projectId,lease,{id:receipt.reviewId,candidateHash:receipt.candidateHash});
+      }});
+      return result.state;
+    }catch{return 'blocked';}
+  }
+  /** Isolated reconciliation; no editor or submission path calls this yet. */
+  async reconcileOriginalReview(projectId:string,capability:LocalWriteCapability):Promise<'cleared'|'blocked'> {
+    try {
+      if(!ORIGINAL_REVIEW_COMPLETION_ENABLED)return 'blocked';
+      const id=uuid.parse(projectId),account=this.snapshot.user?.id,sessionGuard=this.captureOriginalSceneReadGuard();
+      if(!account||!sessionGuard()||typeof window==='undefined'||!navigator.locks)return 'blocked';
+      const key=originalReviewReceiptKey(account,id),guard=localWriteCapabilityGuard(capability);
+      const current=()=>{try{guard.assertStillHeld();return !guard.signal.aborted&&sessionGuard()&&this.snapshot.user?.id===account;}catch{return false;}};
+      if(!current())return 'blocked';
+      return await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},async lock=>{
+        if(!lock||!current())return 'blocked' as const;
+        const storage=window.localStorage,ledger=createOriginalReviewLedger(capability,account,guard.signal);
+        const pending=readOriginalReviewPending(storage,key),existing=await ledger.read(key);
+        if(!current()||pending.state==='unavailable')return 'blocked' as const;
+        const receipt=pending.state==='pending'?pending.receipt:existing.present?existing.value.receipt:null;
+        if(!isOriginalReviewReceipt(receipt)||receipt.projectId.toLowerCase()!==id.toLowerCase())return 'blocked' as const;
+        let expected=existing;
+        const view:OriginalReviewCompletionStore={
+          get:async k=>{if(k!==key||!current())throw new Error('核对范围已变化。');const item=await ledger.read(k);return item.present?item.value:null;},
+          list:async()=>ledger.list(),
+          put:async(k:string,value:OriginalReviewCompletion)=>{if(k!==key||!current())throw new Error('核对范围已变化。');const next={present:true as const,value};if(await ledger.compareAndSwap(k,expected,next)!=='applied')throw new Error('完成记录未能核对。');expected=next;},
+          delete:async k=>{if(k!==key||!current()||!expected.present)throw new Error('核对范围已变化。');await deleteVerifiedOriginalCompletion(k,expected.value,guard,current);expected={present:false};},
+        };
+        return reconcileVerifiedOriginalReview({accountId:account,projectId:id,storage,ledger:view,isCurrent:current,readCloud:()=>this.#readOriginalReviewEvidence(receipt)});
+      });
+    }catch{return 'blocked';}
+  }
+  /** Joint startup audit prototype; current writers are not yet all integrated. */
+  async auditOriginalReviewReceipts(capability:LocalWriteCapability):Promise<'clear'|'blocked'> {
+    try {
+      const account=this.snapshot.user?.id,sessionGuard=this.captureOriginalSceneReadGuard();
+      if(!account||!sessionGuard()||typeof window==='undefined')return 'blocked';
+      const guard=localWriteCapabilityGuard(capability);guard.assertStillHeld();
+      const ledger=createOriginalReviewLedger(capability,account,guard.signal);
+      await auditOriginalReviewStartup({storage:window.localStorage,ledger:ledger.auditView});
+      guard.assertStillHeld();
+      // Ordinary writers have not yet all joined this audit/lock protocol.
+      // Even an empty snapshot cannot grant write permission at startup.
+      return 'blocked';
+    }catch{return 'blocked';}
+  }
+  async #applyOriginalReview(projectId:string,lease:{sessionId:string;generation:number;revision:number;originalSceneHash:string},review:{id:string;candidateHash:string}) {
+    this.assertCanvasProjectMatch();
+    const id=uuid.parse(projectId),reviewId=uuid.parse(review.id),guard=this.captureOriginalSceneReadGuard(),dispatch=this.scopedDispatchGuard(true);
+    if(!guard()||lease.sessionId!==this.snapshot.sessionId)throw new SceneApiError('SESSION_CHANGED',409,null);
+    const raw=await this.client.request<unknown>(`/projects/${id}/original-scene/reviews/${reviewId}/apply`,'POST',{sessionId:lease.sessionId,generation:lease.generation,expectedRevision:lease.revision,originalSceneHash:lease.originalSceneHash,candidateHash:review.candidateHash,acknowledged:true},false,undefined,()=>{dispatch();if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);});
+    if(!guard())throw new SceneApiError('SESSION_CHANGED',409,null);
+    const result=z.object({id:uuid,revision:z.number().int().nonnegative()}).safeParse(raw);
+    if(!result.success||result.data.id!==id||result.data.revision!==lease.revision+1)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    return {revision:result.data.revision};
+  }
   async getProject(projectId: string, validate?: (project: BackendProject) => void): Promise<BackendProject> {
     this.ensureCanSwitch();
     this.cancelGeometryPreparation();
@@ -904,6 +1171,7 @@ export class BackendSession {
       const project = await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`, "GET", undefined, this.captureRequestScope(), true, geometry);
       this.assertGeometryCurrent(geometry);
       if (geometry && project.id !== projectId) throw new SceneApiError("INVALID_RESPONSE", 502, null);
+      if(project.projection?.requiresOriginalSceneForWrite)throw new SceneApiError('ORIGINAL_SCENE_REVIEW_REQUIRED',409,null);
       // The renderer can reject unsupported geometry before changing the active project.
       validate?.(project);
       this.selectProject(project, geometry?.bindingFor(project));
@@ -923,6 +1191,7 @@ export class BackendSession {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     if (this.snapshot.lease && !this.snapshot.writeBlocked && this.snapshot.lease.projectId !== projectId) throw new SceneApiError("PROJECT_SWITCH_REQUIRES_RELEASE", 409, null);
     this.operationPending = true;
+    const acquireEpoch=this.epoch,acquireScopeEpoch=this.dispatchScopeEpoch,acquireActor=this.snapshot.user?.id,acquireSession=this.snapshot.sessionId;
     let acquired: LeaseResponse | null = null;
     try {
       const project = this.snapshot.project?.id === projectId ? this.snapshot.project : await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`, "GET", undefined, this.captureRequestScope(), true, geometry);
@@ -944,9 +1213,11 @@ export class BackendSession {
     } catch (error) {
       // A supported JSON schema can still be unsupported by this editor. Release the
       // just-acquired lease without ever making its scene writable or replacing the draft.
-      if (acquired?.sessionId === this.snapshot.sessionId) {
+      if (acquired?.sessionId === acquireSession) {
         try {
-          await this.client.request(`/projects/${encodeURIComponent(projectId)}/lease/release`, "POST", { sessionId: acquired.sessionId, generation: acquired.generation });
+          const held=acquired;
+          const checkRelease=()=>{const current=this.snapshot.lease;if(!acquireActor||this.epoch!==acquireEpoch||this.dispatchScopeEpoch!==acquireScopeEpoch||this.snapshot.user?.id!==acquireActor||this.snapshot.sessionId!==acquireSession||held.sessionId!==acquireSession||(current&&(current.projectId!==projectId||current.sessionId!==held.sessionId||current.generation!==held.generation)))throw new SceneApiError('SESSION_CHANGED',409,null);};
+          await this.client.request(`/projects/${encodeURIComponent(projectId)}/lease/release`, "POST", { sessionId: held.sessionId, generation: held.generation },false,undefined,checkRelease);
         } catch { /* A failed release remains blocked locally and expires server-side. */ }
       }
       if (!geometry || geometry.current()) this.block(error);
@@ -1093,6 +1364,23 @@ export class BackendSession {
     if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
   }
+  async getAgentRunEvents(runId:string,after:number):Promise<AgentRunEventPage> {
+    const projectId=this.snapshot.project?.id,actor=this.snapshot.user?.id;
+    if(!projectId||!actor)throw new SceneApiError('PROJECT_REQUIRED',409,null);
+    if(!Number.isSafeInteger(after)||after<0||after>128)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const epoch=this.epoch,lease=this.snapshot.lease;
+    const matches=()=>this.epoch===epoch&&this.snapshot.project?.id===projectId&&this.snapshot.user?.id===actor&&
+      this.snapshot.lease?.projectId===lease?.projectId&&this.snapshot.lease?.sessionId===lease?.sessionId&&this.snapshot.lease?.generation===lease?.generation;
+    let invalidated=false;const stop=this.subscribe(()=>{if(!matches())invalidated=true;});
+    try{
+      // Optional observation endpoint: an old server's 404 must not mark the
+      // project as failed or affect the active run.
+      this.requireConfig();
+      const value=await this.client.request(`/projects/${uuid.parse(projectId)}/agent-runs/${uuid.parse(runId)}/events?after=${after}`,'GET',undefined,false,undefined,()=>{if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);});
+      if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);
+      return parseAgentRunEvents(value,after);
+    }finally{stop();}
+  }
   async getAgentRunByRequest(requestId: string): Promise<AgentRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
@@ -1121,7 +1409,7 @@ export class BackendSession {
     return run;
   }
   /** Task runs use the typed transport and existing session boundary, without synchronizing or uploading a scene. */
-  private async activityRunRequest(path: string, method: 'GET' | 'POST', transport: () => Promise<ActivityTaskRun>): Promise<ActivityTaskRun> {
+  private async activityRunRequest(path: string, method: 'GET' | 'POST', transport: (beforeDispatch:()=>void) => Promise<ActivityTaskRun>): Promise<ActivityTaskRun> {
     const actor = this.snapshot.user?.id, projectId = this.snapshot.project?.id;
     if (!actor || !projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
     const binding = this.snapshot.geometryBinding;
@@ -1133,7 +1421,7 @@ export class BackendSession {
     let invalidated = false;
     const stop = this.subscribe(() => { if (!identity()) invalidated = true; });
     try {
-      const run = await this.request(path, method, undefined, this.captureRequestScope(), 'business', undefined, transport);
+      const run = await this.request(path, method, undefined, this.captureRequestScope(), 'business', undefined,transport,()=>!invalidated&&identity());
       if (invalidated || !identity()) throw new SceneApiError('SESSION_CHANGED', 409, null);
       return run;
     } finally { stop(); }
@@ -1149,27 +1437,45 @@ export class BackendSession {
     }
     const body = activityTaskRunRequestSchema.parse({ ...input, kind: 'activity_tasks', sessionId: lease.sessionId,
       generation: lease.generation, expectedRevision: this.snapshot.revision });
-    return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', () => this.client.startActivityTaskRun(projectId, body));
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', check => this.client.startActivityTaskRun(projectId, body,check));
   }
   /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
-  async briefExtract(message: string): Promise<BriefExtractResponse> {
+  async briefExtract(message: string, signal?: AbortSignal): Promise<BriefExtractResponse> {
     const input = briefExtractRequestSchema.parse({ message });
-    return briefExtractResponseSchema.parse(await this.client.request('/brief/extract', 'POST', input));
+    const dispatch=this.scopedDispatchGuard(false);
+    return briefExtractResponseSchema.parse(await this.client.request('/brief/extract', 'POST', input, false, signal,dispatch));
+  }
+  /** One opt-in call returns a reply and proposed facts; it never executes actions. */
+  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal):Promise<BriefConversationResponse> {
+    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history});
+    const dispatch=this.scopedDispatchGuard(false);
+    const result=briefConversationResponseSchema.parse(await this.client.request('/brief/extract','POST',input,false,signal,dispatch));
+    if(result.enabled){
+      if(!result.extraction||!result.reply||result.reason)throw new SceneApiError('INVALID_RESPONSE',502,null);
+      parseBriefConversation({extraction:result.extraction,reply:result.reply,unhandled:result.unhandled,factEvidence:result.factEvidence,...(result.materialQueries?{materialQueries:result.materialQueries}:{})},input.message);
+    } else if(result.extraction!==null||result.reply!==null||result.unhandled.length||result.factEvidence.length||result.materialQueries?.length)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    return result;
+  }
+  /** Explicitly enabled read-only conversation; does not execute scene actions. */
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history });
+    const dispatch=this.scopedDispatchGuard(false);
+    return assistantChatResponseSchema.parse(await this.client.request('/assistant/chat', 'POST', input, false, signal,dispatch));
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
-    return this.activityRunRequest(`/projects/${projectId}/agent-runs/${uuid.parse(id)}`, 'GET', () => this.client.getActivityTaskRun(projectId, id));
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs/${uuid.parse(id)}`, 'GET', check => this.client.getActivityTaskRun(projectId, id,check));
   }
   async getActivityTaskRunByRequest(requestId: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
-    return this.activityRunRequest(`/projects/${projectId}/agent-runs/by-request/${uuid.parse(requestId)}`, 'GET', () => this.client.getActivityTaskRunByRequest(projectId, requestId));
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs/by-request/${uuid.parse(requestId)}`, 'GET', check => this.client.getActivityTaskRunByRequest(projectId, requestId,check));
   }
   async cancelActivityTaskRun(id: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
-    return this.activityRunRequest(`/projects/${projectId}/agent-runs/${uuid.parse(id)}/cancel`, 'POST', () => this.client.cancelActivityTaskRun(projectId, id));
+    return this.activityRunRequest(`/projects/${projectId}/agent-runs/${uuid.parse(id)}/cancel`, 'POST', check => this.client.cancelActivityTaskRun(projectId, id,check));
   }
   /** Deterministic asset replacement prepares a preview; only applySceneProposal saves it. */
   async prepareMaterialVariantProposal(input: { requestId: string; scene: Scene; objectIds: string[]; sourceAssetId: string; variantAssetId: string }): Promise<SceneProposal> {
@@ -1224,13 +1530,15 @@ export class BackendSession {
   }
   /** Source bytes remain private; no base64 payload or credentials are persisted with a scene. */
   async uploadSource(file: Blob, name: string, kind: SourceImage['kind']): Promise<SourceImage> {
+    this.assertCanvasProjectMatch();
     this.requireConfig();
     const lease = this.writableLease();
-    const scope = this.captureRequestScope();
+    const scope = this.captureRequestScope(),dispatch=this.scopedDispatchGuard(true);
     const epoch = this.epoch;
     const token = await this.accessToken();
     if (!token) throw new SceneApiError("UNAUTHENTICATED", 401, null);
     const form = new FormData(); form.append("file", file, name); form.append("projectId", lease.projectId); form.append("kind", kind);
+    dispatch();this.writableLease();
     const response = await fetch(`${this.config.apiUrl}/assets/sources`, { method: "POST", headers: {Authorization: `Bearer ${token}`}, body: form, cache: "no-store" });
     const result = await response.json();
     if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError("SESSION_CHANGED", 409, null);
@@ -1272,12 +1580,14 @@ export class BackendSession {
     return generationCapabilitiesSchema.parse(await this.businessRequest('/generation/capabilities'));
   }
   async uploadGenerationReference(file: File): Promise<{ id: string }> {
+    this.assertCanvasProjectMatch();
     if (!['image/png','image/jpeg'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) throw new Error('请选择 5 MB 以内的 PNG 或 JPEG 参考图。');
     this.requireConfig();
-    const scope = this.captureRequestScope(), epoch = this.epoch, token = await this.accessToken();
+    const scope = this.captureRequestScope(), epoch = this.epoch,dispatch=this.scopedDispatchGuard(true), token = await this.accessToken();
     const credentials = this.tokens;
     if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
     try {
+      dispatch();
       const response = await fetch(`${this.config.apiUrl}/assets/floorplan`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
       if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
       if (response.status === 401) throw new SceneApiError('UNAUTHENTICATED', 401, null);
@@ -1301,17 +1611,19 @@ export class BackendSession {
     meta: { name: string; source: 'aholo' | 'upload'; sourceId?: string },
     onProgress?: (loaded: number, total: number) => void,
   ): Promise<{ id: string; byteSize: number; sha256: string; reused?: boolean; metadata?: Record<string, unknown> }> {
+    this.assertCanvasProjectMatch();
     if (!file.size) throw new SceneApiError('EMPTY_ASSET', 422, null);
     if (file.size > 10 * 1024 * 1024) throw new SceneApiError('ASSET_TOO_LARGE', 413, { limit: 10 * 1024 * 1024 });
     if (!meta.name.trim()) throw new SceneApiError('ASSET_NAME_REQUIRED', 422, null);
     if (meta.source === 'aholo' && !meta.sourceId) throw new SceneApiError('SOURCE_ID_REQUIRED', 422, null);
     this.requireConfig();
-    const scope = this.captureRequestScope(), epoch = this.epoch, token = await this.accessToken();
+    const scope = this.captureRequestScope(), epoch = this.epoch,dispatch=this.scopedDispatchGuard(true), token = await this.accessToken();
     const credentials = this.tokens;
     if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
     const query = new URLSearchParams({ name: meta.name.trim().slice(0, 120), source: meta.source, ...(meta.sourceId ? { sourceId: meta.sourceId } : {}) });
     try {
-      const result = await this.sendAssetBlob(`${this.config.apiUrl}/assets/glb?${query.toString()}`, token, file, onProgress);
+      dispatch();
+      const result = await this.sendAssetBlob(`${this.config.apiUrl}/assets/glb?${query.toString()}`, token, file, onProgress,dispatch);
       if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
       const parsed = z.object({
         id: uuid,
@@ -1338,8 +1650,9 @@ export class BackendSession {
     }
   }
   /** 浏览器有 XHR 时用它拿上传进度；没有（单测 / SSR）退回 fetch。两条路径的错误形状保持一致。 */
-  private sendAssetBlob(url: string, token: string, file: Blob, onProgress?: (loaded: number, total: number) => void): Promise<unknown> {
+  private sendAssetBlob(url: string, token: string, file: Blob, onProgress?: (loaded: number, total: number) => void,beforeDispatch?:()=>void): Promise<unknown> {
     if (typeof XMLHttpRequest === 'undefined') {
+      beforeDispatch?.();
       return fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'model/gltf-binary' }, body: file, cache: 'no-store' })
         .then(async response => {
           const result = await response.json().catch(() => null);
@@ -1366,7 +1679,7 @@ export class BackendSession {
       xhr.onerror = () => reject(new SceneApiError('NETWORK_ERROR', 0, null));
       xhr.ontimeout = () => reject(new SceneApiError('ASSET_UPLOAD_TIMEOUT', 408, null));
       xhr.onabort = () => reject(new SceneApiError('ASSET_UPLOAD_ABORTED', 499, null));
-      xhr.send(file);
+      try{beforeDispatch?.();xhr.send(file);}catch(error){reject(error);}
     });
   }
   async createGenerationJob(prompt: string, requestId: string, options?: Partial<Pick<GenerationRequest, 'kind' | 'referenceImageAssetId' | 'sourceAssetId' | 'provider'>>): Promise<GenerationJob> {

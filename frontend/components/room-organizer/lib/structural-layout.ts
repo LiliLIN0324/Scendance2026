@@ -19,7 +19,7 @@ export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2
     ...stored?.structure.walls.find(original => original.id === w.id),
     id: w.id, start: world({ x: w.x1, z: w.z1 }, stored?.structure.walls.find(o=>o.id===w.id)?.start), end: world({ x: w.x2, z: w.z2 }, stored?.structure.walls.find(o=>o.id===w.id)?.end),
     height: w.height ?? floor?.height ?? 3, thickness: w.thickness ?? 0.16,
-    kind: w.kind ?? 'interior', status: w.status ?? 'confirmed',
+    kind: w.kind ?? 'interior', status: w.status ?? 'inferred',
   }));
   const openings: SceneV2['structure']['openings'] = [];
   for (const item of floor?.items ?? []) {
@@ -40,13 +40,13 @@ export function layoutGeometryScene(layout: RoomLayout, floorIndex = 0): SceneV2
     if (best) openings.push({ ...old, id: item.structuralOpeningId ?? item.id,
       wallId: best.wall.id, kind: item.type as 'door' | 'window', offset: stableMeasurement(Math.max(0, best.offset - item.width / 2), old?.offset),
       width: item.width, height: item.height, sillHeight: item.sillHeight ?? (item.type === 'window' ? 0.8 : 0),
-      status: old?.status ?? 'confirmed' });
+      status: old?.status ?? (stored ? 'inferred' : 'confirmed') });
   }
   const columns = (floor?.items ?? []).filter(i => i.structuralColumnId && i.position).map(i => ({
     ...stored?.structure.columns.find(c => c.id === i.structuralColumnId),
     id: i.structuralColumnId!, position: world(i.position!, stored?.structure.columns.find(c=>c.id===i.structuralColumnId)?.position),
     size: { width: i.width, depth: i.depth, height: i.height }, rotation: stableMeasurement(-(i.rotation ?? 0) * 180 / Math.PI, stored?.structure.columns.find(c=>c.id===i.structuralColumnId)?.rotation),
-    status: stored?.structure.columns.find(c => c.id === i.structuralColumnId)?.status ?? 'confirmed' as const,
+    status: stored?.structure.columns.find(c => c.id === i.structuralColumnId)?.status ?? (stored ? 'inferred' : 'confirmed') as 'inferred' | 'confirmed',
   }));
   const objects = (floor?.items ?? []).filter(i => i.position && !i.structuralOpeningId && !i.structuralColumnId && !i.venueEntranceId && !isWallMounted(i.type) && i.category !== 'outdoor').map(i => ({
     id: i.id, materialId: i.materialId ?? 'decoration' as const,
@@ -99,6 +99,16 @@ export function venueArea(layout: RoomLayout): number {
   if (!points) return layout.width * layout.height;
   return Math.abs(points.reduce((sum,p,i)=>{ const q=points[(i+1)%points.length]!;return sum+p.x*q.z-q.x*p.z; },0))/2;
 }
+/** Existing confirmed or source-linked walls require the dedicated review workflow. */
+export function isEvidenceProtectedWall(layout: RoomLayout, wallId: string): boolean {
+  const source=layout.backendSceneV2;
+  if(!source)return false;
+  const wall=source.structure.walls.find(value=>value.id===wallId);
+  return layout.floors.some(floor=>floor.interiorWalls?.some(value=>value.id===wallId&&value.status==='confirmed')) ||
+    wall?.status==='confirmed' || (wall?.evidence?.length??0)>0 ||
+    source.dimensions.some(value=>value.status==='confirmed'&&(value.targetId===wallId||value.targetEndId===wallId));
+}
+
 /** 门、柱、出入口的现场标记：它们是场地真相的一部分，不算物料。 */
 export function isStructuralMarker(item: Pick<FurnitureItem, 'structuralOpeningId' | 'structuralColumnId' | 'venueEntranceId'>): boolean {
   return !!(item.structuralOpeningId || item.structuralColumnId || item.venueEntranceId);

@@ -22,6 +22,8 @@ export interface GenerationReportInput {
   refusedCount: number;
   /** 按原样保留没动的件数。 */
   skippedCount: number;
+  /** 从布局中移除的物料数量。 */
+  removedCount?: number;
   /** settle 自动挪开的件数。 */
   fixedCount: number;
   /** settle 挪不动、已标红的件数。 */
@@ -41,8 +43,9 @@ function round1(value: number): string {
 /** 「为什么这么摆」：只陈述这一版实际发生了什么。 */
 export function buildReasoning(input: GenerationReportInput): string {
   const parts: string[] = [];
-  parts.push(`按 ${round1(input.areaM2)} m² 的场地摆了 ${input.placedCount} 件。`);
-  if (input.fixedCount > 0) parts.push(`压住通道和边界的 ${input.fixedCount} 件已自动挪开。`);
+  parts.push(`按画布面积 ${round1(input.areaM2)} m²，本次新增 ${input.placedCount} 件物料。`);
+  if ((input.removedCount ?? 0)>0) parts.push(`移除了 ${input.removedCount} 件物料。`);
+  if (input.fixedCount > 0) parts.push(`有 ${input.fixedCount} 件已调整位置。`);
   if (input.stuckCount > 0) parts.push(`还有 ${input.stuckCount} 件挪不动，已在画布标红。`);
   if (input.refusedCount > 0) parts.push(`${input.refusedCount} 件没过判据被拒，没有硬塞进场地。`);
   if (input.skippedCount > 0) parts.push(`${input.skippedCount} 件按原样保留，这次没动。`);
@@ -51,10 +54,9 @@ export function buildReasoning(input: GenerationReportInput): string {
 
 /** 「后续建议」：下一句该做什么，按最要紧的问题排。 */
 export function buildSuggestion(input: GenerationReportInput): string {
-  if (input.stuckCount > 0) return `先处理 ${input.stuckCount} 处标红（压通道或压墙），再交场。`;
+  if (input.stuckCount > 0) return `先检查 ${input.stuckCount} 处标红，再核对现场条件。`;
   if (input.refusedCount > 0) return `有 ${input.refusedCount} 件因判据被拒，换个位置或换个素材再试一次。`;
-  if (input.score.total < 95) return `体检 ${input.score.total} 分，交付前照着主通道走一遍，确认净宽够 1.2 m。`;
-  return `体检 ${input.score.total} 分，通道与间距都过；交付前按主通道净宽 ≥1.2 m 复核一次。`;
+  return '请核对实际出入口、通行净宽及现场条件，消防与无障碍要求需另行核验。';
 }
 
 /**

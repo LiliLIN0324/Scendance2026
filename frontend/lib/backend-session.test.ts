@@ -5,7 +5,7 @@ import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canonical, sha256 } from "../../supabase/functions/_shared/domain";
 import { backendSceneToLayout } from "../components/room-organizer/lib/backend-adapter";
-import { BackendSession, getBackendConfig, useBackendSession, type Scene } from "./backend-session";
+import { BackendSession, getBackendConfig, useBackendSession, type BackendSnapshot, type Scene } from "./backend-session";
 import { geometryWorkbenchBindingKey, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 import type { ActivityTaskContext, ActivityTaskRun } from "../../supabase/functions/_shared/activity-task-contract";
 
@@ -59,6 +59,15 @@ async function editing() {
 describe('typed activity task session transport', () => {
   const requestId = '70000000-0000-4000-8000-000000000001', runId = '70000000-0000-4000-8000-000000000002';
   const context: ActivityTaskContext = { projectId, dataKind: 'rehearsal', briefText: 'Explicit task transport rehearsal', tasks: [], objects: [] };
+  it('does not dispatch an activity task if revision changes while waiting for the token',async()=>{
+    const controller=await editing(),before=mockFetch.mock.calls.length,oldError=controller.getSnapshot().error;
+    let finish!:(value:string|null)=>void,markStarted!:()=>void;const started=new Promise<void>(resolve=>{markStarted=resolve;});
+    vi.spyOn(controller as unknown as {accessToken():Promise<string|null>},'accessToken').mockImplementationOnce(()=>{markStarted();return new Promise(resolve=>{finish=resolve;});});
+    const pending=controller.startActivityTaskRun({requestId,instruction:'Prepare tasks',activityContext:context}).catch(error=>error);await started;
+    (controller as unknown as {update(patch:Partial<BackendSnapshot>):void}).update({revision:5});finish('fixture-token');
+    expect(await pending).toMatchObject({code:'SESSION_CHANGED'});expect(mockFetch).toHaveBeenCalledTimes(before);
+    expect(controller.getSnapshot()).toMatchObject({revision:5,writeBlocked:false,error:oldError});
+  });
   async function run(state: ActivityTaskRun['state'] = 'complete'): Promise<ActivityTaskRun> {
     return { kind: 'activity_tasks', id: runId, projectId, requestId, activityId: context.projectId,
       contextHash: await sha256(canonical(context)), state, progress: 'rehearsal', callCount: 1,
@@ -188,14 +197,19 @@ describe("local activity geometry bindings", () => {
 
   it("deduplicates first-time preparation even after guest authentication becomes visible", async () => {
     const controller = session();queue({ ...auth, user: { id: "guest-a", is_anonymous: true } });
+    expect(controller.canCreateUnboundLocalDraft()).toBe(true);
+    const authority=controller.localDraftAuthorityVersion();
     let finish!: (value: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     queue(project);queue(grant(controller));
     const first = controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId);
+    expect(controller.canCreateUnboundLocalDraft()).toBe(false);
+    expect(controller.localDraftAuthorityVersion()).not.toBe(authority);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
     expect(controller.getSnapshot().user?.id).toBe("guest-a");
     const second = controller.ensureGeometryWorkbenchReady(scene, "本地活动", localId);
     finish(response([studio]));expect(await first).toEqual(await second);
+    expect(controller.canCreateUnboundLocalDraft()).toBe(false);
     expect(creates()).toHaveLength(1);expect(controller.isGeometryBound(localId)).toBe(true);
   });
 
@@ -642,6 +656,51 @@ describe("backend session contract", () => {
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
+  it('does not select a projected read-only project as a complete editable draft',async()=>{
+    const controller=session();queue(auth);await controller.signIn('test@example.com','pass');queue(project);await controller.getProject(projectId);
+    const local={...scene,lighting:'warm' as const};controller.setDraft(local);const otherId='10000000-0000-4000-8000-000000000002';
+    queue({...project,id:otherId,projection:{status:'read_only',changed:true,requiresOriginalSceneForWrite:true}});
+    await expect(controller.getProject(otherId)).rejects.toMatchObject({code:'ORIGINAL_SCENE_REVIEW_REQUIRED'});
+    expect(controller.getSnapshot()).toMatchObject({project,draft:local,writeBlocked:true,error:{code:'ORIGINAL_SCENE_REVIEW_REQUIRED'}});
+  });
+  it('reads an explicitly authorized original only when its project and exact hash match',async()=>{
+    const controller=session();queue(auth);await controller.signIn('test@example.com','pass');
+    const hash=await sha256(canonical(scene));queue({projectId,scene,revision:4,originalSceneHash:hash});
+    expect(await controller.readOriginalScene(projectId)).toEqual({scene,revision:4,originalSceneHash:hash});
+    queue({projectId,scene,revision:4,originalSceneHash:'0'.repeat(64)});
+    await expect(controller.readOriginalScene(projectId)).rejects.toMatchObject({code:'INVALID_RESPONSE'});
+    queue({projectId:'10000000-0000-4000-8000-000000000099',scene,revision:4,originalSceneHash:hash});
+    await expect(controller.readOriginalScene(projectId)).rejects.toMatchObject({code:'INVALID_RESPONSE'});
+  });
+  it('re-reads both the authorized review and the raw scene for completion evidence',async()=>{
+    const controller=session();queue(auth);await controller.signIn('test@example.com','pass');
+    const hash=await sha256(canonical(scene)),reviewId='30000000-0000-4000-8000-000000000001';
+    const receipt={version:1 as const,projectId,reviewId,baseHash:'a'.repeat(64),candidateHash:hash,baseRevision:3};
+    queue({id:reviewId,projectId,baseRevision:3,baseHash:receipt.baseHash,candidateHash:hash,expiresAt:'2099-01-01T00:00:00Z',appliedAt:'2026-11-07T00:00:00Z',appliedRevision:4,changes:[]});
+    queue({projectId,scene,revision:4,originalSceneHash:hash});
+    expect(await controller.readOriginalReviewEvidence(receipt)).toEqual({projectId,reviewId,baseHash:receipt.baseHash,candidateHash:hash,baseRevision:3,appliedRevision:4,currentRevision:4,currentSceneHash:hash});
+    expect(controller.getSnapshot().project).toBeNull();
+  });
+  it('refuses original review reconciliation without a real local capability',async()=>{
+    const controller=session();queue({...auth,user:{...auth.user,id:'11111111-1111-4111-8111-111111111111'}});await controller.signIn('test@example.com','pass');
+    vi.stubGlobal('navigator',{locks:{request:vi.fn()}});
+    expect(await controller.reconcileOriginalReview(projectId,{} as never)).toBe('blocked');
+    expect(mockFetch).toHaveBeenCalledTimes(1);expect(controller.getSnapshot().project).toBeNull();
+  });
+  it('invalidates an original-read authority after the same user signs out and back in',async()=>{
+    const controller=session();queue(auth);await controller.signIn('test@example.com','pass');
+    const old=controller.captureOriginalSceneReadGuard();expect(old()).toBe(true);
+    queue({});await controller.signOut();queue(auth);await controller.signIn('test@example.com','pass');
+    expect(controller.getSnapshot().user?.id).toBe('user-a');expect(old()).toBe(false);
+  });
+  it('keeps a local draft when the server refuses an unprojectable scene before saving',async()=>{
+    const controller=await editing();
+    const local:Scene={...scene,objects:[{id:'50000000-0000-4000-8000-000000000001',materialId:'chair',position:{x:2,z:3},rotation:0,size:{width:.5,depth:.5,height:.8},color:'#ffffff',locked:false,notes:'本机原始备注'}]};
+    controller.setDraft(local);queue({error:{code:'ORIGINAL_SCENE_REVIEW_REQUIRED'}},409);
+    await expect(controller.saveScene(local)).rejects.toMatchObject({code:'ORIGINAL_SCENE_REVIEW_REQUIRED'});
+    expect(controller.getSnapshot()).toMatchObject({draft:local,writeBlocked:true,error:{code:'ORIGINAL_SCENE_REVIEW_REQUIRED'}});
+  });
+
   it("releases a just-acquired unsupported cloud scene without replacing the original draft", async () => {
     const controller = session();
     queue(auth);
@@ -797,6 +856,31 @@ describe("workspace business requests", () => {
 describe('Agent run client contract',()=>{
   const requestId='70000000-0000-4000-8000-000000000001',runId='70000000-0000-4000-8000-000000000002';
   const run={id:runId,projectId,requestId,state:'running',progress:'查找物料',callCount:1,candidates:[],evaluation:null,executionMode:'preview',jevEnabled:false,expiresAt:'2026-10-02T08:10:00Z'};
+  it('reads safe ordered events without changing the project',async()=>{
+    const controller=await editing(),before=controller.getSnapshot();
+    queue({events:[{seq:1,tool:'get_scene',stage:'started',outcome:null,errorCode:null}],nextCursor:1,mayBeIncomplete:true});
+    expect((await controller.getAgentRunEvents(runId,0)).events[0]?.tool).toBe('get_scene');
+    expect(request(3)).toMatchObject({options:{method:'GET'},url:`${base}/functions/v1/scene-api/projects/${projectId}/agent-runs/${runId}/events?after=0`});
+    expect(controller.getSnapshot()).toBe(before);
+  });
+  it('keeps the editor usable when an old server has no event endpoint',async()=>{
+    const controller=await editing(),before=controller.getSnapshot();
+    queue({error:{code:'NOT_FOUND'}},404);
+    await expect(controller.getAgentRunEvents(runId,0)).rejects.toBeTruthy();
+    expect(controller.getSnapshot()).toBe(before);expect(controller.getSnapshot().writeBlocked).toBe(false);
+  });
+  it('rejects an event page after project A to B to A while the read is pending',async()=>{
+    const controller=await editing();let release!:(value:Response)=>void;let started!:()=>void;
+    const sent=new Promise<void>(resolve=>{started=resolve;});
+    mockFetch.mockImplementationOnce(()=>new Promise(resolve=>{release=resolve;started();}));
+    const pending=controller.getAgentRunEvents(runId,0).catch(error=>error);await sent;
+    queue({});await controller.releaseLease();
+    queue({...project,id:'10000000-0000-4000-8000-000000000099'});await controller.getProject('10000000-0000-4000-8000-000000000099');
+    queue(project);await controller.getProject(projectId);
+    queue({sessionId:controller.getSnapshot().sessionId,generation:3,expiresAt:new Date(Date.now()+90_000).toISOString(),revision:4,scene});await controller.acquireLease(projectId);
+    release(response({events:[{seq:1,tool:'get_scene',stage:'started',outcome:null,errorCode:null}],nextCursor:1,mayBeIncomplete:true}));
+    expect(await pending).toMatchObject({code:'SESSION_CHANGED'});expect(controller.getSnapshot().writeBlocked).toBe(false);
+  });
   it('sends current unsaved scene with real lease context and recovers solely through GET',async()=>{
     const controller=await editing();
     queue(run,202);
@@ -819,5 +903,85 @@ describe('Agent run client contract',()=>{
     queue({...run,projectId:studioId});
     await expect(controller.getAgentRun(runId)).rejects.toMatchObject({code:'INVALID_RESPONSE'});
     expect(mockFetch).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('canvas and cloud project mismatch',()=>{
+  it('blocks scene, agent, general writes and direct upload while leaving read-only access available',async()=>{
+    const controller=await editing();const before=mockFetch.mock.calls.length;
+    controller.suspendForCanvasProjectMismatch(projectId);
+    expect(controller.getSnapshot()).toMatchObject({writeBlocked:true,status:'blocked',error:{code:'CANVAS_PROJECT_MISMATCH'}});
+    await expect(controller.businessRequest('/projects','POST',{})).rejects.toMatchObject({code:'CANVAS_PROJECT_MISMATCH'});
+    await expect(controller.saveScene(scene)).rejects.toBeTruthy();
+    await expect(controller.startAgentRun({requestId:'70000000-0000-4000-8000-000000000001',scene,selectedIds:[],instruction:'预览',context:{brief:'',acceptedDecisions:[],recentMessages:[]},jevEnabled:false,executionMode:'preview'})).rejects.toBeTruthy();
+    await expect(controller.uploadLocalAsset(new Blob(['test']),{name:'fixture',source:'upload'})).rejects.toMatchObject({code:'CANVAS_PROJECT_MISMATCH'});
+    await expect(controller.beginOriginalReview(projectId,{revision:2,originalSceneHash:'0'.repeat(64)})).rejects.toMatchObject({code:'CANVAS_PROJECT_MISMATCH'});
+    expect(mockFetch).toHaveBeenCalledTimes(before);
+    queue({});await controller.releaseLeaseAfterCanvasMismatch(projectId);
+    expect(controller.getSnapshot()).toMatchObject({lease:null,writeBlocked:true});
+    queue(project);await expect(controller.peekProject(projectId)).resolves.toMatchObject({id:projectId});
+    expect(()=>controller.acknowledgeCanvasProjectMatch('10000000-0000-4000-8000-000000000099')).toThrow();
+    controller.acknowledgeCanvasProjectMatch(projectId);expect(controller.getSnapshot().writeBlocked).toBe(true);
+  });
+  it('does not allow an arbitrary release-looking URL to bypass the mismatch guard',async()=>{
+    const controller=await editing(),before=mockFetch.mock.calls.length;controller.suspendForCanvasProjectMismatch(projectId);
+    await expect(controller.businessRequest('/unrelated/lease/release','POST',{})).rejects.toMatchObject({code:'CANVAS_PROJECT_MISMATCH'});
+    expect(mockFetch).toHaveBeenCalledTimes(before);
+  });
+  it.each(['generic','source','generation-reference','asset','original-review','original-review-prepare','activity-run'] as const)(
+    'does not dispatch %s when mismatch happens while acquiring the token',async kind=>{
+      const controller=await editing(),before=mockFetch.mock.calls.length;
+      let finish!:(value:string|null)=>void,markStarted!:()=>void;
+      const started=new Promise<void>(resolve=>{markStarted=resolve;});
+      vi.spyOn(controller as unknown as {accessToken():Promise<string|null>},'accessToken').mockImplementationOnce(()=>{markStarted();return new Promise(resolve=>{finish=resolve;});});
+      const file=new File(['fictional'], 'fixture.png',{type:'image/png'});
+      const action=kind==='generic'?()=>controller.businessRequest('/projects','POST',{}):
+        kind==='source'?()=>controller.uploadSource(file,'fixture.png','floorplan'):
+        kind==='generation-reference'?()=>controller.uploadGenerationReference(file):
+        kind==='asset'?()=>controller.uploadLocalAsset(new Blob(['fixture']),{name:'fixture',source:'upload'}):
+        kind==='original-review'?()=>controller.beginOriginalReview(projectId,{revision:4,originalSceneHash:'0'.repeat(64)}):
+        kind==='original-review-prepare'?()=>controller.prepareOriginalReview(projectId,{sessionId:controller.getSnapshot().sessionId,generation:3,revision:4,originalSceneHash:'0'.repeat(64)},scene,'70000000-0000-4000-8000-000000000002'):
+        ()=>controller.startActivityTaskRun({requestId:'70000000-0000-4000-8000-000000000001',instruction:'准备活动',activityContext:{projectId,dataKind:'rehearsal',briefText:'虚构活动',tasks:[],objects:[]}});
+      const pending=action().catch(error=>error);await started;
+      controller.suspendForCanvasProjectMismatch(projectId);finish('fixture-token');
+      expect(await pending).toMatchObject({code:'SESSION_CHANGED'});expect(mockFetch).toHaveBeenCalledTimes(before);
+    },
+  );
+  it('does not dispatch after project scope changes away and back during token acquisition',async()=>{
+    const controller=await editing(),before=mockFetch.mock.calls.length,original=controller.getSnapshot().project;
+    let finish!:(value:string|null)=>void,markStarted!:()=>void;const started=new Promise<void>(resolve=>{markStarted=resolve;});
+    vi.spyOn(controller as unknown as {accessToken():Promise<string|null>},'accessToken').mockImplementationOnce(()=>{markStarted();return new Promise(resolve=>{finish=resolve;});});
+    const pending=controller.businessRequest('/projects','POST',{}).catch(error=>error);await started;
+    const raw=controller as unknown as {update(patch:Partial<BackendSnapshot>):void};
+    raw.update({project:{...project,id:'10000000-0000-4000-8000-000000000099'}});raw.update({project:original});
+    const currentError=controller.getSnapshot().error;
+    finish('fixture-token');expect(await pending).toMatchObject({code:'SESSION_CHANGED'});expect(mockFetch).toHaveBeenCalledTimes(before);
+    expect(controller.getSnapshot()).toMatchObject({writeBlocked:false,error:currentError});
+  });
+  it('never releases a newer lease when the release token is delayed',async()=>{
+    const controller=await editing(),before=mockFetch.mock.calls.length;controller.suspendForCanvasProjectMismatch(projectId);
+    const original=controller.getSnapshot().lease!;let finish!:(value:string|null)=>void,markStarted!:()=>void;
+    const started=new Promise<void>(resolve=>{markStarted=resolve;});
+    vi.spyOn(controller as unknown as {accessToken():Promise<string|null>},'accessToken').mockImplementationOnce(()=>{markStarted();return new Promise(resolve=>{finish=resolve;});});
+    const pending=controller.releaseLeaseAfterCanvasMismatch(projectId).catch(error=>error);await started;
+    const newer={...original,generation:original.generation+1};(controller as unknown as {update(patch:Partial<BackendSnapshot>):void}).update({lease:newer});
+    finish('fixture-token');expect(await pending).toMatchObject({code:'SESSION_CHANGED'});
+    expect(controller.getSnapshot().lease).toEqual(newer);expect(mockFetch).toHaveBeenCalledTimes(before);
+  });
+  it('keeps a mismatched lease and refuses project switch/sign-out until release is confirmed',async()=>{
+    const controller=await editing();controller.suspendForCanvasProjectMismatch(projectId);
+    const lease=controller.getSnapshot().lease;
+    await expect(controller.getProject('10000000-0000-4000-8000-000000000099')).rejects.toMatchObject({code:'PROJECT_SWITCH_REQUIRES_RELEASE'});
+    mockFetch.mockRejectedValueOnce(new TypeError('release unavailable'));
+    await expect(controller.signOut()).rejects.toBeTruthy();
+    expect(controller.getSnapshot()).toMatchObject({user:{id:'user-a'},project:{id:projectId},lease,writeBlocked:true});
+    queue({});await controller.releaseLeaseAfterCanvasMismatch(projectId);
+    expect(controller.getSnapshot()).toMatchObject({lease:null,writeBlocked:true});
+  });
+  it('clears only the captured mismatched lease when the server confirms it is no longer valid',async()=>{
+    const controller=await editing();controller.suspendForCanvasProjectMismatch(projectId);
+    queue({error:{code:'LEASE_LOST'}},409);
+    await controller.releaseLeaseAfterCanvasMismatch(projectId);
+    expect(controller.getSnapshot()).toMatchObject({lease:null,writeBlocked:true,project:{id:projectId}});
   });
 });

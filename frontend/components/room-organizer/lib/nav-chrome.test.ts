@@ -53,7 +53,7 @@ describe('nav chrome state', () => {
   it('does not store a separate navExpanded flag beside the two doors', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).not.toMatch(/navExpanded\s*=\s*useState|const \[navExpanded/);
-    expect(source).toContain('toggleNavColumns');
+    expect(source).toContain("onToggle={() => toggleAgent('door')}");
     expect(source).toContain('isNavExpanded');
   });
 });

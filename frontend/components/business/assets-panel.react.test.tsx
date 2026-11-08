@@ -43,13 +43,14 @@ function setup(bound = false) {
   const onApplyLayout = vi.fn();
   const props = { controller, layout: backendSceneToLayout(scene), onApplyLayout, bound, busy: false };
   const view = render(<AssetsPanel {...props}/>);
-  fireEvent.click(screen.getByRole('button', { name: '素材库' }));
   return { ...view, props, onApplyLayout };
 }
 describe('personal cloud assets', () => {
   it('only lists personal assets without another AI generation entry or requests', async () => {
     setup(); await screen.findByRole('button', { name: '预览 木椅' });
-    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.getByRole('tab', { name: /^库/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: /^我的生成/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^收藏/ })).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByText(/生成任务/)).toBeNull();
     expect(requests.mock.calls.every(([path]) => path === '/assets')).toBe(true);
@@ -63,7 +64,7 @@ describe('personal cloud assets', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(requests).toHaveBeenCalledOnce();
     requests.mockResolvedValueOnce([{ ...asset, name: '新木椅' }]);
-    fireEvent.click(screen.getByRole('button', { name: '刷新素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByRole('button', { name: '预览 新木椅' })).toBeTruthy();
     expect(requests).toHaveBeenCalledTimes(2);
@@ -96,7 +97,7 @@ describe('personal cloud assets', () => {
   it('keeps the previous list available when a manual refresh fails', async () => {
     setup(); await screen.findByRole('button', { name: '预览 木椅' });
     requests.mockRejectedValueOnce(new Error('连接中断'));
-    fireEvent.click(screen.getByRole('button', { name: '刷新素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     await screen.findByText('连接中断');
     expect(screen.getByRole('button', { name: '预览 木椅' })).toBeTruthy();
   });
@@ -119,6 +120,6 @@ describe('personal cloud assets', () => {
     setup(); fireEvent.click(await screen.findByRole('button', { name: '预览 木椅' }));
     await act(async () => { await controller.signOut(); finish(authorized); });
     expect(screen.queryByRole('region', { name: '三维素材预览' })).toBeNull();
-    expect(screen.getByText(/登录后查看素材/)).toBeTruthy();
+    expect(screen.getByText(/登录后查看物料/)).toBeTruthy();
   });
 });

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import * as THREE from 'three';
 import { describe, it, expect } from 'vitest';
 import { sceneSchema, type SceneV2 } from '../../../../supabase/functions/_shared/domain';
@@ -115,15 +116,16 @@ describe('measured Scene v2 editor', () => {
     const layout=backendSceneToLayout(input),state={layout,activeFloorIndex:0};
     expect(layoutReducer(state,{type:'updateItem',id:id(3),patch:{width:2}})).toBe(state);
     const changed=structuredClone(layout);changed.floors[0].items.find(i=>i.id===id(3))!.width=2;
-    expect(()=>layoutToBackendScene(changed)).toThrow('门宽');
+    expect(()=>layoutToBackendScene(changed)).toThrow('原结构确认和尺寸依据不能沿用');
   });
-  it('persists editable column dimensions and door width using owned wall offset', () => {
+  it('refuses direct marker edits that would retain outdated confirmed evidence', () => {
     const layout = backendSceneToLayout(measured());
-    layout.floors[0].items.find(i=>i.structuralColumnId)!.width = 0.8;
-    layout.floors[0].items.find(i=>i.structuralOpeningId===id(3))!.width = 1;
-    const output = layoutToBackendScene(layout) as SceneV2;
-    expect(output.structure.columns[0].size.width).toBe(0.8);
-    expect(output.structure.openings[0].offset).toBeCloseTo(3.1, 10);
+    const changedColumn=structuredClone(layout);
+    changedColumn.floors[0].items.find(i=>i.structuralColumnId)!.width = 0.8;
+    expect(()=>layoutToBackendScene(changedColumn)).toThrow('柱子已改变');
+    const changedDoor=structuredClone(layout);
+    changedDoor.floors[0].items.find(i=>i.structuralOpeningId===id(3))!.width = 1;
+    expect(()=>layoutToBackendScene(changedDoor)).toThrow('门窗已改变');
   });
   it('upgrades legacy entrances into actual wall openings and refuses dimensions that cannot contain them', () => {
     const base=backendSceneToLayout({schemaVersion:1,venue:{shape:'rectangle',width:10,depth:8,height:3,

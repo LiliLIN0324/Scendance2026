@@ -7,7 +7,7 @@ import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { buildStructureShell } from './structure-builder';
 import type { RoomLayout } from '../lib/types';
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('satellite floor texture', () => {
   it('sticks a decoded satellite image on the floor instead of painting olive', async () => {
@@ -60,12 +60,16 @@ describe('satellite floor texture', () => {
       onerror: null | (() => void) = null;
       set src(_value: string) { queueMicrotask(() => this.onerror?.()); }
     });
-    HTMLCanvasElement.prototype.getContext = (() => ({
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({
       fillStyle: '',
       font: '',
       fillRect() {},
       fillText() {},
-    })) as unknown as HTMLCanvasElement['getContext'];
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      stroke() {},
+    })) as unknown as HTMLCanvasElement['getContext']);
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, makeLayout({
       satelliteGroundRef: true,

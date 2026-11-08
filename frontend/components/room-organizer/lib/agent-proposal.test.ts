@@ -12,7 +12,7 @@ const build = (items: FurnitureItem[] = [], input: Partial<VenueInput> = {}, var
   const base = makeLayout({ width: 12, height: 9, floors: [makeFloor({ items })] });
   const venue = raiseVenue({ base, floorIndex: 0, widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated', ...input });
   const staged: RoomLayout = venue ? venue.layout : base;
-  const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant });
+  const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant, guests: 24 });
   return { base, venue, staged, proposal };
 };
 
@@ -116,13 +116,13 @@ describe('replaceVenueWithShell — 有模板改尺寸就卸模板立壳（T-VEN
 });
 
 describe('proposePlan — 布置候选只预览，确认前不写画布（T-02 对话四步②）', () => {
-  it('不动传进来的场景，另外长出 5 帧候选', () => {
+  it('不动传进来的场景，另外长出候选', () => {
     const { staged, proposal } = build();
     expect(itemsOf(staged)).toHaveLength(1); // 只有门洞标记
-    expect(proposal.layouts).toHaveLength(5);
+    expect(proposal.layouts).toHaveLength(4);
     const counts = proposal.layouts.map(layout => itemsOf(layout).length);
     expect(counts).toEqual([...counts].sort((a, b) => a - b));
-    expect(counts[4]!).toBeGreaterThan(counts[0]!);
+    expect(counts.at(-1)!).toBeGreaterThan(counts[0]!);
     expect(proposal.added).toBeGreaterThan(0);
     expect(proposal.blocked).toBeNull();
   });
@@ -186,7 +186,7 @@ describe('proposePlan — 布置候选只预览，确认前不写画布（T-02 �
     const base = makeLayout({ width: 2.6, height: 4, floors: [makeFloor()] });
     const venue = raiseVenue({ base, floorIndex: 0, widthM: 2.6, depthM: 4, indoorOutdoor: 'outdoor', scaleOrigin: 'stated' });
     const staged = venue ? venue.layout : base;
-    const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 2.6, depthM: 4, variant: 0 });
+    const proposal = proposePlan({ base: staged, floorIndex: 0, widthM: 2.6, depthM: 4, variant: 0, guests: 4 });
     expect(proposal.dropped).toBeGreaterThan(0);
     expect(proposal.diagnostics!.reduce((sum, item) => sum + item.count, 0)).toBe(proposal.dropped);
     expect(proposal.diagnostics!.every(item => item.severity === 'warning')).toBe(true);
@@ -261,12 +261,13 @@ describe('proposePlan — 座位优先（T-05：人还站着就补座，但只�
     expect(chairHits(plan)).toBeLessThanOrEqual(chairHits(plain));
   });
 
-  it('没有说人数时不补座，也不多长一帧', () => {
+  it('没有说人数时不生成或修改候选', () => {
     const staged = build().staged;
     const plan = proposePlan({ base: staged, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, seatPriority: true });
-    expect(plan.seatPriority).toBe(true);
+    expect(plan.blocked).toContain('预计人数');
     expect(plan.guests).toBeNull();
-    expect(plan.layouts).toHaveLength(5);
+    expect(plan.layouts).toEqual([staged]);
+    expect(plan.added).toBe(0);
   });
 });
 

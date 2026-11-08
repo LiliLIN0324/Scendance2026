@@ -3,8 +3,11 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
 import { planZones } from '../../../lib/plan-approve';
-import type { ScoredPlan, PlanVariantId } from '../../../lib/plan-scoring';
+import { isScoredPlanApplicable, type ScoredPlan, type PlanVariantId } from '../../../lib/plan-scoring';
 import type { ActivitySuggestion } from '../../../lib/suggestions';
+import { buildPlanChecklist } from '../../../lib/plan-checklist';
+import type { PlanSizeFacts } from '../../../lib/plan-size-facts';
+import type { FunctionalNeeds } from '../lib/functional-requirements';
 
 type SkippedZone = { zoneId: string; reason: string };
 
@@ -35,6 +38,11 @@ export interface PlanCardProps {
   onSelectVariant?(id: PlanVariantId): void;
   /** AI 建议列表；空数组时不渲染建议卡。 */
   suggestions?: ActivitySuggestion[] | undefined;
+  zoneWarnings?: readonly string[];
+  blockedReason?: string | undefined;
+  functionalNeeds?: FunctionalNeeds | undefined;
+  /** 当前场地、当前楼层的尺寸事实；无可信关联来源时不运行网格。 */
+  sizeFacts?: PlanSizeFacts | undefined;
 }
 
 const cardStyle: CSSProperties = {
@@ -250,14 +258,11 @@ const suggestionReasonStyle: CSSProperties = {
   fontSize: 11,
 };
 
-/** 把 aisleWidthM 格式化成一行人话。
- * - NaN / >=999（无穷或哨兵值）→ 「通道 ≥3.0m」，避免 UI 出现「通道 Infintym」；
- * - 否则显示实际米数。
- */
+/** 局部间距不等于通道宽度或通行结论。 */
 function formatAisle(plan: ScoredPlan): string {
   const w = plan.flow.aisleWidthM;
-  if (!Number.isFinite(w) || w >= 999) return '通道 ≥3.0m';
-  return `通道 ${w.toFixed(1)}m`;
+  if (w === null || !Number.isFinite(w)) return '通行待核验';
+  return `签到区一侧间距估算 ${w.toFixed(1)}m`;
 }
 
 export function PlanCard({
@@ -271,8 +276,19 @@ export function PlanCard({
   selectedId,
   onSelectVariant,
   suggestions,
+  zoneWarnings,
+  blockedReason,
+  functionalNeeds,
+  sizeFacts,
 }: PlanCardProps): JSX.Element | null {
   const [comment, setComment] = useState('');
+  const selectedPlan = plans?.find((plan) => plan.variantId === selectedId);
+  const trustedSize = sizeFacts && [sizeFacts.width, sizeFacts.depth].every(fact =>
+    fact.status === 'confirmed' && fact.valueMeters !== null && Number.isFinite(fact.valueMeters) && fact.valueMeters > 0
+    && fact.records.some(entry => entry.matchesCurrent && entry.record.status === 'confirmed' && entry.source !== null));
+  const checklistRoomSize = trustedSize ? { width: sizeFacts!.width.valueMeters!, height: sizeFacts!.depth.valueMeters! } : undefined;
+  const checklistEvidence = (value:string) => (draft?.annotations ?? []).reduce((text, annotation) =>
+    annotation.id ? text.replaceAll(annotation.id, annotation.label || '标注') : text, value);
 
   const stages = useMemo(
     () => (draft ? [...draft.stages].sort((a, b) => a.stageNo - b.stageNo) : []),
@@ -282,7 +298,7 @@ export function PlanCard({
   // 批准前先把「每个区会落什么」算出来摆给用户看，别让人盲批。
   const preview = useMemo(() => {
     if (!draft) return { byId: new Map<string, string>(), skipped: [] as SkippedZone[] };
-    const outcome = planZones(draft.annotations, 0.5);
+    const outcome = selectedPlan ?? (plans?.length ? { placements: [], skipped: [] } : planZones(draft.annotations, 0.5));
     const byId = new Map<string, string>();
     for (const zone of draft.annotations.filter((a) => a.kind === 'zone')) {
       const items = outcome.placements.filter((p) => p.zoneId === zone.id);
@@ -292,7 +308,7 @@ export function PlanCard({
       byId.set(zone.id, [...counts.entries()].map(([name, n]) => `${name}×${n}`).join('、'));
     }
     return { byId, skipped: outcome.skipped };
-  }, [draft]);
+  }, [draft, selectedPlan, plans]);
 
   if (!draft) return null;
 
@@ -309,6 +325,8 @@ export function PlanCard({
   return (
     <section style={cardStyle} aria-label="规划草案">
       <header style={titleStyle}>规划草案</header>
+      {blockedReason && <p role="alert" style={violationHardStyle}>{blockedReason}</p>}
+      {zoneWarnings?.map(warning => <p key={warning} style={rationaleStyle}>{warning}</p>)}
 
       {stages.length === 0 && (
         <p style={rationaleStyle}>还没有阶段，正在画标注…</p>
@@ -343,18 +361,28 @@ export function PlanCard({
       {hasPlans && (
         <div style={variantsBlockStyle}>
           <div style={variantsTitleStyle}>三版布置打分</div>
+          <p style={rationaleStyle}>当前为待核验草案：入口、门扇与现场通行条件仍需确认，分数不代表安全或合规。</p>
+          {functionalNeeds?.checkin == null && <p style={rationaleStyle}>尚未确认是否需要签到。</p>}
+          {functionalNeeds?.stage == null && <p style={rationaleStyle}>尚未确认是否需要舞台。</p>}
+          {selectedPlan && <details><summary>本次候选检查范围与待核验项</summary>
+            <p>仅检查本次候选及其区域标注，不覆盖既有物件或全部楼层；不能作为全场安全或规范结论。</p>
+            {buildPlanChecklist({placements:selectedPlan.placements,annotations:draft.annotations,...(checklistRoomSize ? {roomSize:checklistRoomSize} : {}),...(functionalNeeds?.checkin != null?{checkinRequired:functionalNeeds.checkin}:{})}).map(check => <div key={check.id} style={metaStyle}>
+              <strong>{check.status === 'violated' ? '发现冲突' : check.status === 'not_applicable' ? '本项不适用' : check.status === 'pass' ? '已核对' : '待核验'}</strong>：{check.applicability} {check.evidence.map(checklistEvidence).join('；')}（{check.ruleScope}）
+            </div>)}
+          </details>}
+          {!plans!.some(isScoredPlanApplicable) && <p style={rationaleStyle}>本次没有找到可应用的完整候选，可调整区域或需求后重试；这不代表场地无解。</p>}
           {plans!.map((p) => {
             // 防御：reasons 为空数组时，这个 plan 没法向用户解释为什么推荐，
             // 哪怕它被父组件标成 recommendedId 也不渲染「✅ 推荐」标签。
             const hasReasons = Array.isArray(p.reasons) && p.reasons.length > 0;
-            const isRecommended = recommendedId === p.variantId && hasReasons;
+            const isRecommended = recommendedId === p.variantId && hasReasons && isScoredPlanApplicable(p);
             const isSelected = selectedId === p.variantId;
             const rowStyle = isSelected ? variantRowSelected : variantRowBase;
             const hardViolations = Array.isArray(p.violations)
-              ? p.violations.filter((v) => v.severity === 'hard')
+              ? p.violations.filter((v) => v.severity === 'hard' && (v.status === undefined || v.status === 'violated'))
               : [];
             const softViolations = Array.isArray(p.violations)
-              ? p.violations.filter((v) => v.severity === 'soft')
+              ? p.violations.filter((v) => v.status === 'unknown' || (v.severity === 'soft' && (v.status === undefined || v.status === 'violated')))
               : [];
             const hasViolations = hardViolations.length > 0 || softViolations.length > 0;
             return (
@@ -371,12 +399,15 @@ export function PlanCard({
                     {p.label}版
                   </span>
                   <span style={variantRowMeta}>
-                    可坐 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds}
+                    估算 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds}
                   </span>
                 </button>
                 <div style={variantSubScoreStyle}>
-                  容量 {p.subScores.capacity} · 动线 {p.subScores.flow} · 人体 {p.subScores.ergonomics}
+                  容量 {p.subScores.capacity} · 动线 {p.subScores.flow ?? '待核验'} · 人体 {p.subScores.ergonomics ?? '待核验'}
                 </div>
+                {p.placements.length === 0 && <div style={violationSoftStyle}>这版没有生成物料，请调整区域后重试。</div>}
+                {p.skipped.map((item, index) => <div key={`skipped-${index}`} style={violationSoftStyle}>未能放入{item.label ? `「${item.label}」` : '物料'}：{item.reason}</div>)}
+                {(p.inventoryNotes ?? []).map((note, index) => <div key={`inventory-${index}`} style={violationSoftStyle}>{note}</div>)}
                 {hasViolations && (
                   <div style={variantViolationsWrapStyle}>
                     {hardViolations.map((v, i) => (
@@ -413,8 +444,8 @@ export function PlanCard({
       )}
 
       <div style={buttonRowStyle}>
-        <button type="button" style={primaryButtonStyle} onClick={onApprove}>
-          批准施工
+        <button type="button" style={primaryButtonStyle} onClick={onApprove} disabled={!!blockedReason || !selectedPlan || !isScoredPlanApplicable(selectedPlan)}>
+          应用布置
         </button>
         <button type="button" style={secondaryButtonStyle} onClick={onReplace}>
           换一版

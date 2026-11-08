@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { archiveLocalActivity, listLocalActivities, readLocalActivity, type NewLocalActivityMode } from '@/lib/local-activities';
 import { createLocalProjectBackupV3, parseLocalProjectBackupJson, serializeLocalProjectBackupV3, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
 import { registerStageCover } from '@/lib/stage-cover';
+import * as restoreAvailability from '@/lib/local-project-restore';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -13,6 +14,7 @@ import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixture
 import { LocalActivitiesPanel } from './local-activities-panel';
 import type { LocalProjectBackupActions } from './creative-studio';
 import type { RoomLayout } from '../lib/types';
+import * as switchGuard from '../lib/local-activity-switch-guard';
 
 vi.mock('@/lib/local-activities', async original => ({
   ...await original<typeof import('@/lib/local-activities')>(), archiveLocalActivity: vi.fn(), listLocalActivities: vi.fn(), readLocalActivity: vi.fn(),
@@ -43,12 +45,14 @@ function deferred<T>() {
   const promise = new Promise<T>(ok => { resolve = ok; });return { promise, resolve };
 }
 beforeEach(() => {
+  vi.spyOn(switchGuard,'useLocalActivitySwitchGuard').mockReturnValue({capture:()=>()=>{}});
+  vi.spyOn(restoreAvailability, 'localRestoreAvailable').mockReturnValue(true);
   vi.stubGlobal('crypto', webcrypto);
   vi.mocked(listLocalActivities).mockReset().mockResolvedValue({ activities: [], unreadableProjectIds: [] });
   vi.mocked(readLocalActivity).mockReset().mockResolvedValue(parseLocalProjectBackupJson(backupText(target)));
   vi.mocked(archiveLocalActivity).mockReset().mockImplementation(async (text, id, beforeWrite) => archiveResult(text, id, beforeWrite));
 });
-afterEach(() => { cleanup();vi.unstubAllGlobals(); });
+afterEach(() => { cleanup();vi.restoreAllMocks();vi.unstubAllGlobals(); });
 function setup(commitRestore = false) {
   let current = original, disabled = false;
   const onComplete = vi.fn();let view: ReturnType<typeof render>;
@@ -70,6 +74,53 @@ function submit(): void { fireEvent.submit(screen.getByRole('form', { name: '新
 function listedTarget() { return { projectId: targetId, name: target.name, archivedAt: '2026-10-09T03:00:00Z', itemCount: 1 }; }
 
 describe('local activity creation and switching', () => {
+  it('refuses to begin a switch while an unconsumed planning draft exists',async()=>{
+    const guard=switchGuard.createLocalActivitySwitchGuard({identity:()=>({scope:originalId,layoutRevision:1}),
+      snapshot:()=>({draft:{id:'draft',createdAt:1,annotations:[],stages:[]},revision:1}),blocker:()=>null});
+    vi.mocked(switchGuard.useLocalActivitySwitchGuard).mockReturnValue(guard);
+    const ui=setup();name();submit();expect(await screen.findByText(/有未应用的规划草稿/)).toBeTruthy();
+    expect(ui.actions.prepareBackup).not.toHaveBeenCalled();expect(archiveLocalActivity).not.toHaveBeenCalled();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
+  });
+  it('rejects a draft created and removed in the same batch while archive preparation is pending',async()=>{
+    let revision=1;const guard=switchGuard.createLocalActivitySwitchGuard({identity:()=>({scope:originalId,layoutRevision:1}),
+      snapshot:()=>({draft:null,revision}),blocker:()=>null});
+    vi.mocked(switchGuard.useLocalActivitySwitchGuard).mockReturnValue(guard);
+    const ui=setup(),pending=deferred<string>();vi.mocked(ui.actions.prepareBackup).mockReturnValueOnce(pending.promise);
+    name();submit();await waitFor(()=>expect(ui.actions.prepareBackup).toHaveBeenCalledOnce());
+    act(()=>{revision++;revision++;});await act(async()=>pending.resolve(backupText(original)));
+    expect(await screen.findByText(/草稿在准备期间发生变化/)).toBeTruthy();expect(archiveLocalActivity).not.toHaveBeenCalled();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
+  });
+  it('stops before opening the target when new unsaved material appears during archiving',async()=>{
+    let blocker:string|null=null;const guard=switchGuard.createLocalActivitySwitchGuard({identity:()=>({scope:originalId,layoutRevision:1}),
+      snapshot:()=>({draft:null,revision:1}),blocker:()=>blocker});
+    vi.mocked(switchGuard.useLocalActivitySwitchGuard).mockReturnValue(guard);
+    const ui=setup(),pending=deferred<ReturnType<typeof archiveResult>>();vi.mocked(archiveLocalActivity).mockReturnValueOnce(pending.promise);
+    name();submit();await waitFor(()=>expect(archiveLocalActivity).toHaveBeenCalledOnce());
+    blocker='有未保存的图片原件，请先保留。';await act(async()=>pending.resolve(archiveResult(backupText(original),originalId)));
+    expect(await screen.findByText(/未保存的图片原件/)).toBeTruthy();expect(ui.actions.restoreBackup).not.toHaveBeenCalled();
+  });
+  it('passes the same live guard into restore so a mid-operation draft blocks its later writes',async()=>{
+    let revision=1;const guard=switchGuard.createLocalActivitySwitchGuard({identity:()=>({scope:originalId,layoutRevision:1}),snapshot:()=>({draft:null,revision}),blocker:()=>null});
+    vi.mocked(switchGuard.useLocalActivitySwitchGuard).mockReturnValue(guard);
+    const ui=setup();vi.mocked(ui.actions.restoreBackup).mockImplementationOnce(async(_candidate,check)=>{revision++;check?.();});
+    name();submit();expect(await screen.findByText(/草稿在准备期间发生变化/)).toBeTruthy();
+    expect(ui.actions.restoreBackup).toHaveBeenCalledOnce();expect(ui.layout).toBe(original);
+  });
+  it('disables creating and opening when restoration is paused without archiving or touching current data', async () => {
+    vi.mocked(restoreAvailability.localRestoreAvailable).mockReturnValue(false);
+    vi.mocked(listLocalActivities).mockResolvedValue({ activities: [listedTarget()], unreadableProjectIds: [] });
+    const ui = setup();
+    expect(screen.getByText(/新建或打开其他活动暂不可用/)).toBeTruthy();
+    const form = screen.getByRole('form', { name: '新建活动' });
+    expect((screen.getByRole('button', { name: '新建活动' }) as HTMLButtonElement).disabled || form.querySelector('fieldset')!.disabled).toBe(true);
+    const open = await screen.findByRole('button', { name: `打开活动「${target.name}」` });
+    expect((open as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(form); fireEvent.click(open);
+    expect(ui.actions.prepareBackup).not.toHaveBeenCalled();
+    expect(archiveLocalActivity).not.toHaveBeenCalled(); expect(readLocalActivity).not.toHaveBeenCalled();
+    expect(ui.actions.restoreBackup).not.toHaveBeenCalled(); expect(ui.onComplete).not.toHaveBeenCalled();
+    expect(ui.layout).toBe(original);
+  });
   it('splits the create card and the archive list for their outside entry points', async () => {
     const actions: LocalProjectBackupActions = {
       prepareBackup: vi.fn(), restoreBackup: vi.fn(), undoRestore: vi.fn(), backupPending: false, canUndoRestore: false,
@@ -200,7 +251,7 @@ describe('local activity creation and switching', () => {
     const args = vi.mocked(archiveLocalActivity).mock.calls[0]!;
     await act(async () => { pending.resolve(archiveResult(args[0], args[1], args[2])); });
     await waitFor(() => expect(ui.onComplete).toHaveBeenCalledOnce());
-    expect(readLocalActivity).toHaveBeenCalledWith(targetId);expect(ui.actions.restoreBackup).toHaveBeenCalledWith(parseLocalProjectBackupJson(backupText(target)));
+    expect(readLocalActivity).toHaveBeenCalledWith(targetId);expect(ui.actions.restoreBackup).toHaveBeenCalledWith(parseLocalProjectBackupJson(backupText(target)),expect.any(Function));
     expect(ui.layout.id).toBe(targetId);expect(screen.getByText(/已打开「演练目标活动」/)).toBeTruthy();
   });
 

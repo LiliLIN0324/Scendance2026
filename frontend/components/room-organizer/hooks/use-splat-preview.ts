@@ -1,3 +1,5 @@
+import type { LocalWriteCapability } from '@/lib/local-write-lease';
+import { readSiteCalibrationStrict } from '../lib/site-calibration-capability';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSplatPreview, paintSplatLayers } from '../three/splat-preview';
 import type { SplatDisplayMode, SplatMeters, SplatPaint, SplatPosition, SplatPreview, SplatSource, SplatTransformMode, SplatUpAxis, SplatWalkBounds } from '../three/splat-preview';
@@ -106,6 +108,9 @@ export function useSplatPreview(deps: {
   primaryVisible?: boolean;
   transformMode: SplatTransformMode;
   onPositionChange(position: SplatPosition): void;
+  /** Controlled workspace cannot write the legacy calibration map until it is integrated. */
+  calibrationReadOnly?: boolean;
+  calibrationCapability?: LocalWriteCapability | undefined;
   upAxis?: SplatUpAxis;
   /**
    * When the current value is true, leave the camera where first-person walk
@@ -136,6 +141,11 @@ export function useSplatPreview(deps: {
   landingPlan(items: readonly LandableItem[], floorY?: number): LandingCorrection[];
 }> {
   const { isReady, rendererRef, cameraRef, controlsRef, invalidate, requestShadowUpdate } = deps;
+  const calibrationReadOnlyRef=useRef(!!deps.calibrationReadOnly);
+  if(deps.calibrationReadOnly)calibrationReadOnlyRef.current=true;
+  const calibrationCapabilityRef=useRef<{value:LocalWriteCapability;revoked:boolean}|null>(null);
+  if(!calibrationCapabilityRef.current && deps.calibrationCapability)calibrationCapabilityRef.current={value:deps.calibrationCapability,revoked:false};
+  else if(calibrationCapabilityRef.current && deps.calibrationCapability!==calibrationCapabilityRef.current.value)calibrationCapabilityRef.current.revoked=true;
   const controllerRef = useRef<SplatPreview | null>(null);
   const otherControllersRef = useRef(new Map<string, SplatPreview>());
   const [state, setState] = useState<SplatPreviewState>(IDLE);
@@ -191,7 +201,7 @@ export function useSplatPreview(deps: {
 
   const persistCalibration = useCallback((mutate: (record: SiteCalibration) => void): SplatCalibrationState | null => {
     const record = recordRef.current;
-    if (!record) return null;
+    if (!record || calibrationReadOnlyRef.current) return null;
     mutate(record);
     record.updatedAt = Date.now();
     writeSiteCalibration(record);
@@ -228,7 +238,13 @@ export function useSplatPreview(deps: {
     const hasActiveScene = !!controller.shownId;
     const current = ++attempt.current;
     // 标定随场景走：换回同一条扫描，比例 / 朝向 / 基准面 / 锚点原样复原。
-    const stored = readSiteCalibration(source.assetId) ?? defaultSiteCalibration(source.assetId);
+    let stored:SiteCalibration;
+    if(calibrationReadOnlyRef.current) {
+      const bound=calibrationCapabilityRef.current;
+      const checked=bound&&!bound.revoked?readSiteCalibrationStrict(bound.value):{status:'unknown' as const};
+      if(checked.status!=='ready') { setState({status:'error',assetId:source.assetId,name:source.name,error:'本机场地标定无法核对，原资料已保留；暂不加载扫描。'});return; }
+      stored=checked.snapshot.records[source.assetId] ?? defaultSiteCalibration(source.assetId);
+    } else stored=readSiteCalibration(source.assetId) ?? defaultSiteCalibration(source.assetId);
     recordRef.current = stored;
     assetIdRef.current = source.assetId;
     metersRef.current = null;
@@ -438,10 +454,10 @@ export function useSplatPreview(deps: {
     };
     const result = calibrateScanScale({ axis: input.axis, knownMeters: input.knownMeters, scan: rawScan });
     if (!result) return null;
-    persistCalibration(next => {
+    if (!persistCalibration(next => {
       next.scale = result.scale;
       next.reference = { ...result.reference };
-    });
+    })) return null;
     return result;
   }, [persistCalibration]);
 
@@ -481,9 +497,9 @@ export function useSplatPreview(deps: {
       x: Math.round(input.x * 100) / 100,
       z: Math.round(input.z * 100) / 100,
     };
-    persistCalibration(next => {
+    if (!persistCalibration(next => {
       next.anchors = [...next.anchors, anchor];
-    });
+    })) return null;
     return anchor;
   }, [persistCalibration]);
 
@@ -536,6 +552,7 @@ export function useSplatPreview(deps: {
   // 标定入口：角标常驻（未标定也可点开），展开就是比例 / 朝向 / 原点 / 基准面 / 锚点面板。
   useEffect(() => {
     if (!isReady) return;
+    if (calibrationReadOnlyRef.current) { hudRef.current?.update({ visible:false, summary:'',scale:1,yawDeg:0,groundY:0,originX:0,originZ:0,anchors:[] }); return; }
     const container = rendererRef.current?.domElement.parentElement;
     if (!container) return;
     hudRef.current ??= createCalibrationHud(container, {
@@ -582,7 +599,7 @@ export function useSplatPreview(deps: {
       anchors: calibration.anchors,
     });
   }, [state.calibration, state.status, state.meters, isReady, rendererRef,
-    calibrate, setYaw, setGround, setOrigin, addAnchor, removeAnchor, resetCalibration]);
+    calibrate, setYaw, setGround, setOrigin, addAnchor, removeAnchor, resetCalibration, deps.calibrationReadOnly]);
 
   // 开发态桥：Agent / 测试可直接按语义标定，不必先长出一套表单 UI。
   useEffect(() => {
@@ -602,6 +619,7 @@ export function useSplatPreview(deps: {
         b: { x: number; y: number; z: number },
         c: { x: number; y: number; z: number },
       ) => {
+        if(calibrationReadOnlyRef.current)return null;
         const plane = groundFromThreePoints(a, b, c);
         if (plane) setGround(plane);
         return plane;

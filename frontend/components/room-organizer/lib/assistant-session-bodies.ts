@@ -1,3 +1,4 @@
+import {isWorkspaceWriteFenceRequired} from '@/lib/workspace-write-fence';
 /**
  * Bingo 方案会话的气泡正文：按 sessionId 分袋，与标题索引分键存放。
  * 不进 layout reducer / 画布撤销栈。气泡上的 action 回调不可序列化，落盘时丢掉。
@@ -19,6 +20,9 @@ export type StoredAssistantBubble = {
   readonly amber?: boolean;
   readonly long?: boolean;
   readonly image?: string;
+  /** Only a model-authored reply, never a tool/system status. */
+  readonly modelConversation?: boolean;
+  readonly materialQueries?: readonly string[];
 };
 
 export type AssistantSessionBodies = {
@@ -108,6 +112,7 @@ export function readAssistantSessionBodies(storage?: Storage): AssistantSessionB
 }
 
 export function writeAssistantSessionBodies(bodies: AssistantSessionBodies, storage?: Storage): boolean {
+  if(isWorkspaceWriteFenceRequired())return false;
   const payload = JSON.stringify({ version: bodies.version, byId: bodies.byId });
   return storage === undefined
     ? safeSetItem(ASSISTANT_SESSION_BODIES_STORAGE_KEY, payload)
@@ -129,6 +134,8 @@ function normalizeStoredBubble(row: unknown): StoredAssistantBubble | null {
     ...(record.amber === true ? { amber: true } : {}),
     ...(record.long === true ? { long: true } : {}),
     ...(typeof record.image === 'string' ? { image: record.image } : {}),
+    ...(record.role === 'agent' && record.modelConversation === true ? { modelConversation: true } : {}),
+    ...(record.role === 'agent' && Array.isArray(record.materialQueries) && record.materialQueries.length<=3 && record.materialQueries.every(value=>typeof value==='string'&&value.trim()===value&&value.length>0&&value.length<=40&&!/[\u0000-\u001f\u007f]/.test(value)) ? {materialQueries:record.materialQueries as string[]} : {}),
   } satisfies StoredAssistantBubble;
   return bubble;
 }

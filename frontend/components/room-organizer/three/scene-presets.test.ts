@@ -90,22 +90,21 @@ describe('editable scene archives', () => {
       expect(encoded).not.toBe('');
       const { state } = JSON.parse(encoded);
       expect(new TextEncoder().encode(encoded).length).toBeLessThan(100000);
-      expect(state.objectRows).toHaveLength(310); // 307 shared fixtures plus three distinct tables.
-      const restored = state.candidates.map(({ warningRefs, scene: compactScene, ...candidate }: {
-        warningRefs: number[]; scene: { objects: number[] }; [key: string]: unknown;
-      }) => ({ ...candidate, scene: { ...compactScene, objects: compactScene.objects.map(index => {
-        const object: Record<string, unknown> = {};
-        state.objectColumns.forEach((column: string, field: number) => {
-          const value = state.objectRows[index][field];
-          if (value === null) return;
-          const [key, child] = column.split('.');
-          if (child) object[key] ??= {};
-          if (child) (object[key] as Record<string, unknown>)[child] = value;
-          else object[key] = value;
-        });
-        return object;
-      }) }, warnings: warningRefs.map(index => state.warningRows[index]) }));
-      expect(restored).toEqual(JSON.parse(JSON.stringify(candidates)));
+      // The bounded request retains every candidate difference and summarizes shared context.
+      expect(state.sharedContext.objectCount).toBe(307);
+      expect(state.sharedContext.scenePreset).toBe('gym');
+      expect(state.sharedContext.nearbyObjects.length + state.sharedContext.omittedObjectCount).toBe(307);
+      expect(state.coverage).toContain('cannot establish global circulation or safety');
+      expect(state.candidates).toHaveLength(3);
+      for (let index = 0; index < state.candidates.length; index++) {
+        const candidate = state.candidates[index];
+        expect(candidate.label).toBe(['A', 'B', 'C'][index]);
+        expect(candidate.objectCount).toBe(308);
+        expect(candidate.scene.objects).toHaveLength(1);
+        const originalAdded = candidates[index].scene.objects[307];
+        expect({ ...candidate.scene.objects[0], id: originalAdded.id }).toEqual(originalAdded);
+        expect(candidate.scene.objects[0].id).toMatch(/^ref\d+$/);
+      }
       expect(evaluation).toMatchObject({ status: 'complete', choice: 'B', confidence: 0.5, probabilities: { A: 0.2, B: 0.5, C: 0.2, NONE: 0.1 } });
       expect(candidates).toEqual(originalCandidates);
     }

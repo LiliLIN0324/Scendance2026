@@ -1,3 +1,5 @@
+import { createMeasuredRoomLayout } from '../backend-adapter';
+import { layoutToDxf } from './dxf';
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from '../__testfixtures__/fixtures';
 import { layoutToSvg, planSheetSize } from './svg';
@@ -28,7 +30,7 @@ describe('layoutToSvg', () => {
     const svg = layoutToSvg(layout, floor);
     expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
     // 8 m × 50 px/m + 2 × 60 px margin.
-    expect(svg).toContain('viewBox="0 0 520 520"');
+    expect(svg).toContain('viewBox="0 0 520 554"');
     expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
     expect(svg).not.toContain('NaN');
   });
@@ -52,8 +54,12 @@ describe('layoutToSvg', () => {
     expect(svg).toContain('data-layer="DOORS"');
     expect(svg).toContain('data-type="window"');
     expect(svg).toContain('data-layer="WINDOWS"');
-    // Door swing: quarter arc with radius = width (0.9 m × 50 px/m).
-    expect(svg).toContain('A 45 45 0 0 1');
+    // Only the recorded opening span is drawn; hinge and swing are unknown.
+    expect(count(svg, 'class="door-jamb"')).toBe(2);
+    expect(svg).not.toContain('A 45 45 0 0 1');
+    expect(svg).toContain('门洞与开向待核验');
+    expect(svg).toContain('待核验草案：出口、门洞与场地尺度未核验。');
+    expect(svg).toContain('通行、疏散、消防、无障碍及核定人数未核验。');
   });
 
   it('draws the grid, the room outline (hidden walls dashed), and interior walls', () => {
@@ -138,7 +144,7 @@ describe('layoutToSvg', () => {
   it('honours theme and scale options', () => {
     const { layout, floor } = makeFixture();
     const svg = layoutToSvg(layout, floor, { pxPerMetre: 100, margin: 50, theme: { wall: '#123456' } });
-    expect(svg).toContain('viewBox="0 0 900 900"');
+    expect(svg).toContain('viewBox="0 0 900 934"');
     expect(svg).toContain('#123456');
   });
 
@@ -185,7 +191,7 @@ describe('layoutToSvg', () => {
     const { layout, floor } = makeFixture();
     const svg = layoutToSvg(layout, floor);
     expect(svg).toContain('<g class="plan" transform="translate(0 0)">');
-    expect(planSheetSize(layout, floor)).toEqual({ widthPx: 520, heightPx: 520, widthM: 10.4, heightM: 10.4 });
+    expect(planSheetSize(layout, floor)).toEqual({ widthPx: 520, heightPx: 554, widthM: 10.4, heightM: 11.08 });
   });
 
   it('grows the sheet to enclose outdoor items and keeps the scale bar clear of them (#287)', () => {
@@ -195,8 +201,8 @@ describe('layoutToSvg', () => {
     const layout = makeLayout({ floors: [floor] });
     const svg = layoutToSvg(layout, floor);
     // Content z −4 … 7.4 plus 1.2 m margins = 13.8 m → 690 px tall, width unchanged.
-    expect(svg).toContain('viewBox="0 0 520 690"');
-    expect(planSheetSize(layout, floor)).toEqual({ widthPx: 520, heightPx: 690, widthM: 10.4, heightM: 13.8 });
+    expect(svg).toContain('viewBox="0 0 520 724"');
+    expect(planSheetSize(layout, floor)).toEqual({ widthPx: 520, heightPx: 724, widthM: 10.4, heightM: 14.48 });
     // The room did not move (the sheet only grew southwards) …
     expect(svg).toContain('<g class="plan" transform="translate(0 0)">');
     // … the tree is drawn where it stands, fully inside the sheet …
@@ -215,7 +221,7 @@ describe('layoutToSvg', () => {
     const layout = makeLayout({ floors: [floor] });
     const svg = layoutToSvg(layout, floor);
     // Content x −10 … 4 (14 m), z −7.4 … 4 (11.4 m) plus margins.
-    expect(svg).toContain('viewBox="0 0 820 690"');
+    expect(svg).toContain('viewBox="0 0 820 724"');
     // Room top-left moves from (60, 60) to ((−4 + 11.2) × 50, (−4 + 8.6) × 50) = (360, 230).
     expect(svg).toContain('<g class="plan" transform="translate(300 170)">');
     // Size sits under the title, not on the north or west edges.
@@ -278,4 +284,25 @@ describe('layoutToSvg', () => {
     expect(firstSvg.indexOf('class="stairwell"')).toBeGreaterThan(firstSvg.indexOf('class="wall"'));
     expect(firstSvg).not.toContain('NaN');
   });
+});
+
+it('复杂场馆结构和多边形不输出伪造矩形平面，简单矩形仍可导出', () => {
+  const floor=makeFloor({items:[]});
+  const simple=makeLayout({floors:[floor],roof:{style:'none'}});
+  expect(layoutToSvg(simple,floor)).toContain('<svg');
+  expect(layoutToDxf(simple,floor)).toContain('EOF');
+  const complex=createMeasuredRoomLayout(simple,{width:8,depth:8,height:3});
+  expect(()=>layoutToSvg(complex,complex.floors[0]!)).toThrow('复杂场馆或结构');
+  expect(()=>layoutToDxf(complex,complex.floors[0]!)).toThrow('复杂场馆或结构');
+  const polygon={...simple,backendVenue:{width:8,depth:8,height:3,shape:'polygon' as const,polygon:[{x:0,z:0},{x:8,z:0},{x:0,z:8}],entrances:[]}};
+  expect(()=>layoutToSvg(polygon,floor)).toThrow('多边形');
+  expect(()=>layoutToDxf(polygon,floor)).toThrow('多边形');
+});
+
+it('独立 SVG 明确列出未定位数量与完整名称', () => {
+  const {position:_position,...unplaced}=makeItem({name:'待定位 <签到桌>'});
+  const floor=makeFloor({items:[unplaced]});
+  const svg=layoutToSvg(makeLayout({floors:[floor]}),floor);
+  expect(svg).toContain('位置待确认 1 件，未绘入平面');
+  expect(svg).toContain('待定位 &lt;签到桌&gt;');
 });

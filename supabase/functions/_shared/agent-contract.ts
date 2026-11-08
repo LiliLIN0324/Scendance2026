@@ -3,12 +3,26 @@ import { leaseSchema, sceneSchema, uuid } from './domain.ts';
 import { materialSuggestionSchema } from './agent-material-contract.ts';
 import { modelSuggestionSchema } from './ai.ts';
 import { AGENT_PHASES } from './agent-progress.ts';
-import { activityTaskRunRequestSchema, activityTaskRunSchema } from './activity-task-contract.ts';
+import { activityTaskRunRequestSchema, activityTaskRunSchema, modelGeneratedTextNoticeSchema } from './activity-task-contract.ts';
 
+const seatingEvidence=z.string().trim().min(1).max(200);
+export const agentSeatingAllocationSchema=z.discriminatedUnion('status',[
+  z.strictObject({status:z.literal('one_per_desk'),peoplePerDesk:z.literal(1),evidence:seatingEvidence,source:z.literal('user')}),
+  z.strictObject({status:z.literal('shared_desk'),peoplePerDesk:z.number().int().min(2).max(100),evidence:seatingEvidence,source:z.literal('user')}),
+  z.strictObject({status:z.literal('unknown'),peoplePerDesk:z.null(),evidence:seatingEvidence,source:z.enum(['user','unverified'])}),
+]);
+const agentSeatingSizeFact=z.discriminatedUnion('status',[
+  z.strictObject({status:z.literal('reported'),valueM:z.number().finite().min(.01).max(50),evidence:seatingEvidence,source:z.literal('user')}),
+  z.strictObject({status:z.literal('unknown'),valueM:z.null(),evidence:seatingEvidence,source:z.enum(['user','unverified'])}),
+]);
+const agentSeatingItemSpecs=z.strictObject({width:agentSeatingSizeFact.optional(),depth:agentSeatingSizeFact.optional(),height:agentSeatingSizeFact.optional()});
+export const agentSeatingSpecsSchema=z.strictObject({desk:agentSeatingItemSpecs.optional(),chair:agentSeatingItemSpecs.optional()});
 export const agentContextSchema=z.strictObject({
   brief:z.string().max(12000).default(''),acceptedDecisions:z.array(z.string().max(1000)).max(20).default([]),
   recentMessages:z.array(z.strictObject({role:z.enum(['user','assistant']),text:z.string().max(3000)})).max(12).default([]),
   lastProposalExplanation:z.string().max(1200).optional(),
+  seatingAllocation:agentSeatingAllocationSchema.optional(),
+  seatingSpecs:agentSeatingSpecsSchema.optional(),
 });
 export const agentRunRequestSchema=z.strictObject({
   ...leaseSchema.shape,requestId:uuid,localRevision:z.number().int().nonnegative(),scene:sceneSchema,
@@ -32,6 +46,7 @@ export const agentEvaluationSchema=z.object({
 export const agentRunSchema=z.object({
   id:uuid,projectId:uuid,requestId:uuid,state:z.enum(['queued','running','complete','failed','cancelled']),progress:z.string(),
   callCount:z.number().int().nonnegative(),
+  modelText:modelGeneratedTextNoticeSchema.optional(),
   /** 这一趟工作推进到哪一段（四段工作）。可空：没有阶段账的老记录与活动任务运行都没有这条，界面就不显示阶段。 */
   phase:z.enum(AGENT_PHASES).nullish(),
   candidates:z.array(z.object({label:z.enum(['A','B','C']),title:z.string(),proposal:agentProposalSchema})).max(3),

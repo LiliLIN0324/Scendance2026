@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from './domain.ts';
 import { required, type Env } from './http.ts';
+import type {AgentTrialDiagnostic} from './agent-trial-diagnostic.ts';
 
 // RPC responses are PostgreSQL JSON; route-specific inputs are validated with Zod.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -10,7 +11,14 @@ export interface Backend {
   scene: Rpc;
   jobs: Rpc;
   reconstruction: Rpc;
+  originalSceneReview?: Rpc;
   agent?: Rpc;
+  /** Read-only check that the versioned steering guard is deployed. */
+  agentGuardReady?: Rpc;
+  /** Optional bounded observations; absent/unavailable storage never blocks a run. */
+  agentEvents?: Rpc;
+  /** Optional in-memory hook provided only by an explicitly isolated local trial. */
+  agentTrialDiagnostic?(actor:string,projectId:string,runId:string,value:AgentTrialDiagnostic):void;
   upload(path:string,bytes:Uint8Array,mime:string):Promise<void>;
   sign(path:string):Promise<string>;
   readSourceBytes?(path:string):Promise<Uint8Array>;
@@ -31,10 +39,10 @@ function rpc(client: SupabaseClient,name:string): Rpc {
 }
 export function createBackend(env:Env):Backend {
   const client=createClient(required(env,'SUPABASE_URL'),required(env,'SUPABASE_SERVICE_ROLE_KEY'),{ auth:{persistSession:false,autoRefreshToken:false} });
-  const scene=rpc(client,'scene_rpc'),studios=rpc(client,'studio_rpc');
+  const scene=rpc(client,'scene_rpc'),studios=rpc(client,'studio_rpc'),agent=rpc(client,'agent_rpc'),guardedAgent=rpc(client,'agent_steering_guard_rpc');
   return {
     async user(token) { const {data,error}=await client.auth.getUser(token); if(error||!data.user) throw new ApiError('UNAUTHENTICATED',401); return data.user.id; },
-    scene:(actor,action,data)=>(action.startsWith('studios.')?studios:scene)(actor,action,data),jobs:rpc(client,'job_rpc'),reconstruction:rpc(client,'reconstruction_rpc'),agent:rpc(client,'agent_rpc'),
+    scene:(actor,action,data)=>(action.startsWith('studios.')?studios:scene)(actor,action,data),jobs:rpc(client,'job_rpc'),reconstruction:rpc(client,'reconstruction_rpc'),originalSceneReview:rpc(client,'original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:agent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:rpc(client,'agent_run_events_rpc'),
     async upload(path,bytes,mime) {
       const {error}=await client.storage.from('scene-assets').upload(path,new Uint8Array(bytes),{contentType:mime,upsert:false});
       // Retry after a worker crash reuses a content-addressed immutable path.

@@ -89,7 +89,7 @@ function provenanceLine(item: FurnitureItem): string | null {
     return p.recipeId ? `AI 生成 · ${humanRecipeId(p.recipeId)}` : 'AI 生成';
   }
   if (p.source === 'human') return '手动放置';
-  if (p.source === 'procedural') return '场地自带';
+  if (p.source === 'procedural') return '系统生成';
   return null;
 }
 
@@ -114,6 +114,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   const locked = item.locked === true;
   const structuralSize = !!item.structuralOpeningId || !!item.structuralColumnId;
   const entranceSize = !!item.venueEntranceId || item.id === ENTRANCE_DOOR_ID;
+  const protectedStructure = !!layout.backendSceneV2 && structuralSize;
   const position = item.position ?? { x: 0, z: 0 };
   const rotation = ((item.rotation ?? 0) * 180 / Math.PI % 360 + 360) % 360;
   return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
@@ -141,6 +142,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
           }}
         /><span>{catalogItemOrigin(item)}</span>{item.category && <span>分类 · {catalogGroupLabel(item.category)}</span>}</div>
       <button type="button" className={`sc-lock-button ${locked ? 'is-locked' : ''}`} aria-pressed={locked} onClick={() => actions.setLocked(item.id, !locked)}>{locked ? <Lock size={16}/> : <Unlock size={16}/>}<span>{locked ? '已锁定 · 点击解锁' : '允许编辑 · 点击锁定'}</span></button>
+      {protectedStructure && <p className="sc-warning">门窗和柱子的尺寸、位置请在结构面板中核对修改。</p>}
       {props.hasCollision && <p className="sc-warning">物料可能重叠或超出场地，请检查位置。</p>}
       <section><h3>物料尺寸</h3><div className="sc-dimension-grid">
         {DIMENSIONS.map(dimension => <DimensionInput key={`${layout.id ?? 'local'}:${activeFloor.id}:${item.id}:${dimension.key}:${locked}`}
@@ -159,8 +161,8 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
           : <p className="sc-note">输入后按回车或离开字段应用。{item.glbUrl || item.assetId || item.glbNode ? '只调整当前物件尺寸，原模型保持不变。' : ''}</p>}
       </section>
       <section><h3>位置与角度</h3><div className="sc-dimension-grid">
-        <NumberField label="X / m" value={position.x} min={-100} max={100} disabled={locked} onChange={value => actions.moveItem(item.id, value, position.z)}/>
-        <NumberField label="Y / m" value={position.z} min={-100} max={100} disabled={locked} onChange={value => actions.moveItem(item.id, position.x, value)}/>
+        <NumberField label="X / m" value={position.x} min={-100} max={100} disabled={locked || protectedStructure} onChange={value => actions.moveItem(item.id, value, position.z)}/>
+        <NumberField label="Y / m" value={position.z} min={-100} max={100} disabled={locked || protectedStructure} onChange={value => actions.moveItem(item.id, position.x, value)}/>
         <NumberField label="Z / m" value={item.elevation ?? 0} min={item.glbNode ? -100 : 0} max={item.glbNode ? 100 : 30} disabled={locked || !!item.venueEntranceId || !!item.structuralOpeningId || !!item.structuralColumnId} onChange={value => actions.updateItem(item.id, { elevation: value })}/>
       </div><div className="sc-property-actions">
         <NumberField label="旋转 / °" value={rotation} min={0} max={360} step={15} disabled={locked} onChange={value => actions.setRotation(item.id, value * Math.PI / 180)}/>
@@ -171,8 +173,8 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         : <section><h3>物料颜色 <input type="color" aria-label="物料颜色" value={item.color} disabled={locked} onChange={event => { actions.setColor(item.id, event.target.value); pushColor(event.target.value); }}/></h3><div className="sc-color-swatches">{COLORS.map(color => <button type="button" key={color} style={{ background: color }} aria-label={`颜色 ${color}`} aria-pressed={item.color.toUpperCase() === color} disabled={locked} onClick={() => { actions.setColor(item.id, color); pushColor(color); }}/>)}</div></section>}
       <section><h3>物料备注</h3><textarea className="sc-notes" aria-label="物料备注" placeholder="例如：预留电源 / 实物待确认" maxLength={500} disabled={locked} value={item.notes ?? ''} onChange={event => actions.updateItem(item.id, { notes: event.target.value })}/></section>
       {provenanceLine(item) && <p className="sc-note" data-testid="item-provenance">{provenanceLine(item)}</p>}
-      <div className="sc-property-actions"><button type="button" className="sc-button" disabled={activeFloor.items.length >= editorItemLimit(layout)} onClick={() => props.onDuplicate(item.id)}><Copy size={16}/>复制</button></div>
-      <button type="button" className="sc-delete-button" disabled={locked} onClick={() => props.onRemove(item.id)}><Trash2 size={16}/>删除物料</button>
+      <div className="sc-property-actions"><button type="button" className="sc-button" disabled={protectedStructure || activeFloor.items.length >= editorItemLimit(layout)} onClick={() => props.onDuplicate(item.id)}><Copy size={16}/>复制</button></div>
+      <button type="button" className="sc-delete-button" disabled={locked || protectedStructure} onClick={() => props.onRemove(item.id)}><Trash2 size={16}/>删除物料</button>
     </div>
   </aside>;
 }

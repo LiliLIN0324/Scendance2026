@@ -8,8 +8,20 @@ import type { Scene } from '@/lib/backend-session';
 const scene: Scene = { schemaVersion: 1, venue: { width: 12, depth: 10, height: 3, shape: 'rectangle', entrances: [] }, camera: 'overview', lighting: 'neutral', objects: [{ id: '10000000-0000-4000-8000-000000000001', materialId: 'chair', position: { x: 2, z: 2 }, rotation: 0, size: { width: .5, depth: .5, height: .9 }, color: '#ffffff', locked: false, notes: '' }] };
 
 describe('creative brief boundaries', () => {
+  it('never treats old implicit defaults as activity facts but preserves explicitly confirmed default values', () => {
+    const unknown = buildBriefReference(INITIAL_BRIEF);
+    expect(unknown).not.toContain('品牌快闪');
+    expect(unknown).not.toContain('24 人');
+    const confirmed = buildBriefReference({...INITIAL_BRIEF, eventConfirmed:true, guestsConfirmed:true});
+    expect(confirmed).toContain('品牌快闪');
+    expect(confirmed).toContain('24 人');
+    const legacy = {...INITIAL_BRIEF, description:'交流活动', allowIdeas:true, ideasConfirmed:undefined};
+    expect(briefInstruction(legacy,12,10)).toContain('不自行扩展需求');
+    expect(briefInstruction({...legacy, ideasConfirmed:true},12,10)).toContain('主动布置适合主题的亮点');
+  });
+
   it('generates a filled reference from the current type and headcount, not blank labels', () => {
-    const text = buildBriefReference({ ...INITIAL_BRIEF, event: '工作坊', guests: 16 });
+    const text = buildBriefReference({ ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 });
     expect(text).toContain('【需求参考 · 工作坊 · 16 人】');
     expect(text).toContain('目标：让每位参与者坐下来动手');
     expect(text).toContain('观众：报名参加的来宾');
@@ -32,7 +44,7 @@ describe('creative brief boundaries', () => {
   });
 
   it('omits the headcount when the number is not valid', () => {
-    const text = buildBriefReference({ ...INITIAL_BRIEF, event: '工作坊', guests: 0 });
+    const text = buildBriefReference({ ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 0 });
     expect(text).toContain('【需求参考 · 工作坊】');
     expect(text).not.toContain(' 人】');
   });
@@ -50,14 +62,14 @@ describe('creative brief boundaries', () => {
 
   it('preserves the complete original text and does not append a second copy', () => {
     const original = '  客户原话：保留入口。\n假设：两人执行。  ';
-    const once = composeBriefReference(original, { ...INITIAL_BRIEF, event: '工作坊', guests: 16 });
-    expect(once).toBe(`客户原话：保留入口。\n假设：两人执行。\n\n${buildBriefReference({ ...INITIAL_BRIEF, event: '工作坊', guests: 16 })}`);
-    expect(composeBriefReference(once, { ...INITIAL_BRIEF, event: '工作坊', guests: 16 })).toBe(once);
+    const once = composeBriefReference(original, { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 });
+    expect(once).toBe(`客户原话：保留入口。\n假设：两人执行。\n\n${buildBriefReference({ ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 })}`);
+    expect(composeBriefReference(once, { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 })).toBe(once);
   });
 
   it('refreshes the previous reference instead of stacking another one', () => {
-    const first = composeBriefReference('客户原话。', { ...INITIAL_BRIEF, event: '工作坊', guests: 16 });
-    const next = composeBriefReference(first, { ...INITIAL_BRIEF, event: '展览市集', guests: 80 });
+    const first = composeBriefReference('客户原话。', { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 });
+    const next = composeBriefReference(first, { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '展览市集', guests: 80 });
     expect(next).toContain('客户原话。');
     expect(next).not.toContain('【需求参考 · 工作坊 · 16 人】');
     expect(next.match(/【需求参考 ·/g)).toHaveLength(1);
@@ -66,21 +78,21 @@ describe('creative brief boundaries', () => {
 
   it('replaces the old scaffold outright when the field has no other text', () => {
     const old = '【创意简报与观众体验】\n活动目标：\n参与观众：\n布置要求：';
-    const next = composeBriefReference(old, { ...INITIAL_BRIEF, event: '工作坊', guests: 16 });
-    expect(next).toBe(buildBriefReference({ ...INITIAL_BRIEF, event: '工作坊', guests: 16 }));
+    const next = composeBriefReference(old, { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 });
+    expect(next).toBe(buildBriefReference({ ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 }));
     expect(next).not.toContain('活动目标：');
   });
 
   it('accepts the exact editor limit and refuses overflow without truncation', () => {
-    const reference = buildBriefReference({ ...INITIAL_BRIEF, event: '工作坊', guests: 16 });
+    const reference = buildBriefReference({ ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 });
     const original = '甲'.repeat(CREATIVE_BRIEF_DESCRIPTION_LIMIT - reference.length - 2);
-    expect(composeBriefReference(original, { ...INITIAL_BRIEF, event: '工作坊', guests: 16 })).toHaveLength(CREATIVE_BRIEF_DESCRIPTION_LIMIT);
-    expect(() => composeBriefReference(original + '乙', { ...INITIAL_BRIEF, event: '工作坊', guests: 16 })).toThrow('原文字保持不变');
+    expect(composeBriefReference(original, { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 })).toHaveLength(CREATIVE_BRIEF_DESCRIPTION_LIMIT);
+    expect(() => composeBriefReference(original + '乙', { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 })).toThrow('原文字保持不变');
     expect(original.endsWith('甲')).toBe(true);
   });
 
   it('keeps manual text in the same backup and generation source', () => {
-    const brief = { ...INITIAL_BRIEF, description: composeBriefReference('假设演练：交流开放日', { ...INITIAL_BRIEF, event: '工作坊', guests: 16 }) };
+    const brief = { ...INITIAL_BRIEF, description: composeBriefReference('假设演练：交流开放日', { ...INITIAL_BRIEF, eventConfirmed: true, guestsConfirmed: true, event: '工作坊', guests: 16 }) };
     const layout = backendSceneToLayout(scene, { projectId: 'brief-template-rehearsal' });
     const restored = parseLocalProjectBackupJson(serializeLocalProjectBackup(layout, {
       state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief },
@@ -90,7 +102,7 @@ describe('creative brief boundaries', () => {
     expect(Object.keys(brief)).toEqual(Object.keys(INITIAL_BRIEF));
   });
   it('accepts a headcount the chat can also parse and rejects only out-of-range input', () => {
-    const brief = { ...INITIAL_BRIEF, description: '交流活动' };
+    const brief = { ...INITIAL_BRIEF, guestsConfirmed: true, description: '交流活动' };
     for (const guests of [0, 1.5, HEADCOUNT_MAX + 1, 100000, NaN]) expect(() => briefInstruction({ ...brief, guests }, 12, 10)).toThrow(`1–${HEADCOUNT_MAX}`);
     expect(() => briefInstruction(INITIAL_BRIEF, 12, 10)).toThrow('描述');
     expect(briefInstruction({ ...brief, guests: 80 }, 12, 10)).toContain('80人');
@@ -98,11 +110,13 @@ describe('creative brief boundaries', () => {
   });
 
   it('does not imply image understanding and creates a complete preview for confirmation', () => {
-    const instruction = briefInstruction({ ...INITIAL_BRIEF, description: '要帐篷和签到区' }, 12, 10);
+    const instruction = briefInstruction({ ...INITIAL_BRIEF, ideasConfirmed: true, allowIdeas: true, description: '要帐篷和签到区' }, 12, 10);
     expect(instruction).toContain('完整候选后由客户整体确认');
     expect(instruction).toContain('现场照片尚未提交给模型');
     expect(instruction).toContain('不得用桌椅冒充');
-    expect(instruction).toContain('依据当前资源库');
+    expect(instruction).toContain('优先复用已授权数字模型');
+    expect(instruction).toContain('型号、实物库存和可用性待核验');
+    expect(instruction).not.toContain('选用真实物料');
     expect(instruction).not.toContain('帐篷、拱门等当前不支持');
     expect(briefInstruction({ ...INITIAL_BRIEF, description: '交流会', allowIdeas: false }, 12, 10)).toContain('不自行扩展');
   });

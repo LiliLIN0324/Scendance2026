@@ -23,6 +23,8 @@ export interface OutcomeInput {
   review?: boolean;
   /** 云端提案动了锁着的物料：按「被拒」记账，不装作没发生。 */
   lockedTouched?: number;
+  /** Cloud geometry diffs include more than movement. */
+  changedLabel?: '调整' | undefined;
 }
 
 export interface OutcomeRefusal {
@@ -48,6 +50,7 @@ export interface RunOutcome {
   seats: number;
   seatPriority: boolean;
   review: boolean;
+  changedLabel?: '调整' | undefined;
 }
 
 export function outcomeOfPlan(plan: PlanProposal): RunOutcome {
@@ -78,6 +81,7 @@ export function buildOutcome(input: OutcomeInput): RunOutcome {
     seats: input.seats ?? 0,
     seatPriority: !!input.seatPriority,
     review: !!input.review,
+    ...(input.changedLabel?{changedLabel:input.changedLabel}:{}),
   };
 }
 
@@ -89,7 +93,7 @@ export function outcomeLines(outcome: RunOutcome): string[] {
   } else {
     const parts: string[] = [];
     if (outcome.placed) parts.push(`放进 ${outcome.placed} 件`);
-    if (outcome.moved) parts.push(`挪动 ${outcome.moved} 件`);
+    if (outcome.moved) parts.push(`${outcome.changedLabel ?? '挪动'} ${outcome.moved} 件`);
     if (outcome.removed) parts.push(`撤掉 ${outcome.removed} 件`);
     if (parts.length) lines.push(parts.join(' · '));
   }

@@ -104,10 +104,11 @@ describe('validateSceneScript — 建之前先说清楚哪儿不对', () => {
 });
 
 describe('sceneScriptFromBrief — 从人已经说过的话里先画一张计划', () => {
-  it('12 × 9 的发布会：舞台、通道、座位、签到、绿植都在，且不互相压', () => {
+  it('12 × 9 的发布会：舞台、通道、座位、签到不互相压且不擅加绿植', () => {
     const derived = sceneScriptFromBrief({ widthM: 12, depthM: 9, guests: 24, stage: true, checkin: true, seed: 3 });
     const roles = derived.zones.map((zone) => zone.role);
-    expect(roles).toEqual(expect.arrayContaining(['stage', 'aisle', 'seating', 'checkin', 'plant']));
+    expect(roles).toEqual(expect.arrayContaining(['stage', 'aisle', 'seating', 'checkin']));
+    expect(roles).not.toContain('plant');
     expect(validateSceneScript(derived, venue).filter((entry) => entry.severity === 'error')).toHaveLength(0);
     const seating = zonesWithRole(derived, 'seating')[0]!;
     expect(seating.rect.x).toBeGreaterThanOrEqual(-venue.width / 2);

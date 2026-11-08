@@ -24,6 +24,9 @@ export async function handoffBasis(layout: RoomLayout, itemId: string, criteria:
     ...(production ? { production } : {}),
     itemId, type: item.type, materialId: object?.materialId ?? null, assetId: object?.assetId ?? null,
     floorId: floor.id, venue: scene.venue, structure: scene.schemaVersion === 2 ? scene.structure : null,
+    venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null,
+    mapGroundPolygon: layout.mapGroundPolygon ?? null, floorPlanImage: layout.floorPlanImage ?? null,
+    sources: scene.schemaVersion === 2 ? scene.sources : null, dimensions: scene.schemaVersion === 2 ? scene.dimensions : null,
     size: [item.width, item.depth, item.height], color: item.color,
     position: item.position ?? null, rotation: item.rotation ?? 0, elevation: item.elevation ?? 0,
     mirrored: item.mirrored ?? false, acceptance: criteria.acceptance.trim(),
@@ -37,7 +40,8 @@ export async function handoffBasis(layout: RoomLayout, itemId: string, criteria:
 export async function effectiveHandoffStatus(layout: RoomLayout, itemId: string): Promise<Handoff['status'] | 'needs_review'> {
   const handoff = layout.floors.flatMap(floor => floor.items).find(item => item.id === itemId)?.handoff;
   if (!handoff) return 'todo';
-  if ((handoff.status === 'review' || handoff.status === 'accepted') &&
-      handoff.reviewedBasis !== await handoffBasis(layout, itemId, handoff)) return 'needs_review';
+  // The stored hash alone cannot prove a monotonic revision, source authority or cross-tab exclusion.
+  // Keep the recorded status/evidence, but never call it current until those authorities are integrated.
+  if (handoff.status === 'review' || handoff.status === 'accepted') return 'needs_review';
   return handoff.status;
 }

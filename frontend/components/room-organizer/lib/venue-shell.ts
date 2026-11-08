@@ -68,8 +68,8 @@ export function buildVenueShell(input: VenueShellInput): SceneV2 {
   }
   const { heightM, heightSource } = resolveVenueHeight(input.heightM);
   const confidence = SCALE_CONFIDENCE[input.scaleOrigin];
-  // 只有人明确给过尺度才把外墙当确认事实；面积折算、图纸估算、沿用画布都还是推断。
-  const wallStatus = confidence === 'high' ? 'confirmed' : 'inferred';
+  // 长宽明确不代表矩形轮廓、墙厚或层高经过核实。
+  const wallStatus = 'inferred' as const;
   const indoor = input.indoorOutdoor === 'indoor';
 
   const rawPoly = (input.polygonMeters ?? []).filter(p => Number.isFinite(p.x) && Number.isFinite(p.z));
@@ -129,9 +129,9 @@ export function buildVenueShell(input: VenueShellInput): SceneV2 {
     structure: { walls, openings, columns: [] },
     sources: [],
     dimensions: [
-      { id: newId(), kind: 'width', valueMeters: width, status: 'inferred', label: '总宽' },
-      { id: newId(), kind: 'depth', valueMeters: depth, status: 'inferred', label: '总长' },
-      { id: newId(), kind: 'height', valueMeters: heightM, status: 'inferred', label: '净高' },
+      { id: newId(), kind: 'width', valueMeters: width, status: confidence === 'high' ? 'confirmed' : 'inferred', label: '总宽' },
+      { id: newId(), kind: 'depth', valueMeters: depth, status: confidence === 'high' ? 'confirmed' : 'inferred', label: '总长' },
+      { id: newId(), kind: 'height', valueMeters: heightM, status: heightSource === 'confirmed' ? 'confirmed' : 'inferred', label: '净高' },
     ],
   });
 }

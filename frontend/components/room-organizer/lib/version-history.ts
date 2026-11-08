@@ -1,7 +1,11 @@
+import {captureWorkspaceWriteFence,isWorkspaceWriteFenceRequired,resolveWorkspaceWriteCapability} from '@/lib/workspace-write-fence';
+import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
+import { VERSION_HISTORY_PENDING_KEY } from '@/lib/version-history-pending';
 import { STORAGE_KEY } from './constants';
 import { randomId } from './ids';
 import { parseStoredLayout } from './schema';
 import { classifyStorageError } from './storage-errors';
+import { withStorageWriteGuard } from './guarded-storage';
 import type { RoomLayout } from './types';
 
 /**
@@ -103,6 +107,65 @@ export interface VersionHistoryOptions {
   storage?: VersionHistoryStore;
   /** Clock override for tests; defaults to `Date.now`. */
   now?: () => number;
+  /** Optional live write authorization, checked immediately before each mutation. */
+  assertWrite?: () => void;
+  /** Optional real ordinary capability; never accepts a caller-created assertion as authority. */
+  capability?: LocalWriteCapability;
+}
+
+type HistoryPair = { ring: string | null; meta: string | null };
+type PendingHistoryChange = { version: 1; before: HistoryPair; attempted: HistoryPair };
+function readHistoryPair(storage: VersionHistoryStore): HistoryPair {
+  return {ring: storage.getItem(VERSION_HISTORY_STORAGE_KEY), meta: storage.getItem(VERSION_HISTORY_META_KEY)};
+}
+function validHistoryPair(value: unknown): value is HistoryPair {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).sort().join(',') === 'meta,ring' && [record.ring, record.meta].every(item => item === null || typeof item === 'string');
+}
+function validateHistoryChange(value: unknown): value is PendingHistoryChange {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).sort().join(',') === 'attempted,before,version' && record.version === 1 && validHistoryPair(record.before) && validHistoryPair(record.attempted);
+}
+function guardForHistory(capability: LocalWriteCapability, storage: VersionHistoryStore): () => void {
+  const guard = localWriteCapabilityGuard(capability), fence=captureWorkspaceWriteFence(capability);
+  if (typeof window === 'undefined' || storage !== window.localStorage) throw new Error('版本历史与当前编辑权不属于同一本机存储。');
+  return () => { fence?.(); guard.assertStillHeld(); if (guard.signal.aborted) throw new Error('本机编辑权已失效。'); };
+}
+function writeHistoryValue(storage: VersionHistoryStore, key: string, value: string | null, check: () => void): void {
+  check(); if (value === null) { if (!storage.removeItem) throw new Error('存储不支持删除。'); storage.removeItem(key); } else storage.setItem(key, value); check();
+}
+function historyPending(storage: VersionHistoryStore): boolean { try { return storage.getItem(VERSION_HISTORY_PENDING_KEY) !== null; } catch { return true; } }
+function commitHistoryPair(storage: VersionHistoryStore, before: HistoryPair, attempted: HistoryPair, capability: LocalWriteCapability): boolean {
+  try {
+    const check = guardForHistory(capability, storage); check();
+    if (historyPending(storage) || JSON.stringify(readHistoryPair(storage)) !== JSON.stringify(before)) return false;
+    const marker = JSON.stringify({version:1,before,attempted});
+    check(); storage.setItem(VERSION_HISTORY_PENDING_KEY, marker); check();
+    if (storage.getItem(VERSION_HISTORY_PENDING_KEY) !== marker) return false;
+    writeHistoryValue(storage, VERSION_HISTORY_STORAGE_KEY, attempted.ring, check);
+    writeHistoryValue(storage, VERSION_HISTORY_META_KEY, attempted.meta, check);
+    if (JSON.stringify(readHistoryPair(storage)) !== JSON.stringify(attempted)) return false;
+    check(); if (!storage.removeItem) return false; storage.removeItem(VERSION_HISTORY_PENDING_KEY);
+    notify(); return true;
+  } catch { return false; }
+}
+/** Undo an incomplete change only if both keys still match its before or attempted value. */
+export function recoverVersionHistoryChange(capability: LocalWriteCapability): boolean {
+  try {
+    const storage=defaultStorage(); if (!storage) return false;
+    const check=guardForHistory(capability,storage); check();
+    const raw=storage.getItem(VERSION_HISTORY_PENDING_KEY); if(raw===null)return true;
+    const pending:unknown=JSON.parse(raw); if(!validateHistoryChange(pending))return false;
+    const current=readHistoryPair(storage);
+    if ((current.ring!==pending.before.ring && current.ring!==pending.attempted.ring) ||
+        (current.meta!==pending.before.meta && current.meta!==pending.attempted.meta)) return false;
+    writeHistoryValue(storage,VERSION_HISTORY_STORAGE_KEY,pending.before.ring,check);
+    writeHistoryValue(storage,VERSION_HISTORY_META_KEY,pending.before.meta,check);
+    if (JSON.stringify(readHistoryPair(storage)) !== JSON.stringify(pending.before)) return false;
+    check(); if(!storage.removeItem)return false;storage.removeItem(VERSION_HISTORY_PENDING_KEY);notify();return true;
+  } catch { return false; }
 }
 
 function defaultStorage(): VersionHistoryStore | null {
@@ -338,8 +401,12 @@ export function recordSnapshot(
   layout: RoomLayout,
   opts: VersionHistoryOptions & { force?: boolean } = {}
 ): boolean {
-  const storage = opts.storage ?? defaultStorage();
-  if (!storage) return false;
+  try { const capability=resolveWorkspaceWriteCapability(opts.capability); if(capability)opts={...opts,capability}; } catch { return false; }
+  const original = opts.storage ?? defaultStorage();
+  if (!original || historyPending(original)) return false;
+  const storage = withStorageWriteGuard(original, opts.assertWrite);
+  let historyBefore: HistoryPair | null = null;
+  if (opts.capability !== undefined) { try { guardForHistory(opts.capability, original)(); historyBefore=readHistoryPair(original); } catch { return false; } }
   const at = (opts.now ?? Date.now)();
   const ref: HouseRef = { layoutId: layout.id, name: layout.name };
 
@@ -350,6 +417,10 @@ export function recordSnapshot(
   if (gated && insideInterval(at, gated.savedAt)) return false;
 
   const slots = readSlots(storage);
+  if (historyBefore?.ring !== null && historyBefore?.ring !== undefined) {
+    try { const raw: unknown = JSON.parse(historyBefore.ring); if (!Array.isArray(raw) || raw.length !== slots.length) return false; }
+    catch { return false; }
+  }
   const previous = newestOfHouse(
     slots.map((slot) => slot.entry),
     ref
@@ -357,7 +428,7 @@ export function recordSnapshot(
 
   // The sidecar was missing or stale — the ring is the source of truth.
   if (!opts.force && previous && insideInterval(at, previous.savedAt)) {
-    if (meta === null) writeMeta(storage, slots);
+    if (meta === null && opts.capability === undefined) writeMeta(storage, slots);
     return false;
   }
 
@@ -405,6 +476,10 @@ export function recordSnapshot(
   while (slots.length > VERSION_HISTORY_LIMIT) slots.shift();
   while (serialisedLength(slots) > VERSION_HISTORY_MAX_CHARS) slots.shift();
 
+  if (opts.capability !== undefined && historyBefore) {
+    const metaText = JSON.stringify({entries:slots.map(({entry})=>({savedAt:entry.savedAt,layoutId:entry.layoutId,name:entry.name}))});
+    return commitHistoryPair(original, historyBefore, {ring:serialiseSlots(slots),meta:metaText}, opts.capability);
+  }
   while (slots.length > 0) {
     try {
       storage.setItem(VERSION_HISTORY_STORAGE_KEY, serialiseSlots(slots));
@@ -412,6 +487,7 @@ export function recordSnapshot(
       notify();
       return true;
     } catch {
+      if (opts.assertWrite) return false;
       // Quota — drop the oldest restore point and try again.
       slots.shift();
     }
@@ -485,8 +561,11 @@ export function snapshotBelongsTo(summary: HouseFields, layout: RoomLayout): boo
 
 /** Drop every restore point, freeing the ring's whole share of the quota. */
 export function clearSnapshots(opts: VersionHistoryOptions = {}): void {
-  const storage = opts.storage ?? defaultStorage();
-  if (!storage) return;
+  try { const capability=resolveWorkspaceWriteCapability(opts.capability); if(capability)opts={...opts,capability}; } catch { return; }
+  const original = opts.storage ?? defaultStorage();
+  if (!original || historyPending(original)) return;
+  if (opts.capability !== undefined) { try { const before=readHistoryPair(original); commitHistoryPair(original,before,{ring:null,meta:null},opts.capability); } catch { /* preserve prior data */ } return; }
+  const storage = withStorageWriteGuard(original, opts.assertWrite);
   removeKey(storage, VERSION_HISTORY_STORAGE_KEY);
   removeKey(storage, VERSION_HISTORY_META_KEY);
   notify();
@@ -497,15 +576,24 @@ export function clearSnapshots(opts: VersionHistoryOptions = {}): void {
  * there is nothing left to drop, so callers can loop on it.
  */
 export function evictOldestSnapshot(opts: VersionHistoryOptions = {}): boolean {
-  const storage = opts.storage ?? defaultStorage();
-  if (!storage) return false;
+  try { const capability=resolveWorkspaceWriteCapability(opts.capability); if(capability)opts={...opts,capability}; } catch { return false; }
+  const original = opts.storage ?? defaultStorage();
+  if (!original || historyPending(original)) return false;
+  let historyBefore: HistoryPair | null = null;
+  if (opts.capability !== undefined) { try { guardForHistory(opts.capability,original)(); historyBefore=readHistoryPair(original); } catch { return false; } }
+  const storage = withStorageWriteGuard(original, opts.assertWrite);
   try {
     if (!storage.getItem(VERSION_HISTORY_STORAGE_KEY)) return false;
   } catch {
     return false;
   }
   const slots = readSlots(storage);
+  if (opts.capability !== undefined && historyBefore && slots.length === 0) return false;
   slots.shift();
+  if (opts.capability !== undefined && historyBefore) {
+    const attempted = slots.length ? {ring:serialiseSlots(slots),meta:JSON.stringify({entries:slots.map(({entry})=>({savedAt:entry.savedAt,layoutId:entry.layoutId,name:entry.name}))})} : {ring:null,meta:null};
+    return commitHistoryPair(original,historyBefore,attempted,opts.capability);
+  }
   if (slots.length === 0) {
     // Also covers a corrupt blob: it holds quota but no usable entry.
     clearSnapshots({ storage });
@@ -516,6 +604,7 @@ export function evictOldestSnapshot(opts: VersionHistoryOptions = {}): boolean {
     writeMeta(storage, slots);
     notify();
   } catch {
+    if (opts.assertWrite) return false;
     clearSnapshots({ storage });
   }
   return true;
@@ -540,8 +629,10 @@ export const MAX_STORAGE_ENTRY_CHARS = 5 * 1024 * 1024;
 export function setItemEvictingSnapshots(
   storage: VersionHistoryStore,
   key: string,
-  value: string
+  value: string,
+  assertWrite?: () => void,
 ): void {
+  const target = withStorageWriteGuard(storage, assertWrite);
   if (key.length + value.length > MAX_STORAGE_ENTRY_CHARS) {
     throw new DOMException(
       `"${key}" is ${value.length} characters, more than browser storage can ever hold.`,
@@ -550,12 +641,12 @@ export function setItemEvictingSnapshots(
   }
   for (;;) {
     try {
-      storage.setItem(key, value);
+      target.setItem(key, value);
       return;
     } catch (error) {
       // Eviction frees space, so only a quota error costs a restore point:
       // storage that is blocked outright fails the same way afterwards.
-      if (classifyStorageError(error) !== 'quota' || !evictOldestSnapshot({ storage })) throw error;
+      if (assertWrite || isWorkspaceWriteFenceRequired() || classifyStorageError(error) !== 'quota' || !evictOldestSnapshot({ storage: target })) throw error;
     }
   }
 }

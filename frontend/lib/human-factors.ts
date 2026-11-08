@@ -1,11 +1,10 @@
 /**
- * 第 12 批 P0-1 人体工学硬阈值（对齐 RoomCraft）。
+ * 基于中心距的粗略提示；不作为人体工学或规范通过结论。
  *
  * 设计红线：
  * - 纯函数、不可变，不接 React、不读 layoutStore；
  * - 只输出带 code 的 violations，扣分层由 plan-scoring.ts 按 severity/code 算；
- * - 阈值：餐椅间距 < 0.9m（每对 -1）、对坐家具中心距 < 1.65m（每对 -2）、
- *   签到台前缓冲 < 1.5m（soft，不扣分只进 reasons）；
+ * - 餐椅、长椅中心距和签到区边缘间距仅用于提示，实际通行空间仍需核对；
  * - 中文简体，禁「高斯/WorldGen」。
  */
 
@@ -26,7 +25,8 @@ export type ViolationCode =
   /** 缺房间尺寸：墙退距/可达性无法核验，不算 pass。 */
   | 'ROOM_SIZE_UNKNOWN'
   /** 缺门数据：门弧/动线可信度未知（推测门由 assurance 单独标记）。 */
-  | 'DOOR_UNKNOWN';
+  | 'DOOR_UNKNOWN'
+  | 'FLOW_ANALYSIS_LIMIT';
 
 /** 检查结果四值：pass 不必生成 violation；violated 进 violations；unknown 软提示；not_applicable 省略。 */
 export type CheckStatus = 'pass' | 'violated' | 'unknown' | 'not_applicable';
@@ -54,8 +54,8 @@ const EPS = 1e-6;
 /**
  * 扫 placements，返回人体工学 violations（不扣分，扣分层由 plan-scoring 算）。
  *
- * - CHAIR_GAP：两把 dining-chair 中心距 < 0.9m → 每对一条 hard violation。
- * - AISLE_CLEARANCE：两条对坐长椅（bench vs bench）中心距 < 1.65m → 每对一条 hard violation。
+ * - CHAIR_GAP：两把 dining-chair 中心距 < 0.9m → 每对一条待核验提示。
+ * - AISLE_CLEARANCE：两条长椅中心距 < 1.65m → 每对一条待核验提示。
  * - CHECKIN_QUEUE：有签到区时，签到台（type=table/name=签到台）前沿到 zone z0 边距离 < 1.5m
  *   → 一条 soft violation（不扣分）。无签到区或无签到台 placement 时不产生。
  */
@@ -75,8 +75,9 @@ export function evaluateHumanFactors(
       if (d < CHAIR_GAP_THRESHOLD_M - EPS) {
         violations.push({
           code: 'CHAIR_GAP',
-          severity: 'hard',
-          message: `餐椅间距仅 ${d.toFixed(2)}m，小于 ${CHAIR_GAP_THRESHOLD_M.toFixed(2)}m 过挤`,
+          severity: 'soft',
+          status: 'unknown',
+          message: `两把餐椅中心距约 ${d.toFixed(2)}m，请核对椅背空间和实际使用方式。`,
         });
       }
     }
@@ -92,8 +93,9 @@ export function evaluateHumanFactors(
       if (d < AISLE_CLEARANCE_THRESHOLD_M - EPS) {
         violations.push({
           code: 'AISLE_CLEARANCE',
-          severity: 'hard',
-          message: `对坐家具通行余量仅 ${d.toFixed(2)}m，小于 ${AISLE_CLEARANCE_THRESHOLD_M.toFixed(2)}m`,
+          severity: 'soft',
+          status: 'unknown',
+          message: `两条长椅中心距约 ${d.toFixed(2)}m；朝向与实际通行空间仍需核对。`,
         });
       }
     }
@@ -119,8 +121,9 @@ export function evaluateHumanFactors(
         violations.push({
           code: 'CHECKIN_QUEUE',
           severity: 'soft',
+          status: 'unknown',
           zoneId: zone.id,
-          message: `签到台前排队缓冲仅 ${buffer.toFixed(2)}m，建议留 ≥ ${CHECKIN_QUEUE_THRESHOLD_M.toFixed(2)}m`,
+          message: `签到台与区域一侧距离约 ${buffer.toFixed(2)}m；实际排队方向和空间仍需核对。`,
         });
       }
     }
@@ -129,12 +132,8 @@ export function evaluateHumanFactors(
   return violations;
 }
 
-/** 门开门扇区半径（米，按门宽 0.9 的一半近似）。 */
-export const DOOR_SWEEP_RADIUS_M = 0.45;
-
 /**
- * 门弧遮挡：每个 door 标注按真实墙位置算扇区中心，沿墙法线向室内展开 widthM/2 半径。
- * 家具 footprint 落入扇区 → DOOR_SWEEP_BLOCKED hard（-3）。
+ * 门附近的粗略检查：当前缺少铰链和开启方向，不能据此判定实际门扇遮挡。
  *
  * 门宽已知但开启方向（swing）未知 → 结论为「近似，门扇未核验」，
  * 另产一条 soft unknown violation（DOOR_SWEEP_UNVERIFIED），不声称通过。
@@ -150,7 +149,7 @@ export function evaluateDoorSweep(
   const out: ScoredViolation[] = [];
 
   // 缺 roomSize：几何不真实，统一标 unknown，不算通过。
-  if (!roomSize || !Number.isFinite(roomSize.width) || !Number.isFinite(roomSize.height)) {
+  if (!roomSize || !Number.isFinite(roomSize.width) || !Number.isFinite(roomSize.height) || roomSize.width <= 0 || roomSize.height <= 0) {
     for (const d of doors) {
       out.push({
         code: 'DOOR_SWEEP_BLOCKED',
@@ -169,8 +168,16 @@ export function evaluateDoorSweep(
   for (const d of doors) {
     const g = d.geometry;
     if (g.kind !== 'door') continue;
-    // 真实门中心按墙位置算；扇区半径 = 门宽的一半。
-    const sweepR = g.widthM / 2;
+    const hasWidth = typeof g.widthM === 'number' && Number.isFinite(g.widthM) && g.widthM > 0;
+    if (!hasWidth) {
+      out.push({
+        code: 'DOOR_SWEEP_BLOCKED', severity: 'soft', status: 'unknown', zoneId: d.id,
+        message: `「${d.label || '门'}」门宽未知，位置及开启方向仍需核验。`,
+      });
+      continue;
+    }
+    // 已录入的宽度只用于粗略提示，不代表现场尺寸或开门方向已确认。
+    const sweepR = g.widthM! / 2;
     let doorX: number;
     let doorZ: number;
     // 向室内展开的法线方向（用于判定家具在门内侧而非墙外）。
@@ -196,12 +203,14 @@ export function evaluateDoorSweep(
         severity: 'soft',
         status: 'unknown',
         zoneId: d.id,
-        message: `「${d.label || '门'}」为推测门（门宽/位置/开启方向未核验），门弧几何不做硬判定`,
+        message: g.source === 'scene'
+          ? `「${d.label || '门'}」来自场景记录；现场位置、净宽和开启方向仍需核验。`
+          : `「${d.label || '门'}」为推测门（门宽/位置/开启方向未核验），门弧几何不做硬判定`,
       });
       continue;
     }
 
-    let blocked = false;
+    let nearbyName: string | null = null;
     for (const p of placements) {
       const furnitureR = Math.max(p.spec.width, p.spec.depth) / 2;
       const dx = p.x - doorX;
@@ -210,59 +219,39 @@ export function evaluateDoorSweep(
       // 家具在扇区半径内，且位于门内侧（向内法线方向投影 ≥ -0.1m 容差）。
       const inwardProj = dx * inwardX + dz * inwardZ;
       if (dist < sweepR + furnitureR && inwardProj >= -0.1) {
-        out.push({
-          code: 'DOOR_SWEEP_BLOCKED',
-          severity: 'hard',
-          status: 'violated',
-          zoneId: d.id,
-          message: `${d.label || '门'}的开门扇区被「${p.spec.name}」压住，开门会撞家具（近似，门扇未核验）`,
-        });
-        blocked = true;
+        nearbyName = p.spec.name;
         break;
       }
     }
-    // 无论是否 blocked，开启方向未知 → 软 unknown 提示。
+    // 当前模型没有铰链和开启方向；无论附近是否有物件，门扇都未核验。
     out.push({
       code: 'DOOR_SWEEP_BLOCKED',
       severity: 'soft',
       status: 'unknown',
       zoneId: d.id,
-      message: `「${d.label || '门'}」门扇开启方向未核验，结论为近似${blocked ? '，且已检出遮挡' : ''}`,
+      message: nearbyName
+        ? `「${d.label || '门'}」附近有「${nearbyName}」；门位置、宽度及开启方向未核验，请现场确认是否遮挡。`
+        : `「${d.label || '门'}」门位置、宽度及开启方向未核验，请现场确认是否遮挡。`,
     });
   }
   return out;
 }
 
-/**
- * 隐私区顺序软约束：签到区应在前场（z>0）、休息区应在后场（z<0）。
- * 违反 → PRIVACY_ORDER soft（不扣分），只进 reasons 建议。
- */
+/** 没有经过核验的入口与路径距离，不按坐标推断区域和入口的远近。 */
 export function evaluatePrivacyOrder(
   zones: readonly PlanAnnotation[],
-  roomSize: { width: number; height: number } | undefined,
+  _roomSize: { width: number; height: number } | undefined,
 ): ScoredViolation[] {
-  if (!roomSize) return [];
   const out: ScoredViolation[] = [];
   for (const z of zones) {
     if (z.kind !== 'zone' || z.geometry.kind !== 'rect') continue;
-    const centerZ = z.geometry.z + z.geometry.depth / 2;
-    if (z.zoneType === 'checkin' && centerZ > 0) {
-      // 签到区已经在前场 OK；z<0 说明签到在后排，反了
-    }
-    if (z.zoneType === 'checkin' && centerZ < -roomSize.height / 4) {
+    if (z.zoneType === 'checkin' || z.zoneType === 'rest') {
       out.push({
         code: 'PRIVACY_ORDER',
         severity: 'soft',
+        status: 'unknown',
         zoneId: z.id,
-        message: '签到区放到场地后半了，建议挪到入口侧（前排），宾客进来先签到',
-      });
-    }
-    if (z.zoneType === 'rest' && centerZ > roomSize.height / 4) {
-      out.push({
-        code: 'PRIVACY_ORDER',
-        severity: 'soft',
-        zoneId: z.id,
-        message: '休息区离门太近，建议往深处挪，留出签到→圆桌的自然动线',
+        message: `${z.zoneType === 'checkin' ? '签到区' : '休息区'}与入口的距离及实际路线尚未核验，请结合现场入口确认。`,
       });
     }
   }

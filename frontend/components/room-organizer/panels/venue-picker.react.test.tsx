@@ -62,7 +62,7 @@ function harness(onApply = vi.fn()) {
   state.layout = makeLayout();
   state.view = makeViewSettings();
   state.apply = onApply;
-  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/><VenuePickerOverlay/></LayoutAgentProvider>);
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel activeAgent="space"/><VenuePickerOverlay/></LayoutAgentProvider>);
   return onApply;
 }
 
@@ -122,9 +122,9 @@ describe('VenuePicker（换场地 / 新建）', () => {
     expect(mocks.listStudios).not.toHaveBeenCalled();
   });
 
-  it('从「你可以做什么」chip 打开弹层，取消即关', async () => {
+  it('从空间工具打开弹层，取消即关', async () => {
     harness();
-    fireEvent.click(screen.getByRole('button', { name: /换场地 \/ 新建/ }));
+    fireEvent.click(screen.getByRole('button', { name: '新建/换场地' }));
     expect(await screen.findByRole('dialog', { name: '换场地 / 新建' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(screen.queryByRole('dialog', { name: '换场地 / 新建' })).toBeNull();
@@ -132,7 +132,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
 
   it('弹层里选空白场地，开始布置 = 现有立壳链', async () => {
     const onApply = harness();
-    fireEvent.click(screen.getByRole('button', { name: /换场地 \/ 新建/ }));
+    fireEvent.click(screen.getByRole('button', { name: '新建/换场地' }));
     fireEvent.click(await screen.findByRole('button', { name: '开始布置' }));
     expect(onApply).toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: '换场地 / 新建' })).toBeNull();

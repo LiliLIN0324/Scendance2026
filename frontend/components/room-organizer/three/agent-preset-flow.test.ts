@@ -33,7 +33,7 @@ it.each([3, 6])('keeps the real gym read, BOM, three validations and JEV workflo
   };
   const providerBodies: string[] = [], jevBodies: string[] = [];
   const tool = (name: string, args: unknown) => ({ id: crypto.randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } });
-  await executeAgentRun(backend, 'actor', crypto.randomUUID(), crypto.randomUUID(), () => 'fixture', async (url, init) => {
+  await executeAgentRun(backend, 'actor', crypto.randomUUID(), crypto.randomUUID(), (key) => key === 'TOKENDANCE_API_KEY' ? 'fixture' : undefined, async (url, init) => {
     const encoded = String(init?.body);
     if (String(url).includes('systemone')) {
       jevBodies.push(encoded);

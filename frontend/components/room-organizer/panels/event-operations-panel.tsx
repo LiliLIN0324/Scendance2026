@@ -133,14 +133,14 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
       if (onSave(parsed.data)) {
         savedTask.current = parsed.data;
         setDraft(parsed.data); setTimes(timeInputs(parsed.data)); setBadTimeFields([]); setLinks(parsed.data.evidenceUrls.join('\n'));
-        setError(''); setNotice('任务已更新，请留意本机保存状态。');
+        setError(''); setNotice('任务记录已更新；场地来源与本版完成状态仍需复核，请留意本机保存状态。');
       }
     } catch { if (mounted.current) setError('任务核对失败，填写内容已保留，请重试。'); }
     finally { pending.current = false; if (mounted.current) setSaving(false); }
   }
   function submit(event: FormEvent): void { event.preventDefault(); void save(); }
   return <form className="sc-handoff-form sc-operation-form" onSubmit={submit}>
-    {status === 'needs_review' && <p className="sc-handoff-review">任务条件、时间或关联场景已变化，请重新核对。原现场核对说明已保留。</p>}
+    {status === 'needs_review' && <p className="sc-handoff-review">场地来源或本版任务依据尚未确认，请重新核对；原现场记录已保留，不能视为当前已完成。</p>}
     {reviewFailed && <p className="sc-handoff-error" role="alert">任务核对失败，请检查当前场景后重试。</p>}
     {(productionMissing.length>0||productionAmbiguous.length>0)&&<p className="sc-handoff-review">制作计划关联物料{productionMissing.length?`缺失 ${productionMissing.length} 件`:''}{productionMissing.length&&productionAmbiguous.length?'，':''}{productionAmbiguous.length?`不唯一 ${productionAmbiguous.length} 件`:''}，请到“制作计划”页核对。原制作关联保留，不会在此取消或重挂。</p>}
     <fieldset disabled={disabled || saving || status === 'checking'}>
@@ -152,7 +152,7 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
       <div className="sc-handoff-pair">{(['plannedStartAt', 'plannedEndAt'] as const).map(field => <label key={field} className="sc-field">{timeLabels[field]}<input type="datetime-local" step="0.001" value={times[field]} onChange={event => changeTime(field, event)}/></label>)}</div>
       <p className="sc-note sc-operation-time-note">时间按北京时间填写。未安排的时间可留空。</p>
       <label className="sc-field">完成条件<textarea rows={3} maxLength={eventOperationsLimits.acceptance} value={draft.acceptance} placeholder="写明完成后需要现场检查的结果" onChange={event => setDraft({ ...draft, acceptance: event.target.value })}/></label>
-      <label className="sc-field">任务状态<select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as EventOperationTask['status'] })}>{(['todo', 'doing', 'review', 'accepted'] as const).map(value => <option key={value} value={value}>{OPERATION_STATUS_LABELS[value]}</option>)}</select></label>
+      <label className="sc-field">任务记录状态（不代表当前已完成）<select aria-label="任务状态" value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as EventOperationTask['status'] })}>{(['todo', 'doing', 'review', 'accepted'] as const).map(value => <option key={value} value={value}>{OPERATION_STATUS_LABELS[value]}</option>)}</select></label>
       <details className="sc-operation-more">
         <summary>承接团队与实际时间</summary>
         <label className="sc-field">承接团队<input value={draft.contractorName} maxLength={eventOperationsLimits.contractorName} placeholder="可选，填写实际承接或外包团队" onChange={event => setDraft({ ...draft, contractorName: event.target.value })}/></label>
@@ -174,7 +174,7 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
       </details>
       <div className="sc-handoff-actions">
         <button className="sc-button" type="submit">{saving ? '正在保存…' : draft.status === 'accepted' && task.status !== 'accepted' ? '确认完成' : draft.status === 'review' && task.status !== 'review' ? '提交核对' : '保存任务'}</button>
-        {status === 'needs_review' && draft.status === 'accepted' && task.status === 'accepted' && <button className="sc-button" type="button" disabled={hasObjectProblems} onClick={() => void save(true)}>重新确认完成</button>}
+        {status === 'needs_review' && draft.status === 'accepted' && task.status === 'accepted' && <button className="sc-button" type="button" disabled={hasObjectProblems} onClick={() => void save(true)}>重新记录完成</button>}
         {status === 'needs_review' && draft.status === 'review' && task.status === 'review' && <button className="sc-button" type="button" disabled={hasObjectProblems} onClick={() => void save(true)}>重新提交核对</button>}
         <button className="sc-button" type="button" onClick={onDelete}>删除任务</button>
       </div>
@@ -259,7 +259,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
     {checkinsUnavailable&&<p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p>}
     <div className="sc-operation-brief">
       <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
-      {brief ? <><p className="sc-note">已保存需求草稿 · {brief.event} · 预计 {brief.guests} 人</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
+      {brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
     </div>
     <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
     {suggestionsPanel}

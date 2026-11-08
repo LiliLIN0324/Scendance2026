@@ -53,18 +53,22 @@ describe('production changes and local activity facts',()=>{
   const financial=productionPlanSchema.parse({budget:{limitMinor:0,scopeNote:'演练范围',basisNote:'人工假设'},estimates:[{id:id(7),title:'人工估算',taskIds:[id(6)],amountMinor:0,basisNote:'假设零费'}]});
   expect(await operationBasis({...base,productionPlan:financial},task)).toBe(original);
  });
- it('invalidates only the affected task when staffing changes and preserves accepted facts',async()=>{
+ it('tracks affected task basis while preserving recorded acceptance as needing review',async()=>{
   const base={...venue(),productionPlan:plan()},task=await reviewed(base),unrelated=await reviewed(base,id(6));
   const changed={...base,productionPlan:{...plan(),staffing:[{...plan().staffing[0],headcount:3}]}};
-  expect((await operationReview(changed,task)).status).toBe('needs_review');expect((await operationReview(changed,unrelated)).status).toBe('accepted');
+  expect(await operationBasis(changed,task)).not.toBe(task.reviewedBasis);expect(await operationBasis(changed,unrelated)).toBe(unrelated.reviewedBasis);
+  expect((await operationReview(changed,task)).status).toBe('needs_review');expect((await operationReview(changed,unrelated)).status).toBe('needs_review');
   expect(task).toMatchObject({status:'accepted',actualStartedAt:'2026-10-08T08:00:00+08:00',actualFinishedAt:'2026-10-08T09:00:00+08:00',evidenceNote:'演练证据'});
  });
- it('invalidates related material checks after acquisition changes, while money edits leave them intact',async()=>{
+ it('tracks relevant acquisition changes without treating an unchanged hash as acceptance',async()=>{
   const base={...venue(),productionPlan:plan()};const handoff={ownerName:'演练岗位',dueDate:'',acceptance:'核对演练规格',status:'accepted' as const,evidenceNote:'演练说明',evidenceUrls:[],reviewedBasis:await handoffBasis(base,id(2),{ownerName:'演练岗位',dueDate:'',acceptance:'核对演练规格'})};
   base.floors[0].items[0].handoff=handoff;
   const changed={...base,productionPlan:{...plan(),acquisitions:[{...plan().acquisitions[0],transportScope:'人工演练运输范围'}]}};
-  expect(await effectiveHandoffStatus(changed,id(2))).toBe('needs_review');expect(handoff.status).toBe('accepted');expect(handoff.evidenceNote).toBe('演练说明');
-  expect(await effectiveHandoffStatus({...base,productionPlan:{...plan(),estimates:[{id:id(7),title:'演练估算',taskIds:[],objectIds:[id(2)],amountMinor:100,basisNote:'人工假设'}]}},id(2))).toBe('accepted');
+  const financial={...base,productionPlan:{...plan(),estimates:[{id:id(7),title:'演练估算',taskIds:[],objectIds:[id(2)],amountMinor:100,basisNote:'人工假设'}]}};
+  expect(await handoffBasis(changed,id(2),handoff)).not.toBe(handoff.reviewedBasis);
+  expect(await handoffBasis(financial,id(2),handoff)).toBe(handoff.reviewedBasis);
+  expect(await effectiveHandoffStatus(changed,id(2))).toBe('needs_review');expect(await effectiveHandoffStatus(financial,id(2))).toBe('needs_review');
+  expect(handoff.status).toBe('accepted');expect(handoff.evidenceNote).toBe('演练说明');
  });
  it('keeps UUID aliases connected, legacy spelling distinct, and ignores row display ordering',()=>{
   const value=plan();value.staffing[0].taskIds=[id(5).toUpperCase()];expect(productionTaskBasis(value,id(5),[])).not.toBeNull();

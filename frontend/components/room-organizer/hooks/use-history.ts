@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface UseHistoryOptions {
+export interface UseHistoryOptions<T = unknown> {
   /** Debounce window for committing a snapshot, in milliseconds. */
   debounceMs?: number;
   /** Maximum number of snapshots to retain. */
   maxEntries?: number;
+  /** Refuse a transition before modifying either history stack. */
+  canApply?: (snapshot: T) => boolean;
 }
 
 export interface UseHistoryResult<T = unknown> {
@@ -50,8 +52,10 @@ interface HistoryStacks<T> {
  * outside the setState updater — StrictMode double-invokes updaters, so side
  * effects inside them (apply, ref writes) would corrupt the stacks in dev.
  */
-export function useHistory<T>(value: T, apply: (snapshot: T) => void, options: UseHistoryOptions = {}): UseHistoryResult<T> {
+export function useHistory<T>(value: T, apply: (snapshot: T) => void, options: UseHistoryOptions<T> = {}): UseHistoryResult<T> {
   const { debounceMs = 600, maxEntries = 50 } = options;
+  const canApplyRef=useRef(options.canApply);canApplyRef.current=options.canApply;
+  const mayApply=(snapshot:T)=>{try{return canApplyRef.current?.(snapshot)!==false;}catch{return false;}};
 
   const [stacks, setStacks] = useState<HistoryStacks<T>>({ past: [], future: [] });
   // Mirrors so event handlers read the current state without going through an
@@ -119,21 +123,22 @@ export function useHistory<T>(value: T, apply: (snapshot: T) => void, options: U
     // skipNextRef is armed the divergence is a not-yet-adopted baseline
     // (undo/redo), not a pending edit.
     if (!skipNextRef.current && !Object.is(valueRef.current, lastCommittedRef.current)) {
-      stacksRef.current = { past, future: [...future, valueRef.current] };
+      if (!mayApply(lastCommittedRef.current)) return;
+      const oldSkip=skipNextRef.current, pendingValue=valueRef.current, target=lastCommittedRef.current;skipNextRef.current=true;
+      try { apply(target); } catch { skipNextRef.current=oldSkip; return; }
+      stacksRef.current = { past, future: [...future, pendingValue] };
       setStacks(stacksRef.current);
-      skipNextRef.current = true;
-      apply(lastCommittedRef.current);
       return;
     }
 
     if (past.length === 0) return;
     const last = past[past.length - 1];
-    if (last === undefined) return;
-    stacksRef.current = { past: past.slice(0, -1), future: [...future, lastCommittedRef.current] };
+    if (last === undefined || !mayApply(last)) return;
+    const oldSkip=skipNextRef.current, previous=lastCommittedRef.current;skipNextRef.current=true;
+    try { apply(last); } catch { skipNextRef.current=oldSkip; return; }
+    stacksRef.current = { past: past.slice(0, -1), future: [...future, previous] };
     setStacks(stacksRef.current);
-    skipNextRef.current = true;
     lastCommittedRef.current = last;
-    apply(last);
   }, [apply]);
 
   const redo = useCallback(() => {
@@ -155,12 +160,12 @@ export function useHistory<T>(value: T, apply: (snapshot: T) => void, options: U
 
     if (future.length === 0) return;
     const next = future[future.length - 1];
-    if (next === undefined) return;
-    stacksRef.current = { past: [...past, lastCommittedRef.current], future: future.slice(0, -1) };
+    if (next === undefined || !mayApply(next)) return;
+    const oldSkip=skipNextRef.current, previous=lastCommittedRef.current;skipNextRef.current=true;
+    try { apply(next); } catch { skipNextRef.current=oldSkip; return; }
+    stacksRef.current = { past: [...past, previous], future: future.slice(0, -1) };
     setStacks(stacksRef.current);
-    skipNextRef.current = true;
     lastCommittedRef.current = next;
-    apply(next);
   }, [apply]);
 
   // The baseline is explicit rather than "whatever value arrives next": the

@@ -34,7 +34,7 @@ const checkinZone: PlanAnnotation = {
 describe('evaluateHumanFactors — CHAIR_GAP 餐椅间距', () => {
   it('两椅中心距 0.5m < 0.9m → CHAIR_GAP hard violation', () => {
     const v = evaluateHumanFactors([chair(0, 0), chair(0.5, 0)], []);
-    expect(v.some((x) => x.code === 'CHAIR_GAP' && x.severity === 'hard')).toBe(true);
+    expect(v.some((x) => x.code === 'CHAIR_GAP' && x.severity === 'soft' && x.status === 'unknown')).toBe(true);
   });
   it('两椅中心距 1.5m ≥ 0.9m → 无 CHAIR_GAP', () => {
     const v = evaluateHumanFactors([chair(0, 0), chair(1.5, 0)], []);
@@ -45,7 +45,7 @@ describe('evaluateHumanFactors — CHAIR_GAP 餐椅间距', () => {
 describe('evaluateHumanFactors — AISLE_CLEARANCE 对坐通行余量', () => {
   it('两排长椅中心距 1.5m < 1.65m → AISLE_CLEARANCE hard violation', () => {
     const v = evaluateHumanFactors([bench(0, 0), bench(0, 1.5)], []);
-    expect(v.some((x) => x.code === 'AISLE_CLEARANCE' && x.severity === 'hard')).toBe(true);
+    expect(v.some((x) => x.code === 'AISLE_CLEARANCE' && x.severity === 'soft' && x.status === 'unknown')).toBe(true);
   });
   it('两排长椅中心距 2.5m ≥ 1.65m → 无 AISLE_CLEARANCE', () => {
     const v = evaluateHumanFactors([bench(0, 0), bench(0, 2.5)], []);
@@ -60,7 +60,8 @@ describe('evaluateHumanFactors — CHECKIN_QUEUE 签到台前缓冲', () => {
     const q = v.find((x) => x.code === 'CHECKIN_QUEUE');
     expect(q).toBeDefined();
     expect(q!.severity).toBe('soft');
-    expect(q!.message).toContain('排队缓冲');
+    expect(q!.message).toContain('排队方向和空间仍需核对');
+    expect(q!.status).toBe('unknown');
   });
   it('签到台前沿到 z0 边缓冲 2.0m ≥ 1.5m → 无 CHECKIN_QUEUE', () => {
     // 桌前沿落在 z=2.0 → 桌中心 = 2.3

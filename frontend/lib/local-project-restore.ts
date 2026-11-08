@@ -1,3 +1,7 @@
+export const LOCAL_RESTORE_PAUSED = '本机备份恢复暂不可用；请保留备份文件和当前活动，恢复保障完成后再使用。';
+export function localRestoreAvailable(): boolean { return false; }
+export function requireLocalRestoreAvailable(): void { throw new Error(LOCAL_RESTORE_PAUSED); }
+
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
 import { withHouseId } from '../components/room-organizer/lib/ids';
 import { backupStoredLayout, localStorageOrNull, parseLayoutJson, sameLayoutContent } from '../components/room-organizer/lib/persistence';
@@ -22,6 +26,7 @@ export function commitLocalRestoreLayout(layout: RoomLayout, access: {
   apply(value: RoomLayout): void;
   beforeReplace?(): void;
 }, storage: Storage | null = localStorageOrNull()): string {
+  requireLocalRestoreAvailable();
   if (!storage) throw new Error('本机布局存储不可用，恢复未完成。');
   const candidate = createLocalProjectBackup(layout, {
     state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },

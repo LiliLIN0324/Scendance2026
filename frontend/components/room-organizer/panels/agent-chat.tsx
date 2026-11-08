@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, Globe, LayoutTemplate, Plus, Scan, SquareDashed } from '@/components/solid-icons';
 import { useRoomEditor } from '../contexts';
 import { useSupervisionMode } from '../hooks/use-supervision-mode';
@@ -31,11 +31,27 @@ const AGENT_CHAT_META: Record<'space' | 'material', { name: string; placeholder:
 };
 
 const COLOR_GREEN = '#4A7C59';
+// Unsent text stays in this page only, partitioned by the caller's activity/session/account scope.
+const retainedDrafts = new Map<string,string>();
 
-export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflow }: { agent: ChatAgent; onNewSpace?: ((mode?: 'blank' | 'template') => void) | undefined; onOpenAholo?: ((kind: 'world' | 'recon', prompt?: string) => void) | undefined; onSelectSpaceWorkflow?: ((workflow: 'aholo' | 'traditional') => void) | undefined }): JSX.Element | null {
+export interface AgentChatProps {
+  agent: ChatAgent;
+  onNewSpace?: ((mode?: 'blank' | 'template') => void) | undefined;
+  onOpenAholo?: ((kind: 'world' | 'recon', prompt?: string) => void) | undefined;
+  onSelectSpaceWorkflow?: ((workflow: 'aholo' | 'traditional') => void) | undefined;
+  /** True means the current activity accepted the text for its existing conversation. */
+  onForwardToActivity?: ((text:string) => boolean | Promise<boolean>) | undefined;
+  draftScope?: string | undefined;
+}
+
+export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflow, onForwardToActivity, draftScope }: AgentChatProps): JSX.Element | null {
   const { layout } = useRoomEditor();
   void layout;
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(()=>draftScope ? retainedDrafts.get(draftScope)??'' : '');
+  const [notice, setNotice] = useState('');
+  const [forwarding, setForwarding] = useState(false);
+  const forwardingRef = useRef(false);
+  function rememberDraft(value:string):void { if(draftScope){if(value)retainedDrafts.set(draftScope,value);else retainedDrafts.delete(draftScope);}setDraft(value); }
 
   // 订阅运行时账本（真步骤时间线 / 三控件状态）。
   // 注意：所有 hooks 必须在 early return 之前调用（React rules of hooks）。
@@ -43,43 +59,56 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
   useEffect(() => subscribeAgentRun(() => setRun(getAgentRun())), []);
   const [mode, setMode] = useSupervisionMode();
 
-  const submit = (event: FormEvent<HTMLFormElement>): void => {
+  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if(forwardingRef.current)return;
     const text = draft.trim();
     if (!text) return;
-    // 真动作：空间脸 4 条口令直通对应回调；不匹配就只是清空——不再拼假寒暄。
-    if (agent === 'space' && onSelectSpaceWorkflow && /传统.*(空间|模板)|切换.*传统|空白.*空间/.test(text)) {
+    const actionClauses=text.split(/[，,。；;！!]/).map(value=>value.trim()).filter(value=>value&&!/(?:不要|不用|无需|不需要|暂不|别|已经|已完成|完成了|如何|怎么|怎样|是否|能否|要不要|是什么意思|[?？])/.test(value));
+    // These shortcuts are not a general conversation; retain any unhandled request.
+    if (agent === 'space' && onSelectSpaceWorkflow && actionClauses.some(value=>/传统.*(空间|模板)|切换.*传统|空白.*空间/.test(value))) {
       onSelectSpaceWorkflow('traditional');
-      setDraft('');
+      rememberDraft('');
       return;
     }
-    if (agent === 'space' && onSelectSpaceWorkflow && /切回.*(生成|建模)|切换到.*(生成|建模)/.test(text)) {
+    if (agent === 'space' && onSelectSpaceWorkflow && actionClauses.some(value=>/切回.*(生成|建模)|切换到.*(生成|建模)/.test(value))) {
       onSelectSpaceWorkflow('aholo');
-      setDraft('');
+      rememberDraft('');
       return;
     }
     if (agent === 'space' && onOpenAholo) {
-      const kind = /重建|真实场地|实景|现场照片|现场视频|照片重建|视频重建/.test(text)
+      // Questions, negations and completed actions belong to the conversation,
+      // not to a shortcut that opens a generation workflow.
+      const actionClause=actionClauses.find(value=>/(?:重建|生成.{0,8}(?:空间|场景)|创建.{0,8}(?:空间|场景))/.test(value));
+      const kind = actionClause && /重建/.test(actionClause)
         ? 'recon'
-        : /生成.{0,8}(空间|场景)|创建.{0,8}(空间|场景)/.test(text)
+        : actionClause && /生成.{0,8}(空间|场景)|创建.{0,8}(空间|场景)/.test(actionClause)
           ? 'world'
           : null;
       if (kind) {
         onOpenAholo(kind, kind === 'world' ? text : undefined);
-        setDraft('');
+        rememberDraft('');
         return;
       }
     }
-    setDraft('');
+    if(onForwardToActivity){
+      forwardingRef.current=true;setForwarding(true);setNotice('正在转交活动对话，请稍候。');
+      let accepted=false;
+      try{accepted=await onForwardToActivity(text);}catch{/* Keep the original input for the user. */}
+      finally{forwardingRef.current=false;setForwarding(false);}
+      if(accepted){rememberDraft('');setNotice('已转交活动对话。');return;}
+    }
+    setNotice('这条需求暂时无法转交。请复制内容，打开活动对话继续；输入内容已保留。');
   };
 
   // 运行条：回车把 draft 当 steer 备注塞进下一轮上下文，不做主任务提交。
   const submitSteer = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    if(forwardingRef.current)return;
     const text = draft.trim();
     if (!text) return;
     pushAgentSteerNote(text);
-    setDraft('');
+    rememberDraft('');
   };
 
   // 活动与 Bingo 是 AgentPanel 里那场真对话，这里不接管。
@@ -110,15 +139,17 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
             id={`ap-chat-${agent}`}
             rows={1}
             value={draft}
+            disabled={forwarding}
             maxLength={400}
             placeholder={run.isRunning ? '为下一步加备注…' : meta.placeholder}
-            onChange={event => setDraft(event.target.value)}
+            onChange={event => { rememberDraft(event.target.value); setNotice(''); }}
             onKeyDown={event => {
               if (event.nativeEvent.isComposing) return;
               if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
             }}
           />
         </div>
+        {notice && <p role="status">{notice}</p>}
         <div className="ap-composer-bar">
           <div className="ap-composer-left">
             {agent === 'space' && (onNewSpace) && !run.isRunning && <details className="sc-chat-plus">
@@ -176,7 +207,7 @@ export function AgentChat({ agent, onNewSpace, onOpenAholo, onSelectSpaceWorkflo
             {/* 物料这一格的左下角就是那颗生成物料星，和生成入口那格同一个入口、同一颗钮。 */}
             {agent === 'material' && <MaterialCreateCell/>}
           </div>
-          <button type="submit" className="ap-send" aria-label="发送" disabled={!draft.trim()}><ArrowUp size={18}/></button>
+          <button type="submit" className="ap-send" aria-label="发送" disabled={forwarding || !draft.trim()}><ArrowUp size={18}/></button>
         </div>
       </form>
     </div>

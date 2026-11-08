@@ -27,6 +27,7 @@ import {
 import { generateScoredPlans, pickRecommendedPlan, detectFurnitureOverlap } from './plan-scoring';
 import type { PlanAnnotation } from './plan-annotation';
 import { HALL_D5, GUANGZHOU_MEETING_ROOM_6, type FixtureDoor } from './fixtures/hall-d5';
+import { FURNITURE_CATALOG } from './furniture-catalog';
 
 /** 把 fixture 的门标注转成管线吃的 PlanAnnotation door。 */
 function fixtureDoorToAnnotation(d: FixtureDoor): PlanAnnotation {
@@ -39,10 +40,8 @@ function fixtureDoorToAnnotation(d: FixtureDoor): PlanAnnotation {
       kind: 'door',
       wall: d.wall,
       position: d.position,
-      // fixture 明确不填 widthM = unknown；管线里 door.widthM 是 number 必填，
-      // 这里给一个占位 0.9m，但同时断言 violation 里 status=unknown，不宣称通过。
-      // 真正门宽待场地方核实后回填（见 fixture 注释）。
-      widthM: d.widthM ?? 0.9,
+      // fixture 未提供的宽度保持未知，不生成假定的门洞尺寸。
+      widthM: d.widthM ?? null,
       ...(d.inferred ? { inferred: true } : {}),
     },
   };
@@ -91,12 +90,28 @@ describe('场景 A：Hall D5 120 人公开讲座课桌式', () => {
     expect(plans.length).toBeLessThanOrEqual(3);
     const feasible = plans.filter((p) => p.feasible);
     expect(feasible.length).toBeGreaterThanOrEqual(1);
-    // 官方课桌 120；我们摆约 126（6 排 × 7 桌 × 3 人），容差 ±20%。
+    // 人工估测矩形与课桌区的模拟：容差只用于发现算法回归，不能证明匹配官方完整布局。
     for (const p of feasible) {
       expect(p.capacitySeats).toBeGreaterThanOrEqual(96);
       expect(p.capacitySeats).toBeLessThanOrEqual(144);
-      expect(p.feasibilityStatus).toBe('FEASIBLE');
+      expect(p.feasibilityStatus).toBe('INSUFFICIENT_INPUT');
     }
+  });
+
+  it('示例课桌区的原始排布为 42 桌、126 椅，仅是估测条件下的合成计数', () => {
+    const raw = planZones(annotations, 0.5);
+    expect(raw.placements.filter(p => p.spec.type === 'desk-table')).toHaveLength(42);
+    expect(raw.placements.filter(p => p.spec.type === 'desk-chair')).toHaveLength(126);
+    expect(groupTablesByRow(raw.placements)).toHaveLength(6);
+  });
+
+  it('人工矩形与区块未复现官图完整台前条件，不能作为容量校准结论', () => {
+    const raw = planZones(annotations, 0.5);
+    const firstTableEdge = Math.min(...raw.placements.filter(p => p.spec.type === 'desk-table').map(p => p.z - p.spec.depth / 2));
+    const estimatedNorthWall = -HALL_D5.roomSize.height / 2;
+    // 仅计算到估测边界的距离；基准没有舞台，不能由此测量真实台前距离。
+    expect(firstTableEdge - estimatedNorthWall).toBeLessThan(HALL_D5.layoutReference.stageFrontClearM);
+    expect(HALL_D5.roomSize.note).toContain('估测');
   });
 
   it('A2：课桌排距 ≥1.4m（对齐官方课桌图，不是剧院的 0.9m）', () => {
@@ -156,7 +171,7 @@ describe('场景 A：Hall D5 120 人公开讲座课桌式', () => {
     }
   });
 
-  it('A7：不堵南墙推断门（门 ±1.5m 内无家具 footprint）', () => {
+  it('A7：在估计的南门位置留空，不代表实际入口已核验' , () => {
     const plans = generateScoredPlans(annotations, { roomSize: HALL_D5.roomSize });
     const rec = pickRecommendedPlan(plans)!;
     const halfH = HALL_D5.roomSize.height / 2;
@@ -171,7 +186,7 @@ describe('场景 A：Hall D5 120 人公开讲座课桌式', () => {
     }
   });
 
-  it('A8：不堵西北角非常口应急口', () => {
+  it('A8：在估计的非常口位置留空，不代表实际出口已核验' , () => {
     const plans = generateScoredPlans(annotations, { roomSize: HALL_D5.roomSize });
     const rec = pickRecommendedPlan(plans)!;
     const halfW = HALL_D5.roomSize.width / 2;
@@ -186,6 +201,7 @@ describe('场景 A：Hall D5 120 人公开讲座课桌式', () => {
   });
 
   it('A9：门弧因门宽/方向 unknown → violation status=unknown，不宣称通过', () => {
+    expect(doors.every(d => d.geometry.kind === 'door' && d.geometry.widthM === null)).toBe(true);
     const plans = generateScoredPlans(annotations, { roomSize: HALL_D5.roomSize });
     for (const p of plans) {
       const doorSweeps = p.violations.filter((v) => v.code === 'DOOR_SWEEP_BLOCKED');
@@ -206,13 +222,8 @@ describe('场景 A：Hall D5 120 人公开讲座课桌式', () => {
     const badAnns = [badDesk, ...doors];
     const plans = generateScoredPlans(badAnns, { roomSize: HALL_D5.roomSize });
     const rec = pickRecommendedPlan(plans);
-    // 所有方案都 feasible=false 时，pickRecommended 返回 null。
-    if (plans.some((p) => p.feasible)) {
-      // 有可行方案时，被选中的必须 feasible=true。
-      expect(rec!.feasible).toBe(true);
-    } else {
-      expect(rec).toBeNull();
-    }
+    if (rec) { expect(rec.feasible).toBe(true); expect(rec.placements.length).toBeGreaterThan(0); expect(rec.skipped).toEqual([]); }
+    else expect(plans.every(p => !p.feasible || p.placements.length === 0 || p.skipped.length > 0)).toBe(true);
   });
 });
 
@@ -222,22 +233,21 @@ describe('场景 A：Hall D5 120 人公开讲座课桌式', () => {
 describe('场景 B：对抗 250 人（超官方剧院 200）', () => {
   const doors = HALL_D5.doors.map(fixtureDoorToAnnotation);
 
-  it('B1：250 人需求在 19×15 厅里摆不下（capacitySeats < 250，不默默硬凑）', () => {
+  it('B1：本次课桌搜索未达到 250 座，不将不完整候选标为推荐', () => {
     // 把课桌区拉到最大（18×14），看管线实际能摆多少。
     const maxDesk = deskZone('d5-max', -9, -7, 18, 14, '最大课桌区');
     const plans = generateScoredPlans([maxDesk, ...doors], { roomSize: HALL_D5.roomSize });
-    const rec = pickRecommendedPlan(plans);
-    expect(rec).not.toBeNull();
-    // 关键断言：实际 capacitySeats 远小于 250，没有"虚增椅子"硬凑 250。
-    expect(rec!.capacitySeats).toBeLessThan(250);
-    // 且接近官方课桌 120 ~ 剧院 200 的量级（不应只摆几十把）。
-    expect(rec!.capacitySeats).toBeGreaterThanOrEqual(100);
+    // 这是有限搜索的诊断，不以跳过物料的不完整版本冒充可推荐方案。
+    const candidate = plans.reduce((best, plan) => plan.capacitySeats > best.capacitySeats ? plan : best);
+    expect(candidate.capacitySeats).toBeLessThan(250);
+    expect(candidate.capacitySeats).toBeGreaterThanOrEqual(100);
+    expect(pickRecommendedPlan(plans)).toBeNull();
   });
 
   it('B2：空间不够时，capacitySeats 等于实际 desk-chair 数（不凭空加椅子）', () => {
     const maxDesk = deskZone('d5-max2', -9, -7, 18, 14);
     const plans = generateScoredPlans([maxDesk, ...doors], { roomSize: HALL_D5.roomSize });
-    const rec = pickRecommendedPlan(plans)!;
+    const rec = plans.reduce((best, plan) => plan.capacitySeats > best.capacitySeats ? plan : best);
     // capacitySeats 必须等于 placements 里 desk-chair 的实际数量（不能凭空加椅子）。
     const actualChairs = rec.placements.filter((p) => p.spec.type === 'desk-chair').length;
     expect(rec.capacitySeats).toBe(actualChairs);
@@ -247,21 +257,21 @@ describe('场景 B：对抗 250 人（超官方剧院 200）', () => {
     // 这条产品 gap 在对照结论里列出，本测试只验证"不硬凑"。
   });
 
-  it('B3：传 targetCapacity=250 时，推荐版 reasons 必须出现「装不下 250」或「建议降到」人话', () => {
+  it('B3：传 targetCapacity=250 时，诊断候选说明当前区域的座位缺口', () => {
     // 真断言：直接调用 generateScoredPlans 并把 targetCapacity=250 喂进去，
-    // 要求推荐版 reasons 里有人话降容提示（不是测试侧自己算 capacity<250 的旧绕法）。
+    // 要求诊断候选的 reasons 里有人话缺口提示，不宣称场地最大容量。
     const maxDesk = deskZone('d5-max3', -9, -7, 18, 14);
     const plans = generateScoredPlans([maxDesk, ...doors], {
       roomSize: HALL_D5.roomSize,
       targetCapacity: 250,
     });
-    const rec = pickRecommendedPlan(plans);
-    expect(rec).not.toBeNull();
-    const reasonText = rec!.reasons.join('\n');
-    expect(reasonText).toMatch(/装不下\s*250/);
-    expect(reasonText).toMatch(/建议(把人数)?降到/);
+    const rec = plans.reduce((best, plan) => plan.capacitySeats > best.capacitySeats ? plan : best);
+    expect(pickRecommendedPlan(plans)).toBeNull();
+    const reasonText = rec.reasons.join('\n');
+    expect(reasonText).toMatch(/目标\s*250\s*座还差约/);
+    expect(reasonText).not.toContain('最多');
     // 同时保留「容量不虚增」的硬断言。
-    expect(rec!.capacitySeats).toBeLessThan(250);
+    expect(rec.capacitySeats).toBeLessThan(250);
   });
 });
 
@@ -337,12 +347,15 @@ describe('场景 C：广州会议室 6 社区健康讲座 45 人课桌+签到台
  * 常量对照（文档性断言：保证我们导出的常数与官方参考值对齐）
  * ===================================================================== */
 describe('常数对照：我们导出的课桌常数 vs 官方图', () => {
-  it('排距/走道/每桌人数与 fixture layoutReference 对齐', () => {
+  it('局部排距/走道/每桌人数沿用参考值，不代表完整布局一致', () => {
     expect(DESK_ROW_PITCH_M).toBe(HALL_D5.layoutReference.classroomRowPitchM); // 1.4
     expect(DESK_AISLE_M).toBe(HALL_D5.layoutReference.classroomAisleM); // 1.2
     expect(DESK_CHAIRS_PER_TABLE).toBe(HALL_D5.layoutReference.chairsPerClassroomTable); // 3
     expect(DESK_TABLE_WIDTH_M).toBe(HALL_D5.furniture.deskTable.width); // 1.8
     expect(DESK_TABLE_DEPTH_M).toBe(HALL_D5.furniture.deskTable.depth); // 0.6
+    expect(HALL_D5.furniture.deskTable.referenceHeightM).toBe(0.7);
+    expect(FURNITURE_CATALOG.find(item => item.type === 'desk-table')?.height).toBe(0.75);
+    expect(FURNITURE_CATALOG.find(item => item.type === 'desk-table')?.height).not.toBe(HALL_D5.furniture.deskTable.referenceHeightM);
     expect(DESK_CHAIR_WIDTH_M).toBe(HALL_D5.furniture.deskChair.width); // 0.49
     expect(DESK_CHAIR_DEPTH_M).toBe(HALL_D5.furniture.deskChair.depth); // 0.57
   });

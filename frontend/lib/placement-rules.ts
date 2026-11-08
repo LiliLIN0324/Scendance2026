@@ -1,4 +1,5 @@
 import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import { isStructuralMarker } from '../components/room-organizer/lib/structural-layout';
 
 /** 几何判据容差（米）。所有数字与相交判断都用同一把尺子。 */
 const EPS = 1e-6;
@@ -183,7 +184,7 @@ function isLowProfile(item: FurnitureItem): boolean {
 
 /** structural-* 标记件（柱/墙/门洞等结构占位）：跳过重叠判据。 */
 function isStructural(item: FurnitureItem): boolean {
-  return typeof item.type === 'string' && item.type.startsWith('structural');
+  return isStructuralMarker(item) || (typeof item.type === 'string' && item.type.startsWith('structural'));
 }
 
 /**
@@ -212,6 +213,8 @@ function checkAgainstFloor(
   const violations: Violation[] = [];
   const floor = layout.floors[floorIndex];
   if (!floor) return violations;
+  // 门洞等结构标记位于墙线上，其几何由结构检查处理，不是越界家具。
+  if (isStructuralMarker(candidate)) return violations;
 
   const poly = itemCorners(candidate);
 

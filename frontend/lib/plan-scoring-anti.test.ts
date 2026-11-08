@@ -124,8 +124,7 @@ describe('H. 空 annotations → 合并为 1 版 balanced', () => {
       expect(p.capacitySeats).toBe(0);
     }
     const rec = pickRecommendedPlan(plans);
-    expect(rec!.variantId).toBe('balanced');
-    expect(rec!.placements).toEqual([]);
+    expect(rec).toBeNull(); // 没有物料时只能展示诊断，不能推荐。
   });
 });
 
@@ -174,10 +173,8 @@ describe('P1. subScores 0-100 三维子分', () => {
     for (const p of plans) {
       expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
       expect(p.subScores.capacity).toBeLessThanOrEqual(100);
-      expect(p.subScores.flow).toBeGreaterThanOrEqual(0);
-      expect(p.subScores.flow).toBeLessThanOrEqual(100);
-      expect(p.subScores.ergonomics).toBeGreaterThanOrEqual(0);
-      expect(p.subScores.ergonomics).toBeLessThanOrEqual(100);
+      expect(p.subScores.flow).toBeNull();
+      expect(p.subScores.ergonomics).toBeNull();
     }
   });
 
@@ -185,10 +182,9 @@ describe('P1. subScores 0-100 三维子分', () => {
     const plans = generateScoredPlans([]);
     for (const p of plans) {
       expect(Number.isFinite(p.subScores.capacity)).toBe(true);
-      expect(Number.isFinite(p.subScores.flow)).toBe(true);
-      expect(Number.isFinite(p.subScores.ergonomics)).toBe(true);
+      expect(p.subScores.flow).toBeNull();
+      expect(p.subScores.ergonomics).toBeNull();
       expect(p.subScores.capacity).toBeGreaterThanOrEqual(0);
-      expect(p.subScores.flow).toBeLessThanOrEqual(100);
     }
   });
 });
@@ -209,7 +205,7 @@ describe('4.0.1 默认南门（withDefaultDoor）+ 墙退距', () => {
     }
   });
 
-  it('用户已画真实门时 assurance=verified（不是 draft_unverified）', () => {
+  it('画了门仍不能声称已核验：门的开启方向及检查覆盖仍未知', () => {
     const userDoor: PlanAnnotation = {
       id: 'user-door-north',
       kind: 'door',
@@ -220,8 +216,9 @@ describe('4.0.1 默认南门（withDefaultDoor）+ 墙退距', () => {
     const zone = makeZone('round', { x: -4, z: 0, w: 4, d: 4, zoneType: 'roundtable' });
     const plans = generateScoredPlans([zone, userDoor], { roomSize: { width: 12, height: 10 } });
     for (const p of plans) {
-      expect(p.assurance).toBe('verified');
+      expect(p.assurance).toBe('draft_unverified');
       expect(p.violations.some(v => v.code === 'DOOR_UNKNOWN')).toBe(false);
+      expect(p.violations.some(v => v.code === 'DOOR_SWEEP_BLOCKED' && v.status === 'unknown')).toBe(true);
     }
   });
 
