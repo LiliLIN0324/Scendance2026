@@ -19,5 +19,9 @@ describe('场地规划引导', () => {
     expect(screen.getByText(/按 Enter 或双击结束/)).toBeTruthy();
     view.rerender(<AnnotationGuide mode="measure" zoneType="roundtable" onModeChange={onModeChange} onZoneTypeChange={onZoneTypeChange} onFinish={onFinish} />);
     expect(screen.getByText(/点击起点和终点/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '标出入口' }));
+    expect(onModeChange).toHaveBeenCalledWith('door');
+    view.rerender(<AnnotationGuide mode="door" zoneType="roundtable" onModeChange={onModeChange} onZoneTypeChange={onZoneTypeChange} onFinish={onFinish} />);
+    expect(screen.getByText(/门宽、开启方向与现场情况仍需核对/)).toBeTruthy();
   });
 });

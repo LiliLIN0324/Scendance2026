@@ -230,6 +230,89 @@ const violationSoftStyle: CSSProperties = {
   lineHeight: 1.4,
 };
 
+/* ---------- SC-19/G1：版级可行性徽标 + 无推荐横幅样式 ---------- */
+
+/** 不可行（hard violation）徽标：琥珀色，沿用取消按钮色板，禁紫/禁靛。 */
+const variantInfeasibleBadgeStyle: CSSProperties = {
+  color: '#b45309',
+  fontSize: 11,
+  fontWeight: 600,
+  border: '1px solid #f3d5a4',
+  borderRadius: 999,
+  padding: '1px 8px',
+  whiteSpace: 'nowrap',
+};
+
+/** 缺关键数据（INSUFFICIENT_INPUT）徽标：灰底灰字。 */
+const variantInsufficientBadgeStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 600,
+  border: '1px solid #e5e7eb',
+  borderRadius: 999,
+  padding: '1px 8px',
+  whiteSpace: 'nowrap',
+};
+
+/** 推测门草案（draft_unverified）小字标签：灰色，不与不可行混用。 */
+const variantDraftMetaStyle: CSSProperties = {
+  color: '#9ca3af',
+  fontSize: 11,
+};
+
+/* ---------- B4 降容话术露出面：推荐版 reasons 渲染 ---------- */
+
+/** 推荐版理由列表容器（挂在推荐版行下，与 violations 同级）。 */
+const variantReasonsWrapStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  padding: '0 6px 2px 10px',
+};
+
+/** 「推荐理由」小标题。 */
+const variantReasonTitleStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 600,
+};
+
+/** 单条理由：灰色小字，与子分行保持同色系。 */
+const variantReasonStyle: CSSProperties = {
+  color: '#6b7280',
+  fontSize: 11,
+  lineHeight: 1.5,
+};
+
+/** 降容建议行（「装不下 N 人 / 建议降到」）：琥珀色提醒，沿用 REC=null 横幅色板。 */
+const variantCapacityAdviceStyle: CSSProperties = {
+  color: '#92400e',
+  fontSize: 11,
+  lineHeight: 1.5,
+};
+
+/** REC=null 横幅：所有版本都有硬冲突时，先说「没有可推荐方案」。 */
+const noRecommendBannerStyle: CSSProperties = {
+  borderLeft: '3px solid #b45309',
+  background: '#fff7ed',
+  padding: '6px 10px',
+  fontSize: 12,
+  color: '#92400e',
+  borderRadius: 4,
+  lineHeight: 1.5,
+};
+
+/** feasibilityStatus → 版级徽标文案；FEASIBLE 不出徽标。 */
+function feasibilityBadge(p: ScoredPlan): { text: string; style: CSSProperties } | null {
+  if (p.feasibilityStatus === 'INSUFFICIENT_INPUT') {
+    return { text: '⚠ 待核验', style: variantInsufficientBadgeStyle };
+  }
+  if (!p.feasible) {
+    return { text: '⛔ 不可行', style: variantInfeasibleBadgeStyle };
+  }
+  return null;
+}
+
 const suggestionsBlockStyle: CSSProperties = {
   background: '#f9fafb',
   border: '1px solid #e5e7eb',
@@ -321,6 +404,22 @@ export function PlanCard({
 
   const hasPlans = Array.isArray(plans) && plans.length > 0;
   const hasSuggestions = Array.isArray(suggestions) && suggestions.length > 0;
+  // SC-19/G1：三版都有硬冲突（父组件推荐版为空）时，先明说「没有可推荐方案」，
+  // 再列硬冲突清单——不能让用户对着一排看似正常的分数条自己猜。
+  const noRecommendedPlan = hasPlans && !recommendedId && plans!.every((p) =>
+    (p.violations ?? []).some((v) => v.severity === 'hard' && (v.status === undefined || v.status === 'violated')),
+  );
+  const hardConflictSummary = noRecommendedPlan
+    ? (() => {
+        const seen = new Set<string>();
+        for (const p of plans!) {
+          for (const v of Array.isArray(p.violations) ? p.violations : []) {
+            if (v.severity === 'hard' && (v.status === undefined || v.status === 'violated')) seen.add(v.message);
+          }
+        }
+        return [...seen].slice(0, 4);
+      })()
+    : [];
 
   return (
     <section style={cardStyle} aria-label="规划草案">
@@ -371,6 +470,14 @@ export function PlanCard({
             </div>)}
           </details>}
           {!plans!.some(isScoredPlanApplicable) && <p style={rationaleStyle}>本次没有找到可应用的完整候选，可调整区域或需求后重试；这不代表场地无解。</p>}
+          {noRecommendedPlan && (
+            <div style={noRecommendBannerStyle} data-testid="plan-card-no-recommendation">
+              各候选均有硬冲突，没有可推荐方案：
+              {hardConflictSummary.length > 0
+                ? hardConflictSummary.map((m, i) => <div key={`hc-${i}`}>· {m}</div>)
+                : '请调整标注或场地尺寸'}
+            </div>
+          )}
           {plans!.map((p) => {
             // 防御：reasons 为空数组时，这个 plan 没法向用户解释为什么推荐，
             // 哪怕它被父组件标成 recommendedId 也不渲染「✅ 推荐」标签。
@@ -385,6 +492,18 @@ export function PlanCard({
               ? p.violations.filter((v) => v.status === 'unknown' || (v.severity === 'soft' && (v.status === undefined || v.status === 'violated')))
               : [];
             const hasViolations = hardViolations.length > 0 || softViolations.length > 0;
+            // G1 版级出口：不可行 / 缺尺寸出版级徽标；推测门草案出灰色小字。
+            const badge = feasibilityBadge(p);
+            const isDraft = p.assurance === 'draft_unverified';
+            // B4：推荐版的 reasons 从数据层露出——降容建议（「装不下 N 人 / 建议降到」）
+            // 此前只存在 reasons 数组里，任何 UI 都不渲染，用户永远看不到。
+            // 与 violations 去重：与违规清单逐字相同的理由不再重复列一遍。
+            const shownViolationTexts = new Set(
+              [...hardViolations, ...softViolations].map((v) => v.message),
+            );
+            const reasonLines = isRecommended && hasReasons
+              ? [...new Set((p.reasons ?? []).filter((r) => !shownViolationTexts.has(r)))]
+              : [];
             return (
               <div key={p.variantId} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <button
@@ -398,16 +517,37 @@ export function PlanCard({
                     {isSelected ? '👉 选中 ' : ''}
                     {p.label}版
                   </span>
+                  {badge && <span style={badge.style} data-testid={`plan-variant-badge-${p.variantId}`}>{badge.text}</span>}
                   <span style={variantRowMeta}>
                     估算 {p.capacitySeats} 座 · {formatAisle(p)} · 越界 {p.outOfBounds}
                   </span>
                 </button>
                 <div style={variantSubScoreStyle}>
                   容量 {p.subScores.capacity} · 动线 {p.subScores.flow ?? '待核验'} · 人体 {p.subScores.ergonomics ?? '待核验'}
+                  {isDraft && <span style={variantDraftMetaStyle} data-testid="plan-card-draft-unverified"> · 待核验草案</span>}
                 </div>
                 {p.placements.length === 0 && <div style={violationSoftStyle}>这版没有生成物料，请调整区域后重试。</div>}
                 {p.skipped.map((item, index) => <div key={`skipped-${index}`} style={violationSoftStyle}>未能放入{item.label ? `「${item.label}」` : '物料'}：{item.reason}</div>)}
                 {(p.inventoryNotes ?? []).map((note, index) => <div key={`inventory-${index}`} style={violationSoftStyle}>{note}</div>)}
+                {reasonLines.length > 0 && (
+                  <div style={variantReasonsWrapStyle} data-testid="plan-card-recommended-reasons">
+                    <div style={variantReasonTitleStyle}>推荐理由</div>
+                    {reasonLines.map((r, i) => {
+                      // 降容建议行加琥珀色提醒：这是 B4 的核心露出——出方案时就
+                      // 能看到「装不下 N 人 / 建议降到约 X 人」，不必等批准。
+                      const isCapacityAdvice = r.includes('还差约');
+                      return (
+                        <div
+                          key={`r-${i}`}
+                          style={isCapacityAdvice ? variantCapacityAdviceStyle : variantReasonStyle}
+                          data-testid={isCapacityAdvice ? 'plan-card-capacity-advice' : undefined}
+                        >
+                          · {r}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {hasViolations && (
                   <div style={variantViolationsWrapStyle}>
                     {hardViolations.map((v, i) => (

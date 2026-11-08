@@ -788,6 +788,7 @@ body {
 .sc-geo-basemap .sc-geo-chip strong { color: var(--wk-ink); font-weight: 500; }
 .sc-geo-basemap .sc-geo-chip small { color: var(--wk-muted); }
 .sc-geo-basemap .sc-geo-notice { font-size: var(--fs-cap); color: var(--warn); background: var(--paper); border: 1px solid var(--wk-hair); border-radius: var(--r-sm); padding: 3px 8px; }
+.sc-geo-basemap .sc-geo-attribution { font-size: var(--fs-cap); color: var(--wk-muted); background: var(--wk-paper); border: 1px solid var(--wk-hair); border-radius: 999px; padding: 3px 9px; opacity: 0.9; }
 .sc-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sc-canvas-dot { color: var(--faint); }
 .sc-canvas-tip { position: absolute; right: 20px; top: 17px; padding-right: 24px; pointer-events: none; }
@@ -1242,6 +1243,11 @@ body {
 .sc-lux-direct textarea { resize: vertical; }
 .sc-lux-direct input[type='file'] { width: 100%; min-width: 0; font: inherit; font-size: var(--sc-type-meta); }
 .sc-lux-direct-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); color: var(--sc-ink); overflow-wrap: anywhere; }
+/* 选址输入联想：挂在搜索行（position:relative）下方的浮层，打字时不把地图挤下去。 */
+.sc-amap-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; margin: 0; padding: 4px; list-style: none; display: flex; flex-direction: column; gap: 2px; background: var(--paper); border: 1px solid var(--sc-line); border-radius: var(--r-md); box-shadow: 0 12px 30px rgba(20, 20, 22, 0.14); max-height: 240px; overflow-y: auto; }
+.sc-amap-suggest button { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--r-sm); background: none; font: inherit; color: var(--sc-ink); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.sc-amap-suggest button .sc-note { color: var(--sc-muted); }
+.sc-amap-suggest button[aria-selected='true'], .sc-amap-suggest button:hover { background: var(--sc-accent-soft, var(--plane)); }
 .sc-aholo-path { margin: 0; padding: 8px 10px; border: 1px solid var(--sc-line); border-radius: var(--r-sm); background: var(--wk-plane, var(--plane)); color: var(--sc-ink); font-size: var(--sc-type-meta); line-height: 1.55; }
 .sc-aholo-from-capture { margin: 0; }
 .sc-aholo-tabs { display: flex; align-items: stretch; border-bottom: 1px solid var(--sc-line); }
@@ -1449,27 +1455,27 @@ body {
 .sc-workbench .sc-floor-switcher-arrows button:disabled .sc-floor-triangle.is-up path { fill: #919693; }
 .sc-workbench .sc-floor-switcher-arrows button:disabled { color: #a2a7a3; opacity: .55; cursor: not-allowed; }
 .sc-workbench .sc-floor-switcher-arrows button:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
-/* 图标直接落在场景上：不再每个按钮一块纸面圆板，白晕保证在实景照片上也读得清。 */
+/* 右侧圆钮：白底气泡，默认不描边；只有选中才加一圈绿描边。 */
 .sc-workbench .sc-tool-column > button,
 .sc-workbench .sc-tool-column .sc-tool-menu > button {
   position: relative;
   width: 30px; height: 30px; min-width: 30px; min-height: 30px; padding: 0;
-  border-radius: 50%; background: transparent; border: 1px solid transparent;
-  box-shadow: none; color: var(--wk-ink-soft, #71717a);
-  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 85%)) drop-shadow(0 0 2px rgb(255 255 255 / 60%));
+  border-radius: 50%; background: var(--wk-paper); border: 1px solid transparent;
+  box-shadow: 0 1px 3px rgb(20 20 22 / 12%); color: var(--wk-ink-soft, #71717a);
   display: inline-flex; align-items: center; justify-content: center;
-  transition: background .12s ease, border-color .12s ease;
+  transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
 }
 .sc-workbench .sc-tool-column > button:hover,
 .sc-workbench .sc-tool-column .sc-tool-menu > button:hover {
-  background: rgb(255 255 255 / 55%); border-color: var(--wk-hair);
+  background: var(--wk-paper); border-color: transparent;
+  box-shadow: 0 2px 6px rgb(20 20 22 / 16%);
 }
 .sc-workbench .sc-tool-column > button:disabled {
-  color: var(--wk-ink-faint); background: transparent; box-shadow: none; opacity: .45;
+  color: var(--wk-ink-faint); background: var(--wk-paper); box-shadow: none; opacity: .45;
 }
 .sc-workbench .sc-tool-column > button.is-active,
 .sc-workbench .sc-tool-column .sc-tool-menu > button.is-active {
-  background: var(--wk-green-pale, #eef3ef); border-color: #c5d4c9; color: var(--wk-green-deep, #3a6247);
+  background: var(--wk-paper); border-color: var(--wk-green, #4A7C59); color: var(--wk-green-deep, #3a6247);
 }
 /* 选择工具是开关，不是禁用：关掉后按钮还在，只用虚线描边示意「画布只浏览、不抓物料」。 */
 .sc-workbench .sc-tool-column > #tool-select.is-off {
@@ -1482,7 +1488,7 @@ body {
   border-color: transparent; color: #3a6247;
 }
 .sc-workbench .sc-tool-column > #tool-walk.is-active {
-  background: #eef3ef; border-color: #4A7C59; color: #3a6247;
+  background: var(--wk-paper); border-color: #4A7C59; color: #3a6247;
 }
 .sc-workbench .sc-tool-column > #tool-walk .sc-walk-label {
   position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%);

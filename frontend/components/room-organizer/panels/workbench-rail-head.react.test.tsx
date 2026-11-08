@@ -32,6 +32,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(primary).not.toContain('<Boxes');
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(3);
     expect(primary).toContain('aria-label="拍摄场地：拍完当场判断能不能重建，并出 3D"');
+    expect(primary).toContain('href="/guide/capture"');
     expect(primary).toContain('data-tip="空间"');
     expect(primary).toContain('data-tip="物料"');
     expect(primary).not.toContain('sc-space-chevron');
@@ -43,6 +44,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(source).not.toContain('id="workbench-space-shelf"');
     expect(source).not.toContain('id="workbench-material-shelf"');
     expect(primary).not.toContain('aria-label="场地"');
+    // 旧「场地」轨钮已删；「拍摄场地」（拍摄引导锚点）允许含「场地」二字，故只封具体名称。
     expect(primary).not.toContain('<VenueRailButton');
     expect(primary).not.toContain('Store');
     expect(source).not.toContain('<VenueRailButton');

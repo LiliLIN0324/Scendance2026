@@ -183,6 +183,17 @@ async function main() {
     report.finalStatus = detail.status;
     report.finalDetail = detail;
     report.artifacts = await downloadSpz(detail, query);
+  } else if (getArg('--url', null)) {
+    // 已入库资产直建任务：同 md5 文件平台侧去重会让新上传会话秒被终结
+    // （「上传任务已经结束」），此时复用上一次入库返回的 URL 即可，不再重传。
+    report.mode = 'url';
+    const url = getArg('--url');
+    report.uploads.push({ file: '(already-ingested)', url });
+    report.taskId = await createTask([{ url, type: getArg('--asset-type', 'video') }], name, quality);
+    const detail = await pollTask(report.taskId);
+    report.finalStatus = detail.status;
+    report.finalDetail = detail;
+    report.artifacts = await downloadSpz(detail, report.taskId);
   } else if (video) {
     report.mode = 'video';
     const asset = await uploadOne(resolve(video));

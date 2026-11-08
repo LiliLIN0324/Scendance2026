@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import './__testshims__/gltf-blob-image-loader';
 import { readFileSync } from 'node:fs';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import * as THREE from 'three';
@@ -244,7 +245,8 @@ describe('scene delivery',()=>{
   it('rejects glbNode presets and multiple floors rather than exporting a partial scene',async()=>{
     const current=layout([object(1)]);current.floors[0].items[0].glbNode='chair';
     expect(()=>assembleDeliveryScene(current)).toThrow('完整场景预设');
-    await expect(sceneDeliveryJson({...layout(),floors:[...layout().floors,...layout().floors]})).rejects.toThrow('多层');
+    // 产品文案已细化为「暂不支持保存多层方案…保留在本机」（backend-adapter MULTI_FLOOR_NOT_SUPPORTED），钉稳定关键词。
+    await expect(sceneDeliveryJson({...layout(),floors:[...layout().floors,...layout().floors]})).rejects.toThrow('多层方案');
   });
   it('exports and actually reloads a 12-chair scene with stable IDs, materials, rotations and height',async()=>{
     await load();await load(variantId);
@@ -257,7 +259,7 @@ describe('scene delivery',()=>{
     expect(ids.sort()).toEqual(current.floors[0].items.map(item=>item.id).sort());
     expect(new Uint8Array(output.buffer).slice(0,4)).toEqual(new Uint8Array([0x67,0x6c,0x54,0x46]));
     disposeOwnedModel(reopened);
-  });
+  },15_000); // GLB 导出/回读隔离 ~1s，但全量并发下 worker 争抢会超 5s 默认档；15s 仍能抓真挂死
   it('preserves measured structure and material instances through export/reload',async()=>{
     await load();const current=createMeasuredRoomLayout(layout([object(1)]),{width:8,depth:6,height:3});
     const output=await exportDeliveryGlb(current);
@@ -265,7 +267,7 @@ describe('scene delivery',()=>{
     const reopened=(await new GLTFLoader().parseAsync(output.buffer,'')).scene;
     const shells:THREE.Object3D[]=[];reopened.traverse(node=>{if(node.userData.deliveryKind==='shell')shells.push(node);});
     expect(shells.length).toBeGreaterThanOrEqual(5);disposeOwnedModel(reopened);
-  });
+  },15_000); // 同上
   it.each(['geometry','uv','material','placement','missing'] as const)('detects %s corruption on reload before download',async mutation=>{
     await load();const source=assembleDeliveryScene(layout([object(1)]));
     const changed=source.clone(true);let target:THREE.Object3D|undefined;

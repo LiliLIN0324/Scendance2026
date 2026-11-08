@@ -22,6 +22,10 @@ export type ViolationCode =
   | 'ZONE_ENTRANCE_BLOCKED'
   | 'DOOR_SWEEP_BLOCKED'
   | 'PRIVACY_ORDER'
+  /** 必留区（预留区/消防疏散）被家具侵入：SC-19 §五.4，硬约束不进推荐。 */
+  | 'KEEP_OUT_INTRUDED'
+  /** 必留通道（route 折线走廊）被家具压住：同上，压通道的方案不进推荐。 */
+  | 'ROUTE_BLOCKED'
   /** 缺房间尺寸：墙退距/可达性无法核验，不算 pass。 */
   | 'ROOM_SIZE_UNKNOWN'
   /** 缺门数据：门弧/动线可信度未知（推测门由 assurance 单独标记）。 */

@@ -1,9 +1,9 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 'use client';
 
-import { AlertTriangle, Info, Satellite, Search } from '@/components/solid-icons';
+import { AlertTriangle, Info, Satellite, Search, X } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
-import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from '../lib/amap-script';
+import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript, type AmapAutoComplete } from '../lib/amap-script';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
 import { defaultGuestFlow } from '../lib/site-capture';
 import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
@@ -31,6 +31,29 @@ export interface VenuePickResult {
 
 type DrawMode = 'polygon' | 'polyline' | null;
 
+/** 输入联想的一条提示：区划/线路类 tip 可能没有坐标，点它转 POI 搜索。 */
+export interface AmapSuggestion {
+  id: string;
+  name: string;
+  /** 区划 + 地址串，用来区分同名地点（如「西湖」的区/景区同名条目）。 */
+  detail: string;
+  location?: { lng: number; lat: number };
+}
+
+function suggestionOf(raw: unknown, index: number): AmapSuggestion | null {
+  const tip = raw as { id?: string; name?: string; district?: string; address?: string[] | string; location?: { lng?: number; lat?: number } };
+  if (!tip?.name) return null;
+  const parts = [tip.district, Array.isArray(tip.address) ? tip.address.join('') : tip.address].filter(Boolean);
+  const lng = Number(tip.location?.lng);
+  const lat = Number(tip.location?.lat);
+  return {
+    id: tip.id || `${tip.name}-${index}`,
+    name: tip.name,
+    detail: parts.join(' · '),
+    ...(Number.isFinite(lng) && Number.isFinite(lat) ? { location: { lng, lat } } : {}),
+  };
+}
+
 /**
  * 高德选址圈画：搜索/点选地点 → 卫星图上画多边形 → 可选画主客流线 → 真轮廓壳体；卫星贴地参考默认开（仍仅观感）。key 只留在本机。
  * grow = 交给浮层撑高度：圈一块地要能看清地块，左栏那条 260px 的窄缝圈不准。
@@ -55,6 +78,9 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
   /** 卫星贴地参考：地图立壳默认开；只贴观感底图，绝不进 Aholo 上传。 */
   const [satelliteGround, setSatelliteGround] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<AmapSuggestion[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [activeSuggest, setActiveSuggest] = useState(-1);
   const mapRef = useRef<unknown>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const toolRef = useRef<{ close?(clear?: boolean): void; polygon?(): void; polyline?(): void } | null>(null);
@@ -63,6 +89,11 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
   const drawModeRef = useRef<DrawMode>(null);
   const savedPolygonRef = useRef(savedPolygon);
   savedPolygonRef.current = savedPolygon;
+  // 连续搜索/联想的竞态守卫：每次发起自增，回包时序号不是当前值就丢弃（慢的旧响应不覆盖新结果）。
+  const searchSeqRef = useRef(0);
+  const suggestSeqRef = useRef(0);
+  const suggestTimerRef = useRef<number | null>(null);
+  const autoCompleteRef = useRef<AmapAutoComplete | null>(null);
 
   useEffect(() => {
     if (!key) return;
@@ -149,23 +180,81 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
     return () => observer.disconnect();
   }, [mapReady]);
 
-  function search() {
+  // 卸载时清掉联想防抖计时器，避免闭包 setState。
+  useEffect(() => () => {
+    if (suggestTimerRef.current != null) window.clearTimeout(suggestTimerRef.current);
+  }, []);
+
+  function search(keywordOverride?: string) {
+    const keyword = (keywordOverride ?? query).trim();
+    if (!keyword) return;
     const AMap = window.AMap as unknown as { PlaceSearch?: new (opts: Record<string, unknown>) => { search(kw: string, cb: (status: string, result: unknown) => void): void } };
     if (!AMap?.PlaceSearch) { setStatus('地图尚未就绪'); return; }
+    closeSuggestions();
+    const seq = ++searchSeqRef.current;
     const searcher = new AMap.PlaceSearch({ city: '全国', pageSize: 6 });
-    searcher.search(query.trim(), (status, result) => {
+    searcher.search(keyword, (status, result) => {
+      if (seq !== searchSeqRef.current) return; // 慢的旧响应不覆盖新结果
       const pois = (result as { poiList?: { pois?: { id: string; name: string; address?: string[] | string; location: { lng: number; lat: number } }[] } }).poiList?.pois ?? [];
       setResults(pois.map(poi => ({ id: poi.id, name: poi.name, address: Array.isArray(poi.address) ? poi.address.join('') : poi.address ?? '', location: poi.location })));
       setStatus(status === 'complete' ? '' : '没有找到这个地点，试试更短的关键词。');
     });
   }
 
-  function focusResult(result: { name: string; address: string; location: { lng: number; lat: number } }) {
+  /** 输入联想（AutoComplete）：250ms 防抖 + 序号守卫，插件缺失时静默（回车仍可 PlaceSearch）。 */
+  function suggest(raw: string) {
+    const keyword = raw.trim();
+    if (suggestTimerRef.current != null) { window.clearTimeout(suggestTimerRef.current); suggestTimerRef.current = null; }
+    if (!keyword) { closeSuggestions(); return; }
+    suggestTimerRef.current = window.setTimeout(() => {
+      suggestTimerRef.current = null;
+      const AMap = window.AMap as unknown as { AutoComplete?: new (opts: Record<string, unknown>) => AmapAutoComplete };
+      if (!AMap?.AutoComplete) return;
+      const seq = ++suggestSeqRef.current;
+      if (!autoCompleteRef.current) autoCompleteRef.current = new AMap.AutoComplete({ city: '全国' });
+      autoCompleteRef.current.search(keyword, (status, result) => {
+        if (seq !== suggestSeqRef.current) return; // 旧联想不覆盖新输入
+        const tips = (result as { tips?: unknown[] }).tips ?? [];
+        const items = tips.map(suggestionOf).filter((item): item is AmapSuggestion => item != null);
+        setSuggestions(items);
+        setActiveSuggest(-1);
+        setSuggestOpen(status === 'complete' && items.length > 0);
+      });
+    }, 250);
+  }
+
+  function closeSuggestions() {
+    setSuggestOpen(false);
+    setActiveSuggest(-1);
+  }
+
+  function clearSearch() {
+    ++searchSeqRef.current;
+    ++suggestSeqRef.current;
+    setResults([]);
+    setSuggestions([]);
+    closeSuggestions();
+    setStatus('');
+  }
+
+  /** 预览地点：只挪地图视角与候选名，不写任何锚点；写入发生在「生成户外场地」。 */
+  function previewPlace(result: { name: string; address: string; location: { lng: number; lat: number } }) {
     setPickName(result.name);
     setPickLocation(result.address);
-    setStatus(`已定位：${result.name}。在卫星图上圈出活动场地，完成后点「生成户外场地」。`);
+    setStatus(`已定位预览：${result.name}。在卫星图上圈出活动场地后点「生成户外场地」才确认写入；点「清空搜索」可取消。`);
     const map = mapRef.current as { setZoomAndCenter?(zoom: number, center: [number, number]): void } | null;
     map?.setZoomAndCenter?.(16, [result.location.lng, result.location.lat]);
+  }
+
+  /** 采用一条联想：有坐标直接预览；区划类 tip 没坐标，转成 POI 搜索。 */
+  function adoptSuggestion(item: AmapSuggestion) {
+    closeSuggestions();
+    if (item.location) {
+      previewPlace({ name: item.name, address: item.detail, location: item.location });
+      return;
+    }
+    setQuery(item.name);
+    search(item.name);
   }
 
   function startDraw() {
@@ -273,14 +362,38 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
 
   return <div className={`sc-aholo-task${grow ? ' is-grow' : ''}`} aria-label="高德选址圈画">
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative', zIndex: 2 }}>
-      <input aria-label="搜索地点" type="text" value={query} placeholder="搜索地点，如：盐官潮乐之城"
-        onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') search(); }} />
-      <button type="button" className="sc-button" aria-label="搜索" data-tip="搜索" title="搜索" onClick={search} disabled={busy}><Search size={16} aria-hidden="true"/></button>
+      <input aria-label="搜索地点" type="text" role="combobox" aria-expanded={suggestOpen} aria-autocomplete="list"
+        value={query} placeholder="搜索地点，如：盐官潮乐之城"
+        onChange={event => { setQuery(event.target.value); suggest(event.target.value); }}
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown' && suggestOpen && suggestions.length > 0) {
+            event.preventDefault();
+            setActiveSuggest(index => Math.min(suggestions.length - 1, index + 1));
+          } else if (event.key === 'ArrowUp' && suggestOpen && suggestions.length > 0) {
+            event.preventDefault();
+            setActiveSuggest(index => Math.max(-1, index - 1));
+          } else if (event.key === 'Escape') {
+            closeSuggestions();
+          } else if (event.key === 'Enter') {
+            if (suggestOpen && activeSuggest >= 0 && activeSuggest < suggestions.length) adoptSuggestion(suggestions[activeSuggest]!);
+            else search();
+          }
+        }} />
+      <button type="button" className="sc-button" aria-label="搜索" data-tip="搜索" title="搜索" onClick={() => search()} disabled={busy}><Search size={16} aria-hidden="true"/></button>
+      {(results.length > 0 || suggestOpen) && <button type="button" className="sc-button" aria-label="清空搜索结果" data-tip="清空搜索" title="清空搜索结果（取消本次搜索，不改动场地）"
+        onClick={clearSearch}><X size={16} aria-hidden="true"/></button>}
       <button type="button" className="sc-button" onClick={() => void demoPick()} disabled={busy} title="不手画：立 L 轮廓户外壳（非矩形）+ 默认长轴流线站位">演示圈画 · L 轮廓</button>
+      {suggestOpen && suggestions.length > 0 && <ul className="sc-amap-suggest" role="listbox" aria-label="地点联想" data-testid="amap-suggest">
+        {suggestions.map((item, index) => <li key={item.id} role="option" aria-selected={index === activeSuggest}>
+          <button type="button" onMouseEnter={() => setActiveSuggest(index)} onClick={() => adoptSuggestion(item)}>
+            <strong>{item.name}</strong><span className="sc-note">{item.detail ? ` ${item.detail}` : ''}</span>
+          </button>
+        </li>)}
+      </ul>}
     </div>
-    {results.length > 0 && <ul className="sc-lux-direct-results">
+    {results.length > 0 && <ul className="sc-lux-direct-results" aria-label="搜索结果">
       {results.map(result => <li key={result.id}>
-        <button type="button" onClick={() => focusResult(result)}>{result.name}<span className="sc-note"> {result.address}</span></button>
+        <button type="button" onClick={() => previewPlace(result)}>{result.name}<span className="sc-note"> {result.address}</span></button>
       </li>)}
     </ul>}
     <div ref={containerRef} style={{ width: '100%', position: 'relative', zIndex: 0, ...(grow ? { flex: '1 1 auto', minHeight: 240, minWidth: 0 } : { height: 260 }), borderRadius: 10, border: '1px solid var(--sc-line)' }} />
@@ -306,6 +419,6 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
     </div>
     {status && (/失败|未加载|不可用|降级|未运行|代理|拒绝了/.test(status)
       ? <div className="sc-note sc-amap-error" role="status"><AlertTriangle size={13} aria-hidden="true"/><span>地图未加载</span><InfoTip label="地图加载排查">{status}；可在上方检查 Key 与安全密钥，或稍后重试。</InfoTip></div>
-      : <p className="sc-note">{status}</p>)}
+      : <p className="sc-note" role="status">{status}</p>)}
   </div>;
 }

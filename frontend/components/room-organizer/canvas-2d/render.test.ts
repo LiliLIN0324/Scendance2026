@@ -106,6 +106,86 @@ it('does not move a fully offscreen selected item dimension onto the viewport ed
   expect(JSON.stringify(layout)).toBe(original);
 });
 
+describe('walking person 2D marker (PEOPLE-04)', () => {
+  const personAt = (position: { x: number; z: number }, overrides = {}) =>
+    makeItem({ id: 'walker', type: 'person', name: 'Walker', icon: '🚶', width: 0.5, depth: 0.5, height: 1.7, position, ...overrides });
+
+  function paint(
+    items: ReturnType<typeof personAt>[],
+    personSample?: (itemId: string) => { x: number; z: number } | null,
+    selectedItemId: string | null = null
+  ) {
+    const translations: { x: number; y: number }[] = [], segments: { op: string; x: number; y: number; dash: string }[] = [];
+    let dash = '';
+    const methods = {
+      measureText: (text: string) => ({ width: text.length * 6 }),
+      translate: (x: number, y: number) => translations.push({ x, y }),
+      setLineDash: (value: number[]) => { dash = JSON.stringify(value); },
+      moveTo: (x: number, y: number) => segments.push({ op: 'moveTo', x, y, dash }),
+      lineTo: (x: number, y: number) => segments.push({ op: 'lineTo', x, y, dash }),
+    };
+    const ctx = new Proxy(methods, { get: (target, key) => target[key as keyof typeof methods] ?? (() => {}) });
+    const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const floor = makeFloor({ items });
+    const layout = makeLayout({ width: 10, height: 8, floors: [floor] });
+    render2DTopDown({ canvas, layout, floor, selectedItemId, showMeasurements: false, showWiFiSignals: false,
+      hasCollision: () => false, ...(personSample ? { personSample } : {}) });
+    const view = get2DViewTransform(800, 600, layout, 60);
+    const at = (x: number, z: number) => ({ x: view.offsetX + (x + layout.width / 2) * view.scale, y: view.offsetY + (z + layout.height / 2) * view.scale });
+    // 路线折线是全文件唯一 [4,3] 虚线（marquee/rug [5,3]、隐藏墙 [6,4]），
+    // 用 dash 状态过滤掉网格/墙线等无关 moveTo/lineTo。
+    const route = segments.filter((s) => s.dash === '[4,3]');
+    return { translations, route, at };
+  }
+
+  it('draws the person marker at the live sample, other items at their anchors', () => {
+    const chair = makeItem({ id: 'chair-1', position: { x: 0, z: 0 } });
+    const { translations, at } = paint([personAt({ x: 2, z: 1 }), chair], (id) => (id === 'walker' ? { x: 4, z: 3 } : null));
+    const live = at(4, 3), anchor = at(2, 1), chairAt = at(0, 0);
+    expect(translations).toContainEqual(live);
+    expect(translations).toContainEqual(chairAt);
+    expect(translations).not.toContainEqual(anchor);
+  });
+
+  it('keeps the person at the anchor when no sample is available', () => {
+    const { translations, at } = paint([personAt({ x: 2, z: 1 })]);
+    expect(translations).toContainEqual(at(2, 1));
+  });
+
+  it('moves the selection outline with the walking marker', () => {
+    // 选中行走者：drawFurniture 与 drawSelectionOutlines 各 translate 一次，
+    // 两处都必须落在实时位置上（选择框跟着人走，不留在锚点）。
+    const { translations, at } = paint(
+      [personAt({ x: 2, z: 1 })],
+      (id) => (id === 'walker' ? { x: -3, z: -2 } : null),
+      'walker'
+    );
+    const live = at(-3, -2), anchor = at(2, 1);
+    const atLive = translations.filter((t) => t.x === live.x && t.y === live.y);
+    expect(atLive.length).toBeGreaterThanOrEqual(2);
+    expect(translations).not.toContainEqual(anchor);
+  });
+
+  it('traces the walk route as a polyline with loop closure', () => {
+    const routed = personAt({ x: 0, z: 0 }, { walkRoute: { points: [{ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 2, z: 2 }] } });
+    const { route, at } = paint([routed]);
+    const p0 = at(0, 0), p1 = at(2, 0), p2 = at(2, 2);
+    const has = (p: { x: number; y: number }) => route.some((s) => Math.abs(s.x - p.x) < 1e-6 && Math.abs(s.y - p.y) < 1e-6);
+    expect(has(p0)).toBe(true);
+    expect(has(p1)).toBe(true);
+    expect(has(p2)).toBe(true);
+    // 闭环：折线末点接回首点（首点出现两次：moveTo + 收尾 lineTo）。
+    expect(route.filter((s) => Math.abs(s.x - p0.x) < 1e-6 && Math.abs(s.y - p0.y) < 1e-6)).toHaveLength(2);
+  });
+
+  it('open (折返) routes do not close back to the first point', () => {
+    const routed = personAt({ x: 0, z: 0 }, { walkRoute: { points: [{ x: 0, z: 0 }, { x: 2, z: 2 }], loop: false } });
+    const { route, at } = paint([routed]);
+    const p0 = at(0, 0);
+    expect(route.filter((s) => Math.abs(s.x - p0.x) < 1e-6 && Math.abs(s.y - p0.y) < 1e-6)).toHaveLength(1);
+  });
+});
+
 // A 10×10 m room with the default 20×20 grid gives 0.5 m cells, so grid
 // coordinates are easy to reason about: cell (col, row) spans
 // [col·0.5, (col+1)·0.5) × [row·0.5, (row+1)·0.5) in room space, and room

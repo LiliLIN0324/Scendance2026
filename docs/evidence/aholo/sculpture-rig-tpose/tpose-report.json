@@ -1,0 +1,56 @@
+{
+  "source": "c:\\Users\\13266\\.dsh\\bot\\workspace\\Scendance2026\\docs\\evidence\\aholo\\sculpture-img2-3d\\4676340-unpacked\\MODEL.glb",
+  "source_bytes": 985424,
+  "base": {
+    "vertices": 19883,
+    "triangles": 28888,
+    "bbox_min": [
+      -0.423036,
+      -0.421104,
+      0.0
+    ],
+    "bbox_max": [
+      0.423036,
+      0.421104,
+      1.8
+    ],
+    "width": 0.846073,
+    "depth": 0.842209,
+    "height": 1.8
+  },
+  "result": {
+    "vertices": 19883,
+    "triangles": 28888,
+    "bbox_min": [
+      -0.703192,
+      -0.421104,
+      0.0
+    ],
+    "bbox_max": [
+      0.703192,
+      0.421104,
+      1.8
+    ],
+    "width": 1.406383,
+    "depth": 0.842209,
+    "height": 1.8,
+    "file_bytes": 812712
+  },
+  "method": "lateral_shear",
+  "dx": 0.36,
+  "dz": 0.08,
+  "hand": [
+    -0.0038,
+    0.2312,
+    1.0783
+  ],
+  "moved_vertices": 6948,
+  "peak_weight": 1.0,
+  "deltas": {
+    "width": 0.56031,
+    "depth": 0.0,
+    "height": 0.0,
+    "bytes": -172712
+  },
+  "span_vs_height": 0.781
+}

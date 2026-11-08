@@ -15,10 +15,12 @@ import { withDefaultDoor } from './plan-annotation';
 import {
   planZones,
   applyWallClearance,
+  isRingChairOfTable,
+  MAX_TABLES_PER_ZONE,
   type ZoneFurniturePlacement,
   type ZonePlanSkipped,
 } from './plan-approve';
-import { evaluateFlow, evaluateReachability, type FlowEvaluation } from './flow-constraints';
+import { evaluateFlow, evaluateReachability, evaluateKeepOut, evaluateRouteClear, type FlowEvaluation } from './flow-constraints';
 import { evaluateHumanFactors, evaluateDoorSweep, evaluatePrivacyOrder, type ScoredViolation } from './human-factors';
 import { getCatalogByType } from './furniture-catalog';
 
@@ -110,6 +112,7 @@ export interface ScoredPlan {
   assurance: 'verified' | 'draft_unverified';
   /**
    * 没有已检出的硬冲突时为 true，可作为草案排序；不代表安全已确认。
+   * 已检出的硬冲突使其为 false，不能被座位容量加分盖过。
    */
   feasible: boolean;
   /**
@@ -297,12 +300,19 @@ function scoreVariant(
   const doorAnnots = withDefaultDoor(annotations);
   const doorViolations = evaluateDoorSweep(placements, doorAnnots, roomSize);
   const privacyViolations = evaluatePrivacyOrder(annotations, roomSize);
+  // SC-19 §五.4 / SC-20 输入侧：必留区（reserved）侵入与必留通道（route 走廊）
+  // 压线都是硬约束——annotations 里有没有 route/reserved 由调用方决定
+  // （产品主路径传全量 draft 标注，routes 才有机会参与评分）。
+  const keepOutViolations = evaluateKeepOut(placements, annotations);
+  const routeViolations = evaluateRouteClear(placements, annotations);
   const violations: ScoredViolation[] = [
     ...hfViolations,
     ...reach.violations,
     ...furnViolations,
     ...doorViolations,
     ...privacyViolations,
+    ...keepOutViolations,
+    ...routeViolations,
   ];
   // 缺场地尺寸 → soft unknown violation，绝不当成合规 pass。
   const hasRoomSize = !!roomSize && Number.isFinite(roomSize.width) && Number.isFinite(roomSize.height) && roomSize.width > 0 && roomSize.height > 0;
@@ -346,6 +356,8 @@ function scoreVariant(
     if (v.code === 'ZONE_PAIR_DISCONNECTED') return sum - 2;
     if (v.code === 'ZONE_ENTRANCE_BLOCKED') return sum - 3;
     if (v.code === 'DOOR_SWEEP_BLOCKED') return sum - 3;
+    if (v.code === 'KEEP_OUT_INTRUDED') return sum - 3;
+    if (v.code === 'ROUTE_BLOCKED') return sum - 3;
     return sum;
   }, 0);
 
@@ -385,8 +397,11 @@ function scoreVariant(
   }
 
   if (targetCapacity && Number.isFinite(targetCapacity) && capacitySeats < targetCapacity) {
+    const recipeCap = placements.some((p) => p.spec.type === 'dining-table')
+      ? `圆桌区当前配方每区最多 ${MAX_TABLES_PER_ZONE} 桌、每桌 ${getCatalogByType('dining-table')?.chairsPerTable ?? 4} 椅。`
+      : '';
     reasons.push(
-      `当前这些区域估算 ${capacitySeats} 座，距目标 ${targetCapacity} 座还差约 ${targetCapacity - capacitySeats} 座；可调整区域、摆法或目标人数。`,
+      `当前这些区域估算 ${capacitySeats} 座，距目标 ${targetCapacity} 座还差约 ${targetCapacity - capacitySeats} 座；${recipeCap}可调整区域、摆法或目标人数。`,
     );
   }
 
@@ -739,6 +754,9 @@ function boxesOverlap(a: ZoneFurniturePlacement, b: ZoneFurniturePlacement): boo
  * 两两 AABB 相交检测（含 0.02m 容差）。
  * 家具 footprint 按 placement 中心 ± (spec.width/2, spec.depth/2) 算轴对齐矩形。
  * 相交 → 每次生成 code='BBOX_OVERLAP' 的 hard violation（进 violations 数组）。
+ * 例外：斜向环椅 vs 自家圆桌——AABB 轴对齐近似下 45° 环椅的包围盒角会戳进
+ * 桌包围盒，但径向距离够远（isRingChairOfTable 自带径向自守卫，环半径被改小
+ * 豁免自动失效），不算压住（G5 修复）。
  * 同一对家具只报一次（i<j 遍历）。扣分由 scoreVariant 按 hard/code 统一算。
  */
 export function detectFurnitureOverlap(
@@ -749,7 +767,7 @@ export function detectFurnitureOverlap(
     for (let j = i + 1; j < placements.length; j++) {
       const a = placements[i]!;
       const b = placements[j]!;
-      if (boxesOverlap(a, b)) {
+      if (boxesOverlap(a, b) && !isRingChairOfTable(a, b) && !isRingChairOfTable(b, a)) {
         violations.push({
           code: 'BBOX_OVERLAP',
           severity: 'hard',
@@ -785,7 +803,9 @@ function buildReasons(
     reasons.push(`${prefix}估算 ${capacitySeats} 座（${placements.length} 件家具），仍需核对实际座位`);
   }
   if (skipped.length > 0) {
-    reasons.push(`${skipped.length} 个区被跳过：${skipped[0].reason}`);
+    // skipped 里既有整块区（越界/太小）也有单件家具（墙退距放不下），
+    // 用中性的「项」计数，不把件数说成区数（docs/32 验收点二缺口 4）。
+    reasons.push(`${skipped.length} 项被跳过：${skipped[0].reason}`);
   }
   if (outOfBounds > 0) {
     reasons.push(`${outOfBounds} 件越界，扣分 -${3 * outOfBounds}`);

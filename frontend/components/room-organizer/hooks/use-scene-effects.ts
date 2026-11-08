@@ -15,6 +15,9 @@ import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
 import { buildEntrance } from '../three/entrance';
 import { createFurnitureModel } from '../three/furniture-builders';
+import { personWalkBounds, routeIsLoop } from '../lib/person-route';
+import { buildWalkColliders } from '../lib/walk-collision';
+import { personAnimIds, personFollowSample, setPeopleShadowRefresher, setPersonWalkContext } from '../three/people-anim';
 import {
   clearInteriorWalls,
   clearPreview as clearWallPreview,
@@ -27,6 +30,7 @@ import { clearMeasurement, clearRoomDimensions, renderMeasurement, renderRoomDim
 import { buildNeighbours, removeNeighbours } from '../three/neighbours';
 import { setOutdoorVisible } from '../three/outdoor';
 import { buildResearchBasemap, clearGeoCrosses, clearResearchBasemap, buildGeoCrosses, parseGeoCrossParam } from '../three/research-basemap';
+import { buildResearchOverlays, clearResearchOverlays } from '../three/research-overlays';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
 import { createPresetStructure } from '../three/scene-presets';
@@ -136,6 +140,8 @@ export interface UseSceneEffectsParams {
   layout: RoomLayout;
   activeFloor: FloorLayout;
   activeFloorIndex: number;
+  /** 实景点云实测四至（SplatWalkBounds）：有值时人物巡游夹取框用它而非布局名义矩形。 */
+  personRouteBounds?: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }> | null;
   referenceImage?: ReferenceImageLayer;
   view: ViewSettings;
   selectedItemId: string | null;
@@ -161,6 +167,7 @@ export function useSceneEffects({
   layout,
   activeFloor,
   activeFloorIndex,
+  personRouteBounds = null,
   referenceImage,
   view,
   selectedItemId,
@@ -410,11 +417,13 @@ export function useSceneEffects({
   const researchKey = layout.researchArea
     ? [
       layout.researchArea.imageUrl,
+      layout.researchArea.presetId,
       layout.researchArea.bounds.west, layout.researchArea.bounds.south,
       layout.researchArea.bounds.east, layout.researchArea.bounds.north,
       layout.width, layout.height,
       layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0,
       layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale,
+      view.showResearchOverlays === false ? 'overlays-off' : 'overlays-on',
     ].join('|')
     : '';
   useEffect(() => {
@@ -424,10 +433,15 @@ export function useSceneEffects({
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
     buildResearchBasemap(THREE, scene, layout, { onTextureLoaded: invalidate });
+    // 整景区矢量叠加（范围线 + 水面）：与底图同一套 geo→world，默认开，可关。
+    if (layout.researchArea?.presetId && view.showResearchOverlays !== false) {
+      buildResearchOverlays(THREE, scene, layout, { onLoaded: invalidate });
+    }
     // 候选坐标十字核对：?geocross=lng,lat,名字;lng,lat,名字（肉眼读图不可靠，用十字压点核对投影）
     const crosses = parseGeoCrossParam(window.location.search);
     if (crosses.length > 0) buildGeoCrosses(THREE, scene, layout, crosses);
     return () => {
+      clearResearchOverlays(scene);
       clearResearchBasemap(scene);
       clearGeoCrosses(scene);
     };
@@ -548,6 +562,70 @@ export function useSceneEffects({
     // from the model cache, and this re-runs the build once it's filled.
     peopleModelReady, glbAssetsRevision,
   ]);
+
+  // 行走上下文（PEOPLE-04）：本层有带路线的人物时，把碰撞盒与可走边界交给
+  // three/people-anim 的注册表。坐标与场景一致（房间中心为原点）；真实景
+  // （点云就绪）时边界换成点云实测四至，与第一人称漫游共用同一条围栏。
+  useEffect(() => {
+    const routed = activeFloor.items.some((item) => item.walkRoute && item.walkRoute.points.length >= 2);
+    if (!routed) {
+      setPersonWalkContext(null);
+      return;
+    }
+    setPersonWalkContext({
+      colliders: buildWalkColliders(activeFloor.items, activeFloor.interiorWalls ?? [], {
+        roomWidth: layout.width,
+        roomDepth: layout.height,
+      }),
+      bounds: personWalkBounds(personRouteBounds, { width: layout.width, depth: layout.height }),
+    });
+    return () => setPersonWalkContext(null);
+  }, [activeFloor, activeFloor.interiorWalls, layout.width, layout.height, personRouteBounds]);
+
+  // 行走中的人物是动态投影体：把静态阴影图的重算入口递给注册表（与 use-npcs 同款）。
+  useEffect(() => {
+    setPeopleShadowRefresher(requestShadowUpdate);
+    return () => setPeopleShadowRefresher(null);
+  }, [requestShadowUpdate]);
+
+  // 路线可视化（PEOPLE-04）：折线（闭环含收尾段）+ 路点圆片，纯装饰、不参与拾取。
+  useEffect(() => {
+    invalidate();
+    if (!isReady) return;
+    const THREE = threeModuleRef.current;
+    const scene = sceneRef.current;
+    if (!THREE || !scene) return;
+
+    removeTagged(scene, ROOM_OBJECT_TAGS.PersonRoute);
+    const routed = activeFloor.items.filter((item) => item.walkRoute && item.walkRoute.points.length >= 2);
+    if (routed.length === 0) return;
+
+    const floorY = floorElevation(layout.floors, activeFloorIndex);
+    const material = new THREE.MeshBasicMaterial({ color: 0x0f766e, transparent: true, opacity: 0.85 });
+    const markerGeometry = new THREE.CircleGeometry(0.11, 20);
+    for (const item of routed) {
+      const route = item.walkRoute!;
+      const pts = routeIsLoop(route) ? [...route.points, route.points[0]!] : route.points;
+      const geometry = new THREE.BufferGeometry().setFromPoints(
+        pts.map((p) => new THREE.Vector3(p.x, floorY + 0.02, p.z))
+      );
+      const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x0f766e, transparent: true, opacity: 0.9 }));
+      line.raycast = () => {};
+      line.userData.type = ROOM_OBJECT_TAGS.PersonRoute;
+      scene.add(line);
+      for (const point of route.points) {
+        const marker = new THREE.Mesh(markerGeometry, material);
+        marker.rotation.x = -Math.PI / 2;
+        marker.position.set(point.x, floorY + 0.012, point.z);
+        marker.raycast = () => {};
+        marker.userData.type = ROOM_OBJECT_TAGS.PersonRoute;
+        scene.add(marker);
+      }
+    }
+    return () => {
+      removeTagged(scene, ROOM_OBJECT_TAGS.PersonRoute);
+    };
+  }, [isReady, invalidate, threeModuleRef, sceneRef, activeFloor, activeFloorIndex, layout.floors]);
 
   // Selection / highlight outlines. Kept out of the furniture effect above so
   // a selection click only swaps the outline LineSegments instead of
@@ -1001,11 +1079,21 @@ export function useSceneEffects({
         showFloorPlan: view.showReferenceImage !== false,
         ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         hasCollision: (item) => structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls }),
+        // 行走人物（PEOPLE-04）：2D 标记吃注册表的实时位置（personFollowSample，
+        // 由 3D tick 每帧推进——2D 模式下 tick 也照跑），路线画虚线折线。
+        personSample: personFollowSample,
       });
     };
 
     const removeRepaintHandler = addFloorPlanRepaintHandler(paint);
     paint();
+
+    // 行走人物在 2D 平面图上的实时位置：没有 per-frame 重绘链路，用 250ms
+    // 低频重绘消费注册表（与 autoCycleLighting 的 250ms 心跳同款节拍）。
+    // 动画人物清零（纯座位图布局）时不挂表，行为与开销都和从前一致。
+    // 注册表生命周期事件（加/删路线人物、暂停切换）都伴随 layout 变化，
+    // 会重跑本 effect 重新决定是否挂表，无需单独订阅。
+    const walkTimer = personAnimIds().length > 0 ? window.setInterval(paint, 250) : null;
 
     const observer = new ResizeObserver(paint);
     observer.observe(canvas);
@@ -1031,6 +1119,7 @@ export function useSceneEffects({
       dprQuery?.removeEventListener('change', onDprChange);
       observer.disconnect();
       removeRepaintHandler();
+      if (walkTimer !== null) window.clearInterval(walkTimer);
     };
   }, [invalidate, canvas2DRef, view.view2D, view.showMeasurements, view.showWiFiSignals, view.showHeatmap,
     view.showReferenceImage, view.referenceImageOpacity, referenceImage, layout, activeFloor, activeFloorIndex,

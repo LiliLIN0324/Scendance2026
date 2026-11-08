@@ -11,7 +11,8 @@ import { onlineModelThumb } from '../lib/online-models';
 import { editorItemLimit } from '../lib/scene-presets';
 import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { MaterialGlyph, NumberField } from './scendance-workspace';
-import type { FurnitureItem } from '../lib/types';
+import { routeIsLoop, routeLength } from '../lib/person-route';
+import type { FurnitureItem, PersonAction, WalkRoute } from '../lib/types';
 
 export interface ItemContextPopoverProps {
   embedded?: boolean;
@@ -21,6 +22,18 @@ export interface ItemContextPopoverProps {
   onRotate(id: string): void;
   onToggleCameraBracket(id: string): void;
   onClose(): void;
+  /** 画布路点绘制进行中（room-organizer 持有模式态与草稿）。 */
+  routeDrawing?: boolean;
+  /** 画布布点被拒时的提示文案；null = 无。 */
+  routeDrawHint?: string | null;
+  /** 开始/结束画布路点绘制。 */
+  onToggleRouteDrawing?(): void;
+  /** 撤掉最后一个路点（先撤草稿首点，再撤已提交路线的末点）。 */
+  onUndoRoutePoint?(): void;
+  /** 正在近景跟拍该人物（PEOPLE-04 后半）。 */
+  following?: boolean;
+  /** 开始/停止跟拍该人物；镜头推进在渲染循环里（three/person-follow）。 */
+  onToggleFollow?(): void;
 }
 
 const COLORS = ['#375B4B', '#78958B', '#B5C3B2', '#C9B89D', '#DDD9CA', '#EDEAE1', '#B98067', '#404748'];
@@ -115,6 +128,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
   const structuralSize = !!item.structuralOpeningId || !!item.structuralColumnId;
   const entranceSize = !!item.venueEntranceId || item.id === ENTRANCE_DOOR_ID;
   const protectedStructure = !!layout.backendSceneV2 && structuralSize;
+  const isPerson = item.type === 'person';
   const position = item.position ?? { x: 0, z: 0 };
   const rotation = ((item.rotation ?? 0) * 180 / Math.PI % 360 + 360) % 360;
   return <aside className={`sc-properties${props.embedded?' is-embedded':''}`} aria-label={`${item.name}属性`}>
@@ -168,6 +182,9 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         <NumberField label="旋转 / °" value={rotation} min={0} max={360} step={15} disabled={locked} onChange={value => actions.setRotation(item.id, value * Math.PI / 180)}/>
         <button type="button" className="sc-button" disabled={locked} onClick={() => props.onRotate(item.id)}><RotateCcw size={16}/>旋转 90°</button>
       </div></section>
+      {isPerson && <PersonSections item={item} locked={locked} routeDrawing={props.routeDrawing} routeDrawHint={props.routeDrawHint}
+        onToggleRouteDrawing={props.onToggleRouteDrawing} onUndoRoutePoint={props.onUndoRoutePoint}
+        following={props.following} onToggleFollow={props.onToggleFollow} />}
       {item.glbUrl || item.assetId
         ? <p className="sc-note">{item.assetId?'该模型保留原材质。需要调整时，请到“资料 → 物料工具 → 材质调整”核对材质槽并预览新版本。':'该模型保留自身材质，暂不支持改色。'}</p>
         : <section><h3>物料颜色 <input type="color" aria-label="物料颜色" value={item.color} disabled={locked} onChange={event => { actions.setColor(item.id, event.target.value); pushColor(event.target.value); }}/></h3><div className="sc-color-swatches">{COLORS.map(color => <button type="button" key={color} style={{ background: color }} aria-label={`颜色 ${color}`} aria-pressed={item.color.toUpperCase() === color} disabled={locked} onClick={() => { actions.setColor(item.id, color); pushColor(color); }}/>)}</div></section>}
@@ -177,4 +194,84 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
       <button type="button" className="sc-delete-button" disabled={locked || protectedStructure} onClick={() => props.onRemove(item.id)}><Trash2 size={16}/>删除物料</button>
     </div>
   </aside>;
+}
+
+const PERSON_ACTIONS: Array<[PersonAction, string]> = [['idle', '待机'], ['talk', '交谈'], ['walk', '行走']];
+
+/**
+ * 人物动画与行走路线（PEOPLE-01/04）。路线数据存放在 item.walkRoute：
+ * 点位来自画布布点（room-organizer 转发），本面板负责撤销、清除与巡游参数。
+ */
+function PersonSections({ item, locked, routeDrawing, routeDrawHint, onToggleRouteDrawing, onUndoRoutePoint, following, onToggleFollow }: {
+  item: FurnitureItem;
+  locked: boolean;
+  routeDrawing?: boolean | undefined;
+  routeDrawHint?: string | null | undefined;
+  onToggleRouteDrawing?: (() => void) | undefined;
+  onUndoRoutePoint?: (() => void) | undefined;
+  following?: boolean | undefined;
+  onToggleFollow?: (() => void) | undefined;
+}): JSX.Element {
+  const { actions, history } = useRoomEditor();
+  const route = item.walkRoute;
+  const commitRoute = (next: WalkRoute | undefined): void => {
+    history.commitNow();
+    // 「清除路线」传 undefined：exactOptionalPropertyTypes 下 patch 不收 undefined，此处断言。
+    actions.updateItem(item.id, (next === undefined ? { walkRoute: undefined } : { walkRoute: next }) as Partial<FurnitureItem>);
+  };
+  const patchRoute = (patch: Partial<WalkRoute>): void => {
+    if (!route) return;
+    commitRoute({ ...route, ...patch });
+  };
+  const points = route?.points ?? [];
+  const currentAction: PersonAction = item.personAction ?? 'idle';
+  const paused = item.personPaused === true;
+  return <>
+    <section><h3>人物动画</h3>
+      <div className="sc-property-actions" role="group" aria-label="人物动作">
+        {PERSON_ACTIONS.map(([action, label]) => <button type="button" key={action} className="sc-button" aria-pressed={currentAction === action}
+          disabled={locked || !!route}
+          onClick={() => { history.commitNow(); actions.updateItem(item.id, { personAction: action }); }}>{label}</button>)}
+      </div>
+      <div className="sc-property-actions">
+        <button type="button" className="sc-button" aria-pressed={paused} disabled={locked || !route && currentAction === 'idle'}
+          onClick={() => { history.commitNow(); actions.updateItem(item.id, { personPaused: !paused }); }}>{paused ? '继续播放' : '暂停动作'}</button>
+        {onToggleFollow && <button type="button" className="sc-button" aria-pressed={!!following} disabled={locked}
+          onClick={onToggleFollow}>{following ? '退出跟拍' : '跟拍镜头'}</button>}
+      </div>
+      <p className="sc-note">{route
+        ? '人物正沿路线行走：走动时播「行走」，在途经点停留时回「待机」。'
+        : '选「交谈 / 行走」让人物在原地做动作；画路线后人物会沿路线巡游。'}</p>
+    </section>
+    <section><h3>行走路线</h3>
+      {route || routeDrawing
+        ? <>
+          <p className="sc-note">{points.length > 0
+            ? `已画 ${points.length} 个途经点 · 全程约 ${routeLength(points, routeIsLoop(route ?? { points })).toFixed(1)} m`
+            : '在画布上点击，放下第一个途经点。'}</p>
+          <div className="sc-property-actions">
+            {onToggleRouteDrawing && <button type="button" className="sc-button" aria-pressed={!!routeDrawing} disabled={locked}
+              onClick={onToggleRouteDrawing}>{routeDrawing ? '完成绘制' : (route ? '改画路线' : '开始画路线')}</button>}
+            {onUndoRoutePoint && <button type="button" className="sc-button" disabled={locked || points.length === 0 && !routeDrawing} onClick={onUndoRoutePoint}>撤销上一点</button>}
+            {route && <button type="button" className="sc-button" disabled={locked} onClick={() => commitRoute(undefined)}>清除路线</button>}
+          </div>
+          {routeDrawing && <p className="sc-note" role="status">{routeDrawHint ?? '点击画布添加途经点（至少 2 个），Esc 或「完成绘制」结束。'}</p>}
+          {route && <>
+            <div className="sc-property-actions" role="group" aria-label="巡游方式">
+              <button type="button" className="sc-button" aria-pressed={routeIsLoop(route)} disabled={locked}
+                onClick={() => patchRoute({ loop: true })}>环形巡游</button>
+              <button type="button" className="sc-button" aria-pressed={route.loop === false} disabled={locked}
+                onClick={() => patchRoute({ loop: false })}>折返巡游</button>
+            </div>
+            <div className="sc-dimension-grid">
+              <NumberField label="步速 / m·s" value={route.speed ?? 1.05} min={0.3} max={2.5} step={0.05} disabled={locked}
+                onChange={value => patchRoute({ speed: Math.min(2.5, Math.max(0.3, value)) })}/>
+              <NumberField label="停留 / s" value={(route.pauseMs ?? 900) / 1000} min={0} max={30} step={0.5} disabled={locked}
+                onChange={value => patchRoute({ pauseMs: Math.round(Math.min(30, Math.max(0, value)) * 1000) })}/>
+            </div>
+          </>}
+        </>
+        : <p className="sc-note">给这位人物画一条巡游路线：至少 2 个途经点，人物沿米制路线行走、转向并在途经点停留。</p>}
+    </section>
+  </>;
 }

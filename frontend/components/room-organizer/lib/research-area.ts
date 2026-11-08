@@ -56,10 +56,8 @@ export interface ResearchArea {
   /** 底图地址。带 west/south/east/north，3D 与 2D 靠这几个值对齐。 */
   imageUrl: string;
   style: ResearchMapStyle;
-  /** 场地脚下那片高清卫星贴片的半径（米，z18 级分辨率）；没有就没有贴片。 */
-  detailRadiusM?: number;
-  detailBounds?: GeoBounds;
-  detailImageUrl?: string;
+  /** 静态预置底图标记（整景区拼图）：半径/样式不重算，图与 bounds 一一对应。 */
+  presetId?: ResearchBasemapPresetId;
 }
 
 const round7 = (value: number): number => Math.round(value * 1e7) / 1e7;
@@ -164,10 +162,7 @@ export async function lookupPlace(keywords: string, signal?: AbortSignal): Promi
   });
 }
 
-/** 场地脚下高清贴片的默认半径：正好罩住重建场地与它周围一圈实景（约 0.5 m/px）。 */
-export const DETAIL_BASEMAP_RADIUS_M = 250;
-
-/** 地点 + 半径 → 一片可铺进 3D 的调研底图；脚下再垫一块 z18 级高清贴片，走近也看得出真实地物。 */
+/** 地点 + 半径 → 一片可铺进 3D 的调研底图。整片场地只有这一张图，不另叠贴片。 */
 export function createResearchArea(
   place: ResearchPlace,
   radiusM: number = DEFAULT_RESEARCH_RADIUS_M,
@@ -176,7 +171,6 @@ export function createResearchArea(
   const center = { lng: place.lng, lat: place.lat };
   const bounds = boundsAround(center, radiusM);
   const size = boundsSizeMeters(bounds);
-  const detailBounds = boundsAround(center, DETAIL_BASEMAP_RADIUS_M);
   return {
     name: place.name,
     address: place.address,
@@ -187,20 +181,17 @@ export function createResearchArea(
     depthM: Math.round(size.depthM),
     imageUrl: researchImageUrl(bounds, style),
     style,
-    detailRadiusM: DETAIL_BASEMAP_RADIUS_M,
-    detailBounds,
-    detailImageUrl: researchImageUrl(detailBounds, style),
   };
 }
 
-/** 换半径或换样式时重算底图，地名与地址不动；高清贴片跟着中心与样式一起换。 */
+/** 换半径或换样式时重算底图，地名与地址不动。 */
 export function researchAreaWith(area: ResearchArea, changes: { radiusM?: number; style?: ResearchMapStyle }): ResearchArea {
+  // 静态预置底图与 bounds 一一对应：换半径会重算出与图片不符的范围，直接不响应。
+  if (area.presetId) return area;
   const radiusM = changes.radiusM ?? area.radiusM;
   const style = changes.style ?? area.style;
   const bounds = boundsAround(area.center, radiusM);
   const size = boundsSizeMeters(bounds);
-  const detailRadiusM = area.detailRadiusM ?? DETAIL_BASEMAP_RADIUS_M;
-  const detailBounds = boundsAround(area.center, detailRadiusM);
   return {
     ...area,
     radiusM: Math.max(50, Math.min(20000, Math.round(radiusM))),
@@ -209,9 +200,54 @@ export function researchAreaWith(area: ResearchArea, changes: { radiusM?: number
     depthM: Math.round(size.depthM),
     imageUrl: researchImageUrl(bounds, style),
     style,
-    detailRadiusM,
-    detailBounds,
-    detailImageUrl: researchImageUrl(detailBounds, style),
+  };
+}
+
+/* ---------------- 整景区静态底图（避开 /amap-static 长边 2048 限流） ---------------- */
+
+export type ResearchBasemapPresetId = 'xihu-scenic';
+
+export interface ResearchBasemapPreset {
+  id: ResearchBasemapPresetId;
+  name: string;
+  address: string;
+  /** 预先拼好、随仓库发布的静态图；不经过瓦片代理，也不会被缩到 2048。 */
+  imageUrl: string;
+  /**
+   * 静态图的经纬度四至：它是按 OSM 边界 bbox 在 z15 墨卡托下逐像素裁切的，
+   * 所以这组值同时也是图片的精确覆盖范围——底图尺寸/中心/偏航仍由它与 sceneAnchor 推出。
+   */
+  bounds: GeoBounds;
+  /** z15 下的像素尺寸（只用于报告清晰度，不参与摆放）。 */
+  pixelWidth: number;
+  pixelHeight: number;
+}
+
+/** 西湖风景名胜区：OSM relation/13164471 的 bbox，z15 裁切 2382×2585（4.13 m/px，1.38 MB）。 */
+export const XIHU_SCENIC_PRESET: ResearchBasemapPreset = {
+  id: 'xihu-scenic',
+  name: '西湖风景名胜区',
+  address: '浙江省杭州市西湖区',
+  imageUrl: '/basemap/xihu-scenic-z15.jpg',
+  bounds: { west: 120.0714663, south: 30.1777743, east: 120.1737028, north: 30.2736397 },
+  pixelWidth: 2382,
+  pixelHeight: 2585,
+};
+
+/** 预设 → 可直接铺进 3D 的底图。radiusM 只作档位展示，不参与取景（bounds 才是真值）。 */
+export function createPresetResearchArea(preset: ResearchBasemapPreset = XIHU_SCENIC_PRESET): ResearchArea {
+  const size = boundsSizeMeters(preset.bounds);
+  return {
+    name: preset.name,
+    address: preset.address,
+    center: boundsCenter(preset.bounds),
+    radiusM: Math.max(50, Math.min(20000, Math.round(Math.max(size.widthM, size.depthM) / 2))),
+    bounds: { ...preset.bounds },
+    widthM: Math.round(size.widthM),
+    depthM: Math.round(size.depthM),
+    imageUrl: preset.imageUrl,
+    style: RESEARCH_SATELLITE_STYLE,
+    presetId: preset.id,
   };
 }
 

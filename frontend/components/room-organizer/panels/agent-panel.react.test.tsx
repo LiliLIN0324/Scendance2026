@@ -9,6 +9,7 @@ import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { presetModelUrl } from '../lib/scene-presets';
 import { STAGE_PLATFORM_ASSET_ID } from '../lib/stage-platform-plan';
 import * as stagePlatformPlan from '../lib/stage-platform-plan';
+import * as researchArea from '../lib/research-area';
 import { getAssistantSessionBodies, resetAssistantSessionsStoreForTests, useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { useHistory } from '../hooks/use-history';
 import { useLayoutState } from '../hooks/use-layout-state';
@@ -92,15 +93,39 @@ function seatLayout(overrides: { locked?: boolean } = {}): RoomLayout {
 
 function ui(layout: RoomLayout, onApply = vi.fn(), onPreview = vi.fn()) {
   state.layout = layout;
-  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>;
+  return <LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>;
 }
+
+describe('research map activity scope', () => {
+  it('applies a found reference map through its dedicated callback', async () => {
+    vi.spyOn(researchArea, 'lookupPlace').mockResolvedValue({ name: '西湖', address: '杭州', lng: 120.15, lat: 30.25 });
+    const onApplyResearchArea = vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(onApplyResearchArea).toHaveBeenCalledOnce());
+    expect(onApplyResearchArea.mock.calls[0]![0]).toMatchObject({ name: '西湖', center: { lng: 120.15, lat: 30.25 } });
+  });
+
+  it('does not apply a delayed reference map after the activity session becomes stale', async () => {
+    let finish!: (value: researchArea.ResearchPlace | null) => void;
+    vi.spyOn(researchArea, 'lookupPlace').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const onApplyResearchArea = vi.fn();
+    let current = true;
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea} isSessionCurrent={() => current}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    current = false;
+    await act(async () => finish({ name: '西湖', address: '杭州', lng: 120.15, lat: 30.25 }));
+    expect(onApplyResearchArea).not.toHaveBeenCalled();
+  });
+});
 
 /** 候选确认后让测试画布跟随实际应用，预览阶段不调用 onApply。 */
 function LocalHarness({ initial, onApply, onPreview = vi.fn(), brief = false }: { initial: RoomLayout; onApply(next: RoomLayout): void; onPreview?(next: RoomLayout | null): void; brief?: boolean }) {
   const [current, setCurrent] = useState(initial);
   state.layout = current;
   state.apply = vi.fn((next: RoomLayout) => setCurrent(next));
-  return <LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/>{brief && <ActivityBrief tools={[]}/>}</LayoutAgentProvider>;
+  return <LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/>{brief && <ActivityBrief tools={[]}/>}</LayoutAgentProvider>;
 }
 
 /** 云端预览只要这几栏：右栏的差分、提案卡与 stale 判断读的就是它们。 */
@@ -240,7 +265,7 @@ describe('dialogue export in-flight fence',()=>{
  it('keeps the original words and does not dispatch if the fence cannot be acquired',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');state.layout=makeLayout();
   render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueTurnStart={()=>undefined as unknown as ()=>void}><AgentPanel/></LayoutAgentProvider>);
-  send('30人');expect(await screen.findByText('30人')).toBeTruthy();expect(await screen.findByText('对话状态暂时无法核对，请稍后重试。')).toBeTruthy();expect(studioMock.controller.briefExtract).not.toHaveBeenCalled();
+  send('30人');expect(within(await screen.findByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();expect(await screen.findByText('对话状态暂时无法核对，请稍后重试。')).toBeTruthy();expect(studioMock.controller.briefExtract).not.toHaveBeenCalled();
  });
  it('lets the export confirmation card run after its own request has finished',async()=>{
   const fence=tracker();state.layout=makeLayout();studioMock.exportActivity.mockImplementationOnce(async()=>{if(fence.active.size)throw Error('对话仍在处理');});
@@ -1515,14 +1540,14 @@ describe('T-UI visible interaction', () => {
 
   it('keeps the plan picker out of the Bingo review face', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.queryByLabelText('生成活动方案')).toBeNull();
   });
 
   it('previews a checked style bundle and applies only after explicit confirmation', async () => {
     const onApply = vi.fn(), onPreview = vi.fn();
     state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
@@ -1615,7 +1640,7 @@ describe('T-UI visible interaction', () => {
   }, 20000);
 
   it('keeps map选址 on the 活动 face together with the style chip', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/><MapVenueOverlay/></LayoutAgentProvider>);
     const group = screen.getByRole('group', { name: '你可以做什么' });
     expect(within(group).getByRole('button', { name: /地图选址/ })).toBeTruthy();
     expect(within(group).getByRole('button', { name: /按风格配一套/ })).toBeTruthy();
@@ -1632,7 +1657,7 @@ describe('T-UI visible interaction', () => {
   });
 
   it('renders the activity brief as read-only facts from the conversation', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
     // 无眉题头：左栏 Tab 已标明位置，卡片直接以活动名开场。
     expect(within(brief).queryByText('来自对话')).toBeNull();
@@ -1648,7 +1673,7 @@ describe('T-UI visible interaction', () => {
       { id: 'reference', label: '图纸与照片', hint: '图纸、照片与实测尺寸', icon: <span aria-hidden="true"/>, group: 'venue', onOpen: vi.fn() },
       { id: 'brief', label: '活动需求表', hint: '完整需求与场地资料表单', icon: <span aria-hidden="true"/>, group: 'docs', onOpen: vi.fn() },
     ];
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={tools}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 量出同一块场地的两条路并列，不再一个在左栏一个在左轨。
     expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['图纸与照片', '地图圈画', '空白空间 · 12 × 8 m']);
@@ -1663,7 +1688,7 @@ describe('T-UI visible interaction', () => {
 
   it('still offers the map once a venue is standing, as a replacement', () => {
     state.layout = { ...seatLayout(), backendVenue: { shape: 'rectangle', entrances: [], width: 12, depth: 8, height: 4 } };
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={[]}/><MapVenueOverlay/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><ActivityBrief tools={[]}/><MapVenueOverlay/></LayoutAgentProvider>);
     const ways = screen.getByRole('group', { name: '这块场地从哪来' });
     // 场地立起来后空地文字链退场，地图圈画留着。
     expect(within(ways).getAllByRole('button').map(button => visibleText(button.textContent))).toEqual(['地图圈画']);
@@ -1675,7 +1700,7 @@ describe('T-UI visible interaction', () => {
   // F-02：左栏表单是次要轨，但改过的值必须看得见——简报和对话回显读的是同一个 recap。
   it('echoes a left-rail form change into the brief', () => {
     studioMock.brief = { event: '工作坊', guests: 40, eventConfirmed: true, guestsConfirmed: true };
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
     expect(within(brief).getByText('工作坊')).toBeTruthy();
     expect(within(brief).getByText('40 人')).toBeTruthy();
@@ -1684,7 +1709,7 @@ describe('T-UI visible interaction', () => {
 
   it('keeps untouched form defaults out of the brief', () => {
     studioMock.brief = { event: INITIAL_BRIEF.event, guests: INITIAL_BRIEF.guests, eventConfirmed: false, guestsConfirmed: false };
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ActivityBrief tools={[]}/></LayoutAgentProvider>);
     const brief = screen.getByLabelText('活动简报');
     expect(within(brief).getAllByText('还没说').length).toBeGreaterThan(0);
     expect(within(brief).queryByText('品牌快闪')).toBeNull();
@@ -2469,6 +2494,56 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(studioMock.discardPreview).toHaveBeenCalledOnce();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'模拟其他确认入口'}));expect(studioMock.applyPreview).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
+  it('withdraws the old preview when a new design requirement is classified as other',async()=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+    studioMock.connection='项目已连接';studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
+    studioMock.discardPreview.mockImplementation(()=>{studioMock.preview=null;});
+    const onApply=vi.fn(),onMemory=vi.fn();state.layout=makeLayout({width:12,height:9});
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/><ConfirmationProbe/></LayoutAgentProvider>);
+    send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});studioMock.discardPreview.mockClear();
+    const before=structuredClone(onMemory.mock.lastCall?.[0]);vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
+    studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'这个要求需要继续处理。',unhandled:[{kind:'other',evidence:'花材只能摆在舞台后侧'}],factEvidence:[]});
+    send('花材只能摆在舞台后侧');await screen.findByText(/以下内容尚未执行或仍需核对/);
+    expect(onMemory.mock.lastCall?.[0]).toEqual(before);
+    expect(screen.getByText(/旧方案预览已收回.*重新生成/)).toBeTruthy();
+    expect(studioMock.discardPreview).toHaveBeenCalledOnce();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'模拟其他确认入口'}));expect(studioMock.applyPreview).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['把椅子往左挪','移动距离或要求不明确'],
+    ['把椅子放大','缩放倍数或要求不明确'],
+    ['加0把椅子','单次支持'],
+    ['加两把椅子和一张桌子','物料增减的意思尚不明确'],
+  ])('withdraws a previous preview when a local modification is unresolved: %s',async(message,hint)=>{
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
+    studioMock.connection='项目已连接';studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
+    studioMock.discardPreview.mockImplementation(()=>{studioMock.preview=null;});
+    state.layout=makeLayout({width:12,height:9});render(ui(state.layout));
+    send('30 人，室内 12×9，课桌椅');await screen.findByRole('button',{name:'确认布置'});studioMock.discardPreview.mockClear();
+    send(message);await screen.findByText(new RegExp(hint));
+    expect(studioMock.discardPreview).toHaveBeenCalledOnce();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
+  });
+  it('lets the user explicitly withdraw one unresolved requirement without clearing the other',async()=>{
+    render(ui(makeLayout({width:12,height:9})));
+    send('把椅子往左挪');await screen.findByText(/移动距离或要求不明确/);
+    send('把椅子放大');await screen.findByText(/缩放倍数或要求不明确/);
+    let list=screen.getByRole('region',{name:'尚未处理的要求'});
+    expect(within(list).getByText('把椅子往左挪')).toBeTruthy();expect(within(list).getByText('把椅子放大')).toBeTruthy();
+    fireEvent.click(within(list).getAllByRole('button',{name:'撤回这项要求'})[0]!);
+    list=screen.getByRole('region',{name:'尚未处理的要求'});
+    expect(within(list).queryByText('把椅子往左挪')).toBeNull();expect(within(list).getByText('把椅子放大')).toBeTruthy();
+  });
+  it('does not show unresolved requests from a different conversation',async()=>{
+    render(ui(makeLayout({width:12,height:9})));
+    send('把椅子往左挪');await screen.findByText(/移动距离或要求不明确/);
+    expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('把椅子往左挪')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'新开会话'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull());
+    fireEvent.click(screen.getByRole('button',{name:'会话历史'}));
+    const rows=within(screen.getByRole('list',{name:'方案会话列表'})).getAllByRole('button',{name:/^新会话/});
+    fireEvent.click(rows.find(button=>button.getAttribute('aria-current')!=='true')!);
+    expect(within(await screen.findByRole('region',{name:'尚未处理的要求'})).getByText('把椅子往左挪')).toBeTruthy();
+  });
   it('keeps an unchanged preview when the user asks an ordinary question',async()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
     studioMock.connection='项目已连接';studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
@@ -3224,7 +3299,7 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
 describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除', () => {
   it('活动脸集齐例句卡、会话操作与两枚能力芯片', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     // 默认脸即活动：布置生成例句卡归活动脸。
     expect(screen.getByLabelText('生成活动方案')).toBeTruthy();
     // 会话历史与新开随生成主对话一起归活动脸。
@@ -3239,7 +3314,7 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 
   it('Bingo 脸是纯审校台：无输入框、无布置话术，空态只说审校的事', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.queryByLabelText('生成活动方案')).toBeNull();
     expect(screen.queryByRole('button', { name: '会话历史' })).toBeNull();
     expect(screen.queryByRole('button', { name: '新开会话' })).toBeNull();
@@ -3257,14 +3332,14 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 
   it('Bingo 脸只回放审校气泡：体检回执出现在审校台', async () => {
     state.layout = seatLayout();
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
     expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
   });
 
   it('假分派控件与话术全部消失，空态改成统一的先说一句引导', () => {
     state.layout = INITIAL_LAYOUT;
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="door"/></LayoutAgentProvider>);
     expect(screen.queryByRole('group', { name: '这场对话里找谁说' })).toBeNull();
     expect(screen.queryByRole('group', { name: '一起说的 agent' })).toBeNull();
     expect(screen.queryByText('分派结果')).toBeNull();
@@ -3277,38 +3352,38 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 
   it('S1.1 画廊桥缺 Provider 时安静不渲染，活动脸与 Bingo 脸都不炸', () => {
     state.layout = INITIAL_LAYOUT;
-    const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    const view = render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     // 本壳没有 CreativeStudioProvider，useLocalProjectBackup() 为 null：画廊整块缺席而非抛错。
     expect(view.container.querySelector('.sc-local-activities')).toBeNull();
-    view.rerender(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    view.rerender(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(view.container.querySelector('.sc-local-activities')).toBeNull();
   });
 });
 
 describe('S2 Bingo 审校台：三钮状态台直达', () => {
   it('Bingo 脸渲染三钮状态台', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '准备客户评审' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '发送钉评链接' })).toBeTruthy();
   });
 
   it('活动脸不挂审校状态台三钮', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     expect(screen.queryByRole('button', { name: '立即体检' })).toBeNull();
     expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
     expect(screen.queryByRole('button', { name: '发送钉评链接' })).toBeNull();
   });
 
   it('点「立即体检」不打字即出几何体检回执', async () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
     // 与 T-03 口令路径同引擎、同口径声明，只是入口从 send() 换成按钮。
     expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
   });
 
   it('点「准备客户评审」直接回调，不落气泡', () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '准备客户评审' }));
     expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
   });
@@ -3349,7 +3424,7 @@ describe('S2 Bingo 审校台：三钮状态台直达', () => {
   });
 
   it('点「发送钉评链接」只指路到甲方评审记录卡，聊天不打链接', async () => {
-    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '发送钉评链接' }));
     await waitFor(() => expect(callbacks.onIssueReviewLink).toHaveBeenCalled());
     expect(screen.getByText(/对方的意见仅保存在对方浏览器，不会自动回到这里/)).toBeTruthy();

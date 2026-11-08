@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
+import { createPresetResearchArea } from './research-area';
 import {
   MAX_COLOR_LENGTH,
   MAX_COORDINATE,
@@ -18,7 +19,7 @@ import {
 import { ENTRANCE_DOOR_ID, ENTRANCE_WALL_ID } from './street';
 import { MAX_STORAGE_ENTRY_CHARS } from './version-history';
 import { MAX_ZONES } from './zones';
-import type { FurnitureItem, RoomLayout } from './types';
+import type { FurnitureItem, RoomLayout, SceneAnchor } from './types';
 
 describe('isFurnitureItem', () => {
   it('accepts a well-formed item', () => {
@@ -232,6 +233,41 @@ describe('isRoomLayout', () => {
     const frame = { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 0.5 };
     expect(parseStoredLayout(makeLayout({ floorPlanImage: bounded, mapGroundFrame: frame }))?.mapGroundFrame).toEqual(frame);
     expect(isRoomLayout(makeLayout({ mapGroundFrame: { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 2 } }))).toBe(false);
+  });
+
+  it('accepts the scenic preset basemap and round-trips its presetId', () => {
+    const area = createPresetResearchArea();
+    const layout = makeLayout({ researchArea: area });
+    expect(isRoomLayout(layout)).toBe(true);
+    const parsed = parseStoredLayout(JSON.parse(JSON.stringify(layout)));
+    expect(parsed?.researchArea).toEqual(area);
+    // 静态底图只放行仓库 /basemap/ 相对路径：外站与越界路径仍拒绝。
+    expect(isRoomLayout(makeLayout({ researchArea: { ...area, imageUrl: 'https://evil.example/basemap/x.jpg' } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ researchArea: { ...area, imageUrl: '/basemap/../secrets.json' } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ researchArea: { ...area, presetId: 'unknown-preset' as never } }))).toBe(false);
+    // 手动底图没有 presetId 也照常收（走卫星代理白名单）。
+    const manual = {
+      ...area,
+      presetId: undefined as never,
+      imageUrl: '/api/amap-static?location=120.1,30.2&zoom=15&size=2048*2048&scale=2&x-ref=map-basemap',
+    };
+    expect(isRoomLayout(makeLayout({ researchArea: manual }))).toBe(true);
+  });
+
+  it('accepts scene anchor metadata (source/accuracyM) and rejects unknown sources', () => {
+    const anchor: SceneAnchor = { lng: 120.13, lat: 30.24, orientationDeg: 0, metersPerUnit: 1, source: 'asset-geo', accuracyM: 12.5 };
+    const layout = makeLayout({ sceneAnchor: anchor });
+    expect(isRoomLayout(layout)).toBe(true);
+    // 元数据随存档往返不丢（MAP-05 拿它核对锚点可信度）。
+    expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))?.sceneAnchor).toEqual(anchor);
+    // 旧存档没有元数据字段照常收。
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { lng: 120.13, lat: 30.24, orientationDeg: 0, metersPerUnit: 1 } }))).toBe(true);
+    // 来源白名单：未知值与类型不对都拒收，防止随存档扩散。
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, source: 'rumour' as never } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, source: 7 as never } }))).toBe(false);
+    // 不确定度不为负数、不编数字（没有就不写字段）。
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, accuracyM: -1 } }))).toBe(false);
+    expect(isRoomLayout(makeLayout({ sceneAnchor: { ...anchor, accuracyM: Number.NaN } }))).toBe(false);
   });
 
   it('accepts exactly MAX_ROOM_DIMENSION and exactly MAX_FLOORS', () => {
@@ -684,11 +720,15 @@ describe('persisted-field whitelist and bounds (#350)', () => {
       handoff: { ownerName: '现场负责人', dueDate: '2026-10-07', acceptance: '尺寸与位置核对通过', status: 'review', evidenceUrls: [], evidenceNote: '' },
       structuralOpeningId: 'opening', structuralColumnId: 'column', wallId: 'wall',
       materialId: 'asset',
+      personAction: 'talk',
+      personPaused: false,
+      walkRoute: { points: [{ x: 1, z: 2 }, { x: 3, z: 4 }], loop: true, speed: 1.2, pauseMs: 1200 },
       assetId: '00000000-0000-4000-8000-000000000002',
       notes: '保存来源与备注',
       source: 'generated',
       glbUrl: '/assets/models/table.glb',
       glbNode: 'Preset_Object_0',
+      uniformScale: true,
       elevation: 0.75,
       venueEntranceId: '00000000-0000-4000-8000-000000000003',
       id: 'cam',

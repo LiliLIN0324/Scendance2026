@@ -12,8 +12,46 @@ export type GlbAssetState = Readonly<{
   error?: string;
   dimensions?: Readonly<{ width: number; depth: number; height: number }>;
 }>;
-type CachedAsset = { url: string; state: GlbAssetState; source?: THREE.Object3D; promise: Promise<void>; controller: AbortController };
+type CachedAsset = {
+  url: string;
+  state: GlbAssetState;
+  source?: THREE.Object3D;
+  /** 模板里带的动画片段；只有真带 clip 的资产才会填。 */
+  animations?: readonly THREE.AnimationClip[] | undefined;
+  promise: Promise<void>;
+  controller: AbortController;
+};
 const cache = new Map<string, CachedAsset>();
+
+/**
+ * 正在播放的实例动画。只有 `createCachedGlbModel` 建出的、带 clip 的实例才会进这张表，
+ * 程序化家具永远不进来，所以渲染循环的「每帧跑」开关只对有动画的场景生效。
+ */
+const mixers = new Set<THREE.AnimationMixer>();
+
+/** 场景里是否有实例正在播动画；渲染循环据此决定要不要每帧续跑。 */
+export function hasGlbAnimations(): boolean { return mixers.size > 0; }
+
+/** 推进所有实例动画；返回本次实际推进的 mixer 数（0 表示这一帧可以早退）。 */
+export function advanceGlbAnimations(deltaSeconds: number): number {
+  if (!mixers.size || !(deltaSeconds > 0)) return 0;
+  for (const mixer of mixers) mixer.update(deltaSeconds);
+  return mixers.size;
+}
+
+/** 物件被移除时必须调用，否则已脱离场景的 mixer 会一直往无主骨骼上写。 */
+export function disposeGlbMixersIn(root: THREE.Object3D): void {
+  root.traverse(node => {
+    const holder = node.userData as { glbMixer?: THREE.AnimationMixer | undefined };
+    const mixer = holder.glbMixer;
+    if (!mixer) return;
+    // 先停动作再摘引用：只删表里的项，clip 与骨骼的绑定缓存会继续握着已脱离场景的节点。
+    mixer.stopAllAction();
+    mixer.uncacheRoot(mixer.getRoot());
+    mixers.delete(mixer);
+    holder.glbMixer = undefined;
+  });
+}
 const listeners = new Set<() => void>();
 const IDLE: GlbAssetState = Object.freeze({ status: 'idle' });
 let revision = 0;
@@ -100,6 +138,7 @@ export function ensureGlbAsset(key: string, url: string): Promise<void> {
       const normalized = normalizeGlbRoot(source);
       if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型加载请求已过期，请重试。');
       entry.source = normalized.root;
+      entry.animations = gltf.animations?.length ? gltf.animations : undefined;
       entry.state = { status: 'ready', dimensions: normalized.size };
       source = undefined; // The cache now owns the template.
       changed();
@@ -146,7 +185,11 @@ export function cloneOwnedGlb(source: THREE.Object3D): THREE.Object3D {
   return object;
 }
 
-export function normalizeGlbInstance(source: THREE.Object3D, dimensions: { width: number; depth: number; height: number }): THREE.Group {
+export function normalizeGlbInstance(
+  source: THREE.Object3D,
+  dimensions: { width: number; depth: number; height: number },
+  uniformScale = false,
+): THREE.Group {
   if (![dimensions.width, dimensions.depth, dimensions.height].every(n => Number.isFinite(n) && n > 0)) throw new Error('模型尺寸必须为正数。');
   const object = cloneOwnedGlb(source);
   const bounds = new THREE.Box3().setFromObject(object);
@@ -158,16 +201,32 @@ export function normalizeGlbInstance(source: THREE.Object3D, dimensions: { width
   origin.add(object);
   const result = new THREE.Group();
   result.add(origin);
-  result.scale.set(dimensions.width / size.x, dimensions.height / size.y, dimensions.depth / size.z);
+  if (uniformScale) {
+    // 骨骼蒙皮不能吃三轴独立缩放：肩宽与身高被拉成不同倍率会把骨架扯歪。
+    // 以标称高度为准算一个统一倍率，深度/宽度随原比例走。
+    result.scale.setScalar(dimensions.height / size.y);
+  } else {
+    result.scale.set(dimensions.width / size.x, dimensions.height / size.y, dimensions.depth / size.z);
+  }
   return result;
 }
 
 export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
   const key = glbAssetKey(item);
-  const asset = key ? cache.get(key)?.source : undefined;
+  const entry = key ? cache.get(key) : undefined;
+  const asset = entry?.source;
   const source = item.glbNode ? asset?.getObjectByName(item.glbNode) : asset;
   if (!source) return null;
-  const group = normalizeGlbInstance(source, item);
+  const clips = entry?.animations;
+  let rigged = false;
+  source.traverse(node => { if ((node as THREE.SkinnedMesh).isSkinnedMesh) rigged = true; });
+  /*
+   * 只有真绑骨（SkinnedMesh）的实例才自动等比缩放并自动播 clip。
+   * 实测 table.glb 也带 open/close 两个片段但 skins=0，它是刚性开合、一直是按轴拉伸摆放的；
+   * 若「有 clip 就等比 + 播放」，既有桌椅模板的占地面积会被改掉，抽屉还会自己动。
+   */
+  const uniformScale = item.uniformScale === true || rigged;
+  const group = normalizeGlbInstance(source, item, uniformScale);
   if (item.elevation) {
     // Keep the outer group on the floor for the existing drag handlers.
     // This wrapper's world offset must not scale when the fixture is resized.
@@ -195,6 +254,15 @@ export function createCachedGlbModel(item: FurnitureItem): THREE.Group | null {
     });
   }
   group.userData.glbStatus = 'ready';
+  // 只有绑骨实例才挂 mixer；挂上后由渲染循环的 advanceGlbAnimations 每帧推进。
+  if (rigged && clips?.length) {
+    const mixer = new THREE.AnimationMixer(group);
+    mixer.clipAction(clips[0]).play();
+    mixer.timeScale = 1;
+    group.userData.glbMixer = mixer;
+    group.userData.glbClip = clips[0].name;
+    mixers.add(mixer);
+  }
   return group;
 }
 
@@ -215,6 +283,7 @@ export function createGlbCatalogItem(input: GlbCatalogInput): CatalogItem {
 }
 
 export function disposeOwnedModel(root: THREE.Object3D): void {
+  disposeGlbMixersIn(root);
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
@@ -287,6 +356,7 @@ export async function importLocalGlb(file: File, key: string): Promise<ImportedG
     const normalized = normalizeGlbRoot(source);
     if (cache.get(key) !== entry || controller.signal.aborted) throw new Error('模型导入请求已过期，请重试。');
     entry.source = normalized.root;
+    entry.animations = gltf.animations?.length ? gltf.animations : undefined;
     entry.state = { status: 'ready', dimensions: normalized.size };
     source = undefined;
     const asset: ImportedGlbAsset = {

@@ -91,7 +91,7 @@ function chooseZoom(west: number, south: number, east: number, north: number): n
   for (let zoom = 18; zoom >= 3; zoom--) {
     const nw = mercatorPixel(west, north, zoom);
     const se = mercatorPixel(east, south, zoom);
-    if (Math.max(se.x - nw.x, se.y - nw.y) <= 1024) return zoom;
+    if (Math.max(se.x - nw.x, se.y - nw.y) <= 2048) return zoom;
   }
   return 3;
 }
@@ -121,7 +121,7 @@ async function renderLngLatBounds(
     const srcH = se.y - nw.y;
     if (srcW < 1 || srcH < 1) return 'invalid';
     const longEdge = Math.max(srcW, srcH);
-    const fit = longEdge > 768 ? 768 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
+    const fit = longEdge > 1536 ? 1536 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
     const outW = Math.max(2, Math.round(srcW * fit));
     const outH = Math.max(2, Math.round(srcH * fit));
     const canvas = new OffscreenCanvas(outW, outH);
@@ -134,16 +134,28 @@ async function renderLngLatBounds(
     const limit = 2 ** zoom;
     const scaleX = outW / srcW;
     const scaleY = outH / srcH;
+    // 一张底图最多拆成几十块瓦片，并行取完再拼；顺序串行会把一次出图拖到好几秒。
+    const coords: { tx: number; ty: number }[] = [];
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         if (tx < 0 || ty < 0 || tx >= limit || ty >= limit) continue;
-        const host = 1 + ((tx + ty) % 4);
-        const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
-        if (!response.ok) return null;
-        const bitmap = await createImageBitmap(await response.blob());
-        context.drawImage(bitmap, (tx * TILE - nw.x) * scaleX, (ty * TILE - nw.y) * scaleY, TILE * scaleX, TILE * scaleY);
-        bitmap.close();
+        coords.push({ tx, ty });
       }
+    }
+    const tiles = await Promise.all(coords.map(async ({ tx, ty }) => {
+      const host = 1 + ((tx + ty) % 4);
+      const response = await fetchImpl(`https://webst0${host}.is.autonavi.com/appmaptile?style=${style}&x=${tx}&y=${ty}&z=${zoom}`, { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) return null;
+      return { tx, ty, bitmap: await createImageBitmap(await response.blob()) };
+    }));
+    if (tiles.some(tile => !tile)) {
+      for (const tile of tiles) tile?.bitmap.close();
+      return null;
+    }
+    for (const tile of tiles) {
+      if (!tile) continue;
+      context.drawImage(tile.bitmap, (tile.tx * TILE - nw.x) * scaleX, (tile.ty * TILE - nw.y) * scaleY, TILE * scaleX, TILE * scaleY);
+      tile.bitmap.close();
     }
     const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.86 });
     return { bytes: await blob.arrayBuffer(), type: 'image/jpeg' };

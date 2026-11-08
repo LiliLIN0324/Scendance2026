@@ -103,7 +103,7 @@ export function calculateRoomFraming(
   return Number.isFinite(dollyOut) && Number.isFinite(far) ? { dollyOut, far } : null;
 }
 
-/* ---------------- 相机距离钳制（跟随当前焦点，docs/49） ---------------- */
+/* ---------------- 相机距离钳制（跟随当前焦点，docs/19） ---------------- */
 
 /**
  * 轨道最小距离 2m：小于最小场地特征（西湖茶亭进深 3.7m），能贴近看细节又不穿模。

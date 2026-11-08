@@ -11,14 +11,15 @@
 | `logo-2026/door/door-128.svg` | 同一路径的 `viewBox="0 0 128 128"` 等价版 | 与原图逐像素同坐标，便于比对 |
 | `logo-2026/door/door-eyes.svg` | 母版 + 两只白眼睛（取自 `icon.svg` 的 rect，48 单位换算到 128） | 对齐运行时包装层的外观 |
 | `logo-2026/door/png/` | 16 / 24 / 28 / 32 / 48 / 64 / 128 / 256 / 512 共 9 档 | **128 档为原件字节**（SHA256 逐字节一致）；其余 8 档由 `door.svg` 渲染，非位图降采样 |
-| `logo-2026/door/compare-128.png` | 原图 / SVG 渲回 128 / 差异高亮 三面板 | 形状掩膜 IoU **0.9779**，不匹配 215 px（1.31%） |
-| `logo-2026/door/compare-eyes.png` | 带眼 / 不带眼并排 | 眼睛是否存在的事实对照 |
 | `logo-2026/door/door-master-128.png` | 运行时 `door.png` 的逐字节副本（SHA256 `911D11FD…ADAF8F`） | 仅作溯源留档 |
 | `logo-2026/motion/` | 12 个动效 SVG + `index.html`（双击即开）+ `preview.png` | 见 `logo-2026/README.md` 的动效一节 |
 
 旧的 `threshold-*`（黑底门槛 + 拱内绿点）是 2026-10 的设计，与当前在用的 door 版不是同一设计，
 **已于 2026-11-04 全部删除**（62 个文件、约 0.58 MB）。**现在仓库内已不存在任何 threshold 文件**，
 `logo-2026/` 下只剩 `door/`、`motion/` 与两份 README。
+
+> QA 对照位图 `compare-128.png` / `compare-eyes.png` 已按品牌 P0 删除（2026-11-07，见 docs/26）；
+> IoU 0.9779 与残差数字留在本目录两份 README 正文里，可随时用 `door.svg` 重渲复验。
 
 ## 矢量几何是怎么来的（反推，不是手绘）
 

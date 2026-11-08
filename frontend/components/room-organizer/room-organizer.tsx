@@ -1,4 +1,9 @@
-﻿'use client';
+'use client';
+/*
+ * COLLAB.md 独占区（Qoder 侧只提需求）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
+ * 整景区视距下点云退化成锚点 POI，进到 100 m 内再挂/显示 splat。
+ * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
+ */
 
 import { PanelLeftClose } from '@/components/solid-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -56,7 +61,8 @@ import { useSceneLighting } from './hooks/use-scene-lighting';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
 import { useSplatPreview } from './hooks/use-splat-preview';
-import type { SplatPosition, SplatTransformMode } from './three/splat-preview';
+import { useSplatLod } from './hooks/use-splat-lod';
+import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useWalkthrough } from './hooks/use-walkthrough';
 import { useWeather } from './hooks/use-weather';
@@ -102,13 +108,18 @@ import type { ScannedVenue } from './lib/venue-scans';
 import { listScannedVenues } from './lib/venue-scans';
 import { sceneAnchorOf } from './lib/scene-anchor';
 import { cameraDistanceClamp } from './lib/camera-framing';
-import type { SceneAnchor } from './lib/types';
+import type { SceneAnchor, SceneAnchorSource } from './lib/types';
+import { wgs84ToGcj02 } from './lib/geo-coords';
 import { useSceneZoom, SCENE_ZOOM_CLOSER_RATIO } from './hooks/use-scene-zoom';
 import { SceneGeoDots } from './panels/scene-geo-dots';
+import { SplatLodMarker } from './panels/splat-lod-marker';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount, isEvidenceProtectedWall } from './lib/structural-layout';
 import { snapWallEndpoint } from './lib/wall-snap';
+import { ROUTE_WAYPOINT_CLEARANCE_WARN_M, routePointError, routePointErrorInRect } from './lib/person-route';
+import { buildWalkColliders, walkerClearanceAt } from './lib/walk-collision';
+import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { CanvasHeading } from './panels/canvas-heading';
@@ -172,7 +183,7 @@ import { AnnotationGuide } from './panels/annotation-guide';
 import type { View2DTransform } from './canvas-2d/render';
 import { PlanCard } from './panels/plan-card';
 import { computeBingoScore } from '@/lib/bingo-score';
-import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
+import { ANNOTATION_PRESET_LABELS, createEmptyPlanDraft, pickDoorWallFromPoint, ZONE_SEMANTIC_LABELS, type PlanPoint, type ZoneSemanticType } from '@/lib/plan-annotation';
 // 第 12 批：三版打分 + 动线约束 + AI 建议（纯函数层，已独立测试）。
 import {
   pickRecommendedPlan,
@@ -644,6 +655,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [measurementPoints, setMeasurementPoints] = useState<ReadonlyArray<{ x: number; z: number }>>([]);
   const [wallDraft, setWallDraft] = useState<{ x: number; z: number } | null>(null);
   const [pointerWorld, setPointerWorld] = useState<{ x: number; z: number } | null>(null);
+  // 人物路线布点（PEOPLE-04）：画布点击喂给选中人物的 walkRoute。首个路点先落
+  // 草稿（单点路线过不了 schema 校验，不能提前写进 item），第二个点起直接提交。
+  const [routeDrawItemId, setRouteDrawItemId] = useState<string | null>(null);
+  const [routeDraft, setRouteDraft] = useState<{ itemId: string; points: Array<{ x: number; z: number }> } | null>(null);
+  const [routeDrawHint, setRouteDrawHint] = useState<string | null>(null);
+  // 近景跟拍（PEOPLE-04 后半）：目标 id 只是 UI 态；镜头推进在渲染循环里
+  // （three/person-follow），人物被删时由 follow 模块回调收摊。
+  const [followPersonId, setFollowPersonId] = useState<string | null>(null);
+  // 实景点云实测四至（茶亭实景接线）：splatState 声明在 handleEmptyClick 之后，
+  // 布点校验经 ref 读现值（每渲染同步），渲染进 useSceneEffects 时直接传值。
+  const splatWalkBoundsRef = useRef<SplatWalkBounds | null>(null);
   // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
 
@@ -683,6 +705,52 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
 
   const handleEmptyClick = useCallback(
     (x: number, z: number) => {
+      if (routeDrawItemId) {
+        // 人物路线布点（PEOPLE-04）：与画墙同款「点击布点」。第一个点存草稿，
+        // 第二个点起写进 item.walkRoute（路线可视化随布局重建自动出现）。
+        // 撤销边界由 useHistory 的自动快照负责（同 addInteriorWall）。
+        const item = activeFloor.items.find((candidate) => candidate.id === routeDrawItemId);
+        if (!item) {
+          setRouteDrawItemId(null);
+          setRouteDraft(null);
+          setRouteDrawHint(null);
+          return;
+        }
+        const points = routeDraft?.itemId === routeDrawItemId
+          ? routeDraft.points
+          : item.walkRoute?.points ?? [];
+        // 真实景（点云就绪）按点云实测四至校验，与巡游夹取框同一围栏；
+        // 无实景退回布局名义矩形（房间中心原点）。
+        const problem = splatWalkBoundsRef.current
+          ? routePointErrorInRect(points, { x, z }, splatWalkBoundsRef.current)
+          : routePointError(points, { x, z }, { width: layout.width, depth: layout.height });
+        if (problem) {
+          setRouteDrawHint(problem);
+          return;
+        }
+        // 贴障预检（PEOPLE-04 E2E 实踩：距桌沿 0.2m 的路线点会被碰撞推挤钉死、
+        // 来回徘徊）：途经点离障碍太近时提示但不阻断——1.2s 受阻掉头仍兜底，
+        // 用户可能就是想要贴着桌边走。排除本人（首点尚无路线时自己是静态碰撞盒）。
+        const colliders = buildWalkColliders(
+          activeFloor.items.filter((candidate) => candidate.id !== routeDrawItemId),
+          activeFloor.interiorWalls ?? [],
+          { roomWidth: layout.width, roomDepth: layout.height }
+        );
+        const clearance = walkerClearanceAt(colliders, { x, z }, { roomWidth: layout.width, roomDepth: layout.height });
+        setRouteDrawHint(
+          clearance < ROUTE_WAYPOINT_CLEARANCE_WARN_M
+            ? `途经点距最近障碍约 ${clearance.toFixed(1)}m，行走时可能被推挤折返徘徊，建议离障碍 ${ROUTE_WAYPOINT_CLEARANCE_WARN_M}m 以上。`
+            : null
+        );
+        const next = [...points, { x, z }];
+        if (next.length >= 2) {
+          actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: next } });
+          setRouteDraft(null);
+        } else {
+          setRouteDraft({ itemId: routeDrawItemId, points: next });
+        }
+        return;
+      }
       if (view.drawWallMode) {
         const snapped = snapWallEndpoint({
           point: { x, z },
@@ -728,6 +796,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       activeFloor.interiorWalls,
       layout.width,
       layout.height,
+      routeDrawItemId,
+      routeDraft,
     ]
   );
 
@@ -738,6 +808,78 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const handleFloorPointerLeave = useCallback(() => {
     setPointerWorld(null);
   }, []);
+
+  const stopRouteDraw = useCallback(() => {
+    setRouteDrawItemId(null);
+    setRouteDraft(null);
+    setRouteDrawHint(null);
+  }, []);
+
+  // Esc 结束布点；离开属性面板或取消选中时同样收摊（未满两点的草稿直接丢弃）。
+  useEffect(() => {
+    if (!routeDrawItemId) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') stopRouteDraw();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [routeDrawItemId, stopRouteDraw]);
+  useEffect(() => {
+    if (routeDrawItemId && leftMode !== 'properties') stopRouteDraw();
+  }, [routeDrawItemId, leftMode, stopRouteDraw]);
+  useEffect(() => {
+    if (routeDrawItemId && selectedItemId !== routeDrawItemId) stopRouteDraw();
+  }, [routeDrawItemId, selectedItemId, stopRouteDraw]);
+
+  const toggleRouteDraw = useCallback(() => {
+    if (routeDrawItemId) {
+      stopRouteDraw();
+      return;
+    }
+    if (!selectedItemId) return;
+    const item = activeFloor.items.find((candidate) => candidate.id === selectedItemId);
+    if (!item || item.type !== 'person') return;
+    setRouteDrawItemId(selectedItemId);
+    // 已有路线就在末点续画；无路线从空草稿起步。
+    setRouteDraft(item.walkRoute ? null : { itemId: selectedItemId, points: [] });
+    setRouteDrawHint(null);
+  }, [routeDrawItemId, selectedItemId, activeFloor.items, stopRouteDraw]);
+
+  const undoRoutePoint = useCallback(() => {
+    if (!routeDrawItemId) return;
+    const item = activeFloor.items.find((candidate) => candidate.id === routeDrawItemId);
+    if (!item) {
+      stopRouteDraw();
+      return;
+    }
+    if (routeDraft?.itemId === routeDrawItemId && routeDraft.points.length > 0) {
+      setRouteDraft({ itemId: routeDrawItemId, points: routeDraft.points.slice(0, -1) });
+      return;
+    }
+    const points = item.walkRoute?.points ?? [];
+    if (points.length === 0) return;
+    if (points.length <= 2) {
+      // 撤到不足两点：整条路线随存档规则一起撤销，首点退回草稿方便重画。
+      actions.updateItem(routeDrawItemId, { walkRoute: undefined } as unknown as Partial<FurnitureItem>);
+      setRouteDraft({ itemId: routeDrawItemId, points: [points[0]!] });
+    } else {
+      actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: points.slice(0, -1) } });
+    }
+  }, [routeDrawItemId, routeDraft, activeFloor.items, actions, stopRouteDraw]);
+
+  // 近景跟拍（PEOPLE-04 后半）：toggle 一名人物的跟随镜头。人物被删时
+  // three/person-follow 检测到目标消失自动退出并回调清 UI 态。
+  const toggleFollowPerson = useCallback((itemId: string) => {
+    if (followPersonId === itemId) {
+      setPersonFollowTarget(null);
+      setFollowPersonId(null);
+      return;
+    }
+    setPersonFollowTarget(itemId, () => setFollowPersonId(null));
+    setFollowPersonId(itemId);
+    // 跟拍是 3D 视角的事：停在 2D 平面图上看不到，切回 3D。
+    setView(current => (current.view2D ? { ...current, view2D: false } : current));
+  }, [followPersonId]);
 
   // Reset wall draft + wall selection whenever draw mode flips off.
   useEffect(() => {
@@ -1505,6 +1647,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
           setDraftPoints([]);
           planAnnot.setDrawMode('off');
         }
+      } else if (planAnnot.drawMode === 'door') {
+        // 用户在墙边标注入口位置；门宽与开启方向仍需现场核验。
+        // 离四墙都太远时静默不落（保持绘制模式，用户点到墙边再落）；
+        // 单击即收（同 measure 的单段语义），Esc/再点标注钮退出。
+        const door = pickDoorWallFromPoint(w, { width: layout.width, height: layout.height });
+        if (door) {
+          planAnnot.addDoorAnnotation(door);
+          setDraftPoints([]);
+          planAnnot.setDrawMode('off');
+        }
       } else if (planAnnot.drawMode === 'route') {
         const added=route?.add(w);
         if(added==='added')setDraftPoints(route!.points());
@@ -1587,6 +1739,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     planAnnot.addAnnotationFromPoints,
     planAnnot.addUserRouteFromPoints,
     planAnnot.getSnapshot,
+    planAnnot.addDoorAnnotation,
     planAnnot.setDrawMode,
     sessionToken,
     activitySession.isCurrent,
@@ -1595,6 +1748,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     routeVenueFacts.capture,
     routeVenueFacts.isCurrent,
     zoneType,
+    layout.width,
+    layout.height,
   ]);
 
   // canvas 挂载 / 尺寸变化时 bump overlayTick，让 PlanOverlay 用真实 transform 重算。
@@ -1639,7 +1794,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       onViewportResize: () => frameViewportRef.current(),
       walkthroughActive,
       // The distance tool measures across furniture, so its clicks go to the floor (#341).
-      floorPickOnly: view.drawWallMode || view.measurementMode,
+      // 人物路线布点同理：绘制中所有点击都落到地面坐标（PEOPLE-04）。
+      floorPickOnly: view.drawWallMode || view.measurementMode || routeDrawItemId !== null,
       onItemSelect: handleSelect,
       onItemDoubleClick: openPropertiesForItem,
       selectedIds: allSelectedIds,
@@ -1731,6 +1887,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         floorIndex: entry.floorIndex ?? 0, roofCutoffY: floorElevation(layout.floors, (entry.floorIndex ?? 0) + 1) + (entry.position?.y ?? 0) - floorElevation(layout.floors, entry.floorIndex ?? 0) }];
     } catch { return []; }
   }), [environments, layout.floors]);
+  // 第 3 步：整景区视距 LOD。锚点 = 点云落位（geo 锚点投影到世界后即环境位移），
+  // 距离按锚点 metersPerUnit 折回真实米。MAP-03：凡铺了调研底图（整景区预设、
+  // 地名定位、scanAssetId 自动铺图）都启用——概览视距下点云一样不该解码；室内照旧。
+  const splatLodAnchor = environment ? {
+    x: environment.position?.x ?? 0,
+    z: environment.position?.z ?? 0,
+  } : null;
+  const splatLodEnabled = !!layout.researchArea && !!environment;
+  const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
+  const { mode: splatLod, measured: splatLodMeasured } = useSplatLod({
+    isReady,
+    cameraRef,
+    controlsRef,
+    anchor: splatLodAnchor,
+    metersPerUnit: splatLodMetersPerUnit,
+    enabled: splatLodEnabled,
+  });
   const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat,
     setPosition: setSplatPosition, displayMode: splatDisplayMode, setDisplayMode: setSplatDisplayMode,
     setTransformMode: setSplatTransform, pickScene: pickSplatScene } = useSplatPreview({
@@ -1752,7 +1925,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     calibrationCapability: workspaceWriteGuards?.capability,
     otherScenes: otherSplatScenes,
     activeFloorIndex,
-    primaryVisible: (environment?.floorIndex ?? 0) === activeFloorIndex,
+    primaryVisible: (environment?.floorIndex ?? 0) === activeFloorIndex && splatLod !== 'poi',
     preserveCameraRef: preserveSplatCameraRef,
   });
   splatPositionSetterRef.current=setSplatPosition;
@@ -1769,11 +1942,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, isReady, sceneRef, invalidate]);
   splatPaintRef.current = paintSplatFrame;
   const restoredEnvironmentRef = useRef('');
+  // 遥远视距先记录场景，进入范围后再加载。
+  const deferredEnvironmentRef = useRef<StoredEnvironment | null>(null);
   const selectEnvironment = useCallback((assetId: string, name: string, options?: { restoreItems?: boolean; previousLayout?: RoomLayout }) => {
     if(workspaceWriteGuards)throw new Error('当前编辑权模式暂不支持切换场地及其物料，请保留现有资料。');
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     const current = environmentsRef.current;
     if (current[0]?.assetId === assetId) return;
+    deferredEnvironmentRef.current = null;
     const liveLayout = options?.previousLayout ?? layoutStore.getState().layout;
     const currentItems = liveLayout.floors.map(floor => floor.items.map(item => ({
       ...item,
@@ -1890,19 +2066,37 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setEnvironments(defaults);
   }, [environmentKey, layout.id, stopSplat, workspaceWriteGuards]);
   // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
+  // 第 3 步：整景区视距（>200 m）下不解码点云，先挂锚点 POI；等到 <100 m 再补挂。
+  // 等 splatLodMeasured 才判断，避免相机/控件尚未就绪时把「还没量」误当成近景。
   useEffect(() => {
     if (!environment) return;
+    if (!isReady || !splatLodMeasured) return;
     const key = `${environmentKey}:${environment.assetId}`;
     if (restoredEnvironmentRef.current === key) return;
+    if (splatLod === 'poi') {
+      deferredEnvironmentRef.current = environment;
+      return;
+    }
     restoredEnvironmentRef.current = key;
+    deferredEnvironmentRef.current = null;
     restoreEnvironment(environment);
-  }, [environment, environmentKey, restoreEnvironment]);
+  }, [environment, environmentKey, restoreEnvironment, isReady, splatLodMeasured, splatLod]);
+  // 从整景区视距回到 100 m 内：把先前压住的自动挂载补上（只补一次）。
+  useEffect(() => {
+    if (!isReady || !splatLodMeasured || splatLod !== 'splat') return;
+    const deferred = deferredEnvironmentRef.current;
+    if (!deferred) return;
+    deferredEnvironmentRef.current = null;
+    restoredEnvironmentRef.current = `${environmentKey}:${deferred.assetId}`;
+    restoreEnvironment(deferred);
+  }, [isReady, splatLodMeasured, splatLod, environmentKey, restoreEnvironment]);
   const removeEnvironment = useCallback((assetId: string) => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     const next = environmentsRef.current.filter(entry => entry.assetId !== assetId);
     environmentsRef.current = next;
     setEnvironments(next);
     restoredEnvironmentRef.current = '';
+    if (deferredEnvironmentRef.current?.assetId === assetId) deferredEnvironmentRef.current = null;
     if (next.length) writeEnvironments(layoutStore.getState().layout.id, next);
     else {
       clearEnvironment(layoutStore.getState().layout.id);
@@ -1915,6 +2109,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setEnvironments([]);
     clearEnvironment(layoutStore.getState().layout.id);
     restoredEnvironmentRef.current = '';
+    deferredEnvironmentRef.current = null;
     stopSplat();
   }, [stopSplat,workspaceWriteGuards]);
   const setEnvironmentFloor = useCallback((assetId: string, floorIndex: number) => {
@@ -1964,6 +2159,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
 
   // 环境预览就绪时，围栏换成点云真实范围：1:1 实景漫游（不再被 12×9 的场地板困住）。
   const splatWalkBounds = splatState.status === 'ready' ? splatState.walkBounds ?? null : null;
+  splatWalkBoundsRef.current = splatWalkBounds;
 
   const { phase: walkthroughPhase } = useWalkthrough({
     enabled: isReady && walkthroughActive,
@@ -2007,6 +2203,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     layout,
     activeFloor,
     activeFloorIndex,
+    ...(splatWalkBounds ? { personRouteBounds: splatWalkBounds } : {}),
     view,
     ...(referenceImage.layer ? { referenceImage: referenceImage.layer } : {}),
     selectedItemId,
@@ -2085,9 +2282,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     canvasRef,
     buildingHeight: buildingHeight(layout.floors),
   });
+  // MAP-03 走查实测：清焦点后同步调 fitToRoom，闭包里还是旧焦点框，取景会停在场地
+  // 而不是全湖。回概览/底图重置统一走 ref+rAF，等焦点态真的清掉再取景。
+  const fitToRoomRef = useRef(fitToRoom);
+  fitToRoomRef.current = fitToRoom;
+  const fitOverviewAfterFocusClear = useCallback(() => {
+    setSceneFocus(null);
+    const raf = requestAnimationFrame(() => fitToRoomRef.current());
+    return () => cancelAnimationFrame(raf);
+  }, [setSceneFocus]);
   frameViewportRef.current = () => { if (!view.view2D) ensureRoomInView(); };
 
-  // docs/49 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
+  // docs/19 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
   // 距离=max(8m, 包围盒最长边×2.5)，俯角 42.5°；打断与推近规则在 use-scene-zoom 里。
   const { zoomToScene } = useSceneZoom({ cameraRef, controlsRef, invalidate });
   const [focusedVenueId, setFocusedVenueId] = useState<string | null>(null);
@@ -2133,12 +2339,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const lastResearchAreaRef = useRef<RoomLayout['researchArea']>();
   useEffect(() => {
     const area = layout.researchArea;
-    if (lastResearchAreaRef.current === area) return;
+    if (lastResearchAreaRef.current === area) return undefined;
     lastResearchAreaRef.current = area;
-    setSceneFocus(null);
     setFocusedVenueId(null);
-    if (!area || !area.scanAssetId) fitToRoom();
-  }, [layout.researchArea, setSceneFocus, fitToRoom]);
+    // 焦点清掉后下一帧再取景（同步调 fitToRoom 会读到旧焦点闭包，停在场地框）。
+    if (!area || !area.scanAssetId) return fitOverviewAfterFocusClear();
+    setSceneFocus(null);
+    return undefined;
+  }, [layout.researchArea, setSceneFocus, fitOverviewAfterFocusClear]);
 
   const { captureRenderImage, exportRenderImage, exportRenderAlbum, handleShareLink } = useImportExport({
     layout,
@@ -2152,7 +2360,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     controlsRef,
     applyPreset,
     // 导出走实时那条渲染栈（点云背景 + 布置前景），否则成图里只剩布置。
-    paintFrame: paintSplatFrame,
+    paintFrame: (renderer, scene, camera) => paintSplatFrame(renderer, scene, camera, { guides: false }),
     onImported: clearTransientSelection,
   });
 
@@ -2605,7 +2813,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   }, [commitHistoryNow, layout, actions, clearTransientSelection, previewGuard, activeFloorIndex, applyOutcome, workspaceWriteGuards, floorSession.isCurrent,flushPendingBeforeSwitch,activitySession.isCurrent,sessionToken]);
 
   /**
-   * docs/49 地理底图：只动 researchArea 与场景锚点，走正式历史；输入与自动铺图共用这一条路。
+   * docs/19 地理底图：只动 researchArea 与场景锚点，走正式历史；输入与自动铺图共用这一条路。
    *
    * 架构定案：地图是 3D 场景里的一个渲染层，场景坐标 ↔ 地理坐标的唯一变换是场景锚点。
    * 铺图 = 把场景重新锚到那片真实位置（锚点原点 = 底图中心经纬度）；朝向沿用现有锚点
@@ -2613,7 +2821,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
    * 场景里不存在第二套地面坐标——因此删掉了旧的「异地框架 >3km 就清掉」补丁：
    * 它是在掩盖两套坐标打架，而不是解决问题。
    */
-  const applyResearchArea = useCallback((area: RoomLayout['researchArea'] | null) => {
+  const applyResearchArea = useCallback((area: RoomLayout['researchArea'] | null, meta?: {
+    /** 锚点定位来源（MAP-04 元数据）：缺省视为人工底图定位。 */
+    source?: SceneAnchorSource;
+    /** 锚点朝向（度，正北顺时针）：scanAssetId 自动铺图带资产采集朝向时写入；缺省沿用现有锚点。 */
+    orientationDeg?: number;
+  }) => {
+    if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) {
+      notify('活动已变化，请重新核对底图。', 'error');
+      return false;
+    }
     const current = layoutStore.getState().layout;
     const next: RoomLayout = (() => {
       if (!area) {
@@ -2621,21 +2838,32 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         return rest as RoomLayout;
       }
       const existing = sceneAnchorOf(current);
-      const sceneAnchor: SceneAnchor = {
-        lng: area.center.lng,
-        lat: area.center.lat,
-        orientationDeg: existing?.orientationDeg ?? 0,
-        metersPerUnit: existing?.metersPerUnit ?? 1,
-      };
+      // 静态整景区底图是「给已有锚点的场景垫一张大图」：锚点必须留在原扫描位置，
+      // 底图中心由 bounds 经 anchorGeoToWorld 投出来，不能把锚点搬到 bbox 中心去。
+      const sceneAnchor: SceneAnchor = area.presetId
+        ? existing ?? { lng: area.center.lng, lat: area.center.lat, orientationDeg: 0, metersPerUnit: 1, source: 'preset' }
+        : {
+          lng: area.center.lng,
+          lat: area.center.lat,
+          orientationDeg: meta?.orientationDeg ?? existing?.orientationDeg ?? 0,
+          metersPerUnit: existing?.metersPerUnit ?? 1,
+          source: meta?.source ?? 'manual',
+        };
       return { ...current, sceneAnchor, researchArea: area };
     })();
     try {
+      workspaceWriteGuards?.assertLayoutWrite();
       commitHistoryNow();
+      workspaceWriteGuards?.assertLayoutWrite();
+      if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || layoutStore.getState().layout !== current) throw new Error('活动或场景已变化，请重新核对底图。');
       actions.applyLayout(next);
+      if (!sameLayoutContent(layoutStore.getState().layout, next)) throw new Error('底图结果未能读回，请重新核对。');
+      return true;
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
+      return false;
     }
-  }, [actions, commitHistoryNow, notify]);
+  }, [actions, commitHistoryNow, notify, workspaceWriteGuards, activitySession.isCurrent, sessionToken, sessionScope]);
 
   /**
    * Golden Path 第 1 步：选中一套已扫描的真实场地，直接换场。
@@ -2676,11 +2904,17 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       notify(error instanceof Error ? error.message : String(error), 'error');
       return;
     }
+    // MAP-03：整景区视距（POI）下点云被延后挂载，等 splat ready 再 zoom 会永远等不到——
+    // 先把相机推到场地，推近途中视距翻回 splat（<100 m），延后的挂载自动补上。
+    if (splatLod === 'poi') {
+      zoomToVenue(venue, false);
+      return;
+    }
     // 场地 splat 异步加载，就绪后 zoom 到该场景（pending 效果在 splatState ready 时触发）。
     pendingVenueZoomRef.current = venue;
-  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, workspaceWriteGuards]);
+  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, workspaceWriteGuards, splatLod]);
 
-  // 场景点位（docs/49 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
+  // 场景点位（docs/19 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
   const sceneGeoDots = useMemo(() => {
     if (view.view2D || !layout.researchArea) return [];
     return listScannedVenues().flatMap(venue => {
@@ -2728,7 +2962,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       setSplatShellKeptFor(splatState.assetId);
     }
   }, [splatState, onApplyCreative]);
-  // docs/49 地理底图：场地扫描资产带 geo（拍摄位置）就自动铺卫星底图，重建物落在真实位置上；
+  // docs/19 地理底图：场地扫描资产带 geo（拍摄位置）就自动铺卫星底图，重建物落在真实位置上；
   // 手动/调研标的底图（无 scanAssetId 标记）永远不被自动逻辑覆盖；新场地没 geo 就撤掉自己铺的那张。
   const scanBasemapAssetRef = useRef('');
   useEffect(() => {
@@ -2743,11 +2977,20 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       return;
     }
     if (existing?.scanAssetId === assetId) return;
+    // MAP-04 坐标系边界：telemetry（遥测/EXIF）是 WGS-84，喂给高德底图与锚点前必须转 GCJ-02；
+    // picker/lookup 本来就是 GCJ-02，直接用（约定见 lib/aholo-assets.ts AholoAssetGeo 注释）。
+    const geo = asset.geo.source === 'telemetry'
+      ? { ...asset.geo, ...wgs84ToGcj02(asset.geo.lng, asset.geo.lat) }
+      : asset.geo;
     const span = Math.max(asset.meters?.width ?? 0, asset.meters?.depth ?? 0);
-    const radius = asset.geo.radiusM ?? Math.round(Math.max(300, Math.min(1600, span * 12)));
+    const radius = geo.radiusM ?? Math.round(Math.max(300, Math.min(1600, span * 12)));
     applyResearchArea({
-      ...createResearchArea({ name: asset.name, address: '', lng: asset.geo.lng, lat: asset.geo.lat }, radius, RESEARCH_SATELLITE_STYLE),
+      ...createResearchArea({ name: asset.name, address: '', lng: geo.lng, lat: geo.lat }, radius, RESEARCH_SATELLITE_STYLE),
       scanAssetId: assetId,
+    }, {
+      source: 'asset-geo',
+      // 采集主朝向（通路预留，现无生产者）：写成锚点 orientationDeg，底图正北随它转。
+      ...(geo.headingDeg !== undefined && Number.isFinite(geo.headingDeg) ? { orientationDeg: geo.headingDeg } : {}),
     });
   }, [environments, applyResearchArea]);
   const splatPlacement = splatState.status === 'ready'
@@ -2903,9 +3146,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 只根据本活动已绘制区域和场地尺寸提示，不读取其他活动的对话。
   const zoneTypesForSuggestions = [
     ...new Set(
-      zoneAnnotationsForScoring.map((a) => a.zoneType ?? 'roundtable'),
+      zoneAnnotationsForScoring
+        .filter((a): a is typeof a & { zoneType: ZoneSemanticType } => typeof a.zoneType === 'string')
+        .map((a) => a.zoneType),
     ),
-  ] as ZoneSemanticType[];
+  ];
   const roomShortSideM = (typeof layout.width === 'number' && typeof layout.height === 'number')
     ? Math.min(layout.width, layout.height)
     : undefined;
@@ -2994,7 +3239,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
         setAgentBriefRecord(record);
       }} onVenueIOChange={io => { if (activitySession.isCurrent(sessionToken) && getStoreSessionScope() === sessionScope) setOutdoorVenue(io === 'outdoor'); }}
       onPreview={scopedPreview}
-      onApply={scopedApply} onApplyZoneRects={(zones) => {
+      onApply={scopedApply} onApplyResearchArea={area=>{if(!applyResearchArea(area))throw new Error('当前活动无法写入调研底图。');}} onApplyZoneRects={(zones) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) { notify('活动已切换，请重新核对区域建议。', 'info'); return null; }
         const brief = getActiveBrief();
         if (!brief) { notify('活动需求正在切换，请稍后再试。', 'info'); return null; }
@@ -3263,6 +3508,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
                 hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
+                routeDrawing={routeDrawItemId !== null && routeDrawItemId === selectedItem.id}
+                routeDrawHint={routeDrawHint}
+                onToggleRouteDrawing={toggleRouteDraw}
+                onUndoRoutePoint={undoRoutePoint}
+                following={followPersonId === selectedItem.id}
+                onToggleFollow={() => toggleFollowPerson(selectedItem.id)}
                 onRotate={id => { commitHistoryNow(); if (rotateItemHandler(id)) playCue('rotate'); }} onToggleCameraBracket={toggleCameraBracket} onDuplicate={duplicateSelected} onRemove={removeItem} onClose={() => { selectOnly(null); setLeftMode('brief'); }}/>
             </div>}
             {luxDirectVisible && leftMode === 'lux3d' && <div className="sc-canvas-share">
@@ -3270,7 +3521,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               <Lux3dDirectTest reconPreset={aholoReconPreset} openKind={lux3dOpenKind} onHangMockScene={hangDemoEnvironment} onPreviewShippedScene={startStoredScene} onPlace={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); return !!id; }} onPreviewScene={openScenePreview}/>
             </div>}
             <CanvasHeading view2D={view.view2D} />
-            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={() => { setSceneFocus(null); fitToRoom(); }} />
+            <GeoBasemapInput area={layout.researchArea} onApply={applyResearchArea} view2D={view.view2D} onFrameOverview={fitOverviewAfterFocusClear}
+              overlaysVisible={view.showResearchOverlays !== false}
+              onToggleOverlays={() => setView(current => ({ ...current, showResearchOverlays: current.showResearchOverlays === false }))} />
             <SceneGeoDots
               dots={sceneGeoDots}
               focusedId={focusedVenueId}
@@ -3278,6 +3531,16 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
               controlsRef={controlsRef}
               cameraReady={isReady}
               onPick={pickSceneGeoDot}
+            />
+            <SplatLodMarker
+              visible={splatLodEnabled && splatLod === 'poi'}
+              name={environment?.name ?? '扫描场地'}
+              anchor={splatLodAnchor}
+              metersPerUnit={splatLodMetersPerUnit}
+              cameraRef={cameraRef}
+              controlsRef={controlsRef}
+              toScreen={toScreen}
+              cameraReady={isReady}
             />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {workspaceWriteGuards && environmentShown && <div className="sc-local-conflict" role="status"><span>当前编辑权模式暂不支持修改场地标定；标定结果仍需现场核对。</span></div>}
@@ -3366,6 +3629,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
                     }
                     if (!draft || !reviewedDraft || !plan) {
                       notify('请先绘制区域并选择方案。', 'info');
+                      return;
+                    }
+                    if (plan.placements.length === 0) {
+                      const onlyReserved = draft.annotations.filter(a => a.kind === 'zone').every(a => a.zoneType === 'reserved');
+                      notify(plan.skipped.map(item => item.reason).join('；') || (onlyReserved ? '预留区不摆家具；请再画至少一个要落家具的区。' : '本次未能排入家具，请检查区域与可用物料。'), 'error');
                       return;
                     }
                     if ((!isVenueScaleCurrent(getActiveBrief(), layoutStore.getState().layout) || !isVenueFactMemoryCurrent(getActiveBrief(), layoutStore))) {

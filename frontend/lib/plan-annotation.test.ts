@@ -4,9 +4,13 @@ import {
   ANNOTATION_PRESET_LABELS,
   clearAllAnnotations,
   createEmptyPlanDraft,
+  DOOR_DEFAULT_WIDTH_M,
+  DOOR_WALL_PICK_MAX_DIST_M,
   formatMeasureLabel,
   measureDistanceM,
+  pickDoorWallFromPoint,
   removeAnnotation,
+  withDefaultDoor,
   type PlanAnnotation,
 } from './plan-annotation';
 
@@ -133,5 +137,59 @@ describe('ANNOTATION_PRESET_LABELS', () => {
     expect(ANNOTATION_PRESET_LABELS.guest_route).toBe('宾客动线');
     expect(ANNOTATION_PRESET_LABELS.fire_route).toBe('消防疏散');
     expect(ANNOTATION_PRESET_LABELS.reserved).toBe('预留区');
+  });
+});
+
+describe('pickDoorWallFromPoint（真门绘制入口）', () => {
+  /** 16×10 场地：x ∈ [-8, 8]，z ∈ [-5, 5]。 */
+  const ROOM = { width: 16, height: 10 };
+
+  it('南墙边点击落南墙，position 为沿墙米制中心', () => {
+    const hit = pickDoorWallFromPoint({ x: 3.2, z: 4.7 }, ROOM);
+    expect(hit).not.toBeNull();
+    expect(hit!.wall).toBe('south');
+    expect(hit!.position).toBeCloseTo(3.2, 6);
+  });
+
+  it('四墙取法向距离最近的一面：靠东墙的点落东墙，position 沿 z 轴', () => {
+    const hit = pickDoorWallFromPoint({ x: 7.9, z: -2.4 }, ROOM);
+    expect(hit!.wall).toBe('east');
+    expect(hit!.position).toBeCloseTo(-2.4, 6);
+    // 北墙边同样成立。
+    const north = pickDoorWallFromPoint({ x: -1.1, z: -4.95 }, ROOM);
+    expect(north!.wall).toBe('north');
+    expect(north!.position).toBeCloseTo(-1.1, 6);
+  });
+
+  it('点击超出墙端也不让门洞出墙：position 夹在 ±(半墙 − 半门宽)', () => {
+    const limit = ROOM.width / 2 - DOOR_DEFAULT_WIDTH_M / 2;
+    const hit = pickDoorWallFromPoint({ x: 30, z: 5 }, ROOM);
+    expect(hit!.wall).toBe('south');
+    expect(hit!.position).toBeCloseTo(limit, 6);
+  });
+
+  it(`离四墙都超过 ${DOOR_WALL_PICK_MAX_DIST_M}m 不落门（房间中央误点不生成门）`, () => {
+    expect(pickDoorWallFromPoint({ x: 0, z: 0 }, ROOM)).toBeNull();
+    expect(pickDoorWallFromPoint({ x: 0, z: 2.5 }, ROOM)).toBeNull();
+  });
+
+  it('默认门宽 0.9m，与 withDefaultDoor 兜底门一致', () => {
+    expect(DOOR_DEFAULT_WIDTH_M).toBe(0.9);
+    const hit = pickDoorWallFromPoint({ x: 0, z: 5 }, ROOM);
+    expect(hit!.position).toBe(0);
+  });
+});
+
+describe('withDefaultDoor 与真门共存', () => {
+  it('标注里已有真门（inferred 缺省）时不再合成推测门', () => {
+    const realDoor = makeAnnotation({
+      id: 'ann-door',
+      kind: 'door',
+      label: '主入口门',
+      geometry: { kind: 'door', wall: 'east', position: 1.5, widthM: 0.9 },
+    });
+    const result = withDefaultDoor([realDoor]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(realDoor);
   });
 });

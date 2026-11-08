@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   AISLE_MIN_NORMAL,
   AISLE_MIN_WHEELCHAIR,
+  ROUTE_CORRIDOR_WIDTH_M,
   evaluateFlow,
+  evaluateKeepOut,
   evaluateReachability,
+  evaluateRouteClear,
 } from './flow-constraints';
 import type { PlanAnnotation, ZoneSemanticType } from './plan-annotation';
 import type { ZoneFurniturePlacement } from './plan-approve';
@@ -56,6 +59,11 @@ function furniture(
 
 /** 默认签到区：x0=0, z0=0, w=2, d=1.4。入口侧 = z<0；横向条带 = [-0.3, 2.3]。 */
 const CHECKIN = zone('c1', 0, 0, 2, 1.4, 'checkin');
+
+/** 造一条 route 折线标注。 */
+function makeRoute(id: string, points: Array<{ x: number; z: number }>, label = '宾客动线'): PlanAnnotation {
+  return { id, kind: 'route', label, stageNo: 1, geometry: { kind: 'polyline', points } };
+}
 
 describe('evaluateFlow / 待核验的局部间距估算', () => {
   it('没有签到区时不把空场或任意家具间距当作通道', () => {
@@ -180,5 +188,94 @@ describe('evaluateReachability — blockedBy 入口边被家具覆盖', () => {
     const r = evaluateReachability([small], [restZone], { width: 6, height: 6 });
     expect(r.blockedBy.find((b) => b.zoneId === 'r1')).toBeUndefined();
     expect(r.violations.some((v) => v.code === 'ZONE_ENTRANCE_BLOCKED')).toBe(false);
+  });
+});
+
+describe('evaluateKeepOut / evaluateRouteClear（SC-19 §五.4：必留区与必留通道）', () => {
+  /** 预留区：x∈[-4,4]、z∈[2,4]（房间中心为原点）。 */
+  const KEEP = zone('k1', -4, 2, 8, 2, 'reserved', '消防疏散');
+
+  it('必留区没有家具压入 → 无 violation', () => {
+    const placements = [furniture('d1', 'desk', -1, -3, 0.57, 1.8)];
+    expect(evaluateKeepOut(placements, [KEEP])).toEqual([]);
+  });
+
+  it('家具压进必留区 → KEEP_OUT_INTRUDED hard，按区聚合点名件数', () => {
+    const placements = [
+      furniture('d1', 'desk', 0, 3, 0.57, 1.8),   // 完全在带内
+      furniture('d2', 'desk', 0, 2.2, 0.57, 1.8), // 部分压入（z∈[1.915,2.485]）
+      furniture('d3', 'desk', 0, -3, 0.57, 1.8),  // 区外，不计
+    ];
+    const v = evaluateKeepOut(placements, [KEEP]);
+    expect(v).toHaveLength(1);
+    expect(v[0].code).toBe('KEEP_OUT_INTRUDED');
+    expect(v[0].severity).toBe('hard');
+    expect(v[0].zoneId).toBe('k1');
+    expect(v[0].message).toContain('必留区');
+    expect(v[0].message).toContain('测试家具×2');
+  });
+
+  it('压入在容差内（footprint 边缘压入 <0.02m）不误杀', () => {
+    // 椅深 0.57，中心 z = 2 − 0.285 + 0.01 = 1.725 → 后缘 2.01，压入 0.01 < 容差 → 放行。
+    const placements = [furniture('d1', 'desk', 0, 1.725, 0.57, 1.8)];
+    expect(evaluateKeepOut(placements, [KEEP])).toEqual([]);
+  });
+
+  it('动线走廊 1.2m：家具距线段 < 半宽−容差 → ROUTE_BLOCKED；官方 1.2m 走道居中不误杀', () => {
+    expect(ROUTE_CORRIDOR_WIDTH_M).toBeCloseTo(1.2, 6);
+    const route = makeRoute('r1', [{ x: 0, z: -5 }, { x: 0, z: 5 }]);
+    // 桌半宽 0.9，桌心 x=±1.5 → 内缘 x=±0.6，距线段 0.6 ≥ 半宽−容差 → 不判。
+    const clearRows = [
+      furniture('d1', 'desk', -1.5, 0, 0.6, 1.8),
+      furniture('d2', 'desk', 1.5, 0, 0.6, 1.8),
+    ];
+    expect(evaluateRouteClear(clearRows, [route])).toEqual([]);
+    // 桌心挪近到 x=±1.4 → 内缘 x=±0.5，压入走廊 → 判。
+    const tightRows = [
+      furniture('d1', 'desk', -1.4, 0, 0.6, 1.8),
+      furniture('d2', 'desk', 1.4, 0, 0.6, 1.8),
+    ];
+    const v = evaluateRouteClear(tightRows, [route]);
+    expect(v).toHaveLength(1);
+    expect(v[0].code).toBe('ROUTE_BLOCKED');
+    expect(v[0].severity).toBe('hard');
+    expect(v[0].zoneId).toBe('r1');
+    expect(v[0].message).toContain('1.2m 净空');
+    expect(v[0].message).toContain('测试家具×2');
+  });
+
+  it('线段整个穿过家具 footprint（相交距离=0）必判；斜向线段也不漏', () => {
+    const route = makeRoute('r1', [{ x: -3, z: -3 }, { x: 3, z: 3 }]);
+    const blocker = furniture('d1', 'desk', 0, 0, 0.6, 1.8);
+    const v = evaluateRouteClear([blocker], [route]);
+    expect(v).toHaveLength(1);
+    expect(v[0].code).toBe('ROUTE_BLOCKED');
+  });
+
+  it('旋转后的长桌占地进入必留区或路线时不能漏检', () => {
+    const rotated = { ...furniture('d1', 'desk', 0, 1.1, 0.4, 2), rotation: Math.PI / 2 };
+    expect(evaluateKeepOut([rotated], [KEEP])[0]?.code).toBe('KEEP_OUT_INTRUDED');
+    const route = makeRoute('r1', [{ x: -3, z: 0 }, { x: 3, z: 0 }]);
+    expect(evaluateRouteClear([rotated], [route])[0]?.code).toBe('ROUTE_BLOCKED');
+  });
+
+  it('斜向包围盒相交只标待核验，不能把近似当作硬冲突', () => {
+    const diagonal = { ...furniture('d1', 'desk', 0, 2.1, 0.4, 2), rotation: Math.PI / 4 };
+    expect(evaluateKeepOut([diagonal], [KEEP])[0]).toMatchObject({ code: 'KEEP_OUT_INTRUDED', severity: 'soft', status: 'unknown' });
+    const route = makeRoute('r1', [{ x: -3, z: 0.8 }, { x: 3, z: 0.8 }]);
+    expect(evaluateRouteClear([diagonal], [route])[0]).toMatchObject({ code: 'ROUTE_BLOCKED', severity: 'soft', status: 'unknown' });
+  });
+
+  it('无效家具坐标不能静默当作保留区或路线已通过', () => {
+    const invalid = { ...furniture('d1', 'desk', 0, 0, 0.4, 2), x: NaN };
+    expect(evaluateKeepOut([invalid], [KEEP])[0]?.status).toBe('unknown');
+    const route = makeRoute('r1', [{ x: -3, z: 0 }, { x: 3, z: 0 }]);
+    expect(evaluateRouteClear([invalid], [route])[0]?.status).toBe('unknown');
+  });
+
+  it('无 route 标注 / 单点折线 → 不产生 violation', () => {
+    const placements = [furniture('d1', 'desk', 0, 0, 0.6, 1.8)];
+    expect(evaluateRouteClear(placements, [])).toEqual([]);
+    expect(evaluateRouteClear(placements, [makeRoute('r1', [{ x: 0, z: 0 }])])).toEqual([]);
   });
 });

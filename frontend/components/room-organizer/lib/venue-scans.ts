@@ -6,7 +6,7 @@ export type ScannedVenue = {
   name: string;
   meters?: { width: number; depth: number; height: number };
   savedAt?: number;
-  /** 拍摄位置（docs/49 地理底图）；没有就还没标注。 */
+  /** 拍摄位置（docs/19 地理底图）；没有就还没标注。 */
   geo?: AholoAssetGeo;
 };
 

@@ -2320,7 +2320,7 @@ describe('creative brief and assistant interaction', () => {
   it('keeps a committed recovery record if dialogue changes while the cloud application is in flight',async()=>{
     connected();let current=true;const release=vi.fn();let finish!:(value:{id:string;revision:number;scene:Scene;previousScene:Scene;updatedAt:string;undoGroup:string;acceptedLocally:boolean})=>void;
     vi.mocked(controller.applySceneProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    const captureDialogue=vi.fn(()=>({project:()=>projectDialogueHandoff(null),isCurrent:()=>current,release}));
+    const captureDialogue=vi.fn(()=>({project:()=>projectDialogueHandoff(initialBriefMemory()),isCurrent:()=>current,release}));
     render(<CreativeStudioProvider controller={controller} layout={layout} captureDialogue={captureDialogue} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     await generatePreview();fireEvent.click(screen.getByRole('button',{name:'确认布置'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));
     current=false;
@@ -2328,6 +2328,16 @@ describe('creative brief and assistant interaction', () => {
     expect(onApply).not.toHaveBeenCalled();expect((await screen.findByRole('alert')).textContent).toContain('云端已提交第 2 版');expect(release).toHaveBeenCalledTimes(captureDialogue.mock.calls.length);
     const key=Object.keys(localStorage).find(value=>value.startsWith('scendance:agent-apply-recovery:'))!;
     expect(JSON.parse(localStorage.getItem(key)!).outcome).toBe('committed');
+  });
+
+  it('does not submit a candidate when the dialogue snapshot is unavailable',async()=>{
+    connected();const release=vi.fn();
+    const captureDialogue=vi.fn(()=>({project:()=>projectDialogueHandoff(null),isCurrent:()=>true,release}));
+    render(<CreativeStudioProvider controller={controller} layout={layout} captureDialogue={captureDialogue} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    await generatePreview();fireEvent.click(screen.getByRole('button',{name:'确认布置'}));
+    expect(await screen.findByText('当前对话尚未核对完成，请稍后重试。')).toBeTruthy();
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalled();
   });
 
   it('does not republish a preview when its parent rerenders with a new getter function',async()=>{

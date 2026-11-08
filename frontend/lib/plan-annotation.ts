@@ -9,8 +9,13 @@
 
 export type PlanAnnotationKind = 'zone' | 'route' | 'measure' | 'door';
 
-/** 第 11 批：zone 标注的语义类型，决定批准时落什么家具。 */
-export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk';
+/**
+ * 第 11 批：zone 标注的语义类型，决定批准时落什么家具。
+ * reserved（SC-19 §五.4 / SC-20 输入侧）是 keep-out 语义：「预留区」「消防疏散」
+ * 这类必留区共用它——生成层不摆任何家具，评分层把别区家具的侵入判成 hard
+ * violation（KEEP_OUT_INTRUDED，见 flow-constraints.evaluateKeepOut）。
+ */
+export type ZoneSemanticType = 'roundtable' | 'checkin' | 'photo' | 'rest' | 'desk' | 'reserved';
 
 /** zone 类型 → 画布/卡片中文标签。 */
 export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
@@ -19,6 +24,7 @@ export const ZONE_SEMANTIC_LABELS: Record<ZoneSemanticType, string> = {
   photo: '打卡区',
   rest: '休息区',
   desk: '课桌区',
+  reserved: '预留区',
 };
 
 /** 米制二维点（x 向右，z 向下，房间中心为原点）。 */
@@ -188,4 +194,53 @@ export function withDefaultDoor(
     geometry: { kind: 'door', wall: 'south', position: 0, widthM: null, inferred: true },
   };
   return [...annotations, defaultDoor];
+}
+
+/* ---------- 真门绘制（B 断点：门标注接入画布绘制循环） ---------- */
+
+/** 用户画的真门默认洞宽（米），与 withDefaultDoor 兜底门一致。 */
+export const DOOR_DEFAULT_WIDTH_M = 0.9;
+
+/** 点击离墙超过这个距离（米）不算画门——防止房间中央误落一扇门。 */
+export const DOOR_WALL_PICK_MAX_DIST_M = 2;
+
+export type PlanDoorWall = Extract<PlanAnnotation['geometry'], { kind: 'door' }>['wall'];
+
+/**
+ * 把画布上的一次点击换成「哪面墙 + 沿墙位置」（真门几何，非推测）。
+ *
+ * - 墙取四墙中法向距离最近的一面；距离超过 DOOR_WALL_PICK_MAX_DIST_M 返回 null
+ *   （调用方保持绘制模式，让用户点到墙边再落）；
+ * - position 是门洞中心沿墙轴的米制坐标（0 = 墙中点，与 door-render 的
+ *   `position ± widthM/2` 门洞语义一致），夹在墙长内保证门洞不出墙。
+ */
+export function pickDoorWallFromPoint(
+  p: PlanPoint,
+  layout: { width: number; height: number },
+  widthM: number = DOOR_DEFAULT_WIDTH_M,
+): { wall: PlanDoorWall; position: number } | null {
+  const halfW = layout.width / 2;
+  const halfH = layout.height / 2;
+  const dNorth = Math.abs(p.z + halfH);
+  const dSouth = Math.abs(halfH - p.z);
+  const dWest = Math.abs(p.x + halfW);
+  const dEast = Math.abs(halfW - p.x);
+  const min = Math.min(dNorth, dSouth, dWest, dEast);
+  if (min > DOOR_WALL_PICK_MAX_DIST_M) return null;
+  if (dSouth <= dNorth && dSouth <= dWest && dSouth <= dEast) {
+    return { wall: 'south', position: clampToWall(p.x, halfW, widthM) };
+  }
+  if (dNorth <= dWest && dNorth <= dEast) {
+    return { wall: 'north', position: clampToWall(p.x, halfW, widthM) };
+  }
+  if (dWest <= dEast) {
+    return { wall: 'west', position: clampToWall(p.z, halfH, widthM) };
+  }
+  return { wall: 'east', position: clampToWall(p.z, halfH, widthM) };
+}
+
+/** 沿墙轴夹取门洞中心：门洞完整落在墙长内（留出 widthM/2 边距）。 */
+function clampToWall(v: number, half: number, widthM: number): number {
+  const limit = Math.max(0, half - widthM / 2);
+  return Math.min(limit, Math.max(-limit, v));
 }

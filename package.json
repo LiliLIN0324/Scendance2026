@@ -29,7 +29,7 @@
     "@supabase/supabase-js": "2.117.2",
     "gltf-validator": "2.0.0-dev.3.10",
     "miniprogram-automator": "^0.13.0",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
@@ -39,5 +39,15 @@
     "supabase": "2.119.0",
     "typescript": "5.9.3",
     "vitest": "5.0.3"
+  },
+  "overrides": {
+    "miniprogram-automator": {
+      "debug": "4.3.1"
+    },
+    "jpeg-js": "0.4.4",
+    "phin": "3.7.1",
+    "mkdirp": {
+      "minimist": "0.2.4"
+    }
   }
 }

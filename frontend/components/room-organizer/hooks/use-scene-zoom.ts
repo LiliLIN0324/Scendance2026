@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type * as ThreeNS from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
 
-/** 点场景 zoom 的时长（毫秒）与俯角（度）：docs/49 需求A 定案。 */
+/** 点场景 zoom 的时长（毫秒）与俯角（度）：docs/19 需求A 定案。 */
 export const SCENE_ZOOM_MS = 600;
 export const SCENE_ZOOM_ELEVATION_DEG = 42.5;
 /** 已在焦点上的场景再点一次，按当前距离推近一档。 */
@@ -23,7 +23,7 @@ export interface SceneZoomDest {
 }
 
 /**
- * 点场景 → 平滑 zoom（docs/49 需求A）。
+ * 点场景 → 平滑 zoom（docs/19 需求A）。
  * - 600ms ease-in-out；target 移到场景包围盒中心，俯角 42.5°，方位角保持当前值（不甩镜头）。
  * - 打断规则：过渡中点另一个场景 = 重新定向（token 作废旧动画）；用户拖拽 = controls
  *   的 start 事件立刻中止。到位后没有任何提示。

@@ -411,12 +411,25 @@ export function createServer({
     return searchParams.get('x-ref') === 'map-basemap' ? 7 : 6;
   }
 
+  // 高分辨率底图会拆成上百块瓦片；同时打太多高德会被限流，这里限并发。
+  async function mapWithLimit(items, limit, worker) {
+    const results = new Array(items.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await worker(items[index]);
+      }
+    }));
+    return results;
+  }
+
   async function fetchAmapBounds(sharp, west, south, east, north, style = 6) {
     let zoom = 18;
     while (zoom > 3) {
       const nw = mercatorPixel(west, north, zoom);
       const se = mercatorPixel(east, south, zoom);
-      if (Math.max(se.x - nw.x, se.y - nw.y) <= 2048) break;
+      if (Math.max(se.x - nw.x, se.y - nw.y) <= 4096) break;
       zoom -= 1;
     }
     const nw = mercatorPixel(west, north, zoom);
@@ -425,7 +438,7 @@ export function createServer({
     const srcH = se.y - nw.y;
     if (srcW < 1 || srcH < 1) throw new HttpError(400, 'bounds invalid');
     const longEdge = Math.max(srcW, srcH);
-    const fit = longEdge > 1024 ? 1024 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
+    const fit = longEdge > 2048 ? 2048 / longEdge : (longEdge < 256 ? 256 / longEdge : 1);
     const outW = Math.max(2, Math.round(srcW * fit));
     const outH = Math.max(2, Math.round(srcH * fit));
     const tile = 256;
@@ -455,10 +468,10 @@ export function createServer({
         throw failure;
       }
     }
-    const satelliteTiles = (await Promise.all(coords.map(({ tx, ty }) => grabTile(style, tx, ty, false)))).filter(Boolean);
+    const satelliteTiles = (await mapWithLimit(coords, 24, ({ tx, ty }) => grabTile(style, tx, ty, false))).filter(Boolean);
     // 底图带道路信息（用户拍板）：卫星(6)之上叠路网注记(8)透明 PNG；矢量路网(7)本身带路，不叠。
     const roadTiles = style === 6
-      ? (await Promise.all(coords.map(({ tx, ty }) => grabTile(8, tx, ty, true)))).filter(Boolean)
+      ? (await mapWithLimit(coords, 24, ({ tx, ty }) => grabTile(8, tx, ty, true))).filter(Boolean)
       : [];
     const loaded = [...satelliteTiles, ...roadTiles];
     if (!satelliteTiles.length) throw new HttpError(502, 'no satellite tiles');

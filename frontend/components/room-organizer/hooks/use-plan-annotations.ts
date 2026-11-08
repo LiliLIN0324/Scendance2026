@@ -5,6 +5,7 @@ import {
   type LayoutPlanDraft,
   type PlanAnnotation,
   type PlanAnnotationKind,
+  type PlanDoorWall,
   type PlanPoint,
   type ZoneSemanticType,
 } from '../../../lib/plan-annotation';
@@ -177,6 +178,11 @@ export interface UsePlanAnnotationsResult {
    * drawMode 保持不变，不强迫用户进绘制模式。
    */
   addZoneRects(items: readonly ZoneRectItem[]): void;
+  /**
+   * 记录用户在画布上指示的门；宽度或开向缺资料时保持待核验。
+   * 没 draft 时由 reducer 自动补一份空草案（同 ADD_ANNOTATION 语义）。
+   */
+  addDoorAnnotation(door: { wall: PlanDoorWall; position: number; widthM?: number }): void;
 }
 
 /**
@@ -294,6 +300,32 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     [],
   );
 
+  const addDoorAnnotation = useCallback(
+    (door: { wall: PlanDoorWall; position: number; widthM?: number }) => {
+      const id = `ann-${current.current.nextId}`;
+      const stageNo = current.current.draft?.stages.reduce(
+        (max, s) => Math.max(max, s.stageNo),
+        0,
+      ) || 1;
+      const annotation: PlanAnnotation = {
+        id,
+        kind: 'door',
+        label: '用户标注门（待核验）',
+        stageNo,
+        // 图上点击不构成现场尺寸、门扇或疏散出口的确认。
+        geometry: {
+          kind: 'door',
+          wall: door.wall,
+          position: door.position,
+          widthM: typeof door.widthM === 'number' && Number.isFinite(door.widthM) && door.widthM > 0 ? door.widthM : null,
+          inferred: true,
+        },
+      };
+      dispatch({ type: 'ADD_ANNOTATION', annotation });
+    },
+    [dispatch],
+  );
+
   const annotations = useMemo(
     () => (state.draft ? state.draft.annotations : []),
     [state.draft],
@@ -317,5 +349,6 @@ export function usePlanAnnotations(): UsePlanAnnotationsResult {
     addUserRouteFromPoints,
     getUserRouteProvenance,
     addZoneRects,
+    addDoorAnnotation,
   };
 }
