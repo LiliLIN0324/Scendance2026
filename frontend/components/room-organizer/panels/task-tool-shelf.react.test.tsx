@@ -77,4 +77,41 @@ describe('task tool shelf', () => {
     const update = setBrief.mock.calls[0][0] as (current: { guests: number }) => { guests: number };
     expect(update({ guests: 24 }).guests).toBe(80);
   });
+
+  it('keeps 24 and 240, and treats a cleared field as unset', () => {
+    shelf(true);
+    const input = screen.getByLabelText('这场来多少人') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(screen.getByRole('status').textContent).toBe('下一步：填写这场来多少人。');
+    fireEvent.change(input, { target: { value: '2' } });
+    fireEvent.change(input, { target: { value: '24' } });
+    expect(input.value).toBe('24');
+    expect(screen.getByRole('status').textContent).not.toContain('填写这场来多少人');
+    fireEvent.change(input, { target: { value: '240' } });
+    expect(input.value).toBe('240');
+    const wrote240 = setBrief.mock.calls.at(-1)?.[0] as (current: { guests: number }) => { guests: number };
+    expect(wrote240({ guests: 24 }).guests).toBe(240);
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    expect(screen.getByRole('status').textContent).toBe('下一步：填写这场来多少人。');
+    fireEvent.change(input, { target: { value: '24' } });
+    expect(input.value).toBe('24');
+  });
+
+  it('follows an external material request onto the material tab', () => {
+    const view = shelf(true);
+    expect(screen.getByRole('tab', { name: '物料' }).getAttribute('aria-selected')).toBe('false');
+    view.rerender(
+      <TaskToolShelf
+        venueReady
+        itemCount={0}
+        groupRequest={{ group: 'material', nonce: 1 }}
+        onOpenChecklist={vi.fn()}
+        spaceSlot={<p>空间内容</p>}
+        materialSlot={<p>物料内容</p>}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: '物料' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('物料内容')).toBeTruthy();
+  });
 });

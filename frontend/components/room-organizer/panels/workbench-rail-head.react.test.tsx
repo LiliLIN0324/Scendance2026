@@ -30,6 +30,8 @@ describe('左栏助手与下方工具', () => {
     expect(source).toContain('activeAgent="door"');
     expect(source).toContain("openToolGroup('space')");
     expect(source).toContain("openToolGroup('material')");
+    expect(source).toContain("toggleSidebar: () => openToolGroup('material')");
+    expect(source).not.toContain("toggleSidebar: () => toggleAgent('material')");
     expect(source).not.toContain("showAgent('space')");
     expect(source).not.toContain("showAgent('material')");
     expect(source).not.toContain('id="workbench-library-shelf"');

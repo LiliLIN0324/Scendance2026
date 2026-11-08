@@ -26,6 +26,7 @@ export function TaskToolShelf({
   venueReady,
   itemCount,
   groupRequest,
+  activityKey = '',
   onOpenChecklist,
   spaceSlot,
   materialSlot,
@@ -33,6 +34,8 @@ export function TaskToolShelf({
   venueReady: boolean;
   itemCount: number;
   groupRequest: TaskToolGroupRequest | null;
+  /** 换项目时丢掉这一格里还没提交的人数草稿。 */
+  activityKey?: string;
   onOpenChecklist(): void;
   spaceSlot: ReactNode;
   materialSlot: ReactNode;
@@ -42,6 +45,8 @@ export function TaskToolShelf({
   const [picked, setPicked] = useState(false);
   const [group, setGroup] = useState<TaskToolGroup>('space');
   const [note, setNote] = useState('');
+  // null = 还没在这格里改过。默认 24 是脚手架，不能拿来判断「已经填了」。
+  const [entry, setEntry] = useState<{ text: string; committed: boolean } | null>(null);
 
   useEffect(() => {
     if (!groupRequest) return;
@@ -49,7 +54,15 @@ export function TaskToolShelf({
     setGroup(groupRequest.group);
   }, [groupRequest]);
 
-  const peopleStated = !!studio && (studio.hasSavedBrief || studio.brief.guests !== INITIAL_BRIEF.guests);
+  useEffect(() => {
+    setEntry(null);
+  }, [activityKey]);
+
+  const scaffold = !!studio
+    && !studio.hasSavedBrief
+    && studio.brief.event === INITIAL_BRIEF.event
+    && studio.brief.guests === INITIAL_BRIEF.guests;
+  const peopleStated = entry ? entry.committed : !!studio && !scaffold;
   const generating = agent.state === 'generating' || agent.state === 'generatePaused';
   const unconfirmed = agent.state === 'planProposed' || agent.proposal !== null;
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
@@ -57,7 +70,7 @@ export function TaskToolShelf({
   const shown: TaskToolGroup = picked ? group : step.group;
   const checkReason = checkBlockReason({ itemCount, generating, unconfirmed });
   const handoffReason = handoffBlockReason({ itemCount, generating, unconfirmed });
-  const peopleValue = peopleStated && studio ? String(studio.brief.guests) : '';
+  const peopleText = entry ? entry.text : (!studio || scaffold ? '' : String(studio.brief.guests));
 
   const choose = (next: TaskToolGroup) => {
     setPicked(true);
@@ -68,13 +81,21 @@ export function TaskToolShelf({
   const writeGuests = (raw: string) => {
     if (!studio) return;
     if (raw.trim() === '') {
+      setEntry({ text: '', committed: false });
       studio.setBrief(current => ({ ...current, guests: INITIAL_BRIEF.guests }));
       return;
     }
+    if (!/^\d+$/.test(raw)) {
+      setEntry({ text: raw, committed: false });
+      return;
+    }
     const next = Number(raw);
-    if (!Number.isFinite(next)) return;
-    const guests = Math.max(1, Math.min(HEADCOUNT_MAX, Math.floor(next)));
-    studio.setBrief(current => ({ ...current, guests }));
+    if (next < 1 || next > HEADCOUNT_MAX) {
+      setEntry({ text: raw, committed: false });
+      return;
+    }
+    setEntry({ text: raw, committed: true });
+    studio.setBrief(current => ({ ...current, guests: next }));
   };
 
   return (
@@ -89,7 +110,7 @@ export function TaskToolShelf({
           min={1}
           max={HEADCOUNT_MAX}
           placeholder="例如 80"
-          value={peopleValue}
+          value={peopleText}
           disabled={!studio || !!studio.busy}
           onChange={event => writeGuests(event.target.value)}
         />

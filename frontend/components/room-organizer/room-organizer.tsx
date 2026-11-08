@@ -2310,7 +2310,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
         if (next < 0 || next >= layout.floors.length) return;
         actions.setActiveFloorIndex(next);
       },
-      toggleSidebar: () => toggleAgent('material'),
+      toggleSidebar: () => openToolGroup('material'),
       setGizmoMode: (next: GizmoMode) => setGizmoMode(next),
       removeInteriorWall: (id: string) => {
         actions.removeInteriorWall(id);
@@ -2356,6 +2356,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
       view.drawWallMode,
       view.measurementMode,
       setGizmoMode,
+      openToolGroup,
     ]
   );
 
@@ -3033,7 +3034,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true 
           </div>
           {personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}/>}
           {!personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent="door" chatSlot={<AgentChat agent={activeAgent} onNewSpace={mode => spaceNewRef.current?.(mode)} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} onSelectSpaceWorkflow={setSpaceWorkflow}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
-          {!personChat && agentPanelVisible && <TaskToolShelf venueReady={!isUntouched(layout) || environment !== null} itemCount={materialCount(activeFloor.items)} groupRequest={toolGroupRequest} onOpenChecklist={() => setChecklistOpen(true)} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} />}
+          {!personChat && agentPanelVisible && <TaskToolShelf venueReady={!isUntouched(layout) || environment !== null} itemCount={materialCount(activeFloor.items)} groupRequest={toolGroupRequest} activityKey={layout.id ?? 'local'} onOpenChecklist={() => setChecklistOpen(true)} spaceSlot={<SpacePanel variant="card" layout={layout} onApply={onApplyCreative} onOpenAholo={luxDirectVisible ? openAholoWorkflow : undefined} workflow={spaceWorkflow} onWorkflowChange={setSpaceWorkflow} onRegisterNew={run => { spaceNewRef.current = run; }} onPickScan={applyRealVenue} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment }}/>} materialSlot={<ScendanceLibrary variant="card" capturePlacement={capturePlacement} controller={controller} placeCatalogItem={placeFromCatalog}/>} />}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
