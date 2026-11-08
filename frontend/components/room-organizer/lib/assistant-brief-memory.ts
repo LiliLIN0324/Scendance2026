@@ -39,6 +39,19 @@ function read(storage?: Storage): MemoryStore | null {
   return { version: 1, byId: {} };
 }
 
+/** Strict readback for an explicitly-created session. A storage error or a
+ * malformed store is not evidence that the session has no prior memory. */
+export function hasNoStoredBriefForNewSession(id:string,storage?:Storage):boolean {
+  try {
+    const target=storage??(typeof window==='undefined'?undefined:window.localStorage);
+    if(!target)return false;
+    const raw=target.getItem(KEY);
+    if(raw===null)return true;
+    const parsed=storeSchema.safeParse(JSON.parse(raw));
+    return parsed.success&&!Object.hasOwn(parsed.data.byId,id);
+  } catch { return false; }
+}
+
 export function readBriefMemory(id: string, storage?: Storage): BriefMemory | null {
   const memory = read(storage)?.byId[id];
   if (!memory) return null;

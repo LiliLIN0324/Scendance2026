@@ -295,6 +295,9 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const pendingDialogueTurns=useRef(new Set<symbol>());
   // Session-local, in-memory warning only. It is not a persistent audit log.
   const incompleteDialogueSessions=useRef(new Set<string>());
+  // Recovered conversation history may omit unresolved requirements. Nothing is
+  // trusted until this exact activity/session has been explicitly rechecked.
+  const reviewedDialogueHistory=useRef<{scope:string;sessionId:string;chatEpoch:number;activityEpoch:number|null}|null>(null);
   const dialogueSessionKey=(sessionId:string)=>JSON.stringify([sessionScope,sessionId]);
   const setDialogueIncomplete=(sessionId:string|null,incomplete:boolean)=>{
     if(!sessionId)return;const key=dialogueSessionKey(sessionId),had=incompleteDialogueSessions.current.has(key);
@@ -305,7 +308,13 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     const token=Symbol('dialogue-turn');pendingDialogueTurns.current.add(token);briefCaptureEpoch.current++;
     let released=false;return()=>{if(released)return;released=true;if(pendingDialogueTurns.current.delete(token))briefCaptureEpoch.current++;};
   };
-  useEffect(()=>subscribeActiveAssistantSession(sessionScope,()=>{chatTransitionEpoch.current++;}),[sessionScope]);
+  useEffect(()=>subscribeActiveAssistantSession(sessionScope,(id)=>{
+    const reviewed=reviewedDialogueHistory.current;
+    // Initial store hydration may emit the same session immediately after an
+    // explicit review. A genuine away-and-back still increments on the away.
+    if(reviewed&&reviewed.scope===sessionScope&&reviewed.sessionId===id&&reviewed.activityEpoch===(sessionToken?.epoch??null)&&reviewed.chatEpoch===chatTransitionEpoch.current)return;
+    chatTransitionEpoch.current++;
+  }),[sessionScope,sessionToken?.epoch]);
   const [agentBriefRecord, setAgentBriefRecord] = useState<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
   const agentBriefRef = useRef<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
   const agentBriefMemory = agentBriefRecord?.scope === sessionScope && agentBriefRecord.epoch === sessionToken?.epoch && agentBriefRecord.chatEpoch===chatTransitionEpoch.current && agentBriefRecord.sessionId!==null && agentBriefRecord.sessionId===getActiveAssistantSessionId(sessionScope) ? agentBriefRecord.memory : null;
@@ -3059,15 +3068,23 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     const token=sessionToken, selectedFloor=floorToken, chatId=getActiveAssistantSessionId(sessionScope);
     if(pendingDialogueTurns.current.size||!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor)||!isScopedSessionCurrent())return null;
     const chatEpoch=chatTransitionEpoch.current, briefEpoch=briefCaptureEpoch.current;
+    const reviewed=reviewedDialogueHistory.current;
+    if(!chatId||!reviewed||reviewed.scope!==sessionScope||reviewed.sessionId!==chatId||reviewed.activityEpoch!==(token?.epoch??null)||reviewed.chatEpoch!==chatEpoch)return null;
     let memory:BriefMemory|null;
     try{memory=chatId&&incompleteDialogueSessions.current.has(dialogueSessionKey(chatId))?null:structuredClone(getActiveBrief());}catch{return null;}
     let released=false;
     return {
       project:(reference?:{event?:string|null;guests?:number|null})=>projectDialogueHandoff(memory,reference),
-      isCurrent:()=>!released&&pendingDialogueTurns.current.size===0&&activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&isScopedSessionCurrent()&&
+      isCurrent:()=>!released&&reviewedDialogueHistory.current===reviewed&&pendingDialogueTurns.current.size===0&&activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&isScopedSessionCurrent()&&
         chatTransitionEpoch.current===chatEpoch&&briefCaptureEpoch.current===briefEpoch&&getActiveAssistantSessionId(sessionScope)===chatId,
       release:()=>{released=true;},
     };
+  };
+  const reviewDialogueHistory=(sessionId:string):boolean=>{
+    if(!isScopedSessionCurrent()||!activitySession.isCurrent(sessionToken)||!floorSession.isCurrent(floorToken)||pendingDialogueTurns.current.size||getActiveAssistantSessionId(sessionScope)!==sessionId||incompleteDialogueSessions.current.has(dialogueSessionKey(sessionId)))return false;
+    pendingCandidates.invalidate();briefCaptureEpoch.current++;
+    reviewedDialogueHistory.current={scope:sessionScope,sessionId,chatEpoch:chatTransitionEpoch.current,activityEpoch:sessionToken?.epoch??null};
+    return true;
   };
   const scopedPreview = useCallback((candidate: RoomLayout | null) => {
     const id = layoutStore.getState().layout.id;
@@ -3231,7 +3248,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); actions.setEventOperations(value);
     }}>
-      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} assertSessionWrite={isolatedRef.current ? () => { assertIsolatedSession?.(); isolatedRef.current!.session.assertSessionWrite(); } : workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
+      <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={isolatedRef.current ? () => { assertIsolatedSession?.(); isolatedRef.current!.session.assertSessionWrite(); } : workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || !sessionToken) return;
         briefCaptureEpoch.current++;
         const record = { scope: sessionScope, epoch: sessionToken.epoch, chatEpoch:chatTransitionEpoch.current, sessionId, memory };

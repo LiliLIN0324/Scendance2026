@@ -1177,6 +1177,46 @@ describe('zero seating result',()=>{
 });
 
 describe('dialogue export capture',()=>{
+  it('does not discard an unknown stored run before history review',()=>{
+    let outcome:boolean|undefined;
+    function Probe(){const studio=useStudioAgent();return <button onClick={()=>{outcome=studio?.discardPreviewForHistoryReview();}}>核对任务记录</button>;}
+    const key=`scendance:agent-run:${controller.config.apiUrl}:anonymous:${layout.id??'local'}`;
+    localStorage.setItem(key,JSON.stringify({requestId:'unknown',baseKey:'old',briefKey:'old'}));
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><Probe/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'核对任务记录'}));
+    expect(outcome).toBe(false);expect(localStorage.getItem(key)).not.toBeNull();
+  });
+  it('does not treat an unreadable task marker as absent',()=>{
+    let outcome:boolean|undefined;
+    function Probe(){const studio=useStudioAgent();return <button onClick={()=>{outcome=studio?.discardPreviewForHistoryReview();}}>核对任务记录</button>;}
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><Probe/></CreativeStudioProvider>);
+    const originalGetItem=Storage.prototype.getItem;
+    const read=vi.spyOn(Storage.prototype,'getItem').mockImplementation(function(this:Storage,key:string){if(key.startsWith('scendance:agent-run:'))throw new Error('unavailable');return originalGetItem.call(this,key);});
+    fireEvent.click(screen.getByRole('button',{name:'核对任务记录'}));
+    expect(outcome).toBe(false);read.mockRestore();
+  });
+  it('can discard a verified completed preview only after its marker is removed and read back',async()=>{
+    connected();let outcome:boolean|undefined;
+    function Probe(){const studio=useStudioAgent();return <button onClick={()=>{outcome=studio?.discardPreviewForHistoryReview();}}>核对任务记录</button>;}
+    render(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/><Probe/></CreativeStudioProvider>);
+    await generatePreview();const key=Object.keys(localStorage).find(value=>value.startsWith('scendance:agent-run:'));
+    expect(key).toBeTruthy();expect(localStorage.getItem(key!)).not.toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'核对任务记录'}));
+    expect(outcome).toBe(true);expect(localStorage.getItem(key!)).toBeNull();expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();expect(onApply).not.toHaveBeenCalled();
+  });
+  it.each(['throws','ignores'] as const)('keeps a known task marker and preview when removing the marker %s',async failure=>{
+    connected();let outcome:boolean|undefined;
+    function Probe(){const studio=useStudioAgent();return <button onClick={()=>{outcome=studio?.discardPreviewForHistoryReview();}}>核对任务记录</button>;}
+    render(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/><Probe/></CreativeStudioProvider>);
+    await generatePreview();
+    const key=Object.keys(localStorage).find(value=>value.startsWith('scendance:agent-run:'));
+    expect(key).toBeTruthy();const before=localStorage.getItem(key!);
+    const originalRemoveItem=Storage.prototype.removeItem;
+    const remove=vi.spyOn(Storage.prototype,'removeItem').mockImplementation(function(this:Storage,value:string){if(value===key){if(failure==='throws')throw new Error('blocked');return;}return originalRemoveItem.call(this,value);});
+    fireEvent.click(screen.getByRole('button',{name:'核对任务记录'}));
+    expect(outcome).toBe(false);expect(localStorage.getItem(key!)).toBe(before);expect(screen.getByText('方案提案 · 尚未应用')).toBeTruthy();
+    remove.mockRestore();
+  });
   it('fences activity and floor transitions and releases the captured snapshot',()=>{
     const previous=layoutStore.getState();
     const local=structuredClone(layout);local.id='dialogue-capture-test';

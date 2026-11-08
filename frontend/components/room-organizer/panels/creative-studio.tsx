@@ -224,7 +224,7 @@ interface StudioValue extends LocalProjectBackupActions {
   busy: boolean; preparing: boolean; notice: string; connection: string; generate(message?: string, options?: {intent?:'model'; requirePreview?: true; seatingAllocation?:AgentRunInput['context']['seatingAllocation'] | undefined; seatingSpecs?:AgentRunInput['context']['seatingSpecs'] | undefined}): Promise<UnchangedRunResult|void>;
   messages: Message[]; expanded: boolean; setExpanded(value: boolean): void; preview: Preview | null; stale: boolean; expired: boolean;
   jevEnabled: boolean; setJevEnabled(value:boolean):void; run: AgentRun | null; candidates: CandidatePreview[]; selectCandidate(label: 'A'|'B'|'C'):void; cancelRun():Promise<void>; recoverRun():Promise<void>; recoverable:boolean;
-  applyPreview(): Promise<void>; discardPreview(): void;
+  applyPreview(): Promise<void>; discardPreview(): void; discardPreviewForHistoryReview(): boolean;
   candidateRequirementError(base: RoomLayout, candidate: RoomLayout): string | null;
   candidateSeatAdvisory(candidate:Preview): string | null;
   applyRecovery: ApplyRecovery | null; applyRecoveryReview: ApplyRecoveryReview | null; reviewingApplyRecovery: boolean;
@@ -241,7 +241,7 @@ export function useCreativeBriefState(): CreativeBriefState | null {
 /** v2.4 AgentPanel：只取出方案需要的那几项（复用现有 AI 生成，不新增算法）。
  *  云端提案现在也要在Bingo栏里「确认布置 / 撤回」，所以把预览与确认这几项一起放出来。 */
 export function useStudioAgent(): Pick<StudioValue, 'generate'|'busy'|'run'|'connection'|'notice'|'controller'|'brief'|'setBrief'|'hasSavedBrief'
-  |'preview'|'stale'|'expired'|'recoverable'|'selectCandidate'|'applyPreview'|'discardPreview'|'cancelRun'|'exportActivity'|'exportCloudMaterialDraft'|'cloudMaterialDraftAvailable'|'candidateRequirementError'|'setCandidateInventory'|'getBoundCandidateInventory'|'getSessionInventory'|'rememberSessionInventory'|'canRememberSessionInventory'|'applyRecovery'|'applyRecoveryReview'|'reviewingApplyRecovery'|'reviewApplyRecovery'|'acknowledgeApplyRecovery'>|null { return useContext(StudioContext); }
+  |'preview'|'stale'|'expired'|'recoverable'|'selectCandidate'|'applyPreview'|'discardPreview'|'discardPreviewForHistoryReview'|'cancelRun'|'exportActivity'|'exportCloudMaterialDraft'|'cloudMaterialDraftAvailable'|'candidateRequirementError'|'setCandidateInventory'|'getBoundCandidateInventory'|'getSessionInventory'|'rememberSessionInventory'|'canRememberSessionInventory'|'applyRecovery'|'applyRecoveryReview'|'reviewingApplyRecovery'|'reviewApplyRecovery'|'acknowledgeApplyRecovery'>|null { return useContext(StudioContext); }
 export function useLocalProjectBackup(): LocalProjectBackupActions | null { return useContext(StudioContext); }
 export function useMaterialCheckinState(): MaterialCheckinState { return useStudio().checkins; }
 const initialMessages: Message[] = [{ id:'welcome', role:'assistant', text:'活动需求、客户方案与执行资料可以先在本机整理。需要 AI 布置或物料候选时，再连接场景服务。' }];
@@ -1260,6 +1260,26 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const projectId=controller.getSnapshot().project?.id;
     return (projectId && readApplyRecovery(projectRecoveryScope(controller.config.apiUrl,projectId))) || readApplyRecovery(agentScopeRef.current);
   }
+  /** Refuse to forget an unknown run or an unreadable recovery marker. */
+  function discardPreviewForHistoryReview():boolean {
+    if(!alive.current||!sessionValid(sessionToken)||requestPending.current||recoverable||applyRecoveryRef.current||reviewingApplyRecovery)return false;
+    try {
+      const storage=localStorageOrNull();if(!storage)return false;
+      const scope=agentScopeRef.current,key=runStorageKey(scope),projectId=controller.getSnapshot().project?.id;
+      if(storage.getItem(applyRecoveryKey(scope))!==null || (projectId&&storage.getItem(applyRecoveryKey(projectRecoveryScope(controller.config.apiUrl,projectId)))!==null))return false;
+      const raw=storage.getItem(key);
+      if(raw!==null){
+        const marker=JSON.parse(raw) as RunMarker;
+        // Only a visible terminal result belonging to this exact run may be
+        // discarded; unknown/running tasks keep their ID for later readback.
+        if(!previewRef.current||run?.state!=='complete'||!marker.runId||marker.runId!==run.id||markerRef.current?.runId!==run.id)return false;
+        storage.removeItem(key);
+        if(storage.getItem(key)!==null)return false;
+      } else if(markerRef.current)return false;
+      markerRef.current=null;setRecoverable(false);setTrackedPreview(null);setCandidates([]);
+      return true;
+    } catch {return false;}
+  }
   async function reviewApplyRecovery(): Promise<void> {
     const turnToken=sessionToken;if(!sessionValid(turnToken))return;
     const recovery=applyRecoveryRef.current;
@@ -1678,7 +1698,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const chatScope=`activity:${selected.layout.id??''}`,chatId=getActiveAssistantSessionId(chatScope);
     const briefEpoch=briefEditEpoch.current;
     const dialogue=captureDialogue?.()??null;
-    if(captureDialogue&&!dialogue)throw new Error('当前对话尚未核对完成，请稍后重试。');
+    if(captureDialogue&&!dialogue)throw new Error('当前对话尚未核对完成，请先核对历史需求并重新生成方案。');
     const checkRequirements=()=>{
       if(briefEditEpoch.current!==briefEpoch||briefRef.current!==selected.briefKey||getActiveAssistantSessionId(chatScope)!==chatId||dialogue&&!dialogue.isCurrent())throw new Error('应用期间需求或对话已变化，已保留当前画布。');
       if(dialogue && dialogue.project().availability!=='available')throw new Error('当前对话尚未核对完成，请稍后重试。');
@@ -1839,7 +1859,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     }finally{materialDraftExportPending.current=false;}
   }
   const checkinView=checkinRecovery.current?{...checkins,ready:false,error:'点验记录回退尚未完成，请先重试恢复或撤销恢复。'}:checkins;
-  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
+  const value:StudioValue={setCandidateInventory,getBoundCandidateInventory,getSessionInventory,rememberSessionInventory,canRememberSessionInventory,sourceCoordinator,onDrawingRecheckReader,recheckVenueSources,sourceRecheckNotice,briefExportNotice,exportOriginalBrief,exportBriefDraft,sourceWriteGuard,sourcesRestoring,checkins:checkinView,reviewSource,getReviewSource,prepareReview,exportActivity,exportCloudMaterialDraft,captureLocalDraftExport,capturePendingCandidates:pendingCandidates?capturePendingCandidates:undefined,cloudMaterialDraftAvailable:!!cloud.user&&!!cloud.project&&layout.id===cloud.project.id&&!isLocalActivityWorkspace(controller),captureMobility,captureDialogue:captureDialogue?captureGuardedDialogue:undefined,scope:agentScope,controller,layout,getCurrentLayout,onApply,onUpdateItem,onUpdateEventOperations,onUpdateProductionPlan,onPreview,updateImage,brief,setBrief,briefReady,briefError,hasSavedBrief,retryBrief,prepareBackup,restoreBackup,undoRestore,backupPending,canUndoRestore,images,addImages,removeImage,autoGenerateRequest,busy,preparing:preservingPreparation.current,notice,connection,generate,messages,expanded,setExpanded,preview,stale,expired,jevEnabled,setJevEnabled,run,candidates,recoverable,recoverRun,cancelRun,candidateRequirementError,candidateSeatAdvisory,applyRecovery,applyRecoveryReview,reviewingApplyRecovery,reviewApplyRecovery,acknowledgeApplyRecovery,selectCandidate:label=>{const item=candidates.find(value=>value.label===label);if(item&&!stale){if(item.preview!==previewRef.current){inventoryGeneration.current++;sharedInventory.current?.fence?.release();sharedInventory.current?.continuity?.release();}setTrackedPreview(item.preview);}},applyPreview,discardPreviewForHistoryReview,discardPreview:()=>{setTrackedPreview(null);setCandidates([]);forgetRun();}};
   return <StudioContext.Provider value={value}><UnsavedSourceNotice scope={scope}/>{children}</StudioContext.Provider>;
 }
 

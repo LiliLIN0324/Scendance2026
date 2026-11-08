@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useSyncExternalStore } from 'react';
-import { pruneBriefMemories } from '../lib/assistant-brief-memory';
+import { hasNoStoredBriefForNewSession, pruneBriefMemories } from '../lib/assistant-brief-memory';
 import {
   deleteSessionBubbles,
+  ASSISTANT_SESSION_BODIES_STORAGE_KEY,
   emptyAssistantSessionBodies,
   pruneSessionBodies,
   readAssistantSessionBodies,
@@ -40,7 +41,7 @@ export interface AssistantSessionsController {
   activeId: string | null;
   query: string;
   setQuery(value: string): void;
-  openSession(): void;
+  openSession(): {id:string;verifiedFresh:boolean}|null;
   selectSession(id: string): void;
   renameSession(id: string, title: string): void;
   toggleFavorite(id: string): void;
@@ -191,7 +192,35 @@ function useController(assertWrite?: () => void): AssistantSessionsController {
 
   const openSession = useCallback(() => {
     const index = snapshot.index ?? emptyAssistantSessionIndex();
-    commitIndex(openAssistantSession(index, { id: createAssistantSessionId(), now: Date.now() }), '', assertWrite);
+    const id=createAssistantSessionId();
+    const strictBodiesMissing=():boolean=>{
+      try {
+        const target=storage??(typeof window==='undefined'?undefined:window.localStorage);
+        if(!target)return false;
+        const raw=target.getItem(ASSISTANT_SESSION_BODIES_STORAGE_KEY);
+        if(raw===null)return true;
+        const parsed:unknown=JSON.parse(raw);
+        if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return false;
+        const record=parsed as Record<string,unknown>;
+        if(record.version!==1||!record.byId||typeof record.byId!=='object'||Array.isArray(record.byId))return false;
+        return !Object.hasOwn(record.byId,id);
+      } catch {return false;}
+    };
+    let before=false;
+    try {
+      const target=storage??(typeof window==='undefined'?undefined:window.localStorage);
+      const raw=target?.getItem(ASSISTANT_SESSIONS_STORAGE_KEY);
+      const persisted=raw?readAssistantSessionIndex(target):null;
+      before=!!persisted&&persisted.activeId===index.activeId&&!index.sessions.some(session=>session.id===id)&&!persisted.sessions.some(session=>session.id===id)&&!Object.hasOwn(bodies.byId,id)&&strictBodiesMissing()&&hasNoStoredBriefForNewSession(id,target);
+    } catch {before=false;}
+    commitIndex(openAssistantSession(index, { id, now: Date.now() }), '', assertWrite);
+    let verifiedFresh=false;
+    try {
+      const target=storage??(typeof window==='undefined'?undefined:window.localStorage);
+      const persisted=target?readAssistantSessionIndex(target):null;
+      verifiedFresh=before&&!snapshot.saveFailed&&!!persisted&&persisted.activeId===id&&persisted.sessions.some(session=>session.id===id)&&!Object.hasOwn(bodies.byId,id)&&strictBodiesMissing()&&hasNoStoredBriefForNewSession(id,target)&&canWrite(assertWrite);
+    } catch {verifiedFresh=false;}
+    return {id,verifiedFresh};
   }, [assertWrite]);
 
   const selectSession = useCallback((id: string) => {

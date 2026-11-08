@@ -45,6 +45,7 @@ it('real workspace discards an old reply across same-batch A→B→A and preserv
 it('invalidates an existing dialogue capture at submit and blocks new captures until interpretation finishes',async()=>{
  const a=activity('dialogue-in-flight');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<StrictMode><RoomOrganizer/></StrictMode>);const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
  let before:{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null=null;
  await waitFor(()=>{before=capture.dialogue?.()??null;expect(before).not.toBeNull();});
  fireEvent.change(input,{target:{value:'30人的活动'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
@@ -55,6 +56,7 @@ it('invalidates an existing dialogue capture at submit and blocks new captures u
 it('exports partial dialogue after a failed correction until the same words are successfully understood',async()=>{
  const a=activity('dialogue-incomplete');layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<StrictMode><RoomOrganizer/></StrictMode>);const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ fireEvent.click(await screen.findByRole('button',{name:'按当前记录重新开始'}));
  async function submit(text:string,resolution:'model'|'failed',call:number){capture.forcedResolution=resolution;fireEvent.change(input,{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送'}));await waitFor(()=>expect(capture.calls).toBe(call));await act(async()=>{capture.resolve!();await Promise.resolve();});}
  await submit('30人','model',1);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().fields.headcount.value).toBe(30);current?.release();});
  await submit('40人','failed',2);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('unavailable');current?.release();});
