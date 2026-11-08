@@ -2385,6 +2385,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(turn.resolution==='failed'||turn.resolution==='unavailable'||turn.resolution==='not_connected')updateDialogueIncomplete(turnSessionId,trimmed,true);
     else if(turn.unhandled?.some(item=>item.kind==='action'||item.kind==='other'))updateDialogueIncomplete(turnSessionId,trimmed,true);
     else if(turn.resolution==='model'&&!mixedUtility)updateDialogueIncomplete(turnSessionId,trimmed,false);
+    const unhandledAction=turn.unhandled?.some(item=>item.kind==='action'&&!!item.evidence&&trimmed.includes(item.evidence))??false;
+    if(unifiedConversation&&unhandledAction&&(phaseRef.current==='proposed'||phaseRef.current==='paused')){
+      dropProposal();discardCloudPreview();phaseRef.current='idle';setPhase('idle');setProgress(0);
+      say({role:'agent',amber:true,text:'这项操作尚未执行，旧方案预览已收回。请带上这项要求重新生成，再核对修改。'});
+    }
     if(turn.readOnlyReply){
       if(turn.unhandled?.length)say({role:'agent',amber:true,text:`以下内容尚未执行或仍需核对：${turn.unhandled.map(item=>`「${item.evidence}」`).join('、')}。`});
       say({role:'agent',text:turn.text,modelConversation:true,...(turn.materialQueries?.length?{materialQueries:turn.materialQueries}:{})});releaseTurn();return;
