@@ -613,6 +613,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const generationQueuedRef = useRef(0);
   const sendLatest = useRef<(text:string,allowUncertainRetry?:boolean,queued?:boolean,attachment?:{file:File;url:string}|null,history?:Array<{role:'user'|'assistant';text:string}>)=>Promise<void>>(async()=>{});
   const briefRequest = useRef<{controller:AbortController;text:string}|null>(null);
+  const researchRequest = useRef<AbortController | null>(null);
   const uncertainInputs = useRef(new Set<string>());
   const pendingModelInputs = useRef(new Set<string>());
   const [understanding,setUnderstanding]=useState(false);
@@ -671,7 +672,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setCancelledInput({id:Date.now(),text:request.text});
     say({role:'agent',amber:true,text:'已停止等待，本次需求未写入。服务商可能仍在处理或计费；再次发送前请确认。'});
   }
-  useEffect(() => () => { briefTurnSequence.current++; runToken.current++; generationWait.current?.cancel();briefRequest.current?.controller.abort(); }, []);
+  useEffect(() => () => { briefTurnSequence.current++; runToken.current++; generationWait.current?.cancel();briefRequest.current?.controller.abort();researchRequest.current?.abort(); }, []);
   const briefFallbackNotified = useRef(false);
   const touchActiveSessionRef = useRef(assistantSessions.touchActiveSession);
   touchActiveSessionRef.current = assistantSessions.touchActiveSession;
@@ -713,6 +714,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
     pendingCandidates?.invalidate();
     briefTurnSequence.current++;runToken.current++;
+    researchRequest.current?.abort();
     if(nextId!==boundSessionId.current&&proposal.current){hidePreview();phaseRef.current='idle';setPhase('idle');setProgress(0);}
     if(generationWait.current||localDraftOwner.current){suppressCancelledCloudPreview.current=true;generationWait.current?.cancel();dropProposal();phaseRef.current='idle';setPhase('idle');setProgress(0);}
   }),[sessionScope,pendingCandidates]);
@@ -724,6 +726,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const next=controller.getSnapshot().user?.id??null;if(next===actor)return;actor=next;
       pendingCandidates?.invalidate();
       briefTurnSequence.current++;runToken.current++;
+      researchRequest.current?.abort();
       if(generationWait.current||localDraftOwner.current){suppressCancelledCloudPreview.current=true;generationWait.current?.cancel();dropProposal();phaseRef.current='idle';setPhase('idle');setProgress(0);}
       if(briefRequest.current){updateDialogueIncomplete(boundSessionId.current,briefRequest.current.text,true);uncertainInputs.current.add(briefRequest.current.text);briefRequest.current.controller.abort();}
     });
@@ -1219,29 +1222,95 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', text: '调研哪一片？说个地名就行，比如「调研西湖」。' });
       return;
     }
+    // Only the latest request can replace this activity's single reference map.
+    researchRequest.current?.abort();
     if (!onApplyResearchArea) { say({role:'agent',amber:true,text:'当前工作台暂不支持应用调研底图。'}); return; }
     const researchSession = getActiveAssistantSessionId(sessionScope);
     const researchToken = runToken.current;
     say({ role: 'agent', text: `正在查「${query}」的位置…` });
-    const place = await lookupPlace(query);
-    if (researchToken !== runToken.current || !sessionScopeIsCurrent() || getActiveAssistantSessionId(sessionScope) !== researchSession) return;
-    if (!place) {
-      say({ role: 'agent', amber: true, text: `没查到「${query}」。换个更准的地名再试，或点「地图选址」手动圈一块。` });
+    const controller = new AbortController();
+    researchRequest.current = controller;
+    const current = () => researchRequest.current === controller && researchToken === runToken.current && sessionScopeIsCurrent() && getActiveAssistantSessionId(sessionScope) === researchSession;
+    let timeout: number | undefined;
+    let removeAbortListener = () => {};
+    let unsubscribeMap = () => {};
+    try {
+      // Track the venue identity/geometry as well as map placement, while the
+      // shared venue basis excludes ordinary furniture. Compare the potentially
+      // large floor-plan image separately rather than serializing it on every
+      // store event. The monotonic flag catches A→B→A.
+      const mapKey = (value: RoomLayout) => {
+        const {floorPlanImage:_image,...withoutImage}=value;
+        return JSON.stringify({venue:venueScaleBasis(withoutImage),researchArea:value.researchArea ?? null,sceneAnchor:value.sceneAnchor ?? null,
+          mapGroundPolygon:value.mapGroundPolygon ?? null,mapLngLat:value.mapLngLat ?? null,mapGroundFrame:value.mapGroundFrame ?? null,
+          satelliteGroundRef:value.satelliteGroundRef ?? null,floorPlanFitMode:value.floorPlanFitMode ?? null});
+      };
+      const initialLayout = layoutStore.getState().layout;
+      const baseline = mapKey(initialLayout), baselineImage = initialLayout.floorPlanImage ?? null;
+      let mapChanged = false;
+      const matchesMap = (value: RoomLayout) => (value.floorPlanImage ?? null) === baselineImage && mapKey(value) === baseline;
+      unsubscribeMap = layoutStore.subscribe(state => {
+        try { if(!mapChanged && !matchesMap(state.layout))mapChanged = true; }
+        catch { mapChanged = true; }
+      });
+      const mapCurrent = () => {
+        try { return !mapChanged && matchesMap(layoutStore.getState().layout); }
+        catch { return false; }
+      };
+      // Include script loading in the bound; its own timeout begins only after
+      // the map SDK has loaded. A late response must never apply a map.
+      const result = await Promise.race([
+        lookupPlace(query, controller.signal).then(value => ({ kind: 'result' as const, value })),
+        new Promise<{kind:'timeout'}>(resolve => { timeout = window.setTimeout(() => resolve({kind:'timeout'}), 12_000); }),
+        new Promise<{kind:'cancelled'}>(resolve => {
+          const cancelled=()=>resolve({kind:'cancelled'});
+          if(controller.signal.aborted)cancelled();
+          else { controller.signal.addEventListener('abort',cancelled,{once:true});removeAbortListener=()=>controller.signal.removeEventListener('abort',cancelled); }
+        }),
+      ]);
+      if (!current()) return;
+      if (result.kind === 'cancelled') return;
+      if (result.kind === 'timeout') {
+        controller.abort();
+        say({role:'agent',amber:true,text:'调研查询超时，本次没有铺设底图；请稍后重试或手动选址。'});
+        return;
+      }
+      const place = result.value;
+      if (!place) {
+        say({ role: 'agent', amber: true, text: `没查到「${query}」。换个更准的地名再试，或点「地图选址」手动圈一块。` });
+        return;
+      }
+      if (!mapCurrent()) {
+        say({role:'agent',amber:true,text:'场地、底图或场景锚点已变化，本次调研结果未覆盖当前选择；请重新调研。'});
+        return;
+      }
+      const area = createResearchArea(place);
+      // 落盘走专用路径，从 store 现取布局；不覆盖查询期间新选择的底图或锚点。
+      try {
+        requireSessionWrite();
+        if (!current()) return;
+        if (!mapCurrent()) {
+          say({role:'agent',amber:true,text:'场地、底图或场景锚点已变化，本次调研结果未覆盖当前选择；请重新调研。'});
+          return;
+        }
+        onApplyResearchArea(area);
+      } catch { say({role:'agent',amber:true,text:'当前活动无法写入调研底图，请检查编辑权后重试。'}); return; }
+      setView(current => ({ ...current, view2D: false }));
+      say({
+        role: 'agent',
+        image: area.imageUrl,
+        meta: '参考底图 · 不可作重建素材',
+        text: `调研底图铺好了：${area.name}${area.address ? `（${area.address}）` : ''}。中心 ${area.center.lng.toFixed(5)}, ${area.center.lat.toFixed(5)}，半径 ${area.radiusM} m、约 ${area.widthM}×${area.depthM} m。3D 地面上那张图和这里贴的是同一张，可以直接在上面定点圈场地。`,
+      });
+    } catch {
+      if (current()) say({role:'agent',amber:true,text:'调研查询暂时不可用，本次没有铺设底图；请稍后重试或手动选址。'});
       return;
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      removeAbortListener();
+      unsubscribeMap();
+      if(researchRequest.current === controller)researchRequest.current = null;
     }
-    const area = createResearchArea(place);
-    // 落盘走 docs/19 的专用路径：从 store 现取布局再叠底图并设场景锚点。
-    // 不能整张覆盖 live 快照——查询等待期间挂载的场地（venueScan/sceneAnchor）会被旧快照冲掉。
-    try { requireSessionWrite(); onApplyResearchArea(area); }
-    catch { say({role:'agent',amber:true,text:'当前活动无法写入调研底图，请检查编辑权后重试。'}); return; }
-    // 旧路径经 onApplyCreative 收尾时会把画布切回 3D；专用路径不管视图，这里自己切。
-    setView(current => ({ ...current, view2D: false }));
-    say({
-      role: 'agent',
-      image: area.imageUrl,
-      meta: '参考底图 · 不可作重建素材',
-      text: `调研底图铺好了：${area.name}${area.address ? `（${area.address}）` : ''}。中心 ${area.center.lng.toFixed(5)}, ${area.center.lat.toFixed(5)}，半径 ${area.radiusM} m、约 ${area.widthM}×${area.depthM} m。3D 地面上那张图和这里贴的是同一张，可以直接在上面定点圈场地。`,
-    });
   }
 
   // 画布上有墙体/场地真相 = 第 ① 步已经过了；撤回或作废不会把它拆掉，进度和尺寸读数都靠它。
@@ -2249,6 +2318,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(!queued&&generationWait.current&&isStopCommand(trimmed)){
       say({role:'user',text:trimmed});stop();return;
     }
+    if(!queued && researchRequest.current && isStopCommand(trimmed)){
+      say({role:'user',text:trimmed});researchRequest.current.abort();say({role:'agent',text:'已停止调研，本次没有铺设底图。'});return;
+    }
     if(!queued&&generationWait.current){
       if(trimmed)say({role:'user',text:trimmed});
       const history=chatUserHistory(bubblesRef.current.slice(0,-1),trimmed);
@@ -2332,7 +2404,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 「调研西湖」：先把地名换成坐标，查到的参考底图铺进 3D，同一张图也贴进对话。
     const researchQuery = matchResearchCommand(trimmed);
     if (researchQuery) {
-      void runResearchCommand(researchQuery);
+      await runResearchCommand(researchQuery);
       return;
     }
     // 左栏那几件事先改走对话：加物料、出清单、写文案、换区，不再开第二套表单页。

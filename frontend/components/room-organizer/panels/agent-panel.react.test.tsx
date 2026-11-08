@@ -98,6 +98,182 @@ function ui(layout: RoomLayout, onApply = vi.fn(), onPreview = vi.fn()) {
 }
 
 describe('research map activity scope', () => {
+  function deferredResearch() {
+    let resolve!: (value: researchArea.ResearchPlace | null) => void;
+    vi.spyOn(researchArea, 'lookupPlace').mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const release = vi.fn();
+    const start = vi.fn(() => release);
+    const onApplyResearchArea = vi.fn();
+    return { resolve: (value: researchArea.ResearchPlace | null) => resolve(value), release, start, onApplyResearchArea };
+  }
+  const place: researchArea.ResearchPlace = { name: '西湖', address: '杭州', lng: 120.15, lat: 30.25 };
+  it('keeps the dialogue fence until a delayed research lookup actually applies', async () => {
+    const research = deferredResearch();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    await act(async () => { await Promise.resolve(); });
+    expect(research.start).toHaveBeenCalledOnce();
+    expect(research.release).not.toHaveBeenCalled();
+    expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+    await act(async () => { research.resolve(place); await Promise.resolve(); });
+    await waitFor(() => expect(research.onApplyResearchArea).toHaveBeenCalledOnce());
+    await waitFor(() => expect(research.release).toHaveBeenCalledOnce());
+  });
+  it('holds the fence until a failed lookup finishes and never applies a map', async () => {
+    const research = deferredResearch();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    await act(async () => { await Promise.resolve(); });
+    expect(research.release).not.toHaveBeenCalled();
+    await act(async () => { research.resolve(null); await Promise.resolve(); });
+    expect(await screen.findByText(/没查到/)).toBeTruthy();
+    expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+    await waitFor(() => expect(research.release).toHaveBeenCalledOnce());
+  });
+  it('releases a hung lookup after a bounded wait and ignores a late result', async () => {
+    vi.useFakeTimers();
+    try {
+      const research = deferredResearch();
+      render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start}><AgentPanel/></LayoutAgentProvider>);
+      send('调研西湖');
+      expect(researchArea.lookupPlace).toHaveBeenCalledOnce();
+      expect(research.release).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+      expect(screen.getByText(/调研查询超时/)).toBeTruthy();
+      expect(research.release).toHaveBeenCalledOnce();
+      await act(async () => { research.resolve(place); await Promise.resolve(); });
+      expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+      expect(research.release).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+  it('reports an unexpected lookup failure without applying a map', async () => {
+    vi.spyOn(researchArea, 'lookupPlace').mockRejectedValueOnce(new Error('simulated provider failure'));
+    const release = vi.fn(), onApplyResearchArea = vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea} onDialogueTurnStart={() => release}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    expect(await screen.findByText(/调研查询暂时不可用/)).toBeTruthy();
+    expect(onApplyResearchArea).not.toHaveBeenCalled();
+    await waitFor(() => expect(release).toHaveBeenCalledOnce());
+  });
+  it('does not block a separate ordinary message while research is pending', async () => {
+    let resolve!: (value: researchArea.ResearchPlace | null) => void;
+    vi.spyOn(researchArea, 'lookupPlace').mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const firstRelease = vi.fn(), secondRelease = vi.fn();
+    const start = vi.fn().mockImplementationOnce(() => firstRelease).mockImplementationOnce(() => secondRelease);
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={vi.fn()} onDialogueTurnStart={start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    send('你好');
+    expect(await screen.findByText(/你好，我可以帮你/)).toBeTruthy();
+    await waitFor(() => expect(secondRelease).toHaveBeenCalledOnce());
+    expect(firstRelease).not.toHaveBeenCalled();
+    await act(async () => { resolve(null); await Promise.resolve(); });
+    await waitFor(() => expect(firstRelease).toHaveBeenCalledOnce());
+  });
+  it('does not let an older lookup overwrite a later research request', async () => {
+    let first!: (value: researchArea.ResearchPlace | null) => void;
+    let second!: (value: researchArea.ResearchPlace | null) => void;
+    vi.spyOn(researchArea, 'lookupPlace')
+      .mockImplementationOnce(() => new Promise(resolve => { first = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { second = resolve; }));
+    const onApplyResearchArea = vi.fn();
+    const firstRelease = vi.fn(), secondRelease = vi.fn();
+    const start = vi.fn().mockImplementationOnce(() => firstRelease).mockImplementationOnce(() => secondRelease);
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea} onDialogueTurnStart={start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledTimes(1));
+    send('调研灵隐寺');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(firstRelease).toHaveBeenCalledOnce());
+    expect(secondRelease).not.toHaveBeenCalled();
+    await act(async () => { second({ name: '灵隐寺', address: '杭州', lng: 120.1, lat: 30.2 }); await Promise.resolve(); });
+    await waitFor(() => expect(onApplyResearchArea).toHaveBeenCalledOnce());
+    expect(onApplyResearchArea.mock.calls[0]![0]).toMatchObject({ name: '灵隐寺' });
+    await act(async () => { first(place); await Promise.resolve(); });
+    expect(onApplyResearchArea).toHaveBeenCalledOnce();
+    expect(firstRelease).toHaveBeenCalledOnce();
+    await waitFor(() => expect(secondRelease).toHaveBeenCalledOnce());
+  });
+  it('does not apply an older lookup even when it returns before the newer one', async () => {
+    let first!: (value: researchArea.ResearchPlace | null) => void;
+    let second!: (value: researchArea.ResearchPlace | null) => void;
+    vi.spyOn(researchArea, 'lookupPlace')
+      .mockImplementationOnce(() => new Promise(resolve => { first = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { second = resolve; }));
+    const onApplyResearchArea = vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖'); await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledTimes(1));
+    send('调研灵隐寺'); await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledTimes(2));
+    await act(async () => { first(place); await Promise.resolve(); });
+    expect(onApplyResearchArea).not.toHaveBeenCalled();
+    await act(async () => { second({ name: '灵隐寺', address: '杭州', lng: 120.1, lat: 30.2 }); await Promise.resolve(); });
+    await waitFor(() => expect(onApplyResearchArea).toHaveBeenCalledOnce());
+    expect(onApplyResearchArea.mock.calls[0]![0]).toMatchObject({ name: '灵隐寺' });
+  });
+  it('keeps the previous lookup cancelled if the newer lookup fails', async () => {
+    let first!: (value: researchArea.ResearchPlace | null) => void;
+    let second!: (value: researchArea.ResearchPlace | null) => void;
+    vi.spyOn(researchArea, 'lookupPlace')
+      .mockImplementationOnce(() => new Promise(resolve => { first = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { second = resolve; }));
+    const onApplyResearchArea = vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖'); await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledTimes(1));
+    send('调研灵隐寺'); await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledTimes(2));
+    await act(async () => { second(null); await Promise.resolve(); });
+    expect(await screen.findByText(/没查到「灵隐寺」/)).toBeTruthy();
+    await act(async () => { first(place); await Promise.resolve(); });
+    expect(onApplyResearchArea).not.toHaveBeenCalled();
+  });
+  it('lets the user stop a pending research lookup without applying its late result', async () => {
+    const research = deferredResearch();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖'); await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    send('停一下');
+    expect(await screen.findByText(/已停止调研/)).toBeTruthy();
+    await act(async () => { research.resolve(place); await Promise.resolve(); });
+    expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+  });
+  it('does not apply a delayed research result after the user switches conversation', async () => {
+    const research = deferredResearch();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    await act(async () => { await Promise.resolve(); });
+    expect(research.release).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '新开会话' }));
+    await act(async () => { research.resolve(place); await Promise.resolve(); });
+    expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+    await waitFor(() => expect(research.release).toHaveBeenCalledOnce());
+  });
+  it('does not apply a delayed result after editing authority is lost', async () => {
+    const research = deferredResearch(); let writable = true;
+    const assertSessionWrite = () => { if (!writable) throw new Error('编辑权已失效'); };
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start} assertSessionWrite={assertSessionWrite}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    await act(async () => { await Promise.resolve(); });
+    expect(research.release).not.toHaveBeenCalled();
+    writable = false;
+    await act(async () => { research.resolve(place); await Promise.resolve(); });
+    expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+    await waitFor(() => expect(research.release).toHaveBeenCalledOnce());
+  });
+  it('releases the fence once on cancellation by unmount and ignores the late lookup', async () => {
+    const research = deferredResearch();
+    const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea} onDialogueTurnStart={research.start}><AgentPanel/></LayoutAgentProvider>);
+    send('调研西湖');
+    await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+    await act(async () => { await Promise.resolve(); });
+    expect(research.release).not.toHaveBeenCalled();
+    view.unmount();
+    expect(research.release).toHaveBeenCalledOnce();
+    await act(async () => { research.resolve(place); await Promise.resolve(); });
+    expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+    expect(research.release).toHaveBeenCalledOnce();
+  });
   it.each([['生成一个竹林场景','可在「空间」入口使用生成引擎'],['文生一张白桌','请使用「物料」里的生成入口']])('describes the %s tool entry without inventing another agent',async(input,answer)=>{
     render(ui(makeLayout({width:12,height:9})));send(input);
     const response=await screen.findByText(new RegExp(answer));expect(response.textContent).not.toMatch(/空间 Agent|物料 Agent/);
@@ -123,6 +299,74 @@ describe('research map activity scope', () => {
     await act(async () => finish({ name: '西湖', address: '杭州', lng: 120.15, lat: 30.25 }));
     expect(onApplyResearchArea).not.toHaveBeenCalled();
   });
+  it.each(['area', 'anchor', 'polygon', 'image', 'aba'] as const)('does not overwrite a newer map or anchor (%s)', async change => {
+    const saved = realLayoutStoreGetState().layout;
+    const initial = makeLayout({ id: 'research-epoch', width: 12, height: 9 });
+    state.layout = initial; useRealLayoutStore = true;
+    act(() => { layoutStore.setState({ layout: initial }); });
+    const research = deferredResearch();
+    const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea}><AgentPanel/></LayoutAgentProvider>);
+    try {
+      send('调研西湖');
+      await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+      const area = researchArea.createResearchArea({ name: '灵隐寺', address: '杭州', lng: 120.1, lat: 30.2 });
+      const next = change === 'anchor'
+        ? { ...initial, sceneAnchor: { lng: 120.1, lat: 30.2, orientationDeg: 0, metersPerUnit: 1, source: 'manual' as const } }
+        : change === 'polygon' ? { ...initial, mapGroundPolygon: [{lng:120.1,lat:30.2},{lng:120.11,lat:30.2},{lng:120.1,lat:30.21}] }
+        : change === 'image' ? { ...initial, floorPlanImage: 'data:image/png;base64,YWJj' }
+        : { ...initial, researchArea: area };
+      act(() => {
+        layoutStore.setState({ layout: next });
+        if (change === 'aba') layoutStore.setState({ layout: initial });
+      });
+      await act(async () => { research.resolve(place); await Promise.resolve(); });
+      expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+      expect(await screen.findByText(/底图或场景锚点已变化/)).toBeTruthy();
+    } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
+  });
+  it('does not reject research when only unrelated furniture changes', async () => {
+    const saved = realLayoutStoreGetState().layout;
+    const initial = makeLayout({ id: 'research-furniture', width: 12, height: 9 });
+    state.layout = initial; useRealLayoutStore = true;
+    act(() => { layoutStore.setState({ layout: initial }); });
+    const research = deferredResearch();
+    const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea}><AgentPanel/></LayoutAgentProvider>);
+    try {
+      send('调研西湖');
+      await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+      const floors = initial.floors.map((floor, index) => index ? floor : { ...floor, items: [...floor.items, makeItem({ id:'unrelated-chair', type:'chair', name:'椅子' })] });
+      act(() => { layoutStore.setState({ layout: { ...initial, floors } }); });
+      await act(async () => { research.resolve(place); await Promise.resolve(); });
+      await waitFor(() => expect(research.onApplyResearchArea).toHaveBeenCalledOnce());
+      expect(screen.queryByText(/底图或场景锚点已变化/)).toBeNull();
+    } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
+  });
+  it.each(['scan', 'preset', 'width', 'height', 'venue', 'scan-aba', 'preset-aba', 'width-aba'] as const)(
+    'does not apply stale research after the venue changes (%s)', async change => {
+      const saved = realLayoutStoreGetState().layout;
+      const initial = makeLayout({ id: 'research-venue-epoch', width: 12, height: 9 });
+      state.layout = initial; useRealLayoutStore = true;
+      act(() => { layoutStore.setState({ layout: initial }); });
+      const research = deferredResearch();
+      const view = render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={research.onApplyResearchArea}><AgentPanel/></LayoutAgentProvider>);
+      try {
+        send('调研西湖');
+        await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
+        const next: RoomLayout = change.startsWith('scan') ? { ...initial, venueScan: { assetId:'new-scan', name:'新场地' } }
+          : change.startsWith('preset') ? { ...initial, scenePreset:'cafe' }
+          : change.startsWith('width') ? { ...initial, width:20 }
+          : change === 'height' ? { ...initial, height:15 }
+          : { ...initial, backendVenue:{shape:'rectangle',width:12,depth:9,height:3,entrances:[]} };
+        act(() => {
+          layoutStore.setState({ layout: next });
+          if (change.endsWith('-aba')) layoutStore.setState({ layout: initial });
+        });
+        await act(async () => { research.resolve(place); await Promise.resolve(); });
+        expect(research.onApplyResearchArea).not.toHaveBeenCalled();
+        expect(await screen.findByText(/场地、底图或场景锚点已变化/)).toBeTruthy();
+      } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
+    },
+  );
 });
 
 /** 候选确认后让测试画布跟随实际应用，预览阶段不调用 onApply。 */
